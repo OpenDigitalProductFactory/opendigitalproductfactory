@@ -137,7 +137,40 @@ Rejected patterns:
 - do not hard-code one vendor's invoice workflow into DPF.
 - do not make recurring invoices the default finance shape for every business.
 
-### 3.5 Internal reference: 4-portfolio taxonomy workbook
+### 3.5 Customer network topology and MSP scope references
+
+NetBox models overlapping address space with VRFs. Its documentation describes each VRF as an independent routing table used to isolate customers or organizations and route overlapping spaces such as multiple 10.0.0.0/8 instances. NetBox tenants separately group resources for administrative purposes, usually customers or internal departments.
+
+Auvik treats the network map as a central feature showing physical and logical connections, device status, IP address, interfaces, and connection details. Its ConnectWise Automate integration distinguishes an MSP client map from a client network map, and its site-type documentation ties network mapping and monitoring functionality to site-level plan availability.
+
+N-able N-central documentation describes monitored devices as systems maintained for a customer, and its topology map is accessed at the customer or service-organization level. NinjaOne documentation similarly uses organizations and locations as management boundaries, with NMS device location changes constrained by organization and credential context.
+
+Sources:
+
+- NetBox VRFs: https://netbox.readthedocs.io/en/stable/models/ipam/vrf/
+- NetBox tenants: https://netbox.readthedocs.io/en/stable/models/tenancy/tenant/
+- Auvik network map: https://support.auvik.com/hc/en-us/articles/204908674-Your-network-map
+- Auvik ConnectWise Automate client maps: https://support.auvik.com/hc/en-us/articles/360020807372-Using-the-plugin-with-ConnectWise-Automate-v11
+- Auvik site types: https://support.auvik.com/hc/en-us/articles/360027698992-What-are-the-different-site-types
+- N-able N-central devices: https://documentation.n-able.com/N-central/userguide/Content/Devices/Devices_Overview.html
+- N-able N-central topology maps: https://documentation.n-able.com/N-central/userguide/Content/Configuration/Discovery_Jobs/View_Topology_Map.html
+- NinjaOne organizations and locations: https://www.ninjaone.com/docs/endpoint-management/hardware-inventory/organizations-and-locations/
+- NinjaOne NMS location movement: https://www.ninjaone.com/docs/network-management-system/moving-network-devices-between-locations/
+
+Adopted patterns:
+
+- customer and site scope are authoritative boundaries for network discovery and topology.
+- overlapping private IP ranges must be valid when they occur under different customer/site scopes.
+- a customer network map is an MSP/RMM operational surface, not a universal small-business feature.
+- plan or service tier may affect which site-level network functions are available.
+
+Rejected patterns:
+
+- do not expose customer topology just because the platform can store scoped inventory.
+- do not show a customer network workbench for non-MSP archetypes such as salons, retail shops, or appointment-service businesses.
+- do not rely on global device/IP uniqueness and repair it later with filters.
+
+### 3.6 Internal reference: 4-portfolio taxonomy workbook
 
 `docs/Reference/4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx` is the canonical internal reference for how the business taxonomy team decomposes any digital product or service. Four sheets, four portfolios:
 
@@ -318,6 +351,18 @@ Required rules:
 
 Network topology is the strongest proof that customer scope cannot be a presentation-layer filter. Many small-business customers will use the same private address ranges (`192.168.1.0/24`, `10.0.0.0/24`, default gateway `192.168.1.1`) and may even use the same hardware vendors, hostnames, SSIDs, or device model identifiers. Those values are only natural identifiers **inside one customer estate scope**.
 
+Applicability gate:
+
+Customer network topology is not a universal portal route. It appears only when the normalized activation profile proves an MSP-style managed-network operating model:
+
+- `customer-estate.applicability === "required"`
+- `customer-estate.isolation === "strict-customer-scope"`
+- `network-inventory.applicability === "required"`
+- `network-inventory.isolation === "strict-customer-scope"`
+- `edge-node-customer-deployment.applicability === "required"`
+
+The initial built-in archetype that satisfies this gate is `it-managed-services`. Future archetypes can qualify only by deriving the same required capability combination from axes and portfolio roles; UI code must not compare raw `archetypeId` values to the MSP string. Non-MSP archetypes may still have organization-internal device inventory, security posture, backup posture, or facilities records, but they must not see a customer-estate network topology workbench unless their operating model is reclassified as MSP-style managed-network work.
+
 Required topology invariants:
 
 1. A customer-estate topology view must start from a `TopologyScopeContext`, not from a global graph plus client-side filters.
@@ -371,7 +416,7 @@ If a row below disagrees with what the rules engine produces, the rules engine w
 | Customer sites | required | optional | optional | required |
 | Customer IT estate / CIs | required | not-applicable | optional for internal devices only | optional for property assets |
 | Edge Node customer deployment | required for managed monitoring tiers | hidden | hidden | optional |
-| Network inventory | required | hidden | hidden | optional for facilities |
+| Network inventory | required, customer topology enabled | hidden | hidden | optional internal/facilities only; no customer topology workbench |
 | Cybersecurity posture | required | recommended for internal business IT | recommended for POS/store IT | recommended |
 | Backup and restore posture | required | recommended for business systems | recommended for store systems | recommended |
 | Service agreements | required | optional packages/memberships only | optional wholesale/account terms | required for management contracts |
@@ -456,6 +501,7 @@ The MSP UI should feel like an operational workbench, not a marketing page.
 Required UI principles:
 
 - customer selector is always visible in customer-estate and MSP operations surfaces
+- customer network topology routes are visible only when `canUseCustomerNetworkTopology(profile)` returns true from normalized capability activations
 - cross-customer views are summary/triage only until a customer is selected
 - site, estate, agreements, tickets, projects, backup, security, and billing readiness are tabs or sub-routes under a customer context
 - action buttons are scope-aware and disabled when no customer/site context exists
@@ -475,6 +521,8 @@ Suggested first MSP workspace shape:
 /customers/[id]/sites/[siteId]
   Site Overview | Network | Devices | Software | Backups | Access | Edge Node
 ```
+
+`Network` in the site route is conditional. For MSP-type profiles it is the customer topology workbench. For salons, retail, and other non-MSP archetypes it is absent from customer/site navigation; any internal device inventory remains under organization-internal operations, not under customer context.
 
 Setup should not ask the operator to understand the whole architecture. Selecting IT Managed Services should surface a concise checklist:
 
@@ -547,9 +595,10 @@ The planning and implementation track is successful when:
 5. Edge Node MSP planning has a customer/site binding path.
 6. Customer-estate actions and queries have a reusable scope helper that consumes the normalized profile, not the raw archetype id.
 7. UI plans use customer-scoped navigation and DPF theme rules.
-8. No TeamLogic-only code path is introduced, and no `archetypeId === ...` conditional appears in feature code.
+8. No TeamLogic-only code path is introduced, and no raw archetype-id conditional appears in feature code.
 9. Two customers with the same private subnet, gateway IP, hostnames, and adapter observed keys produce separate `InventoryEntity`, `InventoryRelationship`, Neo4j `InfraCI`, and topology graph records.
 10. A customer-scoped discovery run cannot mark another customer's devices, another customer's relationships, or the MSP internal estate stale.
+11. Customer network topology surfaces are hidden for non-MSP archetypes, including hair salon and retail profiles, even though the platform can still use organization-internal inventory and posture helpers for those businesses.
 
 ## 16. Risks And Mitigations
 

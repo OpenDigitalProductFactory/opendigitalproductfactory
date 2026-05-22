@@ -4,7 +4,7 @@
 
 **Goal:** Prevent MSP customer inventory and network topology from cross-contaminating when customers reuse the same private IP ranges, hostnames, device identifiers, or network layouts.
 
-**Architecture:** Treat customer estate topology as a scoped identity problem, not a UI filtering problem. Discovery ingestion derives scope from the authenticated Edge Node, persists scope onto discovery runs, inventory entities, relationships, and Neo4j projections, and requires topology graph queries to start from a `TopologyScopeContext`.
+**Architecture:** Treat customer estate topology as a scoped identity problem, not a UI filtering problem. Discovery ingestion derives scope from the authenticated Edge Node, persists scope onto discovery runs, inventory entities, relationships, and Neo4j projections, and requires topology graph queries to start from a `TopologyScopeContext`. The customer topology workbench is also an MSP-type capability gate, not a universal portal feature.
 
 **Tech Stack:** Next.js 16, React 19, Prisma 7, PostgreSQL, Neo4j, pnpm, Vitest, DPF Edge Node discovery APIs.
 
@@ -27,8 +27,14 @@ Current state on `origin/main` after PR #988:
 
 The first code slice must fix identity, persistence, and query scoping before polishing the UI.
 
+Research update: NetBox models overlapping IP address spaces through VRF and tenant boundaries; Auvik, N-able N-central, and NinjaOne all frame network maps or device operations around customer/site/organization contexts. DPF should follow the same separation. The storage and query safeguards are platform hygiene, but the customer network topology route itself belongs only to MSP-type profiles whose normalized capabilities make customer-estate, network-inventory, and edge-node customer deployment required.
+
 ## File Structure
 
+- Create `apps/web/lib/customer-estate/topology-applicability.ts`
+  - Owns `canUseCustomerNetworkTopology()` and keeps route/UI gating out of scattered components.
+- Create `apps/web/lib/customer-estate/topology-applicability.test.ts`
+  - Proves MSP-type activation passes and salon/retail/optional-network profiles do not.
 - Create `packages/db/src/discovery-scope.ts`
   - Owns `DiscoveryScopeContext`, `buildDiscoveryScopeKey()`, `buildScopedInventoryEntityKey()`, and `buildScopedRelationshipKey()`.
 - Create `packages/db/src/discovery-scope.test.ts`
@@ -62,7 +68,171 @@ The first code slice must fix identity, persistence, and query scoping before po
 - Create `apps/web/components/inventory/CustomerTopologyScopeBar.test.tsx`
   - Verifies customer, site, and internal labels render with theme-aware classes.
 
-Refactoring allocation: Tasks 1, 4, 7, and 8 are refactoring-heavy and account for at least 20 percent of the implementation. They remove global identity assumptions and split graph scope/style responsibilities before adding more UI.
+Refactoring allocation: Tasks 0, 1, 4, 7, and 8 are refactoring-heavy and account for at least 20 percent of the implementation. They remove global identity assumptions, centralize applicability gating, and split graph scope/style responsibilities before adding more UI.
+
+## Task 0: Gate Customer Topology By MSP-Type Capability Applicability
+
+**Files:**
+- Create: `apps/web/lib/customer-estate/topology-applicability.ts`
+- Create: `apps/web/lib/customer-estate/topology-applicability.test.ts`
+
+- [ ] **Step 1: Write the failing applicability tests**
+
+Create `apps/web/lib/customer-estate/topology-applicability.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+
+import { readActivationProfile } from "@/lib/storefront/archetype-activation";
+import { canUseCustomerNetworkTopology } from "./topology-applicability";
+
+const baseProfile = {
+  modules: [],
+  billingReadinessMode: "none",
+  customerGraph: "none",
+  estateSeparation: "shared",
+} as const;
+
+describe("canUseCustomerNetworkTopology", () => {
+  it("allows MSP-type managed network profiles", () => {
+    const profile = readActivationProfile({
+      ...baseProfile,
+      profileType: "managed-service-provider",
+      billingReadinessMode: "prepared-not-prescribed",
+      customerGraph: "separate-customer-projection",
+      estateSeparation: "strict",
+      axes: {
+        form: "services",
+        delivery: "hybrid",
+        primaryConsumer: "business",
+        consumptionChannel: "onsite-plus-portal",
+        commercialModel: "recurring-agreement",
+        provisioning: "account-and-entitlement",
+        platform: "no",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: {
+          scope: "primary",
+          it4itStages: ["detect-to-correct", "deploy-to-operate", "request-to-fulfill"],
+        },
+        forEmployees: { scope: "standard" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+    });
+
+    expect(canUseCustomerNetworkTopology(profile)).toBe(true);
+  });
+
+  it("blocks appointment-service archetypes such as hair salons", () => {
+    const profile = readActivationProfile({
+      ...baseProfile,
+      profileType: "standard",
+      axes: {
+        form: "services",
+        delivery: "physical",
+        primaryConsumer: "individual",
+        consumptionChannel: "physical",
+        commercialModel: "appointment-checkout",
+        provisioning: "account-with-billing",
+        platform: "no",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: { scope: "minimal" },
+        forEmployees: { scope: "minimal" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+    });
+
+    expect(canUseCustomerNetworkTopology(profile)).toBe(false);
+  });
+
+  it("blocks optional facilities-style network inventory", () => {
+    const profile = readActivationProfile({
+      ...baseProfile,
+      profileType: "standard",
+      billingReadinessMode: "prepared-not-prescribed",
+      customerGraph: "separate-customer-projection",
+      estateSeparation: "strict",
+      axes: {
+        form: "services",
+        delivery: "physical",
+        primaryConsumer: "household",
+        consumptionChannel: "onsite-plus-portal",
+        commercialModel: "recurring-agreement",
+        provisioning: "account-and-entitlement",
+        platform: "no",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: { scope: "standard" },
+        forEmployees: { scope: "minimal" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+    });
+
+    expect(canUseCustomerNetworkTopology(profile)).toBe(false);
+  });
+});
+```
+
+Run:
+
+```powershell
+pnpm --filter web exec vitest run lib/customer-estate/topology-applicability.test.ts
+```
+
+Expected: FAIL because the helper does not exist.
+
+- [ ] **Step 2: Implement the helper**
+
+Create `apps/web/lib/customer-estate/topology-applicability.ts`:
+
+```ts
+import {
+  getCapabilityActivation,
+  type ArchetypeActivationProfile,
+} from "@/lib/storefront/archetype-activation";
+
+function isRequiredStrictCapability(
+  profile: ArchetypeActivationProfile | null | undefined,
+  capabilityKey: string,
+): boolean {
+  const capability = getCapabilityActivation(profile, capabilityKey);
+  return capability?.applicability === "required" && capability.isolation === "strict-customer-scope";
+}
+
+export function canUseCustomerNetworkTopology(
+  profile: ArchetypeActivationProfile | null | undefined,
+): boolean {
+  return (
+    isRequiredStrictCapability(profile, "customer-estate") &&
+    isRequiredStrictCapability(profile, "network-inventory") &&
+    getCapabilityActivation(profile, "edge-node-customer-deployment")?.applicability === "required"
+  );
+}
+```
+
+Do not branch on `archetypeId`. The initial built-in archetype expected to pass is `it-managed-services`, but the test should prove the capability combination, not the string id.
+
+- [ ] **Step 3: Run the tests**
+
+Run:
+
+```powershell
+pnpm --filter web exec vitest run lib/customer-estate/topology-applicability.test.ts
+pnpm --filter web typecheck
+```
+
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```powershell
+git add apps/web/lib/customer-estate/topology-applicability.ts apps/web/lib/customer-estate/topology-applicability.test.ts
+git commit -s -m "feat(customer-estate): gate network topology by MSP capability"
+```
 
 ## Task 1: Add Discovery Scope Helpers
 
@@ -1061,6 +1231,7 @@ git commit -s -m "feat(graph): require scope for customer topology reads"
 - Create: `apps/web/components/inventory/CustomerTopologyScopeBar.tsx`
 - Create: `apps/web/components/inventory/CustomerTopologyScopeBar.test.tsx`
 - Modify: `apps/web/components/inventory/DiscoveryOperationsPage.tsx`
+- Use: `apps/web/lib/customer-estate/topology-applicability.ts`
 
 - [ ] **Step 1: Write the scope bar tests**
 
@@ -1173,12 +1344,15 @@ Modify `apps/web/components/inventory/DiscoveryOperationsPage.tsx` so the global
 
 Do not add customer selection to this page in this task. Customer topology entry belongs under customer/site routes after scoped persistence is in place.
 
+When the customer/site route is added, render the `Network` tab only if `canUseCustomerNetworkTopology(profile)` returns true. For non-MSP archetypes such as salons or retail shops, do not render the tab, do not show an empty-state upsell, and do not expose a customer topology action through command menus. Those businesses can still use organization-internal inventory/posture surfaces where applicable.
+
 - [ ] **Step 4: Run component tests**
 
 Run:
 
 ```powershell
 pnpm --filter web exec vitest run components/inventory/CustomerTopologyScopeBar.test.tsx
+pnpm --filter web exec vitest run lib/customer-estate/topology-applicability.test.ts
 pnpm --filter web typecheck
 ```
 
@@ -1316,6 +1490,7 @@ Run:
 
 ```powershell
 pnpm --filter web exec vitest run lib/actions/graph.customer-scope.test.ts components/inventory/CustomerTopologyScopeBar.test.tsx lib/graph/graph-style-tokens.test.ts components/inventory/TopologyGraph.test.tsx components/inventory/__tests__/TopologyGraph.subnet.test.tsx
+pnpm --filter web exec vitest run lib/customer-estate/topology-applicability.test.ts
 ```
 
 Expected: PASS.
@@ -1365,9 +1540,10 @@ Use the Docker-served app, not a stale dev server.
 2. Log in as `admin@dpf.local` using `ADMIN_PASSWORD` from repo-root `.env`.
 3. Open `/platform/tools/discovery`.
 4. Confirm the topology panel shows the internal/MSP scope bar and does not imply it is a customer estate view.
-5. Seed or submit two synthetic scoped discovery runs with the same `arp:192.168.1.1` under two different customer/site scopes.
-6. Confirm the DB has two distinct `InventoryEntity.entityKey` rows, one per customer scope.
-7. Confirm the customer-scoped graph action only returns the selected customer's scoped node.
+5. Confirm a non-MSP archetype profile such as hair salon does not expose a customer/site `Network` tab or customer topology action.
+6. Seed or submit two synthetic scoped discovery runs with the same `arp:192.168.1.1` under two different customer/site scopes.
+7. Confirm the DB has two distinct `InventoryEntity.entityKey` rows, one per customer scope.
+8. Confirm the customer-scoped graph action only returns the selected customer's scoped node.
 
 - [ ] **Step 7: Final commit if verification fixes were needed**
 
@@ -1399,7 +1575,7 @@ PR body must include:
 ## Summary
 - scopes discovery identity and stale detection for MSP customer estate topology
 - persists customer/site scope on inventory entities, relationships, and Neo4j projections
-- adds explicit topology scope UI and duplicate-private-IP regression tests
+- adds MSP-capability topology gating, explicit topology scope UI, and duplicate-private-IP regression tests
 
 ## Verification
 - pnpm --filter @dpf/db exec vitest run ...
@@ -1409,6 +1585,7 @@ PR body must include:
 - pnpm --filter web build
 - pnpm --filter @dpf/db exec prisma migrate deploy
 - Docker-served UI: /platform/tools/discovery scope bar verified
+- Docker-served UI: non-MSP customer/site navigation has no customer topology surface
 ```
 
 ## Self-Review
@@ -1421,7 +1598,8 @@ Spec coverage:
 - Scope-local stale detection: Task 4.
 - Neo4j and topology graph filtering: Tasks 5 and 6.
 - UI scope clarity and theme-aware design: Tasks 7 and 8.
-- Refactoring capacity: Tasks 1, 4, 7, and 8.
+- MSP-only topology applicability: Task 0 and Task 7.
+- Refactoring capacity: Tasks 0, 1, 4, 7, and 8.
 
 Placeholder scan:
 
