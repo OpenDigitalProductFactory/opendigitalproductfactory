@@ -190,6 +190,32 @@ export type PaymentPattern =
 
 export type InvoiceExecutionMode = "none" | "manual" | "prepared-not-prescribed" | "automated";
 
+/**
+ * Where a {@link PrimaryAction} is invoked from in the UI. Drives which actions
+ * the {@link CapabilityActivation} contributes to a given surface (map pin
+ * click, list-row click, multi-select toolbar, detail page).
+ */
+export type PrimaryActionSurface = "map-pin" | "list-row" | "selection" | "detail-page";
+
+/**
+ * Declares an action that a capability contributes to a UI surface, so map-pin
+ * click / list-row click / etc. semantics are capability-driven rather than
+ * hard-coded per archetype. Resolution happens via
+ * `apps/web/lib/customer-surface/pin-actions.ts` (or equivalent host helpers);
+ * see `docs/superpowers/specs/2026-05-22-customer-surface-archetype-activation-design.md`
+ * §11.
+ */
+export interface PrimaryAction {
+  /** Stable id, e.g. "open-customer-detail", "dispatch-tech", "log-violation". */
+  id: string;
+  /** Verb label for the action button, e.g. "Open", "Dispatch", "Log violation". */
+  label: string;
+  /** Which UI scope this action fires from. */
+  surface: PrimaryActionSurface;
+  /** Whether this is the default action (e.g. single-click on map pin). */
+  isDefault?: boolean;
+}
+
 export interface CapabilityActivation {
   capabilityKey: string;
   applicability: CapabilityApplicability;
@@ -197,6 +223,12 @@ export interface CapabilityActivation {
   transactionContexts?: TransactionContext[];
   isolation: CapabilityIsolation;
   surfaces: string[];
+  /**
+   * Actions this capability contributes to UI surfaces. Optional for backward
+   * compatibility — existing capabilities without action declarations behave
+   * exactly as before.
+   */
+  primaryActions?: PrimaryAction[];
   sourceRules: string[];
   reason?: string;
   overrideReason?: string;
@@ -209,6 +241,7 @@ export interface CapabilityOverride {
   transactionContexts?: TransactionContext[];
   isolation?: CapabilityIsolation;
   surfaces?: string[];
+  primaryActions?: PrimaryAction[];
   reason: string;
 }
 
