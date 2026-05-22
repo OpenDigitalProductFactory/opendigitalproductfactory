@@ -5,6 +5,12 @@
 **Author:** OpenAI Codex with user direction  
 **Epic:** TBD - recommend new epic
 
+> Applicability update: the cross-archetype capability, segmentation,
+> and billing-pattern contract now lives in
+> `docs/superpowers/specs/2026-05-22-archetype-capability-applicability-and-msp-segmentation-design.md`.
+> Treat this document as the MSP operating-model grounding and the newer
+> spec as the canonical applicability architecture.
+
 ## 1. Problem Statement
 
 The current storefront/business archetype model is too weak for an IT service provider / managed service provider (MSP) business.
