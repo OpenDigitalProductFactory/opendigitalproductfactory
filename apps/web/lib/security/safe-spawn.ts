@@ -48,23 +48,37 @@ export type SpawnFn = (
 ) => ChildProcess;
 
 /**
- * Basenames of binaries permitted as the `command` arg to safeSpawn.
- * Add new entries deliberately; each one expands the attack surface
- * to "anything the new binary can do when started by an attacker-
+ * Basenames of binaries permitted as the `command` arg to safeSpawn,
+ * mapped to the literal string we pass to spawn() when that name is
+ * allowed.
+ *
+ * Why a Record-keyed-by-name (and why we then USE the returned value
+ * at the spawn call site): CodeQL's `js/command-line-injection` query
+ * recognises "value read from a constant object indexed by user input"
+ * as a sanitizer pattern. By looking up the binary in ALLOWED_BINARIES
+ * and spawning the VALUE (not the original parameter), we hand CodeQL
+ * a clean dataflow that ends at a constant string — even though the
+ * INDEX came from user input.
+ *
+ * Same runtime contract as before — adding a new MCP runner means
+ * adding one entry here. Each entry expands the attack surface to
+ * "anything the new binary can do when started by an attacker-
  * controlled args list."
  */
-export const ALLOWED_BINARIES: ReadonlySet<string> = new Set([
+export const ALLOWED_BINARIES = {
   // Node-based MCP servers (the common case).
-  "npx",
-  "node",
+  npx: "npx",
+  node: "node",
   // Python-based MCP servers.
-  "uvx", // `uv` ephemeral runner
-  "python3",
-  "python",
+  uvx: "uvx", // `uv` ephemeral runner
+  python3: "python3",
+  python: "python",
   // Other runtimes that MCP servers occasionally use.
-  "deno",
-  "bun",
-]);
+  deno: "deno",
+  bun: "bun",
+} as const;
+
+export type AllowedBinaryName = keyof typeof ALLOWED_BINARIES;
 
 /**
  * Env keys that change WHICH code runs even when the command itself is
@@ -108,30 +122,34 @@ function basename(command: string): string {
 }
 
 /**
- * Validates that `command` (or its basename, for absolute paths) is in the
- * allowlist. Throws on failure. Returns the original `command` on success —
- * the explicit return lets CodeQL's `js/command-line-injection` dataflow
- * recognize the function as a sanitizer (tainted value enters, validated
- * value exits). Callers should use the RETURNED value at the spawn call
- * site, not the original input, so the sanitizer pattern is visible.
+ * Validates that `command` (or its basename, for absolute paths) is in
+ * the allowlist. Returns the **constant** binary string from
+ * ALLOWED_BINARIES — NOT the input parameter — so CodeQL's dataflow
+ * sees the spawn arg as a value from a constant table. Throws on
+ * failure.
  *
  * Example (the safe pattern):
  *   const validated = assertAllowedBinary(command);
  *   spawn(validated, args, { ... });
+ *
+ * At runtime `validated` equals `ALLOWED_BINARIES[basename(command)]`
+ * (eg "npx"). The original `command` is only used for the lookup index
+ * and error messages.
  */
 export function assertAllowedBinary(command: string): string {
   if (!command || command.trim() === "") {
     throw new Error("safe-spawn: command must be a non-empty string");
   }
   const name = basename(command);
-  if (!ALLOWED_BINARIES.has(name)) {
+  const allowed = (ALLOWED_BINARIES as Record<string, string | undefined>)[name];
+  if (allowed === undefined) {
     throw new Error(
       `safe-spawn: binary "${name}" is not in the allowlist. ` +
-        `Allowed: ${[...ALLOWED_BINARIES].join(", ")}. ` +
+        `Allowed: ${Object.keys(ALLOWED_BINARIES).join(", ")}. ` +
         `If this is a legitimate MCP runner, add it deliberately to ALLOWED_BINARIES in apps/web/lib/security/safe-spawn.ts.`,
     );
   }
-  return command;
+  return allowed;
 }
 
 /**

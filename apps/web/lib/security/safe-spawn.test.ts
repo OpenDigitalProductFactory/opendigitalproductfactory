@@ -25,7 +25,7 @@ describe("ALLOWED_BINARIES contract", () => {
     // If you add a new MCP runner that's NOT in this list, the user-visible
     // health check will reject it. Update the allowlist deliberately.
     for (const name of ["npx", "node", "uvx", "python3", "python"]) {
-      expect(ALLOWED_BINARIES.has(name)).toBe(true);
+      expect(name in ALLOWED_BINARIES).toBe(true);
     }
   });
 
@@ -35,8 +35,17 @@ describe("ALLOWED_BINARIES contract", () => {
     // proof-of-concept exploit shape. `env` lets PATH manipulation pick
     // an unintended binary even when the basename looks safe.
     for (const name of ["sh", "bash", "zsh", "fish", "dash", "env"]) {
-      expect(ALLOWED_BINARIES.has(name)).toBe(false);
+      expect(name in ALLOWED_BINARIES).toBe(false);
     }
+  });
+
+  it("returns the constant binary string for an allowed input (key sanitizer test)", () => {
+    // assertAllowedBinary returns the VALUE from the constant table, not
+    // the input parameter. This is what makes CodeQL recognise the
+    // function as a sanitizer for js/command-line-injection.
+    expect(assertAllowedBinary("npx")).toBe("npx");
+    expect(assertAllowedBinary("/usr/local/bin/npx")).toBe("npx");
+    expect(assertAllowedBinary("C:\\Program Files\\nodejs\\node.exe")).toBe("node");
   });
 });
 
