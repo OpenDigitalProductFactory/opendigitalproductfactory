@@ -1,7 +1,7 @@
 import type { VoiceSynthesisConfig, TTSProvider } from "./types"
 import { synthesizeWithCartesia, VoiceSynthesisError } from "./adapters/cartesia"
 import { synthesizeWithFishAudio } from "./adapters/fish-audio"
-import { synthesizeWithChatterbox } from "./adapters/chatterbox"
+import { synthesizeWithChatterbox, type ChatterboxSynthesisConfig } from "./adapters/chatterbox"
 
 export interface SynthesisOutput {
   audioBuffer: ArrayBuffer
@@ -22,11 +22,11 @@ export function defaultProvider(): TTSProvider {
 
 export async function synthesizeSpeech(
   text: string,
-  config: VoiceSynthesisConfig,
+  config: VoiceSynthesisConfig | ChatterboxSynthesisConfig,
 ): Promise<SynthesisOutput> {
   switch (config.provider) {
     case "chatterbox":
-      return synthesizeWithChatterbox(text, config) as Promise<SynthesisOutput>
+      return synthesizeWithChatterbox(text, config as ChatterboxSynthesisConfig) as Promise<SynthesisOutput>
     case "cartesia":
       return synthesizeWithCartesia(text, config) as Promise<SynthesisOutput>
     case "fish-audio":
