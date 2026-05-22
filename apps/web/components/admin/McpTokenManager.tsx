@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Ban,
   CheckCircle2,
+  Clock,
   Copy,
   KeyRound,
   Plus,
@@ -14,18 +15,26 @@ import {
 import { type ReactNode, useEffect, useMemo, useState, useTransition } from "react";
 
 import {
+  bulkRevokeMyMcpTokens,
   copyMyMcpToken,
   issueMyMcpToken,
+  issueMyTemplateMcpToken,
   issueMyWriteMcpToken,
   listAvailableMcpScopes,
+  listMcpTokenTemplates,
   listMyMcpTokens,
   revokeMyMcpToken,
   rotateMyMcpToken,
+  rotateMyMcpTokenWithEdit,
   upgradeMyMcpTokenForCodingAgent,
+  type McpTokenTemplateSummary,
 } from "@/lib/actions/mcp-tokens";
 import {
   defaultMcpTokenScopes,
+  MCP_TOKEN_DEFAULT_STALE_DAYS,
+  MCP_TOKEN_REVOKED_ARCHIVE_DAYS,
   type McpTokenScopeTier,
+  type McpTokenTemplateId,
 } from "@/lib/mcp-token-scopes";
 
 export interface McpTokenManagerProps {
@@ -42,13 +51,21 @@ type TokenRow = {
   scope: McpTokenScopeTier;
   scopes: string[];
   lastUsedAt: string | null;
+  // Derived server-side in listMyMcpTokens. Null when the token has never
+  // been used, when revoked, or when expired — see MCP_TOKEN_DEFAULT_STALE_DAYS.
+  idleDays: number | null;
   expiresAt: string | null;
   revokedAt: string | null;
   createdAt: string;
 };
 
+// Alias the shared constants from mcp-token-scopes for use inside the JSX —
+// keeps the source of truth out of "use server" modules per Next.js rules.
+const STALE_THRESHOLD_DAYS = MCP_TOKEN_DEFAULT_STALE_DAYS;
+const REVOKED_ARCHIVE_DAYS = MCP_TOKEN_REVOKED_ARCHIVE_DAYS;
+
 type Issued = {
-  mode: "issued" | "rotated" | "copied";
+  mode: "issued" | "rotated" | "copied" | "rotated-with-edit";
   tokenId: string;
   plaintext: string;
   prefix: string;
@@ -62,6 +79,10 @@ type Issued = {
     envPowerShell: string;
     runtimeRefreshPowerShell: string;
   };
+  // Surfaced from rotateMyMcpTokenWithEdit when the new token issued OK but
+  // the underlying revoke of the old token failed. The operator needs to
+  // manually revoke the old row in this case.
+  oldTokenRevokeError?: string;
 };
 
 type View =
@@ -110,6 +131,7 @@ async function writeClipboardText(value: string): Promise<boolean> {
 export function McpTokenManager(props: McpTokenManagerProps) {
   const [tokens, setTokens] = useState<TokenRow[]>([]);
   const [scopes, setScopes] = useState<string[]>([]);
+  const [templates, setTemplates] = useState<McpTokenTemplateSummary[]>([]);
   const [view, setView] = useState<View>({ kind: "idle" });
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
@@ -117,23 +139,45 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   const [pending, startTransition] = useTransition();
 
   const [formName, setFormName] = useState("");
+  const [formTemplateId, setFormTemplateId] = useState<McpTokenTemplateId>("development");
   const [formScope, setFormScope] = useState<McpTokenScopeTier>("read");
   const [formScopes, setFormScopes] = useState<Set<string>>(() => new Set());
   const [formExpires, setFormExpires] = useState<string>("90");
+  // null = "issue new token" mode (default). When set to a tokenId, the
+  // form's submit runs rotateMyMcpTokenWithEdit against that token instead
+  // — the modal feels like editing the live row but the security model
+  // stays immutable (new token issued, old revoked atomically).
+  const [formRotateTargetId, setFormRotateTargetId] = useState<string | null>(null);
+
+  // Idle hygiene: filter to stale-only and multi-select for bulk revoke.
+  const [staleOnly, setStaleOnly] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  // Revoked tokens are hidden by default to keep the active-token list
+  // legible. Operator toggles this on for triage / cleanup work.
+  const [showRevoked, setShowRevoked] = useState(false);
+  // Reported by the server: count of tokens auto-archived (revoked >
+  // REVOKED_ARCHIVE_DAYS ago) and dropped from the response. Surfaced in the
+  // toolbar so the operator knows older revocations aren't gone, just hidden.
+  const [archivedCount, setArchivedCount] = useState(0);
 
   const defaultScopes = useMemo(() => defaultMcpTokenScopes(scopes), [scopes]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [tokensResult, scopesResult] = await Promise.all([
+      const [tokensResult, scopesResult, templatesResult] = await Promise.all([
         listMyMcpTokens(),
         listAvailableMcpScopes(),
+        listMcpTokenTemplates(),
       ]);
       if (cancelled) return;
-      if (tokensResult.ok) setTokens(tokensResult.tokens);
+      if (tokensResult.ok) {
+        setTokens(tokensResult.tokens);
+        setArchivedCount(tokensResult.archivedCount);
+      }
       const availableScopes = scopesResult.scopes;
       setScopes(availableScopes);
+      setTemplates(templatesResult.templates);
       setFormScopes((current) =>
         current.size > 0 ? current : new Set(defaultMcpTokenScopes(availableScopes)),
       );
@@ -146,22 +190,62 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   function refresh() {
     startTransition(async () => {
       const result = await listMyMcpTokens();
-      if (result.ok) setTokens(result.tokens);
+      if (result.ok) {
+        setTokens(result.tokens);
+        setArchivedCount(result.archivedCount);
+      }
     });
   }
 
-  function applyScopeDefaults(scope: McpTokenScopeTier) {
-    setFormScope(scope);
-    setFormScopes(new Set(defaultMcpTokenScopes(scopes, scope)));
+  function applyTemplate(templateId: McpTokenTemplateId) {
+    setFormTemplateId(templateId);
+    const template = templates.find((t) => t.id === templateId);
+    if (!template) return;
+    setFormScope(template.tier);
+    if (templateId === "custom") {
+      // Preserve whatever the user had ticked; fall back to read defaults
+      // if they switched to custom from a clean form.
+      setFormScopes((prev) =>
+        prev.size > 0 ? prev : new Set(defaultMcpTokenScopes(scopes)),
+      );
+    } else {
+      setFormScopes(new Set(template.grants));
+    }
   }
 
-  function openForm(scope: McpTokenScopeTier = "read") {
+  function openForm(templateId: McpTokenTemplateId = "development") {
     setInlineError(null);
     setFormName("");
-    setFormScope(scope);
-    setFormScopes(new Set(defaultMcpTokenScopes(scopes, scope)));
     setFormExpires("90");
     setNotice(null);
+    setFormTemplateId(templateId);
+    setFormRotateTargetId(null);
+    const template = templates.find((t) => t.id === templateId);
+    if (template && templateId !== "custom") {
+      setFormScope(template.tier);
+      setFormScopes(new Set(template.grants));
+    } else {
+      // Custom or templates-not-yet-loaded → fall back to read defaults.
+      setFormScope("read");
+      setFormScopes(new Set(defaultMcpTokenScopes(scopes)));
+    }
+    setView({ kind: "form", error: null });
+  }
+
+  // Open the same form modal pre-populated with the row's current grants
+  // and tier, in Custom mode so the operator sees the flat checkbox picker
+  // and can add/remove grants. Submit branches to rotateMyMcpTokenWithEdit
+  // so the underlying McpToken row stays immutable — new token issued, old
+  // revoked atomically.
+  function openRotateWithEditForm(token: TokenRow) {
+    setInlineError(null);
+    setNotice(null);
+    setFormName(token.name);
+    setFormExpires("90");
+    setFormTemplateId("custom");
+    setFormScope(token.scope);
+    setFormScopes(new Set(token.scopes));
+    setFormRotateTargetId(token.id);
     setView({ kind: "form", error: null });
   }
 
@@ -172,11 +256,58 @@ export function McpTokenManager(props: McpTokenManagerProps) {
       else next.add(scope);
       return next;
     });
+    // Manually toggling a scope means the operator has diverged from the
+    // template — drop them into "custom" so the picker label stays honest.
+    setFormTemplateId("custom");
   }
 
   function submit() {
     startTransition(async () => {
       const expiresInDays = formExpires === "never" ? null : parseInt(formExpires, 10);
+
+      // Rotate-with-edit branch: the form was opened against an existing
+      // row. Issue new + revoke old via the dedicated action so the
+      // operator sees a single atomic outcome.
+      if (formRotateTargetId != null) {
+        const result = await rotateMyMcpTokenWithEdit({
+          tokenId: formRotateTargetId,
+          name: formName.trim(),
+          scope: formScope,
+          scopes: [...formScopes],
+          expiresInDays,
+          baseUrl: props.baseUrl,
+        });
+        if (!result.ok) {
+          setView({ kind: "form", error: result.message });
+          return;
+        }
+        setView({
+          kind: "issued",
+          payload: {
+            ...result,
+            mode: "rotated-with-edit",
+            oldTokenRevokeError: result.oldTokenRevokeError,
+          },
+        });
+        refresh();
+        return;
+      }
+
+      if (formTemplateId !== "custom") {
+        const result = await issueMyTemplateMcpToken({
+          templateId: formTemplateId,
+          name: formName.trim(),
+          expiresInDays,
+          baseUrl: props.baseUrl,
+        });
+        if (!result.ok) {
+          setView({ kind: "form", error: result.message });
+          return;
+        }
+        setView({ kind: "issued", payload: { ...result, mode: "issued" } });
+        refresh();
+        return;
+      }
       const result = await issueMyMcpToken({
         name: formName.trim(),
         capability: formScope === "read" ? "read" : "write",
@@ -261,6 +392,59 @@ export function McpTokenManager(props: McpTokenManagerProps) {
     });
   }
 
+  function isActive(token: TokenRow): boolean {
+    return token.revokedAt == null && !isExpired(token);
+  }
+
+  function isStale(token: TokenRow): boolean {
+    if (!isActive(token)) return false;
+    // Never-used tokens that are also older than the threshold count as
+    // stale — issued but never picked up by anything.
+    if (token.idleDays != null) return token.idleDays >= STALE_THRESHOLD_DAYS;
+    const createdAt = new Date(token.createdAt).getTime();
+    return Date.now() - createdAt >= STALE_THRESHOLD_DAYS * 86_400_000;
+  }
+
+  function toggleSelect(tokenId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(tokenId)) next.delete(tokenId);
+      else next.add(tokenId);
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  function bulkRevokeSelected() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    if (!confirm(`Revoke ${ids.length} token${ids.length === 1 ? "" : "s"}? Clients using them will fail on their next MCP call.`)) {
+      return;
+    }
+    setNotice(null);
+    startTransition(async () => {
+      const result = await bulkRevokeMyMcpTokens({
+        tokenIds: ids,
+        reason: "bulk revoke from admin UI",
+      });
+      if (!result.ok) {
+        setNotice({ kind: "error", message: result.error });
+        return;
+      }
+      const parts = [`${result.revokedCount} revoked`];
+      if (result.failedCount > 0) parts.push(`${result.failedCount} failed`);
+      setNotice({
+        kind: result.failedCount > 0 ? "error" : "success",
+        message: parts.join(", ") + ".",
+      });
+      clearSelection();
+      refresh();
+    });
+  }
+
   function upgradeForCodeIntelligence(tokenId: string) {
     setNotice(null);
     setPendingTokenId(tokenId);
@@ -285,7 +469,9 @@ export function McpTokenManager(props: McpTokenManagerProps) {
             <h2 className="text-lg font-semibold text-[var(--dpf-text)]">MCP access tokens</h2>
           </div>
           <p className="mt-1 max-w-2xl text-sm leading-5 text-[var(--dpf-muted)]">
-            External coding-agent access for <code>/api/mcp/v1</code>.
+            External coding-agent access for <code>/api/mcp/v1</code>. Pick a
+            role template (Admin, Development, Employee, Observer) or compose
+            a custom grant set.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -294,18 +480,19 @@ export function McpTokenManager(props: McpTokenManagerProps) {
             onClick={issueWriteToken}
             disabled={pending}
             className={buttonClass("primary")}
+            title="One-click: issues a development-template token (read code/specs, write backlog/work-capsules, sandbox + iac_execute) valid for 90 days."
           >
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            Issue write token
+            Issue development token
           </button>
           <button
             type="button"
-            onClick={() => openForm("read")}
+            onClick={() => openForm("development")}
             disabled={pending}
             className={buttonClass()}
           >
             <Plus className={iconClass()} aria-hidden="true" />
-            Generate token
+            Issue token from template
           </button>
         </div>
       </div>
@@ -338,20 +525,28 @@ export function McpTokenManager(props: McpTokenManagerProps) {
             No MCP tokens have been issued yet.
           </div>
         ) : (
-          <ul className="space-y-2">
-            {tokens.map((token) => (
-              <TokenListItem
-                key={token.id}
-                token={token}
-                pending={pending || pendingTokenId === token.id}
-                defaultScopes={defaultScopes}
-                onCopy={copyCurrentToken}
-                onRotate={rotateToken}
-                onRevoke={revoke}
-                onUpgrade={upgradeForCodeIntelligence}
-              />
-            ))}
-          </ul>
+          <TokenList
+            tokens={tokens}
+            pending={pending}
+            pendingTokenId={pendingTokenId}
+            defaultScopes={defaultScopes}
+            selectedIds={selectedIds}
+            staleOnly={staleOnly}
+            showRevoked={showRevoked}
+            archivedCount={archivedCount}
+            onCopy={copyCurrentToken}
+            onRotate={rotateToken}
+            onRotateWithEdit={openRotateWithEditForm}
+            onRevoke={revoke}
+            onUpgrade={upgradeForCodeIntelligence}
+            onToggleSelect={toggleSelect}
+            onToggleStaleOnly={() => setStaleOnly((v) => !v)}
+            onToggleShowRevoked={() => setShowRevoked((v) => !v)}
+            onBulkRevoke={bulkRevokeSelected}
+            onClearSelection={clearSelection}
+            isActive={isActive}
+            isStale={isStale}
+          />
         )}
       </div>
 
@@ -362,13 +557,16 @@ export function McpTokenManager(props: McpTokenManagerProps) {
           formName={formName}
           formScope={formScope}
           formScopes={formScopes}
+          formTemplateId={formTemplateId}
+          rotateTargetId={formRotateTargetId}
           pending={pending}
           scopes={scopes}
+          templates={templates}
           onCancel={() => setView({ kind: "idle" })}
           onExpiresChange={setFormExpires}
           onNameChange={setFormName}
-          onScopeChange={applyScopeDefaults}
           onSubmit={submit}
+          onTemplateChange={applyTemplate}
           onToggleScope={toggleScope}
         />
       )}
@@ -383,12 +581,153 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   );
 }
 
+function TokenList(props: {
+  tokens: TokenRow[];
+  pending: boolean;
+  pendingTokenId: string | null;
+  defaultScopes: string[];
+  selectedIds: Set<string>;
+  staleOnly: boolean;
+  showRevoked: boolean;
+  archivedCount: number;
+  onCopy: (token: TokenRow) => void;
+  onRotate: (token: TokenRow) => void;
+  onRotateWithEdit: (token: TokenRow) => void;
+  onRevoke: (tokenId: string) => void;
+  onUpgrade: (tokenId: string) => void;
+  onToggleSelect: (tokenId: string) => void;
+  onToggleStaleOnly: () => void;
+  onToggleShowRevoked: () => void;
+  onBulkRevoke: () => void;
+  onClearSelection: () => void;
+  isActive: (token: TokenRow) => boolean;
+  isStale: (token: TokenRow) => boolean;
+}) {
+  const revokedCount = props.tokens.filter((t) => t.revokedAt != null).length;
+  const staleCount = props.tokens.filter(props.isStale).length;
+  // Filter chain: hide-revoked first (default), then stale-only.
+  let visible = props.showRevoked
+    ? props.tokens
+    : props.tokens.filter((t) => t.revokedAt == null);
+  if (props.staleOnly) visible = visible.filter(props.isStale);
+  const selectedCount = props.selectedIds.size;
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <label className="inline-flex items-center gap-2 text-sm text-[var(--dpf-text)]">
+            <input
+              type="checkbox"
+              checked={props.staleOnly}
+              onChange={props.onToggleStaleOnly}
+              aria-label={`Show only tokens idle for at least ${STALE_THRESHOLD_DAYS} days`}
+            />
+            <Clock className="h-3.5 w-3.5 text-[var(--dpf-muted)]" aria-hidden="true" />
+            <span>
+              Show stale only
+              <span className="ml-1 text-xs text-[var(--dpf-muted)]">
+                (≥ {STALE_THRESHOLD_DAYS} days idle — {staleCount} of {props.tokens.length})
+              </span>
+            </span>
+          </label>
+          <label className="inline-flex items-center gap-2 text-sm text-[var(--dpf-text)]">
+            <input
+              type="checkbox"
+              checked={props.showRevoked}
+              onChange={props.onToggleShowRevoked}
+              aria-label="Show revoked tokens"
+            />
+            <Ban className="h-3.5 w-3.5 text-[var(--dpf-muted)]" aria-hidden="true" />
+            <span>
+              Show revoked
+              <span className="ml-1 text-xs text-[var(--dpf-muted)]">
+                ({revokedCount} hidden by default)
+              </span>
+            </span>
+          </label>
+        </div>
+        {selectedCount > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[var(--dpf-muted)]">
+              {selectedCount} selected
+            </span>
+            <button
+              type="button"
+              onClick={props.onClearSelection}
+              disabled={props.pending}
+              className={buttonClass()}
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={props.onBulkRevoke}
+              disabled={props.pending}
+              className={buttonClass("danger")}
+            >
+              <Ban className={iconClass()} aria-hidden="true" />
+              Revoke {selectedCount} selected
+            </button>
+          </div>
+        )}
+      </div>
+
+      {visible.length === 0 ? (
+        <div className="rounded-md border border-dashed border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-5 text-sm text-[var(--dpf-muted)]">
+          {props.staleOnly
+            ? `No tokens are idle for ${STALE_THRESHOLD_DAYS}+ days. Uncheck "Show stale only" to see all tokens.`
+            : !props.showRevoked && revokedCount > 0
+              ? `All ${revokedCount} of your tokens are revoked. Toggle "Show revoked" above to view them.`
+              : "No MCP tokens have been issued yet."}
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {visible.map((token) => (
+            <TokenListItem
+              key={token.id}
+              token={token}
+              pending={props.pending || props.pendingTokenId === token.id}
+              defaultScopes={props.defaultScopes}
+              selected={props.selectedIds.has(token.id)}
+              selectable={props.isActive(token)}
+              stale={props.isStale(token)}
+              onToggleSelect={props.onToggleSelect}
+              onCopy={props.onCopy}
+              onRotate={props.onRotate}
+              onRotateWithEdit={props.onRotateWithEdit}
+              onRevoke={props.onRevoke}
+              onUpgrade={props.onUpgrade}
+            />
+          ))}
+        </ul>
+      )}
+
+      {props.archivedCount > 0 && (
+        <p className="mt-3 text-xs text-[var(--dpf-muted)]">
+          <strong>{props.archivedCount}</strong>{" "}
+          {props.archivedCount === 1 ? "token" : "tokens"} auto-archived
+          (revoked &gt; {REVOKED_ARCHIVE_DAYS} days). They remain in the
+          database for audit FK integrity and are queryable via{" "}
+          <code>/platform/ai/authority</code>; hidden from this list to keep
+          it legible.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function TokenListItem(props: {
   token: TokenRow;
   pending: boolean;
   defaultScopes: string[];
+  selected: boolean;
+  selectable: boolean;
+  stale: boolean;
+  onToggleSelect: (tokenId: string) => void;
   onCopy: (token: TokenRow) => void;
   onRotate: (token: TokenRow) => void;
+  onRotateWithEdit: (token: TokenRow) => void;
   onRevoke: (tokenId: string) => void;
   onUpgrade: (tokenId: string) => void;
 }) {
@@ -401,7 +740,18 @@ function TokenListItem(props: {
   return (
     <li className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 gap-3">
+          {props.selectable && (
+            <input
+              type="checkbox"
+              className="mt-1 shrink-0"
+              checked={props.selected}
+              onChange={() => props.onToggleSelect(token.id)}
+              disabled={props.pending}
+              aria-label={`Select token ${token.name} for bulk revoke`}
+            />
+          )}
+          <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium text-[var(--dpf-text)]">{token.name}</span>
             <code className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-0.5 text-xs text-[var(--dpf-text)]">
@@ -419,6 +769,15 @@ function TokenListItem(props: {
             </span>
             {revoked && <StatusPill label="revoked" tone="error" />}
             {expired && !revoked && <StatusPill label="expired" tone="warning" />}
+            {props.stale && (
+              <span
+                className="inline-flex items-center gap-1 rounded-md border border-[var(--dpf-warning)] px-2 py-0.5 text-xs font-medium text-[var(--dpf-warning)]"
+                title={`Idle ${formatIdle(token)} — exceeds ${STALE_THRESHOLD_DAYS}-day threshold`}
+              >
+                <Clock className="h-3 w-3" aria-hidden="true" />
+                stale {formatIdle(token)}
+              </span>
+            )}
           </div>
 
           <dl className="mt-2 grid gap-1 text-xs text-[var(--dpf-muted)] md:grid-cols-2">
@@ -432,13 +791,21 @@ function TokenListItem(props: {
             </div>
             <div>
               <dt className="inline font-medium text-[var(--dpf-text)]">Last used: </dt>
-              <dd className="inline">{formatDate(token.lastUsedAt)}</dd>
+              <dd className="inline">
+                {formatDate(token.lastUsedAt)}
+                {token.idleDays != null && (
+                  <span className="ml-1 text-[var(--dpf-muted)]">
+                    ({token.idleDays === 0 ? "today" : `${token.idleDays}d idle`})
+                  </span>
+                )}
+              </dd>
             </div>
             <div>
               <dt className="inline font-medium text-[var(--dpf-text)]">Expires: </dt>
               <dd className="inline">{formatDate(token.expiresAt)}</dd>
             </div>
           </dl>
+          </div>
         </div>
 
         {!revoked && (
@@ -468,10 +835,21 @@ function TokenListItem(props: {
               type="button"
               onClick={() => props.onRotate(token)}
               disabled={disabled}
+              title="Issue a new token with the SAME grants, revoke this one"
               className={buttonClass()}
             >
               <RefreshCw className={iconClass()} aria-hidden="true" />
               Rotate token
+            </button>
+            <button
+              type="button"
+              onClick={() => props.onRotateWithEdit(token)}
+              disabled={disabled}
+              title="Open this token's grants in the form for editing, then issue + revoke atomically"
+              className={buttonClass()}
+            >
+              <RefreshCw className={iconClass()} aria-hidden="true" />
+              Rotate with edit
             </button>
             <button
               type="button"
@@ -487,6 +865,14 @@ function TokenListItem(props: {
       </div>
     </li>
   );
+}
+
+// Human-readable idle duration for the stale pill. Falls back to
+// "never used" for tokens with no lastUsedAt — the stale predicate already
+// gated whether to show this, so we only need a short label.
+function formatIdle(token: TokenRow): string {
+  if (token.idleDays == null) return "never used";
+  return token.idleDays === 1 ? "1d" : `${token.idleDays}d`;
 }
 
 function StatusPill(props: { label: string; tone: "warning" | "error" }) {
@@ -520,27 +906,41 @@ function TokenFormDialog(props: {
   formName: string;
   formScope: McpTokenScopeTier;
   formScopes: Set<string>;
+  formTemplateId: McpTokenTemplateId;
+  rotateTargetId: string | null;
   pending: boolean;
   scopes: string[];
+  templates: McpTokenTemplateSummary[];
   onCancel: () => void;
   onExpiresChange: (value: string) => void;
   onNameChange: (value: string) => void;
-  onScopeChange: (value: McpTokenScopeTier) => void;
   onSubmit: () => void;
+  onTemplateChange: (value: McpTokenTemplateId) => void;
   onToggleScope: (scope: string) => void;
 }) {
+  const activeTemplate = props.templates.find((t) => t.id === props.formTemplateId);
+  const showCustomGrants = props.formTemplateId === "custom";
+  const groupedTemplates = useMemo(() => groupTemplatesByCategory(props.templates), [props.templates]);
+  const isRotateMode = props.rotateTargetId != null;
+
   return (
     <DialogFrame onClose={props.onCancel}>
       <div
         role="dialog"
         aria-modal="true"
-        className="w-full max-w-lg rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5 shadow-xl"
+        className="w-full max-w-xl rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5 shadow-xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-base font-semibold text-[var(--dpf-text)]">Generate MCP token</h3>
-            <p className="mt-1 text-xs text-[var(--dpf-muted)]">Choose authority, scopes, and expiry for this client.</p>
+            <h3 className="text-base font-semibold text-[var(--dpf-text)]">
+              {isRotateMode ? "Rotate token with edited grants" : "Issue MCP token"}
+            </h3>
+            <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+              {isRotateMode
+                ? "Add or remove grants. On submit, a new token is issued with these grants and the original token is revoked — atomically."
+                : "Pick the role this token is for. Grants and audit tier come from the template; switch to Custom to compose them by hand."}
+            </p>
           </div>
           <button type="button" onClick={props.onCancel} className={buttonClass()}>
             <X className={iconClass()} aria-hidden="true" />
@@ -550,46 +950,89 @@ function TokenFormDialog(props: {
 
         <div className="mt-4 space-y-3">
           <label className="block text-sm">
+            <span className="font-medium text-[var(--dpf-text)]">Role template</span>
+            <select
+              value={props.formTemplateId}
+              onChange={(event) => props.onTemplateChange(event.target.value as McpTokenTemplateId)}
+              className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2 text-sm text-[var(--dpf-text)]"
+            >
+              {groupedTemplates.map((group) => (
+                <optgroup
+                  key={group.category}
+                  label={categoryLabel(group.category)}
+                  className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
+                >
+                  {group.templates.map((template) => (
+                    <option
+                      key={template.id}
+                      value={template.id}
+                      className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
+                    >
+                      {template.label} ({template.tier})
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            {activeTemplate && (
+              <p className="mt-1 text-xs text-[var(--dpf-muted)]">{activeTemplate.description}</p>
+            )}
+          </label>
+
+          {!showCustomGrants && activeTemplate && (
+            <fieldset className="text-sm">
+              <legend className="font-medium text-[var(--dpf-text)]">
+                Grants ({activeTemplate.grants.length})
+              </legend>
+              <div className="mt-2 flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
+                {activeTemplate.grants.length === 0 ? (
+                  <span className="text-xs text-[var(--dpf-muted)]">
+                    No grants from this template are registered on this install.
+                  </span>
+                ) : (
+                  activeTemplate.grants.map((grant) => (
+                    <span
+                      key={grant}
+                      className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-0.5 font-mono text-[11px] text-[var(--dpf-text)]"
+                    >
+                      {grant}
+                    </span>
+                  ))
+                )}
+              </div>
+            </fieldset>
+          )}
+
+          {showCustomGrants && (
+            <fieldset className="text-sm">
+              <legend className="font-medium text-[var(--dpf-text)]">
+                Scopes ({props.formScopes.size} selected)
+              </legend>
+              <div className="mt-2 grid max-h-44 grid-cols-1 gap-1 overflow-y-auto rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2 sm:grid-cols-2">
+                {props.scopes.map((scope) => (
+                  <label key={scope} className="inline-flex items-center gap-2 text-xs text-[var(--dpf-text)]">
+                    <input
+                      type="checkbox"
+                      checked={props.formScopes.has(scope)}
+                      onChange={() => props.onToggleScope(scope)}
+                    />
+                    <span className="break-all">{scope}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
+          <label className="block text-sm">
             <span className="font-medium text-[var(--dpf-text)]">Name</span>
             <input
               type="text"
               value={props.formName}
               onChange={(event) => props.onNameChange(event.target.value)}
-              placeholder="Mark laptop"
+              placeholder={activeTemplate?.label ?? "Mark laptop"}
               className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)]"
             />
           </label>
-
-          <fieldset className="text-sm">
-            <legend className="font-medium text-[var(--dpf-text)]">Scope tier</legend>
-            <div className="mt-2 grid gap-2 sm:grid-cols-3">
-              {(["read", "write", "admin"] as const).map((scope) => (
-                <ScopeTierOption
-                  key={scope}
-                  checked={props.formScope === scope}
-                  label={scope}
-                  value={scope}
-                  onChange={() => props.onScopeChange(scope)}
-                />
-              ))}
-            </div>
-          </fieldset>
-
-          <fieldset className="text-sm">
-            <legend className="font-medium text-[var(--dpf-text)]">Scopes</legend>
-            <div className="mt-2 grid max-h-44 grid-cols-1 gap-1 overflow-y-auto rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2 sm:grid-cols-2">
-              {props.scopes.map((scope) => (
-                <label key={scope} className="inline-flex items-center gap-2 text-xs text-[var(--dpf-text)]">
-                  <input
-                    type="checkbox"
-                    checked={props.formScopes.has(scope)}
-                    onChange={() => props.onToggleScope(scope)}
-                  />
-                  <span className="break-all">{scope}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
 
           <label className="block text-sm">
             <span className="font-medium text-[var(--dpf-text)]">Expires</span>
@@ -620,11 +1063,21 @@ function TokenFormDialog(props: {
           <button
             type="button"
             onClick={props.onSubmit}
-            disabled={props.pending || !props.formName.trim() || props.formScopes.size === 0}
+            disabled={
+              props.pending ||
+              (showCustomGrants && props.formScopes.size === 0) ||
+              (!showCustomGrants && (activeTemplate?.grants.length ?? 0) === 0)
+            }
             className={buttonClass("primary")}
           >
-            <KeyRound className="h-4 w-4" aria-hidden="true" />
-            {props.pending ? "Generating..." : "Generate"}
+            {isRotateMode ? (
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <KeyRound className="h-4 w-4" aria-hidden="true" />
+            )}
+            {props.pending
+              ? isRotateMode ? "Rotating..." : "Generating..."
+              : isRotateMode ? "Rotate with edit" : "Issue token"}
           </button>
         </div>
       </div>
@@ -632,39 +1085,54 @@ function TokenFormDialog(props: {
   );
 }
 
-function ScopeTierOption(props: {
-  checked: boolean;
-  label: string;
-  value: McpTokenScopeTier;
-  onChange: () => void;
-}) {
-  return (
-    <label
-      className="flex items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-[var(--dpf-text)]"
-    >
-      <input
-        type="radio"
-        name="scope-tier"
-        value={props.value}
-        checked={props.checked}
-        onChange={props.onChange}
-      />
-      <span className="text-sm">{props.label}</span>
-    </label>
-  );
+function categoryLabel(category: McpTokenTemplateSummary["category"]): string {
+  switch (category) {
+    case "admin":
+      return "Admin";
+    case "development":
+      return "Development";
+    case "employee":
+      return "Employee surfaces";
+    case "observer":
+      return "Observers";
+    case "custom":
+      return "Custom";
+  }
+}
+
+function groupTemplatesByCategory(
+  templates: McpTokenTemplateSummary[],
+): Array<{ category: McpTokenTemplateSummary["category"]; templates: McpTokenTemplateSummary[] }> {
+  const order: McpTokenTemplateSummary["category"][] = [
+    "admin",
+    "development",
+    "employee",
+    "observer",
+    "custom",
+  ];
+  return order
+    .map((category) => ({
+      category,
+      templates: templates.filter((t) => t.category === category),
+    }))
+    .filter((g) => g.templates.length > 0);
 }
 
 function IssuedTokenDialog(props: { payload: Issued; onClose: () => void }) {
   const title =
     props.payload.mode === "rotated"
       ? "Replacement token issued"
-      : props.payload.mode === "copied"
-        ? "Current token"
-        : "Token issued";
+      : props.payload.mode === "rotated-with-edit"
+        ? "Rotated with edited grants"
+        : props.payload.mode === "copied"
+          ? "Current token"
+          : "Token issued";
   const description =
     props.payload.mode === "copied"
       ? "Clipboard access was blocked. Select the current token or setup command below."
-      : "Copy the token or refresh payload before closing.";
+      : props.payload.mode === "rotated-with-edit"
+        ? "New token is live with the edited grants. The original token has been revoked. Copy the plaintext below before closing — you won't see it again."
+        : "Copy the token or refresh payload before closing.";
 
   return (
     <DialogFrame>
@@ -683,6 +1151,18 @@ function IssuedTokenDialog(props: { payload: Issued; onClose: () => void }) {
             Close
           </button>
         </div>
+
+        {props.payload.oldTokenRevokeError && (
+          <div className="mt-3 flex items-start gap-2 rounded-md border border-[var(--dpf-warning)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm text-[var(--dpf-warning)]">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <div>
+              <p className="font-medium">New token issued, but old token revoke failed.</p>
+              <p className="mt-1 text-xs">
+                Reason: <code>{props.payload.oldTokenRevokeError}</code>. The new token below is live; manually revoke the original row from the token list to complete the rotation.
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="mt-4 space-y-3">
           <SnippetBlock

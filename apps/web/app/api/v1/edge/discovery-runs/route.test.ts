@@ -42,6 +42,15 @@ const AUTHED = {
   edgeNodeRowId: "edgenode_cuid_1",
   nodeId: "edge_abc",
   trustState: "trusted" as const,
+  customerAccountId: "cust_acme",
+  customerSiteId: "site_hq",
+  scopePolicy: {
+    ownershipScope: "customer-site",
+    enforcement: "strict-customer-scope",
+    source: "bootstrap-token",
+    customerAccountId: "cust_acme",
+    customerSiteId: "site_hq",
+  },
 };
 
 // observedAt must be within the route's freshness window (+/- 24h
@@ -269,6 +278,8 @@ describe("POST /api/v1/edge/discovery-runs — happy path (persists)", () => {
     expect(input.edgeNodeId).toBe("edgenode_cuid_1");
     expect(input.nodeId).toBe("edge_abc");
     expect(input.runKey).toBe("run_a1b2c3");
+    expect(input.customerAccountId).toBe("cust_acme");
+    expect(input.customerSiteId).toBe("site_hq");
     expect(input.submittedOutput.items).toEqual([
       {
         sourceKind: "edge_node",

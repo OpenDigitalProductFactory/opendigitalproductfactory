@@ -195,11 +195,13 @@ The duplicate check found adjacent taxonomy nodes, docs refresh work, and `BI-IN
 | --- | --- | --- | --- |
 | `BI-407125DA` Capability taxonomy: establish employee-work backlog capture foundation | `EP-BIZ-CAP` | Done | Standardize the context template and decide whether backlog needs schema or manifest fields later. |
 | `BI-0E6D42B3` Capability taxonomy: audit employee roles against DPF surfaces, coworkers, and integrations | `EP-BIZ-CAP` | Done | Map employee jobs to DPF surfaces, coworkers, queues, and integrations. |
-| `BI-4C166411` Capability taxonomy UX: expose commercial market and product enrichment from taxonomy nodes | `EP-BIZ-CAP` | Open | Render workbook-derived sample services, offering considerations, and commercial market/product guidance in taxonomy node UX instead of silently dropping it. |
-| `BI-C61B5202` QuickBooks parity: expand read-only coverage to vendors, bills, expenses, payments, accounts, and reports | `EP-INT-2E7C1A` | Open | Move QuickBooks entity families from not-mapped to read, still with no writes. |
-| `BI-07D76D6B` QuickBooks parity: define import staging and ownership posture for core accounting records | `EP-INT-2E7C1A` | Open | Stage source-attributed QuickBooks records in DPF without claiming ownership. |
+| `BI-4C166411` Capability taxonomy UX: expose commercial market and product enrichment from taxonomy nodes | `EP-BIZ-CAP` | Done | Render workbook-derived sample services, offering considerations, and commercial market/product guidance in taxonomy node UX instead of silently dropping it. |
+| `BI-C61B5202` QuickBooks parity: expand read-only coverage to vendors, bills, expenses, payments, accounts, and reports | `EP-INT-2E7C1A` | Done | Move QuickBooks entity families from not-mapped to read, still with no writes. |
+| `BI-07D76D6B` QuickBooks parity: define import staging and ownership posture for core accounting records | `EP-INT-2E7C1A` | Done | Stage source-attributed QuickBooks records in DPF without claiming ownership. |
 
 Execution update on 2026-05-17: the batch above was restored and linked through live DPF MCP. The first three items are under `EP-BIZ-CAP`; the QuickBooks items remain under `EP-INT-2E7C1A`. `BI-407125DA` and `BI-0E6D42B3` are done. No DB fallback was used for backlog status updates.
+
+Execution update on 2026-05-22: live MCP shows `BI-C61B5202`, `BI-07D76D6B`, `BI-80A71362`, `BI-861433C0`, and `BI-4C166411` are done. The next QuickBooks bridge is `BI-4025EF5F`, with the focused implementation plan in `docs/superpowers/plans/2026-05-22-quickbooks-parity-import-review-and-entity-link.md`.
 
 ## Second Backlog Batch Created From Role Audit
 
@@ -215,35 +217,34 @@ The role-to-work audit created these additional items through live DPF MCP under
 
 Remaining integration-provider follow-ons stay with `EP-INT-2E7C1A` unless a later epic split is approved:
 
-| Proposed title | Preferred epic | Purpose |
+| Item | Preferred epic | Purpose |
 | --- | --- | --- |
-| Accounting entity link and ownership posture model | `EP-INT-2E7C1A` | Define external/local links and owner-side states for accounting and payment objects. |
-| Stripe and QuickBooks payment reconciliation posture | `EP-INT-2E7C1A` | Define read-first reconciliation across DPF, Stripe, QuickBooks, fees, payouts, and deposits. |
-| Bank feeds and reconciliation source-of-truth decision | `EP-INT-2E7C1A` | Decide whether DPF reads bank facts from QuickBooks, a bank-feed provider, CSV, or direct open-banking later. |
-| Tax/VAT/sales tax mapping posture | `EP-INT-2E7C1A` | Map DPF tax profiles, jurisdictions, liabilities, and reports to QuickBooks tax codes without filing claims. |
-| Reports and close workflow parity | `EP-INT-2E7C1A` | Expand from readiness into P&L, cash flow, aging, close packets, variance notes, and accountant view. |
-| Accountant collaboration and evidence packet | `EP-INT-2E7C1A` plus taxonomy epic | Define accountant principal/access pattern and monthly review evidence. |
+| `BI-4025EF5F` QuickBooks parity: persist import review queue and accounting entity links | `EP-INT-2E7C1A` | Define persisted review queue records, external/local links, and owner-side states for accounting and payment objects. |
+| `BI-2DB52EAB` QuickBooks parity: reconcile QuickBooks, Stripe, payments, fees, payouts, and deposits | `EP-INT-2E7C1A` | Define read-first reconciliation across DPF, Stripe, QuickBooks, fees, payouts, and deposits. |
+| `BI-47366954` QuickBooks parity: decide bank-feed source of truth and reconciliation evidence posture | `EP-INT-2E7C1A` | Decide whether DPF reads bank facts from QuickBooks, a bank-feed provider, CSV, or direct open-banking later. |
+| `BI-47F08F7A` QuickBooks parity: map tax, VAT, and sales-tax posture without filing claims | `EP-INT-2E7C1A` | Map DPF tax profiles, jurisdictions, liabilities, and reports to QuickBooks tax codes without filing claims. |
+| `BI-4291195F` QuickBooks parity: reports, close workflow, and accountant evidence packet | `EP-INT-2E7C1A` | Expand from readiness into P&L, cash flow, aging, close packets, variance notes, and accountant view. |
 | SMB setup readiness for books, payments, payroll, tax, and bank feeds | Business Capability and Employee Work Taxonomy plus `EP-ARCH-8D4F2A` | Add setup routing from business context to finance/integration readiness. |
-| Governed QuickBooks write-back gates | `EP-INT-2E7C1A` | Add proposal-mode writes only after read/stage/ownership gates are proven. |
-| DPF system-of-record promotion criteria for accounting | Future finance/accounting epic | Define dual-run thresholds, rollback/export requirements, and entity-family ownership gates. |
+| `BI-B1F6D8ED` QuickBooks parity: approval-gated write-back and DPF-primary promotion gates | `EP-INT-2E7C1A` | Add proposal-mode writes and DPF-primary promotion only after read/stage/ownership/reconciliation/accountant/export gates are proven. |
 
 ## QuickBooks Long-Tail Sequence (canonical reference)
 
-> **Single source of truth for Chunk 3.** The Chunk 3 tasks below implement steps 1–4 of this sequence. Steps 5–11 become backlog items only after the step 4 gate passes. Do not duplicate this sequence elsewhere.
+> **Single source of truth for Chunk 3.** The Chunk 3 tasks below originally implemented steps 1–4 of this sequence. As of 2026-05-22, steps 1–3 are complete, and `BI-4025EF5F` is the active bridge from staged descriptors into persisted import review and entity links.
 
-The QuickBooks readiness snapshot is the approved starting point, but current `origin/main` does not yet contain the sibling branch's readiness files. Steps 1–4 can proceed immediately. Steps 5–11 unblock after the sibling branch (`DPF-small-business-os-parity`) merges or its equivalent is rebuilt on main.
+The QuickBooks readiness snapshot, read expansion, import staging posture, native integration coverage matrix, taxonomy commercial-market UX, and accountant lane are now merged foundation. The remaining sequence must stay proof-gated: review queue and entity links before reconciliation, reconciliation before write-back, and dual-run/accountant/export evidence before DPF-primary promotion.
 
 1. Read-only company, customer, invoice staging: prove company info, customers, invoices, and invoice lines can be read and displayed with source timestamps.
 2. Vendors, bills, expenses, payments, accounts, and reports: expand read scopes and readiness descriptors before any import or write path.
-3. Import staging and entity ownership: stage company, customer, invoice, vendor, bill, and payment objects with external IDs, source provider, source timestamp, owner side, and proposed local link.
-4. Payments and Stripe/QuickBooks reconciliation: compare invoices, payments, payment intents, fees, payouts, deposits, and DPF payment records with discrepancy reasons.
-5. Bank feeds and reconciliation posture: decide whether bank facts come through QuickBooks, CSV, a bank-feed provider, or a later direct open-banking route; do not imply DPF owns bank rec until source-of-truth is explicit.
-6. Tax, VAT, and sales tax: map DPF tax profiles, jurisdictions, liabilities, tax codes, and reports; preserve external filing boundaries.
-7. Reports and close workflows: produce P&L, cash flow, AR/AP aging, close checklist, variance notes, and accountant packet from read/staged facts.
-8. Accountant collaboration: add accountant principal/access posture, evidence packet, review workflow, and removable access model.
-9. Setup and onboarding: ask once where books, payments, payroll, tax, bank feeds, invoicing, and accountant collaboration live; route the owner to integration readiness and DPF-native defaults.
-10. Governed write-back gates: introduce proposal-mode create/update operations only with idempotency keys, preview, approval, audit receipt, and rollback/export expectations.
-11. DPF system-of-record promotion: promote one entity family at a time only after read coverage, staged import, dual-run comparison, accountant evidence, export completeness, and rollback criteria are met.
+3. Import staging and entity ownership: stage company, customer, invoice, vendor, bill, expense, payment, account, and report objects with external IDs, source provider, source timestamp, owner side, and proposed local link.
+4. Persisted import review and entity links: store reviewed staged records and proposed links without editing source records or claiming local ownership.
+5. Payments and Stripe/QuickBooks reconciliation: compare invoices, payments, payment intents, fees, payouts, deposits, and DPF payment records with discrepancy reasons.
+6. Bank feeds and reconciliation posture: decide whether bank facts come through QuickBooks, CSV, a bank-feed provider, or a later direct open-banking route; do not imply DPF owns bank rec until source-of-truth is explicit.
+7. Tax, VAT, and sales tax: map DPF tax profiles, jurisdictions, liabilities, tax codes, and reports; preserve external filing boundaries.
+8. Reports and close workflows: produce P&L, cash flow, AR/AP aging, close checklist, variance notes, and accountant packet from read/staged facts.
+9. Accountant collaboration: add accountant principal/access posture, evidence packet, review workflow, and removable access model.
+10. Setup and onboarding: ask once where books, payments, payroll, tax, bank feeds, invoicing, and accountant collaboration live; route the owner to integration readiness and DPF-native defaults.
+11. Governed write-back gates: introduce proposal-mode create/update operations only with idempotency keys, preview, approval, audit receipt, and rollback/export expectations.
+12. DPF system-of-record promotion: promote one entity family at a time only after read coverage, staged import, dual-run comparison, accountant evidence, export completeness, and rollback criteria are met.
 
 ## Architecture Posture
 
@@ -365,29 +366,29 @@ Execution result for `BI-407125DA` on 2026-05-17:
 
 ## Chunk 3: QuickBooks Long Tail
 
-**Canonical sequence:** see `§ QuickBooks Long-Tail Sequence` above. This chunk implements sequence steps 1–4 only. Steps 5–11 become backlog items after step 4 passes.
+**Canonical sequence:** see `§ QuickBooks Long-Tail Sequence` above. This chunk shipped sequence steps 1–3 and now hands off to `BI-4025EF5F` for persisted import review and entity links.
 
-**Backlog items:** `BI-C61B5202` (sequence steps 1–2), `BI-07D76D6B` (sequence step 3), plus entity-link, reconciliation, tax, reports/close, accountant collaboration, write-back, and DPF-primary promotion items created after read/import proof.
+**Backlog items:** `BI-C61B5202` (sequence steps 1–2, done), `BI-07D76D6B` (sequence step 3, done), `BI-4025EF5F` (sequence step 4, next), `BI-2DB52EAB`, `BI-47366954`, `BI-47F08F7A`, `BI-4291195F`, and `BI-B1F6D8ED`.
 
-**Dependency:** can start immediately; full sequence (steps 5–11) unblocks after `DPF-small-business-os-parity` branch merges.
+**Dependency:** `BI-4025EF5F` can start immediately from the current merged foundation. Later reconciliation, tax, reporting, write-back, and DPF-primary promotion remain blocked on review queue/entity-link evidence.
 
 ### Task 4: Sequence Replacement Maturity (steps 1–4)
 
-- [ ] **Step 1: Keep the next QuickBooks item read-only** (sequence step 1–2)
+- [x] **Step 1: Keep the next QuickBooks item read-only** (sequence step 1–2)
 
 Implement `BI-C61B5202` before import/write work. The readiness descriptor should move entity families from `not-mapped` to `read` for vendors, bills, expenses, payments, accounts, and reports.
 
-- [ ] **Step 2: Stage before ownership** (sequence step 3)
+- [x] **Step 2: Stage before ownership** (sequence step 3)
 
 Implement `BI-07D76D6B` after read expansion. Imported data remains non-editable and source-attributed. Each staged record carries: `externalId`, `sourceProvider`, `sourceTimestamp`, `ownerSide`, `proposedLocalLink`.
 
-- [ ] **Step 3: Add entity links after staging proves the fields** (sequence step 3 continued)
+- [ ] **Step 3: Persist review queue and entity links after staging proves the fields** (sequence step 4)
 
-Create the proposed accounting entity-link backlog item only after staging shows the exact external/local link structure needed. Do not design the link model speculatively.
+Implement `BI-4025EF5F` using `docs/superpowers/plans/2026-05-22-quickbooks-parity-import-review-and-entity-link.md`. Preserve non-editable staged source records, add durable review/link posture, and keep QuickBooks writes blocked.
 
 - [ ] **Step 4: Gate on read data before reconciliation** (sequence step 4)
 
-Create the proposed Stripe/QuickBooks reconciliation item only after DPF has sufficient QuickBooks and Stripe read data to compare payment facts. Gate: both providers have `read` maturity for payment objects.
+Implement `BI-2DB52EAB` only after `BI-4025EF5F` proves durable entity links. Gate: both providers have `read` maturity for payment objects and review queue records can explain the local/external match candidates.
 
 ## Chunk 4: Employee Work Taxonomy
 
@@ -505,4 +506,4 @@ After applying the body template to 10+ items (Chunk 2, Task 3), review: which f
 
 **Next taxonomy/data slice:** build `BI-861433C0` - publish the native integration coverage matrix for employee work roles. This should consume the same backlog context model and avoid creating a parallel taxonomy system.
 
-**QuickBooks can proceed in parallel:** `BI-C61B5202` and `BI-07D76D6B` remain under `EP-INT-2E7C1A` and do not depend on `EP-BIZ-CAP`.
+**QuickBooks can proceed in parallel:** `BI-4025EF5F` remains under `EP-INT-2E7C1A`, does not depend on `EP-BIZ-CAP`, and is the next manual-work slice while Build Studio capacity is full.

@@ -48,7 +48,7 @@ export default async function ProductHealthPage({ params }: Props) {
   return (
     <div>
       {isPortal ? (
-        <PortalHealth openBugs={product._count.backlogItems} />
+        <PortalHealth openBugs={product._count.backlogItems} productId={id} />
       ) : (
         <ProductHealth
           hasObservation={hasObservation}
@@ -62,12 +62,18 @@ export default async function ProductHealthPage({ params }: Props) {
   );
 }
 
-function PortalHealth({ openBugs }: { openBugs: number }) {
+function PortalHealth({ openBugs, productId }: { openBugs: number; productId: string }) {
   return (
     <div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         <HealthCard label="Platform Status" value="Operational" colour="#4ade80" />
-        <HealthCard label="Open Issues" value={String(openBugs)} colour={openBugs > 0 ? "#fbbf24" : "#4ade80"} />
+        <HealthCard
+          label="Open Backlog Items"
+          value={String(openBugs)}
+          colour={openBugs > 0 ? "#fbbf24" : "#4ade80"}
+          href={`/portfolio/product/${productId}/backlog`}
+          hint={openBugs > 0 ? "View list" : undefined}
+        />
         <HealthCard label="Health Monitoring" value="Active" colour="#4ade80" />
       </div>
       <ServiceHealthDashboard />
@@ -115,9 +121,11 @@ function ProductHealth({
     <div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         <HealthCard
-          label="Open Issues"
+          label="Open Backlog Items"
           value={String(openBugs)}
           colour={openBugs > 0 ? "#fbbf24" : "#4ade80"}
+          href={`/portfolio/product/${productId}/backlog`}
+          hint={openBugs > 0 ? "View list" : undefined}
         />
         <HealthCard
           label="SLA Targets"
@@ -167,17 +175,33 @@ function HealthCard({
   label,
   value,
   colour,
+  href,
+  hint,
 }: {
   label: string;
   value: string;
   colour: string;
+  href?: string;
+  hint?: string;
 }) {
-  return (
-    <div className="bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg p-4">
+  const body = (
+    <div className="bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg p-4 transition-colors hover:border-[var(--dpf-accent)]">
       <div className="text-lg font-bold" style={{ color: colour }}>
         {value}
       </div>
       <div className="text-[11px] text-[var(--dpf-muted)] mt-1">{label}</div>
+      {hint && (
+        <div className="text-[10px] text-[var(--dpf-accent)] mt-1">{hint} →</div>
+      )}
     </div>
   );
+
+  if (href) {
+    return (
+      <Link href={href} className="block">
+        {body}
+      </Link>
+    );
+  }
+  return body;
 }

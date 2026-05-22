@@ -29,7 +29,8 @@ import { getFeatureBuild } from "@/lib/actions/build-read";
 import { getBuildFlowStateAction } from "@/lib/actions/build-flow";
 import { getBuildProgressVisibilityAction } from "@/lib/actions/build-progress-visibility";
 import { getCodeGraphFreshnessAction } from "@/lib/actions/code-intelligence";
-import { getBuildBomSummary } from "@/lib/actions/assurance";
+import { getBuildAssuranceFindings, getBuildBomSummary } from "@/lib/actions/assurance";
+import type { ActiveAssuranceFindingRow } from "@/lib/assurance/finding-read";
 import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import type { BuildFlowState } from "@/lib/build-flow-state";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
@@ -63,6 +64,18 @@ const MISSING_BOM_SUMMARY: BomSummary = {
   state: "missing",
   document: null,
   counts: { components: 0, models: 0 },
+  findings: {
+    total: 0,
+    blocking: 0,
+    bySeverity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+    byKind: {},
+  },
+  scanner: {
+    state: "needs-evaluation",
+    approvedScannerCount: 0,
+    scannerNames: [],
+    reason: "no-approved-scanner",
+  },
 };
 
 export function BuildStudio({
@@ -131,6 +144,7 @@ export function BuildStudio({
   const [progressVisibility, setProgressVisibility] = useState<BuildProgressVisibility | null>(null);
   const [codeGraphFreshness, setCodeGraphFreshness] = useState<CodeGraphFreshness | null>(null);
   const [bomSummary, setBomSummary] = useState<BomSummary>(MISSING_BOM_SUMMARY);
+  const [assuranceFindings, setAssuranceFindings] = useState<ActiveAssuranceFindingRow[]>([]);
   const workflowAction = activeBuild
     ? deriveBuildStudioWorkflowAction({
       build: activeBuild,
@@ -146,21 +160,24 @@ export function BuildStudio({
   }, [activeBuild?.buildId, initialBuildId, router]);
 
   const refreshActiveBuildState = useCallback(async (buildId: string) => {
-    const [freshResult, flowResult, progressResult, bomResult] = await Promise.allSettled([
+    const [freshResult, flowResult, progressResult, bomResult, findingsResult] = await Promise.allSettled([
       getFeatureBuild(buildId),
       getBuildFlowStateAction(buildId),
       getBuildProgressVisibilityAction(buildId),
       getBuildBomSummary(buildId),
+      getBuildAssuranceFindings(buildId, 25),
     ]);
     const fresh = freshResult.status === "fulfilled" ? freshResult.value : null;
     const nextFlow = flowResult.status === "fulfilled" ? flowResult.value : null;
     const nextProgress = progressResult.status === "fulfilled" ? progressResult.value : null;
     const nextBomSummary = bomResult.status === "fulfilled" ? bomResult.value : MISSING_BOM_SUMMARY;
+    const nextFindings = findingsResult.status === "fulfilled" ? findingsResult.value : [];
 
     if (fresh) setActiveBuild(fresh);
     setFlowState(nextFlow);
     setProgressVisibility(nextProgress);
     setBomSummary(nextBomSummary);
+    setAssuranceFindings(nextFindings);
   }, []);
   const debouncedRefetch = useCallback(async () => {
     if (!activeBuild) return;
@@ -186,6 +203,7 @@ export function BuildStudio({
       setFlowState(null);
       setProgressVisibility(null);
       setBomSummary(MISSING_BOM_SUMMARY);
+      setAssuranceFindings([]);
       return;
     }
     let cancelled = false;
@@ -193,17 +211,20 @@ export function BuildStudio({
       getBuildFlowStateAction(activeBuild.buildId),
       getBuildProgressVisibilityAction(activeBuild.buildId),
       getBuildBomSummary(activeBuild.buildId),
-    ]).then(([flowResult, progressResult, bomResult]) => {
+      getBuildAssuranceFindings(activeBuild.buildId, 25),
+    ]).then(([flowResult, progressResult, bomResult, findingsResult]) => {
       if (!cancelled) {
         setFlowState(flowResult.status === "fulfilled" ? flowResult.value : null);
         setProgressVisibility(progressResult.status === "fulfilled" ? progressResult.value : null);
         setBomSummary(bomResult.status === "fulfilled" ? bomResult.value : MISSING_BOM_SUMMARY);
+        setAssuranceFindings(findingsResult.status === "fulfilled" ? findingsResult.value : []);
       }
     }).catch(() => {
       if (!cancelled) {
         setFlowState(null);
         setProgressVisibility(null);
         setBomSummary(MISSING_BOM_SUMMARY);
+        setAssuranceFindings([]);
       }
     });
     return () => { cancelled = true; };
@@ -591,7 +612,11 @@ export function BuildStudio({
                   <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
                     <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(280px,380px)]">
                       <CodeIntelligenceStatusCard freshness={codeGraphFreshness} />
-                      <BuildAssuranceGateCard buildId={activeBuild.buildId} summary={bomSummary} />
+                      <BuildAssuranceGateCard
+                        buildId={activeBuild.buildId}
+                        summary={bomSummary}
+                        findings={assuranceFindings}
+                      />
                     </div>
                   </div>
                   <div className="border-b border-[var(--dpf-border)] px-4 py-2 text-xs text-[var(--dpf-muted)]">
@@ -1019,6 +1044,14 @@ function FleetRailZone({
     return a.build.buildId.localeCompare(b.build.buildId);
   });
 
+  // Split entries into active (needs attention) vs completed (historical). The
+  // fleet rail surfaces what needs attention; completed work is one click away
+  // via the "{N} completed" toggle below. Matches the "Builds: {N} running"
+  // header semantic — the list should only show inflight work by default.
+  const activeEntries = sorted.filter((e) => e.build.phase !== "complete");
+  const completedEntries = sorted.filter((e) => e.build.phase === "complete");
+  const [showCompleted, setShowCompleted] = useState(false);
+
   const counts = deriveFleetCounts(entries.map((e) => e.queueState));
 
   if (buildRows.length === 0) {
@@ -1061,7 +1094,7 @@ function FleetRailZone({
         <span aria-hidden="true" className="text-[var(--dpf-muted)]">›</span>
       </button>
       <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1" data-testid="fleet-rail-body">
-        {sorted.map((entry, idx) => (
+        {activeEntries.map((entry, idx) => (
           <li key={entry.build.buildId}>
             <BuildListItem
               build={entry.build}
@@ -1077,6 +1110,54 @@ function FleetRailZone({
             />
           </li>
         ))}
+        {activeEntries.length === 0 && (
+          <li className="px-3 py-6 text-center text-[11px] text-[var(--dpf-muted)]">
+            No active builds. Type a feature name above and press <strong className="text-[var(--dpf-text)]">New</strong> to start.
+          </li>
+        )}
+        {completedEntries.length > 0 && (
+          <>
+            <li>
+              <button
+                type="button"
+                onClick={() => setShowCompleted((v) => !v)}
+                aria-expanded={showCompleted}
+                aria-controls="fleet-rail-completed-list"
+                data-testid="fleet-rail-completed-toggle"
+                className="mt-2 flex w-full items-center justify-between rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-left text-[11px] font-semibold text-[var(--dpf-muted)] transition-colors hover:bg-[var(--dpf-surface-3)] hover:text-[var(--dpf-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+              >
+                <span>
+                  {completedEntries.length} completed build{completedEntries.length === 1 ? "" : "s"}
+                </span>
+                <span aria-hidden="true" className="text-[var(--dpf-muted)]">
+                  {showCompleted ? "▾" : "▸"}
+                </span>
+              </button>
+            </li>
+            {showCompleted && (
+              <li id="fleet-rail-completed-list" className="contents">
+                <ul className="flex flex-col gap-0.5">
+                  {completedEntries.map((entry, idx) => (
+                    <li key={entry.build.buildId}>
+                      <BuildListItem
+                        build={entry.build}
+                        active={activeBuildId === entry.build.buildId}
+                        index={activeEntries.length + idx}
+                        lifecycleLabel={entry.lifecycleLabel}
+                        isDevEnvironment={isDevEnvironment}
+                        density="fleet"
+                        queueState={entry.queueState}
+                        needsAttention={entry.needsAttention}
+                        onSelect={() => onSelectBuild(entry.build)}
+                        onDelete={() => onDeleteBuild(entry.build)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            )}
+          </>
+        )}
       </ul>
     </div>
   );

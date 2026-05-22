@@ -190,6 +190,12 @@ export interface InfraCIExtendedProps {
   networkMask?: string;
   protocolFamily?: string;
   parentCiId?: string;
+  // Customer-estate scope (Phase: customer topology isolation).
+  // scopeKey defaults to "organization:internal" via the InventoryEntity column
+  // default; customerAccountId/customerSiteId are null for MSP-internal nodes.
+  scopeKey?: string;
+  customerAccountId?: string | null;
+  customerSiteId?: string | null;
 }
 
 /** Upsert an InfraCI node. */
@@ -256,6 +262,18 @@ export async function syncInfraCI(
     if (extendedProps.parentCiId !== undefined) {
       setClauses.push("ci.parentCiId = $parentCiId");
       params.parentCiId = extendedProps.parentCiId;
+    }
+    if (extendedProps.scopeKey !== undefined) {
+      setClauses.push("ci.scopeKey = $scopeKey");
+      params.scopeKey = extendedProps.scopeKey;
+    }
+    if (extendedProps.customerAccountId !== undefined) {
+      setClauses.push("ci.customerAccountId = $customerAccountId");
+      params.customerAccountId = extendedProps.customerAccountId;
+    }
+    if (extendedProps.customerSiteId !== undefined) {
+      setClauses.push("ci.customerSiteId = $customerSiteId");
+      params.customerSiteId = extendedProps.customerSiteId;
     }
   }
 
@@ -369,6 +387,13 @@ export async function syncInventoryEntityAsInfraCI(entity: {
   if (props.networkMask != null) extendedProps.networkMask = props.networkMask as string;
   if (props.protocolFamily != null) extendedProps.protocolFamily = props.protocolFamily as string;
   if (props.parentCiId != null) extendedProps.parentCiId = props.parentCiId as string;
+  if (props.scopeKey != null) extendedProps.scopeKey = props.scopeKey as string;
+  if (props.customerAccountId !== undefined) {
+    extendedProps.customerAccountId = props.customerAccountId as string | null;
+  }
+  if (props.customerSiteId !== undefined) {
+    extendedProps.customerSiteId = props.customerSiteId as string | null;
+  }
 
   await syncInfraCI(
     {

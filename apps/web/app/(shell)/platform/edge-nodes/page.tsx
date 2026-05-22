@@ -49,6 +49,10 @@ type EdgeNodeRow = {
    */
   hostHostname: string | null;
   hostIpAddresses: string[] | null;
+  customerAccountId: string | null;
+  customerAccountName: string | null;
+  customerSiteId: string | null;
+  customerSiteName: string | null;
 };
 
 /**
@@ -88,6 +92,23 @@ type BootstrapTokenRow = {
   consumedAt: string | null;
   consumedByNodeId: string | null;
   revokedAt: string | null;
+  targetCustomerAccountId: string | null;
+  targetCustomerAccountName: string | null;
+  targetCustomerSiteId: string | null;
+  targetCustomerSiteName: string | null;
+};
+
+type CustomerAccountOption = {
+  id: string;
+  accountId: string;
+  name: string;
+  status: string;
+  sites: {
+    id: string;
+    siteId: string;
+    name: string;
+    status: string;
+  }[];
 };
 
 export default async function EdgeNodesAdminPage() {
@@ -111,7 +132,11 @@ export default async function EdgeNodesAdminPage() {
   // Principal, not on EdgeNode.
   const nodes = await prisma.edgeNode.findMany({
     orderBy: [{ trustState: "asc" }, { lastSeenAt: "desc" }],
-    include: { principal: { select: { displayName: true } } },
+    include: {
+      principal: { select: { displayName: true } },
+      customerAccount: { select: { name: true } },
+      customerSite: { select: { name: true } },
+    },
   });
 
   // Recent (non-expired, non-consumed) bootstrap tokens so the
@@ -125,6 +150,27 @@ export default async function EdgeNodesAdminPage() {
     take: 20,
     include: {
       consumedByEdgeNode: { select: { nodeId: true } },
+      targetCustomerAccount: { select: { name: true } },
+      targetCustomerSite: { select: { name: true } },
+    },
+  });
+
+  const customerAccounts = await prisma.customerAccount.findMany({
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      accountId: true,
+      name: true,
+      status: true,
+      customerSites: {
+        orderBy: { name: "asc" },
+        select: {
+          id: true,
+          siteId: true,
+          name: true,
+          status: true,
+        },
+      },
     },
   });
 
@@ -151,6 +197,10 @@ export default async function EdgeNodesAdminPage() {
         : [],
       hostHostname: hostMetadata.hostname,
       hostIpAddresses: hostMetadata.ipAddresses,
+      customerAccountId: n.customerAccountId,
+      customerAccountName: n.customerAccount?.name ?? null,
+      customerSiteId: n.customerSiteId,
+      customerSiteName: n.customerSite?.name ?? null,
     };
   });
 
@@ -163,7 +213,26 @@ export default async function EdgeNodesAdminPage() {
     consumedAt: t.consumedAt?.toISOString() ?? null,
     consumedByNodeId: t.consumedByEdgeNode?.nodeId ?? null,
     revokedAt: t.revokedAt?.toISOString() ?? null,
+    targetCustomerAccountId: t.targetCustomerAccountId,
+    targetCustomerAccountName: t.targetCustomerAccount?.name ?? null,
+    targetCustomerSiteId: t.targetCustomerSiteId,
+    targetCustomerSiteName: t.targetCustomerSite?.name ?? null,
   }));
+
+  const customerAccountOptions: CustomerAccountOption[] = customerAccounts.map(
+    (account) => ({
+      id: account.id,
+      accountId: account.accountId,
+      name: account.name,
+      status: account.status,
+      sites: account.customerSites.map((site) => ({
+        id: site.id,
+        siteId: site.siteId,
+        name: site.name,
+        status: site.status,
+      })),
+    }),
+  );
 
   return (
     <div className="space-y-6">
@@ -176,7 +245,11 @@ export default async function EdgeNodesAdminPage() {
         </p>
       </div>
 
-      <EdgeNodesAdminClient nodes={nodeRows} tokens={tokenRows} />
+      <EdgeNodesAdminClient
+        nodes={nodeRows}
+        tokens={tokenRows}
+        customerAccounts={customerAccountOptions}
+      />
     </div>
   );
 }

@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import type { EstateIndicatorTone, EstateItem, EstateSupportTone } from "@/lib/estate/estate-item";
 
 type Props = {
@@ -137,6 +139,45 @@ function EstateGlyph({ iconKey }: { iconKey: string }) {
           <path d="M5 20h14" />
         </svg>
       );
+    case "thermostat":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <circle cx="12" cy="12" r="8" />
+          <circle cx="12" cy="12" r="4.5" />
+          <path d="M12 7v2M12 15v2M7 12h2M15 12h2" />
+        </svg>
+      );
+    case "appliance":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <rect x="5" y="3" width="14" height="18" rx="2" />
+          <circle cx="12" cy="13" r="4" />
+          <path d="M8 6h.01M11 6h.01" />
+        </svg>
+      );
+    case "phone":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <rect x="7" y="3" width="10" height="18" rx="2" />
+          <path d="M10 18h4" />
+        </svg>
+      );
+    case "speaker":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <rect x="6" y="3" width="12" height="18" rx="2" />
+          <circle cx="12" cy="14" r="3" />
+          <circle cx="12" cy="7" r="1" />
+        </svg>
+      );
+    case "router":
+      return (
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <rect x="3" y="12" width="18" height="7" rx="2" />
+          <path d="M7 12V9l5-3 5 3v3" />
+          <path d="M8 15.5h.01M11 15.5h.01M14 15.5h.01" />
+        </svg>
+      );
     default:
       return (
         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -149,19 +190,25 @@ function EstateGlyph({ iconKey }: { iconKey: string }) {
 
 export function EstateItemCard({ item }: Props) {
   return (
-    <article className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+    <article className="group rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 transition-colors hover:border-[var(--dpf-accent)]/60">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
+        <Link
+          href={`/inventory/entity/${item.id}`}
+          className="flex flex-1 items-start gap-3 outline-none"
+          aria-label={`Open ${item.name} detail`}
+        >
           <div className="rounded-2xl bg-[var(--dpf-surface-2)] p-3 text-[var(--dpf-accent)]" aria-hidden="true">
             <EstateGlyph iconKey={item.iconKey} />
           </div>
           <div>
-            <p className="text-sm font-semibold text-[var(--dpf-text)]">{item.name}</p>
+            <p className="text-sm font-semibold text-[var(--dpf-text)] group-hover:text-[var(--dpf-accent)]">
+              {item.name}
+            </p>
             <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
               {item.technicalClassLabel}
             </p>
           </div>
-        </div>
+        </Link>
         <span className={`rounded-full border px-2 py-1 text-[10px] font-medium ${TONE_CLASSES[item.supportTone]}`}>
           {item.supportStatusLabel}
         </span>

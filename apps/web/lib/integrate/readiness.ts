@@ -1,4 +1,5 @@
 import type { IntegrationImportStagingDescriptor } from "@/lib/integrate/import-staging";
+import type { IntegrationImportReviewPosture } from "@/lib/integrate/import-review";
 
 export const INTEGRATION_READINESS_STATES = [
   "not-connected",
@@ -62,6 +63,7 @@ export interface IntegrationReadinessDescriptor {
   health: IntegrationReadinessHealth;
   capabilities: IntegrationReadinessCapability[];
   importStaging?: IntegrationImportStagingDescriptor;
+  importReview?: IntegrationImportReviewPosture;
   nextSafeActions: string[];
   updatedAt: string | null;
 }

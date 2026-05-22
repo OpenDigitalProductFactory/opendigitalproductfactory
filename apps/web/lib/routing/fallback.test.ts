@@ -658,4 +658,142 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       expect(mockCallProvider).toHaveBeenCalledTimes(2);
     });
   });
+
+  // ── local fallback skip on large tool surfaces (FB-71FB3A53) ────────────────
+
+  describe("local fallback skip on large tool surfaces", () => {
+    function makeChainWithLocalFallback(): RouteDecision {
+      return {
+        selectedEndpoint: "prov1",
+        selectedModelId: "model1",
+        reason: "test",
+        fitnessScore: 1,
+        fallbackChain: ["local"],
+        candidates: [
+          { endpointId: "prov1", providerId: "prov1", modelId: "model1",
+            endpointName: "Prov1", fitnessScore: 1, dimensionScores: {},
+            costPerOutputMToken: null, excluded: false },
+          { endpointId: "local", providerId: "local", modelId: "local-7b",
+            endpointName: "Local", fitnessScore: 0.5, dimensionScores: {},
+            costPerOutputMToken: null, excluded: false },
+        ],
+        excludedCount: 0, excludedReasons: [], policyRulesApplied: [],
+        taskType: "test", sensitivity: "internal" as SensitivityLevel, timestamp: new Date(),
+      };
+    }
+
+    function manyTools(count: number): Array<Record<string, unknown>> {
+      return Array.from({ length: count }, (_, i) => ({
+        name: `tool_${i}`,
+        description: `Tool ${i}`,
+        parameters: { type: "object", properties: {} },
+      }));
+    }
+
+    it("skips local fallback when tools.length exceeds threshold", async () => {
+      mockPrisma.modelProvider.findUnique
+        .mockResolvedValueOnce({ providerId: "prov1", name: "Prov1" });
+
+      const pinnedErr = new InferenceError("preferred down", "auth", "prov1", 401);
+      mockCallProvider.mockRejectedValueOnce(pinnedErr);
+
+      const pending = callWithFallbackChain(
+        makeChainWithLocalFallback(),
+        [{ role: "user", content: "hi" }],
+        "system",
+        manyTools(30), // build-studio-shaped tool surface
+      );
+      const rejection = expect(pending).rejects.toThrow("All endpoints failed");
+      await vi.runAllTimersAsync();
+      await rejection;
+
+      // Only the primary was attempted; local fallback was skipped.
+      expect(mockCallProvider).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps local fallback when tools.length is within threshold", async () => {
+      mockPrisma.modelProvider.findUnique
+        .mockResolvedValueOnce({ providerId: "prov1", name: "Prov1" })
+        .mockResolvedValueOnce({ providerId: "local", name: "Local" });
+
+      const pinnedErr = new InferenceError("preferred down", "auth", "prov1", 401);
+      const localErr = new InferenceError("local also down", "auth", "local", 401);
+      mockCallProvider
+        .mockRejectedValueOnce(pinnedErr)
+        .mockRejectedValueOnce(localErr);
+
+      const pending = callWithFallbackChain(
+        makeChainWithLocalFallback(),
+        [{ role: "user", content: "hi" }],
+        "system",
+        manyTools(10), // small tool surface — local should still be tried
+      );
+      const rejection = expect(pending).rejects.toThrow("All endpoints failed");
+      await vi.runAllTimersAsync();
+      await rejection;
+
+      // Primary + local fallback both attempted.
+      expect(mockCallProvider).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps local fallback when no tools are passed at all", async () => {
+      mockPrisma.modelProvider.findUnique
+        .mockResolvedValueOnce({ providerId: "prov1", name: "Prov1" })
+        .mockResolvedValueOnce({ providerId: "local", name: "Local" });
+
+      const pinnedErr = new InferenceError("preferred down", "auth", "prov1", 401);
+      const localErr = new InferenceError("local also down", "auth", "local", 401);
+      mockCallProvider
+        .mockRejectedValueOnce(pinnedErr)
+        .mockRejectedValueOnce(localErr);
+
+      const pending = callWithFallbackChain(
+        makeChainWithLocalFallback(),
+        [{ role: "user", content: "hi" }],
+        "system",
+      );
+      const rejection = expect(pending).rejects.toThrow("All endpoints failed");
+      await vi.runAllTimersAsync();
+      await rejection;
+
+      expect(mockCallProvider).toHaveBeenCalledTimes(2);
+    });
+
+    it("still attempts the local primary endpoint even on large tool surfaces", async () => {
+      // If routing decided local IS the primary (e.g. local_only residency),
+      // the skip-on-fallback guard should NOT block i=0.
+      const decision: RouteDecision = {
+        selectedEndpoint: "local",
+        selectedModelId: "local-7b",
+        reason: "test",
+        fitnessScore: 1,
+        fallbackChain: [],
+        candidates: [
+          { endpointId: "local", providerId: "local", modelId: "local-7b",
+            endpointName: "Local", fitnessScore: 1, dimensionScores: {},
+            costPerOutputMToken: null, excluded: false },
+        ],
+        excludedCount: 0, excludedReasons: [], policyRulesApplied: [],
+        taskType: "test", sensitivity: "internal" as SensitivityLevel, timestamp: new Date(),
+      };
+
+      mockPrisma.modelProvider.findUnique.mockResolvedValueOnce({ providerId: "local", name: "Local" });
+      mockCallProvider.mockResolvedValueOnce({
+        content: "ok",
+        inputTokens: 10,
+        outputTokens: 5,
+        inferenceMs: 100,
+      });
+
+      const result = await callWithFallbackChain(
+        decision,
+        [{ role: "user", content: "hi" }],
+        "system",
+        manyTools(30),
+      );
+
+      expect(result.content).toBe("ok");
+      expect(mockCallProvider).toHaveBeenCalledTimes(1);
+    });
+  });
 });

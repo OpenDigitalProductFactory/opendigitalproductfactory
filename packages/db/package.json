@@ -18,7 +18,8 @@
     "./edge-node-types": "./src/edge-node-types.ts",
     "./wiki-taxonomy": "./src/wiki-taxonomy.ts",
     "./wiki-store": "./src/wiki-store.ts",
-    "./wiki-frontmatter": "./src/wiki-frontmatter.ts"
+    "./wiki-frontmatter": "./src/wiki-frontmatter.ts",
+    "./capability-maturity": "./src/capability-maturity.ts"
   },
   "scripts": {
     "postinstall": "prisma generate",

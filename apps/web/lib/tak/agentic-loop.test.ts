@@ -161,24 +161,35 @@ describe("shouldNudge", () => {
 });
 
 describe("buildRepeatedToolStopMessage", () => {
-  it("points non-build repeated tool loops to the activity trail instead of build evidence", () => {
-    expect(buildRepeatedToolStopMessage({
+  it("points non-build repeated tool loops to the activity trail without naming tools", () => {
+    const msg = buildRepeatedToolStopMessage({
       toolName: "suggest_campaign_ideas",
       count: 3,
       routeContext: "/customer/marketing",
       reasonHint: "",
-    })).toBe(
-      "I called suggest_campaign_ideas 3 times with the same arguments and got stuck. I recorded this as a coworker execution issue and stopped before repeating the same tool again. Check the activity trail for what was attempted, then continue from the last saved recommendation.",
-    );
+    });
+
+    // Rule #5: do not leak tool names, call counts, or "reasonHint" architecture
+    // language into the user-facing message.
+    expect(msg).not.toContain("suggest_campaign_ideas");
+    expect(msg).not.toMatch(/\d times with the same arguments/);
+    expect(msg).not.toContain("coworker execution issue");
+    expect(msg).toMatch(/activity panel/i);
+    expect(msg.toLowerCase()).toContain("got stuck");
   });
 
-  it("keeps build evidence guidance only for Build Studio routes", () => {
-    expect(buildRepeatedToolStopMessage({
+  it("points Build Studio routes at the build details panel without naming tools", () => {
+    const msg = buildRepeatedToolStopMessage({
       toolName: "saveBuildEvidence",
       count: 3,
       routeContext: "/build",
       reasonHint: "",
-    })).toContain("Check the build evidence for what was completed.");
+    });
+
+    expect(msg).not.toContain("saveBuildEvidence");
+    expect(msg).not.toMatch(/\d times with the same arguments/);
+    expect(msg).toMatch(/build's details panel|build details/i);
+    expect(msg.toLowerCase()).toContain("got stuck");
   });
 });
 
@@ -443,8 +454,40 @@ describe("runAgenticLoop", () => {
 
     expect(mockRoute).toHaveBeenCalledTimes(1);
     expect(result.providerId).toBe("local");
-    expect(result.content).toContain("routed to Docker Model Runner");
-    expect(result.content).toContain("did not produce the required tool call");
+    // User-facing message must NOT leak infrastructure names / model IDs (rule #5).
+    expect(result.content).not.toContain("Docker Model Runner");
+    expect(result.content).not.toContain("gemma");
+    expect(result.content).not.toContain("tool-capable provider");
+    expect(result.content).not.toMatch(/required tool call/);
+    expect(result.content.toLowerCase()).toContain("couldn't complete");
+    expect(result.content).toMatch(/AI Workforce/);
+  });
+
+  it("returns the same local-model diagnostic on Build Studio routes (FB-71FB3A53)", async () => {
+    // Regression guard: the prior carve-out at agentic-loop.ts:1308 excluded
+    // /build routes from the local-model early-exit guard, which led to
+    // 200-iteration spins when the preferred provider fell back to local on
+    // a Build Studio thread. Dropping the carve-out means /build routes get
+    // the same diagnostic exit any other route would.
+    const mockRoute = vi.mocked(routeAndCall);
+
+    mockRoute.mockResolvedValueOnce(mockResult({
+      content: "I can check that for you.",
+      providerId: "local",
+      modelId: "docker.io/ai/gemma4:latest",
+      toolCalls: [],
+    }));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/build",
+      agentId: "build-specialist",
+    });
+
+    expect(mockRoute).toHaveBeenCalledTimes(1);
+    expect(result.providerId).toBe("local");
+    expect(result.content.toLowerCase()).toContain("couldn't complete");
+    expect(result.content).toMatch(/AI Workforce/);
   });
 
   it("does not surface raw tool_use JSON when a non-build tool loop hits the runtime limit", async () => {
@@ -1028,7 +1071,12 @@ describe("runAgenticLoop", () => {
       ],
     });
 
-    expect(result.content).toContain("I called saveBuildEvidence 3 times with the same arguments and got stuck.");
+    // User-facing message must NOT leak tool names or counts (rule #5).
+    expect(result.content).not.toContain("saveBuildEvidence");
+    expect(result.content).not.toMatch(/\d times with the same arguments/);
+    // It must still tell the user a stop happened and point them at the build details.
+    expect(result.content.toLowerCase()).toContain("got stuck");
+    expect(result.content).toMatch(/build's details panel|build details/i);
     expect(mockExecuteTool).toHaveBeenCalledTimes(6);
   });
 
@@ -1235,7 +1283,13 @@ describe("runAgenticLoop", () => {
     });
 
     expect(result.content).not.toContain("Plan ready");
-    expect(result.content).toContain("Start Implementation cannot unlock until I save buildPlan");
+    // User-facing message must NOT leak tool / schema names (rule #5).
+    expect(result.content).not.toContain("saveBuildEvidence");
+    expect(result.content).not.toContain("reviewBuildPlan");
+    expect(result.content).not.toContain("buildPlan");
+    // It must explain what happened in plain language and offer a next move.
+    expect(result.content.toLowerCase()).toMatch(/caught myself saying the plan is ready/);
+    expect(result.content.toLowerCase()).toContain("send me the same instruction again");
   });
 
   it("nudges build agent to use fallback steps after failed read stalls", async () => {

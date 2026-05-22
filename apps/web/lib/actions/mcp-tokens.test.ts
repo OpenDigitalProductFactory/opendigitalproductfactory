@@ -28,15 +28,75 @@ import {
 } from "@/lib/auth/mcp-api-token";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 import {
+  bulkRevokeMyMcpTokens,
   copyMyMcpToken,
   issueMyMcpToken,
+  issueMyTemplateMcpToken,
   issueMyWriteMcpToken,
   listAvailableMcpScopes,
+  listMcpTokenTemplates,
   listMyMcpTokens,
   revokeMyMcpToken,
   rotateMyMcpToken,
+  rotateMyMcpTokenWithEdit,
   upgradeMyMcpTokenForCodingAgent,
 } from "./mcp-tokens";
+
+// deriveIdleDays + MCP_TOKEN_DEFAULT_STALE_DAYS moved to mcp-token-scopes.ts
+// because Next.js requires every export from a "use server" module to be an
+// async function (see the build error in PR review history).
+import { deriveIdleDays } from "@/lib/mcp-token-scopes";
+
+// Grant map used by the template-resolution path. Lists every grant our
+// templates reference so resolveTemplateGrants() does not silently strip
+// scopes when the test runs against the mocked catalog.
+const FULL_GRANT_MAP: Record<string, string[]> = {
+  t_a: ["architecture_read"],
+  t_b: ["backlog_read"],
+  t_c: ["code_graph_read"],
+  t_d: ["file_read"],
+  t_e: ["spec_plan_read"],
+  t_f: ["work_capsule_read"],
+  t_g: ["registry_read"],
+  t_h: ["ea_graph_read"],
+  t_i: ["thread_read"],
+  t_j: ["deliberation_read"],
+  t_k: ["release_plan_read"],
+  t_l: ["agent_control_read"],
+  t_m: ["telemetry_read"],
+  t_n: ["portfolio_read"],
+  t_o: ["document_read"],
+  t_p: ["admin_read"],
+  t_q: ["marketing_read"],
+  t_r: ["consumer_read"],
+  t_s: ["backlog_write"],
+  t_t: ["backlog_triage"],
+  t_u: ["build_promote"],
+  t_v: ["build_plan_write"],
+  t_w: ["work_capsule_write"],
+  t_x: ["work_capsule_adopt"],
+  t_y: ["sandbox_execute"],
+  t_z: ["iac_execute"],
+  t_aa: ["deployment_plan_create"],
+  t_ab: ["release_gate_create"],
+  t_ac: ["release_plan_create"],
+  t_ad: ["deliberation_create"],
+  t_ae: ["thread_write"],
+  t_af: ["decision_record_create"],
+  t_ag: ["tool_evaluation_create"],
+  t_ah: ["document_write"],
+  t_ai: ["ea_graph_write"],
+  t_aj: ["registry_write"],
+  t_ak: ["document_publish"],
+  t_al: ["consumer_write"],
+  t_am: ["policy_write"],
+  t_an: ["financial_report_create"],
+  t_ao: ["marketing_write"],
+  t_ap: ["web_search"],
+  t_aq: ["external_registry_search"],
+  t_ar: ["data_governance_validate"],
+  t_as: ["admin_write"],
+};
 
 const addScopesMock = addScopesToMcpApiToken as unknown as ReturnType<typeof vi.fn>;
 const authMock = auth as unknown as ReturnType<typeof vi.fn>;
@@ -119,8 +179,9 @@ describe("listMyMcpTokens", () => {
 });
 
 describe("issueMyWriteMcpToken", () => {
-  it("one-click issues a write-scoped token with the standard write grant set", async () => {
+  it("one-click issues a development-template token (rotation of the legacy write affordance)", async () => {
     authMock.mockResolvedValue({ user: { id: "u1" } });
+    grantMapMock.mockReturnValue(FULL_GRANT_MAP);
     issueMock.mockResolvedValue({
       ok: true,
       tokenId: "tok_write",
@@ -140,10 +201,203 @@ describe("issueMyWriteMcpToken", () => {
         userId: "u1",
         capability: "write",
         scope: "write",
-        name: "Write MCP token",
-        scopes: expect.arrayContaining(["backlog_read", "work_capsule_write"]),
+        name: "Development MCP token",
+        scopes: expect.arrayContaining([
+          "backlog_read",
+          "work_capsule_write",
+          "sandbox_execute",
+          "iac_execute",
+        ]),
       }),
     );
+  });
+});
+
+describe("listMcpTokenTemplates", () => {
+  it("returns empty for unauthenticated requests", async () => {
+    authMock.mockResolvedValue(null);
+    const result = await listMcpTokenTemplates();
+    expect(result.templates).toEqual([]);
+  });
+
+  it("returns the canonical templates with grants resolved against the install catalog", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    grantMapMock.mockReturnValue(FULL_GRANT_MAP);
+    const result = await listMcpTokenTemplates();
+    const ids = result.templates.map((t) => t.id);
+    expect(ids).toEqual([
+      "admin",
+      "development",
+      "employee_finance",
+      "employee_hr",
+      "employee_ea",
+      "employee_marketing",
+      "observer",
+      "custom",
+    ]);
+    const dev = result.templates.find((t) => t.id === "development");
+    expect(dev?.tier).toBe("write");
+    expect(dev?.grants).toEqual(expect.arrayContaining(["iac_execute", "sandbox_execute"]));
+    const observer = result.templates.find((t) => t.id === "observer");
+    // Observer must never carry a *_write grant.
+    expect(observer?.grants.some((g) => g.endsWith("_write"))).toBe(false);
+  });
+
+  it("strips template grants that the install does not expose", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    // Bare-bones catalog: only backlog_read is registered.
+    grantMapMock.mockReturnValue({ tool_a: ["backlog_read"] });
+    const result = await listMcpTokenTemplates();
+    const finance = result.templates.find((t) => t.id === "employee_finance");
+    expect(finance?.grants).toEqual(["backlog_read"]);
+  });
+});
+
+describe("issueMyTemplateMcpToken", () => {
+  it("rejects unauthenticated callers", async () => {
+    authMock.mockResolvedValue(null);
+    const result = await issueMyTemplateMcpToken({
+      templateId: "development",
+      name: "agent",
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("unauthorized");
+    expect(issueMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects unknown templates", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    const result = await issueMyTemplateMcpToken({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      templateId: "not_a_real_template" as any,
+      name: "agent",
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("invalid_template");
+    expect(issueMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses to issue from the custom template (use issueMyMcpToken instead)", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    const result = await issueMyTemplateMcpToken({
+      templateId: "custom",
+      name: "agent",
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("invalid_template");
+  });
+
+  it("fails when the install does not expose any of the template's grants", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    grantMapMock.mockReturnValue({ tool_a: ["unrelated_grant"] });
+    const result = await issueMyTemplateMcpToken({
+      templateId: "employee_finance",
+      name: "Finance bot",
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("no_resolvable_scopes");
+    expect(issueMock).not.toHaveBeenCalled();
+  });
+
+  it("issues a finance-employee token with only finance-relevant scopes", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    grantMapMock.mockReturnValue(FULL_GRANT_MAP);
+    issueMock.mockResolvedValue({
+      ok: true,
+      tokenId: "tok_fin",
+      plaintext: "dpfmcp_FIN",
+      prefix: "dpfmcp_FIN1",
+      tokenSuffix: "FIN1",
+      expiresAt: new Date("2026-08-25T00:00:00Z"),
+    });
+    const result = await issueMyTemplateMcpToken({
+      templateId: "employee_finance",
+      name: "Finance coworker",
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(true);
+    expect(issueMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "u1",
+        scope: "write",
+        capability: "write",
+        name: "Finance coworker",
+        scopes: expect.arrayContaining(["financial_report_create", "registry_read"]),
+      }),
+    );
+    const passed = issueMock.mock.calls[0]![0] as { scopes: string[] };
+    // Finance must never carry sandbox_execute or iac_execute.
+    expect(passed.scopes).not.toContain("sandbox_execute");
+    expect(passed.scopes).not.toContain("iac_execute");
+    expect(passed.scopes).not.toContain("admin_write");
+  });
+
+  it("issues an admin token at the admin tier with admin_write included", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    grantMapMock.mockReturnValue(FULL_GRANT_MAP);
+    issueMock.mockResolvedValue({
+      ok: true,
+      tokenId: "tok_admin",
+      plaintext: "dpfmcp_ADM",
+      prefix: "dpfmcp_ADM1",
+      tokenSuffix: "ADM1",
+      expiresAt: null,
+    });
+    const result = await issueMyTemplateMcpToken({
+      templateId: "admin",
+      name: "Platform admin",
+      expiresInDays: null,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(true);
+    expect(issueMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: "admin",
+        capability: "write",
+        scopes: expect.arrayContaining(["admin_write", "iac_execute"]),
+      }),
+    );
+  });
+
+  it("issues an observer token at the read tier with no *_write scopes", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    grantMapMock.mockReturnValue(FULL_GRANT_MAP);
+    issueMock.mockResolvedValue({
+      ok: true,
+      tokenId: "tok_obs",
+      plaintext: "dpfmcp_OBS",
+      prefix: "dpfmcp_OBS1",
+      tokenSuffix: "OBS1",
+      expiresAt: null,
+    });
+    const result = await issueMyTemplateMcpToken({
+      templateId: "observer",
+      name: "Read-only dashboard",
+      expiresInDays: null,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(true);
+    expect(issueMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: "read",
+        capability: "read",
+      }),
+    );
+    const passed = issueMock.mock.calls[0]![0] as { scopes: string[] };
+    expect(passed.scopes.some((g) => g.endsWith("_write"))).toBe(false);
   });
 });
 
@@ -404,5 +658,545 @@ describe("upgradeMyMcpTokenForCodingAgent", () => {
       "spec_plan_read",
       "work_capsule_read",
     ]);
+  });
+});
+
+describe("deriveIdleDays", () => {
+  const now = new Date("2026-05-22T12:00:00Z");
+
+  it("returns null when the token has never been used", () => {
+    expect(deriveIdleDays(null, now)).toBeNull();
+    expect(deriveIdleDays(undefined, now)).toBeNull();
+  });
+
+  it("returns 0 when last-used is the same instant as now", () => {
+    expect(deriveIdleDays(now, now)).toBe(0);
+  });
+
+  it("returns 0 when last-used is in the future (clock skew safety)", () => {
+    expect(
+      deriveIdleDays(new Date("2026-05-22T18:00:00Z"), now),
+    ).toBe(0);
+  });
+
+  it("floors fractional days so a 6.5-day-old token reads as 6", () => {
+    expect(
+      deriveIdleDays(new Date("2026-05-16T00:00:00Z"), now),
+    ).toBe(6);
+  });
+
+  it("returns the integer day count for older tokens", () => {
+    expect(
+      deriveIdleDays(new Date("2026-05-08T12:00:00Z"), now),
+    ).toBe(14);
+  });
+});
+
+describe("listMyMcpTokens — idle hygiene fields", () => {
+  it("returns idleDays for active tokens and null for revoked/expired/never-used", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    // Freeze time so the test isn't flaky.
+    const now = new Date("2026-05-22T12:00:00Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    listMock.mockResolvedValue([
+      {
+        id: "tok_active_idle_3d",
+        name: "active 3d idle",
+        prefix: "dpfmcp_A1",
+        tokenSuffix: "AAAA",
+        canCopy: true,
+        capability: "write",
+        scope: "write",
+        scopes: ["backlog_write"],
+        lastUsedAt: new Date("2026-05-19T12:00:00Z"),
+        expiresAt: null,
+        revokedAt: null,
+        createdAt: new Date("2026-04-01T00:00:00Z"),
+      },
+      {
+        id: "tok_active_never_used",
+        name: "never used",
+        prefix: "dpfmcp_B2",
+        tokenSuffix: "BBBB",
+        canCopy: true,
+        capability: "read",
+        scope: "read",
+        scopes: ["backlog_read"],
+        lastUsedAt: null,
+        expiresAt: null,
+        revokedAt: null,
+        createdAt: new Date("2026-05-22T00:00:00Z"),
+      },
+      {
+        id: "tok_revoked",
+        name: "revoked",
+        prefix: "dpfmcp_C3",
+        tokenSuffix: "CCCC",
+        canCopy: false,
+        capability: "write",
+        scope: "write",
+        scopes: ["backlog_write"],
+        lastUsedAt: new Date("2026-05-18T12:00:00Z"),
+        expiresAt: null,
+        revokedAt: new Date("2026-05-21T12:00:00Z"),
+        createdAt: new Date("2026-04-01T00:00:00Z"),
+      },
+      {
+        id: "tok_expired",
+        name: "expired",
+        prefix: "dpfmcp_D4",
+        tokenSuffix: "DDDD",
+        canCopy: false,
+        capability: "read",
+        scope: "read",
+        scopes: ["backlog_read"],
+        lastUsedAt: new Date("2026-05-10T12:00:00Z"),
+        expiresAt: new Date("2026-05-20T12:00:00Z"),
+        revokedAt: null,
+        createdAt: new Date("2026-04-01T00:00:00Z"),
+      },
+    ]);
+
+    const result = await listMyMcpTokens();
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+
+    const byId = new Map(result.tokens.map((t) => [t.id, t]));
+    expect(byId.get("tok_active_idle_3d")?.idleDays).toBe(3);
+    expect(byId.get("tok_active_never_used")?.idleDays).toBeNull();
+    expect(byId.get("tok_revoked")?.idleDays).toBeNull();
+    expect(byId.get("tok_expired")?.idleDays).toBeNull();
+
+    vi.useRealTimers();
+  });
+});
+
+describe("bulkRevokeMyMcpTokens", () => {
+  it("rejects unauthenticated callers", async () => {
+    authMock.mockResolvedValue(null);
+    const result = await bulkRevokeMyMcpTokens({ tokenIds: ["a"], reason: "x" });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("unauthorized");
+    expect(revokeMock).not.toHaveBeenCalled();
+  });
+
+  it("returns an empty result set when no tokenIds are passed", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    const result = await bulkRevokeMyMcpTokens({ tokenIds: [], reason: "x" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.results).toEqual([]);
+    expect(result.revokedCount).toBe(0);
+    expect(result.failedCount).toBe(0);
+    expect(listMock).not.toHaveBeenCalled();
+    expect(revokeMock).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates ids so a misclicked token is only revoked once", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    listMock.mockResolvedValue([
+      { id: "tok_x", name: "x", revokedAt: null, expiresAt: null },
+    ]);
+    revokeMock.mockResolvedValue({ ok: true });
+
+    const result = await bulkRevokeMyMcpTokens({
+      tokenIds: ["tok_x", "tok_x", "tok_x"],
+      reason: "leaked",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(revokeMock).toHaveBeenCalledTimes(1);
+    expect(result.revokedCount).toBe(1);
+    expect(result.failedCount).toBe(0);
+  });
+
+  it("treats already-revoked rows as idempotent successes", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    listMock.mockResolvedValue([
+      {
+        id: "tok_already_revoked",
+        name: "x",
+        revokedAt: new Date("2026-05-21T00:00:00Z"),
+        expiresAt: null,
+      },
+    ]);
+
+    const result = await bulkRevokeMyMcpTokens({
+      tokenIds: ["tok_already_revoked"],
+      reason: "cleanup",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(revokeMock).not.toHaveBeenCalled();
+    expect(result.results[0]?.status).toBe("already_revoked");
+    expect(result.revokedCount).toBe(1);
+    expect(result.failedCount).toBe(0);
+  });
+
+  it("flags tokens the caller does not own as failures without touching the DB", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    listMock.mockResolvedValue([{ id: "tok_mine", name: "mine", revokedAt: null, expiresAt: null }]);
+    revokeMock.mockResolvedValue({ ok: true });
+
+    const result = await bulkRevokeMyMcpTokens({
+      tokenIds: ["tok_mine", "tok_someone_else"],
+      reason: "cleanup",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(revokeMock).toHaveBeenCalledTimes(1);
+    expect(revokeMock).toHaveBeenCalledWith("tok_mine", "cleanup");
+    expect(result.revokedCount).toBe(1);
+    expect(result.failedCount).toBe(1);
+    const failed = result.results.find((r) => r.tokenId === "tok_someone_else");
+    expect(failed?.status).toBe("not_found_or_not_yours");
+  });
+
+  it("reports partial failures from the underlying revoke call", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    listMock.mockResolvedValue([
+      { id: "tok_a", name: "a", revokedAt: null, expiresAt: null },
+      { id: "tok_b", name: "b", revokedAt: null, expiresAt: null },
+    ]);
+    revokeMock
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({ ok: false, error: "db_unavailable" });
+
+    const result = await bulkRevokeMyMcpTokens({
+      tokenIds: ["tok_a", "tok_b"],
+      reason: "cleanup",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.revokedCount).toBe(1);
+    expect(result.failedCount).toBe(1);
+    const bResult = result.results.find((r) => r.tokenId === "tok_b");
+    expect(bResult?.status).toBe("error");
+    expect(bResult?.error).toBe("db_unavailable");
+  });
+});
+
+describe("rotateMyMcpTokenWithEdit", () => {
+  function makeOwnedToken(overrides: Partial<{
+    revokedAt: Date | null;
+    expiresAt: Date | null;
+    name: string;
+  }> = {}) {
+    return {
+      id: "tok_orig",
+      name: overrides.name ?? "Mark laptop",
+      revokedAt: overrides.revokedAt ?? null,
+      expiresAt: overrides.expiresAt ?? null,
+    };
+  }
+
+  it("rejects unauthenticated callers", async () => {
+    authMock.mockResolvedValue(null);
+    const result = await rotateMyMcpTokenWithEdit({
+      tokenId: "tok_orig",
+      name: "x",
+      scope: "write",
+      scopes: ["backlog_write"],
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("unauthorized");
+    expect(issueMock).not.toHaveBeenCalled();
+    expect(revokeMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses an empty scopes list — a rotation without scopes is operator error", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    const result = await rotateMyMcpTokenWithEdit({
+      tokenId: "tok_orig",
+      name: "x",
+      scope: "read",
+      scopes: [],
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("no_scopes");
+    expect(issueMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses tokens not owned by the caller", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    listMock.mockResolvedValue([{ id: "tok_other", name: "x", revokedAt: null, expiresAt: null }]);
+    const result = await rotateMyMcpTokenWithEdit({
+      tokenId: "tok_orig",
+      name: "x",
+      scope: "write",
+      scopes: ["backlog_write"],
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("not_found_or_not_yours");
+    expect(issueMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses revoked tokens — rotate is for active rows only", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    listMock.mockResolvedValue([makeOwnedToken({ revokedAt: new Date("2026-05-21") })]);
+    const result = await rotateMyMcpTokenWithEdit({
+      tokenId: "tok_orig",
+      name: "x",
+      scope: "write",
+      scopes: ["backlog_write"],
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("revoked");
+    expect(issueMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses expired tokens", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    listMock.mockResolvedValue([makeOwnedToken({ expiresAt: new Date("2020-01-01") })]);
+    const result = await rotateMyMcpTokenWithEdit({
+      tokenId: "tok_orig",
+      name: "x",
+      scope: "write",
+      scopes: ["backlog_write"],
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("expired");
+  });
+
+  it("issues new + revokes old in order on the happy path", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    listMock.mockResolvedValue([makeOwnedToken()]);
+    issueMock.mockResolvedValue({
+      ok: true,
+      tokenId: "tok_new",
+      plaintext: "dpfmcp_NEW",
+      prefix: "dpfmcp_NEW1",
+      tokenSuffix: "NEW1",
+      expiresAt: new Date("2026-08-22T00:00:00Z"),
+    });
+    revokeMock.mockResolvedValue({ ok: true });
+
+    const result = await rotateMyMcpTokenWithEdit({
+      tokenId: "tok_orig",
+      name: "Mark laptop edited",
+      scope: "write",
+      scopes: ["backlog_read", "backlog_write", "sandbox_execute"],
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.oldTokenRevokeError).toBeUndefined();
+    expect(issueMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "u1",
+        name: "Mark laptop edited",
+        capability: "write",
+        scope: "write",
+        scopes: ["backlog_read", "backlog_write", "sandbox_execute"],
+      }),
+    );
+    expect(revokeMock).toHaveBeenCalledWith("tok_orig", "rotated with edited grants");
+    // Issue must precede revoke — never leave the operator with neither.
+    const issueOrder = issueMock.mock.invocationCallOrder[0]!;
+    const revokeOrder = revokeMock.mock.invocationCallOrder[0]!;
+    expect(issueOrder).toBeLessThan(revokeOrder);
+  });
+
+  it("falls back to the old token's name when operator leaves name blank", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    listMock.mockResolvedValue([makeOwnedToken({ name: "Old name" })]);
+    issueMock.mockResolvedValue({
+      ok: true,
+      tokenId: "tok_new",
+      plaintext: "dpfmcp_NEW",
+      prefix: "dpfmcp_NEW1",
+      tokenSuffix: "NEW1",
+      expiresAt: null,
+    });
+    revokeMock.mockResolvedValue({ ok: true });
+
+    await rotateMyMcpTokenWithEdit({
+      tokenId: "tok_orig",
+      name: "   ",
+      scope: "write",
+      scopes: ["backlog_write"],
+      expiresInDays: null,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(issueMock).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Old name" }),
+    );
+  });
+
+  it("returns the new token plus oldTokenRevokeError when revoke of old fails", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    listMock.mockResolvedValue([makeOwnedToken()]);
+    issueMock.mockResolvedValue({
+      ok: true,
+      tokenId: "tok_new",
+      plaintext: "dpfmcp_NEW",
+      prefix: "dpfmcp_NEW1",
+      tokenSuffix: "NEW1",
+      expiresAt: null,
+    });
+    revokeMock.mockResolvedValue({ ok: false, error: "db_locked" });
+
+    const result = await rotateMyMcpTokenWithEdit({
+      tokenId: "tok_orig",
+      name: "edited",
+      scope: "write",
+      scopes: ["backlog_write"],
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.plaintext).toBe("dpfmcp_NEW");
+    expect(result.oldTokenRevokeError).toBe("db_locked");
+  });
+
+  it("propagates the issue-call failure without touching revoke", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    listMock.mockResolvedValue([makeOwnedToken()]);
+    issueMock.mockResolvedValue({
+      ok: false,
+      error: "invalid_scope",
+      message: "scope must be read, write, or admin",
+    });
+
+    const result = await rotateMyMcpTokenWithEdit({
+      tokenId: "tok_orig",
+      name: "edited",
+      scope: "write",
+      scopes: ["backlog_write"],
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("invalid_scope");
+    // Old token must remain active when new token issuance fails.
+    expect(revokeMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("listMyMcpTokens — revoked archive", () => {
+  it("filters out tokens revoked >90 days and reports archivedCount", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    const now = new Date("2026-05-22T12:00:00Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    listMock.mockResolvedValue([
+      {
+        // Active token — always visible.
+        id: "tok_active",
+        name: "active",
+        prefix: "dpfmcp_A",
+        tokenSuffix: "AAAA",
+        canCopy: true,
+        capability: "write",
+        scope: "write",
+        scopes: ["backlog_write"],
+        lastUsedAt: new Date("2026-05-22T00:00:00Z"),
+        expiresAt: null,
+        revokedAt: null,
+        createdAt: new Date("2026-04-01T00:00:00Z"),
+      },
+      {
+        // Revoked 30 days ago — within window, must remain visible (UI
+        // hides via the "Show revoked" toggle separately).
+        id: "tok_recent_revoke",
+        name: "recent revoke",
+        prefix: "dpfmcp_R",
+        tokenSuffix: "RRRR",
+        canCopy: false,
+        capability: "write",
+        scope: "write",
+        scopes: ["backlog_write"],
+        lastUsedAt: null,
+        expiresAt: null,
+        revokedAt: new Date("2026-04-22T12:00:00Z"),
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+      },
+      {
+        // Revoked 120 days ago — past archive window, must be hidden.
+        id: "tok_archived_1",
+        name: "archived 1",
+        prefix: "dpfmcp_X",
+        tokenSuffix: "XXXX",
+        canCopy: false,
+        capability: "write",
+        scope: "write",
+        scopes: ["backlog_write"],
+        lastUsedAt: null,
+        expiresAt: null,
+        revokedAt: new Date("2026-01-22T12:00:00Z"),
+        createdAt: new Date("2025-10-01T00:00:00Z"),
+      },
+      {
+        // Revoked exactly at threshold (90 days) — must be archived.
+        id: "tok_archived_2",
+        name: "archived 2",
+        prefix: "dpfmcp_Y",
+        tokenSuffix: "YYYY",
+        canCopy: false,
+        capability: "write",
+        scope: "write",
+        scopes: ["backlog_write"],
+        lastUsedAt: null,
+        expiresAt: null,
+        revokedAt: new Date("2026-02-21T12:00:00Z"),
+        createdAt: new Date("2025-10-01T00:00:00Z"),
+      },
+    ]);
+
+    const result = await listMyMcpTokens();
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+
+    const visibleIds = result.tokens.map((t) => t.id);
+    expect(visibleIds).toEqual(["tok_active", "tok_recent_revoke"]);
+    expect(result.archivedCount).toBe(2);
+
+    vi.useRealTimers();
+  });
+
+  it("reports archivedCount=0 when no tokens are past the window", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    listMock.mockResolvedValue([
+      {
+        id: "tok_x",
+        name: "x",
+        prefix: "dpfmcp_X",
+        tokenSuffix: "XXXX",
+        canCopy: true,
+        capability: "read",
+        scope: "read",
+        scopes: ["backlog_read"],
+        lastUsedAt: null,
+        expiresAt: null,
+        revokedAt: null,
+        createdAt: new Date(),
+      },
+    ]);
+    const result = await listMyMcpTokens();
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.archivedCount).toBe(0);
   });
 });

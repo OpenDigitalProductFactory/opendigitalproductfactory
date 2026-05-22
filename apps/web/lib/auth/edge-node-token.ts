@@ -41,6 +41,12 @@ export type ResolvedEdgeNodeAuth = {
   /** EdgeNode.nodeId (the stable external identifier). */
   nodeId: string;
   trustState: "pending" | "trusted" | "quarantined" | "revoked";
+  /** Optional MSP customer-account scope approved at enrollment. */
+  customerAccountId: string | null;
+  /** Optional MSP customer-site scope approved at enrollment. */
+  customerSiteId: string | null;
+  /** Policy metadata approved at enrollment. */
+  scopePolicy: Record<string, unknown> | null;
 };
 
 export type EdgeNodeScope =
@@ -142,5 +148,8 @@ export async function resolveEdgeNodeAuth(
     edgeNodeRowId: node.id,
     nodeId: node.nodeId,
     trustState: node.trustState as ResolvedEdgeNodeAuth["trustState"],
+    customerAccountId: node.customerAccountId,
+    customerSiteId: node.customerSiteId,
+    scopePolicy: node.scopePolicy as Record<string, unknown> | null,
   };
 }

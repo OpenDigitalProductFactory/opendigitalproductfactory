@@ -262,6 +262,11 @@
 
 `docs/superpowers/specs/YYYY-MM-DD-edge-node-customer-site-binding-design.md`
 
+Focused follow-on created:
+
+- `docs/superpowers/specs/2026-05-22-edge-node-customer-site-binding-design.md`
+- `docs/superpowers/plans/2026-05-22-edge-node-customer-site-binding-plan.md`
+
 Inputs for that spec (recorded here so they aren't lost):
 
 - Reference `EP-EDGE-NODE`, `EP-SITE-7C4D2B`, and `EP-CTRL-5E21A4`.

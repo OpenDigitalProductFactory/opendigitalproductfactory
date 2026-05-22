@@ -28,6 +28,10 @@ type EdgeNodeRow = {
   capabilities: string[];
   hostHostname: string | null;
   hostIpAddresses: string[] | null;
+  customerAccountId: string | null;
+  customerAccountName: string | null;
+  customerSiteId: string | null;
+  customerSiteName: string | null;
 };
 
 type BootstrapTokenRow = {
@@ -39,11 +43,31 @@ type BootstrapTokenRow = {
   consumedAt: string | null;
   consumedByNodeId: string | null;
   revokedAt: string | null;
+  targetCustomerAccountId: string | null;
+  targetCustomerAccountName: string | null;
+  targetCustomerSiteId: string | null;
+  targetCustomerSiteName: string | null;
+};
+
+type CustomerSiteOption = {
+  id: string;
+  siteId: string;
+  name: string;
+  status: string;
+};
+
+type CustomerAccountOption = {
+  id: string;
+  accountId: string;
+  name: string;
+  status: string;
+  sites: CustomerSiteOption[];
 };
 
 type Props = {
   nodes: EdgeNodeRow[];
   tokens: BootstrapTokenRow[];
+  customerAccounts: CustomerAccountOption[];
 };
 
 type FlashMessage = {
@@ -81,6 +105,39 @@ function formatTimestamp(iso: string | null): string {
   } catch {
     return iso;
   }
+}
+
+type ScopeBadgeInput = {
+  customerAccountId: string | null;
+  customerAccountName: string | null;
+  customerSiteId: string | null;
+  customerSiteName: string | null;
+};
+
+function formatScopeLabel(scope: ScopeBadgeInput): string {
+  const accountLabel = scope.customerAccountName ?? scope.customerAccountId;
+  const siteLabel = scope.customerSiteName ?? scope.customerSiteId;
+  if (accountLabel && siteLabel) return `${accountLabel} / ${siteLabel}`;
+  if (accountLabel) return accountLabel;
+  if (siteLabel) return siteLabel;
+  return "Organization";
+}
+
+function ScopeBadge({ scope }: { scope: ScopeBadgeInput }) {
+  const isScoped = Boolean(scope.customerAccountId || scope.customerSiteId);
+  return (
+    <span
+      className="inline-flex max-w-56 items-center rounded border px-2 py-0.5 text-xs font-medium"
+      style={{
+        borderColor: isScoped ? "var(--dpf-accent)" : "var(--dpf-border)",
+        backgroundColor: "var(--dpf-surface-2)",
+        color: isScoped ? "var(--dpf-accent)" : "var(--dpf-muted)",
+      }}
+      title={formatScopeLabel(scope)}
+    >
+      <span className="truncate">{formatScopeLabel(scope)}</span>
+    </span>
+  );
 }
 
 /**
@@ -132,14 +189,23 @@ function HostAddressCell({
 // above; this is not part of the public component API.
 export { HostAddressCell as __test_HostAddressCell };
 
-export function EdgeNodesAdminClient({ nodes, tokens }: Props) {
+export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props) {
   const [flash, setFlash] = useState<FlashMessage | null>(null);
   const [issuedToken, setIssuedToken] = useState<IssuedTokenView | null>(null);
   const [ttlMinutes, setTtlMinutes] = useState<number>(15);
+  const [selectedCustomerAccountId, setSelectedCustomerAccountId] = useState<string>("");
+  const [selectedCustomerSiteId, setSelectedCustomerSiteId] = useState<string>("");
   const [isPending, startTransition] = useTransition();
+  const selectedCustomerAccount =
+    customerAccounts.find((account) => account.id === selectedCustomerAccountId) ?? null;
 
   function clearFlash() {
     setFlash(null);
+  }
+
+  function onCustomerAccountChange(value: string) {
+    setSelectedCustomerAccountId(value);
+    setSelectedCustomerSiteId("");
   }
 
   function onIssueBootstrap() {
@@ -148,6 +214,8 @@ export function EdgeNodesAdminClient({ nodes, tokens }: Props) {
     startTransition(async () => {
       const result = await issueEdgeBootstrapTokenAction({
         ttlMs: Math.max(60_000, ttlMinutes * 60_000),
+        targetCustomerAccountId: selectedCustomerAccountId || null,
+        targetCustomerSiteId: selectedCustomerSiteId || null,
       });
       if (result.ok) {
         setIssuedToken({
@@ -303,23 +371,94 @@ export function EdgeNodesAdminClient({ nodes, tokens }: Props) {
           One-time enrollment credential for a new Edge Node. Single-use, hashed at rest. TTL
           15 min default; cap 24h.
         </p>
-        <div className="flex items-center gap-3">
-          <label className="text-sm text-[var(--dpf-text)]">
-            TTL (minutes)
+        <div className="grid gap-3 md:grid-cols-[minmax(7rem,0.6fr)_minmax(12rem,1fr)_minmax(12rem,1fr)_auto] md:items-end">
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="edge-bootstrap-ttl"
+              className="text-xs font-medium text-[var(--dpf-muted)]"
+            >
+              TTL (minutes)
+            </label>
             <input
+              id="edge-bootstrap-ttl"
               type="number"
               min={1}
               max={24 * 60}
               value={ttlMinutes}
               onChange={(e) => setTtlMinutes(parseInt(e.target.value, 10) || 15)}
-              className="ml-2 w-20 rounded border px-2 py-1 text-sm"
+              className="w-full rounded border px-2 py-1.5 text-sm"
               style={{
                 borderColor: "var(--dpf-border)",
                 backgroundColor: "var(--dpf-surface-2)",
                 color: "var(--dpf-text)",
               }}
             />
-          </label>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="edge-bootstrap-customer-account"
+              className="text-xs font-medium text-[var(--dpf-muted)]"
+            >
+              Customer account
+            </label>
+            <select
+              id="edge-bootstrap-customer-account"
+              value={selectedCustomerAccountId}
+              onChange={(e) => onCustomerAccountChange(e.target.value)}
+              className="w-full rounded border px-2 py-1.5 text-sm"
+              style={{
+                borderColor: "var(--dpf-border)",
+                backgroundColor: "var(--dpf-surface-2)",
+                color: "var(--dpf-text)",
+              }}
+            >
+              <option value="" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
+                Organization scope
+              </option>
+              {customerAccounts.map((account) => (
+                <option
+                  key={account.id}
+                  value={account.id}
+                  className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
+                >
+                  {account.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="edge-bootstrap-customer-site"
+              className="text-xs font-medium text-[var(--dpf-muted)]"
+            >
+              Customer site
+            </label>
+            <select
+              id="edge-bootstrap-customer-site"
+              value={selectedCustomerSiteId}
+              disabled={!selectedCustomerAccount}
+              onChange={(e) => setSelectedCustomerSiteId(e.target.value)}
+              className="w-full rounded border px-2 py-1.5 text-sm disabled:opacity-60"
+              style={{
+                borderColor: "var(--dpf-border)",
+                backgroundColor: "var(--dpf-surface-2)",
+                color: "var(--dpf-text)",
+              }}
+            >
+              <option value="" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
+                Account-wide
+              </option>
+              {selectedCustomerAccount?.sites.map((site) => (
+                <option
+                  key={site.id}
+                  value={site.id}
+                  className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
+                >
+                  {site.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <button
             type="button"
             onClick={onIssueBootstrap}
@@ -358,6 +497,7 @@ export function EdgeNodesAdminClient({ nodes, tokens }: Props) {
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Node ID</th>
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Platform / mode</th>
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Host / LAN address</th>
+                  <th className="p-2 text-left text-[var(--dpf-muted)]">Scope</th>
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Trust state</th>
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Last seen</th>
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Actions</th>
@@ -380,6 +520,16 @@ export function EdgeNodesAdminClient({ nodes, tokens }: Props) {
                       <HostAddressCell
                         hostname={n.hostHostname}
                         ipAddresses={n.hostIpAddresses}
+                      />
+                    </td>
+                    <td className="p-2">
+                      <ScopeBadge
+                        scope={{
+                          customerAccountId: n.customerAccountId,
+                          customerAccountName: n.customerAccountName,
+                          customerSiteId: n.customerSiteId,
+                          customerSiteName: n.customerSiteName,
+                        }}
                       />
                     </td>
                     <td className="p-2">
@@ -482,6 +632,7 @@ export function EdgeNodesAdminClient({ nodes, tokens }: Props) {
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--dpf-border)" }}>
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Prefix</th>
+                  <th className="p-2 text-left text-[var(--dpf-muted)]">Target</th>
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Issued</th>
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Expires</th>
                   <th className="p-2 text-left text-[var(--dpf-muted)]">Status</th>
@@ -499,6 +650,16 @@ export function EdgeNodesAdminClient({ nodes, tokens }: Props) {
                     <tr key={t.id} style={{ borderBottom: "1px solid var(--dpf-border)" }}>
                       <td className="p-2 font-mono text-xs text-[var(--dpf-muted)]">
                         {t.prefix}
+                      </td>
+                      <td className="p-2">
+                        <ScopeBadge
+                          scope={{
+                            customerAccountId: t.targetCustomerAccountId,
+                            customerAccountName: t.targetCustomerAccountName,
+                            customerSiteId: t.targetCustomerSiteId,
+                            customerSiteName: t.targetCustomerSiteName,
+                          }}
+                        />
                       </td>
                       <td className="p-2 text-xs text-[var(--dpf-muted)]">
                         {formatTimestamp(t.issuedAt)}

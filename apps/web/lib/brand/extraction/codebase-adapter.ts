@@ -16,7 +16,10 @@ function parseTailwindColors(source: string): Record<string, string> {
   const colorsMatch = source.match(/colors\s*:\s*\{([^}]*)\}/s);
   if (!colorsMatch) return result;
   const inner = colorsMatch[1];
-  const pairs = inner.matchAll(/(\w+)\s*:\s*["']([#a-fA-F0-9\d,().\s]+)["']/g);
+  // CodeQL #71 (js/overly-large-range): `0-9` and `\d` overlap in the
+  // same character class. Removed the redundant `\d`; `0-9` already
+  // matches the same digits.
+  const pairs = inner.matchAll(/(\w+)\s*:\s*["']([#a-fA-F0-9,().\s]+)["']/g);
   for (const m of pairs) {
     result[m[1]] = m[2].trim();
   }

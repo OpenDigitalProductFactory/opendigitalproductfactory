@@ -52,6 +52,9 @@ export interface GenerateAndPersistBuildBomInput {
   now: Date;
   gitRef?: string;
   readTextFile?: (path: string) => Promise<string>;
+  // Injection point so the auto-trigger does not pull the Inngest client
+  // into pure unit tests. Defaults to queueBuildAssuranceScan at runtime.
+  queueScan?: (input: { buildId: string; requestedByUserId: string }) => Promise<unknown>;
 }
 
 async function defaultReadTextFile(path: string): Promise<string> {
@@ -189,6 +192,21 @@ export async function generateAndPersistBuildBom(input: GenerateAndPersistBuildB
       buildId: build.buildId,
       field: "assuranceBom",
     });
+  }
+
+  // Auto-trigger the assurance scan once the BOM is committed. Best-effort:
+  // a queue failure must not roll back BOM persistence — the operator can
+  // still click "Run scan" manually from BuildAssuranceGateCard.
+  try {
+    const enqueue = input.queueScan
+      ?? (await import("./scan-trigger")).queueBuildAssuranceScan;
+    await enqueue({ buildId: build.buildId, requestedByUserId: input.requestedByUserId });
+  } catch (err) {
+    console.error(
+      "[tool-trace] failed to auto-queue assurance scan buildId=%s error=%s",
+      JSON.stringify(build.buildId),
+      JSON.stringify(err instanceof Error ? err.message : String(err)),
+    );
   }
 
   return {

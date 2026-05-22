@@ -5,6 +5,20 @@ import {
   getLatestBomSummaryForProduct,
 } from "./bom-read";
 
+const emptyFindings = {
+  total: 0,
+  blocking: 0,
+  bySeverity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+  byKind: {},
+};
+
+const platformNativeScanner = {
+  state: "ready",
+  approvedScannerCount: 1,
+  scannerNames: ["pnpm-audit"],
+  reason: "platform-native-scanner-available",
+};
+
 describe("getLatestBomSummaryForBuild", () => {
   it("returns a missing state when no BOM exists", async () => {
     const db = { bomDocument: { findFirst: vi.fn(async () => null) } };
@@ -13,6 +27,8 @@ describe("getLatestBomSummaryForBuild", () => {
       state: "missing",
       document: null,
       counts: { components: 0, models: 0 },
+      findings: emptyFindings,
+      scanner: platformNativeScanner,
     });
   });
 
@@ -45,6 +61,8 @@ describe("getLatestBomSummaryForBuild", () => {
         sourceKind: "pnpm-lock",
       },
       counts: { components: 3, models: 1 },
+      findings: emptyFindings,
+      scanner: platformNativeScanner,
     });
     expect(db.bomDocument.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: { buildId: "BUILD-1" },
@@ -72,6 +90,8 @@ describe("getLatestBomSummaryForProduct", () => {
     const summary = await getLatestBomSummaryForProduct(db, "product-1");
 
     expect(summary.state).toBe("stale");
+    expect(summary.findings).toEqual(emptyFindings);
+    expect(summary.scanner).toEqual(platformNativeScanner);
     expect(db.bomDocument.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: { digitalProductId: "product-1" },
     }));
@@ -119,6 +139,8 @@ describe("getLatestBomComponentsForProduct", () => {
           packageUrl: "pkg:npm/next@16.2.6",
         },
       ],
+      findingSummary: emptyFindings,
+      scanner: platformNativeScanner,
     });
   });
 });

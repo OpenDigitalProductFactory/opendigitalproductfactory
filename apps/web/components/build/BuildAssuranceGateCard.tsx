@@ -1,9 +1,14 @@
 "use client";
 
-import { Clock3, RefreshCw, ShieldCheck, TriangleAlert } from "lucide-react";
+import { Clock3, RefreshCw, ScanLine, ShieldAlert, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useState, useTransition } from "react";
-import { requestBuildBomGeneration } from "@/lib/actions/assurance";
+import {
+  requestBuildAssuranceScan,
+  requestBuildBomGeneration,
+} from "@/lib/actions/assurance";
 import type { BomSummary } from "@/lib/assurance/bom-read";
+import type { ActiveAssuranceFindingRow } from "@/lib/assurance/finding-read";
+import { AssuranceFindingsList } from "./AssuranceFindingsList";
 
 type RequestState = "idle" | "queued" | "failed";
 
@@ -15,29 +20,61 @@ function formatGeneratedAt(value: Date | string | null | undefined): string {
 }
 
 function statusLabel(summary: BomSummary): string {
+  if (summary.state === "missing") return "No BOM generated";
+  if (summary.findings.blocking > 0) return "Assurance blocked";
+  if (summary.scanner.state === "needs-evaluation") return "Scanner not approved";
   if (summary.state === "current") return "BOM current";
   if (summary.state === "stale") return "BOM stale";
   return "No BOM generated";
 }
 
+function statusTone(summary: BomSummary): string {
+  if (summary.findings.blocking > 0) return "text-[var(--dpf-error)]";
+  if (summary.scanner.state === "needs-evaluation") return "text-[var(--dpf-warning)]";
+  if (summary.state === "current") return "text-[var(--dpf-success)]";
+  if (summary.state === "stale") return "text-[var(--dpf-warning)]";
+  return "text-[var(--dpf-muted)]";
+}
+
+function scannerDetail(summary: BomSummary): string {
+  if (summary.scanner.state === "ready") {
+    return summary.scanner.scannerNames.join(", ");
+  }
+
+  return "No approved vulnerability scanner";
+}
+
 export function BuildAssuranceGateCard({
   buildId,
   summary,
+  findings = [],
 }: {
   buildId: string;
   summary: BomSummary;
+  findings?: ActiveAssuranceFindingRow[];
 }) {
   const [pending, startTransition] = useTransition();
+  const [scanPending, startScanTransition] = useTransition();
   const [requestState, setRequestState] = useState<RequestState>("idle");
+  const [scanRequestState, setScanRequestState] = useState<RequestState>("idle");
   const hasBom = summary.state !== "missing" && summary.document;
-  const StatusIcon = hasBom ? ShieldCheck : TriangleAlert;
-  const statusColor = summary.state === "current"
-    ? "text-[var(--dpf-success)]"
-    : summary.state === "stale"
-      ? "text-[var(--dpf-warning)]"
-      : "text-[var(--dpf-muted)]";
+  const StatusIcon = summary.findings.blocking > 0
+    ? ShieldAlert
+    : hasBom && summary.scanner.state === "ready"
+      ? ShieldCheck
+      : TriangleAlert;
+  const statusColor = statusTone(summary);
   const modelLabel = `${summary.counts.models} AI model${summary.counts.models === 1 ? "" : "s"}`;
+  const findingLabel = summary.findings.blocking > 0
+    ? `${summary.findings.blocking} blocking`
+    : `${summary.findings.total} active`;
   const buttonLabel = pending ? "Queueing" : requestState === "queued" ? "Queued" : "Generate BOM";
+  const scanButtonLabel = scanPending
+    ? "Queueing"
+    : scanRequestState === "queued"
+      ? "Scan queued"
+      : "Run scan";
+  const scanDisabled = !hasBom || scanPending;
 
   return (
     <section
@@ -52,36 +89,62 @@ export function BuildAssuranceGateCard({
           </div>
           <p className={`mt-1 text-xs font-medium ${statusColor}`}>{statusLabel(summary)}</p>
         </div>
-        <button
-          type="button"
-          className="inline-flex h-8 items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 text-xs font-medium text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-accent)] disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={pending}
-          onClick={() => {
-            setRequestState("idle");
-            startTransition(() => {
-              void requestBuildBomGeneration(buildId)
-                .then(() => setRequestState("queued"))
-                .catch(() => setRequestState("failed"));
-            });
-          }}
-        >
-          <RefreshCw className={pending ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} aria-hidden="true" />
-          {buttonLabel}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="inline-flex h-8 items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 text-xs font-medium text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-accent)] disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={pending}
+            onClick={() => {
+              setRequestState("idle");
+              startTransition(() => {
+                void requestBuildBomGeneration(buildId)
+                  .then(() => setRequestState("queued"))
+                  .catch(() => setRequestState("failed"));
+              });
+            }}
+          >
+            <RefreshCw className={pending ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} aria-hidden="true" />
+            {buttonLabel}
+          </button>
+          <button
+            type="button"
+            data-testid="build-assurance-gate-run-scan"
+            className="inline-flex h-8 items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 text-xs font-medium text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-accent)] disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={scanDisabled}
+            onClick={() => {
+              setScanRequestState("idle");
+              startScanTransition(() => {
+                void requestBuildAssuranceScan(buildId)
+                  .then(() => setScanRequestState("queued"))
+                  .catch(() => setScanRequestState("failed"));
+              });
+            }}
+          >
+            <ScanLine className={scanPending ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} aria-hidden="true" />
+            {scanButtonLabel}
+          </button>
+        </div>
       </div>
 
-      <dl className="mt-3 grid min-h-14 grid-cols-3 divide-x divide-[var(--dpf-border)] border-t border-[var(--dpf-border)] pt-3 text-xs">
-        <div className="min-w-0 pr-3">
+      <dl className="mt-3 grid min-h-20 grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--dpf-border)] pt-3 text-xs">
+        <div className="min-w-0">
           <dt className="text-[var(--dpf-muted)]">Components</dt>
           <dd className="mt-1 truncate font-semibold text-[var(--dpf-text)]">
             {summary.counts.components} components
           </dd>
         </div>
-        <div className="min-w-0 px-3">
+        <div className="min-w-0">
           <dt className="text-[var(--dpf-muted)]">Models</dt>
           <dd className="mt-1 truncate font-semibold text-[var(--dpf-text)]">{modelLabel}</dd>
         </div>
-        <div className="min-w-0 pl-3">
+        <div className="min-w-0">
+          <dt className="flex items-center gap-1 text-[var(--dpf-muted)]">
+            <ShieldAlert className="h-3 w-3" aria-hidden="true" />
+            Findings
+          </dt>
+          <dd className="mt-1 truncate font-semibold text-[var(--dpf-text)]">{findingLabel}</dd>
+        </div>
+        <div className="min-w-0">
           <dt className="flex items-center gap-1 text-[var(--dpf-muted)]">
             <Clock3 className="h-3 w-3" aria-hidden="true" />
             Generated
@@ -92,11 +155,25 @@ export function BuildAssuranceGateCard({
         </div>
       </dl>
 
-      {requestState === "failed" && (
+      <p className="mt-3 truncate border-t border-[var(--dpf-border)] pt-3 text-xs text-[var(--dpf-muted)]" title={scannerDetail(summary)}>
+        {scannerDetail(summary)}
+      </p>
+
+      {(requestState === "failed" || scanRequestState === "failed") && (
         <p className="mt-2 text-xs text-[var(--dpf-error)]" role="status">
           Queue failed. Try again after the worker is available.
         </p>
       )}
+
+      <div className="mt-3 border-t border-[var(--dpf-border)] pt-3">
+        <p className="text-xs font-semibold text-[var(--dpf-text)]">Active findings</p>
+        <div className="mt-2">
+          <AssuranceFindingsList
+            findings={findings}
+            emptyLabel={hasBom ? "No active findings." : "Generate a BOM, then run a scan."}
+          />
+        </div>
+      </div>
     </section>
   );
 }

@@ -8,20 +8,46 @@
  * No DB calls, no I/O — callers fetch the inputs and persist the outcome.
  */
 
+// Product-shaped entity types — things that represent software products in
+// their own right, not the infrastructure they run on. Hosts, containers,
+// subnets, gateways, switches, etc. are runtime instances/transports, not
+// products; they belong as InventoryEntity rows attributed to a product
+// (e.g. "dpf-postgres-1 container" attributed to the "postgres" product),
+// not as standalone DigitalProduct rows that bloat the portfolio.
+//
+// Before BI-79307D22 (2026-05-22), this list included the runtime/infra
+// types and the dev install ended up with 209 DigitalProducts — 95% of
+// them auto-promoted Docker containers like "dpf-redis-1" and gateway IP
+// rows like "Docker GW dpf_default (172.18.0.1)". Operators couldn't find
+// their real products. The list is now product-shaped types only.
 export const LEGACY_PROMOTABLE_TYPES: readonly string[] = [
-  "host",
   "runtime",
-  "container",
   "database",
   "monitoring_service",
   "ai_service",
   "application",
-  "subnet",
-  "gateway",
-  "network_interface",
-  "docker_host",
-  "router",
+  "service",
 ];
+
+// Name patterns that indicate "this is a runtime instance / device / host
+// / network artifact, not a product." These reject even if the entity has
+// an explicit taxonomy `governance.promotion.mode = "auto"` policy —
+// structural shape wins over taxonomy placement here, because the
+// alternative is letting bad taxonomy data write bad product rows.
+const NON_PRODUCT_NAME_PATTERNS: readonly RegExp[] = [
+  /^dpf-/i,                              // dpf-redis-1, dpf-postgres-1, dpf-grafana-1
+  /-\d+$/,                               // anything-1, foo-bar-2
+  /Docker GW /,                          // Docker GW dpf_default (172.18.0.1)
+  /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/,     // raw IPv4 addresses
+  /^[a-f0-9]{12}$/i,                     // bare Docker container IDs (short SHA)
+  /^arp:/,                               // arp-discovered host placeholders
+  /\(WAN\d*\)/,                          // VLAN-shape names from unifi
+  /^subnet:/,                            // bootstrap subnet placeholders
+];
+
+export function looksLikeRuntimeArtifact(name: string): boolean {
+  return NON_PRODUCT_NAME_PATTERNS.some((pattern) => pattern.test(name));
+}
 
 export const AUTO_PROMOTE_THRESHOLD = 0.9;
 
@@ -29,7 +55,8 @@ export type PromotionSkipReason =
   | "no_taxonomy"
   | "low_confidence_promotion"
   | "no_portfolio_root"
-  | "type_not_promotable";
+  | "type_not_promotable"
+  | "name_not_promotable";
 
 /**
  * Evidence is a small, JSON-serializable bag of decision context. The set
@@ -50,6 +77,10 @@ export type PromotionDecision =
  */
 export interface PromotionEntityInput {
   entityType: string;
+  // Required for the structural name-shape gate (BI-79307D22). Older
+  // callers that omit this get the same behaviour they had pre-fix —
+  // the name gate just doesn't fire.
+  name?: string;
   attributionStatus?: string;
   attributionConfidence: number;
   digitalProductId: string | null;
@@ -118,6 +149,22 @@ export function resolvePromotionDecision(
   // point at a digital product (Task 2.1's promoteInventoryEntities filters
   // digitalProductId: null at the Prisma query level). The resolver does not
   // gate on digitalProductId — keeping it pure over (entity, node, portfolio).
+
+  // Gate 4 (structural, BI-79307D22): reject runtime instances / devices
+  // / network artifacts by name shape, regardless of taxonomy policy.
+  // "dpf-postgres-1" is structurally a container — even if a taxonomy
+  // node says auto-promote, the right model is to keep it as an
+  // InventoryEntity attributed to the canonical "postgres" product.
+  if (entity.name && looksLikeRuntimeArtifact(entity.name)) {
+    return {
+      decision: "skip",
+      reason: "name_not_promotable",
+      evidence: {
+        source: "name-gate",
+        name: entity.name,
+      },
+    };
+  }
 
   // Policy lookup: governance.promotion on the taxonomy node wins.
   const promotionPolicy = taxonomyNode.governance?.promotion ?? null;

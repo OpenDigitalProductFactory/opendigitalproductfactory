@@ -1,6 +1,7 @@
 import { evaluateInventoryQuality } from "./discovery-attribution";
 import type { NormalizedDiscoveryOutput } from "./discovery-normalize";
 import { deriveInventoryEvidenceSnapshot } from "./discovery-evidence";
+import { deriveInventoryEnrichment } from "./inventory-enrichment";
 import {
   syncInventoryEntityAsInfraCI,
   syncInventoryRelationship,
@@ -27,6 +28,10 @@ type DiscoveryRunMeta = {
   // DiscoveryRun row carries this through so consumers can attribute
   // observations back to a specific agent.
   edgeNodeId?: string | null;
+  // Customer-estate scope derived server-side from the authenticated
+  // EdgeNode, never from an edge request body.
+  customerAccountId?: string | null;
+  customerSiteId?: string | null;
 };
 
 export type DiscoveryProjectionOptions = {
@@ -46,12 +51,20 @@ type DiscoverySyncTx = {
         itemCount: number;
         relationshipCount: number;
         edgeNodeId?: string | null;
+        customerAccountId?: string | null;
+        customerSiteId?: string | null;
       };
       select: { id: true };
     }): Promise<{ id: string }>;
   };
   inventoryEntity: {
-    findMany(args: { select: { entityKey: true } }): Promise<Array<{ entityKey: string }>>;
+    findMany(args: {
+      where?: {
+        scopeKey?: string;
+        lastConfirmedRun?: { sourceSlug?: string };
+      };
+      select: { entityKey: true };
+    }): Promise<Array<{ entityKey: string }>>;
     upsert(args: {
       where: { entityKey: string };
       create: Record<string, unknown>;
@@ -59,7 +72,7 @@ type DiscoverySyncTx = {
       select: { id: true; entityKey: true };
     }): Promise<{ id: string; entityKey: string }>;
     updateMany(args: {
-      where: { entityKey: { in: string[] } };
+      where: { scopeKey?: string; entityKey: { in: string[] } };
       data: { status: string; lastSeenAt: Date };
     }): Promise<{ count: number }>;
   };
@@ -77,7 +90,13 @@ type DiscoverySyncTx = {
     }): Promise<unknown>;
   };
   inventoryRelationship: {
-    findMany(args: { select: { relationshipKey: true } }): Promise<Array<{ relationshipKey: string }>>;
+    findMany(args: {
+      where?: {
+        scopeKey?: string;
+        lastConfirmedRun?: { sourceSlug?: string };
+      };
+      select: { relationshipKey: true };
+    }): Promise<Array<{ relationshipKey: string }>>;
     upsert(args: {
       where: { relationshipKey: string };
       create: Record<string, unknown>;
@@ -85,7 +104,7 @@ type DiscoverySyncTx = {
       select: { id: true; relationshipKey: true };
     }): Promise<{ id: string; relationshipKey: string }>;
     updateMany(args: {
-      where: { relationshipKey: { in: string[] } };
+      where: { scopeKey?: string; relationshipKey: { in: string[] } };
       data: { status: string; lastSeenAt: Date };
     }): Promise<{ count: number }>;
   };
@@ -108,6 +127,22 @@ export type DiscoverySyncClient = {
 
 function countObjectKeys(value: Record<string, unknown> | undefined): number {
   return value ? Object.keys(value).length : 0;
+}
+
+function scopeFieldsFromRunMeta(runMeta: DiscoveryRunMeta): {
+  scopeKey: string;
+  customerAccountId: string | null;
+  customerSiteId: string | null;
+} {
+  const customerAccountId = runMeta.customerAccountId ?? null;
+  const customerSiteId = runMeta.customerSiteId ?? null;
+  const scopeKey = customerAccountId
+    ? customerSiteId
+      ? `customer:${customerAccountId}:site:${customerSiteId}`
+      : `customer:${customerAccountId}`
+    : "organization:internal";
+
+  return { scopeKey, customerAccountId, customerSiteId };
 }
 
 function dedupeDiscoveredItems(
@@ -178,13 +213,25 @@ export async function persistBootstrapDiscoveryRun(
       existing.push(software);
       softwareEvidenceByEntityKey.set(software.inventoryEntityKey, existing);
     }
+    const runScope = scopeFieldsFromRunMeta(runMeta);
+    const scopeWhere = { scopeKey: runScope.scopeKey };
+    // Source attribution via lastConfirmedRun.sourceSlug: a sweep from one
+    // source only sees the entities/relationships it has previously
+    // confirmed. A unifi sweep with no dpf_bootstrap-attributed rows in
+    // its view cannot mark dpf_bootstrap rows stale. Composes with the
+    // scopeKey filter so cross-customer isolation still holds.
+    const sourceFilter = { lastConfirmedRun: { sourceSlug: runMeta.sourceSlug } };
     const existingEntityKeys = new Set(
-      (await tx.inventoryEntity.findMany({ select: { entityKey: true } }))
-        .map((entity) => entity.entityKey),
+      (await tx.inventoryEntity.findMany({
+        where: { ...scopeWhere, ...sourceFilter },
+        select: { entityKey: true },
+      })).map((entity) => entity.entityKey),
     );
     const existingRelationshipKeys = new Set(
-      (await tx.inventoryRelationship.findMany({ select: { relationshipKey: true } }))
-        .map((relationship) => relationship.relationshipKey),
+      (await tx.inventoryRelationship.findMany({
+        where: { ...scopeWhere, ...sourceFilter },
+        select: { relationshipKey: true },
+      })).map((relationship) => relationship.relationshipKey),
     );
     const existingIssueKeys = new Set(
       (await tx.portfolioQualityIssue.findMany({ select: { issueKey: true } }))
@@ -206,6 +253,12 @@ export async function persistBootstrapDiscoveryRun(
         ...(runMeta.edgeNodeId !== undefined
           ? { edgeNodeId: runMeta.edgeNodeId }
           : {}),
+        ...(runMeta.customerAccountId !== undefined
+          ? { customerAccountId: runMeta.customerAccountId }
+          : {}),
+        ...(runMeta.customerSiteId !== undefined
+          ? { customerSiteId: runMeta.customerSiteId }
+          : {}),
       },
       select: { id: true },
     });
@@ -221,17 +274,35 @@ export async function persistBootstrapDiscoveryRun(
       const evidenceSnapshot = deriveInventoryEvidenceSnapshot(
         softwareEvidenceByEntityKey.get(entity.entityKey) ?? [],
       );
+      // Enrichment closes the gap between raw discovery signals (MAC OUI
+      // vendor in properties, container image tag, name patterns) and the
+      // typed columns the UI reads. evidenceSnapshot only sees package-
+      // manager softwareEvidence; this layer reads `properties` directly
+      // so unifi MAC vendors, docker image tags, and Nest/postgres/etc.
+      // name hints actually populate manufacturer/iconKey/version.
+      const enrichment = deriveInventoryEnrichment({
+        entityType: entity.entityType,
+        name: entity.name,
+        manufacturer: evidenceSnapshot.manufacturer,
+        productModel: evidenceSnapshot.productModel,
+        observedVersion: evidenceSnapshot.observedVersion,
+        normalizedVersion: evidenceSnapshot.normalizedVersion,
+        iconKey: null,
+        supportStatus: evidenceSnapshot.supportStatus,
+        properties: entity.properties as unknown as import("../generated/client/client").Prisma.JsonValue,
+      });
       const persistedEntity = await tx.inventoryEntity.upsert({
         where: { entityKey: entity.entityKey },
         create: {
           entityKey: entity.entityKey,
           entityType: entity.entityType,
           name: entity.name,
-          manufacturer: evidenceSnapshot.manufacturer,
-          productModel: evidenceSnapshot.productModel,
-          observedVersion: evidenceSnapshot.observedVersion,
-          normalizedVersion: evidenceSnapshot.normalizedVersion,
-          supportStatus: evidenceSnapshot.supportStatus,
+          manufacturer: enrichment.manufacturer,
+          productModel: enrichment.productModel,
+          observedVersion: enrichment.observedVersion,
+          normalizedVersion: enrichment.normalizedVersion,
+          iconKey: enrichment.iconKey,
+          supportStatus: enrichment.supportStatus,
           status: entity.attributionStatus === "stale" ? "stale" : "active",
           attributionStatus: entity.attributionStatus,
           attributionMethod: entity.attributionMethod ?? null,
@@ -247,6 +318,13 @@ export async function persistBootstrapDiscoveryRun(
             ? { connect: { nodeId: entity.taxonomyNodeId } }
             : undefined,
           properties: entity.properties,
+          scopeKey: runScope.scopeKey,
+          customerAccount: runScope.customerAccountId
+            ? { connect: { id: runScope.customerAccountId } }
+            : undefined,
+          customerSite: runScope.customerSiteId
+            ? { connect: { id: runScope.customerSiteId } }
+            : undefined,
           firstSeenAt: now,
           lastSeenAt: now,
           lastConfirmedRun: { connect: { id: run.id } },
@@ -254,10 +332,14 @@ export async function persistBootstrapDiscoveryRun(
         update: {
           entityType: entity.entityType,
           name: entity.name,
-          ...(evidenceSnapshot.manufacturer ? { manufacturer: evidenceSnapshot.manufacturer } : {}),
-          ...(evidenceSnapshot.productModel ? { productModel: evidenceSnapshot.productModel } : {}),
-          ...(evidenceSnapshot.observedVersion ? { observedVersion: evidenceSnapshot.observedVersion } : {}),
-          ...(evidenceSnapshot.normalizedVersion ? { normalizedVersion: evidenceSnapshot.normalizedVersion } : {}),
+          // Use the enriched values; never overwrite a populated column
+          // with null (the `null && X` short-circuit guards that).
+          ...(enrichment.manufacturer ? { manufacturer: enrichment.manufacturer } : {}),
+          ...(enrichment.productModel ? { productModel: enrichment.productModel } : {}),
+          ...(enrichment.observedVersion ? { observedVersion: enrichment.observedVersion } : {}),
+          ...(enrichment.normalizedVersion ? { normalizedVersion: enrichment.normalizedVersion } : {}),
+          ...(enrichment.iconKey ? { iconKey: enrichment.iconKey } : {}),
+          ...(enrichment.supportStatus !== "unknown" ? { supportStatus: enrichment.supportStatus } : {}),
           status: entity.attributionStatus === "stale" ? "stale" : "active",
           attributionStatus: entity.attributionStatus,
           attributionMethod: entity.attributionMethod ?? null,
@@ -273,6 +355,13 @@ export async function persistBootstrapDiscoveryRun(
             ? { connect: { nodeId: entity.taxonomyNodeId } }
             : undefined,
           properties: entity.properties,
+          scopeKey: runScope.scopeKey,
+          customerAccount: runScope.customerAccountId
+            ? { connect: { id: runScope.customerAccountId } }
+            : { disconnect: true },
+          customerSite: runScope.customerSiteId
+            ? { connect: { id: runScope.customerSiteId } }
+            : { disconnect: true },
           lastSeenAt: now,
           lastConfirmedRun: { connect: { id: run.id } },
         },
@@ -359,13 +448,18 @@ export async function persistBootstrapDiscoveryRun(
     const currentEntityKeys = new Set(
       normalized.inventoryEntities.map((entity) => entity.entityKey),
     );
-    const staleEntityKeys = [...existingEntityKeys].filter(
-      (entityKey) => !currentEntityKeys.has(entityKey),
-    );
+    // Stale detection: any entity previously confirmed by THIS source
+    // (via lastConfirmedRun.sourceSlug above) that wasn't observed in
+    // the current run is marked stale. Scope filter handles cross-customer
+    // isolation; source filter handles cross-source isolation within a
+    // scope. A unifi sweep cannot mark dpf_bootstrap or edge-node rows
+    // stale because their lastConfirmedRun.sourceSlug differs.
+    const staleEntityKeys = [...existingEntityKeys]
+      .filter((entityKey) => !currentEntityKeys.has(entityKey));
     const staleEntities = staleEntityKeys.length === 0
       ? 0
       : (await tx.inventoryEntity.updateMany({
-          where: { entityKey: { in: staleEntityKeys } },
+          where: { ...scopeWhere, entityKey: { in: staleEntityKeys } },
           data: { status: "stale", lastSeenAt: now },
         })).count;
 
@@ -399,6 +493,13 @@ export async function persistBootstrapDiscoveryRun(
           status: "active",
           confidence: relationship.confidence ?? null,
           properties: relationship.properties,
+          scopeKey: runScope.scopeKey,
+          customerAccount: runScope.customerAccountId
+            ? { connect: { id: runScope.customerAccountId } }
+            : undefined,
+          customerSite: runScope.customerSiteId
+            ? { connect: { id: runScope.customerSiteId } }
+            : undefined,
           firstSeenAt: now,
           lastSeenAt: now,
           lastConfirmedRun: { connect: { id: run.id } },
@@ -410,6 +511,13 @@ export async function persistBootstrapDiscoveryRun(
           status: "active",
           confidence: relationship.confidence ?? null,
           properties: relationship.properties,
+          scopeKey: runScope.scopeKey,
+          customerAccount: runScope.customerAccountId
+            ? { connect: { id: runScope.customerAccountId } }
+            : { disconnect: true },
+          customerSite: runScope.customerSiteId
+            ? { connect: { id: runScope.customerSiteId } }
+            : { disconnect: true },
           lastSeenAt: now,
           lastConfirmedRun: { connect: { id: run.id } },
           fromEntity: { connect: { id: fromEntityId } },
@@ -441,13 +549,15 @@ export async function persistBootstrapDiscoveryRun(
     const currentRelationshipKeys = new Set(
       normalized.inventoryRelationships.map((relationship) => relationship.relationshipKey),
     );
-    const staleRelationshipKeys = [...existingRelationshipKeys].filter(
-      (relationshipKey) => !currentRelationshipKeys.has(relationshipKey),
-    );
+    // Same column-based source attribution as entities above — the
+    // sweep only sees relationships it previously confirmed, so it can
+    // only mark its own rows stale.
+    const staleRelationshipKeys = [...existingRelationshipKeys]
+      .filter((relationshipKey) => !currentRelationshipKeys.has(relationshipKey));
     const staleRelationships = staleRelationshipKeys.length === 0
       ? 0
       : (await tx.inventoryRelationship.updateMany({
-          where: { relationshipKey: { in: staleRelationshipKeys } },
+          where: { ...scopeWhere, relationshipKey: { in: staleRelationshipKeys } },
           data: { status: "stale", lastSeenAt: now },
         })).count;
 

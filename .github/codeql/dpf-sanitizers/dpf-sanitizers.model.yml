@@ -1,0 +1,63 @@
+# DPF security-helper sanitiser declarations.
+#
+# Each entry below tells CodeQL "this function takes a tainted value
+# and returns a sanitised one." The taint flow through the function is
+# broken, so callers stop seeing false-positive alerts for js/request-
+# forgery, js/command-line-injection, etc.
+#
+# Format reference:
+#   https://docs.github.com/en/code-security/codeql-cli/using-the-advanced-functionality-of-the-codeql-cli/customizing-library-models-for-javascript
+#
+# Each row in summaryModel:
+#   [namespace, type, path, input, output, kind, provenance]
+# where `kind: "taint"` means the function clears taint from input → output.
+
+extensions:
+  # ─── safe-fetch — js/request-forgery sanitiser ───────────────────────────
+  - addsTo:
+      pack: codeql/javascript-all
+      extensible: summaryModel
+    data:
+      # assertSafeOutboundUrl validates scheme + private-network + host
+      # allowlist; the returned URL carries no taint to its callers.
+      - ["safe-fetch", "Module", "Member[assertSafeOutboundUrl]", "Argument[0]", "ReturnValue", "taint", "manual"]
+
+  # ─── safe-spawn — js/command-line-injection sanitiser ────────────────────
+  - addsTo:
+      pack: codeql/javascript-all
+      extensible: summaryModel
+    data:
+      # assertAllowedBinary looks up the input in ALLOWED_BINARIES (constant
+      # Record) and returns the constant value. The returned string is
+      # therefore from a constant set — equivalent to a hardcoded sink arg.
+      - ["safe-spawn", "Module", "Member[assertAllowedBinary]", "Argument[0]", "ReturnValue", "taint", "manual"]
+
+  # ─── public-web-tools — js/request-forgery sanitiser ─────────────────────
+  - addsTo:
+      pack: codeql/javascript-all
+      extensible: summaryModel
+    data:
+      # assertAllowedPublicUrl is the analogue of safe-fetch's
+      # assertSafeOutboundUrl for the public-web-tools surface. It throws
+      # on private IPs / disallowed schemes; the returned URL is safe.
+      - ["public-web-tools", "Module", "Member[assertAllowedPublicUrl]", "Argument[0]", "ReturnValue", "taint", "manual"]
+
+  # ─── codebase-tools makeLineMatcher — js/regex-injection accepted FP ─────
+  - addsTo:
+      pack: codeql/javascript-all
+      extensible: neutralModel
+    data:
+      # The project-search feature INTENTIONALLY compiles user-supplied
+      # regex with bounded length (MAX_QUERY_LEN) + quantifier-count gate.
+      # Declared neutral so the alert doesn't recur.
+      - ["codebase-tools", "Module", "Member[makeLineMatcher]", "ReturnValue", "manual"]
+
+  # ─── safe-log — js/log-injection sanitiser ───────────────────────────────
+  - addsTo:
+      pack: codeql/javascript-all
+      extensible: summaryModel
+    data:
+      # sanitizeForLog strips C0 control characters (U+0000..U+001F) and
+      # DEL (U+007F) — including CR + LF — so the returned string cannot
+      # forge a log line. Breaks taint flow for js/log-injection (CWE-117).
+      - ["safe-log", "Module", "Member[sanitizeForLog]", "Argument[0]", "ReturnValue", "taint", "manual"]

@@ -55,8 +55,30 @@ vi.mock("@/lib/actions/assurance", () => ({
     state: "missing",
     document: null,
     counts: { components: 0, models: 0 },
+    findings: {
+      total: 0,
+      blocking: 0,
+      bySeverity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+      byKind: {},
+    },
+    scanner: {
+      state: "needs-evaluation",
+      approvedScannerCount: 0,
+      scannerNames: [],
+      reason: "no-approved-scanner",
+    },
   }),
   requestBuildBomGeneration: vi.fn(async () => ({ queued: true })),
+  requestBuildAssuranceScan: vi.fn(async () => ({ queued: true })),
+  getBuildAssuranceFindings: vi.fn(async () => []),
+  getProductAssuranceFindings: vi.fn(async () => []),
+  setAssuranceFindingStatus: vi.fn(async () => ({ findingKey: "fk-1", previousStatus: "open", status: "planned" })),
+  requestBacklogFromAssuranceFinding: vi.fn(async () => ({
+    findingKey: "fk-1",
+    backlogItemId: "BI-NEW",
+    epicCuid: "epic-cuid",
+    alreadyLinked: false,
+  })),
 }));
 
 vi.mock("@/components/build/PhaseIndicator", () => ({

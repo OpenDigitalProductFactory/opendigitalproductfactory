@@ -108,8 +108,14 @@ const STOPWORDS: ReadonlySet<string> = new Set([
  * Plain English first-word title-case is filtered downstream by the
  * stopword list in tokenizeTitle.
  */
+// CodeQL #28 (js/redos): previous alternation
+// `(?:[A-Z][a-zA-Z0-9]*|[0-9]+[a-zA-Z0-9]*)+` had unbounded `+` causing
+// exponential backtracking on adversarial strings. Bounded each quantifier
+// while preserving the original two-shape semantics:
+//   1. CamelCaseIdent with at least one Camel/digit transition
+//   2. ALLCAPS_IDENT (≥ 2 uppercase letters)
 const IDENTIFIER_RE =
-  /\b[A-Z][a-z0-9]*(?:[A-Z][a-zA-Z0-9]*|[0-9]+[a-zA-Z0-9]*)+\b|\b[A-Z]{2,}(?:[A-Z0-9_]+)?\b/g;
+  /\b[A-Z][a-z0-9]{0,99}(?:[A-Z][a-zA-Z0-9]{0,99}|[0-9]{1,99}[a-zA-Z0-9]{0,99}){1,20}\b|\b[A-Z]{2,99}(?:[A-Z0-9_]{0,99})?\b/g;
 
 /** Split a title into title-cased words ≥ MIN_TOKEN_LENGTH, minus stopwords. */
 function tokenizeTitle(title: string): string[] {

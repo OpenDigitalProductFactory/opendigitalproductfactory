@@ -306,6 +306,60 @@ export async function getNetworkTopologyAtLayer(osiLayer: number): Promise<{
   };
 }
 
+/** Topology scope context. Mirrors DiscoveryScopeContext at the graph layer. */
+export type Neo4jTopologyScope = {
+  scopeKey: string;
+  customerAccountId?: string | null;
+  customerSiteId?: string | null;
+};
+
+/**
+ * Customer-scope variant of getNetworkTopologyAtLayer.
+ *
+ * Same shape and edge semantics, but every InfraCI node and edge endpoint must
+ * carry the supplied scopeKey. This is the only entry point that customer
+ * topology server actions should use — the global variant would leak nodes
+ * across customer estates.
+ */
+export async function getNetworkTopologyAtLayerForScope(
+  osiLayer: number,
+  scope: Neo4jTopologyScope,
+): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }> {
+  const [nodeRows, edgeRows] = await Promise.all([
+    runCypher<{
+      n: { identity: unknown; labels: string[]; properties: Record<string, unknown> };
+    }>(
+      `MATCH (n:InfraCI {osiLayer: $osiLayer})
+       WHERE n.scopeKey = $scopeKey
+       RETURN n ORDER BY n.name`,
+      { osiLayer, scopeKey: scope.scopeKey },
+    ),
+    runCypher<{
+      fromId: string;
+      toId: string;
+      relType: string;
+      relProps: Record<string, unknown>;
+    }>(
+      `MATCH (a:InfraCI {osiLayer: $osiLayer})-[r]-(b:InfraCI {osiLayer: $osiLayer})
+       WHERE a.ciId < b.ciId
+         AND a.scopeKey = $scopeKey
+         AND b.scopeKey = $scopeKey
+       RETURN a.ciId AS fromId, b.ciId AS toId, type(r) AS relType, properties(r) AS relProps`,
+      { osiLayer, scopeKey: scope.scopeKey },
+    ),
+  ]);
+
+  return {
+    nodes: nodeRows.map((r) => nodeFromRecord(r.n)),
+    edges: edgeRows.map((r) => ({
+      from: r.fromId,
+      to: r.toId,
+      type: r.relType,
+      properties: r.relProps,
+    })),
+  };
+}
+
 // ─── InfraCI helpers ─────────────────────────────────────────────────────────
 
 /**

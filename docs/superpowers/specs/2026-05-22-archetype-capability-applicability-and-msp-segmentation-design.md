@@ -137,7 +137,40 @@ Rejected patterns:
 - do not hard-code one vendor's invoice workflow into DPF.
 - do not make recurring invoices the default finance shape for every business.
 
-### 3.5 Internal reference: 4-portfolio taxonomy workbook
+### 3.5 Customer network topology and MSP scope references
+
+NetBox models overlapping address space with VRFs. Its documentation describes each VRF as an independent routing table used to isolate customers or organizations and route overlapping spaces such as multiple 10.0.0.0/8 instances. NetBox tenants separately group resources for administrative purposes, usually customers or internal departments.
+
+Auvik treats the network map as a central feature showing physical and logical connections, device status, IP address, interfaces, and connection details. Its ConnectWise Automate integration distinguishes an MSP client map from a client network map, and its site-type documentation ties network mapping and monitoring functionality to site-level plan availability.
+
+N-able N-central documentation describes monitored devices as systems maintained for a customer, and its topology map is accessed at the customer or service-organization level. NinjaOne documentation similarly uses organizations and locations as management boundaries, with NMS device location changes constrained by organization and credential context.
+
+Sources:
+
+- NetBox VRFs: https://netbox.readthedocs.io/en/stable/models/ipam/vrf/
+- NetBox tenants: https://netbox.readthedocs.io/en/stable/models/tenancy/tenant/
+- Auvik network map: https://support.auvik.com/hc/en-us/articles/204908674-Your-network-map
+- Auvik ConnectWise Automate client maps: https://support.auvik.com/hc/en-us/articles/360020807372-Using-the-plugin-with-ConnectWise-Automate-v11
+- Auvik site types: https://support.auvik.com/hc/en-us/articles/360027698992-What-are-the-different-site-types
+- N-able N-central devices: https://documentation.n-able.com/N-central/userguide/Content/Devices/Devices_Overview.html
+- N-able N-central topology maps: https://documentation.n-able.com/N-central/userguide/Content/Configuration/Discovery_Jobs/View_Topology_Map.html
+- NinjaOne organizations and locations: https://www.ninjaone.com/docs/endpoint-management/hardware-inventory/organizations-and-locations/
+- NinjaOne NMS location movement: https://www.ninjaone.com/docs/network-management-system/moving-network-devices-between-locations/
+
+Adopted patterns:
+
+- customer and site scope are authoritative boundaries for network discovery and topology.
+- overlapping private IP ranges must be valid when they occur under different customer/site scopes.
+- a customer network map is an MSP/RMM operational surface, not a universal small-business feature.
+- plan or service tier may affect which site-level network functions are available.
+
+Rejected patterns:
+
+- do not expose customer topology just because the platform can store scoped inventory.
+- do not show a customer network workbench for non-MSP archetypes such as salons, retail shops, or appointment-service businesses.
+- do not rely on global device/IP uniqueness and repair it later with filters.
+
+### 3.6 Internal reference: 4-portfolio taxonomy workbook
 
 `docs/Reference/4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx` is the canonical internal reference for how the business taxonomy team decomposes any digital product or service. Four sheets, four portfolios:
 
@@ -213,6 +246,8 @@ activationProfile = {
 The first implementation should preserve compatibility with the current profile shape. `readActivationProfile` should normalize legacy profiles by *inferring* axes and portfolios from the existing `modules`/`billingReadinessMode`/`customerGraph`/`estateSeparation` fields. Seed data migrates gradually without breaking archetype reset, marketing, TAK route context, or customer-estate helpers.
 
 No `version` field and no `profileType` discriminator. The presence of `axes`/`portfolios` is the discriminator; the legacy shape continues to be recognized by the absence of those keys. If a future incompatible change becomes necessary, add the version field then — not speculatively now.
+
+Survival rule for legacy callers: when `readActivationProfile` encounters a profile without `axes`/`portfolios`, the normalizer must populate sensible defaults for both (inferred from `modules`/`billingReadinessMode`/`customerGraph`/`estateSeparation`) before returning. Downstream consumers — including rules-engine evaluation, the §13 Capability Registry, and `getCapabilityActivation` — therefore never have to branch on "axes present" vs "axes absent". Legacy seed data ages out gradually; no flag-day cutover.
 
 ### 6.5 Operating-Model Axes
 
@@ -314,6 +349,63 @@ Required rules:
 6. Cross-customer views are allowed only in aggregate MSP operations views that never mix actionable row-level commands without a selected customer scope.
 7. Customer portal access, if introduced later, should use Principal convergence and authorization policy, not a parallel customer identity table.
 
+### 8.1 Customer Topology Isolation
+
+Network topology is the strongest proof that customer scope cannot be a presentation-layer filter. Many small-business customers will use the same private address ranges (`192.168.1.0/24`, `10.0.0.0/24`, default gateway `192.168.1.1`) and may even use the same hardware vendors, hostnames, SSIDs, or device model identifiers. Those values are only natural identifiers **inside one customer estate scope**.
+
+Applicability gate:
+
+Customer network topology is not a universal portal route. It appears only when the normalized activation profile proves an MSP-style managed-network operating model:
+
+- `customer-estate.applicability === "required"`
+- `customer-estate.isolation === "strict-customer-scope"`
+- `network-inventory.applicability === "required"`
+- `network-inventory.isolation === "strict-customer-scope"`
+- `edge-node-customer-deployment.applicability === "required"`
+
+The initial built-in archetype that satisfies this gate is `it-managed-services`. Future archetypes can qualify only by deriving the same required capability combination from axes and portfolio roles; UI code must not compare raw `archetypeId` values to the MSP string. Non-MSP archetypes may still have organization-internal device inventory, security posture, backup posture, or facilities records, but they must not see a customer-estate network topology workbench unless their operating model is reclassified as MSP-style managed-network work.
+
+Required topology invariants:
+
+1. A customer-estate topology view must start from a `TopologyScopeContext`, not from a global graph plus client-side filters.
+2. `TopologyScopeContext` has three legal modes:
+   - `organization-internal`: the MSP's own DPF/internal estate.
+   - `customer-account`: one `CustomerAccount`, all active sites unless further narrowed.
+   - `customer-site`: one `CustomerSite` under one `CustomerAccount`.
+3. Customer topology queries must require `customerAccountId`. `customerSiteId` is optional only when the operator intentionally wants all sites for one customer.
+4. IP address, MAC address, hostname, LLDP system name, controller device id, SSID, serial number, and adapter-specific observed keys must never be treated as globally unique across customers.
+5. Persisted inventory identity must include the topology scope. The persisted `InventoryEntity.entityKey` is composed as `<scopeKey>:<entityType>:<naturalKey>`, where `scopeKey` is the discovery scope (per invariant 2), `entityType` is the canonical entity type (e.g. `host`, `gateway`), and `naturalKey` is the attribution-source-prefixed raw observed key (e.g. `arp:192.168.1.1`). The `arp:` / `dns:` / `lldp:` prefixes inside `naturalKey` identify the attribution source and are not part of the scope grammar; only the leading `customer:.../site:...` / `organization:internal` segment carries scope. Examples:
+
+   ```text
+   customer:<customerAccountId>:site:<customerSiteId>:host:arp:192.168.1.1
+   customer:<otherCustomerAccountId>:site:<otherCustomerSiteId>:host:arp:192.168.1.1
+   organization:internal:host:arp:192.168.1.1
+   ```
+
+6. `InventoryRelationship.relationshipKey` must be derived from scoped endpoint keys plus relationship type. A relationship whose endpoints resolve to different topology scopes is invalid unless a future, explicitly reviewed cross-scope relationship type is introduced.
+7. Stale detection must be scope-local. A discovery run for Customer A must only compare against Customer A's previous inventory keys; it must not mark Customer B's devices or the MSP's internal devices stale.
+8. Neo4j topology projection is a read model. It must carry `scopeKey`, `customerAccountId`, and `customerSiteId` properties and every graph query must filter on those properties. Postgres remains authoritative.
+9. Cross-customer MSP dashboards may show aggregate counts, health, and alerts. They must not render row-level device graphs or command buttons until a customer scope is selected.
+10. The UI must make the active scope visible in the topology workbench header: customer name, site name when selected, edge node source, and last discovery run. Internal MSP topology must be an explicit mode, not the default inside customer work.
+
+Worked example:
+
+```text
+Customer A, Site Austin:
+  observed gateway: arp:192.168.1.1
+  persisted entityKey: customer:cust_a:site:site_austin:host:arp:192.168.1.1
+
+Customer B, Site Round Rock:
+  observed gateway: arp:192.168.1.1
+  persisted entityKey: customer:cust_b:site:site_round_rock:host:arp:192.168.1.1
+
+MSP internal office:
+  observed gateway: arp:192.168.1.1
+  persisted entityKey: organization:internal:host:arp:192.168.1.1
+```
+
+Those are three different devices. Any implementation that collapses them because the IP address matches is a customer-data isolation defect.
+
 ## 9. Capability Applicability Matrix (worked examples)
 
 **This table is a rendered view of the rules engine output, not the source of truth.** It exists to make the design legible and to serve as fixtures for the applicability tests. The actual applicability is derived from the axes + portfolio decomposition in §6.5/§6.6 — adding a new archetype must not require editing this table; it must come out of the rules.
@@ -326,7 +418,7 @@ If a row below disagrees with what the rules engine produces, the rules engine w
 | Customer sites | required | optional | optional | required |
 | Customer IT estate / CIs | required | not-applicable | optional for internal devices only | optional for property assets |
 | Edge Node customer deployment | required for managed monitoring tiers | hidden | hidden | optional |
-| Network inventory | required | hidden | hidden | optional for facilities |
+| Network inventory | required, customer topology enabled | hidden | hidden | optional internal/facilities only; no customer topology workbench |
 | Cybersecurity posture | required | recommended for internal business IT | recommended for POS/store IT | recommended |
 | Backup and restore posture | required | recommended for business systems | recommended for store systems | recommended |
 | Service agreements | required | optional packages/memberships only | optional wholesale/account terms | required for management contracts |
@@ -411,6 +503,7 @@ The MSP UI should feel like an operational workbench, not a marketing page.
 Required UI principles:
 
 - customer selector is always visible in customer-estate and MSP operations surfaces
+- customer network topology routes are visible only when `canUseCustomerNetworkTopology(profile)` returns true from normalized capability activations
 - cross-customer views are summary/triage only until a customer is selected
 - site, estate, agreements, tickets, projects, backup, security, and billing readiness are tabs or sub-routes under a customer context
 - action buttons are scope-aware and disabled when no customer/site context exists
@@ -430,6 +523,8 @@ Suggested first MSP workspace shape:
 /customers/[id]/sites/[siteId]
   Site Overview | Network | Devices | Software | Backups | Access | Edge Node
 ```
+
+`Network` in the site route is conditional. For MSP-type profiles it is the customer topology workbench. For salons, retail, and other non-MSP archetypes it is absent from customer/site navigation; any internal device inventory remains under organization-internal operations, not under customer context.
 
 Setup should not ask the operator to understand the whole architecture. Selecting IT Managed Services should surface a concise checklist:
 
@@ -464,17 +559,28 @@ First slice:
 - derive UI/workflow behavior from normalized runtime profile via the rules engine in §6.5.
 - no migration required unless persisted profile examples need backfill.
 
-Second slice:
+Current customer-scope foundation already landed after this spec was first drafted:
 
-- add customer/site scope policy fields for Edge Node and discovery connections
-- prefer additive nullable fields first, then enforce with code-level guards and tests
-- candidate additions:
-  - `EdgeNode.customerAccountId`
-  - `EdgeNode.customerSiteId`
-  - `EdgeNode.scopePolicy Json`
-  - `DiscoveryConnection.customerAccountId`
-  - `DiscoveryConnection.customerSiteId`
-  - `DiscoveryConnection.targetEdgeNodeId`
+- `EdgeNode.customerAccountId`
+- `EdgeNode.customerSiteId`
+- `EdgeNode.scopePolicy Json`
+- `BootstrapToken.targetCustomerAccountId`
+- `BootstrapToken.targetCustomerSiteId`
+- `BootstrapToken.scopePolicy Json`
+- `DiscoveryConnection.customerAccountId`
+- `DiscoveryConnection.customerSiteId`
+- `DiscoveryConnection.targetEdgeNodeId`
+- `DiscoveryRun.customerAccountId`
+- `DiscoveryRun.customerSiteId`
+
+Next topology-isolation slice:
+
+- add `TopologyScopeContext` helpers for organization/internal, customer-account, and customer-site modes.
+- add customer/site/scope metadata to `InventoryEntity` and `InventoryRelationship`.
+- derive `InventoryEntity.entityKey` and `InventoryRelationship.relationshipKey` from scope-qualified natural keys for customer-estate discovery.
+- make discovery stale detection scope-local.
+- filter Neo4j projection and graph server actions by `scopeKey` before data reaches `TopologyGraph`.
+- add duplicate private-IP tests proving Customer A, Customer B, and MSP internal devices remain distinct.
 
 Later slice:
 
@@ -491,7 +597,10 @@ The planning and implementation track is successful when:
 5. Edge Node MSP planning has a customer/site binding path.
 6. Customer-estate actions and queries have a reusable scope helper that consumes the normalized profile, not the raw archetype id.
 7. UI plans use customer-scoped navigation and DPF theme rules.
-8. No TeamLogic-only code path is introduced, and no `archetypeId === ...` conditional appears in feature code.
+8. No TeamLogic-only code path is introduced, and no raw archetype-id conditional appears in feature code.
+9. Two customers with the same private subnet, gateway IP, hostnames, and adapter observed keys produce separate `InventoryEntity`, `InventoryRelationship`, Neo4j `InfraCI`, and topology graph records.
+10. A customer-scoped discovery run cannot mark another customer's devices, another customer's relationships, or the MSP internal estate stale.
+11. Customer network topology surfaces are hidden for non-MSP archetypes, including hair salon and retail profiles, even though the platform can still use organization-internal inventory and posture helpers for those businesses.
 
 ## 16. Risks And Mitigations
 

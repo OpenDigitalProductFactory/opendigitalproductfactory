@@ -3,8 +3,12 @@ import type { FingerprintRedactionResult, RedactionStatus } from "./discovery-fi
 const IPV4_PATTERN =
   /\b(?:(?:10)|(?:127)|(?:172\.(?:1[6-9]|2\d|3[0-1]))|(?:192\.168))\.(?:\d{1,3}\.){1,2}\d{1,3}\b/g;
 const MAC_PATTERN = /\b[0-9a-f]{2}(?::[0-9a-f]{2}){5}\b/gi;
+// CodeQL #29 (js/redos): previous `[a-z0-9][a-z0-9-]*(?:-[a-z0-9][a-z0-9-]*)*`
+// had overlapping quantifiers; strings of many `-0` could backtrack
+// exponentially. RFC 1035 caps a hostname segment at 63 chars, so a single
+// bounded `[a-z0-9-]{0,62}` segment is both spec-correct and ReDoS-safe.
 const INTERNAL_HOSTNAME_PATTERN =
-  /\b[a-z0-9][a-z0-9-]*(?:-[a-z0-9][a-z0-9-]*)*\.(?:internal|corp|local|lan|home|intranet)(?:\.[a-z0-9.-]+)?\b/gi;
+  /\b[a-z0-9][a-z0-9-]{0,62}\.(?:internal|corp|local|lan|home|intranet)(?:\.[a-z0-9-]{1,63}){0,4}\b/gi;
 const SERIAL_PATTERN = /\b(?:serial|sn|service tag)\s*[:#-]?\s*[a-z0-9-]+\b/gi;
 const SECRET_PATTERN = /\b(?:authorization:\s*bearer|api[_-]?key|access[_-]?token|secret|password)\b/i;
 

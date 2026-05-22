@@ -75,11 +75,24 @@ export function buildRepeatedToolStopMessage(params: {
   routeContext?: string | null;
   reasonHint: string;
 }): string {
-  const base = `I called ${params.toolName} ${params.count} times with the same arguments and got stuck.${params.reasonHint}`;
+  // User-facing message: respects IDENTITY_BLOCK rule #5 — never expose tool
+  // names, file paths, error codes, or internal architecture to the user.
+  // The technical detail (toolName, count, reasonHint) is captured in the
+  // PlatformIssueReport via recordRepeatedToolIssue() at the call site, so
+  // platform engineers still get the full forensic trail. The user just sees
+  // an action they can take.
   if (BUILD_ROUTE_PATTERN.test(params.routeContext ?? "")) {
-    return `${base} Check the build evidence for what was completed.`;
+    return (
+      "I got stuck retrying the same step and stopped before going in circles. "
+      + "Open the build's details panel to see what's been saved, then either "
+      + "send me a new instruction or retry from there."
+    );
   }
-  return `${base} I recorded this as a coworker execution issue and stopped before repeating the same tool again. Check the activity trail for what was attempted, then continue from the last saved recommendation.`;
+  return (
+    "I got stuck retrying the same step and stopped before going in circles. "
+    + "Check the activity panel for what's been recorded, then tell me how "
+    + "you'd like to proceed."
+  );
 }
 
 export function buildRepeatedQuestionNudge(params: {
@@ -283,6 +296,11 @@ function buildFabricationFailureMessage(params: {
   tools: ToolDefinition[];
   executedTools: Array<{ name: string }>;
 }): string {
+  // User-facing message: respects IDENTITY_BLOCK rule #5 — never expose tool
+  // names, schema fields ("buildPlan"), or internal architecture terms like
+  // "authoritative state" / "persisted evidence" to a non-technical user.
+  // The underlying technical context is preserved in the executedTools list
+  // and console logs for engineers.
   const availableToolNames = new Set(params.tools.map((tool) => tool.name));
 
   if (
@@ -290,19 +308,32 @@ function buildFabricationFailureMessage(params: {
     && availableToolNames.has("saveBuildEvidence")
     && availableToolNames.has("reviewBuildPlan")
   ) {
-    return "I still have not persisted the implementation plan evidence. Start Implementation cannot unlock until I save buildPlan and complete reviewBuildPlan, so I am stopping instead of claiming the plan is ready.";
+    return (
+      "I caught myself saying the plan is ready before I'd actually recorded it. "
+      + "I stopped so we don't end up with a half-saved plan. "
+      + "Send me the same instruction again and I'll record it properly this time, "
+      + "or open the build details to see what's saved so far."
+    );
   }
 
-  return "I stopped because I was still describing work without using the required tools. The authoritative state was not updated yet, so the claimed progress would have been misleading.";
+  return (
+    "I caught myself describing work without actually doing it, and stopped so we "
+    + "don't end up with progress that isn't real. "
+    + "Send me the same instruction again, or check the build details to see what's "
+    + "been recorded so far."
+  );
 }
 
-function buildLocalToolCallFailureMessage(result: RoutedInferenceResult): string {
-  const modelLabel = result.modelId || "the selected local model";
-  return [
-    "This turn routed to Docker Model Runner, but the local model did not produce the required tool call for this data-backed request.",
-    `Model: ${modelLabel}.`,
-    "The route is recorded, but there is no tool-backed result to return. Retry with a tool-capable provider or update this coworker's model assignment before asking for current operational totals.",
-  ].join(" ");
+function buildLocalToolCallFailureMessage(_result: RoutedInferenceResult): string {
+  // User-facing message: respects IDENTITY_BLOCK rule #5 — never expose
+  // infrastructure names ("Docker Model Runner"), model IDs, or routing
+  // architecture. The internal route + model details are already recorded
+  // for engineers via RoutedInferenceResult.
+  return (
+    "I couldn't complete this with the model my admin assigned me. "
+    + "Please try the question again — I'll route through a different model. "
+    + "If it keeps failing, an admin can update my model assignment in the AI Workforce settings."
+  );
 }
 
 type ExecutedTool = { name: string; args?: Record<string, unknown>; result: ToolResult };
@@ -326,6 +357,31 @@ function buildRuntimeLimitToolLoopMessage(executedTools: ExecutedTool[]): string
     "I stopped before returning another raw tool request.",
     "The route and tool attempts were recorded; try a narrower question or use the finance reports directly for the current totals while we add a more direct finance-summary tool.",
   ].join(" ");
+}
+
+/**
+ * Plain-English message for when the loop hits MAX_ITERATIONS without
+ * producing a text-only response. Replaces the prior generic "I ran into
+ * a limit while working on this. Try breaking your request into smaller
+ * steps." which obscured the actual cause (usually: preferred provider
+ * unavailable → fallback model overwhelmed by the tool surface). Respects
+ * IDENTITY_BLOCK rule #5 — no provider/model/tool internals exposed.
+ */
+function buildMaxIterationsExhaustedMessage(params: {
+  downgraded: boolean;
+  executedTools: ExecutedTool[];
+}): string {
+  const toolSummary = summarizeExecutedToolNames(params.executedTools);
+  const downgradeLead = params.downgraded
+    ? "The model my admin assigned me was unavailable, so I worked through a backup that wasn't able to keep up with this task. "
+    : "";
+  const workNote = toolSummary
+    ? `I made several attempts (${toolSummary}) but couldn't complete a final answer before hitting my safety limit.`
+    : "I worked through several attempts but couldn't complete a final answer before hitting my safety limit.";
+  const suggestion = params.downgraded
+    ? "Please try the same question again — I'll route through a different model. If it keeps failing, an admin can update my model assignment in the AI Workforce settings."
+    : "Try the same question again, or break it into a smaller piece.";
+  return `${downgradeLead}${workNote} ${suggestion}`;
 }
 
 // Pattern: response is a short clarifying question asking for a required field.
@@ -912,6 +968,31 @@ export async function runAgenticLoop(params: {
       break;
     }
 
+    // Local-model spinning guard: small local fallback models (Docker Model
+    // Runner, 7-13B class) often don't converge on a final answer when handed
+    // a large tool surface — they keep emitting plausibly-different tool calls
+    // that don't trip the exact-args repetition detector. After ~8 tool calls
+    // on a local provider with no text-only response, accept it isn't going to
+    // converge and return a diagnostic rather than burning the full 200
+    // iterations. See FB-71FB3A53 thread, 2026-05-22.
+    if (lastResult?.providerId === "local" && executedTools.length >= 8) {
+      console.warn(
+        `[agentic-loop] local model spun through ${executedTools.length} tool calls without converging on a text answer. ` +
+        `Exiting early with diagnostic. agent=${agentId} route=${routeContext}`,
+      );
+      return {
+        content: buildLocalToolCallFailureMessage(lastResult),
+        providerId: lastResult.providerId,
+        modelId: lastResult.modelId,
+        downgraded: lastResult.downgraded,
+        downgradeMessage: lastResult.downgradeMessage,
+        totalInputTokens,
+        totalOutputTokens,
+        executedTools,
+        proposal: null,
+      };
+    }
+
     // Repetition detector — extracted to lib/tak/runtime-issues.ts so the
     // existing "agent stuck" PlatformIssueReport write and the new reflection
     // trigger share one detection site.
@@ -1269,12 +1350,18 @@ export async function runAgenticLoop(params: {
         }),
       });
 
+        // Local model produced text-only on iteration 0 of a tool-backed turn:
+        // exit with a diagnostic instead of nudging — nudging won't teach a
+        // small local model to use tools mid-turn, it just burns iterations.
+        // The previous Build-Studio carve-out (!BUILD_ROUTE_PATTERN) was the
+        // root cause of 200-iteration hangs on /build threads when the
+        // preferred provider was unavailable and routing fell back to local.
+        // See FB-71FB3A53 thread, 2026-05-22.
         if (
           shouldNudgeNow &&
           iteration === 0 &&
           executedTools.length === 0 &&
-          result.providerId === "local" &&
-          !BUILD_ROUTE_PATTERN.test(routeContext ?? "")
+          result.providerId === "local"
         ) {
           console.warn(
             `[agentic-loop] local model produced text-only response for tool-backed turn; returning diagnostic instead of issuing a second nudge. agent=${agentId} route=${routeContext}`,
@@ -1559,6 +1646,10 @@ export async function runAgenticLoop(params: {
     executedTools.map((tool) => tool.name),
     new Set(tools.filter((tool) => tool.sideEffect).map((tool) => tool.name)),
   );
+  const exhaustedMessage = buildMaxIterationsExhaustedMessage({
+    downgraded: lastResult?.downgraded ?? false,
+    executedTools,
+  });
   return {
     content: fallbackIsRawToolUse
       ? buildRuntimeLimitToolLoopMessage(executedTools)
@@ -1568,7 +1659,7 @@ export async function runAgenticLoop(params: {
           tools,
           executedTools,
         })
-      : lastResult?.content || "I ran into a limit while working on this. Try breaking your request into smaller steps.",
+      : (lastResult?.content?.trim() ? lastResult.content : exhaustedMessage),
     providerId: lastResult?.providerId ?? "unknown",
     modelId: lastResult?.modelId ?? "unknown",
     downgraded: lastResult?.downgraded ?? false,

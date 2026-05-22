@@ -1,0 +1,18 @@
+name: dpf/sanitizers
+version: 0.1.0
+library: true
+
+# Tells CodeQL to load every *.model.yml under this pack as a data extension
+# that contributes rows to the standard javascript-all extensibles
+# (sourceModel / sinkModel / summaryModel / neutralModel). Our extensions
+# declare DPF's security helpers as canonical sanitisers so CodeQL stops
+# flagging every caller as a tainted-flow false positive.
+dataExtensions:
+  - "**/*.model.yml"
+
+# Data-extension packs use `extensionTargets:` to declare which library
+# packs they augment, not `dependencies:` (which is for query-pack imports).
+# This was the first cause of the model pack being silently ignored on
+# the initial scan after activation.
+extensionTargets:
+  codeql/javascript-all: "*"

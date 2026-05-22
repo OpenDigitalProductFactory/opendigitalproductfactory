@@ -6,7 +6,8 @@ export type GraphViewName =
   | "hosting-stack"
   | "impact-blast-radius"
   | "dependency-audit"
-  | "exploration";
+  | "exploration"
+  | "business-architecture";
 
 export type LayoutAlgorithm = "force" | "hierarchical" | "radial" | "swimlane";
 

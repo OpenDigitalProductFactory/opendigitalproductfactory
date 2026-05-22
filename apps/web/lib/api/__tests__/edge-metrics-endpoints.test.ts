@@ -29,6 +29,9 @@ const VALID_AUTH = {
   edgeNodeRowId: "row-001",
   nodeId: "edge-node-001",
   trustState: "trusted" as const,
+  customerAccountId: null,
+  customerSiteId: null,
+  scopePolicy: null,
 };
 
 function validEnvelope(overrides?: Partial<{ observedAt: string; runKey: string }>) {

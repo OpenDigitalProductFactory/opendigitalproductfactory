@@ -8,9 +8,16 @@ const sqlFile = path.join(__dirname, "_temp_query.sql");
 require("fs").writeFileSync(sqlFile, sql);
 
 try {
-  const result = execSync(
-    `npx prisma db execute --file ${sqlFile}`,
-    { cwd: path.join(__dirname, ".."), encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
+  // CodeQL #53 (js/shell-command-injection-from-environment): use the
+  // argv form of execFileSync instead of a shell string so $PATH /
+  // environment-supplied npx binary can't be hijacked, and so the
+  // sqlFile path is passed as a single argv element (not parsed by
+  // the shell).
+  const { execFileSync } = require("child_process");
+  const result = execFileSync(
+    "npx",
+    ["prisma", "db", "execute", "--file", sqlFile],
+    { cwd: path.join(__dirname, ".."), encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], shell: false }
   );
   console.log(result);
 } catch (e) {

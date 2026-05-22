@@ -19,6 +19,8 @@
 
 export const QUALITY_ISSUE_TYPES = [
   "type_not_promotable",
+  // BI-79307D22: structural name-shape gate on auto-promotion.
+  "name_not_promotable",
   "no_taxonomy",
   "no_portfolio_root",
   "low_confidence_promotion",

@@ -70,6 +70,7 @@ describe("generateAndPersistBuildBom", () => {
       },
     };
 
+    const queueScan = vi.fn(async () => ({ ids: ["evt-scan-1"] }));
     const result = await generateAndPersistBuildBom({
       db,
       buildId: "BUILD-1",
@@ -78,9 +79,11 @@ describe("generateAndPersistBuildBom", () => {
       now: new Date("2026-05-22T00:00:00.000Z"),
       gitRef: "abc123",
       readTextFile: vi.fn(async (path: string) => path.endsWith("package.json") ? packageJson : lockText),
+      queueScan,
     });
 
     expect(result).toMatchObject({ skipped: false, componentCount: 2, occurrenceCount: 2 });
+    expect(queueScan).toHaveBeenCalledWith({ buildId: "BUILD-1", requestedByUserId: "user-1" });
     expect(db.toolExecution.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         toolName: "generate_cyclonedx_bom",
@@ -110,5 +113,56 @@ describe("generateAndPersistBuildBom", () => {
       }),
     }));
     expect(db.buildActivity.create).toHaveBeenCalled();
+  });
+
+  it("still returns success when the auto-scan trigger fails (best-effort)", async () => {
+    const db = {
+      featureBuild: {
+        findUnique: vi.fn(async () => ({
+          buildId: "BUILD-2",
+          title: "Trigger-failure build",
+          threadId: null,
+          createdById: "creator-1",
+          digitalProductId: null,
+        })),
+      },
+      modelProfile: { findMany: vi.fn(async () => []) },
+      toolExecution: { create: vi.fn(async () => ({ id: "tool-2" })) },
+      toolExecutionReceipt: { create: vi.fn(async () => ({ id: "receipt-2" })) },
+      assuranceRun: { create: vi.fn(async () => ({ id: "run-db-2", runId: "run-2" })) },
+      bomComponent: {
+        upsert: vi.fn(async ({ where }: { where: { componentKey: string } }) => ({
+          id: `db-${where.componentKey}`,
+          componentKey: where.componentKey,
+        })),
+      },
+      bomDocument: {
+        upsert: vi.fn(async ({ create }: { create: { documentId: string } }) => ({
+          id: "document-db-2",
+          documentId: create.documentId,
+        })),
+      },
+      bomComponentOccurrence: {
+        createMany: vi.fn(async ({ data }: { data: unknown[] }) => ({ count: data.length })),
+      },
+      buildActivity: { create: vi.fn() },
+    };
+
+    const queueScan = vi.fn(async () => {
+      throw new Error("queue offline");
+    });
+
+    const result = await generateAndPersistBuildBom({
+      db,
+      buildId: "BUILD-2",
+      requestedByUserId: "user-1",
+      projectRoot: "D:/DPF",
+      now: new Date("2026-05-22T00:00:00.000Z"),
+      readTextFile: vi.fn(async (path: string) => path.endsWith("package.json") ? packageJson : lockText),
+      queueScan,
+    });
+
+    expect(result.skipped).toBe(false);
+    expect(queueScan).toHaveBeenCalledOnce();
   });
 });

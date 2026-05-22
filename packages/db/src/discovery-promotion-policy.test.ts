@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { resolvePromotionDecision, LEGACY_PROMOTABLE_TYPES } from "./discovery-promotion-policy";
+import {
+  LEGACY_PROMOTABLE_TYPES,
+  looksLikeRuntimeArtifact,
+  resolvePromotionDecision,
+} from "./discovery-promotion-policy";
 
 describe("resolvePromotionDecision", () => {
   const baseEntity = {
-    entityType: "host",
+    // Switched from "host" to "application" after BI-79307D22 — `host`
+    // is no longer on the legacy promotable list (it's runtime/infra,
+    // attributed to a product rather than promoted into one).
+    entityType: "application",
+    name: "Real Product",
     attributionStatus: "attributed" as const,
     attributionConfidence: 0.95,
     digitalProductId: null,
@@ -45,16 +53,86 @@ describe("resolvePromotionDecision", () => {
 
   it("emits classifyAs from policy when provided", () => {
     const node = { ...taxonomyNode, governance: { promotion: { mode: "auto", classifyAs: "infrastructure_endpoint" } } };
-    const e = { ...baseEntity, entityType: "network_client" };
+    // Use an entityType the legacy list would reject, then prove the
+    // policy override wins. Also pass a non-runtime name so the new
+    // name-gate doesn't fire first.
+    const e = { ...baseEntity, entityType: "network_client", name: "Custom Service Endpoint" };
     expect(resolvePromotionDecision(e, node, portfolio).classifyAs).toBe("infrastructure_endpoint");
+  });
+
+  describe("name-shape gate (BI-79307D22)", () => {
+    it("rejects 'dpf-postgres-1' even when the entityType + taxonomy policy approve", () => {
+      const node = { ...taxonomyNode, governance: { promotion: { mode: "auto" } } };
+      const decision = resolvePromotionDecision(
+        { ...baseEntity, name: "dpf-postgres-1" },
+        node,
+        portfolio,
+      );
+      expect(decision.decision).toBe("skip");
+      expect(decision.reason).toBe("name_not_promotable");
+    });
+
+    it("rejects 'Docker GW dpf_default (172.18.0.1)'", () => {
+      const decision = resolvePromotionDecision(
+        { ...baseEntity, name: "Docker GW dpf_default (172.18.0.1)" },
+        taxonomyNode,
+        portfolio,
+      );
+      expect(decision.reason).toBe("name_not_promotable");
+    });
+
+    it("rejects bare IPv4 addresses", () => {
+      const decision = resolvePromotionDecision(
+        { ...baseEntity, name: "192.168.0.109" },
+        taxonomyNode,
+        portfolio,
+      );
+      expect(decision.reason).toBe("name_not_promotable");
+    });
+
+    it("accepts canonical product names like 'postgres'", () => {
+      const decision = resolvePromotionDecision(
+        { ...baseEntity, name: "postgres", entityType: "database" },
+        taxonomyNode,
+        portfolio,
+      );
+      expect(decision.decision).toBe("promote");
+    });
+  });
+});
+
+describe("looksLikeRuntimeArtifact", () => {
+  it.each([
+    ["dpf-redis-1", true],
+    ["dpf-postgres-1", true],
+    ["Docker GW dpf_default (172.18.0.1)", true],
+    ["192.168.0.109", true],
+    ["abc123def456", true],
+    ["Primary Starlink (WAN1)", true],
+    ["Digital Product Factory Portal", false],
+    ["postgres", false],
+    ["qdrant", false],
+    ["Real Product Name", false],
+  ])("classifies %s as runtime=%s", (name, expected) => {
+    expect(looksLikeRuntimeArtifact(name)).toBe(expected);
   });
 });
 
 describe("LEGACY_PROMOTABLE_TYPES", () => {
-  it("matches the historical list exactly", () => {
+  it("contains product-shaped types only (no host/container/network)", () => {
     expect(LEGACY_PROMOTABLE_TYPES).toEqual([
-      "host","runtime","container","database","monitoring_service","ai_service",
-      "application","subnet","gateway","network_interface","docker_host","router",
+      "runtime",
+      "database",
+      "monitoring_service",
+      "ai_service",
+      "application",
+      "service",
     ]);
+  });
+
+  it("does not include runtime instance / device / network artifact types", () => {
+    for (const removed of ["host", "container", "subnet", "gateway", "network_interface", "docker_host", "router"]) {
+      expect(LEGACY_PROMOTABLE_TYPES).not.toContain(removed);
+    }
   });
 });

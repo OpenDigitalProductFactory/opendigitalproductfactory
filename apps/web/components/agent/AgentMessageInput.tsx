@@ -36,21 +36,56 @@ type Props = {
 const EMPTY_EXPECTED_ARTIFACT = "";
 type ExpectedArtifactValue = QuestionPacketExpectedArtifact | typeof EMPTY_EXPECTED_ARTIFACT;
 
-function splitLines(value: string): string[] {
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+// ── Question-packet chip kinds ───────────────────────────────────────────
+// "intent" is single-value (only one Intent chip can exist); "source" and
+// "edge" are multi-value (each chip is one entry); "artifact" is single-value
+// from a fixed enum and edited via the popover, not an inline text editor.
+type ChipFieldKind = "intent" | "source" | "edge";
+
+type PendingEntry = {
+  kind: ChipFieldKind;
+  draft: string;
+  /** When set, we are editing an existing chip at this index (source/edge only). */
+  editingIndex?: number;
+};
+
+const CHIP_ICONS: Record<ChipFieldKind | "artifact", string> = {
+  intent: "\u{1F3AF}", // 🎯
+  source: "\u{1F4CD}", // 📍
+  edge: "\u{1F6AB}", // 🚫
+  artifact: "\u{1F4E6}", // 📦
+};
+
+const CHIP_LABELS: Record<ChipFieldKind | "artifact", string> = {
+  intent: "Intent",
+  source: "Source",
+  edge: "Scope edge",
+  artifact: "Output shape",
+};
+
+const FIELD_HINTS: Record<ChipFieldKind, string> = {
+  intent: "Tell the coworker what you're really trying to figure out",
+  source: "Point at a file, route, spec, or record to ground on",
+  edge: "A hard line the coworker shouldn't cross",
+};
+
+function truncate(value: string, max = 32): string {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 1)}…`;
 }
 
 export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFile, onFileUploaded, onFileClear, voiceSynthAvailable, voicePlaybackEnabled, onVoicePlaybackToggle }: Props) {
   const [value, setValue] = useState("");
-  const [showQuestionContext, setShowQuestionContext] = useState(false);
   const [intentCenter, setIntentCenter] = useState("");
-  const [sourceRefs, setSourceRefs] = useState("");
-  const [hardEdges, setHardEdges] = useState("");
+  const [sources, setSources] = useState<string[]>([]);
+  const [hardEdges, setHardEdges] = useState<string[]>([]);
   const [expectedArtifact, setExpectedArtifact] = useState<ExpectedArtifactValue>(EMPTY_EXPECTED_ARTIFACT);
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [pendingEntry, setPendingEntry] = useState<PendingEntry | null>(null);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const popoverContainerRef = useRef<HTMLDivElement>(null);
+  const pendingInputRef = useRef<HTMLInputElement>(null);
 
   // ── Voice input wiring (Slice 1 Task 10) ─────────────────────────────────
   // Splices the transcript into the textarea at the current cursor position
@@ -90,6 +125,27 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
     autoResize();
   }, [value, autoResize]);
 
+  // Auto-focus the inline editor when a pending entry is opened so the user
+  // can type immediately without an extra click.
+  useEffect(() => {
+    if (pendingEntry) {
+      pendingInputRef.current?.focus();
+    }
+  }, [pendingEntry]);
+
+  // Close the popover when clicking outside it.
+  useEffect(() => {
+    if (!popoverOpen) return;
+    function onDocMouseDown(e: MouseEvent) {
+      const container = popoverContainerRef.current;
+      if (container && !container.contains(e.target as Node)) {
+        setPopoverOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [popoverOpen]);
+
   function handleSubmit() {
     const trimmed = value.trim();
     if (!trimmed || disabled || busy) return;
@@ -102,9 +158,11 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
     }
     setValue("");
     setIntentCenter("");
-    setSourceRefs("");
-    setHardEdges("");
-    setExpectedArtifact("");
+    setSources([]);
+    setHardEdges([]);
+    setExpectedArtifact(EMPTY_EXPECTED_ARTIFACT);
+    setPendingEntry(null);
+    setPopoverOpen(false);
     textareaRef.current?.focus();
   }
 
@@ -132,21 +190,21 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
   function buildQuestionPacket(): QuestionPacket | null {
     const packet: QuestionPacket = {};
     const trimmedIntent = intentCenter.trim();
-    const sources = splitLines(sourceRefs);
-    const edges = splitLines(hardEdges);
+    const trimmedSources = sources.map((s) => s.trim()).filter(Boolean);
+    const trimmedEdges = hardEdges.map((e) => e.trim()).filter(Boolean);
 
     if (trimmedIntent) {
       packet.intentCenter = trimmedIntent;
     }
-    if (sources.length > 0) {
-      packet.contextRefs = sources.map((ref, index) => ({
+    if (trimmedSources.length > 0) {
+      packet.contextRefs = trimmedSources.map((ref, index) => ({
         kind: "freeform",
         label: `Source ${index + 1}`,
         ref,
       }));
     }
-    if (edges.length > 0) {
-      packet.hardEdges = edges;
+    if (trimmedEdges.length > 0) {
+      packet.hardEdges = trimmedEdges;
     }
     if (expectedArtifact) {
       packet.expectedArtifact = expectedArtifact;
@@ -155,7 +213,391 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
     return Object.keys(packet).length > 0 ? packet : null;
   }
 
+  // ── Chip editing helpers ──────────────────────────────────────────────────
+
+  function togglePopover() {
+    setPendingEntry(null);
+    setPopoverOpen((current) => !current);
+  }
+
+  function startEntry(kind: ChipFieldKind, prefill = "", editingIndex?: number) {
+    setPopoverOpen(false);
+    setPendingEntry({ kind, draft: prefill, editingIndex });
+  }
+
+  function commitEntry() {
+    if (!pendingEntry) return;
+    const draft = pendingEntry.draft.trim();
+    if (!draft) {
+      setPendingEntry(null);
+      return;
+    }
+    if (pendingEntry.kind === "intent") {
+      setIntentCenter(draft);
+    } else if (pendingEntry.kind === "source") {
+      setSources((current) => {
+        if (pendingEntry.editingIndex !== undefined) {
+          return current.map((item, i) => (i === pendingEntry.editingIndex ? draft : item));
+        }
+        return [...current, draft];
+      });
+    } else if (pendingEntry.kind === "edge") {
+      setHardEdges((current) => {
+        if (pendingEntry.editingIndex !== undefined) {
+          return current.map((item, i) => (i === pendingEntry.editingIndex ? draft : item));
+        }
+        return [...current, draft];
+      });
+    }
+    setPendingEntry(null);
+  }
+
+  function cancelEntry() {
+    setPendingEntry(null);
+  }
+
+  function removeSource(index: number) {
+    setSources((current) => current.filter((_, i) => i !== index));
+  }
+
+  function removeEdge(index: number) {
+    setHardEdges((current) => current.filter((_, i) => i !== index));
+  }
+
+  function toggleArtifact(next: QuestionPacketExpectedArtifact) {
+    setExpectedArtifact((current) => (current === next ? EMPTY_EXPECTED_ARTIFACT : next));
+  }
+
   const overLimit = value.trim().length > MAX_MESSAGE_LENGTH;
+  const hasAnyChip =
+    !!pendingFile ||
+    !!intentCenter ||
+    sources.length > 0 ||
+    hardEdges.length > 0 ||
+    !!expectedArtifact;
+
+  // ── Render helpers ────────────────────────────────────────────────────────
+
+  function renderChip(opts: {
+    icon: string;
+    label: string;
+    value: string;
+    onEdit?: () => void;
+    onRemove: () => void;
+    title?: string;
+  }) {
+    return (
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4,
+          background: "var(--dpf-surface-2)",
+          border: "1px solid var(--dpf-border)",
+          borderRadius: 12,
+          padding: "2px 8px 2px 6px",
+          fontSize: 11,
+          color: "var(--dpf-text)",
+          maxWidth: "100%",
+        }}
+        title={opts.title ?? `${opts.label}: ${opts.value}`}
+      >
+        <span style={{ fontSize: 12 }}>{opts.icon}</span>
+        {opts.onEdit ? (
+          <button
+            type="button"
+            onClick={opts.onEdit}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--dpf-text)",
+              cursor: "pointer",
+              fontSize: 11,
+              padding: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              maxWidth: 220,
+              textAlign: "left",
+            }}
+          >
+            <span style={{ color: "var(--dpf-muted)" }}>{opts.label}:</span>{" "}
+            {truncate(opts.value)}
+          </button>
+        ) : (
+          <span
+            style={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              maxWidth: 220,
+            }}
+          >
+            <span style={{ color: "var(--dpf-muted)" }}>{opts.label}:</span>{" "}
+            {truncate(opts.value)}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={opts.onRemove}
+          style={{
+            background: "none",
+            border: "none",
+            color: "var(--dpf-muted)",
+            cursor: "pointer",
+            fontSize: 13,
+            lineHeight: 1,
+            padding: "0 2px",
+            marginLeft: 2,
+          }}
+          title={`Remove ${opts.label.toLowerCase()}`}
+          aria-label={`Remove ${opts.label.toLowerCase()}`}
+        >
+          &times;
+        </button>
+      </span>
+    );
+  }
+
+  function renderPendingEntryRow() {
+    if (!pendingEntry) return null;
+    const hint = FIELD_HINTS[pendingEntry.kind];
+    const icon = CHIP_ICONS[pendingEntry.kind];
+    const label = CHIP_LABELS[pendingEntry.kind];
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "6px 12px 0",
+          flexWrap: "wrap",
+        }}
+      >
+        <span style={{ fontSize: 12 }}>{icon}</span>
+        <span style={{ fontSize: 11, color: "var(--dpf-muted)", flexShrink: 0 }}>{label}:</span>
+        <input
+          ref={pendingInputRef}
+          aria-label={label}
+          value={pendingEntry.draft}
+          placeholder={hint}
+          onChange={(e) =>
+            setPendingEntry((current) =>
+              current ? { ...current, draft: e.target.value } : current,
+            )
+          }
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitEntry();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              cancelEntry();
+            }
+          }}
+          style={{
+            flex: "1 1 160px",
+            minWidth: 0,
+            background: "var(--dpf-surface-1)",
+            border: "1px solid var(--dpf-border)",
+            borderRadius: 6,
+            color: "var(--dpf-text)",
+            fontSize: 12,
+            minHeight: 28,
+            padding: "4px 8px",
+          }}
+        />
+        <button
+          type="button"
+          onClick={commitEntry}
+          style={{
+            background: "var(--dpf-surface-2)",
+            border: "1px solid var(--dpf-border)",
+            borderRadius: 6,
+            color: "var(--dpf-text)",
+            cursor: "pointer",
+            fontSize: 11,
+            padding: "4px 8px",
+          }}
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          onClick={cancelEntry}
+          style={{
+            background: "none",
+            border: "none",
+            color: "var(--dpf-muted)",
+            cursor: "pointer",
+            fontSize: 11,
+            padding: "4px 6px",
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  function renderChipTray() {
+    if (!hasAnyChip) return null;
+    return (
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 4,
+          padding: "6px 12px 0",
+        }}
+      >
+        {pendingFile &&
+          renderChip({
+            icon: "\u{1F4CE}",
+            label: "File",
+            value: pendingFile.fileName,
+            onRemove: onFileClear,
+            title: pendingFile.fileName,
+          })}
+        {intentCenter &&
+          renderChip({
+            icon: CHIP_ICONS.intent,
+            label: CHIP_LABELS.intent,
+            value: intentCenter,
+            onEdit: () => startEntry("intent", intentCenter),
+            onRemove: () => setIntentCenter(""),
+          })}
+        {sources.map((src, i) => (
+          <span key={`src-${i}`}>
+            {renderChip({
+              icon: CHIP_ICONS.source,
+              label: CHIP_LABELS.source,
+              value: src,
+              onEdit: () => startEntry("source", src, i),
+              onRemove: () => removeSource(i),
+            })}
+          </span>
+        ))}
+        {hardEdges.map((edge, i) => (
+          <span key={`edge-${i}`}>
+            {renderChip({
+              icon: CHIP_ICONS.edge,
+              label: CHIP_LABELS.edge,
+              value: edge,
+              onEdit: () => startEntry("edge", edge, i),
+              onRemove: () => removeEdge(i),
+            })}
+          </span>
+        ))}
+        {expectedArtifact &&
+          renderChip({
+            icon: CHIP_ICONS.artifact,
+            label: CHIP_LABELS.artifact,
+            value: expectedArtifact.replace(/-/g, " "),
+            onRemove: () => setExpectedArtifact(EMPTY_EXPECTED_ARTIFACT),
+          })}
+      </div>
+    );
+  }
+
+  function renderContextPopover() {
+    if (!popoverOpen) return null;
+    return (
+      <div
+        role="menu"
+        aria-label="Add context"
+        style={{
+          position: "absolute",
+          bottom: "calc(100% + 6px)",
+          left: 0,
+          minWidth: 260,
+          background: "var(--dpf-surface-1)",
+          border: "1px solid var(--dpf-border)",
+          borderRadius: 8,
+          boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+          padding: 6,
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+          zIndex: 20,
+        }}
+      >
+        <PopoverItem
+          icon={CHIP_ICONS.intent}
+          label={intentCenter ? "Edit intent" : "Set intent…"}
+          hint={FIELD_HINTS.intent}
+          onClick={() => startEntry("intent", intentCenter)}
+        />
+        <PopoverItem
+          icon={CHIP_ICONS.source}
+          label="Add source ref…"
+          hint={FIELD_HINTS.source}
+          onClick={() => startEntry("source")}
+        />
+        <PopoverItem
+          icon={CHIP_ICONS.edge}
+          label="Add scope edge…"
+          hint={FIELD_HINTS.edge}
+          onClick={() => startEntry("edge")}
+        />
+        <div
+          style={{
+            borderTop: "1px solid var(--dpf-border)",
+            marginTop: 4,
+            paddingTop: 6,
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "0 6px",
+              fontSize: 11,
+              color: "var(--dpf-muted)",
+            }}
+          >
+            <span style={{ fontSize: 12 }}>{CHIP_ICONS.artifact}</span>
+            Output shape
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 4,
+              padding: "0 6px 4px",
+            }}
+          >
+            {QUESTION_PACKET_EXPECTED_ARTIFACTS.map((artifact) => {
+              const selected = expectedArtifact === artifact;
+              return (
+                <button
+                  type="button"
+                  key={artifact}
+                  onClick={() => toggleArtifact(artifact)}
+                  aria-pressed={selected}
+                  style={{
+                    background: selected ? "var(--dpf-accent)" : "var(--dpf-surface-2)",
+                    border: `1px solid ${selected ? "var(--dpf-accent)" : "var(--dpf-border)"}`,
+                    borderRadius: 999,
+                    color: selected ? "#ffffff" : "var(--dpf-text)",
+                    cursor: "pointer",
+                    fontSize: 11,
+                    padding: "2px 8px",
+                  }}
+                >
+                  {artifact.replace(/-/g, " ")}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ borderTop: "1px solid var(--dpf-border)" }}>
@@ -202,150 +644,42 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
           </button>
         </div>
       )}
-      {pendingFile && (
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "6px 12px 0",
-        }}>
-          <div style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            background: "var(--dpf-surface-2)",
-            border: "1px solid var(--dpf-border)",
-            borderRadius: 12,
-            padding: "2px 8px 2px 6px",
-            fontSize: 11,
-            color: "var(--dpf-text)",
-            maxWidth: "80%",
-          }}>
-            <span style={{ fontSize: 12 }}>{"\u{1F4CE}"}</span>
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {pendingFile.fileName}
-            </span>
-            <button
-              type="button"
-              onClick={onFileClear}
-              style={{
-                background: "none",
-                border: "none",
-                color: "var(--dpf-muted)",
-                cursor: "pointer",
-                fontSize: 13,
-                lineHeight: 1,
-                padding: "0 2px",
-                marginLeft: 2,
-              }}
-              title="Remove file"
-            >
-              &times;
-            </button>
-          </div>
-        </div>
-      )}
-      {showQuestionContext && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-            gap: 8,
-            padding: "8px 12px 0",
-          }}
-        >
-          <label style={{ display: "grid", gap: 3, fontSize: 11, color: "var(--dpf-muted)" }}>
-            Intent
-            <input
-              value={intentCenter}
-              onChange={(e) => setIntentCenter(e.target.value)}
-              placeholder="Center of attention"
-              style={{
-                background: "var(--dpf-surface-1)",
-                border: "1px solid var(--dpf-border)",
-                borderRadius: 6,
-                color: "var(--dpf-text)",
-                fontSize: 12,
-                minHeight: 30,
-                padding: "5px 8px",
-              }}
-            />
-          </label>
-          <label style={{ display: "grid", gap: 3, fontSize: 11, color: "var(--dpf-muted)" }}>
-            Sources
-            <textarea
-              value={sourceRefs}
-              onChange={(e) => setSourceRefs(e.target.value)}
-              placeholder="One source per line"
-              rows={2}
-              style={{
-                background: "var(--dpf-surface-1)",
-                border: "1px solid var(--dpf-border)",
-                borderRadius: 6,
-                color: "var(--dpf-text)",
-                fontSize: 12,
-                minHeight: 48,
-                padding: "5px 8px",
-                resize: "vertical",
-              }}
-            />
-          </label>
-          <label style={{ display: "grid", gap: 3, fontSize: 11, color: "var(--dpf-muted)" }}>
-            Exclusions
-            <textarea
-              value={hardEdges}
-              onChange={(e) => setHardEdges(e.target.value)}
-              placeholder="One hard edge per line"
-              rows={2}
-              style={{
-                background: "var(--dpf-surface-1)",
-                border: "1px solid var(--dpf-border)",
-                borderRadius: 6,
-                color: "var(--dpf-text)",
-                fontSize: 12,
-                minHeight: 48,
-                padding: "5px 8px",
-                resize: "vertical",
-              }}
-            />
-          </label>
-          <label style={{ display: "grid", gap: 3, fontSize: 11, color: "var(--dpf-muted)" }}>
-            Artifact
-            <select
-              value={expectedArtifact}
-              onChange={(e) => setExpectedArtifact(e.target.value as ExpectedArtifactValue)}
-              style={{
-                background: "var(--dpf-surface-1)",
-                border: "1px solid var(--dpf-border)",
-                borderRadius: 6,
-                color: "var(--dpf-text)",
-                fontSize: 12,
-                minHeight: 30,
-                padding: "5px 8px",
-              }}
-            >
-              <option value="" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
-                Unspecified
-              </option>
-              {QUESTION_PACKET_EXPECTED_ARTIFACTS.map((artifact) => (
-                <option
-                  key={artifact}
-                  value={artifact}
-                  className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
-                >
-                  {artifact.replace(/-/g, " ")}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      )}
+      {renderChipTray()}
+      {renderPendingEntryRow()}
       <div style={{
         display: "flex",
         gap: 6,
         padding: "10px 12px",
         alignItems: "flex-end",
+        flexWrap: "wrap",
       }}>
+        <div ref={popoverContainerRef} style={{ position: "relative", flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={togglePopover}
+            aria-expanded={popoverOpen}
+            aria-haspopup="menu"
+            aria-label="Add context"
+            title="Add context (intent, sources, scope edges, output shape)"
+            disabled={disabled || !!busy}
+            style={{
+              background: "var(--dpf-surface-2)",
+              border: "1px solid var(--dpf-border)",
+              borderRadius: 6,
+              color: "var(--dpf-text)",
+              cursor: disabled || busy ? "not-allowed" : "pointer",
+              fontSize: 18,
+              lineHeight: 1,
+              height: 32,
+              width: 32,
+              opacity: disabled || busy ? 0.5 : 1,
+              padding: 0,
+            }}
+          >
+            +
+          </button>
+          {renderContextPopover()}
+        </div>
         <textarea
           ref={textareaRef}
           value={value}
@@ -355,7 +689,8 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
           placeholder={disabled ? "Sending..." : busy ? "Agent is working... type your next message" : "Ask your co-worker..."}
           rows={1}
           style={{
-            flex: 1,
+            flex: "1 1 180px",
+            minWidth: 0,
             background: "color-mix(in srgb, var(--dpf-bg) 80%, transparent)",
             border: `1px solid ${overLimit ? "var(--dpf-error)" : "var(--dpf-border)"}`,
             borderRadius: 6,
@@ -375,26 +710,6 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
             {value.trim().length.toLocaleString()}/{MAX_MESSAGE_LENGTH.toLocaleString()}
           </span>
         )}
-        <button
-          type="button"
-          onClick={() => setShowQuestionContext((current) => !current)}
-          aria-expanded={showQuestionContext}
-          style={{
-            background: "var(--dpf-surface-2)",
-            border: "1px solid var(--dpf-border)",
-            borderRadius: 6,
-            color: "var(--dpf-text)",
-            cursor: disabled || busy ? "not-allowed" : "pointer",
-            flexShrink: 0,
-            fontSize: 12,
-            height: 32,
-            opacity: disabled || busy ? 0.5 : 1,
-            padding: "0 8px",
-          }}
-          disabled={disabled || !!busy}
-        >
-          {showQuestionContext ? "Hide context" : "Add context"}
-        </button>
         <MicButton
           state={voice.state}
           errorMessage={voice.error}
@@ -458,5 +773,51 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
         </button>
       </div>
     </div>
+  );
+}
+
+function PopoverItem({
+  icon,
+  label,
+  hint,
+  onClick,
+}: {
+  icon: string;
+  label: string;
+  hint: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      title={hint}
+      style={{
+        background: "none",
+        border: "none",
+        color: "var(--dpf-text)",
+        cursor: "pointer",
+        display: "grid",
+        gridTemplateColumns: "auto 1fr",
+        columnGap: 8,
+        rowGap: 0,
+        alignItems: "center",
+        textAlign: "left",
+        padding: "6px 8px",
+        borderRadius: 6,
+        fontSize: 12,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = "var(--dpf-surface-2)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "none";
+      }}
+    >
+      <span style={{ fontSize: 14, gridRow: "1 / span 2" }}>{icon}</span>
+      <span>{label}</span>
+      <span style={{ fontSize: 10, color: "var(--dpf-muted)" }}>{hint}</span>
+    </button>
   );
 }

@@ -157,9 +157,12 @@ describe("openOrUpdateQualityIssue", () => {
     expect(args.update.details).toEqual({ entityType: "network_client", source: "legacy-list" });
   });
 
-  it("QUALITY_ISSUE_TYPES contains the canonical seven values", () => {
+  it("QUALITY_ISSUE_TYPES contains the canonical issue types", () => {
     expect(QUALITY_ISSUE_TYPES).toEqual([
       "type_not_promotable",
+      // Added in BI-79307D22: structural name-shape gate on
+      // auto-promotion (rejects "dpf-redis-1"/"Docker GW …" etc.).
+      "name_not_promotable",
       "no_taxonomy",
       "no_portfolio_root",
       "low_confidence_promotion",
