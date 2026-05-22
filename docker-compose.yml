@@ -654,7 +654,7 @@ services:
   # Spec: docs/superpowers/specs/2026-05-21-chatterbox-tts-self-hosted.md
   #
   # Hardware tiers:
-  #   Tier 1 (CPU):   DPF_TTS_IMAGE=devnen/chatterbox-tts-server:latest-cpu
+  #   Tier 1 (CPU):   DPF_TTS_IMAGE=travisvn/chatterbox-tts-api:latest + unset NVIDIA deploy
   #                   ~10–30x slower but requires no GPU. Good for testing.
   #   Tier 2 (CUDA):  Default. Requires NVIDIA GPU ≥ 6 GB VRAM (Turbo model).
   #                   Can share GPU with dpf-stt when total VRAM ≥ 10 GB.
@@ -663,18 +663,28 @@ services:
   #
   # Opt-in: docker compose --profile tts up
   dpf-tts:
-    image: ${DPF_TTS_IMAGE:-devnen/chatterbox-tts-server:latest-cuda}
+    image: ${DPF_TTS_IMAGE:-travisvn/chatterbox-tts-api:latest}
     profiles: ["tts"]
     restart: unless-stopped
     environment:
+      # travisvn/chatterbox-tts-api defaults to port 5123; force 8000 so the
+      # Docker-network DNS address (dpf-tts:8000) matches DPF_TTS_URL.
+      PORT: "8000"
       # turbo = 350M params, ~5-6 GB VRAM, fastest inference.
       # Override to `original` (500M, ~7 GB) or `multilingual` (550M, 23 langs).
       TTS_MODEL: ${TTS_CHATTERBOX_MODEL:-turbo}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     volumes:
       # Persists registered reference audio clips across container restarts.
       - dpf_tts_voices:/app/voices
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/v1/models"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -682,7 +692,8 @@ services:
       start_period: 120s
     ports:
       # Localhost-only. Portal reaches sidecar via dpf-tts:8000 on the
-      # Docker network; host mapping is for developer smoke testing only.
+      # Docker network (PORT=8000 above); host mapping is for developer smoke
+      # testing only.
       - "127.0.0.1:8766:8000"
 
 volumes:
