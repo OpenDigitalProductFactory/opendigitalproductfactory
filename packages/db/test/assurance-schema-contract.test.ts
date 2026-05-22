@@ -17,7 +17,17 @@ describe("Assurance BOM schema", () => {
     expect(modelBlock("BomComponentOccurrence")).toContain("occurrenceKey");
   });
 
-  it("does not add AssuranceFinding in Phase 1A", () => {
-    expect(modelBlock("AssuranceFinding")).toBe("");
+  it("adds the Phase 1 narrow AssuranceFinding substrate", () => {
+    const block = modelBlock("AssuranceFinding");
+
+    expect(block).toContain("findingKey");
+    expect(block).toContain("assuranceRunId");
+    expect(block).toContain("bomDocumentId");
+    expect(block).toContain("bomComponentId");
+    expect(block).toContain("identifierStability");
+    expect(block).toContain("reopenCount");
+    expect(block).toContain("@@unique([findingKey])");
+    expect(block).toContain("@@index([affectedType, affectedId])");
+    expect(block).toContain("@@index([policySeverity, releaseImpact])");
   });
 });
