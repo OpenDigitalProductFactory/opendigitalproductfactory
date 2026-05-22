@@ -4,6 +4,7 @@ import { useState, useTransition, useRef, useCallback } from "react"
 import { VoiceConsentForm } from "@/components/admin/VoiceConsentForm"
 import { setVoiceEnabled } from "@/lib/actions/voice-profile"
 import { selectSupportedMimeType } from "@/components/agent/hooks/mime-probe"
+import { useVoiceSynth } from "@/components/agent/hooks/useVoiceSynth"
 
 interface ConsentRecord {
   id: string
@@ -31,6 +32,9 @@ interface Props {
   voiceProfile: VoiceProfileData | null
 }
 
+const PREVIEW_TEXT =
+  "The platform recommends proceeding to build. The architecture is sound and the plan is ready for implementation."
+
 export function VoiceProfileSetup({
   profileId,
   profileName,
@@ -40,6 +44,7 @@ export function VoiceProfileSetup({
 }: Props) {
   const [enabled, setEnabled] = useState(voiceEnabled)
   const [isPending, startTransition] = useTransition()
+  const voiceSynth = useVoiceSynth()
 
   const hasValidConsent =
     voiceProfile?.consentRecord &&
@@ -131,12 +136,34 @@ export function VoiceProfileSetup({
         {!hasValidConsent ? (
           <p className="text-sm text-muted-foreground pl-8">Complete step 1 first.</p>
         ) : voiceProfile?.status === "ready" ? (
-          <div className="rounded-md border border-green-500/20 bg-green-500/5 px-4 py-3 text-sm">
-            Voice profile ready.
-            {voiceProfile.qualityScore && (
-              <span className="ml-2 text-muted-foreground">
-                Quality: {Math.round(voiceProfile.qualityScore * 100)}%
-              </span>
+          <div className="rounded-md border border-green-500/20 bg-green-500/5 px-4 py-3 text-sm flex flex-wrap items-center gap-3">
+            <span>
+              Voice profile ready.
+              {voiceProfile.qualityScore && (
+                <span className="ml-2 text-muted-foreground">
+                  Quality: {Math.round(voiceProfile.qualityScore * 100)}%
+                </span>
+              )}
+            </span>
+            {voiceSynth.available && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (voiceSynth.isPlaying) {
+                    voiceSynth.stop()
+                  } else {
+                    voiceSynth.synthesize(PREVIEW_TEXT, profileId)
+                  }
+                }}
+                disabled={voiceSynth.isSynthesizing}
+                className="inline-flex items-center gap-1.5 rounded border border-green-500/30 bg-white/50 px-3 py-1 text-xs font-medium text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+              >
+                {voiceSynth.isSynthesizing
+                  ? "Synthesizing…"
+                  : voiceSynth.isPlaying
+                    ? "⏸ Stop"
+                    : "▶ Preview voice"}
+              </button>
             )}
           </div>
         ) : (
@@ -317,7 +344,7 @@ function MicRecorder({ profileId }: { profileId: string }) {
   return (
     <div className="space-y-3">
       {/* Suggested script */}
-      {showScript && recState === "idle" && (
+      {showScript && recState !== "preview" && recState !== "uploading" && (
         <div className="rounded-md bg-muted/50 border border-border p-3 space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Suggested script</p>

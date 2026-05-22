@@ -58,6 +58,7 @@ import {
   retryOptimisticMessage,
   type AgentRenderableMessage,
 } from "./agent-message-state";
+import { useVoiceSynth } from "./hooks/useVoiceSynth";
 
 type Props = {
   threadId: string | null;
@@ -130,6 +131,11 @@ export function AgentCoworkerPanel({
   const [activeSkill, setActiveSkill] = useState<{ skillId: string; label: string } | null>(null);
   const [marketingSkillRules, setMarketingSkillRules] = useState<Record<string, { visible?: boolean; label?: string; reframe?: string }> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const voiceSynth = useVoiceSynth();
+  // Keep a ref so the SSE done handler always sees the latest voiceSynth state
+  // without needing to re-subscribe the EventSource on every render.
+  const voiceSynthRef = useRef(voiceSynth);
+  voiceSynthRef.current = voiceSynth;
 
   const routeAgent: AgentInfo = resolveAgentForRouteSync(effectiveRoute, userContext);
   const agent = routeAgent;
@@ -285,7 +291,13 @@ export function AgentCoworkerPanel({
           if (threadId) {
             getThreadSnapshotById({ threadId }).then((snapshot) => {
               if (snapshot) {
-                setMessages(filterMessages(snapshot.messages));
+                const filtered = filterMessages(snapshot.messages);
+                setMessages(filtered);
+                // Auto-synthesize the last assistant message if voice is available
+                const lastMsg = filtered[filtered.length - 1];
+                if (lastMsg?.role === "assistant" && voiceSynthRef.current.available) {
+                  voiceSynthRef.current.synthesize(lastMsg.content).catch(() => {});
+                }
               }
               setIsBusy(false);
             }).catch(() => {
@@ -648,6 +660,41 @@ export function AgentCoworkerPanel({
         marketingSkillRules={marketingSkillRules}
         isDocked={isDocked}
       />
+
+      {/* Voice activity indicator — shown when voice synthesis is active */}
+      {voiceSynth.available && (voiceSynth.isSynthesizing || voiceSynth.isPlaying) && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "4px 12px",
+            background: "color-mix(in srgb, var(--dpf-accent) 8%, transparent)",
+            borderBottom: "1px solid color-mix(in srgb, var(--dpf-accent) 20%, transparent)",
+            fontSize: 11,
+            color: "var(--dpf-accent)",
+          }}
+        >
+          <button
+            type="button"
+            aria-label="Stop voice playback"
+            onClick={() => voiceSynth.stop()}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "var(--dpf-accent)",
+              fontSize: 13,
+              lineHeight: 1,
+              padding: 0,
+              flexShrink: 0,
+            }}
+          >
+            {voiceSynth.isSynthesizing ? "⏳" : "🔊"}
+          </button>
+          <span>{voiceSynth.isSynthesizing ? "Synthesizing voice…" : "Speaking — click to stop"}</span>
+        </div>
+      )}
 
       {showProfile && (
         <CoworkerProfilePanel
