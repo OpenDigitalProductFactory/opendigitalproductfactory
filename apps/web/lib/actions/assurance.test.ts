@@ -19,6 +19,20 @@ import { auth } from "@/lib/auth";
 import { queueBuildBomGeneration } from "@/lib/assurance/bom-trigger";
 import { getBuildBomSummary, requestBuildBomGeneration } from "./assurance";
 
+const emptyFindings = {
+  total: 0,
+  blocking: 0,
+  bySeverity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+  byKind: {},
+};
+
+const noScanner = {
+  state: "needs-evaluation",
+  approvedScannerCount: 0,
+  scannerNames: [],
+  reason: "no-approved-scanner",
+};
+
 describe("assurance actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -52,6 +66,8 @@ describe("assurance actions", () => {
       state: "missing",
       document: null,
       counts: { components: 0, models: 0 },
+      findings: emptyFindings,
+      scanner: noScanner,
     });
   });
 });

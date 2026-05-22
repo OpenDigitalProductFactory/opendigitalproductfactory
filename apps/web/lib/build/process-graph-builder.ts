@@ -411,7 +411,10 @@ export function buildTaskGraph(
     return { nodes: [], edges: [] };
   }
 
-  const execPhases = buildDependencyGraph(fileStructure, tasks);
+  // `fileStructure` is typed required on BuildPlanDoc but lives in a Prisma
+  // JSON column with no runtime shape enforcement; guard so a partial plan
+  // does not throw inside buildDependencyGraph.
+  const execPhases = buildDependencyGraph(fileStructure ?? [], tasks);
   const nodes: ProcessNode[] = [];
   const edges: ProcessEdge[] = [];
 

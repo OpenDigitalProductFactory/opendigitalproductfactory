@@ -15,6 +15,7 @@
 
 import { readFileSync } from "node:fs";
 import { basename, extname } from "node:path";
+import path from "node:path";
 
 // Split on both POSIX and Windows separators so callers can pass either flavor
 // of path (URL-style "/x/y/z.md" or native "C:\x\y\z.md") and get the same
@@ -118,9 +119,50 @@ export function deriveSourceTypeFromPath(filePath: string): RawSourceType | null
 // ─── Frontmatter helpers ────────────────────────────────────────────────────
 
 /**
+ * Allowed roots for raw-source ingest from MCP-callable callers.
+ * Exported so the MCP wrapper (mcp-tools.ts wiki_ingest) can apply
+ * the gate at the trust boundary — library callers (tests, internal
+ * use) bypass this and trust their own input.
+ */
+export const ALLOWED_INGEST_ROOTS = [
+  "docs/founder-kernel/raw-sources",
+  "docs/founder-kernel/wiki",
+  "docs/superpowers/specs",
+  "docs/superpowers/plans",
+  "docs/wiki-sources",
+] as const;
+
+/**
+ * CodeQL #62 (js/path-injection) gate for MCP-supplied paths. The
+ * wiki_ingest MCP tool calls this BEFORE handing the path to
+ * ingestRawSourceFromFile. Library callers don't need to (they have
+ * their own trust model).
+ */
+export function assertAllowedIngestPath(filePath: string): string {
+  const resolved = path.resolve(filePath);
+  const projectRoot = process.env.PROJECT_ROOT
+    ? path.resolve(process.env.PROJECT_ROOT)
+    : process.cwd();
+  for (const root of ALLOWED_INGEST_ROOTS) {
+    const allowedAbs = path.resolve(projectRoot, root);
+    const rel = path.relative(allowedAbs, resolved);
+    if (rel && !rel.startsWith("..") && !path.isAbsolute(rel)) {
+      return resolved;
+    }
+  }
+  throw new Error(
+    `wiki_ingest: filePath "${filePath}" is outside the allowed source roots ` +
+      `(${ALLOWED_INGEST_ROOTS.join(", ")}). Refusing to read.`,
+  );
+}
+
+/**
  * Read a markdown file and parse its frontmatter when present. Files without
  * a `---` delimiter fall through with empty frontmatter and the entire file
  * body — the caller still gets a citable raw source, it just has no metadata.
+ *
+ * Trust model: this function trusts the caller's `filePath`. MCP-callable
+ * entry points must run `assertAllowedIngestPath()` first.
  */
 function readSourceFile(filePath: string): {
   frontmatter: Partial<RawSourceFrontmatter>;
