@@ -1,4 +1,8 @@
 import { describe, it, expect } from "vitest";
+import {
+  getCapabilityApplicability,
+  readActivationProfile,
+} from "../activation-profile";
 import { ALL_ARCHETYPES } from "./index";
 
 describe("archetype catalog", () => {
@@ -40,6 +44,26 @@ describe("archetype catalog", () => {
     const msp = ALL_ARCHETYPES.find((a) => a.archetypeId === "it-managed-services");
     expect(msp).toBeDefined();
     expect(msp?.activationProfile?.profileType).toBe("managed-service-provider");
+    expect(msp?.activationProfile?.axes).toMatchObject({
+      form: "services",
+      delivery: "hybrid",
+      primaryConsumer: "business",
+      consumptionChannel: "onsite-plus-portal",
+      commercialModel: "recurring-agreement",
+      provisioning: "account-and-entitlement",
+      platform: "no",
+    });
+    expect(msp?.activationProfile?.portfolios?.manufactureAndDeliver).toMatchObject({
+      scope: "primary",
+      it4itStages: ["detect-to-correct", "deploy-to-operate", "request-to-fulfill"],
+    });
+    expect(msp?.activationProfile?.capabilityOverrides).toEqual([
+      {
+        capabilityKey: "remote-support",
+        applicability: "recommended",
+        reason: "Consent gating is not yet automated.",
+      },
+    ]);
     expect(msp?.activationProfile?.modules).toContain("customer-estate");
     expect(msp?.activationProfile?.modules).toContain("service-agreements");
     expect(msp?.activationProfile?.modules).toContain("service-operations");
@@ -47,6 +71,29 @@ describe("archetype catalog", () => {
     expect(msp?.activationProfile?.estateSeparation).toBe("strict");
     expect(msp?.activationProfile?.seededConfigurationItemTypes?.some((item) => item.key === "endpoint-security-license")).toBe(true);
     expect(msp?.activationProfile?.seededChargeModels?.some((model) => model.key === "pass_through")).toBe(true);
+
+    const normalized = readActivationProfile(msp?.activationProfile);
+    expect(getCapabilityApplicability(normalized, "customer-estate")).toBe("required");
+    expect(getCapabilityApplicability(normalized, "remote-support")).toBe("recommended");
+  });
+
+  it("hair salon uses appointment checkout without customer-estate activation", () => {
+    const salon = ALL_ARCHETYPES.find((a) => a.archetypeId === "hair-salon");
+    expect(salon).toBeDefined();
+    expect(salon?.activationProfile?.axes).toMatchObject({
+      form: "services",
+      delivery: "physical",
+      primaryConsumer: "individual",
+      consumptionChannel: "physical",
+      commercialModel: "appointment-checkout",
+      provisioning: "account-with-billing",
+      platform: "no",
+    });
+
+    const normalized = readActivationProfile(salon?.activationProfile);
+    expect(getCapabilityApplicability(normalized, "appointment-checkout")).toBe("required");
+    expect(getCapabilityApplicability(normalized, "point-of-sale")).toBe("required");
+    expect(getCapabilityApplicability(normalized, "customer-estate")).toBe("not-applicable");
   });
 
   it("includes a software-platform archetype for DPF-style product sellers", () => {

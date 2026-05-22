@@ -1,0 +1,378 @@
+import {
+  deriveBillingPatternProfile,
+  deriveCapabilityApplicability,
+} from "./applicability-rules";
+import {
+  isCapabilityKey,
+  type CapabilityKey,
+} from "./capability-registry";
+import type {
+  ActivationProfile,
+  ArchetypeModule,
+  BillingPatternProfile,
+  CapabilityActivation,
+  CapabilityApplicability,
+  CapabilityOverride,
+  CommercialModel,
+  ConsumptionChannel,
+  CustomerGraphMode,
+  EstateSeparationMode,
+  It4ItStage,
+  OperatingModelAxes,
+  OperatingModelDelivery,
+  OperatingModelForm,
+  PlatformEcosystem,
+  PortfolioDecomposition,
+  PortfolioScope,
+  PrimaryConsumer,
+  ProvisioningModel,
+} from "./types";
+
+type UnknownRecord = Record<string, unknown>;
+
+const MODULES = new Set<ArchetypeModule>([
+  "customer-estate",
+  "service-agreements",
+  "billing-readiness",
+  "service-operations",
+  "projects",
+  "lifecycle-signals",
+  "integrations",
+]);
+
+const PROFILE_TYPES = new Set(["standard", "managed-service-provider"] as const);
+const BILLING_MODES = new Set(["none", "prepared-not-prescribed"] as const);
+const GRAPH_MODES = new Set<CustomerGraphMode>(["none", "separate-customer-projection"]);
+const ESTATE_MODES = new Set<EstateSeparationMode>(["shared", "strict"]);
+
+const FORM_VALUES = new Set<OperatingModelForm>(["goods", "services"]);
+const DELIVERY_VALUES = new Set<OperatingModelDelivery>(["digital", "physical", "hybrid"]);
+const PRIMARY_CONSUMER_VALUES = new Set<PrimaryConsumer>([
+  "individual",
+  "household",
+  "business",
+  "patient-and-payer",
+  "channel-partner",
+  "internal",
+]);
+const CHANNEL_VALUES = new Set<ConsumptionChannel>([
+  "physical",
+  "web-app",
+  "portal-api",
+  "sales-assisted",
+  "onsite-plus-portal",
+  "api-portal-cli",
+  "multi-channel",
+  "portal-dashboard",
+]);
+const COMMERCIAL_MODEL_VALUES = new Set<CommercialModel>([
+  "transactional",
+  "subscription",
+  "recurring-agreement",
+  "usage-based",
+  "account-based-fees",
+  "encounter-based",
+  "appointment-checkout",
+  "point-of-sale",
+  "hybrid",
+]);
+const PROVISIONING_VALUES = new Set<ProvisioningModel>([
+  "none",
+  "account-with-billing",
+  "account-and-entitlement",
+  "account-with-kyc",
+  "device-bound",
+  "episode-of-care",
+]);
+const PLATFORM_VALUES = new Set<PlatformEcosystem>(["no", "yes-marketplace", "yes-developer"]);
+const PORTFOLIO_SCOPES = new Set<PortfolioScope>(["absent", "minimal", "standard", "primary"]);
+const IT4IT_STAGES = new Set<It4ItStage>([
+  "strategy-to-portfolio",
+  "requirement-to-deploy",
+  "request-to-fulfill",
+  "detect-to-correct",
+  "deploy-to-operate",
+]);
+const APPLICABILITY_VALUES = new Set<CapabilityApplicability>([
+  "required",
+  "recommended",
+  "optional",
+  "hidden",
+  "not-applicable",
+]);
+
+export interface NormalizedActivationProfile extends ActivationProfile {
+  axes: OperatingModelAxes;
+  portfolios: PortfolioDecomposition;
+  capabilityOverrides: CapabilityOverride[];
+  billingProfile: BillingPatternProfile;
+  capabilityActivations: CapabilityActivation[];
+}
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function readAxes(raw: unknown): OperatingModelAxes | null {
+  if (!isRecord(raw)) return null;
+
+  const axes = raw as Partial<OperatingModelAxes>;
+  if (
+    !FORM_VALUES.has(axes.form as OperatingModelForm) ||
+    !DELIVERY_VALUES.has(axes.delivery as OperatingModelDelivery) ||
+    !PRIMARY_CONSUMER_VALUES.has(axes.primaryConsumer as PrimaryConsumer) ||
+    !CHANNEL_VALUES.has(axes.consumptionChannel as ConsumptionChannel) ||
+    !COMMERCIAL_MODEL_VALUES.has(axes.commercialModel as CommercialModel) ||
+    !PROVISIONING_VALUES.has(axes.provisioning as ProvisioningModel) ||
+    !PLATFORM_VALUES.has(axes.platform as PlatformEcosystem)
+  ) {
+    return null;
+  }
+
+  return {
+    form: axes.form as OperatingModelForm,
+    delivery: axes.delivery as OperatingModelDelivery,
+    primaryConsumer: axes.primaryConsumer as PrimaryConsumer,
+    consumptionChannel: axes.consumptionChannel as ConsumptionChannel,
+    commercialModel: axes.commercialModel as CommercialModel,
+    provisioning: axes.provisioning as ProvisioningModel,
+    platform: axes.platform as PlatformEcosystem,
+  };
+}
+
+function readPortfolioProfile(raw: unknown) {
+  if (!isRecord(raw) || !PORTFOLIO_SCOPES.has(raw.scope as PortfolioScope)) {
+    return null;
+  }
+
+  const it4itStages = raw.it4itStages;
+  const offerings = raw.offerings;
+
+  if (
+    it4itStages !== undefined &&
+    (!Array.isArray(it4itStages) ||
+      it4itStages.some((stage) => typeof stage !== "string" || !IT4IT_STAGES.has(stage as It4ItStage)))
+  ) {
+    return null;
+  }
+
+  if (offerings !== undefined && !isStringArray(offerings)) {
+    return null;
+  }
+
+  return {
+    scope: raw.scope as PortfolioScope,
+    ...(it4itStages ? { it4itStages: it4itStages as It4ItStage[] } : {}),
+    ...(offerings ? { offerings } : {}),
+  };
+}
+
+function readPortfolios(raw: unknown): PortfolioDecomposition | null {
+  if (!isRecord(raw)) return null;
+
+  const foundational = readPortfolioProfile(raw.foundational);
+  const manufactureAndDeliver = readPortfolioProfile(raw.manufactureAndDeliver);
+  const forEmployees = readPortfolioProfile(raw.forEmployees);
+  const productsAndServicesSold = readPortfolioProfile(raw.productsAndServicesSold);
+
+  if (!foundational || !manufactureAndDeliver || !forEmployees || !productsAndServicesSold) {
+    return null;
+  }
+
+  return {
+    foundational,
+    manufactureAndDeliver,
+    forEmployees,
+    productsAndServicesSold,
+  };
+}
+
+function readCapabilityOverrides(raw: unknown): CapabilityOverride[] | null {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) return null;
+
+  const overrides: CapabilityOverride[] = [];
+  for (const item of raw) {
+    if (
+      !isRecord(item) ||
+      typeof item.capabilityKey !== "string" ||
+      !isCapabilityKey(item.capabilityKey) ||
+      typeof item.applicability !== "string" ||
+      !APPLICABILITY_VALUES.has(item.applicability as CapabilityApplicability) ||
+      typeof item.reason !== "string" ||
+      item.reason.trim().length === 0
+    ) {
+      return null;
+    }
+
+    overrides.push({
+      capabilityKey: item.capabilityKey,
+      applicability: item.applicability as CapabilityApplicability,
+      reason: item.reason,
+    });
+  }
+
+  return overrides;
+}
+
+function isManagedServiceProviderLegacyProfile(input: Pick<ActivationProfile, "profileType" | "modules" | "customerGraph" | "estateSeparation">): boolean {
+  return (
+    input.profileType === "managed-service-provider" ||
+    input.modules.includes("customer-estate") ||
+    input.customerGraph === "separate-customer-projection" ||
+    input.estateSeparation === "strict"
+  );
+}
+
+function inferLegacyAxes(input: Pick<ActivationProfile, "profileType" | "modules" | "customerGraph" | "estateSeparation" | "billingReadinessMode">): OperatingModelAxes {
+  if (isManagedServiceProviderLegacyProfile(input)) {
+    return {
+      form: "services",
+      delivery: "hybrid",
+      primaryConsumer: "business",
+      consumptionChannel: "onsite-plus-portal",
+      commercialModel:
+        input.billingReadinessMode === "prepared-not-prescribed"
+          ? "recurring-agreement"
+          : "transactional",
+      provisioning: "account-and-entitlement",
+      platform: "no",
+    };
+  }
+
+  return {
+    form: "services",
+    delivery: "physical",
+    primaryConsumer: "individual",
+    consumptionChannel: "web-app",
+    commercialModel: "transactional",
+    provisioning: "none",
+    platform: "no",
+  };
+}
+
+function inferLegacyPortfolios(input: Pick<ActivationProfile, "profileType" | "modules" | "customerGraph" | "estateSeparation">): PortfolioDecomposition {
+  if (isManagedServiceProviderLegacyProfile(input)) {
+    return {
+      foundational: { scope: "minimal" },
+      manufactureAndDeliver: {
+        scope: "primary",
+        it4itStages: ["detect-to-correct", "deploy-to-operate", "request-to-fulfill"],
+      },
+      forEmployees: { scope: "standard" },
+      productsAndServicesSold: { scope: "primary" },
+    };
+  }
+
+  return {
+    foundational: { scope: "minimal" },
+    manufactureAndDeliver: { scope: "minimal" },
+    forEmployees: { scope: "minimal" },
+    productsAndServicesSold: { scope: "primary" },
+  };
+}
+
+export function readActivationProfile(raw: unknown): NormalizedActivationProfile | null {
+  if (!isRecord(raw)) return null;
+
+  const profileType = raw.profileType;
+  const modules = raw.modules;
+  const billingReadinessMode = raw.billingReadinessMode;
+  const customerGraph = raw.customerGraph;
+  const estateSeparation = raw.estateSeparation;
+
+  if (typeof profileType !== "string" || !PROFILE_TYPES.has(profileType as ActivationProfile["profileType"])) {
+    return null;
+  }
+
+  if (
+    !Array.isArray(modules) ||
+    modules.some((module) => typeof module !== "string" || !MODULES.has(module as ArchetypeModule))
+  ) {
+    return null;
+  }
+
+  if (
+    typeof billingReadinessMode !== "string" ||
+    !BILLING_MODES.has(billingReadinessMode as ActivationProfile["billingReadinessMode"])
+  ) {
+    return null;
+  }
+
+  if (typeof customerGraph !== "string" || !GRAPH_MODES.has(customerGraph as CustomerGraphMode)) {
+    return null;
+  }
+
+  if (typeof estateSeparation !== "string" || !ESTATE_MODES.has(estateSeparation as EstateSeparationMode)) {
+    return null;
+  }
+
+  const legacyShape = {
+    profileType: profileType as ActivationProfile["profileType"],
+    modules: modules as ArchetypeModule[],
+    billingReadinessMode: billingReadinessMode as ActivationProfile["billingReadinessMode"],
+    customerGraph: customerGraph as CustomerGraphMode,
+    estateSeparation: estateSeparation as EstateSeparationMode,
+  };
+
+  const axes = raw.axes === undefined ? inferLegacyAxes(legacyShape) : readAxes(raw.axes);
+  if (!axes) return null;
+
+  const portfolios =
+    raw.portfolios === undefined ? inferLegacyPortfolios(legacyShape) : readPortfolios(raw.portfolios);
+  if (!portfolios) return null;
+
+  const capabilityOverrides = readCapabilityOverrides(raw.capabilityOverrides);
+  if (!capabilityOverrides) return null;
+
+  const capabilityMap = deriveCapabilityApplicability(axes, portfolios, capabilityOverrides);
+  const billingProfile = deriveBillingPatternProfile(axes);
+
+  return {
+    ...legacyShape,
+    axes,
+    portfolios,
+    capabilityOverrides,
+    billingProfile,
+    capabilityActivations: Array.from(capabilityMap.values()),
+    ...(raw.seededServiceCategories !== undefined && isStringArray(raw.seededServiceCategories)
+      ? { seededServiceCategories: raw.seededServiceCategories }
+      : {}),
+    ...(Array.isArray(raw.seededConfigurationItemTypes)
+      ? { seededConfigurationItemTypes: raw.seededConfigurationItemTypes as ActivationProfile["seededConfigurationItemTypes"] }
+      : {}),
+    ...(Array.isArray(raw.seededBillingUnitTypes)
+      ? { seededBillingUnitTypes: raw.seededBillingUnitTypes as ActivationProfile["seededBillingUnitTypes"] }
+      : {}),
+    ...(Array.isArray(raw.seededChargeModels)
+      ? { seededChargeModels: raw.seededChargeModels as ActivationProfile["seededChargeModels"] }
+      : {}),
+  };
+}
+
+export function getCapabilityActivation(
+  profile: NormalizedActivationProfile | null | undefined,
+  capabilityKey: CapabilityKey | string,
+): CapabilityActivation | null {
+  if (!profile || typeof capabilityKey !== "string") return null;
+  return profile.capabilityActivations.find((activation) => activation.capabilityKey === capabilityKey) ?? null;
+}
+
+export function getCapabilityApplicability(
+  profile: NormalizedActivationProfile | null | undefined,
+  capabilityKey: CapabilityKey | string,
+): CapabilityApplicability | null {
+  return getCapabilityActivation(profile, capabilityKey)?.applicability ?? null;
+}
+
+export function activationHasCapability(
+  profile: NormalizedActivationProfile | null | undefined,
+  capabilityKey: CapabilityKey | string,
+): boolean {
+  const applicability = getCapabilityApplicability(profile, capabilityKey);
+  return applicability === "required" || applicability === "recommended" || applicability === "optional";
+}

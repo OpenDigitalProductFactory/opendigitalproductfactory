@@ -17,6 +17,29 @@ const BOOKING_CONTACT_FIELDS = [
   { name: "notes", label: "Additional notes", type: "textarea" as const, required: false },
 ];
 
+const BEAUTY_ACTIVATION_PROFILE: ArchetypeDefinition["activationProfile"] = {
+  profileType: "standard",
+  modules: ["integrations"],
+  billingReadinessMode: "none",
+  customerGraph: "none",
+  estateSeparation: "shared",
+  axes: {
+    form: "services",
+    delivery: "physical",
+    primaryConsumer: "individual",
+    consumptionChannel: "physical",
+    commercialModel: "appointment-checkout",
+    provisioning: "account-with-billing",
+    platform: "no",
+  },
+  portfolios: {
+    foundational: { scope: "minimal" },
+    manufactureAndDeliver: { scope: "minimal" },
+    forEmployees: { scope: "minimal" },
+    productsAndServicesSold: { scope: "primary" },
+  },
+};
+
 export const beautyPersonalCareArchetypes: ArchetypeDefinition[] = [
   {
     archetypeId: "hair-salon",
@@ -46,6 +69,7 @@ export const beautyPersonalCareArchetypes: ArchetypeDefinition[] = [
       { name: "stylistPreference", label: "Stylist preference", type: "text" as const, required: false, placeholder: "Leave blank for any available" },
     ],
     schedulingDefaults: BEAUTY_SCHEDULING,
+    activationProfile: BEAUTY_ACTIVATION_PROFILE,
   },
   {
     archetypeId: "barber-shop",
@@ -72,6 +96,7 @@ export const beautyPersonalCareArchetypes: ArchetypeDefinition[] = [
       { name: "barberPreference", label: "Barber preference", type: "text" as const, required: false, placeholder: "Leave blank for next available" },
     ],
     schedulingDefaults: BEAUTY_SCHEDULING,
+    activationProfile: BEAUTY_ACTIVATION_PROFILE,
   },
   {
     archetypeId: "nail-salon",
@@ -99,6 +124,7 @@ export const beautyPersonalCareArchetypes: ArchetypeDefinition[] = [
       { name: "nailLength", label: "Nail length preference", type: "select" as const, required: false, options: ["Short", "Medium", "Long", "Extra long"] },
     ],
     schedulingDefaults: BEAUTY_SCHEDULING,
+    activationProfile: BEAUTY_ACTIVATION_PROFILE,
   },
   {
     archetypeId: "beauty-spa",
@@ -128,6 +154,7 @@ export const beautyPersonalCareArchetypes: ArchetypeDefinition[] = [
       { name: "allergies", label: "Allergies or sensitivities", type: "textarea" as const, required: false },
     ],
     schedulingDefaults: BEAUTY_SCHEDULING,
+    activationProfile: BEAUTY_ACTIVATION_PROFILE,
   },
   {
     archetypeId: "personal-trainer",
@@ -155,5 +182,6 @@ export const beautyPersonalCareArchetypes: ArchetypeDefinition[] = [
       { name: "experienceLevel", label: "Experience level", type: "select" as const, required: false, options: ["Beginner", "Intermediate", "Advanced"] },
     ],
     schedulingDefaults: BEAUTY_SCHEDULING,
+    activationProfile: BEAUTY_ACTIVATION_PROFILE,
   },
 ];
