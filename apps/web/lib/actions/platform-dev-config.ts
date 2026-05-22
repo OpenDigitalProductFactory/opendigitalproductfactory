@@ -459,11 +459,18 @@ export async function validateGitHubToken(
       const probeRepo = UPSTREAM_OWNER_REPO_FALLBACK.split("/")[1];
       // BI-5E53A265 fix (CodeQL alert #34): assertSafeOutboundUrl pins
       // the host so the user-supplied probeOwner can't redirect the
-      // probe anywhere else. Same defense pattern as github-fork.ts.
+      // probe anywhere else. The explicit `probeUrl.hostname` check
+      // below is the pattern CodeQL's HostnameSanitizer recognizes for
+      // js/request-forgery; the helper's internal check is invisible
+      // to that query. Same defense pattern as github-fork.ts.
       const probeUrl = assertSafeOutboundUrl(
         `https://api.github.com/repos/${probeOwner}/${probeRepo}`,
         { allowedHosts: ["api.github.com"] },
       );
+      if (probeUrl.hostname !== "api.github.com") {
+        // Defense-in-depth — helper already enforced this.
+        throw new Error(`Unexpected host after sanitization: ${probeUrl.hostname}`);
+      }
 
       const repoResponse = await fetch(probeUrl.href, {
         headers: {

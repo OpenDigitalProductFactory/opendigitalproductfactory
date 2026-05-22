@@ -37,16 +37,22 @@ export async function forkExistsAndIsFork(params: {
   token: string;
 }): Promise<ForkCheckResult> {
   const { owner, repo, upstreamOwner, upstreamRepo, token } = params;
-  // BI-5E53A265 fix (CodeQL alert #35). owner/repo flow from caller
-  // into a fetch URL. Host is hardcoded to api.github.com, but the
-  // dataflow is still user→fetch. assertSafeOutboundUrl pins the
-  // host so a future refactor can't accidentally let the URL go
-  // anywhere else, and the validated `URL` return type makes the
-  // sanitizer pattern legible to CodeQL.
+  // BI-5E53A265 fix (CodeQL alert #35). owner/repo flow into a fetch URL.
+  // Host is hardcoded to api.github.com, but the dataflow is still
+  // user→fetch. assertSafeOutboundUrl pins the host; the explicit
+  // `url.hostname !== "api.github.com"` check below is the pattern
+  // CodeQL's HostnameSanitizer recognizes for js/request-forgery (the
+  // helper's internal check is invisible to that query).
   const url = assertSafeOutboundUrl(
     `https://api.github.com/repos/${owner}/${repo}`,
     { allowedHosts: ["api.github.com"] },
   );
+  if (url.hostname !== "api.github.com") {
+    // Defense-in-depth + CodeQL sanitizer signal. Helper already
+    // enforced this; throwing here would only fire if the helper
+    // regressed silently.
+    throw new Error(`Unexpected host after sanitization: ${url.hostname}`);
+  }
   const res = await fetch(url.href, { headers: getHeaders(token) });
 
   if (res.status === 404) return { exists: false, isFork: false };
