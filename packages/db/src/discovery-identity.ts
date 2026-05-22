@@ -7,6 +7,7 @@ export type DiscoveredKeyInput = {
 export type InventoryEntityKeyInput = {
   entityType: string;
   naturalKey: string;
+  scopeKey?: string | null;
 };
 
 function normalizeKeyPart(value: string): string {
@@ -22,8 +23,11 @@ export function buildDiscoveredKey(input: DiscoveredKeyInput): string {
 }
 
 export function buildInventoryEntityKey(input: InventoryEntityKeyInput): string {
-  return [
+  const parts = [
+    input.scopeKey ? normalizeKeyPart(input.scopeKey) : null,
     normalizeKeyPart(input.entityType),
     normalizeKeyPart(input.naturalKey),
-  ].join(":");
+  ].filter((part): part is string => Boolean(part));
+
+  return parts.join(":");
 }
