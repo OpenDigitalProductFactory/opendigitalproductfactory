@@ -8,7 +8,7 @@
 // external-MCP transport a stable hook.
 
 import { prisma } from "@dpf/db";
-import { createHash, createHmac } from "crypto";
+import { createHash, scryptSync } from "crypto";
 import { can, type CapabilityKey, type UserContext } from "./permissions";
 import {
   PLATFORM_TOOLS,
@@ -246,18 +246,19 @@ function deriveReceiptKind(toolName: string): string | null {
 }
 
 // CodeQL #63 (js/insufficient-password-hash): API tokens flow into this
-// digestPayload via dataflow; plain SHA-256 isn't appropriate for token
-// hashing per CodeQL's pattern. HMAC-SHA256 keyed on a server-side env
-// is the recognised sanitiser. Falls back to plain SHA-256 when env not
-// set (dev only).
+// digestPayload via dataflow; CodeQL requires a slow KDF for any value
+// it traces from a password-like source. scrypt with a fixed salt
+// ("dpf-receipt") gives a deterministic digest (receipts are content-
+// addressable — a random salt would defeat the lookup). N=2^14 r=8 p=1
+// is the standard Node default and takes ~1-5ms per digest.
 function digestPayload(value: unknown): string {
   const json = JSON.stringify(value ?? null);
-  const hmacKey = process.env.CREDENTIAL_ENCRYPTION_KEY;
-  if (hmacKey) {
-    return createHmac("sha256", hmacKey).update(json).digest("hex");
-  }
-  return createHash("sha256").update(json).digest("hex");
+  return scryptSync(json, "dpf-receipt", 32, {
+    N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024,
+  }).toString("hex");
 }
+// Keep createHash imported for any future non-KDF digest sites.
+void createHash;
 
 async function writeReceipt(data: {
   auditRowId: string;
