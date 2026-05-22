@@ -12,6 +12,7 @@ import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
 import { buildReviewVerification } from "./build-review-verification";
 import { assuranceBomGenerate } from "./assurance-bom";
+import { assuranceScanRun } from "./assurance-scan";
 import { deliberationRun } from "./deliberation-run";
 import {
   governedBacklogTeeUpRequested,
@@ -54,6 +55,7 @@ export const allFunctions = [
   brandExtract,
   buildReviewVerification,
   assuranceBomGenerate,
+  assuranceScanRun,
   deliberationRun,
   governedBacklogTeeUpScheduled,
   governedBacklogTeeUpRequested,

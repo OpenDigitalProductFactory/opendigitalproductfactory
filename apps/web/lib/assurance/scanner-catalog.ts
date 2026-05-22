@@ -1,13 +1,23 @@
 import type { ApprovedTool, ToolVerdict } from "@/lib/evaluate/tool-evaluation";
 
 export type AssuranceScannerReadinessState = "ready" | "needs-evaluation";
-export type AssuranceScannerReadinessReason = "approved-scanner-available" | "no-approved-scanner";
+export type AssuranceScannerReadinessReason =
+  | "approved-scanner-available"
+  | "platform-native-scanner-available"
+  | "no-approved-scanner";
 
 export interface AssuranceScannerReadiness {
   state: AssuranceScannerReadinessState;
   approvedScannerCount: number;
   scannerNames: string[];
   reason: AssuranceScannerReadinessReason;
+}
+
+const PLATFORM_NATIVE_SCANNERS = ["pnpm-audit"] as const;
+export type PlatformNativeScanner = (typeof PLATFORM_NATIVE_SCANNERS)[number];
+
+export function getPlatformNativeScannerNames(): string[] {
+  return [...PLATFORM_NATIVE_SCANNERS];
 }
 
 type ToolEvaluationLike = {
@@ -101,11 +111,16 @@ function uniqueNames(names: string[]): string[] {
 export function resolveAssuranceScannerReadiness(input: {
   approvedTools: ApprovedAssuranceTool[];
   evaluations: ToolEvaluationLike[];
+  includePlatformNative?: boolean;
 }): AssuranceScannerReadiness {
-  const scannerNames = uniqueNames([
+  const includeNative = input.includePlatformNative !== false;
+  const evaluatedScannerNames = uniqueNames([
     ...input.approvedTools.filter(isRegistryScanner).map((tool) => tool.toolName),
     ...input.evaluations.filter(isEvaluationScanner).map((row) => row.toolName),
   ]);
+
+  const platformNativeNames = includeNative ? getPlatformNativeScannerNames() : [];
+  const scannerNames = uniqueNames([...evaluatedScannerNames, ...platformNativeNames]);
 
   if (scannerNames.length === 0) {
     return {
@@ -116,16 +131,37 @@ export function resolveAssuranceScannerReadiness(input: {
     };
   }
 
+  if (evaluatedScannerNames.length > 0) {
+    return {
+      state: "ready",
+      approvedScannerCount: scannerNames.length,
+      scannerNames,
+      reason: "approved-scanner-available",
+    };
+  }
+
   return {
     state: "ready",
     approvedScannerCount: scannerNames.length,
     scannerNames,
-    reason: "approved-scanner-available",
+    reason: "platform-native-scanner-available",
   };
 }
 
 export function noApprovedScannerReadiness(): AssuranceScannerReadiness {
-  return resolveAssuranceScannerReadiness({ approvedTools: [], evaluations: [] });
+  return resolveAssuranceScannerReadiness({
+    approvedTools: [],
+    evaluations: [],
+    includePlatformNative: false,
+  });
+}
+
+export function platformNativeOnlyReadiness(): AssuranceScannerReadiness {
+  return resolveAssuranceScannerReadiness({
+    approvedTools: [],
+    evaluations: [],
+    includePlatformNative: true,
+  });
 }
 
 export async function getAssuranceScannerReadiness(

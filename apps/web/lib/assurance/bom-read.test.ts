@@ -12,11 +12,11 @@ const emptyFindings = {
   byKind: {},
 };
 
-const noScanner = {
-  state: "needs-evaluation",
-  approvedScannerCount: 0,
-  scannerNames: [],
-  reason: "no-approved-scanner",
+const platformNativeScanner = {
+  state: "ready",
+  approvedScannerCount: 1,
+  scannerNames: ["pnpm-audit"],
+  reason: "platform-native-scanner-available",
 };
 
 describe("getLatestBomSummaryForBuild", () => {
@@ -28,7 +28,7 @@ describe("getLatestBomSummaryForBuild", () => {
       document: null,
       counts: { components: 0, models: 0 },
       findings: emptyFindings,
-      scanner: noScanner,
+      scanner: platformNativeScanner,
     });
   });
 
@@ -62,7 +62,7 @@ describe("getLatestBomSummaryForBuild", () => {
       },
       counts: { components: 3, models: 1 },
       findings: emptyFindings,
-      scanner: noScanner,
+      scanner: platformNativeScanner,
     });
     expect(db.bomDocument.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: { buildId: "BUILD-1" },
@@ -91,7 +91,7 @@ describe("getLatestBomSummaryForProduct", () => {
 
     expect(summary.state).toBe("stale");
     expect(summary.findings).toEqual(emptyFindings);
-    expect(summary.scanner).toEqual(noScanner);
+    expect(summary.scanner).toEqual(platformNativeScanner);
     expect(db.bomDocument.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: { digitalProductId: "product-1" },
     }));
@@ -140,7 +140,7 @@ describe("getLatestBomComponentsForProduct", () => {
         },
       ],
       findingSummary: emptyFindings,
-      scanner: noScanner,
+      scanner: platformNativeScanner,
     });
   });
 });

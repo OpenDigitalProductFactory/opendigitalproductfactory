@@ -13,6 +13,11 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+vi.mock("@/lib/actions/assurance", () => ({
+  setAssuranceFindingStatus: vi.fn(),
+  requestBacklogFromAssuranceFinding: vi.fn(),
+}));
+
 afterEach(cleanup);
 
 const emptyFindings = {
@@ -126,5 +131,56 @@ describe("ProductSupplyChainPanel", () => {
     expect(screen.getByText("2 active")).toBeInTheDocument();
     expect(screen.getByText("1 blocking")).toBeInTheDocument();
     expect(screen.getByText("Example Scanner")).toBeInTheDocument();
+  });
+
+  it("renders the active findings section in read-only mode", () => {
+    render(
+      <ProductSupplyChainPanel
+        productId="prod-1"
+        latestBom={{
+          documentId: "bom_abc",
+          generatedAt: new Date("2026-05-22T00:00:00.000Z"),
+          digest: "abcdef1234567890",
+          componentCount: 1,
+        }}
+        components={[
+          {
+            name: "vulnerable-lib",
+            version: "1.2.0",
+            componentType: "library",
+            ecosystem: "npm",
+            packageUrl: "pkg:npm/vulnerable-lib@1.2.0",
+          },
+        ]}
+        findingSummary={emptyFindings}
+        scanner={noScanner}
+        findings={[
+          {
+            findingKey: "fk-1",
+            findingKind: "vulnerability",
+            title: "Critical issue in vulnerable-lib",
+            status: "open",
+            policySeverity: "critical",
+            releaseImpact: "block",
+            adapterKey: "pnpm-audit",
+            vendorIdentifier: "GHSA-1111",
+            affectedType: "bom-component",
+            affectedId: "key-vulnerable",
+            lastSeenAt: new Date("2026-05-22T12:00:00.000Z"),
+            component: {
+              name: "vulnerable-lib",
+              version: "1.2.0",
+              packageUrl: "pkg:npm/vulnerable-lib@1.2.0",
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Active findings")).toBeInTheDocument();
+    expect(screen.getByText("Critical issue in vulnerable-lib")).toBeInTheDocument();
+    // Read-only at product level - no controls.
+    expect(screen.queryByTestId("assurance-finding-status-select")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("assurance-finding-create-backlog")).not.toBeInTheDocument();
   });
 });
