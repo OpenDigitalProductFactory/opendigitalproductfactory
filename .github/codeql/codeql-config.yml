@@ -1,0 +1,22 @@
+# CodeQL configuration for DPF — referenced from .github/workflows/codeql.yml.
+#
+# The dpf/sanitizers model pack (under .github/codeql/dpf-sanitizers/) declares
+# our security helpers as canonical sanitisers, so CodeQL stops flagging every
+# caller of assertSafeOutboundUrl / assertAllowedBinary / etc. as a tainted-
+# flow false positive.
+#
+# Documented in: docs/security/codeql-advanced-setup.md
+
+name: "DPF CodeQL Config"
+
+# Use the standard security-extended query suite — same coverage as the
+# default setup baseline. (security-and-quality adds the "quality" pack
+# which catches code-style alerts — left out so we don't fight noise.)
+queries:
+  - uses: security-extended
+
+# Load our custom data-extensions model pack so the JS sanitiser
+# declarations apply at scan time.
+packs:
+  javascript:
+    - ./.github/codeql/dpf-sanitizers

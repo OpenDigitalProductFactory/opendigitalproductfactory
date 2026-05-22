@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   CODING_AGENT_MCP_TOKEN_SCOPES,
+  MCP_TOKEN_TEMPLATES,
   WRITE_MCP_TOKEN_SCOPES,
   defaultMcpTokenScopes,
+  getMcpTokenTemplate,
+  resolveTemplateGrants,
 } from "./mcp-token-scopes";
 
 describe("defaultMcpTokenScopes", () => {
@@ -48,5 +51,78 @@ describe("defaultMcpTokenScopes", () => {
     expect(defaultMcpTokenScopes([...CODING_AGENT_MCP_TOKEN_SCOPES])).toEqual([
       ...CODING_AGENT_MCP_TOKEN_SCOPES,
     ]);
+  });
+});
+
+describe("MCP_TOKEN_TEMPLATES", () => {
+  it("exposes the canonical role catalog in display order", () => {
+    expect(MCP_TOKEN_TEMPLATES.map((t) => t.id)).toEqual([
+      "admin",
+      "development",
+      "employee_finance",
+      "employee_hr",
+      "employee_ea",
+      "employee_marketing",
+      "observer",
+      "custom",
+    ]);
+  });
+
+  it("tags each template with a coarse tier consistent with its grants", () => {
+    const admin = getMcpTokenTemplate("admin");
+    const development = getMcpTokenTemplate("development");
+    const observer = getMcpTokenTemplate("observer");
+    const custom = getMcpTokenTemplate("custom");
+
+    expect(admin?.tier).toBe("admin");
+    expect(admin?.grants).toContain("admin_write");
+    expect(admin?.grants).toContain("iac_execute");
+
+    expect(development?.tier).toBe("write");
+    expect(development?.grants).toContain("sandbox_execute");
+    expect(development?.grants).toContain("iac_execute");
+    expect(development?.grants).not.toContain("admin_write");
+
+    expect(observer?.tier).toBe("read");
+    // An observer must never have a write or sandbox_execute grant.
+    expect(observer?.grants.some((g) => g.endsWith("_write"))).toBe(false);
+    expect(observer?.grants).not.toContain("sandbox_execute");
+    expect(observer?.grants).not.toContain("iac_execute");
+
+    // Custom is a UI-only sentinel; it must not pre-select any grants.
+    expect(custom?.grants).toEqual([]);
+  });
+
+  it("groups employee surfaces under the employee category", () => {
+    const employees = MCP_TOKEN_TEMPLATES.filter((t) => t.category === "employee");
+    expect(employees.map((t) => t.id).sort()).toEqual([
+      "employee_ea",
+      "employee_finance",
+      "employee_hr",
+      "employee_marketing",
+    ]);
+    // Employee surfaces must not include the platform admin/iac grants.
+    for (const t of employees) {
+      expect(t.grants).not.toContain("admin_write");
+      expect(t.grants).not.toContain("iac_execute");
+      expect(t.grants).not.toContain("sandbox_execute");
+    }
+  });
+
+  it("returns undefined for unknown template ids", () => {
+    expect(getMcpTokenTemplate("does_not_exist")).toBeUndefined();
+  });
+});
+
+describe("resolveTemplateGrants", () => {
+  it("filters template grants down to the install's available scope catalog", () => {
+    const development = getMcpTokenTemplate("development")!;
+    const resolved = resolveTemplateGrants(development, ["backlog_read", "iac_execute"]);
+    expect(resolved.sort()).toEqual(["backlog_read", "iac_execute"]);
+  });
+
+  it("returns empty when no grants overlap (do-not-issue signal)", () => {
+    const finance = getMcpTokenTemplate("employee_finance")!;
+    expect(resolveTemplateGrants(finance, ["unrelated_grant"])).toEqual([]);
   });
 });

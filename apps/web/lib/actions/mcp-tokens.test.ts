@@ -30,13 +30,66 @@ import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 import {
   copyMyMcpToken,
   issueMyMcpToken,
+  issueMyTemplateMcpToken,
   issueMyWriteMcpToken,
   listAvailableMcpScopes,
+  listMcpTokenTemplates,
   listMyMcpTokens,
   revokeMyMcpToken,
   rotateMyMcpToken,
   upgradeMyMcpTokenForCodingAgent,
 } from "./mcp-tokens";
+
+// Grant map used by the template-resolution path. Lists every grant our
+// templates reference so resolveTemplateGrants() does not silently strip
+// scopes when the test runs against the mocked catalog.
+const FULL_GRANT_MAP: Record<string, string[]> = {
+  t_a: ["architecture_read"],
+  t_b: ["backlog_read"],
+  t_c: ["code_graph_read"],
+  t_d: ["file_read"],
+  t_e: ["spec_plan_read"],
+  t_f: ["work_capsule_read"],
+  t_g: ["registry_read"],
+  t_h: ["ea_graph_read"],
+  t_i: ["thread_read"],
+  t_j: ["deliberation_read"],
+  t_k: ["release_plan_read"],
+  t_l: ["agent_control_read"],
+  t_m: ["telemetry_read"],
+  t_n: ["portfolio_read"],
+  t_o: ["document_read"],
+  t_p: ["admin_read"],
+  t_q: ["marketing_read"],
+  t_r: ["consumer_read"],
+  t_s: ["backlog_write"],
+  t_t: ["backlog_triage"],
+  t_u: ["build_promote"],
+  t_v: ["build_plan_write"],
+  t_w: ["work_capsule_write"],
+  t_x: ["work_capsule_adopt"],
+  t_y: ["sandbox_execute"],
+  t_z: ["iac_execute"],
+  t_aa: ["deployment_plan_create"],
+  t_ab: ["release_gate_create"],
+  t_ac: ["release_plan_create"],
+  t_ad: ["deliberation_create"],
+  t_ae: ["thread_write"],
+  t_af: ["decision_record_create"],
+  t_ag: ["tool_evaluation_create"],
+  t_ah: ["document_write"],
+  t_ai: ["ea_graph_write"],
+  t_aj: ["registry_write"],
+  t_ak: ["document_publish"],
+  t_al: ["consumer_write"],
+  t_am: ["policy_write"],
+  t_an: ["financial_report_create"],
+  t_ao: ["marketing_write"],
+  t_ap: ["web_search"],
+  t_aq: ["external_registry_search"],
+  t_ar: ["data_governance_validate"],
+  t_as: ["admin_write"],
+};
 
 const addScopesMock = addScopesToMcpApiToken as unknown as ReturnType<typeof vi.fn>;
 const authMock = auth as unknown as ReturnType<typeof vi.fn>;
@@ -119,8 +172,9 @@ describe("listMyMcpTokens", () => {
 });
 
 describe("issueMyWriteMcpToken", () => {
-  it("one-click issues a write-scoped token with the standard write grant set", async () => {
+  it("one-click issues a development-template token (rotation of the legacy write affordance)", async () => {
     authMock.mockResolvedValue({ user: { id: "u1" } });
+    grantMapMock.mockReturnValue(FULL_GRANT_MAP);
     issueMock.mockResolvedValue({
       ok: true,
       tokenId: "tok_write",
@@ -140,10 +194,203 @@ describe("issueMyWriteMcpToken", () => {
         userId: "u1",
         capability: "write",
         scope: "write",
-        name: "Write MCP token",
-        scopes: expect.arrayContaining(["backlog_read", "work_capsule_write"]),
+        name: "Development MCP token",
+        scopes: expect.arrayContaining([
+          "backlog_read",
+          "work_capsule_write",
+          "sandbox_execute",
+          "iac_execute",
+        ]),
       }),
     );
+  });
+});
+
+describe("listMcpTokenTemplates", () => {
+  it("returns empty for unauthenticated requests", async () => {
+    authMock.mockResolvedValue(null);
+    const result = await listMcpTokenTemplates();
+    expect(result.templates).toEqual([]);
+  });
+
+  it("returns the canonical templates with grants resolved against the install catalog", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    grantMapMock.mockReturnValue(FULL_GRANT_MAP);
+    const result = await listMcpTokenTemplates();
+    const ids = result.templates.map((t) => t.id);
+    expect(ids).toEqual([
+      "admin",
+      "development",
+      "employee_finance",
+      "employee_hr",
+      "employee_ea",
+      "employee_marketing",
+      "observer",
+      "custom",
+    ]);
+    const dev = result.templates.find((t) => t.id === "development");
+    expect(dev?.tier).toBe("write");
+    expect(dev?.grants).toEqual(expect.arrayContaining(["iac_execute", "sandbox_execute"]));
+    const observer = result.templates.find((t) => t.id === "observer");
+    // Observer must never carry a *_write grant.
+    expect(observer?.grants.some((g) => g.endsWith("_write"))).toBe(false);
+  });
+
+  it("strips template grants that the install does not expose", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    // Bare-bones catalog: only backlog_read is registered.
+    grantMapMock.mockReturnValue({ tool_a: ["backlog_read"] });
+    const result = await listMcpTokenTemplates();
+    const finance = result.templates.find((t) => t.id === "employee_finance");
+    expect(finance?.grants).toEqual(["backlog_read"]);
+  });
+});
+
+describe("issueMyTemplateMcpToken", () => {
+  it("rejects unauthenticated callers", async () => {
+    authMock.mockResolvedValue(null);
+    const result = await issueMyTemplateMcpToken({
+      templateId: "development",
+      name: "agent",
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("unauthorized");
+    expect(issueMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects unknown templates", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    const result = await issueMyTemplateMcpToken({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      templateId: "not_a_real_template" as any,
+      name: "agent",
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("invalid_template");
+    expect(issueMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses to issue from the custom template (use issueMyMcpToken instead)", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    const result = await issueMyTemplateMcpToken({
+      templateId: "custom",
+      name: "agent",
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("invalid_template");
+  });
+
+  it("fails when the install does not expose any of the template's grants", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    grantMapMock.mockReturnValue({ tool_a: ["unrelated_grant"] });
+    const result = await issueMyTemplateMcpToken({
+      templateId: "employee_finance",
+      name: "Finance bot",
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toBe("no_resolvable_scopes");
+    expect(issueMock).not.toHaveBeenCalled();
+  });
+
+  it("issues a finance-employee token with only finance-relevant scopes", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    grantMapMock.mockReturnValue(FULL_GRANT_MAP);
+    issueMock.mockResolvedValue({
+      ok: true,
+      tokenId: "tok_fin",
+      plaintext: "dpfmcp_FIN",
+      prefix: "dpfmcp_FIN1",
+      tokenSuffix: "FIN1",
+      expiresAt: new Date("2026-08-25T00:00:00Z"),
+    });
+    const result = await issueMyTemplateMcpToken({
+      templateId: "employee_finance",
+      name: "Finance coworker",
+      expiresInDays: 90,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(true);
+    expect(issueMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "u1",
+        scope: "write",
+        capability: "write",
+        name: "Finance coworker",
+        scopes: expect.arrayContaining(["financial_report_create", "registry_read"]),
+      }),
+    );
+    const passed = issueMock.mock.calls[0]![0] as { scopes: string[] };
+    // Finance must never carry sandbox_execute or iac_execute.
+    expect(passed.scopes).not.toContain("sandbox_execute");
+    expect(passed.scopes).not.toContain("iac_execute");
+    expect(passed.scopes).not.toContain("admin_write");
+  });
+
+  it("issues an admin token at the admin tier with admin_write included", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    grantMapMock.mockReturnValue(FULL_GRANT_MAP);
+    issueMock.mockResolvedValue({
+      ok: true,
+      tokenId: "tok_admin",
+      plaintext: "dpfmcp_ADM",
+      prefix: "dpfmcp_ADM1",
+      tokenSuffix: "ADM1",
+      expiresAt: null,
+    });
+    const result = await issueMyTemplateMcpToken({
+      templateId: "admin",
+      name: "Platform admin",
+      expiresInDays: null,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(true);
+    expect(issueMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: "admin",
+        capability: "write",
+        scopes: expect.arrayContaining(["admin_write", "iac_execute"]),
+      }),
+    );
+  });
+
+  it("issues an observer token at the read tier with no *_write scopes", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    grantMapMock.mockReturnValue(FULL_GRANT_MAP);
+    issueMock.mockResolvedValue({
+      ok: true,
+      tokenId: "tok_obs",
+      plaintext: "dpfmcp_OBS",
+      prefix: "dpfmcp_OBS1",
+      tokenSuffix: "OBS1",
+      expiresAt: null,
+    });
+    const result = await issueMyTemplateMcpToken({
+      templateId: "observer",
+      name: "Read-only dashboard",
+      expiresInDays: null,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(result.ok).toBe(true);
+    expect(issueMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: "read",
+        capability: "read",
+      }),
+    );
+    const passed = issueMock.mock.calls[0]![0] as { scopes: string[] };
+    expect(passed.scopes.some((g) => g.endsWith("_write"))).toBe(false);
   });
 });
 
