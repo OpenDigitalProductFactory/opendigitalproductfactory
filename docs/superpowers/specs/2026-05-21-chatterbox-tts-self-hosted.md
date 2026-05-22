@@ -1,7 +1,7 @@
 # Chatterbox TTS — Self-Hosted Voice Synthesis
 
 **Spec ID:** 2026-05-21-chatterbox-tts-self-hosted  
-**Status:** draft  
+**Status:** shipped  
 **Author:** Mark Bodman  
 **Date:** 2026-05-21  
 **Supersedes / amends:** docs/superpowers/specs/2026-05-19-persona-voice-layer-wwtd-design.md §6 (provider layer)
@@ -48,10 +48,11 @@ This is architecturally equivalent to how `dpf-stt` (speaches/faster-whisper) re
 
 ### 3.2 Docker deployment
 
-Self-hosted server: [`devnen/Chatterbox-TTS-Server`](https://github.com/devnen/Chatterbox-TTS-Server)
+Self-hosted server: [`travisvn/chatterbox-tts-api`](https://github.com/travisvn/chatterbox-tts-api)
 - OpenAI-compatible `/v1/audio/speech` endpoint
 - Voice cloning via `voice_id` pointing to a stored reference audio file, or inline reference audio
-- NVIDIA CUDA / AMD ROCm / CPU fallback
+- NVIDIA CUDA / CPU fallback
+- Listens on port **8000** (set via `PORT=8000` env; image default is 5123)
 - Opt-in profile: `--profile tts`
 
 ### 3.3 Zero-shot cloning flow
@@ -90,7 +91,7 @@ No training step. No async job. No polling. The reference audio IS the voice pro
 
 **Docker Compose:**
 - New `dpf-tts` service under `--profile tts`
-- Image: `devnen/chatterbox-tts-server` (CUDA variant)
+- Image: `travisvn/chatterbox-tts-api:latest` (override via `DPF_TTS_IMAGE`)
 - Volume: `dpf-tts-voices` for persisting reference audio clips
 - DNS: `dpf-tts:8000`
 
