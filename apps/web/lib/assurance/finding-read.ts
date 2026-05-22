@@ -12,6 +12,25 @@ export interface AssuranceFindingSummary {
   byKind: Partial<Record<AssuranceFindingKind, number>> & Record<string, number>;
 }
 
+export interface ActiveAssuranceFindingRow {
+  findingKey: string;
+  findingKind: string;
+  title: string;
+  status: string;
+  policySeverity: AssurancePolicySeverity;
+  releaseImpact: string;
+  adapterKey: string;
+  vendorIdentifier: string;
+  affectedType: string;
+  affectedId: string;
+  lastSeenAt: Date;
+  component: null | {
+    name: string;
+    version: string | null;
+    packageUrl: string | null;
+  };
+}
+
 type FindingSummaryRow = {
   policySeverity: string;
   releaseImpact: string;
@@ -101,4 +120,129 @@ export function getActiveFindingSummaryForProduct(
   digitalProductId: string,
 ): Promise<AssuranceFindingSummary> {
   return getActiveFindingSummary(db, { digitalProductId });
+}
+
+type FindingListRow = {
+  findingKey: string;
+  findingKind: string;
+  title: string;
+  status: string;
+  policySeverity: string;
+  releaseImpact: string;
+  adapterKey: string;
+  vendorIdentifier: string;
+  affectedType: string;
+  affectedId: string;
+  lastSeenAt: Date;
+  bomComponent?: null | {
+    name: string;
+    version: string | null;
+    packageUrl: string | null;
+  };
+};
+
+type FindingListDb = {
+  assuranceFinding?: {
+    findMany(args: unknown): Promise<unknown[]>;
+  };
+};
+
+const SEVERITY_RANK: Record<AssurancePolicySeverity, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+  info: 4,
+};
+
+const CLOSED_LIST_STATUSES: AssuranceFindingStatus[] = ["resolved", "false-positive"];
+
+function toActiveFindingRow(row: FindingListRow): ActiveAssuranceFindingRow {
+  const severity = ASSURANCE_POLICY_SEVERITIES.includes(row.policySeverity as AssurancePolicySeverity)
+    ? (row.policySeverity as AssurancePolicySeverity)
+    : "info";
+  return {
+    findingKey: row.findingKey,
+    findingKind: row.findingKind,
+    title: row.title,
+    status: row.status,
+    policySeverity: severity,
+    releaseImpact: row.releaseImpact,
+    adapterKey: row.adapterKey,
+    vendorIdentifier: row.vendorIdentifier,
+    affectedType: row.affectedType,
+    affectedId: row.affectedId,
+    lastSeenAt: row.lastSeenAt instanceof Date ? row.lastSeenAt : new Date(row.lastSeenAt),
+    component: row.bomComponent ? {
+      name: row.bomComponent.name,
+      version: row.bomComponent.version,
+      packageUrl: row.bomComponent.packageUrl,
+    } : null,
+  };
+}
+
+function castFindingListRows(rows: unknown[]): FindingListRow[] {
+  return rows as FindingListRow[];
+}
+
+function sortBySeverityThenRecency(rows: ActiveAssuranceFindingRow[]): ActiveAssuranceFindingRow[] {
+  return [...rows].sort((a, b) => {
+    const severityDelta = SEVERITY_RANK[a.policySeverity] - SEVERITY_RANK[b.policySeverity];
+    if (severityDelta !== 0) return severityDelta;
+    return b.lastSeenAt.getTime() - a.lastSeenAt.getTime();
+  });
+}
+
+async function listActiveFindings(
+  db: FindingListDb,
+  where: Record<string, unknown>,
+  limit: number,
+): Promise<ActiveAssuranceFindingRow[]> {
+  if (!db.assuranceFinding) return [];
+
+  const rows = await db.assuranceFinding.findMany({
+    where: {
+      ...where,
+      status: { notIn: CLOSED_LIST_STATUSES },
+    },
+    select: {
+      findingKey: true,
+      findingKind: true,
+      title: true,
+      status: true,
+      policySeverity: true,
+      releaseImpact: true,
+      adapterKey: true,
+      vendorIdentifier: true,
+      affectedType: true,
+      affectedId: true,
+      lastSeenAt: true,
+      bomComponent: {
+        select: {
+          name: true,
+          version: true,
+          packageUrl: true,
+        },
+      },
+    },
+    take: Math.max(1, Math.min(limit, 200)),
+  });
+
+  return sortBySeverityThenRecency(castFindingListRows(rows).map(toActiveFindingRow));
+}
+
+export function listActiveFindingsForBuild(
+  db: FindingListDb,
+  buildId: string,
+  limit = 25,
+): Promise<ActiveAssuranceFindingRow[]> {
+  return listActiveFindings(db, { buildId }, limit);
+}
+
+export function listActiveFindingsForProduct(
+  db: FindingListDb,
+  digitalProductId: string,
+  limit = 25,
+): Promise<ActiveAssuranceFindingRow[]> {
+  return listActiveFindings(db, { digitalProductId }, limit);
 }
