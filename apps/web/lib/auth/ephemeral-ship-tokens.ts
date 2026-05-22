@@ -25,31 +25,6 @@ import {
 } from "./mcp-api-token";
 
 /**
- * Match the full C0 control range (U+0000..U+001F) plus DEL (U+007F).
- *
- * Built via the RegExp constructor with a string literal containing
- * "\x00-\x1F\x7F" so the source bytes stay pure ASCII (git diffs render
- * cleanly, no binary-file detection, no scanner false positives). The
- * RegExp engine compiles the escapes at runtime.
- */
-const CONTROL_CHARS_REGEX = new RegExp("[\x00-\x1F\x7F]+", "g");
-
-/**
- * Strip control characters and clamp length so an operator cannot smuggle
- * log-forgery payloads into our diagnostic output via a token name, grant
- * string, or upstream error message. Closes the CodeQL `js/log-injection`
- * finding on PR #1025.
- *
- * Any run of control chars collapses to a single space so adjacent visible
- * text stays readable. Output is capped at 200 chars to keep log lines
- * scannable.
- */
-function sanitizeForLog(value: string): string {
-  const stripped = value.replace(CONTROL_CHARS_REGEX, " ");
-  return stripped.length > 200 ? `${stripped.slice(0, 197)}...` : stripped;
-}
-
-/**
  * Grant set for an ephemeral ship-phase token. Intentionally narrow -
  * just what the ship-phase tools need per `apps/web/lib/tak/agent-grants.ts`:
  *   - iac_execute       : deploy_feature, execute_promotion
@@ -152,13 +127,17 @@ async function issueShipToken(
     // throw because the operator's session token will still work for the
     // ship-phase tools.
     //
-    // sanitizeForLog applied to operator-influenced values (buildId,
-    // result.message) to close the CodeQL js/log-injection finding on
-    // PR #1025. result.error is a literal-union string from
-    // mcp-api-token.ts so it's safe to interpolate raw.
-    console.warn(
-      `[ephemeral-ship-token] issue failed for build ${sanitizeForLog(input.buildId)}: ${result.error} - ${sanitizeForLog(result.message)}`,
-    );
+    // Multi-argument console.warn (object payload) instead of string
+    // interpolation closes the CodeQL js/log-injection finding (alert
+    // #211 on PR #1025). Each value travels as its own structured field
+    // through Node's util.format, so a CR/LF in result.message cannot
+    // forge a new log line. Also more useful for downstream log parsers
+    // than a flat string.
+    console.warn("[ephemeral-ship-token] issue failed", {
+      buildId: input.buildId,
+      error: result.error,
+      message: result.message,
+    });
     return null;
   }
 
