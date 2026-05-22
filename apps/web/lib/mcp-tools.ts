@@ -12867,7 +12867,11 @@ export async function executeTool(
   }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[executeTool] Uncaught exception in tool "${toolName}":`, msg);
+    // CodeQL #52 (js/tainted-format-string): keep the format string constant
+    // so a `%s` inside an attacker-controlled toolName cannot consume the
+    // next argument. toolName + msg are passed as additional args; node's
+    // util.format only honours specifiers in the literal first arg.
+    console.error("[executeTool] Uncaught exception in tool %s: %s", toolName, msg);
     return { success: false, error: msg, message: `Tool ${toolName} failed: ${msg}` };
   }
 }

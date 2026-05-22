@@ -16,16 +16,20 @@ import { type ReactNode, useEffect, useMemo, useState, useTransition } from "rea
 import {
   copyMyMcpToken,
   issueMyMcpToken,
+  issueMyTemplateMcpToken,
   issueMyWriteMcpToken,
   listAvailableMcpScopes,
+  listMcpTokenTemplates,
   listMyMcpTokens,
   revokeMyMcpToken,
   rotateMyMcpToken,
   upgradeMyMcpTokenForCodingAgent,
+  type McpTokenTemplateSummary,
 } from "@/lib/actions/mcp-tokens";
 import {
   defaultMcpTokenScopes,
   type McpTokenScopeTier,
+  type McpTokenTemplateId,
 } from "@/lib/mcp-token-scopes";
 
 export interface McpTokenManagerProps {
@@ -110,6 +114,7 @@ async function writeClipboardText(value: string): Promise<boolean> {
 export function McpTokenManager(props: McpTokenManagerProps) {
   const [tokens, setTokens] = useState<TokenRow[]>([]);
   const [scopes, setScopes] = useState<string[]>([]);
+  const [templates, setTemplates] = useState<McpTokenTemplateSummary[]>([]);
   const [view, setView] = useState<View>({ kind: "idle" });
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
@@ -117,6 +122,7 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   const [pending, startTransition] = useTransition();
 
   const [formName, setFormName] = useState("");
+  const [formTemplateId, setFormTemplateId] = useState<McpTokenTemplateId>("development");
   const [formScope, setFormScope] = useState<McpTokenScopeTier>("read");
   const [formScopes, setFormScopes] = useState<Set<string>>(() => new Set());
   const [formExpires, setFormExpires] = useState<string>("90");
@@ -126,14 +132,16 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [tokensResult, scopesResult] = await Promise.all([
+      const [tokensResult, scopesResult, templatesResult] = await Promise.all([
         listMyMcpTokens(),
         listAvailableMcpScopes(),
+        listMcpTokenTemplates(),
       ]);
       if (cancelled) return;
       if (tokensResult.ok) setTokens(tokensResult.tokens);
       const availableScopes = scopesResult.scopes;
       setScopes(availableScopes);
+      setTemplates(templatesResult.templates);
       setFormScopes((current) =>
         current.size > 0 ? current : new Set(defaultMcpTokenScopes(availableScopes)),
       );
@@ -150,18 +158,37 @@ export function McpTokenManager(props: McpTokenManagerProps) {
     });
   }
 
-  function applyScopeDefaults(scope: McpTokenScopeTier) {
-    setFormScope(scope);
-    setFormScopes(new Set(defaultMcpTokenScopes(scopes, scope)));
+  function applyTemplate(templateId: McpTokenTemplateId) {
+    setFormTemplateId(templateId);
+    const template = templates.find((t) => t.id === templateId);
+    if (!template) return;
+    setFormScope(template.tier);
+    if (templateId === "custom") {
+      // Preserve whatever the user had ticked; fall back to read defaults
+      // if they switched to custom from a clean form.
+      setFormScopes((prev) =>
+        prev.size > 0 ? prev : new Set(defaultMcpTokenScopes(scopes)),
+      );
+    } else {
+      setFormScopes(new Set(template.grants));
+    }
   }
 
-  function openForm(scope: McpTokenScopeTier = "read") {
+  function openForm(templateId: McpTokenTemplateId = "development") {
     setInlineError(null);
     setFormName("");
-    setFormScope(scope);
-    setFormScopes(new Set(defaultMcpTokenScopes(scopes, scope)));
     setFormExpires("90");
     setNotice(null);
+    setFormTemplateId(templateId);
+    const template = templates.find((t) => t.id === templateId);
+    if (template && templateId !== "custom") {
+      setFormScope(template.tier);
+      setFormScopes(new Set(template.grants));
+    } else {
+      // Custom or templates-not-yet-loaded → fall back to read defaults.
+      setFormScope("read");
+      setFormScopes(new Set(defaultMcpTokenScopes(scopes)));
+    }
     setView({ kind: "form", error: null });
   }
 
@@ -172,11 +199,29 @@ export function McpTokenManager(props: McpTokenManagerProps) {
       else next.add(scope);
       return next;
     });
+    // Manually toggling a scope means the operator has diverged from the
+    // template — drop them into "custom" so the picker label stays honest.
+    setFormTemplateId("custom");
   }
 
   function submit() {
     startTransition(async () => {
       const expiresInDays = formExpires === "never" ? null : parseInt(formExpires, 10);
+      if (formTemplateId !== "custom") {
+        const result = await issueMyTemplateMcpToken({
+          templateId: formTemplateId,
+          name: formName.trim(),
+          expiresInDays,
+          baseUrl: props.baseUrl,
+        });
+        if (!result.ok) {
+          setView({ kind: "form", error: result.message });
+          return;
+        }
+        setView({ kind: "issued", payload: { ...result, mode: "issued" } });
+        refresh();
+        return;
+      }
       const result = await issueMyMcpToken({
         name: formName.trim(),
         capability: formScope === "read" ? "read" : "write",
@@ -285,7 +330,9 @@ export function McpTokenManager(props: McpTokenManagerProps) {
             <h2 className="text-lg font-semibold text-[var(--dpf-text)]">MCP access tokens</h2>
           </div>
           <p className="mt-1 max-w-2xl text-sm leading-5 text-[var(--dpf-muted)]">
-            External coding-agent access for <code>/api/mcp/v1</code>.
+            External coding-agent access for <code>/api/mcp/v1</code>. Pick a
+            role template (Admin, Development, Employee, Observer) or compose
+            a custom grant set.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -294,18 +341,19 @@ export function McpTokenManager(props: McpTokenManagerProps) {
             onClick={issueWriteToken}
             disabled={pending}
             className={buttonClass("primary")}
+            title="One-click: issues a development-template token (read code/specs, write backlog/work-capsules, sandbox + iac_execute) valid for 90 days."
           >
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            Issue write token
+            Issue development token
           </button>
           <button
             type="button"
-            onClick={() => openForm("read")}
+            onClick={() => openForm("development")}
             disabled={pending}
             className={buttonClass()}
           >
             <Plus className={iconClass()} aria-hidden="true" />
-            Generate token
+            Issue token from template
           </button>
         </div>
       </div>
@@ -362,13 +410,15 @@ export function McpTokenManager(props: McpTokenManagerProps) {
           formName={formName}
           formScope={formScope}
           formScopes={formScopes}
+          formTemplateId={formTemplateId}
           pending={pending}
           scopes={scopes}
+          templates={templates}
           onCancel={() => setView({ kind: "idle" })}
           onExpiresChange={setFormExpires}
           onNameChange={setFormName}
-          onScopeChange={applyScopeDefaults}
           onSubmit={submit}
+          onTemplateChange={applyTemplate}
           onToggleScope={toggleScope}
         />
       )}
@@ -520,27 +570,35 @@ function TokenFormDialog(props: {
   formName: string;
   formScope: McpTokenScopeTier;
   formScopes: Set<string>;
+  formTemplateId: McpTokenTemplateId;
   pending: boolean;
   scopes: string[];
+  templates: McpTokenTemplateSummary[];
   onCancel: () => void;
   onExpiresChange: (value: string) => void;
   onNameChange: (value: string) => void;
-  onScopeChange: (value: McpTokenScopeTier) => void;
   onSubmit: () => void;
+  onTemplateChange: (value: McpTokenTemplateId) => void;
   onToggleScope: (scope: string) => void;
 }) {
+  const activeTemplate = props.templates.find((t) => t.id === props.formTemplateId);
+  const showCustomGrants = props.formTemplateId === "custom";
+  const groupedTemplates = useMemo(() => groupTemplatesByCategory(props.templates), [props.templates]);
+
   return (
     <DialogFrame onClose={props.onCancel}>
       <div
         role="dialog"
         aria-modal="true"
-        className="w-full max-w-lg rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5 shadow-xl"
+        className="w-full max-w-xl rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5 shadow-xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-base font-semibold text-[var(--dpf-text)]">Generate MCP token</h3>
-            <p className="mt-1 text-xs text-[var(--dpf-muted)]">Choose authority, scopes, and expiry for this client.</p>
+            <h3 className="text-base font-semibold text-[var(--dpf-text)]">Issue MCP token</h3>
+            <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+              Pick the role this token is for. Grants and audit tier come from the template; switch to Custom to compose them by hand.
+            </p>
           </div>
           <button type="button" onClick={props.onCancel} className={buttonClass()}>
             <X className={iconClass()} aria-hidden="true" />
@@ -550,46 +608,89 @@ function TokenFormDialog(props: {
 
         <div className="mt-4 space-y-3">
           <label className="block text-sm">
+            <span className="font-medium text-[var(--dpf-text)]">Role template</span>
+            <select
+              value={props.formTemplateId}
+              onChange={(event) => props.onTemplateChange(event.target.value as McpTokenTemplateId)}
+              className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2 text-sm text-[var(--dpf-text)]"
+            >
+              {groupedTemplates.map((group) => (
+                <optgroup
+                  key={group.category}
+                  label={categoryLabel(group.category)}
+                  className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
+                >
+                  {group.templates.map((template) => (
+                    <option
+                      key={template.id}
+                      value={template.id}
+                      className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
+                    >
+                      {template.label} ({template.tier})
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            {activeTemplate && (
+              <p className="mt-1 text-xs text-[var(--dpf-muted)]">{activeTemplate.description}</p>
+            )}
+          </label>
+
+          {!showCustomGrants && activeTemplate && (
+            <fieldset className="text-sm">
+              <legend className="font-medium text-[var(--dpf-text)]">
+                Grants ({activeTemplate.grants.length})
+              </legend>
+              <div className="mt-2 flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
+                {activeTemplate.grants.length === 0 ? (
+                  <span className="text-xs text-[var(--dpf-muted)]">
+                    No grants from this template are registered on this install.
+                  </span>
+                ) : (
+                  activeTemplate.grants.map((grant) => (
+                    <span
+                      key={grant}
+                      className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-0.5 font-mono text-[11px] text-[var(--dpf-text)]"
+                    >
+                      {grant}
+                    </span>
+                  ))
+                )}
+              </div>
+            </fieldset>
+          )}
+
+          {showCustomGrants && (
+            <fieldset className="text-sm">
+              <legend className="font-medium text-[var(--dpf-text)]">
+                Scopes ({props.formScopes.size} selected)
+              </legend>
+              <div className="mt-2 grid max-h-44 grid-cols-1 gap-1 overflow-y-auto rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2 sm:grid-cols-2">
+                {props.scopes.map((scope) => (
+                  <label key={scope} className="inline-flex items-center gap-2 text-xs text-[var(--dpf-text)]">
+                    <input
+                      type="checkbox"
+                      checked={props.formScopes.has(scope)}
+                      onChange={() => props.onToggleScope(scope)}
+                    />
+                    <span className="break-all">{scope}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
+          <label className="block text-sm">
             <span className="font-medium text-[var(--dpf-text)]">Name</span>
             <input
               type="text"
               value={props.formName}
               onChange={(event) => props.onNameChange(event.target.value)}
-              placeholder="Mark laptop"
+              placeholder={activeTemplate?.label ?? "Mark laptop"}
               className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)]"
             />
           </label>
-
-          <fieldset className="text-sm">
-            <legend className="font-medium text-[var(--dpf-text)]">Scope tier</legend>
-            <div className="mt-2 grid gap-2 sm:grid-cols-3">
-              {(["read", "write", "admin"] as const).map((scope) => (
-                <ScopeTierOption
-                  key={scope}
-                  checked={props.formScope === scope}
-                  label={scope}
-                  value={scope}
-                  onChange={() => props.onScopeChange(scope)}
-                />
-              ))}
-            </div>
-          </fieldset>
-
-          <fieldset className="text-sm">
-            <legend className="font-medium text-[var(--dpf-text)]">Scopes</legend>
-            <div className="mt-2 grid max-h-44 grid-cols-1 gap-1 overflow-y-auto rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2 sm:grid-cols-2">
-              {props.scopes.map((scope) => (
-                <label key={scope} className="inline-flex items-center gap-2 text-xs text-[var(--dpf-text)]">
-                  <input
-                    type="checkbox"
-                    checked={props.formScopes.has(scope)}
-                    onChange={() => props.onToggleScope(scope)}
-                  />
-                  <span className="break-all">{scope}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
 
           <label className="block text-sm">
             <span className="font-medium text-[var(--dpf-text)]">Expires</span>
@@ -620,11 +721,15 @@ function TokenFormDialog(props: {
           <button
             type="button"
             onClick={props.onSubmit}
-            disabled={props.pending || !props.formName.trim() || props.formScopes.size === 0}
+            disabled={
+              props.pending ||
+              (showCustomGrants && props.formScopes.size === 0) ||
+              (!showCustomGrants && (activeTemplate?.grants.length ?? 0) === 0)
+            }
             className={buttonClass("primary")}
           >
             <KeyRound className="h-4 w-4" aria-hidden="true" />
-            {props.pending ? "Generating..." : "Generate"}
+            {props.pending ? "Generating..." : "Issue token"}
           </button>
         </div>
       </div>
@@ -632,26 +737,37 @@ function TokenFormDialog(props: {
   );
 }
 
-function ScopeTierOption(props: {
-  checked: boolean;
-  label: string;
-  value: McpTokenScopeTier;
-  onChange: () => void;
-}) {
-  return (
-    <label
-      className="flex items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-[var(--dpf-text)]"
-    >
-      <input
-        type="radio"
-        name="scope-tier"
-        value={props.value}
-        checked={props.checked}
-        onChange={props.onChange}
-      />
-      <span className="text-sm">{props.label}</span>
-    </label>
-  );
+function categoryLabel(category: McpTokenTemplateSummary["category"]): string {
+  switch (category) {
+    case "admin":
+      return "Admin";
+    case "development":
+      return "Development";
+    case "employee":
+      return "Employee surfaces";
+    case "observer":
+      return "Observers";
+    case "custom":
+      return "Custom";
+  }
+}
+
+function groupTemplatesByCategory(
+  templates: McpTokenTemplateSummary[],
+): Array<{ category: McpTokenTemplateSummary["category"]; templates: McpTokenTemplateSummary[] }> {
+  const order: McpTokenTemplateSummary["category"][] = [
+    "admin",
+    "development",
+    "employee",
+    "observer",
+    "custom",
+  ];
+  return order
+    .map((category) => ({
+      category,
+      templates: templates.filter((t) => t.category === category),
+    }))
+    .filter((g) => g.templates.length > 0);
 }
 
 function IssuedTokenDialog(props: { payload: Issued; onClose: () => void }) {
