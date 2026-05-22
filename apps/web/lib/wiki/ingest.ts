@@ -119,12 +119,12 @@ export function deriveSourceTypeFromPath(filePath: string): RawSourceType | null
 // ─── Frontmatter helpers ────────────────────────────────────────────────────
 
 /**
- * Allowed roots for raw-source ingest. wiki_ingest is MCP-callable
- * so `filePath` is user-supplied; without this gate a caller could
- * pass `/etc/passwd` or `.env` and have its contents ingested. The
- * allowed roots cover every directory we ship raw sources from.
+ * Allowed roots for raw-source ingest from MCP-callable callers.
+ * Exported so the MCP wrapper (mcp-tools.ts wiki_ingest) can apply
+ * the gate at the trust boundary — library callers (tests, internal
+ * use) bypass this and trust their own input.
  */
-const ALLOWED_INGEST_ROOTS = [
+export const ALLOWED_INGEST_ROOTS = [
   "docs/founder-kernel/raw-sources",
   "docs/founder-kernel/wiki",
   "docs/superpowers/specs",
@@ -132,11 +132,13 @@ const ALLOWED_INGEST_ROOTS = [
   "docs/wiki-sources",
 ] as const;
 
-function assertAllowedIngestPath(filePath: string): string {
-  // CodeQL #62 (js/path-injection): wiki_ingest MCP tool passes
-  // user-supplied filePath into readFileSync. Resolve to an absolute
-  // path and assert it sits under one of the allowed roots before
-  // we hand it to fs.
+/**
+ * CodeQL #62 (js/path-injection) gate for MCP-supplied paths. The
+ * wiki_ingest MCP tool calls this BEFORE handing the path to
+ * ingestRawSourceFromFile. Library callers don't need to (they have
+ * their own trust model).
+ */
+export function assertAllowedIngestPath(filePath: string): string {
   const resolved = path.resolve(filePath);
   const projectRoot = process.env.PROJECT_ROOT
     ? path.resolve(process.env.PROJECT_ROOT)
@@ -158,13 +160,15 @@ function assertAllowedIngestPath(filePath: string): string {
  * Read a markdown file and parse its frontmatter when present. Files without
  * a `---` delimiter fall through with empty frontmatter and the entire file
  * body — the caller still gets a citable raw source, it just has no metadata.
+ *
+ * Trust model: this function trusts the caller's `filePath`. MCP-callable
+ * entry points must run `assertAllowedIngestPath()` first.
  */
 function readSourceFile(filePath: string): {
   frontmatter: Partial<RawSourceFrontmatter>;
   body: string;
 } {
-  const safePath = assertAllowedIngestPath(filePath);
-  const raw = readFileSync(safePath, "utf8");
+  const raw = readFileSync(filePath, "utf8");
   if (!raw.trimStart().startsWith("---")) {
     return { frontmatter: {}, body: raw };
   }
