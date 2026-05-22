@@ -19,13 +19,7 @@ import {
   type ActiveAssuranceFindingRow,
 } from "@/lib/assurance/finding-read";
 import type { AssuranceFindingStatus } from "@/lib/assurance/types";
-
-// CodeQL #205/#206 (js/log-injection): strip CR/LF from user-controlled
-// identifiers before they hit console.error so an attacker cannot forge
-// log entries via a crafted route param.
-function sanitizeForLog(value: string): string {
-  return value.replace(/[\r\n]+/g, "_");
-}
+import { sanitizeForLog } from "@/lib/security/safe-log";
 
 async function requirePlatformUser(): Promise<string> {
   const session = await auth();
