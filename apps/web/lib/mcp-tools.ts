@@ -12851,7 +12851,9 @@ export async function executeTool(
       if (parsed) {
         return executeMcpServerTool(parsed.serverSlug, parsed.toolName, params);
       }
-      return { success: false, error: "Unknown tool", message: `Tool ${toolName} not found` };
+      // CodeQL #52 (js/tainted-format-string): toolName is user-influenced.
+      // Use a constant message and put the raw value in error for diagnostics.
+      return { success: false, error: "Unknown tool", message: "Tool not found" };
     }
   }
   } catch (err) {
