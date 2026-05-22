@@ -3,9 +3,28 @@
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { FileText } from "lucide-react";
-import type { AgentMessageRow } from "@/lib/agent-coworker-types";
+import type { AgentMessageProvider, AgentMessageRow } from "@/lib/agent-coworker-types";
 import type { ReactNode } from "react";
 import { AgentAttachmentCard } from "./AgentAttachmentCard";
+
+/**
+ * Format the provider badge label shown next to the coworker name.
+ * Examples:
+ *   { name: "Anthropic", modelId: "claude-opus-4-7", adapterKind: "anthropic-api" }
+ *     → "Anthropic · claude-opus-4-7"
+ *   { name: "ChatGPT", modelId: "gpt-5-codex", adapterKind: "codex-cli" }
+ *     → "ChatGPT CLI · gpt-5-codex"
+ *   { name: "Anthropic", modelId: null, adapterKind: null }
+ *     → "Anthropic"
+ * Returns null when there is nothing meaningful to show.
+ */
+export function formatProviderBadge(provider: AgentMessageProvider | undefined): string | null {
+  if (!provider) return null;
+  const isCli = !!provider.adapterKind && /cli/i.test(provider.adapterKind);
+  const cliAlreadyInName = /\bcli\b/i.test(provider.name);
+  const base = isCli && !cliAlreadyInName ? `${provider.name} CLI` : provider.name;
+  return provider.modelId ? `${base} · ${provider.modelId}` : base;
+}
 
 type Props = {
   message: AgentMessageRow;
@@ -143,6 +162,30 @@ function looksLikeAgentError(content: string): boolean {
   );
 }
 
+function ProviderBadge({ label, title }: { label: string; title: string }) {
+  return (
+    <span
+      data-testid="agent-message-provider"
+      title={title}
+      style={{
+        fontSize: 9,
+        lineHeight: 1,
+        color: "var(--dpf-muted)",
+        background: "color-mix(in srgb, var(--dpf-muted) 12%, transparent)",
+        border: "1px solid color-mix(in srgb, var(--dpf-muted) 22%, transparent)",
+        borderRadius: 999,
+        padding: "2px 6px",
+        maxWidth: 220,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
 function formatRelativeTime(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime();
   const mins = Math.floor(diff / 60_000);
@@ -184,6 +227,8 @@ export function AgentMessageBubble({
   const isUser = message.role === "user";
 
   // Proposal card rendering for assistant messages with a proposal
+  const providerBadge = !isUser ? formatProviderBadge(message.provider) : null;
+
   if (!isUser && message.proposal) {
     const p = message.proposal;
     const isPending = p.status === "proposed";
@@ -280,9 +325,12 @@ export function AgentMessageBubble({
         }}
       >
         {showAgentLabel && agentName && (
-          <span style={{ fontSize: 10, color: "var(--dpf-accent)", marginLeft: 4 }}>
-            {agentName}
-          </span>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginLeft: 4, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 10, color: "var(--dpf-accent)" }}>
+              {agentName}
+            </span>
+            {providerBadge && <ProviderBadge label={providerBadge} title={providerBadge} />}
+          </div>
         )}
         <div style={{ maxWidth: "85%" }}>
           {/* Show the text content first if any */}
@@ -392,9 +440,12 @@ export function AgentMessageBubble({
       }}
     >
       {showAgentLabel && agentName && !isUser && (
-        <span style={{ fontSize: 10, color: "var(--dpf-accent)", marginLeft: 4 }}>
-          {agentName}
-        </span>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginLeft: 4, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 10, color: "var(--dpf-accent)" }}>
+            {agentName}
+          </span>
+          {providerBadge && <ProviderBadge label={providerBadge} title={providerBadge} />}
+        </div>
       )}
       <div
         data-testid="agent-message-content"
