@@ -28,12 +28,17 @@ describe("IntegrationReadinessPanel", () => {
     expect(screen.getAllByText("Expenses").length).toBeGreaterThan(0);
     expect(screen.getByText(/API coverage: QuickBooks Purchase query/i)).toBeVisible();
     expect(screen.getByRole("heading", { name: "Import staging posture" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Import review queue" })).toBeVisible();
     expect(screen.getByText("Non-editable")).toBeVisible();
+    expect(screen.getByText("BI-4025EF5F")).toBeVisible();
+    expect(screen.getByText("Ready for review")).toBeVisible();
+    expect(screen.getByText(/Review queue records are DPF-held posture only/i)).toBeVisible();
     expect(screen.getAllByText("External-owned")).toHaveLength(9);
     expect(screen.getByText("Invoice")).toBeVisible();
     expect(screen.getAllByText("Not mapped").length).toBeGreaterThan(0);
     expect(screen.getByText("Connected")).toBeVisible();
     expect(screen.queryByText(/clientSecret/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/refreshToken/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /sync|write|update quickbooks/i })).not.toBeInTheDocument();
   });
 });

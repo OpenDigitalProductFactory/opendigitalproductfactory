@@ -3,6 +3,7 @@ import type {
   IntegrationReadinessState,
 } from "@/lib/integrate/readiness";
 import type { IntegrationImportStagingDescriptor } from "@/lib/integrate/import-staging";
+import type { IntegrationImportReviewPosture } from "@/lib/integrate/import-review";
 
 interface IntegrationReadinessPanelProps {
   descriptor: IntegrationReadinessDescriptor;
@@ -92,6 +93,10 @@ export function IntegrationReadinessPanel({ descriptor }: IntegrationReadinessPa
         <ImportStagingPosture descriptor={descriptor.importStaging} />
       )}
 
+      {descriptor.importReview && (
+        <ImportReviewPosture posture={descriptor.importReview} />
+      )}
+
       <div className="mt-4">
         <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Next safe actions</h3>
         <ul className="mt-2 flex flex-wrap gap-2">
@@ -104,6 +109,36 @@ export function IntegrationReadinessPanel({ descriptor }: IntegrationReadinessPa
             </li>
           ))}
         </ul>
+      </div>
+    </section>
+  );
+}
+
+function ImportReviewPosture({ posture }: { posture: IntegrationImportReviewPosture }) {
+  return (
+    <section className="mt-5 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="space-y-1">
+          <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Import review queue</h3>
+          <p className="max-w-3xl text-xs leading-5 text-[var(--dpf-muted)]">
+            {posture.guardrail}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <MetricPill label="State" value={reviewStatusLabel(posture.status)} />
+          <MetricPill label="Backlog" value={posture.nextBacklogItemId} />
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {posture.families.map((family) => (
+          <span
+            key={family}
+            className="rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2.5 py-1 text-xs text-[var(--dpf-text)]"
+          >
+            {family}
+          </span>
+        ))}
       </div>
     </section>
   );
@@ -189,6 +224,18 @@ function ownerSideLabel(ownerSide: string): string {
   }
 
   return "DPF-owned";
+}
+
+function reviewStatusLabel(status: IntegrationImportReviewPosture["status"]): string {
+  if (status === "ready-to-review") {
+    return "Ready for review";
+  }
+
+  if (status === "blocked") {
+    return "Blocked";
+  }
+
+  return "Not started";
 }
 
 function StateChip({ state }: { state: IntegrationReadinessState }) {

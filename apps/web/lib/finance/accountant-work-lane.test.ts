@@ -67,7 +67,7 @@ describe("bookkeeper accountant work lane", () => {
       ]),
     );
     expect(quickBooks?.writeBoundary).toContain("source-attributed");
-    expect(quickBooks?.nextBacklogItemId).toBe("BI-07D76D6B");
+    expect(quickBooks?.nextBacklogItemId).toBe("BI-4025EF5F");
   });
 
   it("anchors Stripe and bank feeds as reconciliation dependencies, not replacement claims", () => {
@@ -76,8 +76,9 @@ describe("bookkeeper accountant work lane", () => {
     const bankFeeds = lane.providerBoundaries.find((boundary) => boundary.provider === "bank-feed-provider");
 
     expect(stripe?.missingCoverage).toContain("QuickBooks reconciliation");
-    expect(stripe?.nextBacklogItemId).toBe("BI-07D76D6B");
+    expect(stripe?.nextBacklogItemId).toBe("BI-2DB52EAB");
     expect(bankFeeds?.posture).toBe("not-mapped");
+    expect(bankFeeds?.nextBacklogItemId).toBe("BI-47366954");
     expect(lane.promotionGuardrail).toContain("dual-run");
   });
 });
