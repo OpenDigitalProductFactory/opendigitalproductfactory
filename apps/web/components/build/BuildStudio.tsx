@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { GitBranch } from "lucide-react";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
 import { ReviewPanel } from "./ReviewPanel";
+import { NodeInspector } from "./NodeInspector";
+import type { ProcessGraphNodeClickInfo } from "./ProcessGraphClickInfo";
 import { OpenSandboxButton } from "./OpenSandboxButton";
 import { computeDrivingBuild, isValidSandboxPort, type SandboxDriverCandidate } from "@/lib/build/sandbox-driver";
 import { ClaimBadge } from "./ClaimBadge";
@@ -81,6 +83,17 @@ export function BuildStudio({
       typeof window === "undefined" ? undefined : window.innerWidth,
     ),
   );
+  // Anchored NodeInspector lifecycle. When ProcessGraph is rendered with an
+  // onNodeClick prop, it delegates click handling here instead of opening
+  // its own internal TaskInspector / WorkflowStageInspector overlays. The
+  // anchored inspector lives INSIDE the workflow canvas so it never
+  // displaces the AI Coworker rail. Per spec §2 and Mark's explicit ask.
+  const [selectedNodeClick, setSelectedNodeClick] = useState<ProcessGraphNodeClickInfo | null>(null);
+  // Clear inspector state when the active build changes — a stale anchor
+  // from another build would point at a node that's no longer in the DOM.
+  useEffect(() => {
+    setSelectedNodeClick(null);
+  }, [activeBuild?.buildId]);
   const isDevEnvironment = dpfEnvironment === "dev";
   const branchBadge = resolveBuildStudioBranchBadge({
     submissionBranchShortId,
@@ -595,7 +608,7 @@ export function BuildStudio({
                 {buildView === "topology" && (
                   <div
                     id="panel-topology"
-                    className={getBuildStudioGraphPanelClassName()}
+                    className={`${getBuildStudioGraphPanelClassName()} relative`}
                     data-testid={BUILD_STUDIO_TEST_IDS.graphPanel}
                   >
                     <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
@@ -609,7 +622,33 @@ export function BuildStudio({
                       workflowLabel={activeLifecycleLabel}
                       governedBacklogEnabled={governedBacklogEnabled}
                       progressVisibility={progressVisibility}
+                      onNodeClick={(info) => {
+                        // Re-clicking the same node toggles the inspector closed.
+                        setSelectedNodeClick((prev) =>
+                          prev?.nodeId === info.nodeId ? null : info,
+                        );
+                      }}
                     />
+                    {selectedNodeClick && (
+                      <NodeInspector
+                        nodeId={selectedNodeClick.nodeId}
+                        title={resolveInspectorTitle(selectedNodeClick)}
+                        anchorRect={selectedNodeClick.anchorRect}
+                        containerRect={selectedNodeClick.containerRect}
+                        containerScrollTop={selectedNodeClick.containerScrollTop}
+                        onClose={() => setSelectedNodeClick(null)}
+                        onAskCoworker={() => {
+                          const prefill = buildCoworkerPrefill(selectedNodeClick, activeBuild.buildId);
+                          document.dispatchEvent(
+                            new CustomEvent("open-agent-panel", {
+                              detail: { autoMessage: prefill, targetBuildId: activeBuild.buildId },
+                            }),
+                          );
+                        }}
+                      >
+                        <NodeInspectorBody info={selectedNodeClick} />
+                      </NodeInspector>
+                    )}
                   </div>
                 )}
                 {buildView !== "topology" && (
@@ -678,6 +717,98 @@ export function BuildStudio({
       <BuildStudioFooter builds={buildRows} />
     </div>
   );
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* NodeInspector helpers — derive title + body + coworker-prefill from click. */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+function resolveInspectorTitle(info: ProcessGraphNodeClickInfo): string {
+  if (info.kind === "task") {
+    return info.task?.title ?? "Task";
+  }
+  if (info.kind === "phase" || info.kind === "forkJoin") {
+    const phase = info.phase;
+    if (phase === "ideate") return "Ideate phase";
+    if (phase === "plan") return "Plan phase";
+    if (phase === "build") return "Build phase";
+    if (phase === "review") return "Review phase";
+    if (phase === "ship") return "Ship phase";
+    if (phase === "complete") return "Complete";
+    if (phase === "failed") return "Failed";
+    return "Workflow node";
+  }
+  return "Workflow node";
+}
+
+/**
+ * Build a prefill string for the AI Coworker panel when the operator
+ * clicks "Ask coworker about this step" inside the inspector.
+ */
+function buildCoworkerPrefill(info: ProcessGraphNodeClickInfo, buildId: string): string {
+  if (info.kind === "task" && info.task) {
+    return `In build ${buildId}, looking at task "${info.task.title}". What's happening with this step?`;
+  }
+  if (info.phase) {
+    return `In build ${buildId}, looking at the ${info.phase} phase. What's the current state and what does the operator need to do next?`;
+  }
+  return `In build ${buildId}, looking at a workflow node. What's its current state?`;
+}
+
+function NodeInspectorBody({ info }: { info: ProcessGraphNodeClickInfo }) {
+  if (info.kind === "task") {
+    const assigned = info.task;
+    if (!assigned) {
+      return (
+        <p className="text-[var(--dpf-muted)]">
+          This task is referenced by the workflow but isn't in the saved build plan.
+        </p>
+      );
+    }
+    const plan = assigned.task;
+    return (
+      <div className="flex flex-col gap-2">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">Specialist</p>
+          <p className="mt-0.5 text-[var(--dpf-text)]">{assigned.specialist}</p>
+        </div>
+        {plan?.implement && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">Implement</p>
+            <p className="mt-0.5 text-[var(--dpf-text)]">{plan.implement}</p>
+          </div>
+        )}
+        {plan?.testFirst && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">Test first</p>
+            <p className="mt-0.5 text-[var(--dpf-text)]">{plan.testFirst}</p>
+          </div>
+        )}
+        {plan?.verify && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--dpf-muted)]">Verify</p>
+            <p className="mt-0.5 text-[var(--dpf-text)]">{plan.verify}</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (info.kind === "phase" || info.kind === "forkJoin") {
+    return (
+      <div className="flex flex-col gap-2">
+        <p>
+          Click this node again to close the inspector, or open the Details
+          drawer for full evidence (Progress, Brief, Review, Sandbox).
+        </p>
+        <p className="text-[var(--dpf-muted)]">
+          The full per-phase inspector content migrates into the inspector in
+          a follow-up slice — for now the body shows a minimal placeholder so
+          the anchored-positioning + a11y contract is in place.
+        </p>
+      </div>
+    );
+  }
+  return <p className="text-[var(--dpf-muted)]">Workflow node selected.</p>;
 }
 
 function BuildStudioFooter({ builds }: { builds: FeatureBuildRow[] }) {
