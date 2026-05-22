@@ -147,7 +147,10 @@ export function invalidatePromptCache(category?: string, slug?: string): void {
 function resolveIncludes(content: string, composesFrom: string[], depth = 0): string {
   if (depth > 3 || !content.includes("{{include:")) return content;
 
-  return content.replace(/\{\{include:([^}]+)\}\}/g, (_match, ref: string) => {
+  // CodeQL #24 (js/polynomial-redos): cap the include-ref length at 200
+  // so backtracking is bounded for malformed user input like `{{include:`
+  // followed by many `{{include:|` repetitions.
+  return content.replace(/\{\{include:([^}]{1,200})\}\}/g, (_match, ref: string) => {
     const [cat, sl] = ref.split("/");
     if (!cat || !sl) return _match;
 

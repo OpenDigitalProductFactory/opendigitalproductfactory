@@ -90,7 +90,10 @@ export function extractFormAssistResult(
   content: string,
   context: AgentFormAssistContext,
 ): ExtractedAssist {
-  const blockMatch = content.match(/```agent-form\s*([\s\S]*?)```/i);
+  // CodeQL #22 (js/polynomial-redos): cap the block content at 50k chars
+  // so adversarial input with many `\`\`\`agent-form` markers can't trigger
+  // exponential backtracking.
+  const blockMatch = content.match(/```agent-form\s*([\s\S]{0,50000}?)```/i);
   if (!blockMatch) {
     return {
       displayContent: content.trim(),
