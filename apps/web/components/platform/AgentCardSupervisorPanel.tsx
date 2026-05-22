@@ -164,9 +164,22 @@ function AgentCardArticle({ card }: { card: InternalAgentCard }) {
               {decisionState.pendingProposalCount}
             </p>
             {decisionState.latestPendingProposal ? (
-              <p className="mt-1 break-all text-xs text-[var(--dpf-muted)]">
-                {decisionState.latestPendingProposal.proposalId} / {decisionState.latestPendingProposal.actionType}
-              </p>
+              <>
+                <p className="mt-1 break-all text-xs text-[var(--dpf-muted)]">
+                  {decisionState.latestPendingProposal.proposalId} /{" "}
+                  {decisionState.latestPendingProposal.actionType}
+                </p>
+                <p className="mt-1 break-all text-xs text-[var(--dpf-muted)]">
+                  Thread {decisionState.latestPendingProposal.threadId} / Message{" "}
+                  {decisionState.latestPendingProposal.messageId}
+                </p>
+                <p className="mt-2 break-all text-xs text-[var(--dpf-muted)]">
+                  <span className="font-semibold text-[var(--dpf-text)]">Approval workflow</span>{" "}
+                  <code className="font-mono text-[var(--dpf-muted)]">
+                    {decisionState.latestPendingProposal.decisionEndpoint}
+                  </code>
+                </p>
+              </>
             ) : (
               <p className="mt-1 text-xs text-[var(--dpf-muted)]">No pending proposal cards.</p>
             )}
@@ -181,7 +194,17 @@ function AgentCardArticle({ card }: { card: InternalAgentCard }) {
                   {decisionState.latestReceipt.toolName}
                 </p>
                 <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-                  {decisionState.latestReceipt.executionStatus} / {decisionState.latestReceipt.receiptStatus}
+                  {decisionState.latestReceipt.receiptKind} /{" "}
+                  {decisionState.latestReceipt.executionStatus} /{" "}
+                  {decisionState.latestReceipt.receiptStatus}
+                </p>
+                <p className="mt-2 text-xs">
+                  <a
+                    href={decisionState.latestReceipt.journalHref}
+                    className="text-[var(--dpf-accent)] underline-offset-2 hover:underline"
+                  >
+                    Open receipt in Capability Journal
+                  </a>
                 </p>
               </>
             ) : (

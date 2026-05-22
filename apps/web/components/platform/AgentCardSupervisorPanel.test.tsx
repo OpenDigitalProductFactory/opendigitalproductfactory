@@ -58,18 +58,25 @@ const baseCard: InternalAgentCard = {
         supervisorDecisionState: {
           pendingProposalCount: 2,
           latestPendingProposal: {
+            approvalId: "prop-row-2",
             proposalId: "PROP-002",
+            threadId: "thread-2",
+            messageId: "msg-2",
             actionType: "register_digital_product_from_build",
             proposedAt: "2026-05-20T15:00:00.000Z",
+            decisionEndpoint: "/api/v1/governance/approvals/prop-row-2",
           },
           recentReceiptCount: 3,
           latestReceipt: {
             receiptId: "receipt-2",
             toolExecutionId: "tool-exec-2",
             toolName: "run_sandbox_tests",
+            receiptKind: "sandbox-test-run",
             receiptStatus: "valid",
             executionStatus: "succeeded",
+            expiresAt: "2026-06-20T16:00:01.000Z",
             createdAt: "2026-05-20T16:00:01.000Z",
+            journalHref: "/platform/audit/journal?executionId=tool-exec-2&receiptId=receipt-2",
           },
         },
       },
@@ -95,8 +102,13 @@ describe("AgentCardSupervisorPanel", () => {
     expect(html).toContain("3 exposed tools");
     expect(html).toContain("Pending proposals");
     expect(html).toContain("PROP-002");
+    expect(html).toContain("Approval workflow");
+    expect(html).toContain("/api/v1/governance/approvals/prop-row-2");
     expect(html).toContain("Latest receipt");
     expect(html).toContain("run_sandbox_tests");
+    expect(html).toContain("sandbox-test-run");
+    expect(html).toContain("Open receipt in Capability Journal");
+    expect(html).toContain("/platform/audit/journal?executionId=tool-exec-2&amp;receiptId=receipt-2");
     expect(html).toContain("succeeded");
     expect(html).toContain("proposal/review");
     expect(html).toContain("mcp");

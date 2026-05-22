@@ -103,6 +103,16 @@ function createEmptySupervisorDecisionState(): RuntimeSupervisorDecisionState {
   return { ...EMPTY_SUPERVISOR_DECISION_STATE };
 }
 
+function buildDecisionEndpoint(approvalId: string): string {
+  return `/api/v1/governance/approvals/${encodeURIComponent(approvalId)}`;
+}
+
+function buildJournalHref(params: { toolExecutionId: string; receiptId: string }): string {
+  const executionId = encodeURIComponent(params.toolExecutionId);
+  const receiptId = encodeURIComponent(params.receiptId);
+  return `/platform/audit/journal?executionId=${executionId}&receiptId=${receiptId}`;
+}
+
 const AGENT_CARD_SELECT = {
   agentId: true,
   name: true,
@@ -301,7 +311,10 @@ async function getSupervisorDecisionStateForAgents(
       },
       orderBy: { proposedAt: "desc" },
       select: {
+        id: true,
         proposalId: true,
+        threadId: true,
+        messageId: true,
         agentId: true,
         actionType: true,
         proposedAt: true,
@@ -323,8 +336,10 @@ async function getSupervisorDecisionStateForAgents(
           select: {
             id: true,
             toolExecutionId: true,
+            receiptKind: true,
             receiptStatus: true,
             executionStatus: true,
+            expiresAt: true,
             createdAt: true,
           },
         },
@@ -338,9 +353,13 @@ async function getSupervisorDecisionStateForAgents(
       ...current,
       pendingProposalCount: current.pendingProposalCount + 1,
       latestPendingProposal: current.latestPendingProposal ?? {
+        approvalId: proposal.id,
         proposalId: proposal.proposalId,
+        threadId: proposal.threadId,
+        messageId: proposal.messageId,
         actionType: proposal.actionType,
         proposedAt: proposal.proposedAt.toISOString(),
+        decisionEndpoint: buildDecisionEndpoint(proposal.id),
       },
     });
   }
@@ -355,9 +374,15 @@ async function getSupervisorDecisionStateForAgents(
         receiptId: execution.receipt.id,
         toolExecutionId: execution.receipt.toolExecutionId,
         toolName: execution.toolName,
+        receiptKind: execution.receipt.receiptKind,
         receiptStatus: execution.receipt.receiptStatus,
         executionStatus: execution.receipt.executionStatus,
+        expiresAt: execution.receipt.expiresAt.toISOString(),
         createdAt: execution.receipt.createdAt.toISOString(),
+        journalHref: buildJournalHref({
+          toolExecutionId: execution.receipt.toolExecutionId,
+          receiptId: execution.receipt.id,
+        }),
       },
     });
   }

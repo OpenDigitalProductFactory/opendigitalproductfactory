@@ -369,13 +369,19 @@ describe("resolveInternalAgentCard", () => {
     vi.mocked(resolveAIDocForAgent).mockResolvedValue(null);
     vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([
       {
+        id: "prop-row-2",
         proposalId: "PROP-002",
+        threadId: "thread-2",
+        messageId: "msg-2",
         agentId: "build-specialist",
         actionType: "register_digital_product_from_build",
         proposedAt: new Date("2026-05-20T15:00:00Z"),
       },
       {
+        id: "prop-row-1",
         proposalId: "PROP-001",
+        threadId: "thread-1",
+        messageId: "msg-1",
         agentId: "build-specialist",
         actionType: "deploy_feature",
         proposedAt: new Date("2026-05-19T15:00:00Z"),
@@ -390,8 +396,10 @@ describe("resolveInternalAgentCard", () => {
         receipt: {
           id: "receipt-2",
           toolExecutionId: "tool-exec-2",
+          receiptKind: "sandbox-test-run",
           receiptStatus: "valid",
           executionStatus: "succeeded",
+          expiresAt: new Date("2026-06-20T16:00:01Z"),
           createdAt: new Date("2026-05-20T16:00:01Z"),
         },
       },
@@ -403,8 +411,10 @@ describe("resolveInternalAgentCard", () => {
         receipt: {
           id: "receipt-1",
           toolExecutionId: "tool-exec-1",
+          receiptKind: "sandbox-command",
           receiptStatus: "valid",
           executionStatus: "succeeded",
+          expiresAt: new Date("2026-06-19T16:00:01Z"),
           createdAt: new Date("2026-05-19T16:00:01Z"),
         },
       },
@@ -415,18 +425,25 @@ describe("resolveInternalAgentCard", () => {
     expect(card.extensions.tak.authority.supervisorDecisionState).toEqual({
       pendingProposalCount: 2,
       latestPendingProposal: {
+        approvalId: "prop-row-2",
         proposalId: "PROP-002",
+        threadId: "thread-2",
+        messageId: "msg-2",
         actionType: "register_digital_product_from_build",
         proposedAt: "2026-05-20T15:00:00.000Z",
+        decisionEndpoint: "/api/v1/governance/approvals/prop-row-2",
       },
       recentReceiptCount: 2,
       latestReceipt: {
         receiptId: "receipt-2",
         toolExecutionId: "tool-exec-2",
         toolName: "run_sandbox_tests",
+        receiptKind: "sandbox-test-run",
         receiptStatus: "valid",
         executionStatus: "succeeded",
+        expiresAt: "2026-06-20T16:00:01.000Z",
         createdAt: "2026-05-20T16:00:01.000Z",
+        journalHref: "/platform/audit/journal?executionId=tool-exec-2&receiptId=receipt-2",
       },
     });
     expect(prisma.agentActionProposal.findMany).toHaveBeenCalledWith({
@@ -436,7 +453,10 @@ describe("resolveInternalAgentCard", () => {
       },
       orderBy: { proposedAt: "desc" },
       select: {
+        id: true,
         proposalId: true,
+        threadId: true,
+        messageId: true,
         agentId: true,
         actionType: true,
         proposedAt: true,
