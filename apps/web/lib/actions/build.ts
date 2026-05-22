@@ -492,6 +492,28 @@ export async function advanceBuildPhase(
   });
   revalidatePortalContextForBuild(buildId);
 
+  // Ephemeral ship-phase token lifecycle (BI-9866659C AC #4). Reduces
+  // blast radius: ship-phase work (deploy_feature, execute_promotion, etc)
+  // can run against a build-scoped token instead of the operator's full
+  // session credential. Token entries are issued on review→ship and
+  // revoked on ship→exit. Wrapped in try/catch so a token-side failure
+  // never blocks the phase transition itself — same non-fatal stance as
+  // the agentEventBus emit below.
+  try {
+    const { manageEphemeralShipTokensForTransition } = await import(
+      "@/lib/auth/ephemeral-ship-tokens"
+    );
+    await manageEphemeralShipTokensForTransition({
+      buildId,
+      userId,
+      currentPhase,
+      targetPhase,
+      buildTitle: build.title,
+    });
+  } catch (err) {
+    console.error("[ephemeral-ship-token] lifecycle hook failed (non-fatal)", err);
+  }
+
   // Notify the UI immediately so progress indicators update without waiting for debounce
   try {
     const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId }, select: { threadId: true } });

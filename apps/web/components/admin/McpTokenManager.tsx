@@ -54,10 +54,26 @@ type TokenRow = {
   // Derived server-side in listMyMcpTokens. Null when the token has never
   // been used, when revoked, or when expired — see MCP_TOKEN_DEFAULT_STALE_DAYS.
   idleDays: number | null;
+  // Lifecycle kind: "operator" (default) or "ephemeral_ship" (auto-managed
+  // by transitionBuildPhase). Server defines the canonical set; we treat
+  // anything other than "operator" as lifecycle-managed for UI purposes.
+  kind: string;
+  // FeatureBuild.buildId when kind = "ephemeral_ship"; null for operator
+  // tokens. Surfaced in the ephemeral pill so the operator can trace a
+  // ship token back to its owning build.
+  buildId: string | null;
   expiresAt: string | null;
   revokedAt: string | null;
   createdAt: string;
 };
+
+// Convenience predicate — anything with kind != "operator" is managed by a
+// lifecycle hook somewhere (today only the ship phase). The UI uses this
+// to suppress manual rotate / revoke / bulk-select controls on rows the
+// operator is not supposed to touch by hand.
+function isLifecycleManaged(token: TokenRow): boolean {
+  return token.kind !== "operator";
+}
 
 // Alias the shared constants from mcp-token-scopes for use inside the JSX —
 // keeps the source of truth out of "use server" modules per Next.js rules.
@@ -735,13 +751,17 @@ function TokenListItem(props: {
   const revoked = token.revokedAt != null;
   const expired = isExpired(token);
   const disabled = props.pending || revoked || expired;
+  const lifecycleManaged = isLifecycleManaged(token);
   const missingCodingScopes = props.defaultScopes.filter((scope) => !token.scopes.includes(scope));
 
   return (
     <li className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 flex-1 gap-3">
-          {props.selectable && (
+          {/* Lifecycle-managed rows (ephemeral_ship, etc) are never
+              selectable for bulk revoke — they're owned by the phase
+              transition hook and the operator shouldn't fight it. */}
+          {props.selectable && !lifecycleManaged && (
             <input
               type="checkbox"
               className="mt-1 shrink-0"
@@ -767,6 +787,22 @@ function TokenListItem(props: {
               <ShieldCheck className="h-3 w-3" aria-hidden="true" />
               {token.scope}
             </span>
+            {token.kind === "ephemeral_ship" && (
+              <span
+                className="inline-flex items-center gap-1 rounded-md border border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] px-2 py-0.5 text-xs font-medium text-[var(--dpf-accent)]"
+                title={
+                  token.buildId
+                    ? `Auto-issued for ship phase of FeatureBuild ${token.buildId}. Auto-revokes on phase exit.`
+                    : "Auto-managed by Build Studio ship-phase lifecycle."
+                }
+              >
+                <ShieldCheck className="h-3 w-3" aria-hidden="true" />
+                ephemeral
+                {token.buildId && (
+                  <span className="font-mono opacity-80">· {token.buildId.slice(-8)}</span>
+                )}
+              </span>
+            )}
             {revoked && <StatusPill label="revoked" tone="error" />}
             {expired && !revoked && <StatusPill label="expired" tone="warning" />}
             {props.stale && (
@@ -808,7 +844,7 @@ function TokenListItem(props: {
           </div>
         </div>
 
-        {!revoked && (
+        {!revoked && !lifecycleManaged && (
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             {!expired && missingCodingScopes.length > 0 && (
               <button
@@ -860,6 +896,14 @@ function TokenListItem(props: {
               <Ban className={iconClass()} aria-hidden="true" />
               Revoke
             </button>
+          </div>
+        )}
+        {!revoked && lifecycleManaged && (
+          <div className="flex shrink-0 items-center gap-2 text-xs text-[var(--dpf-muted)] lg:justify-end">
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>
+              Lifecycle-managed — auto-revokes on ship-phase exit
+            </span>
           </div>
         )}
       </div>

@@ -82,6 +82,13 @@ export async function listMyMcpTokens() {
       capability: t.capability,
       scope: t.scope,
       scopes: t.scopes,
+      // Lifecycle classification. "operator" tokens are manually managed;
+      // "ephemeral_ship" tokens are auto-issued/revoked by build phase
+      // transitions. The UI surfaces this so the operator can tell them
+      // apart and so we can suppress manual revoke/rotate affordances on
+      // lifecycle-managed rows.
+      kind: t.kind,
+      buildId: t.buildId,
       lastUsedAt: t.lastUsedAt?.toISOString() ?? null,
       // Idle days only meaningful for active tokens. Revoked / expired rows
       // get null so the UI can show "—" instead of an ever-growing number.
