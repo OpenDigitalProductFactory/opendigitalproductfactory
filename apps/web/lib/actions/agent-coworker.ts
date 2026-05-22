@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { validateMessageInput } from "@/lib/agent-coworker-types";
@@ -1280,6 +1281,13 @@ export async function sendMessage(input: {
   let responseModelId: string | null = null;
   let formAssistUpdate: Record<string, unknown> | undefined;
   let systemMessage: AgentMessageRow | undefined;
+  // Pre-allocate the assistant AgentMessage id so adapter telemetry rows
+  // written inside the agentic loop carry the join key back to the row this
+  // sendMessage will eventually create (either the proposal path or the
+  // standard path below). Without this, AdapterRunTelemetry.agentMessageId is
+  // always null and the per-turn provider/model badge degrades to provider
+  // name only.
+  const pendingAgentMessageId = randomUUID();
   const currentTaskRun = await findCurrentAutonomousWorkRun({
     userId: user.id!,
     threadId: input.threadId,
@@ -1422,6 +1430,7 @@ export async function sendMessage(input: {
       buildPhase: activeBuild?.phase ?? null,
       featureBuildId: activeBuild?.id ?? null,
       activeSkillId,
+      agentMessageId: pendingAgentMessageId,
       ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
       onProgress: (event) => agentEventBus.emit(input.threadId, event),
     });
@@ -1435,6 +1444,7 @@ export async function sendMessage(input: {
       const proposalId = "AP-" + Math.random().toString(36).substring(2, 7).toUpperCase();
       const agentMsg = await prisma.agentMessage.create({
         data: {
+          id: pendingAgentMessageId,
           threadId: input.threadId, role: "assistant",
           taskRunId: currentTaskRun?.taskRunId ?? null,
           content: tc.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
@@ -1810,6 +1820,7 @@ export async function sendMessage(input: {
   // Persist agent response
   const agentMsg = await prisma.agentMessage.create({
     data: {
+      id: pendingAgentMessageId,
       threadId: input.threadId,
       role: "assistant",
       taskRunId: currentTaskRun?.taskRunId ?? null,

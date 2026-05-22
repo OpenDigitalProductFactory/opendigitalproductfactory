@@ -18,6 +18,14 @@ import {
 
 type RouteOutcomeAttribution = {
   agentId?: string | null;
+  /**
+   * Pre-allocated AgentMessage id for the assistant turn this call is part of.
+   * Threaded into AdapterRunTelemetry rows so a thread's badge/cost rollups
+   * can join telemetry → message without depending on row-creation ordering
+   * (the AgentMessage row is persisted after the agentic loop returns, but
+   * adapter rows are written inside each iteration).
+   */
+  agentMessageId?: string | null;
 };
 
 export interface FallbackResult {
@@ -102,6 +110,7 @@ export async function callWithFallbackChain(
   let overloadRetried = false;
   let transientRetried = false;
   const agentId = outcomeAttribution?.agentId?.trim() || mcpSession?.agentId?.trim() || null;
+  const agentMessageId = outcomeAttribution?.agentMessageId?.trim() || null;
 
   for (let i = 0; i < chain.length; i++) {
     const entry = chain[i]!;
@@ -136,7 +145,7 @@ export async function callWithFallbackChain(
         i === 0 ? plan : undefined,
         i === 0 ? previousResponseId : undefined,
         mcpSession,
-        { agentId },
+        { agentId, agentMessageId },
       );
 
       // EP-INF-004: Record successful request for rate tracking
