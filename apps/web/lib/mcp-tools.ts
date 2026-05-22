@@ -7781,6 +7781,20 @@ export async function executeTool(
         };
       }
 
+      const { diagnoseSandboxReadiness } = await import("@/lib/integrate/sandbox/sandbox-admin");
+      const { assertSandboxReadyForDeploy } = await import("@/lib/integrate/sandbox/sandbox-readiness-gate");
+      const readiness = await diagnoseSandboxReadiness({ buildId });
+      const readinessGate = assertSandboxReadyForDeploy(readiness);
+      if (!readinessGate.ok) {
+        logBuildActivity(buildId, "deploy_feature", readinessGate.message);
+        return {
+          success: false,
+          error: "Sandbox readiness blocked deploy_feature.",
+          message: readinessGate.message,
+          data: { ...readiness },
+        };
+      }
+
       const devConfig = await prisma.platformDevConfig.findUnique({
         where: { id: "singleton" },
         select: { contributionMode: true, gitRemoteUrl: true },
@@ -8952,6 +8966,20 @@ export async function executeTool(
       });
       if (!build || build.createdById !== userId) {
         return { success: false, error: "Build not found.", message: `No active build ${buildId} was found for this user.` };
+      }
+
+      const { diagnoseSandboxReadiness } = await import("@/lib/integrate/sandbox/sandbox-admin");
+      const { assertSandboxReadyForContribution } = await import("@/lib/integrate/sandbox/sandbox-readiness-gate");
+      const readiness = await diagnoseSandboxReadiness({ buildId });
+      const readinessGate = assertSandboxReadyForContribution(readiness);
+      if (!readinessGate.ok) {
+        logBuildActivity(buildId, "contribute_to_hive", readinessGate.message);
+        return {
+          success: false,
+          error: "Sandbox readiness blocked contribution.",
+          message: readinessGate.message,
+          data: { ...readiness },
+        };
       }
 
       const diff = (build.diffPatch ?? "") as string;

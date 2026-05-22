@@ -5,10 +5,17 @@ const mockPrisma = {
     findUnique: vi.fn(),
     findFirst: vi.fn(),
   },
+  buildActivity: {
+    create: vi.fn().mockResolvedValue({ id: "activity-1" }),
+  },
+  platformDevConfig: {
+    findUnique: vi.fn(),
+  },
 };
 
 const mockDiagnoseSandboxReadiness = vi.hoisted(() => vi.fn());
 const mockRecoverSandbox = vi.hoisted(() => vi.fn());
+const mockResolveHiveToken = vi.hoisted(() => vi.fn());
 
 vi.mock("@dpf/db", () => ({
   DISCOVERY_TRIAGE_AGENT_ID: "AGT-DISCOVERY",
@@ -25,6 +32,14 @@ vi.mock("@/lib/integrate/sandbox/sandbox-admin", () => ({
 
 vi.mock("@/lib/integrate/sandbox/sandbox-recovery", () => ({
   recoverSandbox: mockRecoverSandbox,
+}));
+
+vi.mock("@/lib/integrate/identity-privacy", () => ({
+  resolveHiveToken: mockResolveHiveToken,
+}));
+
+vi.mock("@/lib/platform-dev-policy", () => ({
+  getPlatformDevPolicyState: vi.fn(() => "contribution_ready"),
 }));
 
 const FORBIDDEN_SANDBOX_HANDOFF_PATTERNS = [
@@ -174,5 +189,97 @@ describe("sandbox admin MCP and coworker messaging", () => {
     expect(result.success).toBe(false);
     expect(result.error).toBe("invalid_action");
     expect(mockRecoverSandbox).not.toHaveBeenCalled();
+  });
+
+  it("blocks deploy_feature before diff extraction when sandbox readiness is red", async () => {
+    mockPrisma.featureBuild.findUnique
+      .mockResolvedValueOnce({
+        buildId: "FB-SANDBOX-1",
+        createdById: "user-1",
+      })
+      .mockResolvedValueOnce({
+        sandboxId: "dpf-sandbox-1",
+        buildBranch: "build/FB-SANDBOX-1",
+        phase: "ship",
+        createdById: "user-1",
+      });
+    mockDiagnoseSandboxReadiness.mockResolvedValueOnce({
+      buildId: "FB-SANDBOX-1",
+      state: "detached",
+      canDeploy: false,
+      canContribute: false,
+      summary: "The sandbox is detached from this build.",
+      checks: [],
+      recommendedActions: [],
+      inspectedAt: "2026-05-22T12:00:00.000Z",
+    });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool("deploy_feature", {
+      buildId: "FB-SANDBOX-1",
+    }, "user-1", { agentId: "AGT-ORCH-400" });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Sandbox readiness blocked deploy_feature.");
+    expect(result.data).toMatchObject({ state: "detached" });
+    expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        buildId: "FB-SANDBOX-1",
+        tool: "deploy_feature",
+        summary: expect.stringContaining("not ready"),
+      }),
+    }));
+  });
+
+  it("blocks contribute_to_hive before FeaturePack creation when sandbox readiness is red", async () => {
+    mockPrisma.featureBuild.findUnique
+      .mockResolvedValueOnce({
+        buildId: "FB-SANDBOX-1",
+        createdById: "user-1",
+      })
+      .mockResolvedValueOnce({
+        id: "feature-build-row-1",
+        title: "Sandbox fix",
+        brief: {},
+        diffPatch: "diff --git a/a.ts b/a.ts\n",
+        diffSummary: "summary",
+        sandboxId: "dpf-sandbox-1",
+        portfolioId: null,
+        createdById: "user-1",
+        createdBy: { email: "admin@dpf.local" },
+      });
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValueOnce({
+      contributionMode: "contribute_all",
+      upstreamRemoteUrl: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git",
+      dcoAcceptedAt: new Date("2026-05-22T12:00:00.000Z"),
+      gitRemoteUrl: null,
+    });
+    mockResolveHiveToken.mockResolvedValueOnce("ghp_test");
+    mockDiagnoseSandboxReadiness.mockResolvedValueOnce({
+      buildId: "FB-SANDBOX-1",
+      state: "stale_source",
+      canDeploy: false,
+      canContribute: false,
+      summary: "The sandbox source is stale.",
+      checks: [],
+      recommendedActions: [],
+      inspectedAt: "2026-05-22T12:00:00.000Z",
+    });
+
+    const { executeTool } = await import("./mcp-tools");
+    const result = await executeTool("contribute_to_hive", {
+      buildId: "FB-SANDBOX-1",
+    }, "user-1", { agentId: "AGT-ORCH-500" });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Sandbox readiness blocked contribution.");
+    expect(result.data).toMatchObject({ state: "stale_source" });
+    expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        buildId: "FB-SANDBOX-1",
+        tool: "contribute_to_hive",
+        summary: expect.stringContaining("upstream contribution"),
+      }),
+    }));
   });
 });
