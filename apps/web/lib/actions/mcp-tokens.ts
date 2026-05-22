@@ -19,6 +19,7 @@ import {
   CODING_AGENT_MCP_TOKEN_SCOPES,
   deriveIdleDays,
   getMcpTokenTemplate,
+  isMcpTokenArchived,
   MCP_TOKEN_TEMPLATES,
   resolveTemplateGrants,
   type McpTokenTemplate,
@@ -52,13 +53,27 @@ export async function listAvailableMcpScopes(): Promise<{
 export async function listMyMcpTokens() {
   const session = await auth();
   if (!session?.user?.id) {
-    return { ok: false as const, error: "unauthorized", tokens: [] };
+    return {
+      ok: false as const,
+      error: "unauthorized",
+      tokens: [],
+      archivedCount: 0,
+    };
   }
   const tokens = await listMcpApiTokens(session.user.id);
   const now = new Date();
+
+  // Archive filter: revoked tokens older than MCP_TOKEN_REVOKED_ARCHIVE_DAYS
+  // (90 days) fall off the admin UI entirely. They remain in the DB so the
+  // ToolExecution audit FK chain is intact — forensic replay via
+  // /platform/ai/authority continues to surface them via raw queries.
+  const archivedCount = tokens.filter((t) => isMcpTokenArchived(t.revokedAt, now)).length;
+  const visible = tokens.filter((t) => !isMcpTokenArchived(t.revokedAt, now));
+
   return {
     ok: true as const,
-    tokens: tokens.map((t) => ({
+    archivedCount,
+    tokens: visible.map((t) => ({
       id: t.id,
       name: t.name,
       prefix: t.prefix,
