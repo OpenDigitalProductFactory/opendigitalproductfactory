@@ -19,6 +19,38 @@ import {
 } from "./eval-scoring";
 import { BACKGROUND_EVAL_ENDPOINT_TYPES } from "./provider-eligibility";
 
+// ── Infrastructure Error Classifier (BI-INST-008 circuit breaker) ──────────
+//
+// Patterns that indicate the probe path itself was broken, not the model
+// being probed. When an all-inconclusive eval matches one of these
+// patterns we skip the auto-retire so the operator can fix the
+// infrastructure and the next eval can give the model a fair chance.
+const INFRASTRUCTURE_ERROR_PATTERNS: RegExp[] = [
+  /No eligible endpoints/i,
+  /No active endpoint manifests/i,
+  /operation was aborted due to timeout/i,
+  /network error/i,
+  /fetch failed/i,
+  /ECONNREFUSED/i,
+  /ENOTFOUND/i,
+  /socket hang up/i,
+  /Docker Model Runner is not running/i,
+  /could not resolve host/i,
+];
+
+/**
+ * Classify an eval error string as infrastructure vs model-quality.
+ * Returns true if the error indicates a broken probe path (no route,
+ * network failure, runner not started, etc.) — in which case the
+ * auto-retire circuit breaker should NOT retire the model.
+ *
+ * Returns false for null/unknown errors so they fall through to the
+ * existing retire-on-failure behaviour (preserves backward compat).
+ */
+export function errorLooksLikeInfrastructure(error: string | null): boolean {
+  return error !== null && INFRASTRUCTURE_ERROR_PATTERNS.some((re) => re.test(error));
+}
+
 // ── Score Computation ────────────────────────────────────────────────────────
 
 /** Compute new dimension score from eval result and previous score. */
@@ -359,10 +391,26 @@ export async function runDimensionEval(
     .flatMap((d) => d.testResults)
     .find((t) => t.error)?.error ?? null;
 
-  // If ALL dimensions are inconclusive, the model is unusable — retire it.
+  // If ALL dimensions are inconclusive, the model MIGHT be unusable.
   // This covers: model removed (404), deprecated, wrong API type (400),
   // auth restrictions, and any other consistent failure pattern.
-  if (allInconclusive && firstError) {
+  //
+  // BI-INST-008 circuit breaker: do NOT retire on infrastructure errors
+  // (no route, network timeout, connection refused, etc.). Those errors
+  // describe a broken probe path, not a broken model. The 2026-05-23
+  // cold-install dogfood hit this: every probe failed with
+  // "No eligible endpoints for task 'conversation'" (a routing bug in
+  // the probe runner — now fixed by BI-INST-007), and the resulting
+  // all-inconclusive verdict retired every local ModelProfile row,
+  // leaving the platform with zero usable models. Recovery required
+  // manual SQL un-retirement.
+  //
+  // errorLooksLikeInfrastructure is exported for unit testing — the
+  // classifier is the only behavior change here that's worth a focused
+  // test, and keeping it pure makes that test trivial.
+  const looksLikeInfrastructure = errorLooksLikeInfrastructure(firstError);
+
+  if (allInconclusive && firstError && !looksLikeInfrastructure) {
     await prisma.modelProfile.update({
       where: { providerId_modelId: { providerId, modelId } },
       data: {
@@ -372,6 +420,10 @@ export async function runDimensionEval(
       },
     });
     console.log(`[eval-runner] Auto-retired ${providerId}/${modelId}: all tests failed — ${firstError.slice(0, 100)}`);
+  } else if (allInconclusive && looksLikeInfrastructure) {
+    console.warn(
+      `[eval-runner] All dimensions inconclusive for ${providerId}/${modelId} but error looks like infrastructure — NOT retiring. Error: ${firstError?.slice(0, 200)}`,
+    );
   }
 
   return {
