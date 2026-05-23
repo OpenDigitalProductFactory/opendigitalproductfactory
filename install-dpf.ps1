@@ -1168,6 +1168,52 @@ GF_ADMIN_PASSWORD=$adminPass
 "@ | Set-Content "$DPF_DIR\.env"
 }
 
+# --- Restore preserved backups from prior reinstall/uninstall -----------------
+#
+# dpf-reinstall.ps1 and uninstall-dpf.ps1 move $DPF_DIR\backups\ to the
+# sibling $DPF_DIR-backups\ before deleting the install directory, so that
+# operator-owned backup history survives a wipe. Fold them back in here so
+# the admin UX picks them up automatically when the portal first reads the
+# /backups bind mount. Idempotent: only acts if the sibling exists with
+# content, and only moves entries that don't collide with anything fresh.
+
+$preserveDir = "$DPF_DIR-backups"
+if (Test-Path $preserveDir) {
+    $backupsDest = Join-Path $DPF_DIR "backups"
+    try {
+        $entries = Get-ChildItem -LiteralPath $preserveDir -Force -ErrorAction SilentlyContinue
+    } catch {
+        $entries = @()
+    }
+    if ($entries) {
+        Write-Action "Restoring preserved backups from $preserveDir"
+        if (-not (Test-Path $backupsDest)) {
+            New-Item -ItemType Directory -Path $backupsDest | Out-Null
+        }
+        foreach ($entry in $entries) {
+            $dest = Join-Path $backupsDest $entry.Name
+            if (Test-Path $dest) {
+                Write-Warn "  Skipped $($entry.Name): already exists in $backupsDest"
+            } else {
+                try {
+                    Move-Item -LiteralPath $entry.FullName -Destination $dest -Force
+                } catch {
+                    Write-Warn "  Could not move $($entry.Name): $_"
+                }
+            }
+        }
+        # Remove the preserve dir only if it's now empty -- leave it in place
+        # otherwise so the operator can investigate skipped entries.
+        $remaining = Get-ChildItem -LiteralPath $preserveDir -Force -ErrorAction SilentlyContinue
+        if (-not $remaining) {
+            Remove-Item -LiteralPath $preserveDir -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Ok "Backups restored to $backupsDest"
+        } else {
+            Write-Warn "Some entries left in $preserveDir (collisions) -- review by hand."
+        }
+    }
+}
+
 # --- Step 6: Start Platform ---------------------------------------------------
 
 Write-Step 7 10 "Starting the platform..."

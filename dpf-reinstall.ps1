@@ -12,7 +12,9 @@
 #   4. Removes ALL DPF Docker volumes (including neo4j, qdrant, postgres)
 #   5. Removes DPF Docker images
 #   6. Removes bind-mount data directories
-#   7. Deletes the project directory
+#   7. Preserves $DPF_DIR\backups\ to sibling $DPF_DIR-backups\ (operator
+#      backup history survives the reinstall; install-dpf.ps1 folds them back)
+#   8. Deletes the project directory
 #
 # After this completes, follow the README to install fresh as a new user.
 #
@@ -71,6 +73,10 @@ Write-Host "    - Redis cache"
 Write-Host "    - Sandbox workspace"
 Write-Host "    - All Docker images and volumes"
 Write-Host "    - The entire $DPF_DIR directory"
+Write-Host ""
+Write-Host "  Operator backups under $DPF_DIR\backups\ are PRESERVED" -ForegroundColor Cyan
+Write-Host "  by moving them to $DPF_DIR-backups\ before the rm."
+Write-Host "  install-dpf.ps1 folds them back in on the next install."
 Write-Host ""
 
 # --- Step 1: Check for uncommitted changes ---------------------------------
@@ -192,6 +198,58 @@ if (Test-Path $dockerDataDir) {
     Write-Ok "Removed $dockerDataDir"
 } else {
     Write-Ok "No bind-mount data directory found"
+}
+
+# --- Step 5b: Preserve operator backups before nuking the install dir ------
+#
+# The platform writes daily Postgres/Neo4j/Qdrant dumps to
+# $DPF_DIR\backups\ via a host bind mount (docker-compose.yml). The compose
+# author chose a bind mount precisely so `docker compose down -v` could not
+# destroy backups -- but Step 6 below removes the entire install directory,
+# which would nuke them anyway. Move them to a sibling path this script does
+# NOT touch; install-dpf.ps1 folds them back in on the next install so the
+# admin UX still shows the full history.
+
+Write-Step "Preserving operator backups"
+
+$backupsSrc = Join-Path $DPF_DIR "backups"
+if (Test-Path $backupsSrc) {
+    $hasContent = $false
+    try {
+        $first = Get-ChildItem -LiteralPath $backupsSrc -Force -ErrorAction SilentlyContinue | Select-Object -First 1
+        $hasContent = [bool]$first
+    } catch {
+        $hasContent = $false
+    }
+    if ($hasContent) {
+        $preserveDir = "$DPF_DIR-backups"
+        Write-Host "   Moving $backupsSrc -> $preserveDir" -ForegroundColor Cyan
+        try {
+            if (-not (Test-Path $preserveDir)) {
+                New-Item -ItemType Directory -Path $preserveDir | Out-Null
+            }
+            # Move each top-level entry so we merge with anything already
+            # preserved from a prior reinstall rather than failing on
+            # collision.
+            Get-ChildItem -LiteralPath $backupsSrc -Force | ForEach-Object {
+                $dest = Join-Path $preserveDir $_.Name
+                if (Test-Path $dest) {
+                    Write-Warn "Skipped $($_.Name): already present in $preserveDir"
+                } else {
+                    Move-Item -LiteralPath $_.FullName -Destination $dest -Force
+                }
+            }
+            Write-Ok "Backups preserved at $preserveDir"
+            Write-Host "   install-dpf.ps1 will fold these back into the new install automatically." -ForegroundColor Gray
+        } catch {
+            Write-Warn "Could not preserve backups: $_"
+            Write-Fail "Refusing to delete $DPF_DIR while backups are present. Move $backupsSrc somewhere safe by hand, then re-run."
+        }
+    } else {
+        Write-Ok "No backup files to preserve"
+    }
+} else {
+    Write-Ok "No backups directory found"
 }
 
 # --- Step 6: Remove project directory --------------------------------------
