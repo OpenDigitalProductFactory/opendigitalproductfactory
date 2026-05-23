@@ -4,7 +4,6 @@
 
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
-import { routeAndCall } from "@/lib/routed-inference";
 import { assembleSystemPrompt, type PromptInput } from "@/lib/prompt-assembler";
 import { evaluateResponseForTest, updatePerformanceProfile } from "@/lib/orchestrator-evaluator";
 import {
@@ -15,7 +14,7 @@ import {
   type CapabilityProbe,
   type TestScenario,
 } from "./endpoint-test-registry";
-import type { ChatMessage } from "@/lib/ai-inference";
+import { callProvider, type ChatMessage } from "@/lib/ai-inference";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -88,16 +87,22 @@ async function runProbe(
     const messages: ChatMessage[] = [{ role: "user", content: probe.userMessage }];
 
     const probeToolsFormatted = probe.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
-    const result = await routeAndCall(messages, systemPrompt, promptInput.sensitivity, {
-      ...(probeToolsFormatted ? { tools: probeToolsFormatted } : {}),
-      preferredProviderId: providerId,
-      ...(modelId !== "default" ? { preferredModelId: modelId } : {}),
-    });
 
-    // Detect failover — if a different endpoint answered, mark as infrastructure failure
-    if (result.downgraded) {
-      return { probeId: probe.id, category: probe.category, name: probe.name, pass: false, reason: "Endpoint unavailable — response came from fallback provider." };
-    }
+    // Resolves BI-INST-007: probes used routeAndCall, which requires
+    // active endpoint manifests in EndpointTaskPerformance. Probes are
+    // SUPPOSED to be the thing that creates those manifests — a
+    // chicken-and-egg that broke every fresh-install probe with
+    // "No eligible endpoints for task 'conversation'" before any model
+    // had ever been profiled. Since the probe runner already knows both
+    // providerId AND modelId (it's testing a SPECIFIC model), there's no
+    // routing decision to make — call the model directly.
+    const result = await callProvider(
+      providerId,
+      modelId,
+      messages,
+      systemPrompt,
+      probeToolsFormatted,
+    );
 
     // Extract tool calls from response
     const toolCalls = result.toolCalls as unknown[] | undefined;
@@ -123,19 +128,16 @@ async function runScenario(
     const messages: ChatMessage[] = [{ role: "user", content: scenario.userMessage }];
 
     const scenarioToolsFormatted = scenario.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
-    const result = await routeAndCall(messages, systemPrompt, promptInput.sensitivity, {
-      ...(scenarioToolsFormatted ? { tools: scenarioToolsFormatted } : {}),
-      preferredProviderId: providerId,
-      ...(modelId !== "default" ? { preferredModelId: modelId } : {}),
-    });
 
-    if (result.downgraded) {
-      return {
-        scenarioId: scenario.id, taskType: scenario.taskType, name: scenario.name,
-        passed: false, assertionResults: [{ description: "Endpoint available", passed: false, detail: "Failover detected" }],
-        orchestratorScore: null, response: result.content,
-      };
-    }
+    // BI-INST-007: same direct-call rationale as runProbe — scenario runner
+    // already targets a specific providerId+modelId, no routing needed.
+    const result = await callProvider(
+      providerId,
+      modelId,
+      messages,
+      systemPrompt,
+      scenarioToolsFormatted,
+    );
 
     const toolCalls = (result as unknown as Record<string, unknown>).toolCalls as unknown[] | undefined;
 
