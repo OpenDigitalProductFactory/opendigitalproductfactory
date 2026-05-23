@@ -24,6 +24,21 @@ export type IssueMcpTokenInput = {
   scopes: string[];
   expiresInDays: number | null;
   agentId?: string | null;
+  /**
+   * Lifecycle classification.
+   * - "operator" (default): manually issued, manually revoked.
+   * - "ephemeral_ship": auto-issued on FeatureBuild review→ship transition,
+   *   auto-revoked on ship exit. Requires `buildId` to be set.
+   * Persisted to McpApiToken.kind.
+   */
+  kind?: "operator" | "ephemeral_ship";
+  /**
+   * FeatureBuild owning this token's lifecycle. Set when kind is an
+   * ephemeral_* variant; null for operator tokens. Persisted as a loose FK
+   * (no Prisma relation) so a build delete does not cascade-delete the
+   * audit row.
+   */
+  buildId?: string | null;
 };
 
 export type IssueMcpTokenResult =
@@ -41,7 +56,8 @@ export type IssueMcpTokenResult =
         | "missing_name"
         | "empty_scopes"
         | "invalid_scope"
-        | "invalid_capability";
+        | "invalid_capability"
+        | "missing_build_id";
       message: string;
     };
 
@@ -221,6 +237,15 @@ export async function issueMcpApiToken(
       ? new Date(Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000)
       : null;
 
+  const kind = input.kind ?? "operator";
+  if (kind === "ephemeral_ship" && !input.buildId) {
+    return {
+      ok: false,
+      error: "missing_build_id",
+      message: "buildId is required when kind is 'ephemeral_ship'",
+    };
+  }
+
   const row = await prisma.mcpApiToken.create({
     data: {
       userId: input.userId,
@@ -234,6 +259,8 @@ export async function issueMcpApiToken(
       capability: scopeToCapability(scope),
       scope,
       expiresAt,
+      kind,
+      buildId: input.buildId ?? null,
     },
   });
 
@@ -491,6 +518,8 @@ export async function listMcpApiTokens(userId: string): Promise<
     expiresAt: Date | null;
     revokedAt: Date | null;
     createdAt: Date;
+    kind: string;
+    buildId: string | null;
   }>
 > {
   const rows = await prisma.mcpApiToken.findMany({
@@ -509,6 +538,8 @@ export async function listMcpApiTokens(userId: string): Promise<
       expiresAt: true,
       revokedAt: true,
       createdAt: true,
+      kind: true,
+      buildId: true,
     },
   });
   return rows.map((r) => ({
@@ -518,4 +549,32 @@ export async function listMcpApiTokens(userId: string): Promise<
     tokenSuffix: r.tokenSuffix ?? r.prefix.slice(-4),
     canCopy: r.secretEnc != null,
   }));
+}
+
+/**
+ * Revoke every active ephemeral_ship token tied to a given FeatureBuild.
+ * Called from transitionBuildPhase when the build leaves the ship phase
+ * (complete / failed / phase rollback). Idempotent — already-revoked rows
+ * are filtered out by the indexed query.
+ *
+ * Returns the number of rows that were revoked. Errors bubble; the caller
+ * (the phase transition path) catches them so a token-side failure never
+ * blocks the phase transition.
+ */
+export async function revokeEphemeralShipTokensForBuild(
+  buildId: string,
+  reason: string,
+): Promise<{ revokedCount: number }> {
+  const result = await prisma.mcpApiToken.updateMany({
+    where: {
+      buildId,
+      kind: "ephemeral_ship",
+      revokedAt: null,
+    },
+    data: {
+      revokedAt: new Date(),
+      revokedReason: reason,
+    },
+  });
+  return { revokedCount: result.count };
 }

@@ -103,6 +103,8 @@ beforeEach(() => {
         scopes: ["backlog_read", "backlog_write"],
         lastUsedAt: "2026-05-18T12:00:00.000Z",
         idleDays: 4,
+        kind: "operator",
+        buildId: null,
         expiresAt: null,
         revokedAt: null,
         createdAt: "2026-05-18T10:00:00.000Z",
@@ -301,6 +303,8 @@ describe("McpTokenManager — idle hygiene", () => {
           scopes: ["backlog_read", "backlog_write"],
           lastUsedAt: "2026-05-22T10:00:00.000Z",
           idleDays: 0,
+          kind: "operator",
+          buildId: null,
           expiresAt: null,
           revokedAt: null,
           createdAt: "2026-05-20T10:00:00.000Z",
@@ -316,6 +320,8 @@ describe("McpTokenManager — idle hygiene", () => {
           scopes: ["backlog_write"],
           lastUsedAt: "2026-05-08T10:00:00.000Z",
           idleDays: 14,
+          kind: "operator",
+          buildId: null,
           expiresAt: null,
           revokedAt: null,
           createdAt: "2026-04-01T10:00:00.000Z",
@@ -331,6 +337,8 @@ describe("McpTokenManager — idle hygiene", () => {
           scopes: ["backlog_write"],
           lastUsedAt: null,
           idleDays: null,
+          kind: "operator",
+          buildId: null,
           expiresAt: null,
           revokedAt: "2026-05-21T00:00:00.000Z",
           createdAt: "2026-04-01T10:00:00.000Z",
@@ -517,6 +525,8 @@ describe("McpTokenManager — revoked hide + archive footer", () => {
           scopes: ["backlog_write"],
           lastUsedAt: "2026-05-22T10:00:00.000Z",
           idleDays: 0,
+          kind: "operator",
+          buildId: null,
           expiresAt: null,
           revokedAt: null,
           createdAt: "2026-05-20T00:00:00.000Z",
@@ -532,6 +542,8 @@ describe("McpTokenManager — revoked hide + archive footer", () => {
           scopes: ["backlog_write"],
           lastUsedAt: null,
           idleDays: null,
+          kind: "operator",
+          buildId: null,
           expiresAt: null,
           revokedAt: "2026-05-15T00:00:00.000Z",
           createdAt: "2026-04-01T00:00:00.000Z",
@@ -567,5 +579,67 @@ describe("McpTokenManager — revoked hide + archive footer", () => {
     expect(screen.getByText(/auto-archived/)).toBeTruthy();
     expect(screen.getByText(/3/)).toBeTruthy();
     expect(screen.getByText(/platform\/ai\/authority/)).toBeTruthy();
+  });
+});
+
+describe("McpTokenManager — ephemeral ship-phase rows", () => {
+  beforeEach(() => {
+    tokensMock.mockResolvedValue({
+      ok: true,
+      archivedCount: 0,
+      tokens: [
+        {
+          id: "tok_ephemeral",
+          name: "ship:1234ABCD · Roll out ephemeral tokens",
+          prefix: "dpfmcp_EP",
+          tokenSuffix: "EP01",
+          canCopy: true,
+          capability: "write",
+          scope: "write",
+          scopes: ["iac_execute", "sandbox_execute", "backlog_write"],
+          lastUsedAt: "2026-05-22T11:00:00.000Z",
+          idleDays: 0,
+          kind: "ephemeral_ship",
+          buildId: "FB-A1B2C31234ABCD",
+          expiresAt: "2026-05-29T11:00:00.000Z",
+          revokedAt: null,
+          createdAt: "2026-05-22T10:00:00.000Z",
+        },
+      ],
+    });
+  });
+
+  it("renders an ephemeral pill with the buildId short id", async () => {
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    expect(
+      await screen.findByText(/ship:1234ABCD/),
+    ).toBeTruthy();
+    // "ephemeral" appears in both the pill and the description toggle copy
+    // ("Show revoked" toolbar), so getAllByText to confirm at least one
+    // pill renders rather than asserting uniqueness.
+    expect(screen.getAllByText(/ephemeral/i).length).toBeGreaterThan(0);
+    // The pill suffix renders the build's last 8 characters in monospace.
+    expect(screen.getByText(/· 1234ABCD/)).toBeTruthy();
+  });
+
+  it("suppresses the per-row action buttons on ephemeral rows", async () => {
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    expect(await screen.findByText(/ship:1234ABCD/)).toBeTruthy();
+    // No Rotate / Revoke / Copy buttons on an ephemeral row — it's
+    // managed by the phase transition hook.
+    expect(screen.queryByRole("button", { name: /^Rotate token$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Rotate with edit$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Revoke$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Copy current token$/i })).toBeNull();
+    // ...and the lifecycle-managed annotation appears instead.
+    expect(screen.getByText(/Lifecycle-managed/i)).toBeTruthy();
+  });
+
+  it("does not render a bulk-revoke checkbox on ephemeral rows", async () => {
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    expect(await screen.findByText(/ship:1234ABCD/)).toBeTruthy();
+    expect(
+      screen.queryByLabelText(/Select token .* for bulk revoke/i),
+    ).toBeNull();
   });
 });

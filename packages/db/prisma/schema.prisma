@@ -3797,6 +3797,19 @@ model McpApiToken {
   id            String    @id @default(cuid())
   userId        String
   agentId       String?
+  // Lifecycle classification. "operator" (default) = manually issued by an
+  // operator, lives until manually revoked. "ephemeral_ship" = auto-issued
+  // by transitionBuildPhase on review→ship entry, auto-revoked on ship
+  // exit (complete / failed / phase rollback). Other kinds may be added
+  // later (e.g. "ephemeral_promotion") — keep as a string so we don't
+  // need an enum migration each time.
+  kind          String    @default("operator")
+  // When kind = "ephemeral_ship", this points at the FeatureBuild whose
+  // ship phase owns this token's lifecycle. Null for operator-issued
+  // tokens. Not modelled as a Prisma relation: FeatureBuild lives in the
+  // same DB but the FK semantics here are loose-coupled (we don't want a
+  // build delete to cascade-delete the audit trail).
+  buildId       String?
   name          String
   tokenHash     String    @unique
   prefix        String
@@ -3814,6 +3827,9 @@ model McpApiToken {
 
   @@index([userId, revokedAt])
   @@index([tokenHash])
+  // Lookup: "all active ephemeral tokens for build X" — used by the
+  // ship-exit hook to find rows to revoke.
+  @@index([buildId, revokedAt])
 }
 
 model AgentAttachment {
