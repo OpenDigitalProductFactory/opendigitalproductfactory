@@ -1365,6 +1365,39 @@ if (-not (Test-StepDone "model")) {
         Write-Warn "Requires Docker Desktop 4.40+. Enable manually: Settings -> AI -> Enable Docker Model Runner"
         Write-Warn "Then re-run this installer."
     } else {
+        # Enable GPU-backed inference. Docker Desktop ships this OFF by default
+        # — without it, llama-server processes run on CPU + system RAM instead
+        # of VRAM, inference is 10-50x slower, and every downstream operation
+        # (probes, coworker calls, model evals) silently degrades. The
+        # `docker desktop enable model-runner --gpu enable` subcommand is
+        # idempotent and a no-op on hosts without a compatible GPU.
+        # See docs/superpowers/specs/2026-05-23-first-run-customer-experience-hardening-design.md.
+        #
+        # Read GPU detection from .host-profile.json (written in Step 6) so we
+        # work correctly on installer re-runs where $gpuName is out of scope.
+        $detectedGpu = $null
+        $hostProfilePath = "$DPF_DIR\.host-profile.json"
+        if (Test-Path $hostProfilePath) {
+            try {
+                $detectedGpu = (Get-Content $hostProfilePath -Raw | ConvertFrom-Json).gpuName
+            } catch {}
+        }
+        if ($detectedGpu) {
+            Write-Action "Enabling GPU-backed inference (detected $detectedGpu)..."
+            $oldEAP = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            docker desktop enable model-runner --gpu enable 2>&1 | Out-Null
+            $gpuEnableExit = $LASTEXITCODE
+            $ErrorActionPreference = $oldEAP
+            if ($gpuEnableExit -ne 0) {
+                Write-Warn "Could not enable GPU-backed inference automatically."
+                Write-Warn "Inference will fall back to CPU + system RAM (10-50x slower)."
+                Write-Warn "Enable manually: Settings -> AI -> Enable GPU-backed inference"
+            }
+        } else {
+            Write-Action "No compatible GPU detected; using CPU inference."
+        }
+
         # Wait briefly for Model Runner to come up before pulling.
         $mrReady = $false
         for ($i = 0; $i -lt 15; $i++) {
