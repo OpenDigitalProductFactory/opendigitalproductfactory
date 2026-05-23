@@ -49,7 +49,6 @@ describe("dispatchIdeateForApprovedBuild", () => {
       designDoc: null,
       title: "Untitled",
       description: "",
-      businessContext: null,
     });
 
     const outcome = await dispatchIdeateForApprovedBuild({ buildId: "FB-X", userId: "u-1" });
@@ -74,7 +73,6 @@ describe("dispatchIdeateForApprovedBuild", () => {
       designDoc: { problemStatement: "Already drafted." },
       title: "T",
       description: "D",
-      businessContext: null,
     });
 
     const outcome = await dispatchIdeateForApprovedBuild({ buildId: "FB-X", userId: "u-1" });
@@ -90,7 +88,6 @@ describe("dispatchIdeateForApprovedBuild", () => {
       designDoc: null,
       title: "T",
       description: "D",
-      businessContext: null,
     });
     mockPrisma.backlogItem.findUnique.mockResolvedValue({ title: "BI Title", body: "BI body content." });
     mockGetBuildStudioConfig.mockResolvedValue({
@@ -114,7 +111,6 @@ describe("dispatchIdeateForApprovedBuild", () => {
       designDoc: null,
       title: "Fallback Title",
       description: "Fallback description.",
-      businessContext: "biz",
     });
     mockPrisma.backlogItem.findUnique.mockResolvedValue({
       title: "BI Title",
@@ -160,7 +156,6 @@ describe("dispatchIdeateForApprovedBuild", () => {
       designDoc: null,
       title: "T",
       description: "D",
-      businessContext: null,
     });
     mockPrisma.backlogItem.findUnique.mockResolvedValue({ title: "BI Title", body: "Body." });
     mockDispatchIdeateResearch.mockResolvedValue({
@@ -183,7 +178,6 @@ describe("dispatchIdeateForApprovedBuild", () => {
       designDoc: null,
       title: "T",
       description: "D",
-      businessContext: null,
     });
     mockPrisma.backlogItem.findUnique.mockResolvedValue({ title: "BI Title", body: "Body." });
     mockDispatchIdeateResearch.mockResolvedValue({
