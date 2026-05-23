@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { GitBranch } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
 import { ReviewPanel } from "./ReviewPanel";
 import { NodeInspector } from "./NodeInspector";
@@ -102,6 +103,9 @@ export function BuildStudio({
   // DetailsDrawer accordion (PR #912's DetailsDrawer + this slice).
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerInitialSectionId, setDrawerInitialSectionId] = useState<string | null>(null);
+  // Assurance + code-intel cards collapse so the workflow graph stays the
+  // primary surface (spec §1 + §9 #11). Operators can re-expand on demand.
+  const [assuranceRowExpanded, setAssuranceRowExpanded] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(() =>
     shouldOpenBuildStudioSidebarByDefault(
       typeof window === "undefined" ? undefined : window.innerWidth,
@@ -558,9 +562,18 @@ export function BuildStudio({
                   <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
                     <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--dpf-muted)]">
                       <span className="font-semibold text-[var(--dpf-text)]">Canonical backlog item</span>
-                      <span className="inline-flex items-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-0.5 font-medium text-[var(--dpf-text)]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDrawerInitialSectionId("canonical-doc");
+                          setDrawerOpen(true);
+                        }}
+                        title="Open the full description and Scout findings"
+                        className="inline-flex items-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-0.5 font-medium text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]"
+                        data-testid="build-studio-canonical-doc-trigger"
+                      >
                         {activeBuild.originator.itemId}
-                      </span>
+                      </button>
                       <span>{activeBuild.originator.title}</span>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--dpf-muted)]">
@@ -609,16 +622,14 @@ export function BuildStudio({
                   className={`${getBuildStudioGraphPanelClassName()} relative`}
                   data-testid={BUILD_STUDIO_TEST_IDS.graphPanel}
                 >
-                  <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
-                    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(280px,380px)]">
-                      <CodeIntelligenceStatusCard freshness={codeGraphFreshness} />
-                      <BuildAssuranceGateCard
-                        buildId={activeBuild.buildId}
-                        summary={bomSummary}
-                        findings={assuranceFindings}
-                      />
-                    </div>
-                  </div>
+                  <AssuranceRow
+                    expanded={assuranceRowExpanded}
+                    onToggle={() => setAssuranceRowExpanded((p) => !p)}
+                    freshness={codeGraphFreshness}
+                    buildId={activeBuild.buildId}
+                    bomSummary={bomSummary}
+                    findings={assuranceFindings}
+                  />
                   <div className="border-b border-[var(--dpf-border)] px-4 py-2 text-xs text-[var(--dpf-muted)]">
                     Select any stage or task to inspect — or open Details on the right for progress, brief, review, sandbox, and BS Queue evidence.
                   </div>
@@ -728,6 +739,7 @@ function buildDetailsDrawerSections(
 ): DetailsDrawerSection[] {
   // Default-open section depends on phase + explicit operator intent.
   // - When the queue header opened the drawer, BS-Queue is the explicit pick.
+  // - When the canonical-doc trigger opened the drawer, that's the explicit pick.
   // - Otherwise: ideate/plan → Brief; build → Progress; review/ship/complete → Review.
   const defaultId =
     initialSectionId ??
@@ -738,6 +750,12 @@ function buildDetailsDrawerSections(
         : "review");
 
   return [
+    {
+      id: "canonical-doc",
+      title: "Canonical doc",
+      defaultOpen: defaultId === "canonical-doc",
+      content: <CanonicalDocSection build={activeBuild} />,
+    },
     {
       id: "progress",
       title: "Progress",
@@ -770,6 +788,108 @@ function buildDetailsDrawerSections(
       content: <BsQueueSection builds={allBuilds} />,
     },
   ];
+}
+
+function CanonicalDocSection({ build }: { build: FeatureBuildRow }) {
+  const description = build.description?.trim() ?? "";
+  const originator = build.originator;
+  const scout = build.scoutFindings;
+
+  return (
+    <div className="flex flex-col gap-4 p-4 text-sm">
+      {originator && (
+        <div className="flex flex-col gap-1 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2 text-[var(--dpf-muted)]">
+            <span className="font-mono font-semibold text-[var(--dpf-text)]">{originator.itemId}</span>
+            <span>·</span>
+            <span>{originator.title}</span>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[var(--dpf-muted)]">
+            <span>Status: <span className="text-[var(--dpf-text)]">{originator.status}</span></span>
+            {originator.triageOutcome && (
+              <span>Triage: <span className="text-[var(--dpf-text)]">{originator.triageOutcome}</span></span>
+            )}
+            {originator.effortSize && (
+              <span>Size: <span className="text-[var(--dpf-text)]">{originator.effortSize}</span></span>
+            )}
+          </div>
+          {originator.resolution && (
+            <p className="mt-1 text-[var(--dpf-text-secondary)] leading-snug">{originator.resolution}</p>
+          )}
+        </div>
+      )}
+      {description ? (
+        <div className="prose prose-sm prose-invert max-w-none text-[var(--dpf-text)] leading-relaxed [&_h1]:text-base [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h3]:text-sm [&_h3]:font-semibold [&_p]:my-2 [&_ul]:my-2 [&_ol]:my-2 [&_code]:text-xs">
+          <ReactMarkdown>{description}</ReactMarkdown>
+        </div>
+      ) : (
+        <p className="text-xs text-[var(--dpf-muted)]">
+          No description was captured for this build. The originating backlog item may have only had a title.
+        </p>
+      )}
+      {scout && (
+        <details className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 text-xs">
+          <summary className="cursor-pointer font-semibold text-[var(--dpf-text)]">Scout findings</summary>
+          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-[var(--dpf-text-secondary)]">
+            {JSON.stringify(scout, null, 2)}
+          </pre>
+        </details>
+      )}
+    </div>
+  );
+}
+
+type AssuranceRowProps = {
+  expanded: boolean;
+  onToggle: () => void;
+  freshness: CodeGraphFreshness | null;
+  buildId: string;
+  bomSummary: BomSummary;
+  findings: ActiveAssuranceFindingRow[];
+};
+
+function AssuranceRow({ expanded, onToggle, freshness, buildId, bomSummary, findings }: AssuranceRowProps) {
+  const codeIntelLabel = freshness
+    ? freshness.available && freshness.indexStatus === "ready"
+      ? "ready"
+      : freshness.indexStatus
+    : "unknown";
+  const bomLabel = bomSummary.state === "missing" ? "no BOM" : bomSummary.state;
+  const activeFindings = findings.length;
+
+  return (
+    <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-xs text-[var(--dpf-muted)] transition-colors hover:bg-[var(--dpf-surface-1)] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]"
+      >
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="font-semibold text-[var(--dpf-text)]">Code intel &amp; assurance</span>
+          <span>Code intel: <span className="text-[var(--dpf-text)]">{codeIntelLabel}</span></span>
+          <span>BOM: <span className="text-[var(--dpf-text)]">{bomLabel}</span></span>
+          <span>Findings: <span className="text-[var(--dpf-text)]">{activeFindings} active</span></span>
+        </span>
+        <span aria-hidden="true" className="text-[var(--dpf-muted)]">{expanded ? "▾" : "▸"}</span>
+      </button>
+      {/* Cards always mounted so eager-render assertions + SR users still find
+       *  them (spec §9 #11). When collapsed we hide via `hidden` rather than
+       *  unmount — keeps the surface eager and avoids re-fetching on toggle. */}
+      <div
+        className={`border-t border-[var(--dpf-border)] px-4 py-3 ${expanded ? "" : "hidden"}`}
+      >
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(280px,380px)]">
+          <CodeIntelligenceStatusCard freshness={freshness} />
+          <BuildAssuranceGateCard
+            buildId={buildId}
+            summary={bomSummary}
+            findings={findings}
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function BsQueueSection({ builds }: { builds: readonly FeatureBuildRow[] }) {
@@ -933,9 +1053,12 @@ function BuildStudioFooter({ builds }: { builds: FeatureBuildRow[] }) {
       data-testid={BUILD_STUDIO_TEST_IDS.footer}
       className="flex h-12 shrink-0 items-center justify-between border-t border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-2"
     >
-      <span className="text-[11px] text-[var(--dpf-muted)]">
+      <span
+        className="text-[11px] text-[var(--dpf-muted)]"
+        title="The sandbox container reuses your portal-configured provider credentials (Codex / Claude OAuth). You don't sign in again."
+      >
         {driving
-          ? "Sandbox is shared across all in-flight builds."
+          ? "Sandbox is shared across all in-flight builds — uses your portal credentials, no extra sign-in."
           : "No build is currently driving the sandbox."}
       </span>
       <OpenSandboxButton
