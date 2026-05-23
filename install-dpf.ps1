@@ -1086,24 +1086,33 @@ if (-not (Test-StepDone "hardware")) {
     if ($gpuName) { $hwSummary += ", $gpuName ($gpuVRAM_GB GB VRAM)" }
     Write-OK $hwSummary
 
-    # Select the largest Gemma 4 model that fits available VRAM.
-    # Docker Model Runner uses Docker Desktop's built-in GPU passthrough.
-    # Model IDs use the ai/ namespace -- Docker Model Runner picks quantization.
-    if ($gpuVRAM_GB -ge 20) {
-        $selectedModel = "ai/gemma4"
-        $modelReason = "Gemma 4 31B -- best quality, fits your $gpuVRAM_GB GB VRAM"
-    } elseif ($gpuVRAM_GB -ge 8) {
-        $selectedModel = "ai/gemma3"
-        $modelReason = "Gemma 3 12B -- strong quality, GPU-accelerated"
-    } elseif ($gpuVRAM_GB -ge 4) {
-        $selectedModel = "ai/gemma3"
-        $modelReason = "Gemma 3 4B -- balanced quality, GPU-accelerated"
+    # Select the largest Qwen3 tool-calling model that fits available VRAM.
+    # Mirrors apps/web/lib/inference/bootstrap-first-run.ts MODEL_TIERS so the
+    # installer's pre-portal model pull agrees with the portal's post-boot
+    # bootstrap. Tags are the exact Docker Hub published forms (verified
+    # against https://hub.docker.com/r/ai/qwen3/tags 2026-05-23) — lowercase
+    # short forms (`ai/qwen3:14b`) 404 against Docker Model Runner.
+    #
+    # Why Qwen3 over Gemma: the platform's Coworkers catalog tiers Qwen3 as
+    # `strong + Tool Use` (F1 0.93 @ 8B, 0.97 @ 14B) while Gemma 3/4 tier as
+    # `adequate`. Default coworkers have `minimumTier: strong` so a Gemma
+    # default fails routing on first install. Capture the rationale here so
+    # this doesn't drift back to Gemma in a later edit.
+    if ($gpuVRAM_GB -ge 22) {
+        $selectedModel = "ai/qwen3:30B-A3B-Q4_K_M"
+        $modelReason = "Qwen3 30B (MoE, 3B active) -- near-cloud quality, fits your $gpuVRAM_GB GB VRAM"
+    } elseif ($gpuVRAM_GB -ge 12) {
+        $selectedModel = "ai/qwen3:14B-Q6_K"
+        $modelReason = "Qwen3 14B -- top local tool calling (F1 0.97, exceeds Haiku)"
+    } elseif ($gpuVRAM_GB -ge 6) {
+        $selectedModel = "ai/qwen3:8B-Q4_K_M"
+        $modelReason = "Qwen3 8B -- matches cloud Haiku tool calling (F1 0.93)"
     } elseif ($totalRAM_GB -ge 16) {
-        $selectedModel = "ai/gemma3"
-        $modelReason = "Gemma 3 -- fits your RAM (CPU mode)"
+        $selectedModel = "ai/qwen3:4B-UD-Q4_K_XL"
+        $modelReason = "Qwen3 4B -- fits your RAM (CPU mode)"
     } else {
-        $selectedModel = "ai/gemma3"
-        $modelReason = "Gemma 3 -- lightweight, runs on your hardware"
+        $selectedModel = "ai/qwen3:4B-UD-Q4_K_XL"
+        $modelReason = "Qwen3 4B -- lightweight, runs on your hardware"
     }
     Write-Action "Selected AI model: $selectedModel ($modelReason)"
     Write-Action "Models are managed by Docker Model Runner (built into Docker Desktop)."
