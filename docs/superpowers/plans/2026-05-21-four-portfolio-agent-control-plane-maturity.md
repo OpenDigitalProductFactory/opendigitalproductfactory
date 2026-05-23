@@ -1275,6 +1275,145 @@ Expected: backlog fan-out is traceable without direct DB edits.
 
 ---
 
+## Task 8: New Invariants from PR #1001 + PR #1004
+
+This task absorbs the nine new invariants the spec gained after this plan was merged via PR #921:
+
+- PR #1001 (consistency pass): `claimed_overdue` alert (§5.3), `MaturityScoreEvent` audit log (§8.1.A + AC #19), `riskTierRationale` breach-scenario field (§5.2.1), §7.0 mode precedence.
+- PR #1004 (UX-audit absorption): count source-of-truth shared projection (§12.1), drill-through invariant (§12.1), portfolio-concentration signal (§12.3), `displayShort` portfolio label variant (§12.4), §12.5 audit-lens assertions.
+
+These extend the modules created in Tasks 1–5 rather than replacing them. Execute Task 8 after Tasks 1–7 land, in the same vertical slice.
+
+**Files (all extensions, no new modules unless noted):**
+
+- Modify: `packages/db/src/capability-maturity.ts` — add `deriveClaimedOverdue`, mode-precedence helper.
+- Modify: `packages/db/src/capability-maturity.test.ts` — cover the new derivers and the audit-log invariants.
+- Modify: `packages/db/prisma/schema.prisma` — add `MaturityScoreEvent` model + `riskTierRationale` + `displayShort` columns.
+- Modify: `packages/db/data/agent_control_plane_maturity_seed.json` — add `riskTierRationale` for every `critical`/`elevated` row.
+- Modify: `packages/db/data/portfolio_registry.json` — add `displayShort` for each of the four portfolios.
+- Create: `packages/db/src/maturity-score-event.ts` — append-only writer for `MaturityScoreEvent`; the single mutation path that the single writer in `capability-maturity.ts` delegates to on every derived-field change.
+- Create: `apps/web/lib/maturity/open-work-projection.ts` — the single named projection consumed by `/workspace`, `/portfolio`, and `/ops` counters per §12.1. **Pre-condition:** look up which existing counter query backs `/workspace` `OPEN WORK = 156` (per audit S2.6) and reuse it; do not invent a fifth projection.
+- Modify: `apps/web/lib/maturity/capability-maturity-data.ts` — add portfolio-concentration calculator (per §12.3, > 3× median rule) and consume `open-work-projection`.
+- Modify: `apps/web/components/portfolio/CapabilityMaturityPanel.tsx` — enforce §7.0 mode precedence (Investment > Operations, Productize overlay only); render `claimed_overdue` alert; render concentration signal; consume `displayShort` for portfolio labels; every status chip carries a `destinationRoute` prop.
+- Create: `apps/web/components/portfolio/__test-helpers__/audit-lens-assertions.ts` — reusable test matchers for the six §12.5 lenses (`functionality`, `data-completeness`, `confidence-signal`, `object-oriented-ux`, `literal-copy`, `millers-law`).
+
+---
+
+- [ ] **Step 1: Add `claimed_overdue` deriver + alert surface**
+
+Per spec §5.3, a row with `confidenceGrade = claimed` for > 60 days raises `claimedOverdue = true`. This does NOT demote `effectiveMaturity` — it surfaces an alert and enqueues a re-assessment task.
+
+Add `deriveClaimedOverdue({ now, confidenceGrade, lastAssessmentAt }): boolean` to `packages/db/src/capability-maturity.ts`. Cover three cases in `capability-maturity.test.ts`: claimed at 59d → false, claimed at 61d → true, evidenced at 90d → false (decay path, not overdue path).
+
+In `CapabilityMaturityPanel.tsx`, render an `claimed-overdue` chip that drills into a filtered re-assessment task queue per the §12.1 drill-through invariant.
+
+Acceptance: `deriveClaimedOverdue` returns the expected boolean for the three cases; rendering the panel for an overdue row shows the chip with a non-null destination route.
+
+- [ ] **Step 2: Add `MaturityScoreEvent` immutable audit log**
+
+Per AC #19 + §8.1.A, every mutation to `maturityScore`, `riskTier`, `confidenceGrade`, `productizationStatus`, `dependsOn`, or `strategicOwnership` emits an append-only event row. This is what makes AC #17 (anti-inflation guard, 14-day window around `candidate` transitions) enforceable.
+
+Add the Prisma model to `schema.prisma`:
+
+```prisma
+model MaturityScoreEvent {
+  id                    String    @id @default(cuid())
+  capabilityId          String
+  field                 String    // "maturityScore" | "riskTier" | "confidenceGrade" | …
+  previousValue         String?
+  newValue              String
+  actor                 String    // human id, coworker id, or governed-automation id
+  evidenceLinks         Json      @default("[]")
+  governanceReviewId    String?
+  transitionContextRef  String?   // e.g. productizationStatus=candidate transition this is checked against
+  createdAt             DateTime  @default(now())
+
+  capability            CapabilityMaturityAssessment @relation(fields: [capabilityId], references: [id])
+
+  @@index([capabilityId, createdAt])
+  @@index([field, createdAt])
+}
+```
+
+Create `packages/db/src/maturity-score-event.ts` exposing `recordMaturityScoreEvent(...)`. The `capability-maturity.ts` writer calls this on every mutation. Reject any direct INSERT/UPDATE on the model from other paths via a Prisma client wrapper or, at minimum, a documented invariant + lint rule.
+
+Acceptance: `recordMaturityScoreEvent` is the only code path that writes the model (test asserts via grep / `findMatchingCallSites`); mutating `maturityScore` in the seed helper emits an event; updating an event row throws.
+
+- [ ] **Step 3: Add `riskTierRationale` field + one-third critical-share writer warning**
+
+Per spec §5.2.1, `critical` and `elevated` capabilities require a one-sentence breach-scenario rationale; the writer warns when the `critical` share of the catalog crosses ~one-third without explicit kernel-principle justification.
+
+Add `riskTierRationale String?` to the capability assessment model in `schema.prisma` (nullable; `standard`/`low` may be set without rationale). Add `kernelPrincipleJustification String[]` for the catalog-share override.
+
+In `packages/db/data/agent_control_plane_maturity_seed.json`, add `riskTierRationale` for every `critical` and `elevated` row from spec §6.
+
+In `capability-maturity.ts`, add `validateRiskTierAuthoring(rows)` that returns warnings when (a) any `critical`/`elevated` row has no `riskTierRationale`, (b) `critical` share > 33% of catalog without `kernelPrincipleJustification` on the excess rows. Seed test asserts both warnings are empty for the canonical bootstrap.
+
+Acceptance: every `critical`/`elevated` seed row has a citable breach scenario; writer warnings fire on a synthetic catalog with 5/10 `critical` rows.
+
+- [ ] **Step 4: Enforce §7.0 mode precedence in the panel**
+
+Per spec §7.0, modes have fixed precedence: Investment > Operations, Productize as Operations-only overlay. The gate reads `effectiveMaturity`, not raw `maturityScore`.
+
+In `CapabilityMaturityPanel.tsx`, add a `resolveRenderMode(row): "investment" | "operations" | "productize-overlay"` helper. A row with `productizationStatus = candidate` but `effectiveMaturity < mvpTargetScore` resolves to `investment` (with a dep-blocked annotation), never `productize-overlay`.
+
+Tests in `CapabilityMaturityPanel.test.tsx`: a row qualifying for productize on raw score but blocked by a dep at score 2 renders in investment mode with the dep-blocked annotation, not the productize affordance.
+
+Acceptance: cannot reach productize-overlay rendering while any dependency floor pulls effective maturity below target.
+
+- [ ] **Step 5: Wire the single named "open work" projection (`open-work-projection.ts`)**
+
+Per spec §12.1, every numeric surface on `/workspace`, `/portfolio`, and `/ops` reads from one named projection. The 2026-05-20 audit S2.6 caught three counters disagreeing (121 vs 156 vs 440); the maturity dashboard must not introduce a fourth.
+
+Before creating `apps/web/lib/maturity/open-work-projection.ts`, find the existing query that backs `/workspace` `OPEN WORK = 156`. Reuse or wrap it; never spawn a new query. If the existing query is wrong, file BI-CANDIDATE-S2-08 from the audit rather than papering over with a fifth number.
+
+The projection exports: `getOpenWorkCount({ scope: "workspace" | "portfolio" | "ops", portfolioId?: string }): Promise<number>`. Tests assert all three scopes hit the same underlying query and never produce divergent counts for the same scope on the same DB state.
+
+Acceptance: `/workspace` and `/portfolio` rendered against the same seeded DB show the same `OPEN WORK` count.
+
+- [ ] **Step 6: Add portfolio-concentration signal (>3× median)**
+
+Per spec §12.3, if one of the four portfolio roots holds > 3× the median product / capability / epic count of the other three, render an investment-mode signal on `/portfolio` root with §7.1 framing.
+
+Add `calculatePortfolioConcentration(counts: Record<PortfolioId, number>): { skewedPortfolio: PortfolioId, ratio: number } | null` to `capability-maturity-data.ts`. Render result in `CapabilityMaturityPanel.tsx` when on portfolio-root scope.
+
+Tests cover: balanced (10/10/10/10) → null; skewed (117/4/5/6) → returns `products_and_services_sold` with ratio ≈ 23x.
+
+Acceptance: against the live install state (per audit: 117 products in one of four), the concentration signal renders with the §7.1 investment framing.
+
+- [ ] **Step 7: Add audit-lens test helpers (§12.5)**
+
+Per spec §12.5, every maturity-surface PR satisfies six AGT-906-derived lenses before merge. Until AGT-906 ships, these are manual; this step provides reusable test matchers so the assertions appear in CI rather than in review comments.
+
+Create `apps/web/components/portfolio/__test-helpers__/audit-lens-assertions.ts` exporting:
+
+```ts
+expectFunctionality(rendered)       // every chip / badge / button has a non-null destination
+expectDataCompleteness(rendered)    // no field reads "Not assigned" / "Unknown" / "—" when source-of-truth count says data exists
+expectConfidenceSignal(rendered)    // no system prompts or [tool-trace] strings leak into operator-visible content
+expectObjectOrientedUx(rendered)    // every numeric surface has an aria-describedby pointing at its source query
+expectLiteralCopy(rendered)         // labels match a curated plain-language allowlist, not schema vocabulary
+expectMillersLaw(rendered)          // at most two header tiers above first content row
+```
+
+Use these in `CapabilityMaturityPanel.test.tsx`. Failures in any of the six block CI.
+
+Acceptance: panel renders against canonical seed data and passes all six matchers in CI.
+
+- [ ] **Step 8: Add `displayShort` portfolio label variant + AppRail consumer**
+
+Per spec §12.4, portfolio root names render in full at every supported viewport width; constrained rails consume a `displayShort` variant rather than CSS truncating to "Products and Services S…".
+
+Add `displayShort String?` to the `Portfolio` model in `schema.prisma`. Backfill in `packages/db/data/portfolio_registry.json` for all four portfolios — e.g. `"foundational" → "Foundational"`, `"manufacturing_and_delivery" → "Manufacturing"`, `"for_employees" → "People"`, `"products_and_services_sold" → "Sold"`. Exact short forms are an §17 #11 open decision; pick the seed values with the operator and record them as the answer to that decision when this step lands.
+
+Update the AppRail and inner-rail consumers (find via `grep -r "products_and_services_sold" apps/web/components`) to prefer `displayShort` when present and width is constrained. CSS truncation of the long form remains forbidden.
+
+Acceptance: rendering `/portfolio` at the audit-observed AppRail width shows "Sold" (or the operator-chosen short form), never "Products and Services S…".
+
+---
+
+After Task 8, re-run the Final Verification Gate. The full test suite must pass before push.
+
 ## Final Verification Gate
 
 Before claiming the slice complete, run both focused and full test gates. The focused tests in Task 6 are not enough by themselves; the full vitest suites must pass locally before push, because the pre-commit hook only runs typecheck and PR CI breaks for every other contributor otherwise.
@@ -1310,3 +1449,4 @@ Plan complete once this file is reviewed. Recommended execution mode is **parall
 5. UI
 6. Verification/fixes
 7. MCP backlog fan-out
+8. New invariants from PR #1001 + PR #1004 (claimed_overdue, MaturityScoreEvent log, riskTierRationale, mode precedence, open-work projection, concentration signal, audit-lens assertions, displayShort)
