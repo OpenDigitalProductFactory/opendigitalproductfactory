@@ -58,8 +58,11 @@ interface ScriptOutcome {
 }
 
 function restoreTraceLog(...parts: unknown[]) {
+  // CodeQL js/log-injection: parts may contain user-influenced values
+  // (restore-job parameters). JSON.stringify each part neutralises CR/LF.
   // eslint-disable-next-line no-console
-  console.log("[restore-trace][neo4j]", ...parts);
+  console.log("[restore-trace][neo4j] %s",
+    parts.map((p) => typeof p === "string" ? JSON.stringify(p) : JSON.stringify(p)).join(" "));
 }
 
 async function fileSha256(absolutePath: string): Promise<string> {

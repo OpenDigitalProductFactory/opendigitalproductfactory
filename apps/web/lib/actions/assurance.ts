@@ -48,8 +48,8 @@ export async function getBuildBomSummary(buildId: string): Promise<BomSummary> {
     return await getLatestBomSummaryForBuild(prisma, buildId);
   } catch (err) {
     console.error(
-      `[tool-trace] failed to load build BOM summary buildId=${buildId} error=${
-        err instanceof Error ? err.message : String(err)
+      `[tool-trace] failed to load build BOM summary buildId=${JSON.stringify(buildId)} error=${
+        JSON.stringify(err instanceof Error ? err.message : String(err))
       }`,
     );
     return missingBomSummary();

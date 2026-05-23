@@ -298,7 +298,7 @@ export async function configureProvider(input: {
       usageUrl: providerForFinance.consoleUrl ?? providerForFinance.docsUrl ?? undefined,
     }).catch((error) => {
       console.warn(
-        `[ai-provider-finance] failed to seed finance bridge for ${input.providerId}: ${error instanceof Error ? error.message : String(error)}`,
+        `[ai-provider-finance] failed to seed finance bridge for ${JSON.stringify(input.providerId)}: ${JSON.stringify(error instanceof Error ? error.message : String(error))}`,
       );
     });
   }
@@ -713,7 +713,7 @@ export async function runScheduledJobNow(jobId: string): Promise<void> {
     await runProviderCatalogReconciliationIfDue();
     return;
   }
-  console.warn(`runScheduledJobNow: unknown jobId "${jobId}"`);
+  console.warn(`runScheduledJobNow: unknown jobId ${JSON.stringify(jobId)}`);
 }
 
 // ─── Model profiling ──────────────────────────────────────────────────────────

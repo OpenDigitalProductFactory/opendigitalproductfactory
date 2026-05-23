@@ -101,7 +101,7 @@ async function getPhase(): Promise<BuildPhase> {
 
 async function callTool(name: string, params: Record<string, unknown> = {}) {
   const result = await executeTool(name, params, testUserId, TEST_CONTEXT);
-  console.log(`  [${name}] ${result.success ? "OK" : "FAIL"}: ${result.message.slice(0, 120)}`);
+  console.log(`  [${JSON.stringify(name)}] ${result.success ? "OK" : "FAIL"}: ${JSON.stringify(result.message.slice(0, 120))}`);
   return result;
 }
 
@@ -202,7 +202,7 @@ describeBuildLifecycle("Build Studio full lifecycle", () => {
         } as unknown as import("@dpf/db").Prisma.InputJsonValue,
       },
     });
-    console.log(`\n  Created test build: ${testBuildId}\n`);
+    console.log(`\n  Created test build: ${JSON.stringify(testBuildId)}\n`);
   });
 
   afterAll(async () => {
@@ -363,7 +363,7 @@ describeBuildLifecycle("Build Studio full lifecycle", () => {
     // That's expected. The diff is already saved above.
     const result = await callTool("deploy_feature", {});
     // May fail due to no sandbox — that's ok, we pre-wrote the diff
-    console.log(`  [deploy_feature] ${result.success ? "OK" : "Expected: " + result.error}`);
+    console.log(`  [deploy_feature] ${result.success ? "OK" : "Expected: " + JSON.stringify(result.error)}`);
   });
 
   it("registers digital product from build", async () => {
@@ -373,7 +373,7 @@ describeBuildLifecycle("Build Studio full lifecycle", () => {
       portfolioSlug: "for_employees",
       versionBump: "minor",
     });
-    console.log(`  [register] ${result.success ? "OK" : "FAIL"}: ${result.message.slice(0, 150)}`);
+    console.log(`  [register] ${result.success ? "OK" : "FAIL"}: ${JSON.stringify(result.message.slice(0, 150))}`);
     // May fail if portfolio doesn't exist, but tests the pipeline
     if (result.success) {
       expect(result.message).toBeTruthy();
@@ -382,7 +382,7 @@ describeBuildLifecycle("Build Studio full lifecycle", () => {
 
   it("creates build epic for backlog tracking", async () => {
     const result = await callTool("create_build_epic", { buildId: testBuildId });
-    console.log(`  [create_build_epic] ${result.success ? "OK" : "FAIL"}: ${result.message.slice(0, 150)}`);
+    console.log(`  [create_build_epic] ${result.success ? "OK" : "FAIL"}: ${JSON.stringify(result.message.slice(0, 150))}`);
   });
 
   it("checks deployment window", async () => {
@@ -391,7 +391,7 @@ describeBuildLifecycle("Build Studio full lifecycle", () => {
       risk_level: "low",
     });
     expect(result.success).toBe(true);
-    console.log(`  [check_deployment_windows] ${result.message.slice(0, 150)}`);
+    console.log(`  [check_deployment_windows] ${JSON.stringify(result.message.slice(0, 150))}`);
   });
 
   it("executes promotion to production", async () => {
@@ -420,7 +420,7 @@ describeBuildLifecycle("Build Studio full lifecycle", () => {
     const result = await callTool("execute_promotion", {
       promotion_id: promotion.id,
     });
-    console.log(`  [execute_promotion] ${result.success ? "OK" : "FAIL"}: ${result.message.slice(0, 200)}`);
+    console.log(`  [execute_promotion] ${result.success ? "OK" : "FAIL"}: ${JSON.stringify(result.message.slice(0, 200))}`);
   });
 
   it("advances to complete after ship", async () => {

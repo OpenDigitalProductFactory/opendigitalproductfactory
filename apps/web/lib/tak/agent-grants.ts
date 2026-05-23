@@ -350,7 +350,7 @@ export function isToolAllowedByGrants(
   // This prevents silent permission escalation when new tools are added without
   // a corresponding grant mapping.
   if (!requiredGrants) {
-    console.warn(`[agent-grants] Tool "${toolName}" has no TOOL_TO_GRANTS entry — denied by default`);
+    console.warn(`[agent-grants] Tool ${JSON.stringify(toolName)} has no TOOL_TO_GRANTS entry — denied by default`);
     return false;
   }
   // Agent must have at least ONE of the required grants

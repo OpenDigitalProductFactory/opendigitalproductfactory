@@ -40,7 +40,9 @@ export async function heartbeat(taskRunId: string): Promise<boolean> {
     // format string) to satisfy CodeQL's externally-controlled-format-string
     // rule. console APIs treat the first arg as a format string in some
     // runtimes; keeping it a literal avoids the warning.
-    console.warn("[heartbeat] write failed for", taskRunId, err instanceof Error ? err.message : err);
+    console.warn("[heartbeat] write failed for %s: %s",
+      JSON.stringify(taskRunId),
+      err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
     return true;
   }
 }
@@ -68,10 +70,9 @@ export async function withHeartbeatTicker<T>(
       intervalMs = Math.floor(threshold.heartbeatTimeoutSeconds * 1000 / 3);
     } catch (err) {
       console.warn(
-        "[withHeartbeatTicker] threshold lookup failed for",
-        taskRunId,
-        "using 60s default —",
-        err instanceof Error ? err.message : err,
+        "[withHeartbeatTicker] threshold lookup failed for %s using 60s default — %s",
+        JSON.stringify(taskRunId),
+        err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
       );
     }
   }

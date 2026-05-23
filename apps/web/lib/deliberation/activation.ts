@@ -192,7 +192,7 @@ export async function resolve(
     const explicitPattern = await getPattern(explicit);
     if (!explicitPattern) {
       console.warn(
-        `[deliberation] explicit pattern slug "${explicit}" not found in registry; returning null. ` +
+        `[deliberation] explicit pattern slug ${JSON.stringify(explicit)} not found in registry; returning null. ` +
           `Typo in caller? Known patterns live under deliberation/ and DeliberationPattern table.`,
       );
       return null;
