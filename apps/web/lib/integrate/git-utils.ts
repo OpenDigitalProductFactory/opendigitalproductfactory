@@ -1,9 +1,10 @@
 // apps/web/lib/git-utils.ts
 // Async git operations for the development lifecycle pipeline.
 
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
 import { lazyPath, lazyFsPromises, lazyExec } from "@/lib/shared/lazy-node";
 import { isPathAllowedSync as isPathAllowed, isDevInstance } from "@/lib/codebase-tools";
-import { secureTempPath } from "@/lib/security/safe-tempfile";
 
 const exec = lazyExec();
 const GIT_TIMEOUT_MS = 10_000;
@@ -412,8 +413,9 @@ export async function applyPatch(patch: string): Promise<{ ok: true } | { error:
   const { writeFile, unlink } = lazyFsPromises();
   // CodeQL #110 (js/insecure-temporary-file): Date.now() is predictable;
   // an attacker with /tmp write could pre-create a symlink at the path.
-  // secureTempPath uses crypto.randomUUID() for an unguessable suffix.
-  const tmpFile = secureTempPath("dpf-pr", "patch");
+  // randomUUID() inline gives 122 bits of entropy — CodeQL recognises
+  // this pattern (function calls are not followed, hence inline).
+  const tmpFile = `${tmpdir()}/dpf-pr-${randomUUID()}.patch`;
   try {
     await writeFile(tmpFile, patch, "utf-8");
     await exec(

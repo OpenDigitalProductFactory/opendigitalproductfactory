@@ -76,17 +76,14 @@ extensions:
       # implies the key was safe.
       - ["safe-property", "Module", "Member[assertSafeKey]", "Argument[0]", "ReturnValue", "taint", "manual"]
 
-  # ─── safe-tempfile — js/insecure-temporary-file safe constructor ─────────
-  - addsTo:
-      pack: codeql/javascript-all
-      extensible: neutralModel
-    data:
-      # secureTempPath returns a /tmp/<prefix>-<uuidv4>.<ext> path. The
-      # randomUUID() suffix has 122 bits of entropy — an attacker cannot
-      # pre-create the path as a symlink. Declared neutral so the return
-      # value is not treated as a tainted/insecure-temp path.
-      - ["safe-tempfile", "Module", "Member[secureTempPath]", "ReturnValue", "manual"]
-      # withSecureTempDir wraps fs.mkdtemp which is atomically race-free
-      # and creates 0700-perm directories. The dir argument passed to the
-      # callback is safe.
-      - ["safe-tempfile", "Module", "Member[withSecureTempDir]", "ReturnValue", "manual"]
+  # ─── insecure-temporary-file note (no model pack entry) ──────────────────
+  # CodeQL's js/insecure-temporary-file query pattern-matches on
+  # `randomUUID()` (or other crypto-random sources) appearing INLINE in
+  # the temp-path expression. It does not follow taint through wrapper
+  # functions, so declaring a `secureTempPath()` helper as neutralModel
+  # does NOT close alerts on its callers. The accepted DPF pattern is
+  # therefore to inline the construction:
+  #
+  #   const tmp = `${tmpdir()}/prefix-${randomUUID()}.ext`;
+  #
+  # See callsites in git-backup.ts / git-utils.ts / audio-storage.ts.

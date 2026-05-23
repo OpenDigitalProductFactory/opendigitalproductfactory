@@ -3,9 +3,10 @@
  * Used by fork_only mode to protect customizations against container rebuilds.
  */
 
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
 import { prisma } from "@dpf/db";
 import { lazyChildProcess, lazyUtil, lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
-import { secureTempPath } from "@/lib/security/safe-tempfile";
 
 /**
  * Commit a promotion diff to the configured backup repository.
@@ -60,8 +61,10 @@ export async function backupPromotionToGit(input: {
     // `/tmp/dpf-backup-${Date.now()}.patch` — Date.now() is predictable,
     // so on a shared-tmp host an attacker could pre-create the path as
     // a symlink and trick writeFile into clobbering a different file.
-    // secureTempPath uses crypto.randomUUID() (122 bits of entropy).
-    const tmpFile = secureTempPath("dpf-backup", "patch");
+    // CodeQL recognises `randomUUID()` inline in the path expression as
+    // the safe-constructor pattern (122 bits of entropy, unguessable);
+    // it does NOT follow wrapper functions, so the call must be inline.
+    const tmpFile = `${tmpdir()}/dpf-backup-${randomUUID()}.patch`;
     await writeFile(tmpFile, input.diffPatch, "utf-8");
 
     try {
@@ -86,8 +89,8 @@ export async function backupPromotionToGit(input: {
       // path is doubly dangerous: an attacker who pre-creates the path as
       // a symlink could not only force the write to a different file but
       // also intercept the token if the symlink points at an attacker-
-      // readable location. secureTempPath closes both risks.
-      const askpassScript = secureTempPath("dpf-askpass", "sh");
+      // readable location. randomUUID() inline gives 122 bits of entropy.
+      const askpassScript = `${tmpdir()}/dpf-askpass-${randomUUID()}.sh`;
       await writeFile(askpassScript, `#!/bin/sh\necho "${token}"`, { mode: 0o700 });
       try {
         await exec(`git push ${JSON.stringify(config.gitRemoteUrl)} HEAD:main`, {
