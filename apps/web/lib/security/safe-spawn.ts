@@ -33,7 +33,6 @@
 // the kernel principle `security-fix-needs-regression-test-first`.
 
 import type { ChildProcess, SpawnOptions } from "node:child_process";
-import { isSafeKey } from "@/lib/security/safe-property";
 
 /**
  * Loose spawn-like signature so callers can hand us the real
@@ -177,9 +176,12 @@ export function sanitizeEnv(
     // DANGEROUS_ENV_VARS allowlist, the analyser cannot prove that `k`
     // isn't "__proto__" / "constructor" / "prototype" — those don't
     // appear in DANGEROUS_ENV_VARS because they aren't shell env vars
-    // people set. The explicit isSafeKey barrier closes the prototype-
-    // pollution gap and is a model-pack-recognised sanitiser.
-    if (!isSafeKey(k)) continue;
+    // people set. Inline guard (not a helper call) because CodeQL
+    // doesn't follow function boundaries; only a literal equality
+    // check at the callsite acts as a sanitiser barrier.
+    if (k === "__proto__" || k === "constructor" || k === "prototype") {
+      continue;
+    }
     if (v !== undefined) out[k] = v;
   }
   return out;
