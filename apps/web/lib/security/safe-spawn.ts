@@ -161,7 +161,13 @@ export function assertAllowedBinary(command: string): string {
 export function sanitizeEnv(
   env: Record<string, string | undefined> | undefined,
 ): Record<string, string> {
-  const out: Record<string, string> = {};
+  // CodeQL #201 (js/remote-property-injection, CWE-1321):
+  // Object.create(null) gives `out` no prototype, so a hostile env key
+  // like "__proto__" can't mutate Object.prototype — it just becomes an
+  // own property on `out`. node:child_process.spawn accepts any
+  // Record<string,string>; downstream code only reads keys it set
+  // itself. This is the CodeQL-recognised structural fix.
+  const out: Record<string, string> = Object.create(null) as Record<string, string>;
   if (!env) return out;
   for (const [k, v] of Object.entries(env)) {
     if (DANGEROUS_ENV_VARS.has(k)) {
@@ -170,16 +176,6 @@ export function sanitizeEnv(
       // we degrade gracefully by stripping the var, not failing the call.
       // eslint-disable-next-line no-console
       console.warn(`[safe-spawn] Dropped dangerous env var ${JSON.stringify(k)} before spawn.`);
-      continue;
-    }
-    // CodeQL #201 (js/remote-property-injection): even after the
-    // DANGEROUS_ENV_VARS allowlist, the analyser cannot prove that `k`
-    // isn't "__proto__" / "constructor" / "prototype" — those don't
-    // appear in DANGEROUS_ENV_VARS because they aren't shell env vars
-    // people set. Inline guard (not a helper call) because CodeQL
-    // doesn't follow function boundaries; only a literal equality
-    // check at the callsite acts as a sanitiser barrier.
-    if (k === "__proto__" || k === "constructor" || k === "prototype") {
       continue;
     }
     if (v !== undefined) out[k] = v;

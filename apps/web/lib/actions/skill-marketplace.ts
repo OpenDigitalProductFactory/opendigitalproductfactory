@@ -75,21 +75,20 @@ function parseSkillMd(raw: string): {
   const yamlBlock = trimmed.slice(3, endIdx).trim();
   const body = trimmed.slice(endIdx + 3).trim();
 
-  const frontmatter: Record<string, string | boolean | string[] | null> = {};
+  // CodeQL #197/#198/#199 (js/remote-property-injection, CWE-1321):
+  // SKILL.md frontmatter is contributor-authored input — keys could be
+  // "__proto__" / "constructor" / "prototype". Object.create(null) gives
+  // a prototype-less target so `frontmatter["__proto__"] = x` becomes a
+  // literal own-property write, not a setter call into Object.prototype.
+  // This is the CodeQL-recognised structural mitigation; an inline
+  // OR-chain guard isn't recognised as a barrier by the analyser.
+  const frontmatter: Record<string, string | boolean | string[] | null> =
+    Object.create(null) as Record<string, string | boolean | string[] | null>;
   for (const line of yamlBlock.split("\n")) {
     if (line.trim().startsWith("#") || line.trim() === "") continue;
     const colonIdx = line.indexOf(":");
     if (colonIdx === -1) continue;
     const key = line.slice(0, colonIdx).trim();
-    // CodeQL #197/#198/#199 (js/remote-property-injection): SKILL.md
-    // frontmatter is contributor-authored input, so `key` could be
-    // "__proto__" / "constructor" / "prototype" — assigning to those
-    // mutates the prototype chain (CWE-1321). Inline guard (not a helper
-    // call) because CodeQL doesn't follow function boundaries — only
-    // a literal equality check at the callsite acts as a sanitiser.
-    if (key === "__proto__" || key === "constructor" || key === "prototype") {
-      continue;
-    }
     let value: string | boolean | string[] | null = line.slice(colonIdx + 1).trim();
     // Inline array: ["item1", "item2"] or [item1, item2]
     if (typeof value === "string" && value.startsWith("[")) {
