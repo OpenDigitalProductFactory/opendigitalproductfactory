@@ -615,7 +615,7 @@ services:
     # Pinned to the multi-arch index digest for hwdsl2/whisper-server:latest at
     # commit time. Bump deliberately; never reach for `:latest` in shipped
     # compose because it makes the install non-reproducible.
-    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:b9a90a45e9ef72434862b0aaed5b503da5a03c0b1df650169e261861baf53d75}
+    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:4b4f3747242bc4be9c7a0a6d2160fef0a957813cf08574e0058841aba630dbd7}
     restart: unless-stopped
     environment:
       # `base` (~145 MB) is the smallest model with usable accuracy on English.
