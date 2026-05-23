@@ -67,6 +67,55 @@ Write-Host "========================================================"
 
 Write-Host "Step 3: Removing $DPF_DIR..." -ForegroundColor Cyan
 Set-Location $env:USERPROFILE  # Move out of the directory first
+
+# Operator backup history lives at $DPF_DIR\backups\ (host bind mount).
+# Uninstall implies "remove everything", but operator-owned backups are
+# the one thing the user might still want for a future install -- prompt
+# before destroying them, defaulting to PRESERVE.
+$backupsSrc = Join-Path $DPF_DIR "backups"
+$preserveBackups = $false
+if (Test-Path $backupsSrc) {
+    $hasContent = $false
+    try {
+        $first = Get-ChildItem -LiteralPath $backupsSrc -Force -ErrorAction SilentlyContinue | Select-Object -First 1
+        $hasContent = [bool]$first
+    } catch {
+        $hasContent = $false
+    }
+    if ($hasContent) {
+        Write-Host ""
+        Write-Host "   Found platform backups at $backupsSrc" -ForegroundColor Yellow
+        Write-Host "   These are the only persisted copies of your database dumps."
+        $keep = Read-Host "   Preserve them at $DPF_DIR-backups\ for a future install? (yes/no, default yes)"
+        if ($keep -eq "" -or $keep -eq "yes" -or $keep -eq "y") {
+            $preserveBackups = $true
+        }
+    }
+}
+
+if ($preserveBackups) {
+    $preserveDir = "$DPF_DIR-backups"
+    try {
+        if (-not (Test-Path $preserveDir)) {
+            New-Item -ItemType Directory -Path $preserveDir | Out-Null
+        }
+        Get-ChildItem -LiteralPath $backupsSrc -Force | ForEach-Object {
+            $dest = Join-Path $preserveDir $_.Name
+            if (Test-Path $dest) {
+                Write-Host "   Skipped $($_.Name): already present in $preserveDir" -ForegroundColor Yellow
+            } else {
+                Move-Item -LiteralPath $_.FullName -Destination $dest -Force
+            }
+        }
+        Write-Host "   Backups preserved at $preserveDir" -ForegroundColor Green
+    } catch {
+        Write-Host "   Could not preserve backups: $_" -ForegroundColor Red
+        Write-Host "   Refusing to delete $DPF_DIR while backups are present." -ForegroundColor Red
+        Write-Host "   Move $backupsSrc somewhere safe by hand, then re-run." -ForegroundColor Red
+        exit 1
+    }
+}
+
 if (Test-Path $DPF_DIR) {
     try {
         Remove-Item $DPF_DIR -Recurse -Force
@@ -125,6 +174,8 @@ Write-Host "                                                      " -ForegroundC
 Write-Host "  What was kept:                                      " -ForegroundColor Green
 Write-Host "   Docker Desktop (uninstall separately if needed)   " -ForegroundColor Green
 Write-Host "   WSL2 (Windows feature, safe to keep)              " -ForegroundColor Green
+Write-Host "   Platform backups (if you chose to preserve them)  " -ForegroundColor Green
+Write-Host "     at $DPF_DIR-backups\                            " -ForegroundColor Green
 Write-Host "                                                      " -ForegroundColor Green
 Write-Host "  To reinstall, run install-dpf.ps1 again.            " -ForegroundColor Green
 Write-Host "========================================================" -ForegroundColor Green
