@@ -1,8 +1,9 @@
 // apps/web/lib/git-utils.ts
 // Async git operations for the development lifecycle pipeline.
 
-import { randomUUID } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { lazyPath, lazyFsPromises, lazyExec } from "@/lib/shared/lazy-node";
 import { isPathAllowedSync as isPathAllowed, isDevInstance } from "@/lib/codebase-tools";
 
@@ -410,12 +411,14 @@ export async function pushBranch(
  */
 export async function applyPatch(patch: string): Promise<{ ok: true } | { error: string }> {
   if (!isDevInstance()) return { error: "Git apply is only available on dev instances." };
-  const { writeFile, unlink } = lazyFsPromises();
-  // CodeQL #110 (js/insecure-temporary-file): Date.now() is predictable;
-  // an attacker with /tmp write could pre-create a symlink at the path.
-  // randomUUID() inline gives 122 bits of entropy — CodeQL recognises
-  // this pattern (function calls are not followed, hence inline).
-  const tmpFile = `${tmpdir()}/dpf-pr-${randomUUID()}.patch`;
+  const { writeFile } = lazyFsPromises();
+  // CodeQL #110 (js/insecure-temporary-file): predictable /tmp paths
+  // let an attacker pre-create symlinks. The recognised safe pattern
+  // is fs.mkdtemp() which atomically creates a 0700-perm subdirectory
+  // owned by the current user; we write the patch inside that dir and
+  // clean up the whole tree on the way out.
+  const workDir = await mkdtemp(join(tmpdir(), "dpf-pr-"));
+  const tmpFile = join(workDir, "patch.diff");
   try {
     await writeFile(tmpFile, patch, "utf-8");
     await exec(
@@ -426,7 +429,7 @@ export async function applyPatch(patch: string): Promise<{ ok: true } | { error:
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Git apply failed" };
   } finally {
-    try { await unlink(tmpFile); } catch { /* cleanup best-effort */ }
+    await rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
 }
 

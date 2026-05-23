@@ -3,8 +3,9 @@
  * Used by fork_only mode to protect customizations against container rebuilds.
  */
 
-import { randomUUID } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { prisma } from "@dpf/db";
 import { lazyChildProcess, lazyUtil, lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
 
@@ -47,7 +48,7 @@ export async function backupPromotionToGit(input: {
 
   try {
     const exec = lazyUtil().promisify(lazyChildProcess().exec);
-    const { writeFile, unlink } = lazyFsPromises();
+    const { writeFile } = lazyFsPromises();
     const { resolve } = lazyPath();
 
     const gitRoot = process.env.PROJECT_ROOT
@@ -56,18 +57,20 @@ export async function backupPromotionToGit(input: {
 
     const timeout = 30_000;
 
-    // Write diff to temp file and apply.
-    // CodeQL #109 (js/insecure-temporary-file): the previous form was
-    // `/tmp/dpf-backup-${Date.now()}.patch` — Date.now() is predictable,
-    // so on a shared-tmp host an attacker could pre-create the path as
-    // a symlink and trick writeFile into clobbering a different file.
-    // CodeQL recognises `randomUUID()` inline in the path expression as
-    // the safe-constructor pattern (122 bits of entropy, unguessable);
-    // it does NOT follow wrapper functions, so the call must be inline.
-    const tmpFile = `${tmpdir()}/dpf-backup-${randomUUID()}.patch`;
-    await writeFile(tmpFile, input.diffPatch, "utf-8");
-
+    // CodeQL #109 (js/insecure-temporary-file): the previous form
+    // `/tmp/dpf-backup-${Date.now()}.patch` was predictable. Inline
+    // randomUUID() in `${tmpdir()}/...${randomUUID()}...` was not
+    // enough either — the CodeQL query still flags any write directly
+    // inside tmpdir() because the file inherits the world-writable
+    // /tmp parent. The recognised safe pattern is fs.mkdtemp() which
+    // atomically creates a 0700-perm subdirectory only the current
+    // user can write to; everything we drop inside that dir is safe
+    // by virtue of its parent's perms + the unguessable random suffix.
+    const workDir = await mkdtemp(join(tmpdir(), "dpf-backup-"));
     try {
+      const tmpFile = join(workDir, "patch.diff");
+      await writeFile(tmpFile, input.diffPatch, "utf-8");
+
       // Apply the patch
       await exec(`git apply ${JSON.stringify(tmpFile)}`, { cwd: gitRoot, timeout });
 
@@ -85,21 +88,15 @@ export async function backupPromotionToGit(input: {
       await exec(`git commit -m ${JSON.stringify(commitMsg)}`, { cwd: gitRoot, timeout });
 
       // Push with token auth via GIT_ASKPASS to avoid token in URLs/error
-      // messages. The script CONTAINS the GitHub token, so a predictable
-      // path is doubly dangerous: an attacker who pre-creates the path as
-      // a symlink could not only force the write to a different file but
-      // also intercept the token if the symlink points at an attacker-
-      // readable location. randomUUID() inline gives 122 bits of entropy.
-      const askpassScript = `${tmpdir()}/dpf-askpass-${randomUUID()}.sh`;
+      // messages. The script CONTAINS the GitHub token, so the 0700-perm
+      // mkdtemp subdir is doubly important — it prevents both symlink
+      // pre-creation attacks and other-user read of the token file.
+      const askpassScript = join(workDir, "askpass.sh");
       await writeFile(askpassScript, `#!/bin/sh\necho "${token}"`, { mode: 0o700 });
-      try {
-        await exec(`git push ${JSON.stringify(config.gitRemoteUrl)} HEAD:main`, {
-          cwd: gitRoot, timeout,
-          env: { ...process.env, GIT_ASKPASS: askpassScript, GIT_TERMINAL_PROMPT: "0" },
-        });
-      } finally {
-        try { await unlink(askpassScript); } catch { /* cleanup */ }
-      }
+      await exec(`git push ${JSON.stringify(config.gitRemoteUrl)} HEAD:main`, {
+        cwd: gitRoot, timeout,
+        env: { ...process.env, GIT_ASKPASS: askpassScript, GIT_TERMINAL_PROMPT: "0" },
+      });
 
       // Record the commit hash on the build
       const { stdout } = await exec("git rev-parse HEAD", { cwd: gitRoot, timeout: 5000 });
@@ -126,7 +123,10 @@ export async function backupPromotionToGit(input: {
 
       return { pushed: true };
     } finally {
-      try { await unlink(tmpFile); } catch { /* cleanup best-effort */ }
+      // Remove the entire mkdtemp directory — covers both the patch
+      // file and the askpass script in one cleanup, even if the work
+      // above threw partway through.
+      await rm(workDir, { recursive: true, force: true }).catch(() => {});
     }
   } catch (err) {
     return { pushed: false, error: err instanceof Error ? err.message : "Git backup push failed" };
