@@ -9,3 +9,12 @@ allowBuilds:
   '@prisma/engines': true
   esbuild: true
   prisma: true
+# Restore peerDependencies that @testing-library/jest-dom dropped in 6.x but still
+# imports from at runtime (src/vitest.js imports `vitest`). Without this, vitest
+# 4.1.6+ loses the `toBeInTheDocument` type augmentation across every test site.
+# Upstream: https://github.com/testing-library/jest-dom/issues/662
+# Tracking: vitest-dev/vitest#10411 (closed as downstream)
+packageExtensions:
+  '@testing-library/jest-dom':
+    peerDependencies:
+      vitest: '*'
