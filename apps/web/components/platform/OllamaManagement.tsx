@@ -24,9 +24,14 @@ type CatalogModel = {
 };
 
 const CATALOG: CatalogModel[] = [
-  // Coworkers — tool-use optimised
+  // Coworkers — tool-use optimised. Tags match Docker Hub exactly (case-
+  // sensitive, with quantization suffix). Verified against
+  // https://hub.docker.com/r/ai/qwen3/tags on 2026-05-23. Earlier shortened
+  // forms (`ai/qwen3:8b` etc.) 404 against Docker Model Runner — the Copy
+  // button copies the literal `id` here so the tag MUST be a real published
+  // tag, not a marketing-friendly short form.
   {
-    id: "ai/qwen3:8b",
+    id: "ai/qwen3:8B-Q4_K_M",
     name: "Qwen3 8B",
     description: "Best tool-calling accuracy for coworkers. Matches cloud Haiku (F1 0.93) — runs on most GPUs.",
     vramGb: 6,
@@ -37,19 +42,19 @@ const CATALOG: CatalogModel[] = [
     recommended: true,
   },
   {
-    id: "ai/qwen3:14b",
+    id: "ai/qwen3:14B-Q6_K",
     name: "Qwen3 14B",
-    description: "Top local model for tool calling (F1 0.97). Exceeds Haiku — needs 10 GB VRAM or 24 GB unified memory.",
-    vramGb: 10,
+    description: "Top local model for tool calling (F1 0.97). Exceeds Haiku — needs 12 GB VRAM or 24 GB unified memory.",
+    vramGb: 12,
     contextK: 32,
     toolUse: true,
     tier: "strong",
     category: "coworkers",
   },
   {
-    id: "ai/qwen3:32b",
-    name: "Qwen3 32B",
-    description: "Near-cloud quality for complex coworker tasks. Requires 24 GB+ VRAM or Apple Silicon 48 GB+ unified.",
+    id: "ai/qwen3:30B-A3B-Q4_K_M",
+    name: "Qwen3 30B (MoE, 3B active)",
+    description: "Mixture-of-Experts: 30B total weights, 3B active per token. Near-cloud reasoning for complex coworker tasks. Requires 24 GB+ VRAM or Apple Silicon 48 GB+ unified. (Qwen3 has no dense 32B variant — this MoE is the largest published.)",
     vramGb: 20,
     contextK: 32,
     toolUse: true,
@@ -91,7 +96,7 @@ const CATALOG: CatalogModel[] = [
   },
   // General / lightweight
   {
-    id: "ai/qwen3:4b",
+    id: "ai/qwen3:4B-UD-Q4_K_XL",
     name: "Qwen3 4B",
     description: "CPU-friendly lightweight model. 3 GB VRAM — for systems without a dedicated GPU.",
     vramGb: 3,
