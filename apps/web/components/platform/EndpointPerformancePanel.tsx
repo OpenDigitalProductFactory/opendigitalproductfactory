@@ -149,7 +149,7 @@ export default function EndpointPerformancePanel({
         </div>
         <div className="text-[10px] text-[var(--dpf-muted)] mt-1">
           {testMessage && <span style={{ color: "var(--dpf-accent)" }}>{testMessage} </span>}
-          Optional diagnostics. The platform automatically tests providers on startup and when they are configured.
+          Re-run model evaluations. Required for routing — run once after pulling new models so the router can pick them. Each run also produces evidence visible in the Recent Evaluations tab below.
         </div>
       </div>
 
