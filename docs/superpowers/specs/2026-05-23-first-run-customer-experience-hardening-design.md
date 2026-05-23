@@ -130,9 +130,18 @@ Replace the current `docker model pull → save progress → exit` with a verifi
 
 ```
 1. Enable Docker Model Runner (already in PR #1044).
-2. Pull selected model from catalog. Verify with `docker model ls`.
-3. Wait for portal to be reachable at localhost:3000/api/health.
-4. Hit the new portal API endpoint POST /api/internal/first-run-bootstrap
+2. Enable Docker Model Runner GPU-backed inference. THE single
+   highest-impact line in this entire spec. Without it, llama-server
+   processes silently run on CPU + system RAM instead of VRAM,
+   inference is 10-50× slower, and every downstream symptom in §4
+   (probe timeouts, model swap fallbacks, "AI provider temporarily
+   unavailable") gets dramatically worse or appears where it
+   otherwise wouldn't. Verify via nvidia-smi (or rocm-smi / Metal
+   equivalent) that the llama-server PIDs show non-zero VRAM use
+   after first inference call.
+3. Pull selected model from catalog. Verify with `docker model ls`.
+4. Wait for portal to be reachable at localhost:3000/api/health.
+5. Hit the new portal API endpoint POST /api/internal/first-run-bootstrap
    which the portal exposes specifically for the installer. The endpoint:
      a. Test-connects to local Docker Model Runner.
      b. Runs Sync Models & Profiles (populates ModelProfile).
@@ -141,11 +150,29 @@ Replace the current `docker model pull → save progress → exit` with a verifi
      e. Sends a test prompt to AI Ops Engineer.
      f. Returns 200 with the assistant's reply, or 4xx/5xx with a
         human-readable failure.
-5. Installer prints the assistant's reply to the console.
+6. Installer prints the assistant's reply to the console.
    "✓ Your AI assistant said: <reply>. Setup complete."
-6. On failure, installer prints the human-readable error AND a
+7. On failure, installer prints the human-readable error AND a
    one-line "what to try next" suggestion. Never a tier dropdown.
 ```
+
+The GPU-enable mechanism is platform-specific:
+
+- **Windows / macOS Docker Desktop**: Settings → AI → "Enable GPU-backed
+  inference" checkbox. Programmatic access: investigate `docker desktop
+  enable model-runner --gpu` (if it exists in the current Docker Desktop
+  CLI surface) before falling back to editing `~/.docker/desktop/settings-
+  store.json` directly. The settings file approach is fragile against
+  Docker Desktop schema changes; prefer the CLI if available.
+- **Linux Docker Engine**: GPU passthrough is handled at runtime via
+  `--gpus all` on the container; Docker Model Runner on Linux must be
+  configured with NVIDIA Container Toolkit installed on the host. The
+  installer's Linux path must check for `nvidia-container-toolkit` and
+  surface the install command if missing.
+- **WSL2 (Docker Desktop on Windows)**: requires the NVIDIA CUDA driver
+  for WSL on the host. Docker Desktop normally bundles the WSL-side
+  passthrough; verify via `docker run --rm --gpus all nvidia/cuda:base
+  nvidia-smi` after enabling.
 
 The installer NEVER claims success without seeing a real coworker reply.
 
@@ -227,6 +254,7 @@ The spec ships when a clean cold install on Windows 11 / macOS / Linux completes
 5. User picks "Built-in (free)" (the default) and clicks Continue.
 6. User lands on the workspace. AI Coworker panel responds to "hello" within 30 seconds.
 7. **No error message containing the words** *manifest, profile, tier, probe, endpoint, capability, unavailable* **appears at any point in this flow** for the default-persona user.
+8. **`nvidia-smi` (or platform equivalent) shows the llama-server PIDs holding non-zero VRAM** after the first AI Coworker call. CPU-only inference fallback in the presence of a usable GPU is a defect, regardless of whether the conversation eventually completes.
 
 Power-user acceptance criteria (separate):
 
@@ -251,6 +279,8 @@ Open follow-up items surfaced during the 2026-05-23 cold install:
 - Task #16: Refresh button doesn't create ModelProfile rows (subsumes §6.3 step 1b)
 - Task #17: ModelProvider.capabilityTier not derived from model tiers (subsumes §6.3 step 1c)
 - Task #18: Run Probes mislabeled "Optional diagnostics" (subsumes §6.3, §6.4)
+- Task #20: Probe HTTP timeout shorter than cold model load (largely subsumed by #21 — GPU inference makes the existing timeout adequate; remaining hardening is async/sequential probe execution, captured in §6.3)
+- **Task #21: Installer must enable Docker Model Runner GPU-backed inference (subsumes §6.2 Step 8.2 — THE highest-impact item in this spec; without it, every other change is materially less effective)**
 - PR #1044: Installer enables Docker Model Runner before pull (lands ahead of this spec, prerequisite)
 
 This spec consolidates all of the above into one coherent first-run UX. Per the standing process, this spec is committed to main and fed to `writing-plans` to be broken into Build Studio work items.
