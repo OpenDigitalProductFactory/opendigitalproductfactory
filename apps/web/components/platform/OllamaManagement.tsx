@@ -8,6 +8,7 @@ import {
   type OllamaModelInfo,
   type OllamaRunningModel,
 } from "@/lib/actions/ollama-management";
+import { discoverModels, profileModels } from "@/lib/actions/ai-providers";
 
 // ── Model Catalog ────────────────────────────────────────────────────────────
 
@@ -145,9 +146,14 @@ function normaliseModelId(name: string): string {
 type Props = {
   canWrite: boolean;
   vramGb?: number | null;
+  // Provider whose models are managed by this panel. Required to route the
+  // post-list discover+profile sync through the right provider. Optional for
+  // backward compat: when omitted, refresh() only reloads the displayed list
+  // (legacy behaviour, BI-INST-004 unfixed).
+  providerId?: string;
 };
 
-export function OllamaManagement({ canWrite, vramGb }: Props) {
+export function OllamaManagement({ canWrite, vramGb, providerId }: Props) {
   const [models, setModels] = useState<OllamaModelInfo[]>([]);
   const [running, setRunning] = useState<OllamaRunningModel[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -159,11 +165,52 @@ export function OllamaManagement({ canWrite, vramGb }: Props) {
   const [copied, setCopied] = useState<string | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [advancedInput, setAdvancedInput] = useState("");
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
-  useEffect(() => { refresh(); }, []);
+  // Initial load: just reload the displayed list. Skip the discover+profile
+  // sync on first mount to avoid redundant work (the parent page-level Sync
+  // Models & Profiles button already fires on user demand).
+  useEffect(() => { refreshList(); }, []);
 
+  // Reloads the displayed list only — used by useEffect on mount and as the
+  // last step of refresh() after the sync completes.
+  function refreshList() {
+    startTransition(async () => {
+      const [modelsResult, runningResult] = await Promise.all([
+        listOllamaModels(),
+        getOllamaRunningModels(),
+      ]);
+      setModels(modelsResult.models);
+      setRunning(runningResult.models);
+      setError(modelsResult.error ?? runningResult.error ?? null);
+      setLoaded(true);
+    });
+  }
+
+  // BI-INST-004: the visible Refresh button now ALSO runs discoverModels +
+  // profileModels so newly-pulled models become routable. Previously only
+  // refreshed the displayed list, which left ModelProfile rows stale and
+  // confused users who expected "Refresh" to make new models usable.
+  // Sync is a no-op when providerId isn't passed (legacy callers).
   function refresh() {
     startTransition(async () => {
+      if (providerId) {
+        setSyncMessage("Discovering models...");
+        const discovery = await discoverModels(providerId);
+        if (discovery.discovered > 0) {
+          setSyncMessage("Syncing routing profiles...");
+          const profResult = await profileModels(providerId);
+          setSyncMessage(profResult.error
+            ? `Profile error: ${profResult.error}`
+            : `${profResult.profiled} profiled, ${profResult.failed} failed`);
+        } else {
+          setSyncMessage("No models to sync");
+        }
+        // Auto-clear the status message after a short window so the panel
+        // doesn't accumulate stale state.
+        setTimeout(() => setSyncMessage(null), 4000);
+      }
+
       const [modelsResult, runningResult] = await Promise.all([
         listOllamaModels(),
         getOllamaRunningModels(),
@@ -229,23 +276,31 @@ export function OllamaManagement({ canWrite, vramGb }: Props) {
           <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", margin: 0 }}>
             Installed Models
           </h2>
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={isPending}
-            style={{
-              fontSize: 11,
-              padding: "4px 10px",
-              borderRadius: 4,
-              border: "1px solid var(--dpf-border)",
-              background: "transparent",
-              color: "var(--dpf-muted)",
-              cursor: "pointer",
-              opacity: isPending ? 0.5 : 1,
-            }}
-          >
-            Refresh
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {syncMessage && (
+              <span style={{ fontSize: 10, color: "var(--dpf-muted)" }}>{syncMessage}</span>
+            )}
+            <button
+              type="button"
+              onClick={refresh}
+              disabled={isPending}
+              title={providerId
+                ? "Reload the list AND sync newly-pulled models into routing profiles."
+                : "Reload the displayed list."}
+              style={{
+                fontSize: 11,
+                padding: "4px 10px",
+                borderRadius: 4,
+                border: "1px solid var(--dpf-border)",
+                background: "transparent",
+                color: "var(--dpf-muted)",
+                cursor: "pointer",
+                opacity: isPending ? 0.5 : 1,
+              }}
+            >
+              {isPending && syncMessage ? "Syncing..." : "Refresh"}
+            </button>
+          </div>
         </div>
 
         {/* Summary bar */}

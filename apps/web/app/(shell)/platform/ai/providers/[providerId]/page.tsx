@@ -116,7 +116,11 @@ export default async function ProviderDetailPage({ params }: Props) {
       )}
 
       {(providerId === "local" || providerId === "ollama") && (
-        <OllamaManagement canWrite={canWrite} vramGb={hardwareInfo?.vramGb ?? null} />
+        <OllamaManagement
+          canWrite={canWrite}
+          vramGb={hardwareInfo?.vramGb ?? null}
+          providerId={providerId}
+        />
       )}
 
       {pw.provider.costPerformanceNotes && (
