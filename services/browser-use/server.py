@@ -645,7 +645,13 @@ async def mcp_endpoint(request: Request):
             # trace context to clients. logger.exception() captures the
             # full trace server-side for diagnostics; the client gets a
             # generic message instead.
-            logger.exception("Tool %s failed", tool_name)
+            #
+            # CodeQL #106 (py/log-injection): tool_name comes from the
+            # JSON-RPC request body — an attacker could embed CR/LF to
+            # forge fake log lines. repr() escapes control characters and
+            # is a CodeQL-recognised log-injection sanitiser. The repr()
+            # form also makes clear in logs that this is untrusted input.
+            logger.exception("Tool %s failed", repr(tool_name))
             _ = e  # consumed by logger.exception
             return JSONResponse(content={
                 "jsonrpc": "2.0",

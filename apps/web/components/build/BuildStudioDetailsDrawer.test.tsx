@@ -194,7 +194,7 @@ describe("BuildStudio DetailsDrawer integration", () => {
     });
   });
 
-  it("renders the canonical 4 drawer sections in order", () => {
+  it("renders the canonical drawer sections in order", () => {
     render(
       <BuildStudio
         builds={[makeBuild()]}
@@ -208,7 +208,7 @@ describe("BuildStudio DetailsDrawer integration", () => {
     fireEvent.click(screen.getByTestId(BUILD_STUDIO_TEST_IDS.detailsDrawerPill));
     const sectionHeaders = document.querySelectorAll("[data-section-id]");
     const ids = Array.from(sectionHeaders).map((s) => s.getAttribute("data-section-id"));
-    expect(ids).toEqual(["progress", "brief", "review", "bs-queue"]);
+    expect(ids).toEqual(["canonical-doc", "progress", "brief", "review", "bs-queue"]);
   });
 
   it("phase=ideate → Brief is default-open", () => {
