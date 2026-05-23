@@ -25,7 +25,12 @@ export async function writeAudioBlob(input: WriteAudioBlobInput): Promise<WriteA
 
   const absoluteDir  = path.join(storageRoot, relativeDir)
   const absolutePath = path.join(storageRoot, storageKey)
-  const tmpPath      = `${absolutePath}.${process.pid}.tmp`
+  // CodeQL #111 (js/insecure-temporary-file): the previous suffix was
+  // `${process.pid}.tmp` which is predictable — an attacker with write
+  // access to absoluteDir could pre-create the path as a symlink and
+  // intercept the audio write. randomUUID() gives 122 bits of entropy
+  // so the path cannot be guessed.
+  const tmpPath      = `${absolutePath}.${randomUUID()}.tmp`
 
   await fs.mkdir(absoluteDir, { recursive: true })
   await fs.writeFile(tmpPath, Buffer.from(input.audioBuffer))

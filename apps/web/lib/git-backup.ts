@@ -5,6 +5,7 @@
 
 import { prisma } from "@dpf/db";
 import { lazyChildProcess, lazyUtil, lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
+import { secureTempPath } from "@/lib/security/safe-tempfile";
 
 /**
  * Commit a promotion diff to the configured backup repository.
@@ -54,8 +55,13 @@ export async function backupPromotionToGit(input: {
 
     const timeout = 30_000;
 
-    // Write diff to temp file and apply
-    const tmpFile = `/tmp/dpf-backup-${Date.now()}.patch`;
+    // Write diff to temp file and apply.
+    // CodeQL #109 (js/insecure-temporary-file): the previous form was
+    // `/tmp/dpf-backup-${Date.now()}.patch` — Date.now() is predictable,
+    // so on a shared-tmp host an attacker could pre-create the path as
+    // a symlink and trick writeFile into clobbering a different file.
+    // secureTempPath uses crypto.randomUUID() (122 bits of entropy).
+    const tmpFile = secureTempPath("dpf-backup", "patch");
     await writeFile(tmpFile, input.diffPatch, "utf-8");
 
     try {
@@ -75,8 +81,13 @@ export async function backupPromotionToGit(input: {
       await exec("git add -A", { cwd: gitRoot, timeout });
       await exec(`git commit -m ${JSON.stringify(commitMsg)}`, { cwd: gitRoot, timeout });
 
-      // Push with token auth via GIT_ASKPASS to avoid token in URLs/error messages
-      const askpassScript = `/tmp/dpf-askpass-${Date.now()}.sh`;
+      // Push with token auth via GIT_ASKPASS to avoid token in URLs/error
+      // messages. The script CONTAINS the GitHub token, so a predictable
+      // path is doubly dangerous: an attacker who pre-creates the path as
+      // a symlink could not only force the write to a different file but
+      // also intercept the token if the symlink points at an attacker-
+      // readable location. secureTempPath closes both risks.
+      const askpassScript = secureTempPath("dpf-askpass", "sh");
       await writeFile(askpassScript, `#!/bin/sh\necho "${token}"`, { mode: 0o700 });
       try {
         await exec(`git push ${JSON.stringify(config.gitRemoteUrl)} HEAD:main`, {

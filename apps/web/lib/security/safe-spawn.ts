@@ -33,6 +33,7 @@
 // the kernel principle `security-fix-needs-regression-test-first`.
 
 import type { ChildProcess, SpawnOptions } from "node:child_process";
+import { isSafeKey } from "@/lib/security/safe-property";
 
 /**
  * Loose spawn-like signature so callers can hand us the real
@@ -172,6 +173,13 @@ export function sanitizeEnv(
       console.warn(`[safe-spawn] Dropped dangerous env var "${k}" before spawn.`);
       continue;
     }
+    // CodeQL #201 (js/remote-property-injection): even after the
+    // DANGEROUS_ENV_VARS allowlist, the analyser cannot prove that `k`
+    // isn't "__proto__" / "constructor" / "prototype" — those don't
+    // appear in DANGEROUS_ENV_VARS because they aren't shell env vars
+    // people set. The explicit isSafeKey barrier closes the prototype-
+    // pollution gap and is a model-pack-recognised sanitiser.
+    if (!isSafeKey(k)) continue;
     if (v !== undefined) out[k] = v;
   }
   return out;

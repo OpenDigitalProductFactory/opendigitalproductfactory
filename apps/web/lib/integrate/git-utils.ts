@@ -3,6 +3,7 @@
 
 import { lazyPath, lazyFsPromises, lazyExec } from "@/lib/shared/lazy-node";
 import { isPathAllowedSync as isPathAllowed, isDevInstance } from "@/lib/codebase-tools";
+import { secureTempPath } from "@/lib/security/safe-tempfile";
 
 const exec = lazyExec();
 const GIT_TIMEOUT_MS = 10_000;
@@ -409,7 +410,10 @@ export async function pushBranch(
 export async function applyPatch(patch: string): Promise<{ ok: true } | { error: string }> {
   if (!isDevInstance()) return { error: "Git apply is only available on dev instances." };
   const { writeFile, unlink } = lazyFsPromises();
-  const tmpFile = `/tmp/dpf-pr-${Date.now()}.patch`;
+  // CodeQL #110 (js/insecure-temporary-file): Date.now() is predictable;
+  // an attacker with /tmp write could pre-create a symlink at the path.
+  // secureTempPath uses crypto.randomUUID() for an unguessable suffix.
+  const tmpFile = secureTempPath("dpf-pr", "patch");
   try {
     await writeFile(tmpFile, patch, "utf-8");
     await exec(

@@ -61,3 +61,32 @@ extensions:
       # DEL (U+007F) — including CR + LF — so the returned string cannot
       # forge a log line. Breaks taint flow for js/log-injection (CWE-117).
       - ["safe-log", "Module", "Member[sanitizeForLog]", "Argument[0]", "ReturnValue", "taint", "manual"]
+
+  # ─── safe-property — js/remote-property-injection guard ──────────────────
+  - addsTo:
+      pack: codeql/javascript-all
+      extensible: summaryModel
+    data:
+      # isSafeKey returns false for the three keys that can mutate the
+      # prototype chain (__proto__, constructor, prototype). Used as
+      # `if (!isSafeKey(k)) continue;` it acts as a taint-clearing barrier
+      # for the computed-property write that follows.
+      - ["safe-property", "Module", "Member[isSafeKey]", "Argument[0]", "ReturnValue", "taint", "manual"]
+      # assertSafeKey throws on the same three keys; surviving the call
+      # implies the key was safe.
+      - ["safe-property", "Module", "Member[assertSafeKey]", "Argument[0]", "ReturnValue", "taint", "manual"]
+
+  # ─── safe-tempfile — js/insecure-temporary-file safe constructor ─────────
+  - addsTo:
+      pack: codeql/javascript-all
+      extensible: neutralModel
+    data:
+      # secureTempPath returns a /tmp/<prefix>-<uuidv4>.<ext> path. The
+      # randomUUID() suffix has 122 bits of entropy — an attacker cannot
+      # pre-create the path as a symlink. Declared neutral so the return
+      # value is not treated as a tainted/insecure-temp path.
+      - ["safe-tempfile", "Module", "Member[secureTempPath]", "ReturnValue", "manual"]
+      # withSecureTempDir wraps fs.mkdtemp which is atomically race-free
+      # and creates 0700-perm directories. The dir argument passed to the
+      # callback is safe.
+      - ["safe-tempfile", "Module", "Member[withSecureTempDir]", "ReturnValue", "manual"]
