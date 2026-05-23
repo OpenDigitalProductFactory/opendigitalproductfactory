@@ -355,6 +355,21 @@ proven by the promoter. Using the same path means a single tree the
 operator can back up off-host later (Phase 3) by pointing
 restic/rclone/Backblaze at one directory.
 
+> **Known hazard (addendum 2026-05-23).** The Windows-side
+> `dpf-reinstall.ps1` and `uninstall-dpf.ps1` scripts `Remove-Item`
+> the entire `$DPF_DIR` — which, because backups live *inside* it,
+> would silently destroy every dump. Both scripts now preserve
+> `$DPF_DIR\backups\` to a sibling `$DPF_DIR-backups\` before the rm,
+> and `install-dpf.ps1` folds them back in on the next install. This
+> is a defense-in-depth patch; the architecturally correct fix is to
+> relocate the bind-mount source out of the install root entirely
+> (e.g. behind a new `DPF_BACKUPS_HOST_PATH` env var defaulting to
+> a sibling path). That relocation is a follow-up because it touches
+> the host-path-translation logic in `scripts/backup-neo4j.sh`,
+> `scripts/restore-neo4j.sh`, and the Neo4j runner env-forwarding.
+> The bash side (`dpf-reinstall.sh` → `uninstall-dpf.sh --purge`)
+> does not delete the repo dir and is already safe.
+
 ### 5.4 Retention policy (GFS)
 
 7/4/12 GFS is the default in nearly every backup tool that defaults at

@@ -1168,6 +1168,52 @@ GF_ADMIN_PASSWORD=$adminPass
 "@ | Set-Content "$DPF_DIR\.env"
 }
 
+# --- Restore preserved backups from prior reinstall/uninstall -----------------
+#
+# dpf-reinstall.ps1 and uninstall-dpf.ps1 move $DPF_DIR\backups\ to the
+# sibling $DPF_DIR-backups\ before deleting the install directory, so that
+# operator-owned backup history survives a wipe. Fold them back in here so
+# the admin UX picks them up automatically when the portal first reads the
+# /backups bind mount. Idempotent: only acts if the sibling exists with
+# content, and only moves entries that don't collide with anything fresh.
+
+$preserveDir = "$DPF_DIR-backups"
+if (Test-Path $preserveDir) {
+    $backupsDest = Join-Path $DPF_DIR "backups"
+    try {
+        $entries = Get-ChildItem -LiteralPath $preserveDir -Force -ErrorAction SilentlyContinue
+    } catch {
+        $entries = @()
+    }
+    if ($entries) {
+        Write-Action "Restoring preserved backups from $preserveDir"
+        if (-not (Test-Path $backupsDest)) {
+            New-Item -ItemType Directory -Path $backupsDest | Out-Null
+        }
+        foreach ($entry in $entries) {
+            $dest = Join-Path $backupsDest $entry.Name
+            if (Test-Path $dest) {
+                Write-Warn "  Skipped $($entry.Name): already exists in $backupsDest"
+            } else {
+                try {
+                    Move-Item -LiteralPath $entry.FullName -Destination $dest -Force
+                } catch {
+                    Write-Warn "  Could not move $($entry.Name): $_"
+                }
+            }
+        }
+        # Remove the preserve dir only if it's now empty -- leave it in place
+        # otherwise so the operator can investigate skipped entries.
+        $remaining = Get-ChildItem -LiteralPath $preserveDir -Force -ErrorAction SilentlyContinue
+        if (-not $remaining) {
+            Remove-Item -LiteralPath $preserveDir -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Ok "Backups restored to $backupsDest"
+        } else {
+            Write-Warn "Some entries left in $preserveDir (collisions) -- review by hand."
+        }
+    }
+}
+
 # --- Step 6: Start Platform ---------------------------------------------------
 
 Write-Step 7 10 "Starting the platform..."
@@ -1298,7 +1344,43 @@ if (-not (Test-StepDone "mcp_seed")) {
 
 Write-Step 8 10 "Setting up your AI Coworker..."
 if (-not (Test-StepDone "model")) {
-    # Pull model via Docker Model Runner (built into Docker Desktop 4.40+)
+    # Pull model via Docker Model Runner (built into Docker Desktop 4.40+).
+    #
+    # Docker Model Runner is DISABLED by default in fresh Docker Desktop
+    # installs. Without explicitly enabling it first, `docker model pull`
+    # fails with "Docker Model Runner is not running" — but the exit code
+    # behavior is inconsistent across versions, so the user ends up with
+    # .selected-model set, no actual model on disk, and the portal's
+    # AI Coworker silently broken ("AI provider is temporarily unavailable"
+    # on first portal load). Enabling is idempotent — no-op if already on.
+    Write-Action "Enabling Docker Model Runner..."
+    $oldEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    docker desktop enable model-runner 2>&1 | Out-Null
+    $enableExit = $LASTEXITCODE
+    $ErrorActionPreference = $oldEAP
+
+    if ($enableExit -ne 0) {
+        Write-Warn "Could not enable Docker Model Runner automatically."
+        Write-Warn "Requires Docker Desktop 4.40+. Enable manually: Settings -> AI -> Enable Docker Model Runner"
+        Write-Warn "Then re-run this installer."
+    } else {
+        # Wait briefly for Model Runner to come up before pulling.
+        $mrReady = $false
+        for ($i = 0; $i -lt 15; $i++) {
+            $oldEAP = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            docker model list 2>&1 | Out-Null
+            $listExit = $LASTEXITCODE
+            $ErrorActionPreference = $oldEAP
+            if ($listExit -eq 0) { $mrReady = $true; break }
+            Start-Sleep -Seconds 2
+        }
+        if (-not $mrReady) {
+            Write-Warn "Docker Model Runner did not become ready in 30s. The model pull will likely fail."
+        }
+    }
+
     Write-Action "Pulling AI model $selectedModel via Docker Model Runner, these may be big..."
     Write-Action "This may take several minutes depending on your internet speed, and size of your video card."
     $oldEAP = $ErrorActionPreference
