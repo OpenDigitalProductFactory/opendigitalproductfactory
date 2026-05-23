@@ -3,7 +3,6 @@
 import { prisma } from "@dpf/db";
 import { isBrandDesignSystem, type BrandDesignSystem } from "@/lib/brand/types";
 import { designSystemToThemeTokens } from "@/lib/brand/apply";
-import { isSafeKey } from "@/lib/security/safe-property";
 
 export type ApplyResult =
   | { success: true }
@@ -13,12 +12,15 @@ function deepMerge<T>(target: T, source: Partial<T>): T {
   if (typeof target !== "object" || target === null) return (source as T) ?? target;
   const result: Record<string, unknown> = { ...(target as Record<string, unknown>) };
   for (const [key, value] of Object.entries(source as Record<string, unknown>)) {
-    // CodeQL #195/#196 (js/remote-property-injection): source comes from
-    // a user-submitted override object, so `key` could be "__proto__" /
-    // "constructor" / "prototype" — assigning to those mutates the
-    // prototype chain (CWE-1321 prototype pollution). isSafeKey is a
-    // model-pack-registered barrier that rejects exactly those three keys.
-    if (!isSafeKey(key)) continue;
+    // CodeQL #195/#196 (js/remote-property-injection, CWE-1321):
+    // source comes from a user-submitted override object, so `key` could
+    // be "__proto__" / "constructor" / "prototype" — assigning to those
+    // mutates the prototype chain. Inline guard (not isSafeKey()) because
+    // CodeQL's JS analyser doesn't follow function-call boundaries — only
+    // a literal equality check at the callsite acts as a sanitiser barrier.
+    if (key === "__proto__" || key === "constructor" || key === "prototype") {
+      continue;
+    }
     if (
       value !== null
       && typeof value === "object"
