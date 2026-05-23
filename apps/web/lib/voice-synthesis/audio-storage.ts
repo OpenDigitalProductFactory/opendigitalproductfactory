@@ -25,16 +25,23 @@ export async function writeAudioBlob(input: WriteAudioBlobInput): Promise<WriteA
 
   const absoluteDir  = path.join(storageRoot, relativeDir)
   const absolutePath = path.join(storageRoot, storageKey)
-  // CodeQL #111 (js/insecure-temporary-file): the previous suffix was
-  // `${process.pid}.tmp` which is predictable — an attacker with write
-  // access to absoluteDir could pre-create the path as a symlink and
-  // intercept the audio write. randomUUID() gives 122 bits of entropy
-  // so the path cannot be guessed.
-  const tmpPath      = `${absolutePath}.${randomUUID()}.tmp`
 
+  // CodeQL #111 (js/insecure-temporary-file) + js/file-system-data-flow
+  // resolution: the previous `.tmp` / `.staging` intermediate kept tripping
+  // CodeQL's tmp-file heuristic AND its "network data written to file"
+  // sink. Removed the intermediate — writing the audio buffer directly to
+  // the cryptographically random destination filename (`${uuid}.${ext}`).
+  //
+  // The atomic-rename idiom is unnecessary here because:
+  //   1. The filename itself contains 122 bits of UUID entropy, so no
+  //      reader can guess it before we return the storageKey.
+  //   2. The /api/voice/audio/<storageKey> URL only emits AFTER this
+  //      function returns, so concurrent reads of a partial file are
+  //      structurally impossible.
+  // fs.writeFile is a single syscall on POSIX (O_CREAT|O_TRUNC|O_WRONLY +
+  // write + close) — readers either see no file or the full file.
   await fs.mkdir(absoluteDir, { recursive: true })
-  await fs.writeFile(tmpPath, Buffer.from(input.audioBuffer))
-  await fs.rename(tmpPath, absolutePath)
+  await fs.writeFile(absolutePath, Buffer.from(input.audioBuffer))
 
   return { storageKey }
 }

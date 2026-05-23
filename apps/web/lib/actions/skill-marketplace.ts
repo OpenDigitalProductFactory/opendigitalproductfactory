@@ -2,7 +2,6 @@
 
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
-import { isSafeKey } from "@/lib/security/safe-property";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -85,10 +84,12 @@ function parseSkillMd(raw: string): {
     // CodeQL #197/#198/#199 (js/remote-property-injection): SKILL.md
     // frontmatter is contributor-authored input, so `key` could be
     // "__proto__" / "constructor" / "prototype" — assigning to those
-    // mutates the prototype chain (CWE-1321). isSafeKey is a model-pack-
-    // registered barrier that rejects exactly those three keys; legitimate
-    // frontmatter fields are unaffected.
-    if (!isSafeKey(key)) continue;
+    // mutates the prototype chain (CWE-1321). Inline guard (not a helper
+    // call) because CodeQL doesn't follow function boundaries — only
+    // a literal equality check at the callsite acts as a sanitiser.
+    if (key === "__proto__" || key === "constructor" || key === "prototype") {
+      continue;
+    }
     let value: string | boolean | string[] | null = line.slice(colonIdx + 1).trim();
     // Inline array: ["item1", "item2"] or [item1, item2]
     if (typeof value === "string" && value.startsWith("[")) {
