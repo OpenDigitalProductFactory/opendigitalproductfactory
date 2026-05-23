@@ -155,6 +155,20 @@ async function persistWithDb(
   if (args.value === undefined) {
     throw new Error(`Cannot save ${args.field} with an undefined value`);
   }
+  // CodeQL #200 (js/remote-property-injection): args.field is typed as
+  // BuildArtifactField but reaches a computed-property write below
+  // (`data: { [args.field]: ... }`). TypeScript's structural typing
+  // erases at runtime, so a caller cast or any-shaped call could pass
+  // "__proto__" / "constructor" / "prototype" and pollute the Prisma
+  // payload. Validate against the literal allowlist at the boundary —
+  // this is both the prototype-pollution guard and a defensive check
+  // that no future field gets quietly added to the type without being
+  // listed in BUILD_ARTIFACT_FIELDS.
+  if (!BUILD_ARTIFACT_FIELDS.includes(args.field)) {
+    throw new Error(
+      `Refusing to persist unknown artifact field: ${JSON.stringify(args.field)}`,
+    );
+  }
 
   const acceptedArtifacts = Object.fromEntries(
     await Promise.all(

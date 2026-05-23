@@ -105,32 +105,45 @@ function makeSnippet(body: string, matchIndex: number): string {
 }
 
 async function loadFile(filePath: string): Promise<CacheEntry | null> {
-  let stat;
+  // CodeQL #107 (js/file-system-race): the previous form was
+  //   stat = await fs.stat(filePath);
+  //   ... (cache decision)
+  //   body = await fs.readFile(filePath, "utf-8");
+  // which has a TOCTOU window between the stat and the readFile —
+  // a symlink swap or file replacement between the two ops could
+  // produce a CacheEntry where mtimeMs and body come from different
+  // files. The fix is to open() once and use the returned FileHandle
+  // for both stat and read: stat-via-fd is atomic against on-disk
+  // changes and readFile-via-fd reads the same inode.
+  const { open } = fs;
+  let fh;
   try {
-    stat = await fs.stat(filePath);
+    fh = await open(filePath, "r");
   } catch {
     return null;
   }
-  const cached = cache.get(filePath);
-  if (cached && cached.mtimeMs === stat.mtimeMs) return cached;
+  try {
+    const stat = await fh.stat();
+    const cached = cache.get(filePath);
+    if (cached && cached.mtimeMs === stat.mtimeMs) return cached;
 
-  let body: string;
-  try {
-    body = await fs.readFile(filePath, "utf-8");
+    const body = await fh.readFile("utf-8");
+    const filename = path.basename(filePath);
+    const entry: CacheEntry = {
+      mtimeMs: stat.mtimeMs,
+      title: extractTitle(body, filename.replace(/\.md$/, "")),
+      date: extractDate(filename),
+      body,
+      bodyLower: body.toLowerCase(),
+      refs: extractRefs(body),
+    };
+    cache.set(filePath, entry);
+    return entry;
   } catch {
     return null;
+  } finally {
+    await fh.close();
   }
-  const filename = path.basename(filePath);
-  const entry: CacheEntry = {
-    mtimeMs: stat.mtimeMs,
-    title: extractTitle(body, filename.replace(/\.md$/, "")),
-    date: extractDate(filename),
-    body,
-    bodyLower: body.toLowerCase(),
-    refs: extractRefs(body),
-  };
-  cache.set(filePath, entry);
-  return entry;
 }
 
 async function listMarkdown(absDir: string): Promise<string[]> {
