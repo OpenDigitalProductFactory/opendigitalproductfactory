@@ -28,7 +28,9 @@ import {
 export async function getDecryptedCredential(providerId: string) {
   const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
   if (!cred) {
-    console.warn(`[credentials] getDecryptedCredential("${providerId}") → null: row not found`);
+    // CodeQL js/log-injection: providerId is user-influenced. JSON.stringify
+    // is a CodeQL-recognised sanitiser — escapes CR/LF, quotes the value.
+    console.warn(`[credentials] getDecryptedCredential(${JSON.stringify(providerId)}) → null: row not found`);
     return null;
   }
   const secretRef    = cred.secretRef    ? decryptSecret(cred.secretRef)    : null;
@@ -40,8 +42,11 @@ export async function getDecryptedCredential(providerId: string) {
     .some(v => v?.startsWith("enc:"));
   const allFailed = hadEncrypted && !secretRef && !clientSecret && !cachedToken && !refreshToken;
   if (allFailed) {
-    console.warn(`[credentials] All encrypted fields for "${providerId}" failed to decrypt — re-configure this provider.`);
-    console.warn(`[credentials] Diagnostic for ${providerId}: ` +
+    // CodeQL js/log-injection: providerId is user-influenced. JSON.stringify
+    // is a CodeQL-recognised sanitiser — escapes CR/LF, quotes the value.
+    const safeProviderId = JSON.stringify(providerId);
+    console.warn(`[credentials] All encrypted fields for ${safeProviderId} failed to decrypt — re-configure this provider.`);
+    console.warn(`[credentials] Diagnostic for ${safeProviderId}: ` +
       `secretRef=${cred.secretRef ? `enc(${cred.secretRef.slice(0,8)})→${secretRef ? "ok" : "null"}` : "none"}, ` +
       `clientSecret=${cred.clientSecret ? `enc(${cred.clientSecret.slice(0,8)})→${clientSecret ? "ok" : "null"}` : "none"}, ` +
       `cachedToken=${cred.cachedToken ? `enc(${cred.cachedToken.slice(0,8)})→${cachedToken ? "ok" : "null"}` : "none"}, ` +
@@ -52,8 +57,12 @@ export async function getDecryptedCredential(providerId: string) {
     if (cred.status !== "key_rotated") {
       prisma.credentialEntry
         .update({ where: { providerId }, data: { status: "key_rotated" } })
-        // CodeQL #47 (js/tainted-format-string): providerId is user-influenced.
-        .catch((err) => console.warn("[credentials] Failed to mark %s as key_rotated:", providerId, err));
+        // CodeQL #47 (js/tainted-format-string) + js/log-injection:
+        // providerId is user-influenced. JSON.stringify is the recognised
+        // sanitiser; the format string is constant so %s can't be hijacked.
+        .catch((err) => console.warn("[credentials] Failed to mark %s as key_rotated: %s",
+          JSON.stringify(providerId),
+          err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err))));
     }
     return null;
   }
@@ -259,15 +268,17 @@ export async function discoverChatGptBackendModels(
         },
       }));
 
+    // CodeQL js/log-injection: providerId + modelId user-influenced.
     console.log(
-      `[discovery] ChatGPT backend returned ${models.length} models for ${providerId}: ` +
-      `[${models.map(m => m.modelId).join(", ")}]`,
+      `[discovery] ChatGPT backend returned ${models.length} models for ${JSON.stringify(providerId)}: ` +
+      `[${models.map(m => JSON.stringify(m.modelId)).join(", ")}]`,
     );
 
     return { models };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Fetch error";
-    console.warn(`[discovery] ChatGPT backend discovery failed for ${providerId}: ${msg}`);
+    // CodeQL js/log-injection: providerId + msg user-influenced.
+    console.warn(`[discovery] ChatGPT backend discovery failed for ${JSON.stringify(providerId)}: ${JSON.stringify(msg)}`);
     return { models: [], error: msg };
   }
 }
@@ -436,7 +447,8 @@ export async function discoverModelsInternal(
               retiredReason: `Model no longer listed by provider after ${newMissedCount} discovery cycles`,
             },
           });
-          console.log(`[discovery] Retired model ${known.modelId} from ${providerId} (missed ${newMissedCount} discoveries)`);
+          // CodeQL js/log-injection: modelId + providerId user-influenced.
+          console.log(`[discovery] Retired model ${JSON.stringify(known.modelId)} from ${JSON.stringify(providerId)} (missed ${newMissedCount} discoveries)`);
         }
       }
     }
@@ -534,7 +546,7 @@ export async function profileModelsInternal(
           retiredReason: "Model not accessible with provider credential type",
         },
       });
-      console.log(`[profiling] Retired restricted model ${m.modelId} from ${providerId}`);
+      console.log(`[profiling] Retired restricted model ${JSON.stringify(m.modelId)} from ${JSON.stringify(providerId)}`);
       continue; // skip normal profiling for this model
     }
     const card = extractModelCardWithFallback(providerId, m.modelId, m.rawMetadata);
@@ -564,7 +576,7 @@ export async function profileModelsInternal(
           retiredReason: `Deprecated by provider${card.deprecationDate ? ` (${card.deprecationDate.toISOString().split("T")[0]})` : ""}`,
         },
       });
-      console.log(`[profiling] Auto-retired deprecated model ${m.modelId} from ${providerId}`);
+      console.log(`[profiling] Auto-retired deprecated model ${JSON.stringify(m.modelId)} from ${JSON.stringify(providerId)}`);
       continue;
     }
 
@@ -593,7 +605,7 @@ export async function profileModelsInternal(
           retiredReason: `Deprecation date passed: ${card.deprecationDate.toISOString().split("T")[0]}`,
         },
       });
-      console.log(`[profiling] Auto-retired past-deprecation model ${m.modelId} from ${providerId}`);
+      console.log(`[profiling] Auto-retired past-deprecation model ${JSON.stringify(m.modelId)} from ${JSON.stringify(providerId)}`);
       continue;
     }
 
@@ -631,7 +643,7 @@ export async function profileModelsInternal(
       && existingProfile.rawMetadataHash !== card.rawMetadataHash;
     if (driftDetected) {
       console.log(
-        `[drift] Provider metadata changed for ${providerId}/${m.modelId} — hash ${existingProfile.rawMetadataHash!.slice(0, 8)}→${card.rawMetadataHash.slice(0, 8)}`
+        `[drift] Provider metadata changed for ${JSON.stringify(providerId)}/${JSON.stringify(m.modelId)} — hash ${existingProfile.rawMetadataHash!.slice(0, 8)}→${card.rawMetadataHash.slice(0, 8)}`
       );
       // For seed-level profiles, allow scores to be re-derived on this sync.
       // For evaluated/admin profiles, flag for admin review via driftDetectedAt.
@@ -645,7 +657,7 @@ export async function profileModelsInternal(
           where: { providerId_modelId: { providerId, modelId: m.modelId } },
           data: { driftDetectedAt: new Date() },
         });
-        console.log(`[drift] ${providerId}/${m.modelId} has evaluated/admin profile — flagged for review`);
+        console.log(`[drift] ${JSON.stringify(providerId)}/${JSON.stringify(m.modelId)} has evaluated/admin profile — flagged for review`);
       }
     }
 
@@ -967,8 +979,8 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
       const knownModels = KNOWN_PROVIDER_MODELS[providerId];
       if (knownModels) {
         console.log(
-          `[auto-discover] Dynamic discovery returned 0 for ${providerId}` +
-          (discovery.error ? ` (${discovery.error})` : "") +
+          `[auto-discover] Dynamic discovery returned 0 for ${JSON.stringify(providerId)}` +
+          (discovery.error ? ` (${JSON.stringify(discovery.error)})` : "") +
           `. Falling back to known catalog (${knownModels.length} models).`,
         );
         result = await seedKnownModels(providerId, knownModels);
@@ -979,7 +991,7 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error(`[auto-discover] Failed for ${providerId}: ${message}`);
+    console.error(`[auto-discover] Failed for ${JSON.stringify(providerId)}: ${JSON.stringify(message)}`);
     result = { discovered: 0, profiled: 0, error: message };
   }
 
@@ -1001,7 +1013,7 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
       });
       if (!canQueueBackgroundModelEvals(provider ?? {})) {
         console.log(
-          `[auto-discover] Skipping background evals for ${providerId}: ${backgroundModelEvalSkipReason(provider)}`,
+          `[auto-discover] Skipping background evals for ${JSON.stringify(providerId)}: ${JSON.stringify(backgroundModelEvalSkipReason(provider))}`,
         );
         return result;
       }
@@ -1013,11 +1025,14 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
       for (const event of buildAutoDiscoveryEvalEvents(providerId, models)) {
         await inngest.send(event);
       }
-      console.log(`[auto-discover] Queued background evals for ${models.length} model(s) on ${providerId}`);
+      console.log(`[auto-discover] Queued background evals for ${models.length} model(s) on ${JSON.stringify(providerId)}`);
     } catch (err) {
       // Non-fatal — catalog scores are usable even without live eval.
-      // CodeQL #48 (js/tainted-format-string): providerId via format-arg.
-      console.warn("[auto-discover] Failed to queue background evals for %s:", providerId, err);
+      // CodeQL #48 (js/tainted-format-string) + js/log-injection: constant
+      // format string + JSON.stringify on each tainted positional arg.
+      console.warn("[auto-discover] Failed to queue background evals for %s: %s",
+        JSON.stringify(providerId),
+        err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
     }
   }
 
@@ -1139,6 +1154,6 @@ async function seedKnownModels(
     profiled++;
   }
 
-  console.log(`[auto-discover] Seeded ${discovered} known models for ${providerId}`);
+  console.log(`[auto-discover] Seeded ${discovered} known models for ${JSON.stringify(providerId)}`);
   return { discovered, profiled };
 }
