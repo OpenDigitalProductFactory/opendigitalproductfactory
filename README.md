@@ -29,12 +29,50 @@ node docs/architecture/generate-agent-standards-white-paper-docx.mjs
 
 ## Quick install
 
-| Platform | Install | Full guide | Status |
-|----------|---------|------------|--------|
-| **Windows 10 / 11** | `powershell -ExecutionPolicy Bypass -File install-dpf.ps1` | (Windows installer is in-repo) | **GA** |
-| **macOS Apple Silicon** | `bash install-dpf.sh` | [docs/install/macos.md](docs/install/macos.md) | Early access |
-| **Linux (native Docker)** | `bash install-dpf.sh` | [docs/install/linux.md](docs/install/linux.md) | Early access |
-| **Cloud Single VM** (AWS / GCP / Azure) | `bash install-dpf.sh --headless --release` inside the VM | [docs/install/cloud-single-vm.md](docs/install/cloud-single-vm.md) | Early access — pilots wanted |
+These commands assume a fresh machine with no DPF repo yet. If you've already cloned the repo (contributors), skip to **Step 2** from inside the repo.
+
+### Windows 10 / 11 — **GA**
+
+The Windows installer is a self-contained PowerShell script that clones the repo for you.
+
+```powershell
+# Step 1 — download the installer (run from any directory)
+iwr -UseBasicParsing https://raw.githubusercontent.com/OpenDigitalProductFactory/opendigitalproductfactory/main/install-dpf.ps1 -OutFile install-dpf.ps1
+
+# Step 2 — run it (will prompt for install directory; defaults to C:\DPF)
+powershell -ExecutionPolicy Bypass -File install-dpf.ps1
+```
+
+### macOS Apple Silicon — Early access · [full guide](docs/install/macos.md)
+
+The Unix installer sources helper libraries from inside the repo, so you must clone first.
+
+```bash
+# Step 1 — clone the repo and enter it
+git clone https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git
+cd opendigitalproductfactory
+
+# Step 2 — run the installer
+bash install-dpf.sh
+```
+
+### Linux (native Docker) — Early access · [full guide](docs/install/linux.md)
+
+```bash
+git clone https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git
+cd opendigitalproductfactory
+bash install-dpf.sh
+```
+
+### Cloud Single VM (AWS / GCP / Azure) — Early access · pilots wanted · [full guide](docs/install/cloud-single-vm.md)
+
+Inside the VM:
+
+```bash
+git clone https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git
+cd opendigitalproductfactory
+bash install-dpf.sh --headless --release
+```
 
 Terraform modules for the cloud-VM path live under [`infra/terraform/single-vm/{aws,gcp,azure}/`](infra/terraform/single-vm/).
 
