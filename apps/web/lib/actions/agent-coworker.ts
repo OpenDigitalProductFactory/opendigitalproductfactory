@@ -1030,10 +1030,12 @@ export async function sendMessage(input: {
   // Log tools available so we can diagnose why a model claims it can't see a
   // tool that should be in scope. Logged for every coworker call, not just
   // build-phase ones — chat coworkers on /workspace etc. were silent before.
+  // CodeQL js/log-injection: input.routeContext + agent.agentId + tool
+  // names are user-influenced. JSON.stringify on each interpolation.
   console.log(
-    `[tools] route=${input.routeContext} agent=${agent.agentId} ` +
-    `${activeBuildPhase ? `buildPhase=${activeBuildPhase} ` : ""}` +
-    `count=${availableTools.length} tools=[${availableTools.map(t => t.name).join(", ")}]`,
+    `[tools] route=${JSON.stringify(input.routeContext)} agent=${JSON.stringify(agent.agentId)} ` +
+    `${activeBuildPhase ? `buildPhase=${JSON.stringify(activeBuildPhase)} ` : ""}` +
+    `count=${availableTools.length} tools=[${availableTools.map(t => JSON.stringify(t.name)).join(", ")}]`,
   );
   if (activeBuildPhase) {
 
@@ -1621,7 +1623,7 @@ export async function sendMessage(input: {
               { routeContext: input.routeContext },
             );
 
-            console.log(`[coworker] saveBuildEvidence result: success=${saveResult.success}, msg=${saveResult.message?.slice(0, 100)}`);
+            console.log(`[coworker] saveBuildEvidence result: success=${saveResult.success}, msg=${JSON.stringify(saveResult.message?.slice(0, 100))}`);
 
             if (saveResult.success) {
               const approach = String((ideateResult.designDoc as Record<string, unknown>).proposedApproach ?? "").trim();
@@ -1635,7 +1637,7 @@ export async function sendMessage(input: {
                 console.log(`[coworker] Running reviewDesignDoc...`);
                 agentEventBus.emit(input.threadId, { type: "tool:start", tool: "design_review", iteration: 0 });
                 const reviewResult = await executeTool("reviewDesignDoc", {}, user.id!, { routeContext: input.routeContext });
-                console.log(`[coworker] reviewDesignDoc result: success=${reviewResult.success}, msg=${reviewResult.message?.slice(0, 100)}`);
+                console.log(`[coworker] reviewDesignDoc result: success=${reviewResult.success}, msg=${JSON.stringify(reviewResult.message?.slice(0, 100))}`);
                 agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "design_review", success: reviewResult.success });
 
                 const reviewDecision = (reviewResult.data as { review?: { decision?: string }; blocked?: boolean } | undefined);
@@ -1827,8 +1829,8 @@ export async function sendMessage(input: {
       `[quality-gate] Response too short (${responseContent.length} chars). ` +
       `Raw from loop (${rawResponseBeforeSanitize.length} chars): ${JSON.stringify(rawResponseBeforeSanitize.slice(0, 500))} | ` +
       `After sanitize: ${JSON.stringify(responseContent)} | ` +
-      `Provider: ${responseProviderId}/${responseModelId} | ` +
-      `Route: ${input.routeContext}`,
+      `Provider: ${JSON.stringify(responseProviderId)}/${JSON.stringify(responseModelId)} | ` +
+      `Route: ${JSON.stringify(input.routeContext)}`,
     );
     const providerHint = responseProviderId
       ? `Provider ${responseProviderId}/${responseModelId} returned an empty response.`

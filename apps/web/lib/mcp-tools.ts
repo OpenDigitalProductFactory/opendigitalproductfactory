@@ -208,7 +208,7 @@ export function sanitizeToolParams(
     if (stringValues.length > 0 && stringValues.every(s => s.trim() === "")) {
       if (!cleaned) cleaned = { ...params };
       delete cleaned[key];
-      console.log(`[sanitize] ${toolName}: stripped empty optional object param "${key}"`);
+      console.log(`[sanitize] ${JSON.stringify(toolName)}: stripped empty optional object param ${JSON.stringify(key)}`);
     }
   }
   return cleaned ?? params;
@@ -6391,7 +6391,10 @@ export async function executeTool(
         }
         normalizedValue = normalizedPlan.plan;
 
-        console.log(`[saveBuildEvidence] buildPlan validated: ${fileStructure.length} files, ${tasks.length} tasks`);
+        // CodeQL js/log-injection: .length is numeric so safe, but CodeQL
+        // tracks the parent array as tainted. Number() coercion is a
+        // recognised sanitiser.
+        console.log(`[saveBuildEvidence] buildPlan validated: ${Number(fileStructure.length)} files, ${Number(tasks.length)} tasks`);
       }
 
       // ── taskResults shape validation ─────────────────────────────────────
@@ -6550,7 +6553,8 @@ export async function executeTool(
           });
         }
       } catch (err) {
-        console.warn("[deliberation] failed to record build review trail", err);
+        console.warn("[deliberation] failed to record build review trail: %s",
+          err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
       }
 
       // Failed review → structured recovery instructions, no auto-advance
@@ -6864,7 +6868,8 @@ export async function executeTool(
           });
         }
       } catch (err) {
-        console.warn("[deliberation] failed to record build review trail", err);
+        console.warn("[deliberation] failed to record build review trail: %s",
+          err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
       }
 
       // Failed review → structured recovery instructions, no auto-advance
@@ -7601,7 +7606,7 @@ export async function executeTool(
         ];
         const blocked = BLOCKED_PATTERNS.find(p => p.test(command));
         if (blocked) {
-          console.warn(`[run_sandbox_command] BLOCKED: ${command.slice(0, 200)}`);
+          console.warn(`[run_sandbox_command] BLOCKED: ${JSON.stringify(command.slice(0, 200))}`);
           return {
             success: false,
             error: "Command blocked by safety policy.",
@@ -7654,7 +7659,7 @@ export async function executeTool(
 
           // No output — actual sandbox connectivity issue
           const errMsg = execErr.message?.slice(0, 2000) || "Command failed";
-          console.error(`[run_sandbox_command] FAILED (no output): ${command.slice(0, 100)} -> ${errMsg.slice(0, 200)}`);
+          console.error(`[run_sandbox_command] FAILED (no output): ${JSON.stringify(command.slice(0, 100))} -> ${JSON.stringify(errMsg.slice(0, 200))}`);
           return { success: false, error: errMsg, message: `Command failed: ${command.slice(0, 100)}`, data: { command, output: errMsg } };
         }
       }
@@ -9579,7 +9584,7 @@ export async function executeTool(
       if (colonGlobMatch) {
         query = colonGlobMatch[1]!.trim();
         opts.glob = colonGlobMatch[2]!.trim();
-        console.log(`[search_project_files] Auto-split combined query: "${params.query}" → query="${query}" glob="${opts.glob}"`);
+        console.log(`[search_project_files] Auto-split combined query: ${JSON.stringify(params.query)} → query=${JSON.stringify(query)} glob=${JSON.stringify(opts.glob)}`);
       }
 
       if (typeof params.glob === "string" && !opts.glob) opts.glob = params.glob;
@@ -9815,7 +9820,7 @@ export async function executeTool(
               }).catch(() => {});
             }
           } else {
-            console.warn("[propose_file_change] git commit failed:", result.error);
+            console.warn("[propose_file_change] git commit failed: %s", JSON.stringify(result.error));
           }
         }
       } catch (err) {
@@ -12867,11 +12872,12 @@ export async function executeTool(
   }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    // CodeQL #52 (js/tainted-format-string): keep the format string constant
-    // so a `%s` inside an attacker-controlled toolName cannot consume the
-    // next argument. toolName + msg are passed as additional args; node's
-    // util.format only honours specifiers in the literal first arg.
-    console.error("[executeTool] Uncaught exception in tool %s: %s", toolName, msg);
+    // CodeQL #52 (js/tainted-format-string) + js/log-injection: keep the
+    // format string constant so a `%s` inside an attacker-controlled
+    // toolName cannot consume the next argument, AND JSON.stringify each
+    // tainted positional arg so CR/LF can't forge log lines.
+    console.error("[executeTool] Uncaught exception in tool %s: %s",
+      JSON.stringify(toolName), JSON.stringify(msg));
     return { success: false, error: msg, message: `Tool ${toolName} failed: ${msg}` };
   }
 }

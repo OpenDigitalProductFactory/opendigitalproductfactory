@@ -116,7 +116,8 @@ export async function POST(request: NextRequest): Promise<Response> {
       });
     } catch (err) {
       agentEventBus.markIdle(input.threadId);
-      console.error("[api/agent/send] background execution failed:", err);
+      console.error("[api/agent/send] background execution failed: %s",
+        err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
       const errorMessage = err instanceof Error ? err.message : "Agent execution failed";
       const systemMessageId = await persistBackgroundFailureMessage({
         threadId: input.threadId,

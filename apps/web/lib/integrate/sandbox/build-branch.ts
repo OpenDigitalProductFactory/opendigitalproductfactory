@@ -134,7 +134,7 @@ async function normalizeSandboxBranchArtifacts(branchName: string): Promise<void
       `chore: untrack sandbox generated artifacts on ${branchName}`,
     ),
   ).catch((err) => {
-    console.warn(`[build-branch] artifact prune commit skipped on ${branchName}: ${(err as Error).message?.slice(0, 200)}`);
+    console.warn(`[build-branch] artifact prune commit skipped on ${JSON.stringify(branchName)}: ${JSON.stringify((err as Error).message?.slice(0, 200))}`);
   });
 }
 
@@ -513,13 +513,13 @@ export async function startBuildBranch(buildId: string): Promise<SandboxSourceCu
       targetRef: identity.clientBranch,
       blockUnknown: true,
     });
-    console.log(`[build-branch] Resumed build branch: ${branchName}`);
+    console.log(`[build-branch] Resumed build branch: ${JSON.stringify(branchName)}`);
   } else {
     await execSandboxGit(
       `git -C ${WORKSPACE} checkout -b "${branchName}"`,
     );
     await normalizeSandboxBranchArtifacts(branchName);
-    console.log(`[build-branch] Created build branch: ${branchName} from ${identity.clientBranch}`);
+    console.log(`[build-branch] Created build branch: ${JSON.stringify(branchName)} from ${JSON.stringify(identity.clientBranch)}`);
   }
   const finalSourceCurrency = await inspectCurrentSandboxSourceCurrency(
     upstreamVerified ? "origin/main" : identity.clientBranch,

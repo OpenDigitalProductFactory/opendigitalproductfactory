@@ -978,7 +978,7 @@ export async function runAgenticLoop(params: {
     if (lastResult?.providerId === "local" && executedTools.length >= 8) {
       console.warn(
         `[agentic-loop] local model spun through ${executedTools.length} tool calls without converging on a text answer. ` +
-        `Exiting early with diagnostic. agent=${agentId} route=${routeContext}`,
+        `Exiting early with diagnostic. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
       );
       return {
         content: buildLocalToolCallFailureMessage(lastResult),
@@ -1364,7 +1364,7 @@ export async function runAgenticLoop(params: {
           result.providerId === "local"
         ) {
           console.warn(
-            `[agentic-loop] local model produced text-only response for tool-backed turn; returning diagnostic instead of issuing a second nudge. agent=${agentId} route=${routeContext}`,
+            `[agentic-loop] local model produced text-only response for tool-backed turn; returning diagnostic instead of issuing a second nudge. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
           );
           return {
             content: buildLocalToolCallFailureMessage(result),
@@ -1583,7 +1583,7 @@ export async function runAgenticLoop(params: {
 
       const durationMs = Date.now() - toolStartMs;
       const resultPreview = (toolResult.message ?? "").slice(0, 200);
-      console.log(`[agentic-tool] RESULT iter=${iteration} tool=${tc.name} success=${toolResult.success} duration=${durationMs}ms msg=${resultPreview}`);
+      console.log(`[agentic-tool] RESULT iter=${iteration} tool=${JSON.stringify(tc.name)} success=${toolResult.success} duration=${durationMs}ms msg=${JSON.stringify(resultPreview)}`);
 
       // Sandbox circuit breaker: track consecutive unavailable responses
       if (!toolResult.success && (toolResult.error ?? toolResult.message ?? "").includes("No sandbox slots available")) {

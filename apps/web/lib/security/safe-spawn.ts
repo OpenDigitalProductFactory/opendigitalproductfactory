@@ -169,7 +169,7 @@ export function sanitizeEnv(
       // Not a console.error because the spawn itself can still proceed —
       // we degrade gracefully by stripping the var, not failing the call.
       // eslint-disable-next-line no-console
-      console.warn(`[safe-spawn] Dropped dangerous env var "${k}" before spawn.`);
+      console.warn(`[safe-spawn] Dropped dangerous env var ${JSON.stringify(k)} before spawn.`);
       continue;
     }
     // CodeQL #201 (js/remote-property-injection): even after the
@@ -225,7 +225,7 @@ export function safeSpawn(
     const message = err instanceof Error ? err.message : String(err);
     // Audit signal so reject reasons are greppable in logs.
     // eslint-disable-next-line no-console
-    console.warn(`[safe-spawn] Rejected: ${message}`);
+    console.warn(`[safe-spawn] Rejected: ${JSON.stringify(message)}`);
     return { ok: false, error: message };
   }
 

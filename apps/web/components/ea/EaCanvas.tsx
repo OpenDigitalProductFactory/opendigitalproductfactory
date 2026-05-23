@@ -527,7 +527,7 @@ export function EaCanvas({
         initialX: x,
         initialY: y,
       });
-      if ("error" in result) { console.warn("addElementToView error:", result.error); return; }
+      if ("error" in result) { console.warn("addElementToView error: %s", JSON.stringify(result.error)); return; }
       window.location.reload();
     })();
   }
@@ -638,7 +638,7 @@ export function EaCanvas({
               initialX: pendingDrop.x,
               initialY: pendingDrop.y,
             });
-            if ("error" in result) { console.warn(result.error); }
+            if ("error" in result) { console.warn(JSON.stringify(result.error)); }
             setPendingDrop(null);
             window.location.reload();
           }}

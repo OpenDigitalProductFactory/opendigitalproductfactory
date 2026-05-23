@@ -637,7 +637,7 @@ export async function advanceBuildPhase(
     // This runs async so the phase transition returns immediately.
     // Progress streams via SSE event bus.
     autoExecuteBuild(buildId).catch((err) =>
-      console.error(`[build] autoExecuteBuild failed for ${buildId}:`, err),
+      console.error(`[build] autoExecuteBuild failed for ${JSON.stringify(buildId)}: ${err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err))}`),
     );
   }
 
@@ -795,7 +795,9 @@ export async function resetBuildExecution(buildId: string): Promise<void> {
   // format string) to avoid CodeQL js/tainted-format-string on the user-
   // routable identifier.
   autoExecuteBuild(buildId).catch((err) =>
-    console.error("[build] resetBuildExecution failed for", buildId, err),
+    console.error("[build] resetBuildExecution failed for %s: %s",
+      JSON.stringify(buildId),
+      err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err))),
   );
 }
 
@@ -825,7 +827,9 @@ export async function retryBuildExecution(buildId: string): Promise<void> {
 
   // Fire-and-forget retry — picks up from failed step
   autoExecuteBuild(buildId).catch((err) =>
-    console.error(`[build] retryBuildExecution failed for ${buildId}:`, err),
+    console.error("[build] retryBuildExecution failed for %s: %s",
+      JSON.stringify(buildId),
+      err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err))),
   );
 }
 
@@ -1072,8 +1076,10 @@ export async function resumeBuildImplementation(buildId: string): Promise<Resume
   }).catch(() => {});
 
   autoExecuteBuild(buildId).catch((err) =>
-    // CodeQL #42 (js/tainted-format-string): buildId via format-arg.
-    console.error("[build] resumeBuildImplementation failed for %s:", buildId, err),
+    // CodeQL #42 (js/tainted-format-string) + js/log-injection.
+    console.error("[build] resumeBuildImplementation failed for %s: %s",
+      JSON.stringify(buildId),
+      err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err))),
   );
 
   return {
@@ -1382,7 +1388,7 @@ export async function shipBuild(input: {
           version: result.version,
         });
         if (backupResult.pushed) {
-          console.log(`[shipBuild] git backup pushed for ${input.buildId}`);
+          console.log(`[shipBuild] git backup pushed for ${JSON.stringify(input.buildId)}`);
         } else if (backupResult.error && backupResult.error !== "No git remote URL configured") {
           console.warn(`[shipBuild] git backup failed: ${backupResult.error}`);
         }

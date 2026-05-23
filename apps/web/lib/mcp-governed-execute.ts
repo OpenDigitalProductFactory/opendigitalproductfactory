@@ -223,10 +223,10 @@ async function writeAudit(data: {
     // execution).
     // CodeQL #49 (js/tainted-format-string): tool/source names are user-influenced.
     console.error(
-      "[governed-execute] audit write failed tool=%s source=%s:",
-      data.toolName,
-      data.source,
-      err,
+      "[governed-execute] audit write failed tool=%s source=%s: %s",
+      JSON.stringify(data.toolName),
+      JSON.stringify(data.source),
+      err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
     );
     return null;
   }
@@ -302,10 +302,10 @@ async function writeReceipt(data: {
   } catch (err) {
     // CodeQL #50 (js/tainted-format-string): tool/build names via format-args.
     console.error(
-      "[governed-execute] receipt write failed tool=%s build=%s:",
-      data.toolName,
-      data.buildId,
-      err,
+      "[governed-execute] receipt write failed tool=%s build=%s: %s",
+      JSON.stringify(data.toolName),
+      JSON.stringify(data.buildId),
+      err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
     );
   }
 }
@@ -345,10 +345,10 @@ async function runPostToolHooks(event: ToolLifecyclePostEvent): Promise<void> {
     } catch (err) {
       // CodeQL #51 (js/tainted-format-string): hook/tool names via format-args.
       console.error(
-        "[governed-execute] post-tool hook failed hook=%s tool=%s:",
-        hook.id,
-        event.toolName,
-        err,
+        "[governed-execute] post-tool hook failed hook=%s tool=%s: %s",
+        JSON.stringify(hook.id),
+        JSON.stringify(event.toolName),
+        err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
       );
     }
   }
