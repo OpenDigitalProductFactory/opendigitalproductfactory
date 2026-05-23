@@ -64,6 +64,13 @@ export async function dispatchIdeateForApprovedBuild(params: {
 
   try {
     // Fetch the build with the linked BI and current designDoc evidence.
+    // NOTE: businessContext is intentionally NOT selected here — it is not a
+    // field on the FeatureBuild Prisma model. PR #947 originally selected it,
+    // which threw a PrismaClientValidationError on every approve_start and was
+    // silently swallowed by the catch below, leaving every backlog-promoted
+    // build stuck at the post-approval gate with no Ideate work ever firing.
+    // If a future change adds businessContext (or sources it from BacklogItem),
+    // re-introduce it via a separate join rather than as a phantom select field.
     const build = await prisma.featureBuild.findUnique({
       where: { buildId },
       select: {
@@ -71,7 +78,6 @@ export async function dispatchIdeateForApprovedBuild(params: {
         designDoc: true,
         title: true,
         description: true,
-        businessContext: true,
       },
     });
 
@@ -148,7 +154,9 @@ export async function dispatchIdeateForApprovedBuild(params: {
       featureDescription,
       reusabilityScope: "parameterizable",
       userContext,
-      businessContext: build.businessContext ?? undefined,
+      // businessContext: see select comment above — field does not exist on
+      // FeatureBuild. Passing undefined preserves the dispatch signature.
+      businessContext: undefined,
       providerId,
       model,
       dispatchEngine: config.provider,
