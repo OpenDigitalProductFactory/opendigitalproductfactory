@@ -20,6 +20,56 @@ export function warnIfLegacyHiveTokenEnvSet(
   return true;
 }
 
+/**
+ * Enqueue background dimension evals for every active ModelProfile under the
+ * given provider. Sends one `ai/eval.run` event per model so Inngest dispatches
+ * them with the function's own concurrency cap (limit 2) and retry policy.
+ * Errors are swallowed because this runs in startup context — the operator
+ * can re-trigger via Run Probes if anything fails. Exported for testing.
+ *
+ * BI-INST-001: this is the missing step in the first-boot auto-provisioning
+ * chain. Without it, ModelProfile rows existed but EndpointTaskPerformance
+ * was empty, so the router rejected every LLM task with "No eligible
+ * endpoints found."
+ */
+export async function enqueueFirstBootEvals(providerId: string): Promise<{
+  enqueued: number;
+  error: string | null;
+}> {
+  try {
+    const { prisma } = await import("@dpf/db");
+    const profiles = await prisma.modelProfile.findMany({
+      where: {
+        providerId,
+        modelStatus: "active",
+        retiredAt: null,
+      },
+      select: { modelId: true },
+    });
+    if (profiles.length === 0) return { enqueued: 0, error: null };
+
+    const { inngest } = await import("@/lib/queue/inngest-client");
+    await inngest.send(
+      profiles.map((p) => ({
+        name: "ai/eval.run",
+        data: {
+          endpointId: providerId,
+          modelId: p.modelId,
+          userId: "first-boot",
+        },
+      })),
+    );
+    console.log(
+      `[first-boot] Enqueued ${profiles.length} dimension eval(s) for ${providerId} (background via Inngest)`,
+    );
+    return { enqueued: profiles.length, error: null };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[first-boot] Failed to enqueue evals for ${providerId}: ${msg}`);
+    return { enqueued: 0, error: msg };
+  }
+}
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs" && process.env.NEXT_PHASE !== "phase-production-build") {
     // Fire the deprecation warning up front so operators see it on first
@@ -103,6 +153,16 @@ export async function register() {
     // post-init SQL activated providers but no discovery has run yet).
     // This eliminates the need to manually click "Update Providers" or
     // "Run Eval" — the platform is ready to route immediately.
+    //
+    // BI-INST-001 (2026-05-23): the original first-boot hook stopped after
+    // discoverModels + profileModels. ModelProfile rows existed but the
+    // router still failed every LLM task with "No active endpoint manifests
+    // found" because no probes had populated EndpointTaskPerformance. This
+    // hook now enqueues `ai/eval.run` events for each freshly-profiled
+    // model so dimension evals run in the background via Inngest. The
+    // evals' new circuit breaker (BI-INST-008, eval-runner.ts
+    // errorLooksLikeInfrastructure) keeps a single transient failure from
+    // poisoning every model.
     setTimeout(async () => {
       try {
         const { prisma } = await import("@dpf/db");
@@ -133,6 +193,16 @@ export async function register() {
             );
             const result = await autoDiscoverAndProfile(providerId);
             console.log(`[first-boot] ${providerId}: discovered=${result.discovered}, profiled=${result.profiled}${result.error ? ` (${result.error})` : ""}`);
+
+            // BI-INST-001 — enqueue background dimension evals for each
+            // freshly profiled model. Without this step the router stays
+            // empty of EndpointTaskPerformance rows and every LLM task
+            // throws "No eligible endpoints" until the operator manually
+            // clicks Run Probes. Inngest enforces concurrency=2 on
+            // ai/eval.run so this doesn't swamp local model runners.
+            if (result.profiled > 0) {
+              await enqueueFirstBootEvals(providerId);
+            }
           }
         }
       } catch (err) {
