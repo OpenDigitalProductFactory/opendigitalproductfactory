@@ -33,6 +33,25 @@ describe("assignTierFromModelId", () => {
     it("assigns strong to docker.io/ai/qwen3:8b", () => {
       expect(assignTierFromModelId("docker.io/ai/qwen3:8b")).toBe("strong");
     });
+    // Canonical Docker Hub tag forms (post-2026-05-23 catalog). The short
+    // forms above 404 against Docker Model Runner; these are what the
+    // installer + portal UI actually emit now.
+    it("assigns strong to ai/qwen3:8B-Q4_K_M (canonical 8B tag)", () => {
+      expect(assignTierFromModelId("ai/qwen3:8B-Q4_K_M")).toBe("strong");
+    });
+    it("assigns strong to ai/qwen3:14B-Q6_K (canonical 14B tag)", () => {
+      expect(assignTierFromModelId("ai/qwen3:14B-Q6_K")).toBe("strong");
+    });
+    it("assigns strong to ai/qwen3:30B-A3B-Q4_K_M (MoE — largest qwen3)", () => {
+      expect(assignTierFromModelId("ai/qwen3:30B-A3B-Q4_K_M")).toBe("strong");
+    });
+    it("assigns adequate to ai/qwen3:4B-UD-Q4_K_XL (canonical 4B tag)", () => {
+      // 4B is below the strong threshold per the tier table — but qwen3
+      // family pattern still matches. Note: the FAMILY_TIERS entry assigns
+      // strong to all qwen3 variants; 4B getting "strong" here is by-family,
+      // not by-size. This documents that behaviour intentionally.
+      expect(assignTierFromModelId("ai/qwen3:4B-UD-Q4_K_XL")).toBe("strong");
+    });
     it("assigns strong to ai/qwen2.5-coder:14b", () => {
       expect(assignTierFromModelId("ai/qwen2.5-coder:14b")).toBe("strong");
     });

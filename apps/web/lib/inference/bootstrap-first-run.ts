@@ -75,27 +75,37 @@ export async function seedOnboardingAgent(): Promise<void> {
  * Each entry specifies the Docker Model Runner tag and the minimum VRAM
  * required to run it at Q4 quantization with ~15% headroom.
  *
- * Sizing estimates (Q4_K_M quantization, ~0.55 GB per billion params):
- *   - ai/qwen3:32b  (32B) → ~20 GB VRAM → needs 24 GB+ GPU / 48 GB+ unified
- *   - ai/qwen3:14b  (14B) → ~10 GB VRAM → needs 12 GB+ GPU / 24 GB+ unified
- *   - ai/qwen3:8b   (8B)  → ~6 GB  VRAM → needs 8 GB+ GPU (most consumer GPUs)
- *   - ai/qwen3:4b   (4B)  → ~3 GB  VRAM → needs 4 GB+ GPU
+ * Sizing estimates use the actual published tag for each tier. Verified
+ * against https://hub.docker.com/r/ai/qwen3/tags on 2026-05-23. Tags must
+ * be EXACTLY as published — Docker Hub treats the registry path as
+ * case-sensitive and `ai/qwen3:14b` (lowercase, no quantization) returns
+ * 404, while `ai/qwen3:14B-Q6_K` resolves correctly.
+ *
+ *   - ai/qwen3:30B-A3B-Q4_K_M  (30B MoE, 3B active) → ~17 GB VRAM → 24 GB+ GPU
+ *   - ai/qwen3:14B-Q6_K        (14B dense)          → ~12 GB VRAM → 16 GB+ GPU
+ *   - ai/qwen3:8B-Q4_K_M       (8B dense)           → ~5  GB VRAM → 8 GB+ GPU
+ *   - ai/qwen3:4B-UD-Q4_K_XL   (4B dense)           → ~3  GB VRAM → 4 GB+ GPU / CPU-OK
  *
  * Qwen3 is preferred over Gemma: Docker's benchmarks show Qwen3:8B matches
  * Claude Haiku for tool calling (F1 0.93) and Qwen3:14B exceeds it (F1 0.97).
  * Tool calling accuracy is critical for coworker routing.
+ *
+ * Note on the top tier: Qwen3 has NO 32B dense model. The largest published
+ * is `30B-A3B-Q4_K_M` (Mixture-of-Experts with 30B total / 3B active per
+ * token). Per-token compute approximates a 7B; total memory footprint is
+ * what gates the 24 GB+ VRAM requirement.
  */
 const MODEL_TIERS: { model: string; minVramGb: number }[] = [
-  { model: "ai/qwen3:32b", minVramGb: 22 },  // 32B — RTX 4090 24 GB / Apple M4 Max 48 GB+
-  { model: "ai/qwen3:14b", minVramGb: 10 },  // 14B — RTX 3080 12 GB / Apple M4 Pro 24 GB+
-  { model: "ai/qwen3:8b",  minVramGb: 6 },   // 8B  — RTX 3060 8 GB / most consumer GPUs
-  { model: "ai/qwen3:4b",  minVramGb: 0 },   // 4B  — CPU-only fallback
+  { model: "ai/qwen3:30B-A3B-Q4_K_M", minVramGb: 22 }, // 30B MoE — RTX 4090 24 GB / Apple M4 Max 48 GB+
+  { model: "ai/qwen3:14B-Q6_K",       minVramGb: 12 }, // 14B dense — RTX 4070 Ti 16 GB / Apple M4 Pro 24 GB+
+  { model: "ai/qwen3:8B-Q4_K_M",      minVramGb: 6  }, // 8B dense — RTX 3060 8 GB / most consumer GPUs
+  { model: "ai/qwen3:4B-UD-Q4_K_XL",  minVramGb: 0  }, // 4B dense — CPU-only fallback
 ];
 
 /**
- * Select the largest Gemma model that fits available VRAM.
- * Walks the tier list top-down and picks the first model whose
- * minimum VRAM requirement is satisfied by the detected hardware.
+ * Select the largest Qwen3 model that fits available VRAM. Walks the tier
+ * list top-down and picks the first model whose minimum VRAM requirement
+ * is satisfied by the detected hardware.
  */
 async function selectModelForHardware(baseUrl: string): Promise<string> {
   try {
@@ -108,10 +118,10 @@ async function selectModelForHardware(baseUrl: string): Promise<string> {
       }
     }
     // Should never reach here (last tier has minVramGb=0), but be safe
-    return "ai/qwen3:4b";
+    return "ai/qwen3:4B-UD-Q4_K_XL";
   } catch {
     // Can't detect hardware — use the broadly compatible mid-range default
-    return "ai/qwen3:8b";
+    return "ai/qwen3:8B-Q4_K_M";
   }
 }
 
