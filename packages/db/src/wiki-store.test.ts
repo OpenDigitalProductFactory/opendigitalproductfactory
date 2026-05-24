@@ -550,6 +550,75 @@ describe("listPrinciplesByTier", () => {
     expect(arg2.take).toBe(50);
   });
 
+  // ─── Ring-scope filter (BI-4AA1074B Slice 2; spec §5.2) ─────────────────
+
+  it("skips the ring-scope filter when caller passed no scope", async () => {
+    const { db, findMany } = makeListMocks();
+    findMany.mockResolvedValueOnce([]);
+
+    await listPrinciplesByTier(db, { tier: "commandment" });
+
+    const arg = findMany.mock.calls[0][0] as { where: Record<string, unknown> };
+    expect(arg.where.AND).toBeUndefined();
+  });
+
+  it("skips the ring-scope filter when caller passed universal-ring (caller opted out of tightening)", async () => {
+    const { db, findMany } = makeListMocks();
+    findMany.mockResolvedValueOnce([]);
+
+    await listPrinciplesByTier(db, {
+      tier: "commandment",
+      ringScope: ["universal-ring"],
+    });
+
+    const arg = findMany.mock.calls[0][0] as { where: Record<string, unknown> };
+    expect(arg.where.AND).toBeUndefined();
+  });
+
+  it("builds an AND/OR clause for a narrow caller scope (empty OR earned-universal OR intersection)", async () => {
+    const { db, findMany } = makeListMocks();
+    findMany.mockResolvedValueOnce([]);
+
+    await listPrinciplesByTier(db, {
+      tier: "core",
+      ringScope: ["ring-2-workflow"],
+    });
+
+    const arg = findMany.mock.calls[0][0] as {
+      where: { AND: Array<{ OR: Array<Record<string, unknown>> }> };
+    };
+    expect(arg.where.AND).toEqual([
+      {
+        OR: [
+          { principleRingScope: { isEmpty: true } },
+          { principleRingScope: { has: "universal-ring" } },
+          { principleRingScope: { hasSome: ["ring-2-workflow"] } },
+        ],
+      },
+    ]);
+  });
+
+  it("threads multi-ring caller scope through to hasSome verbatim", async () => {
+    const { db, findMany } = makeListMocks();
+    findMany.mockResolvedValueOnce([]);
+
+    await listPrinciplesByTier(db, {
+      tier: "commandment",
+      ringScope: ["ring-1-coworker", "ring-2-workflow"],
+    });
+
+    const arg = findMany.mock.calls[0][0] as {
+      where: { AND: Array<{ OR: Array<Record<string, unknown>> }> };
+    };
+    const hasSomeClause = arg.where.AND[0].OR[2] as {
+      principleRingScope: { hasSome: string[] };
+    };
+    expect(hasSomeClause.principleRingScope.hasSome).toEqual([
+      "ring-1-coworker",
+      "ring-2-workflow",
+    ]);
+  });
+
   it("orders results by lastReviewedAt desc then title asc for stable listing", async () => {
     const { db, findMany } = makeListMocks();
     findMany.mockResolvedValueOnce([]);
