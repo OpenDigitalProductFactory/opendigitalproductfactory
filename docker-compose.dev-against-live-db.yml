@@ -1,0 +1,68 @@
+# docker-compose.dev-against-live-db.yml
+#
+# Opt-in override that points the dev-portal hot-reload service at the LIVE
+# DPF databases (postgres / neo4j / qdrant from the base docker-compose.yml)
+# instead of the isolated dev-postgres / dev-neo4j / dev-qdrant stack.
+#
+# Why this exists
+#   The base dev-portal service runs Next.js dev with hot-reload on port 3001
+#   (source bind-mounted from disk), but ships pointed at a separate dev DB so
+#   it doesn't trample the production-style stack on port 3000. That isolation
+#   is correct *most* of the time. For Dale-style dogfooding where we want the
+#   real workspace state (real coworkers, real builds, real backlog) visible
+#   under the dev-mode portal, swap the DB hosts.
+#
+# Usage (from the worktree root)
+#   docker compose -p dpf \
+#     -f /d/DPF/docker-compose.yml \
+#     -f docker-compose.dev-against-live-db.yml \
+#     --profile dev up -d dev-portal
+#
+# The `-p dpf` flag attaches to the existing `dpf` compose project so the
+# `postgres` / `neo4j` / `qdrant` references resolve to the already-running
+# production-stack containers (dpf-postgres-1 etc.). Without it, compose
+# would create a brand-new project with brand-new sibling DBs — defeating
+# the purpose.
+#
+# Risk profile
+#   dev-portal can WRITE to the live DBs. A coding mistake in the worktree
+#   could corrupt production-style data. Use knowingly. Same risk profile as
+#   any local-dev-against-shared-DB workflow — keep the prod portal on :3000
+#   as the stable reference and treat :3001 as the verification surface.
+
+services:
+  dev-portal:
+    volumes:
+      # Override the base `.:/workspace` mount to bind-mount THIS worktree's
+      # source into the container, so edits made in the worktree hot-reload
+      # in dev-portal. Forward slashes for cross-platform path resolution.
+      - D:/DPF/.claude/worktrees/elated-antonelli-540ea2:/workspace
+      - dev_node_modules:/workspace/node_modules
+    environment:
+      # Swap from dev-postgres / dev-neo4j / dev-qdrant to the live stack.
+      # Credentials come from the live install's .env so encrypted secrets
+      # (AUTH_SECRET, CREDENTIAL_ENCRYPTION_KEY) decrypt correctly.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-dpf}:${POSTGRES_PASSWORD:-dpf_dev}@postgres:5432/dpf
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-dpf_dev_password}
+      QDRANT_INTERNAL_URL: http://qdrant:6333
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set — already required by the live portal}
+      AUTH_TRUST_HOST: "true"
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY must be set — already required by the live portal}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
+      DPF_ENVIRONMENT: dev
+      INSTANCE_TYPE: dev
+      PROJECT_ROOT: /workspace
+    # Compose merges depends_on by default, so a plain block here would APPEND
+    # to the base file's `dev-init` dep instead of replacing it. We don't want
+    # dev-init (it's the sanitized-clone of prod→dev DB, irrelevant when we
+    # point dev-portal at the live DB directly). Use !reset (compose 2.20+) to
+    # drop the merged deps, then re-declare only the live-stack services.
+    depends_on: !reset
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
