@@ -536,12 +536,13 @@ export async function getPromotionWindowStatus(promotionId: string) {
 export type SelfUpgradeRunDto = {
   runId: string;
   status: string;
-  triggeredBy: string | null;
-  fromVersion: string | null;
-  toVersion: string | null;
+  trigger: string | null;       // schema: trigger (was: triggeredBy)
+  currentSha: string | null;    // schema: currentSha (was: fromVersion)
+  targetSha: string | null;     // schema: targetSha (was: toVersion)
+  deployedSha: string | null;   // schema: deployedSha (was: absent — adding for completeness)
   startedAt: Date | null;
   completedAt: Date | null;
-  error: string | null;
+  failureLog: string | null;    // schema: failureLog (was: error)
   createdAt: Date;
 };
 
@@ -561,12 +562,13 @@ export async function listSelfUpgradeRuns(opts?: {
     select: {
       runId: true,
       status: true,
-      triggeredBy: true,
-      fromVersion: true,
-      toVersion: true,
+      trigger: true,
+      currentSha: true,
+      targetSha: true,
+      deployedSha: true,
       startedAt: true,
       completedAt: true,
-      error: true,
+      failureLog: true,
       createdAt: true,
     },
   });
