@@ -1,50 +1,6 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 
-// ─── Legacy API ──────────────────────────────────────────────────────────────
-
-export type PromoterStartResult = {
-  containerName: string;
-};
-
-/** @deprecated */
-export function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'"'"'`)}'`;
-}
-
-type LegacyPromoterConfig = {
-  hostInstallPath?: string;
-  hostSourceMountPath?: string;
-  composeProject?: string;
-  portalContainerName?: string;
-  dbContainerName?: string;
-  repositoryRemote?: string;
-  repositoryBranch?: string;
-  healthUrl?: string;
-  promoterImage?: string;
-  [key: string]: unknown;
-};
-
-/** @deprecated Use runPromoter instead */
-export function buildPromoterDockerArgs(config: LegacyPromoterConfig, runId: string, _targetSha?: string | null): string[] {
-  const image = (config.promoterImage as string) ?? "dpf-promoter";
-  const hostSource = (config.hostInstallPath as string) ?? "";
-  const mountPath = (config.hostSourceMountPath as string) ?? "/host-source";
-  return [
-    "run",
-    "--name", `dpf-promoter-self-upgrade-${runId}`,
-    "-v", `${hostSource}:${mountPath}`,
-    "-e", "SELF_UPGRADE=1",
-    image,
-    "--self-upgrade",
-  ];
-}
-
-/** @deprecated Use runPromoter instead */
-export async function startSelfUpgradePromoter(_config: LegacyPromoterConfig, _runId: string, _targetSha?: string | null): Promise<PromoterStartResult> {
-  return { containerName: `dpf-promoter-self-upgrade-${_runId}` };
-}
-
 export type PromoterParams = {
   sourcePath: string;
   targetSha: string;

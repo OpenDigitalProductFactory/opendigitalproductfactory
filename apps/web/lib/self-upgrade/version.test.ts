@@ -56,3 +56,20 @@ describe("getUpgradeVersionState", () => {
     expect(state.targetSha).toBe("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
   });
 });
+
+describe("resolveTargetSha", () => {
+  it("returns null and logs a structured INFO message about pending channel resolution", async () => {
+    const { resolveTargetSha } = await import("./version");
+    const consoleSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    const result = await resolveTargetSha("stable");
+
+    expect(result).toBeNull();
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("self-upgrade.no-target"),
+      expect.objectContaining({ channel: "stable", reason: "channel-resolution-not-implemented" }),
+    );
+
+    consoleSpy.mockRestore();
+  });
+});
