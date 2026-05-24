@@ -12,8 +12,10 @@
 #   4. Removes ALL DPF Docker volumes (including neo4j, qdrant, postgres)
 #   5. Removes DPF Docker images
 #   6. Removes bind-mount data directories
-#   7. Preserves $DPF_DIR\backups\ to sibling $DPF_DIR-backups\ (operator
-#      backup history survives the reinstall; install-dpf.ps1 folds them back)
+#   7. Migrates any legacy in-tree backups under $DPF_DIR\backups\ to the
+#      sibling $DPF_DIR-backups\ (operator backup history survives the
+#      reinstall). New installs already write backups to $DPF_DIR-backups\
+#      directly via DPF_BACKUPS_HOST_PATH so this step is usually a no-op.
 #   8. Deletes the project directory
 #
 # After this completes, follow the README to install fresh as a new user.
@@ -74,9 +76,9 @@ Write-Host "    - Sandbox workspace"
 Write-Host "    - All Docker images and volumes"
 Write-Host "    - The entire $DPF_DIR directory"
 Write-Host ""
-Write-Host "  Operator backups under $DPF_DIR\backups\ are PRESERVED" -ForegroundColor Cyan
-Write-Host "  by moving them to $DPF_DIR-backups\ before the rm."
-Write-Host "  install-dpf.ps1 folds them back in on the next install."
+Write-Host "  Operator backups live at $DPF_DIR-backups\ (OUTSIDE this" -ForegroundColor Cyan
+Write-Host "  install) and are NOT touched by the rm. Any pre-relocation"
+Write-Host "  in-tree backups at $DPF_DIR\backups\ are migrated out first."
 Write-Host ""
 
 # --- Step 1: Check for uncommitted changes ---------------------------------
@@ -200,17 +202,17 @@ if (Test-Path $dockerDataDir) {
     Write-Ok "No bind-mount data directory found"
 }
 
-# --- Step 5b: Preserve operator backups before nuking the install dir ------
+# --- Step 5b: Migrate any legacy in-tree backups out of the install dir ----
 #
-# The platform writes daily Postgres/Neo4j/Qdrant dumps to
-# $DPF_DIR\backups\ via a host bind mount (docker-compose.yml). The compose
-# author chose a bind mount precisely so `docker compose down -v` could not
-# destroy backups -- but Step 6 below removes the entire install directory,
-# which would nuke them anyway. Move them to a sibling path this script does
-# NOT touch; install-dpf.ps1 folds them back in on the next install so the
-# admin UX still shows the full history.
+# Post-relocation (DPF_BACKUPS_HOST_PATH in .env), backups live at
+# $DPF_DIR-backups\ -- OUTSIDE the install root -- so Step 6's rm cannot
+# destroy them. This step is a one-way safety net for the upgrade case
+# where an operator still has backups under the legacy in-tree
+# $DPF_DIR\backups\ location: move them to the sibling dir before the rm.
+# On a fully-relocated install $DPF_DIR\backups\ does not exist and this
+# step is a no-op.
 
-Write-Step "Preserving operator backups"
+Write-Step "Migrating any legacy in-tree backups out of the install dir"
 
 $backupsSrc = Join-Path $DPF_DIR "backups"
 if (Test-Path $backupsSrc) {
@@ -223,14 +225,14 @@ if (Test-Path $backupsSrc) {
     }
     if ($hasContent) {
         $preserveDir = "$DPF_DIR-backups"
-        Write-Host "   Moving $backupsSrc -> $preserveDir" -ForegroundColor Cyan
+        Write-Host "   Moving $backupsSrc -> $preserveDir (legacy in-tree layout)" -ForegroundColor Cyan
         try {
             if (-not (Test-Path $preserveDir)) {
                 New-Item -ItemType Directory -Path $preserveDir | Out-Null
             }
             # Move each top-level entry so we merge with anything already
-            # preserved from a prior reinstall rather than failing on
-            # collision.
+            # at the sibling dir (the permanent home for relocated installs)
+            # rather than failing on collision.
             Get-ChildItem -LiteralPath $backupsSrc -Force | ForEach-Object {
                 $dest = Join-Path $preserveDir $_.Name
                 if (Test-Path $dest) {
@@ -239,17 +241,16 @@ if (Test-Path $backupsSrc) {
                     Move-Item -LiteralPath $_.FullName -Destination $dest -Force
                 }
             }
-            Write-Ok "Backups preserved at $preserveDir"
-            Write-Host "   install-dpf.ps1 will fold these back into the new install automatically." -ForegroundColor Gray
+            Write-Ok "Backups migrated to $preserveDir (permanent home for relocated installs)"
         } catch {
-            Write-Warn "Could not preserve backups: $_"
-            Write-Fail "Refusing to delete $DPF_DIR while backups are present. Move $backupsSrc somewhere safe by hand, then re-run."
+            Write-Warn "Could not migrate backups: $_"
+            Write-Fail "Refusing to delete $DPF_DIR while in-tree backups are present. Move $backupsSrc somewhere safe by hand, then re-run."
         }
     } else {
-        Write-Ok "No backup files to preserve"
+        Write-Ok "No in-tree backup files to migrate (normal for relocated installs)"
     }
 } else {
-    Write-Ok "No backups directory found"
+    Write-Ok "No in-tree backups directory found (normal for relocated installs)"
 }
 
 # --- Step 6: Remove project directory --------------------------------------

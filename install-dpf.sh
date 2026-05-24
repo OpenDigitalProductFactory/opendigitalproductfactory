@@ -259,11 +259,59 @@ if [ ! -f .env ]; then
   dpf_sed_inplace "s|<generate with: openssl rand -hex 32>|$ENC_KEY_VAL|" .env
   dpf_sed_inplace "s|<set a strong password>|$ADMIN_PW_VAL|" .env
   dpf_sed_inplace "s|<set to absolute path of this directory on the host>|$REPO_ROOT|" .env
+  # Backups live OUTSIDE the install root by design so a future repo-tree wipe
+  # cannot destroy operator backup history. Append DPF_BACKUPS_HOST_PATH if it
+  # isn't already in the file (it isn't in .env.docker.example today).
+  if ! grep -q "^DPF_BACKUPS_HOST_PATH=" .env 2>/dev/null; then
+    printf '\n# Backups host path (relocation lives outside install root by design — see\n' >> .env
+    printf '# docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §5.3).\n' >> .env
+    printf 'DPF_BACKUPS_HOST_PATH=%s-backups\n' "$REPO_ROOT" >> .env
+  fi
   ok ".env created with generated secrets"
   info "  Admin password: $ADMIN_PW_VAL"
   info "  (Stored in .env; change before any non-local deployment)"
 else
   ok ".env already exists; preserving operator edits"
+  # Even on an existing .env, ensure DPF_BACKUPS_HOST_PATH is set — operators
+  # upgrading from a pre-relocation install need this added so the new compose
+  # bind mount resolves correctly. Append only; never clobber an existing value.
+  if ! grep -q "^DPF_BACKUPS_HOST_PATH=" .env 2>/dev/null; then
+    printf '\n# Backups host path (added by installer 2026-05-24 — backups now live\n' >> .env
+    printf '# OUTSIDE install root so repo wipes cannot destroy them).\n' >> .env
+    printf 'DPF_BACKUPS_HOST_PATH=%s-backups\n' "$REPO_ROOT" >> .env
+    info "Added DPF_BACKUPS_HOST_PATH=$REPO_ROOT-backups to existing .env"
+  fi
+fi
+
+# Ensure the backups host directory exists. Docker refuses to start the
+# service if a bind-mount source is missing, and the source now lives
+# OUTSIDE the repo so install-time creation is the right place.
+BACKUPS_HOST_DIR="${REPO_ROOT}-backups"
+if [ ! -d "$BACKUPS_HOST_DIR" ]; then
+  mkdir -p "$BACKUPS_HOST_DIR"
+  ok "Created backups directory at $BACKUPS_HOST_DIR (outside install root by design)"
+fi
+
+# One-time migration: pre-relocation installs wrote backups inside
+# ${REPO_ROOT}/backups/. Move them out so the new bind mount sees them.
+LEGACY_BACKUPS_DIR="${REPO_ROOT}/backups"
+if [ -d "$LEGACY_BACKUPS_DIR" ] && [ -n "$(ls -A "$LEGACY_BACKUPS_DIR" 2>/dev/null)" ]; then
+  info "Migrating legacy in-tree backups from $LEGACY_BACKUPS_DIR to $BACKUPS_HOST_DIR"
+  for entry in "$LEGACY_BACKUPS_DIR"/* "$LEGACY_BACKUPS_DIR"/.[!.]*; do
+    [ -e "$entry" ] || continue
+    base="$(basename "$entry")"
+    if [ -e "$BACKUPS_HOST_DIR/$base" ]; then
+      warn "  Skipped $base: already exists in $BACKUPS_HOST_DIR"
+    else
+      mv "$entry" "$BACKUPS_HOST_DIR/$base"
+    fi
+  done
+  if [ -z "$(ls -A "$LEGACY_BACKUPS_DIR" 2>/dev/null)" ]; then
+    rmdir "$LEGACY_BACKUPS_DIR"
+    ok "Legacy in-tree backups migrated to $BACKUPS_HOST_DIR"
+  else
+    warn "Some entries left in $LEGACY_BACKUPS_DIR (collisions) — review by hand."
+  fi
 fi
 
 # 10. Bring up the platform-aware compose stack. Per the doctrine's

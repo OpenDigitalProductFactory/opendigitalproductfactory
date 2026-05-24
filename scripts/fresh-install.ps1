@@ -106,6 +106,7 @@ AUTH_SECRET=$authSecret
 CREDENTIAL_ENCRYPTION_KEY=$encKey
 ADMIN_PASSWORD=changeme123
 DPF_HOST_INSTALL_PATH=$InstallRoot
+DPF_BACKUPS_HOST_PATH=$InstallRoot-backups
 "@ | Set-Content -Path $envFile -Encoding UTF8
     Write-Ok "Created .env with generated secrets"
 } else {
