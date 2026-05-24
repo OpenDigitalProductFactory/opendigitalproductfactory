@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockAuth, mockPrisma, mockIssueBootstrapToken, mockRevalidatePath } = vi.hoisted(() => ({
+const { mockAuth, mockPrisma, mockIssueBootstrapToken, mockRevalidatePath, mockSyncUserPrincipal } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
   mockPrisma: {
     principalAlias: { findFirst: vi.fn() },
@@ -10,12 +10,16 @@ const { mockAuth, mockPrisma, mockIssueBootstrapToken, mockRevalidatePath } = vi
   },
   mockIssueBootstrapToken: vi.fn(),
   mockRevalidatePath: vi.fn(),
+  mockSyncUserPrincipal: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
 vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/edge-node/enrollment", () => ({
   issueBootstrapToken: mockIssueBootstrapToken,
+}));
+vi.mock("@/lib/identity/principal-linking", () => ({
+  syncUserPrincipal: mockSyncUserPrincipal,
 }));
 vi.mock("next/cache", () => ({ revalidatePath: mockRevalidatePath }));
 
@@ -380,20 +384,57 @@ describe("revokeEdgeNodeAction", () => {
   });
 });
 
-describe("Principal-attribution fallback", () => {
+describe("Principal-attribution self-heal", () => {
   beforeEach(() => mockAuth.mockResolvedValue(HR000_USER));
 
-  it("uses a synthetic principalId when no PrincipalAlias exists for the user (so action is never anonymous)", async () => {
+  // Pre-§11 installs / installs that pre-date the seed fix may have a
+  // User row without a matching PrincipalAlias. The action used to fall
+  // back to a synthetic "user:<id>" string that violated the hard FK
+  // (BootstrapToken_issuedByPrincipalId_fkey) and crashed with a Prisma
+  // error leaking to the UI. The self-heal calls syncUserPrincipal to
+  // create the Principal + alias on the fly, and uses the resulting real
+  // principalId.
+  it("lazy-creates the Principal+alias via syncUserPrincipal when none exists", async () => {
     mockPrisma.principalAlias.findFirst.mockResolvedValue(null);
+    mockSyncUserPrincipal.mockResolvedValue({
+      id: "principal_lazy_created_1",
+      principalId: "PRN-lazy-1",
+      kind: "human",
+      status: "active",
+      displayName: "admin@dpf.local",
+      aliases: [{ aliasType: "user", aliasValue: "user_admin_1", issuer: "" }],
+    });
     mockIssueBootstrapToken.mockResolvedValue({
       tokenId: "boot_1",
       plaintext: "dpfboot_x",
       prefix: "dpfboot_x",
       expiresAt: new Date(),
     });
+
     await issueEdgeBootstrapTokenAction({});
+
+    expect(mockSyncUserPrincipal).toHaveBeenCalledWith("user_admin_1");
     expect(mockIssueBootstrapToken).toHaveBeenCalledWith(
-      expect.objectContaining({ issuedByPrincipalId: "user:user_admin_1" }),
+      expect.objectContaining({ issuedByPrincipalId: "principal_lazy_created_1" }),
+    );
+  });
+
+  it("skips the self-heal when an alias already exists (happy path)", async () => {
+    mockPrisma.principalAlias.findFirst.mockResolvedValue({
+      principalId: "principal_admin_1",
+    });
+    mockIssueBootstrapToken.mockResolvedValue({
+      tokenId: "boot_1",
+      plaintext: "dpfboot_x",
+      prefix: "dpfboot_x",
+      expiresAt: new Date(),
+    });
+
+    await issueEdgeBootstrapTokenAction({});
+
+    expect(mockSyncUserPrincipal).not.toHaveBeenCalled();
+    expect(mockIssueBootstrapToken).toHaveBeenCalledWith(
+      expect.objectContaining({ issuedByPrincipalId: "principal_admin_1" }),
     );
   });
 });
