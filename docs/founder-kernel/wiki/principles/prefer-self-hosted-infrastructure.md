@@ -10,6 +10,8 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleRingScope:
+  - universal-ring
 principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: DPF positions itself as a sovereign AI-native platform. Operators who adopt DPF should understand that the platform's default posture is to own its capabilities, not rent them — and that external APIs are explicitly opt-in, not the default.

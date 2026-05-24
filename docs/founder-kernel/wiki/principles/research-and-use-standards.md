@@ -10,6 +10,8 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleRingScope:
+  - universal-ring
 principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: DPF's identity as a standards-anchored platform (IT4IT, CSDM, TOGAF, MCP) makes this commandment product-facing — adopters should expect every design choice to defend itself against published standards.

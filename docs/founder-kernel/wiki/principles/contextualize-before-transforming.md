@@ -10,6 +10,8 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleRingScope:
+  - universal-ring
 principleConsumerArchetype: universal
 principlePublic: false
 principlePublicRationale: ""

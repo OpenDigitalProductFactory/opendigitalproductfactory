@@ -10,6 +10,8 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleRingScope:
+  - universal-ring
 principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: This is DPF's stated technical posture — adopters need to know the platform will choose the sound option even when a faster hack is available.

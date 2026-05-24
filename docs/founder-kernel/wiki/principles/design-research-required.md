@@ -10,6 +10,8 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleRingScope:
+  - universal-ring
 principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: Adopters and contributors should see DPF's research discipline — every spec defends its design choices against the field, not against intuition.

@@ -10,6 +10,8 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleRingScope:
+  - universal-ring
 principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: Assumption-driven errors cause irreversible actions and eroded trust. Adopters need to know agents will verify before acting.
