@@ -56,13 +56,50 @@ export type GateDecision =
       rationale: string;
     };
 
+function rebuildShell(a: Extract<ExecutionAttempt, { kind: "shell" }>): string {
+  return [a.command, ...a.args].join(" ");
+}
+
+function matchShell(
+  a: Extract<ExecutionAttempt, { kind: "shell" }>,
+  p: EnforceablePattern,
+): boolean {
+  if (p.kind !== "shell") return false;
+  try {
+    return new RegExp(p.regex).test(rebuildShell(a));
+  } catch {
+    // Malformed regex never matches. Authors are protected by the
+    // ingest-time lint detector (lib/wiki/principle-lint-detectors.ts).
+    return false;
+  }
+}
+
+function modeFor(p: EnforceablePrinciple, sc: SessionClass): EnforcementMode {
+  return sc === "autonomous" ? p.runtime.autonomousMode : p.runtime.interactiveMode;
+}
+
 export function evaluateExecution(
-  _attempt: ExecutionAttempt,
-  _sessionClass: SessionClass,
+  attempt: ExecutionAttempt,
+  sessionClass: SessionClass,
   principles: EnforceablePrinciple[],
 ): GateDecision {
   if (principles.length === 0) return { verdict: "allow" };
-  // Real matching arrives in Task 1.2+; for the empty-registry case we already
-  // satisfy the spec contract ("allow when nothing registered").
+
+  for (const principle of principles) {
+    for (const pattern of principle.runtime.patterns) {
+      const matched = attempt.kind === "shell" && matchShell(attempt, pattern);
+      if (!matched) continue;
+      const mode = modeFor(principle, sessionClass);
+      if (mode === "refuse") {
+        return {
+          verdict: "refuse",
+          principleId: principle.id,
+          principleSlug: principle.slug,
+          rationale: "rationale" in pattern ? pattern.rationale : "",
+        };
+      }
+      // confirm / warn handled in Task 1.3 + 1.6
+    }
+  }
   return { verdict: "allow" };
 }
