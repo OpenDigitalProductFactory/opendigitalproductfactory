@@ -1,0 +1,118 @@
+name: Semgrep Security Scan
+
+# Pre-PR security gate. Runs on every PR against main and on pushes to main.
+#
+# Complements (not replaces) the CodeQL gate. CodeQL is post-merge analytical;
+# Semgrep is pre-merge syntactic. The two catch different patterns — keep both.
+#
+# Why pull_request (not pull_request_target):
+#   pull_request_target gives the workflow access to secrets but checks out the
+#   base ref by default, requiring careful PR-head handling to scan the change.
+#   DPF currently has no external fork-PR contribution flow; pull_request keeps
+#   the trust boundary clean. If fork PRs become routine, add a sibling workflow
+#   that runs in pull_request_target and uploads SARIF only.
+#
+# Severity gating:
+#   --severity ERROR --severity WARNING — these block the PR. INFO findings are
+#   filtered out (no comment-only surfacing in v1). When Semgrep AppSec Platform
+#   integration lands, the block/comment split moves to rule metadata.
+#
+# Baseline:
+#   --baseline-commit limits the scan diff to changes against origin/main, so
+#   pre-existing patterns don't surface on unrelated PRs (mirrors the inflow-gate
+#   strategy for CodeQL).
+#
+# Custom rules:
+#   .github/semgrep/ is reserved for DPF-specific rule files (.yml). Empty for
+#   v1 — added if the burn-down replay shows gaps in standard rulesets.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least-privilege default. SARIF upload needs security-events:write at the job
+# level (granted below).
+permissions:
+  contents: read
+
+concurrency:
+  group: semgrep-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  semgrep:
+    name: Semgrep Scan
+    runs-on: ubuntu-latest
+    # Skip on Dependabot PRs — they're scanned post-merge by the push trigger,
+    # and Dependabot lacks the token scope to upload SARIF in any case.
+    if: github.actor != 'dependabot[bot]'
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    container:
+      # Pinned to the official Semgrep image. Renovate/Dependabot will track
+      # bumps via the docker-image ecosystem.
+      image: semgrep/semgrep:1.163.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Full history needed for --baseline-commit diff scanning.
+          fetch-depth: 0
+
+      - name: Resolve baseline commit
+        id: baseline
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && github.base_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          # On PRs we already have origin/<base_ref> from checkout. On push to
+          # main, baseline against the parent of the head commit so scan diffs
+          # the merge introducing the change rather than re-scanning history.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASELINE_SHA="$(git rev-parse "origin/${BASE_REF}")"
+          else
+            BASELINE_SHA="$(git rev-parse HEAD^ 2>/dev/null || git rev-parse HEAD)"
+          fi
+          echo "sha=${BASELINE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Baseline commit: ${BASELINE_SHA}"
+
+      - name: Semgrep scan
+        id: scan
+        env:
+          # Disable Semgrep usage metrics (offline, opt-out per privacy policy).
+          SEMGREP_SEND_METRICS: "off"
+          BASELINE_SHA: ${{ steps.baseline.outputs.sha }}
+        run: |
+          set -euo pipefail
+          # --error: non-zero exit if any finding remains after baseline diff.
+          # --severity filter: only ERROR + WARNING block. INFO is dropped.
+          # --sarif-output: machine-readable findings for Code Scanning upload.
+          semgrep scan \
+            --config=p/security-audit \
+            --config=p/typescript \
+            --config=p/javascript \
+            --config=p/nextjs \
+            --config=p/owasp-top-ten \
+            --config=p/github-actions \
+            --config=p/secrets \
+            --severity=ERROR \
+            --severity=WARNING \
+            --baseline-commit="${BASELINE_SHA}" \
+            --sarif-output=semgrep.sarif \
+            --error \
+            --metrics=off \
+            --timeout=60 \
+            --timeout-threshold=3
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
