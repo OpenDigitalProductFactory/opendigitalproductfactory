@@ -88,9 +88,43 @@ switch ($decision.verdict) {
     Write-Host ""
     Write-Host "  Type EXACTLY (no quotes): $phrase"
     $typed = Read-Host "  > "
-    if ($typed -ceq $phrase) { Invoke-Real }
-    Write-Error "[dpf-shell-guard] phrase mismatch — REFUSED"
-    exit 1
+    if ($typed -cne $phrase) {
+      Write-Error "[dpf-shell-guard] phrase mismatch — REFUSED"
+      exit 1
+    }
+
+    # Operator confirmed — attempt the pre-destructive snapshot (BI-611C25F3)
+    # BEFORE exec'ing the real binary. warn-and-proceed-plus-second-confirm.
+    $snapshotScript = Join-Path $GuardDir 'pre-destructive-snapshot.ps1'
+    if (Test-Path -LiteralPath $snapshotScript) {
+      $snapshotArgs = @($BinName) + $argsArray
+      & pwsh -NoProfile -ExecutionPolicy Bypass -File $snapshotScript @snapshotArgs
+      $snapshotRc = $LASTEXITCODE
+      switch ($snapshotRc) {
+        0 { Invoke-Real }
+        1 {
+          Write-Host ""
+          Write-Host "[dpf-shell-guard] ⚠ PRE-DESTRUCTIVE SNAPSHOT FAILED"
+          Write-Host "                  The destructive action will proceed WITHOUT a rollback option."
+          Write-Host "                  See `$DPF_BACKUPS_HOST_PATH\pre-destructive\.snapshot.log for details."
+          Write-Host ""
+          $second = Read-Host "  Type Y to proceed anyway, anything else to cancel"
+          if ($second -ceq 'Y') { Invoke-Real }
+          Write-Error "[dpf-shell-guard] second-confirm declined — REFUSED"
+          exit 1
+        }
+        2 {
+          Write-Host "[dpf-shell-guard] note: no snapshot strategy registered for this command — proceeding without rollback artifact"
+          Invoke-Real
+        }
+        default {
+          Write-Error "[dpf-shell-guard] snapshot dispatcher exited unexpectedly ($snapshotRc) — REFUSED"
+          exit 1
+        }
+      }
+    }
+    # No snapshot script present — honor the typed-confirm.
+    Invoke-Real
   }
   '_unreachable' {
     # Fail-closed for tier-commandment patterns: parse the static fallback
