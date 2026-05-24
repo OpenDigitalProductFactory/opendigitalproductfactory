@@ -350,25 +350,27 @@ else would be inconsistent with `feedback_consult_specs_first.md`.
 
 ### 5.3 Storage path
 
-Host bind mount under `${DPF_HOST_INSTALL_PATH}/backups/` is already
-proven by the promoter. Using the same path means a single tree the
+Host bind mount under `${DPF_BACKUPS_HOST_PATH}` (a sibling directory of
+the install root, e.g. `$DPF_DIR-backups\`) means a single tree the
 operator can back up off-host later (Phase 3) by pointing
-restic/rclone/Backblaze at one directory.
+restic/rclone/Backblaze at one directory. Living OUTSIDE the install
+root is load-bearing: `dpf-reinstall.ps1` and `uninstall-dpf.ps1` can
+`Remove-Item $DPF_DIR -Recurse` without ever touching the backup tree.
 
-> **Known hazard (addendum 2026-05-23).** The Windows-side
-> `dpf-reinstall.ps1` and `uninstall-dpf.ps1` scripts `Remove-Item`
-> the entire `$DPF_DIR` — which, because backups live *inside* it,
-> would silently destroy every dump. Both scripts now preserve
-> `$DPF_DIR\backups\` to a sibling `$DPF_DIR-backups\` before the rm,
-> and `install-dpf.ps1` folds them back in on the next install. This
-> is a defense-in-depth patch; the architecturally correct fix is to
-> relocate the bind-mount source out of the install root entirely
-> (e.g. behind a new `DPF_BACKUPS_HOST_PATH` env var defaulting to
-> a sibling path). That relocation is a follow-up because it touches
-> the host-path-translation logic in `scripts/backup-neo4j.sh`,
-> `scripts/restore-neo4j.sh`, and the Neo4j runner env-forwarding.
-> The bash side (`dpf-reinstall.sh` → `uninstall-dpf.sh --purge`)
-> does not delete the repo dir and is already safe.
+> **Hazard resolved (addendum 2026-05-23 → 2026-05-24, BI-8004BCD8).**
+> First-pass defense-in-depth (PR #1040, 2026-05-23): both Windows
+> scripts moved `$DPF_DIR\backups\` to a sibling `$DPF_DIR-backups\`
+> before the rm, and `install-dpf.ps1` folded them back in.
+> Architectural fix (2026-05-24): introduced `DPF_BACKUPS_HOST_PATH`
+> env var; installer defaults it to the sibling directory; compose
+> bind-mount source reads from it; `scripts/backup-neo4j.sh` /
+> `scripts/restore-neo4j.sh` use it for host-path translation in
+> docker-in-docker bind mounts, with a fallback to
+> `${DPF_HOST_INSTALL_PATH}/backups` for pre-relocation installs.
+> The reinstall/uninstall preserve dance is retained as belt-and-
+> suspenders for operators upgrading from a pre-relocation install
+> (where backups are still in-tree) and becomes a no-op once the
+> migration runs.
 
 ### 5.4 Retention policy (GFS)
 
