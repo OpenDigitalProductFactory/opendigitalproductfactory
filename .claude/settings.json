@@ -34,6 +34,30 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File \"D:\\DPF\\scripts\\safety\\transcript-snapshot.ps1\"",
+            "shell": "powershell",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File \"D:\\DPF\\scripts\\safety\\transcript-snapshot.ps1\"",
+            "shell": "powershell",
+            "async": false
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
