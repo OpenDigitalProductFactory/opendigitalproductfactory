@@ -24,6 +24,12 @@ export const QDRANT_BACKUP_JOB_ID = "qdrant-daily-backup";
 export const QDRANT_BACKUP_JOB_NAME = "Qdrant daily backup (platform-managed)";
 export const QDRANT_BACKUP_SCHEDULE = "daily";
 
+// BI-31C9FBDF: trial-restore verification (postgres only in slice 1).
+export const POSTGRES_TRIAL_RESTORE_JOB_ID = "postgres-trial-restore-daily";
+export const POSTGRES_TRIAL_RESTORE_JOB_NAME =
+  "Postgres trial-restore verification (platform-managed)";
+export const POSTGRES_TRIAL_RESTORE_SCHEDULE = "daily";
+
 type ScheduledJobSeedClient = Pick<PrismaClient, "scheduledJob">;
 
 /** Returns the next 03:00 UTC strictly after `from`. */
@@ -114,15 +120,35 @@ export async function ensureQdrantBackupScheduledJob(
   );
 }
 
-/** Convenience: ensure all three backup scheduled jobs exist in one call. */
+/** BI-31C9FBDF: trial-restore verification heartbeat row. */
+export async function ensurePostgresTrialRestoreScheduledJob(
+  prisma: ScheduledJobSeedClient,
+  now: Date = new Date(),
+): Promise<{ created: boolean }> {
+  return ensureBackupScheduledJob(
+    prisma,
+    POSTGRES_TRIAL_RESTORE_JOB_ID,
+    POSTGRES_TRIAL_RESTORE_JOB_NAME,
+    POSTGRES_TRIAL_RESTORE_SCHEDULE,
+    now,
+  );
+}
+
+/** Convenience: ensure all backup + verification scheduled jobs exist in one call. */
 export async function ensureAllBackupScheduledJobs(
   prisma: ScheduledJobSeedClient,
   now: Date = new Date(),
-): Promise<{ postgres: { created: boolean }; neo4j: { created: boolean }; qdrant: { created: boolean } }> {
-  const [postgres, neo4j, qdrant] = await Promise.all([
+): Promise<{
+  postgres: { created: boolean };
+  neo4j: { created: boolean };
+  qdrant: { created: boolean };
+  postgresTrialRestore: { created: boolean };
+}> {
+  const [postgres, neo4j, qdrant, postgresTrialRestore] = await Promise.all([
     ensureBackupScheduledJob(prisma, POSTGRES_BACKUP_JOB_ID, POSTGRES_BACKUP_JOB_NAME, POSTGRES_BACKUP_SCHEDULE, now),
     ensureBackupScheduledJob(prisma, NEO4J_BACKUP_JOB_ID, NEO4J_BACKUP_JOB_NAME, NEO4J_BACKUP_SCHEDULE, now),
     ensureBackupScheduledJob(prisma, QDRANT_BACKUP_JOB_ID, QDRANT_BACKUP_JOB_NAME, QDRANT_BACKUP_SCHEDULE, now),
+    ensureBackupScheduledJob(prisma, POSTGRES_TRIAL_RESTORE_JOB_ID, POSTGRES_TRIAL_RESTORE_JOB_NAME, POSTGRES_TRIAL_RESTORE_SCHEDULE, now),
   ]);
-  return { postgres, neo4j, qdrant };
+  return { postgres, neo4j, qdrant, postgresTrialRestore };
 }

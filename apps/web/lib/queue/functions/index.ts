@@ -28,6 +28,7 @@ import {
   allBackupsDailyScheduled,
   postgresDailyBackupScheduled,
   postgresBackupRequested,
+  postgresTrialRestoreRequested,
   neo4jBackupRequested,
   qdrantBackupRequested,
 } from "./postgres-daily-backup";
@@ -62,6 +63,7 @@ export const allFunctions = [
   allBackupsDailyScheduled,
   postgresDailyBackupScheduled,
   postgresBackupRequested,
+  postgresTrialRestoreRequested,
   neo4jBackupRequested,
   qdrantBackupRequested,
   selfUpgradeScheduled,
