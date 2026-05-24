@@ -50,9 +50,9 @@ function formatCost(usd: number): string {
 }
 
 function torqueColor(value: number): string {
-  if (value >= 0.9) return "#4ade80"; // healthy green
-  if (value >= 0.6) return "#fbbf24"; // warning amber
-  return "#f87171"; // degraded red
+  if (value >= 0.9) return "var(--dpf-success)";
+  if (value >= 0.6) return "var(--dpf-warning)";
+  return "var(--dpf-error)";
 }
 
 function findReadings(
@@ -402,7 +402,7 @@ export default async function CockpitPage({
                     </td>
                     <td className="py-1.5">
                       {row.slipDetected ? (
-                        <span className="text-[#f87171]">slip{row.slipReason ? `: ${row.slipReason}` : ""}</span>
+                        <span style={{ color: "var(--dpf-error)" }}>slip{row.slipReason ? `: ${row.slipReason}` : ""}</span>
                       ) : (
                         row.outcomeType
                       )}
