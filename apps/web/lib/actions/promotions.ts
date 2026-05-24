@@ -15,6 +15,7 @@ import {
   getDeployedSha,
   getLatestRun,
 } from "@/lib/self-upgrade";
+import { loadPlatformVersion } from "@/lib/platform/version";
 import { inngest } from "@/lib/queue/inngest-client";
 import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
 
@@ -536,12 +537,13 @@ export async function getPromotionWindowStatus(promotionId: string) {
 export type SelfUpgradeRunDto = {
   runId: string;
   status: string;
-  triggeredBy: string | null;
-  fromVersion: string | null;
-  toVersion: string | null;
+  trigger: string | null;       // schema: trigger (was: triggeredBy)
+  currentSha: string | null;    // schema: currentSha (was: fromVersion)
+  targetSha: string | null;     // schema: targetSha (was: toVersion)
+  deployedSha: string | null;   // schema: deployedSha (was: absent — adding for completeness)
   startedAt: Date | null;
   completedAt: Date | null;
-  error: string | null;
+  failureLog: string | null;    // schema: failureLog (was: error)
   createdAt: Date;
 };
 
@@ -561,12 +563,13 @@ export async function listSelfUpgradeRuns(opts?: {
     select: {
       runId: true,
       status: true,
-      triggeredBy: true,
-      fromVersion: true,
-      toVersion: true,
+      trigger: true,
+      currentSha: true,
+      targetSha: true,
+      deployedSha: true,
       startedAt: true,
       completedAt: true,
-      error: true,
+      failureLog: true,
       createdAt: true,
     },
   });
@@ -580,9 +583,10 @@ export async function listSelfUpgradeRuns(opts?: {
 export async function getSelfUpgradeStatus() {
   await requireOpsAccess();
 
-  const [config, latestRun] = await Promise.all([
+  const [config, latestRun, platformVersion] = await Promise.all([
     getSelfUpgradeConfig(),
     getLatestRun(),
+    loadPlatformVersion(),
   ]);
 
   const inMaintenanceWindow = isInMaintenanceWindow(config);
@@ -598,6 +602,12 @@ export async function getSelfUpgradeStatus() {
     targetSha,
     isFresh,
     latestRun,
+    platformVersion: {
+      version: platformVersion.version,
+      publishedAt: platformVersion.publishedAt.toISOString(),
+      gitSha: platformVersion.gitSha,
+      note: platformVersion.note,
+    },
   };
 }
 

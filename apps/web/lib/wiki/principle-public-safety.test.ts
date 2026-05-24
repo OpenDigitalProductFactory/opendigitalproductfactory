@@ -36,6 +36,7 @@ function makePublicPrinciple(
     principleAppliesTo: ["in_platform_coworker"],
     principlePublic: true,
     principlePublicRationale: "Default rationale for tests.",
+    principleRuntimeEnforcement: null,
     lastReviewedAt: null,
     ...overrides,
   };

@@ -7,12 +7,13 @@ import { triggerSelfUpgrade } from "@/lib/actions/promotions";
 type LatestRun = {
   runId: string;
   status: string;
-  triggeredBy: string | null;
-  fromVersion: string | null;
-  toVersion: string | null;
+  trigger: string | null;
+  currentSha: string | null;
+  targetSha: string | null;
+  deployedSha: string | null;
   startedAt: Date | string | null;
   completedAt: Date | string | null;
-  error: string | null;
+  failureLog: string | null;
   createdAt: Date | string;
 };
 
@@ -26,6 +27,12 @@ type Props = {
   latestRun: LatestRun | null;
   history?: LatestRun[];
   historyNextCursor?: string | null;
+  platformVersion: {
+    version: string;
+    publishedAt: string;
+    gitSha: string | null;
+    note: string | null;
+  };
 };
 
 function formatDuration(start: Date | string, end: Date | string): string {
@@ -63,6 +70,7 @@ export default function SelfUpgradeClient({
   latestRun,
   history,
   historyNextCursor,
+  platformVersion,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -121,24 +129,40 @@ export default function SelfUpgradeClient({
         </div>
       )}
 
-      {enabled && (
-        <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] space-y-1">
-          <div className="text-xs text-[var(--dpf-muted)]">
-            <span className="font-medium text-[var(--dpf-text)]">Deployed:</span>{" "}
-            <span className="font-mono">{deployedSha ?? "unknown"}</span>
-          </div>
-          <div className="text-xs text-[var(--dpf-muted)]">
-            <span className="font-medium text-[var(--dpf-text)]">Target:</span>{" "}
-            <span className="font-mono">{targetSha ?? "unknown"}</span>
-          </div>
-          {isFresh && (
-            <div className="text-xs text-[var(--dpf-success)]">Up to date</div>
-          )}
-          {!isFresh && targetSha && (
-            <div className="text-xs text-[var(--dpf-warning)]">Update available</div>
+      <div
+        className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] space-y-1"
+        data-platform-version={platformVersion.version}
+      >
+        <div className="text-xs text-[var(--dpf-muted)]">
+          <span className="font-medium text-[var(--dpf-text)]">Platform version:</span>{" "}
+          <span className="font-mono text-[var(--dpf-text)]">
+            {platformVersion.version}
+          </span>
+          {platformVersion.gitSha && (
+            <span className="ml-2 font-mono text-[var(--dpf-muted)]">
+              ({platformVersion.gitSha.slice(0, 7)})
+            </span>
           )}
         </div>
-      )}
+        {enabled && (
+          <>
+            <div className="text-xs text-[var(--dpf-muted)]">
+              <span className="font-medium text-[var(--dpf-text)]">Deployed:</span>{" "}
+              <span className="font-mono">{deployedSha ?? "unknown"}</span>
+            </div>
+            <div className="text-xs text-[var(--dpf-muted)]">
+              <span className="font-medium text-[var(--dpf-text)]">Target:</span>{" "}
+              <span className="font-mono">{targetSha ?? "unknown"}</span>
+            </div>
+            {isFresh && (
+              <div className="text-xs text-[var(--dpf-success)]">Up to date</div>
+            )}
+            {!isFresh && targetSha && (
+              <div className="text-xs text-[var(--dpf-warning)]">Update available</div>
+            )}
+          </>
+        )}
+      </div>
 
       {enabled && !latestRun && (
         <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)]">
@@ -164,17 +188,17 @@ export default function SelfUpgradeClient({
             <span className="text-xs font-mono text-[var(--dpf-muted)]">{latestRun.runId}</span>
           </div>
 
-          {latestRun.fromVersion && latestRun.toVersion && (
+          {latestRun.currentSha && latestRun.targetSha && (
             <div className="text-xs text-[var(--dpf-muted)]">
-              <span className="font-mono">{latestRun.fromVersion}</span>
+              <span className="font-mono">{latestRun.currentSha}</span>
               {" → "}
-              <span className="font-mono">{latestRun.toVersion}</span>
+              <span className="font-mono">{latestRun.targetSha}</span>
             </div>
           )}
 
-          {latestRun.triggeredBy && (
+          {latestRun.trigger && (
             <div className="text-xs text-[var(--dpf-muted)]">
-              Triggered by: {latestRun.triggeredBy}
+              Triggered by: {latestRun.trigger}
             </div>
           )}
 
@@ -188,13 +212,13 @@ export default function SelfUpgradeClient({
             </div>
           )}
 
-          {latestRun.error && (
+          {latestRun.failureLog && (
             <details className="text-xs">
               <summary className="cursor-pointer text-[var(--dpf-destructive)]">
                 Error details
               </summary>
               <div className="mt-1 p-2 rounded bg-[var(--dpf-destructive)]/10 text-[var(--dpf-destructive)]">
-                {latestRun.error}
+                {latestRun.failureLog}
               </div>
             </details>
           )}
@@ -225,11 +249,11 @@ export default function SelfUpgradeClient({
                   </td>
                   <td className="px-3 py-2 font-mono text-[var(--dpf-muted)]">{run.runId}</td>
                   <td className="px-3 py-2 text-[var(--dpf-muted)]">
-                    {run.fromVersion && run.toVersion ? (
+                    {run.currentSha && run.targetSha ? (
                       <>
-                        <span className="font-mono">{run.fromVersion}</span>
+                        <span className="font-mono">{run.currentSha}</span>
                         {" → "}
-                        <span className="font-mono">{run.toVersion}</span>
+                        <span className="font-mono">{run.targetSha}</span>
                       </>
                     ) : null}
                   </td>

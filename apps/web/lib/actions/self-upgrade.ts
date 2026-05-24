@@ -7,8 +7,8 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { inngest } from "@/lib/queue/inngest-client";
-import { PORTAL_SELF_UPGRADE_EVENT } from "@/lib/queue/functions/portal-self-upgrade";
-import { loadSelfUpgradeConfig } from "@/lib/self-upgrade/config";
+import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
+import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { getUpgradeVersionState, type UpgradeVersionState } from "@/lib/self-upgrade/version";
 
 async function requireSelfUpgradeOperator(
@@ -76,7 +76,7 @@ function toOperatorVersionError(err: unknown): string {
 
 export async function getSelfUpgradeDashboardAction(): Promise<SelfUpgradeDashboard> {
   await requireSelfUpgradeOperator("view_operations");
-  const config = await loadSelfUpgradeConfig();
+  const config = await getSelfUpgradeConfig();
   let versionState: UpgradeVersionState | null = null;
   let versionError: string | null = null;
 
@@ -135,10 +135,9 @@ export async function getSelfUpgradeDashboardAction(): Promise<SelfUpgradeDashbo
 export async function requestPortalSelfUpgradeAction(): Promise<void> {
   const { userId } = await requireSelfUpgradeOperator("manage_provider_connections");
   await inngest.send({
-    name: PORTAL_SELF_UPGRADE_EVENT,
+    name: SELF_UPGRADE_EVENT,
     data: {
-      trigger: "manual",
-      requestedByUserId: userId,
+      triggeredBy: userId ?? "manual",
     },
   });
   revalidatePath("/ops/self-upgrade");

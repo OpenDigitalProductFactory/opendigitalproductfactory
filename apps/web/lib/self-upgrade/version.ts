@@ -99,7 +99,15 @@ export async function getUpgradeVersionState(
 
 // ─── Compatibility Exports ────────────────────────────────────────────────────
 
-export async function resolveTargetSha(_channel: string): Promise<string | null> {
+export async function resolveTargetSha(channel: string): Promise<string | null> {
+  // TODO(BI-UPGRADE-003): implement channel manifest resolution
+  // See docs/superpowers/specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md §4.4
+  // Until then, the hourly self-upgrade cron always skips with reason="no-target".
+  console.info("self-upgrade.no-target", {
+    channel,
+    reason: "channel-resolution-not-implemented",
+    tracking: "BI-UPGRADE-003",
+  });
   return null;
 }
 

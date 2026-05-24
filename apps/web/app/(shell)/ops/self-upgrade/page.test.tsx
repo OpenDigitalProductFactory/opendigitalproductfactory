@@ -19,6 +19,7 @@ vi.mock("@/components/ops/SelfUpgradeClient", () => ({
     isFresh: boolean;
     history?: unknown[];
     historyNextCursor?: string | null;
+    platformVersion?: { version: string; gitSha: string | null };
   }) => (
     <div
       data-testid="self-upgrade-client"
@@ -28,6 +29,8 @@ vi.mock("@/components/ops/SelfUpgradeClient", () => ({
       data-is-fresh={String(props.isFresh)}
       data-history-count={String(props.history?.length ?? 0)}
       data-history-cursor={props.historyNextCursor ?? ""}
+      data-platform-version={props.platformVersion?.version ?? ""}
+      data-platform-git-sha={props.platformVersion?.gitSha ?? ""}
     />
   ),
 }));
@@ -47,6 +50,12 @@ const baseStatus = {
   targetSha: null,
   isFresh: false,
   latestRun: null,
+  platformVersion: {
+    version: "1.0.0",
+    publishedAt: "2026-05-24T00:00:00.000Z",
+    gitSha: "abc1234",
+    note: "baseline",
+  },
 } as const;
 
 describe("SelfUpgradePage", () => {
@@ -83,12 +92,13 @@ describe("SelfUpgradePage", () => {
     const run: SelfUpgradeRunDto = {
       runId: "run-1",
       status: "succeeded",
-      triggeredBy: null,
-      fromVersion: "abc123",
-      toVersion: "def456",
+      trigger: null,
+      currentSha: "abc123",
+      targetSha: "def456",
+      deployedSha: null,
       startedAt: new Date("2025-01-01"),
       completedAt: new Date("2025-01-01"),
-      error: null,
+      failureLog: null,
       createdAt: new Date("2025-01-01"),
     };
     vi.mocked(getSelfUpgradeStatus).mockResolvedValue(baseStatus);
@@ -110,5 +120,15 @@ describe("SelfUpgradePage", () => {
     const html = renderToStaticMarkup(await SelfUpgradePage());
 
     expect(html).toContain('data-history-cursor=""');
+  });
+
+  it("passes platformVersion to SelfUpgradeClient", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue(baseStatus);
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+
+    const html = renderToStaticMarkup(await SelfUpgradePage());
+
+    expect(html).toContain('data-platform-version="1.0.0"');
+    expect(html).toContain('data-platform-git-sha="abc1234"');
   });
 });

@@ -32,6 +32,29 @@ export function warnIfLegacyHiveTokenEnvSet(
  * was empty, so the router rejected every LLM task with "No eligible
  * endpoints found."
  */
+/**
+ * Mirror the canonical platform version (from version.json) into the
+ * PlatformConfig["platform.version"] row so the DB-backed runtime metadata
+ * agrees with the file-backed loader. Non-fatal: failures log loudly but
+ * do not break startup (dev/test environments may not have the table or
+ * may run with a partially seeded DB).
+ *
+ * Spec: docs/superpowers/specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md §4.1
+ */
+export async function syncPlatformVersionOnBoot(
+  logger: Pick<Console, "log" | "error"> = console,
+): Promise<boolean> {
+  try {
+    const { syncPlatformVersionConfig } = await import("@/lib/platform/version-config");
+    await syncPlatformVersionConfig();
+    logger.log("[platform-version] Synced PlatformConfig platform.version");
+    return true;
+  } catch (err) {
+    logger.error("[platform-version] Failed to sync PlatformConfig platform.version:", err);
+    return false;
+  }
+}
+
 export async function enqueueFirstBootEvals(providerId: string): Promise<{
   enqueued: number;
   error: string | null;
@@ -75,6 +98,11 @@ export async function register() {
     // Fire the deprecation warning up front so operators see it on first
     // boot rather than waiting for a contribution to trip it.
     warnIfLegacyHiveTokenEnvSet();
+
+    // Mirror version.json into PlatformConfig["platform.version"] so the
+    // DB-backed runtime metadata matches the canonical file. Non-fatal —
+    // logs loudly on failure but does not block startup.
+    void syncPlatformVersionOnBoot();
 
     // Register ScheduledJob rows so the calendar shows discovery events.
     // Actual execution handled by Inngest cron functions (lib/queue/functions/).

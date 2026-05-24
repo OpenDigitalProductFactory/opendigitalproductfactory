@@ -51,6 +51,29 @@ export type WikiPageFrontmatter = {
   principleConsumerContexts?: string[];
   principlePublic?: boolean;
   principlePublicRationale?: string;
+  // ─── Runtime enforcement (spec 2026-05-24, BI-43F95F77) ───
+  // Optional. When non-empty, the principle is exposed to the runtime gate
+  // at apps/web/lib/kernel/runtime-gate.ts. Authored as a single-line inline
+  // JSON value (the parser supports `key: {...}` but NOT nested YAML blocks
+  // or list-of-objects); a future parser-extension PR can lift this if more
+  // keys want nested authoring.
+  principleRuntimeEnforcement?: PrincipleRuntimeEnforcement;
+};
+
+/**
+ * Runtime enforcement payload for tier-1 kernel commandments. Shape mirrored
+ * by apps/web/lib/kernel/runtime-gate.ts (`EnforceablePrinciple.runtime`) so
+ * the loader can pass parsed-frontmatter values straight through.
+ */
+export type PrincipleRuntimeEnforcement = {
+  interactiveMode: "warn" | "confirm" | "refuse";
+  autonomousMode: "warn" | "confirm" | "refuse";
+  patterns: Array<
+    | { kind: "shell"; regex: string; rationale: string }
+    | { kind: "mcp_tool"; toolName: string; rationale: string }
+    | { kind: "sql"; regex: string; rationale: string }
+    | { kind: "git"; regex: string; rationale: string }
+  >;
 };
 
 // ─── Parser ─────────────────────────────────────────────────────────────────

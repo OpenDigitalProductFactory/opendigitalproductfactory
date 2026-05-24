@@ -15,6 +15,7 @@ import {
   PRINCIPLE_TIER_DEFAULT_WEIGHT,
   isPrincipleDimension,
 } from "@dpf/db/wiki-taxonomy";
+import type { PrincipleRuntimeEnforcement } from "@dpf/db/wiki-frontmatter";
 import type { LintFinding, LintWikiPage } from "./lint-detectors";
 import { detectPrinciplePublicUnsafeMarker } from "./principle-public-safety";
 
@@ -35,6 +36,12 @@ export type LintPrincipleWikiPage = LintWikiPage & {
   principleAppliesTo: string[];
   principlePublic: boolean;
   principlePublicRationale: string | null;
+  /**
+   * Runtime enforcement payload (spec 2026-05-24, BI-43F95F77). Lint
+   * validates regex compilability + rationale presence + mode validity.
+   * Detector defined below.
+   */
+  principleRuntimeEnforcement: PrincipleRuntimeEnforcement | null;
   /**
    * Originally used by the commandment-cap detector for newest-first ordering.
    * Detector removed 2026-05-22 with the cap; field retained because principle
@@ -357,7 +364,117 @@ export function runPrincipleDetectors(input: {
     ...detectPrincipleTierWeightMismatch(input),
     ...detectPrinciplePublicMissingRationale(input),
     ...detectPrinciplePublicUnsafeMarker(input),
+    ...detectPrincipleRuntimeEnforcement(input),
   ];
+}
+
+// ─── 9. principle-runtime-enforcement validation ────────────────────────────
+
+/**
+ * Runtime-enforcement frontmatter (spec 2026-05-24, BI-43F95F77) must:
+ *   1. Have both interactiveMode + autonomousMode set to a valid value
+ *      (warn | confirm | refuse).
+ *   2. Carry at least one pattern (an empty patterns array means the
+ *      principle is decision-time-only — it should NOT have the runtime
+ *      block at all).
+ *   3. Each pattern's regex (shell|sql|git kinds) must compile under JS
+ *      RegExp semantics, INCLUDING the inline-flag prefix lifted by the
+ *      gate's compileRegex helper (`(?i)`, `(?im)`, etc. at start of
+ *      pattern only).
+ *   4. Each pattern must have a non-empty rationale.
+ *   5. mcp_tool patterns must have a non-empty toolName.
+ *
+ * Severity: error for invalid regex (silent gate miss = data loss);
+ * warn for missing rationale (gate works but operator sees blank message);
+ * error for invalid modes (gate refuses to load principle, silent disable).
+ */
+const VALID_MODES = new Set(["warn", "confirm", "refuse"]);
+
+function tryCompileRegex(rawPattern: string): boolean {
+  const inlineFlagMatch = rawPattern.match(/^\(\?([a-z]+)\)/);
+  try {
+    if (inlineFlagMatch) {
+      new RegExp(rawPattern.slice(inlineFlagMatch[0].length), inlineFlagMatch[1]);
+    } else {
+      new RegExp(rawPattern);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function detectPrincipleRuntimeEnforcement(input: {
+  pages: LintPrincipleWikiPage[];
+}): LintFinding[] {
+  const findings: LintFinding[] = [];
+  for (const page of principlePages(input.pages)) {
+    const rte = page.principleRuntimeEnforcement;
+    if (rte === null || rte === undefined) continue;
+
+    if (!VALID_MODES.has(rte.interactiveMode) || !VALID_MODES.has(rte.autonomousMode)) {
+      findings.push(
+        baseFinding(page, "runtime-enforcement-invalid-mode", "error", true, {
+          message:
+            "principleRuntimeEnforcement.interactiveMode / autonomousMode must be one of " +
+            "warn / confirm / refuse.",
+          interactiveMode: rte.interactiveMode,
+          autonomousMode: rte.autonomousMode,
+        }),
+      );
+    }
+
+    if (!Array.isArray(rte.patterns) || rte.patterns.length === 0) {
+      findings.push(
+        baseFinding(page, "runtime-enforcement-empty-patterns", "warn", false, {
+          message:
+            "principleRuntimeEnforcement.patterns is empty — remove the runtime block " +
+            "entirely if the principle is decision-time-only.",
+        }),
+      );
+      continue;
+    }
+
+    rte.patterns.forEach((pattern, index) => {
+      const rationale = (pattern as { rationale?: string }).rationale ?? "";
+      if (typeof rationale !== "string" || rationale.trim().length === 0) {
+        findings.push(
+          baseFinding(page, "runtime-enforcement-missing-rationale", "warn", false, {
+            message: `Pattern at index ${index} has no rationale — operator sees a blank refuse message.`,
+            patternIndex: index,
+          }),
+        );
+      }
+      if (pattern.kind === "mcp_tool") {
+        if (typeof pattern.toolName !== "string" || pattern.toolName.length === 0) {
+          findings.push(
+            baseFinding(page, "runtime-enforcement-invalid-tool-name", "error", true, {
+              message: `mcp_tool pattern at index ${index} has empty toolName.`,
+              patternIndex: index,
+            }),
+          );
+        }
+      } else if (pattern.kind === "shell" || pattern.kind === "sql" || pattern.kind === "git") {
+        if (typeof pattern.regex !== "string" || pattern.regex.length === 0) {
+          findings.push(
+            baseFinding(page, "runtime-enforcement-invalid-regex", "error", true, {
+              message: `${pattern.kind} pattern at index ${index} has empty regex.`,
+              patternIndex: index,
+            }),
+          );
+        } else if (!tryCompileRegex(pattern.regex)) {
+          findings.push(
+            baseFinding(page, "runtime-enforcement-invalid-regex", "error", true, {
+              message: `${pattern.kind} pattern at index ${index} regex does not compile under JS RegExp (with inline-flag prefix support).`,
+              patternIndex: index,
+              regex: pattern.regex,
+            }),
+          );
+        }
+      }
+    });
+  }
+  return findings;
 }
 
 // ─── 8. principle-public-missing-rationale ──────────────────────────────────

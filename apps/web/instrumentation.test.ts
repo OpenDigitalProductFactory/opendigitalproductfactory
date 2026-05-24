@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { warnIfLegacyHiveTokenEnvSet } from "./instrumentation";
+import { warnIfLegacyHiveTokenEnvSet, syncPlatformVersionOnBoot } from "./instrumentation";
+
+const syncPlatformVersionConfigMock = vi.fn();
+
+vi.mock("@/lib/platform/version-config", () => ({
+  syncPlatformVersionConfig: (...args: unknown[]) => syncPlatformVersionConfigMock(...args),
+}));
 
 describe("warnIfLegacyHiveTokenEnvSet", () => {
   let originalEnvToken: string | undefined;
@@ -32,5 +38,43 @@ describe("warnIfLegacyHiveTokenEnvSet", () => {
     expect(message).toContain("HIVE_CONTRIBUTION_TOKEN");
     expect(message).toContain("Admin > Platform Development");
     expect(message).toContain("60 days");
+  });
+});
+
+describe("syncPlatformVersionOnBoot", () => {
+  beforeEach(() => {
+    syncPlatformVersionConfigMock.mockReset();
+  });
+
+  it("returns true and logs success when sync completes", async () => {
+    syncPlatformVersionConfigMock.mockResolvedValueOnce(undefined);
+    const log = vi.fn();
+    const error = vi.fn();
+
+    const result = await syncPlatformVersionOnBoot({ log, error });
+
+    expect(result).toBe(true);
+    expect(syncPlatformVersionConfigMock).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log.mock.calls[0]![0]).toContain("[platform-version]");
+    expect(log.mock.calls[0]![0]).toContain("Synced");
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it("returns false and logs error when sync throws", async () => {
+    const boom = new Error("db is offline");
+    syncPlatformVersionConfigMock.mockRejectedValueOnce(boom);
+    const log = vi.fn();
+    const error = vi.fn();
+
+    const result = await syncPlatformVersionOnBoot({ log, error });
+
+    expect(result).toBe(false);
+    expect(syncPlatformVersionConfigMock).toHaveBeenCalledTimes(1);
+    expect(log).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error.mock.calls[0]![0]).toContain("[platform-version]");
+    expect(error.mock.calls[0]![0]).toContain("Failed");
+    expect(error.mock.calls[0]![1]).toBe(boom);
   });
 });
