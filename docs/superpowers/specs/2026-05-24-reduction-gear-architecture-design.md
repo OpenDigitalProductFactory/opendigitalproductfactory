@@ -484,9 +484,11 @@ Emit GearInterface with torque + slip readings after the phase run completes. Th
 
 **Why this is the biggest external leak:** Today the Hive carries code. Code without calibration means every install starts cold on routing/autonomy decisions for every capability. With calibrated trust traveling, a new HVAC install on day 1 gets archetype-relevant Bayesian priors from every prior HVAC install. This is where Mark's "compounding value increasingly difficult to compete with" claim becomes mechanically real.
 
-## 5. The Cockpit — operator-facing diagnostic surface
+## 5. The Cockpit — platform-operator diagnostic surface (gear-language)
 
-The Cockpit is a *gear train diagnostic panel*, not a dashboard. Five concentric rings rendered visually; each gear interface readable at a glance, with mechanical-engineering vocabulary throughout.
+The Cockpit is a *gear train diagnostic panel* for the **platform-operator audience** (admin, hive contributor, troubleshooter). Five concentric rings rendered visually; each gear interface readable at a glance, with mechanical-engineering vocabulary throughout.
+
+**The gear metaphor is the architecture's mental model — not the user's.** Operators in the trenches (vertical employees, customers) don't need to understand reduction gears any more than a driver needs to understand differential transmissions. The Cockpit exposes the gear train *intentionally for platform diagnosis*; every other audience sees vertical-native vocabulary backed by the same GearInterface stream. See §5.5 (audience layering) and §5.6 (vertical workspace home).
 
 ### 5.1 Diagnostic readings (live)
 
@@ -536,7 +538,32 @@ The Cockpit is the highest-risk part of this architecture because it can either 
 - The mechanical metaphor should be present but restrained. The ring view is an operational topology, not an illustrated gear animation. Animation is allowed only when it helps show live movement or replay; it must pause when the view is frozen.
 - Show sample size and confidence next to trust claims. A 100% pass rate on 2 samples must look weaker than an 88% pass rate on 200 samples.
 
-### 5.5 UX verification gate
+### 5.5 Audience layering — who sees gear-language vs vertical-native
+
+The gear-language Cockpit is appropriate for **one audience only** — the platform operator whose job is to diagnose the substrate itself. Two other audiences interact with the same GearInterface stream but MUST NOT see gear vocabulary:
+
+| Audience | Surface | Vocabulary | Data source |
+|---|---|---|---|
+| **Platform operator / admin** (you, hive contributors, platform troubleshooters) | The Cockpit (§5.1–5.4) | Gear-train mechanical: torque, slip, wear, lubrication, heat, graduation | GearInterface stream directly |
+| **In-trench worker / employee in the vertical** (HVAC dispatcher, clinic scheduler, retail merchandiser, field tech, etc.) | **Vertical workspace home** (§5.6) — tailored per `StorefrontArchetype` | Vertical-native: e.g., "today's jobs", "patient queue", "restock alerts", "service tickets" | GearInterface stream + archetype-specific projections; never raw triples/torque/slip in UI copy |
+| **External customer** (the company's customers — the people the in-trench worker serves) | Customer-facing portal (§8.3, already tailored per archetype) | Vertical-native, customer-scoped: order status, ETA, work-in-progress | GearInterface slices + archetype customer-facing components |
+
+The gear metaphor is the architecture's mental model. Every audience-facing surface that is not the Cockpit MUST translate the gear-train data into vertical-native vocabulary before display. The Cockpit's mechanical vocabulary is *intentional jargon* for platform diagnosis; everywhere else, jargon-leakage is a bug.
+
+### 5.6 Vertical workspace home — in-trench worker view (separate spec)
+
+The internal workspace home page is the analog of the customer-facing portal, but for the company's own employees inside their vertical. Today, the customer-facing portal IS tailored per `StorefrontArchetype` (sections, vocabulary, finance, design); the internal workspace home is comparatively generic. This is the gap.
+
+**Requirements** (full design in its own spec):
+- **Vertical-native vocabulary** — no gear language; presentation matches what the in-trench worker would say to a colleague at the start of a shift
+- **Predicated on `StorefrontArchetype`** — HVAC dispatcher home ≠ clinic scheduler home ≠ merchandiser home; layout, cards, KPIs, and alerts vary by archetype
+- **Reads from GearInterface stream + archetype-specific projections** — does NOT compute its own evidence; does NOT fork from the canonical record
+- **Plugin/extension model** for vertical-specific cards/components so new archetypes can ship their own home variants without forking platform code
+- **Audience** — in-trench employee; explicitly NOT platform admin (admins use the Cockpit at §5.1–5.4)
+
+**Out of scope for this spec.** Tracked under a separate BI in the same epic — see the workspace-home spec dispatched alongside this one. The contribution model (individual specialist → platform → business → market vertical) remains the architecture's spine but stays behind the scenes; in-trench workers should never see "Ring 1→2" in their UI.
+
+### 5.7 UX verification gate
 
 Any Cockpit implementation slice must run production-path UX verification against the Docker-served portal, not a stale dev server. The done evidence must include:
 - Desktop and mobile screenshots of the Cockpit overview and one drill-down.
@@ -666,7 +693,11 @@ This honors the integration-conduit doctrine: DPF is a conduit, not a broker. Cu
 
 ### 8.3 Customer-facing mode
 
-Read-only Cockpit slices exposed to the customer for *their* relevant gear segments. Customer sees: order status, work-in-progress, delivery ETA, support case progression. Customer does not see: internal triples, calibration scores, other customers' data. Privacy by slice scoping.
+Read-only **vertical-native customer surfaces** exposed for *their* relevant work. Customer sees: order status, work-in-progress, delivery ETA, support case progression — in vertical-native vocabulary tailored by `StorefrontArchetype` (the customer-facing portal that already exists today, extended to read from the GearInterface stream as its evidence source).
+
+Customer does NOT see: the gear-language Cockpit, internal triples, calibration scores, torque/slip/wear metrics, or other customers' data. **Two layers of separation:** (1) slice-scoping enforces privacy across customers; (2) vocabulary-translation enforces audience-appropriate presentation. The customer interacts with their domain (orders, services, delivery), not the platform's substrate.
+
+Same discipline as §5.5 audience layering — gear vocabulary is jargon for platform operators only; every other surface translates.
 
 ### 8.4 Separate parallel track
 
