@@ -70,6 +70,29 @@ export type ReviewResult = {
    *  malformed output). Gates and deliberation treat parse-error branches as
    *  absent reviewers, not dissenting votes. */
   parseError?: true;
+  /** Iteration tracking populated when this ReviewResult is the output of a
+   *  re-review (e.g. reviewBuildPlan called against an existing planReview).
+   *  Enables the operator-facing iteration progress chip and the reviewer's
+   *  own delta-awareness on subsequent rounds. BI-4396EFEC (D38). */
+  iteration?: {
+    /** 1-based round number. First review = 1, subsequent = 2, 3, ... */
+    round: number;
+    /** Comparison against the immediately-prior round. Absent on round 1. */
+    prior?: {
+      issueCount: number;
+      /** Prior issues whose description no longer appears in current. */
+      addressed: number;
+      /** Prior issues whose description still appears in current. */
+      persisted: number;
+      /** Current issues whose description didn't appear in prior. */
+      newlySurfaced: number;
+    };
+    /** True when the iteration is not making net progress — issue count
+     *  this round is >= prior round AND the review traded one set of
+     *  issues for another (addressed > 0 AND newlySurfaced > 0). Operator
+     *  signal that the feature scope may be too large to converge. */
+    oscillating?: boolean;
+  };
 };
 
 export type ReusabilityAnalysis = {
@@ -359,6 +382,75 @@ export const CODING_CAPABILITY_COLOURS: Record<CodingCapability, string> = {
 
 export const VISIBLE_PHASES: BuildPhase[] = ["ideate", "plan", "build", "review", "ship"];
 
+// ─── Review iteration helpers (BI-4396EFEC / D38) ───────────────────────────
+
+/** Normalize a review issue description for cross-round comparison. Mirrors
+ *  the dedup key used in `mergeReviews` (first 80 chars, lowercased) so a
+ *  reviewer that re-phrases the same issue between rounds isn't double-counted. */
+export function normalizeIssueKey(description: string): string {
+  return description.toLowerCase().slice(0, 80);
+}
+
+export type ReviewIterationDelta = {
+  issueCount: number;
+  addressed: number;
+  persisted: number;
+  newlySurfaced: number;
+};
+
+/** Pure helper: given prior and current review issues, compute the delta.
+ *  Used by reviewBuildPlan to populate ReviewResult.iteration.prior. */
+export function computeReviewDelta(
+  priorIssues: ReadonlyArray<{ description: string }>,
+  currentIssues: ReadonlyArray<{ description: string }>,
+): ReviewIterationDelta {
+  const priorKeys = new Set(priorIssues.map((i) => normalizeIssueKey(i.description)));
+  const currentKeys = new Set(currentIssues.map((i) => normalizeIssueKey(i.description)));
+  let persisted = 0;
+  for (const k of currentKeys) if (priorKeys.has(k)) persisted++;
+  const addressed = priorKeys.size - persisted;
+  const newlySurfaced = currentKeys.size - persisted;
+  return {
+    issueCount: priorIssues.length,
+    addressed,
+    persisted,
+    newlySurfaced,
+  };
+}
+
+/** Oscillation heuristic: the review is trading one set of issues for another
+ *  without making net progress. True when current count is >= prior count AND
+ *  the review both addressed some prior issues AND surfaced new ones. */
+export function isOscillating(
+  delta: ReviewIterationDelta,
+  currentIssueCount: number,
+): boolean {
+  return (
+    currentIssueCount >= delta.issueCount &&
+    delta.addressed > 0 &&
+    delta.newlySurfaced > 0
+  );
+}
+
+/** Build the operator-facing reason string for a failed planReview, including
+ *  iteration trajectory when present. Pure: extracted so checkPhaseGate stays
+ *  simple and the format is unit-testable. */
+export function describePlanReviewFailure(planReview: ReviewResult): string {
+  const base = "Plan review failed. Revise the implementation plan and re-run plan review before advancing.";
+  const iter = planReview.iteration;
+  if (!iter) return base;
+  const round = `Round ${iter.round}`;
+  if (!iter.prior) {
+    return `${base} (${round})`;
+  }
+  const trajectory =
+    `${iter.prior.addressed} addressed, ${iter.prior.persisted} persist, ${iter.prior.newlySurfaced} new`;
+  const oscillation = iter.oscillating
+    ? " — issue count is not decreasing across rounds. Consider splitting this feature into smaller scopes before continuing to iterate."
+    : "";
+  return `${base} (${round}: ${trajectory})${oscillation}`;
+}
+
 // ─── Phase Transitions ──────────────────────────────────────────────────────
 
 const ALLOWED_TRANSITIONS: Record<BuildPhase, BuildPhase[]> = {
@@ -542,9 +634,13 @@ export function checkPhaseGate(
     if (!evidence.buildPlan) return { allowed: false, reason: "An implementation plan is required before building." };
     if (!evidence.planReview) return { allowed: false, reason: "Plan review is required before building." };
     // Review must pass — a failed review blocks advancement until revision + re-review
-    const planReview = evidence.planReview as { decision?: string };
+    const planReview = evidence.planReview as ReviewResult & { decision?: string };
     if (planReview.decision === "fail") {
-      return { allowed: false, reason: "Plan review failed. Revise the implementation plan and re-run reviewBuildPlan before advancing." };
+      // BI-4396EFEC (D38): when iteration metadata is present, surface the
+      // trajectory in the operator-facing reason so a stuck Plan loop is
+      // visible without reading DB tables. Three rounds with the same issue
+      // count is the "consider splitting scope" signal.
+      return { allowed: false, reason: describePlanReviewFailure(planReview) };
     }
     const happyPathState = normalizeHappyPathState(evidence.happyPathState);
     if (!isHappyPathIntakeReady(happyPathState)) {

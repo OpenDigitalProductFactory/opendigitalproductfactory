@@ -3,6 +3,7 @@ import {
   buildDispatchAttemptData,
   classifyDispatchFailureAxis,
   lineMatchesFailureAxis,
+  recomputeRootCauseSummary,
   recordBuildDispatchAttempt,
 } from "./dispatch-attempts";
 import type { BuildFailureAxis } from "./progress-visibility-types";
@@ -225,5 +226,53 @@ describe("lineMatchesFailureAxis", () => {
     expect(lineMatchesFailureAxis("error TS2345: Argument type mismatch", "typecheck-failure")).toBe(true);
     expect(lineMatchesFailureAxis("workspace prompt prepared", "out-of-scope-noise")).toBe(false);
     expect(lineMatchesFailureAxis("out-of-scope workspace noise detected", "out-of-scope-noise")).toBe(true);
+  });
+});
+
+describe("recomputeRootCauseSummary (BI-594B76AB)", () => {
+  it("returns the axis-matched line when the stdout excerpt contains one", () => {
+    const result = recomputeRootCauseSummary({
+      stdoutExcerpt: "Reading prompt from stdin...\nYou've hit your usage limit for today.",
+      stderrExcerpt: null,
+      failureAxis: "usage-limit",
+    });
+    expect(result.toLowerCase()).toMatch(/usage limit/);
+    expect(result.toLowerCase()).not.toMatch(/reading prompt from stdin/);
+  });
+
+  it("falls back to the first non-prologue line when no axis line is found", () => {
+    const result = recomputeRootCauseSummary({
+      stdoutExcerpt: "Reading prompt from stdin...\nSomething else happened.",
+      stderrExcerpt: null,
+      failureAxis: "unknown",
+    });
+    expect(result).toBe("Something else happened.");
+  });
+
+  it("falls back to the axis name when both excerpts are null", () => {
+    const result = recomputeRootCauseSummary({
+      stdoutExcerpt: null,
+      stderrExcerpt: null,
+      failureAxis: "timeout",
+    });
+    expect(result).toBe("timeout");
+  });
+
+  it("falls back to the axis name when both excerpts are empty strings", () => {
+    const result = recomputeRootCauseSummary({
+      stdoutExcerpt: "",
+      stderrExcerpt: "",
+      failureAxis: "rate-limit",
+    });
+    expect(result).toBe("rate-limit");
+  });
+
+  it("reads the stderr excerpt when stdout has only prologue", () => {
+    const result = recomputeRootCauseSummary({
+      stdoutExcerpt: "Reading prompt from stdin...",
+      stderrExcerpt: "auth error: unauthorized request",
+      failureAxis: "auth",
+    });
+    expect(result.toLowerCase()).toContain("unauthorized");
   });
 });

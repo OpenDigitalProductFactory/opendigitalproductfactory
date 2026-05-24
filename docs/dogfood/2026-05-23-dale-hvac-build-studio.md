@@ -389,3 +389,255 @@ The cross-contamination from the original repro cleared itself naturally — `FB
 | 11 | ✅ shipped (code) / ❌ unverified | BI-F4A30FCB | D32 wrong-build cross-contamination |
 | 12 | open (spawned debug) | BI-09A48EAD | portal rebuild prisma generate failure |
 | 13 | open | BI-87D93A71 | ChatGPT/Codex OAuth port quirk (D30 also shipped via PR #1067 — but UX cleanup outstanding) |
+
+---
+
+## Phase H (2026-05-24 ~late) — Plan iteration shuttle on prod portal
+
+After portal rebuilt cleanly (PR #1091 cleared the prisma generate failure) FB-6F7D6AC4
+advanced **Ideate → Plan** with the full design-doc landing review-passed (idempotency,
+optimistic locking, append-only ledger, mobile-first AC, multi-tenant isolation). Plan
+phase ran its own review (reviewBuildPlan) which initially **failed** with 6 important
+findings — all "plan structure", not "product direction":
+
+- idempotency-key uniqueness scope not pinned (per org+actor+location+op)
+- optimistic-locking versioning mechanism not chosen
+- alternatives not documented (event-source vs cached-balance; pessimistic vs optimistic)
+- append-only enforcement (DB-level update/delete restrictions) not specified
+- multi-tenant query-level authorization not explicit
+- low-stock threshold source + alert deduplication undefined
+
+Agent acknowledged in plain English and re-decomposed the plan into a **much more
+granular task graph** — visible in the stage view: Data Architect owning 14 schema/
+seed/migration tasks (one model per task: `MobileInventoryLocationType`,
+`MobileInventoryLocation`, `InventoryItem`, `LocationInventory`, `InventoryTransaction`;
+plus `Add CHECK constraint to migration`, `Verify FK onDelete in migration`,
+`Implement idempotency check`), Software Engineer owning test-first API endpoint
+tasks (test → impl pairs for list, detail, usage POST), Frontend Engineer owning
+component-level tasks (`LowStockBadge`, `InventoryCard`, `UsageButton`), QA Engineer
+gating with `Full verification: tests + typecheck`. **This is what good Plan looks
+like** — the unit of work is small enough to verify, the order is `model → migration
+→ test → impl → ui → verify`, and review's "smaller steps" feedback was honored.
+
+### New deficiencies surfaced in Phase H
+
+**D33 (filed as BI-62442F75)** — header card text reads "Plan review failed. Revise
+the implementation plan and re-run `reviewBuildPlan` before advancing." The
+`reviewBuildPlan` is a **tool name**, not a Dale-facing concept. Same family as
+D6 (capsule slugs leaking). User-facing copy should say "re-run plan review" or
+just "submit the plan again".
+
+**D34 (NEW)** — bottom status-bar shows `Open live preview · driving: FB-486B7710`
+while the URL + canonical doc viewer focus is `FB-6F7D6AC4`. The "driving" context
+is **stale from a previous build** — likely the last build the user viewed live-
+preview for. When Dale clicks `Open live preview` he'll land on G2's preview (a
+totally unrelated platform fix) instead of his truck-parts build. Either the strip
+should auto-update to the active buildId, or the "driving" label needs to be
+explicit-opt-in. File BI under BI-62075FF9 (status-strip cleanup family).
+
+**D35 (NEW)** — mid-Plan-iteration, **portal self-upgrade banner fired**: "Platform
+update vf2e89dd... is ready. Your customisations are preserved. Review in
+Admin → Platform Development". The in-flight `reviewBuildPlan` call was dropped —
+agent came back with G2 honest message *"I couldn't complete that — the underlying
+work wasn't recorded. Try rephrasing the request, or open the build details to see
+what's saved so far."* This is the exact failure mode in
+`project_self_upgrade_kills_in_session_ux` — known issue, but now reproduced
+inside Plan iteration too (previously documented only for `/build` intake +
+sibling-PR-merge churn). Self-upgrade should **defer** when there's an active
+agentic loop in flight, or at minimum block the upgrade until the in-flight
+tool call completes.
+
+### G2 honest-message family is working
+
+Notable: when self-upgrade killed the call, the agent's recovery message was
+the new G2 family (PR #1070) — *"I couldn't complete that — the underlying
+work wasn't recorded. Try rephrasing the request…"* — no false "I'll route
+through a different model" promise. That's the right shape. The deficiency
+isn't the message; it's the underlying drop, captured as D35.
+
+### D36 (NEW, BI-2ECD7499) — Agent loops on warmup probes after tool drop
+
+After the self-upgrade dropped the in-flight `reviewBuildPlan` call, the agent
+entered a warmup-probe loop instead of either retrying the real call or
+escalating:
+
+```
+19:46:26  report_quality_issue  "System warmup check — Automated warmup — ignore this."
+19:46:27  assistant→user        "I couldn't complete that — the underlying work wasn't recorded..."
+19:47:27  user→assistant        "Please try resubmitting the implementation plan again..."
+19:47:59  report_quality_issue  "System warmup check — Automated warmup — ignore this."
+19:48:18  report_quality_issue  "System warmup check — Automated warmup — ignore this."
+[4+ min silence after, no further tool calls or messages]
+```
+
+Three problems in one:
+1. The agentic loop's warmup probe is firing repeatedly after a tool drop —
+   probably the wrong recovery path.
+2. The probe message is being written to `report_quality_issue`, which is the
+   admin-facing quality feedback queue. Pollutes the BI signal stream.
+3. The UI's "Software Engineer is still working (230s) [Cancel]" indicator
+   keeps the user trusting that work is happening, when the back-end is just
+   pinging itself.
+
+This is paired with D35 (self-upgrade drop) — D35 is the trigger, D36 is the
+broken recovery.
+
+### Plan re-decomposition observed (post-resubmit-1)
+
+The first resubmit (at 19:44:29 update timestamp) DID land — review re-ran and
+produced **21 new issues**, escalated from the prior round's all-"important" to
+this round's **critical**. Issues center on test-first discipline:
+
+- "schema/migration/seed/setup/UI tasks (1-21, 60-66) are mostly
+  implementation-first with empty or compile-only checks rather than failing
+  tests first"
+- "Tasks 1-20 ... violate test-first for foundational database and seeding work"
+- "Tasks 60-65 (UI components/pages) also have no failing tests before
+  implementation and only use `tsc --noEmit` verification"
+- "No explicit test tasks exist for `apps/web/lib/mobile-inventory/types.ts`"
+
+This is **review's third lever**: first round flagged scope/granularity
+("smaller steps"), second round flagged structural rigor ("test-first").
+Reviewer agents are stricter than implementation agents — each iteration
+surfaces previously-tolerated patterns. The Build-Studio review loop
+documented in `project_build_studio_review_loop` is operating as designed
+(strict), but Dale is now 30+ minutes into Plan with no Build phase reached.
+
+This is **legitimate review-iteration cost** for novel features. Documented
+here as a Phase-H observation, not a deficiency on its own. The pairing
+**D35-D36-warmup-loop** is the real deficiency: if every iteration risks
+losing 10 minutes to a self-upgrade drop, total Plan-phase wall time
+inflates dramatically.
+
+### D37 (NEW, BI-0C19AFDD) — Max-iter handler confabulates unrelated domain
+
+After my "Please try resubmitting" prompt, the agent (codex:gpt-5.4 this turn)
+spent 569s in iteration loop before being cancelled. Its post-cancel recovery
+message:
+
+> "I used read_project_file x3, search_project_files x3, list_project_directory
+> x2, describe_model, get_code_graph_freshness, but the coworker hit the runtime
+> limit before it produced a final answer. I stopped before returning another
+> raw tool request. The route and tool attempts were recorded; **try a narrower
+> question or use the finance reports directly for the current totals while we
+> add a more direct finance-summary tool**."
+
+Dale is building **truck-parts inventory** — there are no finance reports,
+nor would using finance reports help him. This is the same class as
+`project_mechanism_question_grounding_gap` (PR #1018 follow-up): when the
+agent loses grounding context (max-iter recovery here, mechanism questions
+there), the model confabulates plausible-sounding-but-domain-wrong examples
+to fill the response template.
+
+Fix shape per BI-0C19AFDD: pass build title/domain into the max-iter prompt,
+OR make max-iter messages deterministic (no model generation in failure
+paths — the place we LEAST trust the model is failure recovery).
+
+### D31 echo confirmed (long-running async UX)
+
+The "Software Engineer is still working (569s)" indicator kept Dale trusting
+that work was happening, when the back-end was just iterating in a loop
+producing no useful tool calls (no DB writes for 11 minutes). This is exactly
+the BI-78499309 surface — D31 is paired with D36/D37 as a cluster: when the
+agent is stuck, the UI can't tell the difference between "thinking deeply" and
+"looping uselessly". Without per-tool-call progress signal, the operator has
+to read DB tables to know.
+
+### Phase H final state (2026-05-24 ~20:30 UTC)
+
+| Time  | Tasks | Issues | Crit | Notes |
+|-------|-------|--------|------|-------|
+| 19:44 | (initial) | 21 | many | first review pass |
+| 20:01 | 99    | 11     | 4    | +78 tasks (test-first decomp), -10 issues |
+| 20:03 | 86    | 13     | ?    | -13 tasks (consolidation), +2 issues |
+| 20:09 | 50    | 21     | 6    | -36 tasks (over-consolidation), back to start |
+| 20:11 | 97    | 15     | 4    | +47 tasks, -6 issues |
+| 20:32 | 97    | 15     | 4    | **agent idle, no further activity** |
+
+Plan iteration **trended down from 21→15** but never converged. Last 25 minutes
+the agent has been silent — neither emitting a recovery message nor running
+further tool calls. Build still in `plan` phase, no Build phase yet observed.
+
+### D38 (NEW, BI-4396EFEC) — Plan-review iteration loop oscillates without converging
+
+Distinct from `project_build_studio_review_loop` (known design-review strictness)
+and `project_review_severity_gate` (which fixed "new important issue per iteration").
+This is the **plan-phase iteration divergence**: the reviewer's optimum has competing
+axes (test-first vs bite-size vs alternatives documented vs scope completeness) that
+can't be simultaneously satisfied for a feature of this size. The agent oscillates
+between two local minima.
+
+Fix shapes proposed in BI: bound iteration count + emit "scope too big — split"
+recommendation; review-delta-aware (acknowledge prior-round findings); operator-
+visible iteration progress chip; pair implementer revisions with explicit acknowledge-
+ment of what changed and why.
+
+### Phase H deficiency roll-up
+
+Six new BIs filed this round, all in EP-9FC5D2FD:
+
+| # | BI | Title | Surface |
+|---|---|---|---|
+| D33 | BI-62442F75 | Tool-name leak in plan-review header ("re-run reviewBuildPlan") | UX copy |
+| D34 | BI-EEC5A5ED | Bottom status-bar "driving:" pointer goes stale across builds | UX/state |
+| D35 | (existing memory `project_self_upgrade_kills_in_session_ux`) | Self-upgrade drops in-flight Plan-iteration tool calls | infra |
+| D36 | BI-2ECD7499 | `ModelWarmup` probe pollutes report_quality_issue on every page-load | client |
+| D37 | BI-0C19AFDD | Max-iter handler confabulates unrelated domain (finance vs truck-parts) | agent/LLM |
+| D38 | BI-4396EFEC | Plan-review iteration loop oscillates without converging | review-agent |
+
+### Phase H lessons (architectural)
+
+1. **G2 honest-failure family is working** — the agent's "platform connection dropped — send 'ready' to retry" message let me drive a clean retry. That's the right shape and shipped in PR #1070.
+2. **The Plan-phase iteration loop is the bottleneck for Dale-class operators.** Ideate → Plan transition is now reliable; Plan → Build transition requires expert nudging.
+3. **The deficiency cluster D31+D35+D36+D37+D38 is interlocking:**
+   - D31 (invisible spin) makes D35-D38 all harder to detect from the seat
+   - D35 (self-upgrade drops) triggers D36 (warmup re-fire) and degrades context
+   - D37 (max-iter confab) is the failure shape when context degrades
+   - D38 (review loop diverges) is what happens to plans across many of those degradations
+4. **Build Studio needs a "Plan iteration referee"** — something that watches the issue-count trajectory across rounds and intervenes when oscillation is detected (bound iteration count + recommend scope-split).
+
+### Where Dale's FB-6F7D6AC4 sits at end of Phase H
+
+- Status: plan-phase, 97 tasks planned, 15 issues remaining (4 critical)
+- Not approved; not actionable from Dale's seat without expert intervention
+- Recommendation: either (a) cancel + split into 2-3 smaller features, or (b) wait
+  on D38 fix landing before re-attempting Plan convergence
+
+---
+
+## End of Phase H — recommended next step
+
+Per the autonomous shuttling directive, productive yield from this thread has
+reached its natural end:
+
+- Ideate → Plan transition: **shipped** (PR #1070 + #1077, verified Phase E-G)
+- Plan-phase observation: **complete** — 6 fresh deficiencies filed, root causes
+  understood, surgical fix shapes proposed in each BI
+- Build-phase observation: **blocked** by D38 (Plan won't converge to approval)
+
+Next thread should be **D38 (or its prerequisite BIs) before re-shuttling Dale**.
+Mark's parallel "vertical-alignment" thread will independently inform the
+architecture for which features need this hardening urgency.
+
+### Phase H lesson learned (architectural)
+
+Plan-phase review iteration is a **bottleneck without backpressure**:
+
+- Review is stricter than implementation; each pass surfaces tolerated patterns.
+- Self-upgrade can drop in-flight reviews; recovery isn't robust.
+- Max-iter triggers domain-blind confabulation as fallback.
+- Operator has no per-tool progress signal — looks like a fast spinner.
+
+For Dale-class operators (zero technical background), this combination is
+likely fatal. He has no vocabulary to say "the agent confabulated finance"
+or "the build plan needs test-first decomposition". The only thing he can do
+is wait, retry, or give up. Build Studio needs:
+
+1. **Deterministic fallback messages** in failure paths (kill D37 confab risk).
+2. **Tool-execution timeline visible to Dale** ("waiting for code review ·
+   12s") so stalls are observable (kill D31 invisible-spin risk).
+3. **Self-upgrade defer** when an agentic loop is active (kill D35 drop risk).
+
+Each is a small surgical fix individually; together they elevate Plan-phase
+reliability from "needs hand-holding by an AI engineer" to "Dale can wait
+for it".

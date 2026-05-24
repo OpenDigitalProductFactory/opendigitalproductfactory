@@ -47,6 +47,12 @@ export type StoreWikiPageInput = {
   // care about a given axis.
   principleTier?: string | null;
   principleAppliesTo?: string[];
+  /**
+   * Ring scope (BI-4AA1074B Slice 2; spec §5.2). Stored as Qdrant payload so
+   * recall callers can pre-filter by intersection without a Postgres
+   * round-trip per hit.
+   */
+  principleRingScope?: string[];
   principleDimensions?: string[];
   principlePublic?: boolean;
 };
@@ -70,6 +76,7 @@ export type WikiSearchResult = {
   // to decide whether to render metadata.
   principleTier?: string;
   principleAppliesTo?: string[];
+  principleRingScope?: string[];
   principleDimensions?: string[];
   principlePublic?: boolean;
 };
@@ -97,6 +104,17 @@ export type SearchWikiPagesInput = {
   principleAppliesTo?: string;
   /** Restrict to principles with this public-classification state. */
   principlePublic?: boolean;
+  /**
+   * Restrict to principles whose `principleRingScope` intersects the caller
+   * scope, OR is empty (backward-compat), OR contains `universal-ring`.
+   * BI-4AA1074B Slice 2 / spec §5.2.
+   *
+   * Caller passes the FULL caller scope (e.g. `["ring-2-workflow"]`); this
+   * function builds a Qdrant `should` clause so the intersection check
+   * happens in the vector store, not in JS post-filter. When the caller
+   * scope contains `universal-ring`, the filter is a no-op (caller is open).
+   */
+  principleRingScope?: string[];
 };
 
 // ─── Write ──────────────────────────────────────────────────────────────────
@@ -147,6 +165,9 @@ export async function storeWikiPage(input: StoreWikiPageInput): Promise<boolean>
     }
     if (input.principleAppliesTo !== undefined) {
       payload.principleAppliesTo = input.principleAppliesTo;
+    }
+    if (input.principleRingScope !== undefined) {
+      payload.principleRingScope = input.principleRingScope;
     }
     if (input.principleDimensions !== undefined) {
       payload.principleDimensions = input.principleDimensions;
@@ -201,9 +222,13 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
   const limit = input.limit ?? 5;
   const scoreThreshold = input.scoreThreshold ?? 0.55;
 
+  // Qdrant accepts richer match shapes than just `{value: scalar}` — the
+  // ring-scope `should` clause below uses `match: {any: [...]}` for OR
+  // semantics across array-containment matches. Loosen the local type so
+  // both shapes coexist; runtime contract is unchanged.
   const baseFilter: Array<{
     key: string;
-    match: { value: string | boolean };
+    match: { value: string | boolean } | { any: string[] };
   }> = [
     { key: "entityType", match: { value: ENTITY_TYPE } },
     { key: "status", match: { value: "published" } },
@@ -235,15 +260,49 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
     });
   }
 
+  // Ring-scope filter (BI-4AA1074B Slice 2; spec §5.2). Built as a
+  // Qdrant `should` clause so any ONE of the conditions can match:
+  //   - principle's ring scope contains `universal-ring` (earned-universal)
+  //   - principle's ring scope contains any caller-scope value
+  // Skipped entirely when:
+  //   - caller passed no ringScope (no constraint)
+  //   - caller passed `universal-ring` (caller opted out of tightening)
+  //
+  // Note: empty `principleRingScope` arrays pass via post-filter in
+  // `recallPrincipleContext` rather than via Qdrant — Qdrant filters can't
+  // easily express "empty-array OR has-X" without breaking the should/must
+  // semantics. The post-filter is an additive safety net for un-backfilled
+  // rows; today's kernel (62/62 backfilled) doesn't depend on it.
+  const ringScopeShould: typeof baseFilter = [];
+  if (
+    input.principleRingScope !== undefined &&
+    input.principleRingScope.length > 0 &&
+    !input.principleRingScope.includes("universal-ring")
+  ) {
+    ringScopeShould.push({
+      key: "principleRingScope",
+      match: { value: "universal-ring" },
+    });
+    ringScopeShould.push({
+      key: "principleRingScope",
+      match: { any: input.principleRingScope },
+    });
+  }
+
   // ── Pass A — org-scoped, only when an organization is in context ──
   let orgResults: WikiSearchResult[] = [];
   if (input.organizationId !== null) {
+    const orgFilter: Record<string, unknown> = {
+      must: [
+        ...baseFilter,
+        { key: "organizationId", match: { value: input.organizationId } },
+      ],
+    };
+    if (ringScopeShould.length > 0) orgFilter.should = ringScopeShould;
     const orgRaw = await searchSimilar(
       QDRANT_COLLECTIONS.WIKI_PAGES,
       vector,
-      {
-        must: [...baseFilter, { key: "organizationId", match: { value: input.organizationId } }],
-      },
+      orgFilter,
       limit,
       scoreThreshold,
     );
@@ -266,6 +325,7 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
       { key: "entityId", match: { any: maskedKernelPageIds } },
     ];
   }
+  if (ringScopeShould.length > 0) kernelFilter.should = ringScopeShould;
 
   const remaining = limit - orgResults.length;
   const kernelRaw = await searchSimilar(
@@ -306,6 +366,9 @@ function projectResult(
   }
   if (Array.isArray(r.payload["principleAppliesTo"])) {
     result.principleAppliesTo = r.payload["principleAppliesTo"] as string[];
+  }
+  if (Array.isArray(r.payload["principleRingScope"])) {
+    result.principleRingScope = r.payload["principleRingScope"] as string[];
   }
   if (Array.isArray(r.payload["principleDimensions"])) {
     result.principleDimensions = r.payload["principleDimensions"] as string[];

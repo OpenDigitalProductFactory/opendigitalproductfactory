@@ -58,7 +58,8 @@ export type SlipReason =
   | "manifest-invalid"
   | "signature-invalid"
   | "seed-delta-conflict"
-  | "source-unindexed";
+  | "source-unindexed"
+  | "archetype-unresolved";
 
 export type AutonomyTier =
   | "hitl-required"

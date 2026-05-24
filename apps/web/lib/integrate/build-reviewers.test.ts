@@ -59,6 +59,68 @@ describe("buildPlanReviewPrompt", () => {
     });
     expect(prompt).toContain("TASKS (3 total)");
   });
+
+  // BI-4396EFEC (D38) — Delta-aware review prompt extension. Round 1
+  // looks unchanged; round 2+ injects a PRIOR REVIEW CONTEXT block that
+  // tells the reviewer to judge resolution rather than re-evaluate from
+  // scratch. This is the surgical lever against plan-iteration oscillation.
+  describe("delta-aware prior context (BI-4396EFEC)", () => {
+    const minimalPlan = {
+      fileStructure: [],
+      tasks: [{ title: "T1", testFirst: "t", implement: "i", verify: "v" }],
+    };
+
+    it("omits prior-context block on round 1 (no prior issues)", () => {
+      const prompt = buildPlanReviewPrompt(minimalPlan);
+      expect(prompt).not.toContain("PRIOR REVIEW CONTEXT");
+      expect(prompt).not.toContain("Delta-aware review protocol");
+    });
+
+    it("omits prior-context block when prior arg is null", () => {
+      const prompt = buildPlanReviewPrompt(minimalPlan, null);
+      expect(prompt).not.toContain("PRIOR REVIEW CONTEXT");
+    });
+
+    it("omits prior-context block when prior issues array is empty", () => {
+      const prompt = buildPlanReviewPrompt(minimalPlan, { round: 1, issues: [] });
+      expect(prompt).not.toContain("PRIOR REVIEW CONTEXT");
+    });
+
+    it("includes prior issues verbatim on round 2+ so the reviewer can judge resolution", () => {
+      const prompt = buildPlanReviewPrompt(minimalPlan, {
+        round: 1,
+        issues: [
+          { severity: "critical", description: "Tasks 1-20 are implementation-first" },
+          { severity: "important", description: "Migration onDelete semantics undefined" },
+        ],
+      });
+      expect(prompt).toContain("PRIOR REVIEW CONTEXT (this is review round 2)");
+      expect(prompt).toContain("Tasks 1-20 are implementation-first");
+      expect(prompt).toContain("Migration onDelete semantics undefined");
+      expect(prompt).toContain("[critical]");
+      expect(prompt).toContain("[important]");
+    });
+
+    it("instructs the reviewer to honor addressed issues and avoid re-litigation", () => {
+      const prompt = buildPlanReviewPrompt(minimalPlan, {
+        round: 2,
+        issues: [{ severity: "critical", description: "Some prior issue" }],
+      });
+      // The three pillars of the delta protocol must be present so the
+      // reviewer can't fall back to re-evaluating from scratch.
+      expect(prompt).toContain("do NOT re-surface it");
+      expect(prompt).toContain("reuse the SAME description");
+      expect(prompt).toContain("Goal: convergence, not re-litigation");
+    });
+
+    it("computes the correct round label when prior round is 2", () => {
+      const prompt = buildPlanReviewPrompt(minimalPlan, {
+        round: 2,
+        issues: [{ severity: "critical", description: "Persistent issue" }],
+      });
+      expect(prompt).toContain("this is review round 3");
+    });
+  });
 });
 
 describe("buildCodeReviewPrompt", () => {

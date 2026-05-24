@@ -193,7 +193,7 @@ export async function getDispatchHistoryForBuild(buildId: string): Promise<Build
   }));
 }
 
-function extractRootCauseSummary(stdout: string, stderr: string, fallback: BuildFailureAxis): string {
+export function extractRootCauseSummary(stdout: string, stderr: string, fallback: BuildFailureAxis): string {
   const combined = `${stdout}\n${stderr}`;
   const lines = combined
     .split(/\r?\n/)
@@ -239,12 +239,32 @@ export function lineMatchesFailureAxis(line: string, axis: BuildFailureAxis): bo
   }
 }
 
-function isCliPrologueLine(line: string): boolean {
+export function isCliPrologueLine(line: string): boolean {
   const normalized = line.toLowerCase();
   return normalized === "reading prompt from stdin..."
     || normalized.startsWith("reading prompt from stdin")
     || normalized.startsWith("openai codex")
     || normalized.startsWith("codex ");
+}
+
+/**
+ * Re-derive `rootCauseSummary` for a row using the persisted excerpts and the
+ * already-classified failure axis. Used by the 2026-05-24 backfill script to
+ * normalize pre-hardening rows whose original `rootCauseSummary` captured the
+ * Codex CLI prologue instead of the diagnostic line.
+ *
+ * Pure. The matcher operates on the 500-char excerpts, not the full original
+ * output — this is acceptable because (a) the recomputed result is at least as
+ * good as the prologue text it replaces, and (b) it matches what the operator
+ * sees when expanding the dispatch history card's raw section. See spec §4.2
+ * of the 2026-05-24 dispatch-history root-cause display spec.
+ */
+export function recomputeRootCauseSummary(row: {
+  stdoutExcerpt: string | null;
+  stderrExcerpt: string | null;
+  failureAxis: BuildFailureAxis;
+}): string {
+  return extractRootCauseSummary(row.stdoutExcerpt ?? "", row.stderrExcerpt ?? "", row.failureAxis);
 }
 
 function excerpt(value: string): string | null {

@@ -21,6 +21,8 @@
     "db:studio": "pnpm --filter @dpf/db studio",
     "graph:init": "pnpm --filter @dpf/db exec tsx scripts/init-neo4j.ts",
     "test:endpoints": "tsx scripts/test-endpoints.ts",
+    "security:secrets": "node scripts/security/run-gitleaks-local.mjs --tree",
+    "security:secrets:staged": "node scripts/security/run-gitleaks-local.mjs --staged",
     "docs:tak": "node docs/architecture/generate-tak-docx.mjs",
     "postinstall": "node scripts/set-hooks-path.mjs"
   },
@@ -49,7 +51,8 @@
       "fast-uri": "^3.1.2",
       "hono": "^4.12.19",
       "mermaid": "^11.15.0",
-      "ip-address": "^10.2.0"
+      "ip-address": "^10.2.0",
+      "qs": "^6.15.2"
     },
     "onlyBuiltDependencies": [
       "msw",

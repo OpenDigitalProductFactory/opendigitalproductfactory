@@ -37,6 +37,8 @@ git config core.hooksPath .githooks
 
 `scripts/fresh-install.ps1` and `scripts/setup.ps1` / `scripts/setup.sh` configure this automatically when you use them to set the repo up. Run the one-liner above manually if you cloned without those helpers.
 
+The pre-commit hook also scans the staged snapshot for secrets with the same pinned Gitleaks version used by CI. It downloads the pinned binary into Git's local cache when needed, then blocks the commit if the staged content contains secret-shaped material. Use `pnpm security:secrets:staged` to run the staged scan manually or `pnpm security:secrets` for a current-tree scan. `DPF_SKIP_SECRET_SCAN=1` exists only for verified false positives; CI still scans every PR.
+
 ### Setup on macOS / Linux
 
 `bash scripts/setup.sh` is the canonical contributor bootstrap on macOS and Linux. It:
@@ -71,6 +73,7 @@ Run these before opening a PR:
 
 ```bash
 pnpm typecheck          # TypeScript across all workspaces
+pnpm security:secrets  # Current-tree Gitleaks scan using the pinned local runner
 pnpm test               # Vitest unit tests (web + db + mobile)
 pnpm --filter web build # Production Next.js build — surfaces errors the dev server hides
 ```

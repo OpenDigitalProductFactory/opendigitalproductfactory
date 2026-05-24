@@ -2969,6 +2969,28 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
           description:
             "Margin threshold below which confidence flips to 'low' and the reasoning recommends human review. Default 0.2.",
         },
+        ringScope: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: [
+              "ring-1-coworker",
+              "ring-2-workflow",
+              "ring-3-archetype",
+              "ring-4-sandbox-prod",
+              "ring-5-hive",
+              "external-coordination",
+              "universal-ring",
+            ],
+          },
+          description:
+            "Reduction Gear ring scope(s) the calling action binds. When set, retrieval filters to principles whose principleRingScope intersects the caller scope OR contains universal-ring OR is empty (backward compat). Omit (or pass ['universal-ring']) to consult the full kernel — appropriate for design-time / kernel-architecture decisions that genuinely bind every ring. See spec docs/superpowers/specs/2026-05-24-founder-kernel-evolution-discipline-design.md §5.",
+        },
+        callingSurface: {
+          type: "string",
+          description:
+            "Optional free-form label naming the calling surface (e.g. 'build-studio-phase', 'promotion-gate'). Propagated to the [principle-recall-trace] log line so operators can correlate recall traffic with the surface that drove it.",
+        },
       },
       required: ["context", "options", "callingPopulation"],
     },
@@ -6923,8 +6945,14 @@ export async function executeTool(
     case "reviewBuildPlan": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true } });
+      // BI-4396EFEC (D38) — also load the prior planReview so we can pass
+      // its issues to the reviewer prompt for delta-awareness and compute
+      // the iteration trajectory for the operator-facing chip.
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true, planReview: true } });
       if (!build?.buildPlan) return { success: false, error: "No build plan saved yet.", message: "Save buildPlan first." };
+      const priorPlanReview = (build.planReview ?? null) as
+        | { issues?: Array<{ severity?: string; description?: string }>; iteration?: { round?: number } }
+        | null;
       const normalizedPlan = normalizeBuildPlanPaths(build.buildPlan as Parameters<typeof normalizeBuildPlanPaths>[0]);
       if (normalizedPlan.rewrites.length > 0 || normalizedPlan.unresolvedModifyPaths.length > 0) {
         await prisma.featureBuild.update({
@@ -6956,7 +6984,23 @@ export async function executeTool(
         };
       }
       const { buildPlanReviewPrompt, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
-      const prompt = buildPlanReviewPrompt(normalizedPlan.plan);
+      // BI-4396EFEC (D38) — Compute the iteration context up front so we can
+      // (a) feed prior issues into the reviewer prompt and (b) populate
+      // ReviewResult.iteration on the output. Round is 1-based: first
+      // review = 1, every subsequent reviewBuildPlan call increments.
+      const priorRound = priorPlanReview?.iteration?.round ?? 0;
+      const priorIssues = Array.isArray(priorPlanReview?.issues)
+        ? priorPlanReview!.issues!
+            .filter((i): i is { severity: string; description: string } =>
+              typeof i?.severity === "string" && typeof i?.description === "string",
+            )
+            .map((i) => ({ severity: i.severity, description: i.description }))
+        : [];
+      const currentRound = priorRound + 1;
+      const priorContext = priorIssues.length > 0
+        ? { round: priorRound, issues: priorIssues }
+        : null;
+      const prompt = buildPlanReviewPrompt(normalizedPlan.plan, priorContext);
       const { routeAndCall } = await import("@/lib/routed-inference");
       const messages = [{ role: "user" as const, content: prompt }];
       // Run two independent reviewers in parallel — conservative merge flags issues either catches.
@@ -6971,11 +7015,30 @@ export async function executeTool(
       ]);
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
       const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
-      const review = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
+      const mergedReview = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
         decision: "fail" as const,
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
         summary: "Review could not be completed — retry.",
       };
+      // BI-4396EFEC (D38) — Compute the iteration delta against the prior
+      // round and attach to the ReviewResult. computeReviewDelta + isOscillating
+      // live in feature-build-types so they're independently unit-testable.
+      const { computeReviewDelta, isOscillating } = await import("@/lib/feature-build-types");
+      const review = (() => {
+        const base = mergedReview;
+        if (priorIssues.length === 0) {
+          return { ...base, iteration: { round: currentRound } };
+        }
+        const delta = computeReviewDelta(priorIssues, base.issues);
+        return {
+          ...base,
+          iteration: {
+            round: currentRound,
+            prior: delta,
+            oscillating: isOscillating(delta, base.issues.length),
+          },
+        };
+      })();
       await prisma.featureBuild.update({ where: { buildId }, data: { planReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "planReview" });
@@ -7010,9 +7073,18 @@ export async function executeTool(
         const issueList = criticalIssues.length > 0
           ? criticalIssues.map((i: { description: string }) => i.description).join("; ")
           : review.summary;
+        // BI-4396EFEC (D38) — Include the iteration trajectory in the
+        // agent-facing message so the implementer model can see when its
+        // revisions are trading one set of issues for another instead of
+        // converging. The oscillating signal recommends scope-split rather
+        // than another iteration.
+        const iter = review.iteration;
+        const trajectoryNote = iter?.prior
+          ? ` (Round ${iter.round}: ${iter.prior.addressed} addressed, ${iter.prior.persisted} persist, ${iter.prior.newlySurfaced} new${iter.oscillating ? " — issues are not net-decreasing across rounds; consider proposing a scope split rather than another revision." : ""}.)`
+          : "";
         return {
           success: true,
-          message: `Plan review FAILED. Blocking issues: ${issueList}. Revise the implementation plan to address these issues, then call saveBuildEvidence with field "buildPlan" and re-run reviewBuildPlan.`,
+          message: `Plan review FAILED. Blocking issues: ${issueList}. Revise the implementation plan to address these issues, then call saveBuildEvidence with field "buildPlan" and re-run reviewBuildPlan.${trajectoryNote}`,
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }
@@ -10702,8 +10774,51 @@ export async function executeTool(
 
       const { listPrinciplesByTier, prisma, PRINCIPLE_DECIDE_DEFAULTS } =
         await import("@dpf/db");
+      const { PRINCIPLE_RING_SCOPES } = await import(
+        "@dpf/db/wiki-taxonomy"
+      );
       const { searchWikiPages } = await import("@/lib/wiki/embeddings");
       const { decide } = await import("@/lib/wiki/principle-decide");
+      const { principleMatchesRingScope } = await import(
+        "@/lib/wiki/calling-ring-map"
+      );
+
+      // Validate ringScope per the closed taxonomy registry. Unknown values
+      // fail fast instead of silently degrading to universal — silent skip
+      // on bad input is the failure mode `make-silent-failures-observable`
+      // (the kernel commandment promoted in PR #1081) forbids.
+      let ringScope: string[] | undefined;
+      if (params["ringScope"] !== undefined) {
+        if (!Array.isArray(params["ringScope"])) {
+          return {
+            success: false,
+            message:
+              "ringScope must be an array of values from PRINCIPLE_RING_SCOPES.",
+            error: "Invalid ringScope shape",
+          };
+        }
+        const unknown = (params["ringScope"] as unknown[]).filter(
+          (v): v is string =>
+            typeof v === "string" &&
+            !(PRINCIPLE_RING_SCOPES as readonly string[]).includes(v),
+        );
+        if (unknown.length > 0) {
+          return {
+            success: false,
+            message: `ringScope contains unknown values: ${unknown.join(", ")}. Allowed: ${PRINCIPLE_RING_SCOPES.join(", ")}.`,
+            error: "Invalid ringScope value",
+          };
+        }
+        ringScope = params["ringScope"] as string[];
+      }
+      const ringScopeActive =
+        ringScope !== undefined &&
+        ringScope.length > 0 &&
+        !ringScope.includes("universal-ring");
+      const callingSurface =
+        typeof params["callingSurface"] === "string"
+          ? params["callingSurface"]
+          : null;
 
       const maxPrinciples =
         typeof params["maxPrinciples"] === "number"
@@ -10730,6 +10845,7 @@ export async function executeTool(
           tier: "commandment",
           organizationId,
           appliesTo: callingPopulation,
+          ringScope,
           limit: 10,
         })) as Array<Record<string, unknown>>;
       } catch (err) {
@@ -10747,6 +10863,7 @@ export async function executeTool(
           pageKind: "principle",
           principleTier: "core",
           principleAppliesTo: callingPopulation,
+          principleRingScope: ringScopeActive ? ringScope : undefined,
           limit: 5,
         })) as Array<Record<string, unknown>>;
       } catch (err) {
@@ -10762,12 +10879,65 @@ export async function executeTool(
           pageKind: "principle",
           principleTier: "contextual",
           principleAppliesTo: callingPopulation,
+          principleRingScope: ringScopeActive ? ringScope : undefined,
           limit: 5,
           scoreThreshold: contextualThreshold,
         })) as Array<Record<string, unknown>>;
       } catch (err) {
         console.warn("[principle_decide] contextual Qdrant lookup failed:", err);
       }
+
+      // Post-filter (cheap belt-and-suspenders). Mirrors the contract used
+      // by recallPrincipleContext: empty principleRingScope passes
+      // (backward-compat); universal-ring always passes; otherwise
+      // intersection check. Catches any retrieval path that didn't get
+      // the ringScope arg threaded through (e.g. narrow test mocks).
+      let commandmentsExcluded = 0;
+      let coreExcluded = 0;
+      let contextualExcluded = 0;
+      if (ringScopeActive && ringScope) {
+        const before = { c: commandments.length, k: core.length, x: contextual.length };
+        commandments = commandments.filter((row) =>
+          principleMatchesRingScope(
+            (row["principleRingScope"] as string[] | undefined) ?? [],
+            ringScope as never,
+          ),
+        );
+        core = core.filter((row) =>
+          principleMatchesRingScope(
+            (row["principleRingScope"] as string[] | undefined) ?? [],
+            ringScope as never,
+          ),
+        );
+        contextual = contextual.filter((row) =>
+          principleMatchesRingScope(
+            (row["principleRingScope"] as string[] | undefined) ?? [],
+            ringScope as never,
+          ),
+        );
+        commandmentsExcluded = before.c - commandments.length;
+        coreExcluded = before.k - core.length;
+        contextualExcluded = before.x - contextual.length;
+      }
+
+      console.info(
+        `[principle-recall-trace] ` +
+          JSON.stringify({
+            callingSurface,
+            callingPopulation,
+            ringScope: ringScope ?? null,
+            ringScopeActive,
+            tool: "principle_decide",
+            commandmentCount: commandments.length,
+            coreCount: core.length,
+            contextualCount: contextual.length,
+            ringScopeExcluded: {
+              commandments: commandmentsExcluded,
+              core: coreExcluded,
+              contextual: contextualExcluded,
+            },
+          }),
+      );
 
       const TIER_DEFAULT_WEIGHT: Record<string, number> = {
         commandment: 1.0,

@@ -9,7 +9,12 @@ import {
   generatePackId,
   normalizeHappyPathState,
   isHappyPathIntakeReady,
+  normalizeIssueKey,
+  computeReviewDelta,
+  isOscillating,
+  describePlanReviewFailure,
 } from "./feature-build-types";
+import type { ReviewResult } from "./feature-build-types";
 
 const readyHappyPath = {
   intake: {
@@ -338,5 +343,179 @@ describe("isHappyPathIntakeReady", () => {
 
   it("returns true when taxonomy, backlog, epic, and constrained goal are present", () => {
     expect(isHappyPathIntakeReady(readyHappyPath)).toBe(true);
+  });
+});
+
+// ─── Plan-review iteration helpers (BI-4396EFEC / D38) ──────────────────────
+//
+// These four helpers are the substrate for the Plan-iteration referee: they
+// let reviewBuildPlan track cross-round trajectory without storing review
+// history in its own table. computeReviewDelta + isOscillating drive the
+// agent-facing "21 → 13 → 15 issues, oscillating" signal; describePlanReview-
+// Failure surfaces the same trajectory in the operator-facing phase-gate
+// reason string. Pure functions — easy to pin behavior.
+
+describe("normalizeIssueKey (BI-4396EFEC)", () => {
+  it("lowercases the description", () => {
+    expect(normalizeIssueKey("CRITICAL: missing test")).toBe("critical: missing test");
+  });
+
+  it("truncates to first 80 chars to match mergeReviews dedup key", () => {
+    const long = "A".repeat(120);
+    expect(normalizeIssueKey(long)).toHaveLength(80);
+  });
+
+  it("returns the same key for descriptions that only differ in suffix > 80 chars", () => {
+    const base = "Tasks 1-20 implementation-first lacking test-first steps for schema migration";
+    const a = `${base} (variant A)`;
+    const b = `${base} (variant B)`;
+    // Both share the first 80 chars, so the dedup key collapses them.
+    expect(normalizeIssueKey(a)).toBe(normalizeIssueKey(b));
+  });
+});
+
+describe("computeReviewDelta (BI-4396EFEC)", () => {
+  it("counts everything as newly-surfaced when prior is empty", () => {
+    const delta = computeReviewDelta([], [
+      { description: "issue A" },
+      { description: "issue B" },
+    ]);
+    expect(delta).toEqual({
+      issueCount: 0,
+      addressed: 0,
+      persisted: 0,
+      newlySurfaced: 2,
+    });
+  });
+
+  it("counts everything as addressed when current is empty", () => {
+    const delta = computeReviewDelta(
+      [{ description: "issue A" }, { description: "issue B" }],
+      [],
+    );
+    expect(delta).toEqual({
+      issueCount: 2,
+      addressed: 2,
+      persisted: 0,
+      newlySurfaced: 0,
+    });
+  });
+
+  it("identifies persisted issues by normalized description match", () => {
+    const delta = computeReviewDelta(
+      [{ description: "Tasks 1-20 are implementation-first" }, { description: "Migration onDelete undefined" }],
+      [{ description: "tasks 1-20 are IMPLEMENTATION-first" }, { description: "Brand new issue" }],
+    );
+    expect(delta.persisted).toBe(1);
+    expect(delta.addressed).toBe(1);
+    expect(delta.newlySurfaced).toBe(1);
+    expect(delta.issueCount).toBe(2);
+  });
+
+  it("handles full match (every prior issue persists, none added)", () => {
+    const issues = [{ description: "A" }, { description: "B" }, { description: "C" }];
+    const delta = computeReviewDelta(issues, issues);
+    expect(delta).toEqual({
+      issueCount: 3,
+      addressed: 0,
+      persisted: 3,
+      newlySurfaced: 0,
+    });
+  });
+});
+
+describe("isOscillating (BI-4396EFEC)", () => {
+  // The oscillation signal is what triggers the "consider splitting scope"
+  // recommendation. Definition: current count >= prior count AND the review
+  // both addressed some prior issues AND surfaced new ones. Pure progress
+  // (everything addressed, no new) is NOT oscillation. Pure regression
+  // (only new issues, none addressed) is NOT oscillation either — that's
+  // a fresh failure mode. Oscillation is the "swap one set for another" case.
+
+  it("returns false when issue count strictly decreased", () => {
+    const delta = { issueCount: 10, addressed: 7, persisted: 3, newlySurfaced: 2 };
+    expect(isOscillating(delta, 5)).toBe(false);
+  });
+
+  it("returns true when count flat AND both addressed and newly-surfaced > 0", () => {
+    const delta = { issueCount: 10, addressed: 4, persisted: 6, newlySurfaced: 4 };
+    expect(isOscillating(delta, 10)).toBe(true);
+  });
+
+  it("returns true when count increased AND review traded issues", () => {
+    const delta = { issueCount: 10, addressed: 3, persisted: 7, newlySurfaced: 5 };
+    expect(isOscillating(delta, 12)).toBe(true);
+  });
+
+  it("returns false when count flat but nothing was addressed (no trade, just persistence)", () => {
+    const delta = { issueCount: 10, addressed: 0, persisted: 10, newlySurfaced: 0 };
+    expect(isOscillating(delta, 10)).toBe(false);
+  });
+
+  it("returns false when nothing newly surfaced (pure progress on subset)", () => {
+    const delta = { issueCount: 10, addressed: 5, persisted: 5, newlySurfaced: 0 };
+    expect(isOscillating(delta, 5)).toBe(false);
+  });
+});
+
+describe("describePlanReviewFailure (BI-4396EFEC)", () => {
+  function review(overrides: Partial<ReviewResult> = {}): ReviewResult {
+    return {
+      decision: "fail",
+      issues: [{ severity: "critical", description: "x" }],
+      summary: "fail",
+      ...overrides,
+    };
+  }
+
+  it("returns base reason when no iteration metadata is attached", () => {
+    const reason = describePlanReviewFailure(review());
+    expect(reason).toContain("Plan review failed");
+    expect(reason).toContain("re-run plan review");
+    expect(reason).not.toContain("Round");
+  });
+
+  it("includes round label when iteration is present but no prior delta", () => {
+    const reason = describePlanReviewFailure(review({ iteration: { round: 1 } }));
+    expect(reason).toContain("(Round 1)");
+    expect(reason).not.toContain("addressed");
+  });
+
+  it("includes addressed/persist/new breakdown when prior delta exists", () => {
+    const reason = describePlanReviewFailure(review({
+      iteration: {
+        round: 2,
+        prior: { issueCount: 21, addressed: 8, persisted: 13, newlySurfaced: 2 },
+      },
+    }));
+    expect(reason).toContain("Round 2");
+    expect(reason).toContain("8 addressed");
+    expect(reason).toContain("13 persist");
+    expect(reason).toContain("2 new");
+  });
+
+  it("recommends scope-splitting when oscillating flag is set", () => {
+    const reason = describePlanReviewFailure(review({
+      iteration: {
+        round: 3,
+        prior: { issueCount: 13, addressed: 5, persisted: 8, newlySurfaced: 7 },
+        oscillating: true,
+      },
+    }));
+    // Dale-class operators need to see "this won't converge — split it"
+    // in plain English at the gate, not buried in the agent's chat.
+    expect(reason).toContain("not decreasing across rounds");
+    expect(reason).toContain("splitting this feature into smaller scopes");
+  });
+
+  it("omits the scope-split recommendation when not oscillating", () => {
+    const reason = describePlanReviewFailure(review({
+      iteration: {
+        round: 2,
+        prior: { issueCount: 21, addressed: 10, persisted: 11, newlySurfaced: 0 },
+        oscillating: false,
+      },
+    }));
+    expect(reason).not.toContain("splitting this feature");
   });
 });
