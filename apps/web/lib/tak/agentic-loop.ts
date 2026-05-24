@@ -1579,6 +1579,11 @@ export async function runAgenticLoop(params: {
             taskRunId: taskRunId ?? undefined,
             apiTokenId: apiTokenId ?? undefined,
             skillId: activeSkillId ?? undefined,
+            // BI-F4A30FCB (Dale dogfood 2026-05-24): plumb the build the
+            // user is messaging from into tool context so phase-scoped
+            // tools (start_ideate_research, start_scout_research) can
+            // target the correct build instead of "latest in phase".
+            featureBuildId: params.featureBuildId ?? undefined,
           },
           source: "agentic-loop",
         });
