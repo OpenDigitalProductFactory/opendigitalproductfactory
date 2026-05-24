@@ -14,6 +14,17 @@ export function PortalContextStrip({ envelope }: { envelope: PortalContextEnvelo
   const primarySignal = envelope.attention[0] ?? null;
   const buildLabel = envelope.work.featureBuild?.buildId ?? "No active build";
   const capsuleLabel = envelope.work.capsule?.capsuleId ?? "No capsule";
+  // D11 (2026-05-23): suppress the AttentionChip rendering when it would
+  // duplicate the "No active build" text already shown in the buildLabel
+  // chip to its left. The chip's job is to carry build identity; when
+  // there is no build, the chip says so — adding a yellow warning chip
+  // with the same text was straight duplication that made the strip
+  // look broken. We KEEP the right-side action button (e.g. "Select
+  // build") because that button is genuinely useful — it just shouldn't
+  // be paired with a redundant warning chip on the left.
+  const showAttentionChip = !(
+    primarySignal?.kind === "no_active_build" && !envelope.work.featureBuild
+  );
 
   return (
     <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-2 text-[var(--dpf-text)]" data-testid="portal-context-strip">
@@ -32,7 +43,7 @@ export function PortalContextStrip({ envelope }: { envelope: PortalContextEnvelo
           <span className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-xs text-[var(--dpf-muted)]">
             {capsuleLabel}
           </span>
-          {primarySignal && <AttentionChip signal={primarySignal} />}
+          {primarySignal && showAttentionChip && <AttentionChip signal={primarySignal} />}
         </div>
 
         <div className="flex items-center gap-2">
