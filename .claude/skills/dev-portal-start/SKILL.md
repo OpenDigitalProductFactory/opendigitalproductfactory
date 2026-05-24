@@ -1,31 +1,34 @@
 ---
 name: dev-portal-start
-description: Use when you need to verify portal source changes in a running browser without rebuilding the production portal image. Triggers — making any edit under apps/web/ that needs visual or HTTP-level confirmation; iterating on /build, /platform, /admin, or any other server-rendered route; debugging a UX change against real workspace data; reproducing a customer-visible bug in a worktree before opening a PR. Don't use for unit-test-only changes (no portal needed) or for changes that need the production-bundled portal specifically (rebuild that image instead).
+description: Use when a DPF contributor needs to verify worktree edits on the **Contributor preview** runtime (port 3001) without rebuilding the Live portal image. Triggers — making any edit under apps/web/ that needs visual or HTTP-level confirmation; iterating on /build, /platform, /admin, or any other server-rendered route; debugging a UX change against real workspace data; reproducing a customer-visible bug in a worktree before opening a PR. This is a CONTRIBUTOR-ONLY workflow; customer installs do not ship the Contributor preview by default. Don't use for unit-test-only changes (no preview needed) or for changes that need the production-bundled Live portal specifically (rebuild that image instead).
 ---
 
 # dev-portal-start
 
 ## Overview
 
-Brings up the `dev-portal` Next.js hot-reload service against the **live** DPF databases on `http://localhost:3001`, leaving the production-bundle portal on `:3000` untouched as the stable reference. Every source edit under `apps/web/` is visible within a few seconds (or one container restart for file-watcher-stubborn cases).
+Brings up the **Contributor preview** runtime — the `dev-portal` Next.js hot-reload service on `http://localhost:3001` — against the live DPF databases, leaving the Live portal on `:3000` untouched as the stable reference. Every source edit under `apps/web/` is visible within a few seconds (or one container restart for file-watcher-stubborn cases).
 
-This eliminates the ~2-minute portal-rebuild loop that otherwise gates every edit-verify cycle.
+This eliminates the ~2-minute Live-portal-rebuild loop that otherwise gates every edit-verify cycle.
+
+The Contributor preview is a **DPF-contributor-only** surface, gated behind the `dev` compose profile. Customer installs (e.g. Dale's HVAC shop) do not ship it by default and do not see a `:3001` URL. If you are not a DPF contributor editing the platform source, you do not need this skill.
 
 ## When to Use
 
-**Symptoms that trigger this skill:**
+**Symptoms that trigger this skill (contributor workflow):**
 
 - "I changed `apps/web/app/(shell)/build/page.tsx` and want to see it."
 - "I need to verify the gate fires on a real install before merging."
-- "The production portal at :3000 shows old code — how do I see my edits?"
+- "The Live portal at :3000 shows old code — how do I see my edits?"
 - "I edited `loadBuildStudioCapability` and tests pass; need to see the live UX."
 - "I'm reproducing a customer-reported bug in a worktree."
 
 **Do not use when:**
 
 - The change is unit-test-only (run `pnpm exec vitest` and you're done).
-- The change is to the production-bundle build itself (Docker image content, entrypoint, etc.) — rebuild `portal` instead.
+- The change is to the Live-portal-bundle build itself (Docker image content, entrypoint, etc.) — rebuild `portal` instead.
 - The change is to non-portal services (sandbox, adp, browser-use) — those have their own rebuild cycles.
+- You are not a DPF contributor. End users and customer-install operators interact with Build Studio's Live preview through the canvas, not through `:3001`.
 
 ## Core Pattern
 
@@ -35,7 +38,7 @@ Agent edits `apps/web/.../page.tsx`. Tests pass. Agent wants to verify in browse
 
 ```
 Agent: "I'll rebuild the portal image."          (~2 min, every edit)
-Agent: "Wait, that restarts the prod portal."
+Agent: "Wait, that restarts the Live portal."
 Agent: "Maybe dev-portal? Let me look it up..."  (5 min reading compose files)
 Agent: "Why doesn't dev-portal see live data?"   (10 min debugging dev-init DB clone)
 Agent: "Why is my edit not loading?"             (10 min on Windows-Docker file watch)
@@ -132,7 +135,7 @@ The override path is relative (`docker-compose.dev-against-live-db.yml`) — mea
 
 ### Mistake 8 — Treating dev-portal data as throwaway
 
-This is intentional: dev-portal writes to the LIVE DB. A coding mistake under `apps/web/` that mutates DB state will affect the production portal at `:3000` too. Keep `:3000` as the safety reference; use `:3001` knowingly.
+This is intentional: the Contributor preview (`dev-portal`) writes to the LIVE DB. A coding mistake under `apps/web/` that mutates DB state will affect the Live portal at `:3000` too. Keep `:3000` as the safety reference; use `:3001` knowingly.
 
 ## When to Tear Down
 
