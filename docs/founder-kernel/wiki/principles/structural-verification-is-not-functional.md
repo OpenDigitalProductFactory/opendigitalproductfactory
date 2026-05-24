@@ -11,6 +11,9 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleRingScope:
+  - ring-2-workflow
+  - ring-4-sandbox-prod
 principleConsumerArchetype: route-domain-specific
 principleConsumerContexts:
   - engineering-flow

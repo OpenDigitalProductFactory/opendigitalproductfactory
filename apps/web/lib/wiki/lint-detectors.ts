@@ -34,7 +34,10 @@ export type LintFindingKind =
   | "principle-public-missing-rationale"
   | "principle-public-unsafe-marker"
   | "principle-duplicate"
-  | "principle-contradiction-review";
+  | "principle-contradiction-review"
+  // ─── Ring-scope axis (spec 2026-05-24-founder-kernel-evolution-discipline) ───
+  | "principle-ring-scope-unknown"
+  | "principle-ring-scope-overuse";
 
 /** Mirrors the `WikiLintFinding.severity` enum. */
 export type LintSeverity = "info" | "warn" | "error";

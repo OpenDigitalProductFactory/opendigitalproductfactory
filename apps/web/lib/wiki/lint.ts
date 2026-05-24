@@ -157,6 +157,7 @@ function asLintPrincipleWikiPage(
       (r["principleDimensionVector"] as Record<string, number> | null) ?? null,
     principleDimensions: (r["principleDimensions"] as string[] | undefined) ?? [],
     principleAppliesTo: (r["principleAppliesTo"] as string[] | undefined) ?? [],
+    principleRingScope: (r["principleRingScope"] as string[] | undefined) ?? [],
     principlePublic: Boolean(r["principlePublic"] ?? false),
     principlePublicRationale:
       (r["principlePublicRationale"] as string | null) ?? null,

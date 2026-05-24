@@ -10,6 +10,8 @@ principleDimensionVector: {"evidence_density": 0.9, "speed_to_value": 0.6, "sche
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
+principleRingScope:
+  - ring-1-coworker
 principleConsumerArchetype: ai-coworker-universal
 principlePublic: false
 authoredAt: 2026-05-18

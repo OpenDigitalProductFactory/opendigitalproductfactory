@@ -58,6 +58,7 @@ import type {
   PrincipleConsumerArchetype,
   PrincipleConsumerContext,
   PrincipleDimension,
+  PrincipleRingScope,
   PrincipleTier,
   WikiPageKind,
   WikiPageStatus,
@@ -69,6 +70,7 @@ export type {
   PrincipleConsumerArchetype,
   PrincipleConsumerContext,
   PrincipleDimension,
+  PrincipleRingScope,
   PrincipleTier,
   WikiPageKind,
   WikiPageStatus,
@@ -95,6 +97,16 @@ export type WikiPagePrincipleInput = {
   principleDimensionVector?: Record<PrincipleDimension | string, number> | null;
   principleDimensions?: PrincipleDimension[] | string[];
   principleAppliesTo?: PrincipleAppliesTo[] | string[];
+  /**
+   * Ring-scope axis — depth of the Reduction Gear loop the principle binds.
+   * Independent of `principleConsumerArchetype` / `principleConsumerContexts`
+   * (which describe domain). Validation against `PRINCIPLE_RING_SCOPES`
+   * happens at seed/lint layer; the store passes through whatever the
+   * caller supplies so a draft with an unknown value can still be saved
+   * for lint to surface. See spec
+   * `2026-05-24-founder-kernel-evolution-discipline-design.md` §3.
+   */
+  principleRingScope?: PrincipleRingScope[] | string[];
   /**
    * Consumer archetype — answers "who is expected to consume this principle?"
    * Independent axis from `principleAppliesTo`; the coherence rule for valid
@@ -174,6 +186,9 @@ function principleDataFromInput(
   }
   if (input.principleAppliesTo !== undefined) {
     data.principleAppliesTo = input.principleAppliesTo;
+  }
+  if (input.principleRingScope !== undefined) {
+    data.principleRingScope = input.principleRingScope;
   }
   if (input.principleConsumerArchetype !== undefined) {
     data.principleConsumerArchetype = input.principleConsumerArchetype;

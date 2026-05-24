@@ -111,6 +111,32 @@ export const PRINCIPLE_CONSUMER_CONTEXT_EXAMPLES = [
 export type PrincipleConsumerContext = string;
 
 /**
+ * Ring scope — orthogonal axis from `principleConsumerArchetype` /
+ * `principleConsumerContexts` describing WHICH DEPTH of the Reduction Gear
+ * loop a principle binds. Contexts describe the domain (build-studio,
+ * finance, ui); ring scopes describe the loop layer (Ring 1 individual
+ * coworker iteration → Ring 5 global hive federation, plus external
+ * coordination plane and a universal-ring escape hatch).
+ *
+ * Source spec: docs/superpowers/specs/2026-05-24-founder-kernel-evolution-discipline-design.md §3.
+ *
+ * `universal-ring` is intentionally a separate value (not the omitted /
+ * empty case) so authoring it requires a conscious choice, not default-
+ * to-broadest. The companion lint detector `principle-ring-scope-overuse`
+ * warns when more than 30% of published principles tag `universal-ring`.
+ */
+export const PRINCIPLE_RING_SCOPES = [
+  "ring-1-coworker",
+  "ring-2-workflow",
+  "ring-3-archetype",
+  "ring-4-sandbox-prod",
+  "ring-5-hive",
+  "external-coordination",
+  "universal-ring",
+] as const;
+export type PrincipleRingScope = (typeof PRINCIPLE_RING_SCOPES)[number];
+
+/**
  * Option-feature axes that principle dimension vectors can score against.
  * V1 ships a small registry — growth is gated by PR review so the registry
  * stays auditable. See spec section 10.
@@ -243,6 +269,20 @@ export function isPrincipleConsumerArchetype(
   return (
     typeof value === "string" &&
     (PRINCIPLE_CONSUMER_ARCHETYPES as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * Narrowing predicate for ring-scope values. Used by seed parsing, MCP input
+ * validation, and the `principle-ring-scope-overuse` lint detector to gate
+ * inputs against the closed `PRINCIPLE_RING_SCOPES` enum.
+ */
+export function isPrincipleRingScope(
+  value: unknown,
+): value is PrincipleRingScope {
+  return (
+    typeof value === "string" &&
+    (PRINCIPLE_RING_SCOPES as readonly string[]).includes(value)
   );
 }
 

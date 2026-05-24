@@ -10,6 +10,8 @@ principleDimensionVector: {"blast_radius": 1.0, "data_privacy": 0.7, "governance
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
+principleRingScope:
+  - universal-ring
 principleConsumerArchetype: ai-coworker-universal
 principlePublic: false
 authoredAt: 2026-05-18

@@ -41,6 +41,19 @@ export type WikiPageFrontmatter = {
   principleDimensionVector?: Record<string, number>;
   principleDimensions?: string[];
   principleAppliesTo?: string[];
+  /**
+   * Ring-scope axis (independent from `principleConsumerArchetype` /
+   * `principleConsumerContexts`). Values from `PRINCIPLE_RING_SCOPES`:
+   *   ring-1-coworker | ring-2-workflow | ring-3-archetype |
+   *   ring-4-sandbox-prod | ring-5-hive | external-coordination |
+   *   universal-ring
+   *
+   * See spec `2026-05-24-founder-kernel-evolution-discipline-design.md` §3.
+   * Empty / omitted is treated as "intent unknown" by lint (warn) — authors
+   * declare explicit ring scope so default-to-broadest behavior is a
+   * conscious choice via `universal-ring`, not silent omission.
+   */
+  principleRingScope?: string[];
   /** Consumer archetype — see spec §8A and §8A.1 coherence matrix. */
   principleConsumerArchetype?: string;
   /**
