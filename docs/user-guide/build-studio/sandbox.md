@@ -1,16 +1,16 @@
 ---
-title: "Sandbox Development Environment"
+title: "Build Runtime (Sandbox)"
 area: build-studio
 order: 3
-lastUpdated: 2026-03-30
+lastUpdated: 2026-05-24
 updatedBy: Claude (Software Engineer)
 ---
 
 ## Overview
 
-The sandbox is an isolated execution environment where your AI Coworker builds, tests, and refines features before they reach production. Each sandbox has its own database, file system, and runtime — completely separated from the live platform. Nothing the AI Coworker does in the sandbox can affect your production system.
+The **Build runtime** — surfaced as **Live preview** in the Build Studio canvas — is the isolated execution environment where your AI Coworker builds, tests, and refines features before they reach the Live portal. Each Build runtime instance has its own database, file system, and runtime, completely separated from the live platform. Nothing the AI Coworker does in the Build runtime can affect your production system.
 
-The sandbox is not the long-lived source of truth for your code. It starts from the install's shared workspace, runs validation work safely, and can be recreated whenever needed.
+The Build runtime is not the long-lived source of truth for your code. It starts from the install's shared workspace, runs validation work safely, and can be recreated whenever needed. The technical name behind it is *sandbox* — that name continues to appear in diagnostic surfaces (Platform Development → Runtime Targets, Admin Recovery, log lines, and MCP schemas).
 
 This isolation is what makes it safe for the AI to experiment freely: modifying code, running database migrations, restarting services, and iterating on your feedback without risk.
 
@@ -18,32 +18,32 @@ This isolation is what makes it safe for the AI to experiment freely: modifying 
 
 When you create a new feature in Build Studio and the AI Coworker begins the Build phase, the platform:
 
-1. **Acquires a sandbox slot** from the pool of available containers
-2. **Copies the active shared project source** from the running portal workspace into the sandbox workspace
+1. **Acquires a Build runtime slot** from the pool of available containers (technical name: *sandbox slot*)
+2. **Copies the active shared project source** from the running Live portal workspace into the Build runtime workspace
 3. **Installs dependencies** (`pnpm install`, Prisma client generation)
-4. **Runs database migrations** against the sandbox's own PostgreSQL instance
-5. **Seeds the sandbox database** with a copy of your production data so the AI works with realistic information
+4. **Runs database migrations** against the Build runtime's own PostgreSQL instance
+5. **Seeds the Build runtime database** with a copy of your live data so the AI works with realistic information
 6. **Starts a preview server** so you can see the feature as it is being built
 7. **Creates a git baseline** so changes can be tracked as a clean diff for promotion
 
 This process takes roughly 60 to 90 seconds. Once complete, the AI Coworker has a fully functional copy of the platform to work with.
 
-## Sandbox Isolation
+## Build Runtime Isolation
 
-Each sandbox is isolated from production at every layer:
+Each Build runtime instance is isolated from the Live portal at every layer:
 
-| Layer | Production | Sandbox |
+| Layer | Live portal | Build runtime |
 |-------|-----------|---------|
 | **Database** | `dpf-postgres-1` (your live data) | `dpf-sandbox-postgres-1` (separate instance, seeded copy) |
-| **File system** | Portal application at `/app` | Sandbox workspace at `/workspace` (Docker volume) |
-| **Network** | Full access to all services | No access to production credentials or Docker socket |
+| **File system** | Portal application at `/app` | Build runtime workspace at `/workspace` (Docker volume) |
+| **Network** | Full access to all services | No access to live credentials or Docker socket |
 | **Resources** | Unrestricted | 2 CPU cores, 4 GB memory, 10 GB disk |
 
-The sandbox has no access to your `.env` file, secrets, API keys, or the Docker socket. It cannot start, stop, or modify production containers. Schema changes and database migrations in the sandbox do not touch the production database.
+The Build runtime has no access to your `.env` file, secrets, API keys, or the Docker socket. It cannot start, stop, or modify the Live portal's containers. Schema changes and database migrations in the Build runtime do not touch the live database.
 
 ## AI Coworker Tools
 
-The AI Coworker has a complete set of development tools for working inside the sandbox. These tools are purpose-built to be safe (sandbox-only) and on par with what a professional developer uses:
+The AI Coworker has a complete set of development tools for working inside the Build runtime. These tools are purpose-built to be safe (Build-runtime-only) and on par with what a professional developer uses. The tool names retain the `sandbox` prefix because they are MCP-bound identifiers and a Phase 1 rename would break callers; the user-facing description has switched to "Build runtime":
 
 ### File Operations
 
@@ -64,49 +64,49 @@ The AI Coworker has a complete set of development tools for working inside the s
 
 | Tool | What it does |
 |------|-------------|
-| **run_sandbox_command** | Run any shell command inside the sandbox. Used for builds, tests, linting, git operations, dependency management, and verification. |
+| **run_sandbox_command** | Run any shell command inside the Build runtime. Used for builds, tests, linting, git operations, dependency management, and verification. |
 | **run_sandbox_tests** | Run the full test suite and typecheck. Optionally enables auto-fix mode, which diagnoses failures and attempts fixes up to three times. |
 
 ### Code Generation
 
 | Tool | What it does |
 |------|-------------|
-| **generate_code** | Send a high-level instruction to the coding agent. It analyzes the existing codebase for patterns, generates the code, writes it to the sandbox, and starts the dev server. |
+| **generate_code** | Send a high-level instruction to the coding agent. It analyzes the existing codebase for patterns, generates the code, writes it to the Build runtime, and starts the dev server. |
 | **iterate_sandbox** | Send a refinement instruction to improve existing code. The agent reads the current state, applies changes, and updates the preview. |
 
 ### Deployment
 
 | Tool | What it does |
 |------|-------------|
-| **deploy_feature** | Extract the changes from the sandbox as a git diff and submit them for promotion to production. This triggers the approval workflow. |
+| **deploy_feature** | Extract the changes from the Build runtime as a git diff and submit them for promotion to the Live portal. This triggers the approval workflow. |
 
 These tools are how the AI Coworker does real development work — not by running arbitrary shell scripts, but through purpose-built operations that handle encoding, path resolution, and error reporting cleanly.
 
-## Sandbox Pool
+## Build Runtime Pool
 
-The platform maintains a pool of sandbox containers so multiple features can be developed concurrently. By default, the pool has one slot (configurable via `DPF_SANDBOX_POOL_SIZE`).
+The platform maintains a pool of Build runtime containers so multiple features can be developed concurrently. By default, the pool has one slot (configurable via `DPF_SANDBOX_POOL_SIZE`).
 
-Each slot is a pre-created Docker container that gets assigned to a build when needed and returned to the pool when the build completes, fails, or is cancelled. If all slots are in use, the platform falls back to the legacy persistent sandbox container.
+Each slot is a pre-created Docker container that gets assigned to a build when needed and returned to the pool when the build completes, fails, or is cancelled. If all slots are in use, the platform falls back to the legacy persistent Build runtime container.
 
 You can monitor pool status from the Build Studio dashboard, which shows how many slots are available and which builds are using them.
 
 ## Live Preview
 
-During the Build phase, a preview panel shows the feature as the AI Coworker builds it. The preview server runs inside the sandbox on port 3000 and serves an auto-refreshing HTML page.
+During the Build phase, a preview panel shows the feature as the AI Coworker builds it. The preview server runs inside the Build runtime on port 3000 and serves an auto-refreshing HTML page.
 
 As the AI Coworker creates or modifies files, the preview updates automatically. If the preview content has not been generated yet, you see a "Building Your Feature" spinner that refreshes every five seconds.
 
-## From Sandbox to Production
+## From Build Runtime to Live Portal
 
 When the feature is ready to ship, the AI Coworker (or you) triggers the `deploy_feature` tool. This:
 
-1. Extracts a clean git diff of all changes made in the sandbox since the baseline
+1. Extracts a clean git diff of all changes made in the Build runtime since the baseline
 2. Creates a **ChangePromotion** record linking the feature build to the promotion pipeline
 3. Submits the promotion for approval
 
-Once approved, the autonomous promotion pipeline takes over. It builds a new portal image that includes the sandbox changes, swaps it into production, runs health checks, and rolls back automatically if anything fails. See [Feature Deployment](deployment.md) for the full eleven-step pipeline.
+Once approved, the autonomous promotion pipeline takes over. It builds a new Live portal image that includes the Build runtime changes, swaps it into production, runs health checks, and rolls back automatically if anything fails. See [Feature Deployment](deployment.md) for the full eleven-step pipeline.
 
-The key insight is that the sandbox diff contains only the changes needed for that validation run — not the entire codebase. The sandbox exists to execute and verify work safely, not to replace the install's shared development workspace.
+The key insight is that the Build runtime diff contains only the changes needed for that validation run — not the entire codebase. The Build runtime exists to execute and verify work safely, not to replace the install's shared development workspace.
 
 ## Shared Workspace Relationship
 
@@ -114,13 +114,13 @@ Build Studio uses the install's shared workspace as its authoring source:
 
 - in ready-to-go installs, Build Studio is the guided interface over that workspace
 - in customizable installs, Build Studio and VS Code use the same workspace and branch
-- the sandbox starts from that shared workspace, then adds isolation for preview, tests, and migration rehearsal
+- the Build runtime starts from that shared workspace, then adds isolation for preview, tests, and migration rehearsal
 
 See [Development Workspace](../development-workspace) for the full operating model.
 
 ## What the AI Coworker Can and Cannot Do
 
-**Can do in the sandbox:**
+**Can do in the Build runtime:**
 - Create, read, edit, and delete any file in the workspace
 - Run shell commands (build, test, lint, git)
 - Install or update dependencies
@@ -128,19 +128,19 @@ See [Development Workspace](../development-workspace) for the full operating mod
 - Start dev servers and preview builds
 - Search the codebase and analyze patterns
 
-**Cannot do from the sandbox:**
-- Access production credentials, API keys, or secrets
-- Connect to the production database
-- Start, stop, or modify production containers
+**Cannot do from the Build runtime:**
+- Access live credentials, API keys, or secrets
+- Connect to the live database
+- Start, stop, or modify Live portal containers
 - Access the Docker socket or host filesystem
 - Make network requests to internal services (other than npm registry for dependencies)
 
 ## Troubleshooting
 
-**"Sandbox not ready"** — The sandbox workspace may not have finished initializing. Dependencies take 60-90 seconds to install on first use. Wait and retry.
+**"Build runtime not ready"** — The Build runtime workspace may not have finished initializing. Dependencies take 60-90 seconds to install on first use. Wait and retry.
 
-**"File not found"** — The AI Coworker may be looking for a file using the production path (`/app/...`) instead of the sandbox path. Sandbox files live under `/workspace/`. The tools handle this translation automatically, but `run_sandbox_command` does not.
+**"File not found"** — The AI Coworker may be looking for a file using the Live portal path (`/app/...`) instead of the Build runtime path. Build runtime files live under `/workspace/`. The tools handle this translation automatically, but `run_sandbox_command` does not.
 
-**"Typecheck failed"** — The sandbox runs the same TypeScript compiler as production. If the typecheck fails, the AI Coworker can use `run_sandbox_tests` with `auto_fix: true` to diagnose and fix the issue automatically (up to three attempts).
+**"Typecheck failed"** — The Build runtime runs the same TypeScript compiler as the Live portal. If the typecheck fails, the AI Coworker can use `run_sandbox_tests` with `auto_fix: true` to diagnose and fix the issue automatically (up to three attempts).
 
-**Build stuck in a phase** — Each pipeline step has retry limits. If a step exhausts retries, the build is marked as failed and the sandbox slot is released. You can create a new feature build to start fresh.
+**Build stuck in a phase** — Each pipeline step has retry limits. If a step exhausts retries, the build is marked as failed and the Build runtime slot is released. You can create a new feature build to start fresh.

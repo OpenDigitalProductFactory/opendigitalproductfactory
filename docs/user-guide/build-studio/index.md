@@ -17,11 +17,11 @@ Build Studio is not a separate code universe. It works from the install's shared
 - **Phases** — The five stages every feature moves through: Ideate (define the problem), Plan (design the solution), Build (generate and test code), Review (quality gates), Ship (deploy to production).
 - **Feature Brief** — The structured output of the Ideate phase. It captures the problem, desired outcome, constraints, and acceptance criteria. Everything downstream is built from this.
 - **AI Coworker** — The Software Engineer agent that works with you through each phase. It searches the codebase, writes code, runs tests, and deploys features. You guide it with plain language.
-- **Sandbox** — An isolated execution environment where generated code runs safely without affecting the production platform. Each sandbox has its own database, file system, and network.
+- **Build runtime** — The isolated execution environment where the AI Coworker generates and tests code. Has its own database, file system, and network — completely separated from the live platform. The Build Studio canvas surfaces it as **Live preview**; the technical name *sandbox* still appears in diagnostics. See [Build Runtime](sandbox.md) for the full operating model.
 - **Shared Workspace** — The durable source workspace for this install. Build Studio reads and writes here, and in customizable installs VS Code uses the same codebase.
 - **Live Preview** — During the Build phase, a real-time preview shows the generated UI in an iframe. The preview updates automatically as the AI Coworker writes code.
 - **Quality Gates** — Automated checks between phases. Each gate requires specific evidence before the feature can advance (design review, plan review, test results, typecheck).
-- **Promotion** — The process of moving a completed feature from the sandbox into production. Includes database backup, image rebuild, health check, and automatic rollback on failure.
+- **Promotion** — The process of moving a completed feature from the Build runtime into production. Includes database backup, image rebuild, health check, and automatic rollback on failure.
 
 ## What You Can Do
 
@@ -45,7 +45,7 @@ The AI Coworker creates an implementation plan listing the files to create or mo
 
 ### Build
 
-The AI Coworker generates code inside an isolated sandbox. You can see the live preview update in real time. It runs tests and typecheck after generating code. If tests fail, it attempts to fix them automatically. You can ask for changes at any time.
+The AI Coworker generates code inside the isolated Build runtime. You can see the live preview update in real time. It runs tests and typecheck after generating code. If tests fail, it attempts to fix them automatically. You can ask for changes at any time.
 
 ### Review
 
