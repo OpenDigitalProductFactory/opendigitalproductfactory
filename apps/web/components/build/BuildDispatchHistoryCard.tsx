@@ -19,22 +19,37 @@ export function BuildDispatchHistoryCard({ attempts }: Props) {
       <div className="mt-3 space-y-2">
         {attempts.length === 0 ? (
           <p className="text-xs text-[var(--dpf-muted)]">No dispatch attempts recorded yet.</p>
-        ) : attempts.map((attempt) => (
-          <div key={attempt.id} className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-2 text-xs">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-medium text-[var(--dpf-text)]">{attempt.taskTitle}</span>
-              <span className="text-[var(--dpf-muted)]">exit {attempt.exitCode ?? "running"} · {attempt.failureAxis}</span>
+        ) : attempts.map((attempt) => {
+          const diagnosis = attempt.rootCauseSummary ?? attempt.failureAxis;
+          const rawOutput = attempt.stdoutExcerpt ?? attempt.stderrExcerpt;
+          return (
+            <div key={attempt.id} className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-2 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-medium text-[var(--dpf-text)]">{attempt.taskTitle}</span>
+                <span className="text-[var(--dpf-muted)]">exit {attempt.exitCode ?? "running"} · {attempt.failureAxis}</span>
+              </div>
+              <div
+                className="mt-1 text-[var(--dpf-text)]"
+                title="Classified diagnosis — derived from stdout/stderr and the failure axis."
+              >
+                {diagnosis}
+              </div>
+              {attempt.model && (
+                <div className="mt-1 text-[var(--dpf-muted)]">{attempt.model}</div>
+              )}
+              {rawOutput && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-[10px] uppercase text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
+                    Raw stdout/stderr
+                  </summary>
+                  <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 text-[10px] text-[var(--dpf-muted)]">
+                    {rawOutput}
+                  </pre>
+                </details>
+              )}
             </div>
-            {attempt.model && (
-              <div className="mt-1 text-[var(--dpf-muted)]">{attempt.model}</div>
-            )}
-            {(attempt.stdoutExcerpt || attempt.stderrExcerpt) && (
-              <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 text-[10px] text-[var(--dpf-muted)]">
-                {attempt.stdoutExcerpt ?? attempt.stderrExcerpt}
-              </pre>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

@@ -2,6 +2,7 @@
 
 import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { BuildDispatchHistoryCard } from "./BuildDispatchHistoryCard";
 import type { BuildDispatchAttemptView } from "@/lib/build/dispatch-attempts";
@@ -36,6 +37,70 @@ describe("BuildDispatchHistoryCard", () => {
     expect(screen.getByText("Add dispatch telemetry")).toBeInTheDocument();
     expect(screen.getByText(/exit 1.*usage-limit/)).toBeInTheDocument();
     expect(screen.getByText("gpt-5.3-codex")).toBeInTheDocument();
-    expect(screen.getByText("ERROR: You've hit your usage limit.")).toBeInTheDocument();
+    // ERROR text now appears as the diagnosis line (rootCauseSummary) and is
+    // also inside the collapsed <details> raw output. Use getAllByText since
+    // it may appear in two places.
+    expect(screen.getAllByText("ERROR: You've hit your usage limit.").length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+function attempt(overrides: Partial<BuildDispatchAttemptView> = {}): BuildDispatchAttemptView {
+  return {
+    id: "att-1",
+    buildId: "FB-X",
+    taskTitle: "Task A",
+    specialist: null,
+    providerId: null,
+    model: null,
+    attemptNumber: 1,
+    startedAt: "2026-05-24T00:00:00Z",
+    completedAt: "2026-05-24T00:00:05Z",
+    durationMs: 5000,
+    exitCode: 1,
+    success: false,
+    failureAxis: "usage-limit",
+    stdoutExcerpt: "Reading prompt from stdin...\nUsage limit reached for the day.",
+    stderrExcerpt: null,
+    rootCauseSummary: "Usage limit reached for the day.",
+    rootCauseHash: "deadbeefcafe1234",
+    ...overrides,
+  };
+}
+
+describe("BuildDispatchHistoryCard — root-cause display (BI-594B76AB)", () => {
+  it("renders rootCauseSummary as the visible diagnosis line when present", () => {
+    const html = renderToStaticMarkup(<BuildDispatchHistoryCard attempts={[attempt()]} />);
+    expect(html).toContain("Usage limit reached for the day.");
+  });
+
+  it("falls back to failureAxis text when rootCauseSummary is null", () => {
+    const html = renderToStaticMarkup(
+      <BuildDispatchHistoryCard
+        attempts={[attempt({ rootCauseSummary: null, failureAxis: "timeout", stdoutExcerpt: null })]}
+      />,
+    );
+    expect(html).toMatch(/\btimeout\b/i);
+  });
+
+  it("places stdoutExcerpt inside a <details> element, not the default visible body", () => {
+    const html = renderToStaticMarkup(<BuildDispatchHistoryCard attempts={[attempt()]} />);
+    expect(html).toMatch(/<details[\s>]/);
+    const detailsMatch = html.match(/<details[\s\S]*?<\/details>/);
+    expect(detailsMatch).not.toBeNull();
+    expect(detailsMatch![0]).toContain("Reading prompt from stdin");
+  });
+
+  it("does not duplicate the rootCauseSummary outside the expected places", () => {
+    const html = renderToStaticMarkup(<BuildDispatchHistoryCard attempts={[attempt()]} />);
+    const occurrences = (html.match(/Usage limit reached for the day\./g) ?? []).length;
+    // Once in the visible diagnosis line, possibly once inside the raw <details>
+    // because stdoutExcerpt contains the same string after the prologue.
+    expect(occurrences).toBeGreaterThanOrEqual(1);
+    expect(occurrences).toBeLessThanOrEqual(2);
+  });
+
+  it("uses a <summary> label that names the raw section", () => {
+    const html = renderToStaticMarkup(<BuildDispatchHistoryCard attempts={[attempt()]} />);
+    expect(html).toMatch(/<summary[^>]*>[^<]*Raw[^<]*<\/summary>/i);
   });
 });
