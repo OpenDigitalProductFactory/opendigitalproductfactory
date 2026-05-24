@@ -34,6 +34,7 @@ function makePublicPrinciple(
     principleDimensionVector: { long_term_maintainability: 1.0 },
     principleDimensions: ["long_term_maintainability"],
     principleAppliesTo: ["in_platform_coworker"],
+    principleRingScope: [],
     principlePublic: true,
     principlePublicRationale: "Default rationale for tests.",
     principleRuntimeEnforcement: null,
