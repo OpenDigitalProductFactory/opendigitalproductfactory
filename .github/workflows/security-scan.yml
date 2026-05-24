@@ -91,10 +91,14 @@ jobs:
         run: |
           set -euo pipefail
           # --error: non-zero exit if any finding remains after baseline diff.
-          # --severity covers both old-style (ERROR/WARNING/INFO) and new
-          # severity tags (CRITICAL/HIGH/MEDIUM/LOW). Without all of these,
-          # modern community rules that use HIGH/CRITICAL are silently
-          # filtered out — verified via demo PR #1061 acceptance test.
+          # NO --severity filter. Semgrep 1.163's --severity flag only
+          # accepts the legacy INFO/WARNING/ERROR tags; modern rules use
+          # CRITICAL/HIGH/MEDIUM/LOW in metadata and many are dropped by
+          # the legacy filter. Demo PR #1061 confirmed 0 findings on
+          # hardcoded AWS keys + Math.random() tokens + eval() with the
+          # legacy filter in place. Removing the filter is the safest fix.
+          # If noise becomes a problem later, suppress via .semgrepignore
+          # or per-rule metadata.justification.
           # --sarif-output: machine-readable findings for Code Scanning upload.
           semgrep scan \
             --config=p/security-audit \
@@ -104,11 +108,6 @@ jobs:
             --config=p/owasp-top-ten \
             --config=p/github-actions \
             --config=p/secrets \
-            --severity=ERROR \
-            --severity=WARNING \
-            --severity=CRITICAL \
-            --severity=HIGH \
-            --severity=MEDIUM \
             --baseline-commit="${BASELINE_SHA}" \
             --sarif-output=semgrep.sarif \
             --error \
