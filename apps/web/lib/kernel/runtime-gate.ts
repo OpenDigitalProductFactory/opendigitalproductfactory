@@ -78,6 +78,17 @@ function modeFor(p: EnforceablePrinciple, sc: SessionClass): EnforcementMode {
   return sc === "autonomous" ? p.runtime.autonomousMode : p.runtime.interactiveMode;
 }
 
+function generateConfirmationToken(): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const buf = new Uint8Array(4);
+  globalThis.crypto.getRandomValues(buf);
+  return Array.from(buf, (b) => alphabet[b % alphabet.length]).join("");
+}
+
+function makeRequiredPhrase(slug: string): string {
+  return `I-MEAN-IT-${slug}-${generateConfirmationToken()}`;
+}
+
 export function evaluateExecution(
   attempt: ExecutionAttempt,
   sessionClass: SessionClass,
@@ -90,15 +101,20 @@ export function evaluateExecution(
       const matched = attempt.kind === "shell" && matchShell(attempt, pattern);
       if (!matched) continue;
       const mode = modeFor(principle, sessionClass);
+      const rationale = "rationale" in pattern ? pattern.rationale : "";
       if (mode === "refuse") {
+        return { verdict: "refuse", principleId: principle.id, principleSlug: principle.slug, rationale };
+      }
+      if (mode === "confirm") {
         return {
-          verdict: "refuse",
+          verdict: "require_confirm",
           principleId: principle.id,
           principleSlug: principle.slug,
-          rationale: "rationale" in pattern ? pattern.rationale : "",
+          rationale,
+          requiredPhrase: makeRequiredPhrase(principle.slug),
         };
       }
-      // confirm / warn handled in Task 1.3 + 1.6
+      // warn handled in Task 1.6 (still allows, caller logs)
     }
   }
   return { verdict: "allow" };

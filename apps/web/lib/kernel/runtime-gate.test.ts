@@ -49,4 +49,18 @@ describe("evaluateExecution — shell refuse (autonomous)", () => {
       ),
     ).toEqual({ verdict: "allow" });
   });
+
+  it("returns require_confirm in interactive mode with a typed phrase", () => {
+    const d = evaluateExecution(
+      { kind: "shell", command: "docker", args: ["volume", "rm", "dpf_pgdata"] },
+      "interactive",
+      [NEVER_WIPE_DB],
+    );
+    expect(d.verdict).toBe("require_confirm");
+    if (d.verdict === "require_confirm") {
+      expect(d.requiredPhrase).toMatch(
+        /^I-MEAN-IT-never-wipe-db-for-code-fixes-[A-Z0-9]{4}$/,
+      );
+    }
+  });
 });
