@@ -79,6 +79,40 @@ describe("loadEnforceablePrinciples — caching", () => {
   });
 });
 
+describe("loadEnforceablePrinciples — defensive behavior", () => {
+  it("returns [] + warns when prisma.wikiPage.findMany is unavailable (partial-mock tests)", async () => {
+    // Simulate a test that mocked @dpf/db without stubbing wikiPage.
+    const original = (prisma as { wikiPage?: unknown }).wikiPage;
+    (prisma as { wikiPage?: unknown }).wikiPage = undefined;
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const out = await loadEnforceablePrinciples();
+      expect(out).toEqual([]);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[runtime-gate] prisma.wikiPage.findMany unavailable"),
+      );
+    } finally {
+      (prisma as { wikiPage?: unknown }).wikiPage = original;
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("returns [] + warns when findMany throws (pre-migration install)", async () => {
+    findManyMock.mockRejectedValueOnce(new Error("column does not exist"));
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const out = await loadEnforceablePrinciples();
+      expect(out).toEqual([]);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[runtime-gate] wikiPage query failed"),
+        expect.any(Error),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+});
+
 describe("loadEnforceablePrinciples — synthetic probe", () => {
   it("appends the synthetic probe principle only when DPF_TEST_MCP_REFUSE_PROBE=1", async () => {
     findManyMock.mockResolvedValue([]);

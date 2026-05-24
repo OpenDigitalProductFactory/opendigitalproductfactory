@@ -88,18 +88,58 @@ function shapeOf(row: WikiPageRow): EnforceablePrinciple | null {
 
 export async function loadEnforceablePrinciples(): Promise<EnforceablePrinciple[]> {
   if (cached !== null) return maybeAppendSynthetic(cached);
-  const rows = await prisma.wikiPage.findMany({
-    where: {
-      pageKind: "principle",
-      NOT: { principleRuntimeEnforcement: { equals: null as unknown as object } },
-    },
-    select: {
-      id: true,
-      slug: true,
-      principleTier: true,
-      principleRuntimeEnforcement: true,
-    },
-  });
+
+  // Defensive against three real cases where prisma.wikiPage may be missing:
+  //   1. Existing unit tests that mock @dpf/db without stubbing wikiPage
+  //      (their executeTool calls now traverse the gate; we must not crash
+  //      them when they didn't opt into providing a wikiPage mock).
+  //   2. Portal cold-boot before the principleRuntimeEnforcement column
+  //      migration has been applied (older installs upgrading via the
+  //      installer's deploy step).
+  //   3. Any future test/runtime context where prisma is provided as a
+  //      partial mock.
+  // In every case the correct behavior is "no enforceable principles" +
+  // a warn-level log so the operator/test author can see something is
+  // off without the dispatcher crashing.
+  if (!prisma?.wikiPage?.findMany) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[runtime-gate] prisma.wikiPage.findMany unavailable — runtime gate is inactive. " +
+        "(Normal in tests that mock @dpf/db without stubbing wikiPage; " +
+        "investigate if seen in production logs.)",
+    );
+    cached = [];
+    return maybeAppendSynthetic(cached);
+  }
+
+  let rows: unknown[] = [];
+  try {
+    rows = await prisma.wikiPage.findMany({
+      where: {
+        pageKind: "principle",
+        NOT: { principleRuntimeEnforcement: { equals: null as unknown as object } },
+      },
+      select: {
+        id: true,
+        slug: true,
+        principleTier: true,
+        principleRuntimeEnforcement: true,
+      },
+    });
+  } catch (err) {
+    // Likely a missing column (pre-migration install). Same posture as
+    // missing wikiPage above — log + treat as no enforceable principles
+    // so the dispatcher / API route do not 500.
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[runtime-gate] wikiPage query failed — runtime gate is inactive. " +
+        "Likely cause: principleRuntimeEnforcement column not yet migrated.",
+      err,
+    );
+    cached = [];
+    return maybeAppendSynthetic(cached);
+  }
+
   const shaped = (rows as unknown as WikiPageRow[])
     .map(shapeOf)
     .filter((p): p is EnforceablePrinciple => p !== null);
