@@ -7,6 +7,7 @@
  */
 
 import { inngest } from "../inngest-client";
+import { gateAtEntry } from "../quiescence-gates";
 
 /**
  * Background dimension eval for a single model.
@@ -20,6 +21,9 @@ export const evalBackground = inngest.createFunction(
     triggers: [{ event: "ai/eval.run" }],
   },
   async ({ event, step }) => {
+    const gate = await gateAtEntry(step);
+    if (!gate.proceed) return { skipped: true, reason: gate.reason };
+
     const { endpointId, modelId, userId } = event.data;
 
     const result = await step.run("run-dimension-eval", async () => {
@@ -63,6 +67,9 @@ export const probeBackground = inngest.createFunction(
     triggers: [{ event: "ai/probe.run" }],
   },
   async ({ event, step }) => {
+    const gate = await gateAtEntry(step);
+    if (!gate.proceed) return { skipped: true, reason: gate.reason, tested: 0 };
+
     const { endpointId, modelId, probesOnly, userId } = event.data;
 
     const results = await step.run("run-endpoint-tests", async () => {

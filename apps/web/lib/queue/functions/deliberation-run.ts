@@ -17,6 +17,7 @@
 //      degradation, and finish.
 
 import { inngest } from "../inngest-client";
+import { gateAtEntry } from "../quiescence-gates";
 
 /* -------------------------------------------------------------------------- */
 /* Public input                                                               */
@@ -379,6 +380,14 @@ export const deliberationRun = inngest.createFunction(
     triggers: [{ event: "deliberation/run.start" }, { event: "deliberation/run.resume" }],
   },
   async ({ event, step }) => {
+    // Gate at entry — refuses new deliberation starts during drain. In-flight
+    // deliberations complete naturally (runDeliberation is a single step.run
+    // so there's no natural mid-flow boundary to suspend; refactoring it to
+    // expose per-branch step.run boundaries for gateBetweenSteps is tracked
+    // as a follow-up under BI-QUIESCE-004b).
+    const gate = await gateAtEntry(step);
+    if (!gate.proceed) return { skipped: true, reason: gate.reason };
+
     const data = event.data as unknown as RunDeliberationInput;
     const resume = event.name === "deliberation/run.resume";
     await step.run("run-deliberation", async () => {
