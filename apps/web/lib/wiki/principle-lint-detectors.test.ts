@@ -15,6 +15,7 @@ import {
   detectPrincipleUnknownDimension,
   detectPrincipleTierWeightMismatch,
   detectPrinciplePublicMissingRationale,
+  detectPrincipleRuntimeEnforcement,
 } from "./principle-lint-detectors";
 import type { LintPrincipleWikiPage } from "./principle-lint-detectors";
 
@@ -42,6 +43,7 @@ function makePrinciplePage(
     principleAppliesTo: overrides.principleAppliesTo ?? [],
     principlePublic: overrides.principlePublic ?? false,
     principlePublicRationale: overrides.principlePublicRationale ?? null,
+    principleRuntimeEnforcement: overrides.principleRuntimeEnforcement ?? null,
     lastReviewedAt: overrides.lastReviewedAt ?? null,
   };
 }
@@ -428,5 +430,134 @@ describe("detectPrinciplePublicMissingRationale", () => {
       ],
     });
     expect(findings).toEqual([]);
+  });
+});
+
+describe("detectPrincipleRuntimeEnforcement", () => {
+  it("returns no findings when the field is absent", () => {
+    expect(
+      detectPrincipleRuntimeEnforcement({
+        pages: [makePrinciplePage({ principleRuntimeEnforcement: null })],
+      }),
+    ).toEqual([]);
+  });
+
+  it("flags invalid modes as error", () => {
+    const findings = detectPrincipleRuntimeEnforcement({
+      pages: [
+        makePrinciplePage({
+          principleRuntimeEnforcement: {
+            interactiveMode: "bogus" as never,
+            autonomousMode: "refuse",
+            patterns: [{ kind: "shell", regex: "^x", rationale: "x" }],
+          },
+        }),
+      ],
+    });
+    expect(findings).toContainEqual(
+      expect.objectContaining({ findingKind: "runtime-enforcement-invalid-mode" as never }),
+    );
+  });
+
+  it("flags an empty patterns array as warn (operator should remove the block)", () => {
+    const findings = detectPrincipleRuntimeEnforcement({
+      pages: [
+        makePrinciplePage({
+          principleRuntimeEnforcement: {
+            interactiveMode: "confirm",
+            autonomousMode: "refuse",
+            patterns: [],
+          },
+        }),
+      ],
+    });
+    expect(findings).toContainEqual(
+      expect.objectContaining({ findingKind: "runtime-enforcement-empty-patterns" as never }),
+    );
+  });
+
+  it("flags an uncompilable regex as error", () => {
+    const findings = detectPrincipleRuntimeEnforcement({
+      pages: [
+        makePrinciplePage({
+          principleRuntimeEnforcement: {
+            interactiveMode: "confirm",
+            autonomousMode: "refuse",
+            patterns: [{ kind: "shell", regex: "[unterminated", rationale: "x" }],
+          },
+        }),
+      ],
+    });
+    expect(findings).toContainEqual(
+      expect.objectContaining({ findingKind: "runtime-enforcement-invalid-regex" as never }),
+    );
+  });
+
+  it("accepts a (?i)-prefixed regex (lifted to RegExp flags by the gate)", () => {
+    const findings = detectPrincipleRuntimeEnforcement({
+      pages: [
+        makePrinciplePage({
+          principleRuntimeEnforcement: {
+            interactiveMode: "confirm",
+            autonomousMode: "refuse",
+            patterns: [{ kind: "sql", regex: "(?i)^\s*DROP\s+DATABASE\s+dpf\b", rationale: "Drops prod DB" }],
+          },
+        }),
+      ],
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it("flags missing rationale as warn", () => {
+    const findings = detectPrincipleRuntimeEnforcement({
+      pages: [
+        makePrinciplePage({
+          principleRuntimeEnforcement: {
+            interactiveMode: "confirm",
+            autonomousMode: "refuse",
+            patterns: [{ kind: "shell", regex: "^docker", rationale: "  " }],
+          },
+        }),
+      ],
+    });
+    expect(findings).toContainEqual(
+      expect.objectContaining({ findingKind: "runtime-enforcement-missing-rationale" as never }),
+    );
+  });
+
+  it("flags an mcp_tool pattern with empty toolName as error", () => {
+    const findings = detectPrincipleRuntimeEnforcement({
+      pages: [
+        makePrinciplePage({
+          principleRuntimeEnforcement: {
+            interactiveMode: "confirm",
+            autonomousMode: "refuse",
+            patterns: [{ kind: "mcp_tool", toolName: "", rationale: "x" }],
+          },
+        }),
+      ],
+    });
+    expect(findings).toContainEqual(
+      expect.objectContaining({ findingKind: "runtime-enforcement-invalid-tool-name" as never }),
+    );
+  });
+
+  it("accepts a well-formed runtime-enforcement block", () => {
+    expect(
+      detectPrincipleRuntimeEnforcement({
+        pages: [
+          makePrinciplePage({
+            principleRuntimeEnforcement: {
+              interactiveMode: "confirm",
+              autonomousMode: "refuse",
+              patterns: [
+                { kind: "shell", regex: "^docker\s+volume\s+rm\b", rationale: "wipes" },
+                { kind: "mcp_tool", toolName: "prisma_migrate_reset", rationale: "drops schema" },
+              ],
+            },
+          }),
+        ],
+      }),
+    ).toEqual([]);
   });
 });
