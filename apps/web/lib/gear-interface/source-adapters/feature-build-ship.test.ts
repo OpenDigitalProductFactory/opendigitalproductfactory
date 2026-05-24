@@ -1,7 +1,11 @@
 // apps/web/lib/gear-interface/source-adapters/feature-build-ship.test.ts
 
 import { describe, it, expect } from "vitest";
-import { featureBuildShipToRing23Input, type FeatureBuildShipSource } from "./feature-build-ship";
+import {
+  featureBuildArchetypeUnresolvedToRing23Input,
+  featureBuildShipToRing23Input,
+  type FeatureBuildShipSource,
+} from "./feature-build-ship";
 import { validateGearInterfaceInput } from "../writer";
 
 function source(overrides: Partial<FeatureBuildShipSource> = {}): FeatureBuildShipSource {
@@ -84,5 +88,26 @@ describe("featureBuildShipToRing23Input", () => {
     expect(
       featureBuildShipToRing23Input(source({ ringRatioConsumed: 12 })).ratioConsumed,
     ).toBe(12);
+  });
+
+  it("can emit a Ring 2→3 archetype-unresolved slip without fabricating context", () => {
+    const input = featureBuildArchetypeUnresolvedToRing23Input({
+      id: "fb-1",
+      buildId: "FB-ABC123",
+      title: "Add invoice export",
+      claimedByAgentId: "agent-build-specialist",
+      codingProvider: "claude-cli",
+      completedAt: new Date("2026-05-24T18:00:00Z"),
+    });
+
+    expect(input.innerRing).toBe(2);
+    expect(input.outerRing).toBe(3);
+    expect(input.archetypeContext).toBeNull();
+    expect(input.outcomeType).toBe("slip");
+    expect(input.slipDetected).toBe(true);
+    expect(input.slipReason).toBe("archetype-unresolved");
+    expect(input.idempotencyKeySuffix).toBe("archetype-unresolved");
+    expect(input.rationale).toMatch(/not onboarded/i);
+    expect(() => validateGearInterfaceInput(input)).not.toThrow();
   });
 });

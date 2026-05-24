@@ -15,20 +15,23 @@
 // BI:   BI-861C4959
 
 import { prisma } from "@dpf/db";
-import { featureBuildShipToRing23Input } from "./source-adapters/feature-build-ship";
+import {
+  featureBuildArchetypeUnresolvedToRing23Input,
+  featureBuildShipToRing23Input,
+} from "./source-adapters/feature-build-ship";
 import { emitGearInterface } from "./writer";
 
 /**
- * Resolve the active archetype id for this install. Returns null when no
- * StorefrontConfig exists yet (fresh install / setup not run) so the caller
- * can skip the Ring 2→3 emit honestly rather than emit with a fabricated
- * archetype.
+ * Resolve the active semantic archetype slug for this install. Returns null
+ * when no StorefrontConfig/archetype relation exists yet so the caller can
+ * emit an observable unresolved slip rather than fabricate context.
  */
 async function resolveArchetypeContext(): Promise<string | null> {
   const config = await prisma.storefrontConfig.findFirst({
-    select: { archetypeId: true },
+    orderBy: { updatedAt: "desc" },
+    select: { archetype: { select: { archetypeId: true } } },
   });
-  return config?.archetypeId ?? null;
+  return config?.archetype?.archetypeId ?? null;
 }
 
 /**
@@ -57,14 +60,6 @@ export async function emitRing23FromCompletedShip(buildId: string): Promise<void
   if (build.phase !== "ship") return; // belt-and-braces — caller should already gate
 
   const archetypeContext = await resolveArchetypeContext();
-  if (!archetypeContext) {
-    console.warn(
-      "[gear-interface] Ring 2→3 emit skipped: no StorefrontConfig.archetypeId resolved for this install",
-      { buildId },
-    );
-    return;
-  }
-
   // shipSucceeded heuristic: phase reached ship AND build was not abandoned.
   // If UX verification ran, prefer its verdict. Acceptance signal — when
   // present — is the strongest input.
@@ -80,17 +75,23 @@ export async function emitRing23FromCompletedShip(buildId: string): Promise<void
     else if (am.met === false || am.status === "not-met") acceptanceMet = false;
   }
 
-  const input = featureBuildShipToRing23Input({
+  const source = {
     id: build.id,
     buildId: build.buildId,
     title: build.title,
-    archetypeContext,
     claimedByAgentId: build.claimedByAgentId,
     codingProvider: build.codingProvider,
-    shipSucceeded,
-    acceptanceMet,
     completedAt: build.updatedAt,
-  });
+  };
+
+  const input = archetypeContext
+    ? featureBuildShipToRing23Input({
+        ...source,
+        archetypeContext,
+        shipSucceeded,
+        acceptanceMet,
+      })
+    : featureBuildArchetypeUnresolvedToRing23Input(source);
 
   await emitGearInterface(input);
 }
