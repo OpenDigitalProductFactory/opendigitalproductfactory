@@ -48,17 +48,6 @@ export async function getBuildMergeSha(buildId: string): Promise<string | null> 
   return build?.productVersions[0]?.gitCommitHash ?? null;
 }
 
-// ─── Legacy completion sweep API ─────────────────────────────────────────────
-
-/** @deprecated Kept for backward-compat with portal-self-upgrade completion sweep */
-export async function completePendingSelfUpgradeRuns(_limit = 5): Promise<{
-  processedRunIds: string[];
-}> {
-  // Stub — completion now happens via isFeatureBuildDeployed checks in
-  // reconcileBuildCompletion during normal flow.
-  return { processedRunIds: [] };
-}
-
 /**
  * Returns true when the currently-deployed runtime SHA contains the
  * FeatureBuild's merge SHA, confirming the running app reflects the build's

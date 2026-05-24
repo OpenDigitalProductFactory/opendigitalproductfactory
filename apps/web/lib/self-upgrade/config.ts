@@ -42,9 +42,6 @@ export function isInMaintenanceWindow(config: SelfUpgradeConfig, now?: Date): bo
   });
 }
 
-/** @deprecated Use getSelfUpgradeConfig instead */
-export const loadSelfUpgradeConfig = (): Promise<SelfUpgradeConfig> => getSelfUpgradeConfig();
-
 export const SELF_UPGRADE_CONFIG_KEY = "portal.selfUpgrade";
 
 export async function getSelfUpgradeConfig(): Promise<SelfUpgradeConfig> {
