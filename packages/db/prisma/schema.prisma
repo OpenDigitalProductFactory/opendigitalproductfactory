@@ -4802,6 +4802,12 @@ model TaskRun {
   // deliberation rounds, sandbox pipeline, Codex CLI) so the watchdog can
   // distinguish a live task from a wedged one. See BI-4ab6be39 §6.1.
   lastHeartbeatAt      DateTime?
+  // Timestamp when the Activity Quiescence coordinator flipped this row to
+  // status='quiescing' during a normal→draining transition. Null on rows
+  // that have never been part of a quiescence cycle. See spec
+  // docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md
+  // §5.1 + §6.2. BI-QUIESCE-001.
+  quiescedAt           DateTime?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -4852,6 +4858,97 @@ model StallEvent {
   @@index([buildId])
   @@index([phase, reason])
   @@index([outcome])
+}
+
+// ─── Activity Quiescence Protocol — coordinator audit (BI-QUIESCE-001) ───
+//
+// One row per orchestrated drain attempt. Lifecycle:
+//   pending → preparing → draining → ready-to-swap → swapping → completed
+//                                          │              │
+//                                          └─→ aborted    └─→ failed
+//                            │
+//                            └─→ deferred (hard-blocker exceeded budget)
+//
+// Critical invariant (spec §5.2): every terminal transition emits the
+// "platform.quiescence-cleared" Inngest event so suspended functions resume
+// regardless of outcome. Otherwise a single coordinator crash would wedge
+// the Inngest queue forever.
+//
+// Independent of SelfUpgradeRun because quiescence is also triggerable from
+// manual maintenance and sandbox recovery flows; the trigger field carries
+// the caller, and triggerRefId links back when the caller has its own audit
+// substrate (e.g., SelfUpgradeRun.runId).
+//
+// Spec: docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md §5.1
+model QuiescenceRun {
+  id              String    @id @default(cuid())
+  // Public/human-readable id (e.g., "QR-2026-05-24-abc123"). Used in event
+  // payloads + URLs + log lines; the cuid `id` is internal FK substrate only.
+  runId           String    @unique
+  // Caller category: "self-upgrade" | "manual" | "sandbox-recovery"
+  trigger         String
+  // Caller's external reference (e.g., SelfUpgradeRun.runId). Echoed back
+  // on platform.quiescence-cleared so caller's step.waitForEvent can filter
+  // when multiple non-self-upgrade callers emit in close sequence (spec §5.3).
+  triggerRefId    String?
+
+  // State machine value (see model comment above). String not enum so future
+  // additions don't require a schema migration — application-layer validation
+  // via the QUIESCENCE_RUN_STATUSES constant.
+  status          String
+  startedAt       DateTime  @default(now())
+  // Per-state entry timestamps: { draining: ts, "ready-to-swap": ts, ... }.
+  // JSON-of-timestamps rather than columns per state so adding telemetry
+  // fields later doesn't force a migration per signal added.
+  enteredStateAt  Json      @default("{}")
+  // Swap-window timestamps populated when the caller signals progress past
+  // the ready-to-swap handshake. Distinguished from completedAt because the
+  // outer coordinator lifetime extends past swap (final state transitions).
+  swapStartedAt   DateTime?
+  swapCompletedAt DateTime?
+  completedAt     DateTime?
+  // Coordinator function heartbeat — written every wait-loop tick (~5s).
+  // Stuck-coordinator detection in taskrunWatchdog (BI-QUIESCE-007) keys on
+  // this; mirrors the BI-4ab6be39 TaskRun.lastHeartbeatAt pattern.
+  lastHeartbeatAt DateTime?
+
+  // ActiveSessionBlockers shape (spec §5.6) captured at preparing transition.
+  initialSnapshot Json
+  // Latest snapshot at completion / defer; null while still in flight.
+  finalSnapshot   Json?
+
+  // Expected post-swap identity for boot reconcile (BI-QUIESCE-010). When the
+  // new bundle boots it can correlate against these fields to detect that a
+  // pending QuiescenceRun matches the now-running version.
+  targetVersion    String?
+  targetBundleHash String?
+
+  // Operator-promised wait budget (ms). Coordinator chooses regime at
+  // preparing time and may extend per spec §5.5 max(regimeBudget, phaseBudget)
+  // rule when a BuildPhaseRun blocker is present.
+  budgetMs        Int
+  // Actual wait time at terminal transition. Populated for success/defer paths.
+  actualWaitMs    Int?
+
+  // Defer audit (populated when status='deferred').
+  deferReason     String?
+  deferSurface    String?
+  // List of surfaces force-cancelled past budget (e.g., ship-force override).
+  // JSON array of { surface, reason, forcedAt } objects.
+  forcedSurfaces  Json      @default("[]")
+
+  // Terminal outcome label: succeeded | deferred-by-surface |
+  // aborted-by-operator | failed. Set together with status transition.
+  outcome         String?
+  // Where the terminal transition came from: caller | boot-reconciler | watchdog.
+  // Distinguishes "caller signaled swap-complete cleanly" from "post-swap boot
+  // reconciler had to close out a pending run" from "watchdog forced cleanup".
+  completionSource String?
+  outcomeNotes    String?   @db.Text
+
+  @@index([trigger, startedAt])
+  // Stuck-coordinator query: status NOT IN (terminal) AND lastHeartbeatAt < cutoff.
+  @@index([status, lastHeartbeatAt])
 }
 
 model TaskMessage {
