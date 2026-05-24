@@ -60,17 +60,56 @@ function rebuildShell(a: Extract<ExecutionAttempt, { kind: "shell" }>): string {
   return [a.command, ...a.args].join(" ");
 }
 
-function matchShell(
-  a: Extract<ExecutionAttempt, { kind: "shell" }>,
-  p: EnforceablePattern,
-): boolean {
-  if (p.kind !== "shell") return false;
+/**
+ * JavaScript's RegExp constructor does NOT support inline flags like `(?i)`.
+ * Authors of principle patterns (especially SQL ones) commonly use `(?i)` to
+ * express case-insensitivity, so we strip a leading `(?<flags>)` prefix and
+ * lift it to the constructor's flags argument. Multi-prefix (`(?im)`,
+ * `(?is)`, etc.) is supported; embedded mid-pattern inline flags are NOT
+ * (treated as a regex syntax error, returns false from safeTest).
+ */
+function compileRegex(rawPattern: string): RegExp {
+  const inlineFlagMatch = rawPattern.match(/^\(\?([a-z]+)\)/);
+  if (inlineFlagMatch) {
+    const flags = inlineFlagMatch[1];
+    const body = rawPattern.slice(inlineFlagMatch[0].length);
+    return new RegExp(body, flags);
+  }
+  return new RegExp(rawPattern);
+}
+
+function safeTest(regex: string, input: string): boolean {
   try {
-    return new RegExp(p.regex).test(rebuildShell(a));
+    return compileRegex(regex).test(input);
   } catch {
     // Malformed regex never matches. Authors are protected by the
     // ingest-time lint detector (lib/wiki/principle-lint-detectors.ts).
     return false;
+  }
+}
+
+function matchShell(a: Extract<ExecutionAttempt, { kind: "shell" }>, p: EnforceablePattern): boolean {
+  return p.kind === "shell" && safeTest(p.regex, rebuildShell(a));
+}
+
+function matchMcpTool(a: Extract<ExecutionAttempt, { kind: "mcp_tool" }>, p: EnforceablePattern): boolean {
+  return p.kind === "mcp_tool" && p.toolName === a.toolName;
+}
+
+function matchSql(a: Extract<ExecutionAttempt, { kind: "sql" }>, p: EnforceablePattern): boolean {
+  return p.kind === "sql" && safeTest(p.regex, a.statement);
+}
+
+function matchGit(a: Extract<ExecutionAttempt, { kind: "git" }>, p: EnforceablePattern): boolean {
+  return p.kind === "git" && safeTest(p.regex, [a.subcommand, ...a.args].join(" "));
+}
+
+function matches(attempt: ExecutionAttempt, pattern: EnforceablePattern): boolean {
+  switch (attempt.kind) {
+    case "shell":    return matchShell(attempt, pattern);
+    case "mcp_tool": return matchMcpTool(attempt, pattern);
+    case "sql":      return matchSql(attempt, pattern);
+    case "git":      return matchGit(attempt, pattern);
   }
 }
 
@@ -89,6 +128,21 @@ function makeRequiredPhrase(slug: string): string {
   return `I-MEAN-IT-${slug}-${generateConfirmationToken()}`;
 }
 
+// Tier-tie resolution: when multiple principles match the same attempt,
+// the highest tier wins; among equal tiers the most restrictive mode wins
+// (refuse > confirm > warn). Among equal tier AND equal mode, the
+// first-in-array wins (deterministic ordering — callers can rely on it).
+const TIER_WEIGHT = { commandment: 3, core: 2, contextual: 1 } as const;
+const MODE_WEIGHT = { refuse: 3, confirm: 2, warn: 1 } as const;
+
+type Match = {
+  principle: EnforceablePrinciple;
+  pattern: EnforceablePattern;
+  mode: EnforcementMode;
+  /** Original array index — preserved for deterministic equal-tier+mode ordering. */
+  index: number;
+};
+
 export function evaluateExecution(
   attempt: ExecutionAttempt,
   sessionClass: SessionClass,
@@ -96,26 +150,40 @@ export function evaluateExecution(
 ): GateDecision {
   if (principles.length === 0) return { verdict: "allow" };
 
-  for (const principle of principles) {
+  const collected: Match[] = [];
+  for (let i = 0; i < principles.length; i++) {
+    const principle = principles[i];
     for (const pattern of principle.runtime.patterns) {
-      const matched = attempt.kind === "shell" && matchShell(attempt, pattern);
-      if (!matched) continue;
-      const mode = modeFor(principle, sessionClass);
-      const rationale = "rationale" in pattern ? pattern.rationale : "";
-      if (mode === "refuse") {
-        return { verdict: "refuse", principleId: principle.id, principleSlug: principle.slug, rationale };
+      if (matches(attempt, pattern)) {
+        collected.push({ principle, pattern, mode: modeFor(principle, sessionClass), index: i });
       }
-      if (mode === "confirm") {
-        return {
-          verdict: "require_confirm",
-          principleId: principle.id,
-          principleSlug: principle.slug,
-          rationale,
-          requiredPhrase: makeRequiredPhrase(principle.slug),
-        };
-      }
-      // warn handled in Task 1.6 (still allows, caller logs)
     }
   }
+  if (collected.length === 0) return { verdict: "allow" };
+
+  collected.sort((a, b) => {
+    const t = TIER_WEIGHT[b.principle.tier] - TIER_WEIGHT[a.principle.tier];
+    if (t !== 0) return t;
+    const m = MODE_WEIGHT[b.mode] - MODE_WEIGHT[a.mode];
+    if (m !== 0) return m;
+    return a.index - b.index;  // deterministic: earlier-in-array wins on ties
+  });
+
+  const w = collected[0];
+  const rationale = "rationale" in w.pattern ? w.pattern.rationale : "";
+
+  if (w.mode === "refuse") {
+    return { verdict: "refuse", principleId: w.principle.id, principleSlug: w.principle.slug, rationale };
+  }
+  if (w.mode === "confirm") {
+    return {
+      verdict: "require_confirm",
+      principleId: w.principle.id,
+      principleSlug: w.principle.slug,
+      rationale,
+      requiredPhrase: makeRequiredPhrase(w.principle.slug),
+    };
+  }
+  // warn mode: still allow at runtime; caller emits telemetry separately.
   return { verdict: "allow" };
 }
