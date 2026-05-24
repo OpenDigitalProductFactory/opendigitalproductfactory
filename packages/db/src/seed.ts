@@ -559,7 +559,36 @@ async function seedDefaultAdminUser(): Promise<void> {
       groups: { create: { platformRoleId: adminRole.id } },
     },
   });
+
+  // Principal convergence (AGENTS.md §11): every User must have a matching
+  // Principal + PrincipalAlias so audit-attributed actions (issue edge-node
+  // bootstrap token, approve principal, etc) can resolve session.user.id →
+  // principalId without falling back to a synthetic string that would
+  // violate BootstrapToken_issuedByPrincipalId_fkey and similar hard FKs.
+  //
+  // Inlined here rather than calling apps/web/lib/identity/principal-linking.ts
+  // because the seed runs in packages/db and cannot depend on apps/web. Keep
+  // the row shape exactly matching `syncUserPrincipal` so the runtime
+  // self-heal path produces identical rows.
+  const principal = await prisma.principal.create({
+    data: {
+      principalId: `PRN-${crypto.randomUUID()}`,
+      kind: "human",
+      status: "active",
+      displayName: user.email,
+    },
+  });
+  await prisma.principalAlias.create({
+    data: {
+      principalId: principal.id,
+      aliasType: "user",
+      aliasValue: user.id,
+      issuer: "",
+    },
+  });
+
   console.log(`Created default admin: ${user.email} (default password set — CHANGE THIS IMMEDIATELY)`);
+  console.log(`  + Principal ${principal.principalId} + PrincipalAlias (aliasType=user, aliasValue=${user.id})`);
 }
 
 async function seedEaViewpoints(): Promise<void> {
