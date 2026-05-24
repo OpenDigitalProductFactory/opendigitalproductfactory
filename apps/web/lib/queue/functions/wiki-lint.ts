@@ -9,6 +9,7 @@
 
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
+import { gateAtEntry } from "../quiescence-gates";
 
 // Daily at 03:30 UTC (matches the time spec §3.6 calls out). Two
 // retries because the orchestrator is idempotent — re-running on
@@ -16,6 +17,9 @@ import { inngest } from "../inngest-client";
 export const wikiLint = inngest.createFunction(
   { id: "wiki/lint-daily", retries: 2, triggers: [cron("30 3 * * *")] },
   async ({ step }) => {
+    const gate = await gateAtEntry(step);
+    if (!gate.proceed) return { skipped: true, reason: gate.reason };
+
     const orgIds = await step.run("collect-active-orgs", async () => {
       const { prisma } = await import("@dpf/db");
       const orgs = await prisma.organization.findMany({
