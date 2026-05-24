@@ -101,8 +101,10 @@ bump, restore the pin or extend the workaround.
 - **Not an e2e gate.** The Playwright suite under `tests/e2e/` runs
   separately on demand and is not blocking. See
   [`tests/e2e/platform-qa-plan.md`](../../tests/e2e/platform-qa-plan.md).
-- **Not a security gate.** That's [Semgrep](../security/semgrep.md) (pre-PR)
-  and CodeQL via the [inflow gate](../security/README.md) (post-PR).
+- **Not a security gate.** That's [gitleaks](../security/secrets-scan.md)
+  (pre-PR secrets), CodeQL (pre-PR code patterns, via
+  [`.github/workflows/codeql.yml`](../../.github/workflows/codeql.yml)),
+  and the CodeQL [inflow gate](../security/README.md) (post-PR diff).
 - **Not a UX gate.** UX verification is part of the manual build gate —
   see §5 of [`AGENTS.md`](../../AGENTS.md). Tests passing does not mean the
   feature works in the running app.
