@@ -1,12 +1,18 @@
 // apps/web/components/build/OpenSandboxButton.tsx
 //
-// Single shared "Open sandbox" button. Lives in the BuildStudio footer; the
-// per-build Preview tab is removed in this redesign because the sandbox is
-// shared across all in-flight builds (project_self_upgrade_kills_in_session_ux).
+// Single shared "Open live preview" button. Lives in the BuildStudio footer;
+// the per-build Preview tab is removed in this redesign because the sandbox
+// (the underlying compose service) is shared across all in-flight builds
+// (project_self_upgrade_kills_in_session_ux). The component file name
+// (OpenSandboxButton) is kept for symbol stability per the 2026-05-24 portal
+// topology consolidation spec §8.3.
 //
 // Per the design spec §1 (Footer) and §6 (component contract):
 //   - Renders <a target="_blank" rel="noopener noreferrer"> — rel is non-optional.
-//   - Label: "Open sandbox · driving: {code | 'idle'}".
+//   - Label: "Open live preview · driving: {code | 'idle'}". The component
+//     name (OpenSandboxButton) and the underlying URL still point at the
+//     "sandbox" compose service — only the user-facing string flipped
+//     per the 2026-05-24 portal topology consolidation spec §8.1.
 //   - Disabled visual + aria-disabled when sandboxUrl is empty.
 //   - Deterministic driver via sandbox-driver helper (R1 from peer review).
 //

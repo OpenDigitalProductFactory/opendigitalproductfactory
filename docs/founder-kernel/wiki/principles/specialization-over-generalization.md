@@ -9,6 +9,9 @@ principleDimensionVector: {"blast_radius": 0.7, "human_cognitive_load": -0.5, "r
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
+principleRingScope:
+  - ring-1-coworker
+  - ring-2-workflow
 principleConsumerArchetype: specialist
 principlePublic: true
 principlePublicRationale: Documents DPF's agentic architecture posture for adopters and contributors building specialist coworkers.

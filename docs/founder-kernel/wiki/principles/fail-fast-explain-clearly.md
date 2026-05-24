@@ -9,6 +9,8 @@ principleDimensionVector: {"evidence_density": 0.8, "blast_radius": 0.5, "speed_
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
+principleRingScope:
+  - ring-1-coworker
 principleConsumerArchetype: ai-coworker-universal
 principlePublic: true
 principlePublicRationale: Adopters need to know that DPF agents surface errors directly rather than masking them through retries.

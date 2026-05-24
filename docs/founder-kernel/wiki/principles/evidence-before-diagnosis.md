@@ -10,6 +10,8 @@ principleDimensionVector: {"evidence_density": 1.0, "schema_grounding": 0.8, "lo
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
+principleRingScope:
+  - ring-1-coworker
 principleConsumerArchetype: ai-coworker-universal
 principlePublic: false
 authoredAt: 2026-05-18

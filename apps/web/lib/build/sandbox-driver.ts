@@ -5,7 +5,11 @@
 //
 // Per the design spec §1 (footer) and §6 (OpenSandboxButton):
 //   - All builds share one sandbox (project_self_upgrade_kills_in_session_ux).
-//   - The footer button always shows ONE label: "Open sandbox · driving: {code}".
+//   - The footer button always shows ONE label:
+//       "Open live preview · driving: {code}"
+//     The internal symbol name (formatSandboxLabel) and the "sandbox" compose
+//     service it points at are unchanged — only the user-facing label flipped
+//     per 2026-05-24 portal topology consolidation spec §8.1.
 //   - "Driving" = the build whose preview port is live; on ties, the most
 //     recently active. When nothing is running, label says "idle".
 //
@@ -69,7 +73,12 @@ export function isValidSandboxPort(port: number | null | undefined): port is num
 }
 
 /** Format the label used by OpenSandboxButton. Stays in this module so the
- *  string contract is centralized. */
+ *  string contract is centralized.
+ *
+ *  Customer-facing wording: "Live preview" (the user-job-named role per the
+ *  portal topology consolidation spec). The function name keeps "Sandbox"
+ *  because that is the compose-service the link points at — the rename is
+ *  *user-facing only*, not a code-symbol rename. See spec §6 and §8.3. */
 export function formatSandboxLabel(drivingBuildCode: string | null): string {
-  return `Open sandbox · driving: ${drivingBuildCode ?? "idle"}`;
+  return `Open live preview · driving: ${drivingBuildCode ?? "idle"}`;
 }

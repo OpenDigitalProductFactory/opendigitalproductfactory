@@ -19,9 +19,11 @@ import { QDRANT_COLLECTIONS, upsertVectors, type VectorPoint } from "./qdrant";
 import {
   PRINCIPLE_CONSUMER_ARCHETYPES,
   PRINCIPLE_DIMENSIONS,
+  PRINCIPLE_RING_SCOPES,
   isPrincipleConsumerArchetype,
   isPrincipleConsumerContextSlug,
   isPrincipleDimension,
+  isPrincipleRingScope,
 } from "./wiki-taxonomy";
 import {
   appendRevision,
@@ -140,6 +142,23 @@ export function extractPrinciplePayload(
     }
   }
 
+  // Validate ring-scope values against the registry. Fail fast on unknown
+  // values rather than silently dropping them — silent skip on bad
+  // frontmatter is the failure mode `feedback_check_tool_signals.md` and
+  // `make-silent-failures-observable` both forbid.
+  if (frontmatter.principleRingScope) {
+    for (const scope of frontmatter.principleRingScope) {
+      if (!isPrincipleRingScope(scope)) {
+        throw new Error(
+          `Unknown principleRingScope value "${scope}". ` +
+            `Allowed ring scopes: ${PRINCIPLE_RING_SCOPES.join(", ")}. ` +
+            `Add the ring scope to PRINCIPLE_RING_SCOPES in wiki-taxonomy.ts ` +
+            `via a follow-up spec/PR before referencing it from frontmatter.`,
+        );
+      }
+    }
+  }
+
   // Validate consumer-context slug shape (governed kebab-case slugs, not a
   // closed enum — new contexts ship via authoring without a schema change).
   if (frontmatter.principleConsumerContexts) {
@@ -233,6 +252,9 @@ export function extractPrinciplePayload(
   }
   if (frontmatter.principleAppliesTo !== undefined) {
     payload.principleAppliesTo = frontmatter.principleAppliesTo as never;
+  }
+  if (frontmatter.principleRingScope !== undefined) {
+    payload.principleRingScope = frontmatter.principleRingScope as never;
   }
   if (frontmatter.principleConsumerArchetype !== undefined) {
     payload.principleConsumerArchetype =

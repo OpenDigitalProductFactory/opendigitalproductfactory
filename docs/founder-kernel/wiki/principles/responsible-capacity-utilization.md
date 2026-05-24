@@ -10,6 +10,8 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleRingScope:
+  - universal-ring
 principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: A core DPF stance — adopters need to understand the platform's posture on idle vs. active coworker time and the governance gates that bound autonomous work.

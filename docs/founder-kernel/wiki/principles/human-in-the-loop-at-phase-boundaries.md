@@ -10,6 +10,9 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleRingScope:
+  - ring-2-workflow
+  - ring-4-sandbox-prod
 principleConsumerArchetype: universal
 principlePublic: true
 principlePublicRationale: Documents DPF's HITL governance posture for adopters and contributors — anyone running the platform needs to know where approvals are required and where the agent operates autonomously.

@@ -81,7 +81,20 @@ import { ROUTE_AGENT_MAP_ENTRIES } from "@/lib/tak/agent-routing";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type BuildPhaseTag = "ideate" | "plan" | "build" | "review" | "ship";
-type ToolExecutionContext = { routeContext?: string; agentId?: string; threadId?: string; taskRunId?: string };
+type ToolExecutionContext = {
+  routeContext?: string;
+  agentId?: string;
+  threadId?: string;
+  taskRunId?: string;
+  /**
+   * Build the user is currently messaging from. Plumbed by agentic-loop.ts
+   * from runAgenticLoop's `featureBuildId` param so phase-scoped tools can
+   * target the correct build instead of fishing for "latest in phase X" —
+   * which silently cross-contaminates state when multiple concurrent builds
+   * are in the same phase (BI-F4A30FCB, Dale dogfood 2026-05-24).
+   */
+  featureBuildId?: string;
+};
 
 /** MCP tool annotation hints (from MCP spec + n8n-MCP pattern).
  *  These let the agent router and governance layer make safety decisions
@@ -4188,6 +4201,31 @@ function redactFunctionalFailureText(text: string): string {
   return text
     .replace(/\bdpfmcp_[A-Za-z0-9_-]+/g, "[redacted-token]")
     .replace(/\bBearer\s+[A-Za-z0-9._-]+/g, "[redacted-token]");
+}
+
+// BI-F4A30FCB (Dale dogfood 2026-05-24): see ideate-build-resolution.ts for
+// the why. Re-exported here so existing imports keep working; new callers
+// should import from "@/lib/build/ideate-build-resolution".
+import { resolveIdeateBuildForToolPure } from "@/lib/build/ideate-build-resolution";
+
+export async function resolveIdeateBuildForTool(args: {
+  contextBuildId?: string;
+  toolName: string;
+}) {
+  return resolveIdeateBuildForToolPure(args, {
+    findUniqueBuild: async (buildId) =>
+      prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: { buildId: true, phase: true },
+      }),
+    findIdeateBuilds: async () =>
+      prisma.featureBuild.findMany({
+        where: { phase: "ideate" },
+        orderBy: { updatedAt: "desc" },
+        select: { buildId: true },
+        take: 2, // only need to distinguish 0 / 1 / 2+
+      }),
+  });
 }
 
 export async function executeTool(
@@ -9577,32 +9615,37 @@ export async function executeTool(
       // agent-coworker.ts after the agentic loop returns. We just persist
       // the user context so the dispatch knows what to research.
       const scope = String(params.reusabilityScope ?? "parameterizable");
-      const context = String(params.userContext ?? "");
+      const userCtx = String(params.userContext ?? "");
 
-      // Store the research request on the build record
-      const activeBuild = await prisma.featureBuild.findFirst({
-        where: { phase: "ideate" },
-        orderBy: { updatedAt: "desc" },
-        select: { buildId: true },
+      // BI-F4A30FCB (Dale dogfood 2026-05-24): resolve the target build
+      // from agent context first. The previous "findFirst by phase=ideate
+      // ordered by updatedAt" silently mis-targeted whenever multiple
+      // builds were in ideate concurrently — the user's request landed on
+      // an unrelated build whose updatedAt happened to be newer.
+      const activeBuild = await resolveIdeateBuildForTool({
+        contextBuildId: context?.featureBuildId,
+        toolName: "start_ideate_research",
       });
-      if (activeBuild) {
-        await prisma.featureBuild.update({
-          where: { buildId: activeBuild.buildId },
-          data: {
-            buildExecState: {
-              ideateResearchRequested: true,
-              reusabilityScope: scope,
-              userContext: context,
-              requestedAt: new Date().toISOString(),
-            },
-          },
-        });
+      if (!activeBuild.build) {
+        return activeBuild.refusal;
       }
+
+      await prisma.featureBuild.update({
+        where: { buildId: activeBuild.build.buildId },
+        data: {
+          buildExecState: {
+            ideateResearchRequested: true,
+            reusabilityScope: scope,
+            userContext: userCtx,
+            requestedAt: new Date().toISOString(),
+          },
+        },
+      });
 
       return {
         success: true,
         message: "Research started. Searching the codebase and drafting the design document — this takes about 1-2 minutes. Tell the user you're researching now. IMPORTANT: Do NOT call saveBuildEvidence with field 'designDoc' — the research system saves the design document and runs the review automatically when research completes. Just wait and tell the user.",
-        data: { reusabilityScope: scope, userContext: context },
+        data: { reusabilityScope: scope, userContext: userCtx, buildId: activeBuild.build.buildId },
       };
     }
 
@@ -9610,13 +9653,21 @@ export async function executeTool(
       // Scout dispatch: similar to ideate research, but runs a fast parallel search + URL fetch
       const externalUrls = (params.externalUrls as string[] | undefined) ?? [];
 
-      const activeBuild = await prisma.featureBuild.findFirst({
-        where: { phase: "ideate" },
-        orderBy: { updatedAt: "desc" },
+      // BI-F4A30FCB (Dale dogfood 2026-05-24): resolve the target build
+      // from agent context first; see start_ideate_research comment above.
+      const resolved = await resolveIdeateBuildForTool({
+        contextBuildId: context?.featureBuildId,
+        toolName: "start_scout_research",
+      });
+      if (!resolved.build) {
+        return resolved.refusal;
+      }
+      const activeBuild = await prisma.featureBuild.findUnique({
+        where: { buildId: resolved.build.buildId },
         select: { buildId: true, buildExecState: true, scoutFindings: true },
       });
       if (!activeBuild) {
-        return { success: false, message: "No active ideate build found." };
+        return { success: false, message: "Active ideate build vanished between resolve and read — try again." };
       }
 
       const current = activeBuild.buildExecState as Record<string, unknown> | null;
@@ -12042,122 +12093,41 @@ export async function executeTool(
     }
 
     case "apply_platform_update": {
-      const { exec: execCbUpdate } = lazyChildProcess();
-      const { promisify: promisifyUpdate } = lazyUtil();
-      const execUpdate = promisifyUpdate(execCbUpdate);
+      // Delegates to the shared server action in lib/actions/platform-dev-config.ts.
+      // The same code path backs the in-portal Apply Update UI added in
+      // BI-9B77E247, so both surfaces produce identical merge behavior and
+      // identical structured results — single source of truth.
+      const { applyPlatformUpdate } = await import("@/lib/actions/platform-dev-config");
+      const result = await applyPlatformUpdate();
 
-      const devConfig = await prisma.platformDevConfig.findUnique({ where: { id: "singleton" } });
-      if (!devConfig?.updatePending) {
-        return { success: false, message: "No platform update is pending.", error: "No update pending" };
-      }
-
-      const pendingVersion = devConfig.pendingVersion;
-      if (!pendingVersion || !/^[0-9a-zA-Z._-]+$/.test(pendingVersion)) {
-        return { success: false, message: "Invalid pending version string.", error: "Invalid version" };
-      }
-
-      const workspace = process.env.PROJECT_ROOT ?? "/workspace";
-      const gitOpts = { cwd: workspace, timeout: 30_000 };
-
-      try {
-        // Check for in-progress merge from a previous interrupted run
-        const { existsSync } = lazyFs();
-        const { resolve: resolvePath } = lazyPath();
-        if (existsSync(resolvePath(workspace, ".git", "MERGE_HEAD"))) {
-          // Return existing conflict list
-          const { stdout: conflicted } = await execUpdate("git diff --name-only --diff-filter=U", gitOpts);
-          const conflicts = [];
-          for (const file of conflicted.trim().split("\n").filter(Boolean)) {
-            const { readFileSync } = lazyFs();
-            const content = readFileSync(resolvePath(workspace, file), "utf-8");
-            const upstreamMatch = content.match(/<<<<<<< .+?\n([\s\S]*?)=======/);
-            const localMatch = content.match(/=======\n([\s\S]*?)>>>>>>> .+/);
-            conflicts.push({
-              file,
-              upstreamChange: upstreamMatch?.[1]?.trim() ?? "(could not parse)",
-              localChange: localMatch?.[1]?.trim() ?? "(could not parse)",
-            });
-          }
+      switch (result.kind) {
+        case "no-update-pending":
+          return { success: false, message: result.message, error: "No update pending" };
+        case "invalid-version":
+          return { success: false, message: result.message, error: "Invalid version" };
+        case "conflicts":
           return {
             success: true,
-            message: `A merge is already in progress. ${conflicts.length} conflict(s) remaining.`,
-            data: { clean: false, resumedMerge: true, conflicts } as unknown as Record<string, unknown>,
+            message: result.message,
+            data: {
+              clean: false,
+              resumedMerge: result.resumedMerge,
+              conflicts: result.conflicts,
+              version: result.version,
+            } as unknown as Record<string, unknown>,
           };
-        }
-
-        // Step 1-3: Update dpf-upstream branch with new source
-        await execUpdate("git checkout dpf-upstream", gitOpts);
-        await execUpdate("rm -rf apps/web packages", gitOpts);
-        await execUpdate("cp -r /app/apps/web-src/. apps/web/", gitOpts);
-        await execUpdate("cp -r /app/packages-src/. packages/", gitOpts);
-        await execUpdate("git add -A", gitOpts);
-
-        // Check if there are actually changes
-        const { stdout: diffCheck } = await execUpdate("git diff --cached --stat", gitOpts);
-        if (diffCheck.trim()) {
-          await execUpdate(`git commit -m "chore: dpf-upstream v${pendingVersion}"`, gitOpts);
-        }
-
-        // Step 4: Merge into my-changes
-        await execUpdate("git checkout my-changes", gitOpts);
-        try {
-          await execUpdate("git merge dpf-upstream --no-commit --no-ff", gitOpts);
-        } catch {
-          // Merge conflicts — expected, not an error
-        }
-
-        // Check for conflicts
-        const { stdout: conflictedFiles } = await execUpdate("git diff --name-only --diff-filter=U", gitOpts).catch(() => ({ stdout: "" }));
-        if (conflictedFiles.trim()) {
-          const conflicts = [];
-          const { readFileSync } = lazyFs();
-          const { resolve: rp } = lazyPath();
-          for (const file of conflictedFiles.trim().split("\n").filter(Boolean)) {
-            const content = readFileSync(rp(workspace, file), "utf-8");
-            const upstreamMatch = content.match(/<<<<<<< .+?\n([\s\S]*?)=======/);
-            const localMatch = content.match(/=======\n([\s\S]*?)>>>>>>> .+/);
-            conflicts.push({
-              file,
-              upstreamChange: upstreamMatch?.[1]?.trim() ?? "(could not parse)",
-              localChange: localMatch?.[1]?.trim() ?? "(could not parse)",
-            });
-          }
+        case "clean-merge":
           return {
             success: true,
-            message: `Merge has conflicts. ${conflicts.length} file(s) need resolution.`,
-            data: { clean: false, conflicts } as unknown as Record<string, unknown>,
+            message: result.message,
+            data: {
+              clean: true,
+              filesUpdated: result.filesUpdated,
+              version: result.version,
+            },
           };
-        }
-
-        // Clean merge — commit and update
-        const { stdout: filesChanged } = await execUpdate("git diff --cached --stat", gitOpts);
-        const fileCount = (filesChanged.match(/(\d+) files? changed/) || ["0", "0"])[1];
-        await execUpdate(`git commit -m "chore: merge dpf v${pendingVersion}"`, gitOpts);
-
-        // Update version sentinel
-        const { writeFileSync } = lazyFs();
-        const { resolve: rp2 } = lazyPath();
-        writeFileSync(rp2(workspace, ".dpf-version"), pendingVersion, "utf-8");
-
-        // Clear update pending flag
-        await prisma.platformDevConfig.update({
-          where: { id: "singleton" },
-          data: { updatePending: false, pendingVersion: null },
-        });
-
-        return {
-          success: true,
-          message: `Platform updated to v${pendingVersion}. ${fileCount} files updated. No conflicts.`,
-          data: { clean: true, filesUpdated: parseInt(fileCount ?? "0", 10), version: pendingVersion },
-        };
-      } catch (err) {
-        // Attempt to return to my-changes branch on error
-        try { await execUpdate("git checkout my-changes", gitOpts); } catch { /* best effort */ }
-        return {
-          success: false,
-          message: `Platform update failed: ${err instanceof Error ? err.message : "Unknown error"}`,
-          error: err instanceof Error ? err.message : "Unknown error",
-        };
+        case "error":
+          return { success: false, message: result.message, error: result.message };
       }
     }
 

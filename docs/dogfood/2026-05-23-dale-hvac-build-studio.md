@@ -318,3 +318,74 @@ gets a **hard gate** because it does code generation + complex reasoning
 - **D26** — "Configure →" is small text, not a primary button. Dale will hunt for it.
 - **D27** — Stale model list ("claude-3-5 · claude-4"); model discovery hasn't refreshed.
 - **D28** — Coworker chat panel showing "AI provider unavailable" spam on the very page where Dale would fix that.
+
+---
+
+## Phase E (2026-05-24 ~15:30 UTC) — drive Dale with strong providers connected
+
+After PR #1070 merged + Mark connected Claude OAuth Subscription + OpenAI Codex Subscription, re-drove FB-6F7D6AC4 (Dale's original "truck parts" intake from yesterday). Goal: see if the agent now behaves differently than it did under local Magistral.
+
+**Result: the hotfix bundle landed as a single observable behavior change.**
+
+| Yesterday (Magistral local, stale prompt) | Today (Claude Sonnet 4.6 / Codex GPT-5.4, D29 prompt) |
+|---|---|
+| "I caught myself describing work without actually doing it…" | "Scout is running. While it does — one quick question to make sure I design this right: Do your techs just need to **look up** what's on a truck, or do they also need to **update the list** when they use or pull parts during a job?" |
+| "I couldn't complete this with the model my admin assigned me. Please try the question again — I'll route through a different model." | "I'm looking through the codebase and shaping the feature now; that usually takes about a minute or two. Next I'll bring back a plain-language design for how truck inventory lookup and updates should work." |
+| Model chip: `local:docker.io/ai/magistral-small-3.2:latest` | Model chip: `anthropic-sub:claude-sonnet-4-6` (turn 1) → `codex:gpt-5.4` (turn 2). Dynamic per-turn routing. |
+| Action: hedge / loop | Action: started `scout_research`, then `save_build_notes` + `start_ideate_research` |
+
+**Vocabulary** throughout the agent's responses was Dale's, not the platform's — "codebase", "feature", "plain-language design", "tech", "look up", "update the list", "pull parts during a job". No `saveBuildEvidence`, no `start_ideate_research`, no internal IDs leaked.
+
+**Principle #15 (NEVER DEFLECT WHEN THE USER HAS AGENCY)** observably active — the agent didn't suggest "wait and try again" or "escalate to admin"; it diagnosed the gap in plain language and took the next concrete step.
+
+### Two new deficiencies surfaced in Phase E
+
+**[BI-78499309](http://localhost:3000/backlog/BI-78499309) — D31 (S1):** long-running async tools (`start_ideate_research` etc.) return `success:true` immediately but the actual work continues in the background. Coworker chat panel reverts to idle, no spinner, no "still working" indicator. Per `feedback_agent_as_work_conduit` the principle exists but isn't honored for tools that kick off background jobs. Dale waited 10+ minutes thinking the AI ghosted him.
+
+**[BI-F4A30FCB](http://localhost:3000/backlog/BI-F4A30FCB) — D32 (S0 CRITICAL):** `start_ideate_research` and `start_scout_research` resolved the active build via `findFirst({ where: { phase: "ideate" }, orderBy: { updatedAt: "desc" } })`. With multiple builds in ideate concurrently — common state once Build Studio sees real use — Dale's userContext landed on `FB-291BC06C` (an unrelated Portal self-upgrade build, fresher updatedAt) instead of his `FB-6F7D6AC4`. Bug hid behind `success:true` so neither the user nor the agent had any way to see the mismatch. **Note: D31 is what made D32 hide** — if progress visibility had been correct, the silent mis-targeting would have been caught faster. They're a pair.
+
+---
+
+## D32 surgical fix (PR #1077, merged 2026-05-24 ~16:35 UTC)
+
+- New helper `apps/web/lib/build/ideate-build-resolution.ts` honors explicit `contextBuildId` first, falls back to "single ideate build" only when unambiguous, and refuses with plain-English message when 2+ ideate builds exist without an explicit buildId. Refusal is loud (`console.warn` for the operator).
+- `agentic-loop.ts` plumbs `params.featureBuildId` through `governedExecuteTool → ToolExecutionContext` so the tool handlers can consume it.
+- Both ideate-phase tools use the new helper instead of the old `findFirst`.
+- 7/7 regression tests covering all three resolution paths plus the exact Dale dogfood cross-contamination scenario.
+
+---
+
+## Phase F (2026-05-24 ~17:00 UTC) — D32 behavioral verification BLOCKED
+
+Tried to re-drive Dale's intake against the now-fixed `start_ideate_research` to behaviorally confirm cross-contamination is gone. Two environment issues blocked it:
+
+1. **Prod portal `:3000` is serving stale pre-D32 bundle** — `docker compose build portal` returned exit 0 but was a complete cache hit (image hash unchanged). `--no-cache` rebuild surfaced the real failure: `pnpm --filter @dpf/db exec prisma generate` exit 1. Filed as [BI-09A48EAD](http://localhost:3000/backlog/BI-09A48EAD); spawned debug task working it.
+2. **Dev-portal `:3001` routing returned "AI provider temporarily unavailable"** before reaching tool layer. `RouteDecisionLog` confirms Codex GPT-5.4 was selected with rankScore 30.0, but the actual provider fetch failed downstream — provider intermittency / rate limiting / something at the fetch layer. So the agent never reached `start_ideate_research` and couldn't exercise the D32 fix path.
+
+**D32 verification state:**
+- ✅ Unit tests pass — 7/7 covering the exact cross-contamination scenario
+- ✅ Source on disk and in main as PR #1077
+- ✅ dev-portal bundle has D32 (worktree hot-reload)
+- ❌ Behavioral E2E unverified — environment blockers above
+
+The cross-contamination from the original repro cleared itself naturally — `FB-291BC06C.buildExecState.userContext` now contains the correct self-upgrade context (overwritten at 15:53 UTC by a properly-targeted research call). So whoever drove the self-upgrade build through Ideate after the bug surfaced, did so correctly under the post-fix code. Dale's `FB-6F7D6AC4` is still untouched from yesterday at 23:37 — needs another go once one of the two blockers clears.
+
+---
+
+## Triage state of the Dale epic (EP-9FC5D2FD) at 2026-05-24 ~17:30 UTC
+
+| # | Status | BI | Title |
+|---|---|---|---|
+| 1 | ✅ shipped | BI-7DA88A81 | G1 Build Studio entry gate |
+| 2 | ✅ shipped | BI-0BDA630D | G2 honest failure messages |
+| 3 | ✅ shipped (D25 portion) | BI-D6740C86 | Provider UX cleanup — D24/D26/D27/D28 queued |
+| 4 | ✅ shipped (wiring) | BI-4C478ACF | D29 coworker route+capability context + NEVER-DEFLECT principle |
+| 5 | ✅ shipped (D5/D9 portion) | BI-253ADC70 | Chat hygiene — D10/D18 queued |
+| 6 | ✅ shipped (D12 portion) | BI-950FE085 | Intake affordance — D8 queued |
+| 7 | open | BI-63EAD801 | Hide internal IDs / capsule slugs / git branch chips (D13) |
+| 8 | ✅ shipped (D11/D14 portion) | BI-62075FF9 | Status-strip cleanup — D15/D16/D17/D20 queued |
+| 9 | open | BI-EC26D09D | Portal first-touch labeling (D1, D7) |
+| 10 | open | BI-78499309 | D31 long-running async progress visibility |
+| 11 | ✅ shipped (code) / ❌ unverified | BI-F4A30FCB | D32 wrong-build cross-contamination |
+| 12 | open (spawned debug) | BI-09A48EAD | portal rebuild prisma generate failure |
+| 13 | open | BI-87D93A71 | ChatGPT/Codex OAuth port quirk (D30 also shipped via PR #1067 — but UX cleanup outstanding) |

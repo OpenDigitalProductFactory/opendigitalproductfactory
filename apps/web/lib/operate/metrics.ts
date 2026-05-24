@@ -236,6 +236,30 @@ export const postgresRestoreDurationSeconds = new Histogram({
   registers: [metricsRegistry],
 });
 
+// ─── Postgres Trial-Restore Verification (BI-31C9FBDF) ─────────────────────
+// Nightly automated trial-restore that proves backups are functionally
+// restorable WITHOUT touching the production DB.
+
+export const postgresTrialRestoreRunsTotal = new Counter({
+  name: "dpf_postgres_trial_restore_runs_total",
+  help: "Postgres trial-restore verification runs by status (ok | failed). Failed = pg_restore failed OR a critical-table row-count assertion failed.",
+  labelNames: ["status"] as const,
+  registers: [metricsRegistry],
+});
+
+export const postgresTrialRestoreLastSuccessSeconds = new Gauge({
+  name: "dpf_postgres_trial_restore_last_success_seconds",
+  help: "Epoch seconds at which the last successful Postgres trial-restore verification finished. Stale value = silent backup corruption risk.",
+  registers: [metricsRegistry],
+});
+
+export const postgresTrialRestoreDurationSeconds = new Histogram({
+  name: "dpf_postgres_trial_restore_duration_seconds",
+  help: "Wall-clock duration of Postgres trial-restore runs",
+  buckets: [5, 10, 30, 60, 120, 300, 600, 1800],
+  registers: [metricsRegistry],
+});
+
 // ─── Neo4j Daily Backup (Slice 3) ─────────────────────────────────────────────
 // Spec: docs/superpowers/specs/2026-05-18-postgres-backup-slice-3-neo4j-qdrant.md
 
