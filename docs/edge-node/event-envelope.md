@@ -85,7 +85,7 @@ Examples:
 
 ```
 snmp.trap:10.0.0.5:ifaceDown:ifIndex=42
-syslog:fw01:auth_failure:src_ip=192.0.2.7
+syslog:fw01:login_failure:src_ip=192.0.2.7
 ping:192.168.0.10:loss
 ups.nut:rack-a:on_battery
 unifi.events:aa:bb:cc:dd:ee:ff:client_blocked
