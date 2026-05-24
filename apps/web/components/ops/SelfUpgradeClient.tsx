@@ -7,12 +7,13 @@ import { triggerSelfUpgrade } from "@/lib/actions/promotions";
 type LatestRun = {
   runId: string;
   status: string;
-  triggeredBy: string | null;
-  fromVersion: string | null;
-  toVersion: string | null;
+  trigger: string | null;
+  currentSha: string | null;
+  targetSha: string | null;
+  deployedSha: string | null;
   startedAt: Date | string | null;
   completedAt: Date | string | null;
-  error: string | null;
+  failureLog: string | null;
   createdAt: Date | string;
 };
 
@@ -164,17 +165,17 @@ export default function SelfUpgradeClient({
             <span className="text-xs font-mono text-[var(--dpf-muted)]">{latestRun.runId}</span>
           </div>
 
-          {latestRun.fromVersion && latestRun.toVersion && (
+          {latestRun.currentSha && latestRun.targetSha && (
             <div className="text-xs text-[var(--dpf-muted)]">
-              <span className="font-mono">{latestRun.fromVersion}</span>
+              <span className="font-mono">{latestRun.currentSha}</span>
               {" → "}
-              <span className="font-mono">{latestRun.toVersion}</span>
+              <span className="font-mono">{latestRun.targetSha}</span>
             </div>
           )}
 
-          {latestRun.triggeredBy && (
+          {latestRun.trigger && (
             <div className="text-xs text-[var(--dpf-muted)]">
-              Triggered by: {latestRun.triggeredBy}
+              Triggered by: {latestRun.trigger}
             </div>
           )}
 
@@ -188,13 +189,13 @@ export default function SelfUpgradeClient({
             </div>
           )}
 
-          {latestRun.error && (
+          {latestRun.failureLog && (
             <details className="text-xs">
               <summary className="cursor-pointer text-[var(--dpf-destructive)]">
                 Error details
               </summary>
               <div className="mt-1 p-2 rounded bg-[var(--dpf-destructive)]/10 text-[var(--dpf-destructive)]">
-                {latestRun.error}
+                {latestRun.failureLog}
               </div>
             </details>
           )}
@@ -225,11 +226,11 @@ export default function SelfUpgradeClient({
                   </td>
                   <td className="px-3 py-2 font-mono text-[var(--dpf-muted)]">{run.runId}</td>
                   <td className="px-3 py-2 text-[var(--dpf-muted)]">
-                    {run.fromVersion && run.toVersion ? (
+                    {run.currentSha && run.targetSha ? (
                       <>
-                        <span className="font-mono">{run.fromVersion}</span>
+                        <span className="font-mono">{run.currentSha}</span>
                         {" → "}
-                        <span className="font-mono">{run.toVersion}</span>
+                        <span className="font-mono">{run.targetSha}</span>
                       </>
                     ) : null}
                   </td>

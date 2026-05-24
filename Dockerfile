@@ -103,6 +103,15 @@ RUN rm -rf /app/apps/web-src/.next \
            /app/apps/web-src/tsconfig.tsbuildinfo \
            /app/packages-src/db/generated
 
+# Canonical platform version (Phase 1 of governed-upgrade lifecycle).
+# Hand-edited until Phase 2 CI bump automation lands. Read at boot by
+# /api/platform/version and surfaced in /ops/self-upgrade.
+# Deliberate cache boundary: a version bump invalidates this layer (and
+# everything below) so the runtime image carrying platform metadata is
+# rebuilt whenever the declared version changes.
+# See docs/superpowers/specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md §4.1, §4.2.
+COPY version.json ./version.json
+
 # Version file baked in at build time. If a release version is not supplied,
 # derive one from the bundled source so managed /workspace volumes can detect
 # that the image source changed even during local dev builds.

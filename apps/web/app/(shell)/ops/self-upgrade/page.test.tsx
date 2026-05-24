@@ -83,12 +83,13 @@ describe("SelfUpgradePage", () => {
     const run: SelfUpgradeRunDto = {
       runId: "run-1",
       status: "succeeded",
-      triggeredBy: null,
-      fromVersion: "abc123",
-      toVersion: "def456",
+      trigger: null,
+      currentSha: "abc123",
+      targetSha: "def456",
+      deployedSha: null,
       startedAt: new Date("2025-01-01"),
       completedAt: new Date("2025-01-01"),
-      error: null,
+      failureLog: null,
       createdAt: new Date("2025-01-01"),
     };
     vi.mocked(getSelfUpgradeStatus).mockResolvedValue(baseStatus);

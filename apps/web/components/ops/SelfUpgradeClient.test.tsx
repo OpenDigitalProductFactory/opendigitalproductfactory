@@ -44,12 +44,13 @@ function makeRun(status: string, overrides: Record<string, unknown> = {}) {
   return {
     runId: "SUR-0001",
     status,
-    triggeredBy: "scheduled",
-    fromVersion: "abc1234",
-    toVersion: "def5678",
+    trigger: "scheduled",
+    currentSha: "abc1234",
+    targetSha: "def5678",
+    deployedSha: "def5678",
     startedAt: new Date("2026-05-20T02:00:00Z"),
     completedAt: new Date("2026-05-20T02:05:00Z"),
-    error: null as string | null,
+    failureLog: null as string | null,
     createdAt: new Date("2026-05-20T02:00:00Z"),
     ...overrides,
   };
@@ -181,7 +182,7 @@ describe("SelfUpgradeClient – failed", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient
         {...baseStatus}
-        latestRun={makeRun("failed", { error: "promoter exited with code 1" })}
+        latestRun={makeRun("failed", { failureLog: "promoter exited with code 1" })}
       />,
     );
     expect(html).toContain("failed");
@@ -192,7 +193,7 @@ describe("SelfUpgradeClient – failed", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient
         {...baseStatus}
-        latestRun={makeRun("failed", { error: "promoter exited with code 1" })}
+        latestRun={makeRun("failed", { failureLog: "promoter exited with code 1" })}
       />,
     );
     expect(html).toContain("promoter exited with code 1");
@@ -297,7 +298,7 @@ describe("SelfUpgradeClient – run history", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient
         {...baseStatus}
-        history={[makeRun("succeeded"), makeRun("failed", { runId: "SUR-0002", error: "oops" })]}
+        history={[makeRun("succeeded"), makeRun("failed", { runId: "SUR-0002", failureLog: "oops" })]}
         historyNextCursor={null}
       />,
     );
@@ -308,7 +309,7 @@ describe("SelfUpgradeClient – run history", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient
         {...baseStatus}
-        history={[makeRun("succeeded"), makeRun("failed", { runId: "SUR-0002", error: "oops" })]}
+        history={[makeRun("succeeded"), makeRun("failed", { runId: "SUR-0002", failureLog: "oops" })]}
         historyNextCursor={null}
       />,
     );
@@ -320,7 +321,7 @@ describe("SelfUpgradeClient – run history", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient
         {...baseStatus}
-        history={[makeRun("succeeded"), makeRun("failed", { runId: "SUR-0002", error: "oops" })]}
+        history={[makeRun("succeeded"), makeRun("failed", { runId: "SUR-0002", failureLog: "oops" })]}
         historyNextCursor={null}
       />,
     );
@@ -449,7 +450,7 @@ describe("SelfUpgradeClient – failure detail", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient
         {...baseStatus}
-        latestRun={makeRun("failed", { error: "exit code 1" })}
+        latestRun={makeRun("failed", { failureLog: "exit code 1" })}
       />,
     );
     expect(html).toContain("<details");
@@ -460,7 +461,7 @@ describe("SelfUpgradeClient – failure detail", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient
         {...baseStatus}
-        latestRun={makeRun("failed", { error: "exit code 1" })}
+        latestRun={makeRun("failed", { failureLog: "exit code 1" })}
       />,
     );
     expect(html).toContain("<summary");

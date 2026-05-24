@@ -74,13 +74,13 @@ const mockRun = {
   id: "cuid-1",
   runId: "SUR-AAAA0001",
   status: "succeeded",
-  triggeredBy: "scheduled",
-  fromVersion: "abc1234",
-  toVersion: "def5678",
+  trigger: "scheduled",
+  currentSha: "abc1234",
+  targetSha: "def5678",
+  deployedSha: "def5678",
   startedAt: new Date("2026-05-20T02:00:00Z"),
   completedAt: new Date("2026-05-20T02:05:00Z"),
-  error: null,
-  log: null,
+  failureLog: null,
   createdAt: new Date("2026-05-20T02:00:00Z"),
   updatedAt: new Date("2026-05-20T02:05:00Z"),
 };
@@ -224,24 +224,26 @@ describe("getSelfUpgradeStatus", () => {
 const mockRunRow1 = {
   runId: "SUR-AAAA0001",
   status: "succeeded",
-  triggeredBy: "scheduled",
-  fromVersion: "abc1234",
-  toVersion: "def5678",
+  trigger: "scheduled",
+  currentSha: "abc1234",
+  targetSha: "def5678",
+  deployedSha: "def5678",
   startedAt: new Date("2026-05-20T02:00:00Z"),
   completedAt: new Date("2026-05-20T02:05:00Z"),
-  error: null,
+  failureLog: null,
   createdAt: new Date("2026-05-20T02:00:00Z"),
 };
 
 const mockRunRow2 = {
   runId: "SUR-BBBB0002",
   status: "failed",
-  triggeredBy: "manual",
-  fromVersion: "abc1234",
-  toVersion: "def5678",
+  trigger: "manual",
+  currentSha: "abc1234",
+  targetSha: "def5678",
+  deployedSha: null,
   startedAt: new Date("2026-05-19T02:00:00Z"),
   completedAt: new Date("2026-05-19T02:01:00Z"),
-  error: "promoter exited with code 1",
+  failureLog: "promoter exited with code 1",
   createdAt: new Date("2026-05-19T02:00:00Z"),
 };
 
@@ -348,14 +350,19 @@ describe("listSelfUpgradeRuns – DTO shape", () => {
 
     expect(run.runId).toBe(mockRunRow1.runId);
     expect(run.status).toBe(mockRunRow1.status);
-    expect(run.triggeredBy).toBe(mockRunRow1.triggeredBy);
-    expect(run.fromVersion).toBe(mockRunRow1.fromVersion);
-    expect(run.toVersion).toBe(mockRunRow1.toVersion);
+    expect(run.trigger).toBe(mockRunRow1.trigger);
+    expect(run.currentSha).toBe(mockRunRow1.currentSha);
+    expect(run.targetSha).toBe(mockRunRow1.targetSha);
+    expect(run.deployedSha).toBe(mockRunRow1.deployedSha);
     expect(run.startedAt).toEqual(mockRunRow1.startedAt);
     expect(run.completedAt).toEqual(mockRunRow1.completedAt);
-    expect(run.error).toBeNull();
+    expect(run.failureLog).toBeNull();
     expect(run.createdAt).toEqual(mockRunRow1.createdAt);
     expect(run).not.toHaveProperty("log");
+    expect(run).not.toHaveProperty("triggeredBy");
+    expect(run).not.toHaveProperty("fromVersion");
+    expect(run).not.toHaveProperty("toVersion");
+    expect(run).not.toHaveProperty("error");
   });
 
   it("selects only DTO fields from the database", async () => {
@@ -367,14 +374,19 @@ describe("listSelfUpgradeRuns – DTO shape", () => {
     const select = call.select as Record<string, boolean>;
     expect(select.runId).toBe(true);
     expect(select.status).toBe(true);
-    expect(select.triggeredBy).toBe(true);
-    expect(select.fromVersion).toBe(true);
-    expect(select.toVersion).toBe(true);
+    expect(select.trigger).toBe(true);
+    expect(select.currentSha).toBe(true);
+    expect(select.targetSha).toBe(true);
+    expect(select.deployedSha).toBe(true);
     expect(select.startedAt).toBe(true);
     expect(select.completedAt).toBe(true);
-    expect(select.error).toBe(true);
+    expect(select.failureLog).toBe(true);
     expect(select.createdAt).toBe(true);
     expect(select).not.toHaveProperty("log");
+    expect(select).not.toHaveProperty("triggeredBy");
+    expect(select).not.toHaveProperty("fromVersion");
+    expect(select).not.toHaveProperty("toVersion");
+    expect(select).not.toHaveProperty("error");
   });
 });
 

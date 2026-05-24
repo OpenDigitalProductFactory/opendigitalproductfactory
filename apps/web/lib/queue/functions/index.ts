@@ -25,11 +25,6 @@ import { gitPromotionSandboxVerification } from "./git-promotion-sandbox-verific
 import { skillMetricsAggregator } from "./skill-metrics-aggregator";
 import { skillCurator } from "./skill-curator";
 import {
-  portalSelfUpgradeCompletionSweep,
-  portalSelfUpgradeRequested,
-  portalSelfUpgradeScheduled,
-} from "./portal-self-upgrade";
-import {
   allBackupsDailyScheduled,
   postgresDailyBackupScheduled,
   postgresBackupRequested,
@@ -64,9 +59,6 @@ export const allFunctions = [
   gitPromotionSandboxVerification,
   skillMetricsAggregator,
   skillCurator,
-  portalSelfUpgradeScheduled,
-  portalSelfUpgradeRequested,
-  portalSelfUpgradeCompletionSweep,
   allBackupsDailyScheduled,
   postgresDailyBackupScheduled,
   postgresBackupRequested,
