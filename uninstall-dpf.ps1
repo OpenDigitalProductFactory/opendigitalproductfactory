@@ -68,10 +68,13 @@ Write-Host "========================================================"
 Write-Host "Step 3: Removing $DPF_DIR..." -ForegroundColor Cyan
 Set-Location $env:USERPROFILE  # Move out of the directory first
 
-# Operator backup history lives at $DPF_DIR\backups\ (host bind mount).
-# Uninstall implies "remove everything", but operator-owned backups are
-# the one thing the user might still want for a future install -- prompt
-# before destroying them, defaulting to PRESERVE.
+# Post-relocation (DPF_BACKUPS_HOST_PATH in .env), operator backup history
+# lives OUTSIDE the install root at $DPF_DIR-backups\ and is untouched by
+# the Step 3 rm. This block handles the legacy in-tree case: if backups
+# are still inside $DPF_DIR\backups\ from a pre-relocation install, prompt
+# the operator (defaulting to PRESERVE) before the rm destroys them.
+# On a fully-relocated install $DPF_DIR\backups\ does not exist and this
+# block is a no-op.
 $backupsSrc = Join-Path $DPF_DIR "backups"
 $preserveBackups = $false
 if (Test-Path $backupsSrc) {
@@ -84,7 +87,9 @@ if (Test-Path $backupsSrc) {
     }
     if ($hasContent) {
         Write-Host ""
-        Write-Host "   Found platform backups at $backupsSrc" -ForegroundColor Yellow
+        Write-Host "   Found legacy in-tree backups at $backupsSrc" -ForegroundColor Yellow
+        Write-Host "   (Relocated installs keep backups at $DPF_DIR-backups\ outside the install root,"
+        Write-Host "   which uninstall does NOT touch. These appear to predate the relocation.)"
         Write-Host "   These are the only persisted copies of your database dumps."
         $keep = Read-Host "   Preserve them at $DPF_DIR-backups\ for a future install? (yes/no, default yes)"
         if ($keep -eq "" -or $keep -eq "yes" -or $keep -eq "y") {

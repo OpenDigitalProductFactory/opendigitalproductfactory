@@ -57,8 +57,10 @@ interface ScriptOutcome {
 }
 
 function restoreTraceLog(...parts: unknown[]) {
+  // CodeQL js/log-injection: parts may contain user-influenced values.
   // eslint-disable-next-line no-console
-  console.log("[restore-trace][qdrant]", ...parts);
+  console.log("[restore-trace][qdrant] %s",
+    parts.map((p) => typeof p === "string" ? JSON.stringify(p) : JSON.stringify(p)).join(" "));
 }
 
 async function fileSha256(absolutePath: string): Promise<string> {

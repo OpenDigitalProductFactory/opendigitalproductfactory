@@ -8013,6 +8013,11 @@ model WikiPage {
   principleConsumerContexts  String[] @default([]) // governed kebab-case slugs (e.g., "build-studio")
   principlePublic            Boolean  @default(false)
   principlePublicRationale   String?  @db.Text
+  // Runtime enforcement payload for tier-1 commandments (spec 2026-05-24).
+  // Shape: {interactiveMode, autonomousMode, patterns: [{kind, regex|toolName, rationale}]}
+  // Consumed by apps/web/lib/kernel/runtime-gate.ts at execution time;
+  // orthogonal to the decision-time substrate (principle-decide.ts).
+  principleRuntimeEnforcement Json?
 
   @@unique([organizationId, slug])
   @@index([slug])

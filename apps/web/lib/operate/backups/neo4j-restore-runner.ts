@@ -58,8 +58,11 @@ interface ScriptOutcome {
 }
 
 function restoreTraceLog(...parts: unknown[]) {
+  // CodeQL js/log-injection: parts may contain user-influenced values
+  // (restore-job parameters). JSON.stringify each part neutralises CR/LF.
   // eslint-disable-next-line no-console
-  console.log("[restore-trace][neo4j]", ...parts);
+  console.log("[restore-trace][neo4j] %s",
+    parts.map((p) => typeof p === "string" ? JSON.stringify(p) : JSON.stringify(p)).join(" "));
 }
 
 async function fileSha256(absolutePath: string): Promise<string> {
@@ -167,6 +170,10 @@ export async function runNeo4jRestore(
       DPF_NEO4J_CONTAINER: process.env.DPF_NEO4J_CONTAINER ?? `${composeProject}-neo4j-1`,
       DPF_NEO4J_VOLUME: process.env.DPF_NEO4J_VOLUME ?? `${composeProject}_neo4jdata`,
       DPF_NEO4J_DATABASE: process.env.DPF_NEO4J_DATABASE ?? "neo4j",
+      // Forward both env vars for docker-in-docker bind translation; the
+      // bash script prefers DPF_BACKUPS_HOST_PATH (sibling-to-install) and
+      // falls back to DPF_HOST_INSTALL_PATH/backups for pre-relocation installs.
+      DPF_BACKUPS_HOST_PATH: process.env.DPF_BACKUPS_HOST_PATH ?? "",
       DPF_HOST_INSTALL_PATH: process.env.DPF_HOST_INSTALL_PATH ?? "",
     };
     const outcome = await runScript(scriptPath, env);

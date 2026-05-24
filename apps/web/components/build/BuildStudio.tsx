@@ -458,16 +458,32 @@ export function BuildStudio({
               </div>
             </div>
           ) : (
+            // D12 (2026-05-23): multiline textarea instead of single-line input.
+            // The prior <input> truncated longer descriptions to a tail-only
+            // view (e.g. "...driving back to the warehouse" with no way to see
+            // the start) — looked like the platform had eaten half the text.
+            // Now: auto-resizing textarea with visible char count; Enter inserts
+            // a newline (multiline field), Cmd/Ctrl+Enter submits to preserve
+            // keyboard flow without losing the multiline capability.
             <div className="p-3 border-b border-[var(--dpf-border)]">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Describe a new feature..."
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                  className="flex-1 px-3 py-2 text-sm bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
-                />
+              <textarea
+                placeholder="Describe a new feature in plain English — say what you want to do, who it's for, and any details that matter."
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    handleCreate();
+                  }
+                }}
+                rows={3}
+                className="w-full px-3 py-2 text-sm bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)] resize-y min-h-[72px] max-h-[200px] leading-snug"
+              />
+              <div className="flex items-center justify-between mt-2 gap-2">
+                <div className="text-[10px] text-[var(--dpf-muted)] leading-tight">
+                  Press Cmd/Ctrl+Enter to start.
+                  {newTitle.length > 0 ? ` ${newTitle.length} characters.` : ""}
+                </div>
                 <button
                   onClick={handleCreate}
                   disabled={creating || !newTitle.trim()}

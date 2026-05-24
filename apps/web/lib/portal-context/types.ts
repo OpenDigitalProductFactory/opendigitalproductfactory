@@ -117,6 +117,26 @@ export type AttentionSignal = {
   actionHref?: string | null;
 };
 
+/**
+ * D29 (2026-05-23): runtime capability snapshot piped into the coworker
+ * system prompt so the agent can give concrete advice on configuration
+ * pages instead of generic "wait and try again" hedging. Today the only
+ * snapshot kind is `build_studio` — extend with a discriminated union as
+ * more capability-gated surfaces appear.
+ */
+export type CoworkerCapabilitySnapshot = {
+  kind: "build_studio";
+  gateOpen: boolean;
+  reason:
+    | "no_active_llm_providers"
+    | "only_local_provider_active"
+    | "no_strong_tier_model_available";
+  /** Plain-English action the user should take, when known. */
+  recommendedAction?: string | null;
+  /** True when the current user has permission to perform the fix themselves. */
+  userCanFix: boolean;
+};
+
 export type HiveMindCandidate = {
   agentId: string;
   label: string;
@@ -161,5 +181,7 @@ export type PortalContextEnvelope = {
   authority: AuthoritySummary;
   coworkers: HiveMindCandidate[];
   attention: AttentionSignal[];
+  /** D29: capability snapshot for configuration-page coworker guidance. */
+  capability: CoworkerCapabilitySnapshot | null;
   promptDigest: string;
 };

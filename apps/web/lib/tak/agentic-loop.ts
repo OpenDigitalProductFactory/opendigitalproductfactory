@@ -309,18 +309,15 @@ function buildFabricationFailureMessage(params: {
     && availableToolNames.has("reviewBuildPlan")
   ) {
     return (
-      "I caught myself saying the plan is ready before I'd actually recorded it. "
-      + "I stopped so we don't end up with a half-saved plan. "
-      + "Send me the same instruction again and I'll record it properly this time, "
-      + "or open the build details to see what's saved so far."
+      "I described the plan as ready before it was actually recorded, so the build "
+      + "doesn't have a saved plan yet. Try the request again, or open the build "
+      + "details to see what's saved so far."
     );
   }
 
   return (
-    "I caught myself describing work without actually doing it, and stopped so we "
-    + "don't end up with progress that isn't real. "
-    + "Send me the same instruction again, or check the build details to see what's "
-    + "been recorded so far."
+    "I couldn't complete that — the underlying work wasn't recorded. "
+    + "Try rephrasing the request, or open the build details to see what's saved so far."
   );
 }
 
@@ -329,10 +326,18 @@ function buildLocalToolCallFailureMessage(_result: RoutedInferenceResult): strin
   // infrastructure names ("Docker Model Runner"), model IDs, or routing
   // architecture. The internal route + model details are already recorded
   // for engineers via RoutedInferenceResult.
+  //
+  // Honest copy (G2, 2026-05-23): the prior version promised "I'll route
+  // through a different model" which the loop never delivered. On a single-
+  // provider install the promise was mathematically impossible; on a multi-
+  // provider install the re-route call simply isn't wired. Replaced with
+  // honest copy that points at the actual fix.
   return (
-    "I couldn't complete this with the model my admin assigned me. "
-    + "Please try the question again — I'll route through a different model. "
-    + "If it keeps failing, an admin can update my model assignment in the AI Workforce settings."
+    "I'm on a local AI that wasn't strong enough to finish this. "
+    + "Connecting a stronger provider (Claude, Gemini, or OpenAI) at "
+    + "Platform > AI > Providers unlocks the work I'm built for. "
+    + "If a stronger provider is already connected, try rephrasing or breaking "
+    + "the request into a smaller step."
   );
 }
 
@@ -373,13 +378,15 @@ function buildMaxIterationsExhaustedMessage(params: {
 }): string {
   const toolSummary = summarizeExecutedToolNames(params.executedTools);
   const downgradeLead = params.downgraded
-    ? "The model my admin assigned me was unavailable, so I worked through a backup that wasn't able to keep up with this task. "
+    ? "My usual AI was unavailable, so I worked through a backup that wasn't able to keep up. "
     : "";
   const workNote = toolSummary
     ? `I made several attempts (${toolSummary}) but couldn't complete a final answer before hitting my safety limit.`
     : "I worked through several attempts but couldn't complete a final answer before hitting my safety limit.";
+  // Honest copy (G2, 2026-05-23): no false re-route promises. When downgraded,
+  // point the user at the actual fix; otherwise suggest a smaller question.
   const suggestion = params.downgraded
-    ? "Please try the same question again — I'll route through a different model. If it keeps failing, an admin can update my model assignment in the AI Workforce settings."
+    ? "Connecting a stronger provider (Claude, Gemini, or OpenAI) at Platform > AI > Providers unlocks the work I'm built for. Otherwise, try a narrower question."
     : "Try the same question again, or break it into a smaller piece.";
   return `${downgradeLead}${workNote} ${suggestion}`;
 }
@@ -978,7 +985,7 @@ export async function runAgenticLoop(params: {
     if (lastResult?.providerId === "local" && executedTools.length >= 8) {
       console.warn(
         `[agentic-loop] local model spun through ${executedTools.length} tool calls without converging on a text answer. ` +
-        `Exiting early with diagnostic. agent=${agentId} route=${routeContext}`,
+        `Exiting early with diagnostic. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
       );
       return {
         content: buildLocalToolCallFailureMessage(lastResult),
@@ -1364,7 +1371,7 @@ export async function runAgenticLoop(params: {
           result.providerId === "local"
         ) {
           console.warn(
-            `[agentic-loop] local model produced text-only response for tool-backed turn; returning diagnostic instead of issuing a second nudge. agent=${agentId} route=${routeContext}`,
+            `[agentic-loop] local model produced text-only response for tool-backed turn; returning diagnostic instead of issuing a second nudge. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
           );
           return {
             content: buildLocalToolCallFailureMessage(result),
@@ -1583,7 +1590,7 @@ export async function runAgenticLoop(params: {
 
       const durationMs = Date.now() - toolStartMs;
       const resultPreview = (toolResult.message ?? "").slice(0, 200);
-      console.log(`[agentic-tool] RESULT iter=${iteration} tool=${tc.name} success=${toolResult.success} duration=${durationMs}ms msg=${resultPreview}`);
+      console.log(`[agentic-tool] RESULT iter=${iteration} tool=${JSON.stringify(tc.name)} success=${toolResult.success} duration=${durationMs}ms msg=${JSON.stringify(resultPreview)}`);
 
       // Sandbox circuit breaker: track consecutive unavailable responses
       if (!toolResult.success && (toolResult.error ?? toolResult.message ?? "").includes("No sandbox slots available")) {

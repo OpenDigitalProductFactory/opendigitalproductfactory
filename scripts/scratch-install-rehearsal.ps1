@@ -179,6 +179,7 @@ AUTH_SECRET=$authSecret
 CREDENTIAL_ENCRYPTION_KEY=$credentialKey
 ADMIN_PASSWORD=changeme123
 DPF_HOST_INSTALL_PATH=$installPathForEnv
+DPF_BACKUPS_HOST_PATH=$installPathForEnv-backups
 PUBLIC_URL=http://localhost:$($Ports.Portal)
 APP_URL=http://localhost:$($Ports.Portal)
 MCP_INSECURE_INTERNAL_HOSTS=portal,host.docker.internal,sandbox

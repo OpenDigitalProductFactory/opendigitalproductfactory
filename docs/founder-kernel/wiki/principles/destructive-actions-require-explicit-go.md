@@ -14,6 +14,7 @@ principleConsumerArchetype: ai-coworker-universal
 principlePublic: false
 authoredAt: 2026-05-18
 authoredBy: mark-bodman
+principleRuntimeEnforcement: {"interactiveMode":"confirm","autonomousMode":"refuse","patterns":[{"kind":"git","regex":"^push\\s+.*--force(-with-lease)?\\b.*\\bmain\\b","rationale":"force-push to main is on the destructive list"},{"kind":"shell","regex":"^git\\s+reset\\s+--hard\\b","rationale":"git reset --hard past committed work is destructive"},{"kind":"shell","regex":"^rm\\s+(-rf|-r\\s+-f|-fr|-rfv|-vrf)\\s+/","rationale":"rm -rf on a rooted absolute path is irreversible"}]}
 ---
 
 # Destructive actions require explicit go

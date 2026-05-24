@@ -136,6 +136,11 @@ CREDENTIAL_ENCRYPTION_KEY=$ENC_KEY
 # Host-side install directory (used by the promoter container for Build Studio)
 DPF_HOST_INSTALL_PATH=$DPF_DIR
 
+# Backups host path — lives OUTSIDE the install root so a future repo wipe
+# cannot destroy operator backup history. See
+# docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §5.3.
+DPF_BACKUPS_HOST_PATH=$DPF_DIR-backups
+
 # Grafana monitoring credentials
 GF_ADMIN_USER=admin
 GF_ADMIN_PASSWORD=dpf_monitor

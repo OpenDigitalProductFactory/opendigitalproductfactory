@@ -14,6 +14,8 @@
 #
 # Required env:
 #   TARGET_DIR              absolute path on host where neo4j.dump + manifest + sha256 + log land
+#   DPF_BACKUPS_HOST_PATH   host backups dir for docker-in-docker bind translation (preferred)
+#   DPF_HOST_INSTALL_PATH   host install path (fallback when DPF_BACKUPS_HOST_PATH is unset)
 #   DPF_NEO4J_CONTAINER     container name (default: dpf-neo4j-1)
 #   DPF_NEO4J_VOLUME        named volume (default: dpf_neo4jdata)
 #   DPF_NEO4J_DATABASE      database name (default: neo4j)
@@ -37,9 +39,22 @@ NEO4J_CONTAINER="${DPF_NEO4J_CONTAINER:-dpf-neo4j-1}"
 NEO4J_VOLUME="${DPF_NEO4J_VOLUME:-dpf_neo4jdata}"
 NEO4J_DATABASE="${DPF_NEO4J_DATABASE:-neo4j}"
 DPF_HOST_INSTALL_PATH="${DPF_HOST_INSTALL_PATH:-}"
+DPF_BACKUPS_HOST_PATH="${DPF_BACKUPS_HOST_PATH:-}"
 
 [ -n "$TARGET_DIR" ] || fail "TARGET_DIR not set" 2
-[ -n "$DPF_HOST_INSTALL_PATH" ] || fail "DPF_HOST_INSTALL_PATH not set — required to translate portal's /backups view to the host path that docker-in-docker bind mounts need" 2
+
+# Host-path base for docker-in-docker bind translation. Prefer the explicit
+# DPF_BACKUPS_HOST_PATH (set by the installer; lives OUTSIDE the install
+# root) and fall back to the legacy in-tree default for installs that
+# haven't been re-run since DPF_BACKUPS_HOST_PATH was introduced.
+if [ -n "$DPF_BACKUPS_HOST_PATH" ]; then
+  HOST_BACKUPS_BASE="$DPF_BACKUPS_HOST_PATH"
+elif [ -n "$DPF_HOST_INSTALL_PATH" ]; then
+  HOST_BACKUPS_BASE="${DPF_HOST_INSTALL_PATH}/backups"
+else
+  fail "neither DPF_BACKUPS_HOST_PATH nor DPF_HOST_INSTALL_PATH is set — at least one is required to translate portal's /backups view to the host path that docker-in-docker bind mounts need" 2
+fi
+
 command -v docker >/dev/null 2>&1 || fail "docker CLI not available" 2
 command -v sha256sum >/dev/null 2>&1 || fail "sha256sum not available" 2
 
@@ -48,7 +63,7 @@ mkdir -p "$TARGET_DIR" || fail "could not create $TARGET_DIR" 2
 # bind mount is created by the portal (root), so without explicit
 # chmod the dump container gets AccessDeniedException writing to
 # /dump. 0777 is safe here because the host-side directory lives
-# under the operator-controlled DPF_HOST_INSTALL_PATH/backups tree.
+# under the operator-controlled DPF_BACKUPS_HOST_PATH tree.
 chmod 0777 "$TARGET_DIR" || fail "could not chmod $TARGET_DIR" 2
 
 # Translate the portal's view of TARGET_DIR (/backups/neo4j/<ts>) to the
@@ -56,9 +71,9 @@ chmod 0777 "$TARGET_DIR" || fail "could not chmod $TARGET_DIR" 2
 # mount. Without this translation docker rejects the mount with
 # "invalid path" or silently creates an empty dir, and the dump fails
 # with AccessDeniedException. Same pattern the promoter uses
-# (docker-compose.yml line ~240).
+# (docker-compose.yml promoter service).
 TARGET_REL="${TARGET_DIR#/backups/}"
-HOST_TARGET_DIR="${DPF_HOST_INSTALL_PATH}/backups/${TARGET_REL}"
+HOST_TARGET_DIR="${HOST_BACKUPS_BASE}/${TARGET_REL}"
 log "host path for dump container: $HOST_TARGET_DIR"
 
 DUMP_FILE="$TARGET_DIR/neo4j.dump"

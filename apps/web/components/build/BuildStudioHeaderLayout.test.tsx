@@ -513,6 +513,7 @@ function makePortalContextEnvelope(): PortalContextEnvelope {
     },
     coworkers: [],
     attention: [],
+    capability: null,
     promptDigest: "Route: /build",
   };
 }

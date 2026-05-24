@@ -110,7 +110,7 @@ function ensureContrast(fg: string, bg: string, minRatio: number): string {
       ) {
         console.warn(
           `ensureContrast: nudged lightness by ${Math.abs(l - originalL).toFixed(1)}% ` +
-          `(${originalL.toFixed(1)} → ${l.toFixed(1)}) for ${fg} against ${bg}`
+          `(${originalL.toFixed(1)} → ${l.toFixed(1)}) for ${JSON.stringify(fg)} against ${JSON.stringify(bg)}`
         );
       }
       return candidate;

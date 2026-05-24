@@ -1,6 +1,12 @@
 import type { CapabilityKey } from "@/lib/permissions";
 import { can, type UserContext } from "@/lib/permissions";
 import { DISCOVERY_TRIAGE_AGENT_ID, prisma } from "@dpf/db";
+// Runtime kernel-commandment gate (BI-43F95F77). Static imports — executeTool
+// is a hot path; dynamic import per call would tank dispatcher throughput.
+import { evaluateExecution } from "@/lib/kernel/runtime-gate";
+import { loadEnforceablePrinciples } from "@/lib/kernel/load-enforceable-principles";
+import { detectSessionClass } from "@/lib/kernel/session-class";
+import { kernelGateDecisionsTotal } from "@/lib/operate/metrics";
 import * as crypto from "crypto";
 import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { mergeHappyPathStateIntoPlan, generateBuildId } from "@/lib/feature-build-types";
@@ -208,7 +214,7 @@ export function sanitizeToolParams(
     if (stringValues.length > 0 && stringValues.every(s => s.trim() === "")) {
       if (!cleaned) cleaned = { ...params };
       delete cleaned[key];
-      console.log(`[sanitize] ${toolName}: stripped empty optional object param "${key}"`);
+      console.log(`[sanitize] ${JSON.stringify(toolName)}: stripped empty optional object param ${JSON.stringify(key)}`);
     }
   }
   return cleaned ?? params;
@@ -4192,8 +4198,96 @@ export async function executeTool(
 ): Promise<ToolResult> {
   // Strip empty optional object params that models send as schema artifacts
   const params = sanitizeToolParams(toolName, rawParams);
+
+  // ─── Runtime kernel-commandment gate (BI-43F95F77) ─────────────────────────
+  // Consult the gate BEFORE the switch. If a tier-1 commandment matches this
+  // tool name in the active session class, refuse (autonomous) or surface a
+  // typed-confirmation requirement (interactive) without ever invoking the
+  // tool body. Principle registry is process-cached so this is ~zero-latency
+  // after the first dispatch.
+  const _sessionClass = detectSessionClass();
+  const _principles = await loadEnforceablePrinciples();
+  const _decision = evaluateExecution(
+    { kind: "mcp_tool", toolName, arguments: params },
+    _sessionClass,
+    _principles,
+  );
+  const _slug = _decision.verdict === "allow" ? "_none" : _decision.principleSlug;
+  kernelGateDecisionsTotal.inc({
+    verdict: _decision.verdict,
+    principle_slug: _slug,
+    session_class: _sessionClass,
+  });
+  // CodeQL js/log-injection: toolName + _slug are user-influenced (model
+  // submits the tool name; principle slugs derive from wiki frontmatter
+  // edited by operators). JSON.stringify each user-influenced value to
+  // neutralize CR/LF / control chars — same pattern as
+  // neo4j-restore-runner.ts. _decision.verdict and _sessionClass are typed
+  // enums and not user-influenced.
+  // eslint-disable-next-line no-console
+  console.log(
+    "[kernel-gate-trace] verdict=%s slug=%s session=%s kind=mcp_tool tool=%s",
+    _decision.verdict,
+    JSON.stringify(_slug),
+    _sessionClass,
+    JSON.stringify(toolName),
+  );
+  if (_decision.verdict === "refuse") {
+    return {
+      success: false,
+      message: `Kernel commandment '${_decision.principleSlug}' refused this tool call.`,
+      error: `[kernel-gate] REFUSED by commandment '${_decision.principleSlug}': ${_decision.rationale}`,
+      data: {
+        kernelGate: {
+          verdict: "refuse",
+          principleId: _decision.principleId,
+          principleSlug: _decision.principleSlug,
+          rationale: _decision.rationale,
+        },
+      },
+    };
+  }
+  if (_decision.verdict === "require_confirm") {
+    return {
+      success: false,
+      message: `Kernel commandment '${_decision.principleSlug}' requires typed confirmation.`,
+      error:
+        `[kernel-gate] Commandment '${_decision.principleSlug}' requires typed confirmation. ` +
+        `Operator must reply with exactly: ${_decision.requiredPhrase}`,
+      data: {
+        kernelGate: {
+          verdict: "require_confirm",
+          principleId: _decision.principleId,
+          principleSlug: _decision.principleSlug,
+          rationale: _decision.rationale,
+          requiredPhrase: _decision.requiredPhrase,
+        },
+      },
+    };
+  }
+  // verdict === "allow" — fall through to the existing switch.
+
   try {
   switch (toolName) {
+    case "dpf_test_kernel_refuse_probe": {
+      // Test-only synthetic probe (Phase 9 live verification).
+      // Reachable ONLY when DPF_TEST_MCP_REFUSE_PROBE=1 because:
+      //   - loadEnforceablePrinciples injects a synthetic principle that
+      //     matches this tool name with refuse-in-both-modes, so the gate
+      //     above short-circuits before this body ever runs.
+      //   - When the env is unset, no principle matches, but neither does
+      //     any production code path call this tool name — we return the
+      //     unknown-tool default below.
+      // The body exists to give the dispatcher a recognizable case so the
+      // gate gets a chance to refuse before falling through to unknown-tool.
+      if (process.env.DPF_TEST_MCP_REFUSE_PROBE !== "1") {
+        return { success: false, message: "tool not registered", error: "tool not registered" };
+      }
+      return {
+        success: true,
+        message: "probe tool body — should not be reached when gate is wired and DPF_TEST_MCP_REFUSE_PROBE=1",
+      };
+    }
     case "deliberate_on": {
       return deliberateOnMcpHandler(params, userId, context);
     }
@@ -6391,7 +6485,10 @@ export async function executeTool(
         }
         normalizedValue = normalizedPlan.plan;
 
-        console.log(`[saveBuildEvidence] buildPlan validated: ${fileStructure.length} files, ${tasks.length} tasks`);
+        // CodeQL js/log-injection: .length is numeric so safe, but CodeQL
+        // tracks the parent array as tainted. Number() coercion is a
+        // recognised sanitiser.
+        console.log(`[saveBuildEvidence] buildPlan validated: ${Number(fileStructure.length)} files, ${Number(tasks.length)} tasks`);
       }
 
       // ── taskResults shape validation ─────────────────────────────────────
@@ -6550,7 +6647,8 @@ export async function executeTool(
           });
         }
       } catch (err) {
-        console.warn("[deliberation] failed to record build review trail", err);
+        console.warn("[deliberation] failed to record build review trail: %s",
+          err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
       }
 
       // Failed review → structured recovery instructions, no auto-advance
@@ -6864,7 +6962,8 @@ export async function executeTool(
           });
         }
       } catch (err) {
-        console.warn("[deliberation] failed to record build review trail", err);
+        console.warn("[deliberation] failed to record build review trail: %s",
+          err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
       }
 
       // Failed review → structured recovery instructions, no auto-advance
@@ -7601,7 +7700,7 @@ export async function executeTool(
         ];
         const blocked = BLOCKED_PATTERNS.find(p => p.test(command));
         if (blocked) {
-          console.warn(`[run_sandbox_command] BLOCKED: ${command.slice(0, 200)}`);
+          console.warn(`[run_sandbox_command] BLOCKED: ${JSON.stringify(command.slice(0, 200))}`);
           return {
             success: false,
             error: "Command blocked by safety policy.",
@@ -7654,7 +7753,7 @@ export async function executeTool(
 
           // No output — actual sandbox connectivity issue
           const errMsg = execErr.message?.slice(0, 2000) || "Command failed";
-          console.error(`[run_sandbox_command] FAILED (no output): ${command.slice(0, 100)} -> ${errMsg.slice(0, 200)}`);
+          console.error(`[run_sandbox_command] FAILED (no output): ${JSON.stringify(command.slice(0, 100))} -> ${JSON.stringify(errMsg.slice(0, 200))}`);
           return { success: false, error: errMsg, message: `Command failed: ${command.slice(0, 100)}`, data: { command, output: errMsg } };
         }
       }
@@ -9579,7 +9678,7 @@ export async function executeTool(
       if (colonGlobMatch) {
         query = colonGlobMatch[1]!.trim();
         opts.glob = colonGlobMatch[2]!.trim();
-        console.log(`[search_project_files] Auto-split combined query: "${params.query}" → query="${query}" glob="${opts.glob}"`);
+        console.log(`[search_project_files] Auto-split combined query: ${JSON.stringify(params.query)} → query=${JSON.stringify(query)} glob=${JSON.stringify(opts.glob)}`);
       }
 
       if (typeof params.glob === "string" && !opts.glob) opts.glob = params.glob;
@@ -9815,7 +9914,7 @@ export async function executeTool(
               }).catch(() => {});
             }
           } else {
-            console.warn("[propose_file_change] git commit failed:", result.error);
+            console.warn("[propose_file_change] git commit failed: %s", JSON.stringify(result.error));
           }
         }
       } catch (err) {
@@ -12867,11 +12966,12 @@ export async function executeTool(
   }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    // CodeQL #52 (js/tainted-format-string): keep the format string constant
-    // so a `%s` inside an attacker-controlled toolName cannot consume the
-    // next argument. toolName + msg are passed as additional args; node's
-    // util.format only honours specifiers in the literal first arg.
-    console.error("[executeTool] Uncaught exception in tool %s: %s", toolName, msg);
+    // CodeQL #52 (js/tainted-format-string) + js/log-injection: keep the
+    // format string constant so a `%s` inside an attacker-controlled
+    // toolName cannot consume the next argument, AND JSON.stringify each
+    // tainted positional arg so CR/LF can't forge log lines.
+    console.error("[executeTool] Uncaught exception in tool %s: %s",
+      JSON.stringify(toolName), JSON.stringify(msg));
     return { success: false, error: msg, message: `Tool ${toolName} failed: ${msg}` };
   }
 }

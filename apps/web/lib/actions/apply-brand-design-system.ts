@@ -10,17 +10,20 @@ export type ApplyResult =
 
 function deepMerge<T>(target: T, source: Partial<T>): T {
   if (typeof target !== "object" || target === null) return (source as T) ?? target;
-  const result: Record<string, unknown> = { ...(target as Record<string, unknown>) };
+  // CodeQL #195/#196 (js/remote-property-injection, CWE-1321):
+  // The result object is created with Object.create(null) so it has no
+  // prototype — `result["__proto__"] = x` becomes a literal own-property
+  // write instead of triggering Object.prototype's __proto__ setter.
+  // The function returns a plain `T`, which still satisfies any consumer
+  // doing structural property access. This is the CodeQL-recognised
+  // structural mitigation for js/remote-property-injection (previous
+  // inline `if (key === "__proto__" || ...)` OR-chain guard was correct
+  // at runtime but the analyser didn't recognise it as a barrier).
+  const result: Record<string, unknown> = Object.assign(
+    Object.create(null) as Record<string, unknown>,
+    target as Record<string, unknown>,
+  );
   for (const [key, value] of Object.entries(source as Record<string, unknown>)) {
-    // CodeQL #195/#196 (js/remote-property-injection, CWE-1321):
-    // source comes from a user-submitted override object, so `key` could
-    // be "__proto__" / "constructor" / "prototype" — assigning to those
-    // mutates the prototype chain. Inline guard (not isSafeKey()) because
-    // CodeQL's JS analyser doesn't follow function-call boundaries — only
-    // a literal equality check at the callsite acts as a sanitiser barrier.
-    if (key === "__proto__" || key === "constructor" || key === "prototype") {
-      continue;
-    }
     if (
       value !== null
       && typeof value === "object"

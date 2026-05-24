@@ -6,14 +6,20 @@ intake with full phase rigor).
 
 ## The two-loop model
 
-We run two complementary loops over GitHub code-scanning findings:
+We run three complementary loops:
 
-1. **Inflow gate** (this directory). Per-PR, machine-enforced. Blocks new
-   critical/high findings from landing on `main`. Implemented by
+1. **Pre-PR secrets scan** ([secrets-scan.md](secrets-scan.md)). gitleaks
+   on every PR diff and every push to `main`. Blocks merge on any
+   hardcoded credential. OSS-only — no third-party accounts.
+
+2. **Inflow gate** (this directory). Per-PR, machine-enforced. Blocks new
+   critical/high/medium CodeQL findings from landing on `main` (severity
+   floor tightened from critical/high after the 2026-05 burn-down brought
+   the baseline to 0 alerts). Implemented by
    `.github/workflows/security-inflow-gate.yml` and the helper scripts in
    `scripts/security/`.
 
-2. **Backlog sweep** (separate work, BI-04701325). Nightly portal job that
+3. **Backlog sweep** (separate work, BI-04701325). Nightly portal job that
    triages existing findings into cluster BIs, runs them through Build
    Studio with regression-test-first rigor, and contributes the fix
    patterns (plus CodeQL rules) back to the hive.
@@ -29,20 +35,19 @@ We run two complementary loops over GitHub code-scanning findings:
 
 ## What the baseline contains
 
-At inception, the baseline carries every open CodeQL alert. Each entry is
-keyed by GitHub's stable per-finding `number`. The diff is alert-number
-based (not count-based) so a PR that closes one finding and opens a
-different one is still caught.
+At inception, the baseline carried every open CodeQL alert (8 criticals,
+43 highs, 20 mediums). The 2026-05 burn-down PRs (#1028, #1031, #1048,
+#1056, #1057, plus the SSRF/command-injection cluster fixes) closed all
+remaining alerts. **The baseline is now empty.**
 
-The 8 criticals in the baseline are tracked by these cluster BIs and will
-be removed as fixes ship:
+Each entry (when present) is keyed by GitHub's stable per-finding `number`.
+The diff is alert-number based (not count-based) so a PR that closes one
+finding and opens a different one is still caught.
 
-- **BI-5E53A265** — SSRF cluster (alerts #33-38, `js/request-forgery`)
-- **BI-7DB95878** — Command injection (alert #55, `js/command-line-injection`)
-- **BI-5940955C** — GitHub Actions code injection (alert #1, `actions/code-injection/critical`)
-
-The 43 high and 20 medium findings will be clustered as the nightly sweep
-(BI-04701325) automates that triage.
+Future entries land here only when a maintainer **explicitly** dismisses
+a false positive in the GitHub UI with written justification, or when a
+finding is accepted as tracked debt with a linked backlog item. The
+baseline is not a place to "park" unfixed real findings.
 
 ## When you need to regenerate the baseline
 

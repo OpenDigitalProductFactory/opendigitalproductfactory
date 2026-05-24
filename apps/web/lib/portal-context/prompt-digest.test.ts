@@ -144,5 +144,6 @@ function baseEnvelope(): Omit<PortalContextEnvelope, "promptDigest"> {
     },
     coworkers: [],
     attention: [],
+    capability: null,
   };
 }

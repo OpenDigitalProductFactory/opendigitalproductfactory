@@ -9,6 +9,7 @@ import {
 } from "./cache";
 import type { OrganizationRow, PortalContextDb, PortalUserRow } from "./db-types";
 import { resolvePortalAuthority, resolvePromotionReviewerGrantKeys } from "./authority-resolver";
+import { resolveCoworkerCapability } from "./capability-resolver";
 import { resolvePortalEvidence } from "./evidence-resolver";
 import { resolveHiveMindCandidates } from "./hive-mind-resolver";
 import { createPortalContextPromptDigest } from "./prompt-digest";
@@ -97,7 +98,17 @@ export async function resolvePortalContextEnvelopeUncached(
   );
   const evidence = evidenceResult.value;
   attention.push(...evidenceResult.attention);
-  if (evidence.some((item) => item.isGap)) {
+  // D14 (2026-05-23): only flag "missing evidence" once a phase has actually
+  // had a chance to produce evidence. Before, this fired at t=0 the moment a
+  // build was created — every evidence slot is a "gap" until something fills
+  // it, so a brand-new FB-* always showed an alarming yellow warning before
+  // the user had done anything. The gate now only triggers after the
+  // build has moved past Ideate (Ideate is conversational / scoping; real
+  // evidence production starts at Plan and beyond).
+  const featureBuildPhase = workProjection.work.featureBuild?.phase ?? null;
+  const phaseHasAttemptedEvidence = featureBuildPhase !== null
+    && featureBuildPhase !== "ideate";
+  if (phaseHasAttemptedEvidence && evidence.some((item) => item.isGap)) {
     attention.push({
       kind: "missing_evidence",
       severity: "warning",
@@ -142,6 +153,19 @@ export async function resolvePortalContextEnvelopeUncached(
   const coworkers = coworkersResult.value;
   attention.push(...coworkersResult.attention);
 
+  // D29: capability snapshot for configuration-page coworker guidance.
+  // Soft-fail on its own clock so an outage here can't block the envelope.
+  const capabilityResult = await resolveSource(
+    "capability",
+    resolveCoworkerCapability({
+      routeContext: input.routeContext,
+      platformRole,
+    }),
+    null,
+    resolverTimeoutMs,
+  );
+  attention.push(...capabilityResult.attention);
+
   const baseEnvelope: Omit<PortalContextEnvelope, "promptDigest"> = {
     envelopeId: createPortalContextEnvelopeId(input, userId, bucket),
     resolvedAt: bucket.toISOString(),
@@ -162,6 +186,7 @@ export async function resolvePortalContextEnvelopeUncached(
     authority,
     coworkers,
     attention,
+    capability: capabilityResult.value,
   };
 
   return {

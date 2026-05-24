@@ -3,14 +3,21 @@
  * BI-04701325 Phase 1 — Security inflow gate.
  *
  * Compares current open CodeQL alerts against the committed baseline at
- * docs/security/codeql-baseline.json. Fails CI if any NEW critical or high
- * alert appears (by alert number — CodeQL assigns a stable number per
- * finding instance, so "in current AND not in baseline" = "introduced by
- * this PR").
+ * docs/security/codeql-baseline.json. Fails CI if any NEW alert at the
+ * configured severity floor appears (by alert number — CodeQL assigns a
+ * stable number per finding instance, so "in current AND not in baseline"
+ * = "introduced by this PR").
  *
- * Pre-existing baseline alerts are tracked as cluster BIs (see BI-5E53A265,
- * BI-7DB95878, BI-5940955C for the criticals) and burned down separately.
- * They do NOT block unrelated PRs.
+ * Severity floor (FAIL_SEVERITIES env, default "critical,high,medium"):
+ *   Tightened from "critical,high" once the 2026-05 burn-down brought the
+ *   baseline to 0 alerts. With a clean baseline, MEDIUM-floor protection
+ *   adds coverage at no cost to existing PRs.
+ *
+ * Baseline content:
+ *   Empty after the 2026-05 burn-down. Pre-existing alerts captured here
+ *   are accepted findings (false positives with documented dismissals, or
+ *   tracked-debt items that maintainers have explicitly agreed to defer).
+ *   They do NOT block unrelated PRs.
  *
  * Why alert-number diffing (not severity-count diffing):
  *   A simple count comparison would let a PR that closes one critical and
@@ -40,7 +47,10 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-const FAIL_SEVERITIES = (process.env.FAIL_SEVERITIES ?? "critical,high")
+// Default raised to include "medium" after the 2026-05 burn-down brought the
+// baseline to 0 alerts. With a clean baseline, the cost of tightening is low
+// and the protection covers a larger share of real findings.
+const FAIL_SEVERITIES = (process.env.FAIL_SEVERITIES ?? "critical,high,medium")
   .split(",")
   .map((s) => s.trim().toLowerCase());
 const BASELINE_PATH = process.env.BASELINE_PATH ?? "docs/security/codeql-baseline.json";

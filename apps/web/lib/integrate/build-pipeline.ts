@@ -96,7 +96,7 @@ export async function runBuildPipeline(params: {
     const hasNoCapture = !fbRow?.diffPatch || fbRow.diffPatch.length === 0;
     if (hasNoCapture) {
       console.log(
-        `[build-pipeline] self-heal: ${buildId} is "complete" but has empty diffPatch — rewinding to re-run stepComplete capture`,
+        `[build-pipeline] self-heal: ${JSON.stringify(buildId)} is "complete" but has empty diffPatch — rewinding to re-run stepComplete capture`,
       );
       // Rewind to "code_generated". getResumeStep then advances to "tests_run",
       // and the orchestration loop dispatches stepComplete (which is the
@@ -527,7 +527,7 @@ async function stepComplete(
   });
 
   console.log(
-    `[build-pipeline] stepComplete: captured ${fullDiff.length} bytes diff + ${commitHashes.length} commits for ${buildId}`,
+    `[build-pipeline] stepComplete: captured ${fullDiff.length} bytes diff + ${commitHashes.length} commits for ${JSON.stringify(buildId)}`,
   );
 
   return state;

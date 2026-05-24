@@ -20,12 +20,12 @@ export async function queueBuildReviewVerification(buildId: string): Promise<voi
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(
-      `[tool-trace] build/review.verify enqueue failed buildId=${buildId} error=${message}`,
+      `[tool-trace] build/review.verify enqueue failed buildId=${JSON.stringify(buildId)} error=${JSON.stringify(message)}`,
     );
     await markVerificationEnqueueFailed(buildId, message).catch((persistErr) => {
       console.error(
-        `[tool-trace] failed to mark uxVerificationStatus=failed buildId=${buildId} error=${
-          persistErr instanceof Error ? persistErr.message : String(persistErr)
+        `[tool-trace] failed to mark uxVerificationStatus=failed buildId=${JSON.stringify(buildId)} error=${
+          JSON.stringify(persistErr instanceof Error ? persistErr.message : String(persistErr))
         }`,
       );
     });

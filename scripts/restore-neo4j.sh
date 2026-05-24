@@ -18,7 +18,8 @@
 #   DPF_NEO4J_CONTAINER    container name (default: dpf-neo4j-1)
 #   DPF_NEO4J_VOLUME       named volume (default: dpf_neo4jdata)
 #   DPF_NEO4J_DATABASE     database name (default: neo4j)
-#   DPF_HOST_INSTALL_PATH  host install path for docker-in-docker bind translation
+#   DPF_BACKUPS_HOST_PATH  host backups dir for docker-in-docker bind translation (preferred)
+#   DPF_HOST_INSTALL_PATH  host install path (fallback when DPF_BACKUPS_HOST_PATH is unset)
 #
 # Exit codes:
 #   0 success
@@ -39,9 +40,22 @@ NEO4J_CONTAINER="${DPF_NEO4J_CONTAINER:-dpf-neo4j-1}"
 NEO4J_VOLUME="${DPF_NEO4J_VOLUME:-dpf_neo4jdata}"
 NEO4J_DATABASE="${DPF_NEO4J_DATABASE:-neo4j}"
 DPF_HOST_INSTALL_PATH="${DPF_HOST_INSTALL_PATH:-}"
+DPF_BACKUPS_HOST_PATH="${DPF_BACKUPS_HOST_PATH:-}"
 
 [ -n "$DUMP_PATH" ] || fail "DUMP_PATH not set" 2
-[ -n "$DPF_HOST_INSTALL_PATH" ] || fail "DPF_HOST_INSTALL_PATH not set" 2
+
+# Host-path base for docker-in-docker bind translation. Prefer the explicit
+# DPF_BACKUPS_HOST_PATH (set by the installer; lives OUTSIDE the install
+# root) and fall back to the legacy in-tree default for installs that
+# haven't been re-run since DPF_BACKUPS_HOST_PATH was introduced.
+if [ -n "$DPF_BACKUPS_HOST_PATH" ]; then
+  HOST_BACKUPS_BASE="$DPF_BACKUPS_HOST_PATH"
+elif [ -n "$DPF_HOST_INSTALL_PATH" ]; then
+  HOST_BACKUPS_BASE="${DPF_HOST_INSTALL_PATH}/backups"
+else
+  fail "neither DPF_BACKUPS_HOST_PATH nor DPF_HOST_INSTALL_PATH is set" 2
+fi
+
 [ -f "$DUMP_PATH" ] || fail "dump file does not exist: $DUMP_PATH" 2
 command -v docker >/dev/null 2>&1 || fail "docker CLI not available" 2
 
@@ -49,7 +63,7 @@ command -v docker >/dev/null 2>&1 || fail "docker CLI not available" 2
 # needs for bind mounts (same pattern as backup-neo4j.sh HOST_TARGET_DIR).
 DUMP_DIR="$(dirname "$DUMP_PATH")"
 DUMP_RELATIVE="${DUMP_DIR#/backups/}"
-HOST_DUMP_DIR="${DPF_HOST_INSTALL_PATH}/backups/${DUMP_RELATIVE}"
+HOST_DUMP_DIR="${HOST_BACKUPS_BASE}/${DUMP_RELATIVE}"
 HOST_DUMP_FILE="${HOST_DUMP_DIR}/neo4j.dump"
 log "host dump path for bind mount: $HOST_DUMP_FILE"
 

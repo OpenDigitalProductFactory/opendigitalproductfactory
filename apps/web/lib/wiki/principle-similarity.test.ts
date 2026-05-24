@@ -40,6 +40,7 @@ function makePage(
     principleAppliesTo: ["in_platform_coworker"],
     principlePublic: false,
     principlePublicRationale: null,
+    principleRuntimeEnforcement: null,
     lastReviewedAt: null,
     ...overrides,
   };

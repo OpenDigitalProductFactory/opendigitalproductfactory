@@ -99,6 +99,26 @@ describe("createOAuthFlow", () => {
     const url = new URL((result as { authorizeUrl: string }).authorizeUrl);
     expect(url.searchParams.get("scope")).toBe("openid profile");
   });
+
+  // Regression guard for ChatGPT OAuth `unknown_error` on auth.openai.com.
+  // When the provider row carries an explicit oauthRedirectUri (set in the
+  // seed to match the OAuth client's registered whitelist), the authorize URL
+  // must send that exact value — not the long-path computed fallback.
+  // See docs/triage/2026-05-23-chatgpt-oauth-unknown-error.md.
+  it("sends the provider's explicit oauthRedirectUri verbatim in the authorize URL", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "chatgpt",
+      authorizeUrl: "https://auth.openai.com/oauth/authorize",
+      oauthClientId: "app_EMoamEEZ73f0CkXaXp7hrann",
+      oauthRedirectUri: "http://localhost:1455/auth/callback",
+    });
+
+    const result = await createOAuthFlow("chatgpt");
+
+    expect(result).toHaveProperty("authorizeUrl");
+    const url = new URL((result as { authorizeUrl: string }).authorizeUrl);
+    expect(url.searchParams.get("redirect_uri")).toBe("http://localhost:1455/auth/callback");
+  });
 });
 
 describe("exchangeOAuthCode", () => {
