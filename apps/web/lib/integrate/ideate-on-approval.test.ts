@@ -106,8 +106,11 @@ describe("dispatchIdeateForApprovedBuild", () => {
   });
 
   it("dispatches research and saves designDoc evidence on the happy path", async () => {
+    // 2026-05-24: originatingBacklogItemId is a FK to BacklogItem.id (cuid),
+    // not BacklogItem.itemId (BI-XXXXX semantic id). Use a cuid-shaped value
+    // here so the lookup matches what production code does.
     mockPrisma.featureBuild.findUnique.mockResolvedValue({
-      originatingBacklogItemId: "BI-1",
+      originatingBacklogItemId: "cmpj4gz5605xx01o6lzxt278g",
       designDoc: null,
       title: "Fallback Title",
       description: "Fallback description.",
@@ -132,6 +135,16 @@ describe("dispatchIdeateForApprovedBuild", () => {
     const outcome = await dispatchIdeateForApprovedBuild({ buildId: "FB-X", userId: "u-1" });
 
     expect(outcome.kind).toBe("dispatched-success");
+    // Regression guard: PR #947 looked up BacklogItem by itemId here, which
+    // always missed because originatingBacklogItemId stores the cuid FK to
+    // BacklogItem.id. Live evidence captured on FB-B77B8CC4 2026-05-24.
+    // Without this assertion the prior mock setup (which ignored the where
+    // clause) hid the bug from tests.
+    expect(mockPrisma.backlogItem.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "cmpj4gz5605xx01o6lzxt278g" },
+      }),
+    );
     expect(mockDispatchIdeateResearch).toHaveBeenCalledWith(
       expect.objectContaining({
         featureTitle: "BI Title",

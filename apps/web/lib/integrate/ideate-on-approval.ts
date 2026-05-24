@@ -104,8 +104,17 @@ export async function dispatchIdeateForApprovedBuild(params: {
     }
 
     // Fetch the BI title + body for the research context.
+    //
+    // 2026-05-24: FeatureBuild.originatingBacklogItemId is a FK to BacklogItem.id
+    // (the cuid PK), not BacklogItem.itemId (the semantic BI-XXXXX). PR #947
+    // looked up by itemId here, which always missed because the FK stores the
+    // cuid value. The dispatch then short-circuited with `skipped-no-bi` and
+    // a "data inconsistency" message — masking a code bug as data corruption.
+    // Live evidence captured during FB-B77B8CC4 smoke test 2026-05-24.
+    // Same mock-faked-the-schema class of failure as the businessContext bug
+    // that PR #1030 fixed in this same file.
     const bi = await prisma.backlogItem.findUnique({
-      where: { itemId: build.originatingBacklogItemId },
+      where: { id: build.originatingBacklogItemId },
       select: { title: true, body: true },
     });
 
