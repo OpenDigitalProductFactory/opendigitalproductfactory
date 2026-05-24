@@ -9,6 +9,8 @@ principleDimensionVector: {"evidence_density": 0.6, "governance_compliance": 0.4
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
+principleRingScope:
+  - ring-1-coworker
 principleConsumerArchetype: route-domain-specific
 principleConsumerContexts:
   - mcp

@@ -9,6 +9,8 @@ principleDimensionVector: {"long_term_maintainability": 0.5, "evidence_density":
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
+principleRingScope:
+  - ring-1-coworker
 principleConsumerArchetype: ai-coworker-universal
 principlePublic: true
 principlePublicRationale: Documents why DPF agents have distinct cognitive frames, not just different tool lists — adopters designing their own coworkers need this guidance.
