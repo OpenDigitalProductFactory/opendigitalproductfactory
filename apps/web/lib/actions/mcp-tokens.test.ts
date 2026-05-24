@@ -456,7 +456,7 @@ describe("issueMyMcpToken", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("unreachable");
     expect(result.plaintext).toBe("dpfmcp_SECRET");
-    expect(result.setupSnippets.claudeCode).toContain("http://localhost:3000/api/mcp/v1");
+    expect(result.setupSnippets.claudeCode).toContain("http://127.0.0.1:3000/api/mcp/v1");
     expect(result.setupSnippets.claudeCode).toContain("Bearer ${DPF_MCP_BEARER_TOKEN}");
     expect(result.setupSnippets.vscode).toContain("Bearer ${env:DPF_MCP_BEARER_TOKEN}");
     expect(result.setupSnippets.codex).toContain('bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"');

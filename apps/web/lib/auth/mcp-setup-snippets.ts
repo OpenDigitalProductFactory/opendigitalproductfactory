@@ -20,9 +20,25 @@ function psSingleQuoted(value: string): string {
   return value.replace(/'/g, "''");
 }
 
+function normalizeLocalClientBaseUrl(baseUrl: string): string {
+  const trimmed = baseUrl.replace(/\/+$/, "");
+  try {
+    const parsed = new URL(trimmed);
+    const hostname = parsed.hostname.toLowerCase();
+    if (parsed.protocol === "http:" && (hostname === "localhost" || hostname === "::1" || hostname === "[::1]")) {
+      parsed.hostname = "127.0.0.1";
+      return parsed.toString().replace(/\/+$/, "");
+    }
+  } catch {
+    return trimmed;
+  }
+  return trimmed;
+}
+
 export function buildSetupSnippets(plaintext: string, baseUrl: string): McpSetupSnippets {
-  const url = `${baseUrl}/api/mcp/v1`;
-  const refreshUrl = `${baseUrl}/api/mcp/token/refresh`;
+  const clientBaseUrl = normalizeLocalClientBaseUrl(baseUrl);
+  const url = `${clientBaseUrl}/api/mcp/v1`;
+  const refreshUrl = `${clientBaseUrl}/api/mcp/token/refresh`;
   const httpEntry = {
     type: "http",
     url,

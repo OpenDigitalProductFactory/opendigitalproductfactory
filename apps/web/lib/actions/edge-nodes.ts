@@ -18,6 +18,7 @@ import { prisma } from "@dpf/db";
 
 import { auth } from "@/lib/auth";
 import { issueBootstrapToken } from "@/lib/edge-node/enrollment";
+import { syncUserPrincipal } from "@/lib/identity/principal-linking";
 import { can } from "@/lib/permissions";
 
 const ADMIN_PATH = "/platform/edge-nodes";
@@ -63,19 +64,25 @@ async function assertManagePlatform(): Promise<
     };
   }
 
-  // Map the User to a Principal for audit attribution. Every User has
-  // a corresponding Principal alias by AGENTS.md §11 convergence —
-  // look it up, fall back to a synthetic value if (unexpectedly)
-  // missing so the action still records WHO did it (not anonymous).
+  // Map the User to a Principal for audit attribution. Every User must
+  // have a matching Principal + PrincipalAlias per AGENTS.md §11
+  // (Principal convergence). The install seed creates one for the
+  // bootstrap admin, but pre-§11 installs can be missing the row.
+  //
+  // Self-heal: if no alias exists, call syncUserPrincipal to create the
+  // Principal + alias from the User row. This avoids the prior fallback
+  // ("user:<userId>") which produced a string that violates the hard
+  // FK in BootstrapToken_issuedByPrincipalId_fkey and similar columns,
+  // causing the action to crash with a Prisma error leaking to the UI.
   const alias = await prisma.principalAlias.findFirst({
     where: { aliasType: "user", aliasValue: session.user.id },
     select: { principalId: true },
   });
-  return {
-    ok: true,
-    principalId: alias?.principalId ?? `user:${session.user.id}`,
-    userId: session.user.id,
-  };
+  if (alias?.principalId) {
+    return { ok: true, principalId: alias.principalId, userId: session.user.id };
+  }
+  const synced = await syncUserPrincipal(session.user.id);
+  return { ok: true, principalId: synced.id, userId: session.user.id };
 }
 
 // ── Bootstrap token issuance ────────────────────────────────────────────────
