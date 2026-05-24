@@ -6,7 +6,12 @@ import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/compl
 import { createRun, startRun, completeRun, failRun, getLatestRun } from "@/lib/self-upgrade/run-store";
 import { runPromoter } from "@/lib/self-upgrade/promoter";
 import { emitUpgradeEvent } from "@/lib/self-upgrade/notifications";
-import { getPortalActivity } from "@/lib/self-upgrade/activity";
+import {
+  startQuiescence,
+  signalSwapStarting,
+  signalSwapComplete,
+  failQuiescenceSwap,
+} from "@/lib/self-upgrade/quiescence";
 
 export const SELF_UPGRADE_FUNCTION_ID_SCHEDULED = "ops/self-upgrade-scheduled";
 export const SELF_UPGRADE_FUNCTION_ID_MANUAL = "ops/self-upgrade-manual";
@@ -18,12 +23,18 @@ export type SelfUpgradeRunEventData = {
   dryRun?: boolean;
   buildId?: string;
   /**
-   * Force-apply even when the portal has live operator activity.
-   * Operator-confirmed only; never set by the scheduled cron. Bypasses the
-   * "portal-active" skip-check so an operator can self-service the upgrade
-   * after a hard reload.
+   * Force-apply even when quiescence would defer the upgrade. Operator-
+   * confirmed only; never set by the scheduled cron. Surfaces as a
+   * ship-force-equivalent flag to the coordinator so it records the
+   * override on QuiescenceRun.forcedSurfaces for audit.
    */
   force?: boolean;
+  /**
+   * Wait budget in ms to pass to the coordinator. Defaults to the
+   * coordinator's own DEFAULT_BUDGET_MS (5 minutes). Operators can
+   * raise/lower per upgrade attempt.
+   */
+  budgetMs?: number;
 };
 
 export async function runSelfUpgrade(
@@ -40,24 +51,6 @@ export async function runSelfUpgrade(
   const deployedSha = getDeployedSha();
   if (isShaFresh(deployedSha, targetSha)) return { skipped: true, reason: "up-to-date" };
 
-  // Defer if the portal has live operator activity. Applying an upgrade
-  // mid-session invalidates cached Next.js server action ids in browsers
-  // and breaks every subsequent click until a hard reload — see
-  // docs/superpowers/audits/2026-05-21-bs-end-to-end-cycle-blockers.md §5
-  // Slice 5. dryRun and force bypass this check.
-  if (!params.force && !params.dryRun) {
-    const activity = await getPortalActivity();
-    if (activity.active) {
-      return {
-        skipped: true,
-        reason: "portal-active",
-        lastActivityAt: activity.lastActivityAt?.toISOString() ?? null,
-        lastActivityToolName: activity.lastActivityToolName,
-        thresholdMs: activity.thresholdMs,
-      };
-    }
-  }
-
   const latestRun = await getLatestRun();
   if (latestRun?.status === "running") {
     return { skipped: true, reason: "active-run", runId: latestRun.runId };
@@ -71,6 +64,55 @@ export async function runSelfUpgrade(
   await startRun(run.runId);
   await emitUpgradeEvent({ type: "upgrade.started", runId: run.runId });
 
+  // BI-QUIESCE-010 keystone integration: replaces the single-signal
+  // getPortalActivity check with the full Activity Quiescence Protocol
+  // coordinator (BI-QUIESCE-002). The coordinator inventories all 30
+  // active surfaces, drains them in dependency order, and either
+  // signals ready-to-swap or defers with a specific blocker surface.
+  //
+  // dryRun bypasses the drain entirely (no level flip, no caller
+  // events). force surfaces as shipForce so the coordinator records
+  // the override on forcedSurfaces.
+  let quiescenceRunId: string | null = null;
+  if (!params.dryRun) {
+    const { runId: qRunId, awaitReady } = await startQuiescence({
+      trigger: "self-upgrade",
+      triggerRefId: run.runId,
+      budgetMs: params.budgetMs,
+      shipForce: params.force,
+    });
+    quiescenceRunId = qRunId;
+
+    const outcome = await awaitReady();
+    if (!outcome.ok) {
+      // Coordinator deferred / aborted / failed — no swap should happen.
+      // The upgrade run itself is marked failed so the audit trail is
+      // complete; the next cron tick will retry.
+      await failRun(
+        run.runId,
+        outcome.outcome === "deferred"
+          ? `quiescence-deferred: ${outcome.deferSurface ?? "unknown"}`
+          : `quiescence-${outcome.outcome}: ${("reason" in outcome ? outcome.reason : null) ?? "unknown"}`,
+      );
+      await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
+      return {
+        ok: false,
+        status: "deferred",
+        runId: run.runId,
+        quiescenceRunId,
+        reason: outcome.outcome,
+        deferSurface: outcome.outcome === "deferred" ? outcome.deferSurface : null,
+      };
+    }
+  }
+
+  // Signal swap-starting for audit; record the moment we cross the
+  // ready-to-swap → actually-swapping boundary on the QuiescenceRun.
+  // No-op when quiescenceRunId is null (dryRun path).
+  if (quiescenceRunId) {
+    await signalSwapStarting(quiescenceRunId);
+  }
+
   const result = await runPromoter({
     sourcePath: process.env.PROMOTE_SOURCE ?? "",
     targetSha,
@@ -80,16 +122,36 @@ export async function runSelfUpgrade(
   });
 
   if (result.exitCode === 0) {
+    // Signal swap-complete BEFORE marking the upgrade succeeded so the
+    // coordinator transitions through swapping→completed and flips the
+    // level back to normal as fast as possible. Suspended Inngest
+    // functions wake up via platform.quiescence-cleared.
+    if (quiescenceRunId) {
+      await signalSwapComplete(quiescenceRunId);
+    }
     await completeRun(run.runId);
     await emitUpgradeEvent({ type: "upgrade.succeeded", runId: run.runId });
     const deployed = params.buildId ? await isFeatureBuildDeployed(params.buildId) : null;
-    return { ok: true, status: "succeeded", runId: run.runId, deployed };
+    return { ok: true, status: "succeeded", runId: run.runId, quiescenceRunId, deployed };
   }
 
   const excerpt = result.stderr || result.stdout || "unknown error";
+  // Promoter failed — signal failure to the coordinator so it transitions
+  // to failed + flips level back to normal (critical: without this, the
+  // portal stays draining forever after a failed swap).
+  if (quiescenceRunId) {
+    await failQuiescenceSwap(quiescenceRunId, excerpt);
+  }
   await failRun(run.runId, excerpt);
   await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
-  return { ok: false, status: "failed", runId: run.runId, exitCode: result.exitCode, excerpt };
+  return {
+    ok: false,
+    status: "failed",
+    runId: run.runId,
+    quiescenceRunId,
+    exitCode: result.exitCode,
+    excerpt,
+  };
 }
 
 export const selfUpgradeScheduled = inngest.createFunction(
