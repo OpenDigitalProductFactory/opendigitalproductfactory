@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactElement } from "react";
 
 import {
   getAllBackupReadinessAction,
   listBackupRunsAction,
   readBackupRunLogAction,
   triggerBackupNowAction,
+  triggerTrialRestoreNowAction,
   type BackupRunListItem,
   type BackupRunLog,
 } from "@/lib/actions/backups";
@@ -55,6 +56,60 @@ function formatDurationMs(ms: number | null): string {
 function formatTimestamp(s: string | null): string {
   if (!s) return "—";
   return new Date(s).toLocaleString();
+}
+
+// BI-A8C149C1: age formatters + color-coded pills for the backup-health card.
+
+function formatAgeFromNow(s: string | null): string {
+  if (!s) return "never";
+  const ageMs = Date.now() - new Date(s).getTime();
+  const ageHours = ageMs / (1000 * 60 * 60);
+  if (ageHours < 1) return `${Math.round(ageMs / (1000 * 60))} min`;
+  if (ageHours < 24) return `${ageHours.toFixed(1)} h`;
+  return `${(ageHours / 24).toFixed(1)} d`;
+}
+
+function renderAgePill(finishedAt: string | null): ReactElement | null {
+  if (!finishedAt) {
+    return <StatusPill status="failed" />;  // never = red
+  }
+  const ageHours = (Date.now() - new Date(finishedAt).getTime()) / (1000 * 60 * 60);
+  // Spec from BI: green if <26h (one nightly window + 2h slack), yellow 26-48h,
+  // red >48h. Reuse StatusPill colors: ok=green, running=yellow-ish (we'd
+  // rather have a true yellow but the existing pill set is small), failed=red.
+  if (ageHours < 26) return <StatusPill status="ok" />;
+  if (ageHours < 48) return <StatusPill status="running" />;
+  return <StatusPill status="failed" />;
+}
+
+function renderSha256Pill(sha256: string | null): ReactElement | null {
+  // The dump's sha256 was recorded by scripts/backup-postgres.sh AT dump time
+  // and verified by the BackupRun row. Presence = pass; absence = never ran or
+  // the runner is older than the sha256 feature. The full verification path
+  // (sha256-of-on-disk-file == recorded-sha256) runs inside the existing
+  // restore wizard's integrity check.
+  if (!sha256) return <StatusPill status="failed" />;  // never = red
+  return <StatusPill status="ok" />;
+}
+
+function renderTrialRestoreSummary(
+  tr: { lastStatus: "ok" | "failed"; lastStartedAt: string; lastError: string | null } | null,
+): string {
+  if (!tr) return "never (no trial restore yet)";
+  const when = formatTimestamp(tr.lastStartedAt);
+  if (tr.lastStatus === "ok") {
+    return `last passed ${when} · age ${formatAgeFromNow(tr.lastStartedAt)}`;
+  }
+  return `last FAILED ${when}${tr.lastError ? ` — ${tr.lastError.slice(0, 120)}` : ""}`;
+}
+
+function renderTrialRestorePill(
+  tr: { lastStatus: "ok" | "failed"; lastStartedAt: string } | null,
+): ReactElement | null {
+  if (!tr) return <StatusPill status="failed" />;  // never run = red
+  if (tr.lastStatus === "failed") return <StatusPill status="failed" />;
+  // Apply the same age-based color-coding as the "Last success" row.
+  return renderAgePill(tr.lastStartedAt);
 }
 
 const STATUS_PILL: Record<string, { bg: string; color: string; label: string }> = {
@@ -106,6 +161,7 @@ export function BackupsClient({
   });
   const [restoreRuns, setRestoreRuns] = useState(initialRestoreRuns);
   const [pendingTarget, setPendingTarget] = useState<BackupTarget | null>(null);
+  const [isVerifyPending, setIsVerifyPending] = useState(false);
   const [, startTransition] = useTransition();
   const [openLog, setOpenLog] = useState<{ runId: string; data: BackupRunLog } | null>(null);
   const [loadingLog, setLoadingLog] = useState(false);
@@ -161,6 +217,29 @@ export function BackupsClient({
           setError(e instanceof Error ? e.message : String(e)),
         );
       }, 1500);
+    });
+  }
+
+  // BI-A8C149C1: "Verify last backup" button — fires the postgres trial-restore
+  // manual-trigger event. The trial restore creates a temp DB, pg_restores the
+  // latest dump, asserts row counts, drops the temp DB. Never touches production.
+  function handleVerifyLastBackup() {
+    setError(null);
+    setIsVerifyPending(true);
+    startTransition(async () => {
+      const result = await triggerTrialRestoreNowAction("postgres");
+      setIsVerifyPending(false);
+      if (!result.ok) {
+        setError(result.error ?? "Trial restore request failed.");
+        return;
+      }
+      // Trial restore typically completes in ~10s on a small DB; give it 5s
+      // before refreshing so the BackupRestore row is likely visible.
+      setTimeout(() => {
+        refresh().catch((e: unknown) =>
+          setError(e instanceof Error ? e.message : String(e)),
+        );
+      }, 5000);
     });
   }
 
@@ -222,27 +301,49 @@ export function BackupsClient({
                   </p>
                 )}
               </div>
-              <button
-                onClick={() => handleTrigger(target)}
-                disabled={isPending || pendingTarget !== null}
-                className="px-4 py-2 text-sm font-medium rounded transition-colors shrink-0 ml-4"
-                style={{
-                  background:
-                    isPending || pendingTarget !== null
-                      ? "var(--dpf-border)"
-                      : "var(--dpf-accent)",
-                  color:
-                    isPending || pendingTarget !== null
-                      ? "var(--dpf-muted)"
-                      : "#fff",
-                  cursor:
-                    isPending || pendingTarget !== null ? "not-allowed" : "pointer",
-                }}
-              >
-                {isPending
-                  ? "Triggering…"
-                  : `Run ${TARGET_LABELS[target]} backup now`}
-              </button>
+              <div className="flex items-center gap-2 shrink-0 ml-4">
+                {target === "postgres" && (
+                  <button
+                    onClick={() => handleVerifyLastBackup()}
+                    disabled={isVerifyPending || pendingTarget !== null}
+                    className="px-3 py-2 text-sm font-medium rounded transition-colors"
+                    style={{
+                      background: isVerifyPending
+                        ? "var(--dpf-border)"
+                        : "transparent",
+                      color: isVerifyPending
+                        ? "var(--dpf-muted)"
+                        : "var(--dpf-text)",
+                      border: "1px solid var(--dpf-border)",
+                      cursor: isVerifyPending ? "not-allowed" : "pointer",
+                    }}
+                    title="Run a trial restore against the latest postgres dump, into a temp DB. Proves the dump is functionally restorable. Asserts row counts on critical tables."
+                  >
+                    {isVerifyPending ? "Verifying…" : "Verify last backup"}
+                  </button>
+                )}
+                <button
+                  onClick={() => handleTrigger(target)}
+                  disabled={isPending || pendingTarget !== null}
+                  className="px-4 py-2 text-sm font-medium rounded transition-colors"
+                  style={{
+                    background:
+                      isPending || pendingTarget !== null
+                        ? "var(--dpf-border)"
+                        : "var(--dpf-accent)",
+                    color:
+                      isPending || pendingTarget !== null
+                        ? "var(--dpf-muted)"
+                        : "#fff",
+                    cursor:
+                      isPending || pendingTarget !== null ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {isPending
+                    ? "Triggering…"
+                    : `Run ${TARGET_LABELS[target]} backup now`}
+                </button>
+              </div>
             </div>
 
             {/* ─── Readiness card ──────────────────────────────────────── */}
@@ -274,9 +375,24 @@ export function BackupsClient({
                   r.lastSuccess
                     ? `${formatTimestamp(r.lastSuccess.finishedAt)} · ${formatBytes(
                         r.lastSuccess.sizeBytes,
-                      )}`
+                      )} · age ${formatAgeFromNow(r.lastSuccess.finishedAt)}`
                     : "never"
                 }
+                statusBadge={renderAgePill(r.lastSuccess?.finishedAt ?? null)}
+              />
+              <ReadinessRow
+                label="sha256 verification"
+                value={
+                  r.lastSuccess?.sha256
+                    ? `${r.lastSuccess.sha256.substring(0, 12)}… (recorded at dump time)`
+                    : "never recorded"
+                }
+                statusBadge={renderSha256Pill(r.lastSuccess?.sha256 ?? null)}
+              />
+              <ReadinessRow
+                label="Trial restore"
+                value={renderTrialRestoreSummary(r.trialRestore)}
+                statusBadge={renderTrialRestorePill(r.trialRestore)}
               />
               <ReadinessRow
                 label="Next run"

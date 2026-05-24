@@ -115,6 +115,37 @@ export async function triggerBackupNowAction(
   }
 }
 
+/**
+ * BI-A8C149C1: admin "Verify last backup" button — fires the trial-restore
+ * manual-trigger event so an operator can prove the most recent Postgres
+ * backup is restorable without waiting for the nightly cron. Postgres-only
+ * in slice 1 (BI-31C9FBDF). Future BIs add Neo4j + Qdrant variants.
+ */
+export async function triggerTrialRestoreNowAction(
+  target: BackupTarget = "postgres",
+): Promise<{ ok: boolean; eventIds?: string[]; error?: string }> {
+  await requireBackupAdmin();
+  if (target !== "postgres") {
+    return {
+      ok: false,
+      error: `Trial-restore verification is currently postgres-only (got target=${target}). Neo4j + Qdrant variants are tracked as follow-up BIs.`,
+    };
+  }
+  const { POSTGRES_TRIAL_RESTORE_EVENT } = await import(
+    "@/lib/operate/backups/constants"
+  );
+  try {
+    const result = await inngest.send({
+      name: POSTGRES_TRIAL_RESTORE_EVENT,
+      data: { trigger: "manual" },
+    });
+    return { ok: true, eventIds: result.ids };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message };
+  }
+}
+
 export interface BackupRunLog {
   manifest: unknown | null;
   logTail: string | null;

@@ -106,10 +106,26 @@ export interface ReadinessSummary {
     id: string;
     finishedAt: string | null;
     sizeBytes: number | null;
+    sha256: string | null;
   } | null;
   retention: BackupRetentionPolicy;
   retainedCount: number;
   retainedBytes: number;
   storagePath: string;
   failuresInLastThreeRuns: number;
+  /**
+   * Trial-restore verification status (BI-A8C149C1; trigger='trial-verification'
+   * BackupRestore rows from BI-31C9FBDF). Null when no trial restore has ever
+   * been recorded for this target (e.g. fresh install, OR a target whose trial
+   * restore isn't implemented yet — neo4j + qdrant are slice-2 territory).
+   * Used by the admin backup-health card to surface "trial restore last
+   * passed <ts>" alongside the backup status.
+   */
+  trialRestore: {
+    lastRunId: string;
+    lastStatus: "ok" | "failed";
+    lastStartedAt: string;
+    lastFinishedAt: string | null;
+    lastError: string | null;
+  } | null;
 }
