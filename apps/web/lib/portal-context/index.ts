@@ -9,6 +9,7 @@ import {
 } from "./cache";
 import type { OrganizationRow, PortalContextDb, PortalUserRow } from "./db-types";
 import { resolvePortalAuthority, resolvePromotionReviewerGrantKeys } from "./authority-resolver";
+import { resolveCoworkerCapability } from "./capability-resolver";
 import { resolvePortalEvidence } from "./evidence-resolver";
 import { resolveHiveMindCandidates } from "./hive-mind-resolver";
 import { createPortalContextPromptDigest } from "./prompt-digest";
@@ -142,6 +143,19 @@ export async function resolvePortalContextEnvelopeUncached(
   const coworkers = coworkersResult.value;
   attention.push(...coworkersResult.attention);
 
+  // D29: capability snapshot for configuration-page coworker guidance.
+  // Soft-fail on its own clock so an outage here can't block the envelope.
+  const capabilityResult = await resolveSource(
+    "capability",
+    resolveCoworkerCapability({
+      routeContext: input.routeContext,
+      platformRole,
+    }),
+    null,
+    resolverTimeoutMs,
+  );
+  attention.push(...capabilityResult.attention);
+
   const baseEnvelope: Omit<PortalContextEnvelope, "promptDigest"> = {
     envelopeId: createPortalContextEnvelopeId(input, userId, bucket),
     resolvedAt: bucket.toISOString(),
@@ -162,6 +176,7 @@ export async function resolvePortalContextEnvelopeUncached(
     authority,
     coworkers,
     attention,
+    capability: capabilityResult.value,
   };
 
   return {
