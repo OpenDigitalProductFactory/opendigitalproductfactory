@@ -204,14 +204,14 @@ Three channels: `edge` (every release), `beta` (after N-hour soak on `edge`), `s
   "bumpType": "patch",
   "minimumFromVersion": "4.0.0",
   "images": {
-    "portal": { "ref": "ghcr.io/opendigitalproductfactory/dpf-portal@sha256:...", "signature": "..." },
-    "portalInit": { "ref": "ghcr.io/opendigitalproductfactory/dpf-portal-init@sha256:...", "signature": "..." },
-    "sandbox": { "ref": "ghcr.io/opendigitalproductfactory/dpf-sandbox@sha256:...", "signature": "..." }
+    "portal": { "ref": "ghcr.io/opendigitalproductfactory/dpf-portal@sha256:1111111111111111111111111111111111111111111111111111111111111111", "signature": "sigstore-bundle://v4.7.3/portal.json" },
+    "portalInit": { "ref": "ghcr.io/opendigitalproductfactory/dpf-portal-init@sha256:2222222222222222222222222222222222222222222222222222222222222222", "signature": "sigstore-bundle://v4.7.3/portal-init.json" },
+    "sandbox": { "ref": "ghcr.io/opendigitalproductfactory/dpf-sandbox@sha256:3333333333333333333333333333333333333333333333333333333333333333", "signature": "sigstore-bundle://v4.7.3/sandbox.json" }
   },
-  "migrations": { "pending": ["20260520_add_release_table"], "manifestUrl": "..." },
-  "seedDeltas": { "manifestUrl": "...", "hasArchetypeDelta": false, "hasPromptDelta": true, "hasPrincipleKernelDelta": false },
-  "sbom": { "url": "...", "sha256": "..." },
-  "releaseNotesUrl": "..."
+  "migrations": { "pending": ["20260520_add_release_table"], "manifestUrl": "https://releases.dpf.dev/manifests/v4.7.3/migrations.json" },
+  "seedDeltas": { "manifestUrl": "https://releases.dpf.dev/manifests/v4.7.3/seed-deltas.json", "hasArchetypeDelta": false, "hasPromptDelta": true, "hasPrincipleKernelDelta": false },
+  "sbom": { "url": "https://releases.dpf.dev/manifests/v4.7.3/sbom.spdx.json", "sha256": "4444444444444444444444444444444444444444444444444444444444444444" },
+  "releaseNotesUrl": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/releases/tag/v4.7.3"
 }
 ```
 
@@ -330,9 +330,9 @@ Driven by the `SEED_REGISTRY` (§6.2). For each registered model:
   "conflicts": [
     {
       "seedKey": "prompt:builder.architect-review",
-      "base":   { "hash": "abc...", "version": "4.6.0" },
-      "ours":   { "preview": "You are MY architect...", "lastEditedAt": "..." },
-      "theirs": { "preview": "You are an architect reviewing..." },
+      "base":   { "hash": "sha256:abc123", "version": "4.6.0" },
+      "ours":   { "preview": "You are MY architect", "lastEditedAt": "2026-05-20T14:00:00Z" },
+      "theirs": { "preview": "You are an architect reviewing DPF work" },
       "diffSummary": "Both changed opening line + IT4IT instruction"
     }
   ]
@@ -540,7 +540,7 @@ export const SEED_REGISTRY: SeedRegistryEntry[] = [
   { model: "WikiPage",            keyField: "pageId",     mode: "OVERLAY",        auditTable: "WikiPageRevision" },
   { model: "StorefrontArchetype", keyField: "archetypeId",mode: "EXCLUDED_FIELDS",excludedFields: ["isActive"] },
   { model: "AgentToolGrant",      keyField: "grantId",    mode: "AUDIT_TRACE",    auditTable: "BuildActivity" },
-  // ... all 13 modes
+  // remaining registry entries cover the inventory in §2.4
 ];
 ```
 
@@ -633,7 +633,7 @@ These do not block spec approval, but should be settled before Phase 2 ships:
 
 1. **Where does `releases.dpf.dev` host?** Proposed: GitHub Pages from the gh-pages branch of the main repo, populated by release CI. Free, zero-ops, hosted alongside source. Alternative: Cloudflare Worker for routing flexibility.
 2. **Signing key rotation policy.** Proposed: Sigstore "keyless" with GitHub OIDC binding (no key management). Alternative: dedicated cosign key stored in 1Password.
-3. **`edge` → `beta` soak time.** Proposed: 24 hours with no rollback signal from any `edge` install. Telemetry source TBD (anonymous rollback signal in cron poll, opt-in).
+3. **`edge` → `beta` soak time.** Proposed: 24 hours with no rollback signal from any `edge` install. Telemetry source remains an operator decision; the default should be an anonymous, opt-in rollback signal in the cron poll.
 4. **`beta` → `stable` soak time.** Proposed: 7 days clean.
 5. **Hotfix lane.** Confirmed in design but flow unspecified: does a security patch jump straight to `stable`, or still soak briefly in `beta` with reduced timer?
 6. **Smoke-window criteria default.** What error-rate threshold and which health endpoints constitute "healthy" out of the box?

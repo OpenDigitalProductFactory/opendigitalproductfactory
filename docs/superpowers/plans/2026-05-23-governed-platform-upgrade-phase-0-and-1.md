@@ -2,15 +2,23 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Stabilize the split self-upgrade code path so there is exactly one runnable upgrade flow with consistent DTO vocabulary, then introduce a first-class `platform_version` concept that the runtime, API, and Admin UI all read from one source.
+**Goal:** Stabilize the split self-upgrade code path so there is exactly one runnable upgrade flow with consistent DTO vocabulary, then introduce a first-class `platform.version` concept whose canonical source is `version.json` and whose runtime mirror, API, and `/ops/self-upgrade` UI all agree.
 
-**Architecture:** Phase 0 deletes the legacy `portal-self-upgrade.ts` Inngest function family (currently registered but calling deprecated stubs) and aligns the `listSelfUpgradeRuns` action + `SelfUpgradeClient.tsx` UI to the actual `SelfUpgradeRun` Prisma schema column names. Phase 1 adds a canonical `version.json` at the repo root, a runtime loader that exposes it via `/api/platform/version`, and surfaces the value in `/ops/self-upgrade`. No new dependencies; all changes are TDD with vitest.
+**Architecture:** Phase 0 deletes the legacy `portal-self-upgrade.ts` Inngest function family (currently registered but calling deprecated stubs) and aligns the `listSelfUpgradeRuns` action + `SelfUpgradeClient.tsx` UI to the actual `SelfUpgradeRun` Prisma schema column names. Phase 1 adds a canonical `version.json` at the repo root, copies it into the Docker image, loads and validates it through `apps/web/lib/platform/version.ts`, mirrors it to `PlatformConfig["platform.version"]` on boot, exposes it through `/api/platform/version`, and surfaces the same value in `/ops/self-upgrade`. No new dependencies; all changes are TDD with vitest.
 
-**Tech Stack:** Next.js 15 (App Router, Server Actions), Prisma + Postgres (`@dpf/db`), Inngest for queues, vitest + `@testing-library/jest-dom` for tests, pnpm workspaces.
+**Tech Stack:** Next.js 16 (App Router, Server Actions), React 19, Prisma + Postgres (`@dpf/db`), Inngest for queues, vitest + `@testing-library/jest-dom` for tests, pnpm workspaces.
 
 **Spec:** [docs/superpowers/specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md](../specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md) (committed at `0bc912ed`)
 
 **Backlog item:** `BI-5B3FA415`
+
+**Live backlog check:** 2026-05-24 via DPF MCP: `BI-5B3FA415` is `triaging`, type `portfolio`, not linked to an epic, and there is no current open platform-upgrade epic to extend. Re-check this before execution; do not rely on this snapshot if the backlog has moved.
+
+**Architectural review corrections baked into this plan:**
+- Phase 1 is not complete until `PlatformConfig["platform.version"]` is written from the same `version.json` source as the API and UI. A UI/API-only implementation would make the spec look complete while leaving runtime state unqueryable.
+- `SelfUpgradeRun.currentSha` / `targetSha` stay SHA-named in Phase 0+1. Do not rename them to version vocabulary until channel manifests and version-bearing runs exist.
+- The current route at `/ops/self-upgrade` renders `SelfUpgradeClient`; `SelfUpgradePanel` exists but is not used by this route today. Update the rendered route unless you deliberately migrate the route in the same task.
+- Reserve roughly the first 20% of implementation attention for refactoring and deletion: remove the legacy substrate, collapse duplicate DTO vocabulary, and keep the version loader/API/UI path small and reusable before adding display polish.
 
 ---
 
@@ -18,19 +26,30 @@
 
 - [ ] Confirm you are on a fresh branch off `origin/main`:
   ```
-  git fetch origin && git status
+  git fetch origin
+  git status --short --branch
   git log origin/main..HEAD --oneline   # should show only the spec commit if continuing this worktree
   ```
-- [ ] Confirm vitest runs clean:
+  If the worktree is dirty, classify the changes before continuing and leave unrelated files untouched. If the branch is `main` or detached, stop and create/switch to a topic branch first. If the branch tracks `origin/main` directly, set an upstream branch for the topic before the first push.
+- [ ] Re-check live backlog through DPF MCP before executing:
+  - `list_backlog_items` filtered to `triaging` (confirm `BI-5B3FA415` status and epic link).
+  - `list_epics` filtered to open epics (confirm no overlapping platform-upgrade epic appeared).
+  If MCP is unavailable, use live DB fallback and say so in the evidence note. Do not use seed files or docs as backlog truth.
+- [ ] Confirm vitest runs clean for the existing self-upgrade coverage:
   ```
   pnpm --filter web test -- --run apps/web/lib/self-upgrade
   pnpm --filter web test -- --run apps/web/lib/queue/functions/self-upgrade.test.ts
   pnpm --filter web test -- --run apps/web/lib/queue/functions/portal-self-upgrade.test.ts
+  pnpm --filter web test -- --run apps/web/lib/actions/promotions.self-upgrade.test.ts
   ```
   Note any pre-existing failures so they're not attributed to your changes.
 - [ ] Confirm Prisma client is generated:
   ```
   pnpm --filter @dpf/db generate
+  ```
+- [ ] Confirm the exact runtime stack before editing:
+  ```
+  pnpm --filter web exec next --version
   ```
 
 If any pre-flight step fails, stop and surface to the human rather than working around it.
@@ -105,62 +124,47 @@ The goal of Phase 0 is **fewer running code paths**, not more. After Phase 0, th
 
 ---
 
-### Task 2: Reproduce the `listSelfUpgradeRuns` DTO drift bug
+### Task 2: Convert existing `listSelfUpgradeRuns` tests into the DTO-drift reproducer
 
 **Why:** `apps/web/lib/actions/promotions.ts:561-570` selects `triggeredBy`, `fromVersion`, `toVersion`, `error` from `prisma.selfUpgradeRun.findMany`, but the `SelfUpgradeRun` model in `packages/db/prisma/schema.prisma:4971` has columns `trigger`, `currentSha`, `targetSha`, `failureLog`. This is a runtime bug — the query will throw `PrismaClientValidationError`. We write the failing test first.
 
 **Files:**
-- Create: `apps/web/lib/actions/promotions.self-upgrade.test.ts`
+- Modify: `apps/web/lib/actions/promotions.self-upgrade.test.ts` (already exists)
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Update the existing DTO fixtures and select assertions**
+
+  In `apps/web/lib/actions/promotions.self-upgrade.test.ts`, replace the self-upgrade run fixtures and DTO shape expectations so they use the Prisma schema column names:
 
   ```ts
-  import { describe, it, expect } from "vitest";
-  import { listSelfUpgradeRuns } from "@/lib/actions/promotions";
-
-  // This test is INTENTIONALLY EXPECTED TO FAIL today because of the
-  // DTO drift in promotions.ts. Task 3 will make it pass.
-  describe("listSelfUpgradeRuns DTO alignment", () => {
-    it("returns runs without throwing PrismaClientValidationError", async () => {
-      // Auth is required — this test must be wired through the test harness'
-      // mock-auth path. If your harness doesn't have it, mark this `it.todo`
-      // and add the harness wiring as a follow-up step (out of scope here).
-      const result = await listSelfUpgradeRuns({ limit: 1 });
-      expect(result).toHaveProperty("runs");
-      expect(result).toHaveProperty("nextCursor");
-    });
-  });
+  const mockRunRow1 = {
+    runId: "SUR-AAAA0001",
+    status: "succeeded",
+    trigger: "scheduled",
+    currentSha: "abc1234",
+    targetSha: "def5678",
+    deployedSha: "def5678",
+    startedAt: new Date("2026-05-20T02:00:00Z"),
+    completedAt: new Date("2026-05-20T02:05:00Z"),
+    failureLog: null,
+    createdAt: new Date("2026-05-20T02:00:00Z"),
+  };
   ```
 
-- [ ] **Step 2: Run test to verify it fails with the expected Prisma validation error**
+  Update the DTO-shape test to assert `trigger`, `currentSha`, `targetSha`, `deployedSha`, and `failureLog`, and assert the `select` object includes those fields while excluding the old `triggeredBy`, `fromVersion`, `toVersion`, and `error` properties. This existing test file already has auth mocks; do not create a second narrower reproducer.
+
+- [ ] **Step 2: Run test to verify it fails on the stale select clause**
 
   ```
   pnpm --filter web test -- --run apps/web/lib/actions/promotions.self-upgrade.test.ts
   ```
 
-  Expect: `PrismaClientValidationError` mentioning unknown fields `triggeredBy`, `fromVersion`, `toVersion`, `error`. If you get a different failure (e.g. auth), wire the auth mock first and re-run.
+  Expect the DTO/select assertion to fail because `promotions.ts` still selects `triggeredBy`, `fromVersion`, `toVersion`, and `error`. The Prisma runtime error is the production symptom; the unit test should pin the bad select without requiring a live database.
 
   If the test PASSES, stop — the schema may have been migrated between this plan and now. Re-read `packages/db/prisma/schema.prisma:4971` and adjust Task 3 accordingly.
 
-- [ ] **Step 3: Mark the test `it.skip` so it does not gate CI red**
+- [ ] **Step 3: Keep the red test uncommitted and continue directly to Task 3**
 
-  Repo convention (confirmed by grep against `apps/web/lib/orchestration/structural.test.ts` and `apps/web/lib/integrate/build-orchestrator.test.ts`) is `it.skip` / `it.todo` for known-failing or pending tests, NOT a `[FAIL]` commit marker. Change `it(...)` to `it.skip(...)` in the test you just wrote. Task 3 will unskip it after the fix.
-
-- [ ] **Step 4: Commit the skipped reproducer**
-
-  ```
-  git add apps/web/lib/actions/promotions.self-upgrade.test.ts
-  git commit -s apps/web/lib/actions/promotions.self-upgrade.test.ts -m "test(promotions): reproducer (skipped) for listSelfUpgradeRuns DTO drift
-
-  Schema columns: trigger, currentSha, targetSha, failureLog
-  Action selects: triggeredBy, fromVersion, toVersion, error
-  → PrismaClientValidationError at runtime.
-
-  Test is it.skip per repo convention; Task 3 aligns the action to
-  schema names and unskips.
-
-  Refs: BI-5B3FA415"
-  ```
+  Do not push a deliberately red commit. Task 2 is the TDD red step; Task 3 is the green step. Commit the test and implementation together once the action, UI consumers, and tests pass.
 
 ---
 
@@ -169,8 +173,8 @@ The goal of Phase 0 is **fewer running code paths**, not more. After Phase 0, th
 **Files:**
 - Modify: `apps/web/lib/actions/promotions.ts:536-578`
 - Modify (if it references the DTO): `apps/web/components/ops/SelfUpgradeClient.tsx`
-- Modify (if it references the DTO): `apps/web/components/ops/SelfUpgradePanel.tsx`
 - Modify: `apps/web/components/ops/SelfUpgradeClient.test.tsx` — this exists today and almost certainly references the renamed DTO fields; update it in lockstep with the component
+- Modify: `apps/web/app/(shell)/ops/self-upgrade/page.test.tsx` — its typed fixture imports `SelfUpgradeRunDto`; update it with the same schema-aligned fields
 
 - [ ] **Step 1: Replace the DTO type definition**
 
@@ -212,7 +216,7 @@ The goal of Phase 0 is **fewer running code paths**, not more. After Phase 0, th
 
 - [ ] **Step 3: Update UI components AND their tests to use the renamed fields**
 
-  Open `apps/web/components/ops/SelfUpgradeClient.tsx`, `SelfUpgradePanel.tsx`, and `apps/web/components/ops/SelfUpgradeClient.test.tsx`. Find references to `triggeredBy`, `fromVersion`, `toVersion`, `error` from `SelfUpgradeRunDto`. Replace:
+  Open `apps/web/components/ops/SelfUpgradeClient.tsx`, `apps/web/components/ops/SelfUpgradeClient.test.tsx`, and `apps/web/app/(shell)/ops/self-upgrade/page.test.tsx`. Find references to `triggeredBy`, `fromVersion`, `toVersion`, `error` from `SelfUpgradeRunDto`. Replace:
   - `run.triggeredBy` → `run.trigger`
   - `run.fromVersion` → `run.currentSha`
   - `run.toVersion` → `run.targetSha`
@@ -220,9 +224,7 @@ The goal of Phase 0 is **fewer running code paths**, not more. After Phase 0, th
 
   Display labels can stay user-friendly (`"Triggered by"`, `"From version"`, etc. on screen) — only the property accesses change.
 
-- [ ] **Step 4: Unskip the reproducer test from Task 2 and run it to verify it now passes**
-
-  Change `it.skip(...)` back to `it(...)` in `apps/web/lib/actions/promotions.self-upgrade.test.ts`, then:
+- [ ] **Step 4: Run the existing action test to verify it now passes**
 
   ```
   pnpm --filter web test -- --run apps/web/lib/actions/promotions.self-upgrade.test.ts
@@ -247,8 +249,8 @@ The goal of Phase 0 is **fewer running code paths**, not more. After Phase 0, th
 - [ ] **Step 7: Commit**
 
   ```
-  git add apps/web/lib/actions/promotions.ts apps/web/lib/actions/promotions.self-upgrade.test.ts apps/web/components/ops/SelfUpgradeClient.tsx apps/web/components/ops/SelfUpgradePanel.tsx apps/web/components/ops/SelfUpgradeClient.test.tsx
-  git commit -s apps/web/lib/actions/promotions.ts apps/web/lib/actions/promotions.self-upgrade.test.ts apps/web/components/ops/SelfUpgradeClient.tsx apps/web/components/ops/SelfUpgradePanel.tsx apps/web/components/ops/SelfUpgradeClient.test.tsx -m "fix(promotions): align SelfUpgradeRunDto to SelfUpgradeRun schema columns
+  git add apps/web/lib/actions/promotions.ts apps/web/lib/actions/promotions.self-upgrade.test.ts apps/web/components/ops/SelfUpgradeClient.tsx apps/web/components/ops/SelfUpgradeClient.test.tsx "apps/web/app/(shell)/ops/self-upgrade/page.test.tsx"
+  git commit -s apps/web/lib/actions/promotions.ts apps/web/lib/actions/promotions.self-upgrade.test.ts apps/web/components/ops/SelfUpgradeClient.tsx apps/web/components/ops/SelfUpgradeClient.test.tsx "apps/web/app/(shell)/ops/self-upgrade/page.test.tsx" -m "fix(promotions): align SelfUpgradeRunDto to SelfUpgradeRun schema columns
 
   listSelfUpgradeRuns selected DTO field names that did not exist in the
   Prisma model, causing PrismaClientValidationError at runtime. Aligned
@@ -349,6 +351,7 @@ The goal of Phase 0 is **fewer running code paths**, not more. After Phase 0, th
 - Modify: `apps/web/lib/self-upgrade/config.ts` (remove deprecated `loadSelfUpgradeConfig` alias)
 - Modify: `apps/web/lib/actions/self-upgrade.ts` — **live caller** of `loadSelfUpgradeConfig` at lines 11 and 79; rename call site to `getSelfUpgradeConfig` (the canonical name)
 - Modify: `apps/web/lib/self-upgrade/promoter.ts` (remove deprecated legacy API: `shellQuote`, `buildPromoterDockerArgs`, `startSelfUpgradePromoter`, `PromoterStartResult` type, `LegacyPromoterConfig` type)
+- Modify: `apps/web/lib/self-upgrade/promoter.test.ts` (remove or rewrite tests that only cover the deprecated legacy API)
 - Modify: `apps/web/lib/queue/functions/substrate-audit.test.ts` (remove the two stub-behavior tests since the stubs are gone — they were intentional characterization tests pinning the pre-Phase-0 state, NOT spec coverage; their job is done once the stubs no longer exist)
 
 **Pre-Task note on `shellQuote`:** grep will surface additional `shellQuote` matches in `git-promotion-sandbox-verification.ts:3`, `sandbox-source-currency.ts:282`, and `sandbox-admin.ts:601`. These are **independent local definitions**, not imports from `promoter.ts` — they are harmless and out of scope for this task. Verify by reading the import statements, not just the symbol grep.
@@ -375,8 +378,8 @@ The goal of Phase 0 is **fewer running code paths**, not more. After Phase 0, th
 - [ ] **Step 2: Delete the files**
 
   ```
-  rm apps/web/lib/queue/functions/portal-self-upgrade.ts
-  rm apps/web/lib/queue/functions/portal-self-upgrade.test.ts
+  git rm apps/web/lib/queue/functions/portal-self-upgrade.ts
+  git rm apps/web/lib/queue/functions/portal-self-upgrade.test.ts
   ```
 
 - [ ] **Step 3: Remove deprecated stubs from the surviving files**
@@ -410,8 +413,8 @@ The goal of Phase 0 is **fewer running code paths**, not more. After Phase 0, th
 - [ ] **Step 7: Commit**
 
   ```
-  git add -u apps/web/lib/queue/functions apps/web/lib/self-upgrade
-  git commit -s apps/web/lib/queue/functions apps/web/lib/self-upgrade -m "chore(self-upgrade): delete deprecated stubs and legacy promoter API
+  git add -u apps/web/lib/queue/functions apps/web/lib/self-upgrade apps/web/lib/actions/self-upgrade.ts
+  git commit -s apps/web/lib/queue/functions apps/web/lib/self-upgrade apps/web/lib/actions/self-upgrade.ts -m "chore(self-upgrade): delete deprecated stubs and legacy promoter API
 
   Removed:
   - apps/web/lib/queue/functions/portal-self-upgrade.ts (+ test)
@@ -569,14 +572,15 @@ The goal of Phase 0 is **fewer running code paths**, not more. After Phase 0, th
   - Hourly cron still skips every fire (`reason: "no-target"`), but the log
     signal makes the gating visible.
   - Future schema rename of `currentSha`/`targetSha` to `fromVersion`/`toVersion`
-    is unblocked once Phase 1+ make those fields actually carry versions.
+    remains deferred until channel manifests and version-bearing runs exist.
 
   ## Out of scope (handled in later phases)
 
   - Implementing `resolveTargetSha` — Phase 2 (channel manifest).
   - Wiring `emitUpgradeEvent` to a real event bus — Phase 5 (graceful recycle).
   - Replacing the 5-min activity defer with a graceful drain protocol — Phase 5.
-  - Replacing the SHA-based vocabulary throughout — Phase 1 (platform_version).
+  - Replacing SHA-based run vocabulary throughout — later phase after channel manifests.
+  - Publishing the install's platform version — Phase 1 (`platform.version`).
   ```
 
 - [ ] **Step 3: Commit**
@@ -600,7 +604,8 @@ Before moving to Phase 1, run the full test suite and confirm zero new failures:
 - [ ] `pnpm typecheck` — must pass clean
 - [ ] `pnpm --filter web test` — must pass clean (or only show pre-existing failures noted in pre-flight)
 - [ ] `pnpm --filter @dpf/db test` — must pass clean
-- [ ] Manual verification (do this yourself, do not ask the user): start the dev portal (`pnpm dev:portal`) and load `/ops/self-upgrade`. The page must render without server-action errors and the history table must list runs (or empty state) without throwing.
+- [ ] `pnpm --filter web build` — must pass clean; this is the only local gate that reliably catches Next/TypeScript route build errors.
+- [ ] Manual verification (do this yourself, do not ask the user): rebuild/restart the Docker-served portal path per AGENTS.md, authenticate as `admin@dpf.local` using `ADMIN_PASSWORD` from repo-root `.env`, and load `/ops/self-upgrade`. The page must render without server-action errors and the history table must list runs (or empty state) without throwing.
 
 If any of the above fails, stop and investigate. Do not proceed to Phase 1 with a regressed substrate.
 
@@ -608,26 +613,27 @@ If any of the above fails, stop and investigate. Do not proceed to Phase 1 with 
 
 ## Phase 1 — Versioning Baseline
 
-The goal of Phase 1 is **establishing a single canonical platform version** that the runtime, API, and Admin UI all read from one source. Phase 1 does **not** implement automatic bumping (Phase 2) or channel feeds (Phase 2). It only declares "this install is on version X" and exposes that consistently.
+The goal of Phase 1 is **establishing a single canonical platform version** that the runtime mirror, API, and `/ops/self-upgrade` UI all derive from one source. Phase 1 does **not** implement automatic bumping (Phase 2) or channel feeds (Phase 2). It only declares "this install is on version X" and exposes that consistently.
 
 ### Task 8: Add `version.json` at repo root with baseline v1.0.0
 
 **Files:**
 - Create: `version.json`
+- Modify: `Dockerfile` (copy `version.json` into the runner image)
 
 - [ ] **Step 1: Write `version.json`**
 
-  At the repository root, create `version.json`:
+  At the repository root, create `version.json`. Use the current UTC timestamp when executing this task; the timestamp below is an example shape, not a stale fixed value:
 
   ```json
   {
     "version": "1.0.0",
-    "publishedAt": "2026-05-23T00:00:00Z",
-    "note": "Phase 1 baseline — first explicit platform version. See docs/superpowers/specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md §4.2."
+    "publishedAt": "2026-05-24T00:00:00Z",
+    "note": "Phase 1 baseline - first explicit platform version. See docs/superpowers/specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md §4.2."
   }
   ```
 
-  Use the current UTC date for `publishedAt`. Bump-to-2.0.0 automation is Phase 2 — this file is hand-edited until then.
+  Bump automation is Phase 2. Until then, this file is hand-edited by the release operator/agent.
 
 - [ ] **Step 2: Verify the file is valid JSON**
 
@@ -635,15 +641,28 @@ The goal of Phase 1 is **establishing a single canonical platform version** that
   node -e "console.log(JSON.parse(require('fs').readFileSync('version.json','utf8')))"
   ```
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Copy `version.json` into the production runner image**
+
+  In `Dockerfile`, copy the root `version.json` into `/app/version.json` in the `runner` stage. The loader in Task 9 must work inside the Docker-served portal, not only in a workspace checkout.
+
+  Recommended placement: near the existing `COPY --from=init /app/pnpm-workspace.yaml ...` runner-stage copies:
+
+  ```dockerfile
+  COPY version.json ./version.json
+  ```
+
+  This is a deliberate cache boundary: a version bump should invalidate the runtime image layer that carries runtime metadata.
+
+- [ ] **Step 4: Commit**
 
   ```
-  git add version.json
-  git commit -s version.json -m "feat(platform): baseline platform version 1.0.0
+  git add version.json Dockerfile
+  git commit -s version.json Dockerfile -m "feat(platform): baseline platform version 1.0.0
 
   Introduces version.json at repo root as the canonical platform version
-  source. Phase 1 of the governed upgrade lifecycle: every install boot
-  reads this; /api/platform/version returns it; Admin UI displays it.
+  source and bakes it into the portal image. Phase 1 of the governed
+  upgrade lifecycle: every install boot reads this, /api/platform/version
+  returns it, and /ops/self-upgrade displays it.
 
   Future bumps are hand-edited until Phase 2 CI automation lands.
 
@@ -661,24 +680,40 @@ The goal of Phase 1 is **establishing a single canonical platform version** that
 - [ ] **Step 1: Write the failing test**
 
   ```ts
-  import { describe, it, expect, vi, afterEach } from "vitest";
+  import { afterEach, describe, expect, it, vi } from "vitest";
+  import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+  import { join } from "node:path";
+  import { tmpdir } from "node:os";
 
   describe("loadPlatformVersion", () => {
-    afterEach(() => vi.resetModules());
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    });
 
-    it("reads version.json from the repo root and returns version/publishedAt", async () => {
+    it("reads version.json and returns a validated version/publishedAt", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "dpf-version-test-"));
+      const path = join(dir, "version.json");
+      writeFileSync(path, JSON.stringify({
+        version: "1.0.0",
+        publishedAt: "2026-05-24T00:00:00.000Z",
+        note: "test",
+      }));
+      vi.stubEnv("DPF_VERSION_FILE", path);
+
       const { loadPlatformVersion } = await import("./version");
       const v = await loadPlatformVersion();
       expect(v.version).toMatch(/^\d+\.\d+\.\d+/);
       expect(v.publishedAt).toBeInstanceOf(Date);
+
+      rmSync(dir, { recursive: true, force: true });
     });
 
-    it("includes gitSha from DEPLOYED_SHA env when set", async () => {
+    it("includes gitSha from DEPLOYED_SHA when present", async () => {
       vi.stubEnv("DEPLOYED_SHA", "abc1234567890abcdef1234567890abcdef12345");
       const { loadPlatformVersion } = await import("./version");
       const v = await loadPlatformVersion();
       expect(v.gitSha).toBe("abc1234567890abcdef1234567890abcdef12345");
-      vi.unstubAllEnvs();
     });
 
     it("returns null gitSha when DEPLOYED_SHA is unset", async () => {
@@ -686,7 +721,18 @@ The goal of Phase 1 is **establishing a single canonical platform version** that
       const { loadPlatformVersion } = await import("./version");
       const v = await loadPlatformVersion();
       expect(v.gitSha).toBeNull();
-      vi.unstubAllEnvs();
+    });
+
+    it("throws a useful error for invalid semver", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "dpf-version-test-"));
+      const path = join(dir, "version.json");
+      writeFileSync(path, JSON.stringify({ version: "latest", publishedAt: "2026-05-24T00:00:00.000Z" }));
+      vi.stubEnv("DPF_VERSION_FILE", path);
+
+      const { loadPlatformVersion } = await import("./version");
+      await expect(loadPlatformVersion()).rejects.toThrow(/Invalid platform version/);
+
+      rmSync(dir, { recursive: true, force: true });
     });
 
     it("memoizes the result across calls", async () => {
@@ -709,22 +755,26 @@ The goal of Phase 1 is **establishing a single canonical platform version** that
   Create `apps/web/lib/platform/version.ts`:
 
   ```ts
+  import { existsSync } from "node:fs";
   import { readFile } from "node:fs/promises";
   import { resolve } from "node:path";
+  import { readImageVersion } from "./image-version";
 
   export type PlatformVersion = {
     version: string;
     publishedAt: Date;
     gitSha: string | null;
+    note: string | null;
   };
 
   let cached: Promise<PlatformVersion> | null = null;
+  const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
   /**
    * Reads version.json from the repo root and returns the canonical platform
-   * version. Memoized for the lifetime of the process. gitSha is read from the
-   * DEPLOYED_SHA env var if set (populated by the deploy pipeline); null in
-   * dev or when running outside a self-upgrade context.
+   * version. Memoized for the lifetime of the process. gitSha is read from
+   * DEPLOYED_SHA when set, then from the existing image-version helper when
+   * the baked image marker is a git SHA; null in dev/content-hash builds.
    *
    * See docs/superpowers/specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md §4.1
    */
@@ -733,12 +783,19 @@ The goal of Phase 1 is **establishing a single canonical platform version** that
       cached = (async () => {
         const path = resolveVersionJsonPath();
         const raw = await readFile(path, "utf8");
-        const parsed = JSON.parse(raw) as { version: string; publishedAt: string };
+        const parsed = parseVersionJson(JSON.parse(raw));
+        const image = await readImageVersion();
         const envSha = process.env.DEPLOYED_SHA;
         return {
           version: parsed.version,
           publishedAt: new Date(parsed.publishedAt),
-          gitSha: envSha && envSha.length > 0 ? envSha : null,
+          gitSha:
+            envSha && envSha.length > 0
+              ? envSha
+              : image?.source === "git-sha"
+                ? image.raw
+                : null,
+          note: parsed.note ?? null,
         };
       })();
     }
@@ -750,19 +807,41 @@ The goal of Phase 1 is **establishing a single canonical platform version** that
     cached = null;
   }
 
+  function parseVersionJson(raw: unknown): { version: string; publishedAt: string; note?: string } {
+    if (!raw || typeof raw !== "object") {
+      throw new Error("Invalid platform version: version.json must be an object");
+    }
+    const value = raw as Record<string, unknown>;
+    if (typeof value.version !== "string" || !SEMVER_RE.test(value.version)) {
+      throw new Error("Invalid platform version: version must be SemVer");
+    }
+    if (typeof value.publishedAt !== "string" || Number.isNaN(Date.parse(value.publishedAt))) {
+      throw new Error("Invalid platform version: publishedAt must be an ISO timestamp");
+    }
+    return {
+      version: value.version,
+      publishedAt: value.publishedAt,
+      note: typeof value.note === "string" ? value.note : undefined,
+    };
+  }
+
   function resolveVersionJsonPath(): string {
-    // version.json lives at the monorepo root. process.cwd() under the
-    // Next.js server is the apps/web package directory; under pnpm
-    // workspace scripts it can be either. existsSync-based fallback is
-    // overkill for a one-time-per-process read; the path is stable.
-    //
-    // Both vitest (per workspace config) and `next start` run with cwd
-    // at apps/web, so "../../version.json" resolves to the monorepo root.
-    return resolve(process.cwd(), "../../version.json");
+    const candidates = [
+      process.env.DPF_VERSION_FILE,
+      resolve(process.cwd(), "version.json"),
+      resolve(process.cwd(), "../../version.json"),
+      "/app/version.json",
+    ].filter((value): value is string => Boolean(value));
+
+    const found = candidates.find((candidate) => existsSync(candidate));
+    if (!found) {
+      throw new Error(`version.json not found; checked ${candidates.join(", ")}`);
+    }
+    return found;
   }
   ```
 
-  Note: this assumes vitest and the Next runtime both run with cwd at `apps/web`. Verify by logging `process.cwd()` in the test if path resolution fails; if your harness uses monorepo-root cwd, drop the `../../` prefix. Do NOT hardcode an absolute path.
+  Do not hardcode a developer-machine absolute path. The loader must work in three contexts: `pnpm --filter web test` (`cwd=apps/web`), root workspace commands (`cwd` at repo root), and the Docker runner (`/app/version.json`).
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -778,8 +857,155 @@ The goal of Phase 1 is **establishing a single canonical platform version** that
   git add apps/web/lib/platform/version.ts apps/web/lib/platform/version.test.ts
   git commit -s apps/web/lib/platform/version.ts apps/web/lib/platform/version.test.ts -m "feat(platform): loader for canonical platform version
 
-  Reads version.json from repo root, memoized per process. gitSha sourced
-  from DEPLOYED_SHA env (populated by deploy pipeline; null in dev).
+  Reads version.json from repo root or the runner image, memoized per process.
+  gitSha is sourced from DEPLOYED_SHA when set, otherwise from the existing
+  image-version marker when it is git-SHA shaped.
+
+  Refs: BI-5B3FA415, spec §4.1"
+  ```
+
+---
+
+### Task 9b: Mirror platform version into `PlatformConfig` on boot
+
+**Files:**
+- Create: `apps/web/lib/platform/version-config.ts`
+- Create: `apps/web/lib/platform/version-config.test.ts`
+- Modify: `apps/web/instrumentation.ts`
+- Modify: `apps/web/instrumentation.test.ts`
+
+**Why:** The spec requires `PlatformConfig["platform.version"]` to be the runtime mirror. Without this task, Phase 1 would expose a version through API/UI but leave live runtime state unable to answer the same question through the database.
+
+- [ ] **Step 1: Write the failing mirror test**
+
+  Create `apps/web/lib/platform/version-config.test.ts` with a narrow dependency-injection test. Do not hit a real database.
+
+  ```ts
+  import { describe, expect, it, vi } from "vitest";
+  import { syncPlatformVersionConfig, PLATFORM_VERSION_CONFIG_KEY } from "./version-config";
+
+  describe("syncPlatformVersionConfig", () => {
+    it("upserts PlatformConfig platform.version from loaded version metadata", async () => {
+      const upsert = vi.fn().mockResolvedValue({});
+
+      await syncPlatformVersionConfig({
+        load: async () => ({
+          version: "1.0.0",
+          publishedAt: new Date("2026-05-24T00:00:00.000Z"),
+          gitSha: "abc123",
+          note: "baseline",
+        }),
+        platformConfig: { upsert },
+      });
+
+      expect(upsert).toHaveBeenCalledWith({
+        where: { key: PLATFORM_VERSION_CONFIG_KEY },
+        update: {
+          value: {
+            version: "1.0.0",
+            publishedAt: "2026-05-24T00:00:00.000Z",
+            gitSha: "abc123",
+            note: "baseline",
+            source: "version.json",
+          },
+        },
+        create: {
+          key: PLATFORM_VERSION_CONFIG_KEY,
+          value: {
+            version: "1.0.0",
+            publishedAt: "2026-05-24T00:00:00.000Z",
+            gitSha: "abc123",
+            note: "baseline",
+            source: "version.json",
+          },
+        },
+      });
+    });
+  });
+  ```
+
+- [ ] **Step 2: Implement the mirror helper**
+
+  Create `apps/web/lib/platform/version-config.ts`:
+
+  ```ts
+  import { loadPlatformVersion, type PlatformVersion } from "./version";
+
+  export const PLATFORM_VERSION_CONFIG_KEY = "platform.version";
+
+  type PlatformConfigHandle = {
+    upsert: (args: {
+      where: { key: string };
+      update: { value: Record<string, unknown> };
+      create: { key: string; value: Record<string, unknown> };
+    }) => Promise<unknown>;
+  };
+
+  export async function syncPlatformVersionConfig(deps?: {
+    load?: () => Promise<PlatformVersion>;
+    platformConfig?: PlatformConfigHandle;
+  }): Promise<void> {
+    const load = deps?.load ?? loadPlatformVersion;
+    const platformConfig = deps?.platformConfig ?? (await import("@dpf/db")).prisma.platformConfig;
+    const version = await load();
+    const value = {
+      version: version.version,
+      publishedAt: version.publishedAt.toISOString(),
+      gitSha: version.gitSha,
+      note: version.note,
+      source: "version.json",
+    };
+
+    await platformConfig.upsert({
+      where: { key: PLATFORM_VERSION_CONFIG_KEY },
+      update: { value },
+      create: { key: PLATFORM_VERSION_CONFIG_KEY, value },
+    });
+  }
+  ```
+
+- [ ] **Step 3: Wire startup sync through instrumentation**
+
+  In `apps/web/instrumentation.ts`, export a small helper so the behavior is unit-testable without invoking the full `register()` startup routine:
+
+  ```ts
+  export async function syncPlatformVersionOnBoot(
+    logger: Pick<Console, "log" | "error"> = console,
+  ): Promise<boolean> {
+    try {
+      const { syncPlatformVersionConfig } = await import("@/lib/platform/version-config");
+      await syncPlatformVersionConfig();
+      logger.log("[platform-version] Synced PlatformConfig platform.version");
+      return true;
+    } catch (err) {
+      logger.error("[platform-version] Failed to sync PlatformConfig platform.version:", err);
+      return false;
+    }
+  }
+  ```
+
+  Call `void syncPlatformVersionOnBoot();` near the top of `register()` after `warnIfLegacyHiveTokenEnvSet();`. Keep it non-fatal for dev/test startup, but fail loud in logs. The API and loader still throw if `version.json` is invalid.
+
+- [ ] **Step 4: Add instrumentation unit tests**
+
+  In `apps/web/instrumentation.test.ts`, mock `@/lib/platform/version-config` and test both success and failure paths for `syncPlatformVersionOnBoot`.
+
+- [ ] **Step 5: Run tests**
+
+  ```
+  pnpm --filter web test -- --run apps/web/lib/platform/version-config.test.ts
+  pnpm --filter web test -- --run apps/web/instrumentation.test.ts
+  ```
+
+- [ ] **Step 6: Commit**
+
+  ```
+  git add apps/web/lib/platform/version-config.ts apps/web/lib/platform/version-config.test.ts apps/web/instrumentation.ts apps/web/instrumentation.test.ts
+  git commit -s apps/web/lib/platform/version-config.ts apps/web/lib/platform/version-config.test.ts apps/web/instrumentation.ts apps/web/instrumentation.test.ts -m "feat(platform): mirror platform version into PlatformConfig on boot
+
+  Syncs PlatformConfig[platform.version] from the canonical version.json
+  loader during startup. This closes the runtime-state leg of Phase 1 so
+  API, UI, and DB-backed runtime metadata agree.
 
   Refs: BI-5B3FA415, spec §4.1"
   ```
@@ -795,17 +1021,30 @@ The goal of Phase 1 is **establishing a single canonical platform version** that
 - [ ] **Step 1: Write the failing test**
 
   ```ts
-  import { describe, it, expect } from "vitest";
+  import { describe, it, expect, vi } from "vitest";
+
+  vi.mock("@/lib/platform/version", () => ({
+    loadPlatformVersion: async () => ({
+      version: "1.0.0",
+      publishedAt: new Date("2026-05-24T00:00:00.000Z"),
+      gitSha: "abc123",
+      note: "baseline",
+    }),
+  }));
+
   import { GET } from "./route";
 
   describe("GET /api/platform/version", () => {
-    it("returns version, publishedAt, and gitSha as JSON", async () => {
+    it("returns version, publishedAt, gitSha, and note as JSON", async () => {
       const res = await GET();
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.version).toMatch(/^\d+\.\d+\.\d+/);
-      expect(typeof body.publishedAt).toBe("string");
-      expect("gitSha" in body).toBe(true);
+      expect(body).toEqual({
+        version: "1.0.0",
+        publishedAt: "2026-05-24T00:00:00.000Z",
+        gitSha: "abc123",
+        note: "baseline",
+      });
     });
 
     it("has cache headers preventing stale responses", async () => {
@@ -831,6 +1070,9 @@ The goal of Phase 1 is **establishing a single canonical platform version** that
   import { NextResponse } from "next/server";
   import { loadPlatformVersion } from "@/lib/platform/version";
 
+  export const dynamic = "force-dynamic";
+  export const revalidate = 0;
+
   /**
    * Public read of the canonical platform version. No auth — the install's
    * version is not sensitive. See spec §4.1, §5.1.
@@ -842,6 +1084,7 @@ The goal of Phase 1 is **establishing a single canonical platform version** that
         version: v.version,
         publishedAt: v.publishedAt.toISOString(),
         gitSha: v.gitSha,
+        note: v.note,
       },
       { headers: { "cache-control": "no-store" } },
     );
@@ -860,9 +1103,9 @@ The goal of Phase 1 is **establishing a single canonical platform version** that
   git add apps/web/app/api/platform/version/route.ts apps/web/app/api/platform/version/route.test.ts
   git commit -s apps/web/app/api/platform/version/route.ts apps/web/app/api/platform/version/route.test.ts -m "feat(platform): /api/platform/version endpoint
 
-  Public read of canonical platform version. Used by Admin UI (Task 11)
-  and reserved for future external introspection (e.g. hive scout, beta
-  channel telemetry).
+  Public read of canonical platform version. Used by /ops/self-upgrade
+  (Task 11) and reserved for future external introspection (e.g. hive scout,
+  beta channel telemetry).
 
   Refs: BI-5B3FA415, spec §4.1, §5.1"
   ```
@@ -872,78 +1115,98 @@ The goal of Phase 1 is **establishing a single canonical platform version** that
 ### Task 11: Surface platform version in `/ops/self-upgrade`
 
 **Files:**
-- Modify: `apps/web/components/ops/SelfUpgradePanel.tsx` (add a "Platform Version" row near the top)
-- OR: Modify: `apps/web/components/ops/SelfUpgradeClient.tsx` if it owns the header area
+- Modify: `apps/web/lib/actions/promotions.ts` (`getSelfUpgradeStatus`)
+- Modify: `apps/web/lib/actions/promotions.self-upgrade.test.ts`
+- Modify: `apps/web/app/(shell)/ops/self-upgrade/page.test.tsx`
+- Modify: `apps/web/components/ops/SelfUpgradeClient.tsx`
+- Modify: `apps/web/components/ops/SelfUpgradeClient.test.tsx`
 
-(Choose based on which component owns the page header — read both to decide.)
+`SelfUpgradePanel.tsx` exists, but the current `/ops/self-upgrade` route renders `SelfUpgradeClient`. Do not spend this slice polishing the unused panel unless you also migrate the route and tests deliberately.
 
-- [ ] **Step 1: Read both components to identify the header section**
+- [ ] **Step 1: Add platform version to the status action contract**
 
-  Use Read tool on:
-  - `apps/web/components/ops/SelfUpgradeClient.tsx`
-  - `apps/web/components/ops/SelfUpgradePanel.tsx`
+  In `apps/web/lib/actions/promotions.ts`, import `loadPlatformVersion` and include the result in `getSelfUpgradeStatus()`:
 
-  Decide which file owns the section above the runs table.
+  ```ts
+  const [config, latestRun, platformVersion] = await Promise.all([
+    getSelfUpgradeConfig(),
+    getLatestRun(),
+    loadPlatformVersion(),
+  ]);
+  ```
+
+  Return a serializable `platformVersion` object with `version`, `publishedAt` ISO string, `gitSha`, and `note`.
 
 - [ ] **Step 2: Write the failing test**
 
-  Create or modify a test file alongside the chosen component, e.g. `apps/web/components/ops/SelfUpgradePanel.test.tsx`:
+  Update the existing action/page/client tests. Do not create a parallel component test if the current files already cover the contract.
 
   ```tsx
-  import { describe, it, expect, vi } from "vitest";
-  import { render, screen } from "@testing-library/react";
-  import { SelfUpgradePanel } from "./SelfUpgradePanel";
-
-  // Mock the version loader at the action layer used by the panel
   vi.mock("@/lib/platform/version", () => ({
     loadPlatformVersion: async () => ({
       version: "1.0.0",
-      publishedAt: new Date("2026-05-23T00:00:00Z"),
+      publishedAt: new Date("2026-05-24T00:00:00.000Z"),
       gitSha: "abc1234",
+      note: "baseline",
     }),
   }));
-
-  describe("SelfUpgradePanel header", () => {
-    it("displays the current platform version", async () => {
-      const ui = await SelfUpgradePanel({ /* required props */ });
-      render(ui);
-      expect(screen.getByText(/Platform version/i)).toBeInTheDocument();
-      expect(screen.getByText("1.0.0")).toBeInTheDocument();
-    });
-  });
   ```
 
-  If `SelfUpgradePanel` is a server component that takes data via props rather than fetching, pass the version through a new prop instead of mocking the loader.
+  Add assertions:
+  - `promotions.self-upgrade.test.ts`: `getSelfUpgradeStatus()` includes `platformVersion.version === "1.0.0"`.
+  - `page.test.tsx`: the mocked `SelfUpgradeClient` receives a `platformVersion` prop.
+  - `SelfUpgradeClient.test.tsx`: rendered markup includes `Platform version` and `1.0.0`.
 
 - [ ] **Step 3: Run the test to verify it fails**
 
   ```
-  pnpm --filter web test -- --run apps/web/components/ops/SelfUpgradePanel.test.tsx
+  pnpm --filter web test -- --run apps/web/lib/actions/promotions.self-upgrade.test.ts
+  pnpm --filter web test -- --run "apps/web/app/(shell)/ops/self-upgrade/page.test.tsx"
+  pnpm --filter web test -- --run apps/web/components/ops/SelfUpgradeClient.test.tsx
   ```
 
-- [ ] **Step 4: Add the header row to the component**
+- [ ] **Step 4: Add the UI row to the rendered client**
 
-  Edit the chosen component to display `Platform version: <version>` (and optionally `Git SHA: <gitSha.slice(0,7)>` when present) near the top, above the runs table. Style consistent with the existing panel.
+  Extend `SelfUpgradeClient` props with:
+
+  ```ts
+  platformVersion: {
+    version: string;
+    publishedAt: string;
+    gitSha: string | null;
+    note: string | null;
+  };
+  ```
+
+  Render `Platform version: <version>` in the summary block above the SHA rows, with `gitSha.slice(0, 7)` as secondary text when present. Keep styling theme-aware (`text-[var(--dpf-*)]`, no hardcoded colors). This is a compact ops control surface, not a hero/card redesign.
+
+  UI quality bar:
+  - Keep the information hierarchy scannable: platform version first, then deployed/target SHA, then status.
+  - Use the existing compact ops-control styling; no marketing hero, no nested cards, no new color palette.
+  - Do not introduce hardcoded colors. Use DPF CSS variables for text, muted text, surfaces, borders, and status accents.
+  - The row must survive long semver/pre-release strings and null `gitSha` without wrapping over adjacent controls.
 
 - [ ] **Step 5: Run the test to verify it passes**
 
   ```
-  pnpm --filter web test -- --run apps/web/components/ops/SelfUpgradePanel.test.tsx
+  pnpm --filter web test -- --run apps/web/lib/actions/promotions.self-upgrade.test.ts
+  pnpm --filter web test -- --run "apps/web/app/(shell)/ops/self-upgrade/page.test.tsx"
+  pnpm --filter web test -- --run apps/web/components/ops/SelfUpgradeClient.test.tsx
   ```
 
 - [ ] **Step 6: Manual verification**
 
-  Start the dev portal: `pnpm dev:portal`. Open `/ops/self-upgrade`. Confirm the version shows `1.0.0` in the panel header. Take a screenshot for the commit message reference.
+  Rebuild/restart the Docker-served portal path, open `/ops/self-upgrade`, and confirm the version shows `1.0.0` in the control surface. Capture a screenshot/evidence path for the PR body, including a narrow viewport check so the version row does not overlap the trigger control.
 
 - [ ] **Step 7: Commit**
 
   ```
-  git add apps/web/components/ops/SelfUpgradePanel.tsx apps/web/components/ops/SelfUpgradePanel.test.tsx
-  git commit -s apps/web/components/ops/SelfUpgradePanel.tsx apps/web/components/ops/SelfUpgradePanel.test.tsx -m "feat(ops): show platform version in /ops/self-upgrade header
+  git add apps/web/lib/actions/promotions.ts apps/web/lib/actions/promotions.self-upgrade.test.ts "apps/web/app/(shell)/ops/self-upgrade/page.test.tsx" apps/web/components/ops/SelfUpgradeClient.tsx apps/web/components/ops/SelfUpgradeClient.test.tsx
+  git commit -s apps/web/lib/actions/promotions.ts apps/web/lib/actions/promotions.self-upgrade.test.ts "apps/web/app/(shell)/ops/self-upgrade/page.test.tsx" apps/web/components/ops/SelfUpgradeClient.tsx apps/web/components/ops/SelfUpgradeClient.test.tsx -m "feat(ops): show platform version in /ops/self-upgrade header
 
   Closes the spec §9 acceptance criterion 'answer to what version am I on
-  is identical from UI, API, manifest, git tag' for the UI + API legs.
-  Manifest + tag legs are Phase 2.
+  is identical from UI, API, and PlatformConfig' for the Phase 1 legs.
+  Manifest, image-label, and tag agreement arrive in Phase 2.
 
   Refs: BI-5B3FA415, spec §4.1, §9"
   ```
@@ -952,18 +1215,20 @@ The goal of Phase 1 is **establishing a single canonical platform version** that
 
 ### Phase 1 verification gate
 
-Before moving to Phase 2, confirm the four sources agree:
+Before moving to Phase 2, confirm the Phase 1 sources agree:
 
 - [ ] `cat version.json` → version field
-- [ ] `curl http://localhost:3000/api/platform/version` (with dev portal running) → version field matches
+- [ ] `curl http://localhost:3000/api/platform/version` against the Docker-served portal → version field matches
+- [ ] `PlatformConfig["platform.version"]` in the live DB → version field matches and `source` is `version.json`
 - [ ] `/ops/self-upgrade` UI → displays the same version
-- [ ] (Future: git tag will agree once Phase 2 ships)
+- [ ] (Future: channel manifest, image labels, and git tag will agree once Phase 2 ships)
 
 - [ ] Run the full test suite:
   ```
   pnpm typecheck
   pnpm --filter web test
   pnpm --filter @dpf/db test
+  pnpm --filter web build
   ```
 
 - [ ] Per `feedback_run_full_tests_before_push.md`, also run vitest at root if there's a root config:
@@ -1016,7 +1281,7 @@ After all tasks in Phase 0+1 are committed and both verification gates pass:
 
 - [ ] Sweep `git log origin/main..HEAD --oneline` and confirm only your commits are present (no concurrent-session sweep).
 - [ ] Per `feedback_pr_overlap_check_before_pushing.md`, search recent main commits + open PRs for any concurrent work on `apps/web/lib/self-upgrade/` or `apps/web/lib/queue/functions/self-upgrade*`. Surface conflicts to operator before pushing.
-- [ ] Push branch.
+- [ ] Push the topic branch. Per AGENTS.md, each task commit should already have been pushed; this step is a final `git push` plus confirmation that the remote branch contains every commit.
 - [ ] Open PR with title: `feat(platform): governed-upgrade Phase 0+1 — substrate consolidation and version baseline`
 - [ ] PR body should reference spec, BI, and link to this plan.
 
@@ -1026,6 +1291,7 @@ After all tasks in Phase 0+1 are committed and both verification gates pass:
 
 - **Never ask the operator to run commands.** Every step here is something you run yourself. If a command fails, debug it; if you can't, report concrete output to the operator.
 - **DCO sign-off is mandatory** on every commit (`-s` flag). Per `feedback_dco_signoff_required.md`.
+- **Push after every task commit.** If the first push discovers the branch has no upstream, push with `git push -u origin HEAD`; subsequent task commits use `git push`.
 - **Scope commits with positional path args** per `feedback_git_commit_only_for_concurrent_sessions.md` — concurrent sessions can sweep staged files into your commit otherwise.
 - **Do not skip the test-first pattern** even for "obvious" deletions. The characterization tests in Task 1 and the failing test in Task 2 are what give us confidence the deletions are safe.
-- **Frequent commits** — every task is one logical commit. Do not batch.
+- **Frequent commits** — every green task is one logical commit. The one intentional red step (Task 2) is committed with Task 3 after the fix passes.
