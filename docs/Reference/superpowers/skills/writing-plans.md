@@ -10,6 +10,8 @@ source: superpowers v5.0.5
 
 Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. TDD. Frequent commits.
 
+Before manual file reads for substrate sweeps, try `mcp__dpf__search_code_graph({ query: "<topic>", limit: 10 })` for a curated subgraph. Example: `mcp__dpf__search_code_graph({ query: "principle wiki frontmatter ingest", limit: 10 })`.
+
 Save plans to: `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`
 
 ## Bite-Sized Task Granularity
