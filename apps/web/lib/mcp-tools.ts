@@ -6945,8 +6945,14 @@ export async function executeTool(
     case "reviewBuildPlan": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true } });
+      // BI-4396EFEC (D38) — also load the prior planReview so we can pass
+      // its issues to the reviewer prompt for delta-awareness and compute
+      // the iteration trajectory for the operator-facing chip.
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true, planReview: true } });
       if (!build?.buildPlan) return { success: false, error: "No build plan saved yet.", message: "Save buildPlan first." };
+      const priorPlanReview = (build.planReview ?? null) as
+        | { issues?: Array<{ severity?: string; description?: string }>; iteration?: { round?: number } }
+        | null;
       const normalizedPlan = normalizeBuildPlanPaths(build.buildPlan as Parameters<typeof normalizeBuildPlanPaths>[0]);
       if (normalizedPlan.rewrites.length > 0 || normalizedPlan.unresolvedModifyPaths.length > 0) {
         await prisma.featureBuild.update({
@@ -6978,7 +6984,23 @@ export async function executeTool(
         };
       }
       const { buildPlanReviewPrompt, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
-      const prompt = buildPlanReviewPrompt(normalizedPlan.plan);
+      // BI-4396EFEC (D38) — Compute the iteration context up front so we can
+      // (a) feed prior issues into the reviewer prompt and (b) populate
+      // ReviewResult.iteration on the output. Round is 1-based: first
+      // review = 1, every subsequent reviewBuildPlan call increments.
+      const priorRound = priorPlanReview?.iteration?.round ?? 0;
+      const priorIssues = Array.isArray(priorPlanReview?.issues)
+        ? priorPlanReview!.issues!
+            .filter((i): i is { severity: string; description: string } =>
+              typeof i?.severity === "string" && typeof i?.description === "string",
+            )
+            .map((i) => ({ severity: i.severity, description: i.description }))
+        : [];
+      const currentRound = priorRound + 1;
+      const priorContext = priorIssues.length > 0
+        ? { round: priorRound, issues: priorIssues }
+        : null;
+      const prompt = buildPlanReviewPrompt(normalizedPlan.plan, priorContext);
       const { routeAndCall } = await import("@/lib/routed-inference");
       const messages = [{ role: "user" as const, content: prompt }];
       // Run two independent reviewers in parallel — conservative merge flags issues either catches.
@@ -6993,11 +7015,30 @@ export async function executeTool(
       ]);
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
       const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
-      const review = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
+      const mergedReview = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
         decision: "fail" as const,
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
         summary: "Review could not be completed — retry.",
       };
+      // BI-4396EFEC (D38) — Compute the iteration delta against the prior
+      // round and attach to the ReviewResult. computeReviewDelta + isOscillating
+      // live in feature-build-types so they're independently unit-testable.
+      const { computeReviewDelta, isOscillating } = await import("@/lib/feature-build-types");
+      const review = (() => {
+        const base = mergedReview;
+        if (priorIssues.length === 0) {
+          return { ...base, iteration: { round: currentRound } };
+        }
+        const delta = computeReviewDelta(priorIssues, base.issues);
+        return {
+          ...base,
+          iteration: {
+            round: currentRound,
+            prior: delta,
+            oscillating: isOscillating(delta, base.issues.length),
+          },
+        };
+      })();
       await prisma.featureBuild.update({ where: { buildId }, data: { planReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "planReview" });
@@ -7032,9 +7073,18 @@ export async function executeTool(
         const issueList = criticalIssues.length > 0
           ? criticalIssues.map((i: { description: string }) => i.description).join("; ")
           : review.summary;
+        // BI-4396EFEC (D38) — Include the iteration trajectory in the
+        // agent-facing message so the implementer model can see when its
+        // revisions are trading one set of issues for another instead of
+        // converging. The oscillating signal recommends scope-split rather
+        // than another iteration.
+        const iter = review.iteration;
+        const trajectoryNote = iter?.prior
+          ? ` (Round ${iter.round}: ${iter.prior.addressed} addressed, ${iter.prior.persisted} persist, ${iter.prior.newlySurfaced} new${iter.oscillating ? " — issues are not net-decreasing across rounds; consider proposing a scope split rather than another revision." : ""}.)`
+          : "";
         return {
           success: true,
-          message: `Plan review FAILED. Blocking issues: ${issueList}. Revise the implementation plan to address these issues, then call saveBuildEvidence with field "buildPlan" and re-run reviewBuildPlan.`,
+          message: `Plan review FAILED. Blocking issues: ${issueList}. Revise the implementation plan to address these issues, then call saveBuildEvidence with field "buildPlan" and re-run reviewBuildPlan.${trajectoryNote}`,
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }
