@@ -1,9 +1,13 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
+import { gateAtEntry } from "../quiescence-gates";
 
 export const infraPrune = inngest.createFunction(
   { id: "ops/infra-prune", retries: 2, triggers: [cron("0 3 * * 0")] },
   async ({ step }) => {
+    const gate = await gateAtEntry(step);
+    if (!gate.proceed) return { skipped: true, reason: gate.reason };
+
     await step.run("prune-stale", async () => {
       const { pruneStaleInfraCIs, prisma } = await import("@dpf/db");
       const { computeNextRunAt } = await import("@/lib/ai-provider-types");

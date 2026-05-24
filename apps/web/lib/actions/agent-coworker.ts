@@ -52,7 +52,11 @@ import {
   executeAutonomousAgenticLoop,
   findCurrentAutonomousWorkRun,
 } from "@/lib/tak/autonomous-work-run";
-import { isPageExplanationOnlyRequest, isPlatformMechanismQuestion } from "@/lib/tak/conversation-intent";
+import {
+  isConversationalExpansionRequest,
+  isPageExplanationOnlyRequest,
+  isPlatformMechanismQuestion,
+} from "@/lib/tak/conversation-intent";
 import {
   buildExternalAccessDisabledInstruction,
   getExternalAccessToolSummaries,
@@ -1026,12 +1030,13 @@ export async function sendMessage(input: {
   // model explains from context instead of turning friction into backlog work.
   const isExplicitConversationSkill = /^This is a CONVERSATION request/i.test(trimmedContent);
   const isPageExplanationOnly = isPageExplanationOnlyRequest(trimmedContent);
+  const isExpansionFollowup = isConversationalExpansionRequest(trimmedContent);
   // Platform-mechanism questions ("if I deploy, will it also rebase?") should
   // answer from prompt + portal context, not by spinning tools. Especially
   // important on Build Studio routes where the tool surface is large enough
   // to drown a small local fallback model. See FB-71FB3A53 thread, 2026-05-22.
   const isMechanismQuestion = isPlatformMechanismQuestion(trimmedContent);
-  const isConversationOnly = isExplicitConversationSkill || isPageExplanationOnly || isMechanismQuestion;
+  const isConversationOnly = isExplicitConversationSkill || isPageExplanationOnly || isExpansionFollowup || isMechanismQuestion;
 
   const toolsForProvider = (!isConversationOnly && availableTools.length > 0)
     ? toolsToOpenAIFormat(availableTools)
@@ -1267,6 +1272,17 @@ export async function sendMessage(input: {
       "The employee is asking you to explain the current UI or page, not to file, log, queue, or triage work.",
       "Do not call tools, create backlog items, report issues, propose improvements, or list backlog status for this turn.",
       "Use PAGE DATA and recent conversation to explain what the user is seeing. If context is missing, say what you can infer and ask one concise clarifying question.",
+    ].join("\n");
+  }
+
+  if (isExpansionFollowup) {
+    populatedPrompt += [
+      "",
+      "",
+      "READ-ONLY FOLLOW-UP REQUEST",
+      "The employee is asking for more explanation of the previous answer, not granting permission for an offered action.",
+      "Do not call tools, create backlog items, report issues, propose improvements, or list backlog status for this turn.",
+      "Answer by expanding the prior explanation. If the prior answer offered an action, do not perform it unless the employee explicitly asks you to do that action.",
     ].join("\n");
   }
 

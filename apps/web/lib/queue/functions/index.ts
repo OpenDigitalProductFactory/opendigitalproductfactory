@@ -20,6 +20,7 @@ import {
 } from "./governed-backlog-tee-up";
 import { tokenExpiryMonitor } from "./token-expiry-monitor";
 import { selfUpgradeScheduled, selfUpgradeManual } from "./self-upgrade";
+import { quiescenceRun } from "./quiescence-run";
 import { wikiLint } from "./wiki-lint";
 import { gitPromotionSandboxVerification } from "./git-promotion-sandbox-verification";
 import { skillMetricsAggregator } from "./skill-metrics-aggregator";
@@ -68,4 +69,5 @@ export const allFunctions = [
   qdrantBackupRequested,
   selfUpgradeScheduled,
   selfUpgradeManual,
+  quiescenceRun,
 ];

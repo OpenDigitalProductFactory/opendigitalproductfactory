@@ -147,6 +147,16 @@ export function deriveProjectionSeverityFromTaskState(state: TaskState): Operati
       return "attention";
     case "stalled":
       return "attention";
+    case "quiescing":
+    case "paused-for-upgrade":
+    case "paused-for-upgrade-forced":
+      // BI-QUIESCE-001 — quiescence-related pauses surface in the AI
+      // Operations Map attention bucket alongside stalled/input-required.
+      // Operator-actionable: the thread either has a Resume button (the
+      // "paused-for-upgrade*" variants) or is mid cooperative cancel
+      // ("quiescing") and will transition shortly. Forced-pause carries a
+      // truncated-response warning at the Resume site, not here.
+      return "attention";
     case "submitted":
     case "working":
     case "completed":

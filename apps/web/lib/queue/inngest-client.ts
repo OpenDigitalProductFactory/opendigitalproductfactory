@@ -132,3 +132,46 @@ export interface PortalSelfUpgradeRequestedEvent {
     requestedByUserId?: string | null;
   };
 }
+
+// ─── Activity Quiescence Protocol events (BI-QUIESCE-002) ────────────────
+
+/** Sent by callers to start a quiescence drain. The coordinator function
+ *  (apps/web/lib/queue/functions/quiescence-run.ts) is triggered on this event. */
+export interface OpsQuiescenceStartEvent {
+  name: "ops/quiescence.start";
+  data: {
+    runId: string;
+    budgetMs: number;
+    triggerRefId: string | null;
+    shipForce: boolean;
+  };
+}
+
+/** Sent by callers AFTER the swap completes (or fails / is aborted). The
+ *  coordinator picks this up via step.waitForEvent and transitions to its
+ *  terminal state. */
+export interface OpsQuiescenceSwapCompleteEvent {
+  name: "ops/quiescence.swap-complete";
+  data: {
+    runId: string;
+    outcome: "succeeded" | "failed" | "aborted";
+    reason?: string;
+    operatorUserId?: string;
+  };
+}
+
+/** Emitted by the coordinator on EVERY terminal transition. Two consumer
+ *  classes: client UI (banner dismiss) AND suspended Inngest functions
+ *  waiting on this event for resume. The CRITICAL invariant from spec §5.2:
+ *  every terminal path emits this — without it, a coordinator failure leaves
+ *  the Inngest queue waiting forever. */
+export interface PlatformQuiescenceClearedEvent {
+  name: "platform.quiescence-cleared";
+  data: {
+    runId: string;
+    outcome: "succeeded" | "deferred" | "aborted" | "failed";
+    triggerRefId: string | null;
+    deferSurface: string | null;
+    reason: string | null;
+  };
+}
