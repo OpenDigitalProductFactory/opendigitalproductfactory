@@ -6,7 +6,7 @@
 - **Size**: 4 trucks; small owner-operated shop. Employee count, revenue, and geography were not specified in the dogfood source.
 - **Tech baseline**: Types with two fingers, has never opened a terminal, and calls every tool an "app."
 - **What they don't have**: A simple way for technicians to know what parts are on each truck, plus a software-building experience that speaks shop language instead of platform language.
-- **Archetype**: Target leaf `hvac-contractor`; current category `trades-maintenance`. The catalog seeds `facilities-maintenance`, `plumber`, `electrician`, `cleaning-service`, and `landscaping`; `hvac-contractor` is not yet seeded.
+- **Archetype**: Target leaf `hvac-contractor`; current category `trades-maintenance`. The catalog seeds `facilities-maintenance`, `plumber`, `electrician`, `cleaning-service`, and `landscaping`; `hvac-contractor` is not yet seeded. The missing leaf is filed as [`BI-FS-001`](../superpowers/plans/2026-05-19-field-service-sprint-1.md#bi-fs-001--hvacac-contractor-storefront-archetype) (open, under `EP-TRADES-FIELD-SERVICE`). Until it lands, persona runs fall back to the category-level `trades-maintenance` archetype — useful for a smoke, but visibly generic.
 - **IT4IT value streams they care about**: `strategy-to-portfolio`, `requirement-to-deploy`, `request-to-fulfill`, `detect-to-correct`, `deploy-to-operate`.
 
 ## The narrative (marketing-grade)
@@ -34,7 +34,10 @@ The source Build Studio build is `FB-6F7D6AC4`, under Dale's hardening epic `EP-
 
 - **Vocabulary** they expect: trucks, techs, parts, warehouse, jobs, service calls, customers, look up, update the list, pull parts, restock, on my way.
 - **Vocabulary to avoid**: FeatureBuild, work capsule, branch, build ID, model route, MCP tool, evidence, taxonomy, IT4IT, schema, designDoc, buildPlan, sandbox container, GearInterface, torque, ring, slip, cockpit.
-- **Coworkers** they need active: Build Studio Software Engineer for the first feature; Dispatcher-style coworker for daily schedule and customer updates; Field Technician-style coworker for mobile job and parts-used updates. The Dispatcher and Field Technician roles are designed in the field-service spec but must be checked against seed reality before a dogfood run.
+- **Coworkers** they need active:
+  - *Seeded today* (`packages/db/src/seed.ts`): **Software Engineer** (slug `build-specialist`) drives Build Studio for the first feature. **COO**, **Scrum Master**, **Storefront Operations Manager**, and **Customer Success Manager** are present and visible from the workspace shell.
+  - *Designed in spec, not yet seeded*: **Dispatcher-style coworker** for daily schedule and customer updates; **Field Technician-style coworker** for mobile job and parts-used updates. Both are specified in the [Field Service Trades design](../superpowers/specs/2026-05-19-field-service-trades-ai-dispatch-design.md) and must be simulated through the generic Build Studio coworker until they seed.
+  - *Name-collision to avoid*: the seeded `inventory-specialist` slug renders as **"Digital Product Estate Specialist"** — a platform/EA role for digital-product lifecycle, **not** truck-parts inventory. Dale's truck-stock helper is a new field-service coworker, not this existing slug.
 - **Critical features**: obvious "start a build" entry, provider readiness gate, multiline intake, visible long-running progress, correct active-build targeting, review-loop convergence, plain-language status banners, live preview tied to the active build, internal ID hiding, truck inventory lookup/update, and archetype-aware hive applicability.
 - **Mostly irrelevant at first touch**: architecture maps, code intelligence chips, model/provider IDs, branch/capsule metadata, raw admin backlog mechanics, generic portfolio language, and release internals.
 - **Surfaces they'll touch first**: `/welcome`, `/login`, `/workspace`, `/build`, `/platform/ai/providers` only if setup is blocked, live preview, and later a mobile or technician surface for truck stock.
@@ -80,6 +83,8 @@ The source Build Studio build is `FB-6F7D6AC4`, under Dale's hardening epic `EP-
 | 2026-05-24 | Phase H - Plan iteration | D34, D36, D37, D38 | New persona Build Studio runs should wait until D38 plan-iteration divergence is fixed; otherwise they will likely hit the same cliff. |
 
 ## Open BIs from this persona's dogfooding
+
+> **Snapshot date: 2026-05-24.** Re-query before gating new work — `list_backlog_items(epicId="EP-9FC5D2FD")`. The referee patch for `BI-4396EFEC` (D38) shipped to `main` on 2026-05-24 as PR #1107 (`2eec3807`); the BI remains in `triaging` until a fresh persona Build Studio run confirms plan-iteration convergence.
 
 Live backlog check on 2026-05-24 showed these non-done items under `EP-9FC5D2FD`:
 

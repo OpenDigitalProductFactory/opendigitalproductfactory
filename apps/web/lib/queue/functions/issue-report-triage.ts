@@ -1,9 +1,13 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
+import { gateAtEntry } from "../quiescence-gates";
 
 export const issueReportTriage = inngest.createFunction(
   { id: "quality/issue-report-triage", retries: 2, triggers: [cron("*/15 * * * *")] },
   async ({ step }) => {
+    const gate = await gateAtEntry(step);
+    if (!gate.proceed) return { skipped: true, reason: gate.reason };
+
     const result = await step.run("triage-open-reports", async () => {
       const { prisma } = await import("@dpf/db");
       const { triageIssueReports } = await import("@/lib/operate/issue-report-triage");

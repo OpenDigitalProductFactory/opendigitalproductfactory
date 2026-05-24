@@ -21,6 +21,15 @@ import { inngest } from "../inngest-client";
 import { decideStall, type WatchdogCandidate, type StallDecision } from "@/lib/observability/watchdog-detect";
 import { isStallWatchdogEnabled } from "@/lib/shared/feature-flags";
 
+// QUIESCENCE EXEMPTION (BI-QUIESCE-004a + spec §6.1 extension): this
+// function is intentionally NOT wrapped with gateAtEntry. The watchdog
+// must keep running during quiescence drain because BI-QUIESCE-007
+// extends it to also detect stuck quiescence coordinators (rows in
+// status NOT IN terminal with stale lastHeartbeatAt). Gating the
+// watchdog would prevent it from ever detecting that very condition,
+// creating a deadlock: a crashed coordinator would never be reaped.
+// Same rationale exempts selfUpgradeScheduled + selfUpgradeManual.
+
 export const taskrunWatchdog = inngest.createFunction(
   {
     id: "ops/taskrun-watchdog",
