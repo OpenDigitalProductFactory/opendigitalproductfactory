@@ -6,6 +6,7 @@ import { getPortfoliosForSelect } from "@/lib/backlog-data";
 import { businessBuildBriefFromRecord } from "@/lib/build/business-build-brief";
 import { BuildStudio } from "@/components/build/BuildStudio";
 import { BuildStudioV2 } from "@/components/build-studio/BuildStudioV2";
+import { loadBuildStudioCapability } from "@/lib/build/build-studio-capability";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import Link from "next/link";
 import { execSync } from "child_process";
@@ -97,6 +98,76 @@ export default async function BuildPage({ searchParams }: PageProps) {
           >
             Go to Admin &rarr; Platform Development
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Capability gate (G1): Build Studio's build-specialist agent needs a
+  // strong-tier model with tool use and ≥32K context. On a typical first-
+  // customer install only the local Docker Model Runner is active, which
+  // cannot satisfy that floor. Rather than letting Dale type into a doomed
+  // pipeline and hit opaque agent failures, surface "connect a provider" as
+  // the obvious next step.
+  const capability = await loadBuildStudioCapability();
+  if (!capability.ok) {
+    const isOnlyLocal = capability.reason === "only_local_provider_active";
+    const heading = isOnlyLocal
+      ? "Connect a stronger AI to start building"
+      : "Build Studio needs a stronger AI model";
+    const body = isOnlyLocal
+      ? "Build Studio writes code and orchestrates tools for you. The local AI on this install can chat, but it isn't strong enough for that work yet. Connect one of the providers below — it takes about a minute — and the build flow opens up."
+      : "Build Studio needs a model that can write code and use tools at production quality. The AI providers configured on this install don't include one yet. Connect one of the providers below to get started.";
+    return (
+      <div className="flex items-start justify-center min-h-[60vh] px-6 py-10">
+        <div className="max-w-2xl w-full space-y-6 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface)] p-8 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="text-4xl opacity-30" aria-hidden="true">&#128274;</div>
+            <div className="space-y-2">
+              <h2 className="text-xl font-semibold text-[var(--dpf-text)]">
+                {heading}
+              </h2>
+              <p className="text-sm leading-relaxed text-[var(--dpf-muted)]">{body}</p>
+            </div>
+          </div>
+
+          <ul className="space-y-3 border-t border-[var(--dpf-border)] pt-5">
+            {capability.suggestedProviders.map((provider) => (
+              <li key={provider.name} className="flex items-start gap-3">
+                <span
+                  className={`mt-1 inline-block h-2 w-2 rounded-full ${
+                    provider.recommended ? "bg-[var(--dpf-accent)]" : "bg-[var(--dpf-muted)] opacity-50"
+                  }`}
+                  aria-hidden="true"
+                />
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-[var(--dpf-text)]">
+                    {provider.name}
+                    {provider.recommended ? (
+                      <span className="ml-2 text-xs font-normal uppercase tracking-wide text-[var(--dpf-accent)]">
+                        Recommended
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="text-xs text-[var(--dpf-muted)]">{provider.description}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          <div className="flex flex-col gap-3 border-t border-[var(--dpf-border)] pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <Link
+              href="/platform/ai/providers"
+              className="inline-block rounded px-5 py-2.5 text-sm font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity"
+            >
+              Connect a provider &rarr;
+            </Link>
+            <span className="text-xs text-[var(--dpf-muted)]">
+              {capability.activeProviderNames.length === 0
+                ? "No AI providers are connected yet."
+                : `Currently connected: ${capability.activeProviderNames.join(", ")}`}
+            </span>
+          </div>
         </div>
       </div>
     );
