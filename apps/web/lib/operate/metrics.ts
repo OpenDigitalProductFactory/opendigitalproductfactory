@@ -174,6 +174,21 @@ export const utilityInferenceLatency = new Histogram({
   registers: [metricsRegistry],
 });
 
+// ─── Runtime kernel-commandment gate (BI-43F95F77) ─────────────────────────
+// Spec: docs/superpowers/specs/2026-05-24-runtime-kernel-commandments.md §5.5
+//
+// Emitted by both the /api/kernel/gate route (shell-guard requests) and the
+// MCP dispatcher integration in lib/mcp-tools.ts. Labels let us see which
+// commandments fire most often and how often interactive vs autonomous
+// sessions hit confirms vs refuses.
+
+export const kernelGateDecisionsTotal = new Counter({
+  name: "dpf_kernel_gate_decisions_total",
+  help: "Runtime kernel-commandment gate decisions, labelled by verdict + principle slug + session class.",
+  labelNames: ["verdict", "principle_slug", "session_class"] as const,
+  registers: [metricsRegistry],
+});
+
 // ─── Postgres Daily Backup (Slice 1) ───────────────────────────────────────
 // Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §8
 
