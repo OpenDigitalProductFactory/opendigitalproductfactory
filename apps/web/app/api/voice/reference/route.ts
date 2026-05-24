@@ -9,13 +9,14 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@dpf/db"
+import { resolveVoiceStorageRoot } from "@/lib/voice-synthesis/storage-root"
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
 
 const MAX_BYTES = 50 * 1024 * 1024
 
 function getStorageRoot(): string {
-  return process.env.UPLOAD_STORAGE_PATH ?? "./data/uploads"
+  return resolveVoiceStorageRoot()
 }
 
 export async function POST(req: Request): Promise<NextResponse> {

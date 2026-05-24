@@ -6,16 +6,32 @@ export interface VoiceSynthHook {
   synthesize: (text: string, voiceProfileId?: string) => Promise<void>
   isPlaying: boolean
   isSynthesizing: boolean
-  /** false when last call returned tts_unavailable (dpf-tts not running) */
+  /** false when synthesis cannot run until service/configuration changes */
   available: boolean
+  unavailableReason: string | null
+  lastErrorCode: string | null
   stop: () => void
+}
+
+function getUnavailableReason(code: string | undefined): string | null {
+  switch (code) {
+    case "tts_unavailable":
+      return "Text-to-speech service is not running."
+    case "reference_missing":
+      return "Reference voice sample is missing. Replace or re-register the voice sample."
+    case "no_voice_profile":
+    case "voice_profile_not_ready":
+      return "No ready voice profile is available."
+    default:
+      return null
+  }
 }
 
 /**
  * Calls /api/voice/synthesize and manages HTMLAudioElement playback state.
  *
  * - `available` starts true; flips false permanently for this mount if
- *   the endpoint returns code:"tts_unavailable" (dpf-tts not running).
+ *   the endpoint reports an unavailable service or missing voice profile asset.
  * - Blob URLs are revoked as soon as playback ends.
  * - SSR-safe: audio is only created in the browser.
  */
@@ -23,6 +39,8 @@ export function useVoiceSynth(): VoiceSynthHook {
   const [isSynthesizing, setIsSynthesizing] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [available, setAvailable] = useState(true)
+  const [unavailableReason, setUnavailableReason] = useState<string | null>(null)
+  const [lastErrorCode, setLastErrorCode] = useState<string | null>(null)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const blobUrlRef = useRef<string | null>(null)
@@ -59,13 +77,21 @@ export function useVoiceSynth(): VoiceSynthHook {
 
         if (!res.ok) {
           const json = await res.json().catch(() => ({}))
-          if ((json as { code?: string }).code === "tts_unavailable") {
+          const code = (json as { code?: string }).code
+          const reason = getUnavailableReason(code)
+          setLastErrorCode(code ?? null)
+          if (reason) {
             setAvailable(false)
+            setUnavailableReason(reason)
           }
           // Graceful: don't throw, just log
           console.warn("[useVoiceSynth] synthesis failed", res.status, json)
           return
         }
+
+        setAvailable(true)
+        setUnavailableReason(null)
+        setLastErrorCode(null)
 
         const blob = await res.blob()
         const url = URL.createObjectURL(blob)
@@ -106,5 +132,5 @@ export function useVoiceSynth(): VoiceSynthHook {
     [stop],
   )
 
-  return { synthesize, isPlaying, isSynthesizing, available, stop }
+  return { synthesize, isPlaying, isSynthesizing, available, unavailableReason, lastErrorCode, stop }
 }

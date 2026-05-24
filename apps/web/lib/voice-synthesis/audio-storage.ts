@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
 import { randomUUID } from "node:crypto"
+import { resolveVoiceStorageRoot } from "./storage-root"
 
 export interface WriteAudioBlobInput {
   interactionId: string
@@ -14,7 +15,7 @@ export interface WriteAudioBlobResult {
 }
 
 function getStorageRoot(override?: string): string {
-  return override ?? process.env.UPLOAD_STORAGE_PATH ?? "./data/uploads"
+  return resolveVoiceStorageRoot({ uploadStoragePath: override })
 }
 
 export async function writeAudioBlob(input: WriteAudioBlobInput): Promise<WriteAudioBlobResult> {
