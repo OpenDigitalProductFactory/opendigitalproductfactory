@@ -1,5 +1,6 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
+import { gateAtEntry } from "../quiescence-gates";
 
 /**
  * Daily skill curator for Slice 4 of the governed Hermes learning loop.
@@ -19,6 +20,9 @@ export const skillCurator = inngest.createFunction(
     triggers: [cron("0 7 * * *")],
   },
   async ({ step }) => {
+    const gate = await gateAtEntry(step);
+    if (!gate.proceed) return { skipped: true, reason: gate.reason };
+
     return step.run("run-skill-curator", async () => {
       const { runSkillCurator } = await import("@/lib/skills/curator");
       const result = await runSkillCurator({ invokedByUserId: "system" });

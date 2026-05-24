@@ -28,6 +28,7 @@
 
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
+import { gateAtEntry } from "../quiescence-gates";
 
 type Severity = "info" | "warning" | "critical" | "expired";
 
@@ -156,6 +157,9 @@ export async function runTokenExpiryScan(): Promise<{
 export const tokenExpiryMonitor = inngest.createFunction(
   { id: "ops/token-expiry-monitor", retries: 2, triggers: [cron("0 9 * * *")] },
   async ({ step }) => {
+    const gate = await gateAtEntry(step);
+    if (!gate.proceed) return { skipped: true, reason: gate.reason };
+
     return await step.run("scan-token-expiry", async () => runTokenExpiryScan());
   },
 );

@@ -3,11 +3,12 @@
 | Field | Value |
 | --- | --- |
 | Date | 2026-05-24 |
-| Status | Draft for review |
+| Status | Chief architect review applied; ready for implementation planning |
 | Primary epic | None linked yet. Live backlog item `BI-40F05BAC` is in `triaging`; parent `BI-5B3FA415` (governed platform upgrade lifecycle) is also `triaging`. No active epic to extend. |
 | Related backlog | `BI-40F05BAC` Activity Quiescence Protocol (this spec); `BI-5B3FA415` parent governed-upgrade lifecycle |
 | Related docs | `docs/superpowers/specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md` §5.5 (the drain protocol this spec replaces); `docs/superpowers/specs/2026-05-19-build-studio-stall-detection.md` (BI-4ab6be39 — substrate this spec reuses); `docs/superpowers/specs/2026-05-22-build-studio-sandbox-admin-recovery-design.md` (another caller for quiescence) |
 | Triggering signals | `project_self_upgrade_kills_in_session_ux.md` — the documented failure mode: PR #830 self-upgrade recycles portal on every bundle-hash change; server actions 404, executor flows drop, UX driving breaks during concurrent-PR merges. The Phase 0 stopgap at `apps/web/lib/self-upgrade/activity.ts` defers when a non-edge `ToolExecution` landed in the last 5 minutes — one signal across one surface, doesn't generalize across the 30 concurrent active surfaces this spec inventories. |
+| Review evidence | Repo state and live backlog re-checked 2026-05-24 in worktree `claude/infallible-torvalds-936ac4`; DPF MCP confirms `BI-40F05BAC` and `BI-5B3FA415` remain `triaging` with no linked active epic. Next.js 16 Proxy/Edge runtime docs checked for request-gate feasibility. |
 
 ## 1. Purpose
 
@@ -71,19 +72,22 @@ Five DPF substrates already exist and the protocol reuses them rather than inven
 | TaskRun recovery | [actions/taskrun-recovery.ts:99–203](../../../apps/web/lib/actions/taskrun-recovery.ts:99) — per-phase Retry strategies (`resume-build`, `resume-plan`, `review-current`, `ship-force`, `fresh`) | After-swap resume contract for `paused-for-upgrade` TaskRuns; no new per-phase logic needed |
 | BuildPhaseRun idempotency | [integrate/build-phase-run.ts:38–43](../../../apps/web/lib/integrate/build-phase-run.ts:38) — explicit "phase may restart rarely" | Phase row reused on resume; no new schema needed |
 | agentEventBus subscription | [tak/agent-event-bus.ts](../../../apps/web/lib/tak/agent-event-bus.ts) — per-thread subscribe + EP-ASYNC-COWORKER-001 active-thread tracking | SSE delivery channel for `system:quiescence` event; extended with new `broadcastSystem()` primitive |
-| PlatformConfig key-value | [self-upgrade/config.ts:48](../../../apps/web/lib/self-upgrade/config.ts:48) — established pattern (`portal.selfUpgrade`) | New `portal.quiescence` row holds runtime level state; hot-read by middleware and Inngest gates |
+| PlatformConfig key-value | [self-upgrade/config.ts:48](../../../apps/web/lib/self-upgrade/config.ts:48) — established pattern (`portal.selfUpgrade`) | New `portal.quiescence` row holds runtime level state; hot-read by Node gates and exposed to Proxy via the internal state route |
 | Inngest step.waitForEvent | Inngest framework primitive | Suspend-and-resume mechanism for Inngest functions during drain; no parallel pause infrastructure |
 
 ### 2.4 Gaps that must be closed (new code required)
 
 | Gap | What's missing | Where it lands |
 |---|---|---|
-| Request-layer gate | No `apps/web/middleware.ts` exists; server actions and SSE handshakes have no global gate | New file `apps/web/middleware.ts` — also hosts response-header injection |
-| Version-signal headers | No `X-Bundle-Hash` or `X-Platform-Version` response headers exist anywhere | Same middleware |
+| Request-layer gate | `apps/web/proxy.ts` already exists for canonical-host, sandbox, auth, and route-class policy; it has no quiescence gate or version headers yet | Extend the existing Edge-safe `apps/web/proxy.ts` with quiescence header injection and mutation/SSE refusal while preserving current route policy order. Next.js 16 calls this Proxy, not Middleware. |
+| Proxy state source | Proxy cannot import Prisma or Node-only helpers; no Node route exposes current quiescence state | New Node runtime route `apps/web/app/api/internal/platform/quiescence/state/route.ts`, excluded from Proxy matching; Proxy reads it with a short timeout + 1s module cache. |
+| Version-signal headers | No `X-Bundle-Hash` or `X-Platform-Version` response headers exist anywhere | Same Proxy |
 | Broadcast-to-all SSE | `agentEventBus.emit(threadId, event)` is per-thread only; no system-namespace event variant exists | Extend `tak/agent-event-bus.ts` |
+| Global operator event stream | Existing SSE streams are opened only by active coworker/build/sync surfaces; a user sitting on `/ops` or `/platform` may have no EventSource open | New authenticated `apps/web/app/api/platform/events/route.ts`; `PlatformBannerProvider` subscribes globally from the shell layout. |
 | Quiescing TaskRun status | `TaskRun.status` has no `quiescing` / `paused-for-upgrade` / `paused-for-upgrade-forced` values | Add status enum values + `quiescedAt` timestamp; one Prisma migration |
 | Coordinator entity | `QuiescenceRun` model doesn't exist | New table |
 | Coordinator function | No `ops/quiescence-run` Inngest function exists | New file `apps/web/lib/queue/functions/quiescence-run.ts` |
+| Swap completion reconciliation | Current promoter can recreate the portal container; the old process may die before it can report completion | Add boot-time/post-health `reconcileQuiescenceOnBoot()` so a new portal process can complete or fail a run left in `swapping`. |
 | Per-tool wait budgets | No central registry of MCP tool typical/max wait + killability | New file `apps/web/lib/mcp/tool-timeouts.ts` |
 | Client banner | No `<PlatformBanner />` component exists | New component + provider context |
 
@@ -100,6 +104,7 @@ The platform principle is to research standards before inventing (memory: `feedb
 | [Kubernetes Pod termination lifecycle](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination) | `terminationGracePeriodSeconds` (default 30s) + `preStop` hook + `readinessProbe` flip-to-not-ready before SIGTERM. Two-phase: "stop accepting new work" (readiness false), then "drain existing work" (preStop), then "kill." | DPF's three quiescence levels (`normal` / `draining` / `swapping`) mirror this two-phase pattern, with `draining` ≈ readiness-false + preStop and `swapping` ≈ post-SIGTERM cleanup window. |
 | [AWS ELB connection draining](https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/config-conn-drain.html) | `deregistration_delay` (default 300s) — bounded wait for in-flight requests after target removal. Forces a per-protocol max. | DPF's `budgetMs` per quiescence run mirrors `deregistration_delay`; per-surface wait budgets in §6 collapse to a single coordinator-visible upper bound. |
 | [Erlang/OTP hot code reload](https://www.erlang.org/doc/man/code.html) | Per-process code upgrade with `code:purge/2` after all callers have transitioned. The platform tracks per-module reference counts and only purges when zero. | DPF can't approach per-process granularity (Next.js is monolithic per-instance), but the principle — never swap while any consumer holds a reference — is what the `system:quiescence` + bundle-hash dual-signal achieves. |
+| [Next.js 16 Proxy](https://nextjs.org/docs/app/getting-started/proxy) + [Edge Runtime](https://nextjs.org/docs/app/api-reference/edge) | Proxy is the current request-interception convention; it is intended for request/response shaping, not slow data fetching, and it runs in the limited Edge runtime. | DPF uses `apps/web/proxy.ts` for cheap header injection and mutation/SSE refusal only. It MUST NOT import Prisma, `@dpf/db`, filesystem APIs, or Node-only helpers. Dynamic quiescence state is read through an excluded Node runtime route with a short timeout and 1s cache. |
 
 ### 3.2 Comparable patterns
 
@@ -155,7 +160,7 @@ Three concrete pathologies the protocol must eliminate:
 2. **Dropped SSE streams**: token streams from coworker reasoning loops die mid-message with no client-side reconnection contract; the user sees a frozen half-rendered response.
 3. **Mid-phase Build Studio kills**: a `build` phase mid-execution loses its checkpoint state; the operator has to manually retry from the BS UI, often with no clear understanding of why the build stopped.
 
-The protocol solves all three: (1) middleware refuses new actions during drain + bundle-hash mismatch triggers soft reload; (2) `system:quiescence` event closes streams gracefully + EventSource auto-reconnect replays from `TaskRun.progressPayload`; (3) BuildPhaseRun is treated as a hard blocker by default — the coordinator either waits for phase completion or defers the upgrade.
+The protocol solves all three: (1) Proxy refuses new actions during drain + bundle-hash mismatch triggers soft reload; (2) `system:quiescence` closes streams gracefully and `useResilientEventSource()` reconnects/replays from `TaskRun.progressPayload`; (3) BuildPhaseRun is treated as a hard blocker by default — the coordinator either waits for phase completion or defers the upgrade.
 
 ### 4.4 Unobservable surfaces produce silent failure modes
 
@@ -177,11 +182,16 @@ model QuiescenceRun {
   status          String                                // see §5.2 state machine
   startedAt       DateTime  @default(now())
   enteredStateAt  Json      @default("{}")              // { draining: ts, swapping: ts, ... }
+  swapStartedAt   DateTime?
+  swapCompletedAt DateTime?
   completedAt     DateTime?
   lastHeartbeatAt DateTime?                             // Inngest function liveness
 
   initialSnapshot Json                                  // ActiveSessionBlockers (§5.6) at start
   finalSnapshot   Json?                                 // at completion / defer
+
+  targetVersion   String?                               // expected post-swap platform version
+  targetBundleHash String?                              // expected post-swap bundle hash
 
   budgetMs        Int                                   // operator-promised wait budget
   actualWaitMs    Int?
@@ -191,6 +201,7 @@ model QuiescenceRun {
   forcedSurfaces  Json      @default("[]")              // surfaces force-cancelled past budget
 
   outcome         String?                               // succeeded | deferred-by-surface | aborted-by-operator | failed
+  completionSource String?                              // caller | boot-reconciler | watchdog
   outcomeNotes    String?
 
   @@index([trigger, startedAt])
@@ -207,9 +218,10 @@ The `enteredStateAt` JSON-of-timestamps pattern (rather than columns per state) 
                   │                                     │
                   ▼                                     │
    pending → preparing → draining → ready-to-swap → swapping → completed
-                            │              │
-                            │              └─→ aborted (operator)
-                            │
+                            │              │             │
+                            │              └─→ aborted   └─→ failed
+                            │                 (before       (swap failed /
+                            │                  swap)         boot reconcile failed)
                             └─→ deferred (auto, on hard-blocker timeout)
                                    │
                                    └─→ (caller may retry by creating a new run)
@@ -224,14 +236,19 @@ Per-state contract:
 | `pending` | Row created, Inngest function dispatched but not started | yes |
 | `preparing` | Initial snapshot captured; about to flip level | yes |
 | `draining` | `PlatformConfig.portal.quiescence.level = "draining"`; all stop-accept primitives (§6) active; waiting for §6.X checkpoints | yes — banner shown |
-| `ready-to-swap` | `hardBlockers === 0`; coordinator paused awaiting `signalSwapComplete` from caller (caller does the actual container swap) | yes |
-| `swapping` | `PlatformConfig.portal.quiescence.level = "swapping"`; middleware rejects everything except edge + health | yes |
-| `completed` | Swap succeeded; level back to `normal`; `platform.quiescence-cleared` event emitted | terminal |
+| `ready-to-swap` | `hardBlockers === 0`; coordinator paused awaiting `signalSwapStarting` from caller. Level remains `draining` so new work stays refused until the caller explicitly accepts the swap window. | yes |
+| `swapping` | `PlatformConfig.portal.quiescence.level = "swapping"`; Proxy rejects everything except edge, health, and the internal quiescence state route; caller has persisted target version/hash and is applying the swap. Completion may be reported by the caller or by post-boot reconciliation if the old process dies. | yes |
+| `completed` | Swap succeeded; level back to `normal`; durable and UI cleared events emitted | terminal |
 | `deferred` | Hard blocker exceeded budget; level back to `normal`; new run may be scheduled | terminal — operator sees defer reason |
-| `aborted` | Operator cancelled mid-drain; cleanup identical to deferred | terminal |
+| `aborted` | Operator cancelled before `swapping`; cleanup identical to deferred. After `swapping`, cancellation becomes rollback/failure handling in the parent upgrade spec. | terminal |
 | `failed` | Coordinator crashed; watchdog forces level reset | terminal |
 
-**Critical invariant**: every terminal transition (`completed`, `deferred`, `aborted`, `failed`) emits `platform.quiescence-cleared`. This wakes both client UI (banner can dismiss) AND any suspended Inngest functions waiting on the event. Without this invariant, a single coordinator crash would leave the entire Inngest queue waiting forever.
+**Critical invariant**: every terminal transition (`completed`, `deferred`, `aborted`, `failed`) calls one idempotent helper, `emitQuiescenceTerminal(runId, outcome)`. That helper emits both transports from the same state change:
+
+- Durable Inngest event `platform.quiescence-cleared` for functions suspended on `step.waitForEvent`.
+- UI `system:quiescence` event with `level: "cleared"` for the global banner and open task streams.
+
+These are two transports, not one shared event. Without both, either the queue can wait forever or the operator UI can remain stuck after a coordinator crash.
 
 ### 5.3 Sequencing inside the coordinator function
 
@@ -257,17 +274,18 @@ export const quiescenceRun = inngest.createFunction(
     }));
     await step.run("flip-taskruns-quiescing", flipActiveTaskRunsToQuiescing);
 
-    // Wait loop — re-snapshot every 5s up to budget.
-    const deadline = Date.now() + budgetMs;
-    let lastSnapshot: ActiveSessionBlockers | null = null;
-    while (Date.now() < deadline) {
-      await step.sleep("drain-tick", "5s");
-      lastSnapshot = await step.run(`snapshot-${Date.now()}`, captureActiveSessionBlockers);
+    // Wait loop — re-snapshot every 5s up to budget. Step ids MUST be deterministic
+    // across retries; never include Date.now() or other non-replayable values.
+    const maxTicks = Math.max(1, Math.ceil(budgetMs / 5_000));
+    let lastSnapshot: ActiveSessionBlockers = initialSnapshot;
+    for (let tick = 0; tick < maxTicks && lastSnapshot.hardBlockers > 0; tick += 1) {
+      await step.sleep(`drain-tick-${tick}`, "5s");
+      lastSnapshot = await step.run(`snapshot-drain-${tick}`, captureActiveSessionBlockers);
       if (lastSnapshot.hardBlockers === 0) break;
-      await step.run("heartbeat", () => heartbeatQuiescenceRun(runId));
+      await step.run(`heartbeat-${tick}`, () => heartbeatQuiescenceRun(runId));
     }
 
-    if (!lastSnapshot || lastSnapshot.hardBlockers > 0) {
+    if (lastSnapshot.hardBlockers > 0) {
       const blockingSurface = pickPrimaryBlocker(lastSnapshot);
       await step.run("enter-deferred", () => transitionState(runId, "deferred", {
         finalSnapshot: lastSnapshot,
@@ -276,34 +294,61 @@ export const quiescenceRun = inngest.createFunction(
       }));
       await step.run("flip-level-normal", () => setQuiescenceLevel("normal"));
       await step.run("emit-cleared-deferred", () =>
-        emitEvent("platform.quiescence-cleared", { outcome: "deferred", runId, triggerRefId }),
+        emitQuiescenceTerminal(runId, { outcome: "deferred", triggerRefId }),
       );
       return { ok: false, outcome: "deferred", deferSurface: blockingSurface };
     }
 
     await step.run("enter-ready-to-swap", () => transitionState(runId, "ready-to-swap", { finalSnapshot: lastSnapshot }));
-    const swap = await step.waitForEvent("await-swap-complete", {
-      event: "ops/quiescence.swap-complete",
+
+    const swapStart = await step.waitForEvent("await-swap-starting", {
+      event: "ops/quiescence.swap-starting",
       timeout: "10m",
       if: `async.data.runId == "${runId}"`,
     });
 
-    if (!swap) {
-      await step.run("enter-failed", () => transitionState(runId, "failed", { outcomeNotes: "swap-complete signal never received within 10m" }));
+    if (!swapStart) {
+      await step.run("enter-aborted", () => transitionState(runId, "aborted", { outcomeNotes: "caller did not accept ready-to-swap within 10m" }));
+      await step.run("flip-level-normal-on-abort", () => setQuiescenceLevel("normal"));
+      await step.run("emit-cleared-aborted", () =>
+        emitQuiescenceTerminal(runId, { outcome: "aborted", triggerRefId }),
+      );
+      return { ok: false, outcome: "aborted" };
+    }
+
+    // signalSwapStarting() already persisted level=swapping before returning to
+    // the caller. This step is idempotent confirmation for the durable timeline.
+    await step.run("enter-swapping", () => transitionState(runId, "swapping", {
+      targetVersion: swapStart.data.targetVersion,
+      targetBundleHash: swapStart.data.targetBundleHash,
+    }));
+    await step.run("flip-level-swapping", () => setQuiescenceLevel("swapping"));
+    await step.run("broadcast-swapping", () => broadcastSystemEvent("quiescence", {
+      level: "swapping", swapEtaSeconds: 30, runId,
+    }));
+
+    const swapComplete = await step.waitForEvent("await-swap-complete", {
+      event: "ops/quiescence.swap-complete",
+      timeout: "30m",
+      if: `async.data.runId == "${runId}"`,
+    });
+
+    if (!swapComplete) {
+      await step.run("enter-failed", () => transitionState(runId, "failed", { outcomeNotes: "swap-complete signal never received within 30m" }));
       await step.run("flip-level-normal-on-failure", () => setQuiescenceLevel("normal"));
       await step.run("emit-cleared-failed", () =>
-        emitEvent("platform.quiescence-cleared", { outcome: "failed", runId, triggerRefId }),
+        emitQuiescenceTerminal(runId, { outcome: "failed", triggerRefId }),
       );
       return { ok: false, outcome: "failed" };
     }
 
-    await step.run("enter-swapping", () => transitionState(runId, "swapping"));
-    await step.run("flip-level-swapping", () => setQuiescenceLevel("swapping"));
-    // Caller already did the swap by now; this step records the state for audit.
-    await step.run("enter-completed", () => transitionState(runId, "completed"));
+    await step.run("enter-completed", () => transitionState(runId, "completed", {
+      swapCompletedAt: swapComplete.data.completedAt,
+      completionSource: swapComplete.data.source ?? "caller",
+    }));
     await step.run("flip-level-normal-on-success", () => setQuiescenceLevel("normal"));
     await step.run("emit-cleared-success", () =>
-      emitEvent("platform.quiescence-cleared", { outcome: "succeeded", runId, triggerRefId }),
+      emitQuiescenceTerminal(runId, { outcome: "succeeded", triggerRefId }),
     );
 
     return { ok: true, outcome: "succeeded", runId };
@@ -311,12 +356,14 @@ export const quiescenceRun = inngest.createFunction(
 );
 ```
 
-Note `triggerRefId` is included on every `platform.quiescence-cleared` payload (deferred, failed, succeeded). Callers that `step.waitForEvent` on the cleared event use `if: async.data.triggerRefId == "..."` to filter when multiple non-self-upgrade callers (e.g., concurrent manual + sandbox-recovery) might emit in close sequence. Without this, a sibling caller's terminal event could wake the wrong waiter.
+Note `triggerRefId` is included on every `platform.quiescence-cleared` payload (deferred, aborted, failed, succeeded). Callers that `step.waitForEvent` on the cleared event use `if: async.data.triggerRefId == "..."` to filter when multiple non-self-upgrade callers (e.g., concurrent manual + sandbox-recovery) might emit in close sequence. Without this, a sibling caller's terminal event could wake the wrong waiter.
 
-Three properties this gives for free:
+`signalSwapStarting()` is deliberately separate from `signalSwapComplete()`. The caller MUST persist `swapping` before running `runPromoter`; otherwise the UI and Proxy only learn about the swap after it has already happened. Because `scripts/promote.sh` can recreate the portal container, `signalSwapComplete()` is best-effort from the old process. The durable fallback is `reconcileQuiescenceOnBoot()` in the new process: after `/api/health` is live and `platform.version` / bundle hash match the stored target, it emits `ops/quiescence.swap-complete` with `source: "boot-reconciler"`.
+
+Three properties this preserves:
 
 - **Resumable on worker restart** — every `step.run` is checkpointed; a worker dying mid-drain resumes from the next step.
-- **Single-flight via `concurrency: { limit: 1, scope: "fn" }`** — only one quiescence active at a time, matching existing self-upgrade pattern.
+- **Single-flight via API lease + Inngest backstop** — `startQuiescence()` uses a DB transaction/advisory lock to return the active run by default; Inngest `concurrency: { limit: 1, scope: "fn" }` prevents accidental double execution if events race.
 - **Caller-coordinator handshake via events** — `ops/quiescence.swap-complete` is the swap-done signal; matches Inngest distributed-coordination idiom.
 
 ### 5.4 Coordinator API
@@ -324,7 +371,8 @@ Three properties this gives for free:
 ```ts
 // apps/web/lib/self-upgrade/quiescence.ts (new — sibling to activity.ts)
 
-// Hot-read by middleware and Inngest gates. Must be <1ms p99.
+// Hot-read by Node gates. Proxy reads the internal state route instead of
+// importing this Node/Prisma-backed helper directly.
 // Backed by PlatformConfig["portal.quiescence"] with in-memory 1s TTL cache.
 export async function getQuiescenceLevel(): Promise<"normal" | "draining" | "swapping">;
 
@@ -334,14 +382,30 @@ export async function startQuiescence(opts: {
   trigger: "self-upgrade" | "manual" | "sandbox-recovery";
   triggerRefId?: string;
   budgetMs?: number;     // defaults to 5min (§5.5)
+  concurrencyMode?: "join-active" | "queue-after-active"; // default join-active
 }): Promise<{ runId: string; awaitReady: () => Promise<QuiescenceOutcome> }>;
 
+// Called by caller immediately AFTER awaitReady() succeeds and immediately BEFORE
+// runPromoter. Persists state=swapping/level=swapping before returning.
+export async function signalSwapStarting(runId: string, opts: {
+  targetVersion?: string;
+  targetBundleHash?: string;
+}): Promise<void>;
+
 // Called by caller AFTER it has done the actual swap (e.g., runPromoter returned 0).
-// Coordinator transitions to completed and flips level back to normal.
+// Best-effort from the old process; reconcileQuiescenceOnBoot is the durable fallback.
 export async function signalSwapComplete(runId: string): Promise<void>;
+
+// Called when the swap attempt fails after signalSwapStarting.
+// Transitions swapping -> failed and emits terminal events.
+export async function failQuiescenceSwap(runId: string, reason: string): Promise<void>;
 
 // Called by operator from /ops/self-upgrade UI.
 export async function abortQuiescence(runId: string, operatorUserId: string): Promise<void>;
+
+// Called during platform-version boot reconciliation. Completes or fails a
+// swapping run left behind by a process/container replacement.
+export async function reconcileQuiescenceOnBoot(): Promise<void>;
 
 type QuiescenceOutcome =
   | { ok: true; outcome: "ready-to-swap"; runId: string; finalSnapshot: ActiveSessionBlockers }
@@ -349,7 +413,9 @@ type QuiescenceOutcome =
   | { ok: false; outcome: "aborted" | "failed"; reason: string };
 ```
 
-The integration with `runSelfUpgrade` collapses the parent spec's §5.5 numbered protocol into ~6 lines of caller code; see §8.
+Default `concurrencyMode: "join-active"` means a second caller receives the active run and waits on its outcome instead of creating a surprise follow-on drain. Explicit `queue-after-active` is reserved for manual maintenance workflows that truly want a second run after the first terminal state. The API enforces this under a DB transaction/advisory lock; Inngest function concurrency is only the execution backstop, not the correctness boundary.
+
+The integration with `runSelfUpgrade` collapses the parent spec's §5.5 numbered protocol into ~12 lines of caller code; see §8.
 
 ### 5.5 Wait budgets — three regimes
 
@@ -417,7 +483,7 @@ Operator UI renders each surface differently based on `detectionClass`: A/C/D/F 
 
 `QuiescenceRun.lastHeartbeatAt` is written every wait-loop tick (~5s). If a coordinator crashes between ticks, the row sits in `draining` indefinitely. Two defenses:
 
-1. **Extend existing 1-minute `taskrunWatchdog`** at [taskrun-watchdog.ts:24](../../../apps/web/lib/queue/functions/taskrun-watchdog.ts:24) — or sibling `quiescenceWatchdog` if mixing concerns is undesirable. Detection: `QuiescenceRun WHERE status NOT IN (terminal) AND lastHeartbeatAt < now - 2min`. Action: transition to `failed`, force level back to `normal`, emit `platform.quiescence-cleared`.
+1. **Extend existing 1-minute `taskrunWatchdog`** at [taskrun-watchdog.ts:24](../../../apps/web/lib/queue/functions/taskrun-watchdog.ts:24). Detection: `QuiescenceRun WHERE status NOT IN (terminal) AND lastHeartbeatAt < now - 2min`. Action: transition to `failed`, force level back to `normal`, emit `platform.quiescence-cleared`.
 2. **Inngest function timeout** — declare `timeout: "60m"` so even without the watchdog, Inngest itself terminates a runaway coordinator. **60min — not 30min** — because §6.5's `build` phase budget is 30min, and at 30min coordinator timeout the watchdog would race the legitimate completion of a long build and flip level back to `normal` mid-wait, causing `awaitReady` to return `failed` even when nothing is wrong. 60min gives 2× headroom over the longest legitimate single-surface wait. The watchdog is secondary defense.
 
 **Watchdog allow-list for new TaskRun statuses**: the existing `taskrunWatchdog` at [taskrun-watchdog.ts:60](../../../apps/web/lib/queue/functions/taskrun-watchdog.ts:60) filters `status IN ('working', 'active')` to find stall candidates. The new `quiescing` value is intentionally in-flight but cooperatively cancelling — it must NOT be flagged as a stall (the loop will exit on next heartbeat). Filter stays as-is; `quiescing` is implicitly excluded. The two `paused-for-upgrade*` values are terminal-ish (loop has exited) and also implicitly excluded. BI-QUIESCE-001 must include a watchdog regression test confirming none of the three new statuses appear in stall candidates.
@@ -433,7 +499,7 @@ Each subsection covers a surface category from §2.1 with its four answers (Dete
 **Stop-accept** — Two helpers in `apps/web/lib/queue/inngest-client.ts`:
 
 - `gateAtEntry(step)` — for cron functions. Returns early with `{ skipped: true, reason: "quiescing" }` if level ≥ `draining`. Function will re-fire on next cron tick after `cleared`.
-- `gateBetweenSteps(step)` — for long-running event-driven functions. Calls `step.waitForEvent("platform.quiescence-cleared", { timeout: "30m" })` between major steps to suspend cleanly. Resumes when terminal `system:quiescence` event of any outcome fires.
+- `gateBetweenSteps(step)` — for long-running event-driven functions. Calls `step.waitForEvent("platform.quiescence-cleared", { timeout: "30m" })` between major steps to suspend cleanly. Resumes when the durable Inngest `platform.quiescence-cleared` event fires for any terminal outcome. The UI `system:quiescence` event is emitted from the same transition but is not the durable wake signal.
 
 Every existing Inngest function in `apps/web/lib/queue/functions/` is wrapped with the appropriate gate as a Phase 1 deliverable. Cron functions get `gateAtEntry`; event-driven and long-running functions get `gateBetweenSteps` between their natural steps.
 
@@ -441,7 +507,7 @@ Every existing Inngest function in `apps/web/lib/queue/functions/` is wrapped wi
 
 **Fail-safe + Resume** — Inngest native. Worker dies mid-step → function retries from last checkpoint on next dispatch. Suspended function resumes when `platform.quiescence-cleared` fires. No extra contract needed.
 
-**Exception — `selfUpgradeScheduled` and `selfUpgradeManual` themselves**: these are the CALLERS of quiescence. Gating them would deadlock the upgrade. Explicitly exempt from `gateAtEntry`; they consume `getQuiescenceLevel` directly to make their own routing decisions.
+**Exception — `selfUpgradeScheduled`, `selfUpgradeManual`, and `quiescenceRun` themselves**: these are the CALLERS / COORDINATOR of quiescence. Gating them would deadlock the upgrade. Explicitly exempt from `gateAtEntry`; they consume `getQuiescenceLevel` directly to make their own routing decisions.
 
 ### 6.2 Coworker reasoning loops (A + C class, 1 surface)
 
@@ -466,29 +532,37 @@ Every existing Inngest function in `apps/web/lib/queue/functions/` is wrapped wi
 
 1. `agentEventBus.broadcastSystem({ type: "system:quiescence", level: "draining", swapEtaSeconds, runId })` — iterates every subscriber Set, emits the event. (New primitive — §2.4 gap.)
 2. Each open stream emits the event to its client, then continues serving its existing event chain (no mid-stream cancel).
-3. Middleware (§6.4) rejects NEW SSE handshakes with 503 + Retry-After.
+3. Proxy (§6.4) rejects NEW SSE handshakes with 503 + Retry-After.
 
 **Wait / checkpoint** — Stream closes when current event chain reaches `done`. Client receives `system:quiescence`, EventSource closes cleanly via AbortSignal, server unsubscribes. Typical: <500ms after broadcast. Worst case: bounded by `forceCloseAfterMs` (default 5s) — server force-closes via AbortController on the Response object.
 
 **Fail-safe** — 5s force-close window past broadcast. Force-close is safe (closing a stream is non-destructive).
 
-**Resume contract** — EventSource native auto-reconnect (default 3s delay). New connection hits middleware 503 during drain → backs off → succeeds when level returns to `normal`. Replay machinery (EP-ASYNC-COWORKER-001 at [agent-event-bus.ts:91–106](../../../apps/web/lib/tak/agent-event-bus.ts:91)) catches client up from `TaskRun.progressPayload`. Five existing consumers (AgentCoworkerPanel, BuildStudio, BrandExtractionSection, McpSyncButton, the stream route itself) get this for free via existing subscribe logic.
+**Resume contract** — `useResilientEventSource()` owns reconnect/backoff. New connection hits Proxy 503 during drain → backs off with floor/jitter → succeeds when level returns to `normal`. Replay machinery (EP-ASYNC-COWORKER-001 at [agent-event-bus.ts:91–106](../../../apps/web/lib/tak/agent-event-bus.ts:91)) catches clients up from `TaskRun.progressPayload` where available. Direct current consumers must migrate in BI-QUIESCE-008; this is not "free" in the existing repo because some handlers close permanently on `onerror`.
 
 **Exception — SSE catalog sync progress**: marked `killable: false`. The catalog sync underneath is mid-upsert; force-closing the SSE doesn't kill the sync but loses operator visibility. Coordinator treats an in-flight catalog sync as a hard blocker.
 
 ### 6.4 Request layer — server actions + page POSTs (B-class, many surfaces)
 
-**Detection** — B-class proxy via `ToolExecution` recency (today's stopgap). Sharpened by middleware-incremented `inFlightActions` counter (new gauge, in-memory, per-process) for direct signal.
+**Detection** — B-class proxy via `ToolExecution` recency (today's stopgap). Sharpened by Node-runtime mutation wrappers writing an `inFlightActions` gauge (new in-memory counter exposed through the same internal state route). Proxy itself should not own this gauge because it cannot reliably observe route completion.
 
-**Stop-accept** — `apps/web/middleware.ts` (NEW FILE — §2.4 gap). Reads `getQuiescenceLevel()` (cached, <1ms). Per-request decision:
+**Stop-accept** — extend the existing `apps/web/proxy.ts` (§2.4 gap). Next.js 16 renamed Middleware to Proxy; Proxy runs in the Edge runtime and cannot import Prisma, `@dpf/db`, filesystem APIs, or Node-only helpers. Therefore the gate has two layers:
+
+1. **Proxy path** — injects version headers on all matched responses and rejects mutation POSTs / new SSE handshakes when cached quiescence state is `draining` or `swapping`.
+2. **Node state path** — `GET /api/internal/platform/quiescence/state` runs in the Node runtime, reads `PlatformConfig["portal.quiescence"]`, and returns `{ level, runId, retryAfterSeconds, version, bundleHash }`. This route is excluded from Proxy matching to avoid recursion.
+
+Proxy reads the Node state path with a 50ms timeout and 1s module-level cache. On timeout, it fails open for idempotent GETs and fails closed for mutation POSTs only when the last cached state was non-normal; this keeps the platform usable during transient state-route hiccups while preserving the drain once observed.
+
+Per-request decision:
 
 ```ts
-const level = await getQuiescenceLevel();
+const state = await getCachedQuiescenceState(req); // Edge-safe fetch, no Prisma import
+const level = state.level;
 // Version headers go on EVERY response, including 503s — clients need to detect
 // bundle mismatch from any response, not just successful ones.
 const versionHeaders = {
-  "X-Platform-Version": BOOT.version,
-  "X-Bundle-Hash": BOOT.bundleHash,
+  "X-Platform-Version": state.version,
+  "X-Bundle-Hash": state.bundleHash,
 };
 
 if (level === "swapping") {
@@ -501,8 +575,8 @@ if (level === "draining") {
   // GETs, page loads, page-data revalidation: allow.
 }
 // Allowed path — inject headers onto whatever the route handler returns:
-response.headers.set("X-Platform-Version", BOOT.version);
-response.headers.set("X-Bundle-Hash", BOOT.bundleHash);
+response.headers.set("X-Platform-Version", state.version);
+response.headers.set("X-Bundle-Hash", state.bundleHash);
 ```
 
 Edge-node heartbeat paths (`/api/v1/edge/*`) and `/api/health` are explicitly allow-listed — they're consumed by non-browser callers that don't care about quiescence.
@@ -511,13 +585,13 @@ Edge-node heartbeat paths (`/api/v1/edge/*`) and `/api/health` are explicitly al
 
 **Fail-safe** — None needed. Server actions in flight when level flips complete naturally; no cancel needed.
 
-**Resume contract** — Middleware allows new requests once level returns to `normal`. Combined with client-side action gate (§7.4), the operator never sees a 503 in normal UX flow.
+**Resume contract** — Proxy allows new requests once level returns to `normal`. Combined with client-side action gate (§7.4), the operator never sees a 503 in normal UX flow.
 
 ### 6.5 Build Studio phases + sandbox (A-class, 2 surfaces)
 
 **Detection** — `BuildPhaseRun.completedAt IS NULL AND phase ∈ {ideate, plan, build, review, ship}`. Schema-confirmed unique index `(buildId, phase)` at [schema.prisma:4730](../../../packages/db/prisma/schema.prisma:4730).
 
-**Stop-accept** — Gate `startBuildPhaseRun()` at [build-phase-run.ts:30](../../../apps/web/lib/integrate/build-phase-run.ts:30) and `sandboxPool.acquire()`. Both throw `QuiescingError` if level ≥ `draining`. New phase transitions and new sandbox acquisitions refused.
+**Stop-accept** — Gate `startBuildPhaseRun()` at [build-phase-run.ts:30](../../../apps/web/lib/integrate/build-phase-run.ts:30) and the canonical sandbox acquisition seam (`sandboxPool.acquire()` if that is introduced as the seam). Both throw `QuiescingError` if level ≥ `draining`. New phase transitions and new sandbox acquisitions refused.
 
 **Wait / checkpoint** — Phase completion. Phase-specific wait budget:
 
@@ -547,7 +621,7 @@ Sandbox containers are lifecycle-coupled to BuildPhaseRun — rolled up into pha
 
 **Stop-accept** — No direct gate possible on either. Gated **upstream** via entry-point refusal:
 - Coworker reasoning loop refuses new TaskRuns → no new tool dispatches.
-- Server action middleware refuses POSTs → no new actions starting txns.
+- Proxy refuses mutation POSTs → no new actions starting txns.
 - Inngest gates refuse new dispatches → no new background work spawning either.
 
 This is the structural answer: class-G surfaces are managed transitively by gating every surface that could START them.
@@ -596,8 +670,8 @@ This is the operator-trust contract: never claim certainty the system doesn't ha
 The wait phase processes surfaces in dependency order (longest-tolerable last):
 
 1. **Block all entry points** (single batch, on `normal → draining`):
-   - Middleware refuses new server actions
-   - `spawnWorkThread` / `startBuildPhaseRun` / `sandboxPool.acquire` / `callBrowserUse` refuse new entries
+   - Proxy refuses new server actions / mutation POSTs / new SSE handshakes
+   - `spawnWorkThread` / `startBuildPhaseRun` / canonical sandbox acquisition / `callBrowserUse` refuse new entries
    - Inngest cron functions skip-and-reschedule at entry; long-running event-driven suspend at next step
 2. **Broadcast quiescence** — single `agentEventBus.broadcastSystem` call; all UI clients learn
 3. **Flip TaskRuns to `quiescing`** — single UPDATE; coworker loops exit at next iteration
@@ -637,9 +711,9 @@ Three states map onto the §5.2 state machine:
 - `level: "swapping"` — emitted on `ready-to-swap → swapping`
 - `level: "cleared"` — emitted on **every terminal transition** (completed/deferred/aborted/failed); `outcome` distinguishes them
 
-The "cleared" event has two consumers — client UI banner dismissal AND suspended Inngest functions waiting on `step.waitForEvent("platform.quiescence-cleared")`. One event, two consumers, single source of truth.
+The `level: "cleared"` UI event and the durable `platform.quiescence-cleared` Inngest event are emitted by the same `emitQuiescenceTerminal()` helper. They are intentionally separate transports: UI subscribers need an `AgentEvent`, while suspended Inngest functions need a durable event name. The single source of truth is the `QuiescenceRun` terminal transition, not either transport by itself.
 
-The broadcast pathway requires the new `agentEventBus.broadcastSystem(event)` primitive (~10 LOC: iterate every subscriber Set, ignore threadId keying).
+The broadcast pathway requires two new primitives: `agentEventBus.broadcastSystem(event)` (iterate every subscriber Set, ignore threadId keying) and `agentEventBus.subscribeSystem(handler)` for the new global `/api/platform/events` route used by the shell banner.
 
 ### 7.2 Response header contract
 
@@ -650,17 +724,19 @@ X-Platform-Version: 1.0.0
 X-Bundle-Hash: a7c3f2e1
 ```
 
-Source: read once at boot from `version.json` (parent-spec Phase 1 deliverable) + Next.js build manifest hash; cached in process memory; injected by the new middleware.
+Source: read once at boot from `version.json` (parent-spec Phase 1 deliverable) + Next.js build manifest hash; exposed through the internal quiescence state route and injected by the existing Proxy.
 
 Client-side comparison: boot-time values stored in `window.__DPF_BOOT__ = { version, bundleHash }` (injected into root layout). Any response with mismatched headers triggers soft reload on next nav/action.
 
 This is the **defensive layer**: even if SSE failed to deliver `system:quiescence` (browser asleep, edge proxy buffering), the next response header mismatch triggers the same reload. SSE is happy path; headers are fallback.
 
-Exclusions: edge-node heartbeat endpoint and `/api/health` skip header injection — they're consumed by non-browser callers.
+Exclusions: edge-node heartbeat endpoint, `/api/health`, static assets, and `/api/internal/platform/quiescence/state` skip quiescence gating. Edge/health callers do not need operator banners, and the internal state route must remain reachable so Proxy can read current state.
 
 ### 7.3 Banner state machine
 
-Lives in `PlatformBannerProvider` context wrapping root layout; rendered by `<PlatformBanner />` at top of every authenticated page.
+Lives in `PlatformBannerProvider` context mounted from `apps/web/app/(shell)/layout.tsx`, near the existing `StatusBanner` / `UpdatePendingBanner` shell chrome. The provider opens one authenticated global EventSource to `/api/platform/events`, so operators see quiescence state even when no coworker/build/sync stream is active. Rendered by `<PlatformBanner />` at the top of every authenticated shell page.
+
+Styling follows AGENTS.md §12: no hardcoded colors; use `text-[var(--dpf-text)]`, `text-[var(--dpf-muted)]`, `bg-[var(--dpf-surface-1)]`, `border-[var(--dpf-border)]`, and `bg-[var(--dpf-accent)]` with the existing `text-white` accent-button exception only when needed. This banner is operational chrome, not a marketing hero; it should be compact, persistent, and scannable.
 
 ```
 hidden
@@ -697,7 +773,7 @@ Two design choices:
 
 ### 7.4 Client-side action gate
 
-Middleware already returns 503 on new actions during drain — but letting users *try* and get a 503 is worse UX than refusing the click upfront.
+Proxy already returns 503 on new actions during drain — but letting users *try* and get a 503 is worse UX than refusing the click upfront.
 
 Implementation: `usePlatformReady()` hook reads from banner context. Three patterns:
 
@@ -715,38 +791,48 @@ const handleSubmit = (e) => {
 <Button data-platform-bypass onClick={...}>Dismiss</Button>
 ```
 
-v1 ships Pattern 1 on highest-traffic forms (coworker panel, build settings, prompt editor). Middleware 503 + auto-retry-once shim is fallback for everything else. Full coverage is Phase 2.
+This is Phase 2 UX hardening. v1 relies on the authoritative Proxy/API refusal plus the global banner and resilient EventSource migration; broad button/form action gating ships after dogfooding confirms the v1 drain path.
 
 ### 7.5 EventSource reconnect contract
 
-Browser EventSource auto-reconnects on disconnection (default 3s delay). The 5 existing consumers (AgentCoworkerPanel, BuildStudio, BrandExtractionSection, McpSyncButton, agent stream route) don't override this.
+Current repo truth: EventSource handling is inconsistent. `AgentCoworkerPanel` leaves the connection open on `onerror`, but `BrandExtractionSection` and `McpSyncButton` explicitly close on error, and `BuildStudio` has no explicit reconnect/backoff wrapper. Therefore v1 cannot rely on native EventSource auto-reconnect or HTTP `Retry-After` behavior alone.
 
-- **On graceful close from `draining`** — server closes after current event chain; client EventSource disconnects; auto-reconnect fires; new connection hits middleware 503; EventSource respects `Retry-After`.
-- **On hard close from `swapping`** — same path.
-- **On `level=cleared`** — middleware unblocks; reconnect succeeds; replay machinery catches client up from `TaskRun.progressPayload`.
+Phase 1 introduces `useResilientEventSource()` and migrates the direct EventSource consumers found in the current repo:
 
-Three small additions:
+- `apps/web/components/agent/AgentCoworkerPanel.tsx`
+- `apps/web/components/build/BuildStudio.tsx`
+- `apps/web/components/storefront-admin/BrandExtractionSection.tsx`
+- `apps/web/components/platform/McpSyncButton.tsx`
+- New `PlatformBannerProvider` global stream for `/api/platform/events`
 
-1. **`Retry-After` header on the 503** — tames reconnect storms.
-2. **Client-side reconnect floor** — minimum 5s between attempts even if server returns immediate-retry; prevents upgrade window being hammered by 100 tabs reconnecting in lockstep. New `useResilientEventSource()` hook; migrate 5 consumers in Phase 2 (not v1 blocker).
-3. **Stale-bundle detection on successful reconnect** — first event received after reconnect checks `X-Bundle-Hash`; if mismatched, force soft-reload immediately.
+Contract:
+
+- **On graceful close from `draining`** — server emits `system:quiescence`, closes after the current event chain, and the hook backs off at least 5s before reconnect.
+- **On 503 during `draining` / `swapping`** — hook reads `Retry-After` when present but owns the floor/jitter itself; browser native behavior is not treated as sufficient.
+- **On `level=cleared`** — Proxy unblocks; reconnect succeeds; replay machinery catches clients up from `TaskRun.progressPayload` where available.
+- **On successful reconnect after swap** — first successful response/event compares `X-Bundle-Hash`; mismatch triggers soft reload immediately.
+
+The fallback polling already present in `AgentCoworkerPanel` and `BuildStudio` remains, but it is a safety net rather than the primary upgrade-reconnect path.
 
 ### 7.6 File inventory for client-side deliverables
 
 | Deliverable | File | New or modify |
 |---|---|---|
 | `system:quiescence` event variant | [agent-event-bus.ts:7–72](../../../apps/web/lib/tak/agent-event-bus.ts:7) | modify (add union variant) |
-| `broadcastSystem` primitive | [agent-event-bus.ts](../../../apps/web/lib/tak/agent-event-bus.ts) | modify (new export) |
-| Header injection + level gate | `apps/web/middleware.ts` | **new file** |
+| `broadcastSystem` + `subscribeSystem` primitives | [agent-event-bus.ts](../../../apps/web/lib/tak/agent-event-bus.ts) | modify (new exports) |
+| Header injection + level gate | `apps/web/proxy.ts` | **extend existing Proxy** |
+| Node state source for Proxy | `apps/web/app/api/internal/platform/quiescence/state/route.ts` | **new file** |
 | Boot version injection | `apps/web/app/layout.tsx` | modify (`window.__DPF_BOOT__` script) |
 | `PlatformBannerProvider` + `<PlatformBanner />` | `apps/web/components/platform/PlatformBanner.tsx` | **new** |
-| `usePlatformReady()` hook | `apps/web/lib/hooks/usePlatformReady.ts` | **new** |
-| `useResilientEventSource()` (Phase 2) | `apps/web/lib/hooks/useResilientEventSource.ts` | **new (Phase 2)** |
+| Global platform event stream | `apps/web/app/api/platform/events/route.ts` | **new** |
+| Shell mount | `apps/web/app/(shell)/layout.tsx` | modify near `StatusBanner` / `UpdatePendingBanner` |
+| `usePlatformReady()` hook | `apps/web/lib/hooks/usePlatformReady.ts` | **new (Phase 1 provider; broad form adoption Phase 2)** |
+| `useResilientEventSource()` | `apps/web/lib/hooks/useResilientEventSource.ts` | **new (Phase 1, migrate known consumers)** |
 | Bundle-hash mismatch detector | wired into global fetch interceptor or banner provider | **new** |
 
-Phase 1 ships middleware + boot injection + banner provider + `system:quiescence` event. 5 existing EventSource consumers receive the event through their existing subscription paths without modification.
+Phase 1 ships Proxy + Node state route + boot injection + global platform event stream + banner provider + `system:quiescence` event + resilient EventSource wrapper for known consumers. This is the minimum viable user experience: every authenticated shell page sees the banner, and active task streams reconnect deliberately.
 
-Phase 2 ships client-side action gate hook across forms; resilient EventSource wrapper migration; full bundle-hash defensive layer on every fetch.
+Phase 2 ships broad `usePlatformReady()` action gate coverage across forms and the full bundle-hash defensive layer on every fetch.
 
 ## 8. How This Replaces Parent Spec §5.5
 
@@ -754,12 +840,12 @@ The parent spec's [§5.5 graceful recycle protocol](2026-05-23-governed-platform
 
 | Parent §5.5 step | What it actually is | Where it lives now |
 |---|---|---|
-| 4. "Server enters drain mode" | `→ draining` transition + middleware activation | `quiescence-run.ts:enter-draining` + `flip-level-draining` |
+| 4. "Server enters drain mode" | `→ draining` transition + Proxy activation | `quiescence-run.ts:enter-draining` + `flip-level-draining` |
 | 5. "UI receives platform.upgrading" | SSE broadcast | `broadcast-quiescence` step + `system:quiescence` event (§7.1) |
 | 6. "Inngest workers stop dequeuing" | per-function gate at step boundary | §6.1 `gateBetweenSteps` |
 | 7. "Drain wait" | wait loop with re-snapshot | `drain-tick` loop in coordinator (§5.3) |
-| 8–12. L2/L3/L1/L4 apply | the swap itself — caller's job (orthogonal to quiescence) | `runPromoter` after `awaitReady()` returns |
-| 13. "Emit platform.upgraded" | `signalSwapComplete` → `emit-cleared-success` | caller invokes |
+| 8–12. L2/L3/L1/L4 apply | the swap itself — caller's job (orthogonal to quiescence) | `signalSwapStarting()` then `runPromoter` after `awaitReady()` returns |
+| 13. "Emit platform.upgraded" | `signalSwapComplete` or boot reconciler → `emit-cleared-success` | caller invokes best-effort; boot reconciler is durable fallback |
 | 14. "Soft reload via X-Bundle-Hash" | client-side bundle-hash mismatch | §7.2 + §7.3 |
 
 The substitution makes parent §5.5 dramatically shorter. The current 17-step protocol becomes (in `runSelfUpgrade()`):
@@ -776,6 +862,8 @@ if (!outcome.ok) {
   return { skipped: true, reason: outcome.outcome, deferSurface: outcome.deferSurface };
 }
 
+await signalSwapStarting(runId, { targetVersion, targetBundleHash });
+
 // Existing promoter flow — unchanged
 const result = await runPromoter({ ... });
 
@@ -784,7 +872,7 @@ if (result.exitCode === 0) {
   await completeRun(run.runId);
   // ... existing success path
 } else {
-  await abortQuiescence(runId, "system");
+  await failQuiescenceSwap(runId, "promoter failed");
   // ... existing failure path
 }
 ```
@@ -799,17 +887,19 @@ This spec sits between parent Phase 4 (`PreflightRun` and operator surface) and 
 
 - `BI-QUIESCE-001` — `QuiescenceRun` schema + Prisma migration + `quiescedAt` + new TaskRun.status enum values (`quiescing`, `paused-for-upgrade`, `paused-for-upgrade-forced`). One additive migration.
 - `BI-QUIESCE-002` — Coordinator: `quiescence-run.ts` Inngest function + state-machine helpers + `apps/web/lib/self-upgrade/quiescence.ts` caller API.
-- `BI-QUIESCE-003` — Request-layer gate: new `apps/web/middleware.ts` with quiescence level check + response-header injection + `Retry-After` 503.
-- `BI-QUIESCE-004a` — Inngest gate helpers + cron wraps: implement `gateAtEntry` + `gateBetweenSteps` in `apps/web/lib/queue/inngest-client.ts`; wrap all 12 cron functions with `gateAtEntry`. Mechanical, low-risk; cron functions exit cleanly on next tick.
+- `BI-QUIESCE-003` — Request-layer gate: extend existing `apps/web/proxy.ts` with Edge-safe quiescence level check + response-header injection + `Retry-After` 503, plus `apps/web/app/api/internal/platform/quiescence/state/route.ts` Node state source.
+- `BI-QUIESCE-004a` — Inngest gate helpers + scheduled-function wraps: implement `gateAtEntry` + `gateBetweenSteps` in `apps/web/lib/queue/inngest-client.ts`; wrap non-exempt scheduled functions with `gateAtEntry`. Mechanical, low-risk; scheduled functions exit cleanly on next tick while self-upgrade, quiescence-run, and taskrunWatchdog remain exempt.
 - `BI-QUIESCE-004b` — Event-driven `gateBetweenSteps` placement: wrap 5 event-driven functions, choosing checkpoint boundaries per-function (deliberation-run between branches; eval-background between dimensions; etc.). Requires per-function judgment; ships after 004a.
-- `BI-QUIESCE-005` — Per-entry-point gates: `spawnWorkThread`, `startBuildPhaseRun`, `sandboxPool.acquire`, `callBrowserUse` guard insertions; per-tool timeout registry; coworker loop status-flip integration.
-- `BI-QUIESCE-006` — Client-side: `system:quiescence` event variant + `broadcastSystem` primitive + `PlatformBannerProvider` + boot injection + soft-reload on bundle-hash mismatch.
-- `BI-QUIESCE-007` — Watchdog extension: stuck-coordinator detection in `taskrunWatchdog` (or sibling `quiescenceWatchdog` — operator decision in §12).
-- `BI-QUIESCE-008` (Phase 2) — `useResilientEventSource()` hook migration + `usePlatformReady()` action gate across forms.
+- `BI-QUIESCE-005` — Per-entry-point gates: `spawnWorkThread`, `startBuildPhaseRun`, canonical sandbox acquisition, `callBrowserUse` guard insertions; per-tool timeout registry; coworker loop status-flip integration.
+- `BI-QUIESCE-006` — Client-side: `system:quiescence` event variant + `broadcastSystem` / `subscribeSystem` primitives + global `/api/platform/events` stream + `PlatformBannerProvider` in shell layout + boot injection + soft-reload on bundle-hash mismatch.
+- `BI-QUIESCE-007` — Watchdog extension: stuck-coordinator detection in `taskrunWatchdog`.
+- `BI-QUIESCE-008` — `useResilientEventSource()` hook migration for current direct EventSource consumers.
+- `BI-QUIESCE-009` (Phase 2) — broad `usePlatformReady()` action gate across forms.
 
 ### 9.2 Cross-spec dependencies
 
 - This spec depends on parent Phase 1 (`version.json` + `PlatformConfig["platform.version"]`) for the `X-Platform-Version` header source. If quiescence ships first, header value falls back to `process.env.PORTAL_VERSION ?? "unknown"`.
+- This spec also depends on the parent Phase 1 boot-version writer as the natural host for `reconcileQuiescenceOnBoot()`: after the new process writes `PlatformConfig["platform.version"]`, it can safely decide whether a `swapping` run reached the expected target.
 - This spec UNBLOCKS parent Phase 5 (Graceful recycle + rollback) — Phase 5 cannot ship until quiescence does.
 - The [BS sandbox admin recovery spec](2026-05-22-build-studio-sandbox-admin-recovery-design.md) is a second caller of `startQuiescence({trigger: "sandbox-recovery"})`. Quiescence ships first; sandbox recovery integrates as a follow-up.
 
@@ -826,12 +916,14 @@ The protocol is complete when:
 3. A Build Studio `build` phase in flight when the upgrade fires causes the coordinator to either wait up to phase budget OR defer the upgrade with phase id as `deferSurface` — never force-cancel the phase.
 4. A `ship`-phase build in flight defers the upgrade indefinitely until ship completes; only `ship-force` ceremony allows override.
 5. SSE clients receive `system:quiescence`, close gracefully, reconnect after swap, and replay missed events from `TaskRun.progressPayload` — no frozen half-streams.
-6. The bundle-hash mismatch detector fires soft-reload on the next response after swap; no operator click returns a 404 on a stale server-action ID.
-7. A coordinator crash mid-drain is detected by watchdog within 2 minutes; level resets to `normal`; `platform.quiescence-cleared` event fires; no surfaces are left waiting indefinitely.
-8. Class-G surfaces are surfaced as `unobservableSurfaces` in the UI rather than silently ignored.
-9. Operator-triggered manual maintenance (`startQuiescence({trigger: "manual"})`) works independently of upgrade flow.
-10. The replacement integration in `runSelfUpgrade` is ≤10 lines of caller code; no quiescence concerns leak into the upgrade orchestrator.
-11. A second `startQuiescence` call while a run is already active does NOT spawn a second concurrent coordinator: Inngest's `concurrency: { limit: 1, scope: "fn" }` queues the second event; the caller sees the queued run's `runId` and `awaitReady()` resolves after the first run terminates and the second proceeds. The API surface in §5.4 explicitly documents this queue-don't-reject behavior.
+6. Operators on authenticated shell pages with no active coworker/build stream still see the global banner via `/api/platform/events`.
+7. The bundle-hash mismatch detector fires soft-reload on the next response after swap; no operator click returns a 404 on a stale server-action ID.
+8. A coordinator crash mid-drain is detected by watchdog within 2 minutes; level resets to `normal`; durable `platform.quiescence-cleared` and UI `system:quiescence(level="cleared")` events fire; no surfaces are left waiting indefinitely.
+9. A portal process/container replacement after `signalSwapStarting` does not strand the run: `reconcileQuiescenceOnBoot()` completes it when the new version/hash matches the stored target or fails it with operator-visible evidence when it does not.
+10. Class-G surfaces are surfaced as `unobservableSurfaces` in the UI rather than silently ignored.
+11. Operator-triggered manual maintenance (`startQuiescence({trigger: "manual"})`) works independently of upgrade flow.
+12. The replacement integration in `runSelfUpgrade` is ≤12 lines of caller code and includes the explicit `signalSwapStarting` / `signalSwapComplete` handshake; no per-surface quiescence concerns leak into the upgrade orchestrator.
+13. A second `startQuiescence` call while a run is already active does NOT spawn a second concurrent coordinator by default: the API returns the active run under `concurrencyMode: "join-active"`. Only an explicit `queue-after-active` caller queues a follow-on run. Inngest function concurrency remains the backstop, not the primary correctness boundary.
 
 ## 11. Out of Scope
 
@@ -842,15 +934,16 @@ The protocol is complete when:
 - **The actual container swap, health check, smoke window, rollback.** These are parent spec §5.5 remainder (Phase 5 BIs). Quiescence is the prerequisite; swap is the next layer.
 - **Upgrade-window scheduling beyond what `PlatformConfig.maintenanceWindows` already supports.** Existing parent-spec mechanism.
 
-## 12. Open Questions for Operator Decision
+## 12. Operator Decisions (Locked Defaults)
 
-These do not block spec approval, but should be settled before BI-QUIESCE-00X implementation begins:
+The six questions originally listed here have been resolved with the recommended defaults below (operator-acknowledged 2026-05-24 during in-session implementation directive). Each decision is locked into the implementation BIs and can be revisited via a follow-up spec edit + corresponding BI if a default needs to flip.
 
-1. **Default budgets per regime.** §5.5 proposes 60s / 5min / per-tool max. Confirm or adjust.
-2. **Auto-resume vs. operator-gated resume for `paused-for-upgrade` coworker threads.** §6.2 defaults to operator-gated. Operator may prefer auto-resume for fast-drain regime where banner showed for <60s.
-3. **Per-tool registry maintenance.** Who owns updating `TOOL_WAIT_BUDGETS` as new MCP tools land? Proposal: registry is required at MCP tool registration time (similar to seed registry pattern in parent spec); CI lint fails if a tool ships without an entry.
-4. **Phase 1 vs Phase 2 client-side scope.** v1 ships middleware + banner + event. Phase 2 ships action gate + resilient EventSource. Confirm cut line.
-5. **Whether `system:quiescence` should also fire on operator-triggered `manual` quiescence, or only `self-upgrade`.** Default: yes — same event; operators triggering manual maintenance want users to see the banner.
+1. **Default budgets per regime** — **DECIDED**: fast drain 60s; normal drain 5min; extended drain = per-tool `maxMs` from `TOOL_WAIT_BUDGETS`. Locked in §5.5. BI-QUIESCE-002 implements.
+2. **Coworker `paused-for-upgrade` resume policy** — **DECIDED**: operator-gated in v1 (Resume button on the thread). Auto-resume considered for fast-drain regime in a future iteration once dogfooding shows the banner-under-60s case is well-behaved. Locked in §5.3 + §6.2. BI-QUIESCE-005 + 006 implement.
+3. **`TOOL_WAIT_BUDGETS` registry maintenance** — **DECIDED**: registry entry is required at MCP tool registration time; CI lint fails the PR that adds a new MCP tool without a registry entry. Pattern mirrors the seed-registry approach in the parent spec. Locked in §6.6. BI-QUIESCE-005 implements registry + lint.
+4. **Phase 1 vs Phase 2 client-side cut line** — **DECIDED**: v1 = Proxy + Node state route + global banner stream + resilient EventSource migration for the 5 current consumers (BI-QUIESCE-003 + 006 + 008). Phase 2 = broad `usePlatformReady()` action gate across high-traffic forms (BI-QUIESCE-009, post-v1). Locked in §7.6.
+5. **`system:quiescence` event on operator-triggered manual quiescence** — **DECIDED**: yes, same event fires for `trigger: "manual"` and `trigger: "sandbox-recovery"`. Operators triggering manual maintenance want users to see the banner. Locked in §7.1. BI-QUIESCE-006 implements (no special-case filtering).
+6. **Proxy fail-open vs fail-closed on state-route timeout** — **DECIDED**: fail open for GET / page-data revalidation (read-only paths); preserve last known non-normal state for mutation POSTs / server actions / new SSE handshakes (the safety-critical paths). Rationale: reads must never break due to coordinator availability, but writes during an in-progress drain should fail safely toward the previously-observed drain posture. Locked in §6.4. BI-QUIESCE-003 implements.
 
 ## 13. References
 
@@ -866,9 +959,10 @@ These do not block spec approval, but should be settled before BI-QUIESCE-00X im
 - [`docs/superpowers/specs/2026-05-22-build-studio-sandbox-admin-recovery-design.md`](2026-05-22-build-studio-sandbox-admin-recovery-design.md) — second caller of `startQuiescence`.
 - [`apps/web/lib/self-upgrade/activity.ts`](../../../apps/web/lib/self-upgrade/activity.ts) — Phase 0 stopgap this spec replaces.
 - [`apps/web/lib/queue/functions/self-upgrade.ts`](../../../apps/web/lib/queue/functions/self-upgrade.ts) — primary caller of quiescence after this lands.
+- [`apps/web/app/(shell)/layout.tsx`](<../../../apps/web/app/(shell)/layout.tsx>) — authenticated shell chrome where `PlatformBannerProvider` mounts near existing banners.
 - [`apps/web/lib/observability/heartbeat.ts`](../../../apps/web/lib/observability/heartbeat.ts) — cooperative-cancel signal reused for coworker quiescence.
 - [`apps/web/lib/actions/taskrun-recovery.ts`](../../../apps/web/lib/actions/taskrun-recovery.ts) — per-phase Retry strategies reused for post-swap resume.
-- [`apps/web/lib/tak/agent-event-bus.ts`](../../../apps/web/lib/tak/agent-event-bus.ts) — extended with `broadcastSystem` and `system:quiescence` event.
+- [`apps/web/lib/tak/agent-event-bus.ts`](../../../apps/web/lib/tak/agent-event-bus.ts) — extended with `broadcastSystem`, `subscribeSystem`, and `system:quiescence` event.
 - [`apps/web/lib/integrate/build-phase-run.ts`](../../../apps/web/lib/integrate/build-phase-run.ts) — `startBuildPhaseRun` idempotency enables phase resume after swap.
 
 **External standards and benchmarks**
@@ -879,6 +973,8 @@ These do not block spec approval, but should be settled before BI-QUIESCE-00X im
 - [Linkerd traffic shifting](https://linkerd.io/2.16/tasks/traffic-shifting/)
 - [Cloudflare Workers gradual deployment](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/gradual-deployments/)
 - [Stripe API versioning](https://stripe.com/docs/upgrades)
+- [Next.js 16 Proxy](https://nextjs.org/docs/app/getting-started/proxy)
+- [Next.js Edge Runtime](https://nextjs.org/docs/app/api-reference/edge)
 
 **Internal memory signals**
 

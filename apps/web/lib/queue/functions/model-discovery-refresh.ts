@@ -1,6 +1,7 @@
 import { cron } from "inngest";
 import { Pool } from "pg";
 import { inngest } from "../inngest-client";
+import { gateAtEntry } from "../quiescence-gates";
 
 // Lazy singleton pool — created once per process, reused across invocations.
 let _pgPool: Pool | undefined;
@@ -19,6 +20,9 @@ export const modelDiscoveryRefresh = inngest.createFunction(
     triggers: [cron("0 3 * * *")], // 3 AM daily (EP-MODEL-CAP-001-D)
   },
   async ({ step }) => {
+    const gate = await gateAtEntry(step);
+    if (!gate.proceed) return { skipped: true, reason: gate.reason };
+
     await step.run("refresh-all-providers", async () => {
       const { runModelRevalidation } = await import(
         "@/lib/inference/model-revalidation"
