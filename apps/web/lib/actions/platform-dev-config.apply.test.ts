@@ -133,9 +133,8 @@ describe("applyPlatformUpdate", () => {
       expect(result.resumedMerge).toBe(true);
       expect(result.conflicts).toHaveLength(1);
       expect(result.conflicts[0]?.file).toBe("apps/web/page.tsx");
-      // Note: regex pulls upstreamMatch from <<<<<<<…=======, localMatch from =======…>>>>>>>;
-      // the names in the regex variables refer to "upstream of the conflict marker", not the
-      // git remote — see the source for the historical reason.
+      expect(result.conflicts[0]?.localChange).toBe("local version");
+      expect(result.conflicts[0]?.upstreamChange).toBe("upstream version");
     }
   });
 
@@ -166,5 +165,78 @@ describe("applyPlatformUpdate", () => {
       data: { updatePending: false, pendingVersion: null },
     });
     expect(mockWriteFileSync).toHaveBeenCalled();
+  });
+
+  it("repairs missing managed update branches before applying the update", async () => {
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      updatePending: true,
+      pendingVersion: "v1.2.3",
+    });
+    mockPrisma.platformDevConfig.update.mockResolvedValue({});
+    mockExistsSync.mockReturnValue(false);
+
+    mockExec.mockImplementation((cmd: string, _opts: unknown, cb?: (err: Error | null, value: { stdout: string; stderr: string }) => void) => {
+      if (!cb) return;
+      if (cmd === "git show-ref --verify --quiet refs/heads/dpf-upstream") {
+        cb(new Error("missing branch"), { stdout: "", stderr: "missing" });
+        return;
+      }
+      if (cmd === "git show-ref --verify --quiet refs/heads/my-changes") {
+        cb(new Error("missing branch"), { stdout: "", stderr: "missing" });
+        return;
+      }
+      if (cmd.includes("--diff-filter=U")) cb(null, { stdout: "", stderr: "" });
+      else if (cmd === "git diff --cached --stat") cb(null, { stdout: " 2 files changed, 5 insertions(+)", stderr: "" });
+      else cb(null, { stdout: "", stderr: "" });
+    });
+
+    const result = await applyPlatformUpdate();
+
+    expect(result.kind).toBe("clean-merge");
+    const commands = mockExec.mock.calls.map(([cmd]) => cmd);
+    expect(commands).toContain("git branch dpf-upstream HEAD");
+    expect(commands).toContain("git branch my-changes HEAD");
+    expect(commands).toContain("git add -A apps/web packages");
+    expect(commands).not.toContain("git add -A");
+  });
+
+  it("does not repair missing update branches over committed source changes", async () => {
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      updatePending: true,
+      pendingVersion: "v1.2.3",
+    });
+    mockExistsSync.mockReturnValue(false);
+
+    mockExec.mockImplementation((cmd: string, _opts: unknown, cb?: (err: Error | null, value: { stdout: string; stderr: string }) => void) => {
+      if (!cb) return;
+      if (cmd === "git show-ref --verify --quiet refs/heads/dpf-upstream") {
+        cb(new Error("missing branch"), { stdout: "", stderr: "missing" });
+        return;
+      }
+      if (cmd === "git show-ref --verify --quiet refs/heads/my-changes") {
+        cb(new Error("missing branch"), { stdout: "", stderr: "missing" });
+        return;
+      }
+      if (cmd === "git rev-parse --verify origin/main") {
+        cb(null, { stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", stderr: "" });
+        return;
+      }
+      if (cmd === "git diff --name-only origin/main...HEAD -- apps/web packages") {
+        cb(null, { stdout: "apps/web/page.tsx\n", stderr: "" });
+        return;
+      }
+      cb(null, { stdout: "", stderr: "" });
+    });
+
+    const result = await applyPlatformUpdate();
+
+    expect(result.kind).toBe("error");
+    if (result.kind === "error") {
+      expect(result.message).toMatch(/missing managed update branches/i);
+      expect(result.message).toMatch(/committed source changes/i);
+    }
+    const commands = mockExec.mock.calls.map(([cmd]) => cmd);
+    expect(commands).not.toContain("git branch dpf-upstream HEAD");
+    expect(commands).not.toContain("git branch my-changes HEAD");
   });
 });
