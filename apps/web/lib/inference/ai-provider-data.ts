@@ -18,6 +18,15 @@ import type {
   ToolInventoryItem,
 } from "./ai-provider-types";
 import { getProviderDisplayNameForSpend } from "./ai-provider-cost-view";
+import { assignTierFromModelId, type QualityTier } from "@/lib/routing/quality-tiers";
+
+// D25: tier ordering for "strongest among discovered" reduction.
+const TIER_RANK: Record<QualityTier, number> = {
+  frontier: 4,
+  strong: 3,
+  adequate: 2,
+  basic: 1,
+};
 
 /** Mask a secret to `••••••1234` (last 4 chars visible). */
 function maskSecret(value: string | null): string | null {
@@ -238,15 +247,30 @@ export const getModelProfiles = cache(async (providerId: string): Promise<ModelP
 export const getProviderModelSummaries = cache(
   async (): Promise<Map<string, ProviderModelSummary>> => {
     const profiles = await prisma.modelProfile.findMany({
-      select: { providerId: true, modelClass: true, modelStatus: true },
+      select: { providerId: true, modelId: true, modelClass: true, modelStatus: true },
     });
     const map = new Map<string, ProviderModelSummary>();
     for (const p of profiles) {
-      const s = map.get(p.providerId) ?? { totalModels: 0, activeModels: 0, nonChatClasses: [] };
+      const s = map.get(p.providerId) ?? {
+        totalModels: 0,
+        activeModels: 0,
+        nonChatClasses: [],
+        derivedTier: null as QualityTier | null,
+      };
       s.totalModels++;
       if (p.modelStatus === "active") s.activeModels++;
       if (!["chat", "reasoning"].includes(p.modelClass) && !s.nonChatClasses.includes(p.modelClass)) {
         s.nonChatClasses.push(p.modelClass);
+      }
+      // D25: derive tier from the model id family rather than trust seed data.
+      // Only count chat/reasoning models for the build-relevant tier signal —
+      // image_gen / embedding / etc. don't drive the "can this provider serve
+      // a coworker" question.
+      if (["chat", "reasoning"].includes(p.modelClass)) {
+        const modelTier = assignTierFromModelId(p.modelId);
+        if (s.derivedTier === null || TIER_RANK[modelTier] > TIER_RANK[s.derivedTier]) {
+          s.derivedTier = modelTier;
+        }
       }
       map.set(p.providerId, s);
     }

@@ -301,6 +301,16 @@ export type ProviderModelSummary = {
   totalModels: number;
   activeModels: number;
   nonChatClasses: string[];
+  /**
+   * D25 (2026-05-23): strongest quality tier across this provider's known
+   * models, computed via `assignTierFromModelId` (longest-prefix match
+   * against the FAMILY_TIERS table). Preferred over the seeded
+   * `provider.capabilityTier` for display, because the seed value is
+   * frequently stale — e.g. an Anthropic-OAuth provider with Sonnet 4.x
+   * discovered should not show "basic" just because the seed never updated.
+   * Null when no models are discovered yet.
+   */
+  derivedTier: import("@/lib/routing/quality-tiers").QualityTier | null;
 };
 
 /** Row shape for activated MCP servers on the providers grid. */

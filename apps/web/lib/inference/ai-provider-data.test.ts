@@ -43,14 +43,14 @@ import {
 beforeEach(() => { vi.clearAllMocks(); });
 
 describe("getProviderModelSummaries", () => {
-  it("aggregates model counts and non-chat classes per provider", async () => {
+  it("aggregates model counts, non-chat classes, and derived tier per provider", async () => {
     mockPrisma.modelProfile.findMany.mockResolvedValue([
-      { providerId: "openai", modelClass: "chat", modelStatus: "active" },
-      { providerId: "openai", modelClass: "chat", modelStatus: "active" },
-      { providerId: "openai", modelClass: "image_gen", modelStatus: "active" },
-      { providerId: "openai", modelClass: "embedding", modelStatus: "retired" },
-      { providerId: "anthropic", modelClass: "chat", modelStatus: "active" },
-      { providerId: "anthropic", modelClass: "reasoning", modelStatus: "active" },
+      { providerId: "openai", modelId: "gpt-4o", modelClass: "chat", modelStatus: "active" },
+      { providerId: "openai", modelId: "gpt-4o-mini", modelClass: "chat", modelStatus: "active" },
+      { providerId: "openai", modelId: "dall-e-3", modelClass: "image_gen", modelStatus: "active" },
+      { providerId: "openai", modelId: "text-embedding-3", modelClass: "embedding", modelStatus: "retired" },
+      { providerId: "anthropic", modelId: "claude-sonnet-4-6", modelClass: "chat", modelStatus: "active" },
+      { providerId: "anthropic", modelId: "claude-opus-4-7", modelClass: "reasoning", modelStatus: "active" },
     ]);
 
     const result = await getProviderModelSummaries();
@@ -59,11 +59,16 @@ describe("getProviderModelSummaries", () => {
       totalModels: 4,
       activeModels: 3,
       nonChatClasses: ["image_gen", "embedding"],
+      // D25: derived from gpt-4o (strong) over gpt-4o-mini (adequate).
+      // image_gen / embedding don't contribute to the chat-tier signal.
+      derivedTier: "strong",
     });
     expect(result.get("anthropic")).toEqual({
       totalModels: 2,
       activeModels: 2,
       nonChatClasses: [],
+      // D25: derived from claude-opus-4 (frontier) and claude-sonnet-4 (frontier).
+      derivedTier: "frontier",
     });
   });
 
@@ -71,6 +76,25 @@ describe("getProviderModelSummaries", () => {
     mockPrisma.modelProfile.findMany.mockResolvedValue([]);
     const result = await getProviderModelSummaries();
     expect(result.size).toBe(0);
+  });
+
+  it("D25: ignores non-chat models when deriving tier (image_gen doesn't contribute to the chat-tier signal)", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([
+      // Local install with one basic chat model + an image_gen entry. The
+      // derived tier reflects only the chat/reasoning models.
+      { providerId: "local", modelId: "ai/llama3.2:8b", modelClass: "chat", modelStatus: "active" },
+      { providerId: "local", modelId: "stable-diffusion-xl", modelClass: "image_gen", modelStatus: "active" },
+    ]);
+    const result = await getProviderModelSummaries();
+    expect(result.get("local")?.derivedTier).toBe("basic");
+  });
+
+  it("D25: derivedTier is null when no chat/reasoning models present", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([
+      { providerId: "openai", modelId: "dall-e-3", modelClass: "image_gen", modelStatus: "active" },
+    ]);
+    const result = await getProviderModelSummaries();
+    expect(result.get("openai")?.derivedTier).toBeNull();
   });
 });
 
