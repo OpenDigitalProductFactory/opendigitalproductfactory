@@ -25,3 +25,29 @@ export const QDRANT_BACKUP_EVENT = "ops/qdrant-backup.requested";
 export const POSTGRES_BACKUP_CRON = "0 3 * * *";
 /** All-services daily backup cron — runs after Postgres (same schedule). */
 export const ALL_BACKUPS_CRON = "0 3 * * *";
+
+// ─── Trial-restore verification (BI-31C9FBDF) ────────────────────────────────
+// Runs as the final step of allBackupsDailyScheduled after postgres + neo4j +
+// qdrant backups complete; also exposed via a manual-trigger event so admins
+// can re-verify on demand.
+
+export const POSTGRES_TRIAL_RESTORE_JOB_ID = "postgres-trial-restore-daily";
+export const POSTGRES_TRIAL_RESTORE_JOB_NAME =
+  "Postgres trial-restore verification (platform-managed)";
+export const POSTGRES_TRIAL_RESTORE_SCHEDULE = "daily";
+export const POSTGRES_TRIAL_RESTORE_EVENT = "ops/postgres-trial-restore.requested";
+
+/** Value written to BackupRestore.trigger for the nightly trial-verification path. */
+export const TRIAL_RESTORE_TRIGGER = "trial-verification";
+
+/**
+ * Default list of critical tables to row-count-assert during trial restore.
+ * The "> 0" check catches truncated dumps + write-during-snapshot corruption.
+ * Comma-joined to match the ASSERT_TABLES env shape the shell script reads.
+ */
+export const TRIAL_RESTORE_DEFAULT_ASSERT_TABLES = [
+  "BacklogItem",
+  "Epic",
+  "ModelProvider",
+  "User",
+] as const;
