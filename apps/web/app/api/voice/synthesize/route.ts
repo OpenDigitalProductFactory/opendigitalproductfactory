@@ -8,6 +8,7 @@
 
 import { auth } from "@/lib/auth"
 import { prisma } from "@dpf/db"
+import { resolveVoiceStorageRoot } from "@/lib/voice-synthesis/storage-root"
 import { synthesizeSpeech, VoiceSynthesisError } from "@/lib/voice-synthesis/voice-service"
 import type { TTSProvider } from "@/lib/voice-synthesis/types"
 import * as fs from "node:fs/promises"
@@ -19,7 +20,7 @@ interface SynthesizeBody {
 }
 
 function getStorageRoot(): string {
-  return process.env.UPLOAD_STORAGE_PATH ?? "./data/uploads"
+  return resolveVoiceStorageRoot()
 }
 
 export async function POST(req: Request): Promise<Response> {

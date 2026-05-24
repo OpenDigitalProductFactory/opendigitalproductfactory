@@ -13,6 +13,9 @@ const BACKLOG_LOOKUP_PATTERN =
 const NEGATED_ACTION_PATTERN =
   /\b(?:not|don't|do not|isn't|not asking)\b.{0,100}\b(?:backlog|item|issue|task|file|report|log|create|queue)\b/i;
 
+const CONVERSATIONAL_EXPANSION_PATTERN =
+  /^(?:elaborate|tell me more|more detail(?:s)?(?: please)?|expand(?: on (?:that|this|it))?|go deeper|say more|can you elaborate|could you elaborate|please elaborate)\.?$/i;
+
 // Question form openers that signal "asking about platform behavior" rather
 // than "asking the agent to do something." Excludes second-person forms like
 // "will you" / "can you" / "could you" / "would you" which are imperative-as-
@@ -47,6 +50,14 @@ export function isPageExplanationOnlyRequest(content: string): boolean {
   }
 
   return true;
+}
+
+export function isConversationalExpansionRequest(content: string): boolean {
+  const text = content.trim();
+  if (!text) return false;
+  if (EXPLICIT_ACTION_PATTERN.test(text)) return false;
+  if (BACKLOG_LOOKUP_PATTERN.test(text)) return false;
+  return CONVERSATIONAL_EXPANSION_PATTERN.test(text);
 }
 
 /**

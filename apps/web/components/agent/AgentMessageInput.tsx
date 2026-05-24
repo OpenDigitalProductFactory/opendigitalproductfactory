@@ -10,6 +10,7 @@ import {
 import { AgentFileUpload } from "./AgentFileUpload";
 import { MicButton } from "./MicButton";
 import { useVoiceCapture } from "./hooks/useVoiceCapture";
+import { Volume2, VolumeOff, VolumeX } from "lucide-react";
 
 type PendingFile = {
   attachmentId: string;
@@ -27,6 +28,8 @@ type Props = {
   onFileClear: () => void;
   /** Whether a ready voice profile is available for synthesis. */
   voiceSynthAvailable?: boolean;
+  /** Short explanation to show when voice synthesis is unavailable. */
+  voicePlaybackUnavailableReason?: string | null;
   /** Current playback preference set by the user. */
   voicePlaybackEnabled?: boolean;
   /** Toggle handler — flips voicePlaybackEnabled and persists to localStorage. */
@@ -74,7 +77,7 @@ function truncate(value: string, max = 32): string {
   return `${value.slice(0, max - 1)}…`;
 }
 
-export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFile, onFileUploaded, onFileClear, voiceSynthAvailable, voicePlaybackEnabled, onVoicePlaybackToggle }: Props) {
+export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFile, onFileUploaded, onFileClear, voiceSynthAvailable, voicePlaybackUnavailableReason, voicePlaybackEnabled, onVoicePlaybackToggle }: Props) {
   const [value, setValue] = useState("");
   const [intentCenter, setIntentCenter] = useState("");
   const [sources, setSources] = useState<string[]>([]);
@@ -269,6 +272,9 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
   }
 
   const overLimit = value.trim().length > MAX_MESSAGE_LENGTH;
+  const voicePlaybackUnavailable = voiceSynthAvailable === false;
+  const voicePlaybackUnavailableTitle =
+    voicePlaybackUnavailableReason ?? "Voice playback unavailable. Start the text-to-speech service or replace the voice sample.";
   const hasAnyChip =
     !!pendingFile ||
     !!intentCenter ||
@@ -720,30 +726,52 @@ export function AgentMessageInput({ onSend, disabled, busy, threadId, pendingFil
           onReset={voice.reset}
           disabled={disabled || !!busy}
         />
-        {voiceSynthAvailable && onVoicePlaybackToggle && (
+        {onVoicePlaybackToggle && (
           <button
             type="button"
-            onClick={onVoicePlaybackToggle}
-            title={voicePlaybackEnabled ? "Mute voice playback" : "Unmute voice playback"}
-            aria-label={voicePlaybackEnabled ? "Mute voice playback" : "Unmute voice playback"}
+            onClick={voicePlaybackUnavailable ? undefined : onVoicePlaybackToggle}
+            title={
+              voicePlaybackUnavailable
+                ? voicePlaybackUnavailableTitle
+                : voicePlaybackEnabled
+                  ? "Mute voice playback"
+                  : "Unmute voice playback"
+            }
+            aria-label={
+              voicePlaybackUnavailable
+                ? "Voice playback unavailable"
+                : voicePlaybackEnabled
+                  ? "Mute voice playback"
+                  : "Unmute voice playback"
+            }
             aria-pressed={voicePlaybackEnabled}
+            disabled={voicePlaybackUnavailable}
             style={{
               background: "none",
               border: "none",
-              cursor: "pointer",
-              color: voicePlaybackEnabled ? "var(--dpf-accent)" : "var(--dpf-muted)",
-              fontSize: 16,
+              cursor: voicePlaybackUnavailable ? "not-allowed" : "pointer",
+              color: voicePlaybackUnavailable
+                ? "var(--dpf-muted)"
+                : voicePlaybackEnabled
+                  ? "var(--dpf-accent)"
+                  : "var(--dpf-muted)",
               lineHeight: 1,
               padding: "0 2px",
               flexShrink: 0,
               height: 32,
               display: "flex",
               alignItems: "center",
-              opacity: voicePlaybackEnabled ? 1 : 0.5,
+              opacity: voicePlaybackUnavailable || !voicePlaybackEnabled ? 0.5 : 1,
               transition: "color 0.15s, opacity 0.15s",
             }}
           >
-            {voicePlaybackEnabled ? "🔊" : "🔇"}
+            {voicePlaybackUnavailable ? (
+              <VolumeX aria-hidden="true" size={16} strokeWidth={2} />
+            ) : voicePlaybackEnabled ? (
+              <Volume2 aria-hidden="true" size={16} strokeWidth={2} />
+            ) : (
+              <VolumeOff aria-hidden="true" size={16} strokeWidth={2} />
+            )}
           </button>
         )}
         <AgentFileUpload
