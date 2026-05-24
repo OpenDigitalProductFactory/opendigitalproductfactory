@@ -1,43 +1,44 @@
 /**
  * DO NOT MERGE — pre-PR Semgrep gate acceptance demonstration.
  *
- * This file deliberately introduces patterns from the categories burned
- * down in the 2026-05 sweep, to verify the new Semgrep gate (workflow
- * .github/workflows/security-scan.yml, merged in PR #1058) catches them
- * at pre-merge time instead of post-merge CodeQL.
+ * First version of this file used patterns like eval(payload) where the
+ * input was just a function parameter. Semgrep's standard rulesets did not
+ * catch any of them because their taint rules require recognised SOURCES
+ * (req.body, process.env, URL, etc.) — a bare `string` parameter isn't a
+ * source. That's a meaningful finding: the gate does NOT catch arbitrary
+ * sink usage without an upstream taint source.
  *
- * Categories represented:
- *   1. js/log-injection — the dominant category (77 sites closed in PR #1056).
- *      Tests whether Semgrep's standard rulesets cover the gap CodeQL flagged.
- *      If they don't, the contingency is a custom rule at
- *      .github/semgrep/dpf-patterns.yml per the spec.
- *   2. Code injection via eval() — universally caught by Semgrep's
- *      p/security-audit and p/javascript rulesets. Acts as a control:
- *      if THIS doesn't trip, the workflow itself is broken.
- *   3. SSRF — js/request-forgery (6 critical alerts closed in earlier
- *      burn-down). Tests p/owasp-top-ten + p/nextjs coverage.
+ * This revision uses patterns Semgrep catches without taint flow:
  *
- * Expected outcome
- *   semgrep job FAILS on this PR with one or more ERROR/WARNING findings.
+ *   1. Hardcoded AWS-style credential → p/secrets, pure pattern match.
+ *   2. Math.random() for security token → p/security-audit, pure pattern.
+ *   3. (Optional) eval() with a Next.js route req.body source → taint flow.
  *
- * Result will be recorded in the spec definition-of-done writeup, and this
- * branch will be closed without merging.
+ * Expected outcome: Semgrep Scan check FAILS with at least 2 ERROR/WARNING
+ * findings. Captured for the spec definition-of-done writeup. Branch closed
+ * without merging.
  */
 
-export function demoLogInjection(userInput: string): void {
-  // js/log-injection — interpolated user value into log sink.
-  console.warn(`Received request from user: ${userInput}`);
-  console.error(`Failure for input: ${userInput}`);
+// 1. Hardcoded AWS access key — universally caught by p/secrets ruleset.
+// Format matches AWS's documented example key from their docs.
+export const AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE";
+export const AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+
+// 2. Math.random() generating a security-sensitive token — caught by
+// javascript.lang.security.audit.math-random-security.
+export function makeSessionToken(): string {
+  return Math.random().toString(36).slice(2);
 }
 
-export function demoCodeInjection(payload: string): unknown {
-  // Universal Semgrep catch — eval of non-literal.
+export function makePasswordResetToken(): string {
+  // Even more obviously security-sensitive.
+  return `reset-${Math.random()}-${Math.random()}`;
+}
+
+// 3. eval() with a string source labeled as user input (no real taint
+// source available in a non-route file, but the literal name helps some
+// rules pattern-match without flow analysis).
+export function unsafeEval(userSubmittedExpression: string): unknown {
   // eslint-disable-next-line no-eval
-  return eval(payload);
-}
-
-export async function demoSsrf(targetUrl: string): Promise<Response> {
-  // js/request-forgery — fetch a URL derived from user input with no
-  // allowlist or scheme/host validation.
-  return fetch(targetUrl);
+  return eval(userSubmittedExpression);
 }
