@@ -2462,7 +2462,57 @@ async function main(): Promise<void> {
   await assertActiveProvidersHaveClearance();
   await assertAnthropicSubToolCapability();
   await assertCoworkerAgentsHaveGrants();
+  await assertSharedOAuthClientsHaveSharedRedirectUri();
   console.log("Seed complete.");
+}
+
+/**
+ * Providers that share an `oauthClientId` (today: codex + chatgpt sharing the
+ * OpenAI client `app_EMoamEEZ73f0CkXaXp7hrann`) MUST also share an
+ * `oauthRedirectUri`. The upstream OAuth client only accepts redirect URIs
+ * present in its registered whitelist; if one provider has the registered URI
+ * and a sibling has `null`, the sibling's authorize request gets
+ * `error_code: unknown_error` on auth.openai.com BEFORE the callback runs.
+ *
+ * History: chatgpt's `oauthRedirectUri` was null from 41c1e0a7 (Mar 22) until
+ * this guard landed; the regression bypassed all prior OAuth-area "fixes"
+ * because none touched the seed. See
+ * docs/triage/2026-05-23-chatgpt-oauth-unknown-error.md.
+ */
+async function assertSharedOAuthClientsHaveSharedRedirectUri(): Promise<void> {
+  const providers = await prisma.modelProvider.findMany({
+    where: { oauthClientId: { not: null } },
+    select: { providerId: true, oauthClientId: true, oauthRedirectUri: true },
+  });
+
+  const byClient = new Map<string, Array<{ providerId: string; oauthRedirectUri: string | null }>>();
+  for (const p of providers) {
+    const clientId = p.oauthClientId as string;
+    const bucket = byClient.get(clientId) ?? [];
+    bucket.push({ providerId: p.providerId, oauthRedirectUri: p.oauthRedirectUri });
+    byClient.set(clientId, bucket);
+  }
+
+  const offenders: string[] = [];
+  for (const [clientId, members] of byClient.entries()) {
+    if (members.length < 2) continue;
+    const uniqueUris = new Set(members.map((m) => m.oauthRedirectUri ?? "<null>"));
+    if (uniqueUris.size > 1) {
+      const detail = members
+        .map((m) => `${m.providerId}=${m.oauthRedirectUri ?? "<null>"}`)
+        .join(", ");
+      offenders.push(`client ${clientId}: ${detail}`);
+    }
+  }
+
+  if (offenders.length > 0) {
+    throw new Error(
+      `Seed invariant violated: providers sharing an oauthClientId must share oauthRedirectUri. ` +
+        `Offenders: ${offenders.join("; ")}. ` +
+        `Set the same oauthRedirectUri on all rows sharing the client_id in providers-registry.json — ` +
+        `the upstream OAuth client only accepts pre-registered redirect URIs.`,
+    );
+  }
 }
 
 /**
