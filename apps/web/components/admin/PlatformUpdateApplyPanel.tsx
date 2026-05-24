@@ -17,9 +17,9 @@
 // result inline — clean merge summary on success, or a per-file conflict
 // list with upstream-vs-local previews when human resolution is required.
 //
-// Conflict resolution is intentionally NOT automated here — listing the
-// conflicts is enough to redirect the operator to a Build Studio session
-// where the resolution can be tested in a sandbox before being committed.
+// Conflict resolution is intentionally NOT automated here. Listing the
+// conflicts gives an operator or admin agent a concrete source-workspace
+// recovery path without depending on Build Studio availability.
 
 import { useActionState } from "react";
 
@@ -120,7 +120,7 @@ export function PlatformUpdateApplyPanel({ updatePending, pendingVersion }: Prop
   );
 }
 
-function ApplyResult({ result }: { result: ApplyPlatformUpdateResult }) {
+export function ApplyResult({ result }: { result: ApplyPlatformUpdateResult }) {
   switch (result.kind) {
     case "clean-merge":
       return (
@@ -129,9 +129,9 @@ function ApplyResult({ result }: { result: ApplyPlatformUpdateResult }) {
           style={{
             marginTop: 14,
             padding: 10,
-            border: "1px solid color-mix(in srgb, var(--dpf-success, #4ade80) 40%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--dpf-success) 40%, transparent)",
             borderRadius: 4,
-            background: "color-mix(in srgb, var(--dpf-success, #4ade80) 8%, transparent)",
+            background: "color-mix(in srgb, var(--dpf-success) 8%, transparent)",
             fontSize: 13,
           }}
         >
@@ -147,9 +147,9 @@ function ApplyResult({ result }: { result: ApplyPlatformUpdateResult }) {
           style={{
             marginTop: 14,
             padding: 10,
-            border: "1px solid color-mix(in srgb, var(--dpf-warn, #f59e0b) 40%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--dpf-warning) 40%, transparent)",
             borderRadius: 4,
-            background: "color-mix(in srgb, var(--dpf-warn, #f59e0b) 8%, transparent)",
+            background: "color-mix(in srgb, var(--dpf-warning) 8%, transparent)",
             fontSize: 13,
           }}
         >
@@ -157,8 +157,9 @@ function ApplyResult({ result }: { result: ApplyPlatformUpdateResult }) {
             {result.resumedMerge ? "Merge already in progress." : "Merge has conflicts."}
           </strong>{" "}
           {result.conflicts.length} file{result.conflicts.length === 1 ? "" : "s"} need
-          resolution. Open a Build Studio session against the <code>my-changes</code> branch
-          to resolve in a sandbox before committing.
+          resolution. The merge is paused in the managed source workspace on the{" "}
+          <code>my-changes</code> branch. Resolve the listed files there, run the verification
+          gate, then finish the merge commit.
           <ul style={{ marginTop: 8, paddingLeft: 18 }}>
             {result.conflicts.map((c) => (
               <li key={c.file} style={{ marginBottom: 8 }}>
@@ -168,7 +169,7 @@ function ApplyResult({ result }: { result: ApplyPlatformUpdateResult }) {
                   <pre
                     style={{
                       fontSize: 11,
-                      background: "var(--dpf-bg, #000)",
+                      background: "var(--dpf-bg)",
                       padding: 6,
                       overflowX: "auto",
                       borderRadius: 3,
@@ -192,9 +193,9 @@ function ApplyResult({ result }: { result: ApplyPlatformUpdateResult }) {
           style={{
             marginTop: 14,
             padding: 10,
-            border: "1px solid color-mix(in srgb, var(--dpf-error, #ef4444) 40%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--dpf-error) 40%, transparent)",
             borderRadius: 4,
-            background: "color-mix(in srgb, var(--dpf-error, #ef4444) 8%, transparent)",
+            background: "color-mix(in srgb, var(--dpf-error) 8%, transparent)",
             fontSize: 13,
           }}
         >
