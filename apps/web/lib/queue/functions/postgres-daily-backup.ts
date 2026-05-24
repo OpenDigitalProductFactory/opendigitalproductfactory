@@ -23,6 +23,7 @@ import {
   NEO4J_BACKUP_EVENT,
   POSTGRES_BACKUP_CRON,
   POSTGRES_BACKUP_EVENT,
+  POSTGRES_TRIAL_RESTORE_EVENT,
   QDRANT_BACKUP_EVENT,
 } from "@/lib/operate/backups/constants";
 
@@ -60,7 +61,44 @@ export const allBackupsDailyScheduled = inngest.createFunction(
       return runQdrantBackup({ trigger: "scheduled" });
     });
 
-    return { pgResult, neo4jResult, qdrantResult };
+    // Postgres trial-restore verification (BI-31C9FBDF). Runs AFTER the
+    // postgres backup completes — verifies the dump is functionally
+    // restorable (catches truncated dumps + write-during-snapshot corruption
+    // that sha256 alone cannot). Never touches production. Runs even if the
+    // other backups failed — we still want to verify the most recent
+    // successful Postgres backup. Independent failure handling inside the
+    // runner (it catches its own errors and writes a BackupRestore row with
+    // trigger=trial-verification).
+    const trialRestoreResult = await step.run(
+      "run-postgres-trial-restore-scheduled",
+      async () => {
+        const { runPostgresTrialRestore } = await import(
+          "@/lib/operate/backups/postgres-trial-restore-runner"
+        );
+        return runPostgresTrialRestore();
+      },
+    );
+
+    return { pgResult, neo4jResult, qdrantResult, trialRestoreResult };
+  },
+);
+
+// ─── Postgres trial-restore — manual trigger (BI-31C9FBDF) ────────────────────
+
+export const postgresTrialRestoreRequested = inngest.createFunction(
+  {
+    id: "ops/postgres-trial-restore-requested",
+    retries: 1,
+    concurrency: { limit: 1, scope: "fn" },
+    triggers: [{ event: POSTGRES_TRIAL_RESTORE_EVENT }],
+  },
+  async ({ step }) => {
+    return step.run("run-postgres-trial-restore-manual", async () => {
+      const { runPostgresTrialRestore } = await import(
+        "@/lib/operate/backups/postgres-trial-restore-runner"
+      );
+      return runPostgresTrialRestore();
+    });
   },
 );
 
