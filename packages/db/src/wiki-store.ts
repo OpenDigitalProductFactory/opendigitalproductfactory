@@ -62,6 +62,7 @@ import type {
   WikiPageKind,
   WikiPageStatus,
 } from "./wiki-taxonomy";
+import type { PrincipleRuntimeEnforcement } from "./wiki-frontmatter";
 export { WIKI_PAGE_KINDS, WIKI_PAGE_STATUSES } from "./wiki-taxonomy";
 export type {
   PrincipleAppliesTo,
@@ -111,6 +112,14 @@ export type WikiPagePrincipleInput = {
   principleConsumerContexts?: PrincipleConsumerContext[] | string[];
   principlePublic?: boolean;
   principlePublicRationale?: string | null;
+  /**
+   * Runtime enforcement payload (spec 2026-05-24, BI-43F95F77). Stored as
+   * JSONB; consumed by apps/web/lib/kernel/runtime-gate.ts at execution
+   * time. Store layer accepts the shape unchanged — schema validation
+   * lives in lib/wiki/principle-lint-detectors.ts and runtime-gate's own
+   * loader filters.
+   */
+  principleRuntimeEnforcement?: PrincipleRuntimeEnforcement | null;
 };
 
 /** Revision provenance defined in EP-WIKI-001 §4. */
@@ -177,6 +186,9 @@ function principleDataFromInput(
   }
   if (input.principlePublicRationale !== undefined) {
     data.principlePublicRationale = input.principlePublicRationale;
+  }
+  if (input.principleRuntimeEnforcement !== undefined) {
+    data.principleRuntimeEnforcement = input.principleRuntimeEnforcement;
   }
   return data;
 }

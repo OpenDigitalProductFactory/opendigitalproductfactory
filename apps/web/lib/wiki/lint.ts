@@ -160,6 +160,10 @@ function asLintPrincipleWikiPage(
     principlePublic: Boolean(r["principlePublic"] ?? false),
     principlePublicRationale:
       (r["principlePublicRationale"] as string | null) ?? null,
+    principleRuntimeEnforcement:
+      (r["principleRuntimeEnforcement"] as
+        | import("@dpf/db/wiki-frontmatter").PrincipleRuntimeEnforcement
+        | null) ?? null,
     lastReviewedAt: reviewed instanceof Date ? reviewed : null,
   };
 }
