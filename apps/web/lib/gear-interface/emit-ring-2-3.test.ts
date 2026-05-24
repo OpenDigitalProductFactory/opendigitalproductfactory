@@ -3,7 +3,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const gearRows = new Map<string, Record<string, unknown>>();
-let storefrontConfig: { archetypeId: string } | null = null;
+let storefrontConfig: {
+  archetypeId: string;
+  archetype: { archetypeId: string } | null;
+} | null = null;
 let featureBuild: Record<string, unknown> | null = null;
 
 vi.mock("@dpf/db", () => ({
@@ -34,7 +37,10 @@ import { prisma } from "@dpf/db";
 beforeEach(() => {
   gearRows.clear();
   vi.clearAllMocks();
-  storefrontConfig = { archetypeId: "hvac" };
+  storefrontConfig = {
+    archetypeId: "cuid-storefront-archetype-fk",
+    archetype: { archetypeId: "hvac-contractor" },
+  };
   featureBuild = {
     id: "fb-id-1",
     buildId: "FB-ABC123",
@@ -50,7 +56,7 @@ beforeEach(() => {
 });
 
 describe("emitRing23FromCompletedShip", () => {
-  it("emits a Ring 2→3 outward record with archetypeContext from the active StorefrontConfig", async () => {
+  it("emits a Ring 2→3 outward record with the semantic StorefrontArchetype.archetypeId slug", async () => {
     await emitRing23FromCompletedShip("FB-ABC123");
     expect(prisma.gearInterface.create).toHaveBeenCalledOnce();
     const data = (vi.mocked(prisma.gearInterface.create).mock.calls[0]![0] as {
@@ -58,15 +64,34 @@ describe("emitRing23FromCompletedShip", () => {
     }).data;
     expect(data.innerRing).toBe(2);
     expect(data.outerRing).toBe(3);
-    expect(data.archetypeContext).toBe("hvac");
+    expect(data.archetypeContext).toBe("hvac-contractor");
     expect(data.torqueTechnical).toBe(1.0);
     expect(data.outcomeType).toBe("transmission");
   });
 
-  it("skips honestly when no StorefrontConfig exists — does not emit", async () => {
+  it("emits an observable archetype-unresolved slip when no StorefrontConfig exists", async () => {
     storefrontConfig = null;
     await emitRing23FromCompletedShip("FB-ABC123");
-    expect(prisma.gearInterface.create).not.toHaveBeenCalled();
+    expect(prisma.gearInterface.create).toHaveBeenCalledOnce();
+    const data = (vi.mocked(prisma.gearInterface.create).mock.calls[0]![0] as {
+      data: Record<string, unknown>;
+    }).data;
+    expect(data.innerRing).toBe(2);
+    expect(data.outerRing).toBe(3);
+    expect(data.archetypeContext).toBeNull();
+    expect(data.outcomeType).toBe("slip");
+    expect(data.slipDetected).toBe(true);
+    expect(data.slipReason).toBe("archetype-unresolved");
+  });
+
+  it("emits an archetype-unresolved slip when the config relation is missing", async () => {
+    storefrontConfig = { archetypeId: "cuid-storefront-archetype-fk", archetype: null };
+    await emitRing23FromCompletedShip("FB-ABC123");
+    const data = (vi.mocked(prisma.gearInterface.create).mock.calls[0]![0] as {
+      data: Record<string, unknown>;
+    }).data;
+    expect(data.archetypeContext).toBeNull();
+    expect(data.slipReason).toBe("archetype-unresolved");
   });
 
   it("is no-op when phase is not 'ship'", async () => {

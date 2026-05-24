@@ -180,6 +180,32 @@ describe("validateGearInterfaceInput", () => {
     ).toThrow(/archetypeContext/);
   });
 
+  it("allows missing Ring 2→3 archetypeContext only for archetype-unresolved slip rows", () => {
+    expect(() =>
+      validateGearInterfaceInput({
+        ...ring12Input(),
+        innerRing: 2,
+        outerRing: 3,
+        outcomeType: "slip",
+        slipDetected: true,
+        slipReason: "archetype-unresolved",
+        archetypeContext: null,
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      validateGearInterfaceInput({
+        ...ring12Input(),
+        innerRing: 2,
+        outerRing: 3,
+        outcomeType: "slip",
+        slipDetected: true,
+        slipReason: "failed-outcome",
+        archetypeContext: null,
+      }),
+    ).toThrow(/archetypeContext/);
+  });
+
   it("allows null archetypeContext at Ring 1→2", () => {
     expect(() => validateGearInterfaceInput(ring12Input())).not.toThrow();
   });

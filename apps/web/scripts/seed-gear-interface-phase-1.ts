@@ -95,8 +95,11 @@ async function main() {
 
   console.log("[gear-phase1] emitting Ring 2→3 transmission with archetype context...");
   // Resolve archetype from the live install — same path the production Ring 2→3 emitter uses.
-  const storefront = await prisma.storefrontConfig.findFirst({ select: { archetypeId: true } });
-  const archetypeContext = storefront?.archetypeId ?? "demo-archetype-no-install";
+  const storefront = await prisma.storefrontConfig.findFirst({
+    orderBy: { updatedAt: "desc" },
+    select: { archetype: { select: { archetypeId: true } } },
+  });
+  const archetypeContext = storefront?.archetype?.archetypeId ?? null;
   const ring23 = await emitGearInterface({
     interfaceClass: "internal-adjacent",
     innerRing: 2,
@@ -111,12 +114,18 @@ async function main() {
     capabilityName: "feature-build-ship",
     archetypeContext,
     agentIdForTriple: AGENT,
-    torqueTechnical: 1.0,
-    torqueConfidence: 0.9,
+    torqueTechnical: archetypeContext ? 1.0 : 0,
+    torqueConfidence: archetypeContext ? 0.9 : 1,
     ratioConsumed: 5,
-    outcomeType: "transmission",
+    outcomeType: archetypeContext ? "transmission" : "slip",
+    slipDetected: !archetypeContext,
+    slipReason: archetypeContext ? null : "archetype-unresolved",
     graderType: "automated",
-    graderId: "feature-build-ship.completePhase",
+    graderId: archetypeContext ? "feature-build-ship.completePhase" : "gear-interface.archetype-resolver",
+    rationale: archetypeContext
+      ? null
+      : "Install is not onboarded to a resolvable vertical archetype; Ring 2→3 seed attribution cannot be safely written.",
+    idempotencyKeySuffix: archetypeContext ? undefined : "archetype-unresolved",
   });
   console.log("  →", ring23);
 

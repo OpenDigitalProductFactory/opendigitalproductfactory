@@ -39,6 +39,16 @@ export interface FeatureBuildShipSource {
   ringRatioConsumed?: number;
 }
 
+export interface FeatureBuildArchetypeUnresolvedSource {
+  /** FeatureBuild.id — used as the canonical shaftSourceId. */
+  id: string;
+  buildId: string;
+  title: string;
+  claimedByAgentId: string | null;
+  codingProvider: string | null;
+  completedAt: Date;
+}
+
 /**
  * Compose a Ring 2→3 outward GearInterfaceInput from a shipped FeatureBuild.
  *
@@ -105,5 +115,48 @@ export function featureBuildShipToRing23Input(
     graderType: "automated",
     graderId: "feature-build-ship.completePhase",
     organizationId: options.organizationId ?? null,
+  };
+}
+
+/**
+ * Compose the documented exception path for a shipped build that cannot be
+ * attributed to a vertical because the install has no resolvable archetype.
+ */
+export function featureBuildArchetypeUnresolvedToRing23Input(
+  source: FeatureBuildArchetypeUnresolvedSource,
+  options: { organizationId?: string | null } = {},
+): GearInterfaceInput {
+  const agentIdForTriple =
+    source.claimedByAgentId ??
+    source.codingProvider ??
+    `unknown-agent:${source.buildId}`;
+
+  return {
+    interfaceClass: "internal-adjacent",
+    transmissionDirection: "outward",
+    innerRing: 2,
+    outerRing: 3,
+    shaftSourceType: "phase-run",
+    shaftSourceId: `${source.id}-ship`,
+    sourceEventAt: source.completedAt,
+    actorType: "system",
+    actorId: "gear-interface.archetype-resolver",
+    intent: "resolve-feature-build-archetype",
+    capabilityName: "feature-build-ship",
+    capabilityVocabularyVersion: "raw-v0",
+    archetypeContext: null,
+    agentIdForTriple,
+    torqueTechnical: 0,
+    torqueConfidence: 1,
+    ratioConsumed: 5,
+    outcomeType: "slip",
+    slipDetected: true,
+    slipReason: "archetype-unresolved",
+    graderType: "automated",
+    graderId: "gear-interface.archetype-resolver",
+    rationale:
+      "Install is not onboarded to a resolvable vertical archetype; Ring 2→3 attribution cannot be safely written.",
+    organizationId: options.organizationId ?? null,
+    idempotencyKeySuffix: "archetype-unresolved",
   };
 }

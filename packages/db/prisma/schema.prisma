@@ -9295,6 +9295,7 @@ model GearInterface {
   /// 'novel-context' | 'failed-outcome' | 'human-override' | 'cost-overrun'
   /// | 'safety-block' | 'rate-limit' | 'capability-gap' | 'migration-destructive'
   /// | 'manifest-invalid' | 'signature-invalid' | 'seed-delta-conflict' | 'source-unindexed'
+  /// | 'archetype-unresolved'
   slipReason       String?
 
   // Cost — Decimal because this joins AI cost governance + finance views

@@ -55,6 +55,10 @@ class GearInterfaceValidationError extends Error {}
  */
 export function validateGearInterfaceInput(input: GearInterfaceInput): void {
   const direction = input.transmissionDirection ?? "outward";
+  const isArchetypeUnresolvedSlip =
+    input.outcomeType === "slip" &&
+    input.slipDetected === true &&
+    input.slipReason === "archetype-unresolved";
 
   if (input.interfaceClass === "internal-adjacent") {
     if (input.innerRing == null || input.outerRing == null) {
@@ -137,7 +141,8 @@ export function validateGearInterfaceInput(input: GearInterfaceInput): void {
     input.interfaceClass === "internal-adjacent" &&
     input.innerRing != null &&
     input.innerRing >= 2 &&
-    !input.archetypeContext
+    !input.archetypeContext &&
+    !isArchetypeUnresolvedSlip
   ) {
     throw new GearInterfaceValidationError(
       `archetypeContext is required at Ring ${input.innerRing}↔${input.outerRing} (spec §3.3)`,
