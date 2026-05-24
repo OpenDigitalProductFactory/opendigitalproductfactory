@@ -398,6 +398,57 @@ describe("seed-wiki-kernel: extractPrinciplePayload", () => {
     });
     expect(payload).toEqual({});
   });
+
+  // ─── Ring-scope axis (spec 2026-05-24-founder-kernel-evolution-discipline) ───
+
+  it("forwards a valid principleRingScope through unchanged", () => {
+    const payload = extractPrinciplePayload({
+      title: "Ring-scoped principle",
+      pageKind: "principle",
+      principleTier: "core",
+      principleAppliesTo: ["in_platform_coworker"],
+      principleConsumerArchetype: "ai-coworker-universal",
+      principleRingScope: ["ring-2-workflow", "ring-3-archetype"],
+    });
+    expect(payload.principleRingScope).toEqual([
+      "ring-2-workflow",
+      "ring-3-archetype",
+    ]);
+  });
+
+  it("throws on unknown principleRingScope value (fails closed, not silent)", () => {
+    expect(() =>
+      extractPrinciplePayload({
+        title: "Bogus scope",
+        pageKind: "principle",
+        principleTier: "core",
+        principleAppliesTo: ["in_platform_coworker"],
+        principleConsumerArchetype: "ai-coworker-universal",
+        principleRingScope: ["ring-1-coworker", "ring-99-bogus"],
+      }),
+    ).toThrow(/Unknown principleRingScope value "ring-99-bogus"/);
+  });
+
+  it("accepts the universal-ring escape hatch as a valid value", () => {
+    const payload = extractPrinciplePayload({
+      title: "Universal principle",
+      pageKind: "principle",
+      principleTier: "commandment",
+      principleAppliesTo: ["in_platform_coworker", "human"],
+      principleConsumerArchetype: "universal",
+      principleRingScope: ["universal-ring"],
+    });
+    expect(payload.principleRingScope).toEqual(["universal-ring"]);
+  });
+
+  it("does not forward principleRingScope on non-principle pages", () => {
+    const payload = extractPrinciplePayload({
+      title: "Edge Node",
+      pageKind: "entity",
+      principleRingScope: ["ring-1-coworker"] as never,
+    });
+    expect(payload).toEqual({});
+  });
 });
 
 describe("founder-kernel principle frontmatter", () => {
