@@ -248,6 +248,9 @@ export function extractPrinciplePayload(
   if (frontmatter.principlePublicRationale !== undefined) {
     payload.principlePublicRationale = frontmatter.principlePublicRationale;
   }
+  if (frontmatter.principleRuntimeEnforcement !== undefined) {
+    payload.principleRuntimeEnforcement = frontmatter.principleRuntimeEnforcement;
+  }
   return payload;
 }
 
