@@ -247,6 +247,26 @@ export function isCliPrologueLine(line: string): boolean {
     || normalized.startsWith("codex ");
 }
 
+/**
+ * Re-derive `rootCauseSummary` for a row using the persisted excerpts and the
+ * already-classified failure axis. Used by the 2026-05-24 backfill script to
+ * normalize pre-hardening rows whose original `rootCauseSummary` captured the
+ * Codex CLI prologue instead of the diagnostic line.
+ *
+ * Pure. The matcher operates on the 500-char excerpts, not the full original
+ * output — this is acceptable because (a) the recomputed result is at least as
+ * good as the prologue text it replaces, and (b) it matches what the operator
+ * sees when expanding the dispatch history card's raw section. See spec §4.2
+ * of the 2026-05-24 dispatch-history root-cause display spec.
+ */
+export function recomputeRootCauseSummary(row: {
+  stdoutExcerpt: string | null;
+  stderrExcerpt: string | null;
+  failureAxis: BuildFailureAxis;
+}): string {
+  return extractRootCauseSummary(row.stdoutExcerpt ?? "", row.stderrExcerpt ?? "", row.failureAxis);
+}
+
 function excerpt(value: string): string | null {
   const trimmed = value.trim();
   return trimmed ? trimmed.slice(0, 500) : null;
