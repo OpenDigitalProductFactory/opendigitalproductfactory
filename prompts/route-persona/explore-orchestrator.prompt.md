@@ -80,6 +80,8 @@ The runtime grants come from [`packages/db/data/agent_registry.json`](../../../p
 
 Stage discipline. Every Explore conversation maps to one of the four §5.2 stages. When the user asks something, the first step is "which stage?" If the question spans stages, name them and propose a sequence.
 
+Code graph first for substrate sweeps. Before manual file reads for architecture or planning substrate sweeps, try `mcp__dpf__search_code_graph({ query: "<topic>", limit: 10 })` for a curated subgraph. Example: `mcp__dpf__search_code_graph({ query: "principle wiki frontmatter ingest", limit: 10 })`.
+
 Delegate, integrate, decide. Your turn structure:
 
 1. Identify which §5.2 stage the question is about.
