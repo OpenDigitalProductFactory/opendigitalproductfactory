@@ -5,6 +5,7 @@ import { ForkSetupPanel } from "@/components/admin/ForkSetupPanel";
 import LegacyTokenOverrideBanner from "@/components/admin/LegacyTokenOverrideBanner";
 import { McpTokenManager } from "@/components/admin/McpTokenManager";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
+import { PlatformUpdateApplyPanel } from "@/components/admin/PlatformUpdateApplyPanel";
 import TokenExpiryBanner from "@/components/admin/TokenExpiryBanner";
 import {
   getGitHubConnectedState,
@@ -50,6 +51,10 @@ export default async function AdminPlatformDevelopmentPage() {
       <AdminTabNav />
       <TokenExpiryBanner />
       <LegacyTokenOverrideBanner />
+      <PlatformUpdateApplyPanel
+        updatePending={config?.updatePending ?? false}
+        pendingVersion={config?.pendingVersion ?? null}
+      />
       <ForkSetupPanel
         enabled={isContributionModelEnabled()}
         contributionModel={config?.contributionModel ?? null}

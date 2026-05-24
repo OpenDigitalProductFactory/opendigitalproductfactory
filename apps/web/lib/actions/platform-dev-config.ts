@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { getPlatformDevPolicyState, type PlatformDevPolicyState } from "@/lib/platform-dev-policy";
 import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
+import { lazyChildProcess, lazyFs, lazyPath, lazyUtil } from "@/lib/shared/lazy-node";
 import { revalidatePath } from "next/cache";
 
 // ─── Auth helper ─────────────────────────────────────────────────────────────
@@ -672,4 +673,218 @@ export async function configureForkSetup(input: {
 
   revalidatePath("/admin/platform-development");
   return { success: true, status, forkOwner, forkRepo };
+}
+
+// ─── Apply Platform Update ──────────────────────────────────────────────────
+//
+// 2026-05-23 BI-9B77E247: The UpdatePendingBanner directs operators to
+// /admin/platform-development to "review" a pending platform update, but the
+// destination route previously had no Apply control — the merge logic only
+// existed inside the `apply_platform_update` MCP tool case in mcp-tools.ts,
+// reachable only via a coworker turn with the right grants. This action
+// extracts that logic so both the MCP tool AND the in-portal UI invoke the
+// same merge implementation. Single source of truth for "apply the queued
+// platform update."
+//
+// Workflow (Docker portal install pattern):
+//   1. Verify a pending update exists in PlatformDevConfig
+//   2. If a partial merge is already in progress (.git/MERGE_HEAD exists),
+//      return the existing conflict list — do NOT restart the merge.
+//   3. Refresh dpf-upstream branch from /app/{apps,packages}-src
+//   4. Merge dpf-upstream into my-changes (--no-commit --no-ff)
+//   5. On conflicts: return structured list with upstream-vs-local previews;
+//      do NOT auto-resolve.
+//   6. On clean merge: commit, write .dpf-version sentinel, clear the
+//      updatePending flag, return file-change summary.
+//
+// Maps to commandment-tier kernel principle
+// `never-wipe-db-for-code-fixes` — this action touches /workspace only;
+// PlatformDevConfig is updated via Prisma update, never delete + recreate.
+
+export type ApplyPlatformUpdateConflict = {
+  file: string;
+  upstreamChange: string;
+  localChange: string;
+};
+
+export type ApplyPlatformUpdateResult =
+  | { kind: "no-update-pending"; message: string }
+  | { kind: "invalid-version"; message: string; version: string | null }
+  | {
+      kind: "clean-merge";
+      message: string;
+      version: string;
+      filesUpdated: number;
+    }
+  | {
+      kind: "conflicts";
+      message: string;
+      version: string;
+      resumedMerge: boolean;
+      conflicts: ApplyPlatformUpdateConflict[];
+    }
+  | { kind: "error"; message: string };
+
+export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> {
+  await requireManagePlatform();
+
+  const { exec: execCb } = lazyChildProcess();
+  const { promisify } = lazyUtil();
+  const execUpdate = promisify(execCb);
+
+  const devConfig = await prisma.platformDevConfig.findUnique({
+    where: { id: "singleton" },
+  });
+  if (!devConfig?.updatePending) {
+    return {
+      kind: "no-update-pending",
+      message: "No platform update is pending.",
+    };
+  }
+
+  const pendingVersion = devConfig.pendingVersion;
+  if (!pendingVersion || !/^[0-9a-zA-Z._-]+$/.test(pendingVersion)) {
+    return {
+      kind: "invalid-version",
+      message: "Pending version string failed validation.",
+      version: pendingVersion ?? null,
+    };
+  }
+
+  const workspace = process.env["PROJECT_ROOT"] ?? "/workspace";
+  const gitOpts = { cwd: workspace, timeout: 30_000 };
+
+  try {
+    // Check for in-progress merge from a previous interrupted run
+    const { existsSync } = lazyFs();
+    const { resolve: resolvePath } = lazyPath();
+
+    if (existsSync(resolvePath(workspace, ".git", "MERGE_HEAD"))) {
+      const { stdout: conflicted } = await execUpdate(
+        "git diff --name-only --diff-filter=U",
+        gitOpts,
+      );
+      const conflicts: ApplyPlatformUpdateConflict[] = [];
+      const { readFileSync } = lazyFs();
+      for (const file of conflicted.trim().split("\n").filter(Boolean)) {
+        const content = readFileSync(resolvePath(workspace, file), "utf-8");
+        const upstreamMatch = content.match(/<<<<<<< .+?\n([\s\S]*?)=======/);
+        const localMatch = content.match(/=======\n([\s\S]*?)>>>>>>> .+/);
+        conflicts.push({
+          file,
+          upstreamChange: upstreamMatch?.[1]?.trim() ?? "(could not parse)",
+          localChange: localMatch?.[1]?.trim() ?? "(could not parse)",
+        });
+      }
+      return {
+        kind: "conflicts",
+        message: `A merge is already in progress. ${conflicts.length} conflict(s) remaining.`,
+        version: pendingVersion,
+        resumedMerge: true,
+        conflicts,
+      };
+    }
+
+    // Step 1-3: Refresh dpf-upstream branch with new source
+    await execUpdate("git checkout dpf-upstream", gitOpts);
+    await execUpdate("rm -rf apps/web packages", gitOpts);
+    await execUpdate("cp -r /app/apps/web-src/. apps/web/", gitOpts);
+    await execUpdate("cp -r /app/packages-src/. packages/", gitOpts);
+    await execUpdate("git add -A", gitOpts);
+
+    // Skip the commit if nothing actually changed (idempotent re-run)
+    const { stdout: diffCheck } = await execUpdate(
+      "git diff --cached --stat",
+      gitOpts,
+    );
+    if (diffCheck.trim()) {
+      await execUpdate(
+        `git commit -m "chore: dpf-upstream v${pendingVersion}"`,
+        gitOpts,
+      );
+    }
+
+    // Step 4: Merge into my-changes
+    await execUpdate("git checkout my-changes", gitOpts);
+    try {
+      await execUpdate("git merge dpf-upstream --no-commit --no-ff", gitOpts);
+    } catch {
+      // Merge conflicts surface as a non-zero exit — expected, handled below
+    }
+
+    const { stdout: conflictedFiles } = await execUpdate(
+      "git diff --name-only --diff-filter=U",
+      gitOpts,
+    ).catch(() => ({ stdout: "" }));
+
+    if (conflictedFiles.trim()) {
+      const conflicts: ApplyPlatformUpdateConflict[] = [];
+      const { readFileSync } = lazyFs();
+      for (const file of conflictedFiles.trim().split("\n").filter(Boolean)) {
+        const content = readFileSync(resolvePath(workspace, file), "utf-8");
+        const upstreamMatch = content.match(/<<<<<<< .+?\n([\s\S]*?)=======/);
+        const localMatch = content.match(/=======\n([\s\S]*?)>>>>>>> .+/);
+        conflicts.push({
+          file,
+          upstreamChange: upstreamMatch?.[1]?.trim() ?? "(could not parse)",
+          localChange: localMatch?.[1]?.trim() ?? "(could not parse)",
+        });
+      }
+      return {
+        kind: "conflicts",
+        message: `Merge has conflicts. ${conflicts.length} file(s) need resolution.`,
+        version: pendingVersion,
+        resumedMerge: false,
+        conflicts,
+      };
+    }
+
+    // Clean merge — commit, write sentinel, clear pending flag
+    const { stdout: filesChanged } = await execUpdate(
+      "git diff --cached --stat",
+      gitOpts,
+    );
+    const fileCount = parseInt(
+      (filesChanged.match(/(\d+) files? changed/) || ["0", "0"])[1] ?? "0",
+      10,
+    );
+    await execUpdate(
+      `git commit -m "chore: merge dpf v${pendingVersion}"`,
+      gitOpts,
+    );
+
+    const { writeFileSync } = lazyFs();
+    writeFileSync(
+      resolvePath(workspace, ".dpf-version"),
+      pendingVersion,
+      "utf-8",
+    );
+
+    await prisma.platformDevConfig.update({
+      where: { id: "singleton" },
+      data: { updatePending: false, pendingVersion: null },
+    });
+
+    revalidatePath("/admin/platform-development");
+    revalidatePath("/", "layout"); // banner lives in shell layout
+
+    return {
+      kind: "clean-merge",
+      message: `Platform updated to v${pendingVersion}. ${fileCount} files updated. No conflicts.`,
+      version: pendingVersion,
+      filesUpdated: fileCount,
+    };
+  } catch (err) {
+    // Best-effort: leave my-changes checked out so the operator's working
+    // copy is in a known state even when the merge step itself crashes.
+    try {
+      await execUpdate("git checkout my-changes", gitOpts);
+    } catch {
+      /* best effort — original error is already captured below */
+    }
+    return {
+      kind: "error",
+      message: `Platform update failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 }
