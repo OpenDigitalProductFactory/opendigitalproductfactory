@@ -11,6 +11,7 @@ import {
   NEO4J_BACKUP_JOB_ID,
   POSTGRES_BACKUP_JOB_ID,
   QDRANT_BACKUP_JOB_ID,
+  TRIAL_RESTORE_TRIGGER,
 } from "./constants";
 import { DEFAULT_BACKUP_RETENTION, type BackupTarget, type ReadinessSummary } from "./types";
 
@@ -20,7 +21,7 @@ async function getReadinessForTarget(
   jobId: string,
   target: BackupTarget,
 ): Promise<ReadinessSummary> {
-  const [job, lastRun, lastSuccess, retainedRuns, recentFailures] =
+  const [job, lastRun, lastSuccess, retainedRuns, recentFailures, lastTrialRestore] =
     await Promise.all([
       prisma.scheduledJob.findUnique({ where: { jobId } }),
       prisma.backupRun.findFirst({
@@ -41,6 +42,27 @@ async function getReadinessForTarget(
         take: 3,
         select: { status: true },
       }),
+      // BI-A8C149C1: surface the most recent trial-restore for this target.
+      // The trial restore writes BackupRestore rows with trigger='trial-verification'
+      // (BI-31C9FBDF). We join through sourceBackup to scope by target — a
+      // trial-restore validates a specific BackupRun, so the target is the
+      // sourceBackup's target. Postgres-only today; neo4j+qdrant are slice-2.
+      target === "postgres"
+        ? prisma.backupRestore.findFirst({
+            where: {
+              trigger: TRIAL_RESTORE_TRIGGER,
+              sourceBackup: { target },
+            },
+            orderBy: { startedAt: "desc" },
+            select: {
+              id: true,
+              status: true,
+              startedAt: true,
+              finishedAt: true,
+              errorMessage: true,
+            },
+          })
+        : Promise.resolve(null),
     ]);
 
   const retainedBytes = retainedRuns.reduce(
@@ -80,6 +102,7 @@ async function getReadinessForTarget(
           id: lastSuccess.id,
           finishedAt: lastSuccess.finishedAt?.toISOString() ?? null,
           sizeBytes: lastSuccess.sizeBytes ? Number(lastSuccess.sizeBytes) : null,
+          sha256: lastSuccess.sha256,
         }
       : null,
     retention: DEFAULT_BACKUP_RETENTION,
@@ -87,6 +110,15 @@ async function getReadinessForTarget(
     retainedBytes,
     storagePath: `${BACKUPS_ROOT}/${target}/`,
     failuresInLastThreeRuns: recentFailures.filter((r) => r.status === "failed").length,
+    trialRestore: lastTrialRestore
+      ? {
+          lastRunId: lastTrialRestore.id,
+          lastStatus: lastTrialRestore.status as "ok" | "failed",
+          lastStartedAt: lastTrialRestore.startedAt.toISOString(),
+          lastFinishedAt: lastTrialRestore.finishedAt?.toISOString() ?? null,
+          lastError: lastTrialRestore.errorMessage,
+        }
+      : null,
   };
 }
 
