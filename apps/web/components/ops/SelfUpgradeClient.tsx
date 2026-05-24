@@ -27,6 +27,12 @@ type Props = {
   latestRun: LatestRun | null;
   history?: LatestRun[];
   historyNextCursor?: string | null;
+  platformVersion: {
+    version: string;
+    publishedAt: string;
+    gitSha: string | null;
+    note: string | null;
+  };
 };
 
 function formatDuration(start: Date | string, end: Date | string): string {
@@ -64,6 +70,7 @@ export default function SelfUpgradeClient({
   latestRun,
   history,
   historyNextCursor,
+  platformVersion,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -122,24 +129,40 @@ export default function SelfUpgradeClient({
         </div>
       )}
 
-      {enabled && (
-        <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] space-y-1">
-          <div className="text-xs text-[var(--dpf-muted)]">
-            <span className="font-medium text-[var(--dpf-text)]">Deployed:</span>{" "}
-            <span className="font-mono">{deployedSha ?? "unknown"}</span>
-          </div>
-          <div className="text-xs text-[var(--dpf-muted)]">
-            <span className="font-medium text-[var(--dpf-text)]">Target:</span>{" "}
-            <span className="font-mono">{targetSha ?? "unknown"}</span>
-          </div>
-          {isFresh && (
-            <div className="text-xs text-[var(--dpf-success)]">Up to date</div>
-          )}
-          {!isFresh && targetSha && (
-            <div className="text-xs text-[var(--dpf-warning)]">Update available</div>
+      <div
+        className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] space-y-1"
+        data-platform-version={platformVersion.version}
+      >
+        <div className="text-xs text-[var(--dpf-muted)]">
+          <span className="font-medium text-[var(--dpf-text)]">Platform version:</span>{" "}
+          <span className="font-mono text-[var(--dpf-text)]">
+            {platformVersion.version}
+          </span>
+          {platformVersion.gitSha && (
+            <span className="ml-2 font-mono text-[var(--dpf-muted)]">
+              ({platformVersion.gitSha.slice(0, 7)})
+            </span>
           )}
         </div>
-      )}
+        {enabled && (
+          <>
+            <div className="text-xs text-[var(--dpf-muted)]">
+              <span className="font-medium text-[var(--dpf-text)]">Deployed:</span>{" "}
+              <span className="font-mono">{deployedSha ?? "unknown"}</span>
+            </div>
+            <div className="text-xs text-[var(--dpf-muted)]">
+              <span className="font-medium text-[var(--dpf-text)]">Target:</span>{" "}
+              <span className="font-mono">{targetSha ?? "unknown"}</span>
+            </div>
+            {isFresh && (
+              <div className="text-xs text-[var(--dpf-success)]">Up to date</div>
+            )}
+            {!isFresh && targetSha && (
+              <div className="text-xs text-[var(--dpf-warning)]">Update available</div>
+            )}
+          </>
+        )}
+      </div>
 
       {enabled && !latestRun && (
         <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)]">

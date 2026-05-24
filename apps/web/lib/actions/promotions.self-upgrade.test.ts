@@ -46,6 +46,15 @@ vi.mock("@/lib/queue/inngest-client", () => ({
   },
 }));
 
+vi.mock("@/lib/platform/version", () => ({
+  loadPlatformVersion: async () => ({
+    version: "1.0.0",
+    publishedAt: new Date("2026-05-24T00:00:00.000Z"),
+    gitSha: "abc1234",
+    note: "baseline",
+  }),
+}));
+
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
@@ -146,6 +155,10 @@ describe("getSelfUpgradeStatus", () => {
     expect(result.targetSha).toBe("def5678");
     expect(result.isFresh).toBe(false);
     expect(result.latestRun).toEqual(mockRun);
+    expect(result.platformVersion.version).toBe("1.0.0");
+    expect(result.platformVersion.publishedAt).toBe("2026-05-24T00:00:00.000Z");
+    expect(result.platformVersion.gitSha).toBe("abc1234");
+    expect(result.platformVersion.note).toBe("baseline");
   });
 
   it("returns isFresh=true when deployed sha matches target", async () => {
