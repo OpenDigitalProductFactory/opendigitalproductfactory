@@ -138,6 +138,7 @@ function makeEnvelope(overrides: Partial<PortalContextEnvelope> = {}): PortalCon
         actionHref: "/build",
       },
     ],
+    capability: null,
     promptDigest: "Route: /build\nAttention: no_active_build(info)",
     ...overrides,
   };

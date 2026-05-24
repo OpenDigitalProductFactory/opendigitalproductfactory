@@ -98,6 +98,7 @@ function makePortalContextEnvelope(): PortalContextEnvelope {
     },
     coworkers: [],
     attention: [{ kind: "no_active_build", severity: "info", message: "No active build", actionLabel: "Select build", actionHref: "/build" }],
+    capability: null,
     promptDigest: "Route: /build",
   };
 }
