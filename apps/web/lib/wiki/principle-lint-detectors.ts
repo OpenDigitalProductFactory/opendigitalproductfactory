@@ -12,8 +12,10 @@
 
 import {
   PRINCIPLE_DIMENSIONS,
+  PRINCIPLE_RING_SCOPES,
   PRINCIPLE_TIER_DEFAULT_WEIGHT,
   isPrincipleDimension,
+  isPrincipleRingScope,
 } from "@dpf/db/wiki-taxonomy";
 import type { PrincipleRuntimeEnforcement } from "@dpf/db/wiki-frontmatter";
 import type { LintFinding, LintWikiPage } from "./lint-detectors";
@@ -34,6 +36,13 @@ export type LintPrincipleWikiPage = LintWikiPage & {
   principleDimensionVector: Record<string, number> | null;
   principleDimensions: string[];
   principleAppliesTo: string[];
+  /**
+   * Ring scope — spec
+   * `2026-05-24-founder-kernel-evolution-discipline-design.md` §3. Closed
+   * enum at the application layer; lint detectors below validate values
+   * against `PRINCIPLE_RING_SCOPES` and surface overuse of `universal-ring`.
+   */
+  principleRingScope: string[];
   principlePublic: boolean;
   principlePublicRationale: string | null;
   /**
@@ -365,7 +374,98 @@ export function runPrincipleDetectors(input: {
     ...detectPrinciplePublicMissingRationale(input),
     ...detectPrinciplePublicUnsafeMarker(input),
     ...detectPrincipleRuntimeEnforcement(input),
+    ...detectPrincipleRingScopeUnknown(input),
+    ...detectPrincipleRingScopeOveruse(input),
   ];
+}
+
+// ─── 10. principle-ring-scope-unknown ───────────────────────────────────────
+
+/**
+ * Every value in `principleRingScope` must be in the
+ * `PRINCIPLE_RING_SCOPES` registry. Unknown values either indicate a typo
+ * or that the registry needs an explicit follow-up spec to add the value.
+ *
+ * Severity: error. Blocks publish — silent skip on bad ring scope would
+ * defeat the whole point of the field.
+ */
+export function detectPrincipleRingScopeUnknown(input: {
+  pages: LintPrincipleWikiPage[];
+}): LintFinding[] {
+  const findings: LintFinding[] = [];
+  for (const page of principlePages(input.pages)) {
+    const unknown = page.principleRingScope.filter(
+      (scope) => !isPrincipleRingScope(scope),
+    );
+    if (unknown.length === 0) continue;
+    findings.push(
+      baseFinding(page, "principle-ring-scope-unknown", "error", true, {
+        unknownRingScopes: unknown,
+        registry: PRINCIPLE_RING_SCOPES,
+        message:
+          "Principle references ring scopes outside the registry. Add them " +
+          "to PRINCIPLE_RING_SCOPES in wiki-taxonomy.ts via a follow-up spec " +
+          "before referencing them, or fix the typo.",
+      }),
+    );
+  }
+  return findings;
+}
+
+// ─── 11. principle-ring-scope-overuse ───────────────────────────────────────
+
+/**
+ * Cross-page detector: warn when too many published principles tag
+ * `universal-ring`. The bar mirrors the scope-refactor plan's
+ * `principle-universal-overuse` discipline (proposed in Phase D of
+ * `docs/superpowers/plans/2026-05-22-principle-scope-refactor.md`).
+ *
+ * Both fire at warn-severity above 30%, both push authors to declare
+ * specific ring scopes rather than default-to-broadest.
+ *
+ * Threshold rationale: 30% leaves room for genuine cross-cutting
+ * principles (e.g., `architecture-over-shortcuts`, `never-fabricate`)
+ * while pressing authors to think about whether a new principle truly
+ * binds every ring. Tunable via constant below.
+ */
+const RING_SCOPE_UNIVERSAL_OVERUSE_RATIO = 0.3;
+
+export function detectPrincipleRingScopeOveruse(input: {
+  pages: LintPrincipleWikiPage[];
+}): LintFinding[] {
+  const published = principlePages(input.pages).filter(
+    (p) => p.status === "published",
+  );
+  if (published.length === 0) return [];
+
+  const universalCount = published.filter((p) =>
+    p.principleRingScope.includes("universal-ring"),
+  ).length;
+  const ratio = universalCount / published.length;
+  if (ratio <= RING_SCOPE_UNIVERSAL_OVERUSE_RATIO) return [];
+
+  // Surface on every published universal-ring principle so the operator
+  // sees the cluster rather than one arbitrary scapegoat. Each finding
+  // points at the same threshold + ratio for context.
+  const findings: LintFinding[] = [];
+  for (const page of published) {
+    if (!page.principleRingScope.includes("universal-ring")) continue;
+    findings.push(
+      baseFinding(page, "principle-ring-scope-overuse", "warn", false, {
+        universalCount,
+        publishedCount: published.length,
+        ratio,
+        threshold: RING_SCOPE_UNIVERSAL_OVERUSE_RATIO,
+        message:
+          `${universalCount}/${published.length} published principles ` +
+          `(${Math.round(ratio * 100)}%) tag universal-ring, exceeding ` +
+          `the ${Math.round(RING_SCOPE_UNIVERSAL_OVERUSE_RATIO * 100)}% ` +
+          `discipline threshold. Tighten ring scope on the principles ` +
+          `that don't genuinely bind every ring.`,
+      }),
+    );
+  }
+  return findings;
 }
 
 // ─── 9. principle-runtime-enforcement validation ────────────────────────────
