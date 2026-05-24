@@ -12,15 +12,33 @@ function nonEmpty(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null
 }
 
+function isWindowsDriveAbsolute(value: string): boolean {
+  return /^[a-zA-Z]:[\\/]/.test(value)
+}
+
+function joinDataUploads(root: string): string {
+  if (isWindowsDriveAbsolute(root)) {
+    return path.win32.join(root, "data", "uploads")
+  }
+  return path.join(root, "data", "uploads")
+}
+
+function resolveRepoDataUploads(cwd: string): string {
+  if (isWindowsDriveAbsolute(cwd)) {
+    return path.win32.resolve(cwd, "..", "..", "data", "uploads")
+  }
+  return path.resolve(cwd, "..", "..", "data", "uploads")
+}
+
 export function resolveVoiceStorageRoot(input: ResolveVoiceStorageRootInput = {}): string {
   const uploadStoragePath = nonEmpty(input.uploadStoragePath ?? process.env.UPLOAD_STORAGE_PATH)
   if (uploadStoragePath) return uploadStoragePath
 
   const hostSourceMount = nonEmpty(input.hostSourceMount ?? process.env.DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT)
-  if (hostSourceMount) return path.join(hostSourceMount, "data", "uploads")
+  if (hostSourceMount) return joinDataUploads(hostSourceMount)
 
   const projectRoot = nonEmpty(input.projectRoot ?? process.env.PROJECT_ROOT)
-  if (projectRoot) return path.join(projectRoot, "data", "uploads")
+  if (projectRoot) return joinDataUploads(projectRoot)
 
-  return path.resolve(input.cwd ?? process.cwd(), "..", "..", "data", "uploads")
+  return resolveRepoDataUploads(input.cwd ?? process.cwd())
 }
