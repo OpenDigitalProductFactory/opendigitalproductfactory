@@ -16,6 +16,8 @@ import {
   detectPrincipleTierWeightMismatch,
   detectPrinciplePublicMissingRationale,
   detectPrincipleRuntimeEnforcement,
+  detectPrincipleRingScopeUnknown,
+  detectPrincipleRingScopeOveruse,
 } from "./principle-lint-detectors";
 import type { LintPrincipleWikiPage } from "./principle-lint-detectors";
 
@@ -41,6 +43,7 @@ function makePrinciplePage(
     principleDimensionVector: overrides.principleDimensionVector ?? null,
     principleDimensions: overrides.principleDimensions ?? [],
     principleAppliesTo: overrides.principleAppliesTo ?? [],
+    principleRingScope: overrides.principleRingScope ?? [],
     principlePublic: overrides.principlePublic ?? false,
     principlePublicRationale: overrides.principlePublicRationale ?? null,
     principleRuntimeEnforcement: overrides.principleRuntimeEnforcement ?? null,
@@ -559,5 +562,143 @@ describe("detectPrincipleRuntimeEnforcement", () => {
         ],
       }),
     ).toEqual([]);
+  });
+});
+
+describe("detectPrincipleRingScopeUnknown", () => {
+  it("flags an unknown ring-scope value as error / blocks publish", () => {
+    const findings = detectPrincipleRingScopeUnknown({
+      pages: [
+        makePrinciplePage({
+          id: "wp1",
+          principleRingScope: ["ring-1-coworker", "ring-99-galaxy"],
+        }),
+      ],
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].findingKind).toBe("principle-ring-scope-unknown");
+    expect(findings[0].severity).toBe("error");
+    expect(findings[0].detail).toMatchObject({
+      blocksPublish: true,
+      unknownRingScopes: ["ring-99-galaxy"],
+    });
+  });
+
+  it("does not flag known ring-scope values", () => {
+    const findings = detectPrincipleRingScopeUnknown({
+      pages: [
+        makePrinciplePage({
+          principleRingScope: ["ring-2-workflow", "universal-ring"],
+        }),
+      ],
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it("does not flag empty ring scope (intentional — backfill is incremental)", () => {
+    const findings = detectPrincipleRingScopeUnknown({
+      pages: [makePrinciplePage({ principleRingScope: [] })],
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it("ignores non-principle pages entirely", () => {
+    const findings = detectPrincipleRingScopeUnknown({
+      pages: [
+        { ...makePrinciplePage({ principleRingScope: ["bogus"] }), pageKind: "entity" },
+      ],
+    });
+    expect(findings).toEqual([]);
+  });
+});
+
+describe("detectPrincipleRingScopeOveruse", () => {
+  it("does not fire when universal-ring usage is at or below 30%", () => {
+    // 3 of 10 published → exactly 30%, threshold is strict-greater, so OK
+    const pages = [
+      ...Array.from({ length: 3 }, (_, i) =>
+        makePrinciplePage({
+          id: `u${i}`,
+          status: "published",
+          principleRingScope: ["universal-ring"],
+        }),
+      ),
+      ...Array.from({ length: 7 }, (_, i) =>
+        makePrinciplePage({
+          id: `r${i}`,
+          status: "published",
+          principleRingScope: ["ring-1-coworker"],
+        }),
+      ),
+    ];
+    expect(detectPrincipleRingScopeOveruse({ pages })).toEqual([]);
+  });
+
+  it("fires warn on every universal-ring published principle when ratio > 30%", () => {
+    // 4 of 10 published → 40%, exceeds threshold
+    const pages = [
+      ...Array.from({ length: 4 }, (_, i) =>
+        makePrinciplePage({
+          id: `u${i}`,
+          status: "published",
+          principleRingScope: ["universal-ring"],
+        }),
+      ),
+      ...Array.from({ length: 6 }, (_, i) =>
+        makePrinciplePage({
+          id: `r${i}`,
+          status: "published",
+          principleRingScope: ["ring-1-coworker"],
+        }),
+      ),
+    ];
+    const findings = detectPrincipleRingScopeOveruse({ pages });
+    expect(findings).toHaveLength(4);
+    for (const f of findings) {
+      expect(f.findingKind).toBe("principle-ring-scope-overuse");
+      expect(f.severity).toBe("warn");
+      expect(f.detail).toMatchObject({
+        universalCount: 4,
+        publishedCount: 10,
+        threshold: 0.3,
+      });
+    }
+  });
+
+  it("counts only published principles toward the ratio", () => {
+    // 1 draft + 1 published universal-ring + 1 published narrow-ring
+    // → 1/2 = 50% of PUBLISHED triggers the warn on the 1 published universal
+    const pages = [
+      makePrinciplePage({
+        id: "draft1",
+        status: "draft",
+        principleRingScope: ["universal-ring"],
+      }),
+      makePrinciplePage({
+        id: "pub1",
+        status: "published",
+        principleRingScope: ["universal-ring"],
+      }),
+      makePrinciplePage({
+        id: "pub2",
+        status: "published",
+        principleRingScope: ["ring-2-workflow"],
+      }),
+    ];
+    const findings = detectPrincipleRingScopeOveruse({ pages });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].pageId).toBe("pub1");
+  });
+
+  it("returns no findings when there are no published principles", () => {
+    const findings = detectPrincipleRingScopeOveruse({
+      pages: [
+        makePrinciplePage({
+          status: "draft",
+          principleRingScope: ["universal-ring"],
+        }),
+      ],
+    });
+    expect(findings).toEqual([]);
   });
 });

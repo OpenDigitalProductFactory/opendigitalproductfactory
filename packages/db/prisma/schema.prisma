@@ -8017,6 +8017,15 @@ model WikiPage {
   principleDimensionVector    Json?
   principleDimensions         String[] @default([])
   principleAppliesTo          String[] @default([]) // in_platform_coworker | external_coding_agent | human
+  // Ring-scope axis — depth of the Reduction Gear loop the principle binds
+  // (Ring 1 coworker → Ring 5 hive + external-coordination + universal-ring).
+  // Independent of principleConsumerArchetype / principleConsumerContexts
+  // (which describe domain). Spec:
+  // docs/superpowers/specs/2026-05-24-founder-kernel-evolution-discipline-design.md §3.
+  // Empty default preserves current behavior for pre-existing principles
+  // until the backfill BI sets explicit scope. Lint detector
+  // `principle-ring-scope-overuse` warns on >30% universal-ring tagging.
+  principleRingScope          String[] @default([])
   // Consumer archetype + contexts — spec §8A. Independent axis from
   // principleAppliesTo; coherence rules in §8A.1 are enforced by lint.
   principleConsumerArchetype  String? // universal | ai-coworker-universal | generalist | specialist | route-domain-specific

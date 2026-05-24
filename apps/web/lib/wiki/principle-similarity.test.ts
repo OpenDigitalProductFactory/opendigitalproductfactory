@@ -38,6 +38,7 @@ function makePage(
     principleDimensionVector: null,
     principleDimensions: [],
     principleAppliesTo: ["in_platform_coworker"],
+    principleRingScope: [],
     principlePublic: false,
     principlePublicRationale: null,
     principleRuntimeEnforcement: null,
