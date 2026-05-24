@@ -38,6 +38,12 @@ const baseStatus = {
   targetSha: "def5678",
   isFresh: false,
   latestRun: null,
+  platformVersion: {
+    version: "1.0.0",
+    publishedAt: "2026-05-24T00:00:00.000Z",
+    gitSha: "9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1098",
+    note: "baseline",
+  },
 };
 
 function makeRun(status: string, overrides: Record<string, unknown> = {}) {
@@ -440,6 +446,47 @@ describe("SelfUpgradeClient – config summary null SHAs", () => {
       <SelfUpgradeClient {...baseStatus} targetSha={null} isFresh={false} />,
     );
     expect(html).not.toContain("Update available");
+  });
+});
+
+// ─── Platform version ────────────────────────────────────────────────────────
+
+describe("SelfUpgradeClient – platform version", () => {
+  it("renders the Platform version label and value", () => {
+    const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
+    expect(html).toContain("Platform version");
+    expect(html).toContain("1.0.0");
+  });
+
+  it("renders the 7-char git sha prefix when gitSha is set", () => {
+    const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
+    // 7-char prefix of "9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1098"
+    expect(html).toContain("9f8e7d6");
+  });
+
+  it("does not render the git sha element when gitSha is null", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        platformVersion={{
+          version: "1.0.0",
+          publishedAt: "2026-05-24T00:00:00.000Z",
+          gitSha: null,
+          note: null,
+        }}
+      />,
+    );
+    expect(html).toContain("Platform version");
+    expect(html).toContain("1.0.0");
+    expect(html).not.toContain("9f8e7d6");
+  });
+
+  it("renders Platform version even when self-upgrade is disabled", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} enabled={false} />,
+    );
+    expect(html).toContain("Platform version");
+    expect(html).toContain("1.0.0");
   });
 });
 
