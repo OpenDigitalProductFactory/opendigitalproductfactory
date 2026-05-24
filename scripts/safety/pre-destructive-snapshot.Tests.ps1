@@ -155,7 +155,7 @@ Describe "pre-destructive-snapshot.ps1 — audit log shape" {
         $entry.install_root | Should -Be $script:Fixture.InstallRoot
         # ConvertFrom-Json normalizes ISO strings to DateTime; assert raw line instead.
         $rawLine = @(Get-Content -LiteralPath $script:Fixture.LogFile)[-1]
-        $rawLine | Should -Match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$'
+        $rawLine | Should -Match '"timestamp":"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z"'
     }
 }
 
