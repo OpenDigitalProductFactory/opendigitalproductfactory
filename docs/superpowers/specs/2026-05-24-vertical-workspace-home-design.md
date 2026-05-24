@@ -2,13 +2,33 @@
 
 | Field | Value |
 | ----- | ----- |
-| Status | Draft for review |
+| Status | Reviewed by chief architect — accepted with edits |
 | Date | 2026-05-24 |
 | Backlog item | BI-89C19AAF |
 | Epic | EP-REDUCTION-GEAR-ARCH |
-| Anchor spec | `docs/superpowers/specs/2026-05-24-reduction-gear-architecture-design.md` sections 5.5, 5.6, 8.3 |
+| Anchor spec | [`docs/superpowers/specs/2026-05-24-reduction-gear-architecture-design.md`](2026-05-24-reduction-gear-architecture-design.md) sections 5.5, 5.6, 8.3 |
+| Related specs | [Portal topology consolidation (PR #1083)](2026-05-24-portal-topology-consolidation-design.md); [Archetype-aware item management](2026-04-03-archetype-aware-item-management-design.md); [Customer-surface archetype activation](2026-05-22-customer-surface-archetype-activation-design.md) |
 | Scope | Internal employee workspace home tailored per `StorefrontArchetype` |
 | Out of scope | Implementation, schema migration, route rewrite, customer portal changes |
+
+## Architect verdict
+
+**Accepted as substrate spec for `EP-REDUCTION-GEAR-ARCH`.** The proposed contribution / resolver / projection / shell-contract decomposition is the right shape. It mirrors the discipline that already worked for `packages/storefront-templates/src/archetypes/*.ts` on the customer-facing side, so this is *symmetric* with the existing platform — not a new pattern. The HVAC dispatcher choice as the first proving archetype is correct: the field-service trades spec gives the cleanest day-one operator story, and `WorkItem`, `CalendarEvent`, `CustomerConfigurationItem`, `CommunicationDeliveryAttempt`, and `WorkSchedule.maxConcurrent` are all verified present in the schema.
+
+**Required corrections folded into this revision:**
+
+1. **Audience-layering nomenclature** — the spec drifted between "Cockpit" (the §5 gear-train diagnostic from the anchor spec) and the current `/workspace` header text. The §5 Cockpit and the current platform workspace home are *not the same surface*. Sharpened in §2.3, §4 principle 1, and §5.1.
+2. **Archetype identity** — picked Option 1 (land `BI-44C34478` so GearInterface rows carry the semantic slug). Option 2 (loader-side normalization) is documented only as a transitional shim with a sunset condition; consumers should not normalize forever. See §5.3.
+3. **Topology naming** — verification language now matches the [portal topology consolidation spec](2026-05-24-portal-topology-consolidation-design.md): **Live portal** at `http://localhost:3000`, not "Docker-served app at 127.0.0.1". See §2.3, §10. (`localhost:3000` only — the LAN IP does not work for Claude-in-Chrome verification.)
+4. **Typed contracts** — added an explicit `WorkspaceHomeComponentRegistry` contract, typed `dataRef`, fail-closed semantics for unknown component keys, and a baseline **slot covenant** every vertical home must satisfy (today/now slot, exceptions/needs-review slot, unconfigured-fallback). See §5.5.
+5. **Recent substrate alignment** — explicit hooks into work that has since landed: Calibrator + Autonomy Governor (`BI-861C4959`) as a signal source alongside the raw GearInterface stream; `principleRingScope` (`BI-4AA1074B` Slice 1-3) as the filter when the worker home calls the decide/recall MCP (worker UI must only retrieve ring-scope = worker principles). See §5.7.
+6. **PAR alignment** — the "coworker handoffs" slot is the canonical PAR (Propose → Acknowledge → Reassign) acknowledgement surface for workers, not a generic activity feed. Documented in §6.4 / §6.5.
+7. **Verification gate** — added the kernel `structural-verification-is-not-functional` requirement explicitly: build green is not done; the dispatch board must be driven on the Live portal with seeded HVAC data and each slot observed rendering real records. Banned-copy assertion now has a concrete test mechanism (vitest over rendered slot output, word-bounded, case-insensitive). See §10.
+8. **Open-question §12 demoted** — the WorkItem `field-service-job` lifecycle question is an *upstream dependency*, not an in-spec decision. The HVAC home **reads** WorkItem as-is and renders field-service vocabulary on top; it must not introduce a parallel job model. Moved to §11.1 Dependencies.
+
+**Not folded in (deferred):** the operator-switch authority predicate (§5.2) is left abstract on purpose — the implementer BI must pick the exact permission grant from `apps/web/lib/govern/permissions.ts` after sweeping which role currently has both Platform Development and worker-vertical authority. Specifying it here would risk pinning to a stale grant.
+
+**Build Studio routing:** the three follow-on implementation BIs in §11 (substrate, projection, HVAC home) are intentionally sized for the BS Ideate→Design→Build→Ship pipeline; this spec is the design input for the substrate BI and is the architectural anchor for the two child BIs that come after. Per standing rule, Claude does not write feature code for these — file BI → promote → Ideate → BS runs.
 
 ## 1. Purpose
 
@@ -51,16 +71,16 @@ This is enough substrate to select and label an internal home. It is not enough 
 
 ### 2.3 Current UI and production-path observation
 
-I verified the Docker-served app at `http://127.0.0.1:3000/workspace` with the local admin account. The current home presents:
+I verified the **Live portal** at `http://localhost:3000/workspace` (per the [portal topology consolidation spec](2026-05-24-portal-topology-consolidation-design.md) — do not use `127.0.0.1` or the LAN IP) with the local admin account. The current home presents:
 
-- A shell header reading "Internal cockpit" and "Small human team, AI coworkers filling in specialist expertise".
+- A shell header reading "Internal cockpit" and "Small human team, AI coworkers filling in specialist expertise". **Naming-conflict note:** this header text predates the anchor spec and is *not* the §5 Cockpit (the gear-train diagnostic). It is the current platform workspace home using "cockpit" colloquially. The Phase-1 implementation must remove the word "cockpit" from this surface to prevent collision with the architecturally reserved term. See [PR #1083 — operator-facing IA](2026-05-24-portal-topology-consolidation-design.md): user-facing language should be **Live portal**, **Build runtime / Live preview**, **Contributor preview**; the §5 Cockpit is its own reserved surface inside Platform Development.
 - Platform navigation across Workspace, Customer, People, Finance, Compliance, Portal, Portfolio, Platform, Build, and Admin.
 - `BusinessCommandCenter` cards for AI coworkers, open work, customer accounts, finance items, open incidents, and builds.
 - Readiness rows for AI workforce, customers and delivery, finance, compliance, people, and platform delivery, each across Context, Connections, Capabilities, Cadence, Confidence, and Containment.
 - Generic workspace tiles such as Direct AI coworkers, Shape products, and Run the business.
 - Calendar and activity feed.
 
-This is coherent for platform operations. It is not what an HVAC dispatcher, clinic scheduler, retail merchandiser, or field tech would naturally scan first.
+This is coherent for **platform operations** (the "platform-operator workspace home" fallback in §5.1, distinct from the §5 Cockpit of the anchor spec). It is not what an HVAC dispatcher, clinic scheduler, retail merchandiser, or field tech would naturally scan first.
 
 ### 2.4 Theme and layout risks
 
@@ -109,7 +129,7 @@ These are not blockers for the spec, but they are required refactoring targets b
 
 ## 4. Design Principles
 
-1. Audience first. Platform operators get the Cockpit. Employees get vertical-native work surfaces. Customers get customer-scoped portal views.
+1. Audience first. Platform operators get **two** surfaces: the §5 Cockpit (gear-train diagnostic, anchor spec §5) for substrate diagnosis *and* the platform workspace home (current `/workspace` page, kept as fallback per §5.1) for cross-domain operations. In-trench employees get vertical-native work surfaces. External customers get customer-scoped portal views (anchor spec §8.3). Three audiences, never collapsed into one rendering.
 2. The selected archetype comes from `StorefrontConfig.archetypeId` and its linked `StorefrontArchetype`, not from `Organization.industry` or `BusinessContext.industry`.
 3. The home reads canonical operational records and GearInterface projections. It does not compute independent evidence.
 4. GearInterface terms are internal to loaders and projection adapters. UI copy uses words a worker would say at the start of a shift.
@@ -123,15 +143,16 @@ These are not blockers for the spec, but they are required refactoring targets b
 
 ### 5.1 Surface split
 
-The platform should support three home modes from one shell:
+The platform supports **four** home/surface modes from one shell. The §5 Cockpit from the anchor spec is a distinct platform-operator surface — it is listed here for completeness but is owned by the reduction-gear anchor spec, not this one:
 
 | Mode | Audience | Route | Language | Source |
 | ---- | -------- | ----- | -------- | ------ |
-| Platform home | Founder/operator/admin | `/workspace` fallback or `/platform/workspace` future route | Platform operations | Existing command center, readiness, platform sections |
-| Vertical workspace home | In-trench employees | `/workspace` when archetype contribution resolves | Vertical-native | Operational records + translated GearInterface projections |
-| Customer portal | External customers | `/s/[slug]`, `/portal` | Customer-native | Storefront + customer-scoped projections |
+| Platform Cockpit (anchor spec §5) | Platform operator diagnosing the substrate | Inside Platform Development, e.g. `/platform/cockpit` | Gear-train mechanical (torque, slip, wear, lubrication, heat, graduation) | GearInterface stream directly |
+| Platform workspace home | Founder / operator / admin doing cross-domain work | `/workspace` fallback when no vertical contribution matches | Platform operations (no gear language) | Existing command center, readiness, platform sections |
+| Vertical workspace home | In-trench employees | `/workspace` when an archetype contribution resolves | Vertical-native | Canonical operational records + translated GearInterface projections + Calibrator/Governor signals |
+| Customer portal | External customers | `/s/[slug]`, `/portal` | Customer-native | Storefront + customer-scoped projections (anchor spec §8.3) |
 
-No routing decision should be based only on role. A platform admin in a configured HVAC install may still need the worker home. The shell should expose a switch only where authorized, but the default employee landing page should be vertical-native when a contribution exists.
+No routing decision should be based only on role. A platform admin in a configured HVAC install may still need the worker home. The shell exposes a mode switch only where authorized; the **default employee landing page is the vertical workspace home when a contribution exists, otherwise the platform workspace home**. The Cockpit is never the default landing — it is reached deliberately from Platform Development.
 
 ### 5.2 Workspace shell and chrome contract
 
@@ -168,12 +189,12 @@ There are two identifiers in the current storefront substrate:
 
 Contribution matching must use the semantic slug. A contribution must not match against the internal FK value.
 
-GearInterface projection filtering needs the same discipline. Current Ring 2->3 emission resolves `archetypeContext` from `StorefrontConfig.archetypeId`, which means current rows may carry the internal FK rather than the semantic slug. Therefore the workspace-home signal BI has a hard dependency on one of these fixes:
+GearInterface projection filtering needs the same discipline. Current Ring 2→3 emission resolves `archetypeContext` from `StorefrontConfig.archetypeId`, which means current rows may carry the internal FK rather than the semantic slug. **Architect decision (2026-05-24):** the canonical fix is Option 1; Option 2 is permitted only as a transitional shim with an explicit sunset condition.
 
-1. Land the stable archetype follow-on (`BI-44C34478`) so GearInterface rows carry semantic `StorefrontArchetype.archetypeId`; or
-2. Normalize FK-backed `archetypeContext` values inside the projection loader by joining through `StorefrontArchetype` before filtering.
+1. **Canonical (required):** Land the stable-archetype follow-on (`BI-44C34478`) so all GearInterface emitters write the semantic `StorefrontArchetype.archetypeId` slug as `archetypeContext`. Includes a one-time backfill of existing FK-valued rows.
+2. **Transitional shim (optional, sunset at substrate BI ship):** Until BI-44C34478 lands, the projection loader may normalize FK-backed `archetypeContext` values by joining through `StorefrontArchetype`. The shim must include a `// TODO(BI-44C34478): remove after backfill` comment and a CI assertion that fails when no FK-valued rows remain. Consumers must not normalize forever.
 
-The UI and contribution registry should always speak in semantic archetype slugs. If a projection cannot resolve the semantic archetype, it must return an observable unconfigured signal for setup/admin users and avoid showing fabricated confidence to workers.
+The UI and contribution registry always speak in semantic archetype slugs. If a projection cannot resolve the semantic archetype, it must return an observable unconfigured signal for setup/admin users — never a fabricated default for workers. This follows the standing `feedback_evidence_before_diagnosis` and `feedback_fix_seed_not_runtime` memory rules: patch the emitter, not every consumer.
 
 ### 5.4 Resolver
 
@@ -198,14 +219,16 @@ type WorkspaceHomeResolution = {
 
 Resolution order:
 
-1. Load `StorefrontConfig` for the current organization and include `StorefrontArchetype`.
-2. Match a contribution by exact `archetypeId`.
+1. Load `StorefrontConfig` for the current organization and include `StorefrontArchetype`. Single-org-per-install (`project_single_org_per_install`) means exactly one `StorefrontConfig` per install; if zero, return `unconfigured` and fall back to the platform workspace home.
+2. Match a contribution by exact semantic `archetypeId` slug.
 3. If none matches, match by `category`.
-4. If none matches, return `unconfigured` with the generic platform home fallback.
+4. If none matches, return `unconfigured` with the platform workspace home fallback (NOT the §5 Cockpit).
+
+**Archetype change behavior.** The resolver re-evaluates per page load — there is no cached resolution. When an install changes its `StorefrontArchetype` via storefront admin, the next page render uses the new archetype. Historical GearInterface rows tagged with the old `archetypeContext` slug are simply not surfaced by the new contribution's signal filter; they remain queryable from the Cockpit. This is acceptable because workers only need *current* operational signal; the diagnostic surface owns the historical view.
 
 ### 5.5 Contribution manifest
 
-Each vertical home ships as a typed manifest in code. DB records may enable, disable, order, or override labels; they must not inject arbitrary React components.
+Each vertical home ships as a typed manifest in code, symmetric with the existing customer-side pattern at `packages/storefront-templates/src/archetypes/*.ts`. DB records may enable, disable, order, or override labels; they must not inject arbitrary React components. This is deliberate: a runtime component sandbox would re-introduce the page-builder sprawl rejected in §3.4.
 
 ```ts
 type WorkspaceHomeContribution = {
@@ -213,7 +236,7 @@ type WorkspaceHomeContribution = {
   displayName: string;
   audience: "internal-worker";
   matches: {
-    archetypeIds?: string[];
+    archetypeIds?: string[];        // semantic slugs only — never FKs
     categories?: string[];
     activationProfiles?: string[];
   };
@@ -226,29 +249,58 @@ type WorkspaceHomeContribution = {
 
 type WorkspaceHomeSlotSpec = {
   slotId: string;
-  component: WorkspaceHomeComponentKey;
+  component: WorkspaceHomeComponentKey;   // typed union, registered in code
   title: string;
   tone?: "neutral" | "success" | "warning" | "critical" | "info";
-  dataRef: string;
-  priority: number;
+  dataRef: WorkspaceHomeDataRef;          // typed, not a free string
+  priority: number;                       // drives desktop sort AND mobile collapse order
+  mobileCollapse?: "visible" | "behind-more" | "hidden";  // default derived from priority
 };
+
+type WorkspaceHomeDataRef =
+  | { kind: "canonical"; loaderId: WorkspaceHomeCanonicalLoaderId; window?: QueryWindow }
+  | { kind: "signal"; signalKindIds: WorkspaceHomeSignalKindId[]; window?: QueryWindow }
+  | { kind: "composite"; left: WorkspaceHomeDataRef; right: WorkspaceHomeDataRef };
 ```
 
-Component keys should be registered in code, for example `today-schedule`, `unassigned-work`, `technician-load`, `customer-callbacks`, `parts-watch`, `notification-status`, `inventory-alerts`, `patient-queue`, and `retail-replenishment`. This gives plugin ergonomics without a runtime component sandbox.
+**Component registry contract.** Components are registered through a single typed map. Unknown component keys must fail closed:
+
+```ts
+type WorkspaceHomeComponentRegistry = Readonly<
+  Record<WorkspaceHomeComponentKey, WorkspaceHomeSlotComponent>
+>;
+
+// At render time
+const component = registry[slot.component] ?? UnknownSlotComponent;  // never throw to the user
+// UnknownSlotComponent renders an honest "Slot misconfigured" tile for admins
+// and an empty placeholder for workers — never silent omission.
+```
+
+Registered component keys (initial set): `today-schedule`, `unassigned-work`, `technician-load`, `customer-callbacks`, `parts-watch`, `notification-status`, `inventory-alerts`, `patient-queue`, `retail-replenishment`, `coworker-handoffs`, `shift-summary`. Adding a key is a code change with type-system enforcement; this gives plugin ergonomics without a runtime component sandbox.
+
+**Slot covenant (mandatory for every vertical home).** Every contribution MUST include at minimum:
+
+1. A **today/now slot** — what is on the board right now (schedule, queue, today's tasks).
+2. An **exceptions / needs-review slot** — what requires the worker's attention before anything else.
+3. A **coworker-handoffs slot** — pending PAR acknowledgements addressed to this worker (see §6.4 and `feedback_propose_acknowledge_reassign`).
+
+This covenant gives workers a consistent mental model across verticals — "where is my day, what's broken, what's waiting on me" — without prescribing the cards in between. The substrate BI MUST encode the covenant as a type-level constraint on `WorkspaceHomeContribution` (e.g. `slots: [TodaySlot, ExceptionsSlot, HandoffsSlot, ...rest]`) or as a runtime registration assertion with a failing test.
 
 ### 5.6 Data flow
 
 ```text
 StorefrontConfig
-  -> StorefrontArchetype
+  -> StorefrontArchetype (semantic archetypeId slug)
   -> WorkspaceHomeResolver
+       -> emits unconfigured-archetype telemetry if no contribution matches
   -> WorkspaceHomeContribution
   -> WorkspaceHomeLoader
-       -> canonical domain queries
-       -> GearInterface projection queries
-       -> vocabulary translation
+       -> canonical domain queries (WorkItem, CalendarEvent, CustomerConfigurationItem, CommunicationDeliveryAttempt, ...)
+       -> GearInterface projection queries (raw stream — anchor spec §3)
+       -> Calibrator/Governor signals (BI-861C4959 — graduations, vetoes, autonomy moves)
+       -> vocabulary translation (worker-native)
   -> WorkspaceHomeShell
-       -> registered slot components
+       -> registered slot components (fail-closed on unknown keys)
 ```
 
 Canonical domain queries answer factual questions:
@@ -279,7 +331,7 @@ The home never renders GearInterface fields directly. It translates them into op
 
 ### 5.7 Projection service
 
-Add a translated projection API near the existing GearInterface query module:
+Add a translated projection API near the existing GearInterface query module. **Two sources, one translator** — the worker home reads raw GearInterface rows *and* Calibrator/Governor outputs (BI-861C4959, already landed); the projection service unifies both behind a single signal type:
 
 ```ts
 type WorkspaceHomeSignal = {
@@ -288,22 +340,22 @@ type WorkspaceHomeSignal = {
   label: string;
   body: string;
   actionHref?: string;
-  source: {
-    kind: "gear-interface";
-    rowIds?: string[];
-    capabilityName?: string;
-    archetypeContext?: string | null;
-  };
+  source:
+    | { kind: "gear-interface"; rowIds?: string[]; capabilityName?: string; archetypeContext?: string | null }
+    | { kind: "governor"; decisionId: string; outcome: "allow-auto" | "allow-with-notify" | "require-hitl" | "escalate" | "block" }
+    | { kind: "calibrator"; trustKey: string; window: QueryWindow };
 };
 
 async function loadWorkspaceHomeSignals(input: {
-  archetypeContext: string;
+  archetypeContext: string;     // semantic slug only
   contributionId: string;
   window: QueryWindow;
 }): Promise<WorkspaceHomeSignal[]>;
 ```
 
-This module may call `getTripleWearReadings`, `getSlipByReason`, `getRecentGraduations`, or newer query helpers. It returns translated signal objects only. The UI should not import `getSlipByReason` or read `prisma.gearInterface` directly.
+This module may call `getTripleWearReadings`, `getSlipByReason`, `getRecentGraduations`, Governor consultation history, or Calibrator trust snapshots. It returns translated signal objects only. The UI MUST NOT import `getSlipByReason` or read `prisma.gearInterface` directly.
+
+**Ring-scope discipline (BI-4AA1074B).** If a worker slot needs to consult the wiki recall/decide MCP (for example, to render decision-relevant principles next to an exception), the call MUST scope by `principleRingScope = worker` (or the equivalent vertical-employee scope). The Cockpit may pull every ring scope; the worker home must not surface platform-engineering principles into the in-trench surface.
 
 ## 6. HVAC Dispatcher Home
 
@@ -386,7 +438,7 @@ Layout notes:
 | Technician load | Capacity at a glance | Assigned jobs, event duration, work schedule | Coworker confidence on route/ETA automation |
 | Customer updates | Confirmation/on-my-way/late notices | `CommunicationDeliveryAttempt`, notification logs | Failed notification/capability gap |
 | Parts and units | HVAC-specific setup risk | `CustomerConfigurationItem`, WorkItem evidence | Missing equipment data, stale service history |
-| Coworker handoffs | Human decisions pending | WorkItem messages, TaskRun/tool evidence where linked | Veto/human override/graduation translated |
+| Coworker handoffs | PAR acknowledgements addressed to this worker (`feedback_propose_acknowledge_reassign`) — coworker proposed, worker must ack/reassign before mutation proceeds | WorkItem messages, TaskRun/tool evidence where linked, Governor `require-hitl` decisions | Veto / human override / graduation translated |
 
 ### 6.5 Query map
 
@@ -398,7 +450,7 @@ Layout notes:
 | Did a customer update fail? | `CommunicationDeliveryAttempt` where target maps to job/customer and status is failed | Slip/failed outcome for notification capability |
 | Is a technician overloaded? | Calendar duration + assigned WorkItems + `WorkSchedule.maxConcurrent` | Gear signal for route/ETA automation confidence |
 | Are parts/equipment missing? | `CustomerConfigurationItem` and WorkItem evidence sidecar | Gear signal for pre-job brief capability gap |
-| Which coworker handoff needs review? | WorkItem messages / task activity associated to dispatch capability | GearInterface rows normalized to semantic `archetypeContext = hvac-contractor` |
+| Which coworker handoff needs review? | WorkItem messages / task activity, joined with PAR acknowledgement state (pending acks where the worker is the named owner) | Governor `require-hitl` decisions + GearInterface rows normalized to semantic `archetypeContext = hvac-contractor` |
 
 ### 6.6 States
 
@@ -487,17 +539,26 @@ The first implementation boundary is registry + platform fallback + `trades-main
 
 ## 10. Verification Strategy for Implementation
 
-Implementation BIs should include:
+Implementation BIs MUST include the following. The kernel principle [`structural-verification-is-not-functional`](../../founder-kernel/wiki/principles/structural-verification-is-not-functional.md) applies — build green and tests passing do not constitute "done". The dispatch board has to be driven on the Live portal with seeded HVAC data and each slot observed rendering real records.
+
+**Structural (necessary, not sufficient):**
 
 - Unit tests for resolver matching: exact archetype, category fallback, unconfigured fallback, no storefront config.
-- Unit tests proving GearInterface projection translation never exposes banned UI terms.
+- Unit tests proving GearInterface projection translation never exposes banned UI terms (see banned-copy assertion mechanism below).
+- Unit test for fail-closed behavior on unknown component keys.
+- Type-level assertion (or failing test) that every contribution satisfies the §5.5 slot covenant.
 - Component tests for each slot using DPF CSS variables and no hardcoded color classes/hex values.
 - Production build with `pnpm --filter web typecheck` and `cd apps/web && pnpm exec next build` or the current repo-approved equivalent.
-- Production-path UX verification against the Docker-served app, not a stale dev server.
-- Desktop and mobile screenshots for each implemented vertical home.
-- Fixture case with at least one automation failure translated to worker-native copy.
 
-Banned copy in worker-facing UI:
+**Functional (required for ship sign-off):**
+
+- Drive the HVAC dispatch board on the **Live portal at `http://localhost:3000/workspace`** (not Contributor preview, not dev server, not `127.0.0.1`, not the LAN IP — see `project_portal_address`) with seeded HVAC data: at least one scheduled job, one unscheduled job, one over-loaded technician, one failed customer update, one pending PAR acknowledgement, and one Governor `require-hitl` decision.
+- Walk every slot. Observe the canonical record rendering and the translated signal overlay. Confirm no slot silently omits when its data source has rows.
+- Drive the operator-switch (if implemented in this slice) and confirm both worker and platform-operator modes render without gear-language collision.
+- Submit a structured dynamic-analysis report (per `feedback_dynamic_analysis_is_evidence`): drove X → observed Y → signed off Z. Screenshots are evidence, not the report.
+- Desktop AND mobile viewport verification — confirm `mobileCollapse` honors slot priority.
+
+**Banned copy in worker-facing UI** — enforced via vitest assertion over rendered slot output with fixtures, word-bounded, case-insensitive:
 
 - gear
 - ring
@@ -508,25 +569,31 @@ Banned copy in worker-facing UI:
 - shaft
 - calibration
 - contribution model
+- cockpit (reserved for anchor spec §5 surface; worker home must not use the word)
 
-These words may exist in code comments, tests, and projection internals, but not in rendered worker UI copy.
+These words may exist in code comments, tests, type names, and projection internals, but MUST NOT appear in rendered worker UI copy. The assertion runs against the rendered HTML/text of each slot component with at least one fixture exercising every signal path.
 
-## 11. Follow-On Implementation BIs
+## 11. Follow-On Implementation BIs and Upstream Dependencies
 
-Filed under `EP-REDUCTION-GEAR-ARCH` from this spec pass:
+### 11.1 Upstream dependencies (must land or be in flight before substrate BI Ideate)
 
-1. `BI-1CCC6264` - Workspace home contribution substrate and resolver.
-   - Build the resolver, contribution registry, context loader, platform fallback extraction, and unconfigured state.
-2. `BI-3E8D2CF5` - Workspace home GearInterface projection service.
-   - Build the translated signal loader, banned-copy tests, and source discipline around GearInterface query APIs.
-3. `BI-CE6AF925` - HVAC dispatcher workspace home.
-   - Add `hvac-contractor` contribution, dispatch-board layout, today's jobs, unscheduled jobs, technician load, customer updates, parts/units, and coworker handoffs.
-4. `BI-8954667A` - Clinic scheduler workspace home.
+- **`BI-44C34478` — Stable semantic archetypeId across the GearInterface emitter path.** Required so projection consumers do not normalize FK values forever. Until landed, the transitional shim in §5.3 Option 2 applies with a documented sunset.
+- **WorkItem `field-service-job` lifecycle ownership.** Originally a §12 open question, demoted here: the HVAC home **reads** WorkItem as-is and renders field-service vocabulary on top. It MUST NOT introduce a parallel job model. The enforcement spec for `field-service-job` status transitions is a separate epic; the HVAC home is tolerant of any status shape that includes `scheduled`, `unscheduled`, and `complete` semantics.
+
+### 11.2 Follow-on BIs filed under `EP-REDUCTION-GEAR-ARCH` from this spec pass
+
+1. `BI-1CCC6264` — Workspace home contribution substrate and resolver.
+   - Build the resolver, contribution registry, context loader, platform fallback extraction, slot covenant enforcement, and unconfigured state telemetry.
+2. `BI-3E8D2CF5` — Workspace home projection service (GearInterface + Calibrator + Governor).
+   - Build the translated signal loader unifying all three sources, banned-copy tests, ring-scope discipline on wiki recall calls, and source discipline around GearInterface query APIs.
+3. `BI-CE6AF925` — HVAC dispatcher workspace home.
+   - Add `hvac-contractor` contribution, dispatch-board layout, today's jobs, unscheduled jobs, technician load, customer updates, parts/units, and coworker-handoffs PAR surface. First-class slice for the §10 functional verification protocol.
+4. `BI-8954667A` — Clinic scheduler workspace home.
    - Add healthcare/wellness schedule-board variant with patient queue, appointment readiness, no-show risk, practitioner capacity, and missing-form signals.
-5. `BI-3F3B535D` - Retail merchandiser workspace home.
+5. `BI-3F3B535D` — Retail merchandiser workspace home.
    - Add retail-goods merchandising-board variant with order tasks, low stock, incoming inventory, return exceptions, and POS/location sales signals.
 
-The first two BIs are substrate. Each archetype BI should be independently reviewable and should not broaden the substrate unless the substrate BI explicitly changes.
+BIs 1 and 2 are substrate; they unblock BIs 3–5 and any future vertical. Each archetype BI must be independently reviewable and must not broaden the substrate unless the substrate BIs explicitly change. Per the Build Studio for ALL development standing rule, Claude does not write the feature code for any of these — file BI → promote → Ideate → BS runs.
 
 ## 12. Decisions and Open Questions
 
@@ -540,9 +607,9 @@ The first two BIs are substrate. Each archetype BI should be independently revie
 
 ### Open questions for implementation planning
 
-- Should the platform home move to a distinct route such as `/platform/workspace`, or should `/workspace` expose a user-authorized mode switch while defaulting employees to the vertical home?
-- Should `customVocabulary` remain flat for storefront terms and use a namespaced object for workspace-home terms, or should workspace vocabulary live entirely in contribution manifests until real customization pressure appears?
-- Which WorkItem status enforcement slice should own the `field-service-job` lifecycle once HVAC dispatcher implementation begins?
+- Should the platform workspace home move to a distinct route such as `/platform/workspace`, or should `/workspace` expose a user-authorized mode switch while defaulting employees to the vertical home? **Architect lean:** keep `/workspace` as the single employee landing surface; expose the mode switch only to roles already authorized for Platform Development. A distinct `/platform/workspace` route is a re-org with no compensating clarity gain over a mode switch with a clear chip label.
+- Should `customVocabulary` remain flat for storefront terms and use a namespaced object for workspace-home terms, or should workspace vocabulary live entirely in contribution manifests until real customization pressure appears? **Architect lean:** keep vocabulary in contribution manifests until a real customer presses for per-install relabeling. Premature namespacing of `customVocabulary` adds a migration we can defer.
+- Which permission grant in `apps/web/lib/govern/permissions.ts` authorizes the worker / platform-operator mode switch? Implementer to pick after sweeping current grants — see "Not folded in" in the architect verdict.
 
 ## 13. Reporting Protocol
 
