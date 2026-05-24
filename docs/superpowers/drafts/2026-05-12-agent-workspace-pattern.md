@@ -323,7 +323,7 @@ The original gating probe was:
 | Sandbox -> `http://portal:3000/api/mcp/v1` without forwarded host | Blocked | HTTP 403, `TLS required (HTTPS only outside localhost)` |
 | Sandbox -> same URL with `X-Forwarded-Host: localhost:3000` | Pass | `initialize` and `tools/list` returned HTTP 200 |
 | Sandbox direct JSON-RPC `tools/call query_backlog` | Pass | Returned `Backlog: 64 open, 5 in-progress, 35 done. 16 epic(s).` |
-| Audit row for direct sandbox `tools/call` | Pass | Latest row: `ToolExecution.id=cmp37hzr70a5v01rumgo4y0ky`, `toolName=query_backlog`, `success=true`, `executionMode=external-jsonrpc`, `apiTokenId=cmd_513545951497cb4a3afd307f`, `createdAt=2026-05-12 22:32:43.843` |
+| Audit row for direct sandbox `tools/call` | Pass | Latest row: `ToolExecution.id=cmp37hzr70a5v01rumgo4y0ky`, `toolName=query_backlog`, `success=true`, `executionMode=external-jsonrpc`, `apiTokenId=<redacted>`, `createdAt=2026-05-12 22:32:43.843` |
 | Claude Code with generated HTTP config lacking `type` | Blocked | Rejected config: `command: expected string, received undefined` |
 | Claude Code with `type: "http"` config | Partially validated | Config progressed past shape validation, then CLI stopped at `Not logged in - Please run /login` |
 | Codex CLI model-mediated probe | Blocked | Sandbox Codex lacked OpenAI auth; `codex exec` returned 401 from `/v1/responses` |

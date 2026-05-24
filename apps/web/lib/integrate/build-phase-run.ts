@@ -20,6 +20,7 @@
 
 import { prisma } from "@dpf/db";
 import { emitRing12FromCompletedPhase } from "@/lib/gear-interface/emit-ring-1-2";
+import { emitRing23FromCompletedShip } from "@/lib/gear-interface/emit-ring-2-3";
 
 export type BuildPhaseName = "ideate" | "plan" | "build" | "review" | "ship";
 
@@ -133,6 +134,20 @@ export async function completeBuildPhaseRun(
         err,
       );
     });
+
+    // Reduction Gear Ring 2→3 emit on ship completion (BI-861C4959, Phase 1).
+    // Only fires when phase==="ship" — that's the gear-train boundary between
+    // Workflow (Ring 2) and Archetype-context outcome (Ring 3). Same
+    // non-blocking contract as Ring 1→2.
+    if (phase === "ship") {
+      void emitRing23FromCompletedShip(buildId).catch((err) => {
+        console.warn(
+          "[gear-interface] Ring 2→3 emit failed for completed ship:",
+          { buildId },
+          err,
+        );
+      });
+    }
   } catch (err) {
     console.warn("[build-phase-run] Failed to complete phase run:", { buildId, phase }, err);
   }

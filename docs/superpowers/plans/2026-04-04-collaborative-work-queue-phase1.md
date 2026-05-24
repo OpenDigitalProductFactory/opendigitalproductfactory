@@ -79,8 +79,8 @@
 - [ ] **Step 3: Add env vars to .env.example**
   ```
   # Inngest (durable execution engine)
-  INNGEST_EVENT_KEY=deadbeefcafebabe
-  INNGEST_SIGNING_KEY=abcdef0123456789
+  INNGEST_EVENT_KEY=<generate with: openssl rand -hex 16>
+  INNGEST_SIGNING_KEY=<generate with: openssl rand -hex 16>
   INNGEST_BASE_URL=http://localhost:8288
   ```
 

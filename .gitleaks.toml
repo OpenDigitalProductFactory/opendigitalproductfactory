@@ -1,0 +1,55 @@
+title = "DPF Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Generated dependency, build, cache, and report artifacts are not source material."
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)\.next/''',
+  '''(^|/)\.turbo/''',
+  '''(^|/)coverage/''',
+  '''(^|/)playwright-report/''',
+  '''(^|/)test-results/''',
+]
+
+[[allowlists]]
+targetRules = ["generic-api-key"]
+description = "Edge event runKey UUID examples are idempotency identifiers, not credentials."
+condition = "AND"
+regexTarget = "line"
+regexes = [
+  '''"runKey"\s*:\s*"[0-9a-fA-F-]{36}"''',
+  '''runKey:\s*"[0-9a-fA-F-]{36}"''',
+]
+paths = [
+  '''^apps/web/app/api/v1/edge/''',
+  '''^docs/edge-node/event-envelope\.md$''',
+]
+
+[[allowlists]]
+targetRules = ["generic-api-key"]
+description = "OAuth client IDs are public identifiers; client secrets remain scanned."
+condition = "AND"
+regexTarget = "line"
+regexes = [
+  '''GITHUB_OAUTH_CLIENT_ID\s*=\s*"[^"]+"''',
+  '''"oauthClientId"\s*:\s*"[^"]+"''',
+]
+paths = [
+  '''^apps/web/lib/integrate/github-oauth\.ts$''',
+  '''^packages/db/data/providers-registry\.json$''',
+]
+
+[[allowlists]]
+targetRules = ["generic-api-key"]
+description = "Restore-backup epic ID mapping uses fixture CUIDs and backlog codes, not secrets."
+condition = "AND"
+regexTarget = "match"
+regexes = [
+  '''EP-[A-Z0-9-]+",\s+"[a-z0-9]{25}''',
+]
+paths = [
+  '''^packages/db/scripts/restore-backup\.ts$''',
+]
