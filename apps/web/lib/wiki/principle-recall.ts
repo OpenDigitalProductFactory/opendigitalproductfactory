@@ -12,8 +12,10 @@ import {
   listPrinciplesByTier,
   prisma,
 } from "@dpf/db";
+import type { PrincipleRingScope } from "@dpf/db/wiki-taxonomy";
 
 import { searchWikiPages, type WikiSearchResult } from "./embeddings";
+import { principleMatchesRingScope } from "./calling-ring-map";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -35,6 +37,25 @@ export type RecallPrincipleContextInput = {
   contextualSimilarityThreshold?: number;
   /** Top-K contextual principles to surface above threshold. Default 5. */
   contextualLimit?: number;
+  /**
+   * Ring scope of the calling action (BI-4AA1074B Slice 2; spec §5.2).
+   *
+   * When provided, retrieval filters principles to those whose
+   * `principleRingScope` intersects the caller scope OR contains
+   * `universal-ring` OR is empty. Pass `["universal-ring"]` (or omit) for
+   * unconstrained consultation — useful for design-time / kernel-
+   * architecture decisions that genuinely bind every ring.
+   *
+   * Defaults can be resolved from a calling-surface name via
+   * `resolveCallerRingScope` in `./calling-ring-map`.
+   */
+  ringScope?: PrincipleRingScope[];
+  /**
+   * Optional calling-surface label propagated into the
+   * `[principle-recall-trace]` log line. Helps the operator correlate
+   * recall traffic with the surface that drove it. Free-form string.
+   */
+  callingSurface?: string;
 };
 
 /**
@@ -50,6 +71,12 @@ export type RecalledCommandment = {
   principleTier: string;
   principleDirection: string | null;
   principleAppliesTo: string[];
+  /**
+   * Ring scope (BI-4AA1074B Slice 2). Populated when the row carries explicit
+   * scope. Empty array for un-backfilled rows; recall treats empty as
+   * "passes any caller scope" for backward compatibility.
+   */
+  principleRingScope?: string[];
   isKernel: boolean;
   organizationId: string | null;
 };
@@ -60,6 +87,18 @@ export type RecallPrincipleContextResult = {
   commandments: RecalledCommandment[];
   core: WikiSearchResult[];
   contextual: WikiSearchResult[];
+  /**
+   * Counts of principles excluded by the ring-scope filter at each tier.
+   * Surfaced in `[principle-recall-trace]` so the operator can spot
+   * over-tight scoping (zero recall when something was expected) and
+   * under-tight scoping (huge excluded counts on every call). Zero across
+   * the board when `ringScope` was unset or `universal-ring`.
+   */
+  ringScopeExcluded?: {
+    commandments: number;
+    core: number;
+    contextual: number;
+  };
 };
 
 // ─── Hard caps ──────────────────────────────────────────────────────────────
@@ -160,29 +199,47 @@ export async function recallPrincipleContext(
     input.contextualSimilarityThreshold ??
     PRINCIPLE_DECIDE_DEFAULTS.contextualSimilarityThreshold;
 
+  // Ring-scope filter (BI-4AA1074B Slice 2; spec §5.2). Pulled into a
+  // single local so the three retrieval branches and the post-filter
+  // share semantics. When the caller did not pass `ringScope`, or passed
+  // `["universal-ring"]`, ring-scope filtering is a no-op everywhere
+  // (the full kernel reaches the decision math).
+  const ringScope = input.ringScope;
+  const ringScopeActive =
+    ringScope !== undefined &&
+    ringScope.length > 0 &&
+    !ringScope.includes("universal-ring");
+
   // ── Branch 1: commandments from Postgres ──
-  let commandments: RecalledCommandment[] = [];
+  // Pass ringScope through to listPrinciplesByTier so the Prisma AND/OR
+  // clause does the heavy filtering server-side. Post-filter is still
+  // applied below to enforce the contract symmetrically with the Qdrant
+  // branches (and to catch any Prisma client that didn't propagate the
+  // arg through, e.g. in tests with a narrow mock).
+  let commandmentsRaw: RecalledCommandment[] = [];
   try {
     const rows = await listPrinciplesByTier(prisma, {
       tier: "commandment",
       organizationId: input.organizationId,
       appliesTo: input.callingPopulation,
+      ringScope: ringScope,
       limit: COMMANDMENT_RETRIEVAL_CAP,
     });
-    commandments = rows as RecalledCommandment[];
+    commandmentsRaw = rows as RecalledCommandment[];
   } catch (err) {
     console.warn("[recallPrincipleContext] commandment Postgres lookup failed:", err);
   }
 
   // ── Branch 2: relevant core principles from Qdrant ──
-  let core: WikiSearchResult[] = [];
+  let coreRaw: WikiSearchResult[] = [];
   try {
-    core = await searchWikiPages({
+    coreRaw = await searchWikiPages({
       query: input.query,
       organizationId: input.organizationId,
       pageKind: "principle",
       principleTier: "core",
       principleAppliesTo: input.callingPopulation,
+      principleRingScope: ringScopeActive ? ringScope : undefined,
       limit: coreLimit,
     });
   } catch (err) {
@@ -190,14 +247,15 @@ export async function recallPrincipleContext(
   }
 
   // ── Branch 3: contextual principles above similarity threshold ──
-  let contextual: WikiSearchResult[] = [];
+  let contextualRaw: WikiSearchResult[] = [];
   try {
-    contextual = await searchWikiPages({
+    contextualRaw = await searchWikiPages({
       query: input.query,
       organizationId: input.organizationId,
       pageKind: "principle",
       principleTier: "contextual",
       principleAppliesTo: input.callingPopulation,
+      principleRingScope: ringScopeActive ? ringScope : undefined,
       limit: contextualLimit,
       scoreThreshold: contextualThreshold,
     });
@@ -205,8 +263,77 @@ export async function recallPrincipleContext(
     console.warn("[recallPrincipleContext] contextual Qdrant lookup failed:", err);
   }
 
+  // Post-filter (cheap belt-and-suspenders). Empty principleRingScope
+  // passes (backward-compat); `universal-ring` always passes; otherwise
+  // intersection check. Identical to the upstream Qdrant + Prisma rules.
+  let commandmentsExcluded = 0;
+  let coreExcluded = 0;
+  let contextualExcluded = 0;
+  let commandments: RecalledCommandment[] = commandmentsRaw;
+  let core: WikiSearchResult[] = coreRaw;
+  let contextual: WikiSearchResult[] = contextualRaw;
+  if (ringScopeActive) {
+    commandments = commandmentsRaw.filter((row) => {
+      const ok = principleMatchesRingScope(
+        row.principleRingScope ?? [],
+        ringScope,
+      );
+      if (!ok) commandmentsExcluded++;
+      return ok;
+    });
+    core = coreRaw.filter((row) => {
+      const ok = principleMatchesRingScope(
+        row.principleRingScope ?? [],
+        ringScope,
+      );
+      if (!ok) coreExcluded++;
+      return ok;
+    });
+    contextual = contextualRaw.filter((row) => {
+      const ok = principleMatchesRingScope(
+        row.principleRingScope ?? [],
+        ringScope,
+      );
+      if (!ok) contextualExcluded++;
+      return ok;
+    });
+  }
+
+  // Telemetry. Mirrors the [tool-trace] and [kernel-gate-trace]
+  // structured-log patterns. Spec §5.4. Always emit, even when nothing
+  // surfaced — zero-recall events are themselves signal.
+  console.info(
+    `[principle-recall-trace] ` +
+      JSON.stringify({
+        callingSurface: input.callingSurface ?? null,
+        callingPopulation: input.callingPopulation,
+        ringScope: ringScope ?? null,
+        ringScopeActive,
+        commandmentCount: commandments.length,
+        coreCount: core.length,
+        contextualCount: contextual.length,
+        ringScopeExcluded: {
+          commandments: commandmentsExcluded,
+          core: coreExcluded,
+          contextual: contextualExcluded,
+        },
+      }),
+  );
+
   const block = formatPrincipleContext({ commandments, core, contextual });
   if (block === null) return null;
 
-  return { block, commandments, core, contextual };
+  return {
+    block,
+    commandments,
+    core,
+    contextual,
+    ringScopeExcluded: ringScopeActive
+      ? {
+          commandments: commandmentsExcluded,
+          core: coreExcluded,
+          contextual: contextualExcluded,
+        }
+      : undefined,
+  };
 }
