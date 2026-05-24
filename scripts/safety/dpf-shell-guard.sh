@@ -88,11 +88,49 @@ case "$VERDICT" in
       printf "  > "
     } >&2
     read -r TYPED || TYPED=""
-    if [ "$TYPED" = "$PHRASE" ]; then
-      exec "$REAL_BIN" "$@"
+    if [ "$TYPED" != "$PHRASE" ]; then
+      echo "[dpf-shell-guard] phrase mismatch — REFUSED" >&2
+      exit 1
     fi
-    echo "[dpf-shell-guard] phrase mismatch — REFUSED" >&2
-    exit 1
+
+    # Operator confirmed — attempt the pre-destructive snapshot (BI-611C25F3)
+    # BEFORE exec'ing the real binary. Per the warn-and-proceed decision:
+    #   exit 0 -> snapshot ok, proceed normally
+    #   exit 1 -> snapshot failed; loud second-confirm before proceeding
+    #   exit 2 -> no strategy registered; warn + proceed (operator confirmed)
+    SNAPSHOT_SCRIPT="$GUARD_DIR/pre-destructive-snapshot.sh"
+    if [ -x "$SNAPSHOT_SCRIPT" ]; then
+      "$SNAPSHOT_SCRIPT" "$BIN_NAME" "$@" >&2
+      SNAPSHOT_RC=$?
+      case "$SNAPSHOT_RC" in
+        0)
+          exec "$REAL_BIN" "$@" ;;
+        1)
+          {
+            echo ""
+            echo "[dpf-shell-guard] ⚠ PRE-DESTRUCTIVE SNAPSHOT FAILED"
+            echo "                  The destructive action will proceed WITHOUT a rollback option."
+            echo "                  See \$DPF_BACKUPS_HOST_PATH/pre-destructive/.snapshot.log for details."
+            echo ""
+            printf "  Type Y to proceed anyway, anything else to cancel: "
+          } >&2
+          read -r SECOND_CONFIRM || SECOND_CONFIRM=""
+          if [ "$SECOND_CONFIRM" = "Y" ]; then
+            exec "$REAL_BIN" "$@"
+          fi
+          echo "[dpf-shell-guard] second-confirm declined — REFUSED" >&2
+          exit 1 ;;
+        2)
+          echo "[dpf-shell-guard] note: no snapshot strategy registered for this command — proceeding without rollback artifact" >&2
+          exec "$REAL_BIN" "$@" ;;
+        *)
+          echo "[dpf-shell-guard] snapshot dispatcher exited unexpectedly ($SNAPSHOT_RC) — REFUSED" >&2
+          exit 1 ;;
+      esac
+    fi
+    # No snapshot script present (older installs not yet upgraded). Honor
+    # the operator's typed-confirm and proceed.
+    exec "$REAL_BIN" "$@"
     ;;
   _unreachable|"")
     # Fail-closed for tier-commandment patterns: load the static fallback,

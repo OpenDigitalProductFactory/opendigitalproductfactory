@@ -556,6 +556,22 @@ export async function listPrinciplesByTier(
     tier: PrincipleTier;
     organizationId?: string | null;
     appliesTo?: PrincipleAppliesTo | string;
+    /**
+     * Optional ring-scope filter (BI-4AA1074B Slice 2; spec §5.2).
+     *
+     * When provided, rows must satisfy one of:
+     *   - `principleRingScope` is empty (backward-compat for un-backfilled rows)
+     *   - `principleRingScope` contains `universal-ring` (earned-universal pass)
+     *   - intersection with caller `ringScope` is non-empty
+     *
+     * When the caller's own scope contains `universal-ring`, the filter is a
+     * no-op (caller did not constrain; consult the full kernel).
+     *
+     * Implemented via Prisma `AND` + nested `OR` so the SQL plan is a single
+     * round-trip rather than a fetch-then-filter; same shape as the existing
+     * `organizationId` OR clause.
+     */
+    ringScope?: PrincipleRingScope[] | string[];
     limit?: number;
   },
 ): Promise<unknown[]> {
@@ -589,6 +605,29 @@ export async function listPrinciplesByTier(
 
   if (args.appliesTo !== undefined) {
     where.principleAppliesTo = { has: args.appliesTo };
+  }
+
+  // Ring-scope filter. Skipped entirely when the caller declared
+  // `universal-ring` because that means "I am not constraining" — the
+  // full kernel should reach the decision math.
+  if (
+    args.ringScope !== undefined &&
+    args.ringScope.length > 0 &&
+    !args.ringScope.includes("universal-ring")
+  ) {
+    where.AND = [
+      {
+        OR: [
+          // Empty array — un-backfilled rows still pass so existing
+          // behavior is preserved as ring-scope rolls out.
+          { principleRingScope: { isEmpty: true } },
+          // Author tagged universal-ring — passes any caller.
+          { principleRingScope: { has: "universal-ring" } },
+          // Intersection with caller scope is non-empty.
+          { principleRingScope: { hasSome: args.ringScope } },
+        ],
+      },
+    ];
   }
 
   return (await db.wikiPage.findMany({
