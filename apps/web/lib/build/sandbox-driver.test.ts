@@ -101,10 +101,10 @@ describe("computeDrivingBuild", () => {
 
 describe("formatSandboxLabel", () => {
   it("renders the driving build code when provided", () => {
-    expect(formatSandboxLabel("FB-B33E84B5")).toBe("Open sandbox · driving: FB-B33E84B5");
+    expect(formatSandboxLabel("FB-B33E84B5")).toBe("Open live preview · driving: FB-B33E84B5");
   });
 
   it('renders "idle" when there is no driver', () => {
-    expect(formatSandboxLabel(null)).toBe("Open sandbox · driving: idle");
+    expect(formatSandboxLabel(null)).toBe("Open live preview · driving: idle");
   });
 });
