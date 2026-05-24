@@ -1723,6 +1723,15 @@ model BackupRestore {
   sourceBackupRunId     String
   preRestoreBackupRunId String?
   errorMessage          String?
+  // What kind of restore this row records:
+  //   "operator-restore"     — operator-triggered full restore (default; preserves
+  //                             prior rows that lack this field on backfill).
+  //   "trial-verification"   — automated nightly trial restore into a temp DB
+  //                             that asserts critical-table row counts; never
+  //                             touches the production DB. preRestoreBackupRunId
+  //                             is null in this case.
+  // BI-31C9FBDF (EP-DR-HARDENING-2026-05-23).
+  trigger               String?
   createdAt             DateTime  @default(now())
 
   sourceBackup     BackupRun  @relation("BackupRestoreSource", fields: [sourceBackupRunId], references: [id])
@@ -1730,6 +1739,7 @@ model BackupRestore {
 
   @@index([startedAt])
   @@index([status])
+  @@index([trigger])
 }
 
 model CodeGraphIndexState {
