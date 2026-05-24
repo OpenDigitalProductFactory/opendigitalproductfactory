@@ -25,6 +25,7 @@ import {
   listRecentGearInterfaceRows,
   type InterfaceTorqueReading,
 } from "@/lib/gear-interface";
+import { GraduationVetoButton } from "@/components/cockpit/GraduationVetoButton";
 
 // All four ring interfaces. Phase 0 only emits at 1→2; the others render as
 // "no data" lanes so the operator sees the gear train honestly, not hidden.
@@ -335,7 +336,7 @@ export default async function CockpitPage({
         ) : (
           <ul className="space-y-1 text-xs text-[var(--dpf-text)]">
             {graduations.map((g) => (
-              <li key={g.id} className="flex items-center gap-2">
+              <li key={g.id} className="flex items-center gap-2 flex-wrap">
                 <span className="text-[var(--dpf-muted)]">{g.recordedAt.toISOString()}</span>
                 <span className="font-semibold">{g.capabilityName}</span>
                 <span className="text-[var(--dpf-muted)]">×</span>
@@ -349,6 +350,9 @@ export default async function CockpitPage({
                   {g.fromAutonomy} <ArrowRight size={10} className="inline mx-1" /> {g.toAutonomy}
                 </span>
                 {g.sampleSize != null && <span className="text-[var(--dpf-muted)]">(n={g.sampleSize})</span>}
+                <span className="ml-auto">
+                  <GraduationVetoButton graduationRowId={g.id} />
+                </span>
               </li>
             ))}
           </ul>
