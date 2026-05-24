@@ -193,7 +193,7 @@ export async function getDispatchHistoryForBuild(buildId: string): Promise<Build
   }));
 }
 
-function extractRootCauseSummary(stdout: string, stderr: string, fallback: BuildFailureAxis): string {
+export function extractRootCauseSummary(stdout: string, stderr: string, fallback: BuildFailureAxis): string {
   const combined = `${stdout}\n${stderr}`;
   const lines = combined
     .split(/\r?\n/)
@@ -239,7 +239,7 @@ export function lineMatchesFailureAxis(line: string, axis: BuildFailureAxis): bo
   }
 }
 
-function isCliPrologueLine(line: string): boolean {
+export function isCliPrologueLine(line: string): boolean {
   const normalized = line.toLowerCase();
   return normalized === "reading prompt from stdin..."
     || normalized.startsWith("reading prompt from stdin")
