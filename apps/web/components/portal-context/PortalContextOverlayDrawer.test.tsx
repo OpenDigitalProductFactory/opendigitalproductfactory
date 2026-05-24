@@ -144,6 +144,7 @@ function makeEnvelope(overrides: Partial<PortalContextEnvelope> = {}): PortalCon
       },
     ],
     attention: [],
+    capability: null,
     promptDigest: "Route: /build\nBuild: FB-123",
   };
 

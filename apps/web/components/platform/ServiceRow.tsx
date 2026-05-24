@@ -92,6 +92,12 @@ export function ServiceRow({ pw, modelSummary }: Props) {
   const needsCredential = provider.authMethod !== "none" && !credential;
   const effectiveStatus = (provider.status === "active" && needsCredential) ? "needs-credentials" : provider.status;
 
+  // D25 (2026-05-23): prefer the tier derived from actually-discovered models
+  // over the seeded provider.capabilityTier. The seed value is frequently
+  // stale — e.g. a freshly discovered Sonnet 4.x model under Anthropic OAuth
+  // shouldn't render as "basic" because the provider seed never updated.
+  const displayedTier = modelSummary?.derivedTier ?? provider.capabilityTier ?? null;
+
   const STATUS_COLORS_EXT: Record<string, string> = {
     ...STATUS_COLORS,
     "needs-credentials": "var(--dpf-warning)",
@@ -235,13 +241,16 @@ export function ServiceRow({ pw, modelSummary }: Props) {
           <RoutingScorePills provider={provider} />
         )}
 
-        {/* Capability tier — hidden on small screens */}
-        {provider.capabilityTier && (
+        {/* Capability tier — hidden on small screens. Prefers derived tier (D25). */}
+        {displayedTier && (
           <span
             className="hidden sm:inline"
             style={{ color: "var(--dpf-muted)", fontSize: 10, flexShrink: 0 }}
+            title={modelSummary?.derivedTier
+              ? "Derived from discovered models"
+              : "From provider seed (no models discovered yet)"}
           >
-            {provider.capabilityTier}
+            {displayedTier}
           </span>
         )}
 
@@ -285,7 +294,7 @@ export function ServiceRow({ pw, modelSummary }: Props) {
               <DetailItem label="Transport" value={provider.mcpTransport ?? "—"} />
             )}
             <DetailItem label="Sensitivity"      value={provider.sensitivityClearance.join(", ") || "—"} />
-            <DetailItem label="Capability Tier"  value={provider.capabilityTier || "—"} />
+            <DetailItem label="Capability Tier"  value={displayedTier ?? "—"} />
             <DetailItem label={costView.routingCostBand.label} value={costView.routingCostBand.value} />
             <DetailItem label={costView.catalogPricing.label} value={costView.catalogPricing.value} />
             <DetailItem label={costView.externalProviderBilling.label} value={costView.externalProviderBilling.value} />

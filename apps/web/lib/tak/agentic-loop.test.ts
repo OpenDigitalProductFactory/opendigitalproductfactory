@@ -459,8 +459,12 @@ describe("runAgenticLoop", () => {
     expect(result.content).not.toContain("gemma");
     expect(result.content).not.toContain("tool-capable provider");
     expect(result.content).not.toMatch(/required tool call/);
-    expect(result.content.toLowerCase()).toContain("couldn't complete");
-    expect(result.content).toMatch(/AI Workforce/);
+    // G2 (2026-05-23): must NOT promise re-routing the loop never performs.
+    expect(result.content.toLowerCase()).not.toContain("route through a different");
+    // Must explain the situation (running on a local model) and point at
+    // the actual fix (connect a stronger provider).
+    expect(result.content.toLowerCase()).toMatch(/local ai|local model/);
+    expect(result.content).toMatch(/Platform > AI > Providers/);
   });
 
   it("returns the same local-model diagnostic on Build Studio routes (FB-71FB3A53)", async () => {
@@ -486,8 +490,10 @@ describe("runAgenticLoop", () => {
 
     expect(mockRoute).toHaveBeenCalledTimes(1);
     expect(result.providerId).toBe("local");
-    expect(result.content.toLowerCase()).toContain("couldn't complete");
-    expect(result.content).toMatch(/AI Workforce/);
+    // G2 (2026-05-23): /build routes get the same honest local-model diagnostic.
+    expect(result.content.toLowerCase()).not.toContain("route through a different");
+    expect(result.content.toLowerCase()).toMatch(/local ai|local model/);
+    expect(result.content).toMatch(/Platform > AI > Providers/);
   });
 
   it("does not surface raw tool_use JSON when a non-build tool loop hits the runtime limit", async () => {
@@ -1287,9 +1293,13 @@ describe("runAgenticLoop", () => {
     expect(result.content).not.toContain("saveBuildEvidence");
     expect(result.content).not.toContain("reviewBuildPlan");
     expect(result.content).not.toContain("buildPlan");
+    // G2 (2026-05-23): must NOT use meta-self-talk language ("I caught myself")
+    // and must NOT promise re-routing that the loop never actually performs.
+    expect(result.content.toLowerCase()).not.toContain("caught myself");
+    expect(result.content.toLowerCase()).not.toContain("route through a different");
     // It must explain what happened in plain language and offer a next move.
-    expect(result.content.toLowerCase()).toMatch(/caught myself saying the plan is ready/);
-    expect(result.content.toLowerCase()).toContain("send me the same instruction again");
+    expect(result.content.toLowerCase()).toMatch(/plan.*(wasn't|was not).*recorded|plan.*saved/);
+    expect(result.content.toLowerCase()).toContain("build details");
   });
 
   it("nudges build agent to use fallback steps after failed read stalls", async () => {

@@ -83,9 +83,24 @@ type MessageSendOptions = {
 };
 
 function filterMessages(messages: AgentMessageRow[]): AgentMessageRow[] {
-  return messages.filter(
-    (m) => !(m.role === "system" && m.content.endsWith("has joined the conversation")),
-  );
+  return messages.filter((m) => {
+    // Hide system-join notices ("X has joined the conversation").
+    if (m.role === "system" && m.content.endsWith("has joined the conversation")) {
+      return false;
+    }
+    // D5 / D9 (2026-05-23): hide setup-trigger user messages from the rendered
+    // chat. These are emitted by SetupOverlay as user-role messages that begin
+    // with "[Setup step: <label>]" + organisation context + instructions
+    // intended for the coworker. The agent handles them as a setup trigger
+    // (see agent-coworker.ts isSetupTrigger), but the user previously saw the
+    // literal setup-instruction text in their chat history — looked like
+    // debug output leaking into the UI. The trigger does its job invisibly
+    // now; the coworker's response is still rendered as normal.
+    if (m.role === "user" && m.content.trimStart().startsWith("[Setup step:")) {
+      return false;
+    }
+    return true;
+  });
 }
 
 function isClearDisabled(

@@ -229,7 +229,17 @@ function normalizePortalContextRoute(pathname: string): string {
 }
 
 function isPortalContextSupportedPath(pathname: string): boolean {
-  return pathname === "/build" || pathname.startsWith("/build/work");
+  // /build and /build/work were the original surfaces. D29 (2026-05-23)
+  // extends to /platform/ai/* so the coworker on the providers/configuration
+  // pages gets the build-studio capability snapshot in its prompt and can
+  // give concrete "connect this provider" advice instead of generic
+  // "wait and try again" hedging.
+  return (
+    pathname === "/build" ||
+    pathname.startsWith("/build/work") ||
+    pathname === "/platform/ai" ||
+    pathname.startsWith("/platform/ai/")
+  );
 }
 
 function resolveBuildIdFromRouteContext(routeContext: string): string | null {
