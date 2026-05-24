@@ -10,6 +10,9 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleRingScope:
+  - ring-2-workflow
+  - ring-3-archetype
 principleConsumerArchetype: route-domain-specific
 principleConsumerContexts:
   - data-model

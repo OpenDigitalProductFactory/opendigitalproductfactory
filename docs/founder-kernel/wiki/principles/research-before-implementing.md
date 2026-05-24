@@ -11,6 +11,8 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleRingScope:
+  - universal-ring
 principleConsumerArchetype: universal
 principlePublic: false
 authoredAt: 2026-05-18

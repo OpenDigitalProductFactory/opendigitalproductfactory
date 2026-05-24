@@ -9,6 +9,8 @@ principleDimensionVector: {"long_term_maintainability": 0.7, "schema_grounding":
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
+principleRingScope:
+  - ring-1-coworker
 principleConsumerArchetype: ai-coworker-universal
 principlePublic: true
 principlePublicRationale: Adopters using DPF's memory layer need to know what belongs there and what doesn't, before they fill it with noise.

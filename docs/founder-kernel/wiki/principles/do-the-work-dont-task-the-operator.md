@@ -9,6 +9,9 @@ principleDimensionVector: {"human_cognitive_load": -1.0, "speed_to_value": 0.6, 
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
+principleRingScope:
+  - ring-1-coworker
+  - ring-2-workflow
 principleConsumerArchetype: ai-coworker-universal
 principlePublic: false
 principlePublicRationale: ""

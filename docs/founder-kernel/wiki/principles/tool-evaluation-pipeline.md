@@ -10,6 +10,8 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleRingScope:
+  - ring-1-coworker
 principleConsumerArchetype: route-domain-specific
 principleConsumerContexts:
   - mcp

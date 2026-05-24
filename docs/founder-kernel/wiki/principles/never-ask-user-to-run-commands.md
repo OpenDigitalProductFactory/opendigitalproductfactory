@@ -10,6 +10,9 @@ principleDimensionVector: {"human_cognitive_load": 1.0, "governance_compliance":
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
+principleRingScope:
+  - ring-1-coworker
+  - ring-2-workflow
 principleConsumerArchetype: ai-coworker-universal
 principlePublic: false
 authoredAt: 2026-05-17

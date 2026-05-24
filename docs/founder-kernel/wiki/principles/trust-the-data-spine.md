@@ -10,6 +10,9 @@ principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
   - human
+principleRingScope:
+  - ring-3-archetype
+  - ring-4-sandbox-prod
 principleConsumerArchetype: route-domain-specific
 principleConsumerContexts:
   - data-model
