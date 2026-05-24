@@ -53,3 +53,28 @@ export {
   type GraduationEvent,
   type GearRowSummary,
 } from "./query";
+
+// Phase 1 — Calibrator + Autonomy Governor
+export {
+  getTrustForTriple,
+  computeFrequentistTrust,
+  computeBayesianTrust,
+  type CalibrationKey,
+  type CalibratorOptions,
+  type TrustReading,
+  type ScorableRow,
+} from "./calibrator";
+export {
+  consult,
+  decideAutonomyTier,
+  evaluateVerdict,
+  BLOCK_THRESHOLD,
+  DEFAULT_GRADUATION_THRESHOLDS,
+  ESCALATE_THRESHOLD,
+  NEXT_TIER,
+  type GovernorVerdict,
+  type GovernorConsultInput,
+  type GovernorConsultResult,
+  type GraduationThreshold,
+} from "./governor";
+export { emitGraduation, emitVeto } from "./governor/graduation";

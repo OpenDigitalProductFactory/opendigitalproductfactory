@@ -2969,6 +2969,28 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
           description:
             "Margin threshold below which confidence flips to 'low' and the reasoning recommends human review. Default 0.2.",
         },
+        ringScope: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: [
+              "ring-1-coworker",
+              "ring-2-workflow",
+              "ring-3-archetype",
+              "ring-4-sandbox-prod",
+              "ring-5-hive",
+              "external-coordination",
+              "universal-ring",
+            ],
+          },
+          description:
+            "Reduction Gear ring scope(s) the calling action binds. When set, retrieval filters to principles whose principleRingScope intersects the caller scope OR contains universal-ring OR is empty (backward compat). Omit (or pass ['universal-ring']) to consult the full kernel — appropriate for design-time / kernel-architecture decisions that genuinely bind every ring. See spec docs/superpowers/specs/2026-05-24-founder-kernel-evolution-discipline-design.md §5.",
+        },
+        callingSurface: {
+          type: "string",
+          description:
+            "Optional free-form label naming the calling surface (e.g. 'build-studio-phase', 'promotion-gate'). Propagated to the [principle-recall-trace] log line so operators can correlate recall traffic with the surface that drove it.",
+        },
       },
       required: ["context", "options", "callingPopulation"],
     },
@@ -10702,8 +10724,51 @@ export async function executeTool(
 
       const { listPrinciplesByTier, prisma, PRINCIPLE_DECIDE_DEFAULTS } =
         await import("@dpf/db");
+      const { PRINCIPLE_RING_SCOPES } = await import(
+        "@dpf/db/wiki-taxonomy"
+      );
       const { searchWikiPages } = await import("@/lib/wiki/embeddings");
       const { decide } = await import("@/lib/wiki/principle-decide");
+      const { principleMatchesRingScope } = await import(
+        "@/lib/wiki/calling-ring-map"
+      );
+
+      // Validate ringScope per the closed taxonomy registry. Unknown values
+      // fail fast instead of silently degrading to universal — silent skip
+      // on bad input is the failure mode `make-silent-failures-observable`
+      // (the kernel commandment promoted in PR #1081) forbids.
+      let ringScope: string[] | undefined;
+      if (params["ringScope"] !== undefined) {
+        if (!Array.isArray(params["ringScope"])) {
+          return {
+            success: false,
+            message:
+              "ringScope must be an array of values from PRINCIPLE_RING_SCOPES.",
+            error: "Invalid ringScope shape",
+          };
+        }
+        const unknown = (params["ringScope"] as unknown[]).filter(
+          (v): v is string =>
+            typeof v === "string" &&
+            !(PRINCIPLE_RING_SCOPES as readonly string[]).includes(v),
+        );
+        if (unknown.length > 0) {
+          return {
+            success: false,
+            message: `ringScope contains unknown values: ${unknown.join(", ")}. Allowed: ${PRINCIPLE_RING_SCOPES.join(", ")}.`,
+            error: "Invalid ringScope value",
+          };
+        }
+        ringScope = params["ringScope"] as string[];
+      }
+      const ringScopeActive =
+        ringScope !== undefined &&
+        ringScope.length > 0 &&
+        !ringScope.includes("universal-ring");
+      const callingSurface =
+        typeof params["callingSurface"] === "string"
+          ? params["callingSurface"]
+          : null;
 
       const maxPrinciples =
         typeof params["maxPrinciples"] === "number"
@@ -10730,6 +10795,7 @@ export async function executeTool(
           tier: "commandment",
           organizationId,
           appliesTo: callingPopulation,
+          ringScope,
           limit: 10,
         })) as Array<Record<string, unknown>>;
       } catch (err) {
@@ -10747,6 +10813,7 @@ export async function executeTool(
           pageKind: "principle",
           principleTier: "core",
           principleAppliesTo: callingPopulation,
+          principleRingScope: ringScopeActive ? ringScope : undefined,
           limit: 5,
         })) as Array<Record<string, unknown>>;
       } catch (err) {
@@ -10762,12 +10829,65 @@ export async function executeTool(
           pageKind: "principle",
           principleTier: "contextual",
           principleAppliesTo: callingPopulation,
+          principleRingScope: ringScopeActive ? ringScope : undefined,
           limit: 5,
           scoreThreshold: contextualThreshold,
         })) as Array<Record<string, unknown>>;
       } catch (err) {
         console.warn("[principle_decide] contextual Qdrant lookup failed:", err);
       }
+
+      // Post-filter (cheap belt-and-suspenders). Mirrors the contract used
+      // by recallPrincipleContext: empty principleRingScope passes
+      // (backward-compat); universal-ring always passes; otherwise
+      // intersection check. Catches any retrieval path that didn't get
+      // the ringScope arg threaded through (e.g. narrow test mocks).
+      let commandmentsExcluded = 0;
+      let coreExcluded = 0;
+      let contextualExcluded = 0;
+      if (ringScopeActive && ringScope) {
+        const before = { c: commandments.length, k: core.length, x: contextual.length };
+        commandments = commandments.filter((row) =>
+          principleMatchesRingScope(
+            (row["principleRingScope"] as string[] | undefined) ?? [],
+            ringScope as never,
+          ),
+        );
+        core = core.filter((row) =>
+          principleMatchesRingScope(
+            (row["principleRingScope"] as string[] | undefined) ?? [],
+            ringScope as never,
+          ),
+        );
+        contextual = contextual.filter((row) =>
+          principleMatchesRingScope(
+            (row["principleRingScope"] as string[] | undefined) ?? [],
+            ringScope as never,
+          ),
+        );
+        commandmentsExcluded = before.c - commandments.length;
+        coreExcluded = before.k - core.length;
+        contextualExcluded = before.x - contextual.length;
+      }
+
+      console.info(
+        `[principle-recall-trace] ` +
+          JSON.stringify({
+            callingSurface,
+            callingPopulation,
+            ringScope: ringScope ?? null,
+            ringScopeActive,
+            tool: "principle_decide",
+            commandmentCount: commandments.length,
+            coreCount: core.length,
+            contextualCount: contextual.length,
+            ringScopeExcluded: {
+              commandments: commandmentsExcluded,
+              core: coreExcluded,
+              contextual: contextualExcluded,
+            },
+          }),
+      );
 
       const TIER_DEFAULT_WEIGHT: Record<string, number> = {
         commandment: 1.0,
