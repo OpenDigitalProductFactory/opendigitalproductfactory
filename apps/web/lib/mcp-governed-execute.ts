@@ -32,6 +32,15 @@ export type GovernedExecuteContext = {
   taskRunId?: string;
   apiTokenId?: string;
   /**
+   * Build the user is currently messaging from. Plumbed by runAgenticLoop
+   * (via its `featureBuildId` param) so phase-scoped tools like
+   * start_ideate_research / start_scout_research target the correct build
+   * instead of fishing for "latest in phase X" — which silently
+   * cross-contaminates state when multiple builds are in the same phase
+   * (BI-F4A30FCB, Dale dogfood 2026-05-24).
+   */
+  featureBuildId?: string;
+  /**
    * Governed Hermes learning Slice 1: active coworker skill for this call.
    * Set by runAgenticLoop when the parent run is attributed to a specific
    * skill invocation. Persisted to ToolExecution.skillId so reflection and
@@ -166,6 +175,7 @@ async function callExecuteTool(
     threadId?: string;
     routeContext?: string;
     taskRunId?: string;
+    featureBuildId?: string;
   },
 ): Promise<ToolResult> {
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);
@@ -442,6 +452,7 @@ export async function governedExecuteTool(
       threadId: args.context?.threadId,
       routeContext: args.context?.routeContext,
       taskRunId: args.context?.taskRunId,
+      featureBuildId: args.context?.featureBuildId,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown tool error";

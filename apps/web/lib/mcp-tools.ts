@@ -81,7 +81,20 @@ import { ROUTE_AGENT_MAP_ENTRIES } from "@/lib/tak/agent-routing";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type BuildPhaseTag = "ideate" | "plan" | "build" | "review" | "ship";
-type ToolExecutionContext = { routeContext?: string; agentId?: string; threadId?: string; taskRunId?: string };
+type ToolExecutionContext = {
+  routeContext?: string;
+  agentId?: string;
+  threadId?: string;
+  taskRunId?: string;
+  /**
+   * Build the user is currently messaging from. Plumbed by agentic-loop.ts
+   * from runAgenticLoop's `featureBuildId` param so phase-scoped tools can
+   * target the correct build instead of fishing for "latest in phase X" —
+   * which silently cross-contaminates state when multiple concurrent builds
+   * are in the same phase (BI-F4A30FCB, Dale dogfood 2026-05-24).
+   */
+  featureBuildId?: string;
+};
 
 /** MCP tool annotation hints (from MCP spec + n8n-MCP pattern).
  *  These let the agent router and governance layer make safety decisions
@@ -4188,6 +4201,31 @@ function redactFunctionalFailureText(text: string): string {
   return text
     .replace(/\bdpfmcp_[A-Za-z0-9_-]+/g, "[redacted-token]")
     .replace(/\bBearer\s+[A-Za-z0-9._-]+/g, "[redacted-token]");
+}
+
+// BI-F4A30FCB (Dale dogfood 2026-05-24): see ideate-build-resolution.ts for
+// the why. Re-exported here so existing imports keep working; new callers
+// should import from "@/lib/build/ideate-build-resolution".
+import { resolveIdeateBuildForToolPure } from "@/lib/build/ideate-build-resolution";
+
+export async function resolveIdeateBuildForTool(args: {
+  contextBuildId?: string;
+  toolName: string;
+}) {
+  return resolveIdeateBuildForToolPure(args, {
+    findUniqueBuild: async (buildId) =>
+      prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: { buildId: true, phase: true },
+      }),
+    findIdeateBuilds: async () =>
+      prisma.featureBuild.findMany({
+        where: { phase: "ideate" },
+        orderBy: { updatedAt: "desc" },
+        select: { buildId: true },
+        take: 2, // only need to distinguish 0 / 1 / 2+
+      }),
+  });
 }
 
 export async function executeTool(
@@ -9577,32 +9615,37 @@ export async function executeTool(
       // agent-coworker.ts after the agentic loop returns. We just persist
       // the user context so the dispatch knows what to research.
       const scope = String(params.reusabilityScope ?? "parameterizable");
-      const context = String(params.userContext ?? "");
+      const userCtx = String(params.userContext ?? "");
 
-      // Store the research request on the build record
-      const activeBuild = await prisma.featureBuild.findFirst({
-        where: { phase: "ideate" },
-        orderBy: { updatedAt: "desc" },
-        select: { buildId: true },
+      // BI-F4A30FCB (Dale dogfood 2026-05-24): resolve the target build
+      // from agent context first. The previous "findFirst by phase=ideate
+      // ordered by updatedAt" silently mis-targeted whenever multiple
+      // builds were in ideate concurrently — the user's request landed on
+      // an unrelated build whose updatedAt happened to be newer.
+      const activeBuild = await resolveIdeateBuildForTool({
+        contextBuildId: context?.featureBuildId,
+        toolName: "start_ideate_research",
       });
-      if (activeBuild) {
-        await prisma.featureBuild.update({
-          where: { buildId: activeBuild.buildId },
-          data: {
-            buildExecState: {
-              ideateResearchRequested: true,
-              reusabilityScope: scope,
-              userContext: context,
-              requestedAt: new Date().toISOString(),
-            },
-          },
-        });
+      if (!activeBuild.build) {
+        return activeBuild.refusal;
       }
+
+      await prisma.featureBuild.update({
+        where: { buildId: activeBuild.build.buildId },
+        data: {
+          buildExecState: {
+            ideateResearchRequested: true,
+            reusabilityScope: scope,
+            userContext: userCtx,
+            requestedAt: new Date().toISOString(),
+          },
+        },
+      });
 
       return {
         success: true,
         message: "Research started. Searching the codebase and drafting the design document — this takes about 1-2 minutes. Tell the user you're researching now. IMPORTANT: Do NOT call saveBuildEvidence with field 'designDoc' — the research system saves the design document and runs the review automatically when research completes. Just wait and tell the user.",
-        data: { reusabilityScope: scope, userContext: context },
+        data: { reusabilityScope: scope, userContext: userCtx, buildId: activeBuild.build.buildId },
       };
     }
 
@@ -9610,13 +9653,21 @@ export async function executeTool(
       // Scout dispatch: similar to ideate research, but runs a fast parallel search + URL fetch
       const externalUrls = (params.externalUrls as string[] | undefined) ?? [];
 
-      const activeBuild = await prisma.featureBuild.findFirst({
-        where: { phase: "ideate" },
-        orderBy: { updatedAt: "desc" },
+      // BI-F4A30FCB (Dale dogfood 2026-05-24): resolve the target build
+      // from agent context first; see start_ideate_research comment above.
+      const resolved = await resolveIdeateBuildForTool({
+        contextBuildId: context?.featureBuildId,
+        toolName: "start_scout_research",
+      });
+      if (!resolved.build) {
+        return resolved.refusal;
+      }
+      const activeBuild = await prisma.featureBuild.findUnique({
+        where: { buildId: resolved.build.buildId },
         select: { buildId: true, buildExecState: true, scoutFindings: true },
       });
       if (!activeBuild) {
-        return { success: false, message: "No active ideate build found." };
+        return { success: false, message: "Active ideate build vanished between resolve and read — try again." };
       }
 
       const current = activeBuild.buildExecState as Record<string, unknown> | null;
