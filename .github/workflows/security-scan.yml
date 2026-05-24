@@ -91,7 +91,10 @@ jobs:
         run: |
           set -euo pipefail
           # --error: non-zero exit if any finding remains after baseline diff.
-          # --severity filter: only ERROR + WARNING block. INFO is dropped.
+          # --severity covers both old-style (ERROR/WARNING/INFO) and new
+          # severity tags (CRITICAL/HIGH/MEDIUM/LOW). Without all of these,
+          # modern community rules that use HIGH/CRITICAL are silently
+          # filtered out — verified via demo PR #1061 acceptance test.
           # --sarif-output: machine-readable findings for Code Scanning upload.
           semgrep scan \
             --config=p/security-audit \
@@ -103,6 +106,9 @@ jobs:
             --config=p/secrets \
             --severity=ERROR \
             --severity=WARNING \
+            --severity=CRITICAL \
+            --severity=HIGH \
+            --severity=MEDIUM \
             --baseline-commit="${BASELINE_SHA}" \
             --sarif-output=semgrep.sarif \
             --error \
