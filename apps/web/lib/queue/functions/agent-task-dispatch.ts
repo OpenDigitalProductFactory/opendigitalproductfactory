@@ -1,5 +1,6 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
+import { gateAtEntry } from "../quiescence-gates";
 
 /**
  * Polls ScheduledAgentTask every 5 minutes and dispatches due tasks.
@@ -13,6 +14,9 @@ export const agentTaskDispatch = inngest.createFunction(
     triggers: [cron("*/5 * * * *")],
   },
   async ({ step }) => {
+    const gate = await gateAtEntry(step);
+    if (!gate.proceed) return { skipped: true, reason: gate.reason };
+
     const dueTaskIds = await step.run("find-due-tasks", async () => {
       const { prisma } = await import("@dpf/db");
       const now = new Date();

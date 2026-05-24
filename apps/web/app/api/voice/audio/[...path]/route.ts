@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
 import { NextResponse } from "next/server"
+import { resolveVoiceStorageRoot } from "@/lib/voice-synthesis/storage-root"
 
 const CONTENT_TYPES: Record<string, string> = {
   mp3: "audio/mpeg",
@@ -9,7 +10,7 @@ const CONTENT_TYPES: Record<string, string> = {
 }
 
 function getStorageRoot(): string {
-  return process.env.UPLOAD_STORAGE_PATH ?? "./data/uploads"
+  return resolveVoiceStorageRoot()
 }
 
 export async function GET(

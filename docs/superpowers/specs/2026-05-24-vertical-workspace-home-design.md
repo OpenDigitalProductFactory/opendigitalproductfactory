@@ -28,7 +28,7 @@
 
 **Not folded in (deferred):** the operator-switch authority predicate (§5.2) is left abstract on purpose — the implementer BI must pick the exact permission grant from `apps/web/lib/govern/permissions.ts` after sweeping which role currently has both Platform Development and worker-vertical authority. Specifying it here would risk pinning to a stale grant.
 
-**Build Studio routing:** the three follow-on implementation BIs in §11 (substrate, projection, HVAC home) are intentionally sized for the BS Ideate→Design→Build→Ship pipeline; this spec is the design input for the substrate BI and is the architectural anchor for the two child BIs that come after. Per standing rule, Claude does not write feature code for these — file BI → promote → Ideate → BS runs.
+**Build Studio routing:** the six follow-on implementation BIs in §11 (workspace-home substrate, projection service, primitive library, HVAC, clinic, and retail homes) are intentionally sized for the BS Ideate→Design→Build→Ship pipeline; this spec is the design input for the substrate BIs and is the architectural anchor for the vertical child BIs that come after. Per standing rule, Claude does not write feature code for these — file BI → promote → Ideate → BS runs.
 
 ## 1. Purpose
 
@@ -245,11 +245,13 @@ type WorkspaceHomeContribution = {
   slots: WorkspaceHomeSlotSpec[];
   projections: WorkspaceHomeProjectionSpec[];
   quickActions: WorkspaceHomeActionSpec[];
+  setupActivation: WorkspaceHomeSetupActivation;
 };
 
 type WorkspaceHomeSlotSpec = {
   slotId: string;
-  component: WorkspaceHomeComponentKey;   // typed union, registered in code
+  primitive: WorkspaceHomePrimitiveKey;   // reusable widget family
+  component: WorkspaceHomeComponentKey;   // concrete renderer, registered in code
   title: string;
   tone?: "neutral" | "success" | "warning" | "critical" | "info";
   dataRef: WorkspaceHomeDataRef;          // typed, not a free string
@@ -257,11 +259,45 @@ type WorkspaceHomeSlotSpec = {
   mobileCollapse?: "visible" | "behind-more" | "hidden";  // default derived from priority
 };
 
+type WorkspaceHomeSetupActivation = {
+  includedInBusinessArchetypeSetup: boolean;
+  requiredCanonicalData: WorkspaceHomeCanonicalLoaderId[];
+  requiredSignals?: WorkspaceHomeSignalKindId[];
+  missingDataBehavior: "seed-demo-data" | "empty-state" | "setup-task";
+};
+
 type WorkspaceHomeDataRef =
   | { kind: "canonical"; loaderId: WorkspaceHomeCanonicalLoaderId; window?: QueryWindow }
   | { kind: "signal"; signalKindIds: WorkspaceHomeSignalKindId[]; window?: QueryWindow }
   | { kind: "composite"; left: WorkspaceHomeDataRef; right: WorkspaceHomeDataRef };
 ```
+
+**Reusable primitive library.** A slot is not a one-off dashboard tile. It is an instance of a reusable primitive with vertical vocabulary, data bindings, and interaction rules. The primitive library is the shared product surface that lets Dale's AC repair board, a clinic scheduler board, a retail merchandising board, and an MSP customer-estate board reuse the same reliable widget mechanics while still looking native to the work.
+
+Initial primitive keys:
+
+| Primitive | Purpose | Example vertical uses |
+| --------- | ------- | --------------------- |
+| `decision-queue` | Work needing human sequencing or acknowledgement | HVAC emergency jobs, dental missing forms, legal filing deadlines |
+| `geo-map` | Location-aware customers, sites, routes, or properties | HVAC customer map, dog-walking route, property-management unit map |
+| `capacity-lanes` | People/resource load by role, vehicle, room, chair, or instructor | Technician lanes, practitioner load, instructor/car capacity |
+| `health-board` | Current health/status of managed customer estates or assets | MSP customer IT health, facilities asset health, software-platform service health |
+| `inventory-watch` | Stock, parts, equipment, or supplies that can block work | Truck stock, retail low stock, bakery ingredients, salon supplies |
+| `case-board` | Longer-running cases, matters, clients, animals, students, or residents | Legal matters, rescue animals, tutoring learners, HOA resident issues |
+| `service-period-board` | Time-bounded service or production periods | Restaurant dinner service, bakery bake schedule, catering event prep |
+| `communication-exceptions` | Customer/client/patient/member updates that failed or need response | HVAC ETA texts, patient reminders, owner updates, donor outreach |
+| `handoff-queue` | Coworker PAR acknowledgements and human-in-the-loop decisions | Dispatcher approvals, clinic scheduler approvals, MSP escalation handoffs |
+
+Every primitive owns:
+
+- A canonical data contract (`dataRef` shape and loader expectations).
+- A visual density contract for desktop and mobile.
+- Empty, loading, stale-data, and misconfigured states.
+- Allowed actions and disabled states.
+- Worker-facing vocabulary inputs.
+- Banned-copy protection for platform and gear language.
+
+Concrete components, for example `TechnicianLoadSlot` or `CustomerUpdatesSlot`, implement one primitive in a vertical-specific form. A component may be reused across archetypes when only vocabulary differs; it should fork only when the operating model changes. This is the architecture that lets the feature library compound instead of spawning one screen per vertical.
 
 **Component registry contract.** Components are registered through a single typed map. Unknown component keys must fail closed:
 
@@ -285,6 +321,22 @@ Registered component keys (initial set): `today-schedule`, `unassigned-work`, `t
 3. A **coworker-handoffs slot** — pending PAR acknowledgements addressed to this worker (see §6.4 and `feedback_propose_acknowledge_reassign`).
 
 This covenant gives workers a consistent mental model across verticals — "where is my day, what's broken, what's waiting on me" — without prescribing the cards in between. The substrate BI MUST encode the covenant as a type-level constraint on `WorkspaceHomeContribution` (e.g. `slots: [TodaySlot, ExceptionsSlot, HandoffsSlot, ...rest]`) or as a runtime registration assertion with a failing test.
+
+**Business-archetype setup activation.** Workspace-home activation is part of archetype setup, not a later manual dashboard configuration chore. When setup selects or changes the business archetype / storefront archetype, the setup flow MUST evaluate the workspace-home contribution registry and report one of these outcomes:
+
+1. **Exact home included** — an exact semantic `StorefrontArchetype.archetypeId` contribution exists. Setup confirms the worker home that will be installed, its primitive widgets, and any required setup data.
+2. **Category home included** — a category fallback exists. Setup confirms the generic category board and names the missing exact-archetype follow-up for admins.
+3. **No home yet** — no contribution exists. Setup records the missing contribution telemetry and keeps employees on the platform workspace home until a contribution lands.
+
+The setup outcome is driven by the existing business setup / storefront setup substrate: `BusinessContext` remains the business identity context, `StorefrontArchetype` remains the surface/archetype resolver, and `BusinessModel` remains the internal operating-model / role template layer. This spec does not collapse those models. It adds a required activation handshake between them: when the archetype is configured, the matching workspace-home contribution and primitive widgets become part of the installed business experience.
+
+Implementation implications:
+
+- The workspace-home substrate (`BI-1CCC6264`) must expose an activation summary that setup can call without rendering `/workspace`.
+- Each vertical implementation BI must include setup verification: after selecting that archetype, `/workspace` resolves to the intended primitive composition without manual admin wiring.
+- Each contribution must declare required canonical data so setup can create setup tasks, seed safe demo records in test installs, or show honest empty states.
+- If an archetype ships without a workspace-home contribution, setup must not imply the business has a tailored worker home.
+- Feature contributions that introduce reusable worker widgets should register against primitive keys and applicability metadata so future archetypes can reuse them by composition.
 
 ### 5.6 Data flow
 
@@ -510,6 +562,7 @@ When a business has no `StorefrontConfig`:
 
 - `/workspace` renders the platform home.
 - Setup/admin flows should point the operator toward storefront/business setup rather than asking a worker to configure architecture.
+- Business-archetype setup must show that the worker home is not yet activated and create/point to the missing workspace-home backlog item for that archetype.
 
 ## 9. Refactoring Allocation
 
@@ -520,11 +573,13 @@ Required refactoring targets:
 1. Split `apps/web/app/(shell)/workspace/page.tsx` into a thin route and a loader boundary. The route should choose platform, vertical, or unconfigured home; data loading should live in `apps/web/lib/workspace-home/`.
 2. Extract the current generic command-center page into a reusable `PlatformWorkspaceHome` so it remains the fallback and admin/operator home.
 3. Add a typed contribution registry under `apps/web/lib/workspace-home/contributions/`.
-4. Add a translated signal loader under `apps/web/lib/workspace-home/signals/` that wraps GearInterface query APIs.
-5. Move vertical UI components under `apps/web/components/workspace-home/`, keeping shared shell/chrome separate from vertical content.
-6. Replace hardcoded calendar color values with semantic DPF tokens before reusing the calendar as a vertical-home primitive.
-7. Constrain tile/status colors to semantic tone keys instead of unconstrained strings.
-8. Add fixture helpers for workspace-home tests so the substrate and HVAC home can be tested without copy-pasted JSON. Clinic and retail fixtures belong to their own follow-on BIs.
+4. Add a typed primitive library under `apps/web/lib/workspace-home/primitives/` so queue, map, capacity, health, inventory, case, service-period, communication, and handoff widgets are reusable across archetypes.
+5. Add a setup activation summary API that business/storefront setup can call when an archetype is selected.
+6. Add a translated signal loader under `apps/web/lib/workspace-home/signals/` that wraps GearInterface query APIs.
+7. Move vertical UI components under `apps/web/components/workspace-home/`, keeping shared shell/chrome separate from vertical content.
+8. Replace hardcoded calendar color values with semantic DPF tokens before reusing the calendar as a vertical-home primitive.
+9. Constrain tile/status colors to semantic tone keys instead of unconstrained strings.
+10. Add fixture helpers for workspace-home tests so the substrate and HVAC home can be tested without copy-pasted JSON. Clinic and retail fixtures belong to their own follow-on BIs.
 
 Suggested file boundary:
 
@@ -532,9 +587,13 @@ Suggested file boundary:
 apps/web/lib/workspace-home/
   resolve-workspace-home.ts
   load-workspace-home-context.ts
+  summarize-workspace-home-activation.ts
   contributions/
     registry.ts
     trades-maintenance.ts
+  primitives/
+    registry.ts
+    contracts.ts
   signals/
     load-workspace-home-signals.ts
     translate-gear-signal.ts
@@ -600,16 +659,19 @@ These words may exist in code comments, tests, type names, and projection intern
 
 1. `BI-1CCC6264` — Workspace home contribution substrate and resolver.
    - Build the resolver, contribution registry, context loader, platform fallback extraction, slot covenant enforcement, and unconfigured state telemetry.
+   - Include the reusable primitive registry and the setup activation summary API so business-archetype setup installs or reports the matching worker home.
 2. `BI-3E8D2CF5` — Workspace home projection service (GearInterface + Calibrator + Governor).
    - Build the translated signal loader unifying all three sources, banned-copy tests, ring-scope discipline on wiki recall calls, and source discipline around GearInterface query APIs.
-3. `BI-CE6AF925` — HVAC dispatcher workspace home.
+3. `BI-5B8FE5C1` — Workspace-home primitive library.
+   - Define reusable queue, map, capacity, health, inventory, case, service-period, communication-exception, and handoff widgets as typed primitives with canonical data contracts and visual behavior.
+4. `BI-CE6AF925` — HVAC dispatcher workspace home.
    - Add `hvac-contractor` contribution, dispatch-board layout, today's jobs, unscheduled jobs, technician load, customer updates, parts/units, and coworker-handoffs PAR surface. First-class slice for the §10 functional verification protocol.
-4. `BI-8954667A` — Clinic scheduler workspace home.
+5. `BI-8954667A` — Clinic scheduler workspace home.
    - Add healthcare/wellness schedule-board variant with patient queue, appointment readiness, no-show risk, practitioner capacity, and missing-form signals.
-5. `BI-3F3B535D` — Retail merchandiser workspace home.
+6. `BI-3F3B535D` — Retail merchandiser workspace home.
    - Add retail-goods merchandising-board variant with order tasks, low stock, incoming inventory, return exceptions, and POS/location sales signals.
 
-BIs 1 and 2 are substrate; they unblock BIs 3–5 and any future vertical. Each archetype BI must be independently reviewable and must not broaden the substrate unless the substrate BIs explicitly change. Per the Build Studio for ALL development standing rule, Claude does not write the feature code for any of these — file BI → promote → Ideate → BS runs.
+BIs 1-3 are substrate; they unblock BIs 4-6 and any future vertical. Each archetype BI must be independently reviewable and must not broaden the substrate unless the substrate BIs explicitly change. Per the Build Studio for ALL development standing rule, Claude does not write the feature code for any of these — file BI → promote → Ideate → BS runs.
 
 ## 12. Decisions and Open Questions
 
