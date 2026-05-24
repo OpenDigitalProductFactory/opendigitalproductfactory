@@ -62,12 +62,14 @@ export const ADMIN_FAMILIES: AdminFamily[] = [
       "/admin/issue-reports",
       "/admin/diagnostics",
       "/admin/backups",
+      "/admin/cockpit",
     ],
     subItems: [
       { label: "Platform Development", href: "/admin/platform-development" },
       { label: "Issue Reports", href: "/admin/issue-reports" },
       { label: "Diagnostics", href: "/admin/diagnostics" },
       { label: "Backups", href: "/admin/backups" },
+      { label: "Cockpit", href: "/admin/cockpit" },
     ],
   },
 ];

@@ -14,8 +14,12 @@
 // never blocks the phase transition itself.
 //
 // Spec: docs/superpowers/specs/2026-05-19-ai-cost-governance.md §Phase 3
+//
+// Reduction Gear Phase 0: completeBuildPhaseRun also dual-emits a Ring 1→2
+// GearInterface record after the source row settles (BI-85CB31F0).
 
 import { prisma } from "@dpf/db";
+import { emitRing12FromCompletedPhase } from "@/lib/gear-interface/emit-ring-1-2";
 
 export type BuildPhaseName = "ideate" | "plan" | "build" | "review" | "ship";
 
@@ -118,6 +122,17 @@ export async function completeBuildPhaseRun(
       `[build-phase-run] Phase ${phase} complete: ${inferenceCount} calls, ` +
       `${inputTokens + outputTokens} tokens, ${costUsd != null ? `$${Number(costUsd).toFixed(4)}` : "cost unknown"}`,
     );
+
+    // Reduction Gear Ring 1→2 dual-emit (BI-85CB31F0). Non-blocking: any
+    // failure must never affect the phase-run write above. The emitter pulls
+    // its own outcome signals from FeatureBuild + BuildDispatchAttempt.
+    void emitRing12FromCompletedPhase(buildId, phase).catch((err) => {
+      console.warn(
+        "[gear-interface] Ring 1→2 emit failed for completed phase:",
+        { buildId, phase },
+        err,
+      );
+    });
   } catch (err) {
     console.warn("[build-phase-run] Failed to complete phase run:", { buildId, phase }, err);
   }

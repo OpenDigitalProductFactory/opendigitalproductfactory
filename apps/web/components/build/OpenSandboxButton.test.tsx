@@ -22,11 +22,11 @@ describe("OpenSandboxButton", () => {
     expect(html).toMatch(/href="http:\/\/localhost:5555"/);
   });
 
-  it('renders the canonical label format "Open sandbox · driving: {code}"', () => {
+  it('renders the canonical label format "Open live preview · driving: {code}"', () => {
     const html = renderToStaticMarkup(
       <OpenSandboxButton drivingBuildCode="FB-B33E84B5" sandboxUrl="http://localhost:5555" />,
     );
-    expect(html).toContain("Open sandbox");
+    expect(html).toContain("Open live preview");
     expect(html).toContain("driving: FB-B33E84B5");
   });
 
