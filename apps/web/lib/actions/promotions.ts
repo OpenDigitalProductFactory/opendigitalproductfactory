@@ -15,6 +15,7 @@ import {
   getDeployedSha,
   getLatestRun,
 } from "@/lib/self-upgrade";
+import { loadPlatformVersion } from "@/lib/platform/version";
 import { inngest } from "@/lib/queue/inngest-client";
 import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
 
@@ -582,9 +583,10 @@ export async function listSelfUpgradeRuns(opts?: {
 export async function getSelfUpgradeStatus() {
   await requireOpsAccess();
 
-  const [config, latestRun] = await Promise.all([
+  const [config, latestRun, platformVersion] = await Promise.all([
     getSelfUpgradeConfig(),
     getLatestRun(),
+    loadPlatformVersion(),
   ]);
 
   const inMaintenanceWindow = isInMaintenanceWindow(config);
@@ -600,6 +602,12 @@ export async function getSelfUpgradeStatus() {
     targetSha,
     isFresh,
     latestRun,
+    platformVersion: {
+      version: platformVersion.version,
+      publishedAt: platformVersion.publishedAt.toISOString(),
+      gitSha: platformVersion.gitSha,
+      note: platformVersion.note,
+    },
   };
 }
 
