@@ -37,6 +37,24 @@ vi.mock("./agent-thread-dispatcher", () => ({
   dispatchAgentThread: mockDispatchAgentThread,
 }));
 
+// BI-QUIESCE-005 gate: spawnWorkThread now calls getQuiescenceLevel.
+// Default to "normal" for all existing tests; tests that want to
+// exercise the gate can override per-test via vi.mocked(...).
+vi.mock("@/lib/self-upgrade/quiescence", () => ({
+  getQuiescenceLevel: vi.fn().mockResolvedValue("normal"),
+  QuiescingError: class QuiescingError extends Error {
+    readonly code = "PORTAL_QUIESCING";
+    readonly retryAfterSeconds: number;
+    readonly level: string;
+    constructor(level: string, retryAfterSeconds = 30) {
+      super(`Portal is ${level} for upgrade — new work refused`);
+      this.name = "QuiescingError";
+      this.level = level;
+      this.retryAfterSeconds = retryAfterSeconds;
+    }
+  },
+}));
+
 import { spawnWorkThread } from "./agent-threads";
 
 describe("spawnWorkThread guards", () => {
