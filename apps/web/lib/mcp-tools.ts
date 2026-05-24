@@ -4218,10 +4218,19 @@ export async function executeTool(
     principle_slug: _slug,
     session_class: _sessionClass,
   });
+  // CodeQL js/log-injection: toolName + _slug are user-influenced (model
+  // submits the tool name; principle slugs derive from wiki frontmatter
+  // edited by operators). JSON.stringify each user-influenced value to
+  // neutralize CR/LF / control chars — same pattern as
+  // neo4j-restore-runner.ts. _decision.verdict and _sessionClass are typed
+  // enums and not user-influenced.
   // eslint-disable-next-line no-console
   console.log(
     "[kernel-gate-trace] verdict=%s slug=%s session=%s kind=mcp_tool tool=%s",
-    _decision.verdict, _slug, _sessionClass, toolName,
+    _decision.verdict,
+    JSON.stringify(_slug),
+    _sessionClass,
+    JSON.stringify(toolName),
   );
   if (_decision.verdict === "refuse") {
     return {

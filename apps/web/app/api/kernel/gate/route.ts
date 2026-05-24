@@ -68,13 +68,14 @@ export async function POST(req: Request): Promise<Response> {
     session_class: parsed.data.sessionClass,
   });
   // CodeQL js/log-injection: bound values are validated by Zod above + the
-  // enum'd verdict / session_class. Tool/command names are user-influenced;
-  // JSON.stringify neutralises CR/LF in the trace line.
+  // enum'd verdict / session_class / attempt.kind. slug derives from
+  // operator-edited principle frontmatter and is user-influenced;
+  // JSON.stringify neutralises CR/LF.
   // eslint-disable-next-line no-console
   console.log(
     "[kernel-gate-trace] verdict=%s slug=%s session=%s kind=%s",
     decision.verdict,
-    slug,
+    JSON.stringify(slug),
     parsed.data.sessionClass,
     parsed.data.attempt.kind,
   );
