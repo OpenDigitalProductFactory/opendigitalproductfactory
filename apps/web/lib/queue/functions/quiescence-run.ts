@@ -88,12 +88,18 @@ export const quiescenceRun = inngest.createFunction(
     await step.run("enter-draining", () => transitionState(runId, "draining"));
     await step.run("flip-level-draining", () => setQuiescenceLevel("draining", runId));
 
-    // BI-QUIESCE-006 wires the real SSE broadcast via agentEventBus.
-    // For now this is a recorded no-op — the coordinator's level flip is
-    // the authoritative signal; client banner consumes it via the state
-    // route which BI-QUIESCE-003 implements.
     await step.run("broadcast-quiescence-draining", async () => {
-      return { broadcast: "deferred-to-bi-quiesce-006", runId, level: "draining" };
+      const { agentEventBus } = await import("@/lib/tak/agent-event-bus");
+      agentEventBus.broadcastSystem({
+        type: "system:quiescence",
+        level: "draining",
+        runId,
+        swapEtaSeconds: Math.floor(budgetMs / 1000),
+        deferReason: null,
+        deferSurface: null,
+        outcome: "draining",
+      });
+      return { broadcast: "draining", runId };
     });
 
     const flippedCount = (await step.run("flip-taskruns-quiescing", () =>
@@ -194,6 +200,19 @@ export const quiescenceRun = inngest.createFunction(
         transitionState(runId, "swapping", { swapStartedAt: now }),
       );
       await step.run("flip-level-swapping", () => setQuiescenceLevel("swapping", runId));
+      await step.run("broadcast-quiescence-swapping", async () => {
+        const { agentEventBus } = await import("@/lib/tak/agent-event-bus");
+        agentEventBus.broadcastSystem({
+          type: "system:quiescence",
+          level: "swapping",
+          runId,
+          swapEtaSeconds: 30,
+          deferReason: null,
+          deferSurface: null,
+          outcome: "swapping",
+        });
+        return { broadcast: "swapping", runId };
+      });
 
       // Caller already did the swap by now; coordinator just records the
       // terminal transition. The 'swapping' state is intentionally brief —
@@ -286,6 +305,28 @@ async function emitCleared(payload: {
   reason?: string;
 }): Promise<void> {
   invalidateQuiescenceCache();
+
+  // SSE broadcast to ALL connected clients FIRST so banners dismiss
+  // immediately. Then the Inngest event so suspended functions wake.
+  // Both are required (spec §5.2 invariant — every terminal path must
+  // emit platform.quiescence-cleared, AND clients must see the banner
+  // dismiss without waiting on Inngest event propagation).
+  try {
+    const { agentEventBus } = await import("@/lib/tak/agent-event-bus");
+    agentEventBus.broadcastSystem({
+      type: "system:quiescence",
+      level: "cleared",
+      runId: payload.runId,
+      swapEtaSeconds: null,
+      deferReason: payload.outcome === "deferred" ? (payload.reason ?? null) : null,
+      deferSurface: payload.deferSurface ?? null,
+      outcome: payload.outcome,
+    });
+  } catch (err) {
+    // Best-effort — the Inngest event below is the authoritative signal.
+    console.warn("[quiescence-run] broadcastSystem failed:", err);
+  }
+
   await inngest.send({
     name: QUIESCENCE_CLEARED_EVENT,
     data: {
