@@ -6,7 +6,7 @@
 - **Size**: 4 trucks; small owner-operated shop. Employee count, revenue, and geography were not specified in the dogfood source.
 - **Tech baseline**: Types with two fingers, has never opened a terminal, and calls every tool an "app."
 - **What they don't have**: A simple way for technicians to know what parts are on each truck, plus a software-building experience that speaks shop language instead of platform language.
-- **Archetype**: Target leaf `hvac-contractor`; current category `trades-maintenance`. The field-service spec notes that the category exists but the HVAC leaf archetype still needs to be added.
+- **Archetype**: Target leaf `hvac-contractor`; current category `trades-maintenance`. The catalog seeds `facilities-maintenance`, `plumber`, `electrician`, `cleaning-service`, and `landscaping`; `hvac-contractor` is not yet seeded.
 - **IT4IT value streams they care about**: `strategy-to-portfolio`, `requirement-to-deploy`, `request-to-fulfill`, `detect-to-correct`, `deploy-to-operate`.
 
 ## The narrative (marketing-grade)
@@ -33,12 +33,12 @@ The source Build Studio build is `FB-6F7D6AC4`, under Dale's hardening epic `EP-
 ## What the platform needs to be like for them
 
 - **Vocabulary** they expect: trucks, techs, parts, warehouse, jobs, service calls, customers, look up, update the list, pull parts, restock, on my way.
-- **Vocabulary to avoid**: FeatureBuild, work capsule, branch, build ID, model route, MCP tool, evidence, taxonomy, IT4IT, schema, designDoc, buildPlan, sandbox container.
-- **Coworkers** they need active: Build Studio Software Engineer for the first feature; Dispatcher for daily schedule and customer updates; Inventory Specialist for truck stock and restock prompts; Field Technician helper for mobile job updates.
+- **Vocabulary to avoid**: FeatureBuild, work capsule, branch, build ID, model route, MCP tool, evidence, taxonomy, IT4IT, schema, designDoc, buildPlan, sandbox container, GearInterface, torque, ring, slip, cockpit.
+- **Coworkers** they need active: Build Studio Software Engineer for the first feature; Dispatcher-style coworker for daily schedule and customer updates; Field Technician-style coworker for mobile job and parts-used updates. The Dispatcher and Field Technician roles are designed in the field-service spec but must be checked against seed reality before a dogfood run.
 - **Critical features**: obvious "start a build" entry, provider readiness gate, multiline intake, visible long-running progress, correct active-build targeting, review-loop convergence, plain-language status banners, live preview tied to the active build, internal ID hiding, truck inventory lookup/update, and archetype-aware hive applicability.
 - **Mostly irrelevant at first touch**: architecture maps, code intelligence chips, model/provider IDs, branch/capsule metadata, raw admin backlog mechanics, generic portfolio language, and release internals.
 - **Surfaces they'll touch first**: `/welcome`, `/login`, `/workspace`, `/build`, `/platform/ai/providers` only if setup is blocked, live preview, and later a mobile or technician surface for truck stock.
-- **Surfaces they should NEVER see**: tool traces, admin internals, raw model IDs, Git branch names, MCP/tool names, schema field names, internal failure handlers, IT4IT/EA jargon, or unrelated platform self-upgrade work.
+- **Surfaces they should NEVER see**: tool traces, admin internals, raw model IDs, Git branch names, MCP/tool names, schema field names, internal failure handlers, IT4IT/EA jargon, GearInterface terms, or unrelated platform self-upgrade work.
 
 ## Marketing extractables
 
@@ -64,6 +64,7 @@ The source Build Studio build is `FB-6F7D6AC4`, under Dale's hardening epic `EP-
 - Re-run Plan iteration for the truck-stock feature and confirm review iterations converge or stop with a clear split-scope recommendation. It must not oscillate between task granularities for 30 minutes. Link: `BI-4396EFEC`.
 - Force or simulate a max-iteration fallback and confirm the recovery message remains deterministic and domain-correct. It must not suggest unrelated finance reports while Dale is building truck inventory. Link: `BI-0C19AFDD`.
 - Switch between two builds, then open live preview from Dale's build. The preview must open the active truck-stock build, not a stale "driving" build from another thread. Link: `BI-EEC5A5ED`.
+- Open `/workspace` as Dale's install once `BI-CE6AF925` lands and confirm the first viewport is a dispatch board with today's jobs, unscheduled jobs, technician load, customer update failures, parts/units, and coworker handoffs.
 - When the truck-stock feature is ready for hive contribution, confirm applicability metadata limits it to field-service/mobile-inventory archetypes by default. A dental practice, law firm, or restaurant install should not see it as a recommended feature. Link: `BI-76E66F9B`.
 - Smoke the shipped feature itself: create two trucks, add parts to each, look up parts from a technician view, mark one part used, and confirm restock visibility updates.
 
@@ -109,4 +110,6 @@ Live backlog check on 2026-05-24 showed these non-done items under `EP-9FC5D2FD`
 
 - Primary dogfood log: [2026-05-23 Dale HVAC Build Studio dogfood](../dogfood/2026-05-23-dale-hvac-build-studio.md).
 - Field-service archetype and architecture grounding: [Field Service Trades design](../superpowers/specs/2026-05-19-field-service-trades-ai-dispatch-design.md) and [Field Service Sprint 1 plan](../superpowers/plans/2026-05-19-field-service-sprint-1.md).
-- Live backlog source at creation: MCP `list_backlog_items(epicId="EP-9FC5D2FD")` and `get_backlog_item("BI-4396EFEC")`.
+- Workspace-home anchor: [Vertical Workspace Home design](../superpowers/specs/2026-05-24-vertical-workspace-home-design.md).
+- Archetype seed reality: `packages/storefront-templates/src/archetypes/trades-maintenance.ts`.
+- Live backlog source at creation: MCP `list_backlog_items(epicId="EP-9FC5D2FD")`, `get_backlog_item("BI-4396EFEC")`, `get_backlog_item("BI-CE6AF925")`, and `list_backlog_items(epicId="EP-REDUCTION-GEAR-ARCH")` on 2026-05-24.

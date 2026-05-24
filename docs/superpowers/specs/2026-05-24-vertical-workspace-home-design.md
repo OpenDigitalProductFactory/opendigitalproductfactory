@@ -481,6 +481,22 @@ The contribution substrate should be proven with HVAC first, then filed as separ
 
 The category fallback should be useful but less specific. Exact archetype contributions win when available.
 
+### 7.1 Overall design evaluation
+
+The overall design is architecturally sound: it keeps `/workspace` as the employee landing surface, preserves the current platform command center as a fallback/operator mode, and introduces vertical homes through typed contributions instead of route forks. The resolver / contribution / projection split is the right durability boundary because each vertical can bring its own vocabulary, layout, and first-view priority while still reading canonical records and translated GearInterface / Calibrator / Governor signals.
+
+The remaining design risk is not the substrate shape; it is validation drift. A table of archetypes is still too abstract unless each implementation BI has a named worker whose day can be replayed. Every vertical-home BI should therefore have a persona case-study document under `docs/personas/` before Build Studio starts the feature. The persona owns the smoke: what the worker asks for, what the first viewport must show, which jargon must be hidden, which coworkers are relevant, and which canonical records must render in the Live portal.
+
+This pass creates the first-wave persona anchors:
+
+| Persona | Persona file | Archetype / category | Workspace-home BI | First-feature smoke |
+| ------- | ------------ | -------------------- | ----------------- | ------------------- |
+| Dale | [`docs/personas/dale-hvac.md`](../../personas/dale-hvac.md) | target `hvac-contractor` / category `trades-maintenance` | `BI-CE6AF925` | Dispatch board plus truck-stock visibility: today's service calls, unscheduled jobs, technician load, customer update failures, parts/units, and coworker handoffs. |
+| Linda | [`docs/personas/linda-clinic.md`](../../personas/linda-clinic.md) | `dental-practice` / category `healthcare-wellness` | `BI-8954667A` | Schedule board: ready appointments, missing forms, no-show risk, practitioner capacity, and patient follow-ups. |
+| Marisol | [`docs/personas/marisol-retail.md`](../../personas/marisol-retail.md) | `retail-goods` / category `retail-goods` | `BI-3F3B535D` | Merchandising board: open order tasks, low stock, incoming inventory, return exceptions, and location-level sales signals. |
+
+Substrate BIs `BI-1CCC6264` and `BI-3E8D2CF5` remain shared prerequisites. As of the 2026-05-24 live backlog check, all three first-wave vertical BIs above are open under `EP-REDUCTION-GEAR-ARCH`. Dale's prior Build Studio blocker `BI-4396EFEC` is still `triaging`; do not run new peer-persona Build Studio sessions until a fresh Dale run proves the plan-iteration divergence no longer traps first-feature work.
+
 ## 8. Unconfigured State
 
 When a business has a `StorefrontArchetype` but no matching home contribution:
@@ -616,6 +632,7 @@ BIs 1 and 2 are substrate; they unblock BIs 3–5 and any future vertical. Each 
 This spec pass produces:
 
 - A written spec at `docs/superpowers/specs/2026-05-24-vertical-workspace-home-design.md`.
+- First-wave persona coverage under `docs/personas/` for the HVAC, clinic, and retail workspace-home variants.
 - Follow-on implementation BIs under `EP-REDUCTION-GEAR-ARCH`.
 - Execution evidence attached to `BI-89C19AAF`.
 
