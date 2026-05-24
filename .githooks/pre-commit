@@ -1,10 +1,14 @@
 #!/bin/sh
 #
-# pre-commit: runs before every local commit. Two guards:
+# pre-commit: runs before every local commit. Four guards:
 #
 #   1. Migration immutability — reject commits that modify previously-committed
 #      Prisma migration .sql files (drift prevention).
-#   2. Typecheck gate — when TypeScript files are staged, run `pnpm typecheck`
+#   2. Stale Prisma client refresh — regenerate when schema.prisma is newer
+#      than the generated client.
+#   3. Secret scan gate — scan the staged snapshot with gitleaks before bytes
+#      enter Git history.
+#   4. Typecheck gate — when TypeScript files are staged, run `pnpm typecheck`
 #      on the affected workspaces and reject the commit if it fails. Catches
 #      missing imports, symbol drift, and type errors BEFORE they reach CI.
 #
@@ -12,6 +16,10 @@
 #   - Only non-TS files are staged (docs-only, config-only, migration-only)
 #   - DPF_SKIP_TYPECHECK=1 is set (emergency escape hatch — use sparingly; CI
 #     will still catch what you let through).
+#
+# The staged secret scan is skipped when:
+#   - DPF_SKIP_SECRET_SCAN=1 skips only the staged gitleaks scan. Use only for
+#     verified false positives; CI still scans the PR.
 #
 # Set up: `git config core.hooksPath .githooks` (done automatically at repo setup).
 
@@ -63,7 +71,31 @@ if [ -f "$SCHEMA" ] && [ -f "$CLIENT" ] && [ "$SCHEMA" -nt "$CLIENT" ]; then
   echo "[pre-commit] Prisma client refreshed."
 fi
 
-# ─── Guard 3: typecheck gate ────────────────────────────────────────────────
+# ─── Guard 3: staged secret scan ────────────────────────────────────────────
+
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR || true)
+
+if [ -n "$STAGED_FILES" ]; then
+  if [ "$DPF_SKIP_SECRET_SCAN" = "1" ]; then
+    echo "[pre-commit] DPF_SKIP_SECRET_SCAN=1 - skipping staged gitleaks scan."
+  else
+    echo "[pre-commit] Staged files present - running gitleaks secret scan..."
+    echo "[pre-commit] To skip a verified false positive: DPF_SKIP_SECRET_SCAN=1 git commit ..."
+    echo ""
+
+    if ! node scripts/security/run-gitleaks-local.mjs --staged; then
+      echo ""
+      echo "Commit rejected. Gitleaks found secret-shaped content in the staged snapshot."
+      echo "Remove the secret, rotate it if it was real, then stage the sanitized file."
+      echo ""
+      exit 1
+    fi
+
+    echo "[pre-commit] secret scan ok"
+  fi
+fi
+
+# ─── Guard 4: typecheck gate ────────────────────────────────────────────────
 
 if [ "$DPF_SKIP_TYPECHECK" = "1" ]; then
   echo "[pre-commit] DPF_SKIP_TYPECHECK=1 — skipping typecheck gate."
