@@ -5,26 +5,37 @@ name: Semgrep Security Scan
 # Complements (not replaces) the CodeQL gate. CodeQL is post-merge analytical;
 # Semgrep is pre-merge syntactic. The two catch different patterns — keep both.
 #
+# `semgrep ci` vs the previous `semgrep scan` invocation:
+#   The original workflow used `semgrep scan --config=p/...` with explicit
+#   community rulesets. Acceptance test in demo PR #1061 found that the
+#   unauthenticated community registry loads only ~150 rules for our TS files,
+#   and those rules missed hardcoded AWS keys, Math.random() for tokens, and
+#   eval(). `semgrep ci` is the canonical CI command — when SEMGREP_APP_TOKEN
+#   is set, it pulls the full registry plus any policies configured in the
+#   Semgrep AppSec Platform (free tier for open-source projects). Without
+#   the token, it gracefully falls back to a community default ruleset.
+#
+# Setup (one-time, repo-owner task):
+#   See docs/security/semgrep.md → "Activating the full ruleset" for the
+#   semgrep.dev account + GitHub repo secret steps. Until SEMGREP_APP_TOKEN
+#   is present, the scan runs with the same limited coverage demo PR #1061
+#   surfaced. The workflow does NOT fail if the token is missing — graceful
+#   degradation, not a hard requirement.
+#
 # Why pull_request (not pull_request_target):
-#   pull_request_target gives the workflow access to secrets but checks out the
-#   base ref by default, requiring careful PR-head handling to scan the change.
-#   DPF currently has no external fork-PR contribution flow; pull_request keeps
-#   the trust boundary clean. If fork PRs become routine, add a sibling workflow
-#   that runs in pull_request_target and uploads SARIF only.
+#   pull_request_target gives the workflow access to secrets but checks out
+#   the base ref by default. DPF currently has no external fork-PR flow;
+#   pull_request keeps the trust boundary clean.
 #
-# Severity gating:
-#   --severity ERROR --severity WARNING — these block the PR. INFO findings are
-#   filtered out (no comment-only surfacing in v1). When Semgrep AppSec Platform
-#   integration lands, the block/comment split moves to rule metadata.
-#
-# Baseline:
-#   --baseline-commit limits the scan diff to changes against origin/main, so
-#   pre-existing patterns don't surface on unrelated PRs (mirrors the inflow-gate
-#   strategy for CodeQL).
+# Baseline / diff scanning:
+#   SEMGREP_BASELINE_REF (canonical for `semgrep ci`) limits the scan diff
+#   to changes against origin/<base_ref>, so pre-existing patterns don't
+#   surface on unrelated PRs.
 #
 # Custom rules:
-#   .github/semgrep/ is reserved for DPF-specific rule files (.yml). Empty for
-#   v1 — added if the burn-down replay shows gaps in standard rulesets.
+#   .github/semgrep/ is reserved for DPF-specific rule files (.yml). Empty
+#   today — populated when a pattern not covered by the platform ruleset
+#   needs targeted coverage.
 
 on:
   pull_request:
@@ -33,8 +44,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Least-privilege default. SARIF upload needs security-events:write at the job
-# level (granted below).
 permissions:
   contents: read
 
@@ -46,72 +55,49 @@ jobs:
   semgrep:
     name: Semgrep Scan
     runs-on: ubuntu-latest
-    # Skip on Dependabot PRs — they're scanned post-merge by the push trigger,
-    # and Dependabot lacks the token scope to upload SARIF in any case.
+    # Skip on Dependabot PRs — those are covered by the post-merge push trigger.
     if: github.actor != 'dependabot[bot]'
     timeout-minutes: 10
     permissions:
       contents: read
       security-events: write
     container:
-      # Pinned to the official Semgrep image. Renovate/Dependabot will track
-      # bumps via the docker-image ecosystem.
       image: semgrep/semgrep:1.163.0
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          # Full history needed for --baseline-commit diff scanning.
+          # Full history needed for SEMGREP_BASELINE_REF diff scanning.
           fetch-depth: 0
 
-      - name: Resolve baseline commit
-        id: baseline
-        env:
-          BASE_REF: ${{ github.event_name == 'pull_request' && github.base_ref || 'main' }}
-        run: |
-          set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          # On PRs we already have origin/<base_ref> from checkout. On push to
-          # main, baseline against the parent of the head commit so scan diffs
-          # the merge introducing the change rather than re-scanning history.
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BASELINE_SHA="$(git rev-parse "origin/${BASE_REF}")"
-          else
-            BASELINE_SHA="$(git rev-parse HEAD^ 2>/dev/null || git rev-parse HEAD)"
-          fi
-          echo "sha=${BASELINE_SHA}" >> "$GITHUB_OUTPUT"
-          echo "Baseline commit: ${BASELINE_SHA}"
+      - name: Configure git safe directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Semgrep scan
-        id: scan
+      - name: Semgrep ci
         env:
-          # Disable Semgrep usage metrics (offline, opt-out per privacy policy).
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+          # Disable Semgrep usage metrics by default. The platform integration
+          # still works for findings reporting; only anonymous CLI usage stats
+          # are suppressed. Override to "on" if telemetry is desired.
           SEMGREP_SEND_METRICS: "off"
-          BASELINE_SHA: ${{ steps.baseline.outputs.sha }}
+          # On PRs: diff against the base branch so only PR-introduced findings
+          # surface. On push to main: no baseline (full scan of touched files).
+          SEMGREP_BASELINE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
         run: |
           set -euo pipefail
-          # --error: non-zero exit if any finding remains after baseline diff.
-          # --severity filter: only ERROR + WARNING block. INFO is dropped.
-          # --sarif-output: machine-readable findings for Code Scanning upload.
-          semgrep scan \
-            --config=p/security-audit \
-            --config=p/typescript \
-            --config=p/javascript \
-            --config=p/nextjs \
-            --config=p/owasp-top-ten \
-            --config=p/github-actions \
-            --config=p/secrets \
-            --severity=ERROR \
-            --severity=WARNING \
-            --baseline-commit="${BASELINE_SHA}" \
-            --sarif-output=semgrep.sarif \
-            --error \
-            --metrics=off \
-            --timeout=60 \
-            --timeout-threshold=3
+          # --sarif-output emits findings in SARIF for GitHub Code Scanning.
+          # `semgrep ci` exit codes:
+          #   0  no blocking findings
+          #   1  blocking findings present
+          #   2  configuration / fatal error
+          # Block-vs-audit per finding is driven by rule metadata + (when the
+          # AppSec Platform is connected) per-rule mode configured at
+          # semgrep.dev. Without an SEMGREP_APP_TOKEN, all default-blocking
+          # rules block.
+          semgrep ci --sarif-output=semgrep.sarif
 
       - name: Upload SARIF to GitHub Code Scanning
-        if: always()
+        if: always() && hashFiles('semgrep.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: semgrep.sarif
