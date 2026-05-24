@@ -69,11 +69,33 @@ RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 }`;
 }
 
-export function buildPlanReviewPrompt(plan: BuildPlanDoc): string {
+/** Optional prior-round context passed to plan review on iterations 2+.
+ *  Lets the reviewer judge which prior issues the new plan addresses, so
+ *  the operator sees converging trajectory instead of issue-set churn.
+ *  BI-4396EFEC (D38). */
+export type PlanReviewPriorContext = {
+  round: number;
+  issues: ReadonlyArray<{ severity: string; description: string }>;
+};
+
+export function buildPlanReviewPrompt(
+  plan: BuildPlanDoc,
+  prior?: PlanReviewPriorContext | null,
+): string {
   const tasks = Array.isArray(plan?.tasks) ? plan.tasks : [];
   const files = Array.isArray(plan?.fileStructure) ? plan.fileStructure : [];
   const taskList = tasks.map((t, i) => `  ${i + 1}. ${t?.title ?? "Untitled"}: test="${t?.testFirst ?? ""}" impl="${t?.implement ?? ""}" verify="${t?.verify ?? ""}"`).join("\n") || "  (no tasks defined)";
   const fileList = files.map((f) => `  ${f?.action ?? "?"}: ${f?.path ?? "?"} — ${f?.purpose ?? ""}`).join("\n") || "  (no file structure defined)";
+
+  // BI-4396EFEC (D38) — Delta-aware review prompt. When prior issues exist,
+  // tell the reviewer to judge resolution rather than re-evaluate from
+  // scratch. The goal is convergence: the reviewer's job on iteration N>1
+  // is to (a) honor genuinely-addressed prior findings, (b) re-surface
+  // anything still present using the SAME description so the operator sees
+  // persistence, (c) flag only NEW issues the prior round didn't catch.
+  const priorSection = prior && prior.issues.length > 0
+    ? `\n\nPRIOR REVIEW CONTEXT (this is review round ${prior.round + 1}):\nThe immediately-prior review of this plan surfaced these ${prior.issues.length} issues:\n${prior.issues.map((i, idx) => `  ${idx + 1}. [${i.severity}] ${i.description}`).join("\n")}\n\nDelta-aware review protocol:\n- For each prior issue, judge whether the new plan addresses it. If yes, do NOT re-surface it.\n- If a prior issue is still present, re-surface it but reuse the SAME description so the operator sees persistence.\n- Only add NEW issues that this revision genuinely introduces or that the prior round missed.\n- Goal: convergence, not re-litigation. Avoid trading one set of issues for another.\n`
+    : "";
 
   return `You are reviewing an implementation plan for a platform feature.
 
@@ -81,7 +103,7 @@ FILE STRUCTURE:
 ${fileList}
 
 TASKS (${tasks.length} total):
-${taskList}
+${taskList}${priorSection}
 
 REVIEW CHECKLIST — evaluate EVERY item against EVERY task before responding:
 1. Are tasks bite-sized (each should be 2-5 minutes of work)? Check EACH task individually.
