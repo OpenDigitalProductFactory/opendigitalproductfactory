@@ -86,9 +86,9 @@ Describe "pre-destructive-snapshot.ps1 — routing table" {
         $entry.strategy | Should -Be 'pg_dump'
     }
 
-    It "routes 'docker compose down -v' to both pg_dump + neo4j strategies" {
+    It "routes 'docker compose down --volumes' to both pg_dump + neo4j strategies" {
         $exit = Invoke-Dispatcher -Dispatcher $script:Fixture.Dispatcher -BackupsDir $script:Fixture.BackupsDir `
-            -BinName 'docker' -DispatcherArgs @('compose','down','-v')
+            -BinName 'docker' -DispatcherArgs @('compose','down','--volumes')
         $exit | Should -BeIn @(0, 1)
         $lines = @(Get-Content -LiteralPath $script:Fixture.LogFile)
         $strategies = $lines | ForEach-Object {
@@ -153,7 +153,9 @@ Describe "pre-destructive-snapshot.ps1 — audit log shape" {
         $entry.event | Should -Be 'pre-destructive-snapshot'
         $entry.cmd | Should -Be 'docker volume rm dpf_pgdata'
         $entry.install_root | Should -Be $script:Fixture.InstallRoot
-        $entry.timestamp | Should -Match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$'
+        # ConvertFrom-Json normalizes ISO strings to DateTime; assert raw line instead.
+        $rawLine = @(Get-Content -LiteralPath $script:Fixture.LogFile)[-1]
+        $rawLine | Should -Match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$'
     }
 }
 
