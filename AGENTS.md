@@ -110,7 +110,7 @@ MCP bearer tokens use the `dpfmcp_...` pattern and are issued from Admin > Platf
 **Token rotation — Claude Code and Codex:** Both tools read the token from the `DPF_MCP_BEARER_TOKEN` Windows user environment variable. `.mcp.json` references it as `${DPF_MCP_BEARER_TOKEN}`; Codex does the same via `bearer_token_env_var` in `~/.codex/config.toml`. Token rotation from Admin > Platform Development > MCP is:
 ```powershell
 [System.Environment]::SetEnvironmentVariable('DPF_MCP_BEARER_TOKEN', '<new-token>', 'User')
-Invoke-RestMethod -Method Post -Uri 'http://localhost:3000/api/mcp/token/refresh' -ContentType 'application/json' -Body '{"token":"<new-token>"}'
+Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:3000/api/mcp/token/refresh' -ContentType 'application/json' -Body '{"token":"<new-token>"}'
 ```
 Then retry the MCP call in the running session. No file edits. No re-registration.
 
