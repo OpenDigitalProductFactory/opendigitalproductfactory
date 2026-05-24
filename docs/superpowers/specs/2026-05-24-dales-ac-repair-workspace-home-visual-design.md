@@ -13,7 +13,7 @@
 
 Dale's AC Repair should not land on a generic platform dashboard. The first screen should look like the working board of a four-truck HVAC shop: what needs dispatch, where the techs are, which customers need updates, what parts are missing, and which coworker suggestions are ready for Dale to approve.
 
-This mockup is a browser-rendered approximation, not implementation code. It is meant to validate the visual paradigm before `BI-CE6AF925` builds the actual HVAC dispatcher home on the workspace-home substrate.
+This mockup is a browser-rendered approximation, not implementation code. It is meant to validate the visual paradigm before `BI-CE6AF925` builds the actual HVAC dispatcher home on the workspace-home substrate. The screen is also a proof of reuse: each visible tile is an instance of a workspace-home primitive that should be available to other verticals and business-archetype setups.
 
 ## Visual Paradigm
 
@@ -26,6 +26,21 @@ The recommended pattern is a **dispatch day board**:
 - Lower row: truck stock, failed customer updates, and coworker handoffs.
 
 This intentionally puts queue, map, technician load, inventory, and communication exceptions above generic business metrics.
+
+## Reusable Primitive Composition
+
+The Dale screen should not create Dale-only widgets. It composes reusable primitives that can be relabeled and rebound for other archetypes:
+
+| Dale tile | Primitive | Reuse examples |
+| --------- | --------- | -------------- |
+| Needs a decision | `decision-queue` | clinic missing forms, legal court deadlines, restaurant guest issues, MSP SLA risks |
+| Trucks and techs | `capacity-lanes` | practitioner capacity, instructor/car capacity, barber chairs, volunteer shifts |
+| Customer map | `geo-map` | dog-walking routes, property-management unit map, landscaping properties, MSP customer/site map |
+| Truck stock | `inventory-watch` | retail low stock, bakery ingredients, salon supplies, optician frame/lens inventory |
+| Customer updates | `communication-exceptions` | patient reminders, owner updates, donor outreach, client approval reminders |
+| Coworker handoffs | `handoff-queue` | dispatcher approvals, clinic scheduler approvals, MSP escalation handoffs, campaign approval handoffs |
+
+`BI-5B8FE5C1` should define these primitives as typed widget families with canonical data contracts, mobile behavior, empty states, action affordances, and banned-copy protection. Vertical BIs such as `BI-CE6AF925` should provide the contribution manifest, vocabulary, data binding, and layout composition.
 
 ## Research Anchors
 
@@ -43,6 +58,7 @@ This intentionally puts queue, map, technician load, inventory, and communicatio
 - Required primitives from `BI-5B8FE5C1`: queue, map, schedule/capacity, inventory/restock, communication exception, coworker handoff.
 - Required vocabulary: jobs, service calls, techs, trucks, parts, warehouse, customers, on-my-way, restock.
 - Avoided vocabulary: platform substrate, build IDs, GearInterface, ring, torque, slip, cockpit, calibration, contribution model.
+- Business-archetype setup implication: after setup selects `hvac-contractor` or the `trades-maintenance` fallback, the setup flow should show that the dispatcher home is included, list the primitive widgets being activated, and verify required setup data or honest empty states. Dale should not need to configure a dashboard after choosing the archetype.
 
 ## Open Design Questions
 
