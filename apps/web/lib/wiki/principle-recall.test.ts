@@ -356,3 +356,176 @@ describe("formatPrincipleContext", () => {
     expect(block).toContain("Prefer queried state over inferred causes.");
   });
 });
+
+// ─── Ring-scope filter (BI-4AA1074B Slice 2; spec §5.2) ────────────────────
+
+describe("recallPrincipleContext: ring-scope filter", () => {
+  function makeScopedCommandment(
+    id: string,
+    title: string,
+    direction: string,
+    ringScope: string[],
+  ) {
+    return {
+      ...makeCommandmentRow(id, title, direction),
+      principleRingScope: ringScope,
+    };
+  }
+
+  function makeScopedHit(
+    slug: string,
+    title: string,
+    tier: string,
+    ringScope: string[],
+    score = 0.8,
+  ) {
+    return {
+      ...makeQdrantHit(slug, title, tier, score),
+      principleRingScope: ringScope,
+    };
+  }
+
+  it("threads ringScope through listPrinciplesByTier when caller declared a narrow scope", async () => {
+    listPrinciplesByTier.mockResolvedValueOnce([]);
+    searchWikiPages.mockResolvedValue([]);
+
+    await recallPrincipleContext({
+      query: "x",
+      organizationId: null,
+      callingPopulation: "in_platform_coworker",
+      ringScope: ["ring-2-workflow"],
+    });
+
+    const args = listPrinciplesByTier.mock.calls[0][1] as {
+      ringScope?: string[];
+    };
+    expect(args.ringScope).toEqual(["ring-2-workflow"]);
+  });
+
+  it("passes principleRingScope to Qdrant search for core + contextual branches", async () => {
+    listPrinciplesByTier.mockResolvedValueOnce([]);
+    searchWikiPages.mockResolvedValue([]);
+
+    await recallPrincipleContext({
+      query: "x",
+      organizationId: null,
+      callingPopulation: "in_platform_coworker",
+      ringScope: ["ring-1-coworker"],
+    });
+
+    for (const call of searchWikiPages.mock.calls) {
+      const args = call[0] as { principleRingScope?: string[] };
+      expect(args.principleRingScope).toEqual(["ring-1-coworker"]);
+    }
+  });
+
+  it("omits principleRingScope on Qdrant calls when caller passed universal-ring (no constraint)", async () => {
+    listPrinciplesByTier.mockResolvedValueOnce([]);
+    searchWikiPages.mockResolvedValue([]);
+
+    await recallPrincipleContext({
+      query: "x",
+      organizationId: null,
+      callingPopulation: "in_platform_coworker",
+      ringScope: ["universal-ring"],
+    });
+
+    for (const call of searchWikiPages.mock.calls) {
+      const args = call[0] as { principleRingScope?: string[] };
+      expect(args.principleRingScope).toBeUndefined();
+    }
+  });
+
+  it("post-filter excludes commandments whose ring scope doesn't match (defensive belt-and-suspenders)", async () => {
+    listPrinciplesByTier.mockResolvedValueOnce([
+      makeScopedCommandment("c1", "Match", "Direction.", ["ring-2-workflow"]),
+      makeScopedCommandment("c2", "Mismatch", "Direction.", ["ring-5-hive"]),
+      makeScopedCommandment("c3", "Universal", "Direction.", ["universal-ring"]),
+      makeScopedCommandment("c4", "Empty", "Direction.", []),
+    ]);
+    searchWikiPages.mockResolvedValue([]);
+
+    const result = await recallPrincipleContext({
+      query: "x",
+      organizationId: null,
+      callingPopulation: "in_platform_coworker",
+      ringScope: ["ring-2-workflow"],
+    });
+
+    const titles = result?.commandments.map((c) => c.title).sort();
+    // Match, Universal, Empty all pass. Mismatch excluded.
+    expect(titles).toEqual(["Empty", "Match", "Universal"]);
+    expect(result?.ringScopeExcluded?.commandments).toBe(1);
+  });
+
+  it("post-filter excludes core/contextual hits whose ring scope doesn't match", async () => {
+    listPrinciplesByTier.mockResolvedValueOnce([]);
+    searchWikiPages
+      .mockResolvedValueOnce([
+        makeScopedHit("p/match", "CoreMatch", "core", ["ring-1-coworker"]),
+        makeScopedHit("p/miss", "CoreMiss", "core", ["ring-5-hive"]),
+      ])
+      .mockResolvedValueOnce([
+        makeScopedHit("p/ctxmatch", "CtxMatch", "contextual", ["universal-ring"]),
+        makeScopedHit("p/ctxmiss", "CtxMiss", "contextual", ["ring-4-sandbox-prod"]),
+      ]);
+
+    const result = await recallPrincipleContext({
+      query: "x",
+      organizationId: null,
+      callingPopulation: "in_platform_coworker",
+      ringScope: ["ring-1-coworker"],
+    });
+
+    expect(result?.core.map((c) => c.title)).toEqual(["CoreMatch"]);
+    expect(result?.contextual.map((c) => c.title)).toEqual(["CtxMatch"]);
+    expect(result?.ringScopeExcluded).toEqual({
+      commandments: 0,
+      core: 1,
+      contextual: 1,
+    });
+  });
+
+  it("skips post-filter when caller passed universal-ring (no constraint)", async () => {
+    listPrinciplesByTier.mockResolvedValueOnce([
+      makeScopedCommandment("c1", "AnyScope", "Direction.", ["ring-5-hive"]),
+    ]);
+    searchWikiPages.mockResolvedValue([]);
+
+    const result = await recallPrincipleContext({
+      query: "x",
+      organizationId: null,
+      callingPopulation: "in_platform_coworker",
+      ringScope: ["universal-ring"],
+    });
+
+    expect(result?.commandments).toHaveLength(1);
+    expect(result?.ringScopeExcluded).toBeUndefined();
+  });
+
+  it("emits [principle-recall-trace] log line with caller surface + counts", async () => {
+    const logSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    listPrinciplesByTier.mockResolvedValueOnce([]);
+    searchWikiPages.mockResolvedValue([]);
+
+    await recallPrincipleContext({
+      query: "x",
+      organizationId: null,
+      callingPopulation: "in_platform_coworker",
+      ringScope: ["ring-2-workflow"],
+      callingSurface: "build-studio-phase",
+    });
+
+    expect(logSpy).toHaveBeenCalledOnce();
+    const logged = logSpy.mock.calls[0][0] as string;
+    expect(logged).toMatch(/^\[principle-recall-trace\] /);
+    const payload = JSON.parse(logged.replace("[principle-recall-trace] ", ""));
+    expect(payload).toMatchObject({
+      callingSurface: "build-studio-phase",
+      callingPopulation: "in_platform_coworker",
+      ringScope: ["ring-2-workflow"],
+      ringScopeActive: true,
+    });
+    logSpy.mockRestore();
+  });
+});
