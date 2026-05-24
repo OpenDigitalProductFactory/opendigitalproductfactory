@@ -96,12 +96,19 @@ services:
       # them through /api/build/<buildId>/evidence/<fileName> (auth-gated).
       # Read-only from the portal's side — only browser-use should write.
       - browser_evidence:/evidence:ro
-      # Platform-managed backups (daily Postgres + future Neo4j/Qdrant).
+      # Platform-managed backups (daily Postgres + Neo4j + Qdrant).
       # Host bind mount (NOT a Docker volume) so `docker compose down -v`,
       # `docker volume rm`, or worktree-induced compose re-labelling cannot
       # destroy backups. Same path the promoter writes pre-promote dumps to.
       # See docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md.
-      - ${DPF_HOST_INSTALL_PATH:-.}/backups:/backups
+      #
+      # Source lives OUTSIDE the install root by default (DPF_BACKUPS_HOST_PATH
+      # is set by the installer to a sibling like $DPF_DIR-backups) so that
+      # dpf-reinstall.ps1 / uninstall-dpf.ps1 rm-ing $DPF_DIR cannot destroy
+      # the only persisted copies of operator backups. Pre-relocation default
+      # is preserved for installs that haven't been re-run since the PR that
+      # introduced DPF_BACKUPS_HOST_PATH.
+      - ${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH:-.}/backups}:/backups
       # Writable host mount: lets the portal write .mcp.json to the install
       # directory at token generation time. Requires DPF_HOST_INSTALL_PATH
       # to be set in .env (done by the installer at setup time).
@@ -132,6 +139,12 @@ services:
       DEPLOYED_VERSION: ${DEPLOYED_VERSION:-}
       DPF_ENVIRONMENT: production
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
+      # Forwarded so scripts/backup-neo4j.sh + scripts/restore-neo4j.sh can
+      # translate the portal's /backups view to the host path that the
+      # docker-in-docker dump container needs as its bind mount source.
+      # Falls back to ${DPF_HOST_INSTALL_PATH}/backups inside the bash
+      # scripts when unset (legacy in-tree layout).
+      DPF_BACKUPS_HOST_PATH: ${DPF_BACKUPS_HOST_PATH:-}
       DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT: /host-dpf
       INSTANCE_TYPE: dev
       PROJECT_ROOT: /workspace
@@ -259,7 +272,9 @@ services:
       # Use absolute host path via DPF_HOST_INSTALL_PATH (declared in
       # .env.docker.example) so bind mounts resolve regardless of the
       # operator's current working directory when invoking docker compose.
-      - ${DPF_HOST_INSTALL_PATH:-.}/backups:/backups
+      # Backups bind mount honors DPF_BACKUPS_HOST_PATH (sibling-to-install
+      # by default; see portal service comment above for rationale).
+      - ${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH:-.}/backups}:/backups
       - ${DPF_HOST_INSTALL_PATH:-.}:/host-source:ro  # Host project source for building new portal images
     environment:
       DPF_PRODUCTION_DB_CONTAINER: dpf-postgres-1

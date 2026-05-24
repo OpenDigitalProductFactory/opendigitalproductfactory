@@ -16,9 +16,11 @@
  *   6. Emit [backup-trace] logs and Prometheus metrics.
  *
  * Docker-in-docker gotcha: when the script spawns the neo4j-admin dump
- * container, the bind mount source must be the HOST path (DPF_HOST_INSTALL_PATH
- * prefix), not the portal's view of /backups. The script handles this
- * translation via HOST_TARGET_DIR; we pass DPF_HOST_INSTALL_PATH through env.
+ * container, the bind mount source must be the HOST path (DPF_BACKUPS_HOST_PATH,
+ * which is the sibling-to-install backups directory in relocated installs;
+ * falls back to DPF_HOST_INSTALL_PATH/backups for pre-relocation installs).
+ * The script handles this translation via HOST_TARGET_DIR; we pass both env
+ * vars through so the script can pick whichever is set.
  *
  * Per the never-ask-user-to-run-commands kernel principle, the operator
  * never sees any of the shell commands here. Failure is reported through
@@ -197,7 +199,12 @@ export async function runNeo4jBackup(
     DPF_NEO4J_DATABASE: process.env.DPF_NEO4J_DATABASE ?? "neo4j",
     // Required by the script to translate /backups/... to a host path for
     // docker-in-docker bind mounts. Without this the dump container gets an
-    // "invalid path" error from the Docker daemon.
+    // "invalid path" error from the Docker daemon. The script prefers
+    // DPF_BACKUPS_HOST_PATH (sibling-to-install in relocated installs) and
+    // falls back to DPF_HOST_INSTALL_PATH/backups for pre-relocation
+    // installs. We forward both; explicit pass-through (rather than relying
+    // on the process.env spread above) documents the runner→script contract.
+    DPF_BACKUPS_HOST_PATH: process.env.DPF_BACKUPS_HOST_PATH ?? "",
     DPF_HOST_INSTALL_PATH: process.env.DPF_HOST_INSTALL_PATH ?? "",
   };
 
