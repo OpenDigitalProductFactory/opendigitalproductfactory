@@ -2,10 +2,13 @@ name: Security Inflow Gate
 
 # Why this exists
 # ---------------
-# Blocks merging a PR that introduces NEW critical or high CodeQL findings.
-# Pre-existing baseline findings (tracked at docs/security/codeql-baseline.json)
-# are catalogued as backlog items (see BI-04701325 and child cluster BIs) and
-# burned down separately — they don't block unrelated PRs.
+# Blocks merging a PR that introduces NEW critical, high, or medium CodeQL
+# findings. (Severity floor was tightened from "critical,high" to include
+# medium after the 2026-05 burn-down brought the baseline to 0 alerts.
+# Override via FAIL_SEVERITIES env if scope ever needs to widen further.)
+# Pre-existing baseline findings (tracked at docs/security/codeql-baseline.json,
+# currently empty) are accepted findings — false positives with documented
+# dismissals or tracked debt — and don't block unrelated PRs.
 #
 # Trigger: workflow_run after the default-setup "CodeQL" workflow completes.
 # Reason: we need CodeQL to have analyzed the PR's head SHA before we can
