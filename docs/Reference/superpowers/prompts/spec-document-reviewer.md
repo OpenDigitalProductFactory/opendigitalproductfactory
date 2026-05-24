@@ -3,6 +3,8 @@
 **Purpose:** Verify the spec is complete, consistent, and ready for implementation planning.
 **Dispatch after:** Spec document is written.
 
+Before manual file reads for substrate sweeps, try `mcp__dpf__search_code_graph({ query: "<topic>", limit: 10 })` for a curated subgraph. Example: `mcp__dpf__search_code_graph({ query: "principle wiki frontmatter ingest", limit: 10 })`.
+
 ```
 Task tool (general-purpose):
   description: "Review spec document"
