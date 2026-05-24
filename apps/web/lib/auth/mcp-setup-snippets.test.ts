@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { buildSetupSnippets } from "./mcp-setup-snippets";
 
 const BASE = "http://localhost:3000";
+const LOCAL_MCP_URL = "http://127.0.0.1:3000/api/mcp/v1";
+const LOCAL_REFRESH_URL = "http://127.0.0.1:3000/api/mcp/token/refresh";
 const TOKEN = "dpfmcp_TESTTOKEN";
 
 describe("buildSetupSnippets", () => {
@@ -10,7 +12,7 @@ describe("buildSetupSnippets", () => {
     const parsed = JSON.parse(claudeCode) as Record<string, unknown>;
     const dpf = (parsed.mcpServers as Record<string, unknown>).dpf as Record<string, unknown>;
     expect(dpf.type).toBe("http");
-    expect(dpf.url).toBe(`${BASE}/api/mcp/v1`);
+    expect(dpf.url).toBe(LOCAL_MCP_URL);
     expect((dpf.headers as Record<string, string>).Authorization).toBe("Bearer ${DPF_MCP_BEARER_TOKEN}");
     expect(claudeCode).not.toContain(TOKEN);
   });
@@ -21,7 +23,7 @@ describe("buildSetupSnippets", () => {
     expect("mcpServers" in parsed).toBe(false);
     const dpf = (parsed.servers as Record<string, unknown>).dpf as Record<string, unknown>;
     expect(dpf.type).toBe("http");
-    expect(dpf.url).toBe(`${BASE}/api/mcp/v1`);
+    expect(dpf.url).toBe(LOCAL_MCP_URL);
     expect((dpf.headers as Record<string, string>).Authorization).toBe("Bearer ${env:DPF_MCP_BEARER_TOKEN}");
     expect(vscode).not.toContain(TOKEN);
   });
@@ -29,7 +31,7 @@ describe("buildSetupSnippets", () => {
   it("codex uses bearer_token_env_var instead of embedding the secret", () => {
     const { codex } = buildSetupSnippets(TOKEN, BASE);
     expect(codex).toContain("[mcp_servers.dpf]");
-    expect(codex).toContain(`url = "${BASE}/api/mcp/v1"`);
+    expect(codex).toContain(`url = "${LOCAL_MCP_URL}"`);
     expect(codex).toContain('bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"');
     expect(codex).not.toContain(TOKEN);
   });
@@ -40,7 +42,7 @@ describe("buildSetupSnippets", () => {
     expect(envPowerShell).toBe(
       "[System.Environment]::SetEnvironmentVariable('DPF_MCP_BEARER_TOKEN', 'dpfmcp_UNIQUETOKEN', 'User')",
     );
-    expect(runtimeRefreshPowerShell).toContain(`${BASE}/api/mcp/token/refresh`);
+    expect(runtimeRefreshPowerShell).toContain(LOCAL_REFRESH_URL);
     expect(runtimeRefreshPowerShell).toContain(`"token":"${t}"`);
   });
 
@@ -48,6 +50,18 @@ describe("buildSetupSnippets", () => {
     const { claudeCode, runtimeRefreshPowerShell } = buildSetupSnippets(TOKEN, "https://dpf.example.com");
     expect(claudeCode).toContain("https://dpf.example.com/api/mcp/v1");
     expect(runtimeRefreshPowerShell).toContain("https://dpf.example.com/api/mcp/token/refresh");
+  });
+
+  it("preserves a non-localhost HTTP baseUrl for LAN installs", () => {
+    const { claudeCode, runtimeRefreshPowerShell } = buildSetupSnippets(TOKEN, "http://192.168.0.200:3000");
+    expect(claudeCode).toContain("http://192.168.0.200:3000/api/mcp/v1");
+    expect(runtimeRefreshPowerShell).toContain("http://192.168.0.200:3000/api/mcp/token/refresh");
+  });
+
+  it("normalizes IPv6 loopback baseUrl to IPv4 for local clients", () => {
+    const { claudeCode, runtimeRefreshPowerShell } = buildSetupSnippets(TOKEN, "http://[::1]:3000");
+    expect(claudeCode).toContain(LOCAL_MCP_URL);
+    expect(runtimeRefreshPowerShell).toContain(LOCAL_REFRESH_URL);
   });
 
   it("JSON setup outputs are valid JSON", () => {

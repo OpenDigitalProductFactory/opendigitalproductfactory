@@ -25,7 +25,7 @@ param(
 )
 
 $mcpJsonPath = Join-Path $RepoRoot ".mcp.json"
-$mcpUrl = "http://localhost:3000/api/mcp/v1"
+$mcpUrl = "http://127.0.0.1:3000/api/mcp/v1"
 $rotating = $PSBoundParameters.ContainsKey("Token")
 
 # -- Step 1: Resolve token ----------------------------------------------------
