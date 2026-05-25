@@ -73,6 +73,11 @@ export async function getQuiescenceConfig(now: Date = new Date()): Promise<Quies
   if (cache && now.getTime() - cache.readAt < CACHE_TTL_MS) {
     return cache.config;
   }
+  if (typeof prisma.platformConfig?.findUnique !== "function") {
+    const config = { ...DEFAULT_CONFIG };
+    cache = { config, readAt: now.getTime() };
+    return config;
+  }
   const row = await prisma.platformConfig.findUnique({
     where: { key: QUIESCENCE_CONFIG_KEY },
   });
