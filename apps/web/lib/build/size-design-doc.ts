@@ -32,21 +32,20 @@
 // and are overridable per call (the eventual PlatformConfig key
 // `build-studio-decomposition` will load overrides at the call site).
 
-import type { BuildDesignDoc } from "@/lib/explore/feature-build-types";
+import type { BuildDesignDoc, SizeAssessmentSnapshot } from "@/lib/explore/feature-build-types";
 
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
 
-export type SizeDecision = "ok" | "decompose-recommended" | "decompose-required";
+// Re-export the canonical SizeAssessment shape from feature-build-types as
+// SizeAssessment so callers of sizeDesignDoc and readers of
+// designReview.sizeAssessment use the same type. Single source of truth.
+export type SizeAssessment = SizeAssessmentSnapshot;
 
-export type SizeThresholds = {
-  models: { recommend: number; required: number };
-  endpoints: { recommend: number; required: number };
-  acs: { recommend: number; required: number };
-  multipliers: { recommend: number; required: number };
-  routes: { recommend: number; required: number };
-};
+export type SizeDecision = SizeAssessment["decision"];
+
+export type SizeThresholds = SizeAssessment["thresholds"];
 
 export const DEFAULT_SIZE_THRESHOLDS: SizeThresholds = {
   models: { recommend: 3, required: 5 },
@@ -56,29 +55,12 @@ export const DEFAULT_SIZE_THRESHOLDS: SizeThresholds = {
   routes: { recommend: 2, required: 4 },
 };
 
-export type SizeBreakdown = {
-  models: { count: number; samples: string[] };
-  endpoints: { count: number; samples: string[] };
-  acs: { count: number };
-  multipliers: { count: number; matchedKeywords: string[] };
-  routes: { count: number; samples: string[] };
-};
-
-export type SizeTrip = {
-  dimension: keyof SizeThresholds;
-  level: "recommend" | "required";
-  threshold: number;
-  observed: number;
-};
-
-export type SizeAssessment = {
-  decision: SizeDecision;
-  breakdown: SizeBreakdown;
-  trips: SizeTrip[];
-  rationale: string;
-  thresholds: SizeThresholds;
-  assessedAt: string;
-};
+// Derive breakdown / trip shapes from the canonical SizeAssessment type so
+// any future change to the snapshot stays consistent across producers and
+// consumers (sizeDesignDoc here, ReviewPanel banner in components/build/,
+// any future Hive analytics).
+export type SizeBreakdown = SizeAssessment["breakdown"];
+export type SizeTrip = SizeAssessment["trips"][number];
 
 // ---------------------------------------------------------------------------
 // Main entry point
