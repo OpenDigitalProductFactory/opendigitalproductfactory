@@ -396,6 +396,42 @@ describe("runAgenticLoop", () => {
     threadId: "thread-1",
   };
 
+  it("explains missing tool-use capacity instead of masking it as a temporary outage", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute.mockRejectedValueOnce(new Error(
+      "No eligible endpoints for task 'unknown': No endpoint satisfies agent capability floor (EP-AGENT-CAP-002). Missing: toolUse.",
+    ));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/admin/issue-reports",
+      agentId: "admin-assistant",
+    });
+
+    expect(result.content).toContain("No tool-use-capable AI provider is available");
+    expect(result.content).toContain("Platform > AI > Model Assignment");
+    expect(result.providerId).toBe("unknown");
+    expect(result.modelId).toBe("unknown");
+  });
+
+  it("explains exhausted tool-using endpoint failures instead of masking them as temporary", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute.mockRejectedValueOnce(new Error(
+      'All endpoints failed for onboarding. Attempts: [{"endpointId":"local","error":"Network error calling local: fetch failed"},{"endpointId":"local","error":"skipped local fallback: 58 tools exceeds threshold for small local models"}]',
+    ));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/admin/issue-reports",
+      agentId: "admin-assistant",
+    });
+
+    expect(result.content).toContain("No tool-use-capable AI provider is available");
+    expect(result.content).toContain("Platform > AI > Model Assignment");
+    expect(result.providerId).toBe("unknown");
+    expect(result.modelId).toBe("unknown");
+  });
+
   it("executes tools through the governed lifecycle path", async () => {
     const mockRoute = vi.mocked(routeAndCall);
     const mockExecuteTool = vi.mocked(executeTool);
