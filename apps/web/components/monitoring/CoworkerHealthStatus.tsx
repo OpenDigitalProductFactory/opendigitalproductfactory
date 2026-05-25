@@ -107,14 +107,14 @@ export function CoworkerHealthStatus() {
           textAlign: "center",
         }}
       >
-        AI Coworker unavailable — check System Health
+        AI Coworker unavailable - check System Health
       </div>
     );
   }
 
   const messages: string[] = [];
   if (!health.memoryUp) {
-    messages.push("Memory offline — responses won't recall prior context");
+    messages.push("Memory offline - responses won't recall prior context");
   }
   if (health.inferenceSlow) {
     messages.push("AI responses may be slower than usual");

@@ -2,6 +2,7 @@
 
 import { useMetricQuery } from "./useMetricQuery";
 import { MetricTimeSeries } from "./MetricTimeSeries";
+import { TONE_COLOR } from "./health-summary";
 
 export function AiCoworkerHealthPanel() {
   const { data: inferenceUp, offline } = useMetricQuery('up{job="model-runner"}');
@@ -24,7 +25,8 @@ export function AiCoworkerHealthPanel() {
     );
   }
 
-  const inferenceAvailable = parseFloat(inferenceUp?.[0]?.value?.[1] ?? "0") === 1;
+  const modelRunnerScraped = (inferenceUp?.length ?? 0) > 0;
+  const inferenceAvailable = !modelRunnerScraped || parseFloat(inferenceUp?.[0]?.value?.[1] ?? "0") === 1;
   const memoryAvailable = parseFloat(qdrantUp?.[0]?.value?.[1] ?? "0") === 1;
   const hasMemErrors = parseFloat(memErrors?.[0]?.value?.[1] ?? "0") > 0;
   const p95Value = parseFloat(inferenceP95?.[0]?.value?.[1] ?? "0");
@@ -40,7 +42,7 @@ export function AiCoworkerHealthPanel() {
           <StatusIndicator
             label="Inference"
             ok={inferenceAvailable}
-            okText="Available"
+            okText={modelRunnerScraped ? "Available" : "Portal metrics"}
             failText="Offline"
           />
           <StatusIndicator
@@ -59,7 +61,7 @@ export function AiCoworkerHealthPanel() {
             <span className="text-xs text-[var(--dpf-muted)]">Memory Errors (5m)</span>
             <span
               className={`text-sm font-mono ${
-                hasMemErrors ? "text-red-400 font-bold" : "text-[var(--dpf-text)]"
+                hasMemErrors ? "font-bold text-[var(--dpf-error)]" : "text-[var(--dpf-text)]"
               }`}
             >
               {hasMemErrors ? "FAILING" : "None"}
@@ -99,11 +101,16 @@ function StatusIndicator({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className={`w-2.5 h-2.5 rounded-full ${ok ? "bg-green-500" : "bg-red-500 animate-pulse"}`} />
+      <span
+        className={`h-2.5 w-2.5 rounded-full ${ok ? "" : "animate-pulse"}`}
+        style={{ backgroundColor: ok ? TONE_COLOR.success : TONE_COLOR.critical }}
+        aria-hidden="true"
+      />
       <div className="flex flex-col">
         <span className="text-xs text-[var(--dpf-muted)]">{label}</span>
         <span
-          className={`text-xs font-medium ${ok ? "text-green-500" : "text-red-400"}`}
+          className="text-xs font-medium"
+          style={{ color: ok ? TONE_COLOR.success : TONE_COLOR.critical }}
         >
           {ok ? okText : failText}
         </span>

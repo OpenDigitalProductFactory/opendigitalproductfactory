@@ -14,16 +14,26 @@ import { MetricTimeSeries } from "./MetricTimeSeries";
 import { MetricTable } from "./MetricTable";
 import { AiCoworkerHealthPanel } from "./AiCoworkerHealthPanel";
 import { RecentAlertsPanel } from "./RecentAlertsPanel";
+import { PortalHealthSummary } from "./PortalHealthSummary";
+import { HOST_RESOURCE_QUERIES } from "./health-summary";
 
-export function ServiceHealthDashboard() {
+type ServiceHealthDashboardProps = {
+  openBacklogItems?: number;
+  backlogHref?: string;
+};
+
+export function ServiceHealthDashboard(props: ServiceHealthDashboardProps = {}) {
   return (
     <MonitoringProvider>
-      <ServiceHealthContent />
+      <ServiceHealthContent {...props} />
     </MonitoringProvider>
   );
 }
 
-function ServiceHealthContent() {
+function ServiceHealthContent({
+  openBacklogItems,
+  backlogHref,
+}: ServiceHealthDashboardProps) {
   const { online, checked } = useMonitoringStatus();
 
   if (!checked) {
@@ -48,6 +58,10 @@ function ServiceHealthContent() {
 
   return (
     <div className="space-y-6">
+      {openBacklogItems !== undefined && backlogHref && (
+        <PortalHealthSummary openBacklogItems={openBacklogItems} backlogHref={backlogHref} />
+      )}
+
       {/* Active alerts */}
       <AlertBanner />
 
@@ -61,18 +75,19 @@ function ServiceHealthContent() {
         </h3>
         <div className="grid grid-cols-3 gap-3">
           <MetricGauge
-            query='100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)'
+            query={HOST_RESOURCE_QUERIES.compute}
             label="Compute"
             thresholds={{ warning: 70, critical: 85 }}
           />
           <MetricGauge
-            query="(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100"
+            query={HOST_RESOURCE_QUERIES.memory}
             label="Memory"
             thresholds={{ warning: 70, critical: 85 }}
           />
           <MetricGauge
-            query='(1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100'
+            query={HOST_RESOURCE_QUERIES.storage}
             label="Storage"
+            hint="Highest drive usage"
             thresholds={{ warning: 70, critical: 90 }}
           />
         </div>

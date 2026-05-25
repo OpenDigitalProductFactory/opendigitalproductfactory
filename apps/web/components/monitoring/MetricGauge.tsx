@@ -7,6 +7,7 @@ type Props = {
   label: string;
   unit?: string;
   thresholds?: { warning: number; critical: number };
+  hint?: string;
   className?: string;
 };
 
@@ -15,6 +16,7 @@ export function MetricGauge({
   label,
   unit = "%",
   thresholds = { warning: 70, critical: 85 },
+  hint,
   className = "",
 }: Props) {
   const { data, loading, offline } = useMetricQuery(query);
@@ -36,6 +38,7 @@ export function MetricGauge({
   const circumference = Math.PI * radius; // half circle
   const pct = numValue !== null ? Math.min(numValue / 100, 1) : 0;
   const offset = circumference * (1 - pct);
+  const displayValue = loading ? "..." : numValue !== null ? `${Math.round(numValue)}${unit}` : "No data";
 
   if (offline) {
     return (
@@ -73,14 +76,15 @@ export function MetricGauge({
           x="50"
           y="50"
           textAnchor="middle"
-          fontSize="14"
+          fontSize={displayValue === "No data" ? "11" : "14"}
           fontWeight="bold"
           fill={color}
         >
-          {loading ? "..." : numValue !== null ? `${Math.round(numValue)}${unit}` : "--"}
+          {displayValue}
         </text>
       </svg>
       <span className="text-xs font-medium text-[var(--dpf-text)]">{label}</span>
+      {hint && <span className="text-[10px] leading-3 text-[var(--dpf-muted)]">{hint}</span>}
     </div>
   );
 }

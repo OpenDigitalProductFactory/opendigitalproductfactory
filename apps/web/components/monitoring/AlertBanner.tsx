@@ -1,50 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 
-type Alert = {
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  state: "firing" | "pending" | "inactive";
-  activeAt: string;
-};
+import { TONE_COLOR, getActiveAlerts } from "./health-summary";
+import { useAlertQuery } from "./useAlertQuery";
 
 type Props = {
   className?: string;
 };
 
 export function AlertBanner({ className = "" }: Props) {
-  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
-  const [offline, setOffline] = useState(false);
+  const { alerts, offline } = useAlertQuery();
 
-  const fetchAlerts = useCallback(async () => {
-    try {
-      const res = await fetch("/api/platform/metrics/alerts");
-      if (res.status === 503) {
-        setOffline(true);
-        setAlerts([]);
-        return;
-      }
-      const json = await res.json();
-      setOffline(false);
-      const firing = (json.data?.alerts ?? []).filter(
-        (a: Alert) => a.state === "firing" || a.state === "pending",
-      );
-      setAlerts(firing);
-    } catch {
-      setOffline(true);
-      setAlerts([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchAlerts();
-    const id = setInterval(fetchAlerts, 30_000);
-    return () => clearInterval(id);
-  }, [fetchAlerts]);
-
-  const visibleAlerts = alerts.filter(
+  const visibleAlerts = getActiveAlerts(alerts).filter(
     (a) => !dismissed.has(a.labels.alertname ?? ""),
   );
 
@@ -57,15 +26,18 @@ export function AlertBanner({ className = "" }: Props) {
         const severity = alert.labels.severity ?? "warning";
         const summary = alert.annotations.summary ?? name;
         const isCritical = severity === "critical";
+        const tone = isCritical ? "critical" : "warning";
+        const color = TONE_COLOR[tone];
 
         return (
           <div
             key={name}
-            className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs ${
-              isCritical
-                ? "bg-red-500/10 border border-red-500/30 text-red-400"
-                : "bg-yellow-500/10 border border-yellow-500/30 text-yellow-400"
-            }`}
+            className="flex items-center justify-between rounded-lg border px-3 py-2 text-xs"
+            style={{
+              backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)`,
+              borderColor: `color-mix(in srgb, ${color} 35%, var(--dpf-border))`,
+              color,
+            }}
           >
             <span>
               <span className="font-semibold uppercase mr-2">{severity}</span>
