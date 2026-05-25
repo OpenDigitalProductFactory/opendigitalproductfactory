@@ -2,6 +2,8 @@
 // Client for the browser-use MCP server (AI-powered browser automation).
 // Replaces playwright-runner.ts — all browser interaction goes through browser-use.
 
+import { getQuiescenceLevel, QuiescingError } from "@/lib/self-upgrade/quiescence";
+
 const BROWSER_USE_URL = process.env.BROWSER_USE_URL || "http://browser-use:8500/mcp";
 
 export type UxTestStep = {
@@ -48,6 +50,16 @@ export async function runBrowserUseTests(
   testCases: string[],
   options?: { buildId?: string },
 ): Promise<UxTestStep[]> {
+  // BI-QUIESCE-005 entry-point gate: refuse new browser-use sessions
+  // during quiescence drain. The sidecar's session lifetime is unbounded
+  // and held externally; refusing new ones lets in-flight sessions
+  // complete naturally at their per-test timeout (callBrowserUse has
+  // 60s–300s configurable timeouts inside the sidecar protocol).
+  const level = await getQuiescenceLevel();
+  if (level !== "normal") {
+    throw new QuiescingError(level);
+  }
+
   // When buildId is present, ask browser-use to persist per-step screenshots
   // on the shared /evidence volume under a build-scoped subdirectory. The
   // portal then serves each PNG through an auth-gated route. Without a
@@ -72,6 +84,12 @@ export async function runBrowserUseTests(
 export async function evaluatePage(
   url: string,
 ): Promise<{ findings: Array<Record<string, unknown>>; screenshot: string | null }> {
+  // BI-QUIESCE-005 entry-point gate (matches runBrowserUseTests above).
+  const level = await getQuiescenceLevel();
+  if (level !== "normal") {
+    throw new QuiescingError(level);
+  }
+
   const open = await callBrowserUse("tools/call", "browse_open", { url });
   const sessionId = open.session_id as string;
   if (!sessionId) throw new Error("Failed to open browser session");
