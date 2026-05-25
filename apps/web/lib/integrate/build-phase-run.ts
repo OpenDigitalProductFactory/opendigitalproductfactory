@@ -21,6 +21,7 @@
 import { prisma } from "@dpf/db";
 import { emitRing12FromCompletedPhase } from "@/lib/gear-interface/emit-ring-1-2";
 import { emitRing23FromCompletedShip } from "@/lib/gear-interface/emit-ring-2-3";
+import { getQuiescenceLevel, QuiescingError } from "@/lib/self-upgrade/quiescence";
 
 export type BuildPhaseName = "ideate" | "plan" | "build" | "review" | "ship";
 
@@ -32,6 +33,16 @@ export async function startBuildPhaseRun(
   buildId: string,
   phase: BuildPhaseName,
 ): Promise<void> {
+  // BI-QUIESCE-005 entry-point gate: refuse new phase transitions during
+  // quiescence drain. The idempotency property at upsert means restarting
+  // the SAME phase after upgrade is fine; this only refuses transitions
+  // that would START a new phase mid-drain. In-flight phases (rows with
+  // completedAt IS NULL) continue uninterrupted.
+  const level = await getQuiescenceLevel();
+  if (level !== "normal") {
+    throw new QuiescingError(level);
+  }
+
   try {
     const now = new Date();
     await prisma.buildPhaseRun.upsert({
