@@ -12,19 +12,19 @@ function nonEmpty(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null
 }
 
-function isWindowsDriveAbsolute(value: string): boolean {
-  return /^[a-zA-Z]:[\\/]/.test(value)
+function isWindowsAbsolute(value: string): boolean {
+  return /^[a-zA-Z]:[\\/]/.test(value) || value.startsWith("\\\\")
 }
 
 function joinDataUploads(root: string): string {
-  if (isWindowsDriveAbsolute(root)) {
+  if (isWindowsAbsolute(root)) {
     return path.win32.join(root, "data", "uploads")
   }
   return path.join(root, "data", "uploads")
 }
 
 function resolveRepoDataUploads(cwd: string): string {
-  if (isWindowsDriveAbsolute(cwd)) {
+  if (isWindowsAbsolute(cwd)) {
     return path.win32.resolve(cwd, "..", "..", "data", "uploads")
   }
   return path.resolve(cwd, "..", "..", "data", "uploads")

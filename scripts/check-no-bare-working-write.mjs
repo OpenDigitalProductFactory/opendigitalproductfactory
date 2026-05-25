@@ -40,9 +40,6 @@ const ALLOWLIST = new Set([
   // exists to enforce; this file just inlines it because it also needs to
   // set other dispatcher-only fields in the same atomic write.
   "apps/web/lib/actions/agent-thread-dispatcher-runtime.ts",
-  // Quiescence only records active TaskRun blocker snapshots with
-  // status: "working"; it does not transition TaskRun rows into working.
-  "apps/web/lib/self-upgrade/quiescence.ts",
 ]);
 
 const PATTERNS = [/status:\s*["']working["']/];
