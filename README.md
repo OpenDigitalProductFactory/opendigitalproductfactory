@@ -1,10 +1,24 @@
 # Open Digital Product Factory
 
-**The platform that builds itself.** An open-source, AI-native digital product management platform under human governance. Single-org install on your hardware; opt-in cross-install contribution through the Hive Mind.
+**The platform that builds itself.** An open-source, AI-native operating platform for small businesses and product teams under human governance. A DPF install starts from a market archetype, gives the business a customer portal and internal workspace in its own vocabulary, and puts purposed AI coworkers at the center of daily work. Single-org install on your hardware; opt-in cross-install contribution through the Hive Mind.
 
 > **For potential users and customers, start at [opendigitalproductfactory.com](https://opendigitalproductfactory.com)** — the canonical product tour with capability inventory, archetypes, coworker workforce, maturity surface, and standards conformance.
 >
 > **This README is for people working with the project source** — contributors, integrators, and anyone running the install scripts or modifying the codebase.
+
+---
+
+## Product posture
+
+DPF's user story is now archetype-led rather than module-led:
+
+- Pick the business type first: HVAC, clinic, retail, nonprofit, HOA, professional services, software platform, and other small-business categories.
+- The selected archetype shapes the customer portal, internal workspace vocabulary, worker home, marketing posture, and feature-contribution applicability.
+- AI coworkers are the primary interaction surface. They are purposed by role and route, but every side effect still goes through role checks, agent grants, approval gates, and audit logs.
+- Voice is an optional coworker modality: speech-to-text for input, text-to-speech for narrated decision/profile output where consent and provider setup allow it.
+- Build Studio is the governed self-development surface, but it is still being hardened. Use it honestly: ready for guided platform work and evidence capture, not a claim that every complex source change is fully autonomous today.
+
+User-facing narrative lives in [Market Archetypes And Coworkers](docs/user-guide/market-archetypes.md), with proof personas under [docs/personas/](docs/personas/).
 
 ---
 
@@ -76,7 +90,7 @@ bash install-dpf.sh --headless --release
 
 Terraform modules for the cloud-VM path live under [`infra/terraform/single-vm/{aws,gcp,azure}/`](infra/terraform/single-vm/).
 
-The installer asks one question — **Ready to go** (pre-built images; Build Studio is the development surface) or **Customizable** (full source clone; Build Studio and a local IDE share the same workspace). Both modes include the full platform; the difference is whether direct IDE access is part of the supported workflow. Login credentials are saved to `.env` / `.admin-credentials` at the end of installation.
+The installer asks one question — **Ready to go** (pre-built images; Build Studio is the governed development surface) or **Customizable** (full source clone; Build Studio and a local IDE share the same workspace). Both modes include the full platform; the difference is whether direct IDE access is part of the supported workflow. For serious source changes while Build Studio continues hardening, use Customizable mode. Login credentials are saved to `.env` / `.admin-credentials` at the end of installation.
 
 If you hit a wall — happy-path success stories and "the installer hit a wall at step X" failures are equally useful — open an issue using the [Install verification report template](.github/ISSUE_TEMPLATE/install_verification.md) and attach the bundle produced by `bash install-dpf.sh doctor`.
 
@@ -235,6 +249,8 @@ Longer-form contributor guidance — full branch model, PR checklist, local veri
 
 - [docs/README.md](docs/README.md) — documentation index
 - [docs/user-guide/](docs/user-guide/) — operator-facing guides, bundled into the portal's in-app help
+- [docs/user-guide/market-archetypes.md](docs/user-guide/market-archetypes.md) — archetype-led user narrative and coworker positioning
+- [docs/personas/](docs/personas/) — persona proof library for archetype-led marketing and dogfood testing
 - [docs/install/](docs/install/) — per-platform install runbooks
 - [docs/architecture/](docs/architecture/) — runtime, deployment, standards, governance
 - [docs/superpowers/specs/](docs/superpowers/specs/) — dated design specs (the "why" record)
