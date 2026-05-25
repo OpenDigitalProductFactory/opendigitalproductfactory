@@ -143,6 +143,18 @@ describe("resolveAgentForRoute", () => {
     expect(result.systemPrompt).toContain("branding");
   });
 
+  it("keeps admin issue triage operational and out of Build Studio", () => {
+    const result = resolveAgentForRoute("/admin/issue-reports", superuser);
+
+    expect(result.agentId).toBe("admin-assistant");
+    expect(result.systemPrompt).toContain("issue reports");
+    expect(result.systemPrompt).toContain("Do not redirect issue-report triage to Build Studio");
+    expect(result.systemPrompt).not.toContain("tell the user to run it manually");
+    expect(result.systemPrompt).not.toContain("give the user the exact SQL to run manually");
+    expect(result.skills.some((skill) => skill.label === "Triage issue reports")).toBe(true);
+    expect(result.skills.some((skill) => skill.label === "Investigate open report")).toBe(true);
+  });
+
   it("returns a non-empty systemPrompt", () => {
     const result = resolveAgentForRoute("/portfolio", superuser);
     expect(result.systemPrompt).toBeTruthy();

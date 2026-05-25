@@ -2502,8 +2502,10 @@
         },
         "concurrency_limit": 2,
         "tool_grants": [
+          "admin_read",
           "admin_write",
           "backlog_read",
+          "backlog_write",
           "file_read",
           "registry_read",
           "web_search"

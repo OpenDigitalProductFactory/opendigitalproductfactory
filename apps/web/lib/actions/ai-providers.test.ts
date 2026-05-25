@@ -160,7 +160,11 @@ describe("testProviderAuth", () => {
     );
     expect(mockActivateProvider).toHaveBeenCalledWith(
       "codex",
-      expect.objectContaining({ trigger: "test_auth" }),
+      expect.objectContaining({
+        trigger: "test_auth",
+        authMethod: "oauth2_authorization_code",
+        activateLinked: true,
+      }),
     );
   });
 
@@ -196,7 +200,11 @@ describe("testProviderAuth", () => {
     );
     expect(mockActivateProvider).toHaveBeenCalledWith(
       "chatgpt",
-      expect.objectContaining({ trigger: "test_auth" }),
+      expect.objectContaining({
+        trigger: "test_auth",
+        authMethod: "oauth2_authorization_code",
+        activateLinked: true,
+      }),
     );
   });
 
@@ -365,6 +373,38 @@ describe("configureProvider", () => {
     expect(mockSeedAiProviderFinanceBridge).toHaveBeenCalledWith(
       expect.objectContaining({
         providerId: "openai",
+      }),
+    );
+  });
+
+  it("activates the paired OpenAI provider when configuring ChatGPT OAuth", async () => {
+    mockPrisma.modelProvider.findUnique.mockImplementation(({ select }: { select?: Record<string, boolean> }) => {
+      if (select?.cliEngine) {
+        return Promise.resolve({ providerId: "chatgpt", cliEngine: "codex" });
+      }
+      return Promise.resolve({
+        providerId: "chatgpt",
+        name: "ChatGPT",
+        consoleUrl: "https://chatgpt.com",
+        docsUrl: "https://platform.openai.com/docs",
+        inputPricePerMToken: 0,
+        outputPricePerMToken: 0,
+      });
+    });
+
+    const result = await configureProvider({
+      providerId: "chatgpt",
+      enabledFamilies: ["gpt-5.4"],
+      authMethod: "oauth2_authorization_code",
+    });
+
+    expect(result).toEqual({});
+    expect(mockActivateProvider).toHaveBeenCalledWith(
+      "chatgpt",
+      expect.objectContaining({
+        trigger: "api_key_configure",
+        authMethod: "oauth2_authorization_code",
+        activateLinked: true,
       }),
     );
   });
