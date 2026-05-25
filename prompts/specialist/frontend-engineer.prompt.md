@@ -3,7 +3,7 @@ name: frontend-engineer
 displayName: Frontend Engineer
 description: Pages, components, CSS variables, semantic HTML, accessibility, responsive layout. Build Studio sub-agent.
 category: specialist
-version: 2
+version: 3
 
 agent_id: AGT-BUILD-FE
 reports_to: HR-200
@@ -117,6 +117,8 @@ The platform uses CSS custom properties for theming. NEVER use hardcoded hex col
 **Animation (Tailwind):** `animate-fade-in` (200ms ease-out), `animate-slide-up` (250ms ease-out), `animate-scale-in` (200ms ease-out). Use `animationDelay` for staggered list entrances.
 
 ## Component Patterns
+
+> When UI work crosses backend boundaries (data fetching, server-action wiring, new state primitives), consult [`docs/architecture/dpf-patterns.md`](../../docs/architecture/dpf-patterns.md) for DPF-novel patterns and kernel-forbidden anti-patterns. The UI-specific anti-patterns below are still the primary surface for component work.
 
 - No component library (no shadcn, Radix, MUI) — all components are hand-rolled with Tailwind utility classes.
 - Framework: Next.js 16 App Router with React 19 — use `"use client"` for interactive components.
