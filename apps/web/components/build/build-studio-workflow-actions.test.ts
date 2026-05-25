@@ -177,6 +177,77 @@ describe("deriveBuildStudioWorkflowAction", () => {
     expect(action.coworkerPrompt).toContain("reviewBuildPlan");
   });
 
+  it("turns an oscillating top-level plan review into a decompose-now action", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        planReview: {
+          decision: "fail",
+          summary: "Scope is still unstable.",
+          issues: [{ severity: "important", description: "Plan is too broad." }],
+          iteration: {
+            round: 3,
+            prior: { issueCount: 8, addressed: 2, persisted: 5, newlySurfaced: 3 },
+            oscillating: true,
+          },
+        },
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("decompose-now");
+    expect(action.primaryLabel).toBe("Decompose now");
+    expect(action.disabledReason).toBeNull();
+    expect(action.message).toContain("Plan review is oscillating");
+  });
+
+  it("shows disabled decompose-now when an oscillating top-level build has no design doc", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        designDoc: null,
+        planReview: {
+          decision: "fail",
+          summary: "Scope is still unstable.",
+          issues: [],
+          iteration: {
+            round: 3,
+            prior: { issueCount: 8, addressed: 2, persisted: 5, newlySurfaced: 3 },
+            oscillating: true,
+          },
+        },
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("decompose-now");
+    expect(action.disabledReason).toBe("Need a design doc first.");
+  });
+
+  it("routes oscillating child builds to parent amendment instead of recursive decomposition", () => {
+    const action = deriveBuildStudioWorkflowAction({
+      build: makeBuild({
+        draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+        parentEpicId: "epic-row-1",
+        planReview: {
+          decision: "fail",
+          summary: "Scope is still unstable.",
+          issues: [],
+          iteration: {
+            round: 3,
+            prior: { issueCount: 8, addressed: 2, persisted: 5, newlySurfaced: 3 },
+            oscillating: true,
+          },
+        },
+      }),
+      governedBacklogEnabled: true,
+    });
+
+    expect(action.kind).toBe("amend-parent-design");
+    expect(action.primaryLabel).toBe("Amend parent design");
+    expect(action.coworkerPrompt).toContain("parent design");
+  });
+
   it("surfaces verification once implementation evidence is ready", () => {
     const action = deriveBuildStudioWorkflowAction({
       build: makeBuild({

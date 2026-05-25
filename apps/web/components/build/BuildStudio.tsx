@@ -18,6 +18,7 @@ import { ProcessGraph } from "./ProcessGraph";
 import { BuildProgressOperationalPanel } from "./BuildProgressOperationalPanel";
 import { ReleaseDecisionPanel } from "./ReleaseDecisionPanel";
 import { BuildStudioWorkflowActionCard } from "./BuildStudioWorkflowActionCard";
+import { DecompositionCoordinator } from "./DecompositionCoordinator";
 import { CodeIntelligenceStatusCard } from "./CodeIntelligenceStatusCard";
 import { BuildAssuranceGateCard } from "./BuildAssuranceGateCard";
 import { BuildListItem } from "./BuildListItem";
@@ -655,6 +656,23 @@ export function BuildStudio({
                       compact
                       onCompleted={() => refreshActiveBuildState(activeBuild.buildId)}
                     />
+                    {workflowAction.kind === "decompose-now" && activeBuild.designDoc && (
+                      <DecompositionCoordinator
+                        buildId={activeBuild.buildId}
+                        buildTitle={activeBuild.title}
+                        parentAcceptanceCriteria={
+                          Array.isArray(activeBuild.designDoc.acceptanceCriteria)
+                            ? activeBuild.designDoc.acceptanceCriteria.filter(
+                                (ac): ac is string => typeof ac === "string",
+                              )
+                            : []
+                        }
+                        assessment={activeBuild.designReview?.sizeAssessment ?? null}
+                        initialCandidates={activeBuild.designReview?.decompositionCandidates?.latest ?? []}
+                        existingOverride={activeBuild.designReview?.decompositionOverride ?? null}
+                        planOscillationEntry
+                      />
+                    )}
                   </div>
                 )}
                 {/* Workflow graph — always-visible primary surface of the

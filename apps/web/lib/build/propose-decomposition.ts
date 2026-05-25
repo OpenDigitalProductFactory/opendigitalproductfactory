@@ -11,10 +11,12 @@
 // from Phase 4a (`decomposition-candidates.ts`).
 //
 // Eligibility:
-//   - build.phase === "ideate"
+//   - build.phase === "ideate", or phase === "plan" with an oscillating
+//     failed planReview (Phase 7 retroactive escape hatch)
 //   - build.designDoc is non-null
 //   - build.designReview is non-null and .decision === "pass"
-//   - build.designReview.sizeAssessment is present and decision !== "ok"
+//   - build.designReview.sizeAssessment is present and decision !== "ok",
+//     or Phase 7 can recompute it from the designDoc for a Plan oscillation
 //   - build.parentEpicId is null (assertNoRecursiveDecomposition)
 //
 // Success path:
@@ -30,6 +32,8 @@
 
 import { prisma } from "@dpf/db";
 import type { BuildDesignDoc, ReviewResult, SizeAssessmentSnapshot } from "@/lib/explore/feature-build-types";
+import { isPlanReviewOscillating } from "@/lib/build/plan-oscillation-decomposition";
+import { sizeDesignDoc } from "@/lib/build/size-design-doc";
 
 import {
   parseCandidatesResponse,
@@ -117,6 +121,7 @@ export async function proposeDecomposition(
       phase: true,
       designDoc: true,
       designReview: true,
+      planReview: true,
       parentEpicId: true,
     },
   });
@@ -125,11 +130,15 @@ export async function proposeDecomposition(
   }
 
   // 2. Eligibility checks.
-  if (build.phase !== "ideate") {
+  const planReview = (build.planReview ?? null) as ReviewResult | null;
+  const planOscillationEntry =
+    build.phase === "plan" && isPlanReviewOscillating(planReview);
+
+  if (build.phase !== "ideate" && !planOscillationEntry) {
     return {
       ok: false,
       code: "build-not-in-ideate",
-      error: `Build is in phase "${build.phase}". Decomposition proposals are only valid during ideate.`,
+      error: `Build is in phase "${build.phase}". Decomposition proposals are only valid during ideate or an oscillating Plan review.`,
     };
   }
   const designDoc = build.designDoc as BuildDesignDoc | null;
@@ -144,7 +153,7 @@ export async function proposeDecomposition(
       error: "Build's designReview is not passed. Run reviewDesignDoc first.",
     };
   }
-  const assessment = review.sizeAssessment ?? null;
+  const assessment = review.sizeAssessment ?? (planOscillationEntry ? sizeDesignDoc(designDoc, {}, now) : null);
   if (!assessment) {
     return {
       ok: false,
@@ -152,7 +161,7 @@ export async function proposeDecomposition(
       error: "No size assessment recorded on this build's review. Re-run reviewDesignDoc to populate sizeAssessment.",
     };
   }
-  if (assessment.decision === "ok") {
+  if (assessment.decision === "ok" && !planOscillationEntry) {
     return {
       ok: false,
       code: "build-size-already-ok",
@@ -168,7 +177,12 @@ export async function proposeDecomposition(
   }
 
   // 3. Build the prompt + call the agent.
-  const prompt = buildDecompositionPrompt(designDoc, assessment, args.operatorHint);
+  const prompt = buildDecompositionPrompt(
+    designDoc,
+    assessment,
+    args.operatorHint,
+    planOscillationEntry ? { source: "plan-oscillation" } : undefined,
+  );
   let rawResponse: string;
   try {
     rawResponse = await callAgent(prompt);
@@ -213,6 +227,7 @@ export async function proposeDecomposition(
     .decompositionCandidates;
   const updatedReview = {
     ...review,
+    sizeAssessment: review.sizeAssessment ?? assessment,
     decompositionCandidates: {
       latest: accepted,
       latestGeneratedAt: now().toISOString(),
@@ -258,6 +273,7 @@ export function buildDecompositionPrompt(
   doc: BuildDesignDoc,
   assessment: SizeAssessmentSnapshot,
   operatorHint?: string,
+  options: { source?: "size-assessment" | "plan-oscillation" } = {},
 ): string {
   const acs = doc.acceptanceCriteria ?? [];
   const acList = acs
@@ -274,10 +290,16 @@ export function buildDecompositionPrompt(
         .join("\n")
     : "  (no specific dimension trips)";
 
+  const sourceIntro =
+    options.source === "plan-oscillation"
+      ? `The implementation plan review is oscillating across rounds. The deterministic design size assessment is "${assessment.decision}", but the empirical D38 trajectory says this scope is not converging as one build.`
+      : `The design below has been size-assessed as "${assessment.decision}".`;
+
   return [
     `# Decompose this design into 2-4 child builds`,
     ``,
-    `The design below has been size-assessed as "${assessment.decision}". Threshold trips:`,
+    sourceIntro,
+    `Threshold trips:`,
     tripsText,
     ``,
     `Your job: propose **2 to 4 different ways** to split this design into smaller coordinated child builds. Each child must:`,

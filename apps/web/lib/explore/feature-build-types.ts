@@ -351,6 +351,7 @@ export type FeatureBuildRow = {
   title: string;
   description: string | null;
   portfolioId: string | null;
+  parentEpicId?: string | null;
   originatingBacklogItemId: string | null;
   brief: FeatureBrief | null;
   plan: Record<string, unknown> | null;

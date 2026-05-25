@@ -22,6 +22,7 @@ type FakeBuild = {
   phase: string;
   designDoc: unknown;
   designReview: unknown;
+  planReview: unknown;
   parentEpicId: string | null;
   originatingBacklogItemId: string | null;
   digitalProductId: string | null;
@@ -115,6 +116,7 @@ function makeBuild(overrides: Partial<FakeBuild> = {}): FakeBuild {
       acceptanceCriteria: ["AC0", "AC1", "AC2", "AC3", "AC4"],
     },
     designReview: { decision: "pass", issues: [], summary: "ok" },
+    planReview: null,
     parentEpicId: null,
     originatingBacklogItemId: "bi-row-001",
     digitalProductId: null,
@@ -169,8 +171,8 @@ describe("approveDecomposition — eligibility checks", () => {
     expect(result.code).toBe("build-not-found");
   });
 
-  it("rejects when build is not in ideate phase", async () => {
-    const { db } = makeFakeDb(makeBuild({ phase: "plan" }));
+  it("rejects when build is neither ideate nor an oscillating plan build", async () => {
+    const { db } = makeFakeDb(makeBuild({ phase: "build" }));
     const result = await approveDecomposition({
       buildId: "FB-PARENT",
       candidate: makeCandidate(),
@@ -182,6 +184,34 @@ describe("approveDecomposition — eligibility checks", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
     expect(result.code).toBe("build-not-in-ideate");
+  });
+
+  it("allows approval from an oscillating plan build", async () => {
+    const { db, writes } = makeFakeDb(makeBuild({
+      phase: "plan",
+      planReview: {
+        decision: "fail",
+        summary: "Plan keeps trading scope issues.",
+        issues: [],
+        iteration: {
+          round: 3,
+          prior: { issueCount: 8, addressed: 2, persisted: 5, newlySurfaced: 3 },
+          oscillating: true,
+        },
+      },
+    }));
+    const result = await approveDecomposition({
+      buildId: "FB-PARENT",
+      candidate: makeCandidate(),
+      userId: "user-1",
+      db,
+      now: fixedNow,
+      idGen: makeIdGen(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(writes.epicCreates).toHaveLength(1);
+    expect(writes.buildUpdates[0]!.data.supersededByEpicId).toBe("epic-row-1");
   });
 
   it("rejects when build has no designDoc", async () => {

@@ -142,6 +142,36 @@ describe("DecompositionCoordinator — propose flow", () => {
     expect(screen.getByTestId("decomposition-assistant-panel")).toBeInTheDocument();
   });
 
+  it("opens from the D38 decompose event without rendering the size banner", async () => {
+    proposeMock.mockResolvedValue({
+      ok: true,
+      candidates: [makeCandidate()],
+      rejected: [],
+    });
+    render(
+      <DecompositionCoordinator
+        buildId="FB-DALE"
+        parentAcceptanceCriteria={acs}
+        assessment={makeAssessment("ok")}
+        planOscillationEntry
+      />,
+    );
+
+    expect(screen.queryByTestId("decomposition-gate-banner")).not.toBeInTheDocument();
+
+    fireEvent(
+      document,
+      new CustomEvent("open-build-decomposition", {
+        detail: { buildId: "FB-DALE" },
+      }),
+    );
+
+    await waitFor(() => {
+      expect(proposeMock).toHaveBeenCalledWith({ buildId: "FB-DALE" });
+    });
+    expect(screen.getByTestId("decomposition-assistant-panel")).toBeInTheDocument();
+  });
+
   it("surfaces propose-action error in the inline error line", async () => {
     proposeMock.mockResolvedValue({
       ok: false,

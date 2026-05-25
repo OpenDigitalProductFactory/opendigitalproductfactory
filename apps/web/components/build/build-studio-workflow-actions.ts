@@ -10,6 +10,7 @@ import {
   normalizeVerificationOutput,
   type NormalizedVerificationOutput,
 } from "@/lib/build/verification-output";
+import { derivePlanOscillationDecompositionAffordance } from "@/lib/build/plan-oscillation-decomposition";
 import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import type {
   BuildFailureAxis,
@@ -94,6 +95,26 @@ export type BuildStudioWorkflowAction =
   } & BuildStudioWorkflowActionMetadata)
   | ({
     kind: "resume-implementation";
+    title: string;
+    message: string;
+    primaryLabel: string;
+    targetPhase: null;
+    disabledReason: string | null;
+    coworkerLabel: string;
+    coworkerPrompt: string;
+  } & BuildStudioWorkflowActionMetadata)
+  | ({
+    kind: "decompose-now";
+    title: string;
+    message: string;
+    primaryLabel: string;
+    targetPhase: null;
+    disabledReason: string | null;
+    coworkerLabel: string;
+    coworkerPrompt: string;
+  } & BuildStudioWorkflowActionMetadata)
+  | ({
+    kind: "amend-parent-design";
     title: string;
     message: string;
     primaryLabel: string;
@@ -437,6 +458,41 @@ export function deriveBuildStudioWorkflowAction({
   }
 
   if (build.phase === "plan") {
+    const decompositionAffordance = derivePlanOscillationDecompositionAffordance({
+      phase: build.phase,
+      planReview: build.planReview,
+      parentEpicId: build.parentEpicId ?? null,
+      designDoc: build.designDoc,
+    });
+
+    if (decompositionAffordance.kind === "decompose-now") {
+      return {
+        kind: "decompose-now",
+        title: "Plan Review Is Oscillating",
+        message: "Plan review is oscillating instead of converging. Split this top-level build into smaller child builds before burning another review round.",
+        primaryLabel: "Decompose now",
+        targetPhase: null,
+        disabledReason: decompositionAffordance.disabledReason,
+        coworkerLabel: "Review scope with coworker",
+        coworkerPrompt:
+          "Explain why the Plan review is oscillating, summarize the D38 trajectory, and help me choose a smaller decomposition for this top-level build.",
+      };
+    }
+
+    if (decompositionAffordance.kind === "amend-parent-design") {
+      return {
+        kind: "amend-parent-design",
+        title: "Amend Parent Design",
+        message: "This child build's Plan review is still oscillating. Recursive decomposition is disabled; amend the parent design so the sibling scopes can be re-derived together.",
+        primaryLabel: "Amend parent design",
+        targetPhase: null,
+        disabledReason: decompositionAffordance.disabledReason,
+        coworkerLabel: "Amend with coworker",
+        coworkerPrompt:
+          "This child build is oscillating in Plan review. Help me amend the parent design instead of recursively decomposing this child; preserve completed sibling work and call out what must wait for the Phase 8 amendment flow.",
+      };
+    }
+
     return {
       kind: "advance-phase",
       title: "Ready for Implementation",
