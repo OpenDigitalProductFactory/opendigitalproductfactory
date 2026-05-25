@@ -74,6 +74,72 @@ const AUDIT_TABLES = new Set([
 /** Maximum audit records to clone per table */
 const AUDIT_RECORD_LIMIT = 50;
 
+type ColumnTypeInfo = {
+  dataType: string;
+  udtName: string;
+};
+
+export function prepareInsertParameter(
+  value: unknown,
+  columnType: ColumnTypeInfo | undefined,
+  paramIdx: number,
+): { placeholder: string; value: unknown } {
+  const placeholder = `$${paramIdx}`;
+
+  if (value === null || value === undefined) {
+    return { placeholder, value: null };
+  }
+
+  if (columnType?.dataType === "json" || columnType?.dataType === "jsonb") {
+    return {
+      placeholder: `${placeholder}::${columnType.dataType}`,
+      value: JSON.stringify(value),
+    };
+  }
+
+  if (columnType?.dataType === "ARRAY" && Array.isArray(value)) {
+    return {
+      placeholder: `${placeholder}::text[]`,
+      value: toPostgresTextArrayLiteral(value),
+    };
+  }
+
+  if (
+    columnType &&
+    typeof value === "object" &&
+    !(value instanceof Date) &&
+    !Buffer.isBuffer(value)
+  ) {
+    const toString = (value as { toString?: () => string }).toString;
+    if (typeof toString === "function" && toString !== Object.prototype.toString) {
+      return { placeholder, value: toString.call(value) };
+    }
+    return { placeholder, value };
+  }
+
+  if (typeof value === "object" && !(value instanceof Date) && !Buffer.isBuffer(value)) {
+    if (Array.isArray(value)) {
+      // PostgreSQL array columns need an array literal. JSON/JSONB arrays are
+      // handled above from catalog type information.
+      return {
+        placeholder: `${placeholder}::text[]`,
+        value: toPostgresTextArrayLiteral(value),
+      };
+    }
+
+    return {
+      placeholder: `${placeholder}::jsonb`,
+      value: JSON.stringify(value),
+    };
+  }
+
+  return { placeholder, value };
+}
+
+function toPostgresTextArrayLiteral(value: unknown[]): string {
+  return `{${value.map((item: unknown) => `"${String(item).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
+}
+
 /**
  * Run the sanitized clone from production to dev.
  * Both DATABASE_URL (dev) and PRODUCTION_DATABASE_URL (production) must be set.
@@ -227,6 +293,8 @@ async function insertRows(
 ): Promise<void> {
   if (rows.length === 0) return;
 
+  const columnTypes = await getColumnTypes(client, tableName);
+
   for (const row of rows) {
     const columns = Object.keys(row);
     const values: unknown[] = [];
@@ -234,28 +302,9 @@ async function insertRows(
     let paramIdx = 1;
 
     for (const col of columns) {
-      const v = row[col];
-      if (v === null || v === undefined) {
-        castPlaceholders.push(`$${paramIdx}`);
-        values.push(null);
-      } else if (typeof v === "object" && !(v instanceof Date) && !Buffer.isBuffer(v)) {
-        if (Array.isArray(v)) {
-          // Pass arrays as JSON text and cast to the column's array type via SQL
-          castPlaceholders.push(`$${paramIdx}::text[]`);
-          // CodeQL #60 (js/incomplete-sanitization): escape backslashes FIRST,
-          // then quotes. The original `replace(/"/g, '\\"')` left embedded
-          // backslashes intact, so a value like `"\"x` would round-trip as
-          // `"\"x"` which Postgres parses as a closing quote + literal x.
-          values.push(`{${v.map((item: unknown) => `"${String(item).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`);
-        } else {
-          // JSON/JSONB columns — pass as text with explicit cast
-          castPlaceholders.push(`$${paramIdx}::jsonb`);
-          values.push(JSON.stringify(v));
-        }
-      } else {
-        castPlaceholders.push(`$${paramIdx}`);
-        values.push(v);
-      }
+      const prepared = prepareInsertParameter(row[col], columnTypes.get(col), paramIdx);
+      castPlaceholders.push(prepared.placeholder);
+      values.push(prepared.value);
       paramIdx++;
     }
 
@@ -266,6 +315,30 @@ async function insertRows(
       ...values,
     );
   }
+}
+
+async function getColumnTypes(
+  client: PrismaClient,
+  tableName: string,
+): Promise<Map<string, ColumnTypeInfo>> {
+  const rows = await client.$queryRawUnsafe<Array<{
+    columnName: string;
+    dataType: string;
+    udtName: string;
+  }>>(
+    `SELECT column_name AS "columnName", data_type AS "dataType", udt_name AS "udtName"
+       FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = $1`,
+    tableName,
+  );
+
+  return new Map(
+    rows.map((row) => [
+      row.columnName,
+      { dataType: row.dataType, udtName: row.udtName },
+    ]),
+  );
 }
 
 // ── Neo4j Clone Pipeline ─────────────────────────────────────────────────────
