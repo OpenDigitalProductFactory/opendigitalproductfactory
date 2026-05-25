@@ -21,13 +21,40 @@
 
 "use client";
 
-import type { SizeAssessmentSnapshot } from "@/lib/explore/feature-build-types";
+import { useState } from "react";
+
+import type {
+  DecompositionOverrideSnapshot,
+  SizeAssessmentSnapshot,
+} from "@/lib/explore/feature-build-types";
 
 type Props = {
   assessment: SizeAssessmentSnapshot | null | undefined;
+  /** Phase 4b — fires when the operator clicks "Propose splits". The parent
+   *  page is expected to invoke propose_decomposition (if no candidates exist
+   *  yet) and then open the DecompositionAssistantPanel. When omitted, the
+   *  CTA is hidden — the banner stays informational (Phase 3 behaviour). */
+  onProposeSplits?: () => void;
+  /** Phase 4b — fires with the operator-typed rationale when they choose
+   *  "Keep as one build (explain why)" on required tier. The parent calls
+   *  record_decomposition_override. When omitted, the override path is
+   *  hidden. Recommended-tier ignores this prop (override only meaningful
+   *  at required-tier per spec §4.1). */
+  onRecordOverride?: (rationale: string) => void;
+  /** Disables both CTAs while in-flight work runs upstream. */
+  actionsDisabled?: boolean;
+  /** When non-null, the override has already been recorded — banner shows a
+   *  small chip with the rationale instead of the override-entry form. */
+  existingOverride?: DecompositionOverrideSnapshot | null;
 };
 
-export function DecompositionGateBanner({ assessment }: Props) {
+export function DecompositionGateBanner({
+  assessment,
+  onProposeSplits,
+  onRecordOverride,
+  actionsDisabled,
+  existingOverride,
+}: Props) {
   if (!assessment) return null;
   if (assessment.decision === "ok") return null;
 
@@ -41,6 +68,8 @@ export function DecompositionGateBanner({ assessment }: Props) {
   const subhead = isRequired
     ? "Plan iteration on designs this size tends to oscillate without converging. Splitting into 2-4 smaller builds that ship one at a time will plan faster and be easier to verify."
     : "Plans this size can converge, but smaller is faster. Consider splitting into 2-3 builds.";
+
+  const hasActions = onProposeSplits != null || (isRequired && onRecordOverride != null);
 
   return (
     <div
@@ -73,8 +102,138 @@ export function DecompositionGateBanner({ assessment }: Props) {
 
       <Rationale text={assessment.rationale} />
 
-      <NextPhaseNotice />
+      {existingOverride ? (
+        <OverrideRecordedChip override={existingOverride} />
+      ) : hasActions ? (
+        <ActionRow
+          isRequired={isRequired}
+          onProposeSplits={onProposeSplits}
+          onRecordOverride={onRecordOverride}
+          actionsDisabled={actionsDisabled ?? false}
+        />
+      ) : (
+        <NextPhaseNotice />
+      )}
     </div>
+  );
+}
+
+function ActionRow({
+  isRequired,
+  onProposeSplits,
+  onRecordOverride,
+  actionsDisabled,
+}: {
+  isRequired: boolean;
+  onProposeSplits: (() => void) | undefined;
+  onRecordOverride: ((rationale: string) => void) | undefined;
+  actionsDisabled: boolean;
+}) {
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [rationale, setRationale] = useState("");
+
+  const showOverride = isRequired && onRecordOverride != null;
+
+  const submitOverride = () => {
+    const trimmed = rationale.trim();
+    if (trimmed.length === 0 || !onRecordOverride) return;
+    onRecordOverride(trimmed);
+    setRationale("");
+    setOverrideOpen(false);
+  };
+
+  return (
+    <div className="mt-3 flex flex-col gap-2">
+      {overrideOpen ? (
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={rationale}
+            onChange={(e) => setRationale(e.target.value)}
+            placeholder="Explain why a single build is the right call here…"
+            aria-label="Override rationale"
+            className="flex-1 rounded border px-2 py-1 text-[11px]"
+            style={{
+              borderColor: "var(--border-default, var(--dpf-muted))",
+              background: "var(--surface-input, var(--dpf-surface))",
+              color: "var(--dpf-text)",
+            }}
+          />
+          <button
+            type="button"
+            onClick={submitOverride}
+            disabled={actionsDisabled || rationale.trim().length === 0}
+            className="rounded px-2 py-1 text-[11px] font-semibold disabled:opacity-50"
+            style={{
+              background: "var(--dpf-warning)",
+              color: "var(--dpf-on-accent, white)",
+            }}
+          >
+            Record override
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOverrideOpen(false);
+              setRationale("");
+            }}
+            className="text-[10px]"
+            style={{ color: "var(--dpf-muted)" }}
+          >
+            cancel
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          {onProposeSplits && (
+            <button
+              type="button"
+              onClick={onProposeSplits}
+              disabled={actionsDisabled}
+              className="rounded px-2 py-1 text-[11px] font-semibold disabled:opacity-50"
+              style={{
+                background: "var(--dpf-accent)",
+                color: "var(--dpf-on-accent, white)",
+              }}
+            >
+              Propose splits
+            </button>
+          )}
+          {showOverride && (
+            <button
+              type="button"
+              onClick={() => setOverrideOpen(true)}
+              disabled={actionsDisabled}
+              className="text-[11px] underline disabled:opacity-50"
+              style={{ color: "var(--dpf-text-secondary)" }}
+            >
+              Keep as one build (explain why)
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OverrideRecordedChip({ override }: { override: DecompositionOverrideSnapshot }) {
+  return (
+    <p
+      className="mt-3 rounded border px-2 py-1 text-[11px] leading-snug"
+      style={{
+        borderColor: "var(--border-default, var(--dpf-muted))",
+        background: "var(--surface-canvas, transparent)",
+        color: "var(--dpf-text-secondary)",
+      }}
+    >
+      <span
+        className="mr-1 font-semibold"
+        style={{ color: "var(--dpf-text)" }}
+      >
+        Override recorded:
+      </span>
+      {override.rationale}
+    </p>
   );
 }
 
