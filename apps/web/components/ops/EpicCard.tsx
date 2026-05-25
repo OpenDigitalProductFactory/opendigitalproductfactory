@@ -5,18 +5,18 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deleteEpic } from "@/lib/actions/backlog";
 import {
-  EPIC_STATUS_COLOURS,
   type EpicWithRelations,
   type BacklogItemWithRelations,
 } from "@/lib/backlog";
 import { AGENT_NAME_MAP } from "@/lib/agent-routing";
 import { BacklogItemRow } from "./BacklogItemRow";
+import { isTerminalBacklogItemStatus } from "./backlogVisibility";
 
 // Must stay in sync with OpsClient SortField / SortState
 export type EpicSortField = "title" | "status" | "progress" | "stories";
 export type EpicSort = { field: EpicSortField; dir: "asc" | "desc" } | null;
 
-const ITEM_STATUS_ORDER: Record<string, number> = { open: 0, "in-progress": 1, done: 2 };
+const ITEM_STATUS_ORDER: Record<string, number> = { open: 0, "in-progress": 1, done: 2, deferred: 3 };
 
 function sortedItems(
   items: BacklogItemWithRelations[],
@@ -40,23 +40,27 @@ function sortedItems(
 type Props = {
   epic: EpicWithRelations;
   sort: EpicSort;
+  hideDoneItems: boolean;
   onEdit: (epic: EpicWithRelations) => void;
   onItemEdit: (item: BacklogItemWithRelations) => void;
   focusedItemId?: string;
 };
 
-export function EpicCard({ epic, sort, onEdit, onItemEdit, focusedItemId }: Props) {
+export function EpicCard({ epic, sort, hideDoneItems, onEdit, onItemEdit, focusedItemId }: Props) {
   const router = useRouter();
   const hasFocusedItem = epic.items.some((item) => isFocusedBacklogItem(item, focusedItemId));
   const [expanded, setExpanded] = useState(hasFocusedItem);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
 
+  const visibleItems = hideDoneItems
+    ? epic.items.filter((item) => !isTerminalBacklogItemStatus(item.status))
+    : epic.items;
+  const hiddenItemCount = epic.items.length - visibleItems.length;
   const doneCount = epic.items.filter((i) => i.status === "done").length;
   const totalCount = epic.items.length;
   const progressPct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
 
-  const statusColour = EPIC_STATUS_COLOURS[epic.status] ?? "#8888a0";
   const portfolioLabels = epic.portfolios.filter((p) => p.portfolio).map((p) => p.portfolio.name).join(" · ");
 
   function handleDelete() {
@@ -83,8 +87,7 @@ export function EpicCard({ epic, sort, onEdit, onItemEdit, focusedItemId }: Prop
         {/* col: status — w-14 */}
         <div className="w-14 shrink-0 flex items-center">
           <span
-            className="w-1.5 h-1.5 rounded-full"
-            style={{ background: statusColour }}
+            className={["w-1.5 h-1.5 rounded-full", epicStatusDotClassName(epic.status)].join(" ")}
             title={epic.status}
           />
         </div>
@@ -124,7 +127,7 @@ export function EpicCard({ epic, sort, onEdit, onItemEdit, focusedItemId }: Prop
           {confirmDelete ? (
             <>
               <button onClick={handleDelete} disabled={isPending}
-                className="text-[10px] text-red-400 hover:text-red-300 px-1">
+                className="text-[10px] text-[var(--dpf-error)] hover:opacity-80 px-1">
                 {isPending ? "…" : "confirm"}
               </button>
               <button onClick={() => setConfirmDelete(false)}
@@ -139,7 +142,7 @@ export function EpicCard({ epic, sort, onEdit, onItemEdit, focusedItemId }: Prop
                 edit
               </button>
               <button onClick={() => setConfirmDelete(true)}
-                className="text-[10px] text-[var(--dpf-muted)] hover:text-red-400 px-1">
+                className="text-[10px] text-[var(--dpf-muted)] hover:text-[var(--dpf-error)] px-1">
                 del
               </button>
             </>
@@ -184,9 +187,13 @@ export function EpicCard({ epic, sort, onEdit, onItemEdit, focusedItemId }: Prop
           )}
           {epic.items.length === 0 ? (
             <p className="text-xs text-[var(--dpf-muted)]">No items in this epic yet.</p>
+          ) : visibleItems.length === 0 ? (
+            <p className="text-xs text-[var(--dpf-muted)]">
+              All {epic.items.length} items in this epic are done or deferred. Uncheck &quot;Hide done&quot; to see them.
+            </p>
           ) : (
             <div className="flex flex-col gap-1.5">
-              {sortedItems(epic.items, sort).map((item) => (
+              {sortedItems(visibleItems, sort).map((item) => (
                 <BacklogItemRow
                   key={item.id}
                   item={item}
@@ -196,6 +203,11 @@ export function EpicCard({ epic, sort, onEdit, onItemEdit, focusedItemId }: Prop
               ))}
             </div>
           )}
+          {hiddenItemCount > 0 && (
+            <p className="mt-1.5 text-[10px] text-[var(--dpf-muted)]">
+              {hiddenItemCount} completed item{hiddenItemCount !== 1 ? "s" : ""} hidden
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -204,4 +216,14 @@ export function EpicCard({ epic, sort, onEdit, onItemEdit, focusedItemId }: Prop
 
 function isFocusedBacklogItem(item: BacklogItemWithRelations, focusedItemId?: string): boolean {
   return Boolean(focusedItemId && (item.itemId === focusedItemId || item.id === focusedItemId));
+}
+
+function epicStatusDotClassName(status: string): string {
+  const classes: Record<string, string> = {
+    open: "bg-[var(--dpf-accent)]",
+    "in-progress": "bg-[var(--dpf-warning)]",
+    done: "bg-[var(--dpf-success)]",
+  };
+
+  return classes[status] ?? "bg-[var(--dpf-muted)]";
 }
