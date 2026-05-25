@@ -73,6 +73,11 @@ export async function getQuiescenceConfig(now: Date = new Date()): Promise<Quies
   if (cache && now.getTime() - cache.readAt < CACHE_TTL_MS) {
     return cache.config;
   }
+  if (typeof prisma.platformConfig?.findUnique !== "function") {
+    const config = { ...DEFAULT_CONFIG };
+    cache = { config, readAt: now.getTime() };
+    return config;
+  }
   const row = await prisma.platformConfig.findUnique({
     where: { key: QUIESCENCE_CONFIG_KEY },
   });
@@ -564,6 +569,7 @@ export async function captureActiveSessionBlockers(opts?: {
       taskRunId: true,
       title: true,
       buildId: true,
+      status: true,
       lastHeartbeatAt: true,
       startedAt: true,
     },
@@ -574,12 +580,13 @@ export async function captureActiveSessionBlockers(opts?: {
       surface: "coworker.reasoning-loop",
       detectionClass: "A",
       kind: "hard",
-      blockerSignal: { class: "A", model: "TaskRun", rowId: row.taskRunId, status: "working" },
+      blockerSignal: { class: "A", model: "TaskRun", rowId: row.taskRunId, status: row.status },
       estimatedWaitMs: 30_000, // typical iteration boundary; worst ~3min
       evidence: {
         taskRunId: row.taskRunId,
         title: row.title,
         buildId: row.buildId,
+        status: row.status,
         startedAt: row.startedAt.toISOString(),
         lastHeartbeatAt: row.lastHeartbeatAt?.toISOString() ?? null,
       },
