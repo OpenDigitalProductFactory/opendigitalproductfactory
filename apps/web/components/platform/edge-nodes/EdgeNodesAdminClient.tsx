@@ -140,6 +140,93 @@ function ScopeBadge({ scope }: { scope: ScopeBadgeInput }) {
   );
 }
 
+function formatCount(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function RuntimeSummary({ nodes }: { nodes: EdgeNodeRow[] }) {
+  const trusted = nodes.filter((node) => node.trustState === "trusted").length;
+  const pending = nodes.filter((node) => node.trustState === "pending").length;
+  const active = nodes.filter((node) => node.status === "active").length;
+  const runtimeModes = Array.from(
+    new Set(nodes.map((node) => `${node.platform} / ${node.installMode}`)),
+  ).sort();
+  const hasContainerRuntime = nodes.some((node) =>
+    node.installMode === "container-host" || node.installMode === "container-vm",
+  );
+
+  return (
+    <section
+      className="rounded border p-4"
+      style={{
+        borderColor: "var(--dpf-border)",
+        backgroundColor: "var(--dpf-surface-1)",
+      }}
+    >
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-[var(--dpf-text)]">
+            Runtime summary
+          </h2>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+            <span
+              className="rounded border px-2 py-1 text-[var(--dpf-text)]"
+              style={{ borderColor: "var(--dpf-border)" }}
+            >
+              {formatCount(active, "active", "active")}
+            </span>
+            <span
+              className="rounded border px-2 py-1 text-[var(--dpf-text)]"
+              style={{ borderColor: "var(--dpf-border)" }}
+            >
+              {formatCount(trusted, "trusted", "trusted")}
+            </span>
+            <span
+              className="rounded border px-2 py-1 text-[var(--dpf-text)]"
+              style={{ borderColor: "var(--dpf-border)" }}
+            >
+              {formatCount(pending, "pending", "pending")}
+            </span>
+          </div>
+        </div>
+        <div className="min-w-0 lg:max-w-xl">
+          <p className="text-xs font-medium uppercase text-[var(--dpf-muted)]">
+            Runtime modes
+          </p>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {runtimeModes.length > 0 ? (
+              runtimeModes.map((mode) => (
+                <span
+                  key={mode}
+                  className="rounded border px-2 py-1 font-mono text-xs text-[var(--dpf-muted)]"
+                  style={{ borderColor: "var(--dpf-border)" }}
+                >
+                  {mode}
+                </span>
+              ))
+            ) : (
+              <span className="text-sm text-[var(--dpf-muted)]">No enrolled nodes</span>
+            )}
+          </div>
+        </div>
+      </div>
+      {hasContainerRuntime && (
+        <p
+          className="mt-3 rounded border px-3 py-2 text-sm text-[var(--dpf-text)]"
+          style={{
+            borderColor: "var(--dpf-warning)",
+            backgroundColor: "var(--dpf-surface-2)",
+          }}
+        >
+          Container runtime is connected to Authority Core, but can have limited
+          host-LAN visibility on Docker Desktop. Native Windows/macOS service mode is
+          the full host-LAN discovery target.
+        </p>
+      )}
+    </section>
+  );
+}
+
 /**
  * Render hostname + LAN IP addresses for the Edge Node admin table.
  * Pure presentational — extracted so the row map stays readable AND
@@ -356,6 +443,8 @@ export function EdgeNodesAdminClient({ nodes, tokens, customerAccounts }: Props)
           </div>
         </div>
       )}
+
+      <RuntimeSummary nodes={nodes} />
 
       <section
         className="rounded border p-4"
