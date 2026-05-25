@@ -883,8 +883,8 @@ async function collectPlatformUpdateConflicts(
   const { readFileSync } = lazyFs();
   for (const file of conflicted.trim().split("\n").filter(Boolean)) {
     const content = readFileSync(resolvePath(workspace, file), "utf-8");
-    const localMatch = content.match(/<<<<<<< .+?\n([\s\S]*?)=======/);
-    const upstreamMatch = content.match(/=======\n([\s\S]*?)>>>>>>> .+/);
+    const localMatch = content.match(/<<<<<<<[^\r\n]*(?:\r?\n)([\s\S]*?)(?:\r?\n)=======/);
+    const upstreamMatch = content.match(/=======(?:\r?\n)([\s\S]*?)(?:\r?\n)>>>>>>>[^\r\n]*/);
     conflicts.push({
       file,
       upstreamChange: upstreamMatch?.[1]?.trim() ?? "(could not parse)",
@@ -892,6 +892,49 @@ async function collectPlatformUpdateConflicts(
     });
   }
   return conflicts;
+}
+
+async function finishPlatformUpdateMerge(
+  execUpdate: ExecUpdate,
+  gitOpts: ExecUpdateOptions,
+  workspace: string,
+  resolvePath: (...parts: string[]) => string,
+  pendingVersion: string,
+): Promise<Extract<ApplyPlatformUpdateResult, { kind: "clean-merge" }>> {
+  const { stdout: filesChanged } = await execUpdate(
+    "git diff --cached --stat",
+    gitOpts,
+  );
+  const fileCount = parseInt(
+    (filesChanged.match(/(\d+) files? changed/) || ["0", "0"])[1] ?? "0",
+    10,
+  );
+  await execUpdate(
+    `git commit -s -m "chore: merge dpf v${pendingVersion}"`,
+    gitOpts,
+  );
+
+  const { writeFileSync } = lazyFs();
+  writeFileSync(
+    resolvePath(workspace, ".dpf-version"),
+    pendingVersion,
+    "utf-8",
+  );
+
+  await prisma.platformDevConfig.update({
+    where: { id: "singleton" },
+    data: { updatePending: false, pendingVersion: null },
+  });
+
+  revalidatePath("/admin/platform-development");
+  revalidatePath("/", "layout"); // banner lives in shell layout
+
+  return {
+    kind: "clean-merge",
+    message: `Platform updated to v${pendingVersion}. ${fileCount} files updated. No conflicts.`,
+    version: pendingVersion,
+    filesUpdated: fileCount,
+  };
 }
 
 export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> {
@@ -937,6 +980,15 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
         workspace,
         resolvePath,
       );
+      if (conflicts.length === 0) {
+        return await finishPlatformUpdateMerge(
+          execUpdate,
+          gitOpts,
+          workspace,
+          resolvePath,
+          pendingVersion,
+        );
+      }
       return {
         kind: "conflicts",
         message: `A merge is already in progress. ${conflicts.length} conflict(s) remaining.`,
@@ -963,7 +1015,7 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
     );
     if (diffCheck.trim()) {
       await execUpdate(
-        `git commit -m "chore: ${UPDATE_UPSTREAM_BRANCH} v${pendingVersion}"`,
+        `git commit -s -m "chore: ${UPDATE_UPSTREAM_BRANCH} v${pendingVersion}"`,
         gitOpts,
       );
     }
@@ -995,40 +1047,13 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
     }
 
     // Clean merge — commit, write sentinel, clear pending flag
-    const { stdout: filesChanged } = await execUpdate(
-      "git diff --cached --stat",
+    return await finishPlatformUpdateMerge(
+      execUpdate,
       gitOpts,
-    );
-    const fileCount = parseInt(
-      (filesChanged.match(/(\d+) files? changed/) || ["0", "0"])[1] ?? "0",
-      10,
-    );
-    await execUpdate(
-      `git commit -m "chore: merge dpf v${pendingVersion}"`,
-      gitOpts,
-    );
-
-    const { writeFileSync } = lazyFs();
-    writeFileSync(
-      resolvePath(workspace, ".dpf-version"),
+      workspace,
+      resolvePath,
       pendingVersion,
-      "utf-8",
     );
-
-    await prisma.platformDevConfig.update({
-      where: { id: "singleton" },
-      data: { updatePending: false, pendingVersion: null },
-    });
-
-    revalidatePath("/admin/platform-development");
-    revalidatePath("/", "layout"); // banner lives in shell layout
-
-    return {
-      kind: "clean-merge",
-      message: `Platform updated to v${pendingVersion}. ${fileCount} files updated. No conflicts.`,
-      version: pendingVersion,
-      filesUpdated: fileCount,
-    };
   } catch (err) {
     // Best-effort: leave my-changes checked out so the operator's working
     // copy is in a known state even when the merge step itself crashes.

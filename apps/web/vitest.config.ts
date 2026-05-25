@@ -2,10 +2,10 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { resolve } from "path";
 import { config as loadEnv } from "dotenv";
+import { buildNodeModuleAliases } from "./vitest.path-aliases";
 
 const rootDir = resolve(__dirname, "../..");
 const webDir = resolve(__dirname);
-const rootNodeModulesDir = resolve(rootDir, "node_modules");
 
 loadEnv({ path: resolve(rootDir, ".env") });
 loadEnv({ path: resolve(webDir, ".env.local"), override: true });
@@ -61,12 +61,7 @@ export default defineConfig({
         replacement: resolve(rootDir, "packages/finance-templates/src/index.ts"),
       },
       { find: "server-only", replacement: resolve(webDir, "test-support/server-only.ts") },
-      { find: "next/server", replacement: resolve(rootDir, "node_modules/next/server.js") },
-      { find: "react/jsx-dev-runtime", replacement: resolve(rootNodeModulesDir, "react/jsx-dev-runtime.js") },
-      { find: "react/jsx-runtime", replacement: resolve(rootNodeModulesDir, "react/jsx-runtime.js") },
-      { find: "react-dom/server", replacement: resolve(rootNodeModulesDir, "react-dom/server.node.js") },
-      { find: "react-dom", replacement: resolve(rootNodeModulesDir, "react-dom/index.js") },
-      { find: "react", replacement: resolve(rootNodeModulesDir, "react/index.js") },
+      ...buildNodeModuleAliases({ webDir, rootDir }),
     ],
   },
 });

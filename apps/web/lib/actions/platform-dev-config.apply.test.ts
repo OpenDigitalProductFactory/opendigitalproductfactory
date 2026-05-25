@@ -138,6 +138,65 @@ describe("applyPlatformUpdate", () => {
     }
   });
 
+  it("parses CRLF conflict markers from the managed Windows source volume", async () => {
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      updatePending: true,
+      pendingVersion: "v1.2.3",
+    });
+    mockExistsSync.mockReturnValue(true);
+
+    mockExec.mockImplementation((cmd: string, _opts: unknown, cb?: (err: Error | null, value: { stdout: string; stderr: string }) => void) => {
+      if (!cb) return;
+      if (cmd.includes("--diff-filter=U")) {
+        cb(null, { stdout: "apps/web/page.tsx\n", stderr: "" });
+        return;
+      }
+      cb(null, { stdout: "", stderr: "" });
+    });
+    mockReadFileSync.mockReturnValue(
+      "// header\r\n<<<<<<< HEAD\r\nlocal version\r\n=======\r\nupstream version\r\n>>>>>>> dpf-upstream\r\n",
+    );
+
+    const result = await applyPlatformUpdate();
+
+    expect(result.kind).toBe("conflicts");
+    if (result.kind === "conflicts") {
+      expect(result.conflicts[0]?.localChange).toBe("local version");
+      expect(result.conflicts[0]?.upstreamChange).toBe("upstream version");
+    }
+  });
+
+  it("finishes a resumed merge when all conflicts have already been resolved", async () => {
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      updatePending: true,
+      pendingVersion: "v1.2.3",
+    });
+    mockPrisma.platformDevConfig.update.mockResolvedValue({});
+    mockExistsSync.mockReturnValue(true);
+
+    mockExec.mockImplementation((cmd: string, _opts: unknown, cb?: (err: Error | null, value: { stdout: string; stderr: string }) => void) => {
+      if (!cb) return;
+      if (cmd.includes("--diff-filter=U")) cb(null, { stdout: "", stderr: "" });
+      else if (cmd === "git diff --cached --stat") cb(null, { stdout: " 3 files changed, 9 insertions(+)", stderr: "" });
+      else cb(null, { stdout: "", stderr: "" });
+    });
+
+    const result = await applyPlatformUpdate();
+
+    expect(result.kind).toBe("clean-merge");
+    if (result.kind === "clean-merge") {
+      expect(result.filesUpdated).toBe(3);
+    }
+    const commands = mockExec.mock.calls.map(([cmd]) => cmd);
+    expect(commands.some((cmd) => String(cmd).startsWith('git commit -s -m "chore: merge dpf'))).toBe(true);
+    expect(commands).not.toContain("rm -rf apps/web packages");
+    expect(mockWriteFileSync).toHaveBeenCalled();
+    expect(mockPrisma.platformDevConfig.update).toHaveBeenCalledWith({
+      where: { id: "singleton" },
+      data: { updatePending: false, pendingVersion: null },
+    });
+  });
+
   it("marks the workspace as a Git safe directory before reading merge state", async () => {
     mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
       updatePending: true,
@@ -148,11 +207,14 @@ describe("applyPlatformUpdate", () => {
     mockExec.mockImplementation((cmd: string, _opts: unknown, cb?: (err: Error | null, value: { stdout: string; stderr: string }) => void) => {
       if (!cb) return;
       if (cmd.includes("--diff-filter=U")) {
-        cb(null, { stdout: "", stderr: "" });
+        cb(null, { stdout: "apps/web/page.tsx\n", stderr: "" });
         return;
       }
       cb(null, { stdout: "", stderr: "" });
     });
+    mockReadFileSync.mockReturnValue(
+      "// header\n<<<<<<< HEAD\nlocal version\n=======\nupstream version\n>>>>>>> dpf-upstream\n",
+    );
 
     const result = await applyPlatformUpdate();
 
