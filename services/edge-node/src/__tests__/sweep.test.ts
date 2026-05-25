@@ -197,6 +197,32 @@ describe("runSweepLoop", () => {
     expect(submit.mock.calls[1]![0]).toBe("dpfedge_specifictoken");
   });
 
+  it("skips discovery submissions while the edge node is not trusted", async () => {
+    const submit = vi.fn().mockResolvedValue({ ok: true });
+    const api = makeApi(submit);
+    const logged: string[] = [];
+    let sleeps = 0;
+
+    await runSweepLoop({
+      config: makeConfig(),
+      api,
+      state: makeState({ trustState: "pending" }),
+      sleep: async () => { sleeps += 1; },
+      log: (_level, message) => logged.push(message),
+      maxIterations: 2,
+      hostInfoAdapter: fakeAdapter(),
+      arpAdapter: emptyArpAdapter(),
+      nmapAdapter: emptyNmapAdapter(),
+      snmpAdapter: emptySnmpAdapter(),
+      unifiAdapter: emptyUnifiAdapter(),
+    });
+
+    expect(submit).not.toHaveBeenCalled();
+    expect(api.fetchAdapters).not.toHaveBeenCalled();
+    expect(logged.some((message) => message.includes("trustState=pending"))).toBe(true);
+    expect(sleeps).toBe(2);
+  });
+
   it("drops the envelope on 4xx client error (no retry)", async () => {
     const submit = vi
       .fn()

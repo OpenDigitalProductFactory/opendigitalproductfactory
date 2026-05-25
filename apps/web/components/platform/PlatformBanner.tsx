@@ -18,6 +18,16 @@
  */
 
 import { useEffect, useState } from "react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Info,
+  RefreshCw,
+  X,
+} from "lucide-react";
 
 type BannerState =
   | { kind: "hidden" }
@@ -46,6 +56,7 @@ declare global {
 
 export function PlatformBanner(): React.ReactElement | null {
   const [state, setState] = useState<BannerState>({ kind: "hidden" });
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     const source = new EventSource("/api/agent/system-stream");
@@ -91,114 +102,129 @@ export function PlatformBanner(): React.ReactElement | null {
     };
   }, []);
 
+  useEffect(() => {
+    if (state.kind === "hidden") setCollapsed(false);
+  }, [state.kind]);
+
   if (state.kind === "hidden") return null;
 
-  // Theme tokens per AGENTS.md (CSS custom properties). Banner is rendered
-  // as a narrow strip at the top of the shell, above StatusBanner +
-  // UpdatePendingBanner.
-  const baseStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "10px 16px",
-    fontSize: "14px",
-    fontWeight: 500,
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-    borderBottom: "1px solid var(--dpf-border, rgba(0,0,0,0.08))",
-  };
+  const view = getPlatformBannerView(state);
+  const Icon = view.icon;
 
-  if (state.kind === "preparing") {
+  if (collapsed) {
     return (
-      <div
-        style={{
-          ...baseStyle,
-          background: "var(--dpf-surface-warning, #fff8e1)",
-          color: "var(--dpf-text, #3e2723)",
-        }}
-        role="status"
-        aria-live="polite"
-        data-quiescence-state="preparing"
-      >
-        <span aria-hidden>⏳</span>
-        <span>
-          Platform upgrade preparing. Your current work will finish — please don&apos;t start new actions.
-          {state.swapEtaSeconds != null ? ` (ETA ~${Math.ceil(state.swapEtaSeconds / 60)}min)` : ""}
-        </span>
-      </div>
-    );
-  }
-
-  if (state.kind === "swapping") {
-    return (
-      <div
-        style={{
-          ...baseStyle,
-          background: "var(--dpf-surface-warning, #fff3e0)",
-          color: "var(--dpf-text, #3e2723)",
-        }}
-        role="status"
-        aria-live="assertive"
-        data-quiescence-state="swapping"
-      >
-        <span aria-hidden>🔄</span>
-        <span>Platform upgrading. Please wait — should take about 30 seconds.</span>
-      </div>
-    );
-  }
-
-  if (state.kind === "reconnecting") {
-    return (
-      <div
-        style={{
-          ...baseStyle,
-          background: "var(--dpf-surface-info, #e3f2fd)",
-          color: "var(--dpf-text, #0d47a1)",
-        }}
-        role="status"
-        aria-live="assertive"
-        data-quiescence-state="reconnecting"
-      >
-        <span aria-hidden>✓</span>
-        <span>Upgrade complete. Reloading…</span>
-      </div>
-    );
-  }
-
-  // deferred
-  return (
-    <div
-      style={{
-        ...baseStyle,
-        background: "var(--dpf-surface-muted, #f5f5f5)",
-        color: "var(--dpf-text, #424242)",
-      }}
-      role="status"
-      aria-live="polite"
-      data-quiescence-state="deferred"
-    >
-      <span aria-hidden>ℹ️</span>
-      <span>
-        Upgrade postponed
-        {state.surface ? ` (blocker: ${state.surface})` : ""}
-        {state.reason ? `: ${state.reason}` : ""}. You can continue working.
-      </span>
       <button
         type="button"
-        onClick={() => setState({ kind: "hidden" })}
-        style={{
-          marginLeft: "auto",
-          background: "transparent",
-          border: "none",
-          cursor: "pointer",
-          color: "inherit",
-          fontSize: "14px",
-        }}
-        aria-label="Dismiss banner"
+        aria-expanded="false"
+        aria-label="Expand platform status banner"
+        data-quiescence-state={state.kind}
+        data-quiescence-collapsed="true"
+        onClick={() => setCollapsed(false)}
+        className="pointer-events-auto flex max-w-[calc(100vw-24px)] items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-xs font-medium text-[var(--dpf-text)] shadow-[0_10px_30px_color-mix(in_srgb,var(--dpf-text)_14%,transparent)]"
       >
-        ✕
+        <Icon aria-hidden="true" className={`h-3.5 w-3.5 ${view.iconClassName}`} />
+        <span className="max-w-[min(72vw,40rem)] truncate">{view.compactLabel}</span>
+        <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 text-[var(--dpf-muted)]" />
       </button>
+    );
+  }
+
+  return (
+    <div
+      role="status"
+      aria-live={view.assertive ? "assertive" : "polite"}
+      className={`pointer-events-auto w-[min(960px,calc(100vw-24px))] rounded-md border px-3 py-2 text-xs text-[var(--dpf-text)] shadow-[0_10px_30px_color-mix(in_srgb,var(--dpf-text)_14%,transparent)] ${view.frameClassName}`}
+      data-overlay-banner="true"
+      data-quiescence-state={state.kind}
+    >
+      <div className="flex items-center gap-2">
+        <Icon aria-hidden="true" className={`h-4 w-4 shrink-0 ${view.iconClassName}`} />
+        <span className="min-w-0 flex-1" style={{ overflowWrap: "anywhere" }}>{view.message}</span>
+        <button
+          type="button"
+          aria-expanded="true"
+          aria-label="Collapse platform status banner"
+          title="Collapse platform status banner"
+          onClick={() => setCollapsed(true)}
+          className="shrink-0 rounded p-1 text-[var(--dpf-muted)] transition hover:bg-[var(--dpf-surface-2)] hover:text-[var(--dpf-text)]"
+        >
+          <ChevronUp aria-hidden="true" className="h-4 w-4" />
+        </button>
+        {state.kind === "deferred" && (
+          <button
+            type="button"
+            onClick={() => setState({ kind: "hidden" })}
+            className="shrink-0 rounded p-1 text-[var(--dpf-muted)] transition hover:bg-[var(--dpf-surface-2)] hover:text-[var(--dpf-text)]"
+            aria-label="Dismiss platform status banner"
+            title="Dismiss platform status banner"
+          >
+            <X aria-hidden="true" className="h-4 w-4" />
+          </button>
+        )}
+      </div>
     </div>
   );
+}
+
+type PlatformBannerView = {
+  compactLabel: string;
+  message: string;
+  assertive: boolean;
+  frameClassName: string;
+  iconClassName: string;
+  icon: typeof Clock;
+};
+
+function getPlatformBannerView(state: Exclude<BannerState, { kind: "hidden" }>): PlatformBannerView {
+  const warningFrame =
+    "border-[color-mix(in_srgb,var(--dpf-warning)_34%,var(--dpf-border))] bg-[color-mix(in_srgb,var(--dpf-warning)_12%,var(--dpf-surface-1))]";
+  const infoFrame =
+    "border-[color-mix(in_srgb,var(--dpf-accent)_34%,var(--dpf-border))] bg-[color-mix(in_srgb,var(--dpf-accent)_10%,var(--dpf-surface-1))]";
+  const neutralFrame =
+    "border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]";
+
+  switch (state.kind) {
+    case "preparing":
+      return {
+        compactLabel: "Platform upgrade preparing",
+        message: `Platform upgrade preparing. Current work will finish before the update${
+          state.swapEtaSeconds != null ? `, ETA about ${Math.ceil(state.swapEtaSeconds / 60)} min` : ""
+        }.`,
+        assertive: false,
+        frameClassName: warningFrame,
+        iconClassName: "text-[var(--dpf-warning)]",
+        icon: Clock,
+      };
+    case "swapping":
+      return {
+        compactLabel: "Platform upgrading",
+        message: "Platform upgrading. Please wait; this should take about 30 seconds.",
+        assertive: true,
+        frameClassName: warningFrame,
+        iconClassName: "text-[var(--dpf-warning)]",
+        icon: RefreshCw,
+      };
+    case "reconnecting":
+      return {
+        compactLabel: "Upgrade complete",
+        message: "Upgrade complete. Reloading.",
+        assertive: true,
+        frameClassName: infoFrame,
+        iconClassName: "text-[var(--dpf-accent)]",
+        icon: CheckCircle2,
+      };
+    case "deferred":
+      return {
+        compactLabel: "Upgrade postponed",
+        message: `Upgrade postponed${state.surface ? `, blocker: ${state.surface}` : ""}${
+          state.reason ? `, ${state.reason}` : ""
+        }. You can continue working.`,
+        assertive: false,
+        frameClassName: neutralFrame,
+        iconClassName: "text-[var(--dpf-muted)]",
+        icon: state.reason === "failed" ? AlertCircle : Info,
+      };
+  }
 }
 
 /**

@@ -16,6 +16,71 @@ function Get-PowerShellCommand {
     return $command.Source
 }
 
+function Invoke-ReleaseAndReject {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$PowerShell,
+
+        [Parameter(Mandatory=$true)]
+        [string]$ScriptUnderTest,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Local,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Bump,
+
+        [Parameter(Mandatory=$true)]
+        [string]$ExpectedVersion,
+
+        [Parameter(Mandatory=$true)]
+        [string]$LocalHead
+    )
+
+    $processInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $processInfo.FileName = $PowerShell
+    $processInfo.WorkingDirectory = $Local
+    $processInfo.UseShellExecute = $false
+    $processInfo.RedirectStandardInput = $true
+    $processInfo.RedirectStandardOutput = $true
+    $processInfo.RedirectStandardError = $true
+    $processInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptUnderTest`" $Bump"
+
+    $process = [System.Diagnostics.Process]::Start($processInfo)
+    $process.StandardInput.WriteLine("n")
+    $process.StandardInput.Close()
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderr = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+    $output = "$stdout`n$stderr"
+
+    if ($process.ExitCode -ne 0) {
+        throw "Expected release script to abort cleanly after confirmation for $Bump; got exit code $($process.ExitCode). Output: $output"
+    }
+    if ($output -match "Fast-forward pull failed") {
+        throw "Release script still tried to fast-forward local main for $Bump. Output: $output"
+    }
+    if ($output -notmatch "Release target:\s+origin/main") {
+        throw "Release script did not report origin/main as the release target for $Bump. Output: $output"
+    }
+    if ($output -notmatch "New version:\s+$([regex]::Escape($ExpectedVersion))\s+\($Bump bump\)") {
+        throw "Release script did not compute $ExpectedVersion for $Bump. Output: $output"
+    }
+    if ($output -notmatch "Aborted\.") {
+        throw "Release script did not abort at operator confirmation for $Bump. Output: $output"
+    }
+
+    $headAfter = (& git "-C" $Local rev-parse HEAD).Trim()
+    if ($headAfter -ne $LocalHead) {
+        throw "Release script changed local HEAD for $Bump. Before: $LocalHead After: $headAfter"
+    }
+
+    $createdTag = ((& git "-C" $Local tag --list $ExpectedVersion) | Out-String).Trim()
+    if ($createdTag) {
+        throw "Release script created $ExpectedVersion even though operator rejected confirmation."
+    }
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $releaseScript = Join-Path $repoRoot "dpf-release.ps1"
 if (-not (Test-Path -LiteralPath $releaseScript)) {
@@ -58,47 +123,12 @@ try {
     Invoke-TestGit "-C" $seed push origin main
 
     $powerShell = Get-PowerShellCommand
-    $processInfo = New-Object System.Diagnostics.ProcessStartInfo
-    $processInfo.FileName = $powerShell
-    $processInfo.WorkingDirectory = $local
-    $processInfo.UseShellExecute = $false
-    $processInfo.RedirectStandardInput = $true
-    $processInfo.RedirectStandardOutput = $true
-    $processInfo.RedirectStandardError = $true
-    $processInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptUnderTest`" minor"
 
-    $process = [System.Diagnostics.Process]::Start($processInfo)
-    $process.StandardInput.WriteLine("n")
-    $process.StandardInput.Close()
-    $stdout = $process.StandardOutput.ReadToEnd()
-    $stderr = $process.StandardError.ReadToEnd()
-    $process.WaitForExit()
-    $output = "$stdout`n$stderr"
+    Invoke-ReleaseAndReject -PowerShell $powerShell -ScriptUnderTest $scriptUnderTest -Local $local -Bump "minor" -ExpectedVersion "v1.1.0" -LocalHead $localHead
+    Invoke-ReleaseAndReject -PowerShell $powerShell -ScriptUnderTest $scriptUnderTest -Local $local -Bump "patch" -ExpectedVersion "v1.0.1" -LocalHead $localHead
+    Invoke-ReleaseAndReject -PowerShell $powerShell -ScriptUnderTest $scriptUnderTest -Local $local -Bump "major" -ExpectedVersion "v2.0.0" -LocalHead $localHead
 
-    if ($process.ExitCode -ne 0) {
-        throw "Expected release script to abort cleanly after confirmation; got exit code $($process.ExitCode). Output: $output"
-    }
-    if ($output -match "Fast-forward pull failed") {
-        throw "Release script still tried to fast-forward local main. Output: $output"
-    }
-    if ($output -notmatch "Release target:\s+origin/main") {
-        throw "Release script did not report origin/main as the release target. Output: $output"
-    }
-    if ($output -notmatch "Aborted\.") {
-        throw "Release script did not abort at operator confirmation. Output: $output"
-    }
-
-    $headAfter = (& git "-C" $local rev-parse HEAD).Trim()
-    if ($headAfter -ne $localHead) {
-        throw "Release script changed local HEAD. Before: $localHead After: $headAfter"
-    }
-
-    $createdTag = ((& git "-C" $local tag --list v1.1.0) | Out-String).Trim()
-    if ($createdTag) {
-        throw "Release script created v1.1.0 even though operator rejected confirmation."
-    }
-
-    Write-Host "PASS: dpf-release.ps1 uses origin/main without mutating divergent local main."
+    Write-Host "PASS: dpf-release.ps1 uses origin/main without mutating divergent local main, and computes minor/patch/major tags."
 }
 finally {
     if (Test-Path -LiteralPath $testRoot) {

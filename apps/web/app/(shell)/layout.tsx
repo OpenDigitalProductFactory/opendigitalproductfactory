@@ -12,6 +12,7 @@ import { QueueFlusher } from "@/components/feedback/QueueFlusher";
 import { StatusBanner } from "@/components/shell/StatusBanner";
 import { UpdatePendingBanner } from "@/components/shell/UpdatePendingBanner";
 import { PlatformBanner } from "@/components/platform/PlatformBanner";
+import { ShellBannerOverlay } from "@/components/shell/ShellBannerOverlay";
 import { ModelWarmup } from "@/components/shell/ModelWarmup";
 import { SetupOverlay } from "@/components/setup/SetupOverlay";
 import { getShellNavSections } from "@/lib/permissions";
@@ -139,9 +140,11 @@ export default async function ShellLayout({ children }: { children: React.ReactN
             }
           />
         )}
-        <PlatformBanner />
-        <StatusBanner />
-        <UpdatePendingBanner />
+        <ShellBannerOverlay>
+          <PlatformBanner />
+          <StatusBanner />
+          <UpdatePendingBanner />
+        </ShellBannerOverlay>
         <Header
           platformRole={user.platformRole}
           brandName={organization?.name ?? "Open Digital Product Factory"}
