@@ -1082,9 +1082,16 @@ export async function runAgenticLoop(params: {
       const msg = routeErr instanceof Error ? routeErr.message : String(routeErr);
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
       const isTooLarge = msg.startsWith("REQUEST_TOO_LARGE:");
+      const isMissingToolUseCapacity =
+        /No eligible endpoints/i.test(msg) && /toolUse/i.test(msg);
+      const isToolUsingEndpointFailure =
+        Boolean(routeOptions.tools && routeOptions.tools.length > 0) &&
+        (/All endpoints failed/i.test(msg) || /tools exceeds threshold/i.test(msg));
       return {
         content: isTooLarge
           ? "Your conversation is too long for this AI provider. Please start a new thread to continue."
+          : isMissingToolUseCapacity || isToolUsingEndpointFailure
+            ? "No tool-use-capable AI provider is available for this coworker. Configure an active model that supports tools in Platform > AI > Model Assignment, then retry this task."
           : "The AI provider is temporarily unavailable. Please try again in about 30 seconds.",
         providerId: "unknown",
         modelId: "unknown",
