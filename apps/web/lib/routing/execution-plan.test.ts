@@ -5,7 +5,11 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { buildPlanFromRecipe, buildDefaultPlan } from "./execution-plan";
+import {
+  buildPlanFromRecipe,
+  buildDefaultPlan,
+  resolveDefaultExecutionAdapter,
+} from "./execution-plan";
 import type { RecipeRow } from "./recipe-types";
 import type { RequestContract } from "./request-contract";
 import type { EndpointManifest } from "./types";
@@ -343,5 +347,23 @@ describe("buildDefaultPlan", () => {
       makeContract(),
     );
     expect(plan.executionAdapter).toBe("claude-cli");
+  });
+});
+
+describe("resolveDefaultExecutionAdapter", () => {
+  it("keeps Codex on the CLI adapter even without a full endpoint manifest", () => {
+    expect(resolveDefaultExecutionAdapter("codex")).toBe("codex-cli");
+  });
+
+  it("keeps ChatGPT subscription calls on the responses adapter", () => {
+    expect(resolveDefaultExecutionAdapter("chatgpt")).toBe("responses");
+  });
+
+  it("keeps Claude subscription calls on the Claude CLI adapter", () => {
+    expect(resolveDefaultExecutionAdapter("anthropic-sub")).toBe("claude-cli");
+  });
+
+  it("falls back to required model-class adapters for generic providers", () => {
+    expect(resolveDefaultExecutionAdapter("openai", "embedding")).toBe("embedding");
   });
 });

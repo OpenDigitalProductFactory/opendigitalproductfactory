@@ -22,6 +22,23 @@ const MODEL_CLASS_ADAPTER: Record<string, string> = {
   code: "chat",
 };
 
+export function resolveProviderExecutionAdapter(providerId: string): string | null {
+  if (usesCodexCli(providerId)) return "codex-cli";
+  if (usesResponsesApi(providerId)) return "responses";
+  if (usesCliAdapter(providerId)) return "claude-cli";
+  return null;
+}
+
+export function resolveDefaultExecutionAdapter(
+  providerId: string,
+  requiredModelClass?: string,
+): string {
+  const providerAdapter = resolveProviderExecutionAdapter(providerId);
+  if (providerAdapter) return providerAdapter;
+  if (requiredModelClass) return MODEL_CLASS_ADAPTER[requiredModelClass] ?? "chat";
+  return "chat";
+}
+
 // ── buildPlanFromRecipe ──────────────────────────────────────────────────────
 
 /**
@@ -67,13 +84,10 @@ export function buildPlanFromRecipe(
   // anthropic-sub uses OAuth tokens which only work with Claude CLI, not the
   // direct Messages API. Always route through CLI adapter for this provider.
   // MCP tool execution happens via the agentic loop, not the adapter itself.
-  const executionAdapter = usesCodexCli(recipe.providerId)
-    ? "codex-cli"
-    : usesResponsesApi(recipe.providerId)
-      ? "responses"
-      : usesCliAdapter(recipe.providerId)
-        ? "claude-cli"
-        : (recipe.executionAdapter ?? "chat");
+  const executionAdapter =
+    resolveProviderExecutionAdapter(recipe.providerId) ??
+    recipe.executionAdapter ??
+    "chat";
 
   const plan: RoutedExecutionPlan = {
     providerId: recipe.providerId,
@@ -122,15 +136,10 @@ export function buildDefaultPlan(
   };
 
   // EP-INF-009c: Select adapter based on required model class
-  const adapterType = usesCodexCli(endpoint.providerId)
-    ? "codex-cli"
-    : usesResponsesApi(endpoint.providerId)
-      ? "responses"
-      : usesCliAdapter(endpoint.providerId)
-        ? "claude-cli"
-        : contract.requiredModelClass
-          ? (MODEL_CLASS_ADAPTER[contract.requiredModelClass] ?? "chat")
-        : "chat";
+  const adapterType = resolveDefaultExecutionAdapter(
+    endpoint.providerId,
+    contract.requiredModelClass,
+  );
 
   return {
     providerId: endpoint.providerId,
