@@ -1,0 +1,27 @@
+{
+  "name": "dpf-platform",
+  "description": "DPF-native agent skills for both Claude Code contributors (plugin namespace dpf-platform:*) and in-portal coworkers (seeded as SkillDefinition rows by the extended seed-skills.ts loader). Single-source-of-truth contract: superset SKILL.md frontmatter feeds both surfaces from one file per skill. See README.md.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Digital Product Factory",
+    "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory"
+  },
+  "homepage": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/packages/dpf-skill-pack",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git",
+    "directory": "packages/dpf-skill-pack"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "dpf",
+    "digital-product-factory",
+    "agent-skills",
+    "build-studio",
+    "kernel-principles",
+    "backlog",
+    "worktree",
+    "dco",
+    "wwmd"
+  ]
+}
