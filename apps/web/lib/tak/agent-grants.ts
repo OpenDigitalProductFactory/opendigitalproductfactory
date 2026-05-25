@@ -135,6 +135,13 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   update_feature_brief: ["backlog_write"],
   assess_complexity: ["backlog_read"],
   propose_decomposition: ["backlog_write"],
+  // Design-time decomposition Phase 4a/4b (BI-2E6CC391). These three tools
+  // are downstream of Ideate (operating on a passed FeatureBuild design),
+  // distinct from the upstream `propose_decomposition` brainstorming tool
+  // above. Same capability tier — all three touch backlog/build state.
+  propose_build_decomposition: ["backlog_write"],
+  approve_decomposition: ["backlog_write"],
+  record_decomposition_override: ["backlog_write"],
   register_tech_debt: ["backlog_write"],
   save_build_notes: ["backlog_write"],
   saveBuildEvidence: ["backlog_write"],

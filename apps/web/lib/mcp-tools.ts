@@ -483,8 +483,13 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
-    name: "propose_decomposition",
-    description: "Phase 4b (BI-2E6CC391). Ask the SE coworker to propose 2-4 candidate decompositions of a passed-design xlarge FeatureBuild. Eligible when the build is in `ideate`, has a passed designReview, and the recorded sizeAssessment.decision is `decompose-recommended` or `decompose-required`. Optional `operatorHint` re-runs with guidance ('make the read-first smaller', 'ship the ledger separately'). Persists validated candidates to designReview.decompositionCandidates.latest; prior rounds are preserved under .priorRounds for audit. Returns the validated candidates plus an observability list of rejected ones (model returned them but they failed validateCandidate).",
+    // NOTE: this tool is DISTINCT from the existing `propose_decomposition`
+    // (epic + feature-set breakdown for ideation). This one operates on a
+    // passed FeatureBuild design and proposes how to SPLIT it into smaller
+    // builds — a downstream-of-Ideate decomposition, not an upstream-from-
+    // backlog one. Different name avoids the collision.
+    name: "propose_build_decomposition",
+    description: "Phase 4b (BI-2E6CC391). Ask the SE coworker to propose 2-4 candidate decompositions of a passed-design xlarge FeatureBuild. Distinct from `propose_decomposition` (which is an upstream brainstorming tool that generates an Epic + feature-set breakdown). This one is downstream of Ideate — eligible when the build is in `ideate`, has a passed designReview, and the recorded sizeAssessment.decision is `decompose-recommended` or `decompose-required`. Optional `operatorHint` re-runs with guidance ('make the read-first smaller', 'ship the ledger separately'). Persists validated candidates to designReview.decompositionCandidates.latest; prior rounds are preserved under .priorRounds for audit. Returns the validated candidates plus an observability list of rejected ones (model returned them but they failed validateCandidate).",
     inputSchema: {
       type: "object",
       properties: {
@@ -4901,7 +4906,7 @@ export async function executeTool(
       };
     }
 
-    case "propose_decomposition": {
+    case "propose_build_decomposition": {
       const buildId = String(params["buildId"] ?? "");
       if (!buildId.startsWith("FB-")) {
         return { success: false, error: "invalid_buildId", message: "buildId must use the FB-* format." };
