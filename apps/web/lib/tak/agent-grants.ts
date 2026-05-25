@@ -135,6 +135,13 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   update_feature_brief: ["backlog_write"],
   assess_complexity: ["backlog_read"],
   propose_decomposition: ["backlog_write"],
+  // Phase 4a decomposition write surfaces (BI-2E6CC391, PR #1132). approve_decomposition
+  // atomically creates an Epic + N child FeatureBuilds + dependency edges + supersedes
+  // the originating build — both backlog creation and a build-promotion-equivalent gate.
+  // record_decomposition_override writes designReview.decompositionOverride for audit
+  // when the operator proceeds monolithically on a decompose-required build.
+  approve_decomposition: ["backlog_write", "build_promote"],
+  record_decomposition_override: ["backlog_write"],
   register_tech_debt: ["backlog_write"],
   save_build_notes: ["backlog_write"],
   saveBuildEvidence: ["backlog_write"],
