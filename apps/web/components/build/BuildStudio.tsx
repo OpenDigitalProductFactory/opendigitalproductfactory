@@ -21,6 +21,7 @@ import { BuildStudioWorkflowActionCard } from "./BuildStudioWorkflowActionCard";
 import { CodeIntelligenceStatusCard } from "./CodeIntelligenceStatusCard";
 import { BuildAssuranceGateCard } from "./BuildAssuranceGateCard";
 import { BuildListItem } from "./BuildListItem";
+import { EpicRollupListItem } from "./EpicRollupListItem";
 import { deriveFleetCounts, deriveNeedsAttention, deriveQueueState } from "./fleet-derivation";
 import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
 import { deriveBuildStudioWorkflowAction } from "./build-studio-workflow-actions";
@@ -35,6 +36,7 @@ import type { ActiveAssuranceFindingRow } from "@/lib/assurance/finding-read";
 import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import type { BuildFlowState } from "@/lib/build-flow-state";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
+import type { EpicRollupView } from "@/lib/build/epic-rollup";
 import type { BomSummary } from "@/lib/assurance/bom-read";
 import type { CodeGraphFreshness } from "@/lib/integrate/code-graph-access";
 import type { BuildExecutionState } from "@/lib/integrate/build-exec-types";
@@ -52,6 +54,7 @@ import {
 
 type Props = {
   builds: FeatureBuildRow[];
+  epicRollups?: EpicRollupView[];
   portfolios: PortfolioForSelect[];
   governedBacklogEnabled: boolean;
   dpfEnvironment?: string;
@@ -59,6 +62,7 @@ type Props = {
   submissionBranchShortId?: string | null;
   initialBuildId?: string | null;
   portalContext?: PortalContextEnvelope | null;
+  initialActiveBuild?: FeatureBuildRow | null;
 };
 
 const MISSING_BOM_SUMMARY: BomSummary = {
@@ -81,6 +85,7 @@ const MISSING_BOM_SUMMARY: BomSummary = {
 
 export function BuildStudio({
   builds,
+  epicRollups = [],
   portfolios,
   governedBacklogEnabled,
   dpfEnvironment,
@@ -88,12 +93,14 @@ export function BuildStudio({
   submissionBranchShortId,
   initialBuildId,
   portalContext,
+  initialActiveBuild,
 }: Props) {
   const router = useRouter();
   const buildRows = Array.isArray(builds) ? builds : [];
+  const rollupRows = Array.isArray(epicRollups) ? epicRollups : [];
   const portfolioRows = Array.isArray(portfolios) ? portfolios : [];
   const [activeBuild, setActiveBuild] = useState<FeatureBuildRow | null>(
-    resolveInitialActiveBuild(buildRows, initialBuildId),
+    () => initialActiveBuild ?? resolveInitialActiveBuild(buildRows, initialBuildId),
   );
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -123,6 +130,10 @@ export function BuildStudio({
     setSelectedNodeClick(null);
   }, [activeBuild?.buildId]);
   const isDevEnvironment = dpfEnvironment === "dev";
+  const supervisedBuildRows =
+    activeBuild && !buildRows.some((build) => build.buildId === activeBuild.buildId)
+      ? [activeBuild, ...buildRows]
+      : buildRows;
   const branchBadge = resolveBuildStudioBranchBadge({
     submissionBranchShortId,
     buildTitle: activeBuild?.title ?? null,
@@ -183,6 +194,20 @@ export function BuildStudio({
     setBomSummary(nextBomSummary);
     setAssuranceFindings(nextFindings);
   }, []);
+  const selectBuildById = useCallback(async (buildId: string) => {
+    const existing = buildRows.find((build) => build.buildId === buildId);
+    if (existing) {
+      setActiveBuild(existing);
+      setSidebarOpen(true);
+      return;
+    }
+
+    const fresh = await getFeatureBuild(buildId);
+    if (fresh) {
+      setActiveBuild(fresh);
+      setSidebarOpen(true);
+    }
+  }, [buildRows]);
   const debouncedRefetch = useCallback(async () => {
     if (!activeBuild) return;
     const now = Date.now();
@@ -503,6 +528,7 @@ export function BuildStudio({
               ascending for same-kind tie-break. */}
           <FleetRailZone
             buildRows={buildRows}
+            epicRollups={rollupRows}
             activeBuildId={activeBuild?.buildId ?? null}
             governedBacklogEnabled={governedBacklogEnabled}
             isDevEnvironment={isDevEnvironment}
@@ -510,6 +536,7 @@ export function BuildStudio({
               setActiveBuild(build);
               setSidebarOpen(true);
             }}
+            onSelectBuildById={selectBuildById}
             onDeleteBuild={(build) => {
               if (isDevEnvironment) return;
               if (!confirm(`Delete "${build.title}"?`)) return;
@@ -694,7 +721,7 @@ export function BuildStudio({
                       activeBuild,
                       progressVisibility,
                       drawerInitialSectionId,
-                      buildRows,
+                      supervisedBuildRows,
                     )}
                   />
                 </div>
@@ -738,7 +765,7 @@ export function BuildStudio({
       {/* Footer — single shared OpenSandboxButton (sandbox is shared across
           all in-flight builds; surfacing one link labeled with the current
           driver replaces the dishonest per-build Preview tab). */}
-      <BuildStudioFooter builds={buildRows} />
+      <BuildStudioFooter builds={supervisedBuildRows} />
     </div>
   );
 }
@@ -1135,21 +1162,27 @@ function BuildFailedBanner({ execState }: { execState: BuildExecutionState | nul
 
 function FleetRailZone({
   buildRows,
+  epicRollups,
   activeBuildId,
   governedBacklogEnabled,
   isDevEnvironment,
   onSelectBuild,
+  onSelectBuildById,
   onDeleteBuild,
   onOpenQueueDrawer,
 }: {
   buildRows: FeatureBuildRow[];
+  epicRollups: EpicRollupView[];
   activeBuildId: string | null;
   governedBacklogEnabled: boolean;
   isDevEnvironment: boolean;
   onSelectBuild: (build: FeatureBuildRow) => void;
+  onSelectBuildById: (buildId: string) => void | Promise<void>;
   onDeleteBuild: (build: FeatureBuildRow) => void;
   onOpenQueueDrawer: () => void;
 }) {
+  const [expandedEpicIds, setExpandedEpicIds] = useState<Set<string>>(() => new Set());
+
   // Derive per-row fleet entries: queueState + needsAttention + lifecycle.
   // queueState falls back to phase-based heuristics until the concurrency
   // dispatcher exposes real values (its thread owns that surface).
@@ -1189,11 +1222,37 @@ function FleetRailZone({
   // header semantic — the list should only show inflight work by default.
   const activeEntries = sorted.filter((e) => e.build.phase !== "complete");
   const completedEntries = sorted.filter((e) => e.build.phase === "complete");
+  const activeEpicRollups = epicRollups.filter((rollup) => rollup.status !== "complete");
+  const completedEpicRollups = epicRollups.filter((rollup) => rollup.status === "complete");
+  const completedItemCount = completedEntries.length + completedEpicRollups.length;
   const [showCompleted, setShowCompleted] = useState(false);
 
   const counts = deriveFleetCounts(entries.map((e) => e.queueState));
 
-  if (buildRows.length === 0) {
+  useEffect(() => {
+    if (!activeBuildId) return;
+    const activeEpic = epicRollups.find((rollup) =>
+      rollup.children.some((child) => child.buildId === activeBuildId),
+    );
+    if (!activeEpic) return;
+    setExpandedEpicIds((previous) => {
+      if (previous.has(activeEpic.epicId)) return previous;
+      const next = new Set(previous);
+      next.add(activeEpic.epicId);
+      return next;
+    });
+  }, [activeBuildId, epicRollups]);
+
+  const toggleEpic = useCallback((epicId: string) => {
+    setExpandedEpicIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(epicId)) next.delete(epicId);
+      else next.add(epicId);
+      return next;
+    });
+  }, []);
+
+  if (buildRows.length === 0 && epicRollups.length === 0) {
     return (
       <div className="flex-1 overflow-auto p-2">
         <div className="p-6 text-center">
@@ -1233,12 +1292,24 @@ function FleetRailZone({
         <span aria-hidden="true" className="text-[var(--dpf-muted)]">›</span>
       </button>
       <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1" data-testid="fleet-rail-body">
+        {activeEpicRollups.map((rollup, idx) => (
+          <li key={rollup.epicId}>
+            <EpicRollupListItem
+              rollup={rollup}
+              activeBuildId={activeBuildId}
+              expanded={expandedEpicIds.has(rollup.epicId)}
+              index={idx}
+              onToggle={() => toggleEpic(rollup.epicId)}
+              onSelectBuild={onSelectBuildById}
+            />
+          </li>
+        ))}
         {activeEntries.map((entry, idx) => (
           <li key={entry.build.buildId}>
             <BuildListItem
               build={entry.build}
               active={activeBuildId === entry.build.buildId}
-              index={idx}
+              index={activeEpicRollups.length + idx}
               lifecycleLabel={entry.lifecycleLabel}
               isDevEnvironment={isDevEnvironment}
               density="fleet"
@@ -1249,12 +1320,12 @@ function FleetRailZone({
             />
           </li>
         ))}
-        {activeEntries.length === 0 && (
+        {activeEpicRollups.length === 0 && activeEntries.length === 0 && (
           <li className="px-3 py-6 text-center text-[11px] text-[var(--dpf-muted)]">
             No active builds. Type a feature name above and press <strong className="text-[var(--dpf-text)]">New</strong> to start.
           </li>
         )}
-        {completedEntries.length > 0 && (
+        {completedItemCount > 0 && (
           <>
             <li>
               <button
@@ -1266,7 +1337,7 @@ function FleetRailZone({
                 className="mt-2 flex w-full items-center justify-between rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-left text-[11px] font-semibold text-[var(--dpf-muted)] transition-colors hover:bg-[var(--dpf-surface-3)] hover:text-[var(--dpf-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
               >
                 <span>
-                  {completedEntries.length} completed build{completedEntries.length === 1 ? "" : "s"}
+                  {completedItemCount} completed build{completedItemCount === 1 ? "" : "s"}
                 </span>
                 <span aria-hidden="true" className="text-[var(--dpf-muted)]">
                   {showCompleted ? "▾" : "▸"}
@@ -1276,12 +1347,24 @@ function FleetRailZone({
             {showCompleted && (
               <li id="fleet-rail-completed-list" className="contents">
                 <ul className="flex flex-col gap-0.5">
+                  {completedEpicRollups.map((rollup, idx) => (
+                    <li key={rollup.epicId}>
+                      <EpicRollupListItem
+                        rollup={rollup}
+                        activeBuildId={activeBuildId}
+                        expanded={expandedEpicIds.has(rollup.epicId)}
+                        index={activeEpicRollups.length + activeEntries.length + idx}
+                        onToggle={() => toggleEpic(rollup.epicId)}
+                        onSelectBuild={onSelectBuildById}
+                      />
+                    </li>
+                  ))}
                   {completedEntries.map((entry, idx) => (
                     <li key={entry.build.buildId}>
                       <BuildListItem
                         build={entry.build}
                         active={activeBuildId === entry.build.buildId}
-                        index={activeEntries.length + idx}
+                        index={activeEpicRollups.length + activeEntries.length + completedEpicRollups.length + idx}
                         lifecycleLabel={entry.lifecycleLabel}
                         isDevEnvironment={isDevEnvironment}
                         density="fleet"
