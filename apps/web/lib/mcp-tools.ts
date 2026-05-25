@@ -19,6 +19,7 @@ import {
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 import { activeBrandExtractionWhere } from "@/lib/brand/active-extraction";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
+import { createPlatformIssueReport } from "@/lib/quality/platform-issue-reports";
 import {
   MARKETING_CHANNELS,
   MARKETING_REVIEW_CADENCE,
@@ -478,6 +479,28 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         limit: { type: "number", description: "Optional cap for this on-demand sweep. Still constrained by the platform daily cap." },
       },
       required: [],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    // NOTE: this tool is DISTINCT from the existing `propose_decomposition`
+    // (epic + feature-set breakdown for ideation). This one operates on a
+    // passed FeatureBuild design and proposes how to SPLIT it into smaller
+    // builds — a downstream-of-Ideate decomposition, not an upstream-from-
+    // backlog one. Different name avoids the collision.
+    name: "propose_build_decomposition",
+    description: "Phase 4b (BI-2E6CC391). Ask the SE coworker to propose 2-4 candidate decompositions of a passed-design xlarge FeatureBuild. Distinct from `propose_decomposition` (which is an upstream brainstorming tool that generates an Epic + feature-set breakdown). This one is downstream of Ideate — eligible when the build is in `ideate`, has a passed designReview, and the recorded sizeAssessment.decision is `decompose-recommended` or `decompose-required`. Optional `operatorHint` re-runs with guidance ('make the read-first smaller', 'ship the ledger separately'). Persists validated candidates to designReview.decompositionCandidates.latest; prior rounds are preserved under .priorRounds for audit. Returns the validated candidates plus an observability list of rejected ones (model returned them but they failed validateCandidate).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Originating FeatureBuild ID (FB-*)." },
+        operatorHint: {
+          type: "string",
+          description: "Optional regenerate guidance. Empty/omitted on first generation.",
+        },
+      },
+      required: ["buildId"],
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
@@ -4884,6 +4907,33 @@ export async function executeTool(
       };
     }
 
+    case "propose_build_decomposition": {
+      const buildId = String(params["buildId"] ?? "");
+      if (!buildId.startsWith("FB-")) {
+        return { success: false, error: "invalid_buildId", message: "buildId must use the FB-* format." };
+      }
+      const operatorHint = typeof params["operatorHint"] === "string" ? params["operatorHint"] : undefined;
+      const { proposeDecomposition } = await import("@/lib/build/propose-decomposition");
+      const result = await proposeDecomposition({
+        buildId,
+        userId,
+        agentId: context?.agentId ?? null,
+        ...(operatorHint ? { operatorHint } : {}),
+      });
+      if (!result.ok) {
+        return { success: false, error: result.code, message: result.error };
+      }
+      return {
+        success: true,
+        entityId: buildId,
+        message: `Proposed ${result.candidates.length} candidate decomposition(s) for ${buildId}.${result.rejected.length > 0 ? ` (${result.rejected.length} additional candidate(s) failed validation and were dropped.)` : ""}`,
+        data: {
+          candidates: result.candidates,
+          rejectedCount: result.rejected.length,
+        },
+      };
+    }
+
     case "approve_decomposition": {
       // Phase 4a (BI-2E6CC391). The candidate is pre-validated by the
       // caller (Phase 4b assistant); we revalidate inside
@@ -5770,17 +5820,18 @@ export async function executeTool(
     }
 
     case "report_quality_issue": {
-      const reportId = "PIR-" + Math.random().toString(36).substring(2, 7).toUpperCase();
-      await prisma.platformIssueReport.create({
-        data: {
-          reportId,
-          type: String(params["type"] ?? "user_report"),
-          title: String(params["title"] ?? "Untitled"),
-          ...(typeof params["description"] === "string" ? { description: params["description"] } : {}),
-          severity: String(params["severity"] ?? "medium"),
-          reportedById: userId,
-          source: "ai_assisted",
-        },
+      const { reportId } = await createPlatformIssueReport({
+        type: String(params["type"] ?? "user_report"),
+        title: String(params["title"] ?? "Untitled"),
+        source: "ai_assisted",
+        ...(typeof params["description"] === "string"
+          ? { description: params["description"] }
+          : {}),
+        severity: String(params["severity"] ?? "medium"),
+        reportedById: userId,
+        ...(typeof context?.routeContext === "string"
+          ? { routeContext: context.routeContext }
+          : {}),
       });
       return { success: true, entityId: reportId, message: `Filed report ${reportId}` };
     }
@@ -6900,6 +6951,30 @@ export async function executeTool(
               success: true,
               message: `Design review: ${review.decision}. ${review.summary} This governed backlog draft is prepared and now waiting for Approve Start before planning can begin.`,
               data: { review, blocked: true, action: "approve_start" },
+            };
+          }
+
+          // Phase 4b decompose-required gate (BI-2E6CC391). If the build's
+          // size assessment is "decompose-required" AND no decomposition
+          // happened (build still exists in ideate, not superseded) AND no
+          // operator override was recorded, refuse advance and tell the
+          // operator what to do next. Recommended-tier and ok-tier builds
+          // proceed through to plan unchanged.
+          const sizedReview = (updatedBuild.designReview ?? null) as
+            | { sizeAssessment?: { decision?: string }; decompositionOverride?: unknown }
+            | null;
+          const decomposeDecision = sizedReview?.sizeAssessment?.decision ?? null;
+          const hasOverride = sizedReview?.decompositionOverride != null;
+          if (decomposeDecision === "decompose-required" && !hasOverride) {
+            logBuildActivity(
+              buildId,
+              "phase:gate-blocked",
+              "decompose-required gate fired; advance blocked until decomposition or override.",
+            );
+            return {
+              success: true,
+              message: `Design review: ${review.decision}, but the size assessment is decompose-required. Before advancing to Plan, either call approve_decomposition with a chosen DecompositionCandidate (preferred) — see propose_decomposition to generate candidates — OR call record_decomposition_override with a one-line justification to ship monolithically.`,
+              data: { review, blocked: true, action: "decompose_or_override" },
             };
           }
 
