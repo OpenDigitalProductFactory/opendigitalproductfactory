@@ -6,7 +6,7 @@
  * with NextAuth wrapping is covered manually via dogfooding once
  * BI-QUIESCE-006 (banner + state route end-to-end) lands.
  */
-import { describe, expect, it, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import {
   _resetProxyQuiescenceCache,
@@ -22,6 +22,10 @@ import {
 
 beforeEach(() => {
   _resetProxyQuiescenceCache();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 const normalState: ProxyQuiescenceState = {
@@ -285,21 +289,16 @@ describe("checkQuiescenceForRequest — fail policy integration", () => {
     void fetchImpl;
   });
 
-  it("fail-closed for mutations when state route returns unknown + no prior memory", async () => {
-    const req = makeRequest("https://example.com/api/portal", { method: "POST" });
-    // Simulate: mutation, unknown state, no last-known → coerce to draining.
-    const conservative: ProxyQuiescenceState = {
-      level: "draining",
-      runId: null,
-      enteredAt: null,
-      version: "x",
-      bundleHash: "y",
-    };
-    const d = evaluateGate(req, conservative);
-    expect(d.kind).toBe("block");
-    if (d.kind === "block") {
-      expect(d.response.status).toBe(503);
-    }
+  it("fails open for mutations when state route returns unknown + no prior non-normal memory", async () => {
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("state route timed out");
+    });
+
+    const req = makeRequest("https://example.com/login", { method: "POST" });
+    const decision = await checkQuiescenceForRequest(req, "https://example.com");
+
+    expect(decision.kind).toBe("pass");
+    expect(decision.state.level).toBe("normal");
   });
 
   it("preserves last-known non-normal state for mutations on route failure", async () => {
@@ -311,12 +310,20 @@ describe("checkQuiescenceForRequest — fail policy integration", () => {
     await fetchQuiescenceState("https://x", { fetchImpl: fetchOk, now: 1000 });
     expect(getLastKnownNonNormal()?.level).toBe("draining");
 
-    // Now subsequent mutations during a fetch failure should use that
-    // memory, not synthesize a fresh "draining" — caller-side decision in
-    // checkQuiescenceForRequest.
-    const remembered = getLastKnownNonNormal();
-    expect(remembered).not.toBeNull();
-    expect(remembered?.runId).toBe("Q1");
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("state route timed out");
+    });
+
+    const req = makeRequest("https://example.com/api/portal", { method: "POST" });
+    const decision = await checkQuiescenceForRequest(req, "https://example.com");
+
+    expect(decision.kind).toBe("block");
+    expect(decision.state.level).toBe("draining");
+    expect(decision.state.runId).toBe("Q1");
+    if (decision.kind === "block") {
+      expect(decision.response.status).toBe(503);
+      expect(decision.response.headers.get("x-quiescence-run-id")).toBe("Q1");
+    }
   });
 
   // Note: full checkQuiescenceForRequest integration test would mock the
