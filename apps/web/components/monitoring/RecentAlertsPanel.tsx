@@ -1,38 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-
-type Alert = {
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  state: string;
-  activeAt: string;
-};
+import { TONE_COLOR, type MonitoringAlert, type Tone } from "./health-summary";
+import { useAlertQuery } from "./useAlertQuery";
 
 export function RecentAlertsPanel() {
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [offline, setOffline] = useState(false);
-
-  const fetchAlerts = useCallback(async () => {
-    try {
-      const res = await fetch("/api/platform/metrics/alerts");
-      if (res.status === 503) {
-        setOffline(true);
-        return;
-      }
-      const json = await res.json();
-      setOffline(false);
-      setAlerts(json.data?.alerts ?? []);
-    } catch {
-      setOffline(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchAlerts();
-    const id = setInterval(fetchAlerts, 30_000);
-    return () => clearInterval(id);
-  }, [fetchAlerts]);
+  const { alerts, offline } = useAlertQuery();
 
   return (
     <section>
@@ -45,7 +17,7 @@ export function RecentAlertsPanel() {
       )}
 
       {!offline && alerts.length === 0 && (
-        <p className="text-xs text-green-500">No alerts</p>
+        <p className="text-xs text-[var(--dpf-success)]">No alerts</p>
       )}
 
       {!offline && alerts.length > 0 && (
@@ -54,7 +26,7 @@ export function RecentAlertsPanel() {
             <tbody>
               {alerts.slice(0, 10).map((alert, i) => {
                 const severity = alert.labels.severity ?? "warning";
-                const isCritical = severity === "critical";
+                const tone = getAlertTone(alert);
                 const time = alert.activeAt
                   ? new Date(alert.activeAt).toLocaleTimeString([], {
                       hour: "2-digit",
@@ -72,9 +44,8 @@ export function RecentAlertsPanel() {
                     </td>
                     <td className="px-2 py-1.5 w-16">
                       <span
-                        className={`text-[10px] font-bold uppercase ${
-                          isCritical ? "text-red-400" : alert.state === "firing" ? "text-yellow-400" : "text-green-500"
-                        }`}
+                        className="text-[10px] font-bold uppercase"
+                        style={{ color: TONE_COLOR[tone] }}
                       >
                         {alert.state === "firing"
                           ? severity.toUpperCase()
@@ -96,4 +67,9 @@ export function RecentAlertsPanel() {
       )}
     </section>
   );
+}
+
+function getAlertTone(alert: MonitoringAlert): Tone {
+  if (alert.state === "inactive") return "success";
+  return alert.labels.severity === "critical" ? "critical" : "warning";
 }

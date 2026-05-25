@@ -1,6 +1,6 @@
 "use client";
 
-import { useMetricRangeQuery } from "./useMetricRangeQuery";
+import { useMetricRangeQuery, type RangeResult } from "./useMetricRangeQuery";
 
 type Props = {
   query: string;
@@ -37,11 +37,7 @@ export function MetricTimeSeries({
     );
   }
 
-  // Collect all series
-  const series = (data ?? []).map((d) => ({
-    label: d.metric.instance || d.metric.name || d.metric.job || label,
-    values: d.values.map(([ts, v]) => ({ ts, v: parseFloat(v) })),
-  }));
+  const series = normalizeMetricSeries(data ?? [], label);
 
   if (series.length === 0 || series[0]!.values.length === 0) {
     return (
@@ -153,6 +149,17 @@ function formatValue(v: number, unit: string): string {
   if (unit === "%") return `${Math.round(v)}%`;
   if (v >= 1000) return `${(v / 1000).toFixed(1)}k`;
   return Number.isInteger(v) ? v.toString() : v.toFixed(2);
+}
+
+export function normalizeMetricSeries(data: RangeResult[], fallbackLabel: string) {
+  return data
+    .map((d) => ({
+      label: d.metric.instance || d.metric.name || d.metric.job || fallbackLabel,
+      values: d.values
+        .map(([ts, value]) => ({ ts, v: parseFloat(value) }))
+        .filter((point) => Number.isFinite(point.v)),
+    }))
+    .filter((series) => series.values.length > 0);
 }
 
 function formatTime(ts: number): string {

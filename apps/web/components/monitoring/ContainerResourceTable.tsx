@@ -111,7 +111,7 @@ export function ContainerResourceTable() {
                   </td>
                   <td
                     className={`px-3 py-1.5 text-right ${
-                      hasRestarts ? "text-yellow-500 font-semibold" : "text-[var(--dpf-text)]"
+                      hasRestarts ? "text-[var(--dpf-warning)] font-semibold" : "text-[var(--dpf-text)]"
                     }`}
                   >
                     {row.restarts !== null ? Math.round(row.restarts) : "--"}
