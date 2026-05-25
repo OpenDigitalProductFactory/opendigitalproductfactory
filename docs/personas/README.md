@@ -5,7 +5,11 @@ This directory holds persona case-study documents that serve two jobs at once:
 - Marketing substrate: narrative, quotes, before/after copy, and concrete pain points that can be reused in site copy, decks, onboarding, and customer conversations.
 - Test substrate: re-runnable dogfood scenarios that prove the platform still works for that persona as DPF evolves.
 
+For the user-facing product framing that these personas support, see [Market Archetypes And Coworkers](../user-guide/market-archetypes.md). That page is the canonical narrative; persona files are proof and test fixtures, not a second product overview.
+
 Each persona gets one Markdown file named `<name>-<vertical>.md`. The first real persona is [Dale, HVAC owner](dale-hvac.md), extracted from the Build Studio dogfood thread at [docs/dogfood/2026-05-23-dale-hvac-build-studio.md](../dogfood/2026-05-23-dale-hvac-build-studio.md) and the live `EP-9FC5D2FD` backlog state. The first vertical workspace-home peer wave is tied to the [Vertical Workspace Home design](../superpowers/specs/2026-05-24-vertical-workspace-home-design.md) and the live `EP-REDUCTION-GEAR-ARCH` backlog.
+
+The current proof set intentionally spans three general market verticals: field service (Dale), healthcare scheduling (Linda), and retail merchandising (Marisol). New personas should keep that market-vertical discipline: they must show how the archetype changes the daily work surface, coworker emphasis, vocabulary, and reusable feature applicability.
 
 ## Library Rules
 
