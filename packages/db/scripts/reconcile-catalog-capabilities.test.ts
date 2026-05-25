@@ -84,6 +84,20 @@ describe("resolveKnownProviderModelsPath", () => {
 
     expect(resolved).toBe(packagedCatalog);
   });
+
+  it("resolves Linux-style packaged app source paths independent of the test host OS", () => {
+    const scriptDir = "/app/packages/db/scripts";
+    const packagedRoot = "/app/apps/web-src";
+    const packagedCatalog = "/app/apps/web-src/lib/routing/known-provider-models.ts";
+
+    const resolved = resolveKnownProviderModelsPath({
+      scriptDir,
+      packagedWebSourceRoot: packagedRoot,
+      exists: (candidate) => candidate === packagedCatalog,
+    });
+
+    expect(resolved).toBe(packagedCatalog);
+  });
 });
 
 describe("admin row-level protection", () => {
