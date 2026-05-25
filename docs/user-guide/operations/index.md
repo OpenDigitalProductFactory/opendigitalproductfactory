@@ -2,8 +2,8 @@
 title: "Operations"
 area: operations
 order: 1
-lastUpdated: 2026-03-29
-updatedBy: Claude (Software Engineer)
+lastUpdated: 2026-05-24
+updatedBy: Codex
 ---
 
 ## Overview
@@ -36,9 +36,9 @@ Operations is the delivery backlog for the platform. It tracks the work items, e
 The Promotions tab in Operations shows all features that have been through the Build Studio ship phase. Each promotion has a status:
 
 - **Pending** — Feature shipped but not yet reviewed for deployment
-- **Approved** — Ready to deploy. Click "Deploy Now" to trigger the autonomous deployment pipeline.
+- **Approved** — Ready to deploy where promotion is enabled. Click "Deploy Now" to trigger the governed deployment pipeline.
 - **Executing** — Deployment in progress. The promoter is building and swapping the application.
 - **Deployed** — Successfully deployed to production. Health check passed.
 - **Rolled Back** — Deployment failed and was automatically reversed. Check the deployment log for details.
 
-When you click "Deploy Now", the platform starts the promoter service which handles the entire process autonomously. The page updates automatically while deployment is in progress.
+When you click "Deploy Now", the platform starts the promoter service for the governed deployment workflow. The page updates automatically while deployment is in progress.

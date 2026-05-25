@@ -1,5 +1,6 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
+import { gateAtEntry } from "../quiescence-gates";
 
 async function recordCodeGraphJob(status: "ok" | "error", error?: string): Promise<void> {
   const { prisma } = await import("@dpf/db");
@@ -31,6 +32,9 @@ export const codeGraphReconcileScheduled = inngest.createFunction(
     triggers: [cron("*/15 * * * *")],
   },
   async ({ step }) => {
+    const gate = await gateAtEntry(step);
+    if (!gate.proceed) return { skipped: true, reason: gate.reason };
+
     try {
       const result = await step.run("reconcile-code-graph-scheduled", async () => {
         const { reconcileCodeGraph } = await import("@/lib/integrate/code-graph-refresh");

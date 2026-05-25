@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it, vi } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BuildStudio } from "@/components/build/BuildStudio";
 import {
@@ -9,6 +9,8 @@ import {
   type FeatureBuildRow,
 } from "@/lib/feature-build-types";
 import type { PortalContextEnvelope } from "@/lib/portal-context";
+
+afterEach(cleanup);
 
 const routerMocks = vi.hoisted(() => ({
   refresh: vi.fn(),

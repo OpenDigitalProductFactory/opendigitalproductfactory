@@ -5,6 +5,7 @@ import { VoiceConsentForm } from "@/components/admin/VoiceConsentForm"
 import { setVoiceEnabled, resetVoiceProfile } from "@/lib/actions/voice-profile"
 import { selectSupportedMimeType } from "@/components/agent/hooks/mime-probe"
 import { useVoiceSynth } from "@/components/agent/hooks/useVoiceSynth"
+import { LoaderCircle, Pause, Play, VolumeX } from "lucide-react"
 
 interface ConsentRecord {
   id: string
@@ -146,26 +147,53 @@ export function VoiceProfileSetup({
                 </span>
               )}
             </span>
-            {voiceSynth.available && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (voiceSynth.isPlaying) {
-                    voiceSynth.stop()
-                  } else {
-                    voiceSynth.synthesize(PREVIEW_TEXT, profileId)
-                  }
-                }}
-                disabled={voiceSynth.isSynthesizing}
-                className="inline-flex items-center gap-1.5 rounded border border-green-500/30 bg-white/50 px-3 py-1 text-xs font-medium text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
-              >
-                {voiceSynth.isSynthesizing
-                  ? "Synthesizing…"
+            <button
+              type="button"
+              onClick={() => {
+                if (!voiceSynth.available) return
+                if (voiceSynth.isPlaying) {
+                  voiceSynth.stop()
+                } else {
+                  voiceSynth.synthesize(PREVIEW_TEXT, profileId)
+                }
+              }}
+              disabled={!voiceSynth.available || voiceSynth.isSynthesizing}
+              aria-label={
+                !voiceSynth.available
+                  ? "Voice preview unavailable"
                   : voiceSynth.isPlaying
-                    ? "⏸ Stop"
-                    : "▶ Preview voice"}
-              </button>
-            )}
+                    ? "Stop voice preview"
+                    : "Preview voice"
+              }
+              title={
+                !voiceSynth.available
+                  ? voiceSynth.unavailableReason ?? "Voice preview unavailable. Start the text-to-speech service or replace the voice sample."
+                  : undefined
+              }
+              className="inline-flex items-center gap-1.5 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-1 text-xs font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+            >
+              {!voiceSynth.available ? (
+                <>
+                  <VolumeX aria-hidden="true" size={13} strokeWidth={2} />
+                  Voice unavailable
+                </>
+              ) : voiceSynth.isSynthesizing ? (
+                <>
+                  <LoaderCircle aria-hidden="true" size={13} strokeWidth={2} className="animate-spin" />
+                  Synthesizing
+                </>
+              ) : voiceSynth.isPlaying ? (
+                <>
+                  <Pause aria-hidden="true" size={13} strokeWidth={2} />
+                  Stop
+                </>
+              ) : (
+                <>
+                  <Play aria-hidden="true" size={13} strokeWidth={2} />
+                  Preview voice
+                </>
+              )}
+            </button>
             <button
               type="button"
               disabled={resetting}

@@ -735,6 +735,21 @@ const UPDATE_UPSTREAM_BRANCH = "dpf-upstream";
 const UPDATE_WORK_BRANCH = "my-changes";
 const PLATFORM_UPDATE_SOURCE_PATHS = ["apps/web", "packages"] as const;
 
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+async function ensureWorkspaceSafeDirectory(
+  execUpdate: ExecUpdate,
+  gitOpts: ExecUpdateOptions,
+  workspace: string,
+): Promise<void> {
+  await execUpdate(
+    `git config --global --add safe.directory ${shellQuote(workspace)} >/dev/null 2>&1 || true`,
+    gitOpts,
+  );
+}
+
 async function gitBranchExists(
   execUpdate: ExecUpdate,
   gitOpts: ExecUpdateOptions,
@@ -869,6 +884,8 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
     // Check for in-progress merge from a previous interrupted run
     const { existsSync } = lazyFs();
     const { resolve: resolvePath } = lazyPath();
+
+    await ensureWorkspaceSafeDirectory(execUpdate, gitOpts, workspace);
 
     if (existsSync(resolvePath(workspace, ".git", "MERGE_HEAD"))) {
       const conflicts = await collectPlatformUpdateConflicts(

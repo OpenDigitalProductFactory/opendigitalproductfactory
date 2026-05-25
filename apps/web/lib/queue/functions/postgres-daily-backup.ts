@@ -18,6 +18,7 @@
  */
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
+import { gateAtEntry } from "../quiescence-gates";
 import {
   ALL_BACKUPS_CRON,
   NEO4J_BACKUP_EVENT,
@@ -37,6 +38,9 @@ export const allBackupsDailyScheduled = inngest.createFunction(
     triggers: [cron(ALL_BACKUPS_CRON)],
   },
   async ({ step }) => {
+    const gate = await gateAtEntry(step);
+    if (!gate.proceed) return { skipped: true, reason: gate.reason };
+
     // Postgres first — most critical, longest-running.
     const pgResult = await step.run("run-postgres-backup-scheduled", async () => {
       const { runPostgresBackup } = await import(
@@ -113,6 +117,9 @@ export const postgresDailyBackupScheduled = inngest.createFunction(
     triggers: [cron(POSTGRES_BACKUP_CRON)],
   },
   async ({ step }) => {
+    const gate = await gateAtEntry(step);
+    if (!gate.proceed) return { skipped: true, reason: gate.reason };
+
     return step.run("run-postgres-backup-scheduled", async () => {
       const { runPostgresBackup } = await import(
         "@/lib/operate/backups/postgres-backup-runner"

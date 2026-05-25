@@ -4,6 +4,7 @@
 // Replaces the single persistent dpf-sandbox-1 with N isolated slots.
 
 import { prisma } from "@dpf/db";
+import { getQuiescenceLevel, QuiescingError } from "@/lib/self-upgrade/quiescence";
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -120,6 +121,15 @@ export async function acquireSandboxLease(
       port: existing.port,
       buildId: existing.buildId ?? null,
     };
+  }
+
+  // BI-QUIESCE-005 entry-point gate: refuse NEW sandbox acquisitions
+  // during quiescence drain. The idempotent early-return above means
+  // builds that already hold a slot are unaffected — only fresh
+  // acquisitions are gated.
+  const level = await getQuiescenceLevel();
+  if (level !== "normal") {
+    throw new QuiescingError(level);
   }
 
   const available = await prisma.sandboxSlot.findFirst({

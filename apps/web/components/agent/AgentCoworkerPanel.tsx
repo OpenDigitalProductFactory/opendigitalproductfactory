@@ -971,6 +971,7 @@ export function AgentCoworkerPanel({
         onFileUploaded={setPendingAttachment}
         onFileClear={() => setPendingAttachment(null)}
         voiceSynthAvailable={voiceSynth.available}
+        voicePlaybackUnavailableReason={voiceSynth.unavailableReason}
         voicePlaybackEnabled={voicePlaybackEnabled}
         onVoicePlaybackToggle={toggleVoicePlayback}
       />
