@@ -53,17 +53,21 @@ export interface SuggestedProvider {
 
 export const SUGGESTED_PROVIDERS: ReadonlyArray<SuggestedProvider> = [
   {
-    name: "Claude (Anthropic) — Subscription sign-in",
-    description: "Easiest path: sign in with an existing Claude account. No API key needed.",
+    name: "ChatGPT / OpenAI Codex - Subscription sign-in",
+    description: "Recommended: sign in with OpenAI OAuth. Build Studio uses the Codex CLI path; no API key needed.",
     recommended: true,
   },
   {
-    name: "Google Gemini",
-    description: "Generous free tier; quick API-key setup.",
+    name: "OpenAI API key",
+    description: "Separate OpenAI platform billing. Use this when you want pay-per-token API usage instead of ChatGPT plan limits.",
   },
   {
-    name: "OpenAI",
-    description: "Widely used; API-key setup.",
+    name: "Anthropic API key",
+    description: "Separate Anthropic Console billing. Use this when Claude subscription limits are paused or exhausted.",
+  },
+  {
+    name: "Google Gemini API key",
+    description: "Useful for light or backup routing. Free-tier keys have lower quotas than paid API or subscription CLI paths.",
   },
 ];
 
@@ -145,7 +149,8 @@ export function deriveBuildStudioCapability(models: ActiveProviderModel[]): Buil
 export async function loadBuildStudioCapability(): Promise<BuildStudioCapability> {
   const profiles = await prisma.modelProfile.findMany({
     where: {
-      modelClass: "chat",
+      modelClass: { in: ["chat", "code"] },
+      modelStatus: { in: ["active", "degraded"] },
       provider: { status: "active" },
     },
     select: {
