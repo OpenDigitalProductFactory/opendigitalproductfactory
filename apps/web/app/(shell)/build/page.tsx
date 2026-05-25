@@ -1,7 +1,7 @@
 // apps/web/app/(shell)/build/page.tsx
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
-import { getFeatureBuilds } from "@/lib/feature-build-data";
+import { getExecutionEpicRollups, getFeatureBuildById, getFeatureBuilds } from "@/lib/feature-build-data";
 import { getPortfoliosForSelect } from "@/lib/backlog-data";
 import { businessBuildBriefFromRecord } from "@/lib/build/business-build-brief";
 import { BuildStudio } from "@/components/build/BuildStudio";
@@ -173,10 +173,14 @@ export default async function BuildPage({ searchParams }: PageProps) {
     );
   }
 
-  const [builds, portfolios] = await Promise.all([
+  const [builds, epicRollups, portfolios] = await Promise.all([
     getFeatureBuilds(session.user.id),
+    getExecutionEpicRollups(session.user.id),
     getPortfoliosForSelect(),
   ]);
+  const initialActiveBuild = buildId && !builds.some((build) => build.buildId === buildId)
+    ? await getFeatureBuildById(buildId)
+    : null;
   const portalContext = await resolvePortalContextEnvelope(
     {
       pathname: "/build",
@@ -199,6 +203,7 @@ export default async function BuildPage({ searchParams }: PageProps) {
     <section className="min-h-full">
       <BuildStudio
         builds={builds}
+        epicRollups={epicRollups}
         portfolios={portfolios}
         governedBacklogEnabled={devConfig.governedBacklogEnabled}
         dpfEnvironment={process.env.DPF_ENVIRONMENT ?? "production"}
@@ -206,6 +211,7 @@ export default async function BuildPage({ searchParams }: PageProps) {
         submissionBranchShortId={submissionBranchShortId}
         initialBuildId={buildId}
         portalContext={portalContext}
+        initialActiveBuild={initialActiveBuild}
       />
     </section>
   );
