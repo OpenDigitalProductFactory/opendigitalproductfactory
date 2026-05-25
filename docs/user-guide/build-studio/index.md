@@ -2,8 +2,8 @@
 title: "Build Studio"
 area: build-studio
 order: 1
-lastUpdated: 2026-03-29
-updatedBy: Claude (Software Engineer)
+lastUpdated: 2026-05-24
+updatedBy: Codex
 ---
 
 ## Overview
@@ -11,6 +11,12 @@ updatedBy: Claude (Software Engineer)
 Build Studio is the platform's feature development environment. It guides a new capability from initial idea through to a shipped, tested, and deployed feature using a five-phase pipeline. AI agents assist at each phase, handling research, planning, code generation, and deployment while keeping a human in control of decisions.
 
 Build Studio is not a separate code universe. It works from the install's shared development workspace. In customizable installs, that means Build Studio and VS Code operate on the same source tree while the portal continues to own review, evidence, and governed promotion.
+
+## Current Maturity
+
+Build Studio is real, but it is still being hardened. It should be described as the governed self-development surface and evidence trail, not as a fully autonomous replacement for every developer workflow today.
+
+Recent hardening work includes plan-review trajectory, design-time decomposition for oversized builds, activity quiescence for safer portal upgrades, and voice/follow-up guards in coworker chat. Complex source changes may still need VS Code in customizable installs while Build Studio keeps the design, review, test, and promotion record.
 
 ## Key Concepts
 
@@ -21,7 +27,7 @@ Build Studio is not a separate code universe. It works from the install's shared
 - **Shared Workspace** — The durable source workspace for this install. Build Studio reads and writes here, and in customizable installs VS Code uses the same codebase.
 - **Live Preview** — During the Build phase, a real-time preview shows the generated UI in an iframe. The preview updates automatically as the AI Coworker writes code.
 - **Quality Gates** — Automated checks between phases. Each gate requires specific evidence before the feature can advance (design review, plan review, test results, typecheck).
-- **Promotion** — The process of moving a completed feature from the Build runtime into production. Includes database backup, image rebuild, health check, and automatic rollback on failure.
+- **Promotion** — The governed process for moving a completed feature from the Build runtime into production where the install is configured for it. Includes evidence capture, backup/rebuild/health-check discipline, and rollback planning.
 
 ## What You Can Do
 
@@ -30,7 +36,7 @@ Build Studio is not a separate code universe. It works from the install's shared
 - Approve the plan and watch the AI Coworker build and test the feature
 - See the live preview of your feature as it is being built
 - Review test results and acceptance criteria before shipping
-- Ship the feature to production with automatic deployment and rollback protection
+- Prepare the feature for governed promotion with recorded evidence, health checks, and rollback planning
 - Track active builds and their current phase from the Build Studio dashboard
 
 ## The Five Phases
@@ -53,12 +59,13 @@ Quality gates verify the feature is ready: all tests pass, typecheck is clean, a
 
 ### Ship
 
-The AI Coworker registers the feature as a digital product, creates a promotion record, and triggers the autonomous deployment pipeline. The platform backs up the database, builds a new version with the feature, swaps it into production, and verifies health. See [Feature Deployment](deployment) for the full process.
+The AI Coworker prepares the promotion record and evidence. Where promotion is enabled, the platform backs up the database, builds a new version with the feature, swaps it into production, and verifies health. Where the surface is still hardening, keep the promotion record honest and finish through the supported source workflow. See [Feature Deployment](deployment) for the full process.
 
 ## Related
 
 - [Feature Deployment](deployment) — How the deployment pipeline works, safety guarantees, and rollback
 - [Development Workspace](../development-workspace) — How Build Studio, VS Code, policy states, and validation environments fit together
+- [Market Archetypes And Coworkers](../market-archetypes) — Why user-facing docs should lead with business work before Build Studio internals
 
 ## Documentation Deliverables
 

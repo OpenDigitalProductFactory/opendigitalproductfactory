@@ -19,6 +19,9 @@ const { mockAuth, mockPrisma } = vi.hoisted(() => ({
     platformDevConfig: {
       findUnique: vi.fn(),
     },
+    platformConfig: {
+      findUnique: vi.fn(),
+    },
     buildActivity: {
       create: vi.fn(),
     },
@@ -130,6 +133,7 @@ describe("governed build start approvals", () => {
     mockPrisma.businessBuildBrief.upsert.mockResolvedValue({});
     mockPrisma.businessBuildBrief.update.mockResolvedValue({});
     mockPrisma.organization.findFirst.mockResolvedValue({ id: "org-1" });
+    mockPrisma.platformConfig.findUnique.mockResolvedValue(null);
     mockIsSandboxAvailable.mockResolvedValue(false);
     mockStartBuildBranch.mockResolvedValue(undefined);
     mockQueueBuildReviewVerification.mockResolvedValue(undefined);

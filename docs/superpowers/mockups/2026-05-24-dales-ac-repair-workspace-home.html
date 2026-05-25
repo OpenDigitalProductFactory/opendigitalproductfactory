@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dale's AC Repair Workspace Home Mockup</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --dpf-bg: oklch(0.965 0.012 92);
+        --dpf-surface-1: oklch(0.995 0.004 95);
+        --dpf-surface-2: oklch(0.955 0.012 94);
+        --dpf-surface-3: oklch(0.925 0.018 97);
+        --dpf-text: oklch(0.205 0.025 250);
+        --dpf-muted: oklch(0.445 0.028 246);
+        --dpf-border: oklch(0.835 0.018 92);
+        --dpf-accent: oklch(0.47 0.12 212);
+        --dpf-accent-soft: oklch(0.91 0.045 212);
+        --dpf-good: oklch(0.49 0.12 145);
+        --dpf-good-soft: oklch(0.92 0.055 145);
+        --dpf-warn: oklch(0.64 0.14 78);
+        --dpf-warn-soft: oklch(0.93 0.07 82);
+        --dpf-danger: oklch(0.53 0.16 28);
+        --dpf-danger-soft: oklch(0.93 0.055 33);
+        --dpf-info: oklch(0.52 0.1 265);
+        --dpf-info-soft: oklch(0.92 0.04 265);
+        --radius: 8px;
+        --shadow: 0 18px 42px oklch(0.16 0.025 250 / 0.1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          linear-gradient(180deg, oklch(0.985 0.008 92), var(--dpf-bg) 42%),
+          var(--dpf-bg);
+        color: var(--dpf-text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        letter-spacing: 0;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .page {
+        min-height: 100vh;
+        padding: 22px;
+      }
+
+      .workspace {
+        max-width: 1440px;
+        margin: 0 auto;
+      }
+
+      .topbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 18px;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+
+      .eyebrow {
+        color: var(--dpf-muted);
+        font-size: 0.82rem;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(1.9rem, 3vw, 3rem);
+        line-height: 1.02;
+        margin-top: 5px;
+      }
+
+      .subtitle {
+        color: var(--dpf-muted);
+        font-size: 1rem;
+        margin-top: 8px;
+      }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+      }
+
+      .icon-button,
+      .primary-button {
+        min-height: 42px;
+        border: 1px solid var(--dpf-border);
+        background: var(--dpf-surface-1);
+        color: var(--dpf-text);
+        border-radius: var(--radius);
+        padding: 0 14px;
+        font-weight: 750;
+      }
+
+      .icon-button {
+        width: 42px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+      }
+
+      .primary-button {
+        background: var(--dpf-accent);
+        color: oklch(0.99 0.005 95);
+        border-color: var(--dpf-accent);
+      }
+
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(120px, 1fr));
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .summary-item,
+      .panel,
+      .job,
+      .tech,
+      .handoff,
+      .stock-row,
+      .update-row {
+        border: 1px solid var(--dpf-border);
+        border-radius: var(--radius);
+        background: var(--dpf-surface-1);
+      }
+
+      .summary-item {
+        padding: 12px 13px;
+        min-height: 82px;
+        display: grid;
+        align-content: space-between;
+      }
+
+      .summary-number {
+        font-size: 1.55rem;
+        font-weight: 850;
+        line-height: 1;
+      }
+
+      .summary-label {
+        color: var(--dpf-muted);
+        font-size: 0.82rem;
+        font-weight: 700;
+      }
+
+      .summary-item.critical {
+        border-color: color-mix(in oklch, var(--dpf-danger), var(--dpf-border) 45%);
+        background: var(--dpf-danger-soft);
+      }
+
+      .summary-item.warning {
+        border-color: color-mix(in oklch, var(--dpf-warn), var(--dpf-border) 45%);
+        background: var(--dpf-warn-soft);
+      }
+
+      .board {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.9fr) minmax(480px, 1.55fr) minmax(320px, 1fr);
+        gap: 14px;
+        align-items: start;
+      }
+
+      .panel {
+        padding: 14px;
+        box-shadow: var(--shadow);
+        min-width: 0;
+      }
+
+      .panel-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: start;
+        margin-bottom: 12px;
+      }
+
+      .panel h2 {
+        font-size: 1rem;
+        line-height: 1.15;
+      }
+
+      .panel-note {
+        color: var(--dpf-muted);
+        font-size: 0.82rem;
+        margin-top: 3px;
+      }
+
+      .badge,
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        border-radius: 999px;
+        padding: 0 8px;
+        font-size: 0.75rem;
+        font-weight: 800;
+        border: 1px solid var(--dpf-border);
+        background: var(--dpf-surface-2);
+        white-space: nowrap;
+        width: max-content;
+        max-width: 100%;
+      }
+
+      .badge.critical,
+      .pill.critical {
+        color: var(--dpf-danger);
+        background: var(--dpf-danger-soft);
+        border-color: color-mix(in oklch, var(--dpf-danger), var(--dpf-border) 40%);
+      }
+
+      .badge.warning,
+      .pill.warning {
+        color: oklch(0.42 0.1 70);
+        background: var(--dpf-warn-soft);
+        border-color: color-mix(in oklch, var(--dpf-warn), var(--dpf-border) 45%);
+      }
+
+      .badge.good,
+      .pill.good {
+        color: var(--dpf-good);
+        background: var(--dpf-good-soft);
+        border-color: color-mix(in oklch, var(--dpf-good), var(--dpf-border) 45%);
+      }
+
+      .job-list,
+      .tech-list,
+      .stack {
+        display: grid;
+        gap: 10px;
+      }
+
+      .job {
+        padding: 11px;
+        display: grid;
+        gap: 9px;
+        min-height: 112px;
+      }
+
+      .job-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: start;
+      }
+
+      .job-title,
+      .tech-name {
+        font-weight: 850;
+        line-height: 1.18;
+      }
+
+      .job-meta,
+      .detail,
+      .small {
+        color: var(--dpf-muted);
+        font-size: 0.82rem;
+        line-height: 1.35;
+      }
+
+      .job-footer {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .tech {
+        padding: 12px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .tech-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+      }
+
+      .load {
+        height: 8px;
+        border-radius: 999px;
+        background: var(--dpf-surface-3);
+        overflow: hidden;
+      }
+
+      .load span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--dpf-good);
+      }
+
+      .load.warn span {
+        background: var(--dpf-warn);
+      }
+
+      .load.danger span {
+        background: var(--dpf-danger);
+      }
+
+      .tech-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .map {
+        position: relative;
+        height: 310px;
+        overflow: hidden;
+        border-radius: var(--radius);
+        border: 1px solid var(--dpf-border);
+        background:
+          linear-gradient(90deg, transparent 0 23%, var(--dpf-border) 23% 24%, transparent 24% 62%, var(--dpf-border) 62% 63%, transparent 63%),
+          linear-gradient(0deg, transparent 0 30%, var(--dpf-border) 30% 31%, transparent 31% 72%, var(--dpf-border) 72% 73%, transparent 73%),
+          radial-gradient(circle at 18% 22%, var(--dpf-accent-soft), transparent 18%),
+          radial-gradient(circle at 78% 68%, var(--dpf-good-soft), transparent 21%),
+          var(--dpf-surface-2);
+      }
+
+      .route {
+        position: absolute;
+        height: 4px;
+        border-radius: 999px;
+        background: color-mix(in oklch, var(--dpf-accent), transparent 20%);
+        transform-origin: left center;
+      }
+
+      .route.one {
+        left: 18%;
+        top: 39%;
+        width: 42%;
+        transform: rotate(-21deg);
+      }
+
+      .route.two {
+        left: 40%;
+        top: 62%;
+        width: 39%;
+        transform: rotate(15deg);
+        background: color-mix(in oklch, var(--dpf-warn), transparent 18%);
+      }
+
+      .pin {
+        position: absolute;
+        width: 17px;
+        height: 17px;
+        border-radius: 50%;
+        background: var(--dpf-accent);
+        border: 3px solid var(--dpf-surface-1);
+        box-shadow: 0 4px 14px oklch(0.2 0.03 250 / 0.25);
+      }
+
+      .pin.critical {
+        background: var(--dpf-danger);
+      }
+
+      .pin.warning {
+        background: var(--dpf-warn);
+      }
+
+      .pin.good {
+        background: var(--dpf-good);
+      }
+
+      .pin-label {
+        position: absolute;
+        transform: translate(14px, -7px);
+        min-width: 84px;
+        padding: 5px 7px;
+        border: 1px solid var(--dpf-border);
+        border-radius: 6px;
+        background: color-mix(in oklch, var(--dpf-surface-1), transparent 8%);
+        font-size: 0.72rem;
+        font-weight: 800;
+        box-shadow: 0 8px 20px oklch(0.2 0.03 250 / 0.1);
+      }
+
+      .map-footer {
+        display: grid;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .map-line {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        color: var(--dpf-muted);
+        font-size: 0.82rem;
+      }
+
+      .lower {
+        display: grid;
+        grid-template-columns: 1.05fr 1fr 1fr;
+        gap: 14px;
+        margin-top: 14px;
+      }
+
+      .stock-row,
+      .update-row,
+      .handoff {
+        padding: 10px;
+        display: grid;
+        gap: 7px;
+      }
+
+      .row-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: start;
+      }
+
+      .handoff {
+        border-color: color-mix(in oklch, var(--dpf-info), var(--dpf-border) 50%);
+        background: var(--dpf-info-soft);
+      }
+
+      .footer-note {
+        margin-top: 14px;
+        color: var(--dpf-muted);
+        font-size: 0.8rem;
+        text-align: center;
+      }
+
+      @media (max-width: 1120px) {
+        .summary {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .board {
+          grid-template-columns: 1fr;
+        }
+
+        .lower {
+          grid-template-columns: 1fr;
+        }
+
+        .tech-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .page {
+          padding: 12px;
+        }
+
+        .topbar {
+          grid-template-columns: 1fr;
+        }
+
+        .actions {
+          justify-content: start;
+        }
+
+        .summary {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .summary-item {
+          min-height: 74px;
+        }
+
+        .panel {
+          padding: 12px;
+          box-shadow: none;
+        }
+
+        .map {
+          height: 260px;
+        }
+      }
+
+      @media (max-width: 430px) {
+        h1 {
+          font-size: 1.72rem;
+        }
+
+        .summary {
+          grid-template-columns: 1fr;
+        }
+
+        .job-top,
+        .tech-head,
+        .row-head,
+        .panel-header {
+          grid-template-columns: 1fr;
+          display: grid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <div class="workspace" aria-label="Dale's AC Repair dispatcher workspace mockup">
+        <header class="topbar">
+          <div>
+            <div class="eyebrow">Dale's AC Repair</div>
+            <h1>Today at the shop</h1>
+            <p class="subtitle">Four trucks, 12 service calls, 2 jobs still need a tech.</p>
+          </div>
+          <div class="actions" aria-label="Workspace actions">
+            <button class="icon-button" aria-label="Previous day">&lt;</button>
+            <button class="primary-button">Today</button>
+            <button class="icon-button" aria-label="Next day">&gt;</button>
+          </div>
+        </header>
+
+        <section class="summary" aria-label="Dispatch summary">
+          <div class="summary-item critical">
+            <div class="summary-number">3</div>
+            <div class="summary-label">Needs dispatch</div>
+          </div>
+          <div class="summary-item warning">
+            <div class="summary-number">1</div>
+            <div class="summary-label">Late risk</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-number">4</div>
+            <div class="summary-label">Trucks on the road</div>
+          </div>
+          <div class="summary-item warning">
+            <div class="summary-number">5</div>
+            <div class="summary-label">Parts to restock</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-number">2</div>
+            <div class="summary-label">Customer updates failed</div>
+          </div>
+        </section>
+
+        <section class="board" aria-label="Main dispatch board">
+          <section class="panel" aria-label="Jobs needing attention">
+            <div class="panel-header">
+              <div>
+                <h2>Needs a decision</h2>
+                <p class="panel-note">Jobs Dale or the dispatcher should touch first.</p>
+              </div>
+              <span class="badge critical">3 hot</span>
+            </div>
+            <div class="job-list">
+              <article class="job">
+                <div class="job-top">
+                  <div>
+                    <div class="job-title">No cooling, elderly customer</div>
+                    <div class="job-meta">Maple St. -> requested 10:00 AM</div>
+                  </div>
+                  <span class="pill critical">Emergency</span>
+                </div>
+                <p class="detail">Closest tech is Sara after her 9:30 capacitor job.</p>
+                <div class="job-footer">
+                  <span class="pill">Assign tech</span>
+                  <span class="pill">Text ETA</span>
+                </div>
+              </article>
+
+              <article class="job">
+                <div class="job-top">
+                  <div>
+                    <div class="job-title">Warehouse part needed</div>
+                    <div class="job-meta">Luis truck 3 -> fan motor missing</div>
+                  </div>
+                  <span class="pill warning">Parts</span>
+                </div>
+                <p class="detail">Customer window is 1:00-3:00. Route can swing by warehouse.</p>
+                <div class="job-footer">
+                  <span class="pill">Add stop</span>
+                  <span class="pill">Hold job</span>
+                </div>
+              </article>
+
+              <article class="job">
+                <div class="job-top">
+                  <div>
+                    <div class="job-title">Maintenance plan callback</div>
+                    <div class="job-meta">Oak Ridge -> customer has not confirmed</div>
+                  </div>
+                  <span class="pill">Confirm</span>
+                </div>
+                <p class="detail">Coworker can try one more text, then call from shop line.</p>
+                <div class="job-footer">
+                  <span class="pill">Retry text</span>
+                  <span class="pill">Call customer</span>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel" aria-label="Technician schedule and load">
+            <div class="panel-header">
+              <div>
+                <h2>Trucks and techs</h2>
+                <p class="panel-note">Each lane shows current job, next job, and load.</p>
+              </div>
+              <span class="badge good">9 scheduled</span>
+            </div>
+
+            <div class="tech-grid">
+              <article class="tech">
+                <div class="tech-head">
+                  <div>
+                    <div class="tech-name">Mike - truck 1</div>
+                    <p class="small">On site: AC tune-up, Cedar Ln.</p>
+                  </div>
+                  <span class="pill good">On time</span>
+                </div>
+                <div class="load"><span style="width: 64%"></span></div>
+                <p class="detail">Next: warranty visit at 12:30. Has capacitor, filters, contactor.</p>
+              </article>
+
+              <article class="tech">
+                <div class="tech-head">
+                  <div>
+                    <div class="tech-name">Sara - truck 2</div>
+                    <p class="small">Finishing capacitor job near Maple St.</p>
+                  </div>
+                  <span class="pill warning">Best fit</span>
+                </div>
+                <div class="load warn"><span style="width: 76%"></span></div>
+                <p class="detail">Can take emergency after 10:20 if customer gets ETA now.</p>
+              </article>
+
+              <article class="tech">
+                <div class="tech-head">
+                  <div>
+                    <div class="tech-name">Luis - truck 3</div>
+                    <p class="small">Install follow-up, South Loop.</p>
+                  </div>
+                  <span class="pill critical">Tight</span>
+                </div>
+                <div class="load danger"><span style="width: 92%"></span></div>
+                <p class="detail">Fan motor missing. Add warehouse stop or move 2:30 job.</p>
+              </article>
+
+              <article class="tech">
+                <div class="tech-head">
+                  <div>
+                    <div class="tech-name">Amy - truck 4</div>
+                    <p class="small">Open from 11:15 to 1:00.</p>
+                  </div>
+                  <span class="pill good">Room</span>
+                </div>
+                <div class="load"><span style="width: 48%"></span></div>
+                <p class="detail">Good for tune-up or second set of hands on install.</p>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel" aria-label="Customer and route map">
+            <div class="panel-header">
+              <div>
+                <h2>Customer map</h2>
+                <p class="panel-note">Where the day gets tight.</p>
+              </div>
+              <span class="badge warning">Route risk</span>
+            </div>
+            <div class="map" role="img" aria-label="Map-style panel with four service calls and a route risk">
+              <div class="route one"></div>
+              <div class="route two"></div>
+              <div class="pin critical" style="left: 22%; top: 27%">
+                <div class="pin-label">Maple emergency</div>
+              </div>
+              <div class="pin good" style="left: 57%; top: 42%">
+                <div class="pin-label">Cedar tune-up</div>
+              </div>
+              <div class="pin warning" style="left: 73%; top: 62%">
+                <div class="pin-label">Warehouse stop</div>
+              </div>
+              <div class="pin" style="left: 39%; top: 74%">
+                <div class="pin-label">Oak callback</div>
+              </div>
+            </div>
+            <div class="map-footer">
+              <div class="map-line"><strong>Closest emergency fit</strong><span>Sara, 12 min away</span></div>
+              <div class="map-line"><strong>Warehouse detour</strong><span>Adds 18 min to Luis</span></div>
+              <div class="map-line"><strong>Open window</strong><span>Amy has 105 min free</span></div>
+            </div>
+          </section>
+        </section>
+
+        <section class="lower" aria-label="Operational follow-up panels">
+          <section class="panel" aria-label="Truck stock and restock">
+            <div class="panel-header">
+              <div>
+                <h2>Truck stock</h2>
+              <p class="panel-note">Restock before the next job gets missed.</p>
+              </div>
+              <span class="badge warning">5 low</span>
+            </div>
+            <div class="stack">
+              <div class="stock-row">
+                <div class="row-head"><strong>Truck 3</strong><span class="pill critical">Fan motor</span></div>
+                <p class="detail">Missing for 1:00 job. Warehouse has 2.</p>
+              </div>
+              <div class="stock-row">
+                <div class="row-head"><strong>Truck 1</strong><span class="pill warning">Filters</span></div>
+                <p class="detail">One left after Cedar tune-up.</p>
+              </div>
+              <div class="stock-row">
+                <div class="row-head"><strong>Truck 2</strong><span class="pill warning">Capacitors</span></div>
+                <p class="detail">Below min for afternoon calls.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" aria-label="Customer updates">
+            <div class="panel-header">
+              <div>
+                <h2>Customer updates</h2>
+                <p class="panel-note">Messages that did not land.</p>
+              </div>
+              <span class="badge">2 failed</span>
+            </div>
+            <div class="stack">
+              <div class="update-row">
+                <div class="row-head"><strong>Oak Ridge</strong><span class="pill">No confirm</span></div>
+                <p class="detail">Text failed twice. Try call before sending tech.</p>
+              </div>
+              <div class="update-row">
+                <div class="row-head"><strong>South Loop</strong><span class="pill warning">Delay</span></div>
+                <p class="detail">Customer needs new ETA if warehouse stop is added.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" aria-label="Coworker handoffs">
+            <div class="panel-header">
+              <div>
+                <h2>Coworker handoffs</h2>
+                <p class="panel-note">Help waiting for Dale's go-ahead.</p>
+              </div>
+              <span class="badge good">2 ready</span>
+            </div>
+            <div class="stack">
+              <div class="handoff">
+                <div class="row-head"><strong>Ask customers to confirm</strong><span class="pill good">Ready</span></div>
+                <p class="detail">Send plain-English ETA texts to 3 afternoon customers.</p>
+              </div>
+              <div class="handoff">
+                <div class="row-head"><strong>Make a restock list</strong><span class="pill good">Ready</span></div>
+                <p class="detail">Build warehouse pull sheet for trucks 1, 2, and 3.</p>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <p class="footer-note">
+          Visual mockup for BI-5656E9C3. The worker-facing screen uses shop language only.
+        </p>
+      </div>
+    </main>
+  </body>
+</html>

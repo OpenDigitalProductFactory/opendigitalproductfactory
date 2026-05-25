@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isPageExplanationOnlyRequest, isPlatformMechanismQuestion } from "./conversation-intent";
+import {
+  isConversationalExpansionRequest,
+  isPageExplanationOnlyRequest,
+  isPlatformMechanismQuestion,
+} from "./conversation-intent";
 
 describe("isPageExplanationOnlyRequest", () => {
   it("treats natural workspace UI explanation asks as conversation-only", () => {
@@ -71,5 +75,21 @@ describe("isPlatformMechanismQuestion", () => {
     expect(isPlatformMechanismQuestion("")).toBe(false);
     expect(isPlatformMechanismQuestion("   ")).toBe(false);
     expect(isPlatformMechanismQuestion("?")).toBe(false);
+  });
+});
+
+describe("isConversationalExpansionRequest", () => {
+  it("treats terse follow-up expansion requests as read-only conversation", () => {
+    expect(isConversationalExpansionRequest("elaborate")).toBe(true);
+    expect(isConversationalExpansionRequest("tell me more")).toBe(true);
+    expect(isConversationalExpansionRequest("more detail please")).toBe(true);
+    expect(isConversationalExpansionRequest("expand on that")).toBe(true);
+  });
+
+  it("does not treat action confirmations as expansion requests", () => {
+    expect(isConversationalExpansionRequest("yes, log it")).toBe(false);
+    expect(isConversationalExpansionRequest("do it")).toBe(false);
+    expect(isConversationalExpansionRequest("create the backlog item")).toBe(false);
+    expect(isConversationalExpansionRequest("continue")).toBe(false);
   });
 });

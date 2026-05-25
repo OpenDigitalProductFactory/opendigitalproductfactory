@@ -1,5 +1,6 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
+import { gateAtEntry } from "../quiescence-gates";
 
 /**
  * Daily aggregator for the governed Hermes-style skill telemetry surface.
@@ -18,6 +19,9 @@ export const skillMetricsAggregator = inngest.createFunction(
     triggers: [cron("0 5 * * *")],
   },
   async ({ step }) => {
+    const gate = await gateAtEntry(step);
+    if (!gate.proceed) return { skipped: true, reason: gate.reason };
+
     return step.run("aggregate-current-period", async () => {
       const { aggregateSkillMetrics } = await import("@/lib/skills/skill-metrics");
       const result = await aggregateSkillMetrics();

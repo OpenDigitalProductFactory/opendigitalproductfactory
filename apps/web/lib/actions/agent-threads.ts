@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { prisma } from "@dpf/db";
 import { THREAD_ERRORS, ThreadSpawnError } from "./agent-thread-errors";
 import { dispatchAgentThread } from "./agent-thread-dispatcher";
+import { getQuiescenceLevel, QuiescingError } from "@/lib/self-upgrade/quiescence";
 
 type SpawnWorkThreadOptions = {
   title?: string;
@@ -23,6 +24,16 @@ export async function spawnWorkThread(
 ): Promise<{ child: { id: string }; taskRunId: string }> {
   const objective = objectiveInput.trim();
   if (!objective) throw new Error("OBJECTIVE_REQUIRED");
+
+  // BI-QUIESCE-005 entry-point gate: refuse new TaskRun spawns during
+  // quiescence drain. Existing in-flight TaskRuns continue via the
+  // cooperative-cancel pathway (heartbeat.ts:27 returns false when the
+  // coordinator flips them to 'quiescing'). Caller catches QuiescingError
+  // and translates to 503 + Retry-After at the response layer.
+  const level = await getQuiescenceLevel();
+  if (level !== "normal") {
+    throw new QuiescingError(level);
+  }
 
   const spawnResult = await prisma.$transaction(
     async (tx) => {

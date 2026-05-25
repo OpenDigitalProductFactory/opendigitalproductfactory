@@ -21,6 +21,15 @@ import { inngest } from "../inngest-client";
 import { decideStall, type WatchdogCandidate, type StallDecision } from "@/lib/observability/watchdog-detect";
 import { isStallWatchdogEnabled } from "@/lib/shared/feature-flags";
 
+// QUIESCENCE EXEMPTION (BI-QUIESCE-004a + spec §6.1 extension): this
+// function is intentionally NOT wrapped with gateAtEntry. The watchdog
+// must keep running during quiescence drain because BI-QUIESCE-007
+// extends it to also detect stuck quiescence coordinators (rows in
+// status NOT IN terminal with stale lastHeartbeatAt). Gating the
+// watchdog would prevent it from ever detecting that very condition,
+// creating a deadlock: a crashed coordinator would never be reaped.
+// Same rationale exempts selfUpgradeScheduled + selfUpgradeManual.
+
 export const taskrunWatchdog = inngest.createFunction(
   {
     id: "ops/taskrun-watchdog",
@@ -184,6 +193,75 @@ export const taskrunWatchdog = inngest.createFunction(
       processed += 1;
     }
 
-    return { processed };
+    // ─── BI-QUIESCE-007: stuck quiescence coordinator detection ──────────
+    //
+    // The QuiescenceRun coordinator function writes lastHeartbeatAt every
+    // ~5s during its wait loop. If a coordinator crashes between ticks the
+    // row sits in a non-terminal state forever; without intervention the
+    // PlatformConfig.portal.quiescence level would stay 'draining' /
+    // 'swapping' and the Inngest queue would be permanently blocked
+    // (every gated cron skips; every gateBetweenSteps suspends).
+    //
+    // Detection: row in non-terminal status with lastHeartbeatAt older
+    // than 2 minutes (or null + startedAt older than 2 minutes — covers
+    // rows that crashed before their first tick).
+    //
+    // Action: transition to failed (completionSource='watchdog'), force
+    // level back to normal, emit platform.quiescence-cleared so suspended
+    // Inngest functions wake up.
+    //
+    // Spec: docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md §5.7
+    const STUCK_COORDINATOR_TIMEOUT_MS = 2 * 60 * 1000;
+    const stuckCutoff = new Date(now.getTime() - STUCK_COORDINATOR_TIMEOUT_MS);
+    const stuckCoordinators = await prisma.quiescenceRun.findMany({
+      where: {
+        status: { notIn: ["completed", "deferred", "aborted", "failed"] },
+        OR: [
+          { lastHeartbeatAt: { lt: stuckCutoff } },
+          { AND: [{ lastHeartbeatAt: null }, { startedAt: { lt: stuckCutoff } }] },
+        ],
+      },
+      select: { runId: true, status: true, lastHeartbeatAt: true, startedAt: true },
+      take: 10,
+    });
+
+    let quiescenceRecovered = 0;
+    if (stuckCoordinators.length > 0) {
+      const { transitionState, setQuiescenceLevel } = await import(
+        "@/lib/self-upgrade/quiescence"
+      );
+      for (const sc of stuckCoordinators) {
+        try {
+          await transitionState(sc.runId, "failed", {
+            outcome: "failed",
+            completionSource: "watchdog",
+            outcomeNotes: `Watchdog reaped stuck coordinator (status=${sc.status}, lastHeartbeat=${sc.lastHeartbeatAt?.toISOString() ?? "never"})`,
+            completedAt: now,
+          });
+          await setQuiescenceLevel("normal", null);
+          await inngest.send({
+            name: "platform.quiescence-cleared",
+            data: {
+              runId: sc.runId,
+              outcome: "failed",
+              triggerRefId: null,
+              deferSurface: null,
+              reason: "watchdog-reaped",
+            },
+          });
+          quiescenceRecovered += 1;
+          console.warn(
+            `[taskrun-watchdog] quiescence-recovery: reaped stuck coordinator ${sc.runId} (was ${sc.status})`,
+          );
+        } catch (err) {
+          console.warn(
+            `[taskrun-watchdog] failed to reap quiescence coordinator ${sc.runId}:`,
+            err,
+          );
+        }
+      }
+    }
+
+    return { processed, quiescenceRecovered };
   },
 );

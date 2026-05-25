@@ -434,6 +434,53 @@ describe("agent coworker external access", () => {
     );
   });
 
+  it("strips coworker tools for terse explanation follow-ups like elaborate", async () => {
+    mockGetAvailableTools.mockReturnValue([
+      {
+        name: "create_backlog_item",
+        description: "Create backlog item",
+        inputSchema: {},
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+      },
+      {
+        name: "query_backlog",
+        description: "Query backlog",
+        inputSchema: {},
+        requiredCapability: "view_platform",
+        executionMode: "immediate",
+        sideEffect: false,
+      },
+    ]);
+    mockRouteAndCall.mockResolvedValue({
+      content: "More detail: Mark treats portal bugs as trust issues because silent failures damage confidence.",
+      providerId: "openai",
+      modelId: "gpt",
+      inputTokens: 1,
+      outputTokens: 1,
+      toolCalls: [],
+      downgraded: false,
+      downgradeMessage: null,
+      toolsStripped: false,
+      routeDecision: {},
+    });
+
+    await sendMessage({
+      threadId: "thread-1",
+      content: "elaborate",
+      routeContext: "/wiki/perspectives/mark-dpf-platform/voice",
+      coworkerMode: "act",
+    });
+
+    expect(mockToolsToOpenAIFormat).not.toHaveBeenCalled();
+    expect(mockRouteAndCall).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.stringContaining("READ-ONLY FOLLOW-UP REQUEST"),
+      "restricted",
+      expect.not.objectContaining({ tools: expect.anything() }),
+    );
+  });
+
   it("injects portal context digest and stable anchors into supported route prompts", async () => {
     mockGetAvailableTools.mockReturnValue([]);
     mockRouteAndCall.mockResolvedValue({

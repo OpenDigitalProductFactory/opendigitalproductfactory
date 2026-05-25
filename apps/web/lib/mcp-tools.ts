@@ -484,6 +484,56 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "approve_decomposition",
+    description: "Phase 4a (BI-2E6CC391). Atomically create an execution-organizational Epic + N child FeatureBuilds + sibling-dependency edges from a pre-validated DecompositionCandidate, and mark the originating FeatureBuild as superseded. The originating build must be in `ideate` phase with a passed designReview and must not itself be a child. Callers (typically the Phase 4b assistant flow) supply the candidate after the operator has chosen and optionally edited it; all invariants from epic-decomposition-invariants run before any DB writes.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Originating FeatureBuild ID (FB-*)." },
+        candidate: {
+          type: "object",
+          description: "The DecompositionCandidate to materialize. See apps/web/lib/build/decomposition-candidates.ts for the full shape.",
+          properties: {
+            candidateId: { type: "string" },
+            rationale: { type: "string" },
+            childScopes: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  childOrder: { type: "number" },
+                  title: { type: "string" },
+                  summary: { type: "string" },
+                  acceptanceCriteriaIndices: { type: "array", items: { type: "number" } },
+                  dependsOn: { type: "array", items: { type: "number" } },
+                },
+                required: ["childOrder", "title", "acceptanceCriteriaIndices", "dependsOn"],
+              },
+            },
+          },
+          required: ["candidateId", "rationale", "childScopes"],
+        },
+      },
+      required: ["buildId", "candidate"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "record_decomposition_override",
+    description: "Phase 4a (BI-2E6CC391). Record the operator's 'keep as one build' override on a FeatureBuild whose size assessment is decompose-required. Writes designReview.decompositionOverride for audit and hive-contribution context. Only valid on decompose-required builds; recommended-tier builds proceed without recording an override (single-click path per spec §4.1). Does not enforce — Phase 4b's gate is the consumer of this record.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "FeatureBuild ID (FB-*)." },
+        rationale: { type: "string", description: "Non-empty one-line justification for proceeding monolithically." },
+      },
+      required: ["buildId", "rationale"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
     name: "update_backlog_item",
     description: "Update an existing backlog item's editable fields. Use update_backlog_item_status for triaged status transitions, triage_backlog_item to triage, size_backlog_item for effortSize, and link_backlog_item_to_epic for epic linkage — those have their own audit and validation.",
     inputSchema: {
@@ -4834,6 +4884,64 @@ export async function executeTool(
         },
       };
     }
+
+    case "approve_decomposition": {
+      // Phase 4a (BI-2E6CC391). The candidate is pre-validated by the
+      // caller (Phase 4b assistant); we revalidate inside
+      // approveDecomposition's pipeline before any DB writes.
+      const buildId = String(params["buildId"] ?? "");
+      const candidateRaw = params["candidate"];
+      if (!buildId.startsWith("FB-")) {
+        return { success: false, error: "invalid_buildId", message: "buildId must use the FB-* format." };
+      }
+      if (!candidateRaw || typeof candidateRaw !== "object") {
+        return { success: false, error: "invalid_candidate", message: "candidate must be an object matching the DecompositionCandidate shape." };
+      }
+      const { approveDecomposition } = await import("@/lib/build/approve-decomposition");
+      const result = await approveDecomposition({
+        buildId,
+        candidate: candidateRaw as Parameters<typeof approveDecomposition>[0]["candidate"],
+        userId,
+        agentId: context?.agentId ?? null,
+      });
+      if (!result.ok) {
+        return { success: false, error: result.code, message: result.error };
+      }
+      return {
+        success: true,
+        entityId: result.epicId,
+        message: `Decomposed ${buildId} into Epic ${result.epicId} with ${result.childBuildIds.length} child build(s).`,
+        data: {
+          epicId: result.epicId,
+          childBuildIds: result.childBuildIds,
+        },
+      };
+    }
+
+    case "record_decomposition_override": {
+      const buildId = String(params["buildId"] ?? "");
+      const rationale = String(params["rationale"] ?? "");
+      if (!buildId.startsWith("FB-")) {
+        return { success: false, error: "invalid_buildId", message: "buildId must use the FB-* format." };
+      }
+      const { recordDecompositionOverride } = await import("@/lib/build/decomposition-override");
+      const result = await recordDecompositionOverride({
+        buildId,
+        rationale,
+        userId,
+        agentId: context?.agentId ?? null,
+      });
+      if (!result.ok) {
+        return { success: false, error: result.code, message: result.error };
+      }
+      return {
+        success: true,
+        entityId: buildId,
+        message: `Decomposition override recorded for ${buildId}.`,
+        data: { override: result.override },
+      };
+    }
+
     case "update_backlog_item": {
       const existing = await prisma.backlogItem.findUnique({ where: { itemId: String(params["itemId"]) } });
       if (!existing) return { success: false, error: "Item not found", message: `Item ${String(params["itemId"])} not found` };
@@ -6683,10 +6791,26 @@ export async function executeTool(
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
         summary: "Review could not be completed — retry.",
       };
-      await prisma.featureBuild.update({ where: { buildId }, data: { designReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
+
+      // Phase 2 of design-time decomposition (BI-2E6CC391, spec
+      // docs/superpowers/specs/2026-05-24-build-studio-design-time-
+      // decomposition-design.md). Run the deterministic sizing counter and
+      // record the assessment alongside the review. Informational only —
+      // no gate, no UX change. Surfaces the rationale ("5 models, 25 ACs,
+      // 4 multipliers → required") so when Phase 3's gate ships, operators
+      // have already seen the signal in passing.
+      const { sizeDesignDoc } = await import("@/lib/build/size-design-doc");
+      const sizeAssessment = sizeDesignDoc(build.designDoc as Parameters<typeof sizeDesignDoc>[0]);
+      const reviewWithSize = { ...review, sizeAssessment };
+      await prisma.featureBuild.update({ where: { buildId }, data: { designReview: reviewWithSize as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "designReview" });
       logBuildActivity(buildId, "reviewDesignDoc", `Design review: ${review.decision}. ${review.summary}`);
+      logBuildActivity(
+        buildId,
+        "design-size-assessed",
+        `Design size: ${sizeAssessment.decision}. ${sizeAssessment.rationale}`,
+      );
 
       // Record a deliberation trail for this dual-reviewer run. The review
       // result above still gates pass/fail; this layer is the honest

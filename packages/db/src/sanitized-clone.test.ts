@@ -7,6 +7,7 @@ import {
   shouldCopyTable,
   shouldObfuscateTable,
   shouldSkipTable,
+  prepareInsertParameter,
 } from "./sanitized-clone";
 
 describe("obfuscation", () => {
@@ -34,6 +35,39 @@ describe("obfuscation", () => {
   it("handles null/undefined fields", () => {
     expect(obfuscateField(null, "name", 1)).toBeNull();
     expect(obfuscateField(undefined, "name", 1)).toBeUndefined();
+  });
+});
+
+describe("insert parameter preparation", () => {
+  it("serializes arrays for jsonb columns instead of casting them as text arrays", () => {
+    const result = prepareInsertParameter(["read", "write"], { dataType: "jsonb", udtName: "jsonb" }, 1);
+
+    expect(result).toEqual({
+      placeholder: "$1::jsonb",
+      value: "[\"read\",\"write\"]",
+    });
+  });
+
+  it("keeps non-json array columns as PostgreSQL array literals", () => {
+    const result = prepareInsertParameter(["a", "b"], { dataType: "ARRAY", udtName: "_text" }, 2);
+
+    expect(result).toEqual({
+      placeholder: "$2::text[]",
+      value: "{\"a\",\"b\"}",
+    });
+  });
+
+  it("keeps decimal-like values out of the jsonb fallback for numeric columns", () => {
+    const decimalLike = {
+      toString: () => "12.34",
+    };
+
+    const result = prepareInsertParameter(decimalLike, { dataType: "numeric", udtName: "numeric" }, 3);
+
+    expect(result).toEqual({
+      placeholder: "$3",
+      value: "12.34",
+    });
   });
 });
 

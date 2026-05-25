@@ -69,7 +69,22 @@ export type AgentEvent =
   // BI-4ab6be39 stall detection — emitted by ops/taskrun-watchdog when a
   // working TaskRun is transitioned to "stalled". Operator UIs subscribe to
   // refresh without polling.
-  | { type: "taskrun:stalled"; taskRunId: string; buildId: string | null; phase: string | null; reason: string };
+  | { type: "taskrun:stalled"; taskRunId: string; buildId: string | null; phase: string | null; reason: string }
+  // BI-QUIESCE-006 Activity Quiescence Protocol — coordinator broadcasts
+  // these to ALL subscribers (broadcastSystem below) so every open SSE
+  // stream renders the banner state. The "cleared" level fires on every
+  // terminal transition (success | deferred | aborted | failed — outcome
+  // distinguishes them) and is also consumed by suspended Inngest
+  // functions waiting on platform.quiescence-cleared. Spec §7.1.
+  | {
+      type: "system:quiescence";
+      level: "draining" | "swapping" | "cleared";
+      runId: string;
+      swapEtaSeconds: number | null;
+      deferReason: string | null;
+      deferSurface: string | null;
+      outcome: "draining" | "swapping" | "succeeded" | "deferred" | "aborted" | "failed";
+    };
 
 type Handler = (event: AgentEvent) => void;
 
@@ -86,6 +101,34 @@ function subscribe(threadId: string, handler: Handler): () => void {
 
 function emit(threadId: string, event: AgentEvent): void {
   subscribers.get(threadId)?.forEach((handler) => handler(event));
+}
+
+// BI-QUIESCE-006 — system-namespace event registry separate from threadId
+// keying. Used by `broadcastSystem` to fan out platform-level events (e.g.,
+// system:quiescence) to every open client without requiring per-thread
+// subscription. The agent-stream SSE handler subscribes to both its own
+// threadId (existing pattern) AND "*" (new system channel) so clients see
+// both their own task events and platform events on the same stream.
+const SYSTEM_CHANNEL = "__dpf_system__";
+
+function subscribeSystem(handler: Handler): () => void {
+  if (!subscribers.has(SYSTEM_CHANNEL)) subscribers.set(SYSTEM_CHANNEL, new Set());
+  subscribers.get(SYSTEM_CHANNEL)!.add(handler);
+  return () => {
+    subscribers.get(SYSTEM_CHANNEL)?.delete(handler);
+    if (subscribers.get(SYSTEM_CHANNEL)?.size === 0) subscribers.delete(SYSTEM_CHANNEL);
+  };
+}
+
+function broadcastSystem(event: AgentEvent): void {
+  // Fan out to system-channel subscribers AND every per-thread subscriber —
+  // the latter ensures that legacy consumers subscribed only to specific
+  // threadIds still receive system events without code changes. Cheap
+  // forEach across the subscriber Map; in practice a single portal has
+  // O(open-tabs) subscribers.
+  for (const [, handlers] of subscribers) {
+    handlers.forEach((handler) => handler(event));
+  }
 }
 
 // EP-ASYNC-COWORKER-001: Track which threads have active background executions.
@@ -121,4 +164,15 @@ function clearCancel(threadId: string): void {
   cancelledThreads.delete(threadId);
 }
 
-export const agentEventBus = { subscribe, emit, requestCancel, isCancelled, clearCancel, markActive, markIdle, isActive };
+export const agentEventBus = {
+  subscribe,
+  emit,
+  subscribeSystem,
+  broadcastSystem,
+  requestCancel,
+  isCancelled,
+  clearCancel,
+  markActive,
+  markIdle,
+  isActive,
+};

@@ -725,12 +725,138 @@ export type ApplyPlatformUpdateResult =
     }
   | { kind: "error"; message: string };
 
+type ExecUpdateOptions = { cwd: string; timeout: number };
+type ExecUpdate = (
+  command: string,
+  options: ExecUpdateOptions,
+) => Promise<{ stdout: string; stderr: string }>;
+
+const UPDATE_UPSTREAM_BRANCH = "dpf-upstream";
+const UPDATE_WORK_BRANCH = "my-changes";
+const PLATFORM_UPDATE_SOURCE_PATHS = ["apps/web", "packages"] as const;
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+async function ensureWorkspaceSafeDirectory(
+  execUpdate: ExecUpdate,
+  gitOpts: ExecUpdateOptions,
+  workspace: string,
+): Promise<void> {
+  await execUpdate(
+    `git config --global --add safe.directory ${shellQuote(workspace)} >/dev/null 2>&1 || true`,
+    gitOpts,
+  );
+}
+
+async function gitBranchExists(
+  execUpdate: ExecUpdate,
+  gitOpts: ExecUpdateOptions,
+  branch: string,
+): Promise<boolean> {
+  try {
+    await execUpdate(`git show-ref --verify --quiet refs/heads/${branch}`, gitOpts);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureManagedUpdateBranches(
+  execUpdate: ExecUpdate,
+  gitOpts: ExecUpdateOptions,
+): Promise<void> {
+  await execUpdate("git rev-parse --is-inside-work-tree", gitOpts);
+  await execUpdate('git config user.email "build-studio@dpf.local"', gitOpts);
+  await execUpdate('git config user.name "DPF Build Studio"', gitOpts);
+
+  const missingBranches: string[] = [];
+  for (const branch of [UPDATE_UPSTREAM_BRANCH, UPDATE_WORK_BRANCH]) {
+    if (!(await gitBranchExists(execUpdate, gitOpts, branch))) missingBranches.push(branch);
+  }
+
+  if (missingBranches.length > 0) {
+    await assertBranchRepairCanUseCurrentHead(execUpdate, gitOpts);
+  }
+
+  for (const branch of missingBranches) {
+    await execUpdate(`git branch ${branch} HEAD`, gitOpts);
+  }
+}
+
+async function assertManagedSourceClean(
+  execUpdate: ExecUpdate,
+  gitOpts: ExecUpdateOptions,
+): Promise<void> {
+  const pathspec = PLATFORM_UPDATE_SOURCE_PATHS.join(" ");
+  const { stdout } = await execUpdate(`git status --porcelain -- ${pathspec}`, gitOpts);
+  if (stdout.trim()) {
+    throw new Error(
+      "Workspace has uncommitted changes in apps/web or packages. Commit or resolve those source changes before applying a platform update.",
+    );
+  }
+}
+
+async function assertBranchRepairCanUseCurrentHead(
+  execUpdate: ExecUpdate,
+  gitOpts: ExecUpdateOptions,
+): Promise<void> {
+  try {
+    await execUpdate("git rev-parse --verify origin/main", gitOpts);
+  } catch {
+    return;
+  }
+
+  const pathspec = PLATFORM_UPDATE_SOURCE_PATHS.join(" ");
+  const { stdout } = await execUpdate(
+    `git diff --name-only origin/main...HEAD -- ${pathspec}`,
+    gitOpts,
+  );
+  if (stdout.trim()) {
+    throw new Error(
+      "Workspace is missing managed update branches and has committed source changes in apps/web or packages. A safe upstream baseline cannot be reconstructed automatically.",
+    );
+  }
+}
+
+async function collectPlatformUpdateConflicts(
+  execUpdate: ExecUpdate,
+  gitOpts: ExecUpdateOptions,
+  workspace: string,
+  resolvePath: (...parts: string[]) => string,
+  options: { tolerateDiffFailure?: boolean } = {},
+): Promise<ApplyPlatformUpdateConflict[]> {
+  let conflicted = "";
+  try {
+    const result = await execUpdate("git diff --name-only --diff-filter=U", gitOpts);
+    conflicted = result.stdout;
+  } catch {
+    if (options.tolerateDiffFailure) return [];
+    throw new Error("Unable to read platform update conflict list.");
+  }
+
+  const conflicts: ApplyPlatformUpdateConflict[] = [];
+  const { readFileSync } = lazyFs();
+  for (const file of conflicted.trim().split("\n").filter(Boolean)) {
+    const content = readFileSync(resolvePath(workspace, file), "utf-8");
+    const localMatch = content.match(/<<<<<<< .+?\n([\s\S]*?)=======/);
+    const upstreamMatch = content.match(/=======\n([\s\S]*?)>>>>>>> .+/);
+    conflicts.push({
+      file,
+      upstreamChange: upstreamMatch?.[1]?.trim() ?? "(could not parse)",
+      localChange: localMatch?.[1]?.trim() ?? "(could not parse)",
+    });
+  }
+  return conflicts;
+}
+
 export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> {
   await requireManagePlatform();
 
   const { exec: execCb } = lazyChildProcess();
   const { promisify } = lazyUtil();
-  const execUpdate = promisify(execCb);
+  const execUpdate = promisify(execCb) as ExecUpdate;
 
   const devConfig = await prisma.platformDevConfig.findUnique({
     where: { id: "singleton" },
@@ -759,23 +885,15 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
     const { existsSync } = lazyFs();
     const { resolve: resolvePath } = lazyPath();
 
+    await ensureWorkspaceSafeDirectory(execUpdate, gitOpts, workspace);
+
     if (existsSync(resolvePath(workspace, ".git", "MERGE_HEAD"))) {
-      const { stdout: conflicted } = await execUpdate(
-        "git diff --name-only --diff-filter=U",
+      const conflicts = await collectPlatformUpdateConflicts(
+        execUpdate,
         gitOpts,
+        workspace,
+        resolvePath,
       );
-      const conflicts: ApplyPlatformUpdateConflict[] = [];
-      const { readFileSync } = lazyFs();
-      for (const file of conflicted.trim().split("\n").filter(Boolean)) {
-        const content = readFileSync(resolvePath(workspace, file), "utf-8");
-        const upstreamMatch = content.match(/<<<<<<< .+?\n([\s\S]*?)=======/);
-        const localMatch = content.match(/=======\n([\s\S]*?)>>>>>>> .+/);
-        conflicts.push({
-          file,
-          upstreamChange: upstreamMatch?.[1]?.trim() ?? "(could not parse)",
-          localChange: localMatch?.[1]?.trim() ?? "(could not parse)",
-        });
-      }
       return {
         kind: "conflicts",
         message: `A merge is already in progress. ${conflicts.length} conflict(s) remaining.`,
@@ -785,12 +903,15 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
       };
     }
 
+    await assertManagedSourceClean(execUpdate, gitOpts);
+    await ensureManagedUpdateBranches(execUpdate, gitOpts);
+
     // Step 1-3: Refresh dpf-upstream branch with new source
-    await execUpdate("git checkout dpf-upstream", gitOpts);
+    await execUpdate(`git checkout ${UPDATE_UPSTREAM_BRANCH}`, gitOpts);
     await execUpdate("rm -rf apps/web packages", gitOpts);
     await execUpdate("cp -r /app/apps/web-src/. apps/web/", gitOpts);
     await execUpdate("cp -r /app/packages-src/. packages/", gitOpts);
-    await execUpdate("git add -A", gitOpts);
+    await execUpdate(`git add -A ${PLATFORM_UPDATE_SOURCE_PATHS.join(" ")}`, gitOpts);
 
     // Skip the commit if nothing actually changed (idempotent re-run)
     const { stdout: diffCheck } = await execUpdate(
@@ -799,37 +920,28 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
     );
     if (diffCheck.trim()) {
       await execUpdate(
-        `git commit -m "chore: dpf-upstream v${pendingVersion}"`,
+        `git commit -m "chore: ${UPDATE_UPSTREAM_BRANCH} v${pendingVersion}"`,
         gitOpts,
       );
     }
 
     // Step 4: Merge into my-changes
-    await execUpdate("git checkout my-changes", gitOpts);
+    await execUpdate(`git checkout ${UPDATE_WORK_BRANCH}`, gitOpts);
     try {
-      await execUpdate("git merge dpf-upstream --no-commit --no-ff", gitOpts);
+      await execUpdate(`git merge ${UPDATE_UPSTREAM_BRANCH} --no-commit --no-ff`, gitOpts);
     } catch {
       // Merge conflicts surface as a non-zero exit — expected, handled below
     }
 
-    const { stdout: conflictedFiles } = await execUpdate(
-      "git diff --name-only --diff-filter=U",
+    const conflicts = await collectPlatformUpdateConflicts(
+      execUpdate,
       gitOpts,
-    ).catch(() => ({ stdout: "" }));
+      workspace,
+      resolvePath,
+      { tolerateDiffFailure: true },
+    );
 
-    if (conflictedFiles.trim()) {
-      const conflicts: ApplyPlatformUpdateConflict[] = [];
-      const { readFileSync } = lazyFs();
-      for (const file of conflictedFiles.trim().split("\n").filter(Boolean)) {
-        const content = readFileSync(resolvePath(workspace, file), "utf-8");
-        const upstreamMatch = content.match(/<<<<<<< .+?\n([\s\S]*?)=======/);
-        const localMatch = content.match(/=======\n([\s\S]*?)>>>>>>> .+/);
-        conflicts.push({
-          file,
-          upstreamChange: upstreamMatch?.[1]?.trim() ?? "(could not parse)",
-          localChange: localMatch?.[1]?.trim() ?? "(could not parse)",
-        });
-      }
+    if (conflicts.length > 0) {
       return {
         kind: "conflicts",
         message: `Merge has conflicts. ${conflicts.length} file(s) need resolution.`,
@@ -878,7 +990,7 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
     // Best-effort: leave my-changes checked out so the operator's working
     // copy is in a known state even when the merge step itself crashes.
     try {
-      await execUpdate("git checkout my-changes", gitOpts);
+      await execUpdate(`git checkout ${UPDATE_WORK_BRANCH}`, gitOpts);
     } catch {
       /* best effort — original error is already captured below */
     }
