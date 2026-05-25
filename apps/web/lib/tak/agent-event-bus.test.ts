@@ -57,3 +57,101 @@ describe("agentEventBus", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 });
+
+// ─── BI-QUIESCE-006 system-channel additions ───────────────────────────
+
+const sampleSystemEvent: AgentEvent = {
+  type: "system:quiescence",
+  level: "draining",
+  runId: "QR-2026-05-24-test1234",
+  swapEtaSeconds: 300,
+  deferReason: null,
+  deferSurface: null,
+  outcome: "draining",
+};
+
+describe("agentEventBus.subscribeSystem + broadcastSystem", () => {
+  it("delivers a broadcast to a system-channel subscriber", () => {
+    const handler = vi.fn();
+    const unsub = agentEventBus.subscribeSystem(handler);
+    agentEventBus.broadcastSystem(sampleSystemEvent);
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(sampleSystemEvent);
+    unsub();
+  });
+
+  it("delivers a broadcast to every system-channel subscriber", () => {
+    const a = vi.fn();
+    const b = vi.fn();
+    const ua = agentEventBus.subscribeSystem(a);
+    const ub = agentEventBus.subscribeSystem(b);
+    agentEventBus.broadcastSystem(sampleSystemEvent);
+    expect(a).toHaveBeenCalledTimes(1);
+    expect(b).toHaveBeenCalledTimes(1);
+    ua();
+    ub();
+  });
+
+  it("ALSO fans out to per-thread subscribers (legacy compatibility)", () => {
+    // Legacy SSE consumers subscribe to their own threadId and have no
+    // knowledge of the system channel. broadcastSystem must reach them
+    // so the platform banner works without per-consumer code changes.
+    const threadHandler = vi.fn();
+    const unsubThread = agentEventBus.subscribe("legacy-thread-banner", threadHandler);
+    agentEventBus.broadcastSystem(sampleSystemEvent);
+    expect(threadHandler).toHaveBeenCalledTimes(1);
+    expect(threadHandler).toHaveBeenCalledWith(sampleSystemEvent);
+    unsubThread();
+  });
+
+  it("unsub removes the subscriber so subsequent broadcasts don't fire", () => {
+    const handler = vi.fn();
+    const unsub = agentEventBus.subscribeSystem(handler);
+    unsub();
+    agentEventBus.broadcastSystem(sampleSystemEvent);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("carries cleared/succeeded payload shape", () => {
+    const handler = vi.fn();
+    const unsub = agentEventBus.subscribeSystem(handler);
+    agentEventBus.broadcastSystem({
+      type: "system:quiescence",
+      level: "cleared",
+      runId: "QR-X",
+      swapEtaSeconds: null,
+      deferReason: null,
+      deferSurface: null,
+      outcome: "succeeded",
+    });
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "system:quiescence",
+        level: "cleared",
+        outcome: "succeeded",
+      }),
+    );
+    unsub();
+  });
+
+  it("carries cleared/deferred payload with defer surface", () => {
+    const handler = vi.fn();
+    const unsub = agentEventBus.subscribeSystem(handler);
+    agentEventBus.broadcastSystem({
+      type: "system:quiescence",
+      level: "cleared",
+      runId: "QR-Y",
+      swapEtaSeconds: null,
+      deferReason: "Hard blocker exceeded budget",
+      deferSurface: "build-studio.phase.build",
+      outcome: "deferred",
+    });
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: "deferred",
+        deferSurface: "build-studio.phase.build",
+      }),
+    );
+    unsub();
+  });
+});

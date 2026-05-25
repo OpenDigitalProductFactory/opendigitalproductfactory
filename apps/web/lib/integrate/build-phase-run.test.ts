@@ -1,5 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// BI-QUIESCE-005 gate: startBuildPhaseRun now calls getQuiescenceLevel.
+// Default to "normal" so existing tests pass through unchanged.
+vi.mock("@/lib/self-upgrade/quiescence", () => ({
+  getQuiescenceLevel: vi.fn().mockResolvedValue("normal"),
+  QuiescingError: class QuiescingError extends Error {
+    readonly code = "PORTAL_QUIESCING";
+    readonly retryAfterSeconds: number;
+    readonly level: string;
+    constructor(level: string, retryAfterSeconds = 30) {
+      super(`Portal is ${level} for upgrade — new work refused`);
+      this.name = "QuiescingError";
+      this.level = level;
+      this.retryAfterSeconds = retryAfterSeconds;
+    }
+  },
+}));
+
 // ── Mock Prisma ──────────────────────────────────────────────────────────────
 const phaseRuns = new Map<string, Record<string, unknown>>();
 

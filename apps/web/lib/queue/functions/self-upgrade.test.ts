@@ -14,7 +14,11 @@ const mocks = vi.hoisted(() => ({
   getLatestRun: vi.fn(),
   runPromoter: vi.fn(),
   emitUpgradeEvent: vi.fn(),
-  getPortalActivity: vi.fn(),
+  // BI-QUIESCE-010 — caller API consumed by runSelfUpgrade.
+  startQuiescence: vi.fn(),
+  signalSwapStarting: vi.fn(),
+  signalSwapComplete: vi.fn(),
+  failQuiescenceSwap: vi.fn(),
 }));
 
 vi.mock("@/lib/self-upgrade/config", () => ({
@@ -48,8 +52,11 @@ vi.mock("@/lib/self-upgrade/notifications", () => ({
   emitUpgradeEvent: mocks.emitUpgradeEvent,
 }));
 
-vi.mock("@/lib/self-upgrade/activity", () => ({
-  getPortalActivity: mocks.getPortalActivity,
+vi.mock("@/lib/self-upgrade/quiescence", () => ({
+  startQuiescence: mocks.startQuiescence,
+  signalSwapStarting: mocks.signalSwapStarting,
+  signalSwapComplete: mocks.signalSwapComplete,
+  failQuiescenceSwap: mocks.failQuiescenceSwap,
 }));
 
 import type { SelfUpgradeRunEventData } from "./self-upgrade";
@@ -63,6 +70,34 @@ import {
   runSelfUpgrade,
 } from "./self-upgrade";
 import { allFunctions } from "./index";
+
+/**
+ * Helper to set up startQuiescence to return a successful ready-to-swap
+ * outcome. Each test that wants the happy path calls this in its beforeEach.
+ */
+function setupQuiescenceReady(quiescenceRunId = "QR-2026-05-24-test1234"): void {
+  mocks.startQuiescence.mockResolvedValue({
+    runId: quiescenceRunId,
+    awaitReady: () =>
+      Promise.resolve({
+        ok: true,
+        outcome: "ready-to-swap",
+        runId: quiescenceRunId,
+        finalSnapshot: {
+          capturedAt: new Date().toISOString(),
+          thresholdMs: 300_000,
+          totalBlockers: 0,
+          hardBlockers: 0,
+          softBlockers: 0,
+          unobservableSurfaces: [],
+          surfaces: [],
+        },
+      }),
+  });
+  mocks.signalSwapStarting.mockResolvedValue(undefined);
+  mocks.signalSwapComplete.mockResolvedValue(undefined);
+  mocks.failQuiescenceSwap.mockResolvedValue(undefined);
+}
 
 describe("cron metadata", () => {
   it("scheduled function id is ops/self-upgrade-scheduled", () => {
@@ -105,14 +140,14 @@ describe("manual payload schema", () => {
     expect(payload.buildId).toBe("FB-TESTBUILD");
   });
 
-  it("accepts full payload", () => {
-    const payload: SelfUpgradeRunEventData = { triggeredBy: "ops-bot", dryRun: false, buildId: "FB-123" };
-    expect(payload).toEqual({ triggeredBy: "ops-bot", dryRun: false, buildId: "FB-123" });
-  });
-
   it("accepts force boolean", () => {
     const payload: SelfUpgradeRunEventData = { force: true };
     expect(payload.force).toBe(true);
+  });
+
+  it("accepts budgetMs (BI-QUIESCE-010)", () => {
+    const payload: SelfUpgradeRunEventData = { budgetMs: 600_000 };
+    expect(payload.budgetMs).toBe(600_000);
   });
 });
 
@@ -142,12 +177,7 @@ describe("success path", () => {
     mocks.resolveTargetSha.mockResolvedValue("abc1234deadbeef");
     mocks.getDeployedSha.mockReturnValue("oldsha1");
     mocks.isShaFresh.mockReturnValue(false);
-    mocks.getPortalActivity.mockResolvedValue({
-      active: false,
-      lastActivityAt: null,
-      lastActivityToolName: null,
-      thresholdMs: 5 * 60 * 1000,
-    });
+    setupQuiescenceReady();
     mocks.getLatestRun.mockResolvedValue(null);
     mocks.createRun.mockResolvedValue({ runId: "SUR-AAAABBBB" });
     mocks.startRun.mockResolvedValue({});
@@ -181,6 +211,62 @@ describe("success path", () => {
     expect(mocks.isFeatureBuildDeployed).not.toHaveBeenCalled();
     expect(result).toMatchObject({ deployed: null });
   });
+
+  // BI-QUIESCE-010 success-path additions:
+
+  it("starts quiescence with trigger=self-upgrade + triggerRefId=SelfUpgradeRun.runId", async () => {
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(mocks.startQuiescence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trigger: "self-upgrade",
+        triggerRefId: "SUR-AAAABBBB",
+      }),
+    );
+  });
+
+  it("signals swap-starting before runPromoter (audit boundary)", async () => {
+    const order: string[] = [];
+    mocks.signalSwapStarting.mockImplementation(async () => {
+      order.push("signalSwapStarting");
+    });
+    mocks.runPromoter.mockImplementation(async () => {
+      order.push("runPromoter");
+      return { exitCode: 0, stdout: "", stderr: "" };
+    });
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(order).toEqual(["signalSwapStarting", "runPromoter"]);
+  });
+
+  it("signals swap-complete after successful promoter (wakes suspended Inngest fns)", async () => {
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(mocks.signalSwapComplete).toHaveBeenCalledWith("QR-2026-05-24-test1234");
+    expect(mocks.failQuiescenceSwap).not.toHaveBeenCalled();
+  });
+
+  it("returns quiescenceRunId on success for caller audit linkage", async () => {
+    const result = await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(result).toMatchObject({ quiescenceRunId: "QR-2026-05-24-test1234" });
+  });
+
+  it("forwards force=true to startQuiescence as shipForce", async () => {
+    await runSelfUpgrade({ triggeredBy: "ops", force: true });
+    expect(mocks.startQuiescence).toHaveBeenCalledWith(
+      expect.objectContaining({ shipForce: true }),
+    );
+  });
+
+  it("forwards budgetMs to the coordinator", async () => {
+    await runSelfUpgrade({ triggeredBy: "ops", budgetMs: 900_000 });
+    expect(mocks.startQuiescence).toHaveBeenCalledWith(
+      expect.objectContaining({ budgetMs: 900_000 }),
+    );
+  });
+
+  it("bypasses quiescence entirely on dryRun", async () => {
+    await runSelfUpgrade({ triggeredBy: "ops", dryRun: true });
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+    expect(mocks.signalSwapComplete).not.toHaveBeenCalled();
+  });
 });
 
 describe("failure path", () => {
@@ -191,12 +277,7 @@ describe("failure path", () => {
     mocks.resolveTargetSha.mockResolvedValue("abc1234deadbeef");
     mocks.getDeployedSha.mockReturnValue("oldsha1");
     mocks.isShaFresh.mockReturnValue(false);
-    mocks.getPortalActivity.mockResolvedValue({
-      active: false,
-      lastActivityAt: null,
-      lastActivityToolName: null,
-      thresholdMs: 5 * 60 * 1000,
-    });
+    setupQuiescenceReady();
     mocks.getLatestRun.mockResolvedValue(null);
     mocks.createRun.mockResolvedValue({ runId: "SUR-FAILTEST" });
     mocks.startRun.mockResolvedValue({});
@@ -247,106 +328,106 @@ describe("failure path", () => {
     await runSelfUpgrade({ triggeredBy: "ops" });
     expect(mocks.completeRun).not.toHaveBeenCalled();
   });
+
+  // BI-QUIESCE-010 failure-path additions:
+
+  it("signals failQuiescenceSwap on promoter failure (level returns to normal)", async () => {
+    mocks.runPromoter.mockResolvedValue({ exitCode: 1, stdout: "", stderr: "fatal" });
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(mocks.failQuiescenceSwap).toHaveBeenCalledWith("QR-2026-05-24-test1234", "fatal");
+    expect(mocks.signalSwapComplete).not.toHaveBeenCalled();
+  });
 });
 
-describe("portal-active skip", () => {
+describe("quiescence-defer path (BI-QUIESCE-010)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Everything passes the prior skip-checks; isolate the activity gate.
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
     mocks.isInMaintenanceWindow.mockReturnValue(true);
     mocks.resolveTargetSha.mockResolvedValue("abc1234deadbeef");
     mocks.getDeployedSha.mockReturnValue("oldsha1");
     mocks.isShaFresh.mockReturnValue(false);
+    mocks.getLatestRun.mockResolvedValue(null);
+    mocks.createRun.mockResolvedValue({ runId: "SUR-DEFER" });
+    mocks.startRun.mockResolvedValue({});
+    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
+    mocks.failRun.mockResolvedValue({});
   });
 
-  it("skips with reason=portal-active when getPortalActivity reports active", async () => {
-    const lastActivity = new Date("2026-05-21T12:00:00Z");
-    mocks.getPortalActivity.mockResolvedValue({
-      active: true,
-      lastActivityAt: lastActivity,
-      lastActivityToolName: "triage_backlog_item",
-      thresholdMs: 5 * 60 * 1000,
+  it("returns deferred + does not run promoter when coordinator defers", async () => {
+    mocks.startQuiescence.mockResolvedValue({
+      runId: "QR-DEFER",
+      awaitReady: () =>
+        Promise.resolve({
+          ok: false,
+          outcome: "deferred",
+          runId: "QR-DEFER",
+          deferSurface: "build-studio.phase.build",
+          finalSnapshot: null,
+        }),
     });
+
     const result = await runSelfUpgrade({ triggeredBy: "scheduled" });
-    expect(result).toEqual({
-      skipped: true,
-      reason: "portal-active",
-      lastActivityAt: lastActivity.toISOString(),
-      lastActivityToolName: "triage_backlog_item",
-      thresholdMs: 5 * 60 * 1000,
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: "deferred",
+      runId: "SUR-DEFER",
+      quiescenceRunId: "QR-DEFER",
+      reason: "deferred",
+      deferSurface: "build-studio.phase.build",
     });
-    expect(mocks.createRun).not.toHaveBeenCalled();
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
+    expect(mocks.failRun).toHaveBeenCalledWith(
+      "SUR-DEFER",
+      "quiescence-deferred: build-studio.phase.build",
+    );
+    expect(mocks.emitUpgradeEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "upgrade.failed", runId: "SUR-DEFER" }),
+    );
+  });
+
+  it("returns failed when coordinator transitions to failed", async () => {
+    mocks.startQuiescence.mockResolvedValue({
+      runId: "QR-FAIL",
+      awaitReady: () =>
+        Promise.resolve({
+          ok: false,
+          outcome: "failed",
+          runId: "QR-FAIL",
+          reason: "coordinator-crash",
+        }),
+    });
+
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled" });
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: "deferred", // outer status is "deferred" for any non-ok coordinator outcome
+      quiescenceRunId: "QR-FAIL",
+      reason: "failed",
+    });
     expect(mocks.runPromoter).not.toHaveBeenCalled();
   });
 
-  it("proceeds when getPortalActivity reports inactive", async () => {
-    mocks.getPortalActivity.mockResolvedValue({
-      active: false,
-      lastActivityAt: null,
-      lastActivityToolName: null,
-      thresholdMs: 5 * 60 * 1000,
+  it("returns aborted when operator aborts", async () => {
+    mocks.startQuiescence.mockResolvedValue({
+      runId: "QR-ABORT",
+      awaitReady: () =>
+        Promise.resolve({
+          ok: false,
+          outcome: "aborted",
+          runId: "QR-ABORT",
+          reason: "operator-abort",
+        }),
     });
-    mocks.getLatestRun.mockResolvedValue(null);
-    mocks.createRun.mockResolvedValue({ runId: "SUR-INACTIVE" });
-    mocks.startRun.mockResolvedValue({});
-    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
-    mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "ok", stderr: "" });
-    mocks.completeRun.mockResolvedValue({});
+
     const result = await runSelfUpgrade({ triggeredBy: "scheduled" });
-    expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-INACTIVE" });
-  });
 
-  it("bypasses the activity check when force=true even if portal is active", async () => {
-    mocks.getPortalActivity.mockResolvedValue({
-      active: true,
-      lastActivityAt: new Date(),
-      lastActivityToolName: "anything",
-      thresholdMs: 5 * 60 * 1000,
+    expect(result).toMatchObject({
+      ok: false,
+      status: "deferred",
+      reason: "aborted",
     });
-    mocks.getLatestRun.mockResolvedValue(null);
-    mocks.createRun.mockResolvedValue({ runId: "SUR-FORCE" });
-    mocks.startRun.mockResolvedValue({});
-    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
-    mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "ok", stderr: "" });
-    mocks.completeRun.mockResolvedValue({});
-    const result = await runSelfUpgrade({ triggeredBy: "operator", force: true });
-    expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-FORCE" });
-  });
-
-  it("bypasses the activity check on dryRun even if portal is active", async () => {
-    mocks.getPortalActivity.mockResolvedValue({
-      active: true,
-      lastActivityAt: new Date(),
-      lastActivityToolName: "anything",
-      thresholdMs: 5 * 60 * 1000,
-    });
-    mocks.getLatestRun.mockResolvedValue(null);
-    mocks.createRun.mockResolvedValue({ runId: "SUR-DRY" });
-    mocks.startRun.mockResolvedValue({});
-    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
-    mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "ok", stderr: "" });
-    mocks.completeRun.mockResolvedValue({});
-    const result = await runSelfUpgrade({ triggeredBy: "operator", dryRun: true });
-    expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-DRY" });
-  });
-
-  it("portal-active check runs before getLatestRun (cheap query first)", async () => {
-    const callOrder: string[] = [];
-    mocks.getPortalActivity.mockImplementation(async () => {
-      callOrder.push("getPortalActivity");
-      return {
-        active: true,
-        lastActivityAt: new Date(),
-        lastActivityToolName: "tool",
-        thresholdMs: 5 * 60 * 1000,
-      };
-    });
-    mocks.getLatestRun.mockImplementation(async () => {
-      callOrder.push("getLatestRun");
-      return null;
-    });
-    await runSelfUpgrade({ triggeredBy: "scheduled" });
-    expect(callOrder).toEqual(["getPortalActivity"]);
   });
 });
