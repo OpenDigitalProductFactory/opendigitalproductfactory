@@ -258,6 +258,69 @@ describe("principle_decide MCP tool", () => {
     expect(res.error ?? res.message).toMatch(/callingPopulation/i);
   });
 
+  it("falls back to semantic alignment using server-side embeddings when option features are empty and principles come from Qdrant (BI-3C1A6451)", async () => {
+    mockPrisma.organization.findFirst.mockResolvedValueOnce({ id: "org_a" });
+    // No PG commandments — only a Qdrant core hit. The Qdrant payload omits
+    // the signed dimension vector, so the principle's dimensionVector is {} →
+    // decide() falls back to semantic alignment for every contribution.
+    listPrinciplesByTier.mockResolvedValueOnce([]);
+    searchWikiPages
+      .mockResolvedValueOnce([
+        principleQdrantHit("arch", "core", {
+          title: "Architecture Over Shortcuts",
+        }),
+      ])
+      .mockResolvedValueOnce([]);
+
+    // Distinct embeddings keyed by input text prefix so the cosine math is
+    // observable. Refactor option is aligned with the principle direction
+    // (high cosine); patch option is orthogonal (cosine ≈ 0).
+    generateEmbedding.mockImplementation(async (text: string) => {
+      if (text.includes("Direction for arch")) return [1, 0, 0];
+      if (text.includes("Refactor with proper architecture"))
+        return [0.95, 0.05, 0];
+      if (text.includes("Quick 3-line patch")) return [0, 1, 0];
+      return [0, 0, 1];
+    });
+
+    const res = await executeTool(
+      "principle_decide",
+      {
+        context: "Should we refactor or patch?",
+        options: [
+          { id: "patch", description: "Quick 3-line patch", features: {} },
+          {
+            id: "refactor",
+            description: "Refactor with proper architecture",
+            features: {},
+          },
+        ],
+        callingPopulation: "human",
+      },
+      "user_test",
+    );
+
+    expect(res.success).toBe(true);
+    const data = res.data as {
+      recommendation: { optionId: string } | null;
+      scores: Array<{
+        optionId: string;
+        composite: number;
+        contributions: Array<{ alignment: number; mode: string }>;
+      }>;
+    };
+    // Every contribution must be semantic mode — the only principle is a Qdrant
+    // hit with no dimension vector.
+    const allContribs = data.scores.flatMap((s) => s.contributions);
+    expect(allContribs.length).toBeGreaterThan(0);
+    expect(allContribs.every((c) => c.mode === "semantic")).toBe(true);
+    // The pre-fix dead-code path collapsed every alignment to 0. With the fix,
+    // at least one contribution must show meaningful semantic similarity.
+    expect(allContribs.some((c) => Math.abs(c.alignment) > 0.5)).toBe(true);
+    // Refactor option is aligned with the principle direction → wins.
+    expect(data.recommendation?.optionId).toBe("refactor");
+  });
+
   it("uses principleWeight override from Postgres when present (otherwise tier default)", async () => {
     mockPrisma.organization.findFirst.mockResolvedValueOnce({ id: "org_a" });
     listPrinciplesByTier.mockResolvedValueOnce([

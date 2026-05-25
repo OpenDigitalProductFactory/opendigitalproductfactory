@@ -10782,6 +10782,11 @@ export async function executeTool(
       const { principleMatchesRingScope } = await import(
         "@/lib/wiki/calling-ring-map"
       );
+      // BI-3C1A6451: server-side embedding for the semantic-fallback path.
+      // Used both for principle direction text (Qdrant-sourced principles
+      // have empty dimensionVector) and for option descriptions when the
+      // caller passes empty features. Pre-fix, both produced alignment=0.
+      const { generateEmbedding } = await import("@/lib/inference/embedding");
 
       // Validate ringScope per the closed taxonomy registry. Unknown values
       // fail fast instead of silently degrading to universal — silent skip
@@ -10950,15 +10955,24 @@ export async function executeTool(
       }
 
       // Build DecisionPrinciple[] from the merged set. Postgres rows carry
-      // the full dimensionVector; Qdrant hits only carry dimension keys, so
-      // their math contribution falls back to semantic (alignment 0 here
-      // since we don't fetch direction embeddings) — they still appear in
-      // the ledger so the caller sees what was in scope.
-      type DecisionPrinciple = Parameters<typeof decide>[1][number];
-      const principleList: DecisionPrinciple[] = [];
-
-      for (const row of commandments) {
-        principleList.push({
+      // the full dimensionVector for structured alignment; Qdrant hits only
+      // carry dimension keys (no signed vector), so they fall back to
+      // semantic alignment. For the semantic path to produce non-zero
+      // signal, we must embed each candidate's direction text and let
+      // decide()'s cosine math do the rest (BI-3C1A6451 — the dead-code
+      // defect tracked at apps/web/lib/wiki/principle-decide.ts:117).
+      // PG rows carry direction at row.principleDirection; Qdrant hits
+      // carry it at hit.contentPreview.
+      type CandidateRow = {
+        id: string;
+        name: string;
+        tier: string;
+        weight: number;
+        dimensionVector: Record<string, number>;
+        directionText: string;
+      };
+      const candidateRows: CandidateRow[] = [
+        ...commandments.map((row): CandidateRow => ({
           id: String(row["id"] ?? ""),
           name: String(row["title"] ?? row["slug"] ?? "principle"),
           tier: String(row["principleTier"] ?? "commandment"),
@@ -10969,10 +10983,9 @@ export async function executeTool(
           dimensionVector:
             (row["principleDimensionVector"] as Record<string, number> | null) ??
             {},
-        });
-      }
-      for (const hit of [...core, ...contextual]) {
-        principleList.push({
+          directionText: String(row["principleDirection"] ?? ""),
+        })),
+        ...[...core, ...contextual].map((hit): CandidateRow => ({
           id: String(hit["pageId"] ?? ""),
           name: String(hit["title"] ?? hit["slug"] ?? "principle"),
           tier: String(hit["principleTier"] ?? "core"),
@@ -10980,23 +10993,70 @@ export async function executeTool(
             String(hit["principleTier"] ?? "core"),
             undefined,
           ),
-          dimensionVector: {}, // Qdrant payload omits the signed vector — semantic fallback
-        });
-      }
+          dimensionVector: {}, // Qdrant payload omits the signed vector
+          directionText: String(hit["contentPreview"] ?? ""),
+        })),
+      ];
+
+      // For any candidate that will fall back to semantic alignment
+      // (empty dimensionVector), embed its direction text server-side.
+      // Parallelized to amortize inference round-trips. Skipped for
+      // structured-alignment rows since their embedding wouldn't be used.
+      const principleEmbeddings = await Promise.all(
+        candidateRows.map(async (row): Promise<number[] | undefined> => {
+          if (Object.keys(row.dimensionVector).length > 0) return undefined;
+          if (!row.directionText) return undefined;
+          const e = await generateEmbedding(row.directionText);
+          return e ?? undefined;
+        }),
+      );
+
+      type DecisionPrinciple = Parameters<typeof decide>[1][number];
+      const principleList: DecisionPrinciple[] = candidateRows.map(
+        (row, i): DecisionPrinciple => ({
+          id: row.id,
+          name: row.name,
+          tier: row.tier,
+          weight: row.weight,
+          dimensionVector: row.dimensionVector,
+          directionEmbedding: principleEmbeddings[i],
+        }),
+      );
 
       const cappedPrinciples = principleList.slice(0, maxPrinciples);
 
+      // Mirror treatment for options: when the caller passes empty features
+      // and no explicit embedding, embed the description so the semantic
+      // path can actually fire. Caller-supplied embeddings (the rare
+      // sophisticated path) win. Per BI-3C1A6451 acceptance criterion.
       type DecisionOption = Parameters<typeof decide>[0][number];
-      const decisionOptions: DecisionOption[] = optionsParam
-        .filter((o): o is Record<string, unknown> => typeof o === "object" && o !== null)
-        .map((o) => ({
-          id: String(o["id"] ?? ""),
-          description: String(o["description"] ?? ""),
-          features:
-            typeof o["features"] === "object" && o["features"] !== null
-              ? (o["features"] as Record<string, number>)
-              : {},
-        }));
+      const decisionOptions: DecisionOption[] = await Promise.all(
+        optionsParam
+          .filter(
+            (o): o is Record<string, unknown> =>
+              typeof o === "object" && o !== null,
+          )
+          .map(async (o): Promise<DecisionOption> => {
+            const features =
+              typeof o["features"] === "object" && o["features"] !== null
+                ? (o["features"] as Record<string, number>)
+                : {};
+            const description = String(o["description"] ?? "");
+            let embedding: number[] | undefined;
+            if (Array.isArray(o["embedding"])) {
+              embedding = (o["embedding"] as unknown[]).map((n) => Number(n));
+            } else if (Object.keys(features).length === 0 && description) {
+              const e = await generateEmbedding(description);
+              if (e) embedding = e;
+            }
+            return {
+              id: String(o["id"] ?? ""),
+              description,
+              features,
+              embedding,
+            };
+          }),
+      );
 
       const result = decide(decisionOptions, cappedPrinciples, {
         tieMargin,
