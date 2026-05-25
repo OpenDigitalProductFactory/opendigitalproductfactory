@@ -5,8 +5,8 @@
 // BI: BI-2E6CC391
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DecompositionGateBanner } from "./DecompositionGateBanner";
 import type { SizeAssessmentSnapshot } from "@/lib/explore/feature-build-types";
@@ -209,5 +209,125 @@ describe("DecompositionGateBanner — defensive presentation", () => {
     render(<DecompositionGateBanner assessment={assessment} />);
     // Banner still renders; rationale block is suppressed when empty.
     expect(screen.getByTestId("decomposition-gate-banner")).toBeInTheDocument();
+  });
+});
+
+describe("DecompositionGateBanner — Phase 4b CTAs", () => {
+  const requiredAssessment = makeAssessment({
+    decision: "decompose-required",
+    trips: [{ dimension: "models", level: "required", threshold: 5, observed: 5 }],
+  });
+  const recommendedAssessment = makeAssessment({
+    decision: "decompose-recommended",
+    trips: [{ dimension: "models", level: "recommend", threshold: 3, observed: 3 }],
+  });
+
+  it("renders 'Propose splits' button when onProposeSplits is wired (required tier)", () => {
+    const onProposeSplits = vi.fn();
+    render(
+      <DecompositionGateBanner
+        assessment={requiredAssessment}
+        onProposeSplits={onProposeSplits}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /propose splits/i }));
+    expect(onProposeSplits).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders 'Propose splits' on recommended tier too (no override path though)", () => {
+    const onProposeSplits = vi.fn();
+    render(
+      <DecompositionGateBanner
+        assessment={recommendedAssessment}
+        onProposeSplits={onProposeSplits}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /propose splits/i })).toBeInTheDocument();
+  });
+
+  it("renders 'Keep as one build' override path only on required tier", () => {
+    const onRecordOverride = vi.fn();
+    render(
+      <DecompositionGateBanner
+        assessment={recommendedAssessment}
+        onRecordOverride={onRecordOverride}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /keep as one build/i })).not.toBeInTheDocument();
+  });
+
+  it("reveals the rationale input on 'Keep as one build' click and submits on click", () => {
+    const onRecordOverride = vi.fn();
+    render(
+      <DecompositionGateBanner
+        assessment={requiredAssessment}
+        onProposeSplits={vi.fn()}
+        onRecordOverride={onRecordOverride}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /keep as one build/i }));
+    const input = screen.getByLabelText(/override rationale/i);
+    expect(input).toBeInTheDocument();
+    fireEvent.change(input, { target: { value: "Single tech ships this end-to-end." } });
+    fireEvent.click(screen.getByRole("button", { name: /record override/i }));
+    expect(onRecordOverride).toHaveBeenCalledWith("Single tech ships this end-to-end.");
+  });
+
+  it("disables 'Record override' submit when input is empty/whitespace", () => {
+    const onRecordOverride = vi.fn();
+    render(
+      <DecompositionGateBanner
+        assessment={requiredAssessment}
+        onProposeSplits={vi.fn()}
+        onRecordOverride={onRecordOverride}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /keep as one build/i }));
+    const submit = screen.getByRole("button", { name: /record override/i });
+    expect(submit).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/override rationale/i), {
+      target: { value: "   " },
+    });
+    expect(submit).toBeDisabled();
+  });
+
+  it("renders 'Override recorded' chip instead of action row when override exists", () => {
+    render(
+      <DecompositionGateBanner
+        assessment={requiredAssessment}
+        onProposeSplits={vi.fn()}
+        onRecordOverride={vi.fn()}
+        existingOverride={{
+          rationale: "Solo dev; coordination cost > benefit.",
+          recordedAt: "2026-05-24T20:00:00.000Z",
+          recordedByUserId: "user-1",
+          recordedByAgentId: null,
+        }}
+      />,
+    );
+    expect(screen.getByText(/Override recorded/i)).toBeInTheDocument();
+    expect(screen.getByText(/Solo dev; coordination cost/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /propose splits/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /keep as one build/i })).not.toBeInTheDocument();
+  });
+
+  it("disables both CTAs when actionsDisabled=true", () => {
+    render(
+      <DecompositionGateBanner
+        assessment={requiredAssessment}
+        onProposeSplits={vi.fn()}
+        onRecordOverride={vi.fn()}
+        actionsDisabled={true}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /propose splits/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /keep as one build/i })).toBeDisabled();
+  });
+
+  it("falls back to the Phase 3 'next phase' notice when no CTAs are wired", () => {
+    render(<DecompositionGateBanner assessment={requiredAssessment} />);
+    expect(
+      screen.getByText(/decomposition assistant.*ships in the next phase/i),
+    ).toBeInTheDocument();
   });
 });
