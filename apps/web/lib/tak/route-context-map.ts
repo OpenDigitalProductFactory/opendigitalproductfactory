@@ -732,6 +732,57 @@ When generating or reviewing UI code, enforce these rules:
     ],
   },
 
+  "/admin/issue-reports": {
+    routePrefix: "/admin/issue-reports",
+    domain: "Admin Issue Triage",
+    sensitivity: "restricted",
+    domainContext:
+      "This page is the restricted administration queue for PlatformIssueReport records. The admin coworker should separate actionable process defects from automated warmup noise, inspect logs and read-only database evidence, create or update backlog work when a report needs code changes, and suppress or locally triage non-actionable operational noise. Do not redirect issue-report triage to Build Studio; use admin and backlog tools from this route.",
+    domainTools: [
+      "admin_view_logs",
+      "admin_query_db",
+      "admin_read_file",
+      "create_backlog_item",
+      "update_backlog_item",
+      "report_quality_issue",
+      "wiki_query",
+      "search_knowledge",
+      "search_knowledge_base",
+    ],
+    docsPath: "/docs/admin/index",
+    skills: [
+      {
+        label: "Triage issue reports",
+        description: "Group reports into actionable defects, warmup noise, and resolved items",
+        capability: "view_admin",
+        taskType: "analysis",
+        prompt:
+          "Triage the issue reports on this page. Use the visible queue first, then use admin_query_db for PlatformIssueReport and ToolExecution evidence and admin_view_logs when logs are relevant. Do not use Build Studio. Return the actionable cause, recommended status, and whether a backlog item or PR is needed.",
+      },
+      {
+        label: "Investigate open report",
+        description: "Inspect backend evidence for the selected or top open report",
+        capability: "view_admin",
+        taskType: "analysis",
+        prompt:
+          "Investigate the top open issue report. Use admin_query_db, admin_view_logs, and admin_read_file as needed. Explain the backend cause, whether it is a product defect or operational noise, and the next admin action. Do not redirect this to Build Studio.",
+      },
+      {
+        label: "Suppress warmup noise",
+        description: "Identify warmup probes that should not dominate issue triage",
+        capability: "view_admin",
+        prompt:
+          "Find warmup and health-check reports that are safe to suppress. Use backend evidence, avoid hiding genuine failures, and summarize which reports should move to suppressed status.",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
   "/admin": {
     routePrefix: "/admin",
     domain: "Administration",

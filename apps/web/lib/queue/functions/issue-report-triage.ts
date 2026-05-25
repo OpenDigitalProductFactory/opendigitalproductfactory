@@ -89,7 +89,7 @@ export const issueReportTriage = inngest.createFunction(
         acknowledgeReport: async (id) => {
           await prisma.platformIssueReport.update({
             where: { id },
-            data: { status: "acknowledged" },
+            data: { status: ISSUE_REPORT_STATUS.TRIAGED_LOCAL },
           });
         },
 

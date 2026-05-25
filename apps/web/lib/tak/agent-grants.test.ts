@@ -482,4 +482,13 @@ describe("agent registry grant lookup", () => {
     expect(isToolAllowedByGrants("trace_code_surface", bySlug ?? [])).toBe(true);
     expect(isToolAllowedByGrants("find_related_tests", bySlug ?? [])).toBe(true);
   });
+
+  it("lets the admin assistant use read-only admin and backlog tools from the registry seed", () => {
+    const grants = getAgentToolGrants("admin-assistant");
+
+    expect(grants).toEqual(expect.arrayContaining(["admin_read", "admin_write", "backlog_read", "backlog_write"]));
+    expect(isToolAllowedByGrants("admin_query_db", grants ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("admin_read_file", grants ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("create_backlog_item", grants ?? [])).toBe(true);
+  });
 });

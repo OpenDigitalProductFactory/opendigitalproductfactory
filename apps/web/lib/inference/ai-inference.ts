@@ -20,6 +20,7 @@ import {
   ANTHROPIC_OAUTH_BETA_HEADERS,
 } from "@/lib/ai-provider-internals";
 import type { RoutedExecutionPlan } from "../routing/recipe-types";
+import { resolveDefaultExecutionAdapter } from "../routing/execution-plan";
 import { getExecutionAdapter } from "../routing/execution-adapter-registry";
 import { resolveExecutionAdapter } from "../routing/resolve-execution-adapter";
 import {
@@ -427,10 +428,10 @@ export async function callProvider(
     modelId,
     recipeId: null,
     contractFamily: "unknown",
-    executionAdapter: "chat",
+    executionAdapter: resolveDefaultExecutionAdapter(providerId),
     maxTokens: 4096,
     providerSettings: {},
-    toolPolicy: {},
+    toolPolicy: (tools?.length ?? 0) > 0 ? { toolChoice: "auto" } : {},
     responsePolicy: {},
   };
 
