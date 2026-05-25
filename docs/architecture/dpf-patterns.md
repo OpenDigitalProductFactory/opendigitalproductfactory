@@ -103,7 +103,7 @@ Result is `{ recommendation, confidence, perPrincipleLedger, ... }`. Persist the
 
 **Failure mode it prevents.** Two sessions silently working the same surface, one sweeping the other's staged files into its commit, overlapping PRs, lost work. Empirically documented in memory across multiple incidents in 2026-05 (`feedback_git_commit_only_for_concurrent_sessions`, `feedback_worktree_per_session`, `feedback_pr_overlap_check_before_pushing`, `feedback_continuous_overlap_check`).
 
-**Kernel:** memory feedback `feedback_propose_acknowledge_reassign` (commandment-tier, candidate for kernel promotion). Related kernel pages: [`worktree-per-session`](../founder-kernel/wiki/principles/worktree-per-session.md), [`worktree-base-origin-main`](../founder-kernel/wiki/principles/worktree-base-origin-main.md), [`sweep-main-before-trusting-worktree-specs`](../founder-kernel/wiki/principles/sweep-main-before-trusting-worktree-specs.md), [`mention-uncommitted-changes`](../founder-kernel/wiki/principles/mention-uncommitted-changes.md).
+**Kernel:** [`propose-acknowledge-reassign`](../founder-kernel/wiki/principles/propose-acknowledge-reassign.md) (commandment-tier). Related: [`worktree-per-session`](../founder-kernel/wiki/principles/worktree-per-session.md), [`worktree-base-origin-main`](../founder-kernel/wiki/principles/worktree-base-origin-main.md), [`sweep-main-before-trusting-worktree-specs`](../founder-kernel/wiki/principles/sweep-main-before-trusting-worktree-specs.md), [`mention-uncommitted-changes`](../founder-kernel/wiki/principles/mention-uncommitted-changes.md).
 
 ---
 
@@ -117,7 +117,7 @@ Result is `{ recommendation, confidence, perPrincipleLedger, ... }`. Persist the
 
 **Why this exists.** Asymmetric trust by provenance compounds: once "Mark's stuff skips review," the platform stops detecting Mark's mistakes; once "the coworker's stuff is suspect by default," the coworker can never accumulate trust. Both failure modes erode the autonomy ladder the platform is built around.
 
-**Kernel:** memory feedback `feedback_governance_approves_evidence_not_provenance` (operator-ratified 2026-05-18, candidate for kernel promotion). Related: [`human-in-the-loop-at-phase-boundaries`](../founder-kernel/wiki/principles/human-in-the-loop-at-phase-boundaries.md), [`evidence-before-diagnosis`](../founder-kernel/wiki/principles/evidence-before-diagnosis.md), [`structural-verification-is-not-functional`](../founder-kernel/wiki/principles/structural-verification-is-not-functional.md).
+**Kernel:** [`governance-approves-evidence-not-provenance`](../founder-kernel/wiki/principles/governance-approves-evidence-not-provenance.md) (core-tier). Related: [`human-in-the-loop-at-phase-boundaries`](../founder-kernel/wiki/principles/human-in-the-loop-at-phase-boundaries.md), [`evidence-before-diagnosis`](../founder-kernel/wiki/principles/evidence-before-diagnosis.md), [`structural-verification-is-not-functional`](../founder-kernel/wiki/principles/structural-verification-is-not-functional.md).
 
 ---
 
