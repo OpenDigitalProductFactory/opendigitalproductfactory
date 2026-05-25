@@ -559,6 +559,7 @@ model Portfolio {
   epicPortfolios         EpicPortfolio[]
   inventoryEntities      InventoryEntity[]
   portfolioQualityIssues PortfolioQualityIssue[]
+  capabilityMaturityAssessments CapabilityMaturityAssessment[]
   knowledgeArticles      KnowledgeArticlePortfolio[]
   valueStreamTeams       ValueStreamTeam[]
   workQueues             WorkQueue[]
@@ -588,6 +589,7 @@ model DigitalProduct {
   featureBuilds                FeatureBuild[]
   inventoryEntities            InventoryEntity[]
   portfolioQualityIssues       PortfolioQualityIssue[]
+  capabilityMaturityAssessments CapabilityMaturityAssessment[]
   versions                     ProductVersion[]
   serviceOfferings             ServiceOffering[]
   quoteLineItems               QuoteLineItem[]
@@ -913,6 +915,7 @@ model TaxonomyNode {
   fingerprintRules         DiscoveryFingerprintRule[]
   inventoryEntities        InventoryEntity[]
   portfolioQualityIssues   PortfolioQualityIssue[]
+  capabilityMaturityAssessments CapabilityMaturityAssessment[]
   triageSelectionDecisions DiscoveryTriageDecision[]     @relation("DiscoveryTriageDecisionSelectedTaxonomy")
   taxonomyProposalParents  TaxonomyProposal[]            @relation("TaxonomyProposalParent")
   createdTaxonomyProposals TaxonomyProposal[]            @relation("TaxonomyProposalCreatedNode")
@@ -5395,11 +5398,73 @@ model EaElement {
   toRelationships         EaRelationship[]              @relation("ToElement")
   viewElements            EaViewElement[]
   businessCapabilityLinks BusinessCapabilityTraceLink[] @relation("BusinessCapabilityEaElementLinks")
+  capabilityMaturityAssessments CapabilityMaturityAssessment[]
 
   @@index([portfolioId])
   @@index([taxonomyNodeId])
   @@index([digitalProductId])
   @@index([elementTypeId])
+}
+
+model CapabilityMaturityAssessment {
+  id                            String                         @id @default(cuid())
+  assessmentId                  String                         @unique
+  name                          String
+  capabilityCategory            String
+  riskTier                      String
+  maturityScore                 Int
+  confidenceGrade               String                         @default("claimed")
+  strategicOwnership            String
+  vendorReplacementConfidence   String                         @default("low")
+  installScope                  String                         @default("canonical")
+  archetypeScope                String?
+  productizationStatus          String                         @default("not_eligible")
+  productizationStatusChangedAt DateTime?
+  parityChecklistEvidence       Json                           @default("[]")
+  existingPrimitives            Json                           @default("[]")
+  maturityGaps                  Json                           @default("[]")
+  evidenceSources               Json                           @default("[]")
+  hiveMindSignals               Json                           @default("[]")
+  kernelPrinciples              String[]                       @default([])
+  operationalSurface            String?
+  hasContinuousEvidence         Boolean                        @default(false)
+  evidenceFreshnessAt           DateTime?
+  lastGovernanceReviewAt        DateTime?
+  lastAssessmentAt              DateTime                       @default(now())
+  assessedBy                    String                         @default("seed")
+  portfolioId                   String
+  taxonomyNodeId                String?
+  eaElementId                   String?
+  digitalProductId              String?
+  createdAt                     DateTime                       @default(now())
+  updatedAt                     DateTime                       @updatedAt
+  portfolio                     Portfolio                      @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  taxonomyNode                  TaxonomyNode?                  @relation(fields: [taxonomyNodeId], references: [id], onDelete: SetNull)
+  eaElement                     EaElement?                     @relation(fields: [eaElementId], references: [id], onDelete: SetNull)
+  digitalProduct                DigitalProduct?                @relation(fields: [digitalProductId], references: [id], onDelete: SetNull)
+  dependencies                  CapabilityMaturityDependency[] @relation("CapabilityMaturityDependencyFrom")
+  dependents                    CapabilityMaturityDependency[] @relation("CapabilityMaturityDependencyTo")
+
+  @@index([portfolioId])
+  @@index([taxonomyNodeId])
+  @@index([eaElementId])
+  @@index([digitalProductId])
+  @@index([capabilityCategory])
+  @@index([riskTier])
+  @@index([installScope])
+  @@index([productizationStatus])
+}
+
+model CapabilityMaturityDependency {
+  id           String                       @id @default(cuid())
+  assessmentId String
+  dependencyId String
+  createdAt    DateTime                     @default(now())
+  assessment   CapabilityMaturityAssessment @relation("CapabilityMaturityDependencyFrom", fields: [assessmentId], references: [id], onDelete: Cascade)
+  dependency   CapabilityMaturityAssessment @relation("CapabilityMaturityDependencyTo", fields: [dependencyId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, dependencyId])
+  @@index([dependencyId])
 }
 
 model BusinessCapability {
