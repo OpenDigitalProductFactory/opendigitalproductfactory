@@ -138,6 +138,31 @@ describe("applyPlatformUpdate", () => {
     }
   });
 
+  it("marks the workspace as a Git safe directory before reading merge state", async () => {
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      updatePending: true,
+      pendingVersion: "v1.2.3",
+    });
+    mockExistsSync.mockReturnValue(true);
+
+    mockExec.mockImplementation((cmd: string, _opts: unknown, cb?: (err: Error | null, value: { stdout: string; stderr: string }) => void) => {
+      if (!cb) return;
+      if (cmd.includes("--diff-filter=U")) {
+        cb(null, { stdout: "", stderr: "" });
+        return;
+      }
+      cb(null, { stdout: "", stderr: "" });
+    });
+
+    const result = await applyPlatformUpdate();
+
+    expect(result.kind).toBe("conflicts");
+    expect(mockExec.mock.calls[0]?.[0]).toBe(
+      "git config --global --add safe.directory '/workspace' >/dev/null 2>&1 || true",
+    );
+    expect(mockExec.mock.calls[1]?.[0]).toBe("git diff --name-only --diff-filter=U");
+  });
+
   it("returns clean-merge after a successful no-conflict merge and clears the pending flag", async () => {
     mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
       updatePending: true,
