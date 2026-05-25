@@ -325,3 +325,161 @@ describe("DecompositionAssistantPanel — header copy", () => {
     expect(header.parentElement?.textContent).toMatch(/decomposition required/);
   });
 });
+
+describe("DecompositionAssistantPanel — edit mode (Phase 4c)", () => {
+  it("moves an AC from one child to another via the move menu", () => {
+    const onApprove = vi.fn();
+    render(
+      <DecompositionAssistantPanel
+        open={true}
+        parentAcceptanceCriteria={acs}
+        candidates={[makeCandidate()]}
+        onApprove={onApprove}
+        onRegenerate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    // Open the move menu for AC index 0 (in child #1) and move to child #2.
+    fireEvent.click(screen.getByTestId("move-ac-0-from-1"));
+    fireEvent.click(screen.getByTestId("move-ac-0-to-2"));
+
+    // Approve and inspect the candidate that was passed.
+    fireEvent.click(screen.getByRole("button", { name: /approve selected/i }));
+    expect(onApprove).toHaveBeenCalledTimes(1);
+    const passedCandidate = onApprove.mock.calls[0]![0];
+    const child1 = passedCandidate.childScopes.find((s: { childOrder: number }) => s.childOrder === 1);
+    const child2 = passedCandidate.childScopes.find((s: { childOrder: number }) => s.childOrder === 2);
+    expect(child1.acceptanceCriteriaIndices).not.toContain(0);
+    expect(child2.acceptanceCriteriaIndices).toContain(0);
+  });
+
+  it("marks the edited candidate with an EDITED badge", () => {
+    render(
+      <DecompositionAssistantPanel
+        open={true}
+        parentAcceptanceCriteria={acs}
+        candidates={[makeCandidate()]}
+        onApprove={vi.fn()}
+        onRegenerate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("edited-badge")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("move-ac-4-from-3"));
+    fireEvent.click(screen.getByTestId("move-ac-4-to-2"));
+    expect(screen.getByTestId("edited-badge")).toBeInTheDocument();
+  });
+
+  it("renames a child title via inline edit (Enter saves)", () => {
+    const onApprove = vi.fn();
+    render(
+      <DecompositionAssistantPanel
+        open={true}
+        parentAcceptanceCriteria={acs}
+        candidates={[makeCandidate()]}
+        onApprove={onApprove}
+        onRegenerate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("child-title-1"));
+    const input = screen.getByTestId("child-title-input-1");
+    fireEvent.change(input, { target: { value: "Look up parts on a truck" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.click(screen.getByRole("button", { name: /approve selected/i }));
+    const passed = onApprove.mock.calls[0]![0];
+    const child1 = passed.childScopes.find((s: { childOrder: number }) => s.childOrder === 1);
+    expect(child1.title).toBe("Look up parts on a truck");
+  });
+
+  it("rename cancels on Escape and restores original title", () => {
+    const onApprove = vi.fn();
+    render(
+      <DecompositionAssistantPanel
+        open={true}
+        parentAcceptanceCriteria={acs}
+        candidates={[makeCandidate()]}
+        onApprove={onApprove}
+        onRegenerate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("child-title-1"));
+    const input = screen.getByTestId("child-title-input-1");
+    fireEvent.change(input, { target: { value: "discarded" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: /approve selected/i }));
+    const passed = onApprove.mock.calls[0]![0];
+    const child1 = passed.childScopes.find((s: { childOrder: number }) => s.childOrder === 1);
+    expect(child1.title).toBe("Truck inventory read"); // unchanged
+  });
+
+  it("disables Approve and shows validation failure when edits break the partition", () => {
+    // Move ALL of child #2's ACs into child #1, leaving #2 with zero ACs.
+    // empty-child-scope failure should surface.
+    render(
+      <DecompositionAssistantPanel
+        open={true}
+        parentAcceptanceCriteria={acs}
+        candidates={[makeCandidate()]}
+        onApprove={vi.fn()}
+        onRegenerate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    // Child #2 originally has ACs [2, 3]. Move both to #1.
+    fireEvent.click(screen.getByTestId("move-ac-2-from-2"));
+    fireEvent.click(screen.getByTestId("move-ac-2-to-1"));
+    fireEvent.click(screen.getByTestId("move-ac-3-from-2"));
+    fireEvent.click(screen.getByTestId("move-ac-3-to-1"));
+
+    expect(screen.getByTestId("validation-failure-list")).toBeInTheDocument();
+    expect(screen.getByText(/empty-child-scope/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /approve selected/i })).toBeDisabled();
+  });
+
+  it("'Reset edits' clears the working copy back to the original", () => {
+    const onApprove = vi.fn();
+    render(
+      <DecompositionAssistantPanel
+        open={true}
+        parentAcceptanceCriteria={acs}
+        candidates={[makeCandidate()]}
+        onApprove={onApprove}
+        onRegenerate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("move-ac-0-from-1"));
+    fireEvent.click(screen.getByTestId("move-ac-0-to-2"));
+    expect(screen.getByTestId("edited-badge")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /reset edits/i }));
+    expect(screen.queryByTestId("edited-badge")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /approve selected/i }));
+    const passed = onApprove.mock.calls[0]![0];
+    const child1 = passed.childScopes.find((s: { childOrder: number }) => s.childOrder === 1);
+    expect(child1.acceptanceCriteriaIndices).toContain(0);
+  });
+
+  it("only the SELECTED candidate is editable; unselected cards have no move buttons", () => {
+    render(
+      <DecompositionAssistantPanel
+        open={true}
+        parentAcceptanceCriteria={acs}
+        candidates={[makeCandidate("a"), makeCandidate("b")]}
+        onApprove={vi.fn()}
+        onRegenerate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    // Candidate "a" is selected by default; the move-ac-0 button should exist
+    // for its scopes. Candidate "b" is unselected; its scopes should not have
+    // a move button.
+    const cardA = screen.getByTestId("candidate-card-a");
+    const cardB = screen.getByTestId("candidate-card-b");
+    expect(within(cardA).queryByTestId("move-ac-0-from-1")).toBeInTheDocument();
+    expect(within(cardB).queryByTestId("move-ac-0-from-1")).not.toBeInTheDocument();
+  });
+});
