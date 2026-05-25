@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Consolidate the four current writers of `PlatformIssueReport` through one server writer, introduce status constants (vocabulary), teach the issue-report triage cron to skip support-flow statuses, and clean theme-token violations in the two touched feedback fallback UI files — all as pure refactor, no new product behavior.
+**Goal:** Consolidate the four current writers of `PlatformIssueReport` through one server writer, introduce status constants (vocabulary), teach the issue-report triage cron to skip support-flow statuses, preserve the existing GitHub Issue bridge compatibility, and clean theme-token violations in the two touched feedback fallback UI files — all as pure refactor, no new product behavior.
 
-**Architecture:** A single `createPlatformIssueReport()` writer in `apps/web/lib/quality/platform-issue-reports.ts` becomes the only path that creates rows in `PlatformIssueReport`. It applies length limits, resolves `portfolioId`/`digitalProductId` defaults, generates the `PIR-XXXXX` `reportId`, and validates `status` against `ISSUE_REPORT_STATUS` constants exported from `apps/web/lib/quality/issue-report-status.ts`. The three call sites (`POST /api/quality/report`, `reportQualityIssue()` server action, `report_quality_issue` MCP tool handler) all become thin adapters over the writer. The crash boundary continues to call `POST /api/quality/report` and inherits the consolidation. The Inngest cron `issue-report-triage` switches its `where: { status: "open" }` filter to use the new `ISSUE_REPORT_STATUS.OPEN` constant, so any future status drift (e.g. `support_triage`) cannot be silently swept into BIs.
+**Architecture:** A single `createPlatformIssueReport()` writer in `apps/web/lib/quality/platform-issue-reports.ts` becomes the only path that creates rows in `PlatformIssueReport`. It applies length limits, resolves `portfolioId`/`digitalProductId` defaults, generates the `PIR-XXXXX` `reportId`, and validates `status` against `ISSUE_REPORT_STATUS` constants exported from `apps/web/lib/quality/issue-report-status.ts`. The three call sites (`POST /api/quality/report`, `reportQualityIssue()` server action, `report_quality_issue` MCP tool handler) all become thin adapters over the writer. The crash boundary continues to call `POST /api/quality/report` and inherits the consolidation. The Inngest cron `issue-report-triage` switches its `where: { status: "open" }` filter to use the new `ISSUE_REPORT_STATUS.OPEN` constant, so any future status drift (e.g. `support_triage`) cannot be silently swept into BIs. Phase 0 does not file upstream, but it must keep `apps/web/lib/integrate/issue-bridge.ts` green because Phase 3 will reuse `escalateToUpstreamIssue({ kind: "issue-report" })` instead of creating a second GitHub Issue path.
 
-**Tech Stack:** TypeScript, Next.js 15 App Router, Prisma 5, Vitest 4.1.5, Inngest, pnpm workspace.
+**Tech Stack:** TypeScript, Next.js 16 App Router, Prisma 7, Vitest 4.1.7, Inngest, pnpm workspace.
 
 **Lane:** This plan is a Phase 0 pure refactor with invariants — the carveout under `feedback_no_manual_prs` for "deps/cleanup/governance/urgent hotfixes." It is a maintenance-class PR opened directly by Claude (not routed through Build Studio). Phase 1+ slices that introduce new product behavior (support-mode coworker, capacity routing, bridge wiring) MUST be filed as BIs and run through Build Studio per `feedback_build_studio_for_all_development`.
 
@@ -14,8 +14,8 @@
 
 ## Spec anchor
 
-- Spec: [`docs/superpowers/specs/2026-05-24-capacity-aware-feedback-escalation-design.md`](../specs/2026-05-24-capacity-aware-feedback-escalation-design.md), §8 Phase 0 (lines 349–368), §6.2 status vocabulary (lines 186–199), §7.2 UI requirements (lines 332–346)
-- PR for spec: [#1110](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1110)
+- Spec: [`docs/superpowers/specs/2026-05-24-capacity-aware-feedback-escalation-design.md`](../specs/2026-05-24-capacity-aware-feedback-escalation-design.md), especially §6.2 status vocabulary, §6.7 existing Git issue capability reuse, §7.2 UI requirements, and §8 Phase 0.
+- Merged PR for spec: [#1110](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1110)
 - Suggested epic: `EP-9FC5D2FD` (Build Studio first-customer experience hardening) — fits because the cleanup directly enables the Dale-on-Build-Studio escalation slices that come next
 
 ## Scope and non-scope
@@ -26,6 +26,7 @@
 - Status constants module (all 9 statuses defined; only `OPEN` actively used in this phase)
 - Three call-site migrations (route handler, server action, MCP tool handler)
 - Cron uses status constant; defensive test that a `support_triage` row is not converted
+- Existing GitHub Issue bridge tests still pass for `kind: "issue-report"` escalation
 - Theme-token cleanup in `FeedbackButton.tsx` and `FeedbackForm.tsx` only
 - Unit tests for the writer covering: ID format, length truncation, defaults, status validation
 - Live UX verification per `structural-verification-is-not-functional` kernel
@@ -37,6 +38,7 @@
 - Coworker support mode behavior (Phase 1)
 - `assessFeedbackRouting()` (Phase 2)
 - `fileUpstreamFeedback()` tool / bridge wiring (Phase 3)
+- Any new direct GitHub Issue writer or new issue-tracker abstraction; Phase 3 must extend the existing issue bridge first
 - Implicit hard-failure triggers beyond what already exists (Phase 4)
 - Reverse channel via `Notification` (Phase 5)
 - Voice STT (Phase 6)
@@ -52,6 +54,8 @@ git log --oneline origin/main..HEAD        # expect 0 commits (or only this plan
 pnpm --filter web typecheck                # expect green baseline
 pnpm --filter web exec vitest run lib/operate/issue-report-triage.test.ts
                                            # expect existing cron test to pass — this is the baseline
+pnpm --filter web exec vitest run lib/integrate/issue-bridge.test.ts
+                                           # expect existing GitHub Issue bridge tests to pass — this protects Phase 3 reuse
 ```
 
 If typecheck or the baseline triage test fails, stop and reconcile before touching production code.
@@ -1100,7 +1104,65 @@ git commit -s -m "refactor(cron/issue-report-triage): use ISSUE_REPORT_STATUS.OP
 
 ---
 
-## Task 8: Theme tokens — `FeedbackButton.tsx`
+## Task 8: Existing GitHub Issue Bridge Compatibility
+
+**Files:**
+- Read/verify: `apps/web/lib/integrate/issue-bridge.ts`
+- Read/verify or modify tests only if needed: `apps/web/lib/integrate/issue-bridge.test.ts`
+
+Purpose: Phase 0 changes issue-report creation and status vocabulary, but it must not damage the existing path that turns a `PlatformIssueReport` into a GitHub Issue. This is important because Phase 3 must reuse `escalateToUpstreamIssue({ kind: "issue-report" })` instead of adding a feedback-specific GitHub client.
+
+- [ ] **Step 1: Run the existing bridge tests before any bridge-adjacent edits**
+
+```bash
+pnpm --filter web exec vitest run lib/integrate/issue-bridge.test.ts
+```
+
+Expect: existing tests pass, including the `issue-report` escalation case with error-stack context.
+
+- [ ] **Step 2: Confirm the writer contract still supplies bridge-readable fields**
+
+Check the shared writer and tests against the fields selected by `loadSource(kind: "issue-report")` in `issue-bridge.ts`:
+
+- `reportId`
+- `title`
+- `description`
+- `severity`
+- `routeContext`
+- `errorStack`
+- `userAgent`
+- `upstreamIssueNumber`
+
+If Phase 0 changes any of these field names or defaulting behavior, update the writer/tests so the bridge keeps working. Do not add a new GitHub API call path.
+
+- [ ] **Step 3: Add only the minimum compatibility test if a gap is found**
+
+The existing test suite already covers issue-report escalation. Add a new test only if the shared writer introduces a field-shape change not covered today, such as `PIR-*` report IDs produced by the new writer or omitted optional fields.
+
+- [ ] **Step 4: Re-run bridge and writer tests**
+
+```bash
+pnpm --filter web exec vitest run lib/integrate/issue-bridge.test.ts
+pnpm --filter web exec vitest run lib/quality/platform-issue-reports.test.ts
+pnpm --filter web typecheck
+```
+
+Acceptance:
+
+- `issue-bridge.test.ts` stays green.
+- No production bridge behavior changes unless required to preserve compatibility.
+- No new direct GitHub Issue writer, REST client, or issue-tracker abstraction is introduced in Phase 0.
+
+Commit only if files changed:
+
+```bash
+git add apps/web/lib/integrate/issue-bridge.test.ts apps/web/lib/integrate/issue-bridge.ts
+git commit -s -m "test(integrate): preserve issue-report bridge compatibility (Phase 0)"
+```
+
+---
+
+## Task 9: Theme tokens — `FeedbackButton.tsx`
 
 **Files:**
 - Modify: `apps/web/components/feedback/FeedbackButton.tsx`
@@ -1169,13 +1231,13 @@ export function FeedbackButton({ userId }: Props) {
 }
 ```
 
-- [ ] **Step 2: Grep the file for any remaining hardcoded color tokens**
+- [ ] **Step 2: Scan the file for any remaining hardcoded color tokens**
 
-```bash
-pnpm --filter web exec grep -nE "rgba\(|#[0-9a-fA-F]{3,6}|var\(--dpf" apps/web/components/feedback/FeedbackButton.tsx || true
+```powershell
+Select-String -Path "apps/web/components/feedback/FeedbackButton.tsx" -Pattern "rgba\(|#[0-9a-fA-F]{3,6}"
 ```
 
-Expect: zero `rgba(` or `#hex` matches. Any remaining `var(--dpf-*)` references are correct.
+Expect: zero matches.
 
 - [ ] **Step 3: Re-run affected tests**
 
@@ -1195,7 +1257,7 @@ git commit -s -m "style(feedback): FeedbackButton uses DPF theme tokens (Phase 0
 
 ---
 
-## Task 9: Theme tokens — `FeedbackForm.tsx`
+## Task 10: Theme tokens — `FeedbackForm.tsx`
 
 **Files:**
 - Modify: `apps/web/components/feedback/FeedbackForm.tsx`
@@ -1321,8 +1383,8 @@ export function FeedbackForm({
 
 - [ ] **Step 2: Verify no hardcoded colors remain**
 
-```bash
-pnpm --filter web exec grep -nE "rgba\(|#[0-9a-fA-F]{3,6}" apps/web/components/feedback/FeedbackForm.tsx || true
+```powershell
+Select-String -Path "apps/web/components/feedback/FeedbackForm.tsx" -Pattern "rgba\(|#[0-9a-fA-F]{3,6}"
 ```
 
 Expect: zero matches.
@@ -1343,7 +1405,7 @@ git commit -s -m "style(feedback): FeedbackForm uses DPF theme tokens (Phase 0)"
 
 ---
 
-## Task 10: Full test sweep + build
+## Task 11: Full test sweep + build
 
 Per `feedback_run_full_tests_before_push`: vitest must run locally before push, not just typecheck.
 
@@ -1371,19 +1433,19 @@ Expect: build succeeds. Warning counts may rise/fall; per `project_turbopack_nft
 
 ---
 
-## Task 11: Live UX verification (the structural-verification-is-not-functional gate)
+## Task 12: Live UX verification (the structural-verification-is-not-functional gate)
 
 Per kernel commandment: code-green is not done. Drive the three writers on the Live portal and confirm rows are equivalent in shape to before.
 
 - [ ] **Step 1: Start (or confirm) the Live portal at `http://localhost:3000`**
 
 ```bash
-docker ps --format '{{.Names}}' | grep -E "portal|postgres"
+docker ps --format '{{.Names}}'
 ```
 
 Confirm `dpf-postgres-1` and the portal container are listed. If not running, follow the standard portal-up procedure (do not modify infra without explicit approval — see `feedback_docker_explicit_approval`). The agent runs the system; do not ask the user to do this.
 
-If your local Compose project name differs, container names may be `dpf-postgres-2` or similar — `docker ps --format '{{.Names}}' | grep postgres` is authoritative. Use whatever name appears.
+If your local Compose project name differs, container names may be `dpf-postgres-2` or similar. The `docker ps --format '{{.Names}}'` output is authoritative; use whatever postgres container name appears.
 
 - [ ] **Step 2: Snapshot a baseline count**
 
@@ -1469,7 +1531,7 @@ git commit -s -m "evidence: Phase 0 feedback substrate verification (live portal
 
 ---
 
-## Task 12: PR overlap sweep, push, open PR
+## Task 13: PR overlap sweep, push, open PR
 
 Per `feedback_pr_overlap_check_before_pushing`: sweep recent main commits + open PRs touching the feedback or issue-report surface before pushing.
 
@@ -1477,11 +1539,11 @@ Per `feedback_pr_overlap_check_before_pushing`: sweep recent main commits + open
 
 ```bash
 git fetch origin
-git log --oneline HEAD..origin/main -- "apps/web/lib/quality/" "apps/web/lib/actions/quality.ts" "apps/web/lib/queue/functions/issue-report-triage.ts" "apps/web/app/api/quality/" "apps/web/components/feedback/" "apps/web/lib/mcp-tools.ts" || true
-gh pr list --state open --limit 30 --json number,title,headRefName --jq '.[] | "#\(.number) \(.title)"' | grep -iE "feedback|issue-report|quality"
+git log --oneline HEAD..origin/main -- "apps/web/lib/quality/" "apps/web/lib/actions/quality.ts" "apps/web/lib/queue/functions/issue-report-triage.ts" "apps/web/app/api/quality/" "apps/web/components/feedback/" "apps/web/lib/mcp-tools.ts" "apps/web/lib/integrate/issue-bridge.ts" "apps/web/lib/integrate/issue-bridge.test.ts"
+gh pr list --state open --limit 30 --json number,title,headRefName --jq '.[] | "#\(.number) \(.title)"'
 ```
 
-If overlap exists: stop, reconcile with the overlapping author, re-evaluate the plan.
+Scan the PR list for `feedback`, `issue-report`, `quality`, `issue bridge`, or `GitHub Issue` overlap. If overlap exists: stop, reconcile with the overlapping author, re-evaluate the plan.
 
 - [ ] **Step 2: Push**
 
@@ -1498,6 +1560,7 @@ gh pr create --title "Phase 0: feedback substrate cleanup (BI for spec #1110)" -
 - One server-side writer (`createPlatformIssueReport`) replaces four inlined `prisma.platformIssueReport.create` call sites
 - New status vocabulary in `apps/web/lib/quality/issue-report-status.ts` (all 9 statuses defined; only `OPEN` used in this phase)
 - Cron `quality/issue-report-triage` now filters on `ISSUE_REPORT_STATUS.OPEN` so future `support_triage` rows cannot be silently swept into BIs
+- Existing `issue-bridge.ts` compatibility remains green for `kind: "issue-report"` GitHub Issue escalation
 - Theme-token cleanup in `FeedbackButton.tsx` and `FeedbackForm.tsx` only
 
 Pure refactor + invariants — no product behavior change. This is Phase 0 of the spec at [#1110](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1110); subsequent phases are blocked on this landing.
@@ -1507,6 +1570,7 @@ Pure refactor + invariants — no product behavior change. This is Phase 0 of th
 - [x] Existing manual feedback, crash feedback, and coworker `report_quality_issue` still create reports
 - [x] The issue-report triage cron still converts generic `open` reports to BIs
 - [x] A `support_triage` report is not converted by the cron
+- [x] Existing issue-report bridge tests pass; no parallel GitHub Issue writer introduced
 - [x] No touched feedback UI contains hardcoded color tokens
 
 ## Test plan
@@ -1514,6 +1578,7 @@ Pure refactor + invariants — no product behavior change. This is Phase 0 of th
 - [x] `pnpm --filter web exec vitest run` — green
 - [x] `pnpm --filter web typecheck` — green
 - [x] `cd apps/web && pnpm exec next build` — green
+- [x] `pnpm --filter web exec vitest run lib/integrate/issue-bridge.test.ts` — green
 - [x] Live UX verification on `http://localhost:3000` (evidence doc included)
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
@@ -1535,7 +1600,7 @@ EOF
 - No Prisma schema migration. The new `triggerKind`, `coalesceKey`, `escalationPolicy`, etc. fields from spec §6.2 are deferred to Phase 2/3 where they earn their keep. Adding them now would be schema churn without a consumer.
 - No `Notification` table changes. Reverse channel is Phase 5.
 - No coworker behavior change. Support mode entry is Phase 1.
-- No bridge wiring. `escalateToUpstreamIssue` is not yet called from any Phase 0 path.
+- No bridge wiring. `escalateToUpstreamIssue` is not yet called from any Phase 0 path. The existing bridge is preserved and tested because Phase 3 will reuse it.
 - No changes to `IssueReportPanel.tsx` or `TokenExpiryBanner.tsx` color tokens — out of scope per spec §7.2.
 
 These deferrals are intentional and protect the 20% refactor budget from sprawling.

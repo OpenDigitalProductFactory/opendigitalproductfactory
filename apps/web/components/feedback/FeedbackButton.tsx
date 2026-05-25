@@ -13,14 +13,10 @@ export function FeedbackButton({ userId }: Props) {
   const [showForm, setShowForm] = useState(false);
 
   function handleClick() {
-    // Try to open AI co-worker with feedback prompt
     const event = new CustomEvent("open-agent-feedback");
     document.dispatchEvent(event);
 
-    // Fallback: if panel doesn't open (no listener, not hydrated, no provider),
-    // show the simple form after a short delay
     setTimeout(() => {
-      // Check if co-worker panel opened by looking for it in the DOM
       const panel = document.querySelector("[data-agent-panel]");
       if (!panel) {
         setShowForm(true);
@@ -34,46 +30,16 @@ export function FeedbackButton({ userId }: Props) {
         type="button"
         onClick={handleClick}
         title="Send feedback"
-        style={{
-          position: "fixed",
-          left: 16,
-          bottom: 60,
-          padding: "6px 14px",
-          borderRadius: 16,
-          background: "rgba(136, 136, 160, 0.4)",
-          backdropFilter: "blur(4px)",
-          WebkitBackdropFilter: "blur(4px)",
-          border: "1px solid rgba(136, 136, 160, 0.25)",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          gap: 5,
-          boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
-          zIndex: 49,
-          color: "rgba(224, 224, 255, 0.8)",
-          fontSize: 11,
-          fontWeight: 400,
-        }}
+        className="fixed bottom-[60px] left-4 z-[49] flex items-center gap-1.5 rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]/70 px-3.5 py-1.5 text-[11px] font-normal text-[var(--dpf-muted)] shadow-md backdrop-blur-sm transition-colors hover:text-[var(--dpf-text)]"
       >
         Feedback
       </button>
 
       {showForm && (
-        <div style={{
-          position: "fixed",
-          left: 16,
-          bottom: 100,
-          width: 300,
-          background: "rgba(26, 26, 46, 0.9)",
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-          border: "1px solid rgba(42, 42, 64, 0.6)",
-          borderRadius: 12,
-          boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
-          zIndex: 50,
-          overflow: "hidden",
-        }}>
-          <div style={{ padding: "10px 12px 0", fontSize: 12, fontWeight: 600, color: "var(--dpf-text)" }}>
+        <div
+          className="fixed bottom-[100px] left-4 z-50 w-[300px] overflow-hidden rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] shadow-xl backdrop-blur"
+        >
+          <div className="px-3 pt-2.5 text-xs font-semibold text-[var(--dpf-text)]">
             Send Feedback
           </div>
           <FeedbackForm
