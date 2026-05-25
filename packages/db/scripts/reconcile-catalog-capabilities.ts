@@ -13,7 +13,7 @@
  */
 import { createHash } from "crypto";
 import { existsSync } from "fs";
-import { dirname, resolve } from "path";
+import { dirname, posix, resolve as nativeResolve, win32 } from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 import { prisma } from "../src/client";
 import type { KnownModel } from "../../../apps/web/lib/routing/known-provider-models";
@@ -52,13 +52,27 @@ export type ProfileUpdateShape = {
   metadataConfidence: string;
 };
 
+function isWindowsAbsolutePath(value: string): boolean {
+  return /^[a-zA-Z]:[\\/]/.test(value) || /^\\\\/.test(value);
+}
+
+function resolveForPathStyle(basePath: string, ...segments: string[]): string {
+  if (isWindowsAbsolutePath(basePath)) {
+    return win32.resolve(basePath, ...segments);
+  }
+  if (basePath.startsWith("/")) {
+    return posix.resolve(basePath, ...segments);
+  }
+  return nativeResolve(basePath, ...segments);
+}
+
 export function resolveKnownProviderModelsPath(
   options: CatalogPathResolutionOptions = {},
 ): string {
   const scriptDir = options.scriptDir ?? dirname(fileURLToPath(import.meta.url));
   const exists = options.exists ?? existsSync;
-  const repoCatalog = resolve(scriptDir, "../../../apps/web/lib/routing/known-provider-models.ts");
-  const packagedCatalog = resolve(
+  const repoCatalog = resolveForPathStyle(scriptDir, "../../../apps/web/lib/routing/known-provider-models.ts");
+  const packagedCatalog = resolveForPathStyle(
     options.packagedWebSourceRoot ?? "/app/apps/web-src",
     "lib/routing/known-provider-models.ts",
   );
