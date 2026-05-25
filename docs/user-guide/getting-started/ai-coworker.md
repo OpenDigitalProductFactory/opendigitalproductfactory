@@ -2,15 +2,22 @@
 title: "AI Coworker"
 area: getting-started
 order: 3
-lastUpdated: 2026-03-21
-updatedBy: Claude (COO)
+lastUpdated: 2026-05-24
+updatedBy: Codex
 ---
+
+## The Short Version
+
+DPF coworkers are purposed helpers, not a generic chatbot. The coworker on a page understands the page, the selected business archetype, the user's role, and the tools that coworker is allowed to propose.
+
+For the broader product framing, see [Market Archetypes And Coworkers](../market-archetypes.md).
 
 ## How It Works
 
 The AI coworker is available on every page via the floating button in the bottom-right corner. It understands:
 
 - **What page you're on** — it knows the domain context (compliance, HR, operations, etc.)
+- **What business archetype is active** — customer-facing and internal language should follow the selected archetype where that surface has been configured
 - **What data is visible** — it can read the current page's content
 - **What actions are available** — it has tools specific to the current area
 
@@ -31,6 +38,12 @@ Four skills appear on every page:
 - **Add a skill** — Extend the page with a new quick action
 - **Evaluate this page** — Check the page for usability and accessibility issues
 
+## Voice
+
+Where enabled, the microphone path sends dictated text into the same coworker message flow as typing. Voice does not bypass permissions or approvals.
+
+Narrated output is separate. Text-to-speech can read decision rationales or persona-profile output when a voice profile is configured, but text remains the primary governed answer. A real-person voice requires explicit consent before training.
+
 ## Authority & Approvals
 
 The coworker operates within a two-layer authorization model:
@@ -50,3 +63,4 @@ When you need to add an external tool (MCP server, npm package, API), the cowork
 - The coworker can create backlog items, register products, assign roles, and more — it's not just a chatbot
 - If the coworker proposes an action (like creating a record), you'll see an approval prompt before anything changes
 - Each conversation is tied to the page context. If you switch pages, the coworker knows the new context
+- Ask in the words of your business. "Which trucks need restock?" or "Which appointments are missing forms?" is better than guessing the platform's internal module name.
