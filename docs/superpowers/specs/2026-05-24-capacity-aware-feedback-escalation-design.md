@@ -2,14 +2,14 @@
 
 | Field | Value |
 | ----- | ----- |
-| Status | Draft - architect revision applied 2026-05-24 |
+| Status | Draft - chief architect revision applied 2026-05-25 |
 | Date | 2026-05-24 |
-| Backlog item | To be filed after sign-off. Live MCP check on 2026-05-24 found no exact existing item for this design; closest active context is `EP-9FC5D2FD` (Build Studio first-customer experience hardening), `EP-REDUCTION-GEAR-ARCH` (cross-ring substrate), and the open `BI-PIR-*` issue-report stream. |
+| Backlog item | To be filed after sign-off. Live MCP check on 2026-05-25 found no exact existing item/spec for this design; closest active context remains `EP-9FC5D2FD` (Build Studio first-customer experience hardening), `EP-REDUCTION-GEAR-ARCH` (cross-ring substrate), and the open `BI-PIR-*` issue-report stream. |
 | Epic recommendation | Start as a focused BI under `EP-9FC5D2FD` if the first slice is Dale/Build Studio support escalation. Create `EP-FEEDBACK-CAPACITY-ROUTING` only if the scope expands into a platform-wide issue-report substrate beyond the Dale/Build Studio path. |
-| Related substrate | [`apps/web/components/feedback/`](../../../apps/web/components/feedback); [`apps/web/components/agent/AgentCoworkerShell.tsx`](../../../apps/web/components/agent/AgentCoworkerShell.tsx); [`apps/web/app/api/quality/report/route.ts`](../../../apps/web/app/api/quality/report/route.ts); [`apps/web/lib/actions/quality.ts`](../../../apps/web/lib/actions/quality.ts); [`apps/web/lib/operate/issue-report-triage.ts`](../../../apps/web/lib/operate/issue-report-triage.ts); [`apps/web/lib/queue/functions/issue-report-triage.ts`](../../../apps/web/lib/queue/functions/issue-report-triage.ts); [`apps/web/lib/integrate/issue-bridge.ts`](../../../apps/web/lib/integrate/issue-bridge.ts); [`apps/web/lib/integrate/identity-privacy.ts`](../../../apps/web/lib/integrate/identity-privacy.ts); `PlatformIssueReport`; `Notification`; `PlatformNotification`; `PlatformDevConfig.contributionMode` |
+| Related substrate | [`apps/web/components/feedback/`](../../../apps/web/components/feedback); [`apps/web/components/agent/AgentCoworkerShell.tsx`](../../../apps/web/components/agent/AgentCoworkerShell.tsx); [`apps/web/app/api/quality/report/route.ts`](../../../apps/web/app/api/quality/report/route.ts); [`apps/web/lib/actions/quality.ts`](../../../apps/web/lib/actions/quality.ts); [`apps/web/lib/operate/issue-report-triage.ts`](../../../apps/web/lib/operate/issue-report-triage.ts); [`apps/web/lib/queue/functions/issue-report-triage.ts`](../../../apps/web/lib/queue/functions/issue-report-triage.ts); [`apps/web/lib/integrate/issue-bridge.ts`](../../../apps/web/lib/integrate/issue-bridge.ts); [`apps/web/lib/integrate/issue-bridge.test.ts`](../../../apps/web/lib/integrate/issue-bridge.test.ts); [`apps/web/lib/integrate/identity-privacy.ts`](../../../apps/web/lib/integrate/identity-privacy.ts); `PlatformIssueReport`; `Notification`; `PlatformNotification`; `PlatformDevConfig.contributionMode` |
 | Related specs | [Quality feedback (2026-03-14)](2026-03-14-quality-feedback-design.md); [Platform feedback loop (2026-03-16)](2026-03-16-platform-feedback-loop-design.md); [Pseudonymous identity and backlog issue bridge (2026-04-18)](2026-04-18-pseudonymous-identity-and-backlog-issue-bridge-design.md); [AI capacity continuity (2026-05-12)](2026-05-12-ai-capacity-continuity-design.md); [Reduction gear architecture (2026-05-24)](2026-05-24-reduction-gear-architecture-design.md); [Vertical workspace home (2026-05-24)](2026-05-24-vertical-workspace-home-design.md) |
-| Scope | The operator Feedback path from a non-technical user such as Dale through coworker support triage, local resolution, local BI creation, or upstream GitHub Issue escalation. |
-| Out of scope | Feature implementation in this thread; voice STT until Phase 6; replacing the general backlog system; making GitHub Issues the canonical store for all local issue reports; GearInterface schema design beyond an optional future observation emission. |
+| Scope | The operator Feedback path from a non-technical user such as Dale through coworker support triage, local resolution, local BI creation, or upstream GitHub Issue escalation through the existing issue bridge. |
+| Out of scope | Feature implementation in this thread; voice STT until Phase 6; replacing the general backlog system; making GitHub Issues the canonical store for all local issue reports; creating a parallel GitHub Issue writer or issue-tracker abstraction before the existing bridge is exhausted; GearInterface schema design beyond an optional future observation emission. |
 
 ---
 
@@ -17,12 +17,13 @@
 
 The original plan has the right product instinct: Feedback must stop being a local dead end. Dale should not have to know whether a failure belongs in a local BI, Build Studio, Admin issue reports, GitHub Issues, or a maintainer's head. The platform should do that routing.
 
-The plan needed four architectural corrections before implementation:
+The plan needed five architectural corrections before implementation:
 
 1. **The current issue-report substrate is fragmented.** `POST /api/quality/report`, `reportQualityIssue()`, the `report_quality_issue` MCP tool, crash-boundary writes, and coworker-runtime writes all create `PlatformIssueReport` rows with different context fidelity. Phase 0 must consolidate that before adding a new escalation layer.
 2. **The current triage cron will race the new flow.** `quality/issue-report-triage` selects every `PlatformIssueReport(status="open")`, creates a local BI, and marks the report `acknowledged`. Support-mode reports need a distinct status/source path so the cron does not convert upstream-worthy feedback into ordinary local backlog before capacity assessment runs.
 3. **The bridge policy is not what the draft assumed.** `escalateToUpstreamIssue()` supports `kind: "issue-report"`, but it explicitly skips `fork_only`. If the product wants an exceptional "send this one critical report upstream" path for fork-only installs, that is a deliberate contribution-policy extension with audit state, not a wrapper around the existing function.
 4. **The reverse channel should use the right notification model.** `PlatformNotification` is global/admin-style and has no `userId` or `deepLink`; Dale-facing resolution updates belong in `Notification`. `PlatformNotification` can still carry admin/global feedback health.
+5. **The upstream issue path already exists.** `issue-bridge.ts` and its tests are the GitHub Issues capability for backlog, epic, and issue-report escalation. This design must extend that path for feedback policy, labels, privacy gates, and idempotency instead of adding a feedback-specific GitHub API writer.
 
 This design therefore starts with cleanup, then adds capacity routing.
 
@@ -34,7 +35,7 @@ Today, a non-technical operator has one visible instinct when something does not
 - crash boundaries auto-write a `PlatformIssueReport`;
 - coworker runtime stalls can write a `PlatformIssueReport`;
 - the issue-report triage cron turns open reports into local BIs;
-- backlog and epic rows can be escalated upstream through `issue-bridge.ts`;
+- backlog, epic, and issue-report rows can be escalated upstream through `issue-bridge.ts`;
 - the Feedback click opens the coworker shell, but does not carry a first-class support mode or capacity decision.
 
 That is close, but not coherent. The missing product contract is:
@@ -71,7 +72,7 @@ The function proposed below should be named around the routing question, not the
 | Manual issue creation | `POST /api/quality/report` writes `PlatformIssueReport` without auth, thread, task, active build lookup, or route-to-portfolio resolution. `reportQualityIssue()` does route-to-portfolio and auth-backed user resolution. The MCP `report_quality_issue` tool writes a smaller row with `source: "ai_assisted"`. | Phase 0 should create one server-side issue-report writer used by route handler, server action, and MCP tool. |
 | Crash boundary | `apps/web/app/(shell)/error.tsx` auto-posts a critical `runtime_error` report and lets the user add context. | Hard-failure capture already exists; Phase 4 should dispatch the support/escalation event from this path after the local report exists. |
 | Issue-report triage | `quality/issue-report-triage` runs every 15 minutes, converts all `status: "open"` reports into BIs, marks them `acknowledged`, and separately files spike BIs. | New support-mode reports cannot remain plain `open` while awaiting capacity assessment. |
-| Issue bridge | `issue-bridge.ts` supports `EscalationKind = "backlog" | "epic" | "issue-report"`, builds redacted GitHub Issues, and records `upstreamIssueNumber`, `upstreamIssueUrl`, `upstreamSyncedAt`. It skips `fork_only`. | Reuse the bridge, but extend its policy contract explicitly for exceptional fork-only feedback if approved. |
+| Issue bridge / Git issue capability | `issue-bridge.ts` supports `EscalationKind = "backlog" | "epic" | "issue-report"`, builds redacted GitHub Issues, records `upstreamIssueNumber`, `upstreamIssueUrl`, `upstreamSyncedAt`, and skips `fork_only`. `issue-bridge.test.ts` covers GitHub repo parsing, body/title redaction, fork-only skip, success persistence, and issue-report escalation with error-stack context. | Treat this as the upstream GitHub Issue capability. Extend bridge policy, labels, privacy gates, and idempotency in place; do not add a parallel feedback-specific GitHub client. |
 | Privacy | `identity-privacy.ts` provides stable pseudonym identity and `redactHostnames()`. | Keep pseudonym as the only upstream identity. Add pre-send secret scanning and synthesized summaries before bridge call. |
 | Notifications | `Notification` has `userId`, `type`, `title`, `body`, `deepLink`, `read`. `PlatformNotification` has global `severity`, `category`, `subjectId`, `message`, `resolvedAt`. | User-visible feedback resolution uses `Notification`; admin/system health uses `PlatformNotification`. |
 | Build Studio capacity | `loadBuildStudioCapability()` already decides whether Build Studio has a strong remote provider with tool use and >=32K context. | Feedback routing should consume this helper when route/build context indicates Build Studio, not duplicate provider-tier logic. |
@@ -104,11 +105,12 @@ OpenTelemetry's log data model separates timestamps, severity, structured bodies
 1. **One operator affordance, multiple routed outcomes.** Dale clicks one thing; the platform chooses local help, local BI, or upstream issue.
 2. **Local resolution first, but not forever.** The coworker attempts a bounded support loop, then records why it stopped.
 3. **No hidden race with triage.** Reports in support triage are not eligible for the generic issue-report-to-BI cron until the support flow chooses that path.
-4. **GitHub Issues is canonical only after upstream escalation.** Before that, `PlatformIssueReport` is the local canonical record.
-5. **Privacy is structural.** Upstream bodies use pseudonym identity, `redactHostnames()`, secret scanning, and coworker-synthesized summaries instead of raw transcript dumps.
-6. **Contribution policy stays visible.** `fork_only` exceptional escalation requires explicit operator acknowledgement and audit fields. It must not silently weaken private-install posture.
-7. **User notifications are local.** Dale receives a DPF `Notification` with a route deep link; GitHub is a secondary external reference.
-8. **20 percent refactor budget is mandatory.** The first implementation slice cleans the feedback/reporting substrate before adding new routing behavior.
+4. **Reuse the existing Git issue path.** Upstream filing flows through `issue-bridge.ts` unless a later architecture review retires that bridge globally.
+5. **GitHub Issues is canonical only after upstream escalation.** Before that, `PlatformIssueReport` is the local canonical record.
+6. **Privacy is structural.** Upstream bodies use pseudonym identity, `redactHostnames()`, secret scanning, and coworker-synthesized summaries instead of raw transcript dumps.
+7. **Contribution policy stays visible.** `fork_only` exceptional escalation requires explicit operator acknowledgement and audit fields. It must not silently weaken private-install posture.
+8. **User notifications are local.** Dale receives a DPF `Notification` with a route deep link; GitHub is a secondary external reference.
+9. **20 percent refactor budget is mandatory.** The first implementation slice cleans the feedback/reporting substrate before adding new routing behavior.
 
 ## 6. Future Architecture
 
@@ -139,7 +141,7 @@ Bounded local-resolution loop
                 - status: awaiting_escalation_ack or upstream_pending
                 - synthesize safe issue body
                 - pre-send privacy/secret checks
-                - fileUpstreamFeedback() calls the bridge
+                - fileUpstreamFeedback() calls issue-bridge.ts with kind: "issue-report"
                 - status: upstream_filed
                 - Dale gets local confirmation with DPF state + GitHub link
 ```
@@ -303,6 +305,18 @@ Privacy gates:
 3. Secret scan runs on title/body/stack before `postIssue()`.
 4. If any gate fails, set status `suppressed` or `awaiting_escalation_ack` with a safe explanation; do not send.
 
+### 6.7 Existing Git Issue Capability Reuse
+
+The upstream work object is a GitHub Issue created through the existing issue bridge. Feedback escalation must not create a second "feedback issue" table, a second GitHub REST client, or an issue-tracker abstraction before the existing path proves insufficient.
+
+Required reuse contract:
+
+1. `PlatformIssueReport` remains the local source record before and after upstream filing.
+2. `fileUpstreamFeedback()` is a policy/privacy wrapper around `escalateToUpstreamIssue({ kind: "issue-report", id })`, not a new direct GitHub caller.
+3. New labels such as `capacity:*`, new redaction checks, and fork-only exception policy belong in or immediately around `issue-bridge.ts` so backlog, epic, and issue-report escalation stay coherent.
+4. Existing `upstreamIssueNumber`, `upstreamIssueUrl`, and `upstreamSyncedAt` remain the local link fields. Add new fields only for feedback-specific acknowledgement, decision reasons, and resolution notification state.
+5. The reverse channel observes GitHub Issue state through webhook or polling and projects it back into DPF `Notification`; Dale does not need a GitHub account or GitHub UI to understand the outcome.
+
 ## 7. UX Contract
 
 ### 7.1 Operator-Facing Behavior
@@ -359,6 +373,7 @@ Scope:
 - Normalize route, user, `threadId`, `taskRunId`, `featureBuildId`, source, and user-agent capture where available.
 - Clean theme-token violations in touched feedback fallback UI.
 - Add unit tests proving the old entry points still create equivalent rows.
+- Run the existing issue-bridge tests to prove Phase 0 preserves `PlatformIssueReport` to GitHub Issue compatibility, even though Phase 0 does not file upstream.
 
 Acceptance:
 
@@ -366,6 +381,7 @@ Acceptance:
 - The issue-report triage cron still converts generic `open` reports to BIs.
 - A `support_triage` report is not converted by the cron.
 - No touched feedback UI contains hardcoded color tokens outside allowed exceptions.
+- Existing issue-bridge tests still pass for `kind: "issue-report"` escalation.
 
 ### Phase 1: Support-Mode Entry
 
@@ -409,10 +425,12 @@ Goal: upstream-worthy feedback files a safe GitHub Issue and updates the local r
 Scope:
 
 - Add `fileUpstreamFeedback()` coworker tool or server action.
+- Implement it as a wrapper around `escalateToUpstreamIssue({ kind: "issue-report" })`; do not add a direct GitHub Issue writer.
 - Extend bridge policy for `fork_only_exception` only if ratified.
 - Add `capacity:*` labels.
 - Add privacy/secret scan gate before `postIssue()`.
 - Make bridge idempotent on existing `upstreamIssueNumber`.
+- Keep bridge changes compatible with backlog and epic escalation; shared labels/redaction helpers should live in `issue-bridge.ts` or adjacent bridge-owned modules.
 
 Acceptance:
 
@@ -492,7 +510,7 @@ Build gates for implementation:
 
 ## 10. Open Decisions
 
-1. **Fork-only exceptional escalation:** approve or reject the one-shot critical upstream path. Recommendation: approve only with explicit acknowledgement and audit fields.
+1. **Fork-only exceptional escalation:** approve or reject the one-shot critical upstream path. Recommendation: approve only with explicit acknowledgement and audit fields implemented as an explicit extension of the existing issue bridge.
 2. **GitHub webhook vs polling priority:** implement polling first if install reachability is unreliable; add webhook as the preferred path when platform reachability is configured.
 3. **Report detail UX:** decide whether Dale's deep link returns to the originating route with a small update tray, or a dedicated local report detail page. Recommendation: route first, detail page later if reports need history.
 4. **GearInterface emission:** do not add GearInterface writes in the first implementation slice. After Phase 3, consider dual-emitting feedback escalation as a ring-boundary observation if the Reduction Gear Phase 0 writer service is already available.
