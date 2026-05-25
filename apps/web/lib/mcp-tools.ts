@@ -19,6 +19,7 @@ import {
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 import { activeBrandExtractionWhere } from "@/lib/brand/active-extraction";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
+import { createPlatformIssueReport } from "@/lib/quality/platform-issue-reports";
 import {
   MARKETING_CHANNELS,
   MARKETING_REVIEW_CADENCE,
@@ -5819,17 +5820,18 @@ export async function executeTool(
     }
 
     case "report_quality_issue": {
-      const reportId = "PIR-" + Math.random().toString(36).substring(2, 7).toUpperCase();
-      await prisma.platformIssueReport.create({
-        data: {
-          reportId,
-          type: String(params["type"] ?? "user_report"),
-          title: String(params["title"] ?? "Untitled"),
-          ...(typeof params["description"] === "string" ? { description: params["description"] } : {}),
-          severity: String(params["severity"] ?? "medium"),
-          reportedById: userId,
-          source: "ai_assisted",
-        },
+      const { reportId } = await createPlatformIssueReport({
+        type: String(params["type"] ?? "user_report"),
+        title: String(params["title"] ?? "Untitled"),
+        source: "ai_assisted",
+        ...(typeof params["description"] === "string"
+          ? { description: params["description"] }
+          : {}),
+        severity: String(params["severity"] ?? "medium"),
+        reportedById: userId,
+        ...(typeof context?.routeContext === "string"
+          ? { routeContext: context.routeContext }
+          : {}),
       });
       return { success: true, entityId: reportId, message: `Filed report ${reportId}` };
     }
