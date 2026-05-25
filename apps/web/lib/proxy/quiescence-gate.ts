@@ -196,8 +196,7 @@ export type GateDecision =
  *
  * Pass `effectiveStateForUnknown` to invoke the fail-open / fail-closed
  * policy: caller decides what state to substitute when level is "unknown".
- *   - For mutations: pass getLastKnownNonNormal() ?? a synthetic
- *     {level: "draining"} (fail-closed default)
+ *   - For mutations: preserve getLastKnownNonNormal(); otherwise fail open.
  *   - For reads: pass {level: "normal"} (fail-open)
  */
 export function evaluateGate(
@@ -286,18 +285,13 @@ export async function checkQuiescenceForRequest(
 ): Promise<GateDecision> {
   const state = await fetchQuiescenceState(origin);
   if (state.level === "unknown") {
-    // Fail policy: preserve last known non-normal for mutations; fail
-    // open for reads.
+    // Fail policy: preserve last known non-normal for mutations; fail open
+    // when there is no evidence this Edge process has observed a drain.
     if (isMutationRequest(req)) {
       const fallback = getLastKnownNonNormal();
       if (fallback) return evaluateGate(req, fallback);
-      // No memory of prior state — be conservative for mutations and
-      // refuse. Reads will fall through to the "open" branch below.
-      const conservative: ProxyQuiescenceState = {
-        ...state,
-        level: "draining",
-      };
-      return evaluateGate(req, conservative);
+      const open: ProxyQuiescenceState = { ...state, level: "normal" };
+      return evaluateGate(req, open);
     }
     // Read: fail open.
     const open: ProxyQuiescenceState = { ...state, level: "normal" };
