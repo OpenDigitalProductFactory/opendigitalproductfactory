@@ -1,7 +1,7 @@
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import Link from "next/link";
+import { UpdatePendingBannerClient } from "./UpdatePendingBannerClient";
 
 export async function UpdatePendingBanner() {
   const session = await auth();
@@ -20,32 +20,5 @@ export async function UpdatePendingBanner() {
 
   if (!config?.updatePending || !config.pendingVersion) return null;
 
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexWrap: "wrap",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 4,
-        padding: "6px 16px",
-        background: "color-mix(in srgb, var(--dpf-accent) 15%, transparent)",
-        borderBottom: "1px solid color-mix(in srgb, var(--dpf-accent) 30%, transparent)",
-        fontSize: 12,
-        lineHeight: 1.4,
-        color: "var(--dpf-accent)",
-        overflowWrap: "anywhere",
-      }}
-    >
-      <span style={{ minWidth: 0 }}>
-        Platform update v{config.pendingVersion} is ready. Your customisations are preserved.{" "}
-        <Link
-          href="/admin/platform-development"
-          style={{ color: "var(--dpf-accent)", textDecoration: "underline", overflowWrap: "anywhere" }}
-        >
-          Review in Admin &rarr; Platform Development
-        </Link>
-      </span>
-    </div>
-  );
+  return <UpdatePendingBannerClient pendingVersion={config.pendingVersion} />;
 }

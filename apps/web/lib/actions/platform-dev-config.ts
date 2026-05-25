@@ -763,6 +763,30 @@ async function gitBranchExists(
   }
 }
 
+function gitErrorText(err: unknown): string {
+  if (!err || typeof err !== "object") {
+    return err instanceof Error ? err.message : String(err);
+  }
+  const record = err as { message?: unknown; stderr?: unknown; stdout?: unknown };
+  return [record.message, record.stderr, record.stdout]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join("\n");
+}
+
+function isMissingGitReferenceError(err: unknown, ref: string): boolean {
+  const text = gitErrorText(err).toLowerCase();
+  const normalizedRef = ref.toLowerCase();
+  return (
+    text.includes(normalizedRef) &&
+    (text.includes("pathspec") ||
+      text.includes("did not match") ||
+      text.includes("not a commit") ||
+      text.includes("unknown revision") ||
+      text.includes("invalid reference") ||
+      text.includes("could not resolve"))
+  );
+}
+
 async function ensureManagedUpdateBranches(
   execUpdate: ExecUpdate,
   gitOpts: ExecUpdateOptions,
@@ -818,6 +842,25 @@ async function assertBranchRepairCanUseCurrentHead(
       "Workspace is missing managed update branches and has committed source changes in apps/web or packages. A safe upstream baseline cannot be reconstructed automatically.",
     );
   }
+}
+
+async function checkoutManagedUpdateBranch(
+  execUpdate: ExecUpdate,
+  gitOpts: ExecUpdateOptions,
+  branch: string,
+): Promise<void> {
+  try {
+    await execUpdate(`git checkout ${branch}`, gitOpts);
+    return;
+  } catch (err) {
+    if (!isMissingGitReferenceError(err, branch)) {
+      throw err;
+    }
+  }
+
+  await assertBranchRepairCanUseCurrentHead(execUpdate, gitOpts);
+  await execUpdate(`git branch -f ${branch} HEAD`, gitOpts);
+  await execUpdate(`git checkout ${branch}`, gitOpts);
 }
 
 async function collectPlatformUpdateConflicts(
@@ -907,7 +950,7 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
     await ensureManagedUpdateBranches(execUpdate, gitOpts);
 
     // Step 1-3: Refresh dpf-upstream branch with new source
-    await execUpdate(`git checkout ${UPDATE_UPSTREAM_BRANCH}`, gitOpts);
+    await checkoutManagedUpdateBranch(execUpdate, gitOpts, UPDATE_UPSTREAM_BRANCH);
     await execUpdate("rm -rf apps/web packages", gitOpts);
     await execUpdate("cp -r /app/apps/web-src/. apps/web/", gitOpts);
     await execUpdate("cp -r /app/packages-src/. packages/", gitOpts);
@@ -926,7 +969,7 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
     }
 
     // Step 4: Merge into my-changes
-    await execUpdate(`git checkout ${UPDATE_WORK_BRANCH}`, gitOpts);
+    await checkoutManagedUpdateBranch(execUpdate, gitOpts, UPDATE_WORK_BRANCH);
     try {
       await execUpdate(`git merge ${UPDATE_UPSTREAM_BRANCH} --no-commit --no-ff`, gitOpts);
     } catch {
@@ -990,7 +1033,7 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
     // Best-effort: leave my-changes checked out so the operator's working
     // copy is in a known state even when the merge step itself crashes.
     try {
-      await execUpdate(`git checkout ${UPDATE_WORK_BRANCH}`, gitOpts);
+      await checkoutManagedUpdateBranch(execUpdate, gitOpts, UPDATE_WORK_BRANCH);
     } catch {
       /* best effort — original error is already captured below */
     }

@@ -160,6 +160,15 @@ export async function runSweepLoop(opts: SweepRunnerOptions): Promise<void> {
     // dedupes them anyway.
     await drainQueue({ queue, api, state, log });
 
+    if (state.trustState !== "trusted") {
+      log(
+        "warn",
+        `Discovery sweep skipped because trustState=${state.trustState}; heartbeat remains active while approval is pending.`,
+      );
+      await sleep(state.sweepIntervalSec * 1000);
+      continue;
+    }
+
     // Collect + submit a fresh sweep.
     let envelope: SubmissionEnvelope;
     try {

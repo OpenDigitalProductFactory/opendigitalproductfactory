@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { X } from "lucide-react";
 
 type BannerMessage = {
   id: string;
@@ -46,7 +47,10 @@ export function StatusBanner() {
   if (messages.length === 0) return null;
 
   return (
-    <div style={{ width: "100%" }}>
+    <div
+      className="pointer-events-auto w-[min(960px,calc(100vw-24px))] space-y-2"
+      data-overlay-banner="true"
+    >
       {messages.map((msg) => {
         const colors = BANNER_COLORS[msg.type];
         return (
@@ -56,20 +60,31 @@ export function StatusBanner() {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              padding: "6px 16px",
+              gap: 12,
+              padding: "8px 12px",
               background: colors.bg,
-              borderBottom: `1px solid ${colors.border}`,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 6,
+              boxShadow: "0 10px 30px color-mix(in srgb, var(--dpf-text) 14%, transparent)",
               fontSize: 12,
               color: colors.text,
             }}
           >
-            <span>{msg.text}</span>
+            <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{msg.text}</span>
             <button
               type="button"
+              aria-label="Dismiss status banner"
               onClick={() => setMessages((prev) => prev.filter((m) => m.id !== msg.id))}
-              style={{ background: "none", border: "none", color: colors.text, cursor: "pointer", fontSize: 14, padding: "0 4px", opacity: 0.7 }}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: colors.text,
+                cursor: "pointer",
+                padding: 4,
+                opacity: 0.8,
+              }}
             >
-              ✕
+              <X aria-hidden="true" size={14} />
             </button>
           </div>
         );
