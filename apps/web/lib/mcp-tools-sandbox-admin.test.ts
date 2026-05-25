@@ -1,25 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockPrisma = {
-  featureBuild: {
-    findUnique: vi.fn(),
-    findFirst: vi.fn(),
+const { mockPrisma } = vi.hoisted(() => ({
+  mockPrisma: {
+    featureBuild: {
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+    },
+    featurePack: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
+    improvementProposal: {
+      updateMany: vi.fn(),
+    },
+    buildActivity: {
+      create: vi.fn().mockResolvedValue({ id: "activity-1" }),
+    },
+    platformDevConfig: {
+      findUnique: vi.fn(),
+    },
   },
-  featurePack: {
-    findFirst: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-  },
-  improvementProposal: {
-    updateMany: vi.fn(),
-  },
-  buildActivity: {
-    create: vi.fn().mockResolvedValue({ id: "activity-1" }),
-  },
-  platformDevConfig: {
-    findUnique: vi.fn(),
-  },
-};
+}));
 
 const mockDiagnoseSandboxReadiness = vi.hoisted(() => vi.fn());
 const mockRecoverSandbox = vi.hoisted(() => vi.fn());
@@ -64,6 +66,9 @@ vi.mock("@/lib/platform-dev-policy", () => ({
   getPlatformDevPolicyState: vi.fn(() => "contribution_ready"),
 }));
 
+import { executeTool, PLATFORM_TOOLS } from "./mcp-tools";
+import { getBuildPhasePrompt } from "./integrate/build-agent-prompts";
+
 const FORBIDDEN_SANDBOX_HANDOFF_PATTERNS = [
   "user must run",
   "user needs to run",
@@ -88,7 +93,6 @@ describe("sandbox admin MCP and coworker messaging", () => {
   });
 
   it("exposes diagnose_sandbox as a read-only build/review/ship tool", async () => {
-    const { PLATFORM_TOOLS } = await import("./mcp-tools");
 
     const tool = PLATFORM_TOOLS.find((candidate) => candidate.name === "diagnose_sandbox");
 
@@ -104,7 +108,6 @@ describe("sandbox admin MCP and coworker messaging", () => {
   });
 
   it("exposes recover_sandbox as a governed side-effect tool", async () => {
-    const { PLATFORM_TOOLS } = await import("./mcp-tools");
 
     const tool = PLATFORM_TOOLS.find((candidate) => candidate.name === "recover_sandbox");
     const schema = tool?.inputSchema as { properties?: Record<string, { enum?: string[] }> } | undefined;
@@ -118,10 +121,6 @@ describe("sandbox admin MCP and coworker messaging", () => {
   });
 
   it("does not tell the coworker to hand Docker commands back to the user", async () => {
-    const [{ PLATFORM_TOOLS }, { getBuildPhasePrompt }] = await Promise.all([
-      import("./mcp-tools"),
-      import("./integrate/build-agent-prompts"),
-    ]);
     const sandboxToolText = PLATFORM_TOOLS
       .filter((tool) => tool.name.includes("sandbox") || tool.description.toLowerCase().includes("sandbox"))
       .map((tool) => `${tool.name}: ${tool.description}`)
@@ -153,7 +152,6 @@ describe("sandbox admin MCP and coworker messaging", () => {
       branchName: "build/FB-SANDBOX-1",
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool("diagnose_sandbox", {
       buildId: "FB-SANDBOX-1",
       expectedWorkspaceRoot: "D:\\DPF\\.worktrees\\FB-SANDBOX-1",
@@ -191,7 +189,6 @@ describe("sandbox admin MCP and coworker messaging", () => {
       },
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool("recover_sandbox", {
       buildId: "FB-SANDBOX-1",
       action: "reset_build_phase",
@@ -213,7 +210,6 @@ describe("sandbox admin MCP and coworker messaging", () => {
       createdById: "user-1",
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool("recover_sandbox", {
       buildId: "FB-SANDBOX-1",
       action: "docker_shell",
@@ -247,7 +243,6 @@ describe("sandbox admin MCP and coworker messaging", () => {
       inspectedAt: "2026-05-22T12:00:00.000Z",
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool("deploy_feature", {
       buildId: "FB-SANDBOX-1",
     }, "user-1", { agentId: "AGT-ORCH-400" });
@@ -299,7 +294,6 @@ describe("sandbox admin MCP and coworker messaging", () => {
       inspectedAt: "2026-05-22T12:00:00.000Z",
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool("contribute_to_hive", {
       buildId: "FB-SANDBOX-1",
     }, "user-1", { agentId: "AGT-ORCH-500" });
@@ -359,7 +353,6 @@ describe("sandbox admin MCP and coworker messaging", () => {
         productVersions: [],
       });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool("create_portal_pr", {
       buildId: "FB-PROMOTE-1",
     }, "user-1", { agentId: "AGT-ORCH-600" });
@@ -431,7 +424,6 @@ describe("sandbox admin MCP and coworker messaging", () => {
       inspectedAt: "2026-05-22T12:00:00.000Z",
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool("contribute_to_hive", {
       buildId: "FB-PROMOTE-2",
     }, "user-1", { agentId: "AGT-ORCH-700" });
