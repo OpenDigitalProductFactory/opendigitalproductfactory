@@ -87,6 +87,10 @@ Step 8 of 8: Opening your portal!
 
 **Note:** Hardware detection (Step 5) happens BEFORE starting containers so the installer can configure Docker Desktop resource allocation and select the appropriate AI model. The hardware profile is passed to the portal container via environment variables and written to `PlatformConfig.host_profile` during the migration/seed step.
 
+**Install drive selection:** The one-file Windows installer still uses `C:\DPF` as the plain default when no better host signal exists, but it MUST inspect fixed local drives before prompting. If `C:` is below the recommended free-space threshold and the next non-`C:` fixed drive has room, the prompt defaults to that drive (for example `D:\DPF`) and explains the recommendation in plain English. The later hardware disk check MUST measure the selected install drive, not hardcode `C:`.
+
+**Docker Desktop storage note:** If Docker Desktop already exists and its WSL data disk is on a crowded `C:` drive, the installer may print a warning-only relocation target such as `D:\DockerDesktop\wsl\disk`. The installer MUST NOT move Docker Desktop storage automatically during the normal install flow.
+
 ### Credentials
 
 The installer generates a random admin password (16 chars, alphanumeric) during setup. No hardcoded default password. The password is displayed once in the terminal and also written to `C:\DPF\.admin-credentials` (a file the user can reference if they lose the terminal output). The platform should enforce a password change on first login as a follow-up enhancement.

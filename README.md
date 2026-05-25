@@ -53,7 +53,7 @@ The Windows installer is a self-contained PowerShell script that clones the repo
 # Step 1 — download the installer (run from any directory)
 iwr -UseBasicParsing https://raw.githubusercontent.com/OpenDigitalProductFactory/opendigitalproductfactory/main/install-dpf.ps1 -OutFile install-dpf.ps1
 
-# Step 2 — run it (will prompt for install directory; defaults to C:\DPF)
+# Step 2 - run it (prompts for install directory; may suggest a non-C drive)
 powershell -ExecutionPolicy Bypass -File install-dpf.ps1
 ```
 
