@@ -1,5 +1,6 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
+import { ISSUE_REPORT_STATUS } from "@/lib/quality/issue-report-status";
 
 export const issueReportTriage = inngest.createFunction(
   { id: "quality/issue-report-triage", retries: 2, triggers: [cron("*/15 * * * *")] },
@@ -35,7 +36,7 @@ export const issueReportTriage = inngest.createFunction(
       return triageIssueReports({
         getOpenReports: () =>
           prisma.platformIssueReport.findMany({
-            where: { status: "open" },
+            where: { status: ISSUE_REPORT_STATUS.OPEN },
             orderBy: { createdAt: "asc" },
             take: 100,
             select: {
