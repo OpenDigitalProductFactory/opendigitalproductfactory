@@ -31,6 +31,7 @@ import { seedStallThresholds } from "./seed-stall-thresholds.js";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
 import { ensureAllBackupScheduledJobs } from "./seed-platform-backup.js";
+import { seedAgentControlPlaneMaturity } from "./seed-agent-control-plane-maturity.js";
 import { syncCapabilities } from "./sync-capabilities.js";
 import { defaultGovernanceFor } from "./taxonomy-governance-defaults.js";
 import { AGENT_MODEL_CONFIG_DEFAULTS } from "./agent-model-defaults.js";
@@ -2404,6 +2405,7 @@ async function main(): Promise<void> {
   await seedAgentPromptContexts();
   await seedFeatureDegradationMappings();
   await seedTaxonomyNodes();
+  await seedAgentControlPlaneMaturity(prisma);
   await seedEaReferenceModels().catch((err: unknown) => {
     console.warn("[seed] EA reference models skipped:", err instanceof Error ? err.message : err);
   });
