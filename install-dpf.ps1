@@ -1,32 +1,10 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 param(
     [string]$InstallDir,
-    [string]$Version = "latest"
+    [string]$Version = "latest",
+    [switch]$LibraryOnly
 )
 $ErrorActionPreference = "Stop"
-
-# Determine a sensible default: if the script already sits in a project
-# directory (has docker-compose.yml), default to that path.
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-if (-not $InstallDir) {
-    if (Test-Path "$scriptDir\docker-compose.yml") {
-        $defaultDir = $scriptDir
-    } else {
-        $defaultDir = "C:\DPF"
-    }
-
-    Write-Host ""
-    Write-Host "Where would you like to install Digital Product Factory?" -ForegroundColor Cyan
-    $answer = Read-Host "  Install directory [$defaultDir]"
-    if ([string]::IsNullOrWhiteSpace($answer)) {
-        $InstallDir = $defaultDir
-    } else {
-        $InstallDir = $answer.Trim()
-    }
-}
-$DPF_DIR = [System.IO.Path]::GetFullPath($InstallDir)
-$PROGRESS_FILE = "$DPF_DIR\.install-progress"
-$AUTOSTART_TASK_NAME = "DPF-AutoStart"
 
 # --- Helpers ----------------------------------------------------------------
 
@@ -101,6 +79,265 @@ function Register-DPFStartupTask {
         return $false
     }
 }
+
+function Format-DPFGigabytes {
+    param([double]$Value)
+
+    if ([math]::Abs($Value - [math]::Round($Value)) -lt 0.05) {
+        return ([math]::Round($Value)).ToString("0")
+    }
+    return $Value.ToString("0.0")
+}
+
+function Get-DPFDriveDeviceIDFromPath {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $root = [System.IO.Path]::GetPathRoot($Path)
+    if ($root -match "^([A-Za-z]:)") {
+        return $matches[1].ToUpperInvariant()
+    }
+    return $null
+}
+
+function Get-DPFDriveInventory {
+    param([object[]]$LogicalDisks)
+
+    if (-not $LogicalDisks) {
+        try {
+            $LogicalDisks = @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3")
+        } catch {
+            return @()
+        }
+    }
+
+    $inventory = foreach ($disk in $LogicalDisks) {
+        $driveType = if ($null -ne $disk.DriveType) { [int]$disk.DriveType } else { 3 }
+        if ($driveType -ne 3) { continue }
+
+        $deviceId = ([string]$disk.DeviceID).TrimEnd("\").ToUpperInvariant()
+        if ($deviceId -notmatch "^[A-Z]:$") { continue }
+
+        $freeGB = if ($disk.PSObject.Properties.Name -contains "FreeGB") {
+            [double]$disk.FreeGB
+        } elseif ($null -ne $disk.FreeSpace) {
+            [math]::Round([double]$disk.FreeSpace / 1GB, 1)
+        } else {
+            0
+        }
+
+        $sizeGB = if ($disk.PSObject.Properties.Name -contains "SizeGB") {
+            [double]$disk.SizeGB
+        } elseif ($null -ne $disk.Size) {
+            [math]::Round([double]$disk.Size / 1GB, 1)
+        } else {
+            0
+        }
+
+        [PSCustomObject]@{
+            DeviceID   = $deviceId
+            FreeGB     = $freeGB
+            SizeGB     = $sizeGB
+            VolumeName = $disk.VolumeName
+        }
+    }
+
+    return @($inventory | Sort-Object DeviceID)
+}
+
+function Get-DPFDriveFromInventory {
+    param(
+        [object[]]$DriveInventory = @(),
+        [Parameter(Mandatory)][string]$DeviceID
+    )
+
+    $normalized = $DeviceID.TrimEnd("\").ToUpperInvariant()
+    return $DriveInventory | Where-Object { $_.DeviceID -eq $normalized } | Select-Object -First 1
+}
+
+function Join-DPFDrivePath {
+    param(
+        [Parameter(Mandatory)][string]$DeviceID,
+        [Parameter(Mandatory)][string]$ChildPath
+    )
+
+    return "$($DeviceID.TrimEnd("\"))\$($ChildPath.TrimStart("\"))"
+}
+
+function Get-DPFInstallDriveRecommendation {
+    param(
+        [object[]]$DriveInventory = @(),
+        [string]$DefaultInstallDir = "C:\DPF",
+        [double]$RecommendedFreeGB = 50
+    )
+
+    $defaultDrive = Get-DPFDriveDeviceIDFromPath -Path $DefaultInstallDir
+    $defaultDriveInfo = if ($defaultDrive) {
+        Get-DPFDriveFromInventory -DriveInventory $DriveInventory -DeviceID $defaultDrive
+    } else {
+        $null
+    }
+
+    $result = [PSCustomObject]@{
+        Recommended      = $false
+        InstallDir       = $DefaultInstallDir
+        RecommendedDrive = $defaultDrive
+        Message          = $null
+    }
+
+    if ($defaultDrive -ne "C:" -or -not $defaultDriveInfo) {
+        return $result
+    }
+
+    if ([double]$defaultDriveInfo.FreeGB -ge $RecommendedFreeGB) {
+        return $result
+    }
+
+    $candidate = $DriveInventory |
+        Where-Object { $_.DeviceID -ne "C:" -and [double]$_.FreeGB -ge $RecommendedFreeGB } |
+        Sort-Object DeviceID |
+        Select-Object -First 1
+
+    if (-not $candidate) {
+        return $result
+    }
+
+    $installDir = Join-DPFDrivePath -DeviceID $candidate.DeviceID -ChildPath "DPF"
+    return [PSCustomObject]@{
+        Recommended      = $true
+        InstallDir       = $installDir
+        RecommendedDrive = $candidate.DeviceID
+        Message          = "C: has $(Format-DPFGigabytes $defaultDriveInfo.FreeGB) GB free; $($candidate.DeviceID) has $(Format-DPFGigabytes $candidate.FreeGB) GB free, so $installDir is the suggested install location."
+    }
+}
+
+function Get-DPFInstallDriveFreeSpace {
+    param(
+        [Parameter(Mandatory)][string]$InstallDir,
+        [object[]]$DriveInventory = @()
+    )
+
+    $installDrive = Get-DPFDriveDeviceIDFromPath -Path $InstallDir
+    if (-not $installDrive) {
+        return [PSCustomObject]@{
+            DeviceID = $null
+            FreeGB   = 0
+            Missing  = $true
+        }
+    }
+
+    $driveInfo = Get-DPFDriveFromInventory -DriveInventory $DriveInventory -DeviceID $installDrive
+    if (-not $driveInfo) {
+        return [PSCustomObject]@{
+            DeviceID = $installDrive
+            FreeGB   = 0
+            Missing  = $true
+        }
+    }
+
+    return [PSCustomObject]@{
+        DeviceID = $driveInfo.DeviceID
+        FreeGB   = [double]$driveInfo.FreeGB
+        Missing  = $false
+    }
+}
+
+function Get-DPFDockerDesktopDataPath {
+    $candidate = Join-Path $env:LOCALAPPDATA "Docker\wsl\disk"
+    if (Test-Path -LiteralPath $candidate) {
+        return $candidate
+    }
+    return $null
+}
+
+function Get-DPFDockerStorageRecommendation {
+    param(
+        [object[]]$DriveInventory = @(),
+        [string]$DockerDataPath,
+        [double]$RecommendedFreeGB = 100
+    )
+
+    $result = [PSCustomObject]@{
+        ShouldWarn  = $false
+        CurrentPath = $DockerDataPath
+        TargetPath  = $null
+        Message     = $null
+    }
+
+    if ([string]::IsNullOrWhiteSpace($DockerDataPath)) {
+        return $result
+    }
+
+    $currentDrive = Get-DPFDriveDeviceIDFromPath -Path $DockerDataPath
+    if ($currentDrive -ne "C:") {
+        return $result
+    }
+
+    $cDrive = Get-DPFDriveFromInventory -DriveInventory $DriveInventory -DeviceID "C:"
+    if (-not $cDrive -or [double]$cDrive.FreeGB -ge $RecommendedFreeGB) {
+        return $result
+    }
+
+    $candidate = $DriveInventory |
+        Where-Object { $_.DeviceID -ne "C:" -and [double]$_.FreeGB -ge $RecommendedFreeGB } |
+        Sort-Object DeviceID |
+        Select-Object -First 1
+
+    if (-not $candidate) {
+        return $result
+    }
+
+    $targetPath = Join-DPFDrivePath -DeviceID $candidate.DeviceID -ChildPath "DockerDesktop\wsl\disk"
+    return [PSCustomObject]@{
+        ShouldWarn  = $true
+        CurrentPath = $DockerDataPath
+        TargetPath  = $targetPath
+        Message     = "Docker Desktop stores Linux data on C: at $DockerDataPath. If Docker storage starts filling C:, use $targetPath as the relocation target. The installer will not move Docker storage automatically."
+    }
+}
+
+if ($LibraryOnly -or $env:DPF_INSTALLER_LIBRARY_ONLY -eq "1") {
+    return
+}
+
+# Determine a sensible default: if the script already sits in a project
+# directory (has docker-compose.yml), default to that path. For one-file
+# downloads, prefer the next fixed non-C drive when C is short on space.
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$driveInventory = Get-DPFDriveInventory
+if (-not $InstallDir) {
+    $installDriveRecommendation = $null
+    if (Test-Path "$scriptDir\docker-compose.yml") {
+        $defaultDir = $scriptDir
+    } else {
+        $installDriveRecommendation = Get-DPFInstallDriveRecommendation `
+            -DriveInventory $driveInventory `
+            -DefaultInstallDir "C:\DPF"
+        $defaultDir = $installDriveRecommendation.InstallDir
+    }
+
+    Write-Host ""
+    Write-Host "Where would you like to install Digital Product Factory?" -ForegroundColor Cyan
+    if ($installDriveRecommendation -and $installDriveRecommendation.Recommended) {
+        Write-Host "  Suggestion: $($installDriveRecommendation.Message)" -ForegroundColor Yellow
+    }
+
+    $dockerStorageRecommendation = Get-DPFDockerStorageRecommendation `
+        -DriveInventory $driveInventory `
+        -DockerDataPath (Get-DPFDockerDesktopDataPath)
+    if ($dockerStorageRecommendation.ShouldWarn) {
+        Write-Host "  Docker storage note: $($dockerStorageRecommendation.Message)" -ForegroundColor Yellow
+    }
+
+    $answer = Read-Host "  Install directory [$defaultDir]"
+    if ([string]::IsNullOrWhiteSpace($answer)) {
+        $InstallDir = $defaultDir
+    } else {
+        $InstallDir = $answer.Trim()
+    }
+}
+$DPF_DIR = [System.IO.Path]::GetFullPath($InstallDir)
+$PROGRESS_FILE = "$DPF_DIR\.install-progress"
+$AUTOSTART_TASK_NAME = "DPF-AutoStart"
 
 $GHCR_PORTAL = "ghcr.io/opendigitalproductfactory/dpf-portal"
 $GHCR_SANDBOX = "ghcr.io/opendigitalproductfactory/dpf-sandbox"
@@ -558,7 +795,7 @@ services:
       retries: 10
       start_period: 30s
 
-  # ─── Sandbox Database (isolated from production) ────────────────────
+  # Sandbox Database (isolated from production)
   sandbox-postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -575,7 +812,7 @@ services:
       retries: 5
       start_period: 10s
 
-  # ─── Sandbox Init (migrations on sandbox DB) ──────────────────────
+  # Sandbox Init (migrations on sandbox DB)
   sandbox-init:
     image: $($GHCR_PORTAL):$Version
     command: ["/docker-entrypoint.sh"]
@@ -588,7 +825,7 @@ services:
       sandbox-postgres:
         condition: service_healthy
 
-  # ─── Sandbox (isolated build environment for Build Studio) ──────────
+  # Sandbox (isolated build environment for Build Studio)
   sandbox:
     image: $($GHCR_SANDBOX):$Version
     restart: unless-stopped
@@ -610,8 +847,8 @@ services:
       sandbox-init:
         condition: service_completed_successfully
 
-  # ─── Promoter (autonomous deployment pipeline) ─────────────────────
-  # One-shot container — triggered by Build Studio ship phase or ops UI.
+  # Promoter (autonomous deployment pipeline)
+  # One-shot container -- triggered by Build Studio ship phase or ops UI.
   promoter:
     image: dpf-promoter:latest
     entrypoint: ["/promoter/promote.sh"]
@@ -1062,7 +1299,7 @@ if (-not (Test-StepDone "hardware")) {
     $cpu = Get-CimInstance Win32_Processor
     $mem = Get-CimInstance Win32_ComputerSystem
     $gpu = Get-CimInstance Win32_VideoController | Where-Object { $_.Name -match "NVIDIA" } | Select-Object -First 1
-    $disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
+    $disk = Get-DPFInstallDriveFreeSpace -InstallDir $DPF_DIR -DriveInventory (Get-DPFDriveInventory)
 
     $totalRAM_GB = [math]::Round($mem.TotalPhysicalMemory / 1GB, 1)
     $gpuName = if ($gpu) { $gpu.Name } else { $null }
@@ -1080,7 +1317,7 @@ if (-not (Test-StepDone "hardware")) {
             $gpuVRAM_GB = [math]::Round($gpu.AdapterRAM / 1GB, 1)
         }
     }
-    $diskFree_GB = [math]::Round($disk.FreeSpace / 1GB, 1)
+    $diskFree_GB = [double]$disk.FreeGB
 
     $hwSummary = "$totalRAM_GB GB RAM, $($cpu.NumberOfCores)-core CPU"
     if ($gpuName) { $hwSummary += ", $gpuName ($gpuVRAM_GB GB VRAM)" }
@@ -1090,7 +1327,7 @@ if (-not (Test-StepDone "hardware")) {
     # Mirrors apps/web/lib/inference/bootstrap-first-run.ts MODEL_TIERS so the
     # installer's pre-portal model pull agrees with the portal's post-boot
     # bootstrap. Tags are the exact Docker Hub published forms (verified
-    # against https://hub.docker.com/r/ai/qwen3/tags 2026-05-23) — lowercase
+    # against https://hub.docker.com/r/ai/qwen3/tags 2026-05-23) -- lowercase
     # short forms (`ai/qwen3:14b`) 404 against Docker Model Runner.
     #
     # Why Qwen3 over Gemma: the platform's Coworkers catalog tiers Qwen3 as
@@ -1119,7 +1356,8 @@ if (-not (Test-StepDone "hardware")) {
 
     # Check disk space
     if ($diskFree_GB -lt 5) {
-        Write-Warn "Not enough disk space. The platform needs about 5 GB free. You have $diskFree_GB GB."
+        $diskLabel = if ($disk.DeviceID) { $disk.DeviceID } else { "the selected install drive" }
+        Write-Warn "Not enough disk space on $diskLabel. The platform needs about 5 GB free. You have $diskFree_GB GB."
         exit 1
     }
 
@@ -1130,12 +1368,13 @@ if (-not (Test-StepDone "hardware")) {
         ramGB = $totalRAM_GB
         gpuName = $gpuName
         gpuVramGB = $gpuVRAM_GB
+        installDrive = $disk.DeviceID
         diskFreeGB = $diskFree_GB
         selectedModel = $selectedModel
         detectedAt = (Get-Date -Format "o")
     } | ConvertTo-Json -Compress
 
-    # Docker Model Runner uses Docker Desktop's built-in GPU support — no override needed.
+    # Docker Model Runner uses Docker Desktop's built-in GPU support -- no override needed.
 
     # Save for later steps
     $hostProfile | Set-Content "$DPF_DIR\.host-profile.json"
@@ -1193,7 +1432,7 @@ GF_ADMIN_PASSWORD=$adminPass
 #
 # Also handles two upgrade paths:
 #   1. Operators upgrading from PR #1040: the dpf-reinstall.ps1 / uninstall
-#      preserve dance moved backups to $DPF_DIR-backups\ — that location IS
+#      preserve dance moved backups to $DPF_DIR-backups\ -- that location IS
 #      the permanent home now, so leave them alone.
 #   2. Operators upgrading from pre-#1040 (backups still in-tree at
 #      $DPF_DIR\backups\): migrate them forward so the new bind mount sees
@@ -1346,7 +1585,7 @@ if (-not (Test-StepDone "started")) {
     docker compose up -d
     $ErrorActionPreference = $oldEAP
 
-    # Sync postgres password — if the volume was reused from a prior install,
+    # Sync postgres password -- if the volume was reused from a prior install,
     # the DB user still has the old password. Update it to match the new .env.
     Write-Action "Syncing database credentials..."
     $envPgPass = (Get-Content "$DPF_DIR\.env" | Select-String "^POSTGRES_PASSWORD=(.+)$").Matches.Groups[1].Value
@@ -1432,11 +1671,11 @@ if (-not (Test-StepDone "model")) {
     #
     # Docker Model Runner is DISABLED by default in fresh Docker Desktop
     # installs. Without explicitly enabling it first, `docker model pull`
-    # fails with "Docker Model Runner is not running" — but the exit code
+    # fails with "Docker Model Runner is not running" -- but the exit code
     # behavior is inconsistent across versions, so the user ends up with
     # .selected-model set, no actual model on disk, and the portal's
     # AI Coworker silently broken ("AI provider is temporarily unavailable"
-    # on first portal load). Enabling is idempotent — no-op if already on.
+    # on first portal load). Enabling is idempotent -- no-op if already on.
     Write-Action "Enabling Docker Model Runner..."
     $oldEAP = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
@@ -1450,7 +1689,7 @@ if (-not (Test-StepDone "model")) {
         Write-Warn "Then re-run this installer."
     } else {
         # Enable GPU-backed inference. Docker Desktop ships this OFF by default
-        # — without it, llama-server processes run on CPU + system RAM instead
+        # Without it, llama-server processes run on CPU + system RAM instead
         # of VRAM, inference is 10-50x slower, and every downstream operation
         # (probes, coworker calls, model evals) silently degrades. The
         # `docker desktop enable model-runner --gpu enable` subcommand is
