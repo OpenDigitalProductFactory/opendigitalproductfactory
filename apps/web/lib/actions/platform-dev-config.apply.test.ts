@@ -225,6 +225,49 @@ describe("applyPlatformUpdate", () => {
     expect(commands).not.toContain("git add -A");
   });
 
+  it("repairs and retries when checkout cannot resolve the managed upstream branch", async () => {
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      updatePending: true,
+      pendingVersion: "v1.2.3",
+    });
+    mockPrisma.platformDevConfig.update.mockResolvedValue({});
+    mockExistsSync.mockReturnValue(false);
+
+    let upstreamCheckoutAttempts = 0;
+    mockExec.mockImplementation((cmd: string, _opts: unknown, cb?: (err: Error | null, value: { stdout: string; stderr: string }) => void) => {
+      if (!cb) return;
+      if (cmd === "git checkout dpf-upstream") {
+        upstreamCheckoutAttempts += 1;
+        if (upstreamCheckoutAttempts === 1) {
+          cb(new Error("pathspec 'dpf-upstream' did not match any file(s) known to git"), {
+            stdout: "",
+            stderr: "pathspec 'dpf-upstream' did not match any file(s) known to git",
+          });
+          return;
+        }
+      }
+      if (cmd === "git rev-parse --verify origin/main") {
+        cb(null, { stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", stderr: "" });
+        return;
+      }
+      if (cmd === "git diff --name-only origin/main...HEAD -- apps/web packages") {
+        cb(null, { stdout: "", stderr: "" });
+        return;
+      }
+      if (cmd.includes("--diff-filter=U")) cb(null, { stdout: "", stderr: "" });
+      else if (cmd === "git diff --cached --stat") cb(null, { stdout: " 2 files changed, 5 insertions(+)", stderr: "" });
+      else cb(null, { stdout: "", stderr: "" });
+    });
+
+    const result = await applyPlatformUpdate();
+
+    expect(result.kind).toBe("clean-merge");
+    const commands = mockExec.mock.calls.map(([cmd]) => cmd);
+    expect(commands.filter((cmd) => cmd === "git checkout dpf-upstream")).toHaveLength(2);
+    expect(commands).toContain("git branch -f dpf-upstream HEAD");
+    expect(commands).toContain("git checkout my-changes");
+  });
+
   it("does not repair missing update branches over committed source changes", async () => {
     mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
       updatePending: true,

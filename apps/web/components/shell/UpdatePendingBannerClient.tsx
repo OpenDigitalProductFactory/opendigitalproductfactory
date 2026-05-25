@@ -1,0 +1,89 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+
+type Props = {
+  pendingVersion: string;
+};
+
+const STORAGE_PREFIX = "dpf:update-pending-banner-collapsed:";
+
+export function UpdatePendingBannerClient({ pendingVersion }: Props) {
+  const versionLabel = formatPendingVersion(pendingVersion);
+  const storageKey = useMemo(() => `${STORAGE_PREFIX}${pendingVersion}`, [pendingVersion]);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    try {
+      setCollapsed(window.localStorage.getItem(storageKey) === "true");
+    } catch {
+      setCollapsed(false);
+    }
+  }, [storageKey]);
+
+  function updateCollapsed(next: boolean) {
+    setCollapsed(next);
+    try {
+      window.localStorage.setItem(storageKey, String(next));
+    } catch {
+      /* localStorage may be unavailable in private contexts */
+    }
+  }
+
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        aria-expanded="false"
+        aria-label="Expand platform update banner"
+        onClick={() => updateCollapsed(false)}
+        className="pointer-events-auto flex max-w-[calc(100vw-24px)] items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-xs font-medium text-[var(--dpf-text)] shadow-[0_10px_30px_color-mix(in_srgb,var(--dpf-text)_14%,transparent)]"
+      >
+        <RefreshCw aria-hidden="true" className="h-3.5 w-3.5 text-[var(--dpf-accent)]" />
+        <span className="max-w-[min(72vw,40rem)] truncate">Platform update {versionLabel}</span>
+        <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 text-[var(--dpf-muted)]" />
+      </button>
+    );
+  }
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      data-overlay-banner="true"
+      className="pointer-events-auto w-[min(960px,calc(100vw-24px))] rounded-md border border-[color-mix(in_srgb,var(--dpf-accent)_34%,var(--dpf-border))] bg-[color-mix(in_srgb,var(--dpf-accent)_12%,var(--dpf-surface-1))] px-3 py-2 text-xs text-[var(--dpf-text)] shadow-[0_10px_30px_color-mix(in_srgb,var(--dpf-text)_14%,transparent)]"
+    >
+      <div className="flex items-center gap-2">
+        <RefreshCw aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--dpf-accent)]" />
+        <div className="min-w-0 flex-1">
+          <span className="font-medium">Platform update {versionLabel} is ready.</span>{" "}
+          <span className="text-[var(--dpf-muted)]">Your customisations are preserved.</span>{" "}
+          <Link
+            href="/admin/platform-development"
+            className="font-medium text-[var(--dpf-accent)] underline underline-offset-2"
+          >
+            Review in Admin - Platform Development
+          </Link>
+        </div>
+        <button
+          type="button"
+          aria-expanded="true"
+          aria-label="Collapse platform update banner"
+          title="Collapse platform update banner"
+          onClick={() => updateCollapsed(true)}
+          className="shrink-0 rounded p-1 text-[var(--dpf-muted)] transition hover:bg-[var(--dpf-surface-2)] hover:text-[var(--dpf-text)]"
+        >
+          <ChevronUp aria-hidden="true" className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function formatPendingVersion(pendingVersion: string): string {
+  if (/^v\d+\.\d+\.\d+$/i.test(pendingVersion)) return pendingVersion;
+  if (/^[0-9a-f]{40}$/i.test(pendingVersion)) return pendingVersion;
+  return `v${pendingVersion}`;
+}
