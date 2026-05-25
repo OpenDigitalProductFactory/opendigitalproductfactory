@@ -962,6 +962,7 @@ model BacklogItem {
   effortSize              String?
   proposedOutcome         String?
   activeBuildId           String?                       @unique
+  activeEpicId            String?                       @unique
   duplicateOfId           String?
   resolution              String?
   abandonReason           String?
@@ -981,6 +982,8 @@ model BacklogItem {
   upstreamSyncedAt        DateTime?
   accountableEmployee     EmployeeProfile?              @relation("ItemAccountable", fields: [accountableEmployeeId], references: [id])
   activeBuild             FeatureBuild?                 @relation("BacklogItemActiveBuild", fields: [activeBuildId], references: [id])
+  activeEpic              Epic?                         @relation("BacklogItemActiveEpic", fields: [activeEpicId], references: [id])
+  originatingEpic         Epic?                         @relation("EpicOriginatingItem")
   digitalProduct          DigitalProduct?               @relation(fields: [digitalProductId], references: [id])
   duplicateOf             BacklogItem?                  @relation("BacklogItemDuplicates", fields: [duplicateOfId], references: [id])
   duplicates              BacklogItem[]                 @relation("BacklogItemDuplicates")
@@ -1153,29 +1156,44 @@ model RuntimeVerification {
 }
 
 model Epic {
-  id                    String           @id @default(cuid())
-  epicId                String           @unique
-  title                 String
-  description           String?
-  status                String           @default("open")
-  priority              Int?
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @updatedAt
-  submittedById         String?
-  agentId               String?
-  completedAt           DateTime?
-  accountableEmployeeId String?
-  claimedById           String?
-  claimedByAgentId      String?
-  claimedAt             DateTime?
-  claimStatus           String?
-  upstreamIssueNumber   Int?
-  upstreamIssueUrl      String?
-  upstreamSyncedAt      DateTime?
-  items                 BacklogItem[]
-  accountableEmployee   EmployeeProfile? @relation("EpicAccountable", fields: [accountableEmployeeId], references: [id])
-  submittedBy           User?            @relation("EpicSubmissions", fields: [submittedById], references: [id])
-  portfolios            EpicPortfolio[]
+  id                       String                   @id @default(cuid())
+  epicId                   String                   @unique
+  title                    String
+  description              String?
+  status                   String                   @default("open")
+  priority                 Int?
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  submittedById            String?
+  agentId                  String?
+  completedAt              DateTime?
+  accountableEmployeeId    String?
+  claimedById              String?
+  claimedByAgentId         String?
+  claimedAt                DateTime?
+  claimStatus              String?
+  upstreamIssueNumber      Int?
+  upstreamIssueUrl         String?
+  upstreamSyncedAt         DateTime?
+  // Design-time decomposition substrate (Phase 1, spec
+  // docs/superpowers/specs/2026-05-24-build-studio-design-time-decomposition-design.md).
+  // Null on portfolio-organizational Epics (the existing use); populated on
+  // execution-organizational Epics created via the decomposition gate.
+  designDoc                Json?
+  designReview             Json?
+  decompositionState       Json?
+  originatingBacklogItemId String?                  @unique
+  items                    BacklogItem[]
+  originatingBacklogItem   BacklogItem?             @relation("EpicOriginatingItem", fields: [originatingBacklogItemId], references: [id])
+  activeForBacklogItem     BacklogItem?             @relation("BacklogItemActiveEpic")
+  featureBuilds            FeatureBuild[]           @relation("EpicFeatureBuilds")
+  supersededBuilds         FeatureBuild[]           @relation("EpicSupersededBuilds")
+  dependencies             FeatureBuildDependency[] @relation("EpicDependencies")
+  accountableEmployee      EmployeeProfile?         @relation("EpicAccountable", fields: [accountableEmployeeId], references: [id])
+  submittedBy              User?                    @relation("EpicSubmissions", fields: [submittedById], references: [id])
+  portfolios               EpicPortfolio[]
+
+  @@index([originatingBacklogItemId])
 }
 
 model EpicPortfolio {
@@ -4321,6 +4339,14 @@ model FeatureBuild {
   abandonedAt              DateTime?
   abandonReason            String?
   draftApprovedAt          DateTime?
+  // Design-time decomposition substrate (Phase 1). When non-null, this build
+  // is a child of an execution-organizational Epic; its plan implements a
+  // subset of the parent Epic's designDoc ACs. Recursive decomposition is
+  // forbidden (a child cannot itself be decomposed) — enforced at the
+  // invariant layer, not the schema.
+  parentEpicId             String?
+  childOrder               Int?
+  supersededByEpicId       String?
   activities               BuildActivity[]
   dispatchAttempts         BuildDispatchAttempt[]
   artifactRevisions        BuildArtifactRevision[]
@@ -4331,11 +4357,15 @@ model FeatureBuild {
   phaseRuns                BuildPhaseRun[]
   toolExecutionReceipts    ToolExecutionReceipt[]
   taxonomyProposals        TaxonomyProposal[]
+  dependenciesOut          FeatureBuildDependency[] @relation("DependentBuild")
+  dependenciesIn           FeatureBuildDependency[] @relation("DependsOnBuild")
   activeForBacklogItem     BacklogItem?            @relation("BacklogItemActiveBuild")
   accountableEmployee      EmployeeProfile?        @relation("BuildAccountable", fields: [accountableEmployeeId], references: [id])
   createdBy                User                    @relation(fields: [createdById], references: [id])
   digitalProduct           DigitalProduct?         @relation(fields: [digitalProductId], references: [id])
   originator               BacklogItem?            @relation("BacklogItemOriginator", fields: [originatingBacklogItemId], references: [id])
+  parentEpic               Epic?                   @relation("EpicFeatureBuilds", fields: [parentEpicId], references: [id])
+  supersededByEpic         Epic?                   @relation("EpicSupersededBuilds", fields: [supersededByEpicId], references: [id])
   releaseBundle            ReleaseBundle?          @relation(fields: [releaseBundleId], references: [id])
   productVersions          ProductVersion[]
   promotionBackups         PromotionBackup[]
@@ -4350,6 +4380,29 @@ model FeatureBuild {
   @@index([digitalProductId])
   @@index([originatingBacklogItemId])
   @@index([releaseBundleId])
+  @@index([parentEpicId, childOrder])
+  @@index([supersededByEpicId])
+}
+
+// FeatureBuildDependency — sibling-dependency edges between child FeatureBuilds
+// within the same parent Epic. Phase 1 substrate for design-time decomposition.
+// Invariants (enforced at apps/web/lib/build/epic-decomposition-invariants.ts):
+//   - dependent.parentEpicId === dependsOn.parentEpicId === this.parentEpicId
+//   - dependent.id !== dependsOn.id (no self-loops)
+//   - the dependency graph is acyclic
+model FeatureBuildDependency {
+  id               String       @id @default(cuid())
+  dependentBuildId String
+  dependsOnBuildId String
+  parentEpicId     String
+  createdAt        DateTime     @default(now())
+  dependent        FeatureBuild @relation("DependentBuild", fields: [dependentBuildId], references: [id], onDelete: Cascade)
+  dependsOn        FeatureBuild @relation("DependsOnBuild", fields: [dependsOnBuildId], references: [id], onDelete: Cascade)
+  parentEpic       Epic         @relation("EpicDependencies", fields: [parentEpicId], references: [id], onDelete: Cascade)
+
+  @@unique([dependentBuildId, dependsOnBuildId])
+  @@index([parentEpicId])
+  @@index([dependsOnBuildId])
 }
 
 model BusinessBuildBrief {
