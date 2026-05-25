@@ -6681,10 +6681,26 @@ export async function executeTool(
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
         summary: "Review could not be completed — retry.",
       };
-      await prisma.featureBuild.update({ where: { buildId }, data: { designReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
+
+      // Phase 2 of design-time decomposition (BI-2E6CC391, spec
+      // docs/superpowers/specs/2026-05-24-build-studio-design-time-
+      // decomposition-design.md). Run the deterministic sizing counter and
+      // record the assessment alongside the review. Informational only —
+      // no gate, no UX change. Surfaces the rationale ("5 models, 25 ACs,
+      // 4 multipliers → required") so when Phase 3's gate ships, operators
+      // have already seen the signal in passing.
+      const { sizeDesignDoc } = await import("@/lib/build/size-design-doc");
+      const sizeAssessment = sizeDesignDoc(build.designDoc as Parameters<typeof sizeDesignDoc>[0]);
+      const reviewWithSize = { ...review, sizeAssessment };
+      await prisma.featureBuild.update({ where: { buildId }, data: { designReview: reviewWithSize as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "designReview" });
       logBuildActivity(buildId, "reviewDesignDoc", `Design review: ${review.decision}. ${review.summary}`);
+      logBuildActivity(
+        buildId,
+        "design-size-assessed",
+        `Design size: ${sizeAssessment.decision}. ${sizeAssessment.rationale}`,
+      );
 
       // Record a deliberation trail for this dual-reviewer run. The review
       // result above still gates pass/fail; this layer is the honest
