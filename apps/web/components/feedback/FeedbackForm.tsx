@@ -12,7 +12,14 @@ type Props = {
   onClose?: () => void;
 };
 
-export function FeedbackForm({ routeContext, userId, errorMessage, errorStack, source, onClose }: Props) {
+export function FeedbackForm({
+  routeContext,
+  userId,
+  errorMessage,
+  errorStack,
+  source,
+  onClose,
+}: Props) {
   const [type, setType] = useState<string>(errorMessage ? "runtime_error" : "user_report");
   const [description, setDescription] = useState(errorMessage ?? "");
   const [submitted, setSubmitted] = useState(false);
@@ -40,12 +47,18 @@ export function FeedbackForm({ routeContext, userId, errorMessage, errorStack, s
 
   if (submitted) {
     return (
-      <div style={{ padding: 16, textAlign: "center", color: "var(--dpf-text)", fontSize: 13 }}>
+      <div className="p-4 text-center text-sm text-[var(--dpf-text)]">
         {reportId
           ? `Thanks! Report ${reportId} filed. The platform team has been notified.`
-          : "Saved — will be sent when connectivity is restored."}
+          : queued
+            ? "Saved — will be sent when connectivity is restored."
+            : "Saved — will be sent when connectivity is restored."}
         {onClose && (
-          <button type="button" onClick={onClose} style={{ display: "block", margin: "12px auto 0", background: "none", border: "1px solid rgba(42,42,64,0.6)", borderRadius: 6, padding: "4px 12px", color: "var(--dpf-text)", fontSize: 12, cursor: "pointer" }}>
+          <button
+            type="button"
+            onClick={onClose}
+            className="mx-auto mt-3 block rounded-md border border-[var(--dpf-border)] px-3 py-1 text-xs text-[var(--dpf-text)]"
+          >
             Close
           </button>
         )}
@@ -54,38 +67,42 @@ export function FeedbackForm({ routeContext, userId, errorMessage, errorStack, s
   }
 
   return (
-    <div style={{ padding: 12, fontSize: 13, color: "var(--dpf-text)" }}>
-      <div style={{ marginBottom: 8 }}>
+    <div className="p-3 text-sm text-[var(--dpf-text)]">
+      <div className="mb-2">
         <select
           value={type}
           onChange={(e) => setType(e.target.value)}
-          style={{ width: "100%", background: "rgba(15,15,26,0.8)", border: "1px solid rgba(42,42,64,0.6)", borderRadius: 6, padding: "6px 8px", color: "var(--dpf-text)", fontSize: 12 }}
+          className="w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1.5 text-xs text-[var(--dpf-text)]"
         >
           <option value="runtime_error">Bug Report</option>
           <option value="feedback">Suggestion</option>
           <option value="user_report">Question</option>
         </select>
       </div>
-      <div style={{ marginBottom: 8 }}>
+      <div className="mb-2">
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Describe what happened or what you'd like to see..."
           rows={4}
-          style={{ width: "100%", background: "rgba(15,15,26,0.8)", border: "1px solid rgba(42,42,64,0.6)", borderRadius: 6, padding: "6px 8px", color: "var(--dpf-text)", fontSize: 12, resize: "vertical" }}
+          className="w-full resize-y rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1.5 text-xs text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)]"
         />
       </div>
-      <div style={{ display: "flex", gap: 8 }}>
+      <div className="flex gap-2">
         <button
           type="button"
           onClick={handleSubmit}
           disabled={!description.trim()}
-          style={{ flex: 1, background: "var(--dpf-accent)", border: "none", borderRadius: 6, padding: "6px 12px", fontSize: 12, color: "#fff", cursor: description.trim() ? "pointer" : "not-allowed", opacity: description.trim() ? 1 : 0.5 }}
+          className="flex-1 rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-xs text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
           Submit
         </button>
         {onClose && (
-          <button type="button" onClick={onClose} style={{ background: "none", border: "1px solid rgba(42,42,64,0.6)", borderRadius: 6, padding: "6px 12px", fontSize: 12, color: "var(--dpf-text)", cursor: "pointer" }}>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-xs text-[var(--dpf-text)]"
+          >
             Cancel
           </button>
         )}
