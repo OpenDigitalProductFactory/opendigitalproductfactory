@@ -267,6 +267,21 @@ describe("fetchQuiescenceState — cache + timeout", () => {
 });
 
 describe("checkQuiescenceForRequest — fail policy integration", () => {
+  it("does not fetch quiescence state for the state route itself", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify(normalState), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const req = makeRequest("https://example.com/api/internal/quiescence-state", {
+      method: "GET",
+    });
+    const decision = await checkQuiescenceForRequest(req, "https://example.com");
+
+    expect(decision.kind).toBe("pass");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("fail-open for reads when state route returns unknown", async () => {
     const fetchImpl = (async () => {
       throw new Error("ECONNREFUSED");
