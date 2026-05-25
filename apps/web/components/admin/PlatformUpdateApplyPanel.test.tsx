@@ -28,6 +28,7 @@ describe("PlatformUpdateApplyPanel", () => {
     );
 
     expect(html).toContain("managed source workspace");
+    expect(html).toContain("click Apply update again");
     expect(html).not.toMatch(/Build Studio/i);
   });
 });
