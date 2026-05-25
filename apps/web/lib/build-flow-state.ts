@@ -14,6 +14,7 @@ import { prisma } from "@dpf/db";
 import type { BuildPhase } from "@/lib/feature-build-types";
 import { PHASE_LABELS } from "@/lib/feature-build-types";
 import { isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
+import { recordReadyDependentsAfterCompletion } from "@/lib/build/feature-build-dependencies";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -442,6 +443,9 @@ export async function reconcileBuildCompletion(buildId: string): Promise<boolean
   await prisma.featureBuild.update({
     where: { buildId },
     data: { phase: "complete" },
+  });
+  await recordReadyDependentsAfterCompletion({ db: prisma, buildId }).catch((err) => {
+    console.error("[reconcileBuildCompletion] dependency readiness check failed:", err);
   });
 
   // Emit phase:change so the UI updates without a full refresh. Dynamic

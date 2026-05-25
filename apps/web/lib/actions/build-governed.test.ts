@@ -105,7 +105,7 @@ vi.mock("next/cache", () => ({
 }));
 
 import { revalidatePath } from "next/cache";
-import { approveBuildStart, advanceBuildPhase, createFeatureBuild, recordBuildAcceptance, resumeBuildImplementation, runBuildReviewVerification, updateBusinessBuildBrief, updateFeatureBrief } from "./build";
+import { approveBuildStart, advanceBuildPhase, completeBuild, createFeatureBuild, recordBuildAcceptance, resumeBuildImplementation, runBuildReviewVerification, updateBusinessBuildBrief, updateFeatureBrief } from "./build";
 
 describe("governed build start approvals", () => {
   beforeEach(() => {
@@ -655,6 +655,69 @@ describe("governed build start approvals", () => {
     );
   });
 
+  it("advanceBuildPhase blocks child implementation while an upstream sibling is unfinished", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue({
+      id: "build-row-usage",
+      buildId: "FB-USAGE",
+      title: "Record usage",
+      phase: "plan",
+      parentEpicId: "epic-row-1",
+      dependenciesOut: [
+        {
+          dependsOn: {
+            id: "build-row-read",
+            buildId: "FB-READ",
+            title: "Truck and parts read",
+            phase: "build",
+          },
+        },
+      ],
+      createdById: "user-1",
+      originatingBacklogItemId: "backlog-row-1",
+      draftApprovedAt: new Date("2026-04-25T13:00:00Z"),
+      designDoc: { problemStatement: "Record parts usage" },
+      designReview: { decision: "pass", summary: "ok", issues: [] },
+      plan: {
+        happyPathState: {
+          intake: {
+            status: "ready",
+            taxonomyNodeId: "taxonomy-1",
+            backlogItemId: "BI-USAGE",
+            epicId: "EP-TRUCK",
+            constrainedGoal: "Record usage",
+            failureReason: null,
+          },
+        },
+      },
+      brief: { acceptanceCriteria: ["A technician can mark a part used."] },
+      buildPlan: {
+        fileStructure: [{ path: "apps/web/components/build/BuildStudio.tsx", action: "modify", purpose: "Record usage" }],
+        tasks: [{ title: "Usage", testFirst: "Add test", implement: "Patch UI", verify: "Run checks" }],
+      },
+      planReview: { decision: "pass", summary: "ready", issues: [] },
+      taskResults: null,
+      verificationOut: null,
+      acceptanceMet: null,
+      uxTestResults: null,
+      uxVerificationStatus: null,
+      sandboxId: null,
+      deliberationSummary: null,
+    });
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({ governedBacklogEnabled: true });
+
+    await expect(advanceBuildPhase("FB-USAGE", "build")).rejects.toThrow(
+      "Waiting on: Truck and parts read",
+    );
+
+    expect(mockEvaluateBuildStudioPlanAdvancementGate).not.toHaveBeenCalled();
+    expect(mockPrisma.featureBuild.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { buildId: "FB-USAGE" },
+        data: expect.objectContaining({ phase: "build" }),
+      }),
+    );
+  });
+
   it("advanceBuildPhase blocks plan to build when WWMD escalates or defers", async () => {
     mockPrisma.featureBuild.findUnique.mockResolvedValue({
       id: "build-row-1",
@@ -731,6 +794,62 @@ describe("governed build start approvals", () => {
       }),
     );
     expect(mockQueueBuildReviewVerification).toHaveBeenCalledWith("FB-789");
+  });
+
+  it("completeBuild records ready dependent children after their upstream blockers clear", async () => {
+    mockPrisma.featureBuild.findUnique.mockImplementation(async (args) => {
+      if ((args as { select?: { dependenciesIn?: unknown } }).select?.dependenciesIn) {
+        return {
+          id: "build-row-read",
+          buildId: "FB-READ",
+          title: "Truck and parts read",
+          parentEpicId: "epic-row-1",
+          phase: "complete",
+          dependenciesIn: [
+            {
+              dependent: {
+                id: "build-row-usage",
+                buildId: "FB-USAGE",
+                title: "Record usage",
+                parentEpicId: "epic-row-1",
+                phase: "plan",
+                dependenciesOut: [
+                  {
+                    dependsOn: {
+                      id: "build-row-read",
+                      buildId: "FB-READ",
+                      title: "Truck and parts read",
+                      phase: "complete",
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        };
+      }
+
+      return {
+        createdById: "user-1",
+      };
+    });
+    mockPrisma.featureBuild.update.mockResolvedValue({});
+
+    await completeBuild("FB-READ");
+
+    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith({
+      where: { buildId: "FB-READ" },
+      data: { phase: "complete" },
+    });
+    expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          buildId: "FB-USAGE",
+          tool: "dependency:ready",
+          summary: expect.stringContaining("Ready to plan"),
+        }),
+      }),
+    );
   });
 
   it("recordBuildAcceptance persists met acceptance evidence once review checks are complete", async () => {

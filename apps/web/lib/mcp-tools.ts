@@ -7299,7 +7299,21 @@ export async function executeTool(
       // see the fix in reviewDesignDoc for the backstory.
       try {
         const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState } = await import("@/lib/feature-build-types");
-        const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId } });
+        const { deriveFeatureBuildDependencyGate, FEATURE_BUILD_DEPENDENCY_GATE_SELECT } = await import("@/lib/build/feature-build-dependencies");
+        const updatedBuild = await prisma.featureBuild.findUnique({
+          where: { buildId },
+          select: {
+            phase: true,
+            plan: true,
+            buildPlan: true,
+            planReview: true,
+            id: true,
+            buildId: true,
+            title: true,
+            parentEpicId: true,
+            dependenciesOut: FEATURE_BUILD_DEPENDENCY_GATE_SELECT.dependenciesOut,
+          },
+        });
         if (updatedBuild && updatedBuild.phase === "plan" && canTransitionPhase("plan", "build")) {
           const plan = (updatedBuild.plan as Record<string, unknown> | null) ?? {};
           const happyPathState = normalizeHappyPathState(plan.happyPathState);
@@ -7309,33 +7323,38 @@ export async function executeTool(
             happyPathState,
           });
           if (gate.allowed) {
-            // Initialize the build branch BEFORE flipping the phase. If the
-            // phase flip lands without buildBranch set, deploy_feature runs
-            // on whatever the current sandbox HEAD is — picking up leftover
-            // work from earlier builds. Gate the transition on the branch
-            // actually being ready so the "phase: build" record is always
-            // paired with a valid buildBranch on the FeatureBuild row.
-            try {
-              const { isSandboxAvailable, startBuildBranch } = await import("@/lib/integrate/sandbox/build-branch");
-              const sandboxUp = await isSandboxAvailable();
-              if (!sandboxUp) {
-                logBuildActivity(buildId, "phase:gate-blocked", "Auto-advance to build blocked: sandbox not running. Start the sandbox, then call start_build.");
-              } else {
-                await startBuildBranch(buildId);
-                // EP-COST Phase 3: record plan-phase cost rollup, start build tracking, and compact thread
-                const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
-                void completeBuildPhaseRun(buildId, "plan");
-                void startBuildPhaseRun(buildId, "build");
-                if (context?.threadId) {
-                  const { persistPhaseHandoffSummary } = await import("@/lib/integrate/phase-compaction-wire");
-                  void persistPhaseHandoffSummary(context.threadId, "plan");
+            const dependencyGate = deriveFeatureBuildDependencyGate(updatedBuild);
+            if (!dependencyGate.allowed) {
+              logBuildActivity(buildId, "phase:gate-blocked", dependencyGate.message);
+            } else {
+              // Initialize the build branch BEFORE flipping the phase. If the
+              // phase flip lands without buildBranch set, deploy_feature runs
+              // on whatever the current sandbox HEAD is — picking up leftover
+              // work from earlier builds. Gate the transition on the branch
+              // actually being ready so the "phase: build" record is always
+              // paired with a valid buildBranch on the FeatureBuild row.
+              try {
+                const { isSandboxAvailable, startBuildBranch } = await import("@/lib/integrate/sandbox/build-branch");
+                const sandboxUp = await isSandboxAvailable();
+                if (!sandboxUp) {
+                  logBuildActivity(buildId, "phase:gate-blocked", "Auto-advance to build blocked: sandbox not running. Start the sandbox, then call start_build.");
+                } else {
+                  await startBuildBranch(buildId);
+                  // EP-COST Phase 3: record plan-phase cost rollup, start build tracking, and compact thread
+                  const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
+                  void completeBuildPhaseRun(buildId, "plan");
+                  void startBuildPhaseRun(buildId, "build");
+                  if (context?.threadId) {
+                    const { persistPhaseHandoffSummary } = await import("@/lib/integrate/phase-compaction-wire");
+                    void persistPhaseHandoffSummary(context.threadId, "plan");
+                  }
+                  await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
+                  if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
+                  logBuildActivity(buildId, "phase:advance", "Phase advanced: plan → build (buildBranch initialized)");
                 }
-                await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
-                if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
-                logBuildActivity(buildId, "phase:advance", "Phase advanced: plan → build (buildBranch initialized)");
+              } catch (branchErr) {
+                logBuildActivity(buildId, "phase:gate-blocked", `startBuildBranch failed: ${(branchErr as Error).message?.slice(0, 200)}`);
               }
-            } catch (branchErr) {
-              logBuildActivity(buildId, "phase:gate-blocked", `startBuildBranch failed: ${(branchErr as Error).message?.slice(0, 200)}`);
             }
           } else {
             logBuildActivity(buildId, "phase:gate-blocked", gate.reason ?? "unknown");
@@ -7560,6 +7579,17 @@ export async function executeTool(
     case "start_build": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+
+      try {
+        const { assertFeatureBuildDependenciesSatisfied } = await import("@/lib/build/feature-build-dependencies");
+        await assertFeatureBuildDependenciesSatisfied({ db: prisma, buildId });
+      } catch (err) {
+        return {
+          success: false,
+          error: "Dependency gate blocked.",
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
 
       const { isSandboxAvailable, startBuildBranch } = await import("@/lib/integrate/sandbox/build-branch");
 
@@ -8609,6 +8639,10 @@ export async function executeTool(
           await prisma.featureBuild.update({
             where: { buildId },
             data: { phase: "complete" },
+          });
+          const { recordReadyDependentsAfterCompletion } = await import("@/lib/build/feature-build-dependencies");
+          await recordReadyDependentsAfterCompletion({ db: prisma, buildId }).catch((err) => {
+            console.warn("[create_portal_pr] dependency readiness check failed:", err);
           });
 
           const promotion = build.productVersions[0]?.promotions[0];
