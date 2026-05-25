@@ -179,6 +179,16 @@ export function getLastKnownNonNormal(): ProxyQuiescenceState | null {
   return lastKnownNonNormal;
 }
 
+function getAllowListedPassState(): ProxyQuiescenceState {
+  return stateCache?.state ?? {
+    level: "normal",
+    runId: null,
+    enteredAt: null,
+    version: "unknown",
+    bundleHash: "unknown",
+  };
+}
+
 // ─── Gating decision ──────────────────────────────────────────────────────
 
 /**
@@ -283,6 +293,10 @@ export async function checkQuiescenceForRequest(
   req: NextRequest,
   origin: string,
 ): Promise<GateDecision> {
+  if (isAllowListed(req.nextUrl.pathname)) {
+    return evaluateGate(req, getAllowListedPassState());
+  }
+
   const state = await fetchQuiescenceState(origin);
   if (state.level === "unknown") {
     // Fail policy: preserve last known non-normal for mutations; fail open
