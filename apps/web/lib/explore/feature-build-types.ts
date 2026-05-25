@@ -93,6 +93,47 @@ export type ReviewResult = {
      *  signal that the feature scope may be too large to converge. */
     oscillating?: boolean;
   };
+  /** Deterministic size assessment of the reviewed design. Populated by
+   *  reviewDesignDoc when designReview is the result of an Ideate-phase
+   *  review (not Plan-phase). Phase 2 of the design-time decomposition
+   *  rollout (BI-2E6CC391, spec
+   *  docs/superpowers/specs/2026-05-24-build-studio-design-time-
+   *  decomposition-design.md). Phase 3 reads this to render the gate
+   *  banner; Phase 4 reads it to gate the decomposition assistant.
+   *  Absent on Plan-phase reviews and on builds reviewed before Phase 2
+   *  shipped. */
+  sizeAssessment?: SizeAssessmentSnapshot;
+};
+
+/** Snapshot of the sizeDesignDoc output as persisted on a ReviewResult.
+ *  Kept structurally compatible with `SizeAssessment` in
+ *  apps/web/lib/build/size-design-doc.ts so client code can import either
+ *  type. Defined here (rather than imported) so the ReviewResult shape has
+ *  no module-graph dependency on the sizing logic. */
+export type SizeAssessmentSnapshot = {
+  decision: "ok" | "decompose-recommended" | "decompose-required";
+  breakdown: {
+    models: { count: number; samples: string[] };
+    endpoints: { count: number; samples: string[] };
+    acs: { count: number };
+    multipliers: { count: number; matchedKeywords: string[] };
+    routes: { count: number; samples: string[] };
+  };
+  trips: Array<{
+    dimension: "models" | "endpoints" | "acs" | "multipliers" | "routes";
+    level: "recommend" | "required";
+    threshold: number;
+    observed: number;
+  }>;
+  rationale: string;
+  thresholds: {
+    models: { recommend: number; required: number };
+    endpoints: { recommend: number; required: number };
+    acs: { recommend: number; required: number };
+    multipliers: { recommend: number; required: number };
+    routes: { recommend: number; required: number };
+  };
+  assessedAt: string;
 };
 
 export type ReusabilityAnalysis = {
