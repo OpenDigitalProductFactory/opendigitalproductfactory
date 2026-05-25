@@ -15,6 +15,7 @@ import type {
 import { safeRenderValue } from "@/lib/safe-render";
 import { normalizeTaskResults, type NormalizedTaskResults } from "@/lib/build/task-results";
 import { normalizeVerificationOutput, type NormalizedVerificationOutput } from "@/lib/build/verification-output";
+import { DecompositionGateBanner } from "@/components/build/DecompositionGateBanner";
 
 type Props = {
   build: FeatureBuildRow;
@@ -263,6 +264,9 @@ function DesignDocSection({
           )}
           {review && (
             <ReviewBadgeBlock decision={review.decision} summary={review.summary} issues={review.issues} />
+          )}
+          {review?.decision === "pass" && (
+            <DecompositionGateBanner assessment={review.sizeAssessment ?? null} />
           )}
         </div>
       )}
