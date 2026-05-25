@@ -26,6 +26,13 @@ describe("resolveVoiceStorageRoot", () => {
     }).replace(/\\/g, "/")).toBe("/workspace/data/uploads")
   })
 
+  it("keeps Windows project roots absolute on non-Windows runners", () => {
+    expect(resolveVoiceStorageRoot({
+      projectRoot: "D:/DPF",
+      cwd: "/workspace/apps/web",
+    }).replace(/\\/g, "/")).toBe("D:/DPF/data/uploads")
+  })
+
   it("falls back from apps/web to the repository data/uploads directory", () => {
     expect(resolveVoiceStorageRoot({
       cwd: "D:/DPF/apps/web",

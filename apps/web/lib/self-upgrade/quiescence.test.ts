@@ -8,8 +8,15 @@
  * with a real Postgres + Prisma; those are tracked separately under
  * BI-QUIESCE-002 follow-up integration work.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@dpf/db", () => ({
+  prisma: {},
+}));
+
 import {
+  getQuiescenceConfig,
+  invalidateQuiescenceCache,
   isTerminalQuiescenceStatus,
   parseQuiescenceConfig,
   phaseBudgetMs,
@@ -54,6 +61,18 @@ describe("parseQuiescenceConfig", () => {
 
   it("treats missing runId as null", () => {
     expect(parseQuiescenceConfig({ level: "draining" }).runId).toBeNull();
+  });
+});
+
+describe("getQuiescenceConfig", () => {
+  it("returns the default normal state when PlatformConfig is absent from a narrow Prisma mock", async () => {
+    invalidateQuiescenceCache();
+
+    await expect(getQuiescenceConfig(new Date("2026-05-24T18:30:00.000Z"))).resolves.toEqual({
+      level: "normal",
+      runId: null,
+      enteredAt: "1970-01-01T00:00:00.000Z",
+    });
   });
 });
 
