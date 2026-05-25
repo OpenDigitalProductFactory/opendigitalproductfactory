@@ -103,6 +103,20 @@ export type ReviewResult = {
    *  Absent on Plan-phase reviews and on builds reviewed before Phase 2
    *  shipped. */
   sizeAssessment?: SizeAssessmentSnapshot;
+  /** Operator override recorded when the build's size assessment is
+   *  `decompose-required` but the operator chose to proceed
+   *  monolithically. Phase 4a writes this; Phase 4b enforces the gate by
+   *  blocking advance-to-plan unless either decomposition happened OR an
+   *  override exists. Spec §12 Q1. */
+  decompositionOverride?: DecompositionOverrideSnapshot;
+};
+
+/** Persisted shape of the "keep as one build" operator override. */
+export type DecompositionOverrideSnapshot = {
+  rationale: string;
+  recordedAt: string;
+  recordedByUserId: string;
+  recordedByAgentId: string | null;
 };
 
 /** Snapshot of the sizeDesignDoc output as persisted on a ReviewResult.
