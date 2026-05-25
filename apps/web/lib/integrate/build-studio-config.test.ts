@@ -20,8 +20,11 @@ const mockFindUnique = vi.mocked(prisma.platformConfig.findUnique);
 const mockProviderFindMany = vi.mocked(prisma.modelProvider.findMany);
 const mockCredentialFindUnique = vi.mocked(prisma.credentialEntry.findUnique);
 
-function providerRow(providerId: string): Awaited<ReturnType<typeof prisma.modelProvider.findMany>>[number] {
-  return { providerId } as Awaited<ReturnType<typeof prisma.modelProvider.findMany>>[number];
+function providerRow(
+  providerId: string,
+  status: "active" | "inactive" | "unconfigured" = "active",
+): Awaited<ReturnType<typeof prisma.modelProvider.findMany>>[number] {
+  return { providerId, status } as Awaited<ReturnType<typeof prisma.modelProvider.findMany>>[number];
 }
 
 function credentialRow(status: "ok" | "configured" | "pending"): NonNullable<Awaited<ReturnType<typeof prisma.credentialEntry.findUnique>>> {
@@ -113,6 +116,22 @@ describe("getBuildStudioConfig", () => {
     const config = await getBuildStudioConfig();
     expect(config.provider).toBe("claude");
     expect(config.claudeProviderId).toBe("anthropic-sub");
+    expect(config.codexProviderId).toBe("chatgpt");
+  });
+
+  it("ignores inactive CLI providers when auto-detecting dispatch engine", async () => {
+    mockFindUnique.mockResolvedValue(null);
+    mockProviderFindMany
+      .mockResolvedValueOnce([providerRow("anthropic-sub", "inactive")])
+      .mockResolvedValueOnce([providerRow("chatgpt", "active")]);
+    mockCredentialFindUnique
+      .mockResolvedValueOnce(credentialRow("ok"))
+      .mockResolvedValueOnce(credentialRow("ok"));
+
+    const config = await getBuildStudioConfig();
+
+    expect(config.provider).toBe("codex");
+    expect(config.claudeProviderId).toBe("");
     expect(config.codexProviderId).toBe("chatgpt");
   });
 

@@ -27,6 +27,28 @@ describe("deriveBuildStudioCapability", () => {
     }
   });
 
+  it("explains subscription and API-key provider paths separately", () => {
+    expect(SUGGESTED_PROVIDERS).toEqual([
+      {
+        name: "ChatGPT / OpenAI Codex - Subscription sign-in",
+        description: "Recommended: sign in with OpenAI OAuth. Build Studio uses the Codex CLI path; no API key needed.",
+        recommended: true,
+      },
+      {
+        name: "OpenAI API key",
+        description: "Separate OpenAI platform billing. Use this when you want pay-per-token API usage instead of ChatGPT plan limits.",
+      },
+      {
+        name: "Anthropic API key",
+        description: "Separate Anthropic Console billing. Use this when Claude subscription limits are paused or exhausted.",
+      },
+      {
+        name: "Google Gemini API key",
+        description: "Useful for light or backup routing. Free-tier keys have lower quotas than paid API or subscription CLI paths.",
+      },
+    ]);
+  });
+
   it("returns only_local_provider_active when only Docker Model Runner has under-tier models", () => {
     const result = deriveBuildStudioCapability([
       model({
