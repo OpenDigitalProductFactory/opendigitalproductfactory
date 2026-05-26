@@ -43,6 +43,10 @@ DPF therefore treats `dpf-platform` as the project-default plugin, not merely a 
 | [`dpf-use-shared-nonprod-environment`](skills/dpf-use-shared-nonprod-environment/SKILL.md) | dpf-worktree-per-session | `["build-specialist", "platform-engineer", "ops-coordinator"]` | Claim and release governed shared localhost environments instead of unmanaged servers |
 | [`dpf-local-merge-ci-before-push`](skills/dpf-local-merge-ci-before-push/SKILL.md) | dpf-pr-with-dco | `["build-specialist", "platform-engineer"]` | Run merged-code local integration gates and record results before push or PR |
 
+## Build Studio capability packs
+
+Build Studio groups these skills through [`capability-packs.json`](capability-packs.json). Packs keep the human workflow simple while letting the platform select the right governed skills for architecture, design, implementation, verification, review/ship, and recovery phases.
+
 ## Authoring contract for new skills
 
 When adding a skill to this pack:
