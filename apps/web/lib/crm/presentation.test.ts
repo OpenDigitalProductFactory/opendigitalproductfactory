@@ -5,6 +5,8 @@ import {
   getAccountStatusMeta,
   getEngagementStatusMeta,
   getOpportunityStageMeta,
+  getQuoteStatusMeta,
+  getSalesOrderStatusMeta,
   isOpenOpportunityStage,
   OPEN_OPPORTUNITY_STAGES,
 } from "./presentation";
@@ -46,6 +48,44 @@ describe("CRM presentation metadata", () => {
     });
     expect(getOpportunityStageMeta("custom_stage")).toMatchObject({
       label: "Custom stage",
+      tone: "neutral",
+    });
+  });
+
+  it("returns quote status metadata for quote list and opportunity detail badges", () => {
+    expect(getQuoteStatusMeta("sent")).toMatchObject({
+      label: "Sent",
+      tone: "info",
+    });
+    expect(getQuoteStatusMeta("accepted")).toMatchObject({
+      label: "Accepted",
+      tone: "success",
+    });
+    expect(getQuoteStatusMeta("rejected")).toMatchObject({
+      label: "Rejected",
+      tone: "danger",
+    });
+    expect(getQuoteStatusMeta("custom_quote_state")).toMatchObject({
+      label: "Custom quote state",
+      tone: "neutral",
+    });
+  });
+
+  it("returns sales order status metadata for order badges", () => {
+    expect(getSalesOrderStatusMeta("confirmed")).toMatchObject({
+      label: "Confirmed",
+      tone: "info",
+    });
+    expect(getSalesOrderStatusMeta("in_progress")).toMatchObject({
+      label: "In progress",
+      tone: "warning",
+    });
+    expect(getSalesOrderStatusMeta("fulfilled")).toMatchObject({
+      label: "Fulfilled",
+      tone: "success",
+    });
+    expect(getSalesOrderStatusMeta("unknown_order_state")).toMatchObject({
+      label: "Unknown order state",
       tone: "neutral",
     });
   });
