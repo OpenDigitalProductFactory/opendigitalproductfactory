@@ -1,17 +1,13 @@
 // apps/web/app/(shell)/customer/opportunities/page.tsx
 import Link from "next/link";
 import { prisma } from "@dpf/db";
-
-const STAGE_META: Record<string, { label: string; color: string }> = {
-  qualification: { label: "Qualification", color: "#fbbf24" },
-  discovery: { label: "Discovery", color: "#fb923c" },
-  proposal: { label: "Proposal", color: "#38bdf8" },
-  negotiation: { label: "Negotiation", color: "#a78bfa" },
-  closed_won: { label: "Won", color: "#4ade80" },
-  closed_lost: { label: "Lost", color: "#ef4444" },
-};
-
-const OPEN_STAGES = ["qualification", "discovery", "proposal", "negotiation"];
+import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
+import {
+  CRM_TONE_CLASSES,
+  getOpportunityStageMeta,
+  OPEN_OPPORTUNITY_STAGES,
+} from "@/lib/crm/presentation";
+import { formatRevenueAmount } from "@/lib/crm/revenue-cockpit";
 
 export default async function OpportunitiesPage() {
   const opportunities = await prisma.opportunity.findMany({
@@ -25,7 +21,7 @@ export default async function OpportunitiesPage() {
 
   // Group by stage for Kanban
   const byStage: Record<string, typeof opportunities> = {};
-  for (const stage of OPEN_STAGES) {
+  for (const stage of OPEN_OPPORTUNITY_STAGES) {
     byStage[stage] = [];
   }
   for (const opp of opportunities) {
@@ -34,7 +30,9 @@ export default async function OpportunitiesPage() {
   }
 
   // Pipeline metrics
-  const openOpps = opportunities.filter((o) => OPEN_STAGES.includes(o.stage));
+  const openOpps = opportunities.filter((o) =>
+    OPEN_OPPORTUNITY_STAGES.includes(o.stage as (typeof OPEN_OPPORTUNITY_STAGES)[number]),
+  );
   const totalPipelineValue = openOpps.reduce(
     (s, o) => s + Number(o.expectedValue ?? 0),
     0,
@@ -53,14 +51,14 @@ export default async function OpportunitiesPage() {
           <span className="text-[var(--dpf-muted)]">
             {openOpps.length} open opportunit{openOpps.length !== 1 ? "ies" : "y"}
           </span>
-          <span style={{ color: "var(--dpf-accent)" }}>
-            £{totalPipelineValue.toLocaleString()} total
+          <span className="text-[var(--dpf-accent)]">
+            {formatRevenueAmount(totalPipelineValue)} total
           </span>
-          <span style={{ color: "#4ade80" }}>
-            £{Math.round(weightedValue).toLocaleString()} weighted
+          <span className="text-[var(--dpf-text)]">
+            {formatRevenueAmount(Math.round(weightedValue))} weighted
           </span>
           {dormantCount > 0 && (
-            <span style={{ color: "#ef4444" }}>
+            <span className="text-[var(--dpf-text)]">
               {dormantCount} dormant
             </span>
           )}
@@ -69,8 +67,9 @@ export default async function OpportunitiesPage() {
 
       {/* Kanban board — open stages */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-        {OPEN_STAGES.map((stage) => {
-          const meta = STAGE_META[stage]!;
+        {OPEN_OPPORTUNITY_STAGES.map((stage) => {
+          const meta = getOpportunityStageMeta(stage);
+          const toneClasses = CRM_TONE_CLASSES[meta.tone];
           const opps = byStage[stage] ?? [];
           const stageValue = opps.reduce(
             (s, o) => s + Number(o.expectedValue ?? 0),
@@ -80,14 +79,16 @@ export default async function OpportunitiesPage() {
           return (
             <div key={stage}>
               <div
-                className="flex items-center justify-between mb-2 pb-1 border-b-2"
-                style={{ borderBottomColor: meta.color }}
+                className={[
+                  "flex items-center justify-between mb-2 pb-1 border-b-2",
+                  toneClasses.border,
+                ].join(" ")}
               >
                 <span className="text-xs font-semibold text-[var(--dpf-text)]">
                   {meta.label}
                 </span>
                 <span className="text-[9px] text-[var(--dpf-muted)]">
-                  {opps.length} · £{stageValue.toLocaleString()}
+                  {opps.length} · {formatRevenueAmount(stageValue)}
                 </span>
               </div>
 
@@ -103,9 +104,7 @@ export default async function OpportunitiesPage() {
                         {opp.title}
                       </p>
                       {opp.isDormant && (
-                        <span className="text-[8px] px-1 py-0.5 rounded-full bg-red-900/30 text-red-400 shrink-0">
-                          dormant
-                        </span>
+                        <CustomerStatusBadge label="Dormant" tone="warning" />
                       )}
                     </div>
                     <p className="text-[9px] text-[var(--dpf-muted)] truncate">
@@ -114,7 +113,7 @@ export default async function OpportunitiesPage() {
                     <div className="flex items-center justify-between mt-1.5">
                       {opp.expectedValue && (
                         <span className="text-[10px] font-mono text-[var(--dpf-text)]">
-                          £{Number(opp.expectedValue).toLocaleString()}
+                          {formatRevenueAmount(Number(opp.expectedValue))}
                         </span>
                       )}
                       <span className="text-[9px] text-[var(--dpf-muted)]">
@@ -144,7 +143,7 @@ export default async function OpportunitiesPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {[...(byStage["closed_won"] ?? []), ...(byStage["closed_lost"] ?? [])].map(
               (opp) => {
-                const meta = STAGE_META[opp.stage]!;
+                const meta = getOpportunityStageMeta(opp.stage);
                 return (
                   <Link
                     key={opp.id}
@@ -157,12 +156,7 @@ export default async function OpportunitiesPage() {
                         {opp.account.name}
                       </p>
                     </div>
-                    <span
-                      className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0"
-                      style={{ background: `${meta.color}20`, color: meta.color }}
-                    >
-                      {meta.label}
-                    </span>
+                    <CustomerStatusBadge label={meta.label} tone={meta.tone} />
                   </Link>
                 );
               },
