@@ -101,14 +101,24 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 function Get-ComposeContainerImage {
   param([Parameter(Mandatory = $true)][string]$Service)
 
-  $psArgs = $composeArgs + @("ps", "-q", $Service)
-  $containerId = (& docker @psArgs).Trim()
+  $psArgs = $composeArgs + @("ps", "-a", "-q", $Service)
+  $containerId = (& docker @psArgs | Select-Object -First 1)
+  if ($null -eq $containerId) {
+    $containerId = ""
+  } else {
+    $containerId = $containerId.Trim()
+  }
   if (-not $containerId) {
     Write-Error "No container found for compose service '$Service'."
     exit 1
   }
 
-  $imageId = (& docker inspect -f '{{.Image}}' $containerId).Trim()
+  $imageId = (& docker inspect -f '{{.Image}}' $containerId | Select-Object -First 1)
+  if ($null -eq $imageId) {
+    $imageId = ""
+  } else {
+    $imageId = $imageId.Trim()
+  }
   if (-not $imageId) {
     Write-Error "Could not inspect image ID for compose service '$Service'."
     exit 1
