@@ -17,8 +17,10 @@ test("PowerShell redeploy helper builds and recreates portal services together",
   assert.match(body, /\$buildArgs\s*\+=\s*@\("portal", "portal-init"\)/);
   assert.match(body, /"up", "-d", "--no-build", "--force-recreate", "portal-init", "portal"/);
   assert.match(body, /\$composeArgs\s*\+\s*@\("ps", "-a", "-q", \$Service\)/);
-  assert.match(body, /docker inspect -f '{{\.Image}}'/);
-  assert.match(body, /\$portalImage\s*-ne\s*\$portalInitImage/);
+  assert.match(body, /\/app\/\.dpf-image-version/);
+  assert.match(body, /docker cp/);
+  assert.match(body, /\$portalVersion\s*-ne\s*\$sha/);
+  assert.match(body, /\$portalInitVersion\s*-ne\s*\$sha/);
 });
 
 test("shell redeploy helper builds and recreates portal services together", () => {
@@ -31,8 +33,10 @@ test("shell redeploy helper builds and recreates portal services together", () =
   assert.match(body, /docker compose "\$\{compose_args\[@\]\}" build "\$\{build_flags\[@\]\}" portal portal-init/);
   assert.match(body, /docker compose "\$\{compose_args\[@\]\}" up -d --no-build --force-recreate portal-init portal/);
   assert.match(body, /docker compose "\$\{compose_args\[@\]\}" ps -a -q portal-init/);
-  assert.match(body, /docker inspect -f '{{\.Image}}'/);
-  assert.match(body, /\[ "\$portal_image" != "\$portal_init_image" \]/);
+  assert.match(body, /\/app\/\.dpf-image-version/);
+  assert.match(body, /docker cp/);
+  assert.match(body, /\[ "\$portal_version" != "\$sha" \]/);
+  assert.match(body, /\[ "\$portal_init_version" != "\$sha" \]/);
 });
 
 test("version-check drift guidance points to redeploy helper", () => {

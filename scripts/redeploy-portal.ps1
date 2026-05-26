@@ -6,7 +6,7 @@
 .DESCRIPTION
   Stamps the current git HEAD into DPF_VERSION, builds portal-init and portal
   from the same checkout, recreates both containers without rebuilding again,
-  and verifies the resulting containers reference the same image ID.
+  and verifies the resulting containers carry the same DPF version marker.
 
 .PARAMETER NoCache
   Pass --no-cache to docker compose build.
@@ -98,7 +98,7 @@ $upArgs = $composeArgs + @("up", "-d", "--no-build", "--force-recreate", "portal
 & docker @upArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-function Get-ComposeContainerImage {
+function Get-ComposeContainerId {
   param([Parameter(Mandatory = $true)][string]$Service)
 
   $psArgs = $composeArgs + @("ps", "-a", "-q", $Service)
@@ -113,26 +113,45 @@ function Get-ComposeContainerImage {
     exit 1
   }
 
-  $imageId = (& docker inspect -f '{{.Image}}' $containerId | Select-Object -First 1)
-  if ($null -eq $imageId) {
-    $imageId = ""
-  } else {
-    $imageId = $imageId.Trim()
+  return $containerId
+}
+
+function Get-ComposeContainerVersion {
+  param([Parameter(Mandatory = $true)][string]$Service)
+
+  $containerId = Get-ComposeContainerId -Service $Service
+  $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "dpf-redeploy-$([guid]::NewGuid().ToString('N'))"
+  $versionPath = Join-Path $tempDir "$Service.dpf-image-version"
+
+  New-Item -ItemType Directory -Path $tempDir | Out-Null
+  try {
+    & docker cp "$containerId`:/app/.dpf-image-version" $versionPath
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    $version = (Get-Content -Raw -LiteralPath $versionPath).Trim()
+  } finally {
+    Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
   }
-  if (-not $imageId) {
-    Write-Error "Could not inspect image ID for compose service '$Service'."
+
+  if (-not $version) {
+    Write-Error "Could not read .dpf-image-version for compose service '$Service'."
     exit 1
   }
 
-  return $imageId
+  return $version
 }
 
-$portalImage = Get-ComposeContainerImage -Service "portal"
-$portalInitImage = Get-ComposeContainerImage -Service "portal-init"
+$portalVersion = Get-ComposeContainerVersion -Service "portal"
+$portalInitVersion = Get-ComposeContainerVersion -Service "portal-init"
 
-if ($portalImage -ne $portalInitImage) {
-  Write-Error "portal and portal-init image IDs differ. portal=$portalImage portal-init=$portalInitImage"
+if ($portalVersion -ne $sha) {
+  Write-Error "portal image version differs from build SHA. portal=$portalVersion expected=$sha"
   exit 1
 }
 
-Write-Host "[redeploy-portal] portal and portal-init image IDs match: $portalImage"
+if ($portalInitVersion -ne $sha) {
+  Write-Error "portal-init image version differs from build SHA. portal-init=$portalInitVersion expected=$sha"
+  exit 1
+}
+
+Write-Host "[redeploy-portal] portal and portal-init image versions match DPF_VERSION=$sha"
