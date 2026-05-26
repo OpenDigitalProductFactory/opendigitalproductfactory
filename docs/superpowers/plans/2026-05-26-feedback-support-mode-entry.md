@@ -27,6 +27,7 @@
 - **Support mode is an entry mode, not a new backend `CoworkerMode`.** Existing runtime `CoworkerMode` is `"advise" | "act"`. Phase 1 should add support copy and support report creation without widening that runtime enum.
 - **Do not write public build IDs into relation fields.** The browser has the public Build Studio `buildId` such as `FB-12345678`. `PlatformIssueReport.featureBuildId` is a relation to internal `FeatureBuild.id`. The server action must resolve public `buildId` to internal `id` before calling the writer.
 - **Manual click should not force category selection.** Healthy installs open the coworker with support copy. The fallback `FeedbackForm` remains only for shell-unavailable cases and continues to post through the existing fallback path, but it must carry the same `supportSessionId`, `routeContext`, and `triggerKind` so a fallback race cannot create a duplicate report.
+- **Explicit Feedback buttons are `manual` triggers.** Per spec section 6.1, `triggerKind` describes why feedback was raised (`manual`, `runtime-error`, `grant-denied`, etc.), not which UI control was clicked. `FeedbackButton` and `HeaderFeedbackButton` should both emit `triggerKind: "manual"` for Phase 1. Do not invent button-specific trigger kinds such as `"feedback-button"` or `"header-feedback"`.
 - **Thread reconciliation is monotonic.** A support report with no `threadId` may be updated with a validated user-owned thread. A report with the same `threadId` is already reconciled. A report with a different `threadId` must not be relinked.
 - **Abuse limits are server-side.** Do not rely on client throttling. Enforce 3 support starts per user per minute and 10 per user per hour, with user-visible text feedback and audit logging on repeated burst violations.
 
@@ -51,7 +52,7 @@
 - Modify `apps/web/components/feedback/FeedbackButton.tsx`
   - Dispatch typed event detail with route and `triggerKind: "manual"`.
 - Modify `apps/web/components/feedback/HeaderFeedbackButton.tsx`
-  - Same event detail and session-aware fallback behavior.
+  - Same event detail (`triggerKind: "manual"`) and session-aware fallback behavior.
 - Create or modify feedback button tests:
   - `apps/web/components/feedback/FeedbackButton.test.tsx`
   - `apps/web/components/feedback/HeaderFeedbackButton.test.tsx`
@@ -558,7 +559,7 @@ In `AgentCoworkerShell.tsx`:
 - import `isFeedbackEventDetail`, `FeedbackEventDetail`, and `startFeedbackSupport`;
 - keep legacy panel detail support unchanged;
 - when event name is `open-agent-feedback` and detail is valid:
-  - call `preventDefault()` immediately so the feedback button knows the shell handled the event;
+  - validate `isFeedbackEventDetail()` first, then call `preventDefault()` only after accepting a valid support event so malformed or unhandled events can still fall through to the existing fallback path;
   - set panel open and save preference;
   - inject a support welcome message, not a category form;
   - store pending support detail in state or ref;
