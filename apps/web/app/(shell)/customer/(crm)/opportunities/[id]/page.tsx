@@ -3,6 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
+import { PipelineStageInspector } from "@/components/customer/PipelineStageInspector";
+import { updateOpportunityStageFromForm } from "@/lib/actions/crm";
+import { getPipelineInspectorView } from "@/lib/crm/pipeline-inspector-data";
 import { getOpportunityStageMeta, getQuoteStatusMeta } from "@/lib/crm/presentation";
 
 const ACTIVITY_ICONS: Record<string, string> = {
@@ -17,7 +20,7 @@ export default async function OpportunityDetailPage({
 }) {
   const { id } = await params;
 
-  const [opportunity, quotes] = await Promise.all([
+  const [opportunity, quotes, inspector] = await Promise.all([
     prisma.opportunity.findUnique({
       where: { id },
       include: {
@@ -38,9 +41,10 @@ export default async function OpportunityDetailPage({
         totalAmount: true, currency: true, sentAt: true, acceptedAt: true,
       },
     }),
+    getPipelineInspectorView(id),
   ]);
 
-  if (!opportunity) notFound();
+  if (!opportunity || !inspector) notFound();
 
   const stageMeta = getOpportunityStageMeta(opportunity.stage);
   const isClosed = opportunity.stage === "closed_won" || opportunity.stage === "closed_lost";
@@ -69,6 +73,13 @@ export default async function OpportunityDetailPage({
           {opportunity.opportunityId}
         </p>
       </div>
+
+      <PipelineStageInspector
+        inspector={inspector}
+        showFullDetailLink={false}
+        stageFormAction={updateOpportunityStageFromForm}
+        className="mb-6"
+      />
 
       {/* Metadata */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">

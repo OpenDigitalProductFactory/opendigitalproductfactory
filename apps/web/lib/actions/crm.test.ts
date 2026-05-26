@@ -28,6 +28,10 @@ vi.mock("@dpf/db", () => ({
       findUnique: vi.fn(),
       update: vi.fn(),
     },
+    opportunity: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
     activity: {
       create: vi.fn(),
     },
@@ -58,6 +62,8 @@ import {
   searchCustomerSiteAddresses,
   createCustomerSite,
   createCustomerSiteNode,
+  advanceOpportunityStage,
+  updateOpportunityStageFromForm,
   updateCustomerConfigurationItem,
 } from "./crm";
 
@@ -310,6 +316,89 @@ describe("createCustomerConfigurationItem", () => {
     });
     expect(revalidatePath).toHaveBeenCalledWith("/customer");
     expect(revalidatePath).toHaveBeenCalledWith("/customer/acct-1");
+  });
+});
+
+describe("advanceOpportunityStage", () => {
+  it("updates stage, records a status-change activity, and revalidates opportunity routes", async () => {
+    vi.mocked(prisma.opportunity.findUnique).mockResolvedValue({
+      id: "opp-1",
+      title: "Modernize revenue workflow",
+      stage: "proposal",
+      probability: 70,
+      accountId: "acct-1",
+      contactId: "contact-1",
+    } as never);
+    vi.mocked(prisma.opportunity.update).mockResolvedValue({
+      id: "opp-1",
+      title: "Modernize revenue workflow",
+      stage: "negotiation",
+      probability: 80,
+      accountId: "acct-1",
+      contactId: "contact-1",
+      activities: [],
+    } as never);
+    vi.mocked(prisma.activity.create).mockResolvedValue({ id: "act-1" } as never);
+
+    const updated = await advanceOpportunityStage("opp-1", "negotiation", {
+      probability: 80,
+    });
+
+    expect(updated.stage).toBe("negotiation");
+    expect(prisma.opportunity.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "opp-1" },
+        data: expect.objectContaining({
+          stage: "negotiation",
+          stageChangedAt: expect.any(Date),
+          isDormant: false,
+        }),
+      }),
+    );
+    expect(prisma.activity.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: "status_change",
+        subject: "Opportunity stage: proposal -> negotiation (80%)",
+        accountId: "acct-1",
+        contactId: "contact-1",
+        opportunityId: "opp-1",
+      }),
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/customer/opportunities");
+    expect(revalidatePath).toHaveBeenCalledWith("/customer/opportunities/opp-1");
+  });
+
+  it("supports stage updates from an explicit form action", async () => {
+    vi.mocked(prisma.opportunity.findUnique).mockResolvedValue({
+      id: "opp-1",
+      title: "Modernize revenue workflow",
+      stage: "discovery",
+      probability: 40,
+      accountId: "acct-1",
+      contactId: null,
+    } as never);
+    vi.mocked(prisma.opportunity.update).mockResolvedValue({
+      id: "opp-1",
+      title: "Modernize revenue workflow",
+      stage: "proposal",
+      probability: 70,
+      accountId: "acct-1",
+      contactId: null,
+      activities: [],
+    } as never);
+
+    const formData = new FormData();
+    formData.set("opportunityId", "opp-1");
+    formData.set("stage", "proposal");
+
+    await updateOpportunityStageFromForm(formData);
+
+    expect(prisma.opportunity.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "opp-1" },
+        data: expect.objectContaining({ stage: "proposal" }),
+      }),
+    );
   });
 });
 
