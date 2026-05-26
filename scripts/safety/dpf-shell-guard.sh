@@ -59,8 +59,23 @@ else
             -d "$BODY" "$GATE_URL" 2>/dev/null || echo '{"verdict":"_unreachable"}')"
 fi
 
-# Extract fields via jq.
-read_field() { printf '%s' "$RESP" | jq -r ".$1 // empty"; }
+# Extract fields via jq. Bad gate JSON is equivalent to an unreachable gate:
+# static fallback still protects destructive patterns, benign commands proceed.
+read_field() { printf '%s' "$RESP" | jq -r ".$1 // empty" 2>/dev/null || true; }
+
+fallback_match_rationale() {
+  fallback_file="$1"
+  cmdline="$2"
+  jq -r --arg cmd "$cmdline" '
+    [
+      .patterns[]
+      | select(.kind == "shell")
+      | select(.regex as $regex | $cmd | test($regex))
+      | .rationale
+    ]
+    | .[0] // empty
+  ' "$fallback_file" 2>/dev/null || true
+}
 VERDICT="$(read_field verdict)"
 
 case "$VERDICT" in
@@ -139,7 +154,7 @@ case "$VERDICT" in
     FALLBACK="$GUARD_DIR/dpf-shell-guard-fallback-patterns.json"
     CMDLINE="$BIN_NAME $*"
     if [ -f "$FALLBACK" ]; then
-      MATCH_RATIONALE="$(jq -r --arg cmd "$CMDLINE" '[.patterns[] | select(.kind=="shell") | select($cmd | test(.regex)) | .rationale] | .[0] // empty' "$FALLBACK")"
+      MATCH_RATIONALE="$(fallback_match_rationale "$FALLBACK" "$CMDLINE")"
       if [ -n "$MATCH_RATIONALE" ]; then
         echo "[dpf-shell-guard] gate unreachable AND command matches static fallback — REFUSED" >&2
         echo "                  $MATCH_RATIONALE" >&2
