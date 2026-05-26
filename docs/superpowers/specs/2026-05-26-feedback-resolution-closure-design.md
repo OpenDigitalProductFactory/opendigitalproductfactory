@@ -2,10 +2,10 @@
 
 | Field | Value |
 | ----- | ----- |
-| Status | Draft for architecture review |
+| Status | Draft - UX/architecture refresh applied 2026-05-26 |
 | Date | 2026-05-26 |
 | Author | Codex |
-| Backlog item | To be filed after spec review. Live MCP lookup on 2026-05-26 found no exact existing spec/plan for feedback resolution closure, update notification, PR provenance, and archetype applicability as one contract. |
+| Backlog item | `BI-FBDC0861` (Phase 2/2a: Feedback routing decision and resolution closure ledger). Live MCP lookup on 2026-05-26 found no exact indexed spec/plan for feedback resolution closure, update notification, PR provenance, and archetype applicability as one contract before filing. Active implementation context also includes `EP-9FC5D2FD` with `BI-4CDB18EE` (Phase 1 feedback support-mode entry) and `BI-C50D48C6` (support event/fallback correction). |
 | Epic recommendation | Start as a focused BI under `EP-9FC5D2FD` while the work is tied to Dale/Build Studio feedback escalation. Create a dedicated epic only if the scope expands into cross-install hive/release-channel infrastructure beyond feedback closure. |
 | Related substrate | `PlatformIssueReport`; `Notification`; `PlatformNotification`; `ProductVersion`; `ChangePromotion`; `SelfUpgradeRun`; `PlatformDevConfig.updatePending`; `FeatureBuild`; `FeaturePack`; `StorefrontConfig.archetypeId`; `Principal`; `PrincipalAlias`; `ToolExecution`; `WorkCapsule`; `issue-bridge.ts`; `identity-privacy.ts` |
 | Related specs | [Capacity-aware feedback escalation](2026-05-24-capacity-aware-feedback-escalation-design.md); [Pseudonymous identity and backlog issue bridge](2026-04-18-pseudonymous-identity-and-backlog-issue-bridge-design.md); [Build Studio source lifecycle](2026-03-27-build-studio-source-lifecycle-design.md); [Canonical deployment contracts](2026-05-09-deployment-contracts.md); [Quality feedback](2026-03-14-quality-feedback-design.md); [Platform feedback loop](2026-03-16-platform-feedback-loop-design.md) |
@@ -24,6 +24,18 @@ The capacity-aware feedback design gets Dale out of the first dead end: he can a
 4. **How does the submitter know?** "Merged upstream" is not the same as "available to this install" or "installed here." Dale needs a local, plain-language signal when action is needed and when the fix is actually present.
 
 This spec therefore adds a **Feedback Resolution Closure Contract**. It should be treated as an amendment to the Phase 2/3/5 work in the capacity-aware feedback plan. Do not implement routing, bridge wiring, or reverse-channel notifications without capturing the closure fields required here.
+
+## 0. User Experience Posture
+
+The closure contract is technical, but its product job is emotional: Dale should feel that the system remembered what he asked, understood whether the fix is local or upstream, and came back with a truthful next step. The implementation should optimize for calm certainty, not tracker completeness.
+
+Three posture rules govern every UI decision downstream:
+
+1. **Truth before tracker.** A state the substrate cannot yet prove is never spoken aloud to Dale. `fix_merged` is not "fixed", `applied_here` is not "verified". Premature certainty is the failure mode.
+2. **One affordance, one next step.** Each surfaced state has at most one primary CTA, even when several actions are technically possible. Optional admin paths live in secondary detail.
+3. **Local language, not internal language.** Default views speak in plain operator terms; semantic IDs (`PIR-*`, `PIRR-*`) are visible for audit, but raw status enums, branch names, CUIDs, and tracker labels do not lead.
+
+The four-persona contract (Dale, admin, maintainer, coworker) is defined once in [Capacity-aware feedback Section 7.0 Persona Contract](2026-05-24-capacity-aware-feedback-escalation-design.md#70-persona-contract). This contract inherits those personas and adds closure-specific UX needs in Section 13 (Dale timeline, admin view, notification rules). Updates to the persona contract land in the capacity-aware doc, not here.
 
 ## 1. Problem
 
@@ -49,18 +61,18 @@ The risk is subtle: the platform can look responsive while still failing the "fu
 
 ## 2. Current Substrate Truth
 
-This spec is grounded in current `origin/main` as of 2026-05-26.
+This spec is grounded in the current `codex/feedback-resolution-closure-spec` worktree and live MCP planning state as of 2026-05-26. The branch already includes the first support-mode substrate; this contract covers the missing closure layer.
 
 | Area | Current truth | Gap |
 | ---- | ------------- | --- |
-| Issue report | `PlatformIssueReport` stores report ID, route, trigger kind, support session, user, thread/task/build links, source, status, and upstream issue URL/number. | No fixed-in version, resolution artifact, applicability scope, notification state, local applied state, or release/update state. |
+| Issue report | `PlatformIssueReport` stores report ID, route, trigger kind, support session, user, thread/task/build links, source, status, and upstream issue URL/number. `createPlatformIssueReport()` is the canonical writer, and `ISSUE_REPORT_STATUS` / `SUPPORT_FLOW_STATUSES` are the current report-state constants. | No coalescing beyond support-session uniqueness, fixed-in version, resolution artifact, applicability scope, notification state, local applied state, or release/update state. |
 | Submitter notification | `Notification` has `userId`, `type`, `title`, `body`, `deepLink`, and `read`. `PlatformNotification` is global/admin health. | No feedback-resolution notification type or idempotency contract. |
 | Upstream bridge | `issue-bridge.ts` files GitHub Issues using pseudonymous identity, redaction, contribution-mode gates, and existing upstream issue fields. | It does not ingest upstream closure, PR merge, release availability, or local install application. |
 | Identity privacy | `identity-privacy.ts` provides stable install pseudonym identity, hostname redaction, privacy-safe branch names, and token resolution. | It is not yet a full pre-send disclosure/secret policy for feedback reports or contributed features. |
 | Build/release | `ProductVersion` links version and commit hash, optionally to `FeatureBuild`. `ChangePromotion` records deployment state. | Report-to-version and report-to-promotion links are absent. |
 | Self-upgrade | `SelfUpgradeRun` records current/target/deployed SHA and completion evidence. `/ops/self-upgrade` shows configured source, running image, target head, and recent runs. | It is not connected to issue resolution notifications. |
 | Shared workspace update | `PlatformDevConfig.updatePending` and `pendingVersion` drive the update banner and apply panel. | The banner says an update exists, not which reports/features it resolves. |
-| Archetype | `StorefrontConfig.archetypeId` is the selected portal archetype source of truth. `FeaturePack` has `applicableVerticals`, `sourceVertical`, and `reusabilityScope`. | Issue reports do not snapshot source archetype or record applicability decisions. |
+| Archetype | `StorefrontConfig.archetypeId` is the selected portal archetype source of truth. `FeaturePack` has `applicableVerticals`, `sourceVertical`, and `reusabilityScope`. | Issue reports do not snapshot source archetype or record applicability decisions. Category-level `applicableVerticals` is useful evidence but is not precise enough for automatic install targeting by itself. |
 | Principal identity | New identity-bearing entities should converge on `Principal` + `PrincipalAlias`. | A future install/source-contributor identity must not become another parallel identity table. |
 
 ## 3. Research And Benchmarking
@@ -86,7 +98,8 @@ DPF's differentiator is the local install boundary. A SaaS product can usually s
 6. **Applicability is explicit.** A fix or feature must declare instance, archetype, or project scope before it is offered as closure.
 7. **Release and apply are separate.** Merged PR, released version, update pending, and installed locally are distinct states.
 8. **Notification is local and user-specific.** Dale-facing closure uses `Notification`; global/admin summaries use `PlatformNotification`.
-9. **20% refactoring reserve.** Each implementation phase reserves at least 20% capacity for reducing existing feedback/release/provenance fragmentation before adding new UI or new tables.
+9. **Delight comes from lowered cognitive load.** The user-facing state must say what happened, whether action is needed, and where to go next. It should never ask Dale to interpret tracker mechanics.
+10. **20% refactoring reserve.** Each implementation phase reserves at least 20% capacity for reducing existing feedback/release/provenance fragmentation before adding new UI or new tables.
 
 ## 5. Core Terms
 
@@ -122,6 +135,8 @@ Secondary fields can refine the scope:
 ## 7. Applicability Rules
 
 Applicability must be a governed decision, not an inference from labels alone.
+
+Architectural default: exact `StorefrontConfig.archetypeId` matches win over broad category labels. Category fields such as `FeaturePack.applicableVerticals` can suggest candidates, but automatic offering should require explicit target archetype IDs or an applicability decision that records why category-level targeting is safe.
 
 ### 7.1 Instance Fixes
 
@@ -242,6 +257,10 @@ Never send these upstream by default:
 
 Names are proposed; implementation may refine them, but the responsibilities should remain separated.
 
+All persisted string vocabularies below need application constants and API/MCP enum exposure in the same implementation slice. Do not let the database accept one set of status strings while the UI, MCP tools, or reconciler use another.
+
+Identifier rule: public markers, user-facing timelines, MCP inputs, and upstream issue/PR footers use semantic IDs (`PIR-*`, `PIRR-*`, `BI-*`, `FB-*`). Physical Prisma relations may use internal `id` fields for referential integrity, but the model must also preserve the semantic ID used outside the database. The sketches below name semantic fields for readability; the implementation plan must spell out the internal FK plus semantic-ID pair for every relation.
+
 ### 10.1 `PlatformIssueResolution`
 
 One resolution can close one or more reports, and one report can have multiple resolution attempts over time. The first implementation may start with one active resolution per report if that keeps the slice smaller, but the model should not prevent many-to-many grouping.
@@ -295,6 +314,18 @@ Proposed `status` values:
 | `blocked` | Privacy, conflict, missing capability, or release-channel issue blocks closure. |
 | `superseded` | Another resolution replaced this one. |
 
+State-machine invariants:
+
+- `fix_merged` requires a PR/commit/issue artifact with merge or closure evidence.
+- `fix_available` requires a release, `ProductVersion`, update-channel, or promotion artifact that includes the fixed version/SHA.
+- `update_required` requires this install to be eligible and not yet applied.
+- `applied_here` requires local apply evidence, not only an upstream merge.
+- `verified_here` requires route/workflow verification evidence after application.
+- Dale-facing "fixed here" copy may only be sent at `applied_here` or `verified_here`; earlier states use "ready", "being worked", or "needs admin action" language.
+- `not_applicable` may be set by: (a) the applicability reconciler when `targetArchetypeIds`/`excludedArchetypeIds`/`requiresCapabilityFlags` evaluate against this install's `StorefrontConfig`/capability state and produce a definitive miss; (b) an admin override via the admin resolution view, which must write a `ToolExecution` audit record citing the reason. The reconciler is never the sole authority for `not_applicable` on `scope="instance"` resolutions. Those require an explicit admin or system-reconciler decision because instance scope means "this install" by definition.
+- `superseded` is set only when a later resolution explicitly claims the same report set or a strict superset, and the relationship is recorded as an artifact (`kind="resolution_link"`) on both rows.
+- Once a resolution reaches `verified_here`, transitions back to earlier active states require a new resolution; the verified record is closed (`status` stays `verified_here`, additional artifacts may still append for audit, but the lifecycle is frozen).
+
 ### 10.2 `PlatformIssueResolutionReport`
 
 Join table between reports and resolutions.
@@ -347,6 +378,7 @@ model PlatformIssueResolutionInstallState {
   id              String   @id @default(cuid())
   resolutionId    String
   installPrincipalId String?
+  dedupeKey       String   @unique
   applicability   String // applicable | not_applicable | unknown | blocked
   availability    String // unavailable | available | update_pending | conflict | blocked
   application     String // not_applied | applied | verified | failed
@@ -359,27 +391,56 @@ model PlatformIssueResolutionInstallState {
   updatedAt       DateTime @updatedAt
 
   @@index([resolutionId])
+  @@index([installPrincipalId])
   @@index([applicability, availability, application])
 }
 ```
 
-Do not introduce a separate identity table for `installPrincipalId`. If the install needs a durable identity, model it as `Principal(kind="install")` with one or more `PrincipalAlias` rows.
+`dedupeKey` is a deterministic non-null key such as `PIRR-123|install:local` or `PIRR-123|install:<principalId>`. Do not introduce a separate identity table for `installPrincipalId`. If the install needs a durable identity, model it as `Principal(kind="install")` with one or more `PrincipalAlias` rows.
 
 ### 10.5 Notification Idempotency
 
-The current `Notification` model lacks a source key. The plan should either:
+The current `Notification` model lacks a source key. Recommended first slice: create a small `PlatformIssueResolutionNotification` ledger that links resolution/report/install state to a notification row. This keeps the closure contract idempotent without forcing a broad `Notification` migration before the feedback path proves the shape.
+
+A later platform-wide notification normalization may add `sourceType` and `sourceId` directly to `Notification`. If that happens, this ledger can either remain as the feedback-specific evidence table or be folded into the general notification provenance model.
+
+Options considered:
 
 - add `sourceType` and `sourceId` to `Notification`, or
 - create a small `PlatformIssueResolutionNotification` ledger that links resolution/report/install state to a notification row.
 
-Recommended first-class fields:
+Recommended ledger fields:
 
 - `resolutionId`
 - `reportId`
+- `installPrincipalId`
 - `userId`
-- `notificationKind`: `fix_available`, `update_required`, `installed_here`, `blocked`, `not_applicable`
+- `dedupeKey`
+- `notificationKind`: `local_answered`, `fix_available`, `update_required`, `installed_here`, `blocked`, `not_applicable`
 - `notificationId`
 - `createdAt`
+
+```prisma
+model PlatformIssueResolutionNotification {
+  id                 String   @id @default(cuid())
+  dedupeKey          String   @unique
+  resolutionId       String
+  reportId           String?
+  installPrincipalId String?
+  userId             String?
+  notificationKind   String
+  notificationId     String?
+  createdAt          DateTime @default(now())
+
+  @@index([resolutionId, notificationKind])
+  @@index([notificationId])
+  @@index([userId])
+}
+```
+
+**Idempotency key:** `dedupeKey` is the deterministic normalized tuple `resolutionId|installPrincipalId-or-local|userId-or-none|notificationKind`. The reconciler must never produce a second row for the same tuple. A re-entry that finds an existing row is a no-op, not a "notify again". Multiple distinct `notificationKind` values for the same resolution/install/user are allowed (e.g. `fix_available` then later `installed_here` are two rows), because each marks a distinct state change.
+
+**Re-notification policy:** state regression (e.g. an install that briefly reached `applied_here` then failed verification and reopened the path) does not re-fire an earlier `notificationKind`. Instead, the path produces a follow-up resolution (per the `superseded` rule in Section 10.1 invariants) and the new resolution drives any new notification. This prevents Dale from receiving "fix installed" twice for the same underlying issue and prevents flapping reconciler state from spamming the user.
 
 ## 11. PR, Issue, And Release Linking
 
@@ -405,6 +466,15 @@ Rules:
 - PR author, branch prefix, or tool name must not be the primary join key.
 - If a PR lacks markers, an admin can manually link it, but the link must be auditable.
 
+**Archetype fingerprinting caveat:** `DPF-Source-Archetype` and `DPF-Target-Archetypes` are useful for upstream maintainers triaging reuse scope, but they leak more than they appear to when an archetype is rare in the deployed fleet. An archetype that resolves to a single install effectively re-identifies that install even when the pseudonym is preserved. The publisher must:
+
+- prefer category-level archetype markers (e.g. `field-service`) over leaf archetype IDs (e.g. `hvac-field-service-tx-region`) when category is sufficient context;
+- drop both markers when the resolution's `scope` is `project` and archetype is irrelevant to the maintainer's work;
+- allow an install-level opt-out (`PlatformDevConfig.shareArchetypeInUpstream`) that suppresses both markers regardless of contribution mode;
+- never emit `DPF-Source-Archetype` for archetypes flagged as `private` in the local archetype registry.
+
+The DPF marker set is additive metadata, not a publication guarantee. The privacy gates in Section 9 still gate the entire send; the markers do not bypass them.
+
 ### 11.2 Artifact Reconciler
 
 A local reconciler should:
@@ -415,6 +485,15 @@ A local reconciler should:
 4. Record `github_issue`, `github_pr`, `merge_commit`, and `product_version` artifacts.
 5. Move resolution state from `fix_in_progress` to `fix_merged` only when merge/closure evidence is real.
 6. Move to `fix_available` only when a release/update path includes the fixed SHA/version.
+
+**Cadence and retry behavior:**
+
+- **Default cadence:** every 15 minutes for resolutions whose status is `fix_in_progress`, `fix_merged`, `fix_available`, or `update_required`. Resolutions in terminal states (`verified_here`, `not_applicable`, `superseded`) are not polled.
+- **Webhook fast-path:** when the install has configured an inbound GitHub webhook, an authenticated event triggers an immediate reconciliation for the affected resolution(s); the periodic poll continues as the floor.
+- **Backoff on transient failure:** GitHub 5xx, network timeout, and rate-limit responses use exponential backoff (1m, 5m, 15m, 30m, capped at 30m) per resolution. The reconciler must not multiply requests across resolutions when one upstream is degraded; it processes serially per repository and respects the `X-RateLimit-Remaining`/`X-RateLimit-Reset` headers.
+- **Hard-failure isolation:** an invalid token, missing repo permission, or repository-removed response moves the affected resolutions to `blocked` with a typed `blockingReason` and surfaces an admin notification. The reconciler must not loop on a credential error.
+- **Idempotency:** every reconciliation pass is safe to re-run. Artifact appends use `(resolutionId, kind, semanticId | url | gitSha)` as the dedup key. The same merge commit, GitHub issue number, or release version produces one row, not one per pass.
+- **Observability:** each reconciliation pass emits a structured log with resolution count, artifacts written, state transitions, and any errors. The admin view in Section 13.3 shows the last successful run timestamp.
 
 ### 11.3 Producer-Agnostic Flow
 
@@ -472,6 +551,17 @@ It does not mean Dale's install has the fix.
 
 `verified_here` requires a route/workflow verification event, not only a successful deployment. For UI/support paths, this should be browser or portal verification on the live portal when feasible. Structural checks alone do not close the loop.
 
+**Verification triggers** (one or more must produce evidence before the state transitions):
+
+| Trigger | Source | Evidence captured |
+| ------- | ------ | ----------------- |
+| Operator confirmation | Dale (or another submitter linked to the report) opens the closure notification's deep link, returns to the originating route, and explicitly confirms via the panel's "this is working now" control. | `verification` artifact with `producerKind="local_coworker"`, route, timestamp, and the user/principal who confirmed. |
+| Automated route hit | The resolution declares a verifiable route/workflow and a route-level success assertion. A subsequent successful request to that route by the affected user, within the validity window after `applied_here`, counts only for issues whose acceptance can be represented by that assertion. Complex UX, data mutation, or workflow outcomes still require operator, admin, or Build Studio verification. | `verification` artifact with `producerKind="system_reconciler"`, route, request id, latency, HTTP status, and the named assertion. Failed requests do not regress the state but extend the validity window. |
+| Admin verification | An admin runs the linked workflow against the install via the admin resolution view's "verify" control. | `verification` artifact with `producerKind="maintainer"` (or admin equivalent), workflow id, and outcome. |
+| Build-Studio verification capability | When the resolution is tied to a `FeatureBuild` that ran a verification phase against the live portal, the verification phase's success record qualifies. | `verification` artifact citing `featureBuildId` and verification phase id. |
+
+The reconciler is responsible for closing the loop: at most one `verified_here` transition per resolution, idempotent on `(resolutionId, "verification")` evidence. A `feedback_installed_here` notification may still fire on `applied_here`; the closure contract does not require waiting for verification to acknowledge install. The user-facing copy must distinguish "installed" from "checked".
+
 ## 13. User Experience Contract
 
 ### 13.1 Dale-Facing Timeline
@@ -486,18 +576,37 @@ Dale should see a simple timeline, not tracker internals:
 
 The UI may be a lightweight report detail route or a support-thread panel. It must not require a GitHub account.
 
+The default Dale view should collapse internal complexity into one primary state:
+
+| Internal state | Dale-facing copy posture | Primary CTA |
+| -------------- | ------------------------ | ----------- |
+| `routing` | "We received this and are checking whether it is local or a platform fix." | None unless clarification is needed. |
+| `local_answered` | "This was handled here." | Return to the originating route. |
+| `local_work_needed` / `fix_in_progress` | "A fix is being worked on." | None, or open support thread if clarification is requested. |
+| `fix_available` | "A fix is ready for this install." | Admin-facing update/apply link if action is needed. |
+| `update_required` | "An admin needs to apply the update before you will see the fix." | Admin update link; submitter sees status only unless they are an admin. |
+| `applied_here` | "The fix is installed here." | Refresh/try again. |
+| `verified_here` | "The fix was installed and checked here." | Return to work. |
+| `blocked` | "We found the path, but this install needs attention first." | Admin action link. |
+| `not_applicable` | "This fix is not for this install." | None, with a short reason. |
+
+The UI should display public semantic IDs (`PIR-*`, `PIRR-*`) only in secondary detail. It should never lead with CUIDs, branch names, raw GitHub state, or raw status enums.
+
 ### 13.2 Notifications
 
 Use `Notification` for submitter-facing updates:
 
 | Notification | Trigger | Example copy |
 | ------------ | ------- | ------------ |
+| `feedback_local_answered` | `local_answered` and submitter exists. | "Your Feedback report was handled here. You can return to the page and keep working." |
 | `feedback_fix_available` | `fix_available` and install eligible, not applied. | "A fix for your Build feedback is ready. Your DPF needs an update before you will see it." |
 | `feedback_update_required` | Update exists but admin action is needed. | "A platform update can fix your report, but an admin needs to apply it." |
 | `feedback_installed_here` | `applied_here` or `verified_here`. | "The fix for your Feedback report is now installed here. You can refresh and try again." |
 | `feedback_blocked` | privacy, conflict, credential, or capability block. | "We found the likely fix, but this install needs admin attention before it can be applied." |
 
 Use `PlatformNotification` only for aggregate/admin health, such as "8 feedback fixes are available but not applied."
+
+Routing rule: notify the submitter when the state changes what they should expect; notify admins when the next action requires admin authority. For `update_required`, send different copy to each audience instead of making Dale parse an admin task.
 
 ### 13.3 Admin View
 
@@ -526,6 +635,12 @@ The issue report admin surface should show:
 | Archetype feature comes from another customer but contains private assumptions | Mark `not_applicable` or `blocked`; require parameterization before offering. |
 | Submitter no longer exists | Keep resolution ledger; skip user notification; emit admin health notification if needed. |
 | Local verification fails after update | Keep state `applied_here` but not `verified_here`; reopen or create linked follow-up report. |
+| GitHub webhook secret invalid / signature mismatch | Reject the event without touching state. Surface an admin notification once per (repo, hour). Continue periodic polling so reconciliation does not stall. Never accept an unverified webhook as authoritative. |
+| Reconciler polling auth fails (token expired, scope revoked) | Move affected resolutions to `blocked` with `blockingReason="upstream_credential"`. Surface a single admin notification with a deep link to the credential repair flow; suppress repeats until the credential is restored. |
+| GitHub rate limit exhausted | Honor `X-RateLimit-Reset`; do not retry until the reset window passes. Pending resolutions hold their current state. If the limit is hit repeatedly across reset windows, surface an admin notification recommending webhook configuration to reduce poll load. |
+| Reconciler discovers two PRs with conflicting markers for the same `resolutionId` | Refuse to auto-progress state. Append both artifacts, mark the resolution `blocked` with `blockingReason="conflicting_artifacts"`, and require admin disambiguation. Better to halt than to pick one silently. |
+| Release note marker points at a resolution that no longer exists locally | Append a `change_promotion` or `product_version` artifact in a quarantine state. Do not create a phantom resolution. Surface an admin notification with the marker and the release reference. |
+| Webhook delivery succeeded but reconciler crashed mid-pass | The pass is idempotent (artifact dedup by `(resolutionId, kind, semanticId|url|gitSha)`); the next pass replays. Do not double-write artifacts; do not double-notify. |
 
 ## 15. Security And Privacy Requirements
 
@@ -546,13 +661,14 @@ This spec does not replace the capacity-aware feedback phases. It tightens them.
 | Existing phase | Amendment |
 | -------------- | --------- |
 | Phase 1 - support mode | No change to UI shell scope. Ensure the report ID/support session can be displayed later in a timeline. |
-| Phase 2 - `assessFeedbackRouting()` | Add scope, applicability seed, privacy decision seed, and expected closure path to the routing result. |
-| Phase 3 - bridge wiring | Add resolution/artifact creation before upstream issue filing. Require DPF artifact markers in issue body. |
+| Phase 2 - `assessFeedbackRouting()` | Add scope, applicability seed, privacy decision seed, and expected closure path to the routing result. Do not send upstream yet. |
+| Phase 2a - resolution ledger | Required insertion before bridge wiring. Create/link resolution, report join, first artifacts, install-state projection, and notification idempotency. |
+| Phase 3 - bridge wiring | Require an active resolution before upstream issue filing. Require DPF artifact markers in issue body. |
 | Phase 4 - implicit triggers | Attach implicit reports to resolution grouping/coalescing, not just one-off PIR rows. |
 | Phase 5 - reverse channel | Expand from "GitHub closed -> Notification" to "artifact -> release -> local apply -> user Notification." |
 | Phase 6 - STT | Voice reports follow the same privacy, secret, and resolution contract; raw audio/transcript is local-only unless a future consent spec says otherwise. |
 
-Recommended insertion: add **Phase 2a - Resolution Closure Ledger** before bridge wiring. Without it, Phase 3 can file upstream issues that cannot reliably notify Dale later.
+Without Phase 2a, Phase 3 can file upstream issues that cannot reliably notify Dale later.
 
 ## 17. Implementation Slices
 
@@ -561,7 +677,7 @@ This is not a task plan, but it suggests reviewable slices.
 ### Slice 0 - Spec And Backlog Alignment
 
 - Review this spec against the capacity-aware feedback design.
-- File or link the backlog item under `EP-9FC5D2FD` unless scope expands into a dedicated feedback platform epic.
+- Use `BI-FBDC0861` under `EP-9FC5D2FD` for the Phase 2/2a implementation handoff; current live context also includes `BI-4CDB18EE` and `BI-C50D48C6`.
 - Update the capacity-aware feedback plan so Phase 2 captures closure fields.
 
 ### Slice 1 - Resolution Ledger Substrate
@@ -598,8 +714,9 @@ This is not a task plan, but it suggests reviewable slices.
 
 ### Slice 6 - Dale/Admin UX
 
-- Add timeline/detail UX and notifications.
-- Add admin resolution columns and manual override controls.
+- Add timeline/detail UX and notifications with one primary Dale CTA per state.
+- Add admin resolution columns, blocked/action-needed grouping, and manual override controls.
+- Keep GitHub mechanics, raw enums, CUIDs, branch names, and tracker labels out of the default Dale view.
 - Verify the live portal click/update flow, not just structural tests.
 
 ## 18. Acceptance Criteria
@@ -636,14 +753,14 @@ This is not a task plan, but it suggests reviewable slices.
 - The public issue/PR contains only pseudonym, semantic IDs, generalized route/context, and sanitized summary.
 - Scanner/audit evidence is local and does not store secret values.
 
-## 19. Open Questions
+## 19. Decisions To Confirm
 
-1. Should the first user-facing detail surface be `/feedback/reports/[reportId]`, a coworker support timeline drawer, or a section inside the notification center?
-2. Should `Notification` gain `sourceType/sourceId` directly, or should notification idempotency live in a feedback-specific join table?
-3. What is the canonical install identity today: existing platform dev pseudonym only, or a new `Principal(kind="install")` alias created during setup?
-4. Should `FeaturePack.applicableVerticals` stay category-based, or should archetype-specific applicability use explicit `StorefrontArchetype.archetypeId` values first?
-5. What release manifest is canonical for mapping merged PRs to `ProductVersion` in image-based installs?
-6. Should update-required notifications go only to submitter, only to admins, or to both with different copy?
+1. **First user-facing detail surface:** recommendation is a lightweight `/feedback/reports/[reportId]` timeline route first because notifications need a durable deep link. Reuse the same component inside the coworker support drawer later.
+2. **Notification idempotency:** recommendation is a feedback-specific `PlatformIssueResolutionNotification` ledger first, with a later platform-wide `Notification.sourceType/sourceId` migration only if multiple domains need it.
+3. **Install identity:** recommendation is to use the existing platform pseudonym for public markers now. If a durable local install identity is needed, create `Principal(kind="install")` plus `PrincipalAlias`; do not add a parallel install identity table.
+4. **Applicability precision:** recommendation is explicit `StorefrontConfig.archetypeId` targeting first, with `FeaturePack.applicableVerticals` as evidence/category fallback rather than the automatic offer key.
+5. **Release manifest:** recommendation is `ProductVersion` as the local closure authority when present, with image/source manifests feeding `ProductVersion` or a linked artifact rather than bypassing it.
+6. **Update-required notifications:** recommendation is both audiences with different copy: submitter gets expectation/status; admins get the actionable update/apply CTA.
 
 ## 20. Non-Goals
 
