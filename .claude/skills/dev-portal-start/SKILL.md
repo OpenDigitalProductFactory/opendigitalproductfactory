@@ -53,6 +53,9 @@ Total: ~30+ minutes for the first edit-verify cycle. Repeated every session.
 # One-time per worktree: ensure docker-compose.dev-against-live-db.yml exists
 # (it should already be checked in — see the file's header comment for the rationale)
 
+# Tell the override which worktree to bind-mount.
+$env:DPF_DEV_WORKTREE = (Get-Location).Path.Replace('\', '/')
+
 # Bring up dev-portal:
 docker compose -p dpf \
   -f /d/DPF/docker-compose.yml \
@@ -71,7 +74,7 @@ Total: ~30 seconds on first bring-up, ~5 seconds for subsequent edits (just save
 
 | Task                         | Command                                                                                                                                            |
 |------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
-| First bring-up               | `docker compose -p dpf -f /d/DPF/docker-compose.yml -f docker-compose.dev-against-live-db.yml --profile dev up -d dev-portal`                      |
+| First bring-up               | `$env:DPF_DEV_WORKTREE = (Get-Location).Path.Replace('\', '/'); docker compose -p dpf -f /d/DPF/docker-compose.yml -f docker-compose.dev-against-live-db.yml --profile dev up -d dev-portal` |
 | Wait for ready               | `until curl -sf http://localhost:3001/api/health >/dev/null 2>&1; do sleep 3; done`                                                                |
 | Force-reload after edit      | `docker restart dpf-dev-portal-1` (use when file-watcher misses the edit)                                                                          |
 | Tail logs                    | `docker logs --tail 50 -f dpf-dev-portal-1`                                                                                                        |
@@ -132,6 +135,8 @@ MSYS_NO_PATHCONV=1 docker exec dpf-dev-portal-1 ls /workspace/apps/web
 ### Mistake 7 — Forgetting the override file lives in the WORKTREE
 
 The override path is relative (`docker-compose.dev-against-live-db.yml`) — meaning compose resolves it from your current working directory. Run the bring-up command from the worktree root, not from `D:/DPF`. If you `cd /d/DPF && docker compose ...`, you'll get `no such file` because the override is in the worktree, not in the main install.
+
+The bind mount is explicit through `DPF_DEV_WORKTREE`; if that variable is missing, compose must fail instead of silently mounting a stale checkout.
 
 ### Mistake 8 — Treating dev-portal data as throwaway
 

@@ -13,6 +13,7 @@
 #   under the dev-mode portal, swap the DB hosts.
 #
 # Usage (from the worktree root)
+#   $env:DPF_DEV_WORKTREE = (Get-Location).Path.Replace('\', '/')
 #   docker compose -p dpf \
 #     -f /d/DPF/docker-compose.yml \
 #     -f docker-compose.dev-against-live-db.yml \
@@ -36,7 +37,7 @@ services:
       # Override the base `.:/workspace` mount to bind-mount THIS worktree's
       # source into the container, so edits made in the worktree hot-reload
       # in dev-portal. Forward slashes for cross-platform path resolution.
-      - D:/DPF/.claude/worktrees/elated-antonelli-540ea2:/workspace
+      - ${DPF_DEV_WORKTREE:?DPF_DEV_WORKTREE must be set to the absolute worktree path with forward slashes}:/workspace
       - dev_node_modules:/workspace/node_modules
     environment:
       # Swap from dev-postgres / dev-neo4j / dev-qdrant to the live stack.
@@ -49,6 +50,9 @@ services:
       QDRANT_INTERNAL_URL: http://qdrant:6333
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set — already required by the live portal}
       AUTH_TRUST_HOST: "true"
+      AUTH_URL: http://localhost:3001
+      APP_URL: http://localhost:3001
+      NEXT_PUBLIC_APP_URL: http://localhost:3001
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY must be set — already required by the live portal}
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
       DPF_ENVIRONMENT: dev
