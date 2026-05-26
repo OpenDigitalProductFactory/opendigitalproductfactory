@@ -816,9 +816,44 @@ async function assertManagedSourceClean(
   const pathspec = PLATFORM_UPDATE_SOURCE_PATHS.join(" ");
   const { stdout } = await execUpdate(`git status --porcelain -- ${pathspec}`, gitOpts);
   if (stdout.trim()) {
+    const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
+    const hasUntracked = lines.some((line) => line.startsWith("??"));
+    if (!hasUntracked) {
+      const hasRealDiff = await gitDiffHasRealChanges(
+        execUpdate,
+        gitOpts,
+        pathspec,
+        { cached: false },
+      );
+      const hasRealCachedDiff = await gitDiffHasRealChanges(
+        execUpdate,
+        gitOpts,
+        pathspec,
+        { cached: true },
+      );
+      if (!hasRealDiff && !hasRealCachedDiff) return;
+    }
     throw new Error(
       "Workspace has uncommitted changes in apps/web or packages. Commit or resolve those source changes before applying a platform update.",
     );
+  }
+}
+
+async function gitDiffHasRealChanges(
+  execUpdate: ExecUpdate,
+  gitOpts: ExecUpdateOptions,
+  pathspec: string,
+  options: { cached: boolean },
+): Promise<boolean> {
+  const cachedArg = options.cached ? "--cached " : "";
+  try {
+    await execUpdate(
+      `git diff ${cachedArg}--quiet --ignore-cr-at-eol -- ${pathspec}`,
+      gitOpts,
+    );
+    return false;
+  } catch {
+    return true;
   }
 }
 

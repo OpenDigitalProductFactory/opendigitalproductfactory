@@ -218,7 +218,7 @@ describe("getSelfUpgradeStatus", () => {
     expect(SelfUpgrade.isInMaintenanceWindow).toHaveBeenCalledWith(windowConfig);
   });
 
-  it("passes channel to resolveTargetSha", async () => {
+  it("passes channel and source config to resolveTargetSha", async () => {
     const betaConfig = { ...mockConfig, channel: "beta" };
     vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(betaConfig as never);
     vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(false);
@@ -228,7 +228,7 @@ describe("getSelfUpgradeStatus", () => {
 
     await getSelfUpgradeStatus();
 
-    expect(SelfUpgrade.resolveTargetSha).toHaveBeenCalledWith("beta");
+    expect(SelfUpgrade.resolveTargetSha).toHaveBeenCalledWith("beta", betaConfig);
   });
 });
 

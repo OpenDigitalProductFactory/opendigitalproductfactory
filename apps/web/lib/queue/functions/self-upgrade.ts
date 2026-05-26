@@ -45,7 +45,7 @@ export async function runSelfUpgrade(
   if (!config.enabled && !params.dryRun) return { skipped: true, reason: "disabled" };
   if (!isInMaintenanceWindow(config) && !params.dryRun) return { skipped: true, reason: "outside-window" };
 
-  const targetSha = await resolveTargetSha(config.channel);
+  const targetSha = await resolveTargetSha(config.channel, config);
   if (!targetSha) return { skipped: true, reason: "no-target" };
 
   const deployedSha = getDeployedSha();
@@ -114,10 +114,10 @@ export async function runSelfUpgrade(
   }
 
   const result = await runPromoter({
-    sourcePath: process.env.PROMOTE_SOURCE ?? "",
+    sourcePath: config.hostSourceMountPath ?? process.env.PROMOTE_SOURCE ?? "",
     targetSha,
-    backupPath: process.env.PROMOTE_BACKUP_PATH ?? "",
-    healthUrl: process.env.PROMOTE_HEALTH_URL ?? "",
+    backupPath: process.env.PROMOTE_BACKUP_PATH ?? `/backups/self-upgrade/${run.runId}`,
+    healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
     dryRun: params.dryRun,
   });
 

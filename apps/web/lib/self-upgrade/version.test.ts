@@ -4,6 +4,7 @@ import {
   buildRemoteHeadCommand,
   compareUpgradeVersions,
   getUpgradeVersionState,
+  resolveTargetSha,
 } from "./version";
 
 describe("compareUpgradeVersions", () => {
@@ -58,18 +59,42 @@ describe("getUpgradeVersionState", () => {
 });
 
 describe("resolveTargetSha", () => {
-  it("returns null and logs a structured INFO message about pending channel resolution", async () => {
-    const { resolveTargetSha } = await import("./version");
+  it("resolves the configured repository branch head as the target SHA", async () => {
+    const execFile = vi.fn().mockResolvedValue({
+      stdout: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n",
+    });
+
+    const result = await resolveTargetSha(
+      "stable",
+      {
+        hostSourceMountPath: "/host-source",
+        repositoryRemote: "upstream",
+        repositoryBranch: "release",
+      },
+      { execFile },
+    );
+
+    expect(result).toBe("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    expect(execFile).toHaveBeenCalledWith(
+      "git",
+      ["-C", "/host-source", "rev-parse", "upstream/release"],
+    );
+  });
+
+  it("returns null and logs when the resolved target is not a git SHA", async () => {
     const consoleSpy = vi.spyOn(console, "info").mockImplementation(() => {});
 
-    const result = await resolveTargetSha("stable");
+    const result = await resolveTargetSha(
+      "stable",
+      { hostSourceMountPath: "/host-source" },
+      { execFile: vi.fn().mockResolvedValue({ stdout: "not-a-sha\n" }) },
+    );
 
     expect(result).toBeNull();
     expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining("self-upgrade.no-target"),
-      expect.objectContaining({ channel: "stable", reason: "channel-resolution-not-implemented" }),
+      expect.objectContaining({ channel: "stable", reason: "target-not-git-sha" }),
     );
-
     consoleSpy.mockRestore();
   });
 });

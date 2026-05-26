@@ -254,6 +254,42 @@ describe("applyPlatformUpdate", () => {
     expect(mockWriteFileSync).toHaveBeenCalled();
   });
 
+  it("allows Windows CRLF-only source differences before applying the update", async () => {
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      updatePending: true,
+      pendingVersion: "v1.2.3",
+    });
+    mockPrisma.platformDevConfig.update.mockResolvedValue({});
+    mockExistsSync.mockReturnValue(false);
+
+    mockExec.mockImplementation((cmd: string, _opts: unknown, cb?: (err: Error | null, value: { stdout: string; stderr: string }) => void) => {
+      if (!cb) return;
+      if (cmd === "git status --porcelain -- apps/web packages") {
+        cb(null, { stdout: " M apps/web/page.tsx\n", stderr: "" });
+        return;
+      }
+      if (cmd === "git diff --quiet --ignore-cr-at-eol -- apps/web packages") {
+        cb(null, { stdout: "", stderr: "" });
+        return;
+      }
+      if (cmd === "git diff --cached --quiet --ignore-cr-at-eol -- apps/web packages") {
+        cb(null, { stdout: "", stderr: "" });
+        return;
+      }
+      if (cmd.includes("--diff-filter=U")) cb(null, { stdout: "", stderr: "" });
+      else if (cmd === "git diff --cached --stat") cb(null, { stdout: " 4 files changed, 12 insertions(+)", stderr: "" });
+      else cb(null, { stdout: "", stderr: "" });
+    });
+
+    const result = await applyPlatformUpdate();
+
+    expect(result.kind).toBe("clean-merge");
+    const commands = mockExec.mock.calls.map(([cmd]) => cmd);
+    expect(commands).toContain("git diff --quiet --ignore-cr-at-eol -- apps/web packages");
+    expect(commands).toContain("git diff --cached --quiet --ignore-cr-at-eol -- apps/web packages");
+    expect(commands).toContain("git checkout dpf-upstream");
+  });
+
   it("repairs missing managed update branches before applying the update", async () => {
     mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
       updatePending: true,
