@@ -118,7 +118,7 @@ export function NewCustomerButton() {
               className={inputClasses}
             />
           </div>
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-[var(--dpf-text)]">{error}</p>}
           <div className="flex gap-2 justify-end">
             <button
               type="button"

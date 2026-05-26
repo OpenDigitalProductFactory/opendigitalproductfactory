@@ -91,9 +91,9 @@ sync_image_source_to_workspace() {
 install_workspace_dependencies() {
   echo "  Installing dependencies (this takes 1-2 minutes on first run)..."
   cd "$WORKSPACE"
-  pnpm install --frozen-lockfile 2>&1 || pnpm install 2>&1
+  pnpm install --frozen-lockfile --config.confirmModulesPurge=false --ignore-scripts 2>&1 || pnpm install --config.confirmModulesPurge=false --ignore-scripts 2>&1
   echo "  Dependencies installed"
-  pnpm --filter @dpf/db exec prisma generate 2>&1 || echo "  WARN prisma generate failed (non-fatal)"
+  pnpm --filter @dpf/db exec prisma generate --schema prisma/schema.prisma 2>&1 || echo "  WARN prisma generate failed (non-fatal)"
 }
 
 is_workspace_housekeeping_status() {

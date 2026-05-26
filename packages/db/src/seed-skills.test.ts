@@ -257,4 +257,21 @@ describe("dpf-platform mirror-field invariant", () => {
       "Grep",
     ]);
   });
+
+  it("includes the Build Studio decision and nonprod workflow skills", () => {
+    const pluginSkillsDir = join(__dirname, "..", "..", "..", "packages", "dpf-skill-pack", "skills");
+    const names = discoverDpfPlatformSkillFiles(pluginSkillsDir)
+      .map((source) => parseFrontmatter(readFileSync(source.filePath, "utf8")).frontmatter.name)
+      .sort();
+
+    expect(names).toEqual(expect.arrayContaining([
+      "dpf-capture-kernel-gap",
+      "dpf-compare-options",
+      "dpf-external-evidence-handoff",
+      "dpf-local-merge-ci-before-push",
+      "dpf-record-decision-outcome",
+      "dpf-retrieve-decision-context",
+      "dpf-use-shared-nonprod-environment",
+    ]));
+  });
 });

@@ -9,6 +9,8 @@ export async function recordExternalEvidence(input: {
   target: string;
   provider: string;
   resultSummary: string;
+  buildId?: string;
+  taskRunId?: string;
   details?: Prisma.InputJsonValue;
 }) {
   return prisma.externalEvidenceRecord.create({
@@ -19,6 +21,8 @@ export async function recordExternalEvidence(input: {
       target: input.target,
       provider: input.provider,
       resultSummary: input.resultSummary,
+      ...(input.buildId !== undefined ? { buildId: input.buildId } : {}),
+      ...(input.taskRunId !== undefined ? { taskRunId: input.taskRunId } : {}),
       ...(input.details !== undefined ? { details: input.details } : {}),
     },
   });

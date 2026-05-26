@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { FeedbackForm } from "./FeedbackForm";
+import {
+  createManualFeedbackEventDetail,
+  type FeedbackEventDetail,
+} from "@/lib/feedback/feedback-event";
 
 type Props = {
   userId?: string | null;
@@ -11,14 +15,25 @@ type Props = {
 export function FeedbackButton({ userId }: Props) {
   const pathname = usePathname();
   const [showForm, setShowForm] = useState(false);
+  const [fallbackDetail, setFallbackDetail] = useState<FeedbackEventDetail | null>(null);
 
   function handleClick() {
-    const event = new CustomEvent("open-agent-feedback");
-    document.dispatchEvent(event);
+    const detail = createManualFeedbackEventDetail(pathname);
+    const handled = !document.dispatchEvent(
+      new CustomEvent("open-agent-feedback", {
+        cancelable: true,
+        detail,
+      }),
+    );
+
+    if (handled) {
+      return;
+    }
 
     setTimeout(() => {
       const panel = document.querySelector("[data-agent-panel]");
       if (!panel) {
+        setFallbackDetail(detail);
         setShowForm(true);
       }
     }, 500);
@@ -43,9 +58,14 @@ export function FeedbackButton({ userId }: Props) {
             Send Feedback
           </div>
           <FeedbackForm
-            routeContext={pathname}
+            routeContext={fallbackDetail?.routeContext ?? pathname}
             {...(userId != null && { userId })}
             source="manual"
+            {...(fallbackDetail && {
+              triggerKind: fallbackDetail.triggerKind,
+              supportSessionId: fallbackDetail.supportSessionId,
+              autoFilePolicy: fallbackDetail.autoFilePolicy,
+            })}
             onClose={() => setShowForm(false)}
           />
         </div>

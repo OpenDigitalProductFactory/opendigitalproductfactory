@@ -19,6 +19,7 @@ import { BuildProgressOperationalPanel } from "./BuildProgressOperationalPanel";
 import { ReleaseDecisionPanel } from "./ReleaseDecisionPanel";
 import { BuildStudioWorkflowActionCard } from "./BuildStudioWorkflowActionCard";
 import { DecompositionCoordinator } from "./DecompositionCoordinator";
+import { ParentDesignAmendmentCoordinator } from "./ParentDesignAmendmentCoordinator";
 import { CodeIntelligenceStatusCard } from "./CodeIntelligenceStatusCard";
 import { BuildAssuranceGateCard } from "./BuildAssuranceGateCard";
 import { BuildListItem } from "./BuildListItem";
@@ -672,6 +673,9 @@ export function BuildStudio({
                         existingOverride={activeBuild.designReview?.decompositionOverride ?? null}
                         planOscillationEntry
                       />
+                    )}
+                    {workflowAction.kind === "amend-parent-design" && (
+                      <ParentDesignAmendmentCoordinator buildId={activeBuild.buildId} />
                     )}
                   </div>
                 )}

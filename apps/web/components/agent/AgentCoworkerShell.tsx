@@ -5,6 +5,11 @@ import { usePathname } from "next/navigation";
 import type { AgentMessageRow } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { getOrCreateThreadSnapshot } from "@/lib/actions/agent-coworker";
+import { startFeedbackSupport } from "@/lib/actions/feedback-support";
+import {
+  isFeedbackEventDetail,
+  type FeedbackEventDetail,
+} from "@/lib/feedback/feedback-event";
 import { AgentFAB } from "./AgentFAB";
 import { AgentCoworkerPanel } from "./AgentCoworkerPanel";
 import {
@@ -29,10 +34,19 @@ import {
   savePanelPosition,
   savePanelSize,
 } from "./agent-panel-prefs";
+import {
+  OPEN_AGENT_FEEDBACK_EVENT,
+  SUPPORT_WELCOME_MESSAGE,
+} from "@/components/feedback/support-entry";
 
 type Props = {
   userContext: UserContext;
   useUnifiedCoworker: boolean;
+};
+
+type PendingSupportSession = {
+  detail: FeedbackEventDetail;
+  featureBuildId: string | null;
 };
 
 function getViewport() {
@@ -45,6 +59,40 @@ function getViewport() {
 function getShellContentTop(): number {
   const shellContent = document.querySelector<HTMLElement>("[data-shell-content='true']");
   return shellContent?.getBoundingClientRect().top ?? 16;
+}
+
+function withSupportWelcomeMessage(messages: AgentMessageRow[]): AgentMessageRow[] {
+  if (messages.some((message) => message.content === SUPPORT_WELCOME_MESSAGE)) {
+    return messages;
+  }
+
+  return [
+    ...messages,
+    {
+      id: "support-mode-welcome",
+      role: "assistant",
+      content: SUPPORT_WELCOME_MESSAGE,
+      createdAt: new Date().toISOString(),
+      agentId: "dale",
+      routeContext: null,
+    },
+  ];
+}
+
+function supportStartFailureMessage(error: unknown): AgentMessageRow {
+  const message = error instanceof Error ? error.message : "";
+  const content = /too many support sessions/i.test(message)
+    ? message
+    : "Couldn't start support triage. You can still describe the issue here.";
+
+  return {
+    id: `support-mode-start-failed-${Date.now()}`,
+    role: "assistant",
+    content,
+    createdAt: new Date().toISOString(),
+    agentId: "dale",
+    routeContext: null,
+  };
 }
 
 export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
@@ -66,11 +114,39 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
     message: string;
     targetBuildId: string | null;
   } | null>(null);
+  const pendingSupportSessionsRef = useRef<Map<string, PendingSupportSession>>(new Map());
+  const startedSupportSessionsRef = useRef<Set<string>>(new Set());
+  const lastFocusRef = useRef<HTMLElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const positionRef = useRef(position);
   const sizeRef = useRef(size);
   const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
   const resizeRef = useRef<{ startX: number; startY: number; startWidth: number; startHeight: number } | null>(null);
   const userKey = userContext.userId ?? `${userContext.isSuperuser ? "super" : "role"}:${userContext.platformRole ?? "none"}`;
+
+  function beginFeedbackSupport(session: PendingSupportSession, resolvedThreadId: string | null) {
+    if (!resolvedThreadId) {
+      pendingSupportSessionsRef.current.set(session.detail.supportSessionId, session);
+      return;
+    }
+
+    if (startedSupportSessionsRef.current.has(session.detail.supportSessionId)) {
+      pendingSupportSessionsRef.current.delete(session.detail.supportSessionId);
+      return;
+    }
+
+    startedSupportSessionsRef.current.add(session.detail.supportSessionId);
+    pendingSupportSessionsRef.current.delete(session.detail.supportSessionId);
+
+    void startFeedbackSupport({
+      detail: session.detail,
+      featureBuildId: session.featureBuildId,
+      threadId: resolvedThreadId,
+    }).catch((error) => {
+      console.warn("startFeedbackSupport error:", error);
+      setInitialMessages((prev) => [...prev, supportStartFailureMessage(error)]);
+    });
+  }
 
   useEffect(() => {
     const viewport = getViewport();
@@ -142,7 +218,18 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
       const snapshot = await getOrCreateThreadSnapshot({ routeContext: threadContext });
       if (!active) return;
       setThreadId(snapshot?.threadId ?? null);
-      setInitialMessages(snapshot?.messages ?? []);
+      const hasPendingSupport = pendingSupportSessionsRef.current.size > 0;
+      setInitialMessages(
+        hasPendingSupport
+          ? withSupportWelcomeMessage(snapshot?.messages ?? [])
+          : snapshot?.messages ?? [],
+      );
+
+      if (snapshot?.threadId) {
+        for (const session of Array.from(pendingSupportSessionsRef.current.values())) {
+          beginFeedbackSupport(session, snapshot.threadId);
+        }
+      }
 
       // Release a queued auto-message targeted at THIS build now that its
       // thread is loaded. Draining inside the load callback avoids the race
@@ -168,6 +255,9 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
   }, [threadContext]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleOpen() {
+    lastFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     setIsOpen(true);
     savePanelOpen(userKey, true);
   }
@@ -175,14 +265,56 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
   function handleClose() {
     setIsOpen(false);
     savePanelOpen(userKey, false);
+    window.setTimeout(() => {
+      const previousFocus = lastFocusRef.current;
+      if (previousFocus?.isConnected) {
+        previousFocus.focus();
+        return;
+      }
+
+      document.querySelector<HTMLElement>("[data-agent-fab='true']")?.focus();
+    }, 0);
   }
+
+  useEffect(() => {
+    if (!isOpen) return;
+    panelRef.current?.focus();
+  }, [isOpen]);
 
   // Listen for panel open requests (feedback button, build creation, etc.)
   useEffect(() => {
     function handleOpenPanel(e: Event) {
+      const detail = (e as CustomEvent<{ autoMessage?: string; welcomeMessage?: string; targetBuildId?: string } | undefined>).detail;
+      if (e.type === OPEN_AGENT_FEEDBACK_EVENT) {
+        if (!isFeedbackEventDetail((e as CustomEvent<unknown>).detail)) {
+          console.warn("Invalid open-agent-feedback detail");
+          return;
+        }
+
+        e.preventDefault();
+        lastFocusRef.current = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+        setIsOpen(true);
+        savePanelOpen(userKey, true);
+
+        const supportDetail = (e as CustomEvent<FeedbackEventDetail>).detail;
+        const supportSession = {
+          detail: supportDetail,
+          featureBuildId: pathname === "/build" ? activeBuildId : null,
+        };
+
+        setInitialMessages((prev) => withSupportWelcomeMessage(prev));
+        beginFeedbackSupport(supportSession, threadId);
+        return;
+      }
+
+      lastFocusRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
       setIsOpen(true);
       savePanelOpen(userKey, true);
-      const detail = (e as CustomEvent<{ autoMessage?: string; welcomeMessage?: string; targetBuildId?: string } | undefined>).detail;
+
       if (detail?.autoMessage) {
         const signature = `${detail.autoMessage}::${detail.targetBuildId ?? ""}`;
         const now = Date.now();
@@ -231,13 +363,13 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
         });
       }
     }
-    document.addEventListener("open-agent-feedback", handleOpenPanel);
+    document.addEventListener(OPEN_AGENT_FEEDBACK_EVENT, handleOpenPanel);
     document.addEventListener("open-agent-panel", handleOpenPanel);
     return () => {
-      document.removeEventListener("open-agent-feedback", handleOpenPanel);
+      document.removeEventListener(OPEN_AGENT_FEEDBACK_EVENT, handleOpenPanel);
       document.removeEventListener("open-agent-panel", handleOpenPanel);
     };
-  }, [activeBuildId, threadId, userKey]);
+  }, [activeBuildId, pathname, threadId, userContext.userId, userKey]);
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {
     if (dockedFrame) return;
@@ -391,7 +523,11 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
 
       {isOpen && (
         <div
+          ref={panelRef}
           data-agent-panel="true"
+          role="dialog"
+          aria-label="AI coworker panel"
+          tabIndex={-1}
           style={panelStyle}
         >
           <AgentCoworkerPanel

@@ -4229,6 +4229,8 @@ model PlatformIssueReport {
   portfolioId         String?
   agentId             String?
   featureBuildId      String?
+  triggerKind         String?
+  supportSessionId    String?
   source              String        @default("manual")
   // Governed Hermes learning Slice 1: link runtime issues to the thread/run
   // that produced them so reflection can avoid route/time-window heuristics.
@@ -4245,6 +4247,8 @@ model PlatformIssueReport {
   @@index([featureBuildId])
   @@index([threadId, createdAt(sort: Desc)])
   @@index([taskRunId])
+  @@unique([reportedById, supportSessionId])
+  @@index([reportedById, supportSessionId, createdAt(sort: Desc)])
 }
 
 model ImprovementSignal {
@@ -4289,12 +4293,44 @@ model ExternalEvidenceRecord {
   provider      String
   resultSummary String
   details       Json?
+  buildId       String?
+  taskRunId     String?
   createdAt     DateTime @default(now())
   actorUser     User     @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
 
   @@index([actorUserId, createdAt])
   @@index([routeContext, operationType])
   @@index([operationType, createdAt])
+  @@index([buildId, createdAt])
+  @@index([taskRunId, createdAt])
+}
+
+model NonProductionEnvironmentLease {
+  id               String    @id @default(cuid())
+  leaseId          String    @unique
+  environmentKey   String
+  status           String    @default("active")
+  ownerProvider    String
+  ownerSessionId   String
+  purpose          String
+  worktreePath     String?
+  branchName       String?
+  buildId          String?
+  taskRunId        String?
+  url              String
+  ports            Int[]     @default([])
+  cleanupCommand   String?
+  evidenceRecordId String?
+  expiresAt        DateTime
+  releasedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([environmentKey, status])
+  @@index([ownerProvider, ownerSessionId])
+  @@index([buildId, createdAt])
+  @@index([taskRunId, createdAt])
+  @@index([expiresAt])
 }
 
 model FeatureBuild {

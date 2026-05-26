@@ -10,6 +10,12 @@ type QueuedReport = {
   source?: string;
   userAgent?: string;
   userId?: string;
+  triggerKind?: string;
+  supportSessionId?: string;
+  threadId?: string;
+  taskRunId?: string;
+  featureBuildId?: string;
+  autoFilePolicy?: string;
   queuedAt: string;
 };
 

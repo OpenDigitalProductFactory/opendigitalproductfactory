@@ -5,7 +5,34 @@ const BASH_AVAILABLE = _probe("bash", ["--version"], { encoding: "utf8" }).statu
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
-const SCRIPT = resolve(__dirname, "../../../../scripts/promote.sh");
+function quoteForBash(value: string) {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function resolveBashPath(path: string) {
+  if (process.platform !== "win32") {
+    return path;
+  }
+
+  const normalized = path.replace(/\\/g, "/");
+  const driveMatch = /^([A-Za-z]):\/(.*)$/.exec(normalized);
+  if (!driveMatch) {
+    return normalized;
+  }
+
+  const [, drive, rest] = driveMatch;
+  const candidates = [`/mnt/${drive.toLowerCase()}/${rest}`, `/${drive.toLowerCase()}/${rest}`, normalized];
+  return (
+    candidates.find((candidate) => {
+      const probe = _probe("bash", ["-lc", `test -f ${quoteForBash(candidate)}`], {
+        encoding: "utf8",
+      });
+      return probe.status === 0;
+    }) ?? normalized
+  );
+}
+
+const SCRIPT = resolveBashPath(resolve(__dirname, "../../../../scripts/promote.sh"));
 
 const BASE_ENV: Record<string, string> = {
   PROMOTE_SOURCE: "/opt/app/release",
@@ -15,8 +42,22 @@ const BASE_ENV: Record<string, string> = {
 };
 
 function runScript(env: Record<string, string | undefined>, extraArgs: string[] = []) {
-  return spawnSync("bash", [SCRIPT, "--self-upgrade", ...extraArgs], {
-    env: { PATH: process.env.PATH ?? "/usr/bin:/bin", NODE_ENV: process.env.NODE_ENV ?? "test", ...env } as NodeJS.ProcessEnv,
+  const envSource: Record<string, string | undefined> = { NODE_ENV: process.env.NODE_ENV ?? "test", ...env };
+  const envAssignments = Object.entries(envSource).flatMap(([key, value]) =>
+    value === undefined ? [] : [`${key}=${quoteForBash(value)}`],
+  );
+  const command = [
+    "env",
+    "-i",
+    'PATH="$PATH"',
+    ...envAssignments,
+    "bash",
+    quoteForBash(SCRIPT),
+    "--self-upgrade",
+    ...extraArgs.map(quoteForBash),
+  ].join(" ");
+
+  return spawnSync("bash", ["-lc", command], {
     encoding: "utf8",
   });
 }

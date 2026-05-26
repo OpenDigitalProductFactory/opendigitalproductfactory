@@ -123,4 +123,29 @@ describe("buildDependencyGraph", () => {
     // QA phase is always appended last.
     expect(phases[phases.length - 1]?.tasks[0]?.specialist).toBe("qa-engineer");
   });
+
+  it("does not throw when legacy file entries omit purpose", () => {
+    // Regression: PR-generated buildPlan JSON can store fileStructure entries
+    // as `{ path, change }`. The graph should tolerate that legacy shape
+    // instead of crashing /build while matching task keywords.
+    const files = [
+      {
+        path: "apps/web/lib/feedback/feedback-event.ts",
+        change: "Restrict trigger vocabulary to spec section 6.1.",
+      },
+    ] as unknown as PlanFileEntry[];
+    const tasks: PlanTask[] = [
+      {
+        title: "Align feedback event contract",
+        testFirst: "",
+        implement: "",
+        verify: "",
+      },
+    ];
+
+    expect(() => buildDependencyGraph(files, tasks)).not.toThrow();
+
+    const phases = buildDependencyGraph(files, tasks);
+    expect(phases[0]?.tasks[0]?.files[0]?.path).toBe("apps/web/lib/feedback/feedback-event.ts");
+  });
 });

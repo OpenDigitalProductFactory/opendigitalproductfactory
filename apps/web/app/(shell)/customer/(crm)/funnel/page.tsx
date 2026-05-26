@@ -1,14 +1,21 @@
 // apps/web/app/(shell)/customer/funnel/page.tsx
 import { prisma } from "@dpf/db";
+import {
+  CRM_TONE_CLASSES,
+  getOpportunityStageMeta,
+  OPEN_OPPORTUNITY_STAGES,
+  type CrmTone,
+} from "@/lib/crm/presentation";
+import { formatRevenueAmount } from "@/lib/crm/revenue-cockpit";
 
-const STAGE_COLOURS: Record<string, string> = {
-  qualification: "#fbbf24",
-  discovery: "#fb923c",
-  proposal: "#38bdf8",
-  negotiation: "#a78bfa",
-  closed_won: "#4ade80",
-  closed_lost: "#ef4444",
-};
+function getFunnelWidthClass(width: number) {
+  if (width >= 90) return "w-full";
+  if (width >= 75) return "w-4/5";
+  if (width >= 60) return "w-3/5";
+  if (width >= 40) return "w-2/5";
+  if (width >= 25) return "w-1/3";
+  return "w-1/4";
+}
 
 export default async function FunnelPage() {
   const thirtyDaysAgo = new Date();
@@ -35,8 +42,9 @@ export default async function FunnelPage() {
 
   const totalInteractions = bookings + inquiries + orders + donations;
   const totalEngagements = engagements.reduce((s, e) => s + e._count, 0);
-  const openStages = ["qualification", "discovery", "proposal", "negotiation"];
-  const openOpps = opportunities.filter((o) => openStages.includes(o.stage));
+  const openOpps = opportunities.filter((o) =>
+    OPEN_OPPORTUNITY_STAGES.includes(o.stage as (typeof OPEN_OPPORTUNITY_STAGES)[number]),
+  );
   const totalOpenOpps = openOpps.reduce((s, o) => s + o._count, 0);
   const closedWon = opportunities.find((o) => o.stage === "closed_won")?._count ?? 0;
   const closedLost = opportunities.find((o) => o.stage === "closed_lost")?._count ?? 0;
@@ -66,7 +74,7 @@ export default async function FunnelPage() {
       count: totalInteractions,
       detail: `${ctaLabel}: ${primaryCount}`,
       convLabel: null as string | null,
-      color: "#f472b6",
+      tone: "accent" as CrmTone,
       width: 100,
     },
     {
@@ -74,7 +82,7 @@ export default async function FunnelPage() {
       count: totalEngagements,
       detail: engagements.map((e) => `${e.status}: ${e._count}`).join(", ") || "none",
       convLabel: convToEngagement ? `${convToEngagement}% conversion` : null,
-      color: "#fb923c",
+      tone: "attention" as CrmTone,
       width: totalInteractions > 0 ? Math.max(15, (totalEngagements / totalInteractions) * 100) : 15,
     },
     {
@@ -82,15 +90,15 @@ export default async function FunnelPage() {
       count: totalOpenOpps + closedWon + closedLost,
       detail: openOpps.map((o) => `${o.stage}: ${o._count}`).join(", ") || "none",
       convLabel: convToOpp ? `${convToOpp}% conversion` : null,
-      color: "var(--dpf-accent)",
+      tone: "info" as CrmTone,
       width: totalInteractions > 0 ? Math.max(10, ((totalOpenOpps + closedWon + closedLost) / Math.max(totalInteractions, 1)) * 100) : 10,
     },
     {
       label: "Closed Won",
       count: closedWon,
-      detail: wonValue > 0 ? `Value: $${wonValue.toLocaleString()}` : "no revenue yet",
+      detail: wonValue > 0 ? `Value: ${formatRevenueAmount(wonValue)}` : "no revenue yet",
       convLabel: winRate ? `${winRate}% win rate` : null,
-      color: "#4ade80",
+      tone: "success" as CrmTone,
       width: totalInteractions > 0 ? Math.max(5, (closedWon / Math.max(totalInteractions, 1)) * 100) : 5,
     },
   ];
@@ -117,41 +125,37 @@ export default async function FunnelPage() {
 
       {/* Funnel visualisation */}
       <div className="space-y-3 mb-6">
-        {funnelStages.map((stage) => (
-          <div key={stage.label}>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-medium text-[var(--dpf-text)]">{stage.label}</span>
-              {stage.convLabel && (
-                <span className="text-[10px] text-[var(--dpf-muted)]">{stage.convLabel}</span>
-              )}
-            </div>
-            <div className="relative">
-              <div
-                className="h-10 rounded-md flex items-center px-3 transition-all"
-                style={{
-                  width: `${stage.width}%`,
-                  background: `${stage.color}20`,
-                  borderLeft: `3px solid ${stage.color}`,
-                  minWidth: 120,
-                }}
-              >
-                <span className="text-sm font-bold text-[var(--dpf-text)] mr-2">{stage.count}</span>
-                <span className="text-[10px] text-[var(--dpf-muted)] truncate">{stage.detail}</span>
+        {funnelStages.map((stage) => {
+          const toneClasses = CRM_TONE_CLASSES[stage.tone];
+          return (
+            <div key={stage.label}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-[var(--dpf-text)]">{stage.label}</span>
+                {stage.convLabel && (
+                  <span className="text-[10px] text-[var(--dpf-muted)]">{stage.convLabel}</span>
+                )}
+              </div>
+              <div className="relative">
+                <div
+                  className={[
+                    "flex h-10 min-w-[120px] items-center rounded-md border-l-4 px-3 transition-all",
+                    getFunnelWidthClass(stage.width),
+                    toneClasses.border,
+                    toneClasses.surface,
+                  ].join(" ")}
+                >
+                  <span className="text-sm font-bold text-[var(--dpf-text)] mr-2">{stage.count}</span>
+                  <span className="text-[10px] text-[var(--dpf-muted)] truncate">{stage.detail}</span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Weakest point callout */}
       {weakest && Number(weakest.rate) < 50 && (
-        <div
-          className="p-3 rounded-lg border-l-2 mb-6"
-          style={{
-            background: "var(--dpf-surface-1)",
-            borderLeftColor: "#ef4444",
-          }}
-        >
+        <div className="p-3 rounded-lg border-l-2 border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] mb-6">
           <p className="text-xs font-medium text-[var(--dpf-text)]">
             Weakest conversion point
           </p>
@@ -166,21 +170,24 @@ export default async function FunnelPage() {
         <h2 className="text-sm font-semibold text-[var(--dpf-text)] mb-3">Pipeline by Stage</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {opportunities.map((o) => {
-            const colour = STAGE_COLOURS[o.stage] ?? "#8888a0";
+            const meta = getOpportunityStageMeta(o.stage);
+            const toneClasses = CRM_TONE_CLASSES[meta.tone];
             const value = Number(o._sum?.expectedValue ?? 0);
             return (
               <div
                 key={o.stage}
-                className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border-l-2"
-                style={{ borderLeftColor: colour }}
+                className={[
+                  "p-3 rounded-lg bg-[var(--dpf-surface-1)] border-l-2",
+                  toneClasses.border,
+                ].join(" ")}
               >
                 <p className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-wider">
-                  {o.stage.replace(/_/g, " ")}
+                  {meta.label}
                 </p>
                 <p className="text-lg font-bold text-[var(--dpf-text)]">{o._count}</p>
                 {value > 0 && (
-                  <p className="text-[10px]" style={{ color: colour }}>
-                    ${value.toLocaleString()}
+                  <p className={["text-[10px]", toneClasses.text].join(" ")}>
+                    {formatRevenueAmount(value)}
                   </p>
                 )}
               </div>
@@ -194,22 +201,27 @@ export default async function FunnelPage() {
         <h2 className="text-sm font-semibold text-[var(--dpf-text)] mb-3">Storefront Inbox (30d)</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Bookings", count: bookings, color: "#a78bfa" },
-            { label: "Inquiries", count: inquiries, color: "#fb923c" },
-            { label: "Orders", count: orders, color: "#4ade80" },
-            { label: "Donations", count: donations, color: "#f472b6" },
-          ].map((item) => (
-            <div
-              key={item.label}
-              className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border-l-2"
-              style={{ borderLeftColor: item.color }}
-            >
-              <p className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-wider">
-                {item.label}
-              </p>
-              <p className="text-lg font-bold text-[var(--dpf-text)]">{item.count}</p>
-            </div>
-          ))}
+            { label: "Bookings", count: bookings, tone: "accent" as CrmTone },
+            { label: "Inquiries", count: inquiries, tone: "attention" as CrmTone },
+            { label: "Orders", count: orders, tone: "success" as CrmTone },
+            { label: "Donations", count: donations, tone: "info" as CrmTone },
+          ].map((item) => {
+            const toneClasses = CRM_TONE_CLASSES[item.tone];
+            return (
+              <div
+                key={item.label}
+                className={[
+                  "p-3 rounded-lg bg-[var(--dpf-surface-1)] border-l-2",
+                  toneClasses.border,
+                ].join(" ")}
+              >
+                <p className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-wider">
+                  {item.label}
+                </p>
+                <p className="text-lg font-bold text-[var(--dpf-text)]">{item.count}</p>
+              </div>
+            );
+          })}
         </div>
       </div>
 
