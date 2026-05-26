@@ -30,7 +30,8 @@ Build Studio should become the simple human interface over the same governed dec
 3. Specialist capability packs for Build Studio phases and external coding agents.
 4. External evidence intake so Claude/Codex work done outside Build Studio returns to the Build Studio timeline.
 5. A central Founder Review Queue for questions the kernel cannot yet answer.
-6. A simplified Build Studio UX that recommends the next action first and keeps raw skill/MCP/evidence machinery behind drill-downs.
+6. A shared two-environment non-production discipline so threads stop creating their own long-lived servers.
+7. A simplified Build Studio UX that recommends the next action first and keeps raw skill/MCP/evidence machinery behind drill-downs.
 
 The governing rule is: **agents ask; WWMD answers or captures; Build Studio explains the recommendation simply; evidence remains audit-ready.**
 
@@ -138,6 +139,8 @@ The MCP `wiki_query` sweep for the user principle "human interfaces are simple, 
 4. **Skill substrate is canonical.** New or updated skills live in `packages/dpf-skill-pack`, seed into coworkers, and travel through Claude/Codex plugin manifests.
 5. **Refactor while adding.** Reserve roughly 20 percent of the implementation effort for extracting decision routing, evidence projection, and pack selection out of UI or one-off orchestration branches.
 6. **One spec, multiple reviewable slices.** This scope is integrated, but each slice must be independently shippable.
+7. **Use shared runtime environments by default.** External agents and Build Studio skills attach to governed non-production environments instead of creating per-thread servers. New servers require an explicit lease, owner, purpose, port, and cleanup path.
+8. **Test merged code before publishing.** A branch is not ready to push or PR merely because it passes in isolation. The local integration lane must verify the branch merged with current `origin/main` and any selected sibling branches.
 
 ## 5. Architecture
 
@@ -146,6 +149,7 @@ flowchart LR
   Human["Human operator"] --> BS["Build Studio simple UX"]
   BS --> BDS["Build Studio Decision Service"]
   BS --> Timeline["Unified Evidence Timeline"]
+  BS --> EnvBroker["Non-production environment broker"]
 
   Claude["Claude Code plugin"] --> DPFPlugin["packages/dpf-skill-pack"]
   Codex["Codex plugin"] --> DPFPlugin
@@ -157,6 +161,8 @@ flowchart LR
 
   MCP --> Kernel["WWMD / founder kernel"]
   MCP --> Evidence["Evidence intake"]
+  EnvBroker --> ActiveEnv["Nonprod A: active candidate"]
+  EnvBroker --> IntegrationEnv["Nonprod B: local integration CI"]
   Kernel --> Answer["Recommendation"]
   Kernel --> Gap["Founder Review Candidate"]
 
@@ -167,6 +173,8 @@ flowchart LR
 ```
 
 Build Studio owns the user-facing workflow. The decision service owns the phase-level decision contract. The DPF skill pack owns reusable procedures. MCP owns governed side effects and founder-kernel retrieval. The Founder Review Queue owns unresolved decision learning. The evidence timeline owns multi-source provenance.
+
+The non-production environment broker owns local runtime allocation. Most threads should use an existing environment. When a server must be started, it is started by the broker, tagged with owner/session/purpose/TTL, and stopped or recycled by the broker.
 
 ## 6. Component Design
 
@@ -181,6 +189,8 @@ Extend `packages/dpf-skill-pack` with skills that compose around `dpf-decision-v
 | `dpf-record-decision-outcome` | Persist the chosen recommendation, human override, or action taken. | Writes through MCP to `DecisionInteraction` and related evidence. |
 | `dpf-capture-kernel-gap` | Capture questions WWMD cannot answer as founder review candidates. | Does not auto-edit the kernel. |
 | `dpf-external-evidence-handoff` | Let Claude/Codex sessions submit commits, files, tests, UX checks, blockers, and unresolved questions back to DPF. | Calls the external evidence intake MCP tool/API. |
+| `dpf-use-shared-nonprod-environment` | Attach a thread to one of the governed non-production environments instead of starting a new dev server. | Checks environment status, lease/owner, URL, branch/build identity, and cleanup. |
+| `dpf-local-merge-ci-before-push` | Verify candidate work in a local merged-code lane before publishing the branch or opening a PR. | Merges `origin/main` plus selected sibling branches, runs gates, records evidence, then permits push only on pass. |
 
 `dpf-decision-via-kernel` remains the central WWMD gate. These new skills should be small, composable, and written in the same superset frontmatter format introduced by PR #1168.
 
@@ -241,7 +251,66 @@ Initial packs:
 
 Pack metadata should live with `packages/dpf-skill-pack`. If the existing `SkillDefinition` schema is enough, seed pack relationships as metadata. If a durable relation becomes necessary later, add the smallest relation needed; do not create a second registry parallel to the skill pack.
 
-### 6.4 External Evidence Intake
+### 6.4 Non-Production Environment Discipline
+
+DPF needs two governed non-production environments for local development and verification:
+
+WWMD consultation on 2026-05-26 compared per-thread servers, two shared non-production environments with local CI, and remote-CI-only verification. The kernel recommended `two-shared-nonprod-plus-local-ci` with high confidence; strongest contributors were the PR discipline and mandatory build-gate principles.
+
+| Environment | Purpose | Who uses it | Rules |
+|---|---|---|---|
+| Nonprod A: active candidate | Fast dynamic verification of the current candidate branch or Build Studio sandbox output. | Build Studio, Claude, Codex, and coworkers during active implementation. | One owner/lease at a time; agents attach to the existing `localhost` URL by default; rebuild/restart only through the environment broker. |
+| Nonprod B: local integration CI | Merged-code verification before push/PR. | Review/Ship capability pack, external agents, and local merge coordinator. | Always starts from current `origin/main`, merges candidate branch plus selected sibling branches, runs gates, records evidence, then allows push/PR only if green. |
+
+This replaces the current failure mode where each thread starts its own server and leaves it running. Per-thread servers are allowed only when the broker grants a lease because the shared environments are occupied or the test requires isolation. Every lease needs:
+
+- owner session and provider (`build-studio`, `claude`, `codex`, or coworker),
+- purpose,
+- worktree/branch/build identity,
+- URL and ports,
+- start time,
+- time-to-live,
+- cleanup command,
+- evidence record link.
+
+Skills and Build Studio orchestration must prefer attaching to `localhost` environments already managed by the broker. They must not run `pnpm dev`, `next dev`, `docker compose up`, or background server starts directly unless the environment skill has granted a lease and written the evidence. Docker Compose commands should flow through the existing safety wrapper, `node scripts/dpf-compose.mjs`, so `COMPOSE_PROJECT_NAME` guardrails remain active.
+
+Resource hygiene requirements:
+
+- Display active leases and ports in Build Studio or Platform Development.
+- Warn before a thread starts a new server when a suitable shared environment is already available.
+- Auto-expire stale leases after a bounded TTL.
+- Provide a janitor action that stops only broker-owned stale processes, preserving the root install and any actively leased environment.
+- Record cleanup evidence so server shutdown is auditable.
+
+### 6.5 Local Integration CI and Concurrent Merge Flow
+
+The Review/Ship pack should include a local integration lane before branch push or PR creation. This lane is CI-like, but it runs locally against merged code so conflicts and cross-branch regressions are found before remote CI burns time.
+
+Flow:
+
+1. Fetch `origin/main`.
+2. Create or refresh an integration worktree/branch owned by the local integration environment.
+3. Merge the candidate branch into current `origin/main`.
+4. Optionally merge selected sibling branches that are expected to land together or share the same Build Studio surface.
+5. Run the relevant gates: affected unit tests, typecheck, production build, migrations if present, and UX verification against Nonprod B.
+6. Record evidence through DPF MCP.
+7. If green, push the candidate branch and proceed toward PR readiness.
+8. If red, block push/PR and return the failure evidence to the owning thread.
+
+This preserves concurrent development because individual threads keep their own worktrees and branches, while the integration lane tests the composition of branches. Local merge artifacts are not the product source of truth; the topic branches remain the reviewable change units. The integration lane is the evidence generator that proves the topic branch behaves when merged with current reality.
+
+The lane should support three merge modes:
+
+| Mode | Use |
+|---|---|
+| `single-branch` | Normal case: candidate branch merged onto `origin/main`. |
+| `sibling-set` | Multiple local branches intentionally tested together before any one is pushed. |
+| `post-merge-main` | Recently merged remote code is pulled locally and verified before the next branch is based or pushed. |
+
+The DPF skills should make this default behavior for Build Studio and external coding agents. "Passed in my isolated worktree" is useful evidence, but "passed in local integration after merge" is the stronger pre-push gate.
+
+### 6.6 External Evidence Intake
 
 External Claude/Codex sessions need one governed intake path.
 
@@ -256,6 +325,7 @@ The intake should accept:
 - Unresolved questions and their classification: `principle-gap`, `evidence-gap`, `domain-gap`, `ownership-gap`, or `volunteers-dilemma`.
 - Blockers, handoff summary, and recommended next action.
 - Skill IDs and capability pack IDs used.
+- Non-production environment lease ID, URL, branch/build identity, and local integration gate result when relevant.
 
 Storage:
 
@@ -267,7 +337,7 @@ Storage:
 
 Build Studio should project these records into one timeline with source labels: Build Studio, Claude, Codex, coworker. It should not show a separate "external session database" as a first-class product concept.
 
-### 6.5 Founder Review Queue
+### 6.7 Founder Review Queue
 
 The Founder Review Queue is the central place where unanswered WWMD questions become platform learning candidates.
 
@@ -297,7 +367,7 @@ When the founder answers, the queue should write the result back to the decision
 - A backlog item if product substrate is missing.
 - A no-op marker if the decision was intentionally context-specific.
 
-### 6.6 Simple Build Studio UX
+### 6.8 Simple Build Studio UX
 
 The UX should hide complexity without hiding accountability.
 
@@ -316,6 +386,7 @@ Audit drill-down:
 - Skill pack and skill IDs used.
 - MCP tool calls and receipts.
 - External session evidence.
+- Non-production environment lease and local integration gate evidence.
 - Full decision history.
 - Founder review link when applicable.
 
@@ -336,6 +407,8 @@ Reserve roughly 20 percent of the implementation effort for refactoring that mak
 - Extract decision routing out of React components and phase-specific orchestration branches.
 - Create typed DTOs for decision requests, decision results, evidence intake, and capability-pack selection.
 - Normalize evidence projection into one library consumed by Build Studio timeline, AI Operations Map, and future founder-review UI.
+- Extract environment lookup, lease, and cleanup behavior into a single broker/service instead of allowing skills, UI actions, and tests to start servers independently.
+- Extract local integration merge/gate orchestration into one reusable command/service that Build Studio, Claude, Codex, and coworkers can all call.
 - Keep skill-pack metadata in one source under `packages/dpf-skill-pack`.
 - Add tests for schema/seed invariants rather than relying on manual review.
 
@@ -348,6 +421,7 @@ First implementation should try to reuse the existing records. The likely additi
 | `ExternalEvidenceRecord` | `buildId String?`, `taskRunId String?` plus indexes | Direct Build Studio timeline join for external Claude/Codex sessions. |
 | `ImprovementSignal` | No required change in first slice | Existing `status`, `sourceType`, `sourceId`, `routeContext`, `buildId`, and recurrence fields are enough for queue projection. |
 | `DecisionInteraction` | No required change in first slice | Existing `outcomeType`, `outcomePayload`, and `humanOutcome` can represent unresolved, answered, overridden, and promoted outcomes. |
+| Environment lease store | Reuse an existing operational/evidence model if possible; otherwise add the smallest model needed | Required only if process/port leases cannot be represented cleanly in existing evidence records. |
 
 Do not add a `FounderReviewQueue` model unless the projection proves insufficient after the first queue slice. A queue is a workflow over decisions and improvement signals, not a new source of truth.
 
@@ -363,6 +437,7 @@ Acceptance:
 - Skills use PR #1168 superset frontmatter.
 - Mirror invariant tests cover every new skill.
 - Skills cite governing kernel principles and call DPF MCP tools instead of local side effects.
+- Skill set includes shared non-production environment use and local merge CI before push.
 
 ### Slice 2: Build Studio Decision Service
 
@@ -388,16 +463,39 @@ Acceptance:
 
 ### Slice 4: External Evidence Intake
 
-Goal: let Claude/Codex sessions submit governed handoff evidence back into Build Studio.
+Goal: let Claude/Codex sessions submit governed handoff evidence back into Build Studio, including environment lease and local integration gate evidence.
 
 Acceptance:
 
-- MCP/API intake accepts provider, session ID, optional build/task/backlog links, changed files, commits, verification evidence, decisions, unresolved questions, blockers, and next action.
+- MCP/API intake accepts provider, session ID, optional build/task/backlog links, changed files, commits, verification evidence, decisions, unresolved questions, blockers, environment lease, local integration result, and next action.
 - Records are stored using `ExternalEvidenceRecord`, `DecisionInteraction`, and `ImprovementSignal` as appropriate.
-- Build Studio timeline displays external evidence with source labels.
-- Tests cover Codex and Claude payloads, missing optional build link, and malformed evidence rejection.
+- Build Studio timeline displays external evidence with source labels and local integration gate status.
+- Tests cover Codex and Claude payloads, missing optional build link, malformed evidence rejection, and local integration failure evidence.
 
-### Slice 5: Founder Review Queue
+### Slice 5: Non-Production Environment Broker
+
+Goal: stop per-thread server sprawl by making the two shared non-production environments explicit and brokered.
+
+Acceptance:
+
+- Build Studio/Platform Development can list active non-production environments, leases, URLs, ports, owners, TTLs, and branch/build identity.
+- Skills default to attaching to Nonprod A or Nonprod B instead of starting servers.
+- A new server can start only through the broker with a lease and cleanup command.
+- Stale broker-owned servers can be stopped by a janitor action without touching the root install or active leases.
+- Tests cover lease creation, lease conflict, TTL expiry, janitor filtering, and forbidden direct-start paths where feasible.
+
+### Slice 6: Local Integration CI
+
+Goal: verify merged code locally before push/PR and support concurrent branch composition.
+
+Acceptance:
+
+- Local integration lane fetches `origin/main`, creates/refreshes an integration worktree, merges candidate branch, optionally merges sibling branches, runs gates, and records evidence.
+- Push/PR skills treat local integration failure as a blocker.
+- Evidence links from branch/PR readiness back to the local integration run.
+- Tests cover single-branch, sibling-set, merge conflict, failed gate, and successful gate flows.
+
+### Slice 7: Founder Review Queue
 
 Goal: centralize unresolved WWMD questions and let founder answers improve future autonomy.
 
@@ -408,13 +506,13 @@ Acceptance:
 - Outcomes write back to the source decision and create the correct follow-up.
 - No automatic kernel PR is created without founder action.
 
-### Slice 6: Build Studio UX Simplification
+### Slice 8: Build Studio UX Simplification
 
 Goal: make the Build Studio surface delightful and simple while preserving audit access.
 
 Acceptance:
 
-- Default phase view shows state, recommendation, blocker/decision, confidence/evidence summary, and one primary action.
+- Default phase view shows state, recommendation, blocker/decision, confidence/evidence summary, environment status, and one primary action.
 - Technical traces move behind "View audit."
 - External evidence appears in the same timeline as internal Build Studio evidence.
 - UI uses DPF theme variables only, per AGENTS.md.
@@ -424,12 +522,15 @@ Acceptance:
 
 Each implementation slice should run the relevant subset of the DPF build gate:
 
-- Focused Vitest for new services, mappers, seed invariants, and UI projections.
+- Focused Vitest for new services, mappers, seed invariants, environment broker behavior, local integration merge orchestration, and UI projections.
 - `pnpm --filter web typecheck` for TypeScript changes.
 - `cd apps/web && pnpm exec next build` or the repo-standard production build command for final Build Studio slices.
 - Migration apply verification when schema changes are introduced.
 - Browser UX verification for Build Studio and Founder Review Queue UI changes.
 - MCP integration smoke test against `http://localhost:3000/api/mcp/v1` using `DPF_MCP_BEARER_TOKEN` for decision/evidence flows.
+- Nonprod A smoke: prove agents attach to the existing active-candidate environment without starting a new server.
+- Nonprod B smoke: prove local integration merges the candidate branch with current `origin/main`, runs the required gates, and blocks push on failure.
+- Resource hygiene smoke: prove stale broker-owned leases can be listed and cleaned without touching the root install or active leases.
 
 Doc-only slices should at least run `git diff --check` and staged secret scanning.
 
@@ -439,30 +540,39 @@ Doc-only slices should at least run `git diff --check` and staged secret scannin
 |---|---|
 | Build Studio becomes more complex internally and harder to use. | Keep the UX recommendation-first; move traces behind audit drill-downs; refactor decision routing into a service. |
 | External agents become the real product and Build Studio remains bypassed. | Require external evidence intake into Build Studio and show it in the same timeline. |
+| Threads keep starting unmanaged servers and consuming resources. | Make shared non-production environment attachment the default skill path; require broker leases for new servers; add TTL and janitor cleanup. |
+| Isolated branches pass but fail once merged. | Add the local integration CI lane and make push/PR readiness depend on merged-code evidence. |
+| Local integration becomes a hidden mega-branch. | Keep topic branches as the reviewable source of truth; integration branches are ephemeral evidence generators only. |
 | WWMD answers are treated as magic instead of advisory. | Persist contribution ledger references, confidence, flags, and human overrides. |
 | Unanswered questions disappear into chat history. | Capture unresolved decisions as Founder Review Queue candidates. |
 | Skill pack diverges across Claude, Codex, and coworkers. | Keep `packages/dpf-skill-pack` as the single authoring source and enforce mirror invariants. |
-| New queue/evidence models duplicate existing records. | Reuse `DecisionInteraction`, `ImprovementSignal`, `ExternalEvidenceRecord`, `TaskRun`, `PhaseHandoff`, and `ToolExecutionReceipt`; add only direct links when needed. |
+| New queue/evidence/environment models duplicate existing records. | Reuse `DecisionInteraction`, `ImprovementSignal`, `ExternalEvidenceRecord`, `TaskRun`, `PhaseHandoff`, and `ToolExecutionReceipt`; add only direct links or a minimal lease model when needed. |
 
 ## 11. Decisions Locked By This Spec
 
 - Use PR #1168's `packages/dpf-skill-pack` as the canonical skill substrate.
 - Build Studio calls a shared decision service rather than embedding WWMD routing in UI components.
 - External Claude/Codex sessions submit governed evidence back into DPF instead of relying on chat summaries.
+- DPF uses two governed non-production environments by default: active candidate and local integration CI.
+- Per-thread servers are disallowed by default; new servers require a broker lease, TTL, owner, purpose, and cleanup path.
+- Push/PR readiness requires merged-code local integration evidence, not only isolated branch evidence.
+- Concurrent development remains branch/worktree isolated, while the local integration lane tests selected branch composition.
 - The Founder Review Queue is central and projected from decision/improvement records.
 - The queue captures candidates; it does not automatically change founder-kernel doctrine.
 - The default human interface is recommendation-first and hides raw skill/MCP mechanics behind audit views.
-- Implementation proceeds as six slices, with roughly 20 percent of effort reserved for refactoring.
+- Implementation proceeds as eight slices, with roughly 20 percent of effort reserved for refactoring.
 
 ## 12. Planning Notes
 
-The implementation plan should sequence slices in the order above because each slice unlocks the next:
+The implementation plan should sequence slices in this order because each slice unlocks the next:
 
 1. Decision skills define the shared client/coworker procedure.
 2. Decision service gives Build Studio a stable internal API.
 3. Capability packs make phase routing readable and testable.
 4. Evidence intake connects external work back to Build Studio.
-5. Founder Review Queue turns unresolved decisions into learning.
-6. UX simplification gives users the calm, delightful surface over the machinery.
+5. Environment broker stops unmanaged server creation.
+6. Local integration CI proves merged-code readiness before push.
+7. Founder Review Queue turns unresolved decisions into learning.
+8. UX simplification gives users the calm, delightful surface over the machinery.
 
-The first code slice should be intentionally small: extend the skill pack and add tests around the seeded skill metadata. That keeps the PR reviewable and proves the dual-surface substrate before touching Build Studio runtime behavior.
+The first code slice should be intentionally small: extend the skill pack and add tests around the seeded skill metadata, including the non-production environment and local integration skill definitions. That keeps the PR reviewable and proves the dual-surface substrate before touching Build Studio runtime behavior.
