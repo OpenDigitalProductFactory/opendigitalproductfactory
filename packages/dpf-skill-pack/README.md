@@ -35,6 +35,13 @@ DPF therefore treats `dpf-platform` as the project-default plugin, not merely a 
 | [`dpf-worktree-per-session`](skills/dpf-worktree-per-session/SKILL.md) | superpowers:finishing-a-development-branch (predecessor) | `["build-specialist", "platform-engineer"]` | `git worktree add` + MCP seed + `COMPOSE_PROJECT_NAME` discipline |
 | [`dpf-pr-with-dco`](skills/dpf-pr-with-dco/SKILL.md) | superpowers:finishing-a-development-branch (successor) | `["build-specialist", "platform-engineer"]` | Branch from `origin/main`, `-s` sign-off, overlap-sweep, PR-when-ready |
 | [`dpf-evidence-before-diagnosis`](skills/dpf-evidence-before-diagnosis/SKILL.md) | superpowers:systematic-debugging (predecessor) | `["*"]` | Query DB/status before claiming cause; dynamic-analysis output discipline |
+| [`dpf-retrieve-decision-context`](skills/dpf-retrieve-decision-context/SKILL.md) | dpf-verify-substrate-first | `["*"]` | Pull repo, specs, live backlog, and kernel context before WWMD scoring |
+| [`dpf-compare-options`](skills/dpf-compare-options/SKILL.md) | dpf-retrieve-decision-context | `["*"]` | Score 2-4 options through `principle_decide` and return operator-safe recommendations |
+| [`dpf-record-decision-outcome`](skills/dpf-record-decision-outcome/SKILL.md) | dpf-decision-via-kernel | `["*"]` | Persist decision result, evidence summary, and next action through governed MCP |
+| [`dpf-capture-kernel-gap`](skills/dpf-capture-kernel-gap/SKILL.md) | dpf-decision-via-kernel | `["*"]` | Route low-confidence, evidence, principle, ownership, or volunteers-dilemma gaps to founder review |
+| [`dpf-external-evidence-handoff`](skills/dpf-external-evidence-handoff/SKILL.md) | dpf-evidence-before-diagnosis | `["build-specialist", "platform-engineer"]` | Record Claude/Codex branch, files, tests, and unresolved questions for Build Studio |
+| [`dpf-use-shared-nonprod-environment`](skills/dpf-use-shared-nonprod-environment/SKILL.md) | dpf-worktree-per-session | `["build-specialist", "platform-engineer", "ops-coordinator"]` | Claim and release governed shared localhost environments instead of unmanaged servers |
+| [`dpf-local-merge-ci-before-push`](skills/dpf-local-merge-ci-before-push/SKILL.md) | dpf-pr-with-dco | `["build-specialist", "platform-engineer"]` | Run merged-code local integration gates and record results before push or PR |
 
 ## Authoring contract for new skills
 
