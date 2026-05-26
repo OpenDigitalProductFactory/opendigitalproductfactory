@@ -17,9 +17,15 @@ describe("business capability perspectives", () => {
     });
 
     expect(msp.sourcePerspectiveIds).toEqual(["common-small-business", "it-managed-services"]);
+    expect(msp.sources.map((source) => source.label)).toEqual(["Common Small Business", "IT Managed Services"]);
+    expect(msp.sources.map((source) => source.source)).toEqual([
+      "DPF baseline informed by APQC-style process families",
+      "DPF MSP overlay informed by managed services, customer estate, NIST CSF, and service-agreement operating patterns",
+    ]);
     expect(msp.capabilities.some((capability) => capability.key === "msp-managed-customer-estate")).toBe(true);
     expect(msp.capabilities.some((capability) => capability.key === "finance")).toBe(true);
     expect(salon.sourcePerspectiveIds).toEqual(["common-small-business"]);
+    expect(salon.sources.map((source) => source.label)).toEqual(["Common Small Business"]);
     expect(salon.capabilities.some((capability) => capability.key === "msp-managed-customer-estate")).toBe(false);
   });
 
