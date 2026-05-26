@@ -105,6 +105,7 @@ export type UnifiConnectionInput = {
   configuration?: {
     site?: string;
     discoverClients?: boolean;
+    tlsInsecure?: boolean;
   };
 };
 
@@ -116,23 +117,24 @@ export type UnifiDeps = {
   apiKey: string;
   site: string;
   discoverClients: boolean;
+  tlsInsecure: boolean;
 };
 
-function createInsecureFetch(): UnifiDeps["fetchFn"] {
+function createUnifiFetch(tlsInsecure: boolean): UnifiDeps["fetchFn"] {
   // CodeQL #61 (js/disabling-certificate-validation): UniFi controllers
   // ship with self-signed certificates by default. To talk to them at
   // all we have to skip cert validation — but we make that explicit
-  // and opt-in via an env var rather than silently disabling validation.
+  // and opt-in per connection (or via the legacy env var) rather than
+  // silently disabling validation.
   //
-  // Default: strict cert validation. Operators running standard UniFi
-  // appliances set UNIFI_ALLOW_INSECURE_TLS=true to enable the legacy
-  // self-signed flow.
-  const allowInsecure = process.env.UNIFI_ALLOW_INSECURE_TLS === "true";
+  // Default: strict cert validation. Operators running standard closed-LAN
+  // UniFi appliances can opt into the self-signed flow per DiscoveryConnection.
+  const allowInsecure = tlsInsecure || process.env.UNIFI_ALLOW_INSECURE_TLS === "true";
   const agent = new https.Agent({ rejectUnauthorized: !allowInsecure });
   if (allowInsecure) {
     // eslint-disable-next-line no-console
     console.warn(
-      "[unifi] TLS cert validation disabled (UNIFI_ALLOW_INSECURE_TLS=true). " +
+      "[unifi] TLS cert validation disabled for this connection. " +
         "Acceptable for self-signed UniFi controllers; rotate to a valid cert in production.",
     );
   }
@@ -177,13 +179,15 @@ function createInsecureFetch(): UnifiDeps["fetchFn"] {
 
 /** Build deps from a DiscoveryConnection loaded by the runner. */
 export function buildDepsFromConnection(conn: UnifiConnectionInput): UnifiDeps {
+  const tlsInsecure = conn.configuration?.tlsInsecure ?? false;
   return {
-    fetchFn: createInsecureFetch(),
+    fetchFn: createUnifiFetch(tlsInsecure),
     // CodeQL #25 (js/polynomial-redos): bound the trailing-slash run.
     unifiUrl: conn.endpointUrl.replace(/\/{1,256}$/, ""),
     apiKey: conn.apiKey,
     site: conn.configuration?.site ?? "default",
     discoverClients: conn.configuration?.discoverClients ?? false,
+    tlsInsecure,
   };
 }
 

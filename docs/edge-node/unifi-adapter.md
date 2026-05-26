@@ -28,6 +28,7 @@ The adapter calls `GET /proxy/network/api/s/{site}/stat/device` and `GET /proxy/
    - **Site**: `default` (or the slug from your UniFi UI for multi-site installs)
    - **Controller URL**: full URL to the controller. UDM/UDM-Pro: `https://<gateway-ip>`. Hosted Network (`https://unifi.ui.com`) is not supported on this path — local LAN only.
    - **API Key**: paste the value from Step 1.
+   - **Allow self-signed controller certificate**: enable only for a trusted closed LAN when the UniFi appliance uses its factory/self-signed certificate.
 4. Click **Save & Test**. The portal:
    - Encrypts the key with AES-256-GCM (`CREDENTIAL_ENCRYPTION_KEY`) and stores the ciphertext in the `DiscoveryConnection` table.
    - Calls the controller once to verify the key works.
@@ -96,7 +97,7 @@ The topology view treats all of these the same way as any other discovered CI, s
 
 **Status `unreachable`.** The portal container can't reach the controller IP. Check the controller is on the same network the portal can route to, and that no firewall blocks the HTTPS port.
 
-**Status `tls_error`.** Common on UDM-Pro home installs with self-signed certs. The connection-edit form does not currently expose `tlsInsecure`; if you need it for a closed LAN, set the field directly in the DB or open an issue. (TLS bypass is intentionally not a one-click UX.)
+**Status `tls_error`.** Common on UDM-Pro home installs with self-signed certs. Edit the connection, enable **Allow self-signed controller certificate** for the trusted closed LAN, then click **Save & Test** again. Keep it disabled for hosted/public controllers and prefer installing a trusted certificate when available.
 
 **No new items appear after a sweep.** Run `docker compose logs edge-node --tail 100 | grep -i unifi`. Common causes:
 - The edge node's `fetchAdapters` call failed — log line `adapters: fetch failed (...)` tells you why (token mismatch, portal unreachable, etc.).
