@@ -59,12 +59,12 @@ test("workspace dependency install skips lifecycle scripts before explicit Prism
   );
   assert.match(
     body,
-    /pnpm exec prisma generate --schema packages\/db\/prisma\/schema\.prisma/,
-    "Prisma generation should use the workspace-root CLI with an explicit schema path",
+    /pnpm --filter @dpf\/db exec prisma generate --schema prisma\/schema\.prisma/,
+    "Prisma generation should use the db package CLI with the package-relative schema path",
   );
   assert.doesNotMatch(
     body,
-    /pnpm --filter @dpf\/db exec prisma generate/,
-    "Prisma generation should not rely on package-local CLI links in the production source volume",
+    /pnpm exec prisma generate --schema packages\/db\/prisma\/schema\.prisma/,
+    "Prisma generation should not rely on the workspace-root CLI link in the production source volume",
   );
 });
