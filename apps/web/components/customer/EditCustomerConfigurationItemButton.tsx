@@ -383,7 +383,7 @@ export function EditCustomerConfigurationItemButton({
                 </div>
               </div>
 
-              {error ? <p className="text-xs text-red-500">{error}</p> : null}
+              {error ? <p className="text-xs text-[var(--dpf-text)]">{error}</p> : null}
 
               <div className="flex justify-end gap-2">
                 <button

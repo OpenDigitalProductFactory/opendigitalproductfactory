@@ -2,74 +2,93 @@
 import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { NewCustomerButton } from "@/components/customer/NewCustomerButton";
-
-const STATUS_COLOURS: Record<string, string> = {
-  prospect: "#fbbf24",
-  qualified: "#fb923c",
-  onboarding: "#38bdf8",
-  active: "#4ade80",
-  at_risk: "#ef4444",
-  suspended: "#8888a0",
-  closed: "#555566",
-};
+import { RevenueCockpit } from "@/components/customer/RevenueCockpit";
+import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
+import { buildRevenueCockpitSummary } from "@/lib/crm/revenue-cockpit";
+import { getAccountStatusMeta } from "@/lib/crm/presentation";
 
 export default async function CustomerPage() {
-  const [accounts, engagementCounts, opportunityCounts, quoteCounts, orderCounts] =
-    await Promise.all([
-      prisma.customerAccount.findMany({
-        orderBy: { name: "asc" },
-        select: {
-          id: true,
-          accountId: true,
-          name: true,
-          status: true,
-          industry: true,
-          _count: { select: { contacts: true, opportunities: true } },
-        },
-      }),
-      prisma.engagement.groupBy({
-        by: ["status"],
-        _count: true,
-      }),
-      prisma.opportunity.groupBy({
-        by: ["stage"],
-        _count: true,
-        _sum: { expectedValue: true },
-      }),
-      prisma.quote.groupBy({
-        by: ["status"],
-        _count: true,
-      }),
-      prisma.salesOrder.groupBy({
-        by: ["status"],
-        _count: true,
-      }),
-    ]);
+  const [
+    accounts,
+    engagementCounts,
+    opportunityCounts,
+    quoteCounts,
+    orderCounts,
+    staleOpportunityCount,
+    campaignBriefsOpen,
+    assetTasksOpen,
+    automationCandidatesOpen,
+  ] = await Promise.all([
+    prisma.customerAccount.findMany({
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        accountId: true,
+        name: true,
+        status: true,
+        industry: true,
+        _count: { select: { contacts: true, opportunities: true } },
+      },
+    }),
+    prisma.engagement.groupBy({
+      by: ["status"],
+      _count: true,
+    }),
+    prisma.opportunity.groupBy({
+      by: ["stage"],
+      _count: true,
+      _sum: { expectedValue: true },
+    }),
+    prisma.quote.groupBy({
+      by: ["status"],
+      _count: true,
+    }),
+    prisma.salesOrder.groupBy({
+      by: ["status"],
+      _count: true,
+    }),
+    prisma.opportunity.count({
+      where: {
+        isDormant: true,
+        stage: { in: ["qualification", "discovery", "proposal", "negotiation"] },
+      },
+    }),
+    prisma.marketingCampaignBrief.count({
+      where: { status: "draft" },
+    }),
+    prisma.marketingAssetTask.count({
+      where: { status: "draft" },
+    }),
+    prisma.marketingAutomationCandidate.count({
+      where: { status: "draft" },
+    }),
+  ]);
 
-  const engTotal = engagementCounts.reduce((s, e) => s + e._count, 0);
-  const engNew = engagementCounts.find((e) => e.status === "new")?._count ?? 0;
-
-  const openStages = ["qualification", "discovery", "proposal", "negotiation"];
-  const openOpps = opportunityCounts.filter((o) => openStages.includes(o.stage));
-  const pipelineCount = openOpps.reduce((s, o) => s + o._count, 0);
-  const pipelineValue = openOpps.reduce(
-    (s, o) => s + Number(o._sum.expectedValue ?? 0),
-    0,
-  );
-
-  const quoteDraft = quoteCounts.find((q) => q.status === "draft")?._count ?? 0;
-  const quoteSent = quoteCounts.find((q) => q.status === "sent")?._count ?? 0;
-
-  const ordersActive = orderCounts
-    .filter((o) => o.status === "confirmed" || o.status === "in_progress")
-    .reduce((s, o) => s + o._count, 0);
-
-  const summaryCards = [
-    { label: "Engagements", value: engTotal, sub: `${engNew} new`, color: "#fb923c", href: "/customer/engagements" },
-    { label: "Pipeline", value: pipelineCount, sub: `$${pipelineValue.toLocaleString()}`, color: "var(--dpf-accent)", href: "/customer/opportunities" },
-    { label: "Quotes", value: quoteDraft + quoteSent, sub: `${quoteSent} sent`, color: "#38bdf8", href: "/customer/quotes" },
-    { label: "Orders", value: ordersActive, sub: "active", color: "#4ade80", href: "/customer/sales-orders" },
-  ];
+  const revenueSummary = buildRevenueCockpitSummary({
+    engagementCounts: engagementCounts.map((item) => ({
+      status: item.status,
+      count: item._count,
+    })),
+    opportunityCounts: opportunityCounts.map((item) => ({
+      stage: item.stage,
+      count: item._count,
+      expectedValue: Number(item._sum.expectedValue ?? 0),
+    })),
+    quoteCounts: quoteCounts.map((item) => ({
+      status: item.status,
+      count: item._count,
+    })),
+    orderCounts: orderCounts.map((item) => ({
+      status: item.status,
+      count: item._count,
+    })),
+    staleOpportunityCount,
+    marketingWork: {
+      campaignBriefsOpen,
+      assetTasksOpen,
+      automationCandidatesOpen,
+    },
+  });
 
   return (
     <div>
@@ -83,36 +102,17 @@ export default async function CustomerPage() {
         <NewCustomerButton />
       </div>
 
-      {/* Pipeline summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        {summaryCards.map((c) => (
-          <Link
-            key={c.label}
-            href={c.href}
-            className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border-l-2 hover:bg-[var(--dpf-surface-2)] transition-colors"
-            style={{ borderLeftColor: c.color }}
-          >
-            <p className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-wider">
-              {c.label}
-            </p>
-            <p className="text-lg font-bold text-[var(--dpf-text)]">{c.value}</p>
-            <p className="text-[10px]" style={{ color: c.color }}>
-              {c.sub}
-            </p>
-          </Link>
-        ))}
-      </div>
+      <RevenueCockpit summary={revenueSummary} />
 
       {/* Account list */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {accounts.map((a) => {
-          const statusColour = STATUS_COLOURS[a.status] ?? "#8888a0";
+          const statusMeta = getAccountStatusMeta(a.status);
           return (
             <Link
               key={a.id}
               href={`/customer/${a.id}`}
-              className="p-4 rounded-lg bg-[var(--dpf-surface-1)] border-l-4 hover:bg-[var(--dpf-surface-2)] transition-colors"
-              style={{ borderLeftColor: "#f472b6" }}
+              className="rounded-lg border-l-4 border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] p-4 transition-colors hover:bg-[var(--dpf-surface-2)]"
             >
               <p className="text-[9px] font-mono text-[var(--dpf-muted)] mb-1">
                 {a.accountId}
@@ -121,12 +121,10 @@ export default async function CustomerPage() {
                 <p className="text-sm font-semibold text-[var(--dpf-text)] leading-tight">
                   {a.name}
                 </p>
-                <span
-                  className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0"
-                  style={{ background: `${statusColour}20`, color: statusColour }}
-                >
-                  {a.status}
-                </span>
+                <CustomerStatusBadge
+                  label={statusMeta.label}
+                  tone={statusMeta.tone}
+                />
               </div>
               <div className="flex gap-3 text-[9px] text-[var(--dpf-muted)]">
                 <span>{a._count.contacts} contact{a._count.contacts !== 1 ? "s" : ""}</span>
