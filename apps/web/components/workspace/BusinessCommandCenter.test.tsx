@@ -23,12 +23,48 @@ const fixtureView: WorkspaceCommandCenterView = {
       label: "AI workforce",
       href: "/platform/ai/operations-map",
       cells: [
-        { key: "context", label: "Context", state: "good", href: "/platform/wiki" },
-        { key: "connections", label: "Connections", state: "attention", href: "/platform/tools/integrations" },
-        { key: "capabilities", label: "Capabilities", state: "good", href: "/platform/ai" },
-        { key: "cadence", label: "Cadence", state: "good", href: "/workspace" },
-        { key: "confidence", label: "Confidence", state: "attention", href: "/platform/ai/operations-map" },
-        { key: "containment", label: "Containment", state: "blocked", href: "/platform/ai/authority" },
+        {
+          key: "context",
+          label: "Context",
+          description: "Evidence, docs, and operating knowledge",
+          state: "good",
+          href: "/wiki",
+        },
+        {
+          key: "connections",
+          label: "Connections",
+          description: "Provider, integration, and customer-system links",
+          state: "attention",
+          href: "/platform/tools/integrations",
+        },
+        {
+          key: "capabilities",
+          label: "Capabilities",
+          description: "People and AI coworkers able to act",
+          state: "good",
+          href: "/platform/ai",
+        },
+        {
+          key: "cadence",
+          label: "Cadence",
+          description: "Scheduled work, reviews, and follow-up rhythm",
+          state: "good",
+          href: "/workspace",
+        },
+        {
+          key: "confidence",
+          label: "Confidence",
+          description: "Recent receipts and low-risk signals",
+          state: "attention",
+          href: "/platform/ai/operations-map",
+        },
+        {
+          key: "containment",
+          label: "Containment",
+          description: "Approvals, route scope, and side-effect controls",
+          state: "blocked",
+          href: "/platform/ai/authority",
+        },
       ],
     },
   ],
@@ -57,6 +93,12 @@ describe("BusinessCommandCenter", () => {
     expect(html).toContain("Containment");
     expect(html).toContain("Reconcile overdue invoices");
     expect(html).toContain("AI Operations Map");
+  });
+
+  it("puts six-C descriptions into cell titles without adding another visible text tier", () => {
+    const html = renderToStaticMarkup(<BusinessCommandCenter view={fixtureView} />);
+
+    expect(html).toContain("Context: Good - Evidence, docs, and operating knowledge");
   });
 
   it("uses DPF theme tokens instead of hardcoded neutral color classes", () => {
