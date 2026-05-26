@@ -13,6 +13,7 @@ import { seedEaStructureRules } from "./seed-ea-structure-rules.js";
 import { seedGovernanceReferenceData } from "./governance-seed.js";
 import { seedWorkforceReferenceData } from "./workforce-seed.js";
 import { seedStorefrontArchetypes } from "./seed-storefront-archetypes.js";
+import { seedBusinessCapabilityPerspective } from "./business-capability-perspectives.js";
 import { seedGeographicData } from "./seed-geographic-data.js";
 import { seedTaxJurisdictions } from "./seed-tax-jurisdictions.js";
 import { seedLicenseRequirements } from "./seed-license-requirements.js";
@@ -2438,6 +2439,11 @@ async function main(): Promise<void> {
   await seedClientIdentity();
   await seedHiveContributionCredential();
   await seedStorefrontArchetypes(prisma);
+  const capabilityPerspectiveSeed = await seedBusinessCapabilityPerspective(prisma);
+  console.log(
+    `  business-capability-perspective: sources=${capabilityPerspectiveSeed.sourcePerspectiveIds.join(",")} ` +
+      `active=${capabilityPerspectiveSeed.appliedCount} deactivated=${capabilityPerspectiveSeed.deactivatedCount}`,
+  );
   await seedWorkQueues();
   await seedPromptTemplates(prisma);
   await seedSkills(prisma);

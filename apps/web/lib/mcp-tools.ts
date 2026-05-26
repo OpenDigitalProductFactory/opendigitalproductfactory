@@ -1171,6 +1171,30 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["ideate", "plan", "build", "review", "ship"],
   },
   {
+    name: "record_local_integration_result",
+    description: "Record the result of a local merged-code integration gate before push or PR. Captures candidate branch, mode, pass/fail/conflict status, and evidence.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        provider: { type: "string", enum: ["build-studio", "claude", "codex", "coworker"] },
+        externalSessionId: { type: "string" },
+        routeContext: { type: "string" },
+        buildId: { type: "string" },
+        taskRunId: { type: "string" },
+        candidateBranch: { type: "string" },
+        mode: { type: "string", enum: ["single-branch", "sibling-set", "post-merge-main"] },
+        status: { type: "string", enum: ["passed", "failed", "conflict"] },
+        summary: { type: "string" },
+        evidence: { type: "object" },
+      },
+      required: ["provider", "externalSessionId", "routeContext", "candidateBranch", "mode", "status", "summary", "evidence"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+  },
+  {
     name: "record_functional_failure_evidence",
     description: "Create or update a deduped backlog item from Playwright FunctionalFailureEvidence. Uses a deterministic testId+route+actual fingerprint and records an evidence activity; the cross-cutting audit lives in ToolExecution. Side-effecting.",
     inputSchema: {
@@ -5824,6 +5848,65 @@ export async function executeTool(
         entityId: lease.leaseId,
         message: `Released nonproduction environment lease ${lease.leaseId}.`,
         data: { lease },
+      };
+    }
+
+    case "record_local_integration_result": {
+      const { recordLocalIntegrationResult } = await import("@/lib/nonprod/local-integration");
+      const stringValue = (key: string) => (typeof params[key] === "string" ? String(params[key]).trim() : "");
+      const provider = stringValue("provider");
+      const externalSessionId = stringValue("externalSessionId");
+      const routeContext = stringValue("routeContext") || context?.routeContext || "";
+      const candidateBranch = stringValue("candidateBranch");
+      const mode = stringValue("mode");
+      const status = stringValue("status");
+      const summary = stringValue("summary");
+      const evidence = params["evidence"];
+      const missing = [
+        ["provider", provider],
+        ["externalSessionId", externalSessionId],
+        ["routeContext", routeContext],
+        ["candidateBranch", candidateBranch],
+        ["mode", mode],
+        ["status", status],
+        ["summary", summary],
+      ].filter(([, value]) => !value).map(([key]) => key);
+      if (evidence === undefined) missing.push("evidence");
+      if (missing.length > 0) {
+        return {
+          success: false,
+          error: "missing_required",
+          message: `Missing required local integration result field(s): ${missing.join(", ")}`,
+        };
+      }
+      if (!["build-studio", "claude", "codex", "coworker"].includes(provider)) {
+        return { success: false, error: "invalid_provider", message: `Unsupported provider: ${provider}` };
+      }
+      if (!["single-branch", "sibling-set", "post-merge-main"].includes(mode)) {
+        return { success: false, error: "invalid_mode", message: `Unsupported local integration mode: ${mode}` };
+      }
+      if (!["passed", "failed", "conflict"].includes(status)) {
+        return { success: false, error: "invalid_status", message: `Unsupported local integration status: ${status}` };
+      }
+
+      const result = await recordLocalIntegrationResult({
+        actorUserId: userId,
+        provider: provider as "build-studio" | "claude" | "codex" | "coworker",
+        externalSessionId,
+        routeContext,
+        buildId: stringValue("buildId") || undefined,
+        taskRunId: stringValue("taskRunId") || undefined,
+        candidateBranch,
+        mode: mode as "single-branch" | "sibling-set" | "post-merge-main",
+        status: status as "passed" | "failed" | "conflict",
+        summary,
+        evidence: evidence as import("@dpf/db").Prisma.InputJsonValue,
+      });
+      return {
+        success: true,
+        entityId: result.id,
+        message: `Recorded local integration result for ${candidateBranch}.`,
+        data: { evidenceId: result.id, status },
       };
     }
 

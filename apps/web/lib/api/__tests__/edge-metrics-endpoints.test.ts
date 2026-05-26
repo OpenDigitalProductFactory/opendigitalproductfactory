@@ -17,10 +17,8 @@ vi.mock("../../auth/edge-node-token.js", () => ({
 
 import { resolveEdgeNodeAuth } from "../../auth/edge-node-token.js";
 import { metricsCache } from "../../edge/metrics-cache.js";
-import {
-  POST as metricsPost,
-  _resetRateLimitForTesting,
-} from "../../../app/api/v1/edge/metrics/route.js";
+import { resetEdgeMetricsRateLimitForTesting } from "../../edge/metrics-rate-limit.js";
+import { POST as metricsPost } from "../../../app/api/v1/edge/metrics/route.js";
 
 const mockAuth = vi.mocked(resolveEdgeNodeAuth);
 
@@ -69,7 +67,7 @@ function makePostRequest(body: unknown, extraHeaders?: Record<string, string>): 
 describe("POST /api/v1/edge/metrics", () => {
   beforeEach(() => {
     metricsCache.clear();
-    _resetRateLimitForTesting();
+    resetEdgeMetricsRateLimitForTesting();
     mockAuth.mockResolvedValue(VALID_AUTH);
     vi.useFakeTimers();
   });

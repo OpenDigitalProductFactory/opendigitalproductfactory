@@ -2,7 +2,7 @@
 title: "Platform Wiki"
 area: wiki
 order: 1
-lastUpdated: 2026-05-14
+lastUpdated: 2026-05-26
 updatedBy: Codex
 ---
 
@@ -27,6 +27,8 @@ The wiki is authoritative for governed platform knowledge that has been imported
 ## AI Coworker Support
 
 Coworkers can retrieve wiki context, propose edits, and use principles as governance context. They must keep source-backed knowledge separate from guesses and should surface missing citations as stewardship issues.
+
+WWMD uses the same wiki substrate for decision support. It retrieves relevant principles, compares candidate options against multiple dimensions, and returns a recommendation, arbitration, escalation, or deferral with confidence and sources attached. See [Autonomy, WWMD, and trusted coworker decisions](../../architecture/autonomy-and-wwmd.md).
 
 ## What To Watch
 

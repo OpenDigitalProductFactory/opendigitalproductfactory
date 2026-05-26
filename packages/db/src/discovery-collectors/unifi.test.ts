@@ -137,6 +137,7 @@ function makeDeps(overrides: Partial<UnifiDeps> = {}): UnifiDeps {
     apiKey: "test-api-key",
     site: "default",
     discoverClients: false,
+    tlsInsecure: false,
     ...overrides,
   };
 }
@@ -448,5 +449,16 @@ describe("buildDepsFromConnection", () => {
 
     expect(deps.site).toBe("default");
     expect(deps.discoverClients).toBe(false);
+    expect(deps.tlsInsecure).toBe(false);
+  });
+
+  it("honors the per-connection TLS policy", () => {
+    const deps = buildDepsFromConnection({
+      endpointUrl: "https://192.168.0.1",
+      apiKey: "key",
+      configuration: { tlsInsecure: true },
+    });
+
+    expect(deps.tlsInsecure).toBe(true);
   });
 });

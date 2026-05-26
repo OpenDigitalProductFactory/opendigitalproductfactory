@@ -12,6 +12,7 @@ import {
   buildCapabilityMapRows,
   deriveCapabilityOverlayState,
 } from "./view-model";
+import { buildCapabilityProvenance } from "./provenance";
 
 const rows: BusinessCapabilityRecord[] = [
   {
@@ -189,5 +190,29 @@ describe("business capability map data helpers", () => {
 
     expect(buildCapabilityMapRows(tree)).toEqual([{ id: "row-1", families: tree }]);
     expect(buildCapabilityMapRows([])).toEqual([]);
+  });
+
+  it("describes the active archetype capability perspective provenance", () => {
+    const seededRows = rows.map((row, index) => ({
+      ...row,
+      capabilityId: index === 0 ? "BCAP-SEED-setup" : row.capabilityId,
+    }));
+
+    const provenance = buildCapabilityProvenance({
+      archetype: {
+        archetypeId: "it-managed-services",
+        category: "professional-services",
+        name: "IT Managed Services",
+      },
+      records: seededRows,
+    });
+
+    expect(provenance.activePerspectiveLabel).toBe("Common Small Business + IT Managed Services");
+    expect(provenance.seedCapabilityCount).toBe(1);
+    expect(provenance.projectionStatus).toBe("seed-projected");
+    expect(provenance.sources.map((source) => source.perspectiveId)).toEqual([
+      "common-small-business",
+      "it-managed-services",
+    ]);
   });
 });

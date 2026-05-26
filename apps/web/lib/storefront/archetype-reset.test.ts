@@ -20,6 +20,17 @@ vi.mock("nanoid", () => ({
 
 import { resetStorefrontArchetype } from "./archetype-reset";
 
+function businessCapabilityProjectionStore() {
+  return {
+    findMany: vi.fn().mockResolvedValue([]),
+    upsert: vi.fn(async (args) => ({
+      id: `db-${args.where.capabilityId}`,
+      capabilityId: args.where.capabilityId,
+    })),
+    updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+  };
+}
+
 describe("resetStorefrontArchetype", () => {
   beforeEach(() => {
     mockNanoid.mockReset();
@@ -43,6 +54,7 @@ describe("resetStorefrontArchetype", () => {
       storefrontArchetype: {
         findUnique: vi.fn().mockResolvedValue({
           id: "arch_1",
+          archetypeId: "software-platform",
           category: "software-platform",
           ctaType: "inquiry",
           sectionTemplates: [{ type: "hero", title: "Hero", sortOrder: 0 }],
@@ -64,6 +76,7 @@ describe("resetStorefrontArchetype", () => {
       bookingHold: {
         deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       },
+      businessCapability: businessCapabilityProjectionStore(),
     };
 
     mockPrisma.$transaction.mockImplementation(async (fn: (trx: typeof tx) => Promise<unknown>) => fn(tx));
@@ -100,6 +113,7 @@ describe("resetStorefrontArchetype", () => {
       storefrontArchetype: {
         findUnique: vi.fn().mockResolvedValue({
           id: "arch_1",
+          archetypeId: "software-platform",
           category: "software-platform",
           ctaType: "inquiry",
           sectionTemplates: [
@@ -127,6 +141,7 @@ describe("resetStorefrontArchetype", () => {
       bookingHold: {
         deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       },
+      businessCapability: businessCapabilityProjectionStore(),
     };
 
     mockPrisma.$transaction.mockImplementation(async (fn: (trx: typeof tx) => Promise<unknown>) => fn(tx));
@@ -161,6 +176,7 @@ describe("resetStorefrontArchetype", () => {
       storefrontArchetype: {
         findUnique: vi.fn().mockResolvedValue({
           id: "arch_1",
+          archetypeId: "software-platform",
           category: "software-platform",
           ctaType: "inquiry",
           sectionTemplates: [{ type: "hero", title: "Hero", sortOrder: 0 }],
@@ -182,6 +198,7 @@ describe("resetStorefrontArchetype", () => {
       bookingHold: {
         deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       },
+      businessCapability: businessCapabilityProjectionStore(),
     };
 
     mockPrisma.$transaction.mockImplementation(async (fn: (trx: typeof tx) => Promise<unknown>) => fn(tx));

@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
+import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
 import { EditCustomerConfigurationItemButton } from "@/components/customer/EditCustomerConfigurationItemButton";
 import { NewCustomerConfigurationItemButton } from "@/components/customer/NewCustomerConfigurationItemButton";
 import { CustomerLifecycleReviewQueues } from "@/components/customer/CustomerLifecycleReviewQueues";
@@ -13,16 +14,7 @@ import {
   deriveCustomerConfigurationItemDefaults,
   readActivationProfile,
 } from "@/lib/storefront/archetype-activation";
-
-const STATUS_COLOURS: Record<string, string> = {
-  prospect: "#fbbf24",
-  qualified: "#fb923c",
-  onboarding: "#38bdf8",
-  active: "#4ade80",
-  at_risk: "#ef4444",
-  suspended: "#8888a0",
-  closed: "#555566",
-};
+import { getAccountStatusMeta } from "@/lib/crm/presentation";
 
 const ACTIVITY_ICONS: Record<string, string> = {
   note: "📝",
@@ -171,7 +163,7 @@ export default async function AccountDetailPage({
 
   if (!account) notFound();
 
-  const statusColour = STATUS_COLOURS[account.status] ?? "#8888a0";
+  const statusMeta = getAccountStatusMeta(account.status);
   const managedItemDefaults = deriveCustomerConfigurationItemDefaults(
     readActivationProfile(storefrontConfig?.archetype?.activationProfile),
   );
@@ -205,12 +197,7 @@ export default async function AccountDetailPage({
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
           <h1 className="text-xl font-bold text-[var(--dpf-text)]">{account.name}</h1>
-          <span
-            className="text-[9px] px-1.5 py-0.5 rounded-full"
-            style={{ background: `${statusColour}20`, color: statusColour }}
-          >
-            {account.status}
-          </span>
+          <CustomerStatusBadge label={statusMeta.label} tone={statusMeta.tone} />
         </div>
         <p className="text-[10px] font-mono text-[var(--dpf-muted)]">
           {account.accountId}
@@ -333,14 +320,18 @@ export default async function AccountDetailPage({
                   )}
                   <div className="flex gap-1 mt-1">
                     {!c.isActive && (
-                      <span className="text-[8px] px-1 py-0.5 rounded-full bg-red-900/30 text-red-400">
-                        inactive
-                      </span>
+                      <CustomerStatusBadge
+                        label="Inactive"
+                        tone="warning"
+                        className="text-[8px]"
+                      />
                     )}
                     {c.doNotContact && (
-                      <span className="text-[8px] px-1 py-0.5 rounded-full bg-yellow-900/30 text-yellow-400">
-                        do not contact
-                      </span>
+                      <CustomerStatusBadge
+                        label="Do not contact"
+                        tone="danger"
+                        className="text-[8px]"
+                      />
                     )}
                   </div>
                 </div>

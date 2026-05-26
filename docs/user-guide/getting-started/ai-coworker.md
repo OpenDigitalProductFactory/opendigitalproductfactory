@@ -2,7 +2,7 @@
 title: "AI Coworker"
 area: getting-started
 order: 3
-lastUpdated: 2026-05-24
+lastUpdated: 2026-05-26
 updatedBy: Codex
 ---
 
@@ -52,6 +52,19 @@ The coworker operates within a two-layer authorization model:
 - **The agent's grants determine what's offered** — each agent persona has declared tool grants that scope what it can do. The coworker on the Ops page (Scrum Master) has different grants than the one on the Portfolio page (Portfolio Analyst)
 - **Side-effect actions require approval** — when the coworker wants to create, update, or delete something, it proposes the action and waits for your approval before executing
 - **Every action is recorded** — all tool calls (not just proposals) are logged with your identity and the agent's identity for audit purposes. View the log at `/platform/ai/authority`
+
+## WWMD And Autonomy
+
+When a coworker hits an ambiguous decision, it should not guess from chat context alone. WWMD is the decision gate that lets the coworker consult the founder-kernel wiki and score options against platform principles.
+
+The gate can return four outcomes:
+
+- **Recommend** — enough evidence exists to advise a path, but the user or workflow still owns approval
+- **Arbitrate** — a low-risk decision has enough confidence for the coworker to continue under policy
+- **Escalate** — risk, conflict, low confidence, or a policy boundary needs a human resolver
+- **Defer** — the wiki does not yet contain enough guidance, so the gap should be captured instead of guessed
+
+This is a critical step toward trustworthy autonomy: every answer keeps sources, confidence, rationale, and decision history attached. For the technical details, see [Autonomy, WWMD, and trusted coworker decisions](../../architecture/autonomy-and-wwmd.md).
 
 ## Tool Evaluation
 
