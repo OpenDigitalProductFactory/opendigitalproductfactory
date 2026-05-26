@@ -735,6 +735,7 @@ const UPDATE_UPSTREAM_BRANCH = "dpf-upstream";
 const UPDATE_WORK_BRANCH = "my-changes";
 const HOOKLESS_GIT = "git -c core.hooksPath=/dev/null";
 const PLATFORM_UPDATE_SOURCE_PATHS = ["apps/web", "packages"] as const;
+const STALE_GIT_INDEX_LOCK_MS = 30_000;
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
@@ -749,6 +750,24 @@ async function ensureWorkspaceSafeDirectory(
     `git config --global --add safe.directory ${shellQuote(workspace)} >/dev/null 2>&1 || true`,
     gitOpts,
   );
+}
+
+function recoverStaleGitIndexLock(
+  workspace: string,
+  resolvePath: (...parts: string[]) => string,
+): void {
+  const { existsSync, statSync, unlinkSync } = lazyFs();
+  const lockPath = resolvePath(workspace, ".git", "index.lock");
+  if (!existsSync(lockPath)) return;
+
+  const ageMs = Date.now() - statSync(lockPath).mtimeMs;
+  if (ageMs < STALE_GIT_INDEX_LOCK_MS) {
+    throw new Error(
+      "Another platform update appears to be running. Wait a minute, then click Apply update again.",
+    );
+  }
+
+  unlinkSync(lockPath);
 }
 
 async function gitBranchExists(
@@ -1012,6 +1031,7 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
     const { resolve: resolvePath } = lazyPath();
 
     await ensureWorkspaceSafeDirectory(execUpdate, gitOpts, workspace);
+    recoverStaleGitIndexLock(workspace, resolvePath);
 
     if (existsSync(resolvePath(workspace, ".git", "MERGE_HEAD"))) {
       const conflicts = await collectPlatformUpdateConflicts(

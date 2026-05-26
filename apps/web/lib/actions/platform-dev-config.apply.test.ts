@@ -16,7 +16,14 @@ const { mockPrisma, mockCan, mockAuth } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
 }));
 
-const { mockExec, mockExistsSync, mockReadFileSync, mockWriteFileSync } = vi.hoisted(() => ({
+const {
+  mockExec,
+  mockExistsSync,
+  mockReadFileSync,
+  mockStatSync,
+  mockUnlinkSync,
+  mockWriteFileSync,
+} = vi.hoisted(() => ({
   // exec returns { stdout, stderr } when promisified; child_process.exec API
   // dispatches via a callback, but lazy-node lets us shape it as a function
   // that promisify() turns into a thenable. We expose a callback-shape mock.
@@ -25,6 +32,8 @@ const { mockExec, mockExistsSync, mockReadFileSync, mockWriteFileSync } = vi.hoi
   }),
   mockExistsSync: vi.fn().mockReturnValue(false),
   mockReadFileSync: vi.fn().mockReturnValue(""),
+  mockStatSync: vi.fn().mockReturnValue({ mtimeMs: Date.now() - 60_000 }),
+  mockUnlinkSync: vi.fn(),
   mockWriteFileSync: vi.fn(),
 }));
 
@@ -55,6 +64,8 @@ vi.mock("@/lib/shared/lazy-node", () => ({
   lazyFs: () => ({
     existsSync: mockExistsSync,
     readFileSync: mockReadFileSync,
+    statSync: mockStatSync,
+    unlinkSync: mockUnlinkSync,
     writeFileSync: mockWriteFileSync,
   }),
   lazyFsPromises: () => ({}),
@@ -71,6 +82,7 @@ describe("applyPlatformUpdate", () => {
     mockAuth.mockResolvedValue({ user: { id: "u-1", platformRole: "admin", isSuperuser: false } });
     mockCan.mockReturnValue(true);
     mockExistsSync.mockReturnValue(false);
+    mockStatSync.mockReturnValue({ mtimeMs: Date.now() - 60_000 });
     mockExec.mockImplementation((_cmd: string, _opts: unknown, cb?: (err: Error | null, value: { stdout: string; stderr: string }) => void) => {
       if (cb) cb(null, { stdout: "", stderr: "" });
     });
@@ -254,6 +266,46 @@ describe("applyPlatformUpdate", () => {
       data: { updatePending: false, pendingVersion: null },
     });
     expect(mockWriteFileSync).toHaveBeenCalled();
+  });
+
+  it("clears a stale Git index lock before applying the queued update", async () => {
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      updatePending: true,
+      pendingVersion: "v1.2.3",
+    });
+    mockPrisma.platformDevConfig.update.mockResolvedValue({});
+    mockExistsSync.mockImplementation((path: string) => path.endsWith("/.git/index.lock"));
+    mockStatSync.mockReturnValue({ mtimeMs: Date.now() - 60_000 });
+
+    mockExec.mockImplementation((cmd: string, _opts: unknown, cb?: (err: Error | null, value: { stdout: string; stderr: string }) => void) => {
+      if (!cb) return;
+      if (cmd.includes("--diff-filter=U")) cb(null, { stdout: "", stderr: "" });
+      else if (cmd === "git diff --cached --stat") cb(null, { stdout: " 2 files changed, 5 insertions(+)", stderr: "" });
+      else cb(null, { stdout: "", stderr: "" });
+    });
+
+    const result = await applyPlatformUpdate();
+
+    expect(result.kind).toBe("clean-merge");
+    expect(mockUnlinkSync).toHaveBeenCalledWith("/workspace/.git/index.lock");
+  });
+
+  it("returns a friendly retry message while a Git index lock is still fresh", async () => {
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      updatePending: true,
+      pendingVersion: "v1.2.3",
+    });
+    mockExistsSync.mockImplementation((path: string) => path.endsWith("/.git/index.lock"));
+    mockStatSync.mockReturnValue({ mtimeMs: Date.now() });
+
+    const result = await applyPlatformUpdate();
+
+    expect(result.kind).toBe("error");
+    if (result.kind === "error") {
+      expect(result.message).toMatch(/another platform update appears to be running/i);
+      expect(result.message).not.toMatch(/index\.lock/i);
+    }
+    expect(mockUnlinkSync).not.toHaveBeenCalled();
   });
 
   it("allows Windows CRLF-only source differences before applying the update", async () => {
