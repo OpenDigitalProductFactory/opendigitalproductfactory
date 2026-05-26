@@ -798,7 +798,7 @@ export async function advanceOpportunityStage(
   });
 
   await logSystemActivity(
-    `Opportunity stage: ${oldStage} → ${newStage} (${probability}%)`,
+    `Opportunity stage: ${oldStage} -> ${newStage} (${probability}%)`,
     {
       type: "status_change",
       accountId: updated.accountId,
@@ -807,7 +807,25 @@ export async function advanceOpportunityStage(
     },
   );
 
+  revalidatePath("/customer/opportunities");
+  revalidatePath(`/customer/opportunities/${updated.id}`);
+  revalidatePath(`/customer/${updated.accountId}`);
+
   return updated;
+}
+
+export async function updateOpportunityStageFromForm(formData: FormData) {
+  const opportunityId = String(formData.get("opportunityId") ?? "").trim();
+  const stage = String(formData.get("stage") ?? "").trim();
+
+  if (!opportunityId) {
+    throw new Error("Opportunity id is required");
+  }
+  if (!stage) {
+    throw new Error("Stage is required");
+  }
+
+  await advanceOpportunityStage(opportunityId, stage);
 }
 
 export async function closeOpportunity(
