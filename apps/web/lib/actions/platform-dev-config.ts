@@ -885,7 +885,7 @@ async function checkoutManagedUpdateBranch(
   branch: string,
 ): Promise<void> {
   try {
-    await execUpdate(`git checkout ${branch}`, gitOpts);
+    await execUpdate(`git checkout -f ${branch}`, gitOpts);
     return;
   } catch (err) {
     if (!isMissingGitReferenceError(err, branch)) {
@@ -895,7 +895,7 @@ async function checkoutManagedUpdateBranch(
 
   await assertBranchRepairCanUseCurrentHead(execUpdate, gitOpts);
   await execUpdate(`git branch -f ${branch} HEAD`, gitOpts);
-  await execUpdate(`git checkout ${branch}`, gitOpts);
+  await execUpdate(`git checkout -f ${branch}`, gitOpts);
 }
 
 async function collectPlatformUpdateConflicts(
