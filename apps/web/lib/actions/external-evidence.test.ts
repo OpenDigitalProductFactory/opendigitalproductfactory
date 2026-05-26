@@ -54,4 +54,27 @@ describe("external evidence", () => {
       },
     });
   });
+
+  it("writes optional build and task links for external development evidence", async () => {
+    mockPrisma.externalEvidenceRecord.create.mockResolvedValue({ id: "evidence-2" });
+
+    await recordExternalEvidence({
+      actorUserId: "user-1",
+      routeContext: "/build",
+      operationType: "external_development_handoff",
+      target: "codex-session-1",
+      provider: "codex",
+      resultSummary: "Local integration passed.",
+      buildId: "FB-123",
+      taskRunId: "TR-123",
+      details: { commits: ["abc123"] },
+    });
+
+    expect(mockPrisma.externalEvidenceRecord.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        buildId: "FB-123",
+        taskRunId: "TR-123",
+      }),
+    });
+  });
 });
