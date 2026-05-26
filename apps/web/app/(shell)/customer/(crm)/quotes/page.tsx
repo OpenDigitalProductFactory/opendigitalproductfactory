@@ -1,15 +1,8 @@
 // apps/web/app/(shell)/customer/quotes/page.tsx
 import Link from "next/link";
 import { prisma } from "@dpf/db";
-
-const STATUS_COLOURS: Record<string, string> = {
-  draft: "#8888a0",
-  sent: "#38bdf8",
-  accepted: "#4ade80",
-  rejected: "#ef4444",
-  expired: "#fbbf24",
-  superseded: "#555566",
-};
+import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
+import { CRM_TONE_CLASSES, getQuoteStatusMeta } from "@/lib/crm/presentation";
 
 export default async function QuotesPage() {
   const quotes = await prisma.quote.findMany({
@@ -33,13 +26,16 @@ export default async function QuotesPage() {
 
       <div className="space-y-2">
         {quotes.map((q) => {
-          const color = STATUS_COLOURS[q.status] ?? "#8888a0";
+          const statusMeta = getQuoteStatusMeta(q.status);
+          const toneClasses = CRM_TONE_CLASSES[statusMeta.tone];
           return (
             <Link
               key={q.id}
               href={`/customer/quotes/${q.id}`}
-              className="block p-4 rounded-lg bg-[var(--dpf-surface-1)] border-l-4 hover:bg-[var(--dpf-surface-2)] transition-colors"
-              style={{ borderLeftColor: color }}
+              className={[
+                "block rounded-lg border-l-4 bg-[var(--dpf-surface-1)] p-4 transition-colors hover:bg-[var(--dpf-surface-2)]",
+                toneClasses.border,
+              ].join(" ")}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
@@ -48,12 +44,7 @@ export default async function QuotesPage() {
                       {q.quoteNumber}
                     </p>
                     <span className="text-[9px] text-[var(--dpf-muted)]">v{q.version}</span>
-                    <span
-                      className="text-[9px] px-1.5 py-0.5 rounded-full"
-                      style={{ background: `${color}20`, color }}
-                    >
-                      {q.status}
-                    </span>
+                    <CustomerStatusBadge label={statusMeta.label} tone={statusMeta.tone} />
                   </div>
                   <p className="text-xs text-[var(--dpf-muted)]">
                     {q.account.name} · {q.opportunity.title}

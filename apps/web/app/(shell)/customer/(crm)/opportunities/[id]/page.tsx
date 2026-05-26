@@ -2,15 +2,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
-
-const STAGE_COLOURS: Record<string, string> = {
-  qualification: "#fbbf24",
-  discovery: "#fb923c",
-  proposal: "#38bdf8",
-  negotiation: "#a78bfa",
-  closed_won: "#4ade80",
-  closed_lost: "#ef4444",
-};
+import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
+import { getOpportunityStageMeta, getQuoteStatusMeta } from "@/lib/crm/presentation";
 
 const ACTIVITY_ICONS: Record<string, string> = {
   note: "📝", call: "📞", email: "📧", meeting: "📅", task: "☑️",
@@ -49,7 +42,7 @@ export default async function OpportunityDetailPage({
 
   if (!opportunity) notFound();
 
-  const stageColour = STAGE_COLOURS[opportunity.stage] ?? "#8888a0";
+  const stageMeta = getOpportunityStageMeta(opportunity.stage);
   const isClosed = opportunity.stage === "closed_won" || opportunity.stage === "closed_lost";
 
   return (
@@ -67,16 +60,9 @@ export default async function OpportunityDetailPage({
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
           <h1 className="text-xl font-bold text-[var(--dpf-text)]">{opportunity.title}</h1>
-          <span
-            className="text-[9px] px-1.5 py-0.5 rounded-full"
-            style={{ background: `${stageColour}20`, color: stageColour }}
-          >
-            {opportunity.stage.replace("_", " ")}
-          </span>
+          <CustomerStatusBadge label={stageMeta.label} tone={stageMeta.tone} />
           {opportunity.isDormant && (
-            <span className="text-[8px] px-1 py-0.5 rounded-full bg-red-900/30 text-red-400">
-              dormant
-            </span>
+            <CustomerStatusBadge label="Dormant" tone="warning" className="text-[8px]" />
           )}
         </div>
         <p className="text-[10px] font-mono text-[var(--dpf-muted)]">
@@ -164,7 +150,7 @@ export default async function OpportunityDetailPage({
             ) : (
               <div className="space-y-2">
                 {quotes.map((q) => {
-                  const qColor = q.status === "accepted" ? "#4ade80" : q.status === "sent" ? "#38bdf8" : "#8888a0";
+                  const quoteMeta = getQuoteStatusMeta(q.status);
                   return (
                     <Link
                       key={q.id}
@@ -173,12 +159,7 @@ export default async function OpportunityDetailPage({
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-mono text-[var(--dpf-text)]">{q.quoteNumber}</span>
-                        <span
-                          className="text-[9px] px-1.5 py-0.5 rounded-full"
-                          style={{ background: `${qColor}20`, color: qColor }}
-                        >
-                          {q.status}
-                        </span>
+                        <CustomerStatusBadge label={quoteMeta.label} tone={quoteMeta.tone} />
                       </div>
                       <p className="text-[10px] font-mono text-[var(--dpf-text)] mt-1">
                         {q.currency} {Number(q.totalAmount).toLocaleString()}
@@ -214,7 +195,7 @@ export default async function OpportunityDetailPage({
               <h2 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest mb-2">
                 Lost Reason
               </h2>
-              <p className="text-xs text-red-400">{opportunity.lostReason}</p>
+              <p className="text-xs text-[var(--dpf-text)]">{opportunity.lostReason}</p>
             </div>
           )}
 

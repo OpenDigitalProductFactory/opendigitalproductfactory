@@ -101,6 +101,22 @@ const OPPORTUNITY_STAGE_META: Record<string, CrmPresentationMeta> = {
   closed_lost: { label: "Lost", tone: "danger" },
 };
 
+const QUOTE_STATUS_META: Record<string, CrmPresentationMeta> = {
+  draft: { label: "Draft", tone: "neutral" },
+  sent: { label: "Sent", tone: "info" },
+  accepted: { label: "Accepted", tone: "success" },
+  rejected: { label: "Rejected", tone: "danger" },
+  expired: { label: "Expired", tone: "warning" },
+  superseded: { label: "Superseded", tone: "neutral" },
+};
+
+const SALES_ORDER_STATUS_META: Record<string, CrmPresentationMeta> = {
+  confirmed: { label: "Confirmed", tone: "info" },
+  in_progress: { label: "In progress", tone: "warning" },
+  fulfilled: { label: "Fulfilled", tone: "success" },
+  cancelled: { label: "Cancelled", tone: "danger" },
+};
+
 export function formatCrmStatusLabel(value: string): string {
   const normalized = value.replace(/[_-]+/g, " ").trim();
   if (!normalized) {
@@ -126,6 +142,14 @@ export function getEngagementStatusMeta(status: string): CrmPresentationMeta {
 
 export function getOpportunityStageMeta(stage: string): CrmPresentationMeta {
   return OPPORTUNITY_STAGE_META[stage] ?? fallbackMeta(stage);
+}
+
+export function getQuoteStatusMeta(status: string): CrmPresentationMeta {
+  return QUOTE_STATUS_META[status] ?? fallbackMeta(status);
+}
+
+export function getSalesOrderStatusMeta(status: string): CrmPresentationMeta {
+  return SALES_ORDER_STATUS_META[status] ?? fallbackMeta(status);
 }
 
 export function isOpenOpportunityStage(stage: string): stage is OpenOpportunityStage {
