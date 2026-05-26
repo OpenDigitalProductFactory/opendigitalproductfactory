@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockFindRelatedTests,
+  mockGetCodeGraphFreshness,
   mockSearchCodeGraph,
   mockTraceCodeSurface,
 } = vi.hoisted(() => ({
   mockFindRelatedTests: vi.fn(),
+  mockGetCodeGraphFreshness: vi.fn(),
   mockSearchCodeGraph: vi.fn(),
   mockTraceCodeSurface: vi.fn(),
 }));
@@ -16,7 +18,12 @@ vi.mock("@/lib/integrate/code-graph/graph-queries", () => ({
   traceCodeSurface: mockTraceCodeSurface,
 }));
 
+vi.mock("@/lib/integrate/code-graph-access", () => ({
+  getCodeGraphFreshness: mockGetCodeGraphFreshness,
+}));
+
 import { executeTool } from "./mcp-tools";
+import { buildCodeGraphFreshnessTrust } from "@/lib/trust-vector/adapters/code-graph";
 
 const unavailableResult = {
   graphKey: "dpf-source",
@@ -31,6 +38,41 @@ beforeEach(() => {
 });
 
 describe("code graph MCP handlers", () => {
+  it("returns trust metadata and stale wording for code graph freshness", async () => {
+    const trust = buildCodeGraphFreshnessTrust({
+      graphKey: "source-code",
+      available: true,
+      indexStatus: "ready",
+      lastIndexedAt: new Date("2026-05-10T12:00:00.000Z"),
+      workspaceDirty: false,
+      indexedFileCount: 42,
+      lastError: null,
+      asOf: new Date("2026-05-26T12:00:00.000Z"),
+    });
+    mockGetCodeGraphFreshness.mockResolvedValueOnce({
+      graphKey: "source-code",
+      available: true,
+      indexStatus: "ready",
+      lastIndexedAt: new Date("2026-05-10T12:00:00.000Z"),
+      lastIndexedBranch: "main",
+      lastIndexedHeadSha: "abc123",
+      workspaceDirty: false,
+      indexedFileCount: 42,
+      lastError: null,
+      warnings: [],
+      summary: "Code graph is ready for 42 indexed files.",
+      trust,
+    });
+
+    const result = await executeTool("get_code_graph_freshness", {}, "user-1");
+
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("Code graph index is 16 days old.");
+    expect(result.data).toEqual(expect.objectContaining({
+      trust: expect.objectContaining({ tier: "low" }),
+    }));
+  });
+
   it("returns failure when graph search cannot read the graph", async () => {
     mockSearchCodeGraph.mockResolvedValueOnce({
       ...unavailableResult,
