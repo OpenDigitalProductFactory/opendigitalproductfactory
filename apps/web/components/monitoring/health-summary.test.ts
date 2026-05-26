@@ -20,27 +20,41 @@ function up(job: string, value: "0" | "1" = "1"): PrometheusInstantResult {
 function alert(
   severity: "critical" | "warning",
   state: "firing" | "pending" | "inactive" = "firing",
+  job = "node-exporter",
 ): MonitoringAlert {
   return {
-    labels: { alertname: "ContainerDown", severity, job: "node-exporter" },
-    annotations: { summary: "Service node-exporter is down" },
+    labels: { alertname: "ContainerDown", severity, job },
+    annotations: { summary: `Service ${job} is down` },
     state,
     activeAt: "2026-05-25T15:29:00.000Z",
   };
 }
 
 describe("derivePlatformSummary", () => {
-  it("reports critical instead of operational when critical alerts are firing", () => {
+  it("reports critical instead of operational when required platform alerts are firing", () => {
     const summary = derivePlatformSummary({
       checked: true,
       online: true,
       upTargets: [up("prometheus"), up("portal"), up("postgres"), up("qdrant")],
-      alerts: [alert("critical")],
+      alerts: [alert("critical", "firing", "portal")],
     });
 
     expect(summary.value).toBe("Critical");
     expect(summary.tone).toBe("critical");
-    expect(summary.detail).toContain("Service node-exporter is down");
+    expect(summary.detail).toContain("Service portal is down");
+  });
+
+  it("does not report platform critical when only telemetry exporter alerts are firing", () => {
+    const summary = derivePlatformSummary({
+      checked: true,
+      online: true,
+      upTargets: [up("prometheus"), up("portal"), up("postgres"), up("qdrant"), up("sandbox"), up("windows-host")],
+      alerts: [alert("critical", "firing", "node-exporter"), alert("critical", "firing", "cadvisor")],
+    });
+
+    expect(summary.value).toBe("Operational");
+    expect(summary.tone).toBe("success");
+    expect(summary.detail).toContain("Required platform services are up");
   });
 });
 

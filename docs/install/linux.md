@@ -99,8 +99,8 @@ bash install-dpf.sh --headless --release
 9. **`.env` generation** — only on first install; existing `.env` is
    preserved.
 10. **`docker compose up -d`** on the Linux overlay (which adds the
-    `ollama` service for local LLM hosting and enables the
-    `linux-monitoring` profile for cAdvisor + node-exporter).
+    `ollama` service for local LLM hosting, cAdvisor, node-exporter,
+    and the matching Prometheus scrape config).
 11. **Health check** — polls `http://localhost:3000/api/health` for up
     to 5 minutes (configurable via `DPF_HEALTH_TIMEOUT`).
 12. **Edge Node bootstrap** (unless `--no-edge`) — mints a single-use
@@ -295,9 +295,9 @@ The user systemd instance may not be running. Check
 user-level units (default on Ubuntu 22.04+, Debian 12+, Fedora 39+).
 
 **cAdvisor / node-exporter aren't reachable.**
-They're behind the `linux-monitoring` profile. The Linux overlay opts
-in by default. To opt out:
-`docker compose -f docker-compose.yml -f docker-compose.linux.yml stop cadvisor node-exporter`.
+The Linux overlay should start them and mount the matching Prometheus
+scrape config. If they are stopped, restart the Linux stack:
+`docker compose -f docker-compose.yml -f docker-compose.linux.yml up -d`.
 
 ## Uninstall
 

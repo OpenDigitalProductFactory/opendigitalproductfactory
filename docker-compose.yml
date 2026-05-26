@@ -529,9 +529,9 @@ services:
   # cadvisor + node-exporter bind-mount Linux-only host paths (/proc, /sys,
   # /var/lib/docker, /). They cannot run on macOS or Windows Docker Desktop
   # (the VM has no equivalent). Gated behind the linux-monitoring profile
-  # per the deployment doctrine's Deployment Support Matrix; Linux installs
-  # opt in via `--profile linux-monitoring` (or by using
-  # docker-compose.linux.yml which enables the profile by default).
+  # per the deployment doctrine's Deployment Support Matrix. Linux installs
+  # should use docker-compose.linux.yml, which also mounts the matching
+  # Prometheus scrape config for these exporter targets.
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
     restart: unless-stopped
