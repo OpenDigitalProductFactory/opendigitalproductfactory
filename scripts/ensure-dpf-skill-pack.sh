@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Open Digital Product Factory -- contributor skill pack installer (POSIX)
+# Open Digital Product Factory -- contributor plugin installer (POSIX)
 #
-# Ensures the repo-local dpf-platform skill pack is available to contributor
+# Ensures the repo-local dpf-platform plugin is available to contributor
 # coding clients without affecting customer coworker seeding. Surface B always
 # seeds from packages/dpf-skill-pack via packages/db/src/seed-skills.ts.
 
@@ -14,7 +14,7 @@ ok() { printf '  [OK] %s\n' "$1"; }
 skip() { printf '  [SKIP] %s\n' "$1"; }
 warn() { printf '  [WARN] %s\n' "$1"; }
 
-printf '\n-> Ensuring DPF contributor skill pack\n'
+printf '\n-> Ensuring DPF contributor plugin\n'
 
 claude_marketplace="$repo_root/.claude-plugin/marketplace.json"
 claude_plugin_manifest="$repo_root/packages/dpf-skill-pack/.claude-plugin/plugin.json"
@@ -40,7 +40,7 @@ fi
 
 if [ -f "$codex_marketplace" ] && [ -f "$codex_plugin_manifest" ]; then
   ok "Codex repo marketplace is present at .agents/plugins/marketplace.json."
-  ok "Codex will discover dpf-platform from the repo marketplace or legacy-compatible Claude marketplace."
+  ok "Codex will discover dpf-platform as the repo plugin for DPF skills and MCP wiring."
 else
   warn "Codex marketplace or plugin manifest missing."
 fi

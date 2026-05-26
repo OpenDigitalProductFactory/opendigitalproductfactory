@@ -1,13 +1,23 @@
-# dpf-platform skill pack
+# dpf-platform plugin / skill pack
 
-DPF-native agent skills shipped to **two surfaces** from one set of source files:
+DPF-native agent workflows shipped as one **plugin substrate** plus one **coworker seed source**:
 
-1. **Contributor coding clients** — installed as the `dpf-platform` plugin for Claude Code (`.claude-plugin/marketplace.json`) and Codex (`.agents/plugins/marketplace.json` + `.codex-plugin/plugin.json`), invoked as `/dpf-<slug>` / `$dpf-<slug>` or auto-loaded by `description` match. Auto-installed or made discoverable on portal install when the matching client home is present.
+1. **Contributor coding clients** — installed as the `dpf-platform` plugin for Claude Code (`.claude-plugin/marketplace.json`) and Codex (`.agents/plugins/marketplace.json` + `.codex-plugin/plugin.json`), invoked as `/dpf-<slug>` / `$dpf-<slug>` or auto-loaded by `description` match. The plugin is the installable unit; skills, MCP server descriptors, future hooks, and runtime assets belong inside it.
 2. **In-portal coworkers** — seeded as `SkillDefinition` + `SkillAssignment` rows by an extended [packages/db/src/seed-skills.ts](../../packages/db/src/seed-skills.ts) loader per [BI-98683E68](../../docs/superpowers/drafts/2026-05-24-dpf-skill-pack-formalization-bi-bundle.md), invoked by `triggerPattern` match or directly by the assigned coworker.
 
 The single-source-of-truth contract is the **superset SKILL.md frontmatter**: Agent Skills open-standard fields (`name`, `description`, `disable-model-invocation`, `user-invocable`, `allowed-tools`) consumed by Claude Code, plus DPF coworker fields (`category`, `assignTo`, `capability`, `taskType`, `triggerPattern`, `userInvocable`, `agentInvocable`, `allowedTools`, `composesFrom`, `contextRequirements`, `riskBand`, `enforces`) consumed by the seed loader. The mirror-field invariant — `user-invocable ↔ userInvocable`, `allowed-tools ↔ allowedTools`, `disable-model-invocation: false ↔ agentInvocable: true` — is asserted by a unit test (BI-98683E68) so divergence between the two field families fails CI.
 
 **One documented asymmetry: `allowed-tools` ↔ `allowedTools` containment, not bytes-equivalence.** The Agent Skills standard supports fine-grained scoping like `Bash(git log *)` (Claude Code uses these as pre-approval rules). The DPF coworker `allowedTools` schema in [seed-skills.ts](../../packages/db/src/seed-skills.ts) accepts only bare tool names. The mirror invariant test therefore checks that every BASE tool name in `allowed-tools` (with the scope-suffix stripped) appears in `allowedTools` — the coworker side is the broader permission. Strict bytes-equivalence would force us to drop Claude Code's pre-approval feature, which is worth keeping; broader-on-Surface-B is the safe direction.
+
+## 2026-05-26 client-plugin research
+
+Official client docs now make plugins the stronger project/team packaging primitive:
+
+- Claude Code plugins can bundle skills, agents, hooks, MCP servers, LSP servers, monitors, and persistent runtime data. Project `.claude/settings.json` can require a marketplace and enable default plugins for trusted repos; container images can pre-populate plugin caches with `CLAUDE_CODE_PLUGIN_SEED_DIR`.
+- Codex plugins bundle skills, app integrations/connectors, MCP servers, hooks, and install-surface assets. Repo marketplaces live at `.agents/plugins/marketplace.json`; workspace sharing is available inside the Codex app; enterprise managed configuration can constrain security-sensitive settings, plugin sharing, and MCP server enablement.
+- Skills remain the workflow authoring format. Plugins are the deployment and governance unit when the workflow must travel with MCP configuration, connectors, hooks, helper scripts, or curated install policy.
+
+DPF therefore treats `dpf-platform` as the project-default plugin, not merely a skill folder. Generic upstream packs are useful raw material, but they are local/user-scope aids unless their behavior has been recast as DPF-governed skills in this package.
 
 ## Conflict-resolution policy
 
@@ -39,15 +49,22 @@ When adding a skill to this pack:
 
 ## Plugin manifests
 
-The `.claude-plugin/plugin.json` manifest turns this directory into an installable Claude Code plugin. The `.codex-plugin/plugin.json` manifest exposes the same `skills/` directory to Codex. Repo-level marketplace files live at the repository root:
+The `.claude-plugin/plugin.json` manifest turns this directory into an installable Claude Code plugin. The `.codex-plugin/plugin.json` manifest exposes the same package to Codex. Both manifests point to the same `skills/` directory and to client-specific DPF MCP descriptors:
+
+- `claude.mcp.json` — Claude Code MCP descriptor using `${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}` and `${DPF_MCP_BEARER_TOKEN:-}`.
+- `codex.mcp.json` — Codex MCP descriptor using local `http://127.0.0.1:3000/api/mcp/v1` plus `bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"`.
+
+Repo-level marketplace files live at the repository root:
 
 - `.claude-plugin/marketplace.json` — Claude Code project marketplace, enabled by `.claude/settings.json` as `dpf-platform@dpf-platform-local`.
 - `.agents/plugins/marketplace.json` — Codex repo marketplace, marked `INSTALLED_BY_DEFAULT` for the same plugin directory.
 
-The auto-install hook (BI-98683E68) wires these into portal install + worktree creation so contributors do not need to hand-run client plugin commands.
+The auto-install hook (BI-98683E68) wires these into portal install + worktree creation so contributors do not need to hand-run client plugin commands. MCP authentication still stays outside git: issue or rotate `DPF_MCP_BEARER_TOKEN` from Admin > Platform Development > MCP. The plugin supplies the client wiring; the portal owns the token.
 
 ## See also
 
 - Parent BI: [BI-90793048](../../docs/superpowers/drafts/2026-05-24-dpf-skill-pack-formalization-bi-bundle.md)
-- AGENTS.md §16 dual-surface catalogue (BI-439BC89B — not yet landed; will reference this README)
+- AGENTS.md §16 dual-surface catalogue (BI-439BC89B)
 - Reduction Gear Architecture: [docs/superpowers/specs/2026-05-24-reduction-gear-architecture-design.md](../../docs/superpowers/specs/2026-05-24-reduction-gear-architecture-design.md) (parent epic substrate framing)
+- Claude Code plugin docs: [Create plugins](https://code.claude.com/docs/en/plugins), [Plugins reference](https://code.claude.com/docs/en/plugins-reference), [Plugin marketplaces](https://code.claude.com/docs/en/plugin-marketplaces)
+- Codex plugin docs: [Plugins](https://developers.openai.com/codex/plugins), [Build plugins](https://developers.openai.com/codex/plugins/build), [Agent Skills](https://developers.openai.com/codex/skills)

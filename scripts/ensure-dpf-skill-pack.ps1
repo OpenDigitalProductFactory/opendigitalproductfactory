@@ -1,6 +1,6 @@
-# Open Digital Product Factory -- contributor skill pack installer (Windows)
+# Open Digital Product Factory -- contributor plugin installer (Windows)
 #
-# Ensures the repo-local dpf-platform skill pack is available to contributor
+# Ensures the repo-local dpf-platform plugin is available to contributor
 # coding clients without affecting customer coworker seeding. Surface B always
 # seeds from packages/dpf-skill-pack via packages/db/src/seed-skills.ts.
 
@@ -21,7 +21,7 @@ $codexMarketplace = Join-Path $RepoRoot ".agents\plugins\marketplace.json"
 $codexPluginManifest = Join-Path $RepoRoot "packages\dpf-skill-pack\.codex-plugin\plugin.json"
 
 Write-Host ""
-Write-Host "-> Ensuring DPF contributor skill pack" -ForegroundColor Yellow
+Write-Host "-> Ensuring DPF contributor plugin" -ForegroundColor Yellow
 
 if ((Test-Path -LiteralPath (Join-Path $HOME ".claude")) -and (Get-Command claude -ErrorAction SilentlyContinue)) {
     if ((Test-Path -LiteralPath $claudeMarketplace) -and (Test-Path -LiteralPath $claudePluginManifest)) {
@@ -50,7 +50,7 @@ if ((Test-Path -LiteralPath (Join-Path $HOME ".claude")) -and (Get-Command claud
 
 if ((Test-Path -LiteralPath $codexMarketplace) -and (Test-Path -LiteralPath $codexPluginManifest)) {
     Write-Ok "Codex repo marketplace is present at .agents/plugins/marketplace.json."
-    Write-Ok "Codex will discover dpf-platform from the repo marketplace or legacy-compatible Claude marketplace."
+    Write-Ok "Codex will discover dpf-platform as the repo plugin for DPF skills and MCP wiring."
 } else {
     Write-WarnLocal "Codex marketplace or plugin manifest missing."
 }

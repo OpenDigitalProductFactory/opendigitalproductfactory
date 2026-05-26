@@ -21,10 +21,11 @@
     "wwmd"
   ],
   "skills": "./skills/",
+  "mcpServers": "./codex.mcp.json",
   "interface": {
     "displayName": "DPF Platform",
     "shortDescription": "DPF-native development and coworker skills",
-    "longDescription": "Distributes DPF-native workflow skills that encode backlog governance, kernel decisions, worktree discipline, DCO PR flow, and evidence-first diagnostics.",
+    "longDescription": "Distributes DPF-native workflow skills and the DPF MCP connector contract that encode backlog governance, kernel decisions, worktree discipline, DCO PR flow, and evidence-first diagnostics.",
     "developerName": "Digital Product Factory",
     "category": "Productivity",
     "capabilities": [

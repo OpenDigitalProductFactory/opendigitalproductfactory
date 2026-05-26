@@ -10,6 +10,7 @@
   "repository": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/packages/dpf-skill-pack",
   "license": "Apache-2.0",
   "skills": "./skills/",
+  "mcpServers": "./claude.mcp.json",
   "keywords": [
     "dpf",
     "digital-product-factory",
