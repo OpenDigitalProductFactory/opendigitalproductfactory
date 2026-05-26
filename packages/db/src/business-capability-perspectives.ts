@@ -84,8 +84,14 @@ type BusinessCapabilityPerspective = {
   capabilities: BusinessCapabilitySeedDefinition[];
 };
 
+export type BusinessCapabilityPerspectiveSource = Pick<
+  BusinessCapabilityPerspective,
+  "perspectiveId" | "label" | "source"
+>;
+
 export type ResolvedBusinessCapabilityPerspective = {
   sourcePerspectiveIds: string[];
+  sources: BusinessCapabilityPerspectiveSource[];
   capabilities: BusinessCapabilitySeedDefinition[];
 };
 
@@ -211,6 +217,11 @@ export function resolveBusinessCapabilityPerspective(
 
   return {
     sourcePerspectiveIds: perspectives.map((perspective) => perspective.perspectiveId),
+    sources: perspectives.map((perspective) => ({
+      perspectiveId: perspective.perspectiveId,
+      label: perspective.label,
+      source: perspective.source,
+    })),
     capabilities: dedupeCapabilities(perspectives.flatMap((perspective) => perspective.capabilities)),
   };
 }

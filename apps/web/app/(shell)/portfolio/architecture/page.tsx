@@ -32,7 +32,7 @@ export default async function PortfolioArchitecturePage() {
         </div>
       </header>
 
-      <BusinessCapabilityMap mapRows={data.mapRows} summary={data.summary} />
+      <BusinessCapabilityMap mapRows={data.mapRows} summary={data.summary} provenance={data.provenance} />
 
       <details className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
         <summary className="cursor-pointer text-sm font-semibold text-[var(--dpf-text)]">
