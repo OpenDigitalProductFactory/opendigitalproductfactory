@@ -358,28 +358,35 @@ Same lifecycle commands as bare-metal Linux:
 
 ### Portal self-upgrade (cloud VM operators)
 
-The platform ships a governed **portal self-upgrade** runtime that
-detects when the running portal is behind `origin/main` and runs an
-in-place upgrade through the same promoter, backup, swap, health, and
-rollback path used for Build Studio ship-phase promotions. For a
-single cloud VM this removes the SSH-and-`git pull` cycle from your
-weekly maintenance.
+The platform ships a governed **portal self-upgrade** runtime for
+operators who want the portal to upgrade itself through the same
+quiescence, promoter, backup, swap, health, and rollback controls used
+for Build Studio ship-phase promotions.
+
+This is separate from the shared-workspace update banner described in
+the [Development Workspace guide](../user-guide/development-workspace.md#platform-updates-and-notifications).
+The banner tells an operator that a newer image is already present and
+the install's shared source workspace needs to merge that source. The
+self-upgrade runner is the operations path that can check a configured
+target and perform the upgrade cycle when enabled.
 
 | Surface | What it does |
 |---------|--------------|
 | `/ops/self-upgrade` | Operations dashboard panel — current SHA, target SHA, recent run history, manual trigger. Read access is gated by the `view_operations` capability; manual triggers require `manage_provider_connections`. |
-| **Daily cron** | `portal/self-upgrade-scheduled` runs at `0 8 * * *` (`SelfUpgradeRun` row written for each cycle; runs that find no new commits exit with `status: "skipped"`). |
-| **Manual trigger** | The dashboard's manual-trigger button fires the `portal/self-upgrade.requested` event, which runs the same cycle on demand. |
-| **Completion sweep** | A separate `*/15 * * * *` cron reconciles runs in the `completing` state — important when the swap succeeded but the post-build verification needs to confirm the running SHA before the run flips to `succeeded`. |
+| **Hourly scheduled runner** | `ops/self-upgrade-scheduled` is registered with cron `0 * * * *` when scheduled Inngest functions are enabled for the runtime. It calls the same runner as manual requests; checks that do not proceed return a skip reason, while upgrade attempts create `SelfUpgradeRun` records. |
+| **Manual trigger** | The dashboard's manual-trigger button fires the `ops/self-upgrade.run` event, which runs the same cycle on demand. |
+| **Skip states** | Scheduled runs skip cleanly when self-upgrade is disabled, outside the configured maintenance window, already up to date, missing a target, or already running another upgrade. |
 
 Canonical status enum: `queued | running | succeeded | failed | rolled_back | completing | skipped`. On health-check failure during the swap the promoter rolls back to the previous image and the run lands in `rolled_back`; the operator can investigate from the dashboard without losing the running portal.
 
-To **disable** scheduled self-upgrade on a particular install, set the
-relevant `PlatformConfig.selfUpgrade.*` flag from the admin surface —
-the manual trigger remains available for operators who want to run
-the cycle on their own schedule.
+Scheduled self-upgrade is opt-in. The runtime must include scheduled
+Inngest functions, and `PlatformConfig["self_upgrade"]` must set
+`enabled: true` with the desired channel, target source path, branch,
+maintenance windows, and health URL. The legacy
+`PlatformConfig["portal.selfUpgrade"]` key is read only as a fallback
+for older installs.
 
-Implementation reference: [`docs/superpowers/plans/2026-05-20-portal-self-upgrade-local.md`](../superpowers/plans/2026-05-20-portal-self-upgrade-local.md).
+Implementation reference: [`docs/superpowers/plans/2026-05-23-governed-platform-upgrade-phase-0-and-1.md`](../superpowers/plans/2026-05-23-governed-platform-upgrade-phase-0-and-1.md).
 
 ## What Phase 0 does NOT cover
 

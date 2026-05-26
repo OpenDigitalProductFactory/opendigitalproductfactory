@@ -1,0 +1,32 @@
+[
+  {
+    "id": "architecture",
+    "label": "Architecture",
+    "skillIds": ["dpf-retrieve-decision-context", "dpf-compare-options", "dpf-decision-via-kernel"]
+  },
+  {
+    "id": "design",
+    "label": "Design",
+    "skillIds": ["dpf-retrieve-decision-context", "dpf-compare-options", "dpf-capture-kernel-gap"]
+  },
+  {
+    "id": "implementation",
+    "label": "Implementation",
+    "skillIds": ["dpf-worktree-per-session", "dpf-use-shared-nonprod-environment", "dpf-evidence-before-diagnosis"]
+  },
+  {
+    "id": "verification",
+    "label": "Verification",
+    "skillIds": ["dpf-evidence-before-diagnosis", "dpf-external-evidence-handoff", "dpf-record-decision-outcome"]
+  },
+  {
+    "id": "review-ship",
+    "label": "Review/Ship",
+    "skillIds": ["dpf-pr-with-dco", "dpf-local-merge-ci-before-push", "dpf-record-decision-outcome"]
+  },
+  {
+    "id": "recovery",
+    "label": "Recovery",
+    "skillIds": ["dpf-evidence-before-diagnosis", "dpf-capture-kernel-gap", "dpf-use-shared-nonprod-environment"]
+  }
+]

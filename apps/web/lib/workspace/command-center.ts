@@ -23,6 +23,7 @@ export type ReadinessCell = {
   key: SixCKey;
   state: ReadinessState;
   label: string;
+  description: string;
   href?: string;
 };
 
@@ -160,8 +161,17 @@ const SIX_C_LABELS: Record<SixCKey, string> = {
   containment: "Containment",
 };
 
+const SIX_C_DESCRIPTIONS: Record<SixCKey, string> = {
+  context: "Evidence, docs, and operating knowledge",
+  connections: "Provider, integration, and customer-system links",
+  capabilities: "People and AI coworkers able to act",
+  cadence: "Scheduled work, reviews, and follow-up rhythm",
+  confidence: "Recent receipts and low-risk signals",
+  containment: "Approvals, route scope, and side-effect controls",
+};
+
 const SIX_C_HREFS: Record<SixCKey, string> = {
-  context: "/platform/wiki",
+  context: "/wiki",
   connections: "/platform/tools/integrations",
   capabilities: "/platform/ai",
   cadence: "/workspace/my-queue",
@@ -203,6 +213,7 @@ export function deriveReadinessCell(
   return {
     key,
     label: SIX_C_LABELS[key],
+    description: SIX_C_DESCRIPTIONS[key],
     state,
     href: SIX_C_HREFS[key],
   };

@@ -70,6 +70,10 @@ const { mockEvaluateBuildStudioPlanAdvancementGate } = vi.hoisted(() => ({
   mockEvaluateBuildStudioPlanAdvancementGate: vi.fn(),
 }));
 
+const { mockEvaluateBuildStudioDecision } = vi.hoisted(() => ({
+  mockEvaluateBuildStudioDecision: vi.fn(),
+}));
+
 vi.mock("@/lib/auth", () => ({
   auth: mockAuth,
 }));
@@ -98,6 +102,10 @@ vi.mock("@/lib/integrate/sandbox/sandbox", () => ({
 
 vi.mock("@/lib/decision-perspective/build-studio-gate", () => ({
   evaluateBuildStudioPlanAdvancementGate: mockEvaluateBuildStudioPlanAdvancementGate,
+}));
+
+vi.mock("@/lib/build/decision-service", () => ({
+  evaluateBuildStudioDecision: mockEvaluateBuildStudioDecision,
 }));
 
 vi.mock("next/cache", () => ({
@@ -145,6 +153,13 @@ describe("governed build start approvals", () => {
         outcomeType: "recommend",
         confidenceScore: 0.9,
       },
+    });
+    mockEvaluateBuildStudioDecision.mockResolvedValue({
+      status: "recommended",
+      recommendation: { optionId: "start-implementation", confidence: "high", margin: 0.8 },
+      reasonSummary: "Recommended next action: start implementation.",
+      operatorActionLabel: "Start implementation",
+      auditSummary: "Governed pre-gate recommendation selected start-implementation.",
     });
     mockSaveBuildArtifactRevision.mockResolvedValue({
       revisionId: "rev-1",
@@ -642,6 +657,21 @@ describe("governed build start approvals", () => {
 
     await advanceBuildPhase("FB-123", "build");
 
+    expect(mockEvaluateBuildStudioDecision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        request: expect.objectContaining({
+          source: "build-studio",
+          routeContext: "/build",
+          buildId: "FB-123",
+          phase: "plan",
+          question: expect.stringContaining("Start implementation"),
+          options: expect.arrayContaining([
+            expect.objectContaining({ id: "start-implementation", operatorLabel: "Start implementation" }),
+          ]),
+        }),
+      }),
+    );
     expect(mockEvaluateBuildStudioPlanAdvancementGate).toHaveBeenCalledWith(
       expect.objectContaining({
         build: expect.objectContaining({ buildId: "FB-123", phase: "plan" }),
