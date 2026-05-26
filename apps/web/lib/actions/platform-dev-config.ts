@@ -946,7 +946,7 @@ async function finishPlatformUpdateMerge(
     10,
   );
   await execUpdate(
-    `git commit -s -m "chore: merge dpf v${pendingVersion}"`,
+    `${HOOKLESS_GIT} commit -s -m "chore: merge dpf v${pendingVersion}"`,
     gitOpts,
   );
 
@@ -1051,7 +1051,7 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
     );
     if (diffCheck.trim()) {
       await execUpdate(
-        `git commit -s -m "chore: ${UPDATE_UPSTREAM_BRANCH} v${pendingVersion}"`,
+        `${HOOKLESS_GIT} commit -s -m "chore: ${UPDATE_UPSTREAM_BRANCH} v${pendingVersion}"`,
         gitOpts,
       );
     }
