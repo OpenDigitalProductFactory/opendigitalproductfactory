@@ -1478,6 +1478,11 @@ export async function sendMessage(input: {
       featureBuildId: activeBuild?.id ?? null,
       activeSkillId,
       agentMessageId: pendingAgentMessageId,
+      // sendMessage is the user-typed-a-question path. Chat mode disables the
+      // Operator Contract zero-tool-call / unsaved-evidence guards so a
+      // conversational reply ("yes do the truck list first") does not
+      // false-positive into a PlatformIssueReport.
+      interactionMode: "chat",
       ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
       onProgress: (event) => agentEventBus.emit(input.threadId, event),
     });

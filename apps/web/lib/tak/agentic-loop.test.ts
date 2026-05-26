@@ -23,6 +23,9 @@ vi.mock("@dpf/db", () => ({
     user: {
       findUnique: vi.fn(),
     },
+    platformIssueReport: {
+      create: vi.fn(),
+    },
   },
 }));
 vi.mock("@/lib/routed-inference", () => ({
@@ -1500,5 +1503,129 @@ describe("detectUnsavedEvidence (clause 2.4)", () => {
   it("returns null when phase is not ideate/plan/review", () => {
     expect(detectUnsavedEvidence("design doc", [], "build")).toBeNull();
     expect(detectUnsavedEvidence("design doc", [], null)).toBeNull();
+  });
+});
+
+// ── interactionMode gate over Operator Contract platform guards ──
+//
+// Phase J finding: chat-mode coworker replies that mention plan-phase
+// keywords ("yes do the truck list first") were triggering the unsaved-
+// evidence guard and writing phantom PlatformIssueReport rows. The
+// guards belong on autonomous phase execution (build-orchestrator,
+// pipeline) but not on a real user asking the build coworker a
+// conversational question.
+//
+// These tests pin the contract:
+//   - interactionMode default "autonomous" preserves prior behavior
+//     (guard fires on conversational-shaped text during plan phase)
+//   - interactionMode "chat" suppresses ALL three guards so the chat
+//     surface stops generating false-positive issue reports.
+describe("runAgenticLoop interactionMode gate (Phase J)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(prisma.agentModelConfig.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.toolExecution.create).mockResolvedValue({} as never);
+    vi.mocked(prisma.platformIssueReport.create).mockResolvedValue({} as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      isSuperuser: true,
+      groups: [{ platformRole: { roleId: "ceo" } }],
+    } as never);
+  });
+
+  const planPhaseConversationalParams = {
+    chatHistory: [
+      { role: "user" as const, content: "yes do the truck list first" },
+    ],
+    systemPrompt: "You are a helpful assistant.",
+    sensitivity: "internal" as const,
+    tools: [
+      {
+        name: "saveBuildEvidence",
+        description: "Save",
+        inputSchema: {},
+        requiredCapability: null,
+        executionMode: "immediate" as const,
+        sideEffect: true,
+      },
+    ],
+    toolsForProvider: [
+      {
+        type: "function",
+        function: { name: "saveBuildEvidence", description: "Save", parameters: {} },
+      },
+    ],
+    userId: "user-1",
+    routeContext: "/build",
+    agentId: "software-engineer",
+    threadId: "thread-1",
+    buildPhase: "plan" as const,
+    featureBuildId: "fb-internal-id",
+  };
+
+  // The agent's reply is a conversational Dale-answer that mentions
+  // "tasks" and "build plan" — enough to trip detectUnsavedEvidence's
+  // plan-phase regex. The first call returns the reply; the second/third
+  // return short status responses so the loop terminates without nudging
+  // forever.
+  function setupConversationalReply() {
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute
+      .mockResolvedValueOnce(
+        mockResult({
+          content:
+            "Got it. I'd recommend a smaller first slice: just the truck list with tasks: 1) show trucks, 2) attach techs. Parts can come in a follow-on build plan.",
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockResult({
+          content:
+            "Confirmed: the smaller scope is captured and the follow-on is documented.",
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockResult({
+          content:
+            "Confirmed: the smaller scope is captured and the follow-on is documented for the next pass.",
+        }),
+      );
+  }
+
+  it("writes a PlatformIssueReport in autonomous mode (default) for plan-phase conversational reply", async () => {
+    setupConversationalReply();
+    await runAgenticLoop(planPhaseConversationalParams);
+
+    const createCalls = vi.mocked(prisma.platformIssueReport.create).mock.calls;
+    const unsavedEvidenceCall = createCalls.find((c) =>
+      String((c[0] as any)?.data?.title ?? "").includes("unsaved-evidence"),
+    );
+    expect(unsavedEvidenceCall).toBeDefined();
+  });
+
+  it('skips the unsaved-evidence guard when interactionMode is "chat"', async () => {
+    setupConversationalReply();
+    await runAgenticLoop({
+      ...planPhaseConversationalParams,
+      interactionMode: "chat",
+    });
+
+    const createCalls = vi.mocked(prisma.platformIssueReport.create).mock.calls;
+    const unsavedEvidenceCall = createCalls.find((c) =>
+      String((c[0] as any)?.data?.title ?? "").includes("unsaved-evidence"),
+    );
+    expect(unsavedEvidenceCall).toBeUndefined();
+  });
+
+  it('also skips the zero-tool-call guard when interactionMode is "chat"', async () => {
+    setupConversationalReply();
+    await runAgenticLoop({
+      ...planPhaseConversationalParams,
+      interactionMode: "chat",
+    });
+
+    const createCalls = vi.mocked(prisma.platformIssueReport.create).mock.calls;
+    const zeroToolCall = createCalls.find((c) =>
+      String((c[0] as any)?.data?.title ?? "").includes("zero-tool-call"),
+    );
+    expect(zeroToolCall).toBeUndefined();
   });
 });

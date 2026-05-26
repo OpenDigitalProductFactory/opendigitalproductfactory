@@ -1,13 +1,8 @@
 // apps/web/app/(shell)/customer/sales-orders/page.tsx
 import Link from "next/link";
 import { prisma } from "@dpf/db";
-
-const STATUS_COLOURS: Record<string, string> = {
-  confirmed: "#38bdf8",
-  in_progress: "#fbbf24",
-  fulfilled: "#4ade80",
-  cancelled: "#ef4444",
-};
+import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
+import { CRM_TONE_CLASSES, getSalesOrderStatusMeta } from "@/lib/crm/presentation";
 
 export default async function SalesOrdersPage() {
   const orders = await prisma.salesOrder.findMany({
@@ -29,24 +24,22 @@ export default async function SalesOrdersPage() {
 
       <div className="space-y-2">
         {orders.map((o) => {
-          const color = STATUS_COLOURS[o.status] ?? "#8888a0";
+          const statusMeta = getSalesOrderStatusMeta(o.status);
+          const toneClasses = CRM_TONE_CLASSES[statusMeta.tone];
           return (
             <div
               key={o.id}
-              className="p-4 rounded-lg bg-[var(--dpf-surface-1)] border-l-4 flex items-center justify-between"
-              style={{ borderLeftColor: color }}
+              className={[
+                "flex items-center justify-between rounded-lg border-l-4 bg-[var(--dpf-surface-1)] p-4",
+                toneClasses.border,
+              ].join(" ")}
             >
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <p className="text-xs font-mono font-semibold text-[var(--dpf-text)]">
                     {o.orderRef}
                   </p>
-                  <span
-                    className="text-[9px] px-1.5 py-0.5 rounded-full"
-                    style={{ background: `${color}20`, color }}
-                  >
-                    {o.status.replace("_", " ")}
-                  </span>
+                  <CustomerStatusBadge label={statusMeta.label} tone={statusMeta.tone} />
                 </div>
                 <p className="text-xs text-[var(--dpf-muted)]">
                   <Link href={`/customer/${o.account.id}`} className="hover:text-[var(--dpf-text)]">

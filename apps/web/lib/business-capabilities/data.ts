@@ -7,6 +7,7 @@ import {
   type CapabilityMaturityBand,
   type TraceTargetType,
 } from "./types";
+import { buildCapabilityProvenance } from "./provenance";
 import { buildCapabilityMapRows } from "./view-model";
 
 export type BusinessCapabilityTraceRecord = {
@@ -222,7 +223,7 @@ function toTraceRecord(link: {
 }
 
 export async function getBusinessCapabilityMapData() {
-  const [capabilities, taxonomyNodes, digitalProducts, backlogItems, eaElements] = await Promise.all([
+  const [capabilities, taxonomyNodes, digitalProducts, backlogItems, eaElements, storefront] = await Promise.all([
     prisma.businessCapability.findMany({
       where: { status: "active" },
       orderBy: [{ level: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
@@ -259,6 +260,14 @@ export async function getBusinessCapabilityMapData() {
       take: 200,
       select: { id: true, name: true, elementType: { select: { name: true } } },
     }),
+    prisma.storefrontConfig.findFirst({
+      select: {
+        archetype: {
+          select: { archetypeId: true, category: true, name: true },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
   ]);
 
   const records: BusinessCapabilityRecord[] = capabilities.map((capability) => ({
@@ -284,6 +293,10 @@ export async function getBusinessCapabilityMapData() {
     tree,
     mapRows: buildCapabilityMapRows(tree),
     summary: summarizeCapabilityMap(records),
+    provenance: buildCapabilityProvenance({
+      archetype: storefront?.archetype ?? null,
+      records,
+    }),
     targetOptions: {
       taxonomyNodes: taxonomyNodes.map((node) => ({ id: node.id, label: `${node.name} (${node.nodeId})` })),
       digitalProducts: digitalProducts.map((product) => ({ id: product.id, label: `${product.name} (${product.productId})` })),

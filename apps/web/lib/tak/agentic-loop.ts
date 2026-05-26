@@ -786,6 +786,26 @@ export async function runAgenticLoop(params: {
    */
   buildPhase?: string | null;
   /**
+   * Distinguish autonomous phase execution from interactive chat.
+   *
+   * - `"autonomous"` (default): orchestrator / pipeline / scheduled runs.
+   *   Operator Contract guards (clauses 2.4 unsaved-evidence,
+   *   2.6a tool-refused-despite-availability, 2.6b zero-tool-call) fire
+   *   on zero-tool-call iterations because those are real contract
+   *   violations in autonomous phase execution.
+   * - `"chat"`: a real user typed a message and is waiting for a reply.
+   *   Conversational answers ("yes do the truck list first") legitimately
+   *   produce zero tool calls and may mention plan-phase keywords without
+   *   intent to save evidence. The contract guards no-op in this mode so
+   *   the chat path does not generate phantom PlatformIssueReport rows.
+   *
+   * Default `"autonomous"` preserves prior behavior for the
+   * build-orchestrator / build-pipeline / autonomous-work-run direct
+   * callers. Chat callers (agent-coworker -> executeAutonomousAgenticLoop)
+   * must opt in to `"chat"` explicitly.
+   */
+  interactionMode?: "chat" | "autonomous";
+  /**
    * Optional active FeatureBuild.id for attribution on guard-written
    * PlatformIssueReport rows. Caller should look this up alongside buildPhase.
    */
@@ -838,6 +858,7 @@ export async function runAgenticLoop(params: {
     activeSkillId,
     agentMessageId,
   } = params;
+  const interactionMode: "chat" | "autonomous" = params.interactionMode ?? "autonomous";
 
   const userContext = await resolveUserContext(userId);
 
@@ -1149,6 +1170,16 @@ export async function runAgenticLoop(params: {
       // Detect contract violations the LLM cannot self-report. Each guard
       // writes a PlatformIssueReport tagged to the active build (when known).
       // Spec: docs/superpowers/specs/2026-04-30-build-specialist-operator-contract.md §2.6
+      //
+      // Skip guards in chat mode. A user asking a build coworker "yes do the
+      // truck list first" legitimately produces a conversational reply with
+      // zero tool calls — that's not a contract violation, the agent is
+      // answering a question. Without this gate the guard regexes
+      // false-positive on any plan-phase chat reply mentioning "tasks" or
+      // "build plan", producing phantom PlatformIssueReport rows that
+      // misdirect troubleshooting. See Phase J of
+      // docs/dogfood/2026-05-23-dale-hvac-build-studio.md (D42, D43).
+      const runContractGuards = interactionMode === "autonomous";
       const writeContractIssue = (
         category: "tool-refused-despite-availability" | "zero-tool-call" | "unsaved-evidence",
         title: string,
@@ -1174,7 +1205,7 @@ export async function runAgenticLoop(params: {
       };
 
       // 2.6a: tool-refused-despite-availability
-      const refusedToolName = detectToolRefusedDespiteAvailability(trimmed, tools);
+      const refusedToolName = runContractGuards ? detectToolRefusedDespiteAvailability(trimmed, tools) : null;
       if (refusedToolName) {
         console.warn(`[agentic-loop] contract-violation tool-refused-despite-availability: ${refusedToolName}`);
         writeContractIssue(
@@ -1185,7 +1216,7 @@ export async function runAgenticLoop(params: {
       }
 
       // 2.6b: zero-tool-call on phase-required turn
-      if (executedTools.length === 0 && phaseRequiresToolCall(params.buildPhase)) {
+      if (runContractGuards && executedTools.length === 0 && phaseRequiresToolCall(params.buildPhase)) {
         console.warn(`[agentic-loop] contract-violation zero-tool-call phase=${params.buildPhase}`);
         writeContractIssue(
           "zero-tool-call",
@@ -1195,7 +1226,9 @@ export async function runAgenticLoop(params: {
       }
 
       // 2.4: save-before-final-response — evidence in text but not persisted
-      const unsavedField = detectUnsavedEvidence(trimmed, executedTools, params.buildPhase);
+      const unsavedField = runContractGuards
+        ? detectUnsavedEvidence(trimmed, executedTools, params.buildPhase)
+        : null;
       if (unsavedField) {
         console.warn(`[agentic-loop] contract-violation unsaved-evidence: ${unsavedField} described but not saved`);
         writeContractIssue(
