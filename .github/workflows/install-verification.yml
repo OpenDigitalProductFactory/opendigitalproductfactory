@@ -74,6 +74,10 @@ jobs:
       - name: Install pnpm
         run: corepack enable && corepack prepare pnpm@10.33.2 --activate
 
+      - name: Verify digest-pinned release compose image manifests
+        if: ${{ (github.event.inputs.mode || 'dev') == 'release' }}
+        run: node scripts/release/verify-compose-image-manifests.mjs --mode release --platform linux --only digest-pinned
+
       - name: Run install-dpf.sh (real install, --no-autostart for CI)
         # Skips the autostart unit step (no user session on a GHA runner).
         # The install path itself — preflight, state, compose chain,
@@ -119,8 +123,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: doctor-bundle-${{ github.event.inputs.mode || 'dev' }}-${{ github.run_id }}
-          path: ~/.dpf/doctor-*.tar.gz
+          path: /home/runner/.dpf/doctor-*.tar.gz
           if-no-files-found: warn
+          include-hidden-files: true
           retention-days: 14
 
       - name: Tear down (uninstall --purge)

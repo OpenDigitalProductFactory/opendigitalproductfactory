@@ -4,13 +4,16 @@ name: Installer Release Gates
 permissions:
   contents: read
 
-# Per the installer-parity roadmap Phase 9b (CI release gates). Three
+# Per the installer-parity roadmap Phase 9b (CI release gates). Four
 # fast gates plus one paid macos-14 gate, all path-filtered so they
-# only run when installer-touching files change. Image-manifests
-# verification lives in publish-image.yml (Phase 1) and runs on tag
-# push, not here.
+# only run when installer-touching files change. Full image-manifest
+# verification still lives in publish-image.yml (Phase 1) and runs on
+# tag push; this workflow checks digest-pinned compose images early so
+# deleted upstream manifests fail before release day.
 #
 # Gates:
+#   - release-contract Static release workflow + artifact contract tests.
+#   - image-manifests  Checks digest-pinned compose images resolve.
 #   - compose-render   Asserts docker-compose.{yml,macos.yml,linux.yml,release.yml}
 #                      render cleanly for every (mode × platform) combo.
 #                      Catches overlay merge regressions before they
@@ -39,7 +42,11 @@ on:
       - "docker-compose*.yml"
       - ".env.docker.example"
       - "docker-entrypoint.sh"
+      - "scripts/release/**"
+      - "tests/release/**"
       - ".github/workflows/release-gates.yml"
+      - ".github/workflows/publish-image.yml"
+      - ".github/workflows/install-verification.yml"
   push:
     branches: [main]
     paths:
@@ -52,13 +59,45 @@ on:
       - "docker-compose*.yml"
       - ".env.docker.example"
       - "docker-entrypoint.sh"
+      - "scripts/release/**"
+      - "tests/release/**"
       - ".github/workflows/release-gates.yml"
+      - ".github/workflows/publish-image.yml"
+      - ".github/workflows/install-verification.yml"
 
 concurrency:
   group: release-gates-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  release-contract:
+    name: Release Contract Guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Run release contract tests
+        run: node tests/release/installer-release-contract.test.mjs
+
+  image-manifests:
+    name: Release Image Manifest Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Verify digest-pinned release compose image manifests
+        run: node scripts/release/verify-compose-image-manifests.mjs --mode release --platform linux --only digest-pinned
+
   compose-render:
     name: Compose Render Policy (${{ matrix.mode }} / ${{ matrix.platform }})
     runs-on: ubuntu-latest
