@@ -378,7 +378,7 @@ model PlatformIssueResolutionInstallState {
   id              String   @id @default(cuid())
   resolutionId    String
   installPrincipalId String?
-  dedupeKey       String   @unique
+  installKey      String
   applicability   String // applicable | not_applicable | unknown | blocked
   availability    String // unavailable | available | update_pending | conflict | blocked
   application     String // not_applied | applied | verified | failed
@@ -390,13 +390,13 @@ model PlatformIssueResolutionInstallState {
   lastCheckedAt   DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  @@index([resolutionId])
+  @@unique([resolutionId, installKey])
   @@index([installPrincipalId])
   @@index([applicability, availability, application])
 }
 ```
 
-`dedupeKey` is a deterministic non-null key such as `PIRR-123|install:local` or `PIRR-123|install:<principalId>`. Do not introduce a separate identity table for `installPrincipalId`. If the install needs a durable identity, model it as `Principal(kind="install")` with one or more `PrincipalAlias` rows.
+`installKey` is a deterministic non-null key such as `install:local` or `install:<principalId>`. Do not introduce a separate identity table for `installPrincipalId`. If the install needs a durable identity, model it as `Principal(kind="install")` with one or more `PrincipalAlias` rows.
 
 ### 10.5 Notification Idempotency
 
@@ -415,7 +415,7 @@ Recommended ledger fields:
 - `reportId`
 - `installPrincipalId`
 - `userId`
-- `dedupeKey`
+- `audienceKey`
 - `notificationKind`: `local_answered`, `fix_available`, `update_required`, `installed_here`, `blocked`, `not_applicable`
 - `notificationId`
 - `createdAt`
@@ -423,22 +423,22 @@ Recommended ledger fields:
 ```prisma
 model PlatformIssueResolutionNotification {
   id                 String   @id @default(cuid())
-  dedupeKey          String   @unique
   resolutionId       String
   reportId           String?
   installPrincipalId String?
   userId             String?
+  audienceKey        String
   notificationKind   String
   notificationId     String?
   createdAt          DateTime @default(now())
 
-  @@index([resolutionId, notificationKind])
+  @@unique([resolutionId, audienceKey, notificationKind])
   @@index([notificationId])
   @@index([userId])
 }
 ```
 
-**Idempotency key:** `dedupeKey` is the deterministic normalized tuple `resolutionId|installPrincipalId-or-local|userId-or-none|notificationKind`. The reconciler must never produce a second row for the same tuple. A re-entry that finds an existing row is a no-op, not a "notify again". Multiple distinct `notificationKind` values for the same resolution/install/user are allowed (e.g. `fix_available` then later `installed_here` are two rows), because each marks a distinct state change.
+**Idempotency key:** `audienceKey` is the deterministic normalized audience tuple, e.g. `install:local|user:<userId>` or `install:<principalId>|user:none`. The unique key is `(resolutionId, audienceKey, notificationKind)`. The reconciler must never produce a second row for the same tuple. A re-entry that finds an existing row is a no-op, not a "notify again". Multiple distinct `notificationKind` values for the same resolution/install/user are allowed (e.g. `fix_available` then later `installed_here` are two rows), because each marks a distinct state change.
 
 **Re-notification policy:** state regression (e.g. an install that briefly reached `applied_here` then failed verification and reopened the path) does not re-fire an earlier `notificationKind`. Instead, the path produces a follow-up resolution (per the `superseded` rule in Section 10.1 invariants) and the new resolution drives any new notification. This prevents Dale from receiving "fix installed" twice for the same underlying issue and prevents flapping reconciler state from spamming the user.
 

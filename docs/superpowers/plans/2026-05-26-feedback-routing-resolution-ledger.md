@@ -31,8 +31,8 @@ Implementation invariants:
 
 - `PlatformIssueReport` remains the local source report; `PlatformIssueResolution*` records are closure/projection records around it.
 - Every support-mode report gets an idempotent `routing` resolution when the support flow returns, including existing or reconciled reports that predate the ledger.
-- Notification idempotency uses a deterministic `dedupeKey`; do not rely on nullable columns inside unique indexes.
-- Install-state idempotency uses a deterministic `dedupeKey`; do not rely on nullable `installPrincipalId` uniqueness.
+- Notification idempotency uses a deterministic `audienceKey`; do not rely on nullable columns inside unique indexes.
+- Install-state idempotency uses a deterministic `installKey`; do not rely on nullable `installPrincipalId` uniqueness.
 - `local_answered` is a first-class resolution status, artifact kind, and notification kind.
 - Applicability targeting prefers exact `StorefrontConfig.archetypeId`; archetype category is evidence/fallback only.
 - Phase 2/2a stores future bridge fields but does not file GitHub issues, parse PR/release markers, apply updates, or run a reconciler.
@@ -651,7 +651,7 @@ describe("resolution-service", () => {
     expect(prismaMock.platformIssueResolutionNotification.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          dedupeKey: "PIRR-AAA11|install:local|user:user-1|local_answered",
+          audienceKey: "install:local|user:user-1",
           notificationKind: "local_answered",
           notificationId: "notif-1",
         }),
@@ -695,24 +695,15 @@ function semanticId(prefix: string): string {
   return `${prefix}-${randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
-function installPrincipalSegment(installPrincipalId: string | null): string {
+function installKey(installPrincipalId: string | null): string {
   return installPrincipalId ? `install:${installPrincipalId}` : "install:local";
 }
 
-function installStateDedupeKey(input: {
-  resolutionId: string;
-  installPrincipalId?: string | null;
-}): string {
-  return `${input.resolutionId}|${installPrincipalSegment(input.installPrincipalId ?? null)}`;
-}
-
-function notificationDedupeKey(input: {
-  resolutionId: string;
+function notificationAudienceKey(input: {
   installPrincipalId?: string | null;
   userId?: string | null;
-  notificationKind: string;
 }): string {
-  return `${input.resolutionId}|${installPrincipalSegment(input.installPrincipalId ?? null)}|user:${input.userId ?? "none"}|${input.notificationKind}`;
+  return `${installKey(input.installPrincipalId ?? null)}|user:${input.userId ?? "none"}`;
 }
 
 export async function createOrGetResolutionForReport(input: {
@@ -761,20 +752,20 @@ export async function createOrGetResolutionForReport(input: {
       },
     });
 
-    const localInstallStateDedupeKey = installStateDedupeKey({
-      resolutionId: created.resolutionId,
-      installPrincipalId: null,
-    });
+    const localInstallKey = installKey(null);
 
     await tx.platformIssueResolutionInstallState.upsert({
       where: {
-        dedupeKey: localInstallStateDedupeKey,
+        resolutionId_installKey: {
+          resolutionId: created.resolutionId,
+          installKey: localInstallKey,
+        },
       },
       update: { lastCheckedAt: new Date() },
       create: {
         resolutionId: created.resolutionId,
         installPrincipalId: null,
-        dedupeKey: localInstallStateDedupeKey,
+        installKey: localInstallKey,
         applicability: INSTALL_APPLICABILITY_STATE.UNKNOWN,
         availability: INSTALL_AVAILABILITY_STATE.UNAVAILABLE,
         application: INSTALL_APPLICATION_STATE.NOT_APPLIED,
@@ -913,15 +904,17 @@ export async function createResolutionNotificationOnce(input: {
   body: string;
   deepLink: string;
 }): Promise<{ notificationId: string | null; created: boolean }> {
-  const dedupeKey = notificationDedupeKey({
-    resolutionId: input.resolutionId,
+  const audienceKey = notificationAudienceKey({
     installPrincipalId: null,
     userId: input.userId,
-    notificationKind: input.notificationKind,
   });
   const existing = await prisma.platformIssueResolutionNotification.findUnique({
     where: {
-      dedupeKey,
+      resolutionId_audienceKey_notificationKind: {
+        resolutionId: input.resolutionId,
+        audienceKey,
+        notificationKind: input.notificationKind,
+      },
     },
     select: { notificationId: true },
   });
@@ -944,7 +937,7 @@ export async function createResolutionNotificationOnce(input: {
       reportId: input.reportId ?? null,
       installPrincipalId: null,
       userId: input.userId,
-      dedupeKey,
+      audienceKey,
       notificationKind: input.notificationKind,
       notificationId: notification.id,
     },
