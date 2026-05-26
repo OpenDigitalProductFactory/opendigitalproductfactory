@@ -109,7 +109,7 @@
   .card {
     border: 1px solid var(--border);
     background: var(--surface);
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 16px 18px;
   }
   .card h3 {
@@ -148,7 +148,7 @@
   .pillar {
     border: 1px solid var(--border);
     background: var(--surface);
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 16px;
   }
   .pillar .tag {
@@ -163,7 +163,7 @@
   .install {
     border: 1px solid var(--border);
     background: var(--surface);
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 16px 18px;
   }
   .install h3 { margin: 0 0 10px; font-size: 16px; }
@@ -187,6 +187,66 @@
     margin-top: 12px;
   }
 
+  .process-strip {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    margin: 22px 0;
+  }
+  .process-step {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 14px;
+    min-height: 118px;
+  }
+  .process-step .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--accent-2);
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+  .process-step strong {
+    display: block;
+    font-size: 14px;
+    margin-bottom: 4px;
+  }
+  .process-step span {
+    color: var(--fg-muted);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .analysis-matrix {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    margin-top: 14px;
+  }
+  .analysis-axis {
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .analysis-axis strong {
+    display: block;
+    font-size: 14px;
+    margin-bottom: 4px;
+  }
+  .analysis-axis span {
+    color: var(--fg-muted);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
   footer {
     border-top: 1px solid var(--border);
     padding: 24px;
@@ -199,7 +259,7 @@
   html { scroll-behavior: smooth; }
   section { scroll-margin-top: 96px; }
 
-  /* Hero highlights — three short value props directly under the lede */
+  /* Hero highlights — short value props directly under the lede */
   .hero-highlights {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -209,7 +269,7 @@
   .hero-highlight {
     border: 1px solid var(--border);
     background: rgba(255,255,255,0.02);
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 14px 16px;
   }
   @media (prefers-color-scheme: light) {
@@ -222,6 +282,7 @@
     header.hero { padding: 32px 16px 28px; }
     .wrap { padding: 0 16px; }
     main { padding: 32px 16px 64px; }
+    section { scroll-margin-top: 74px; }
     .hero-logo {
       height: 96px;
       margin: 0 auto 16px;
@@ -234,6 +295,10 @@
       text-align: center;
     }
     .hero-highlights { margin-top: 18px; }
+    .process-strip,
+    .analysis-matrix {
+      grid-template-columns: 1fr;
+    }
     table.guide {
       display: block;
       max-width: 100%;
@@ -287,6 +352,19 @@
     border-color: var(--border);
     text-decoration: none;
   }
+  @media (max-width: 640px) {
+    nav.toc .toc-inner {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      padding: 0 16px 2px;
+      gap: 8px;
+      -webkit-overflow-scrolling: touch;
+    }
+    nav.toc .toc-label,
+    nav.toc a {
+      flex: 0 0 auto;
+    }
+  }
 
   /* Back-to-top button */
   a.back-top {
@@ -316,6 +394,7 @@
     <div class="cta-row">
       <a class="btn primary" href="#install-on-windows">Install on Windows</a>
       <a class="btn" href="#what-it-does">See what it does</a>
+      <a class="btn" href="#autonomy-wwmd">Autonomy &amp; WWMD</a>
       <a class="btn" href="#audience">Is it for me?</a>
       <a class="btn" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory">GitHub</a>
       <a class="btn" href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/CONTRIBUTING.md">Contributing</a>
@@ -333,6 +412,10 @@
         <strong>Archetype first</strong>
         <span>The selected market archetype shapes portal copy, worker vocabulary, daily boards, and reusable-feature fit.</span>
       </div>
+      <div class="hero-highlight">
+        <strong>Autonomy with inspectable judgment</strong>
+        <span>WWMD asks the founder-kernel wiki how to resolve ambiguity, then returns a confidence-scored rationale and audit trail.</span>
+      </div>
     </div>
   </div>
 </header>
@@ -346,6 +429,7 @@
     <a href="#coworkers">Coworkers</a>
     <a href="#build-studio">Build Studio</a>
     <a href="#ai-workforce">AI workforce</a>
+    <a href="#autonomy-wwmd">Autonomy &amp; WWMD</a>
     <a href="#identity">Identity &amp; A2A</a>
     <a href="#observability">Observability</a>
     <a href="#compliance">Compliance</a>
@@ -491,6 +575,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <tr><td>Build Studio</td><td>A guided five-phase pipeline (ideate, plan, build, review, ship) with AI coworkers, sandbox execution, code intelligence, impact reports, and promotion or PR handoff where configured. Active hardening is underway for oversized-build decomposition and safer portal upgrades.</td></tr>
         <tr><td>Operations &amp; Backlog</td><td>Manage delivery work with epics, items, priorities, and status tracking. Coworkers create, triage, size, and link items through governed MCP tools.</td></tr>
         <tr><td>AI Workforce</td><td>Provider configuration, dynamic model discovery, capability-tier routing, operations map, capacity continuity, capability-needs review, agent registry, and per-agent grants.</td></tr>
+        <tr><td>Autonomy &amp; WWMD</td><td>Decision Perspective Gate for ambiguity: wiki retrieval, principle-vector scoring, risk and confidence guardrails, outcome ledger, and escalation or deferral when the platform should learn before acting.</td></tr>
         <tr><td>Wiki &amp; Managed Documents</td><td>Governed platform knowledge, founder-kernel principles, source citations, linting, maintained documents, versions, references, and publication state.</td></tr>
         <tr><td>Edge Node</td><td>Host-resident trust and discovery component with enrollment, operator approval, heartbeat freshness, local collectors, and multi-host/air-gapped runbooks.</td></tr>
         <tr><td>Identity &amp; Federation</td><td>LDAP, Active Directory, and Microsoft Entra federation for sign-in and directory bootstrap; the platform remains the source of truth for roles, route bundles, and coworker associations.</td></tr>
@@ -697,6 +782,100 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Saved operator views, reset controls, capacity continuity, and capability-needs review help operators see where AI work is active, blocked, underused, or asking for new platform support. Route topology overlays live provider activity, failover curves, quota pressure, and scheduled-window forecasts onto a single time-scrubbable map.</p>
       </div>
     </div>
+  </section>
+
+  <section id="autonomy-wwmd">
+    <h2>Autonomy grows through WWMD, not blind automation</h2>
+    <p class="sub">
+      DPF is deliberately walking toward more autonomous AI coworkers, but autonomy is earned through inspectable decisions. WWMD &mdash; the working shorthand for &ldquo;What Would Mark Do?&rdquo; &mdash; is the Decision Perspective Gate that turns the founder-kernel wiki into a repeatable answer path for ambiguous questions. The point is not to make a founder persona magic; the point is to make product judgment explicit enough that a coworker can explain why it recommends, arbitrates, escalates, or defers.
+    </p>
+
+    <div class="process-strip" aria-label="WWMD decision flow">
+      <div class="process-step">
+        <div class="num">1</div>
+        <strong>Retrieve the wiki</strong>
+        <span><code>wiki_query</code> searches founder-kernel and organization overlay pages. Vector search finds semantic matches; optional PPR re-ranks pages through the wiki link graph.</span>
+      </div>
+      <div class="process-step">
+        <div class="num">2</div>
+        <strong>Frame options</strong>
+        <span>The coworker converts the ambiguity into 2-4 concrete options with plain-language descriptions and scored feature signals.</span>
+      </div>
+      <div class="process-step">
+        <div class="num">3</div>
+        <strong>Score principles</strong>
+        <span><code>principle_decide</code> compares options against tiered commandments, core principles, and contextual rules using signed dimension vectors.</span>
+      </div>
+      <div class="process-step">
+        <div class="num">4</div>
+        <strong>Apply guardrails</strong>
+        <span>Close margins, weak structured coverage, commandment conflicts, high risk, stale material, and recent human overrides all reduce autonomy.</span>
+      </div>
+      <div class="process-step">
+        <div class="num">5</div>
+        <strong>Write the ledger</strong>
+        <span>Every decision records the profile, sources, confidence, rationale, outcome, and whether a human escalation or deferral was captured.</span>
+      </div>
+    </div>
+
+    <h3 style="margin-top:24px; font-size:16px;">Multiple vector analysis, one explainable answer</h3>
+    <p class="sub" style="margin-top:0;">
+      WWMD does not answer by vibe. It combines several kinds of signal so the response is balanced rather than overfit to one principle or one nearest-neighbor search result.
+    </p>
+    <div class="analysis-matrix">
+      <div class="analysis-axis">
+        <strong>Semantic retrieval vector</strong>
+        <span>Finds relevant wiki pages and principles by meaning, not exact wording, then keeps source slugs and previews attached.</span>
+      </div>
+      <div class="analysis-axis">
+        <strong>Link-graph vector</strong>
+        <span>Personalized PageRank can promote pages connected to the seed set, which helps multi-hop questions that plain cosine search misses.</span>
+      </div>
+      <div class="analysis-axis">
+        <strong>Principle dimension vector</strong>
+        <span>Scores options against axes such as maintainability, blast radius, evidence density, human cognitive load, governance, privacy, cost, and vendor lock-in.</span>
+      </div>
+      <div class="analysis-axis">
+        <strong>Authority and scope vector</strong>
+        <span>Filters judgment by calling population and Reduction Gear ring scope so a Build Studio decision does not accidentally borrow a rule meant for a different surface.</span>
+      </div>
+      <div class="analysis-axis">
+        <strong>Evidence-quality vector</strong>
+        <span>Decision Perspective material is weighted by freshness, review status, promotion state, evidence grade, and recent operator overrides.</span>
+      </div>
+      <div class="analysis-axis">
+        <strong>Risk and confidence vector</strong>
+        <span>High risk, low confidence, missing coverage, or conflicting principles force escalation instead of letting a coworker overclaim authority.</span>
+      </div>
+    </div>
+
+    <table class="guide" style="margin-top:20px;">
+      <thead>
+        <tr><th style="width:26%;">Outcome</th><th>What it means for trust at scale</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Recommend</strong></td>
+          <td>The gate has enough signal to advise a path, but the caller still owns execution and approval.</td>
+        </tr>
+        <tr>
+          <td><strong>Arbitrate</strong></td>
+          <td>For low-risk decisions with very high confidence, the coworker may continue under its declared autonomy policy.</td>
+        </tr>
+        <tr>
+          <td><strong>Escalate</strong></td>
+          <td>The gate found risk, conflict, weak confidence, or policy boundaries that need a human resolver.</td>
+        </tr>
+        <tr>
+          <td><strong>Defer</strong></td>
+          <td>The wiki or decision profile lacks enough coverage. The unresolved question becomes learning material instead of a hidden guess.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="note">
+      Why this matters: every unanswered or low-confidence WWMD question is a chance to improve the kernel. Over time, repeated human resolutions become reviewed wiki and perspective material, which lets coworkers handle more decisions safely without losing the audit trail. See the deeper architecture note: <a href="/architecture/autonomy-and-wwmd">Autonomy, WWMD, and trusted coworker decisions</a>.
+    </p>
   </section>
 
   <section id="data-layer">

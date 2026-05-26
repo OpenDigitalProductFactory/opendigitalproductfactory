@@ -15,6 +15,7 @@ DPF's user story is now archetype-led rather than module-led:
 - Pick the business type first: HVAC, clinic, retail, nonprofit, HOA, professional services, software platform, and other small-business categories.
 - The selected archetype shapes the customer portal, internal workspace vocabulary, worker home, marketing posture, and feature-contribution applicability.
 - AI coworkers are the primary interaction surface. They are purposed by role and route, but every side effect still goes through role checks, agent grants, approval gates, and audit logs.
+- WWMD is the trust-building autonomy path: coworkers can consult the founder-kernel wiki and principle vectors for ambiguous decisions, then return a confidence-scored recommendation, arbitration, escalation, or deferral with sources and an audit ledger.
 - Voice is an optional coworker modality: speech-to-text for input, text-to-speech for narrated decision/profile output where consent and provider setup allow it.
 - Build Studio is the governed self-development surface, but it is still being hardened. Use it honestly: ready for guided platform work and evidence capture, not a claim that every complex source change is fully autonomous today.
 
