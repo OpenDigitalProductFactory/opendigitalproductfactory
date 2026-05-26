@@ -5,7 +5,7 @@
 | Status | Active working plan + circulation packet |
 | Date | 2026-05-26 |
 | Branch | `feat/portal-ux-simplification` |
-| Primary anchors | [`2026-04-17-portal-navigation-consolidation-design.md`](../specs/2026-04-17-portal-navigation-consolidation-design.md), [`2026-05-20-portal-ux-audit.md`](../audits/2026-05-20-portal-ux-audit.md), [`2026-05-24-vertical-workspace-home-design.md`](../specs/2026-05-24-vertical-workspace-home-design.md), [`2026-05-16-ux-auditor-coworker-design.md`](../specs/2026-05-16-ux-auditor-coworker-design.md) |
+| Primary anchors | [`2026-04-17-portal-navigation-consolidation-design.md`](../specs/2026-04-17-portal-navigation-consolidation-design.md), [`2026-05-20-portal-ux-audit.md`](../audits/2026-05-20-portal-ux-audit.md), [`2026-05-24-vertical-workspace-home-design.md`](../specs/2026-05-24-vertical-workspace-home-design.md), [`2026-05-16-ux-auditor-coworker-design.md`](../specs/2026-05-16-ux-auditor-coworker-design.md), [`2026-05-26-pipedrive-crm-marketing-ux-fit-review.md`](../audits/2026-05-26-pipedrive-crm-marketing-ux-fit-review.md) |
 | Live backlog anchors | `EP-2b79c5c6-8a63-4184-9076-5257bb271cdd` (manual UX audit intake), `EP-WWMD-MCP`, `EP-BUILD-STUDIO-UX`, `EP-AI-OPSMAP`, `EP-REDUCTION-GEAR-ARCH` |
 | Execution mode | Outside Build Studio until the Build Studio UX/runtime is reliable enough to own this work |
 
@@ -20,6 +20,7 @@ Use this document as the single review packet for the cross-functional audit pas
 3. Confirm the execution order in §6: should any slice move earlier because it blocks trust or discovery?
 4. Identify any finding that should be deliberately rejected or deferred, with the reason.
 5. Identify the smallest evidence set needed for each slice to be merge-ready.
+6. Confirm the UX feature-fit gate is strict enough to stop new feature work from adding another dashboard, tab row, or component family without a clear home.
 
 ### Reviewer lanes
 
@@ -35,6 +36,7 @@ Use this document as the single review packet for the cross-functional audit pas
 | Finance / operations | Operational empty states | Do zero-state and setup paths help real operators act instead of reading empty dashboards? |
 | Architecture / data | Source of truth and substrate | Does the plan avoid route forks, duplicate models, and presentation-only fixes over data seams? |
 | Accessibility / QA | Navigation and visual robustness | Are keyboard route recovery, mobile layout, no-overlap, and failure-mode checks explicit enough? |
+| Incoming feature owners | Fit against portal architecture | Does each new feature plan name its owning area, persona, route family, nav layer, component reuse path, empty state, and verification evidence? |
 
 ### Feedback format
 
@@ -54,6 +56,7 @@ Recommendation: accept / change / defer / reject
 - The manual audit intake epic was live-verified through DB fallback on 2026-05-26 because MCP transport was unavailable in this session. The epic exists as `open` with zero items. That makes it a valid intake anchor, but accepted findings still need backlog materialization.
 - Slice 1 has already landed branch work for the Six-C Context route, readiness affordance, and KPI route regression coverage. The plan below keeps the full Slice 1 scope because 404 recovery still needs to be tightened.
 - Treat the 2026-05-20 audit as the baseline evidence, and the `feat/portal-ux-simplification` branch as current in-flight remediation. Do not rewrite baseline findings as if they are current after a slice has fixed them; add status notes instead.
+- The Pipedrive CRM Marketing Slice 1 plan was reviewed against this spine on 2026-05-26. It fits as a Business > Customer enhancement if it stays inside Customer IA, removes phase-placeholder tabs, converges component patterns, and avoids surprise coworker actions. See the fit review linked in the anchor table.
 
 ## 1. Decision
 
@@ -109,6 +112,7 @@ The latest manual UX audit (`2026-05-20-portal-ux-audit.md`) plus follow-on loca
 | UX-08 | Important | Platform AI | Grant/governance counts disagree across screens | Operators cannot trust AI workforce state | Slice 6 |
 | UX-09 | Important | Build Studio | Unknown/null labels and raw streaming text leak | Contributor cannot distinguish state from debug output | Slice 7 |
 | UX-10 | Cross-cutting | 404 / route recovery | Missing routes can lose shell context | Users must recover from implementation detail failures | Slice 1 and route QA |
+| UX-11 | Cross-cutting | Incoming feature plans | New UI work can bypass IA/component fit review | The portal becomes a patchwork of dashboards, tabs, and one-off widgets | Feature fit gate |
 
 ## 3. Design Principles For This Refactor
 
@@ -121,6 +125,7 @@ The latest manual UX audit (`2026-05-20-portal-ux-audit.md`) plus follow-on loca
 7. Theme-aware styling and restrained operational density are non-negotiable.
 8. Refactoring is part of each slice. Reserve time to remove mixed concepts or duplicated patterns rather than only layering new UI over old structure.
 9. Trust is a first-view requirement. If a link, coworker response, KPI, or status cannot explain what happened and what the user can do next, it does not belong in the primary decision surface.
+10. Feature fit comes before feature surface area. Every new UI plan must name its owning area, route family, persona, navigation layer, component reuse path, empty state, and evidence before implementation starts.
 
 ## 4. Persona Acceptance Gates
 
@@ -133,6 +138,22 @@ Every slice must name the user it is improving before it changes IA. The same co
 | Retail / service worker | Needs fast operational actions on a narrow device or shared workstation | Orders/tasks, low stock, current customer or location exceptions | Admin setup, platform AI internals, broad product architecture | Narrow viewport shows priority action stack without overlap and without requiring horizontal navigation memory |
 | Contributor / platform operator | Understands technical surfaces; needs dense diagnostics and accountability | Build/runtime state, AI routing health, governance gaps, receipts | Ambiguous null/unknown labels or raw streaming walls | `/platform/ai`, `/platform/ai/operations-map`, and `/build` group state into operator questions with drill-down to evidence |
 | External customer | Needs a simple customer-native path; should not learn internal management routes | Sign in, request, book, pay, approve, or check status | Internal `/storefront`, Platform, Build, Admin, or coworker governance surfaces | Internal labels do not train users that `/portal` is management; customer routes remain distinct from internal Storefront management |
+
+### 4.1 UX Feature Fit Gate
+
+Use this gate before accepting any UI-impacting feature plan, including route additions, tab additions, dashboard bands, metric tiles, coworker launchers, and workflow entry points.
+
+| Gate | Required answer |
+| ---- | --------------- |
+| Owning area | Which top-level area owns this work: Workspace, Business, Products, Platform, Knowledge, or customer-facing portal? |
+| Route family | Which route family is canonical, and which routes must not be created or promoted? |
+| Primary persona | Which user gets a simpler first viewport, and what should they not need to remember? |
+| Navigation layer | Is the work global nav, section nav, local page nav, or contextual action? Only one layer should change by default. |
+| Component convergence | Which existing components or patterns are reused? If new components are required, what duplicated pattern do they retire? |
+| Source truth | Which model, service, or read model owns the displayed state? |
+| Empty/failure state | What happens on a fresh install, unavailable provider, missing permission, or missing route? |
+| AI action boundary | Does any click start coworker work? If yes, preview and confirmation are required. |
+| Verification evidence | Which routes, viewports, data fixtures, and failure modes prove the change is usable? |
 
 ## 5. Target Shape
 
@@ -309,6 +330,7 @@ Verification:
 - Treat `EP-2b79c5c6-8a63-4184-9076-5257bb271cdd` as the intake epic for the 2026-05-20 manual audit findings until a governed backlog cleanup explicitly moves or supersedes it.
 - Before filing new work, query the live backlog for overlap under the intake epic and the owning delivery epic.
 - Do not leave audit findings as doc-only observations. Each accepted critical or important finding must map to one execution slice, one backlog item, or one explicit "not doing" decision.
+- Treat accepted feature-fit gaps the same way: either amend the feature plan before implementation, file a backlog item under the owning epic, or record an explicit defer/reject decision.
 - Group related findings by user harm and route family. Do not create one backlog item per element.
 - Record verification evidence with the slice: affected persona, route, viewport, data fixture, result, and screenshots where visual layout is part of the claim.
 
@@ -318,6 +340,7 @@ Verification:
 - Use docs/specs as anchors, but keep current runtime truth separate from future-state design.
 - Prefer small PR-sized slices.
 - Use MCP/backlog state before filing new work.
+- For any incoming UI plan, run the §4.1 fit gate and capture the result in the plan or a linked audit before implementation starts.
 - Keep refactoring inside each slice rather than accumulating cleanup debt. Spend roughly 20% of implementation effort removing mixed concepts, duplicated patterns, or leaky abstractions discovered by that slice.
 - Do not route this through Build Studio until Build Studio can produce reliable UX verification evidence.
 - No slice is done with screenshots alone. Each UI slice needs a persona task outcome and a failure-mode check.
