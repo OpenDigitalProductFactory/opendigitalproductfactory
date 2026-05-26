@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development if available, or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking. This is product behavior and MUST run through Build Studio; do not implement this feature directly from a human chat thread.
 
-**Goal:** Feedback clicks open the existing AI coworker shell in support-entry mode, carry typed context, and create a local `PlatformIssueReport` in `support_triage` with route, trigger, thread, and build context where available.
+**Goal:** Feedback clicks open the existing AI coworker shell in support-entry mode, carry typed context, and create or reconcile one local `PlatformIssueReport` in `support_triage` with route, trigger, support-session, thread, and build context where available.
 
-**Architecture:** Define one typed feedback event contract that both feedback buttons and the coworker shell consume. The shell remains the only panel surface; it enriches the clicked event with the currently loaded thread and active Build Studio build, then calls a server action that uses Phase 0's `createPlatformIssueReport()` writer. Persist `triggerKind` in Phase 1 because acceptance requires it on the created report; defer routing decisions, upstream bridge work, coalescing, implicit triggers, reverse notifications, and STT to later phases.
+**Architecture:** Define one typed feedback event contract that both feedback buttons and the coworker shell consume. The shell remains the only panel surface; it synchronously claims handled events, enriches the clicked event with the currently loaded thread and active Build Studio build, then calls a server action that uses Phase 0's `createPlatformIssueReport()` writer. Persist `triggerKind` and a per-user `supportSessionId` in Phase 1 because acceptance requires durable trigger context and review identified double-click/fallback races as a ship blocker; defer routing decisions, upstream bridge work, coalescing, implicit triggers, reverse notifications, and STT to later phases.
 
 **Tech Stack:** Next.js 16 App Router, React 19, TypeScript, Prisma 7, Vitest, React Testing Library, DPF MCP, Docker-served portal verification.
 
@@ -22,11 +22,14 @@
 
 ## Key Decisions
 
-- **Persist `triggerKind` now.** Phase 1 acceptance says the created report has `triggerKind`; the current schema has no such field. Add only `PlatformIssueReport.triggerKind String?` in this phase. Do not add coalescing, capacity decision, support summary, acknowledgement, or resolved fields.
+- **Persist `triggerKind` and `supportSessionId` now.** Phase 1 acceptance says the created report has `triggerKind`; the current schema has no such field. The support-session key is the minimal additional persistence needed to make support start idempotent across double-clicks, remounts, late thread creation, and shell/fallback races. Do not add coalescing, capacity decision, support summary, acknowledgement, or resolved fields.
 - **Use the existing shell.** Do not create a new support chat surface. `AgentCoworkerShell` already listens for `open-agent-feedback` and `open-agent-panel`; extend that listener.
 - **Support mode is an entry mode, not a new backend `CoworkerMode`.** Existing runtime `CoworkerMode` is `"advise" | "act"`. Phase 1 should add support copy and support report creation without widening that runtime enum.
 - **Do not write public build IDs into relation fields.** The browser has the public Build Studio `buildId` such as `FB-12345678`. `PlatformIssueReport.featureBuildId` is a relation to internal `FeatureBuild.id`. The server action must resolve public `buildId` to internal `id` before calling the writer.
-- **Manual click should not force category selection.** Healthy installs open the coworker with support copy. The fallback `FeedbackForm` remains only for shell-unavailable cases and continues to post through `/api/quality/report`.
+- **Manual click should not force category selection.** Healthy installs open the coworker with support copy. The fallback `FeedbackForm` remains only for shell-unavailable cases and continues to post through the existing fallback path, but it must carry the same `supportSessionId`, `routeContext`, and `triggerKind` so a fallback race cannot create a duplicate report.
+- **Explicit Feedback buttons are `manual` triggers.** Per spec section 6.1, `triggerKind` describes why feedback was raised (`manual`, `runtime-error`, `grant-denied`, etc.), not which UI control was clicked. `FeedbackButton` and `HeaderFeedbackButton` should both emit `triggerKind: "manual"` for Phase 1. Do not invent button-specific trigger kinds such as `"feedback-button"` or `"header-feedback"`.
+- **Thread reconciliation is monotonic.** A support report with no `threadId` may be updated with a validated user-owned thread. A report with the same `threadId` is already reconciled. A report with a different `threadId` must not be relinked.
+- **Abuse limits are server-side.** Do not rely on client throttling. Enforce 3 support starts per user per minute and 10 per user per hour, with user-visible text feedback and audit logging on repeated burst violations.
 
 ## File Map
 
@@ -35,21 +38,21 @@
 - Create `apps/web/lib/feedback/feedback-event.test.ts`
   - Protects the event vocabulary and manual payload shape.
 - Modify `packages/db/prisma/schema.prisma`
-  - Add `triggerKind String?` to `PlatformIssueReport`.
-- Create migration under `packages/db/prisma/migrations/<timestamp>_add_issue_report_trigger_kind/migration.sql`
-  - Add nullable `triggerKind`; no backfill.
+  - Add `triggerKind String?`, `supportSessionId String?`, and a user-scoped unique constraint on `[reportedById, supportSessionId]` to `PlatformIssueReport`.
+- Create migration under `packages/db/prisma/migrations/<timestamp>_add_issue_report_support_context/migration.sql`
+  - Add nullable `triggerKind` and `supportSessionId`, plus the user-scoped unique index; no backfill.
 - Modify `apps/web/lib/quality/platform-issue-reports.ts`
-  - Accept and persist `triggerKind`.
+  - Accept and persist `triggerKind` and `supportSessionId`.
 - Modify `apps/web/lib/quality/platform-issue-reports.test.ts`
-  - Prove writer persists `triggerKind`.
+  - Prove writer persists `triggerKind` and `supportSessionId`.
 - Create `apps/web/lib/actions/feedback-support.ts`
-  - Server action for support-triage report creation.
+  - Server action for support-triage report creation, idempotent reconciliation, build ID resolution, thread ownership validation, and rate limiting.
 - Create `apps/web/lib/actions/feedback-support.test.ts`
-  - Proves auth, build ID resolution, thread pass-through, status, source, and trigger persistence.
+  - Proves auth, build ID resolution, thread pass-through, status, source, trigger persistence, support-session dedupe, monotonic thread reconciliation, and rate limits.
 - Modify `apps/web/components/feedback/FeedbackButton.tsx`
   - Dispatch typed event detail with route and `triggerKind: "manual"`.
 - Modify `apps/web/components/feedback/HeaderFeedbackButton.tsx`
-  - Same event detail and unchanged fallback behavior.
+  - Same event detail (`triggerKind: "manual"`) and session-aware fallback behavior.
 - Create or modify feedback button tests:
   - `apps/web/components/feedback/FeedbackButton.test.tsx`
   - `apps/web/components/feedback/HeaderFeedbackButton.test.tsx`
@@ -88,11 +91,11 @@ pnpm --filter web exec vitest run lib/quality/issue-report-status.test.ts lib/qu
 
 Expected: all pass. If they fail, stop and reconcile before changing Phase 1 code.
 
-### Task 2: Add `triggerKind` to `PlatformIssueReport`
+### Task 2: Add support context to `PlatformIssueReport`
 
 **Files:**
 - Modify: `packages/db/prisma/schema.prisma`
-- Create: `packages/db/prisma/migrations/<timestamp>_add_issue_report_trigger_kind/migration.sql`
+- Create: `packages/db/prisma/migrations/<timestamp>_add_issue_report_support_context/migration.sql`
 - Modify: `apps/web/lib/quality/platform-issue-reports.ts`
 - Modify: `apps/web/lib/quality/platform-issue-reports.test.ts`
 
@@ -101,17 +104,19 @@ Expected: all pass. If they fail, stop and reconcile before changing Phase 1 cod
 Add a test to `platform-issue-reports.test.ts`:
 
 ```ts
-it("persists triggerKind when provided", async () => {
+it("persists support context when provided", async () => {
   await createPlatformIssueReport({
     type: "user_report",
     title: "Build help",
     source: "support_mode",
     status: ISSUE_REPORT_STATUS.SUPPORT_TRIAGE,
     triggerKind: "manual",
+    supportSessionId: "dpf_support_test",
   });
 
   const args = prismaMock.platformIssueReport.create.mock.calls[0]?.[0];
   expect(args?.data.triggerKind).toBe("manual");
+  expect(args?.data.supportSessionId).toBe("dpf_support_test");
 });
 ```
 
@@ -123,26 +128,31 @@ Run:
 pnpm --filter web exec vitest run lib/quality/platform-issue-reports.test.ts
 ```
 
-Expected: fail because `triggerKind` is not in `CreatePlatformIssueReportInput` or writer data.
+Expected: fail because support context is not in `CreatePlatformIssueReportInput` or writer data.
 
-- [ ] **Step 3: Add schema field and migration**
+- [ ] **Step 3: Add schema fields, index, and migration**
 
 Modify `PlatformIssueReport`:
 
 ```prisma
   triggerKind         String?
+  supportSessionId    String?
+
+  @@unique([reportedById, supportSessionId])
+  @@index([reportedById, source, status, createdAt])
 ```
 
 Create migration:
 
 ```powershell
-pnpm --filter @dpf/db exec prisma migrate dev --name add_issue_report_trigger_kind
+pnpm --filter @dpf/db exec prisma migrate dev --name add_issue_report_support_context
 ```
 
-Expected migration SQL:
+Expected migration SQL includes:
 
 ```sql
 ALTER TABLE "PlatformIssueReport" ADD COLUMN "triggerKind" TEXT;
+ALTER TABLE "PlatformIssueReport" ADD COLUMN "supportSessionId" TEXT;
 ```
 
 Do not backfill existing reports.
@@ -153,15 +163,17 @@ Add to `CreatePlatformIssueReportInput`:
 
 ```ts
   triggerKind?: string | null;
+  supportSessionId?: string | null;
 ```
 
 Add to the `create` data:
 
 ```ts
       triggerKind: trimTo(input.triggerKind ?? null, LIMITS.source),
+      supportSessionId: trimTo(input.supportSessionId ?? null, LIMITS.source),
 ```
 
-Use the existing short string limit style; if a dedicated `triggerKind` limit is added, keep it near the Phase 0 `LIMITS` object.
+Use the existing short string limit style; if dedicated `triggerKind` or `supportSessionId` limits are added, keep them near the Phase 0 `LIMITS` object.
 
 - [ ] **Step 5: Run focused tests**
 
@@ -179,7 +191,7 @@ Run:
 
 ```powershell
 git add packages/db/prisma/schema.prisma packages/db/prisma/migrations apps/web/lib/quality/platform-issue-reports.ts apps/web/lib/quality/platform-issue-reports.test.ts
-git commit -s -m "feat(feedback): persist issue report trigger kind"
+git commit -s -m "feat(feedback): persist issue report support context"
 ```
 
 ---
@@ -220,12 +232,13 @@ describe("feedback-event", () => {
     expect(createManualFeedbackEventDetail("/build")).toMatchObject({
       triggerKind: "manual",
       routeContext: "/build",
+      supportSessionId: expect.stringMatching(/^dpf_support_/),
       autoFilePolicy: "ask",
     });
   });
 
   it("rejects malformed event details", () => {
-    expect(isFeedbackEventDetail({ triggerKind: "manual", routeContext: "/build" })).toBe(true);
+    expect(isFeedbackEventDetail({ triggerKind: "manual", routeContext: "/build", supportSessionId: "dpf_support_test" })).toBe(true);
     expect(isFeedbackEventDetail({ triggerKind: "unknown", routeContext: "/build" })).toBe(false);
     expect(isFeedbackEventDetail({ triggerKind: "manual" })).toBe(false);
   });
@@ -261,6 +274,7 @@ export type FeedbackTriggerKind = (typeof FEEDBACK_TRIGGER_KINDS)[number];
 export type FeedbackEventDetail = {
   triggerKind: FeedbackTriggerKind;
   routeContext: string;
+  supportSessionId: string;
   title?: string;
   description?: string;
   errorStack?: string;
@@ -273,7 +287,7 @@ export type FeedbackEventDetail = {
 };
 ```
 
-Also add `createManualFeedbackEventDetail(routeContext: string)` and `isFeedbackEventDetail(value: unknown)`.
+Also add `createManualFeedbackEventDetail(routeContext: string)` and `isFeedbackEventDetail(value: unknown)`. Generate `supportSessionId` with at least 128 bits of entropy. Validate `routeContext` as a normalized path string with a conservative length cap; reject malformed trigger details.
 
 - [ ] **Step 4: Run the contract test**
 
@@ -301,6 +315,7 @@ Test both components with `next/navigation` mocked to return `/build`. Capture `
 expect(detail).toMatchObject({
   triggerKind: "manual",
   routeContext: "/build",
+  supportSessionId: expect.stringMatching(/^dpf_support_/),
   autoFilePolicy: "ask",
 });
 ```
@@ -335,16 +350,19 @@ In both button files:
 import { createManualFeedbackEventDetail } from "@/lib/feedback/feedback-event";
 
 const event = new CustomEvent("open-agent-feedback", {
+  cancelable: true,
   detail: createManualFeedbackEventDetail(pathname),
 });
-document.dispatchEvent(event);
+const handled = !document.dispatchEvent(event);
 ```
 
 Leave fallback `FeedbackForm` behavior intact:
 
 ```tsx
-<FeedbackForm routeContext={pathname} source="manual" ... />
+<FeedbackForm routeContext={pathname} source="manual" triggerKind={detail.triggerKind} supportSessionId={detail.supportSessionId} ... />
 ```
+
+Only open the fallback form if `handled` is false after the existing shell-detection grace period.
 
 - [ ] **Step 4: Run feedback component tests**
 
@@ -384,6 +402,9 @@ Mock `auth`, `prisma`, and `createPlatformIssueReport`. Cover:
 - public `activeBuildId: "FB-12345678"` resolves to internal `FeatureBuild.id`;
 - `threadId` is passed when available;
 - `triggerKind` is passed as `"manual"`;
+- `supportSessionId` is passed and dedupes repeated calls for the same user action;
+- a conflicting existing `threadId` is not overwritten;
+- rate limits reject the fourth support start inside one minute;
 - if no active build is found, the action still writes route/thread/trigger with `featureBuildId: null`.
 
 Expected writer call:
@@ -397,6 +418,7 @@ expect(createPlatformIssueReportMock).toHaveBeenCalledWith(
     status: ISSUE_REPORT_STATUS.SUPPORT_TRIAGE,
     routeContext: "/build",
     triggerKind: "manual",
+    supportSessionId: "dpf_support_test",
     reportedById: "user-1",
     threadId: "thread-1",
     featureBuildId: "internal-feature-build-id",
@@ -438,6 +460,8 @@ type StartFeedbackSupportInput = {
 };
 ```
 
+Require `detail.supportSessionId`, normalize route/trigger values, and reject oversized optional text fields. Look up existing reports by authenticated `reportedById` plus `supportSessionId` before creating. If an existing row has no `threadId`, update it with the validated user-owned thread. If it has a different `threadId`, return a conflict without overwriting.
+
 Resolve public build ID:
 
 ```ts
@@ -463,6 +487,7 @@ const { reportId } = await createPlatformIssueReport({
   source: "support_mode",
   status: ISSUE_REPORT_STATUS.SUPPORT_TRIAGE,
   triggerKind: input.detail.triggerKind,
+  supportSessionId: input.detail.supportSessionId,
   reportedById: session.user.id,
   threadId: input.threadId ?? input.detail.threadId ?? featureBuild?.threadId ?? null,
   taskRunId: input.detail.taskRunId ?? null,
@@ -470,7 +495,7 @@ const { reportId } = await createPlatformIssueReport({
 });
 ```
 
-Return `{ ok: true, reportId }` or `{ ok: false, error: "..." }`. Do not throw into the client shell for normal failures.
+Return `{ ok: true, reportId }` or `{ ok: false, error: "..." }`. Do not throw into the client shell for normal failures. Enforce 3 support starts per user per minute and 10 per user per hour at this server boundary.
 
 - [ ] **Step 4: Run action tests**
 
@@ -534,10 +559,11 @@ In `AgentCoworkerShell.tsx`:
 - import `isFeedbackEventDetail`, `FeedbackEventDetail`, and `startFeedbackSupport`;
 - keep legacy panel detail support unchanged;
 - when event name is `open-agent-feedback` and detail is valid:
+  - validate `isFeedbackEventDetail()` first, then call `preventDefault()` only after accepting a valid support event so malformed or unhandled events can still fall through to the existing fallback path;
   - set panel open and save preference;
   - inject a support welcome message, not a category form;
   - store pending support detail in state or ref;
-  - create the support report once when `threadId` is available.
+  - create or reconcile the support report once per `supportSessionId`, updating the same report when `threadId` becomes available.
 
 Recommended visible support copy:
 
@@ -672,16 +698,16 @@ Expected UI:
 Run:
 
 ```powershell
-docker exec dpf-postgres-1 psql -U dpf -d dpf -c "SELECT \"reportId\", status, source, \"triggerKind\", \"routeContext\", \"threadId\" IS NOT NULL AS has_thread, \"featureBuildId\" IS NOT NULL AS has_build FROM \"PlatformIssueReport\" WHERE status='support_triage' ORDER BY \"createdAt\" DESC LIMIT 3;"
+docker exec dpf-postgres-1 psql -U dpf -d dpf -c "SELECT \"reportId\", status, source, \"triggerKind\", \"supportSessionId\" IS NOT NULL AS has_support_session, \"routeContext\", \"threadId\" IS NOT NULL AS has_thread, \"featureBuildId\" IS NOT NULL AS has_build FROM \"PlatformIssueReport\" WHERE status='support_triage' ORDER BY \"createdAt\" DESC LIMIT 3;"
 ```
 
-Expected: newest row has `status=support_triage`, `source=support_mode`, `triggerKind=manual`, `routeContext=/build`, and `has_thread=true` when the coworker thread loaded. `has_build=true` only when a Build Studio active build exists.
+Expected: newest row has `status=support_triage`, `source=support_mode`, `triggerKind=manual`, `has_support_session=true`, `routeContext=/build`, and `has_thread=true` when the coworker thread loaded. `has_build=true` only when a Build Studio active build exists.
 
 - [ ] **Step 4: Verify fallback still posts**
 
 Temporarily test a shell-unavailable path without source edits if possible: use a route/layout state where `AgentCoworkerShell` is not mounted, or in a browser devtools test remove the panel listener before click. Submit fallback form.
 
-Expected DB row: `source=manual`, ordinary `status=open`, and no `support_triage` unless the shell handled the event.
+Expected DB row: `source=manual`, ordinary `status=open`, and the same `supportSessionId`/`triggerKind` carried from the click. No duplicate `support_triage` row should appear for the same user action unless the shell genuinely handled and reconciled that same support session.
 
 - [ ] **Step 5: Verify non-build route**
 
@@ -696,7 +722,7 @@ Evidence doc must include:
 - commands run and pass/fail result;
 - Chrome MCP path driven;
 - screenshots or text observations for `/build` and non-build support entry;
-- SQL query output proving `routeContext`, `triggerKind`, `threadId` when available, and `status=support_triage`;
+- SQL query output proving `routeContext`, `triggerKind`, `supportSessionId`, `threadId` when available, and `status=support_triage`;
 - fallback-form result;
 - explicit statement that Phase 2+ out-of-scope items were not implemented.
 

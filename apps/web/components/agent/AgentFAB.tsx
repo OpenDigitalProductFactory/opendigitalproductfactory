@@ -81,6 +81,7 @@ export function AgentFAB({ onClick }: Props) {
   return (
     <button
       type="button"
+      data-agent-fab="true"
       onMouseDown={handleMouseDown}
       onClick={handleClick}
       title="Open AI Co-worker"
