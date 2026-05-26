@@ -1866,6 +1866,16 @@ if (-not (Test-StepDone "mcp_seed")) {
             Write-Warn "  .\scripts\seed-worktree-mcp.ps1"
         }
     }
+    $skillPackScript = Join-Path $DPF_DIR "scripts\ensure-dpf-skill-pack.ps1"
+    if (Test-Path $skillPackScript) {
+        Write-Action "Ensuring DPF contributor skill pack..."
+        try {
+            & $skillPackScript -RepoRoot $DPF_DIR
+            Write-OK "DPF contributor skill pack checked."
+        } catch {
+            Write-Warn "DPF contributor skill pack setup failed (non-fatal): $_"
+        }
+    }
     Save-Progress "mcp_seed"
 }
 } else {

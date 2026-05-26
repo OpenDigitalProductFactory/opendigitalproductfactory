@@ -72,10 +72,22 @@ function addFinding(
 export function auditSkillMarkdown(input: AuditInput): SkillAuditResult {
   const { frontmatter, body } = parseFrontmatter(input.content);
   const description = frontmatter.description ?? "";
+  const skillId = typeof frontmatter.name === "string" && frontmatter.name.trim() !== ""
+    ? frontmatter.name
+    : input.path;
   const triggerPhraseCount = countTriggerPhrases(frontmatter.triggerPattern);
   const fullText = `${description}\n${body}`;
   const lineCount = body.split("\n").length;
   const findings: SkillAuditFinding[] = [];
+
+  if (skillId === input.path) {
+    addFinding(
+      findings,
+      "name-missing",
+      "error",
+      "Skill frontmatter must include a non-empty name.",
+    );
+  }
 
   if (description.length < 100) {
     addFinding(
@@ -156,7 +168,7 @@ export function auditSkillMarkdown(input: AuditInput): SkillAuditResult {
 
   return {
     path: input.path,
-    skillId: frontmatter.name,
+    skillId,
     description,
     score: Math.max(0, 100 - penalty),
     findings,

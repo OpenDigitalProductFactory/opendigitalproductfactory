@@ -249,6 +249,15 @@ step "Workspace dependencies"
 pnpm install
 ok "Dependencies installed"
 
+# Contributor coding clients are optional for customer installs. If Claude Code
+# or Codex is present, wire the checked-in dpf-platform skill pack locally.
+step "Contributor skill pack"
+if [ -f scripts/ensure-dpf-skill-pack.sh ]; then
+  bash scripts/ensure-dpf-skill-pack.sh "$REPO_ROOT" || warn "DPF contributor skill pack setup failed (non-fatal)."
+else
+  warn "scripts/ensure-dpf-skill-pack.sh not found; skipping contributor skill pack setup."
+fi
+
 # 8. Resolve host hardware profile (Phase 5 macOS / Linux detector).
 #    Writes DPF_HOST_PROFILE for docker-entrypoint.sh to consume on
 #    portal-init.

@@ -180,6 +180,14 @@ foreach ($pair in $pairs) {
     Write-Ok "Wrote $($pair.Dst)"
 }
 
+Write-Step "Ensuring DPF skill pack"
+$skillPackScript = Join-Path $Target "scripts\ensure-dpf-skill-pack.ps1"
+if (Test-Path -LiteralPath $skillPackScript) {
+    & $skillPackScript -RepoRoot $Target
+} else {
+    Write-Skip "No DPF skill pack installer found at $skillPackScript"
+}
+
 Write-Host ""
-Write-Host "Done. Restart Claude Code (or VS Code) in the worktree to pick up the dpf connector." -ForegroundColor Green
+Write-Host "Done. Restart Claude Code, Codex, or VS Code in the worktree to pick up the dpf connector and skill pack." -ForegroundColor Green
 Write-Host ""

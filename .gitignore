@@ -43,6 +43,7 @@ test-results/
 .codex/
 .claude/*.jsonl
 .claude/*.lock
+.claude/settings.local.json
 .claude/autonomous-e2e-progress.md
 .claude/worktrees/
 

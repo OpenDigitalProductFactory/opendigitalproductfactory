@@ -7987,6 +7987,25 @@ model SkillDefinition {
   @@index([lifecycleState])
 }
 
+model SkillSeedWarning {
+  id          String   @id @default(cuid())
+  warningId   String   @unique
+  skillId     String
+  warningType String
+  message     String
+  legacyPath  String?
+  pluginPath  String?
+  sourceType  String   @default("dpf-platform-plugin")
+  metadata    Json     @default("{}")
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([skillId])
+  @@index([warningType])
+  @@index([resolvedAt])
+}
+
 model SkillAssignment {
   id         String   @id @default(cuid())
   // Business skill identifier (e.g. "code-runner"), references SkillDefinition.skillId.
