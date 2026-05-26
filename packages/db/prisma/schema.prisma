@@ -4293,12 +4293,16 @@ model ExternalEvidenceRecord {
   provider      String
   resultSummary String
   details       Json?
+  buildId       String?
+  taskRunId     String?
   createdAt     DateTime @default(now())
   actorUser     User     @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
 
   @@index([actorUserId, createdAt])
   @@index([routeContext, operationType])
   @@index([operationType, createdAt])
+  @@index([buildId, createdAt])
+  @@index([taskRunId, createdAt])
 }
 
 model FeatureBuild {

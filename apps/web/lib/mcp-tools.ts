@@ -1090,6 +1090,32 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "record_external_development_evidence",
+    description: "Record Claude/Codex or other external development handoff evidence with optional Build Studio build/task links. Use for branches, commits, changed files, verification results, local integration output, unresolved questions, and skills used.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        provider: { type: "string", description: "External development provider, for example codex or claude" },
+        externalSessionId: { type: "string", description: "External thread/session/capsule identifier" },
+        buildId: { type: "string", description: "Optional FB-* build id" },
+        taskRunId: { type: "string", description: "Optional TaskRun id" },
+        routeContext: { type: "string", description: "Route context where the work belongs, usually /build" },
+        summary: { type: "string", description: "Operator-readable handoff summary" },
+        commits: { type: "array", items: { type: "string" }, description: "Commit SHAs or refs included in the handoff" },
+        changedFiles: { type: "array", items: { type: "string" }, description: "Files touched by the external work" },
+        verification: { type: "array", items: { type: "string" }, description: "Verification commands and outcomes" },
+        localIntegration: { type: "object", description: "Local merged-code integration result summary" },
+        unresolvedQuestions: { type: "array", items: { type: "string" }, description: "Open questions that still need decision or founder review" },
+        skillIds: { type: "array", items: { type: "string" }, description: "DPF skill ids used by the external contributor" },
+      },
+      required: ["provider", "externalSessionId", "summary", "routeContext"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+  },
+  {
     name: "record_functional_failure_evidence",
     description: "Create or update a deduped backlog item from Playwright FunctionalFailureEvidence. Uses a deterministic testId+route+actual fingerprint and records an evidence activity; the cross-cutting audit lives in ToolExecution. Side-effecting.",
     inputSchema: {
@@ -5579,6 +5605,70 @@ export async function executeTool(
         entityId: activity.id,
         message: `Recorded ${kindRaw} evidence for ${itemIdRaw}`,
         data: { activityId: activity.id, recordedAt: activity.recordedAt.toISOString() },
+      };
+    }
+
+    case "record_external_development_evidence": {
+      const stringValue = (key: string) => (typeof params[key] === "string" ? String(params[key]).trim() : "");
+      const stringArray = (key: string) => (
+        Array.isArray(params[key])
+          ? (params[key] as unknown[])
+            .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+            .map((value) => value.trim())
+          : []
+      );
+      const provider = stringValue("provider");
+      const externalSessionId = stringValue("externalSessionId");
+      const summary = stringValue("summary");
+      const routeContext = stringValue("routeContext") || context?.routeContext || "";
+      const missing = [
+        ["provider", provider],
+        ["externalSessionId", externalSessionId],
+        ["summary", summary],
+        ["routeContext", routeContext],
+      ].filter(([, value]) => !value).map(([key]) => key);
+      if (missing.length > 0) {
+        return {
+          success: false,
+          error: "missing_required",
+          message: `Missing required external development evidence field(s): ${missing.join(", ")}`,
+        };
+      }
+
+      const buildId = stringValue("buildId") || undefined;
+      const taskRunId = stringValue("taskRunId") || undefined;
+      const localIntegration =
+        params["localIntegration"] && typeof params["localIntegration"] === "object" && !Array.isArray(params["localIntegration"])
+          ? params["localIntegration"] as Record<string, unknown>
+          : null;
+      const details = {
+        commits: stringArray("commits"),
+        changedFiles: stringArray("changedFiles"),
+        verification: stringArray("verification"),
+        localIntegration,
+        unresolvedQuestions: stringArray("unresolvedQuestions"),
+        skillIds: stringArray("skillIds"),
+      };
+      const evidence = await recordExternalEvidence({
+        actorUserId: userId,
+        routeContext,
+        operationType: "external_development_handoff",
+        target: externalSessionId,
+        provider,
+        resultSummary: summary,
+        buildId,
+        taskRunId,
+        details: details as unknown as import("@dpf/db").Prisma.InputJsonValue,
+      });
+      return {
+        success: true,
+        entityId: evidence.id,
+        message: `Recorded external development evidence from ${provider}.`,
+        data: {
+          evidenceId: evidence.id,
+          buildId: buildId ?? null,
+          taskRunId: taskRunId ?? null,
+        },
       };
     }
 
