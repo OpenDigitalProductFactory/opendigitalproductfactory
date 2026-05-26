@@ -10,7 +10,7 @@ Usage:
 
 Builds portal and portal-init with DPF_VERSION set to the current git HEAD,
 recreates both services without rebuilding again, and verifies both containers
-reference the same image ID.
+carry the same DPF version marker.
 
 Set DPF_COMPOSE_ENV_FILE to override the Docker Compose env file. By default,
 the helper uses this checkout's .env, then $HOME/dpf/.env when present.
@@ -75,14 +75,31 @@ if [ -z "$portal_container" ] || [ -z "$portal_init_container" ]; then
   exit 1
 fi
 
-portal_image="$(docker inspect -f '{{.Image}}' "$portal_container")"
-portal_init_image="$(docker inspect -f '{{.Image}}' "$portal_init_container")"
+version_tmp="$(mktemp -d)"
+trap 'rm -rf "$version_tmp"' EXIT
 
-if [ "$portal_image" != "$portal_init_image" ]; then
-  echo "[redeploy-portal] portal and portal-init image IDs differ." >&2
-  echo "[redeploy-portal] portal=$portal_image" >&2
-  echo "[redeploy-portal] portal-init=$portal_init_image" >&2
+read_container_version() {
+  local service="$1"
+  local container="$2"
+  local version_file="$version_tmp/$service.dpf-image-version"
+
+  docker cp "$container:/app/.dpf-image-version" "$version_file"
+  tr -d '\r\n' < "$version_file"
+}
+
+portal_version="$(read_container_version portal "$portal_container")"
+portal_init_version="$(read_container_version portal-init "$portal_init_container")"
+
+if [ "$portal_version" != "$sha" ]; then
+  echo "[redeploy-portal] portal image version differs from build SHA." >&2
+  echo "[redeploy-portal] portal=$portal_version expected=$sha" >&2
   exit 1
 fi
 
-echo "[redeploy-portal] portal and portal-init image IDs match: $portal_image"
+if [ "$portal_init_version" != "$sha" ]; then
+  echo "[redeploy-portal] portal-init image version differs from build SHA." >&2
+  echo "[redeploy-portal] portal-init=$portal_init_version expected=$sha" >&2
+  exit 1
+fi
+
+echo "[redeploy-portal] portal and portal-init image versions match DPF_VERSION=$sha"
