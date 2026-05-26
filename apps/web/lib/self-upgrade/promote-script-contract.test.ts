@@ -51,6 +51,7 @@ function runScript(env: Record<string, string | undefined>, extraArgs: string[] 
     "-i",
     'PATH="$PATH"',
     ...envAssignments,
+    "bash",
     quoteForBash(SCRIPT),
     "--self-upgrade",
     ...extraArgs.map(quoteForBash),

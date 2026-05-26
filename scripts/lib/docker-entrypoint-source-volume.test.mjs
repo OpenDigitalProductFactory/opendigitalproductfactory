@@ -36,3 +36,35 @@ test("source-volume snapshot commits add the safe-directory allowance before loc
     /git init -b dpf-upstream\s+ensure_workspace_safe_directory\s+git config user\.email/,
   );
 });
+
+test("workspace dependency install disables pnpm's interactive modules purge prompt", () => {
+  const body = functionBody("install_workspace_dependencies");
+  const matches = [...body.matchAll(/pnpm install(?: --frozen-lockfile)? --config\.confirmModulesPurge=false/g)];
+
+  assert.equal(
+    matches.length,
+    2,
+    "both frozen and fallback pnpm install commands should disable the non-TTY modules purge prompt",
+  );
+});
+
+test("workspace dependency install skips lifecycle scripts before explicit Prisma generation", () => {
+  const body = functionBody("install_workspace_dependencies");
+  const installMatches = [...body.matchAll(/pnpm install(?: --frozen-lockfile)? --config\.confirmModulesPurge=false --ignore-scripts/g)];
+
+  assert.equal(
+    installMatches.length,
+    2,
+    "both install commands should skip lifecycle scripts while the node_modules tree is being recreated",
+  );
+  assert.match(
+    body,
+    /pnpm exec prisma generate --schema packages\/db\/prisma\/schema\.prisma/,
+    "Prisma generation should use the workspace-root CLI with an explicit schema path",
+  );
+  assert.doesNotMatch(
+    body,
+    /pnpm --filter @dpf\/db exec prisma generate/,
+    "Prisma generation should not rely on package-local CLI links in the production source volume",
+  );
+});
