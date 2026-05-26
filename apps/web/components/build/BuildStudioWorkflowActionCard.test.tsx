@@ -305,8 +305,12 @@ describe("BuildStudioWorkflowActionCard decomposition affordances", () => {
     }
   });
 
-  it("opens the coworker with parent-amendment copy for child builds", async () => {
-    const dispatchSpy = vi.spyOn(document, "dispatchEvent");
+  it("emits the open-parent-design-amendment event for child builds", async () => {
+    const received: unknown[] = [];
+    const handler = (event: Event) => {
+      received.push((event as CustomEvent).detail);
+    };
+    document.addEventListener("open-parent-design-amendment", handler);
     const action: BuildStudioWorkflowAction = {
       kind: "amend-parent-design",
       title: "Amend Parent Design",
@@ -318,26 +322,22 @@ describe("BuildStudioWorkflowActionCard decomposition affordances", () => {
       coworkerPrompt: "Help me amend the parent design instead of decomposing this child.",
     };
 
-    render(
-      <BuildStudioWorkflowActionCard
-        build={makeBuild({ buildId: "FB-CHILD", parentEpicId: "epic-row-1", decisionInteraction: null })}
-        action={action}
-      />,
-    );
+    try {
+      render(
+        <BuildStudioWorkflowActionCard
+          build={makeBuild({ buildId: "FB-CHILD", parentEpicId: "epic-row-1", decisionInteraction: null })}
+          action={action}
+        />,
+      );
 
-    fireEvent.click(screen.getByRole("button", { name: "Amend parent design" }));
+      fireEvent.click(screen.getByRole("button", { name: "Amend parent design" }));
 
-    await waitFor(() => {
-      expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({
-        type: "open-agent-panel",
-      }));
-    });
-    const event = dispatchSpy.mock.calls
-      .map((call) => call[0])
-      .find((candidate) => candidate.type === "open-agent-panel") as CustomEvent;
-    expect(event.detail.autoMessage).toContain("parent design");
-    expect(event.detail.targetBuildId).toBe("FB-CHILD");
-    dispatchSpy.mockRestore();
+      await waitFor(() => {
+        expect(received).toEqual([{ buildId: "FB-CHILD" }]);
+      });
+    } finally {
+      document.removeEventListener("open-parent-design-amendment", handler);
+    }
   });
 });
 
