@@ -119,6 +119,17 @@ export type ToolDefinition = {
   requiresExternalAccess?: boolean;
   executionMode?: "proposal" | "immediate";
   sideEffect?: boolean;
+  /**
+   * Tool captures the coworker's own recommendation or work product as a
+   * structured artifact (e.g. save_marketing_review). Persistence-only; no
+   * external action. Coworkers running in `advise` mode are still permitted
+   * to call these tools because the recommendation IS the deliverable — the
+   * advise/act distinction guards against acting on the outside world, not
+   * against recording the advice the user explicitly asked for. The tool
+   * remains `sideEffect: true` for MCP annotations and tool-execution
+   * memory; this flag only exempts it from the advise-mode runtime filter.
+   */
+  coworkerArtifact?: boolean;
   /** When set, tool is only available during these build phases.
    *  Null/undefined = available in all phases (non-build tools). */
   buildPhases?: BuildPhaseTag[] | null;
@@ -1339,6 +1350,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "operate_marketing",
     sideEffect: true,
+    coworkerArtifact: true,
   },
   {
     name: "create_marketing_campaign_brief",
@@ -1359,6 +1371,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "operate_marketing",
     sideEffect: true,
+    coworkerArtifact: true,
   },
   {
     name: "create_marketing_asset_task",
@@ -1376,6 +1389,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "operate_marketing",
     sideEffect: true,
+    coworkerArtifact: true,
   },
   {
     name: "record_marketing_kpi_checkpoint",
@@ -1392,6 +1406,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "operate_marketing",
     sideEffect: true,
+    coworkerArtifact: true,
   },
   {
     name: "create_marketing_automation_candidate",
@@ -1409,6 +1424,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "operate_marketing",
     sideEffect: true,
+    coworkerArtifact: true,
   },
   {
     name: "analyze_seo_opportunity",
