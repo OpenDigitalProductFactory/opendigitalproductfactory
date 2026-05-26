@@ -70,6 +70,8 @@ import {
   cliAdapter,
   CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE,
   extractMentionedPlatformToolNames,
+  parseCliJsonOutput,
+  parseCliStreamOutput,
 } from "./cli-adapter";
 import { InferenceError } from "@/lib/ai-inference";
 import type { AdapterRequest } from "./adapter-types";
@@ -568,5 +570,96 @@ describe("cliAdapter", () => {
       const result = await cliAdapter.execute(makeMcpRequest());
       expect(result.toolCalls.map((tc) => tc.name)).toEqual(["save_build_notes"]);
     });
+  });
+});
+
+// ── CLI parser tests (Phase J fix: surface mcp__dpf__ pre-executed names) ──
+//
+// Regression coverage for the false-positive NO-CALL-BUT-MENTIONED tracer.
+// When the CLI MCP client already executed an mcp__dpf__* call before we
+// parsed the output, the parser strips it from `toolCalls` (correctly, to
+// avoid double-execution) but used to drop the name on the floor. The trace
+// then logged "agent mentioned a tool but didn't call it" when the agent's
+// post-execution narration referenced the tool name in chat. That signal
+// misled the Phase J Dale dogfood troubleshooter into blaming the model.
+//
+// These tests pin the contract: cliPreExecutedNames is populated with the
+// stripped-prefix names so the trace can subtract them from "mentioned".
+
+describe("parseCliStreamOutput", () => {
+  it("captures mcp__dpf__ tool names as cliPreExecutedNames (stream)", () => {
+    const stream = [
+      '{"type":"assistant","content":"I will file a quality issue."}',
+      '{"type":"tool_use","id":"x1","name":"mcp__dpf__report_quality_issue","input":{"title":"t","type":"feedback"}}',
+      '{"type":"result","result":"done","usage":{"input_tokens":5,"output_tokens":10}}',
+    ].join("\n");
+
+    const parsed = parseCliStreamOutput(stream);
+
+    // The structured tool_use was an MCP-pre-executed call. It must NOT
+    // appear in toolCalls (no re-dispatch) but MUST appear in the
+    // pre-executed names list (so the trace can suppress ghosts).
+    expect(parsed.toolCalls).toEqual([]);
+    expect(parsed.cliPreExecutedNames).toEqual(["report_quality_issue"]);
+  });
+
+  it("keeps non-MCP tool calls in toolCalls (stream)", () => {
+    const stream = [
+      '{"type":"tool_use","id":"x2","name":"saveBuildEvidence","input":{"field":"buildPlan"}}',
+      '{"type":"result","result":"saved","usage":{}}',
+    ].join("\n");
+
+    const parsed = parseCliStreamOutput(stream);
+    expect(parsed.toolCalls).toHaveLength(1);
+    expect(parsed.toolCalls[0]?.name).toBe("saveBuildEvidence");
+    expect(parsed.cliPreExecutedNames).toEqual([]);
+  });
+});
+
+describe("parseCliJsonOutput", () => {
+  it("captures mcp__dpf__ tool names as cliPreExecutedNames (json)", () => {
+    const output = JSON.stringify({
+      result: "Filed the issue.",
+      content: [
+        {
+          type: "tool_use",
+          id: "x1",
+          name: "mcp__dpf__report_quality_issue",
+          input: { title: "t", type: "feedback" },
+        },
+      ],
+      usage: { input_tokens: 5, output_tokens: 10 },
+    });
+
+    const parsed = parseCliJsonOutput(output);
+    expect(parsed.toolCalls).toEqual([]);
+    expect(parsed.cliPreExecutedNames).toEqual(["report_quality_issue"]);
+  });
+
+  it("returns empty cliPreExecutedNames when no MCP calls fired (json)", () => {
+    const output = JSON.stringify({
+      result: "Hello",
+      content: [
+        {
+          type: "tool_use",
+          id: "x2",
+          name: "saveBuildEvidence",
+          input: { field: "designDoc" },
+        },
+      ],
+      usage: {},
+    });
+
+    const parsed = parseCliJsonOutput(output);
+    expect(parsed.toolCalls).toHaveLength(1);
+    expect(parsed.toolCalls[0]?.name).toBe("saveBuildEvidence");
+    expect(parsed.cliPreExecutedNames).toEqual([]);
+  });
+
+  it("returns empty cliPreExecutedNames on raw non-JSON output (json)", () => {
+    // Non-JSON raw output (e.g. CLI printed an error string) should not
+    // crash the new field — it must default to [].
+    const parsed = parseCliJsonOutput("plain error text, not JSON");
+    expect(parsed.cliPreExecutedNames).toEqual([]);
   });
 });

@@ -150,13 +150,24 @@ export function extractMentionedPlatformToolNames(text: string): string[] {
  * - {"type":"tool_use","name":"...","input":{...}} — tool call
  * - {"type":"result","result":"...","usage":{...}} — completion
  */
-function parseCliStreamOutput(output: string): {
+export function parseCliStreamOutput(output: string): {
   text: string;
   toolCalls: ToolCallEntry[];
   usage: { inputTokens: number; outputTokens: number };
+  /**
+   * mcp__dpf__* tool calls that the CLI's MCP client already executed before
+   * we saw the output. Filtered out of `toolCalls` (so the agentic loop does
+   * NOT re-dispatch and double-execute side effects), but surfaced here so
+   * the diagnostic tracer can avoid logging NO-CALL-BUT-MENTIONED when the
+   * post-execution narration mentions a tool name the CLI already ran.
+   * Names have the `mcp__dpf__` prefix stripped for easier comparison
+   * against extractMentionedPlatformToolNames output.
+   */
+  cliPreExecutedNames: string[];
 } {
   const textParts: string[] = [];
   const toolCalls: ToolCallEntry[] = [];
+  const cliPreExecutedNames: string[] = [];
   let inputTokens = 0;
   let outputTokens = 0;
 
@@ -173,12 +184,16 @@ function parseCliStreamOutput(output: string): {
 
     if (event.type === "assistant" && event.content) {
       textParts.push(event.content);
-    } else if (event.type === "tool_use" && event.name && !event.name.startsWith(MCP_TOOL_NAME_PREFIX)) {
-      toolCalls.push({
-        id: event.id ?? event.tool_use_id ?? `cli_${Math.random().toString(36).slice(2, 9)}`,
-        name: event.name,
-        arguments: event.input ?? {},
-      });
+    } else if (event.type === "tool_use" && event.name) {
+      if (event.name.startsWith(MCP_TOOL_NAME_PREFIX)) {
+        cliPreExecutedNames.push(event.name.slice(MCP_TOOL_NAME_PREFIX.length));
+      } else {
+        toolCalls.push({
+          id: event.id ?? event.tool_use_id ?? `cli_${Math.random().toString(36).slice(2, 9)}`,
+          name: event.name,
+          arguments: event.input ?? {},
+        });
+      }
     } else if (event.type === "result") {
       // Final event — contains aggregated result and usage
       if (event.result && textParts.length === 0) {
@@ -207,6 +222,7 @@ function parseCliStreamOutput(output: string): {
     text: finalText,
     toolCalls,
     usage: { inputTokens, outputTokens },
+    cliPreExecutedNames,
   };
 }
 
@@ -214,10 +230,12 @@ function parseCliStreamOutput(output: string): {
  * Fallback parser for `--output-format json` (non-streaming).
  * Returns { result: string, session_id?: string, ... }
  */
-function parseCliJsonOutput(output: string): {
+export function parseCliJsonOutput(output: string): {
   text: string;
   toolCalls: ToolCallEntry[];
   usage: { inputTokens: number; outputTokens: number };
+  /** See parseCliStreamOutput.cliPreExecutedNames for the contract. */
+  cliPreExecutedNames: string[];
 } {
   try {
     const parsed = JSON.parse(output.trim()) as Record<string, unknown>;
@@ -227,15 +245,20 @@ function parseCliJsonOutput(output: string): {
     // entries — those were already dispatched by the CLI's MCP client and
     // re-running them in the agentic loop would double-execute side effects.
     const toolCalls: ToolCallEntry[] = [];
+    const cliPreExecutedNames: string[] = [];
     const content = parsed.content as Array<{ type?: string; id?: string; name?: string; input?: Record<string, unknown> }> | undefined;
     if (Array.isArray(content)) {
       for (const block of content) {
-        if (block.type === "tool_use" && block.name && !block.name.startsWith(MCP_TOOL_NAME_PREFIX)) {
-          toolCalls.push({
-            id: block.id ?? `cli_${Math.random().toString(36).slice(2, 9)}`,
-            name: block.name,
-            arguments: block.input ?? {},
-          });
+        if (block.type === "tool_use" && block.name) {
+          if (block.name.startsWith(MCP_TOOL_NAME_PREFIX)) {
+            cliPreExecutedNames.push(block.name.slice(MCP_TOOL_NAME_PREFIX.length));
+          } else {
+            toolCalls.push({
+              id: block.id ?? `cli_${Math.random().toString(36).slice(2, 9)}`,
+              name: block.name,
+              arguments: block.input ?? {},
+            });
+          }
         }
       }
     }
@@ -258,6 +281,7 @@ function parseCliJsonOutput(output: string): {
         inputTokens: usage?.input_tokens ?? 0,
         outputTokens: usage?.output_tokens ?? 0,
       },
+      cliPreExecutedNames,
     };
   } catch {
     // Not JSON — return raw text. Try to extract tool calls from the raw
@@ -269,6 +293,7 @@ function parseCliJsonOutput(output: string): {
       text: raw,
       toolCalls: rescued,
       usage: { inputTokens: 0, outputTokens: 0 },
+      cliPreExecutedNames: [],
     };
   }
 }
@@ -620,14 +645,28 @@ export const cliAdapter: ExecutionAdapterHandler = {
 
       // ── Durable tool-call extraction trace (mirrors codex-cli-adapter) ──
       // See note there. Kept on until tool dispatch is 100% reliable.
+      //
+      // Subtract names the CLI MCP client already executed before we saw the
+      // output — when an agent calls mcp__dpf__report_quality_issue via the
+      // CLI's MCP layer, then narrates "I filed this issue: { ...args... }",
+      // the bare regex sees the tool name in narration and would otherwise
+      // log NO-CALL-BUT-MENTIONED even though the call actually fired. This
+      // false signal was the root of the misdirected "agent hallucinates
+      // tool calls" diagnosis in Phase J D41. See dogfood log.
       const mentionedNames = extractMentionedPlatformToolNames(parsed.text);
       const extractedNames = parsed.toolCalls.map((c) => c.name);
-      console.log(
-        `[tool-trace] adapter=claude-cli extracted=${parsed.toolCalls.length} names=${JSON.stringify(extractedNames)} mentioned=${JSON.stringify(mentionedNames)}`,
+      const ghostMentions = mentionedNames.filter(
+        (n) => !parsed.cliPreExecutedNames.includes(n) && !extractedNames.includes(n),
       );
-      if (parsed.toolCalls.length === 0 && mentionedNames.length > 0) {
+      console.log(
+        `[tool-trace] adapter=claude-cli extracted=${parsed.toolCalls.length} ` +
+          `cliPreExecuted=${JSON.stringify(parsed.cliPreExecutedNames)} ` +
+          `names=${JSON.stringify(extractedNames)} mentioned=${JSON.stringify(mentionedNames)} ` +
+          `ghosts=${JSON.stringify(ghostMentions)}`,
+      );
+      if (parsed.toolCalls.length === 0 && ghostMentions.length > 0) {
         console.log(
-          `[tool-trace] adapter=claude-cli NO-CALL-BUT-MENTIONED raw=${JSON.stringify(parsed.text.slice(0, 8000))}`,
+          `[tool-trace] adapter=claude-cli NO-CALL-BUT-MENTIONED ghosts=${JSON.stringify(ghostMentions)} raw=${JSON.stringify(parsed.text.slice(0, 8000))}`,
         );
       } else if (parsed.toolCalls.length > 0) {
         console.log(

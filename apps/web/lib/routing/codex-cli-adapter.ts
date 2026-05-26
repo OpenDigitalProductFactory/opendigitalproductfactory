@@ -381,17 +381,24 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       // "model hallucinated a tool call it never emitted".
       const mentionedNames = extractMentionedPlatformToolNames(text);
       const extractedNames = toolCalls.map((c) => c.name);
+      // Names mentioned in narration ARE a real signal when the parser
+      // returned them too (the agent did call the tool and also discussed
+      // it). Exclude those from "ghosts" so the NO-CALL-BUT-MENTIONED
+      // signature only fires when the agent talked about a tool the parser
+      // never extracted — the actual stuck-agent shape.
+      const ghostMentions = mentionedNames.filter((n) => !extractedNames.includes(n));
       console.log(
-        `[tool-trace] extracted=${toolCalls.length} names=${JSON.stringify(extractedNames)} mentioned=${JSON.stringify(mentionedNames)}`,
+        `[tool-trace] extracted=${toolCalls.length} names=${JSON.stringify(extractedNames)} mentioned=${JSON.stringify(mentionedNames)} ghosts=${JSON.stringify(ghostMentions)}`,
       );
 
       // Full dump on the diagnostically-interesting mismatches: the text
-      // references a tool name but the parser returned nothing — this is
-      // the classic "stuck agent" signature. 8k chars covers any realistic
+      // references a tool name but the parser returned nothing AND the
+      // mention isn't accounted for by another extracted call. This is the
+      // classic "stuck agent" signature. 8k chars covers any realistic
       // codex response.
-      if (toolCalls.length === 0 && mentionedNames.length > 0) {
+      if (toolCalls.length === 0 && ghostMentions.length > 0) {
         console.log(
-          `[tool-trace] NO-CALL-BUT-MENTIONED raw=${JSON.stringify(text.slice(0, 8000))}`,
+          `[tool-trace] NO-CALL-BUT-MENTIONED ghosts=${JSON.stringify(ghostMentions)} raw=${JSON.stringify(text.slice(0, 8000))}`,
         );
       } else if (toolCalls.length > 0) {
         // Also log a compact head of the raw text when calls DID parse —
