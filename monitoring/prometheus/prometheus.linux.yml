@@ -6,9 +6,16 @@ rule_files:
   - "alerts.yml"
 
 scrape_configs:
-  # ─── Infrastructure ──────────────────────────────────────────
-  # Linux-only exporter targets live in prometheus.linux.yml, which the
-  # docker-compose.linux.yml overlay mounts when those services are available.
+  # ─── Linux Infrastructure ───────────────────────────────────
+  - job_name: "cadvisor"
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  - job_name: "node-exporter"
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["node-exporter:9100"]
 
   # ─── Databases ───────────────────────────────────────────────
   - job_name: "postgres"

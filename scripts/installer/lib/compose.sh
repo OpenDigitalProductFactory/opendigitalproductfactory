@@ -48,8 +48,7 @@ fi
 # Platform rules:
 #   darwin   = adds docker-compose.macos.yml
 #   linux    = adds docker-compose.linux.yml (which also brings up the
-#              ollama service and enables the linux-monitoring profile
-#              by default)
+#              ollama service and Linux host telemetry exporters)
 #   else     = no platform overlay added; caller proceeds at their own
 #              risk (e.g. raw Linux container without the linux overlay)
 dpf_compose_files() {

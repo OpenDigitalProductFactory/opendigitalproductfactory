@@ -48,6 +48,7 @@ type ServiceStatusInput = {
 
 const PLATFORM_REQUIRED_JOBS = ["portal", "postgres", "qdrant", "sandbox"];
 const TELEMETRY_JOBS = ["node-exporter", "cadvisor"];
+const TELEMETRY_JOB_SET = new Set(TELEMETRY_JOBS);
 
 export const HOST_RESOURCE_QUERIES = {
   compute:
@@ -80,7 +81,7 @@ export function derivePlatformSummary({
     return { value: "Unavailable", tone: "critical", detail: "Monitoring stack is unreachable" };
   }
 
-  const activeAlerts = getActiveAlerts(alerts);
+  const activeAlerts = getPlatformImpactAlerts(alerts);
   const criticalAlerts = activeAlerts.filter((alert) => alert.labels.severity === "critical");
   if (criticalAlerts.length > 0) {
     return {
@@ -198,6 +199,19 @@ export function deriveServiceStatuses({
 
 export function getActiveAlerts(alerts: MonitoringAlert[]): MonitoringAlert[] {
   return alerts.filter((alert) => alert.state === "firing" || alert.state === "pending");
+}
+
+export function getPlatformImpactAlerts(alerts: MonitoringAlert[]): MonitoringAlert[] {
+  return getActiveAlerts(alerts).filter((alert) => !isTelemetryTargetAlert(alert));
+}
+
+export function getTelemetryTargetAlerts(alerts: MonitoringAlert[]): MonitoringAlert[] {
+  return getActiveAlerts(alerts).filter(isTelemetryTargetAlert);
+}
+
+export function isTelemetryTargetAlert(alert: MonitoringAlert): boolean {
+  const job = alert.labels.job;
+  return alert.labels.alertname === "ContainerDown" && !!job && TELEMETRY_JOB_SET.has(job);
 }
 
 function buildJobStatusMap(results: PrometheusInstantResult[] | null | undefined): Map<string, number> {
