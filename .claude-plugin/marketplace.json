@@ -1,0 +1,28 @@
+{
+  "name": "dpf-platform-local",
+  "owner": {
+    "name": "Digital Product Factory"
+  },
+  "metadata": {
+    "description": "Project-local marketplace for DPF-native Claude Code skills.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "dpf-platform",
+      "source": "./packages/dpf-skill-pack",
+      "description": "DPF-native agent skills for contributor sessions and in-portal coworkers.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Digital Product Factory"
+      },
+      "category": "Governance",
+      "tags": [
+        "dpf",
+        "skills",
+        "kernel",
+        "backlog"
+      ]
+    }
+  ]
+}

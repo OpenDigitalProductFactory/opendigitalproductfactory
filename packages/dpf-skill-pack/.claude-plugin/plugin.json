@@ -7,12 +7,9 @@
     "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory"
   },
   "homepage": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/packages/dpf-skill-pack",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git",
-    "directory": "packages/dpf-skill-pack"
-  },
+  "repository": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/packages/dpf-skill-pack",
   "license": "Apache-2.0",
+  "skills": "./skills/",
   "keywords": [
     "dpf",
     "digital-product-factory",

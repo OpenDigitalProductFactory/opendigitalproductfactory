@@ -1,0 +1,20 @@
+{
+  "name": "dpf-platform-local",
+  "interface": {
+    "displayName": "DPF Platform"
+  },
+  "plugins": [
+    {
+      "name": "dpf-platform",
+      "source": {
+        "source": "local",
+        "path": "./packages/dpf-skill-pack"
+      },
+      "policy": {
+        "installation": "INSTALLED_BY_DEFAULT",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

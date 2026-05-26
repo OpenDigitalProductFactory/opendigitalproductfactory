@@ -62,6 +62,18 @@ export type SkillTelemetrySummary = {
   latestMetricPeriod: string | null;
 };
 
+export type SkillSeedWarningEntry = {
+  id: string;
+  warningId: string;
+  skillId: string;
+  warningType: string;
+  message: string;
+  legacyPath: string | null;
+  pluginPath: string | null;
+  sourceType: string;
+  createdAt: string;
+};
+
 export type SkillReviewEvidenceScope = Pick<
   SkillEvidenceSearchInput,
   "threadId" | "taskRunId" | "routeContext" | "query" | "limit"
@@ -258,6 +270,31 @@ export async function getSkillLifecycleState(skillId: string): Promise<{
 export async function getLatestSkillCuratorReport() {
   const { getLatestCuratorReport } = await import("@/lib/skills/curator");
   return getLatestCuratorReport();
+}
+
+/** Pending seed-time conflicts that need operator migration follow-up. */
+export async function getSkillSeedWarnings(limit = 25): Promise<SkillSeedWarningEntry[]> {
+  const rows = await prisma.skillSeedWarning.findMany({
+    where: { resolvedAt: null },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    select: {
+      id: true,
+      warningId: true,
+      skillId: true,
+      warningType: true,
+      message: true,
+      legacyPath: true,
+      pluginPath: true,
+      sourceType: true,
+      createdAt: true,
+    },
+  });
+
+  return rows.map((row) => ({
+    ...row,
+    createdAt: row.createdAt.toISOString(),
+  }));
 }
 
 /**

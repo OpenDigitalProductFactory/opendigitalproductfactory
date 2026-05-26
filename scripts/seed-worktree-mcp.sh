@@ -158,4 +158,12 @@ EOF
 copy_one "$main_abs/.mcp.json"        "$target_abs/.mcp.json"
 copy_one "$main_abs/.vscode/mcp.json" "$target_abs/.vscode/mcp.json"
 
-printf '\nDone. Restart Claude Code (or VS Code) in the worktree to pick up the dpf connector.\n\n'
+step "Ensuring DPF skill pack"
+skill_pack_script="$target_abs/scripts/ensure-dpf-skill-pack.sh"
+if [ -f "$skill_pack_script" ]; then
+    bash "$skill_pack_script" "$target_abs"
+else
+    skip "No DPF skill pack installer found at $skill_pack_script"
+fi
+
+printf '\nDone. Restart Claude Code, Codex, or VS Code in the worktree to pick up the dpf connector and skill pack.\n\n'

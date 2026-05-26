@@ -1,5 +1,20 @@
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { describe, it, expect, vi } from "vitest";
-import { parseFrontmatter, reconcileSkillAssignments } from "./seed-skills";
+import {
+  DPF_PLATFORM_SKILL_SOURCE_TYPE,
+  LEGACY_SKILL_SOURCE_TYPE,
+  discoverDpfPlatformSkillFiles,
+  normalizeSkillFrontmatterForSeed,
+  parseAllowedTools,
+  parseFrontmatter,
+  reconcileSkillAssignments,
+  selectSkillSeedEntries,
+  validateDpfPlatformSkillFrontmatter,
+  writeSkillSeedConflictWarnings,
+  type LoadedSkillSeedEntry,
+} from "./seed-skills";
 
 describe("seed-skills parseFrontmatter", () => {
   it("parses inline arrays", () => {
@@ -105,5 +120,141 @@ describe("reconcileSkillAssignments", () => {
     expect(skillAssignment.delete).toHaveBeenCalledTimes(1);
     expect(skillAssignment.create).not.toHaveBeenCalled();
     expect(result).toEqual({ created: 0, removed: 1 });
+  });
+});
+
+describe("seed-skills dpf-platform loader", () => {
+  it("discovers plugin SKILL.md files under slug directories", () => {
+    const root = mkdtempSync(join(tmpdir(), "dpf-skill-pack-"));
+    const skillDir = join(root, "skills", "dpf-example");
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(join(skillDir, "SKILL.md"), "---\nname: dpf-example\n---\n\nBody.\n");
+
+    expect(discoverDpfPlatformSkillFiles(join(root, "skills"))).toEqual([
+      {
+        category: "dpf-platform",
+        filePath: join(skillDir, "SKILL.md"),
+        sourceType: DPF_PLATFORM_SKILL_SOURCE_TYPE,
+      },
+    ]);
+  });
+
+  it("maps Agent Skills standard fields onto coworker seed fields", () => {
+    const raw = `---
+name: dpf-agent-standard-only
+description: test standard mapping
+disable-model-invocation: false
+user-invocable: true
+allowed-tools: Bash(git log *) Grep mcp__dpf__wiki_query
+category: governance
+assignTo: ["*"]
+---
+
+Body.`;
+
+    const { frontmatter } = parseFrontmatter(raw);
+    const normalized = normalizeSkillFrontmatterForSeed({
+      frontmatter,
+      raw,
+      category: "governance",
+      sourceType: DPF_PLATFORM_SKILL_SOURCE_TYPE,
+    });
+
+    expect(normalized.skillId).toBe("dpf-agent-standard-only");
+    expect(normalized.skillDefinition.sourceType).toBe(DPF_PLATFORM_SKILL_SOURCE_TYPE);
+    expect(normalized.skillDefinition.userInvocable).toBe(true);
+    expect(normalized.skillDefinition.agentInvocable).toBe(true);
+    expect(normalized.skillDefinition.allowedTools).toEqual([
+      "Bash",
+      "Grep",
+      "mcp__dpf__wiki_query",
+    ]);
+  });
+
+  it("selects plugin SKILL.md over legacy .skill.md and reports a warning", () => {
+    const legacy = {
+      skillId: "dpf-same",
+      category: "ops",
+      filePath: "skills/ops/dpf-same.skill.md",
+      raw: "legacy",
+      sourceType: LEGACY_SKILL_SOURCE_TYPE,
+      frontmatter: { name: "dpf-same", description: "legacy" },
+    } satisfies LoadedSkillSeedEntry;
+    const plugin = {
+      skillId: "dpf-same",
+      category: "dpf-platform",
+      filePath: "packages/dpf-skill-pack/skills/dpf-same/SKILL.md",
+      raw: "plugin",
+      sourceType: DPF_PLATFORM_SKILL_SOURCE_TYPE,
+      frontmatter: { name: "dpf-same", description: "plugin" },
+    } satisfies LoadedSkillSeedEntry;
+
+    const { selected, conflicts } = selectSkillSeedEntries([legacy, plugin]);
+
+    expect(selected).toEqual([plugin]);
+    expect(conflicts).toEqual([
+      {
+        skillId: "dpf-same",
+        legacyPath: legacy.filePath,
+        pluginPath: plugin.filePath,
+      },
+    ]);
+  });
+
+  it("writes deterministic SkillSeedWarning rows for plugin-over-legacy conflicts", async () => {
+    const skillSeedWarning = {
+      upsert: vi.fn().mockResolvedValue({}),
+    };
+
+    await writeSkillSeedConflictWarnings(
+      { skillSeedWarning } as never,
+      [
+        {
+          skillId: "dpf-same",
+          legacyPath: "skills/ops/dpf-same.skill.md",
+          pluginPath: "packages/dpf-skill-pack/skills/dpf-same/SKILL.md",
+        },
+      ],
+    );
+
+    expect(skillSeedWarning.upsert).toHaveBeenCalledWith({
+      where: { warningId: "plugin-overrides-legacy:dpf-same" },
+      update: expect.objectContaining({
+        resolvedAt: null,
+        warningType: "plugin-overrides-legacy",
+      }),
+      create: expect.objectContaining({
+        warningId: "plugin-overrides-legacy:dpf-same",
+        skillId: "dpf-same",
+        warningType: "plugin-overrides-legacy",
+      }),
+    });
+  });
+});
+
+describe("dpf-platform mirror-field invariant", () => {
+  it("keeps Agent Skills fields and DPF coworker fields non-contradictory", () => {
+    const pluginSkillsDir = join(__dirname, "..", "..", "..", "packages", "dpf-skill-pack", "skills");
+    const skillFiles = readdirSync(pluginSkillsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(pluginSkillsDir, entry.name, "SKILL.md"));
+
+    expect(skillFiles.length).toBeGreaterThan(0);
+
+    const issues = skillFiles.flatMap((filePath) => {
+      const raw = readFileSync(filePath, "utf-8");
+      const { frontmatter } = parseFrontmatter(raw);
+      return validateDpfPlatformSkillFrontmatter(frontmatter, filePath);
+    });
+
+    expect(issues).toEqual([]);
+  });
+
+  it("parses scoped allowed-tools entries without splitting spaces inside scopes", () => {
+    expect(parseAllowedTools("Bash(git worktree *) Bash(scripts/seed-worktree-mcp*) Grep")).toEqual([
+      "Bash(git worktree *)",
+      "Bash(scripts/seed-worktree-mcp*)",
+      "Grep",
+    ]);
   });
 });

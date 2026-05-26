@@ -2,7 +2,7 @@
 
 DPF-native agent skills shipped to **two surfaces** from one set of source files:
 
-1. **Claude Code contributors** — installed as a Claude Code plugin (`dpf-platform`) per [BI-C74746A1](../../docs/superpowers/drafts/2026-05-24-dpf-skill-pack-formalization-bi-bundle.md), invoked as `/dpf-<slug>` or auto-loaded by `description` match. Auto-installed on portal install when `~/.claude/` is present.
+1. **Contributor coding clients** — installed as the `dpf-platform` plugin for Claude Code (`.claude-plugin/marketplace.json`) and Codex (`.agents/plugins/marketplace.json` + `.codex-plugin/plugin.json`), invoked as `/dpf-<slug>` / `$dpf-<slug>` or auto-loaded by `description` match. Auto-installed or made discoverable on portal install when the matching client home is present.
 2. **In-portal coworkers** — seeded as `SkillDefinition` + `SkillAssignment` rows by an extended [packages/db/src/seed-skills.ts](../../packages/db/src/seed-skills.ts) loader per [BI-98683E68](../../docs/superpowers/drafts/2026-05-24-dpf-skill-pack-formalization-bi-bundle.md), invoked by `triggerPattern` match or directly by the assigned coworker.
 
 The single-source-of-truth contract is the **superset SKILL.md frontmatter**: Agent Skills open-standard fields (`name`, `description`, `disable-model-invocation`, `user-invocable`, `allowed-tools`) consumed by Claude Code, plus DPF coworker fields (`category`, `assignTo`, `capability`, `taskType`, `triggerPattern`, `userInvocable`, `agentInvocable`, `allowedTools`, `composesFrom`, `contextRequirements`, `riskBand`, `enforces`) consumed by the seed loader. The mirror-field invariant — `user-invocable ↔ userInvocable`, `allowed-tools ↔ allowedTools`, `disable-model-invocation: false ↔ agentInvocable: true` — is asserted by a unit test (BI-98683E68) so divergence between the two field families fails CI.
@@ -11,7 +11,7 @@ The single-source-of-truth contract is the **superset SKILL.md frontmatter**: Ag
 
 ## Conflict-resolution policy
 
-- **Surface A (Claude Code) — DPF wins over superpowers** when both could apply. DPF skill `description` fields begin with a DPF-context selector to make the agent's load decision unambiguous.
+- **Surface A (Claude Code / Codex) — DPF wins over non-DPF skills** when both could apply. DPF skill `description` fields begin with a DPF-context selector to make the agent's load decision unambiguous. Generic upstream packs are optional local/user-scope aids, not the project default.
 - **Surface B (coworker) — plugin wins over legacy `.skill.md`** when the same slug appears in both [skills/&lt;category&gt;/](../../skills/) and `packages/dpf-skill-pack/skills/<slug>/SKILL.md`. The loader emits a startup warning and writes a `SkillSeedWarning` row so the admin observatory lists pending migrations. No legacy file is deleted by the loader — migration is opportunistic per EP-SKILL-001 follow-up.
 
 ## Skills shipped in v0.1.0
@@ -37,9 +37,14 @@ When adding a skill to this pack:
 5. Body under 500 lines per the Claude Code skill best practice. If the procedure is bigger, factor sub-skills.
 6. Run the mirror-field invariant test (BI-98683E68) before committing.
 
-## Plugin manifest
+## Plugin manifests
 
-The `.claude-plugin/plugin.json` manifest lands under BI-C74746A1 and turns this directory into an installable Claude Code plugin. The auto-install hook (BI-98683E68) wires it into portal install + worktree-creation so contributors don't run `/plugin install` manually.
+The `.claude-plugin/plugin.json` manifest turns this directory into an installable Claude Code plugin. The `.codex-plugin/plugin.json` manifest exposes the same `skills/` directory to Codex. Repo-level marketplace files live at the repository root:
+
+- `.claude-plugin/marketplace.json` — Claude Code project marketplace, enabled by `.claude/settings.json` as `dpf-platform@dpf-platform-local`.
+- `.agents/plugins/marketplace.json` — Codex repo marketplace, marked `INSTALLED_BY_DEFAULT` for the same plugin directory.
+
+The auto-install hook (BI-98683E68) wires these into portal install + worktree creation so contributors do not need to hand-run client plugin commands.
 
 ## See also
 

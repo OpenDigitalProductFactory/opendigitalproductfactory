@@ -19,6 +19,7 @@ import {
   getSkillReviewDetail,
   getLatestSkillCuratorReport,
   getSkillLifecycleState,
+  getSkillSeedWarnings,
 } from "@/lib/actions/skills-observatory";
 import { isSkillLifecycleState } from "@/lib/skills/lifecycle";
 
@@ -66,6 +67,7 @@ export default async function SkillsObservatoryPage({
     review,
     curatorReport,
     lifecycleRow,
+    seedWarnings,
   ] = await Promise.all([
     getSkillCatalog(),
     getSkillCatalogStats(),
@@ -77,6 +79,7 @@ export default async function SkillsObservatoryPage({
     focusedSkillId ? getSkillReviewDetail(focusedSkillId, evidenceScope) : Promise.resolve(null),
     getLatestSkillCuratorReport(),
     focusedSkillId ? getSkillLifecycleState(focusedSkillId) : Promise.resolve(null),
+    getSkillSeedWarnings(),
   ]);
 
   const focusedLifecycleState =
@@ -92,6 +95,37 @@ export default async function SkillsObservatoryPage({
           Skills — {catalogStats.total} catalog entries and {stats.totalSkills} route-visible skills across {stats.routes} routes
         </p>
       </div>
+
+      {seedWarnings.length > 0 && (
+        <div
+          className="mb-6 rounded border p-4"
+          style={{
+            borderColor: "color-mix(in srgb, var(--dpf-warning) 40%, var(--dpf-border))",
+            background: "color-mix(in srgb, var(--dpf-warning) 8%, var(--dpf-surface-1))",
+          }}
+        >
+          <h2 className="mb-2 text-sm font-semibold text-[var(--dpf-text)]">Seed Warnings</h2>
+          <div className="space-y-2">
+            {seedWarnings.map((warning) => (
+              <div
+                key={warning.warningId}
+                className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-xs"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-[var(--dpf-text)]">{warning.skillId}</span>
+                  <span className="font-mono text-[10px] text-[var(--dpf-muted)]">
+                    {warning.warningType}
+                  </span>
+                </div>
+                <p className="mt-1 text-[var(--dpf-muted)]">{warning.message}</p>
+                <p className="mt-1 font-mono text-[10px] text-[var(--dpf-muted)]">
+                  {warning.legacyPath}{" -> "}{warning.pluginPath}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mb-6 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
         <h2 className="mb-2 text-sm font-semibold text-[var(--dpf-text)]">Catalog</h2>

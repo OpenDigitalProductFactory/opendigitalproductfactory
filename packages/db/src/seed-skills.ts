@@ -7,22 +7,77 @@ import { readdirSync, readFileSync } from "fs";
 import { join, basename } from "path";
 import type { PrismaClient } from "../generated/client/client";
 
-const SKILLS_DIR = join(__dirname, "..", "..", "..", "skills");
+const REPO_ROOT = join(__dirname, "..", "..", "..");
+const SKILLS_DIR = join(REPO_ROOT, "skills");
+const DPF_PLATFORM_SKILLS_DIR = join(REPO_ROOT, "packages", "dpf-skill-pack", "skills");
 
-type SkillFrontmatter = {
-  name: string;
-  description: string;
+export const LEGACY_SKILL_SOURCE_TYPE = "repo-skills-directory";
+export const DPF_PLATFORM_SKILL_SOURCE_TYPE = "dpf-platform-plugin";
+
+export type SkillFrontmatter = {
+  name?: string;
+  description?: string;
+  category?: string;
+  assignTo?: string[];       // ["agent-id"] or ["*"] for all agents
+  capability?: string | null;
+  taskType?: string;
+  triggerPattern?: string | null;
+  userInvocable?: boolean;
+  agentInvocable?: boolean;
+  allowedTools?: string[] | string;
+  composesFrom?: string[];
+  contextRequirements?: string[];
+  riskBand?: string;
+  "disable-model-invocation"?: boolean;
+  "user-invocable"?: boolean;
+  "allowed-tools"?: string | string[];
+  enforces?: string[];
+  [key: string]: unknown;
+};
+
+export type SkillSeedSourceType =
+  | typeof LEGACY_SKILL_SOURCE_TYPE
+  | typeof DPF_PLATFORM_SKILL_SOURCE_TYPE;
+
+export type SkillSeedSource = {
   category: string;
-  assignTo: string[];       // ["agent-id"] or ["*"] for all agents
-  capability: string | null;
-  taskType: string;
-  triggerPattern: string | null;
-  userInvocable: boolean;
-  agentInvocable: boolean;
-  allowedTools: string[];
-  composesFrom: string[];
-  contextRequirements: string[];
-  riskBand: string;
+  filePath: string;
+  sourceType: SkillSeedSourceType;
+};
+
+export type LoadedSkillSeedEntry = SkillSeedSource & {
+  skillId: string;
+  raw: string;
+  frontmatter: SkillFrontmatter;
+};
+
+export type SkillSeedConflict = {
+  skillId: string;
+  legacyPath: string;
+  pluginPath: string;
+};
+
+export type NormalizedSkillSeed = {
+  skillId: string;
+  skillDefinition: {
+    name: string;
+    description: string;
+    skillMdContent: string;
+    sourceType: SkillSeedSourceType;
+    category: string;
+    tags: string[];
+    riskBand: string;
+    status: string;
+    triggerPattern: string | null;
+    userInvocable: boolean;
+    agentInvocable: boolean;
+    allowedTools: string[];
+    composesFrom: string[];
+    contextRequirements: string[];
+    capability: string | null;
+    taskType: string;
+  };
+  assignTo: string[];
 };
 
 // All known agent IDs — used when assignTo includes "*"
@@ -140,12 +195,12 @@ export function parseFrontmatter(raw: string): { frontmatter: SkillFrontmatter; 
 /**
  * Discover all .skill.md files under the skills/ directory tree.
  */
-function discoverSkillFiles(): Array<{ category: string; filePath: string }> {
-  const results: Array<{ category: string; filePath: string }> = [];
+export function discoverLegacySkillFiles(skillsDir = SKILLS_DIR): SkillSeedSource[] {
+  const results: SkillSeedSource[] = [];
 
   let categories: string[];
   try {
-    categories = readdirSync(SKILLS_DIR, { withFileTypes: true })
+    categories = readdirSync(skillsDir, { withFileTypes: true })
       .filter((d) => d.isDirectory())
       .map((d) => d.name);
   } catch {
@@ -154,14 +209,290 @@ function discoverSkillFiles(): Array<{ category: string; filePath: string }> {
   }
 
   for (const category of categories) {
-    const categoryDir = join(SKILLS_DIR, category);
+    const categoryDir = join(skillsDir, category);
     const files = readdirSync(categoryDir).filter((f) => f.endsWith(".skill.md"));
     for (const file of files) {
-      results.push({ category, filePath: join(categoryDir, file) });
+      results.push({
+        category,
+        filePath: join(categoryDir, file),
+        sourceType: LEGACY_SKILL_SOURCE_TYPE,
+      });
     }
   }
 
   return results;
+}
+
+/**
+ * Discover dpf-platform plugin skills. Each skill lives under
+ * packages/dpf-skill-pack/skills/<slug>/SKILL.md so the same files can be
+ * loaded by Claude/Codex plugins and seeded into coworkers.
+ */
+export function discoverDpfPlatformSkillFiles(
+  pluginSkillsDir = DPF_PLATFORM_SKILLS_DIR,
+): SkillSeedSource[] {
+  let slugs: string[];
+  try {
+    slugs = readdirSync(pluginSkillsDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+  } catch {
+    console.warn("[seed-skills] packages/dpf-skill-pack/skills directory not found — skipping dpf-platform skills");
+    return [];
+  }
+
+  return slugs.map((slug) => ({
+    category: "dpf-platform",
+    filePath: join(pluginSkillsDir, slug, "SKILL.md"),
+    sourceType: DPF_PLATFORM_SKILL_SOURCE_TYPE,
+  }));
+}
+
+function discoverSkillFiles(): SkillSeedSource[] {
+  return [
+    ...discoverLegacySkillFiles(),
+    ...discoverDpfPlatformSkillFiles(),
+  ];
+}
+
+function asStringArray(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.trim() !== ""))];
+}
+
+export function parseAllowedTools(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return uniqueStrings(value.filter((item): item is string => typeof item === "string"));
+  }
+  if (typeof value !== "string" || value.trim() === "") return [];
+
+  const tokens: string[] = [];
+  let current = "";
+  let parenDepth = 0;
+
+  for (const char of value.trim()) {
+    if (/\s/.test(char) && parenDepth === 0) {
+      if (current.trim() !== "") tokens.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    if (char === "(") parenDepth += 1;
+    else if (char === ")" && parenDepth > 0) parenDepth -= 1;
+    current += char;
+  }
+
+  if (current.trim() !== "") tokens.push(current.trim());
+  return uniqueStrings(tokens);
+}
+
+function allowedToolBase(tool: string): string {
+  const scopeStart = tool.indexOf("(");
+  return scopeStart === -1 ? tool : tool.slice(0, scopeStart);
+}
+
+function booleanOrUndefined(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+export function normalizeSkillFrontmatterForSeed(input: {
+  frontmatter: SkillFrontmatter;
+  raw: string;
+  category: string;
+  sourceType: SkillSeedSourceType;
+}): NormalizedSkillSeed {
+  const { frontmatter, raw, category, sourceType } = input;
+  const skillId = typeof frontmatter.name === "string" ? frontmatter.name : "";
+  const standardAllowedTools = parseAllowedTools(frontmatter["allowed-tools"]).map(allowedToolBase);
+  const coworkerAllowedTools = asStringArray(frontmatter.allowedTools);
+  const disableModelInvocation = booleanOrUndefined(frontmatter["disable-model-invocation"]);
+  const agentInvocable =
+    booleanOrUndefined(frontmatter.agentInvocable) ?? (disableModelInvocation !== true);
+  const userInvocable =
+    booleanOrUndefined(frontmatter.userInvocable) ??
+    (booleanOrUndefined(frontmatter["user-invocable"]) !== false);
+
+  return {
+    skillId,
+    skillDefinition: {
+      name: skillId,
+      description: typeof frontmatter.description === "string" ? frontmatter.description : "",
+      skillMdContent: raw,
+      sourceType,
+      category: typeof frontmatter.category === "string" ? frontmatter.category : category,
+      tags: [],
+      riskBand: typeof frontmatter.riskBand === "string" ? frontmatter.riskBand : "low",
+      status: "active",
+      triggerPattern: typeof frontmatter.triggerPattern === "string" ? frontmatter.triggerPattern : null,
+      userInvocable,
+      agentInvocable,
+      allowedTools: coworkerAllowedTools.length > 0 ? coworkerAllowedTools : uniqueStrings(standardAllowedTools),
+      composesFrom: asStringArray(frontmatter.composesFrom),
+      contextRequirements: asStringArray(frontmatter.contextRequirements),
+      capability: typeof frontmatter.capability === "string" ? frontmatter.capability : null,
+      taskType: typeof frontmatter.taskType === "string" ? frontmatter.taskType : "conversation",
+    },
+    assignTo: asStringArray(frontmatter.assignTo),
+  };
+}
+
+export function validateDpfPlatformSkillFrontmatter(
+  frontmatter: SkillFrontmatter,
+  sourceLabel: string,
+): string[] {
+  const issues: string[] = [];
+  const standardAllowedTools = parseAllowedTools(frontmatter["allowed-tools"]);
+  const coworkerAllowedTools = asStringArray(frontmatter.allowedTools);
+
+  for (const key of ["name", "description", "category", "taskType", "riskBand"]) {
+    if (typeof frontmatter[key] !== "string" || frontmatter[key] === "") {
+      issues.push(`${sourceLabel}: missing string frontmatter '${key}'`);
+    }
+  }
+
+  for (const key of ["assignTo", "composesFrom", "contextRequirements", "enforces"]) {
+    if (!Array.isArray(frontmatter[key])) {
+      issues.push(`${sourceLabel}: missing array frontmatter '${key}'`);
+    }
+  }
+
+  for (const key of ["disable-model-invocation", "user-invocable", "userInvocable", "agentInvocable"]) {
+    if (typeof frontmatter[key] !== "boolean") {
+      issues.push(`${sourceLabel}: missing boolean frontmatter '${key}'`);
+    }
+  }
+
+  if (standardAllowedTools.length === 0) {
+    issues.push(`${sourceLabel}: missing Agent Skills 'allowed-tools' entries`);
+  }
+  if (coworkerAllowedTools.length === 0) {
+    issues.push(`${sourceLabel}: missing DPF coworker 'allowedTools' entries`);
+  }
+
+  if (
+    typeof frontmatter["user-invocable"] === "boolean" &&
+    typeof frontmatter.userInvocable === "boolean" &&
+    frontmatter["user-invocable"] !== frontmatter.userInvocable
+  ) {
+    issues.push(`${sourceLabel}: user-invocable contradicts userInvocable`);
+  }
+
+  if (
+    typeof frontmatter["disable-model-invocation"] === "boolean" &&
+    typeof frontmatter.agentInvocable === "boolean" &&
+    frontmatter.agentInvocable !== !frontmatter["disable-model-invocation"]
+  ) {
+    issues.push(`${sourceLabel}: disable-model-invocation contradicts agentInvocable`);
+  }
+
+  const missingCoworkerTools = uniqueStrings(standardAllowedTools.map(allowedToolBase))
+    .filter((tool) => !coworkerAllowedTools.includes(tool));
+  if (missingCoworkerTools.length > 0) {
+    issues.push(
+      `${sourceLabel}: allowedTools missing Agent Skills base tool(s): ${missingCoworkerTools.join(", ")}`,
+    );
+  }
+
+  return issues;
+}
+
+function loadSkillSeedEntry(source: SkillSeedSource): LoadedSkillSeedEntry | null {
+  const raw = readFileSync(source.filePath, "utf-8");
+  const { frontmatter } = parseFrontmatter(raw);
+  const skillId = frontmatter.name;
+  if (!skillId) {
+    console.warn(`[seed-skills] Skipping ${basename(source.filePath)} — no 'name' in frontmatter`);
+    return null;
+  }
+  return { ...source, raw, frontmatter, skillId };
+}
+
+export function selectSkillSeedEntries(entries: LoadedSkillSeedEntry[]): {
+  selected: LoadedSkillSeedEntry[];
+  conflicts: SkillSeedConflict[];
+} {
+  const selectedBySkillId = new Map<string, LoadedSkillSeedEntry>();
+  const conflicts: SkillSeedConflict[] = [];
+
+  for (const entry of entries) {
+    const existing = selectedBySkillId.get(entry.skillId);
+    if (!existing) {
+      selectedBySkillId.set(entry.skillId, entry);
+      continue;
+    }
+
+    if (
+      existing.sourceType === LEGACY_SKILL_SOURCE_TYPE &&
+      entry.sourceType === DPF_PLATFORM_SKILL_SOURCE_TYPE
+    ) {
+      conflicts.push({
+        skillId: entry.skillId,
+        legacyPath: existing.filePath,
+        pluginPath: entry.filePath,
+      });
+      selectedBySkillId.set(entry.skillId, entry);
+      continue;
+    }
+
+    if (
+      existing.sourceType === DPF_PLATFORM_SKILL_SOURCE_TYPE &&
+      entry.sourceType === LEGACY_SKILL_SOURCE_TYPE
+    ) {
+      conflicts.push({
+        skillId: entry.skillId,
+        legacyPath: entry.filePath,
+        pluginPath: existing.filePath,
+      });
+      continue;
+    }
+
+    selectedBySkillId.set(entry.skillId, entry);
+  }
+
+  return {
+    selected: [...selectedBySkillId.values()],
+    conflicts,
+  };
+}
+
+type SkillSeedWarningSeedClient = Pick<PrismaClient, "skillSeedWarning">;
+
+export async function writeSkillSeedConflictWarnings(
+  prisma: SkillSeedWarningSeedClient,
+  conflicts: SkillSeedConflict[],
+): Promise<void> {
+  for (const conflict of conflicts) {
+    const warningId = `plugin-overrides-legacy:${conflict.skillId}`;
+    const message =
+      `dpf-platform plugin skill '${conflict.skillId}' overrides legacy coworker skill at seed time; migrate or retire the legacy file under EP-SKILL-001.`;
+
+    await prisma.skillSeedWarning.upsert({
+      where: { warningId },
+      update: {
+        skillId: conflict.skillId,
+        warningType: "plugin-overrides-legacy",
+        message,
+        legacyPath: conflict.legacyPath,
+        pluginPath: conflict.pluginPath,
+        sourceType: DPF_PLATFORM_SKILL_SOURCE_TYPE,
+        metadata: {},
+        resolvedAt: null,
+      },
+      create: {
+        warningId,
+        skillId: conflict.skillId,
+        warningType: "plugin-overrides-legacy",
+        message,
+        legacyPath: conflict.legacyPath,
+        pluginPath: conflict.pluginPath,
+        sourceType: DPF_PLATFORM_SKILL_SOURCE_TYPE,
+        metadata: {},
+      },
+    });
+  }
 }
 
 type SkillAssignmentSeedClient = Pick<PrismaClient, "skillAssignment">;
@@ -214,47 +545,31 @@ export async function reconcileSkillAssignments(
 }
 
 export async function seedSkills(prisma: PrismaClient): Promise<void> {
-  const files = discoverSkillFiles();
-  if (files.length === 0) return;
+  const loadedFiles = discoverSkillFiles()
+    .map((file) => loadSkillSeedEntry(file))
+    .filter((entry): entry is LoadedSkillSeedEntry => entry !== null);
+  if (loadedFiles.length === 0) return;
+
+  const { selected: files, conflicts } = selectSkillSeedEntries(loadedFiles);
+  for (const conflict of conflicts) {
+    console.warn(
+      `[seed-skills] dpf-platform plugin skill '${conflict.skillId}' overrides legacy skill '${conflict.legacyPath}'`,
+    );
+  }
+  await writeSkillSeedConflictWarnings(prisma, conflicts);
 
   let created = 0;
   let updated = 0;
   let assignmentsCreated = 0;
   let assignmentsRemoved = 0;
 
-  for (const { category, filePath } of files) {
-    const raw = readFileSync(filePath, "utf-8");
-    const { frontmatter, body } = parseFrontmatter(raw);
-
-    const skillId = frontmatter.name;
-    if (!skillId) {
-      console.warn(`[seed-skills] Skipping ${basename(filePath)} — no 'name' in frontmatter`);
-      continue;
-    }
-
-    const skillMdContent = raw; // Store the full file content including frontmatter
-
-    const asStringArray = (v: unknown): string[] =>
-      Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
-
-    const data = {
-      name: skillId,
-      description: frontmatter.description ?? "",
-      skillMdContent,
-      sourceType: "internal" as const,
-      category: frontmatter.category ?? category,
-      tags: [],
-      riskBand: frontmatter.riskBand ?? "low",
-      status: "active",
-      triggerPattern: frontmatter.triggerPattern ?? null,
-      userInvocable: frontmatter.userInvocable !== false,
-      agentInvocable: frontmatter.agentInvocable !== false,
-      allowedTools: asStringArray(frontmatter.allowedTools),
-      composesFrom: asStringArray(frontmatter.composesFrom),
-      contextRequirements: asStringArray(frontmatter.contextRequirements),
-      capability: typeof frontmatter.capability === "string" ? frontmatter.capability : null,
-      taskType: frontmatter.taskType ?? "conversation",
-    };
+  for (const file of files) {
+    const { skillId, skillDefinition: data, assignTo } = normalizeSkillFrontmatterForSeed({
+      frontmatter: file.frontmatter,
+      raw: file.raw,
+      category: file.category,
+      sourceType: file.sourceType,
+    });
 
     const existing = await prisma.skillDefinition.findUnique({
       where: { skillId },
@@ -274,7 +589,6 @@ export async function seedSkills(prisma: PrismaClient): Promise<void> {
     }
 
     // Create SkillAssignment records
-    const assignTo = frontmatter.assignTo ?? [];
     const targetAgents = assignTo.includes("*") ? ALL_AGENT_IDS : assignTo;
 
     const reconcileResult = await reconcileSkillAssignments(

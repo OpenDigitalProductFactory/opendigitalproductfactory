@@ -1,0 +1,36 @@
+{
+  "name": "dpf-platform",
+  "version": "0.1.0",
+  "description": "DPF-native agent skills for contributor sessions and in-portal coworkers.",
+  "author": {
+    "name": "Digital Product Factory",
+    "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory"
+  },
+  "homepage": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/packages/dpf-skill-pack",
+  "repository": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/packages/dpf-skill-pack",
+  "license": "Apache-2.0",
+  "keywords": [
+    "dpf",
+    "digital-product-factory",
+    "agent-skills",
+    "build-studio",
+    "kernel-principles",
+    "backlog",
+    "worktree",
+    "dco",
+    "wwmd"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "DPF Platform",
+    "shortDescription": "DPF-native development and coworker skills",
+    "longDescription": "Distributes DPF-native workflow skills that encode backlog governance, kernel decisions, worktree discipline, DCO PR flow, and evidence-first diagnostics.",
+    "developerName": "Digital Product Factory",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory"
+  }
+}
