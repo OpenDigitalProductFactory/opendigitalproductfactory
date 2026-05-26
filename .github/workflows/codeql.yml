@@ -31,8 +31,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: codeql-advanced-${{ github.ref }}
-  cancel-in-progress: true
+  group: codeql-advanced-${{ github.event_name }}-${{ github.ref }}
+  # PR scans are superseded by newer commits. Main branch scans should finish
+  # so GitHub code scanning does not surface cancelled analyses as errors.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   analyze:
