@@ -21,7 +21,8 @@
     "./wiki-taxonomy": "./src/wiki-taxonomy.ts",
     "./wiki-store": "./src/wiki-store.ts",
     "./wiki-frontmatter": "./src/wiki-frontmatter.ts",
-    "./capability-maturity": "./src/capability-maturity.ts"
+    "./capability-maturity": "./src/capability-maturity.ts",
+    "./business-capability-perspectives": "./src/business-capability-perspectives.ts"
   },
   "scripts": {
     "postinstall": "prisma generate",
