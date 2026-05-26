@@ -641,3 +641,239 @@ is wait, retry, or give up. Build Studio needs:
 Each is a small surgical fix individually; together they elevate Plan-phase
 reliability from "needs hand-holding by an AI engineer" to "Dale can wait
 for it".
+
+---
+
+## Phase J — 2026-05-24/25 resumption attempt after sizing+decomposition WIP
+
+**Premise.** Mark put a sizing+decomposition layer effort in flight to handle
+oversized builds (the architectural root cause D38 surfaced but couldn't fix).
+That effort is itself stuck. Goal of this Phase J: drive FB-6F7D6AC4 forward
+on whatever's currently shipped and observe whether decomposition activates.
+
+**Method.** Sign in as the install admin (dogfood-equivalent of "Dale's seat"
+in a single-user install), open FB-6F7D6AC4 in Build Studio, send Dale-natural
+prompts to the Software Engineer coworker chat, observe behavior. No SQL, no
+manual capsule writes.
+
+### D39 — Stale browser bundle creates indefinite "still working" spinner — S0 quit
+
+After portal self-upgrade (container restart picks up new bundle), an
+in-session browser tab carries stale Next.js Server Action hashes. Every chat
+send hits a 404 server-side (`Failed to find Server Action "40c1facd..."`).
+The chat UI has no failure surface for this case — it shows
+"Software Engineer is still working (Xs)" indefinitely, the Cancel button
+doesn't visibly resolve state, and capsule never updates.
+
+This is the same root cause as the existing memory entry
+`project_self_upgrade_kills_in_session_ux` (2026-05-20), but observed on a
+Dale-facing surface. Dale would close the laptop after the spinner passed two
+minutes. The hard-reload fix is invisible to him.
+
+**Fix shape.** Detect Server Action 404 on the client; surface a "this page is
+out of date — refresh to continue" toast with a one-click reload. Pair with
+ETag/bundle-hash heartbeat in coworker chat so staleness is auto-detected
+without waiting for a failed send.
+
+### D40 — Send button double-fires on a single click — S3 friction
+
+First chat send produced two identical user-message bubbles in chat history.
+The prompt was duplicated server-side (visible as two identical chat entries).
+Likely a missing in-flight debounce on the Send button. Wastes one model
+invocation, confuses chat history, makes review unclear.
+
+### D41 — RETRACTED. Was misdiagnosis; see D45 / D46 / D47 for actual root causes.
+
+Original Phase J writeup blamed the model for "hallucinating tool calls" based
+on the `[tool-trace] adapter=claude-cli NO-CALL-BUT-MENTIONED` log line. Mark
+correctly pushed back: Claude/Codex don't hallucinate tool calls
+99.99% of the time. Re-investigating produced three real observability bugs
+(D45-D47 below) that combined to make the model LOOK broken when the model
+was doing its job correctly. Memory entry `check-tool-signals-first` exists
+exactly to prevent this recurring failure pattern. Worked example preserved
+here so future troubleshooters can recognize the shape.
+
+### D45 — TOOL_TRACE_KEYWORD_PATTERN false-positives on narration — S2 wrong
+
+`apps/web/lib/routing/cli-adapter.ts` defines a regex that matches any
+mention of a known platform tool name in any text:
+
+```
+/\b(read_sandbox_file|write_sandbox_file|...|saveBuildEvidence|...)\b/g
+```
+
+When an agent calls `mcp__dpf__report_quality_issue` via the CLI's MCP layer
+and the CLI executes it server-side, the agent then narrates what it did —
+typically including a JSON block showing the args (`{title: "...",
+suggestedTitle: "... saveBuildEvidence ..."}`). The regex hits on the word
+"saveBuildEvidence" inside the narration string and logs
+`[tool-trace] NO-CALL-BUT-MENTIONED` even though the actual call fired and
+succeeded. Every troubleshooter (including this one) reads that log and
+reaches for "the agent isn't calling tools" first.
+
+**Fix (landed in this branch).** Adapter parsers now capture filtered
+mcp__dpf__* names as `cliPreExecutedNames`, and the trace subtracts those
+plus actually-extracted names from `mentioned` before logging
+NO-CALL-BUT-MENTIONED. Only "ghost mentions" — tool names that aren't
+explained by either an extracted call or a pre-executed MCP call — now
+trigger the diagnostic.
+
+### D46 — Operator Contract guards fire on conversational chat — S1 stuck
+
+`apps/web/lib/tak/agentic-loop.ts` lines 1141-1200 host three guards that
+fire on zero-tool-call iterations: `tool-refused-despite-availability`,
+`zero-tool-call`, and `unsaved-evidence`. Each writes a PlatformIssueReport
+when triggered. The guards are correct for **autonomous phase execution**
+(orchestrator running the plan-phase agent loop) — a zero-tool-call iteration
+there really is a contract violation.
+
+But the same code path is reused for **interactive chat**. When Dale asks
+"yes do the truck list first" and the coworker answers conversationally with
+"sure, here's how I'd break it up: tasks: 1) ... 2) ..." — the
+`detectUnsavedEvidence` regex (which matches `tasks?[:\s]`) fires, a phantom
+`[coworker-process] unsaved-evidence: buildPlan` PlatformIssueReport row is
+written, and the chat now looks like it generated a real contract violation.
+The previous Dale Phase J run produced one of these exactly. Pollutes
+reflection/improvement signals.
+
+**Fix (landed in this branch).** `runAgenticLoop` accepts a new
+`interactionMode: "chat" | "autonomous"` parameter. Default "autonomous"
+preserves existing behavior for orchestrator / pipeline / autonomous-work-run
+callers. `agent-coworker.ts:sendMessage` (the user-typed-a-question path)
+now passes `"chat"` so the contract guards no-op. Three unit tests pin the
+contract.
+
+### D47 — Stale browser bundle silently 404s server actions — S0 quit
+
+Portal logs were full of `Error: Failed to find Server Action "..."`
+during the Dale run. This is the documented memory entry
+`project_self_upgrade_kills_in_session_ux` (2026-05-20): when the portal
+self-upgrades mid-session (PR merges to main → container recycles → new
+bundle hash), an open browser tab carries STALE server-action hashes. Every
+chat send hits a 404 server-side. The chat UI has no failure surface for
+this case — it shows "Software Engineer is still working (Xs)" indefinitely.
+Dale would close the laptop.
+
+Same memory entry as D45 in spirit — diagnostic gap, not a model bug.
+
+**Fix shape (NOT in this branch).** Detect Server Action 404 on the client,
+surface a "this page is out of date — refresh to continue" toast with a
+one-click reload. Pair with a bundle-hash heartbeat in coworker chat so
+staleness is auto-detected without waiting for a failed send. File as a
+follow-on BI in the chat-UX hardening epic.
+
+### D42 — Heavy platform vocabulary leaks to Dale in scope-down dialogue — S2 wrong
+
+When Dale asked the SE coworker "the plan keeps failing, can you try breaking
+this into smaller pieces my guys can use? maybe just the truck list first,
+then add parts later," the SE responded with three paragraphs containing:
+
+- "Suspense loading", "atomic usage", "CHECK constraint blocks negative quantities"
+- "concurrency test harness for parallel writes"
+- "duplicate idempotency key with different payload"
+- "register seed module in project entrypoint"
+- "command-layer org scoping is still not explicit enough"
+- "migration/test setup, and data-integrity coverage underspecified"
+- "tasks for `recordUsage` and `recordRestock` must validate `organizationId`"
+
+Dale calls software "an app." None of these terms are recoverable for him.
+The persona doc explicitly bans this vocabulary in coworker output. The SE
+coworker prompt presumably permits engineer-speak by default; it needs a
+Dale-mode template that strips all of this and translates findings into
+shop-floor consequences ("we'd lose a part count if two techs grabbed the
+same wrench at once" not "duplicate idempotency key").
+
+### D43 — Decomposition recognition exists at LLM level, no substrate affordance — S0 quit (architectural)
+
+This is the headline finding. The SE coworker's second-turn response
+contained — at the bottom, after all the platform-vocab diagnosis — a
+genuinely correct decomposition recommendation:
+
+> "Given your scope change, the next logical move is to re-plan this as a
+> smaller first slice: truck list and assignment visibility first, then
+> parts, usage, and live updates in a follow-on build."
+
+This is exactly the shape Mark's sizing+decomposition spec describes. But:
+
+1. It's **text-only**. There is no "Spawn child build for this slice" button.
+   No auto-creation of a follow-on FB-*. No structural affordance that turns
+   the recommendation into action.
+2. Dale's natural response — "yes do the truck list first" — produces another
+   3-minute chat turn but `mcp__dpf__get_build_progress_visibility` still
+   reports 0 dispatch attempts, capsule.workspaceState.phase still "ideate",
+   and no child Work Capsule was created.
+3. There is no `parentBuildId` column on FeatureBuild (verified by grep of
+   `packages/db/prisma/schema.prisma`), so even if the agent wanted to spawn
+   a child build linked back to FB-6F7D6AC4, the schema doesn't support it.
+
+The April commit `2604f2b8 feat(build-studio): effort sizing and epic
+decomposition in scout phase` shipped intake-phase sizing as a coworker
+prompt, but the loop-breaker the spec describes — decomposition assistant
+callable from Plan oscillation that spawns child builds — is not in the
+codebase.
+
+**Fix shape.** This is the WIP effort Mark already has in flight. Phase J's
+contribution is empirical confirmation that the missing piece is exactly
+what the spec called for: schema for parent/child build, tool surface for
+the coworker to actually CREATE a child build (not just talk about one),
+and an operator-visible "Spawn child build" affordance that converts the
+chat recommendation into a structural action.
+
+### D44 — Capsule state desyncs from UI phase — S2 wrong
+
+`mcp__dpf__get_work_capsule(WC-1C481A3E)` returns
+`workspaceState.buildStudio.phase: "ideate"` and last update timestamp
+of 2026-05-23 23:36:59 (capsule creation). But the UI shows Plan phase with
+a "Plan review failed" status banner and Round 1 metrics. The capsule
+hasn't been updated since creation despite ~2 days of Ideate→Plan progression.
+
+If Dale (or any automation) reads the capsule to know what to do next, it
+gets the wrong answer. The phase status in the UI is authoritative but
+the capsule projection is stale by 48 hours. This is a separate substrate
+gap from D41 (hallucinated tool calls) — even when real tool calls fire,
+the capsule projection doesn't update from them.
+
+### Phase J trajectory table
+
+| Date | Phase reached | Deficiencies surfaced | Outcome |
+| ---- | ------------- | --------------------- | ------- |
+| 2026-05-24/25 | Plan-iteration retry with sizing+decomposition WIP in flight | D39 (stale-bundle silent failure → restated D47), D40 (Send double-fire), D41 (RETRACTED — misdiagnosis), D42 (platform vocab in scope-down), D43 (decomposition is text-only, no affordance), D44 (capsule state desync), D45 (TOOL_TRACE_KEYWORD_PATTERN false-positives on narration), D46 (Operator Contract guards fire on chat), D47 (stale-bundle silent 404 → no failure surface) | FB-6F7D6AC4 unchanged. D45+D46 surgical fix landed in this branch (interactionMode gate + cliPreExecutedNames ghost filter, 8 unit tests). Confirmed architectural gap the WIP effort is supposed to close (D43): decomposition recognition lives in LLM reasoning but has no substrate to land on. |
+
+### Phase J lesson learned (architectural)
+
+The sizing+decomposition WIP needs three substrate pieces to land
+together — shipping any one in isolation will not move Dale forward:
+
+1. **Schema** — `parentBuildId` (nullable, self-FK) on FeatureBuild; child
+   inherits parent's designDoc and intake anchors. Without this, the
+   coworker has nowhere to write its proposed child builds.
+
+2. **Tool surface** — a tool the SE coworker can actually invoke
+   (`propose_decomposition` returning candidate splits; operator-approved
+   `create_child_build` that materializes one). The LLM has the right
+   instinct — the substrate just won't let it act.
+
+3. **Operator affordance** — a "Spawn child build" button (or compact card)
+   that appears inline with the recommendation in chat. Dale will not type
+   "yes" four times — the affordance has to be one click and Dale-named
+   ("Start a smaller build for just the truck list?").
+
+D45+D46 fix landed in this branch — diagnostic noise is gone, so the next
+troubleshooter can read PlatformIssueReport rows and tool-trace logs as
+real signals rather than ghost classifier output. D47 (stale-bundle 404)
+is an open follow-on for the chat-UX hardening epic.
+
+A separate finding from this run: the tool surface (192 platform tools,
+22 family test files, 1 top-level mcp-tools.test.ts) lacks a
+contract-level test that would have caught both D45 and D46 in CI before
+they hit production. A tool-hardening initiative is proposed as the
+follow-up — schema validity, registration round-trip, adapter extraction
+round-trip, grant resolution, and OpenAI-conversion smoke per tool.
+
+### Recommendation for next persona dogfood
+
+Resume Phase K on FB-6F7D6AC4. With D45/D46 fixed, future runs will get
+honest diagnostic signals. The remaining gap (D43: no decomposition
+affordance) is the WIP effort Mark already has in flight; that effort's
+own completion is what unblocks Dale shipping. Phase K should re-run
+after the sizing+decomposition WIP lands.

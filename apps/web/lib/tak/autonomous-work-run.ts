@@ -199,6 +199,14 @@ export async function executeAutonomousAgenticLoop(input: {
    * though the row itself is persisted by the caller after the loop returns.
    */
   agentMessageId?: string | null;
+  /**
+   * Distinguish autonomous phase execution from interactive chat. Forwarded
+   * to runAgenticLoop. Defaults to "autonomous" to preserve prior behavior;
+   * interactive chat callers (agent-coworker sendMessage) must pass "chat"
+   * so Operator Contract guards do not false-positive on conversational
+   * replies. See agentic-loop.ts param doc.
+   */
+  interactionMode?: "chat" | "autonomous";
   onProgress?: (event: AgentEvent) => void;
 }) {
   const { runAgenticLoop } = await import("@/lib/tak/agentic-loop");
@@ -225,6 +233,7 @@ export async function executeAutonomousAgenticLoop(input: {
     featureBuildId: input.featureBuildId,
     activeSkillId: input.activeSkillId ?? null,
     agentMessageId: input.agentMessageId ?? null,
+    interactionMode: input.interactionMode,
     ...(input.modelRequirements ? { modelRequirements: input.modelRequirements } : {}),
     onProgress: input.onProgress,
   });
