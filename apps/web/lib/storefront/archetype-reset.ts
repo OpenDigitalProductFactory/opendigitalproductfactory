@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { applyBusinessCapabilityPerspective } from "@dpf/db/business-capability-perspectives";
 import { nanoid } from "nanoid";
 
 type ResetMode = "replace-seeded-content";
@@ -33,6 +34,7 @@ export async function resetStorefrontArchetype(input: {
       where: { archetypeId: targetArchetypeId },
       select: {
         id: true,
+        archetypeId: true,
         category: true,
         ctaType: true,
         sectionTemplates: true,
@@ -60,6 +62,11 @@ export async function resetStorefrontArchetype(input: {
         industry: targetArchetype.category,
         ctaType: targetArchetype.ctaType,
       },
+    });
+
+    await applyBusinessCapabilityPerspective(tx, {
+      archetypeId: targetArchetype.archetypeId,
+      category: targetArchetype.category,
     });
 
     let sectionsCreated = 0;

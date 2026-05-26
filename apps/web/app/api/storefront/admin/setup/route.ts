@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
+import { applyBusinessCapabilityPerspective } from "@dpf/db/business-capability-perspectives";
 import { nanoid } from "nanoid";
 import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
 import { generateDesignSystem } from "@/lib/design-intelligence";
@@ -135,6 +136,11 @@ export async function POST(req: NextRequest) {
       ctaType: archetype.ctaType,
       revenueModel,
     },
+  });
+
+  await applyBusinessCapabilityPerspective(prisma, {
+    archetypeId,
+    category: archetype.category,
   });
 
   // Seed default provider, availability, and booking config from template scheduling defaults
