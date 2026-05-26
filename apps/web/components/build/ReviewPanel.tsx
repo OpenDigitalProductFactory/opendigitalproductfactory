@@ -15,6 +15,7 @@ import type {
 import { safeRenderValue } from "@/lib/safe-render";
 import { normalizeTaskResults, type NormalizedTaskResults } from "@/lib/build/task-results";
 import { normalizeVerificationOutput, type NormalizedVerificationOutput } from "@/lib/build/verification-output";
+import { DecompositionCoordinator } from "@/components/build/DecompositionCoordinator";
 
 type Props = {
   build: FeatureBuildRow;
@@ -46,7 +47,12 @@ export function ReviewPanel({ build }: Props) {
 
       {/* Collapsible sections */}
       <BriefSection brief={build.brief} />
-      <DesignDocSection doc={build.designDoc} review={build.designReview} />
+      <DesignDocSection
+        doc={build.designDoc}
+        review={build.designReview}
+        buildId={build.buildId}
+        buildTitle={build.title}
+      />
       <BuildPlanSection plan={build.buildPlan} review={build.planReview} />
       <TaskResultsSection results={taskResults} />
       <VerificationSection verification={verification} />
@@ -193,9 +199,13 @@ function BriefSection({ brief }: { brief: FeatureBrief | null }) {
 function DesignDocSection({
   doc,
   review,
+  buildId,
+  buildTitle,
 }: {
   doc: BuildDesignDoc | null;
   review: FeatureBuildRow["designReview"];
+  buildId: string;
+  buildTitle: string;
 }) {
   const [formatted, setFormatted] = useState<Record<string, string>>({});
   const [isFormatting, startFormatting] = useTransition();
@@ -263,6 +273,20 @@ function DesignDocSection({
           )}
           {review && (
             <ReviewBadgeBlock decision={review.decision} summary={review.summary} issues={review.issues} />
+          )}
+          {review?.decision === "pass" && (
+            <DecompositionCoordinator
+              buildId={buildId}
+              buildTitle={buildTitle}
+              parentAcceptanceCriteria={
+                Array.isArray(doc.acceptanceCriteria)
+                  ? doc.acceptanceCriteria.filter((ac): ac is string => typeof ac === "string")
+                  : []
+              }
+              assessment={review.sizeAssessment ?? null}
+              initialCandidates={review.decompositionCandidates?.latest ?? []}
+              existingOverride={review.decompositionOverride ?? null}
+            />
           )}
         </div>
       )}

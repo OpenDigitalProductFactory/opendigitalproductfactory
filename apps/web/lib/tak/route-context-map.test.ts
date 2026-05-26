@@ -55,6 +55,23 @@ describe("resolveRouteContext", () => {
     expect(ctx.sensitivity).toBe("restricted");
   });
 
+  it("uses a specialist context for admin issue reports", () => {
+    const ctx = resolveRouteContext("/admin/issue-reports");
+
+    expect(ctx.domain).toBe("Admin Issue Triage");
+    expect(ctx.routePrefix).toBe("/admin/issue-reports");
+    expect(ctx.sensitivity).toBe("restricted");
+    expect(ctx.domainTools).toEqual(expect.arrayContaining([
+      "admin_view_logs",
+      "admin_query_db",
+      "admin_read_file",
+      "create_backlog_item",
+      "update_backlog_item",
+    ]));
+    expect(ctx.skills.some((skill) => skill.label === "Triage issue reports")).toBe(true);
+    expect(ctx.skills.some((skill) => skill.label === "Suppress warmup noise")).toBe(true);
+  });
+
   it("returns correct sensitivity for /employee (confidential)", () => {
     const ctx = resolveRouteContext("/employee");
     expect(ctx.sensitivity).toBe("confidential");
@@ -137,6 +154,7 @@ describe("ROUTE_CONTEXT_MAP", () => {
       "/build",
       "/platform",
       "/admin",
+      "/admin/issue-reports",
       "/workspace",
     ];
     for (const route of expected) {

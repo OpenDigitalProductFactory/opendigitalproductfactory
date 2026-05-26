@@ -97,6 +97,23 @@ describe("AgentMessageInput — mic button is mounted", () => {
   });
 });
 
+describe("AgentMessageInput — voice playback affordance", () => {
+  it("keeps the speaker control visible but disabled when voice synthesis is unavailable", () => {
+    render(
+      <AgentMessageInput
+        {...defaultProps}
+        voiceSynthAvailable={false}
+        voicePlaybackEnabled={true}
+        onVoicePlaybackToggle={vi.fn()}
+      />,
+    );
+
+    const speaker = screen.getByRole("button", { name: /voice playback unavailable/i });
+    expect(speaker).toBeTruthy();
+    expect((speaker as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
 describe("AgentMessageInput — mic button click → voice.start()", () => {
   it("calls voice.start() when the idle mic button is clicked", () => {
     render(<AgentMessageInput {...defaultProps} />);

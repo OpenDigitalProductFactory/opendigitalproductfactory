@@ -265,6 +265,82 @@ describe("BuildStudioWorkflowActionCard resume visibility", () => {
   });
 });
 
+describe("BuildStudioWorkflowActionCard decomposition affordances", () => {
+  it("emits the open-build-decomposition event for Decompose now", async () => {
+    const received: unknown[] = [];
+    const handler = (event: Event) => {
+      received.push((event as CustomEvent).detail);
+    };
+    document.addEventListener("open-build-decomposition", handler);
+
+    try {
+      const action: BuildStudioWorkflowAction = {
+        kind: "decompose-now",
+        title: "Plan Review Is Oscillating",
+        message: "Plan review is oscillating; split this into smaller builds.",
+        primaryLabel: "Decompose now",
+        targetPhase: null,
+        disabledReason: null,
+        coworkerLabel: "Review with coworker",
+        coworkerPrompt: "Explain the split.",
+      };
+      const onCompleted = vi.fn();
+
+      render(
+        <BuildStudioWorkflowActionCard
+          build={makeBuild({ decisionInteraction: null })}
+          action={action}
+          onCompleted={onCompleted}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Decompose now" }));
+
+      await waitFor(() => {
+        expect(received).toEqual([{ buildId: "FB-9B19098C" }]);
+      });
+      expect(onCompleted).toHaveBeenCalledTimes(1);
+    } finally {
+      document.removeEventListener("open-build-decomposition", handler);
+    }
+  });
+
+  it("opens the coworker with parent-amendment copy for child builds", async () => {
+    const dispatchSpy = vi.spyOn(document, "dispatchEvent");
+    const action: BuildStudioWorkflowAction = {
+      kind: "amend-parent-design",
+      title: "Amend Parent Design",
+      message: "This child is still too large; amend the parent design instead.",
+      primaryLabel: "Amend parent design",
+      targetPhase: null,
+      disabledReason: null,
+      coworkerLabel: "Amend with coworker",
+      coworkerPrompt: "Help me amend the parent design instead of decomposing this child.",
+    };
+
+    render(
+      <BuildStudioWorkflowActionCard
+        build={makeBuild({ buildId: "FB-CHILD", parentEpicId: "epic-row-1", decisionInteraction: null })}
+        action={action}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Amend parent design" }));
+
+    await waitFor(() => {
+      expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({
+        type: "open-agent-panel",
+      }));
+    });
+    const event = dispatchSpy.mock.calls
+      .map((call) => call[0])
+      .find((candidate) => candidate.type === "open-agent-panel") as CustomEvent;
+    expect(event.detail.autoMessage).toContain("parent design");
+    expect(event.detail.targetBuildId).toBe("FB-CHILD");
+    dispatchSpy.mockRestore();
+  });
+});
+
 describe("deriveActionBannerState", () => {
   // The card delegates compact rendering to ActionBanner; this helper is the
   // contract between dispatch + presentation. Pinning the mapping ensures the

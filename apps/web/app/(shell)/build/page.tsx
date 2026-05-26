@@ -1,7 +1,7 @@
 // apps/web/app/(shell)/build/page.tsx
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
-import { getFeatureBuilds } from "@/lib/feature-build-data";
+import { getExecutionEpicRollups, getFeatureBuildById, getFeatureBuilds } from "@/lib/feature-build-data";
 import { getPortfoliosForSelect } from "@/lib/backlog-data";
 import { businessBuildBriefFromRecord } from "@/lib/build/business-build-brief";
 import { BuildStudio } from "@/components/build/BuildStudio";
@@ -113,11 +113,11 @@ export default async function BuildPage({ searchParams }: PageProps) {
   if (!capability.ok) {
     const isOnlyLocal = capability.reason === "only_local_provider_active";
     const heading = isOnlyLocal
-      ? "Connect a stronger AI to start building"
-      : "Build Studio needs a stronger AI model";
+      ? "Connect a code-capable AI runner to start building"
+      : "Build Studio needs a code-capable AI runner";
     const body = isOnlyLocal
-      ? "Build Studio writes code and orchestrates tools for you. The local AI on this install can chat, but it isn't strong enough for that work yet. Connect one of the providers below — it takes about a minute — and the build flow opens up."
-      : "Build Studio needs a model that can write code and use tools at production quality. The AI providers configured on this install don't include one yet. Connect one of the providers below to get started.";
+      ? "Build Studio writes code and orchestrates tools for you. The local AI on this install can chat, but it is not the right runner for production code work yet. Connect a subscription CLI path or an API-key provider below, then the build flow opens up."
+      : "Build Studio needs an active runner that can write code and use tools at production quality. ChatGPT/OpenAI Codex can satisfy this through OAuth and Codex CLI; OpenAI and Anthropic API keys are separate pay-per-token licensing paths.";
     return (
       <div className="flex items-start justify-center min-h-[60vh] px-6 py-10">
         <div className="max-w-2xl w-full space-y-6 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface)] p-8 shadow-sm">
@@ -173,10 +173,14 @@ export default async function BuildPage({ searchParams }: PageProps) {
     );
   }
 
-  const [builds, portfolios] = await Promise.all([
+  const [builds, epicRollups, portfolios] = await Promise.all([
     getFeatureBuilds(session.user.id),
+    getExecutionEpicRollups(session.user.id),
     getPortfoliosForSelect(),
   ]);
+  const initialActiveBuild = buildId && !builds.some((build) => build.buildId === buildId)
+    ? await getFeatureBuildById(buildId)
+    : null;
   const portalContext = await resolvePortalContextEnvelope(
     {
       pathname: "/build",
@@ -199,6 +203,7 @@ export default async function BuildPage({ searchParams }: PageProps) {
     <section className="min-h-full">
       <BuildStudio
         builds={builds}
+        epicRollups={epicRollups}
         portfolios={portfolios}
         governedBacklogEnabled={devConfig.governedBacklogEnabled}
         dpfEnvironment={process.env.DPF_ENVIRONMENT ?? "production"}
@@ -206,6 +211,7 @@ export default async function BuildPage({ searchParams }: PageProps) {
         submissionBranchShortId={submissionBranchShortId}
         initialBuildId={buildId}
         portalContext={portalContext}
+        initialActiveBuild={initialActiveBuild}
       />
     </section>
   );

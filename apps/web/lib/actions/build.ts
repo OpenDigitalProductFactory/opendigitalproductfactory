@@ -22,6 +22,11 @@ import {
 import { buildDesignReviewPrompt, buildPlanReviewPrompt, parseReviewResponse } from "@/lib/build-reviewers";
 import { queueBuildReviewVerification } from "@/lib/build-review-verification-trigger";
 import { saveBuildArtifactRevision, type BuildArtifactField } from "@/lib/build/build-artifact-provenance";
+import {
+  assertFeatureBuildDependencyGate,
+  FEATURE_BUILD_DEPENDENCY_GATE_SELECT,
+  recordReadyDependentsAfterCompletion,
+} from "@/lib/build/feature-build-dependencies";
 import { evaluateBuildStudioPlanAdvancementGate } from "@/lib/decision-perspective/build-studio-gate";
 import type { ResumeBuildImplementationOutcome, ResumeImplementationMode } from "@/lib/build/progress-visibility-types";
 import {
@@ -363,6 +368,8 @@ export async function advanceBuildPhase(
       uxVerificationStatus: true,
       sandboxId: true,
       deliberationSummary: true,
+      parentEpicId: true,
+      dependenciesOut: FEATURE_BUILD_DEPENDENCY_GATE_SELECT.dependenciesOut,
     },
   });
   if (!build) throw new Error("Build not found");
@@ -442,6 +449,15 @@ export async function advanceBuildPhase(
   }
 
   if (currentPhase === "plan" && targetPhase === "build") {
+    assertFeatureBuildDependencyGate({
+      id: build.id,
+      buildId: build.buildId,
+      title: build.title,
+      parentEpicId: build.parentEpicId,
+      phase: build.phase,
+      dependenciesOut: build.dependenciesOut,
+    });
+
     const decisionGate = await evaluateBuildStudioPlanAdvancementGate({
       db: prisma,
       build: {
@@ -1459,6 +1475,10 @@ export async function completeBuild(buildId: string): Promise<void> {
     data: { phase: "complete" },
   });
   revalidatePortalContextForBuild(buildId);
+  await recordReadyDependentsAfterCompletion({ db: prisma, buildId }).catch((err) => {
+    console.error("[completeBuild] dependency readiness check failed:", err);
+  });
+  revalidatePath("/build");
 }
 
 // ─── Create Epic + Backlog Items for a Build ────────────────────────────────

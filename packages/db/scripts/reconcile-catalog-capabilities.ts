@@ -12,10 +12,19 @@
  * Run via: pnpm --filter @dpf/db exec tsx scripts/reconcile-catalog-capabilities.ts
  */
 import { createHash } from "crypto";
-import { pathToFileURL } from "url";
+import { existsSync } from "fs";
+import { dirname, posix, resolve as nativeResolve, win32 } from "path";
+import { fileURLToPath, pathToFileURL } from "url";
 import { prisma } from "../src/client";
-import { KNOWN_PROVIDER_MODELS } from "../../../apps/web/lib/routing/known-provider-models";
 import type { KnownModel } from "../../../apps/web/lib/routing/known-provider-models";
+
+type KnownProviderModelsByProvider = Record<string, KnownModel[]>;
+
+export type CatalogPathResolutionOptions = {
+  scriptDir?: string;
+  packagedWebSourceRoot?: string;
+  exists?: (candidate: string) => boolean;
+};
 
 export type ProfileUpdateShape = {
   supportsToolUse: boolean;
@@ -42,6 +51,40 @@ export type ProfileUpdateShape = {
   metadataSource: string;
   metadataConfidence: string;
 };
+
+function isWindowsAbsolutePath(value: string): boolean {
+  return /^[a-zA-Z]:[\\/]/.test(value) || /^\\\\/.test(value);
+}
+
+function resolveForPathStyle(basePath: string, ...segments: string[]): string {
+  if (isWindowsAbsolutePath(basePath)) {
+    return win32.resolve(basePath, ...segments);
+  }
+  if (basePath.startsWith("/")) {
+    return posix.resolve(basePath, ...segments);
+  }
+  return nativeResolve(basePath, ...segments);
+}
+
+export function resolveKnownProviderModelsPath(
+  options: CatalogPathResolutionOptions = {},
+): string {
+  const scriptDir = options.scriptDir ?? dirname(fileURLToPath(import.meta.url));
+  const exists = options.exists ?? existsSync;
+  const repoCatalog = resolveForPathStyle(scriptDir, "../../../apps/web/lib/routing/known-provider-models.ts");
+  const packagedCatalog = resolveForPathStyle(
+    options.packagedWebSourceRoot ?? "/app/apps/web-src",
+    "lib/routing/known-provider-models.ts",
+  );
+
+  return [repoCatalog, packagedCatalog].find((candidate) => exists(candidate)) ?? repoCatalog;
+}
+
+export async function loadKnownProviderModels(): Promise<KnownProviderModelsByProvider> {
+  const catalogPath = resolveKnownProviderModelsPath();
+  const catalogModule = await import(pathToFileURL(catalogPath).href);
+  return catalogModule.KNOWN_PROVIDER_MODELS as KnownProviderModelsByProvider;
+}
 
 /** Recursively sorts all object keys for stable serialization. */
 function sortedJson(obj: unknown): unknown {
@@ -150,6 +193,7 @@ async function logChanges(
 }
 
 async function reconcile(): Promise<void> {
+  const KNOWN_PROVIDER_MODELS = await loadKnownProviderModels();
   let created = 0;
   let updated = 0;
   let skipped = 0;

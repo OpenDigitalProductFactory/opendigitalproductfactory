@@ -6,6 +6,7 @@ import { BacklogPanel } from "./BacklogPanel";
 import { BacklogItemRow } from "./BacklogItemRow";
 import { EpicCard, type EpicSort } from "./EpicCard";
 import { EpicPanel } from "./EpicPanel";
+import { isTerminalBacklogItemStatus } from "./backlogVisibility";
 import type {
   BacklogItemWithRelations,
   DigitalProductSelect,
@@ -201,6 +202,7 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
                       key={epic.id}
                       epic={epic}
                       sort={epicSort}
+                      hideDoneItems={hideDone}
                       onEdit={openEditEpic}
                       onItemEdit={openEdit}
                       focusedItemId={focusedItemId}
@@ -227,7 +229,7 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
 
         {types.map((t) => {
           const typeItems = byType.get(t) ?? [];
-          const filteredItems = hideDone ? typeItems.filter((i) => i.status !== "done" && i.status !== "deferred") : typeItems;
+          const filteredItems = hideDone ? typeItems.filter((i) => !isTerminalBacklogItemStatus(i.status)) : typeItems;
           const hiddenItemCount = typeItems.length - filteredItems.length;
           const label = TYPE_LABELS[t] ?? t;
 

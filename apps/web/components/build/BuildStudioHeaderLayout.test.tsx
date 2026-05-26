@@ -1,14 +1,17 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it, vi } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BuildStudio } from "@/components/build/BuildStudio";
 import {
   normalizeHappyPathState,
   type FeatureBuildRow,
 } from "@/lib/feature-build-types";
+import type { EpicRollupView } from "@/lib/build/epic-rollup";
 import type { PortalContextEnvelope } from "@/lib/portal-context";
+
+afterEach(cleanup);
 
 const routerMocks = vi.hoisted(() => ({
   refresh: vi.fn(),
@@ -160,6 +163,53 @@ function makeBuild(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
   };
 }
 
+function makeEpicRollup(overrides: Partial<EpicRollupView> = {}): EpicRollupView {
+  return {
+    epicId: "EP-TRUCK-STOCK",
+    title: "Truck stock tracker",
+    updatedAt: new Date("2026-05-25T12:00:00Z"),
+    status: "in-progress",
+    backlogItems: [
+      { itemId: "BI-ORIGIN", title: "Track truck parts", status: "in-progress", isOriginating: true },
+      { itemId: "BI-RESTOCK", title: "Surface restock needs", status: "open", isOriginating: false },
+    ],
+    backlogSummary: "2 backlog items",
+    childPhases: [
+      { phase: "complete", count: 1 },
+      { phase: "build", count: 1 },
+      { phase: "plan", count: 1 },
+    ],
+    children: [
+      {
+        buildId: "FB-READ",
+        title: "Truck and parts read",
+        phase: "complete",
+        childOrder: 1,
+        waitingOn: [],
+        updatedAt: new Date("2026-05-25T10:00:00Z"),
+      },
+      {
+        buildId: "FB-USAGE",
+        title: "Record usage",
+        phase: "build",
+        childOrder: 2,
+        waitingOn: [],
+        updatedAt: new Date("2026-05-25T11:00:00Z"),
+      },
+      {
+        buildId: "FB-LOW",
+        title: "Low-stock surfacing",
+        phase: "plan",
+        childOrder: 3,
+        waitingOn: ["Record usage"],
+        updatedAt: new Date("2026-05-25T11:30:00Z"),
+      },
+    ],
+    rollupSummary: "1 of 3 done \u00b7 1 in build \u00b7 1 waiting",
+    ...overrides,
+  };
+}
+
 describe("BuildStudio active-build header layout", () => {
   it("renders the empty state instead of crashing when server data arrays are missing", () => {
     const html = renderToStaticMarkup(
@@ -174,6 +224,25 @@ describe("BuildStudio active-build header layout", () => {
 
     expect(html).toContain("Product Development Studio");
     expect(html).toContain("No builds yet");
+  });
+
+  it("renders execution epics as fleet rows even when their child builds are no longer flat rows", () => {
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[]}
+        epicRollups={[makeEpicRollup()]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+
+    expect(html).toContain("Truck stock tracker");
+    expect(html).toContain("1 of 3 done");
+    expect(html).toContain("2 backlog items");
+    expect(html).not.toContain("No builds yet");
+    expect(html).not.toContain("Low-stock surfacing");
   });
 
   it("keeps the active-build title and metadata lane shrinkable for long submission branches", () => {

@@ -2,19 +2,19 @@
 title: "Feature Deployment"
 area: build-studio
 order: 2
-lastUpdated: 2026-03-29
-updatedBy: Claude (Software Engineer)
+lastUpdated: 2026-05-24
+updatedBy: Codex
 ---
 
 ## Overview
 
-When a feature passes all quality gates in Build Studio, it enters the Ship phase. The platform handles deployment autonomously — backing up your database, building a new version of the application with your feature included, swapping it into production, and verifying everything works. If anything goes wrong, it rolls back automatically.
+When a feature passes all quality gates in Build Studio, it enters the Ship phase. Where promotion is enabled for the install, the platform prepares a governed deployment: backing up your database, building a new version of the application with your feature included, swapping it into production, and verifying everything works. If anything goes wrong, rollback protection applies.
 
 You do not need to understand Docker, databases, or deployment tools. The platform manages the entire process and reports the result in plain language.
 
 ## How Deployment Works
 
-The deployment pipeline has eleven steps, all automated:
+The deployment pipeline has eleven governed steps when promotion is enabled:
 
 1. **Validate** — Confirms the promotion has been approved and is ready to deploy
 2. **Window check** — Verifies the current time falls within a deployment window (if configured). Emergency changes bypass this check.
@@ -62,7 +62,7 @@ When your feature is ready to ship, the AI Coworker runs through these steps in 
 3. **Create backlog epic** — Adds the feature to the operations backlog for visibility
 4. **Contribution assessment** — If sharing is enabled, evaluates whether the feature could benefit the wider community. You choose whether to share.
 5. **Pull request and security gates** — Creates a pull request on the codebase with automated security checks: secret detection, backdoor scanning, architecture compliance, dependency audit, and destructive operation scanning. If all checks pass and the build is fully verified, the PR auto-merges. If any check fails, the PR is flagged for human review with details of what needs attention.
-6. **Deploy** — Checks the deployment window and triggers the autonomous deployment pipeline described above
+6. **Deploy** — Checks the deployment window and triggers the governed deployment pipeline described above where promotion is enabled
 
 ## Database Backups
 

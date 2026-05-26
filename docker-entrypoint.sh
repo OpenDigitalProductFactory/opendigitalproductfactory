@@ -160,7 +160,16 @@ workspace_path_matches_image_source() {
   return 1
 }
 
+ensure_workspace_safe_directory() {
+  if [ -d "$WORKSPACE/.git" ]; then
+    git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$WORKSPACE" \
+      || git config --global --add safe.directory "$WORKSPACE" >/dev/null 2>&1 \
+      || true
+  fi
+}
+
 workspace_has_user_changes() {
+  ensure_workspace_safe_directory
   cd "$WORKSPACE"
   ensure_workspace_git_excludes
   # Older source-volume bootstraps accidentally tracked dependency stores.
@@ -197,6 +206,7 @@ ensure_workspace_git_excludes() {
 }
 
 commit_workspace_snapshot() {
+  ensure_workspace_safe_directory
   cd "$WORKSPACE"
   git config user.email "build-studio@dpf.local"
   git config user.name "DPF Build Studio"
@@ -221,6 +231,7 @@ elif [ -d "$WORKSPACE" ] && [ ! -f "$WORKSPACE/.dpf-version" ]; then
 
   # Initialise git — force-create branches to be idempotent on partial failure
   git init -b dpf-upstream
+  ensure_workspace_safe_directory
   git config user.email "build-studio@dpf.local"
   git config user.name "DPF Build Studio"
   ensure_workspace_git_excludes

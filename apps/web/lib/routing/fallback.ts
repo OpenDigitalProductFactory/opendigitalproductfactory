@@ -7,6 +7,7 @@ import type { ChatMessage } from "@/lib/ai-inference";
 import { prisma } from "@dpf/db";
 import type { RouteDecision } from "./types";
 import type { RoutedExecutionPlan } from "./recipe-types";
+import { resolveDefaultExecutionAdapter } from "./execution-plan";
 import { recordRequest, learnFromRateLimitResponse, extractRetryAfterMs } from "./rate-tracker";
 import { scheduleRecovery } from "./rate-recovery";
 import { recordRouteOutcome } from "./route-outcome";
@@ -27,6 +28,41 @@ type RouteOutcomeAttribution = {
    */
   agentMessageId?: string | null;
 };
+
+function buildFallbackProviderSettings(
+  sourcePlan?: RoutedExecutionPlan,
+): RoutedExecutionPlan["providerSettings"] {
+  const settings = sourcePlan?.providerSettings ?? {};
+  const effort = (settings as Record<string, unknown>).effort;
+  return effort ? { effort } : {};
+}
+
+function buildFallbackPlan(
+  entry: { providerId: string; modelId: string },
+  decision: RouteDecision,
+  tools?: Array<Record<string, unknown>>,
+  sourcePlan?: RoutedExecutionPlan,
+): RoutedExecutionPlan {
+  const toolPolicy: RoutedExecutionPlan["toolPolicy"] = {
+    ...(sourcePlan?.toolPolicy ?? {}),
+  };
+  if ((tools?.length ?? 0) > 0 && toolPolicy.toolChoice === undefined) {
+    toolPolicy.toolChoice = "auto";
+  }
+
+  return {
+    providerId: entry.providerId,
+    modelId: entry.modelId,
+    recipeId: null,
+    contractFamily: sourcePlan?.contractFamily ?? decision.taskType,
+    executionAdapter: resolveDefaultExecutionAdapter(entry.providerId),
+    maxTokens: sourcePlan?.maxTokens ?? 4096,
+    providerSettings: buildFallbackProviderSettings(sourcePlan),
+    toolPolicy,
+    responsePolicy: sourcePlan?.responsePolicy ?? {},
+    ...(sourcePlan?.temperature !== undefined ? { temperature: sourcePlan.temperature } : {}),
+  };
+}
 
 export interface FallbackResult {
   providerId: string;
@@ -157,13 +193,18 @@ export async function callWithFallbackChain(
     }
 
     try {
+      const entryPlan =
+        i === 0 && plan
+          ? plan
+          : buildFallbackPlan(entry, decision, tools, plan);
+
       const result = await callProvider(
         entry.providerId,
         entry.modelId,
         messages,
         systemPrompt,
         tools,
-        i === 0 ? plan : undefined,
+        entryPlan,
         i === 0 ? previousResponseId : undefined,
         mcpSession,
         { agentId, agentMessageId },

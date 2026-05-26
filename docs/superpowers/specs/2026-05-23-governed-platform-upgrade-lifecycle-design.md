@@ -411,42 +411,71 @@ Hard override regardless of bump: any L2 destructive migration → mandatory gat
 
 ### 5.5 Apply — graceful recycle protocol
 
+> **Replaced by the Activity Quiescence Protocol.** The detailed drain
+> mechanics that used to live here (17-step protocol, drain mode, SSE
+> close, work-type survival) are now specified in
+> [`docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md`](2026-05-24-activity-quiescence-protocol-design.md).
+> That spec inventories 30 concurrent active surfaces, gives each its own
+> detection / stop-accept / wait / fail-safe contract, and is implemented
+> across BI-QUIESCE-001..010.
+>
+> This section retains only the apply-side (post-quiescence) steps —
+> the L2/L3/L1/L4 ordering, smoke window, and the integration shape the
+> caller (`runSelfUpgrade`) uses.
+
 After operator approval:
 
-1. Operator approves preflight → `SelfUpgradeRun` row inserted and linked to `PreflightRun.id`. Phase 0 expands the status vocabulary beyond today's `pending` / `running` / `succeeded` / `failed` / `cancelled` to include layer states.
+1. Operator approves preflight → `SelfUpgradeRun` row inserted and linked to `PreflightRun.id`.
 2. Pull and verify the signed target images, but do not route traffic to them yet.
 3. Take the mandatory backup snapshot recorded on `PreflightRun.backupSnapshotId`.
-4. Server enters drain mode:
-   - New long-running requests rejected with `503 Upgrade In Progress, Retry-After: 30`.
-   - Short reads keep working.
-   - SSE streams emit `platform.upgrading` event then close cleanly.
-5. UI receives `platform.upgrading` → banner shown, executor flows pause locally (Inngest jobs already enqueued keep running, but UI does not issue new ones).
-6. Inngest workers stop dequeuing new steps; finish current step then idle.
-7. Drain wait: shorter of (a) bounded requests done AND Inngest workers idle, or (b) hard timeout (default 30s).
-8. **L2 (migrations) applies here** using the target release's migration runner — point of no return. Status `migrating`.
-9. **L3 (seed deltas) applies** — per operator decisions, with `SeedSnapshot` rows recorded for the new version. Status `seeding`.
-10. **L1 (runtime image) swaps container.** Status `swapping`.
-11. Health check on new container (DB connectivity, migration state, route table sanity, version endpoint, MCP tool-list sanity).
-12. **L4 (sandbox reconciliation) applies** — capsule PAR decisions executed. Status `reconciling`.
-13. New container emits `platform.upgraded` over SSE on first client reconnect.
-14. UI receives `platform.upgraded` → soft reload triggered by `X-Platform-Version` / `X-Bundle-Hash` mismatch on next request; Inngest functions resume from last checkpoint.
-15. **Smoke window** runs for K minutes (default 5min) — synthetic checks per release manifest criteria.
-16. If smoke passes → `SelfUpgradeRun.status = succeeded`.
-17. If smoke fails → trigger rollback per §5.6.
+4. **Quiescence drain** — caller invokes `startQuiescence({ trigger: "self-upgrade", triggerRefId: SelfUpgradeRun.runId, ... })` and awaits the coordinator's `ready-to-swap` signal. The coordinator (per the quiescence spec) gates the request layer (Proxy 503 + version headers), Inngest functions (cron skip + event-driven suspend), TaskRuns (cooperative cancel via `quiescing` status flip), BuildPhaseRuns (refuse new starts; in-flight phases continue), and surface-specific entry points. Defer / abort / fail outcomes return without proceeding to migrations.
+5. **`signalSwapStarting`** — coordinator records the swap-window opening.
+6. **L2 (migrations) applies** using the target release's migration runner — point of no return. Status `migrating`.
+7. **L3 (seed deltas) applies** — per operator decisions, with `SeedSnapshot` rows recorded for the new version. Status `seeding`.
+8. **L1 (runtime image) swaps container.** Status `swapping`.
+9. Health check on new container (DB connectivity, migration state, route table sanity, version endpoint, MCP tool-list sanity).
+10. **L4 (sandbox reconciliation) applies** — capsule PAR decisions executed. Status `reconciling`.
+11. **`signalSwapComplete`** — coordinator transitions swapping → completed, flips level back to normal, emits `platform.quiescence-cleared` (wakes suspended Inngest functions + dismisses client banner).
+12. UI receives `system:quiescence` (level=cleared) → bundle-hash mismatch detection triggers soft reload on next response.
+13. **Smoke window** runs for K minutes (default 5min) — synthetic checks per release manifest criteria.
+14. If smoke passes → `SelfUpgradeRun.status = succeeded`.
+15. If smoke fails → trigger rollback per §5.6 + `failQuiescenceSwap` to record the negative outcome on `QuiescenceRun`.
 
-**Stale-bundle signal:** every response carries `X-Platform-Version: <version>` and `X-Bundle-Hash: <hash>`. Client compares both to its boot values; mismatch → soft reload before the next server action. This does not merely recover after "server actions 404"; it avoids issuing a stale action in the first place.
+**Caller integration shape:**
 
-**Work-type survival:**
+```ts
+// In runSelfUpgrade (apps/web/lib/queue/functions/self-upgrade.ts):
+const { runId: qId, awaitReady } = await startQuiescence({
+  trigger: "self-upgrade",
+  triggerRefId: run.runId,
+  budgetMs: params.budgetMs,
+  shipForce: params.force,
+});
+const outcome = await awaitReady();
+if (!outcome.ok) { /* deferred / aborted / failed — bail */ }
 
-| Work type | Survival mechanism |
+await signalSwapStarting(qId);
+const result = await runPromoter({ ... });
+if (result.exitCode === 0) {
+  await signalSwapComplete(qId);
+  // ... success path
+} else {
+  await failQuiescenceSwap(qId, result.stderr);
+  // ... failure path
+}
+```
+
+**Work-type survival** (now specified per-surface in the quiescence spec §6):
+
+| Surface group | Spec section |
 |---|---|
-| Inngest functions (BS phases, executor backbone) | Native checkpointing between steps; resume after swap |
-| Short HTTP / server actions | 503 during drain; client retries on new runtime |
-| SSE streams | Closed cleanly with `platform.upgrading` event; client reconnects to resumed Inngest function |
-| MCP tool calls | Drain window covers them |
-| DB transactions | Commit/rollback at swap; new container reconnects |
-| Build Studio phase mid-gate | Resumes via Inngest |
-| Active capsules | State in DB; recycle is a no-op |
+| Inngest cron + event-driven functions | quiescence §6.1 — gateAtEntry / gateBetweenSteps |
+| Coworker TaskRuns | quiescence §6.2 — cooperative-cancel via heartbeat |
+| SSE streams | quiescence §6.3 + §7.1 — system:quiescence broadcast + EventSource reconnect |
+| Request layer / server actions | quiescence §6.4 — Proxy 503 + version headers |
+| BuildPhaseRun + sandbox | quiescence §6.5 — entry-point gate + phase budgets |
+| MCP tool calls + Postgres txns | quiescence §6.6 — TOOL_WAIT_BUDGETS + upstream gate |
+| Unobservable surfaces (G-class) | quiescence §6.7 — transparency via unobservableSurfaces |
 
 ### 5.6 Rollback per layer
 

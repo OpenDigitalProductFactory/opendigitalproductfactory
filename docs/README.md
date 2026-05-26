@@ -2,8 +2,9 @@
 
 > Looking for a pre-install tour you can share with people who don't have the platform yet? See [index.html](index.html) — a single-page overview that links into the rest of this directory.
 
-This directory holds the long-form documentation that accompanies the Open Digital Product Factory source tree. It's split into two audiences:
+This directory holds the long-form documentation that accompanies the Open Digital Product Factory source tree. It is split into three practical audiences:
 
+- **Market and operator** docs explain the platform from the business archetype outward: what kind of business this is, which coworkers help, and what daily work improves.
 - **User-facing** docs live under [user-guide/](user-guide/) and are also bundled into the portal's in-app help pages at runtime.
 - **Architecture and contributor** docs live under [architecture/](architecture/) and (for internal development tracking) [superpowers/](superpowers/).
 
@@ -13,6 +14,7 @@ If you're looking for the one-page project overview, start at the repo-root [REA
 
 Entry points for people using the platform day-to-day:
 
+- [Market Archetypes And Coworkers](user-guide/market-archetypes.md) — the canonical user-facing explanation of archetypes, purposed coworkers, voice, and Build Studio's current boundary.
 - [Getting Started](user-guide/getting-started/index.md) — what the platform does, how navigation works, and where your AI coworker lives.
 - [Developer Setup](user-guide/getting-started/developer-setup.md) — running the codebase locally with pnpm + Docker sidecars.
 - [Dev Container Setup](user-guide/getting-started/dev-container.md) — fully containerized alternative that needs only Docker Desktop and VS Code.
@@ -22,10 +24,16 @@ Entry points for people using the platform day-to-day:
 
 Domain-specific operating guides (admin, AI workforce, build studio, compliance, customers, finance, HR, operations, platform, portfolios, products, storefront, wiki, workspace) live in their own folders under [user-guide/](user-guide/).
 
+## Market proof
+
+- [Persona Library](personas/README.md) — evidence-backed archetype stories that double as marketing substrate and re-runnable dogfood scenarios.
+- [Dale HVAC](personas/dale-hvac.md), [Linda Clinic](personas/linda-clinic.md), and [Marisol Retail](personas/marisol-retail.md) are the current proof set for vertical workspace homes.
+
 ## Source-of-truth boundaries
 
-- [Repo README](../README.md) is the project overview, install posture, and capability inventory.
-- [index.html](index.html) is the public pre-install website.
+- [Repo README](../README.md) is the source-facing project overview and install posture.
+- [index.html](index.html) is the public pre-install website and marketing tour.
+- [user-guide/market-archetypes.md](user-guide/market-archetypes.md) is the canonical archetype/coworker narrative for user-facing docs.
 - [user-guide/](user-guide/) is operational product help and contextual in-app documentation.
 - [architecture/](architecture/) is current architecture, standards, and conformance context.
 - [superpowers/](superpowers/) is design history, audits, and implementation planning. It can support decisions, but it is not onboarding copy.

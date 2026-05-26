@@ -17,91 +17,80 @@
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight, ArrowDownLeft, AlertTriangle, CheckCircle, Award, GitMerge } from "lucide-react";
 import {
-  defaultWindow,
   getInterfaceTorqueReadings,
   getSlipByReason,
   getTripleWearReadings,
   getRecentGraduations,
   listRecentGearInterfaceRows,
-  type InterfaceTorqueReading,
 } from "@/lib/gear-interface";
+import {
+  findReadings,
+  formatCost,
+  formatPercent,
+  formatTorque,
+  summarizeInterface,
+  torqueColor,
+} from "@/lib/cockpit/cockpit-formatting";
+import {
+  getCockpitInterfaceLabel,
+  getCockpitTerminology,
+  resolveCockpitRowLabels,
+} from "@/lib/cockpit/install-terminology";
 import { GraduationVetoButton } from "@/components/cockpit/GraduationVetoButton";
 
 // All four ring interfaces. Phase 0 only emits at 1→2; the others render as
 // "no data" lanes so the operator sees the gear train honestly, not hidden.
-const ALL_INTERFACES: Array<{ innerRing: number; outerRing: number; label: string }> = [
-  { innerRing: 1, outerRing: 2, label: "Ring 1→2  Coworker → Workflow" },
-  { innerRing: 2, outerRing: 3, label: "Ring 2→3  Workflow → Archetype" },
-  { innerRing: 3, outerRing: 4, label: "Ring 3→4  Archetype → Sandbox/Prod" },
-  { innerRing: 4, outerRing: 5, label: "Ring 4→5  Sandbox/Prod → Hive" },
+const ALL_INTERFACES: Array<{ innerRing: number; outerRing: number }> = [
+  { innerRing: 1, outerRing: 2 },
+  { innerRing: 2, outerRing: 3 },
+  { innerRing: 3, outerRing: 4 },
+  { innerRing: 4, outerRing: 5 },
 ];
 
-function formatTorque(value: number): string {
-  return (value * 100).toFixed(0) + "%";
+function parseRingFilter(value: string | undefined): { innerRing: number; outerRing: number } | null {
+  const match = value?.match(/^([1-4])-([2-5])$/);
+  if (!match) return null;
+  const innerRing = Number(match[1]);
+  const outerRing = Number(match[2]);
+  return outerRing === innerRing + 1 ? { innerRing, outerRing } : null;
 }
 
-function formatPercent(value: number): string {
-  return (value * 100).toFixed(1) + "%";
-}
-
-function formatCost(usd: number): string {
-  if (usd === 0) return "$0";
-  if (usd < 0.01) return `$${usd.toFixed(4)}`;
-  return `$${usd.toFixed(2)}`;
-}
-
-function torqueColor(value: number): string {
-  if (value >= 0.9) return "var(--dpf-success)";
-  if (value >= 0.6) return "var(--dpf-warning)";
-  return "var(--dpf-error)";
-}
-
-function findReadings(
-  all: InterfaceTorqueReading[],
-  innerRing: number,
-  outerRing: number,
-): InterfaceTorqueReading[] {
-  return all.filter((r) => r.innerRing === innerRing && r.outerRing === outerRing);
-}
-
-function summarizeInterface(readings: InterfaceTorqueReading[]) {
-  if (readings.length === 0) {
-    return null;
-  }
-  const total = readings.reduce((acc, r) => acc + r.totalRecords, 0);
-  const weightedTorque =
-    total === 0
-      ? 0
-      : readings.reduce((acc, r) => acc + r.meanTorqueTechnical * r.totalRecords, 0) / total;
-  const slipCount = readings.reduce((acc, r) => acc + r.slipCount, 0);
-  const slipRate = total === 0 ? 0 : slipCount / total;
-  const totalCost = readings.reduce((acc, r) => acc + r.totalCostUsd, 0);
-  const graduations = readings.reduce((acc, r) => acc + r.graduationCount, 0);
-  return { total, weightedTorque, slipRate, totalCost, graduations };
+function parseDirectionFilter(value: string | undefined): "outward" | "inward" | "lateral" | undefined {
+  return value === "outward" || value === "inward" || value === "lateral" ? value : undefined;
 }
 
 export default async function CockpitPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ ring?: string; days?: string }>;
+  searchParams?: Promise<{ ring?: string; days?: string; dir?: string }>;
 }) {
   const params = (await searchParams) ?? {};
   const days = Math.max(1, Math.min(90, Number(params.days ?? "7") || 7));
+  const activeRing = parseRingFilter(params.ring);
+  const activeDirection = parseDirectionFilter(params.dir);
+  const recentFilter = {
+    ...(activeRing ?? {}),
+    ...(activeDirection ? { transmissionDirection: activeDirection } : {}),
+  };
   const now = new Date();
   const start = new Date(now);
   start.setUTCDate(start.getUTCDate() - days);
   const window = { start, end: now };
 
   // Aggregate fetches in parallel — every Cockpit panel reads from the same window
-  const [interfaceReadings, slipByReason, wear, graduations, recentRows] = await Promise.all([
+  const [interfaceReadings, slipByReason, wear, graduations, recentRows, terminology] = await Promise.all([
     getInterfaceTorqueReadings(window),
     getSlipByReason(window),
     getTripleWearReadings(window, { minSampleSize: 1 }),
     getRecentGraduations(window, { limit: 10 }),
-    listRecentGearInterfaceRows(window, {}, { limit: 50 }),
+    listRecentGearInterfaceRows(window, recentFilter, { limit: 50 }),
+    getCockpitTerminology(),
   ]);
 
   const totalRows = interfaceReadings.reduce((acc, r) => acc + r.totalRecords, 0);
+  const activeInterfaceLabel = activeRing
+    ? getCockpitInterfaceLabel(activeRing.innerRing, activeRing.outerRing, terminology)
+    : null;
 
   return (
     <div className="p-6 space-y-6">
@@ -110,10 +99,12 @@ export default async function CockpitPage({
         <div>
           <h1 className="text-xl font-bold text-[var(--dpf-text)] flex items-center gap-2">
             <GitMerge size={18} className="text-[var(--dpf-accent)]" />
-            Reduction Gear Cockpit
+            {terminology.mode === "install-aware" ? `${terminology.installName} Cockpit` : "Reduction Gear Cockpit"}
           </h1>
           <p className="text-xs text-[var(--dpf-muted)] mt-1">
-            Operator diagnostic view — torque, slip, wear, cost, graduations across the agentic gear train.
+            {terminology.mode === "install-aware"
+              ? `Operator diagnostic view for ${terminology.portalLabel} across ${terminology.verticalLabel} work — torque, slip, wear, cost, and graduations remain tied to GearInterface evidence.`
+              : "Operator diagnostic view — torque, slip, wear, cost, graduations across the agentic gear train."}
             <span className="ml-2 italic">Phase 0 emits at Ring 1→2 only.</span>
           </p>
         </div>
@@ -138,14 +129,37 @@ export default async function CockpitPage({
         </div>
       </div>
 
+      {terminology.banner && (
+        <section
+          className="rounded border p-3 flex items-start justify-between gap-3"
+          style={{ borderColor: "var(--dpf-border)", background: "var(--dpf-surface-1)" }}
+        >
+          <div className="flex items-start gap-2">
+            <AlertTriangle size={15} className="text-[var(--dpf-muted)] mt-0.5" />
+            <div>
+              <p className="text-xs font-semibold text-[var(--dpf-text)]">{terminology.banner.message}</p>
+              <p className="text-[11px] text-[var(--dpf-muted)] mt-0.5">
+                Missing context: {terminology.missingContext.join(", ")}.
+              </p>
+            </div>
+          </div>
+          <Link href={terminology.banner.href} className="text-xs font-semibold text-[var(--dpf-accent)] hover:underline">
+            {terminology.banner.cta}
+          </Link>
+        </section>
+      )}
+
       {/* Ring overview band ----------------------------------------------- */}
       <section
         className="rounded border p-4"
         style={{ borderColor: "var(--dpf-border)", background: "var(--dpf-surface-1)" }}
       >
-        <h2 className="text-sm font-semibold text-[var(--dpf-text)] mb-3">Gear interfaces</h2>
+        <h2 className="text-sm font-semibold text-[var(--dpf-text)] mb-3">
+          {terminology.mode === "install-aware" ? `${terminology.portalLabel} gear interfaces` : "Gear interfaces"}
+        </h2>
         <div className="space-y-2">
-          {ALL_INTERFACES.map(({ innerRing, outerRing, label }) => {
+          {ALL_INTERFACES.map(({ innerRing, outerRing }) => {
+            const label = getCockpitInterfaceLabel(innerRing, outerRing, terminology);
             const outward = findReadings(interfaceReadings, innerRing, outerRing).filter(
               (r) => r.transmissionDirection === "outward",
             );
@@ -280,7 +294,9 @@ export default async function CockpitPage({
         >
           <h2 className="text-sm font-semibold text-[var(--dpf-text)] mb-3 flex items-center gap-2">
             <CheckCircle size={14} className="text-[var(--dpf-muted)]" />
-            Triple wear (lowest torque first)
+            {terminology.mode === "install-aware"
+              ? `${terminology.verticalLabel} triple wear`
+              : "Triple wear (lowest torque first)"}
           </h2>
           {wear.length === 0 ? (
             <p className="text-xs text-[var(--dpf-muted)]">
@@ -298,21 +314,43 @@ export default async function CockpitPage({
                 </tr>
               </thead>
               <tbody className="text-[var(--dpf-text)]">
-                {wear.slice(0, 10).map((row, i) => (
-                  <tr
-                    key={`${row.agentIdForTriple}-${row.capabilityName}-${row.archetypeContext ?? "null"}-${i}`}
-                    className="border-t"
-                    style={{ borderColor: "var(--dpf-border)" }}
-                  >
-                    <td className="py-1.5 truncate max-w-[140px]">{row.agentIdForTriple}</td>
-                    <td className="py-1.5 truncate max-w-[140px]">{row.capabilityName}</td>
-                    <td className="py-1.5 text-[var(--dpf-muted)]">{row.archetypeContext ?? "—"}</td>
-                    <td className="py-1.5 text-right">{row.sampleSize}</td>
-                    <td className="py-1.5 text-right font-semibold" style={{ color: torqueColor(row.meanTorqueTechnical) }}>
-                      {formatTorque(row.meanTorqueTechnical)}
-                    </td>
-                  </tr>
-                ))}
+                {wear.slice(0, 10).map((row, i) => {
+                  const labels = resolveCockpitRowLabels(
+                    {
+                      innerRing: null,
+                      outerRing: null,
+                      transmissionDirection: "outward",
+                      agentIdForTriple: row.agentIdForTriple,
+                      actorId: row.agentIdForTriple,
+                      capabilityName: row.capabilityName,
+                      archetypeContext: row.archetypeContext,
+                      shaftSourceType: "gear-interface",
+                      outcomeType: "transmission",
+                      slipDetected: false,
+                      slipReason: null,
+                    },
+                    terminology,
+                  );
+                  return (
+                    <tr
+                      key={`${row.agentIdForTriple}-${row.capabilityName}-${row.archetypeContext ?? "null"}-${i}`}
+                      className="border-t"
+                      style={{ borderColor: "var(--dpf-border)" }}
+                    >
+                      <td className="py-1.5 truncate max-w-[140px]" title={row.agentIdForTriple}>
+                        {labels.agentLabel}
+                      </td>
+                      <td className="py-1.5 truncate max-w-[180px]" title={row.capabilityName}>
+                        {labels.capabilityLabel}
+                      </td>
+                      <td className="py-1.5 text-[var(--dpf-muted)]">{labels.archetypeLabel}</td>
+                      <td className="py-1.5 text-right">{row.sampleSize}</td>
+                      <td className="py-1.5 text-right font-semibold" style={{ color: torqueColor(row.meanTorqueTechnical) }}>
+                        {formatTorque(row.meanTorqueTechnical)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -335,26 +373,40 @@ export default async function CockpitPage({
           </p>
         ) : (
           <ul className="space-y-1 text-xs text-[var(--dpf-text)]">
-            {graduations.map((g) => (
-              <li key={g.id} className="flex items-center gap-2 flex-wrap">
-                <span className="text-[var(--dpf-muted)]">{g.recordedAt.toISOString()}</span>
-                <span className="font-semibold">{g.capabilityName}</span>
-                <span className="text-[var(--dpf-muted)]">×</span>
-                <span>{g.archetypeContext ?? "any-archetype"}</span>
-                <span className="text-[var(--dpf-muted)]">×</span>
-                <span>{g.agentIdForTriple}</span>
-                <span className="text-[var(--dpf-muted)] mx-1">
-                  Ring {g.innerRing}→{g.outerRing}
-                </span>
-                <span>
-                  {g.fromAutonomy} <ArrowRight size={10} className="inline mx-1" /> {g.toAutonomy}
-                </span>
-                {g.sampleSize != null && <span className="text-[var(--dpf-muted)]">(n={g.sampleSize})</span>}
-                <span className="ml-auto">
-                  <GraduationVetoButton graduationRowId={g.id} />
-                </span>
-              </li>
-            ))}
+            {graduations.map((g) => {
+              const labels = resolveCockpitRowLabels(
+                {
+                  innerRing: g.innerRing,
+                  outerRing: g.outerRing,
+                  transmissionDirection: "outward",
+                  agentIdForTriple: g.agentIdForTriple,
+                  actorId: g.agentIdForTriple,
+                  capabilityName: g.capabilityName,
+                  archetypeContext: g.archetypeContext,
+                  shaftSourceType: "decision-interaction",
+                  outcomeType: "graduation",
+                  slipDetected: false,
+                  slipReason: null,
+                },
+                terminology,
+              );
+              return (
+                <li key={g.id} className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[var(--dpf-muted)]">{g.recordedAt.toISOString()}</span>
+                  <span className="font-semibold">{labels.capabilityLabel}</span>
+                  <span className="text-[var(--dpf-muted)]">for</span>
+                  <span>{labels.agentLabel}</span>
+                  <span className="text-[var(--dpf-muted)] mx-1">{labels.interfaceLabel}</span>
+                  <span>
+                    {g.fromAutonomy} <ArrowRight size={10} className="inline mx-1" /> {g.toAutonomy}
+                  </span>
+                  {g.sampleSize != null && <span className="text-[var(--dpf-muted)]">(n={g.sampleSize})</span>}
+                  <span className="ml-auto">
+                    <GraduationVetoButton graduationRowId={g.id} />
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
@@ -364,56 +416,95 @@ export default async function CockpitPage({
         className="rounded border p-4"
         style={{ borderColor: "var(--dpf-border)", background: "var(--dpf-surface-1)" }}
       >
-        <h2 className="text-sm font-semibold text-[var(--dpf-text)] mb-3">Recent transmissions</h2>
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
+              {activeInterfaceLabel ? "Filtered transmissions" : "Recent transmissions"}
+            </h2>
+            {activeInterfaceLabel && (
+              <p className="text-[11px] text-[var(--dpf-muted)] mt-0.5">
+                {activeInterfaceLabel}
+                {activeDirection ? ` - ${activeDirection}` : ""}
+              </p>
+            )}
+          </div>
+          {activeInterfaceLabel && (
+            <Link href={`?days=${days}`} className="text-xs font-semibold text-[var(--dpf-accent)] hover:underline">
+              Clear filter
+            </Link>
+          )}
+        </div>
         {recentRows.length === 0 ? (
           <p className="text-xs text-[var(--dpf-muted)]">
-            No GearInterface records in the window. Trigger a Build Studio phase completion to produce
-            the first Ring 1→2 emit, or expand the window.
+            {activeInterfaceLabel
+              ? "No GearInterface records match this filtered drill-down. The source evidence state is unknown for this filter."
+              : "No GearInterface records in the window. Trigger a Build Studio phase completion to produce the first Ring 1→2 emit, or expand the window."}
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="min-w-[1120px] w-full table-fixed text-xs">
               <thead className="text-[var(--dpf-muted)] text-left">
                 <tr>
-                  <th className="font-medium pb-1">When</th>
-                  <th className="font-medium pb-1">Ring</th>
-                  <th className="font-medium pb-1">Capability</th>
-                  <th className="font-medium pb-1">Source</th>
-                  <th className="font-medium pb-1">Actor</th>
-                  <th className="font-medium pb-1 text-right">Torque</th>
-                  <th className="font-medium pb-1">Outcome</th>
-                  <th className="font-medium pb-1">Grader</th>
+                  <th className="w-[72px] pb-1 pr-3 font-medium">When</th>
+                  <th className="w-[210px] px-3 pb-1 font-medium">Ring</th>
+                  <th className="w-[230px] px-3 pb-1 font-medium">Capability</th>
+                  <th className="w-[220px] px-3 pb-1 font-medium">Source</th>
+                  <th className="w-[150px] px-3 pb-1 font-medium">Actor</th>
+                  <th className="w-[82px] px-3 pb-1 text-right font-medium">Torque</th>
+                  <th className="w-[130px] px-3 pb-1 font-medium">Outcome</th>
+                  <th className="w-[90px] pl-3 pb-1 font-medium">Grader</th>
                 </tr>
               </thead>
               <tbody className="text-[var(--dpf-text)]">
-                {recentRows.map((row) => (
-                  <tr key={row.id} className="border-t" style={{ borderColor: "var(--dpf-border)" }}>
-                    <td className="py-1.5 text-[var(--dpf-muted)] whitespace-nowrap">
-                      {row.recordedAt.toISOString().slice(11, 19)}
-                    </td>
-                    <td className="py-1.5">
-                      {row.innerRing != null && row.outerRing != null
-                        ? `${row.innerRing}→${row.outerRing}`
-                        : row.transmissionDirection}
-                    </td>
-                    <td className="py-1.5 truncate max-w-[180px]">{row.capabilityName}</td>
-                    <td className="py-1.5 text-[var(--dpf-muted)] truncate max-w-[180px]" title={row.shaftSourceId}>
-                      {row.shaftSourceType}
-                    </td>
-                    <td className="py-1.5 truncate max-w-[120px]">{row.actorId}</td>
-                    <td className="py-1.5 text-right font-semibold" style={{ color: torqueColor(row.torqueTechnical) }}>
-                      {formatTorque(row.torqueTechnical)}
-                    </td>
-                    <td className="py-1.5">
-                      {row.slipDetected ? (
-                        <span style={{ color: "var(--dpf-error)" }}>slip{row.slipReason ? `: ${row.slipReason}` : ""}</span>
-                      ) : (
-                        row.outcomeType
-                      )}
-                    </td>
-                    <td className="py-1.5 text-[var(--dpf-muted)]">{row.graderType}</td>
-                  </tr>
-                ))}
+                {recentRows.map((row) => {
+                  const labels = resolveCockpitRowLabels(
+                    {
+                      innerRing: row.innerRing,
+                      outerRing: row.outerRing,
+                      transmissionDirection: row.transmissionDirection,
+                      agentIdForTriple: row.actorId,
+                      actorId: row.actorId,
+                      capabilityName: row.capabilityName,
+                      archetypeContext: row.archetypeContext,
+                      shaftSourceType: row.shaftSourceType,
+                      outcomeType: row.outcomeType,
+                      slipDetected: row.slipDetected,
+                      slipReason: row.slipReason,
+                    },
+                    terminology,
+                  );
+                  return (
+                    <tr key={row.id} className="border-t" style={{ borderColor: "var(--dpf-border)" }}>
+                      <td className="py-1.5 pr-3 text-[var(--dpf-muted)] whitespace-nowrap">
+                        {row.recordedAt.toISOString().slice(11, 19)}
+                      </td>
+                      <td className="px-3 py-1.5 truncate" title={labels.interfaceLabel}>
+                        {labels.interfaceLabel}
+                      </td>
+                      <td className="px-3 py-1.5 truncate" title={row.capabilityName}>
+                        {labels.capabilityLabel}
+                      </td>
+                      <td className="px-3 py-1.5 text-[var(--dpf-muted)]" title={row.shaftSourceId}>
+                        <div className="truncate">{labels.sourceLabel}</div>
+                        <div className="text-[10px] truncate">unknown source route: {row.shaftSourceId}</div>
+                      </td>
+                      <td className="px-3 py-1.5 truncate" title={row.actorId}>
+                        {labels.actorLabel}
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-semibold" style={{ color: torqueColor(row.torqueTechnical) }}>
+                        {formatTorque(row.torqueTechnical)}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        {row.slipDetected ? (
+                          <span style={{ color: "var(--dpf-error)" }}>{labels.outcomeLabel}</span>
+                        ) : (
+                          labels.outcomeLabel
+                        )}
+                      </td>
+                      <td className="py-1.5 pl-3 text-[var(--dpf-muted)]">{row.graderType}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

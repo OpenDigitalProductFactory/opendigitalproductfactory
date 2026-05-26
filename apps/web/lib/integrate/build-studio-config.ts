@@ -28,7 +28,7 @@ async function findConfiguredProvider(cliEngine: string): Promise<string> {
   // Find providers tagged with this CLI engine
   const providers = await prisma.modelProvider.findMany({
     where: { cliEngine },
-    select: { providerId: true },
+    select: { providerId: true, status: true },
     orderBy: { providerId: "asc" },
   });
 
@@ -36,6 +36,7 @@ async function findConfiguredProvider(cliEngine: string): Promise<string> {
 
   // Check which ones have working credentials
   for (const p of providers) {
+    if (p.status !== "active") continue;
     const cred = await prisma.credentialEntry.findUnique({
       where: { providerId: p.providerId },
       select: { status: true },
@@ -49,7 +50,7 @@ async function findConfiguredProvider(cliEngine: string): Promise<string> {
 
 /**
  * Auto-detect the best dispatch provider based on what's configured.
- * Prefers Claude over Codex; falls back to agentic if nothing configured.
+ * Prefers active Claude over active Codex; falls back to agentic if nothing configured.
  */
 async function autoDetectConfig(): Promise<BuildStudioDispatchConfig> {
   const claudeId = await findConfiguredProvider("claude");

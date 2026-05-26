@@ -84,6 +84,21 @@ const makeDecision = (providerId: string, modelId: string): RouteDecision => ({
   timestamp: new Date(),
 });
 
+const makeCandidate = (
+  endpointId: string,
+  providerId: string,
+  modelId: string,
+): RouteDecision["candidates"][number] => ({
+  endpointId,
+  providerId,
+  modelId,
+  endpointName: modelId,
+  fitnessScore: 1,
+  dimensionScores: {},
+  costPerOutputMToken: null,
+  excluded: false,
+});
+
 const mockPrisma = prisma as unknown as {
   modelProvider: {
     findUnique: ReturnType<typeof vi.fn>;
@@ -180,6 +195,60 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
           fallbackOccurred: false,
         }),
       );
+    });
+
+    it("uses provider-specific execution plans for fallback endpoints", async () => {
+      mockCallProvider
+        .mockRejectedValueOnce(new Error("primary unavailable"))
+        .mockResolvedValueOnce({
+          content: "fallback ok",
+          inputTokens: 10,
+          outputTokens: 5,
+          inferenceMs: 100,
+        });
+
+      const tools = [
+        {
+          type: "function",
+          function: {
+            name: "read_project_file",
+            description: "Read a project file",
+            parameters: { type: "object", properties: {} },
+          },
+        },
+      ];
+      const decision: RouteDecision = {
+        ...makeDecision("openai", "gpt-4.1"),
+        selectedEndpoint: "openai-ep",
+        selectedModelId: "gpt-4.1",
+        fallbackChain: ["codex-ep"],
+        candidates: [
+          makeCandidate("openai-ep", "openai", "gpt-4.1"),
+          makeCandidate("codex-ep", "codex", "gpt-5.4"),
+        ],
+      };
+
+      const pending = callWithFallbackChain(
+        decision,
+        [{ role: "user", content: "hi" }],
+        "system",
+        tools,
+      );
+      await vi.runAllTimersAsync();
+      await expect(pending).resolves.toMatchObject({
+        providerId: "codex",
+        modelId: "gpt-5.4",
+        content: "fallback ok",
+        downgraded: true,
+      });
+
+      const fallbackPlan = mockCallProvider.mock.calls[1]?.[5];
+      expect(fallbackPlan).toMatchObject({
+        providerId: "codex",
+        modelId: "gpt-5.4",
+        executionAdapter: "codex-cli",
+        toolPolicy: { toolChoice: "auto" },
+      });
     });
   });
 

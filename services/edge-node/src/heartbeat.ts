@@ -68,7 +68,7 @@ export async function runHeartbeatLoop(
         await saveState(config.stateDir, updated);
         log("info", `Heartbeat: state changed (trustState=${updated.trustState}).`);
       }
-      state = updated;
+      Object.assign(state, updated);
 
       // If Authority revoked us mid-loop, clear local state and
       // exit. Operator must re-enroll explicitly.

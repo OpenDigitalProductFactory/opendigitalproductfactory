@@ -1,62 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 
-type Alert = {
-  labels: Record<string, string>;
-  annotations: Record<string, string>;
-  state: string;
-};
+import { TONE_COLOR, getActiveAlerts, type MonitoringAlert, type Tone } from "./health-summary";
+import { useAlertQuery } from "./useAlertQuery";
 
 type HealthState = "healthy" | "warning" | "critical" | "offline";
 
 export function PlatformHealthIndicator() {
-  const [health, setHealth] = useState<HealthState>("offline");
-  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [open, setOpen] = useState(false);
+  const { alerts: allAlerts, offline } = useAlertQuery();
+  const alerts = getActiveAlerts(allAlerts);
 
-  const fetchHealth = useCallback(async () => {
-    try {
-      const res = await fetch("/api/platform/metrics/alerts", {
-        signal: AbortSignal.timeout(3_000),
-        cache: "no-store",
-      });
-      if (res.status === 503) {
-        setHealth("offline");
-        setAlerts([]);
-        return;
-      }
-      const json = await res.json();
-      const firing: Alert[] = (json.data?.alerts ?? []).filter(
-        (a: Alert) => a.state === "firing",
-      );
-      setAlerts(firing);
-
-      if (firing.length === 0) {
-        setHealth("healthy");
-      } else if (firing.some((a) => a.labels.severity === "critical")) {
-        setHealth("critical");
-      } else {
-        setHealth("warning");
-      }
-    } catch {
-      setHealth("offline");
-      setAlerts([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchHealth();
-    const id = setInterval(fetchHealth, 30_000);
-    return () => clearInterval(id);
-  }, [fetchHealth]);
-
-  const dotColor = {
-    healthy: "bg-green-500",
-    warning: "bg-yellow-500",
-    critical: "bg-red-500 animate-pulse",
-    offline: "bg-gray-400",
-  }[health];
+  const health = deriveHealthState(offline, alerts);
+  const dotTone = healthToTone(health);
 
   const label = {
     healthy: "All systems healthy",
@@ -72,7 +29,11 @@ export function PlatformHealthIndicator() {
         className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-[var(--dpf-surface-2)] transition-colors"
         title={label}
       >
-        <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+        <span
+          className={`h-2 w-2 rounded-full ${health === "critical" ? "animate-pulse" : ""}`}
+          style={{ backgroundColor: TONE_COLOR[dotTone] }}
+          aria-hidden="true"
+        />
         {health !== "healthy" && health !== "offline" && (
           <span className="text-[10px] text-[var(--dpf-muted)]">
             {alerts.length > 0 ? alerts.length : ""}
@@ -87,7 +48,11 @@ export function PlatformHealthIndicator() {
           <div className="absolute right-0 top-full mt-1 z-50 w-72 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] shadow-lg overflow-hidden">
             <div className="px-3 py-2 border-b border-[var(--dpf-border)] flex items-center justify-between">
               <span className="text-xs font-semibold text-[var(--dpf-text)]">Platform Health</span>
-              <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+              <span
+                className={`h-2 w-2 rounded-full ${health === "critical" ? "animate-pulse" : ""}`}
+                style={{ backgroundColor: TONE_COLOR[dotTone] }}
+                aria-hidden="true"
+              />
             </div>
 
             {health === "offline" && (
@@ -101,7 +66,7 @@ export function PlatformHealthIndicator() {
             )}
 
             {health === "healthy" && (
-              <div className="px-3 py-4 text-xs text-green-500 text-center">
+              <div className="px-3 py-4 text-center text-xs text-[var(--dpf-success)]">
                 All systems operational
               </div>
             )}
@@ -110,6 +75,7 @@ export function PlatformHealthIndicator() {
               <div className="max-h-48 overflow-y-auto">
                 {alerts.map((alert, i) => {
                   const severity = alert.labels.severity ?? "warning";
+                  const tone = severity === "critical" ? "critical" : "warning";
                   return (
                     <div
                       key={i}
@@ -117,9 +83,8 @@ export function PlatformHealthIndicator() {
                     >
                       <div className="flex items-center gap-1.5">
                         <span
-                          className={`text-[10px] font-bold uppercase ${
-                            severity === "critical" ? "text-red-400" : "text-yellow-400"
-                          }`}
+                          className="text-[10px] font-bold uppercase"
+                          style={{ color: TONE_COLOR[tone] }}
                         >
                           {severity}
                         </span>
@@ -148,4 +113,17 @@ export function PlatformHealthIndicator() {
       )}
     </div>
   );
+}
+
+function deriveHealthState(offline: boolean, alerts: MonitoringAlert[]): HealthState {
+  if (offline) return "offline";
+  if (alerts.length === 0) return "healthy";
+  return alerts.some((alert) => alert.labels.severity === "critical") ? "critical" : "warning";
+}
+
+function healthToTone(health: HealthState): Tone {
+  if (health === "healthy") return "success";
+  if (health === "critical") return "critical";
+  if (health === "warning") return "warning";
+  return "neutral";
 }

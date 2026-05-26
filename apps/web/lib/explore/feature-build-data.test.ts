@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  Prisma: {
+    DbNull: { kind: "DbNull" },
+  },
   prisma: {
     featureBuild: {
       findUnique: vi.fn(),
+      findMany: vi.fn(),
+    },
+    epic: {
       findMany: vi.fn(),
     },
     platformDevConfig: {
@@ -26,6 +32,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@dpf/db", () => ({
   prisma: mocks.prisma,
+  Prisma: mocks.Prisma,
 }));
 
 vi.mock("@/lib/decision-perspective/types", () => ({
@@ -45,8 +52,93 @@ vi.mock("@/lib/design-intelligence", () => ({
   generateDesignSystem: vi.fn(() => "Generated design system"),
 }));
 
-import { prisma } from "@dpf/db";
-import { getFeatureBuildForContext } from "./feature-build-data";
+import { Prisma, prisma } from "@dpf/db";
+import {
+  getExecutionEpicRollups,
+  getFeatureBuildForContext,
+  getFeatureBuilds,
+} from "./feature-build-data";
+
+describe("getFeatureBuilds", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(prisma.featureBuild.findMany).mockResolvedValue([] as never);
+  });
+
+  it("loads only undecomposed top-level builds for the flat fleet rows", async () => {
+    await getFeatureBuilds("user-phase5-flat-builds");
+
+    expect(prisma.featureBuild.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          phase: { not: "failed" },
+          parentEpicId: null,
+          supersededByEpicId: null,
+        },
+      }),
+    );
+  });
+});
+
+describe("getExecutionEpicRollups", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("loads execution epics as the bridge across backlog items, child builds, and dependencies", async () => {
+    vi.mocked(prisma.epic.findMany).mockResolvedValue([
+      {
+        id: "epic-row-1",
+        epicId: "EP-TRUCK-STOCK",
+        title: "Truck stock tracker",
+        updatedAt: new Date("2026-05-25T12:00:00Z"),
+        originatingBacklogItemId: "bi-row-origin",
+        items: [
+          { id: "bi-row-origin", itemId: "BI-ORIGIN", title: "Track truck parts", status: "in-progress" },
+        ],
+        featureBuilds: [
+          {
+            id: "fb-read-row",
+            buildId: "FB-READ",
+            title: "Truck and parts read",
+            phase: "complete",
+            childOrder: 1,
+            updatedAt: new Date("2026-05-25T10:00:00Z"),
+          },
+          {
+            id: "fb-usage-row",
+            buildId: "FB-USAGE",
+            title: "Record usage",
+            phase: "plan",
+            childOrder: 2,
+            updatedAt: new Date("2026-05-25T11:00:00Z"),
+          },
+        ],
+        dependencies: [
+          {
+            dependentBuildId: "fb-usage-row",
+            dependsOnBuildId: "fb-read-row",
+          },
+        ],
+      },
+    ] as never);
+
+    const rollups = await getExecutionEpicRollups("user-phase5-epics");
+
+    expect(prisma.epic.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          designDoc: { not: Prisma.DbNull },
+          featureBuilds: { some: {} },
+        },
+        orderBy: { updatedAt: "desc" },
+      }),
+    );
+    expect(rollups[0]?.epicId).toBe("EP-TRUCK-STOCK");
+    expect(rollups[0]?.backlogItems[0]?.itemId).toBe("BI-ORIGIN");
+    expect(rollups[0]?.children.map((child) => child.buildId)).toEqual(["FB-READ", "FB-USAGE"]);
+  });
+});
 
 describe("getFeatureBuildForContext taxonomy context", () => {
   beforeEach(() => {

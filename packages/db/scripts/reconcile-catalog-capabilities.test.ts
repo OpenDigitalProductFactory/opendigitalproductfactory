@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildCatalogHash, diffExcludingOverrides, catalogEntryToProfileFields } from "./reconcile-catalog-capabilities";
+import { buildCatalogHash, diffExcludingOverrides, catalogEntryToProfileFields, resolveKnownProviderModelsPath } from "./reconcile-catalog-capabilities";
 import type { KnownModel } from "../../../apps/web/lib/routing/known-provider-models";
 import { EMPTY_CAPABILITIES } from "../../../apps/web/lib/routing/model-card-types";
 
@@ -67,6 +67,36 @@ describe("catalogEntryToProfileFields", () => {
     expect(fields.toolFidelity).toBe(80);
     expect((fields.capabilities as any).toolUse).toBe(true);
     expect(fields.modelStatus).toBe("active");
+  });
+});
+
+describe("resolveKnownProviderModelsPath", () => {
+  it("resolves the packaged app source path when the repo app path is not present", () => {
+    const scriptDir = "C:\\app\\packages\\db\\scripts";
+    const packagedRoot = "C:\\app\\apps\\web-src";
+    const packagedCatalog = "C:\\app\\apps\\web-src\\lib\\routing\\known-provider-models.ts";
+
+    const resolved = resolveKnownProviderModelsPath({
+      scriptDir,
+      packagedWebSourceRoot: packagedRoot,
+      exists: (candidate) => candidate === packagedCatalog,
+    });
+
+    expect(resolved).toBe(packagedCatalog);
+  });
+
+  it("resolves Linux-style packaged app source paths independent of the test host OS", () => {
+    const scriptDir = "/app/packages/db/scripts";
+    const packagedRoot = "/app/apps/web-src";
+    const packagedCatalog = "/app/apps/web-src/lib/routing/known-provider-models.ts";
+
+    const resolved = resolveKnownProviderModelsPath({
+      scriptDir,
+      packagedWebSourceRoot: packagedRoot,
+      exists: (candidate) => candidate === packagedCatalog,
+    });
+
+    expect(resolved).toBe(packagedCatalog);
   });
 });
 

@@ -1,47 +1,49 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockPrisma = {
-  backlogItem: {
-    create: vi.fn(),
-    findFirst: vi.fn(),
-    findUnique: vi.fn(),
-    update: vi.fn(),
-    count: vi.fn(),
+const { mockPrisma, mockInngest } = vi.hoisted(() => ({
+  mockPrisma: {
+    backlogItem: {
+      create: vi.fn(),
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      count: vi.fn(),
+    },
+    backlogItemActivity: {
+      create: vi.fn(),
+    },
+    epic: {
+      create: vi.fn(),
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+    employeeProfile: {
+      findFirst: vi.fn(),
+    },
+    featureBuild: {
+      create: vi.fn(),
+    },
+    workCapsule: {
+      create: vi.fn(),
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+    workCapsuleActivity: {
+      create: vi.fn(),
+    },
+    platformDevConfig: {
+      findUnique: vi.fn(),
+    },
+    $transaction: vi.fn(),
   },
-  backlogItemActivity: {
-    create: vi.fn(),
+  mockInngest: {
+    send: vi.fn(),
   },
-  epic: {
-    create: vi.fn(),
-    findFirst: vi.fn(),
-    findMany: vi.fn(),
-    findUnique: vi.fn(),
-    update: vi.fn(),
-  },
-  employeeProfile: {
-    findFirst: vi.fn(),
-  },
-  featureBuild: {
-    create: vi.fn(),
-  },
-  workCapsule: {
-    create: vi.fn(),
-    findFirst: vi.fn(),
-    findUnique: vi.fn(),
-    update: vi.fn(),
-  },
-  workCapsuleActivity: {
-    create: vi.fn(),
-  },
-  platformDevConfig: {
-    findUnique: vi.fn(),
-  },
-  $transaction: vi.fn(),
-};
+}));
 
-const mockInngest = {
-  send: vi.fn(),
-};
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
 }));
@@ -49,6 +51,9 @@ vi.mock("@dpf/db", () => ({
 vi.mock("@/lib/queue/inngest-client", () => ({
   inngest: mockInngest,
 }));
+
+import { executeTool } from "./mcp-tools";
+
 describe("backlog MCP tool execution", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -82,7 +87,6 @@ describe("backlog MCP tool execution", () => {
       completedAt: null,
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "create_epic",
       {
@@ -120,7 +124,6 @@ describe("backlog MCP tool execution", () => {
       status: "open",
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "create_epic",
       {
@@ -158,7 +161,6 @@ describe("backlog MCP tool execution", () => {
       completedAt: null,
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "create_epic",
       {
@@ -214,7 +216,6 @@ describe("backlog MCP tool execution", () => {
       completedAt: null,
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "create_epic",
       {
@@ -255,7 +256,6 @@ describe("backlog MCP tool execution", () => {
       completedAt: new Date("2026-05-19T12:00:00.000Z"),
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "update_epic",
       {
@@ -299,7 +299,6 @@ describe("backlog MCP tool execution", () => {
       completedAt: null,
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "update_epic",
       {
@@ -346,7 +345,6 @@ describe("backlog MCP tool execution", () => {
       effortSize: "medium",
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "triage_backlog_item",
       {
@@ -386,7 +384,6 @@ describe("backlog MCP tool execution", () => {
       effortSize: "large",
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "size_backlog_item",
       { itemId: "BI-123", size: "large" },
@@ -432,7 +429,6 @@ describe("backlog MCP tool execution", () => {
       status: "open",
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "promote_to_build_studio",
       { itemId: "BI-123" },
@@ -466,7 +462,6 @@ describe("backlog MCP tool execution", () => {
     );
   });
   it("process_backlog_for_build_studio queues an on-demand tee-up sweep", async () => {
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "process_backlog_for_build_studio",
       { limit: 2 },
@@ -512,7 +507,6 @@ describe("backlog MCP tool execution", () => {
     });
     mockPrisma.backlogItem.count.mockResolvedValue(0);
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "retire_backlog_item",
       {
@@ -570,7 +564,6 @@ describe("backlog MCP tool execution", () => {
       completedAt: new Date("2026-04-29T12:00:00.000Z"),
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "retire_backlog_item",
       {
@@ -605,7 +598,6 @@ describe("backlog MCP tool execution", () => {
       activeBuildId: null,
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "retire_backlog_item",
       {
@@ -632,7 +624,6 @@ describe("backlog MCP tool execution", () => {
       recordedAt: new Date("2026-05-11T12:00:00.000Z"),
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "record_functional_failure_evidence",
       {
@@ -700,7 +691,6 @@ describe("backlog MCP tool execution", () => {
       recordedAt: new Date("2026-05-11T12:05:00.000Z"),
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "record_functional_failure_evidence",
       {

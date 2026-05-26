@@ -30,6 +30,18 @@ import {
 import { activateProvider } from "@/lib/govern/activate-provider";
 import { seedAiProviderFinanceBridge } from "@/lib/finance/ai-provider-finance";
 
+const OPENAI_OAUTH_LINKED_PROVIDERS = new Set(["codex", "chatgpt"]);
+
+function getOpenAiLinkedActivationOptions(
+  providerId: string,
+  authMethod: string | null | undefined,
+): { authMethod: string; activateLinked: true } | Record<string, never> {
+  if (authMethod === "oauth2_authorization_code" && OPENAI_OAUTH_LINKED_PROVIDERS.has(providerId)) {
+    return { authMethod, activateLinked: true };
+  }
+  return {};
+}
+
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
 async function requireManageProviders(): Promise<string> {
@@ -276,6 +288,7 @@ export async function configureProvider(input: {
   await activateProvider(input.providerId, {
     trigger: "api_key_configure",
     authMethod: input.authMethod,
+    ...getOpenAiLinkedActivationOptions(input.providerId, input.authMethod),
   });
 
   const providerForFinance = await prisma.modelProvider.findUnique({
@@ -479,7 +492,10 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
       });
 
       if (res.ok || res.status === 400) {
-        await activateProvider(providerId, { trigger: "test_auth" });
+        await activateProvider(providerId, {
+          trigger: "test_auth",
+          ...getOpenAiLinkedActivationOptions(providerId, provider.authMethod),
+        });
         return { ok: true, message: "Connected via OAuth — Responses API verified" };
       }
 

@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { warnIfLegacyHiveTokenEnvSet, syncPlatformVersionOnBoot } from "./instrumentation";
+import {
+  areOptionalStartupTasksEnabled,
+  isInngestSelfSyncOnBootEnabled,
+  isStartupModelRevalidationEnabled,
+  warnIfLegacyHiveTokenEnvSet,
+  syncPlatformVersionOnBoot,
+} from "./instrumentation";
 
 const syncPlatformVersionConfigMock = vi.fn();
 
@@ -76,5 +82,53 @@ describe("syncPlatformVersionOnBoot", () => {
     expect(error.mock.calls[0]![0]).toContain("[platform-version]");
     expect(error.mock.calls[0]![0]).toContain("Failed");
     expect(error.mock.calls[0]![1]).toBe(boom);
+  });
+});
+
+describe("isStartupModelRevalidationEnabled", () => {
+  it("requires explicit opt-in before startup revalidation runs", () => {
+    expect(isStartupModelRevalidationEnabled({})).toBe(false);
+    expect(
+      isStartupModelRevalidationEnabled({
+        DPF_STARTUP_MODEL_REVALIDATION_ENABLED: "false",
+      }),
+    ).toBe(false);
+    expect(
+      isStartupModelRevalidationEnabled({
+        DPF_STARTUP_MODEL_REVALIDATION_ENABLED: "true",
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("isInngestSelfSyncOnBootEnabled", () => {
+  it("requires explicit opt-in before the portal self-registers with Inngest on boot", () => {
+    expect(isInngestSelfSyncOnBootEnabled({})).toBe(false);
+    expect(
+      isInngestSelfSyncOnBootEnabled({
+        DPF_INNGEST_SELF_SYNC_ON_BOOT_ENABLED: "false",
+      }),
+    ).toBe(false);
+    expect(
+      isInngestSelfSyncOnBootEnabled({
+        DPF_INNGEST_SELF_SYNC_ON_BOOT_ENABLED: "true",
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("areOptionalStartupTasksEnabled", () => {
+  it("requires explicit opt-in before nonessential startup maintenance runs", () => {
+    expect(areOptionalStartupTasksEnabled({})).toBe(false);
+    expect(
+      areOptionalStartupTasksEnabled({
+        DPF_OPTIONAL_STARTUP_TASKS_ENABLED: "false",
+      }),
+    ).toBe(false);
+    expect(
+      areOptionalStartupTasksEnabled({
+        DPF_OPTIONAL_STARTUP_TASKS_ENABLED: "true",
+      }),
+    ).toBe(true);
   });
 });

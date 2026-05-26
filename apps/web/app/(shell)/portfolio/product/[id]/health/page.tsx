@@ -1,6 +1,6 @@
 // apps/web/app/(shell)/portfolio/product/[id]/health/page.tsx
 //
-// Health tab — product-specific health metrics.
+// Health tab - product-specific health metrics.
 // For the portal product (dpf-portal), renders the service-level health dashboard.
 // For other products, shows observation config and SLA compliance.
 
@@ -8,6 +8,7 @@ import { prisma } from "@dpf/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ServiceHealthDashboard } from "@/components/monitoring/ServiceHealthDashboard";
+import { TONE_COLOR, type Tone } from "@/components/monitoring/health-summary";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -64,20 +65,10 @@ export default async function ProductHealthPage({ params }: Props) {
 
 function PortalHealth({ openBugs, productId }: { openBugs: number; productId: string }) {
   return (
-    <div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-        <HealthCard label="Platform Status" value="Operational" colour="#4ade80" />
-        <HealthCard
-          label="Open Backlog Items"
-          value={String(openBugs)}
-          colour={openBugs > 0 ? "#fbbf24" : "#4ade80"}
-          href={`/portfolio/product/${productId}/backlog`}
-          hint={openBugs > 0 ? "View list" : undefined}
-        />
-        <HealthCard label="Health Monitoring" value="Active" colour="#4ade80" />
-      </div>
-      <ServiceHealthDashboard />
-    </div>
+    <ServiceHealthDashboard
+      openBacklogItems={openBugs}
+      backlogHref={`/portfolio/product/${productId}/backlog`}
+    />
   );
 }
 
@@ -123,19 +114,19 @@ function ProductHealth({
         <HealthCard
           label="Open Backlog Items"
           value={String(openBugs)}
-          colour={openBugs > 0 ? "#fbbf24" : "#4ade80"}
+          tone={openBugs > 0 ? "warning" : "success"}
           href={`/portfolio/product/${productId}/backlog`}
           hint={openBugs > 0 ? "View list" : undefined}
         />
         <HealthCard
           label="SLA Targets"
           value={`${offerings.length} defined`}
-          colour={hasOfferings ? "#4ade80" : "#8888a0"}
+          tone={hasOfferings ? "success" : "neutral"}
         />
         <HealthCard
           label="Observation"
           value={hasObservation ? "Configured" : "Not set"}
-          colour={hasObservation ? "#4ade80" : "#8888a0"}
+          tone={hasObservation ? "success" : "neutral"}
         />
       </div>
 
@@ -174,24 +165,24 @@ function ProductHealth({
 function HealthCard({
   label,
   value,
-  colour,
+  tone,
   href,
   hint,
 }: {
   label: string;
   value: string;
-  colour: string;
+  tone: Tone;
   href?: string;
   hint?: string;
 }) {
   const body = (
     <div className="bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] rounded-lg p-4 transition-colors hover:border-[var(--dpf-accent)]">
-      <div className="text-lg font-bold" style={{ color: colour }}>
+      <div className="text-lg font-bold" style={{ color: TONE_COLOR[tone] }}>
         {value}
       </div>
       <div className="text-[11px] text-[var(--dpf-muted)] mt-1">{label}</div>
       {hint && (
-        <div className="text-[10px] text-[var(--dpf-accent)] mt-1">{hint} →</div>
+        <div className="text-[10px] text-[var(--dpf-accent)] mt-1">{hint} -&gt;</div>
       )}
     </div>
   );

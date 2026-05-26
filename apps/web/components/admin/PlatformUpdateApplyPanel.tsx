@@ -159,7 +159,7 @@ export function ApplyResult({ result }: { result: ApplyPlatformUpdateResult }) {
           {result.conflicts.length} file{result.conflicts.length === 1 ? "" : "s"} need
           resolution. The merge is paused in the managed source workspace on the{" "}
           <code>my-changes</code> branch. Resolve the listed files there, run the verification
-          gate, then finish the merge commit.
+          gate, then click Apply update again to finish the merge commit.
           <ul style={{ marginTop: 8, paddingLeft: 18 }}>
             {result.conflicts.map((c) => (
               <li key={c.file} style={{ marginBottom: 8 }}>

@@ -171,6 +171,29 @@ describe("HostAddressCell", () => {
 });
 
 describe("EdgeNodesAdminClient customer/site scope", () => {
+  it("summarizes runtime mode and warns about container LAN visibility", () => {
+    render(
+      <EdgeNodesAdminClient
+        nodes={[
+          {
+            ...BASE_NODE,
+            platform: "linux",
+            installMode: "container-vm",
+            trustState: "trusted",
+            status: "active",
+          },
+        ]}
+        tokens={[]}
+        customerAccounts={CUSTOMER_ACCOUNTS}
+      />,
+    );
+
+    expect(screen.getByText("Runtime summary")).toBeInTheDocument();
+    expect(screen.getByText("1 trusted")).toBeInTheDocument();
+    expect(screen.getAllByText("linux / container-vm").length).toBeGreaterThan(0);
+    expect(screen.getByText(/limited host-LAN visibility/i)).toBeInTheDocument();
+  });
+
   it("renders customer/site scope badges for nodes and bootstrap tokens", () => {
     render(
       <EdgeNodesAdminClient

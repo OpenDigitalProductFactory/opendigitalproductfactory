@@ -138,6 +138,93 @@ describe("applyPlatformUpdate", () => {
     }
   });
 
+  it("parses CRLF conflict markers from the managed Windows source volume", async () => {
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      updatePending: true,
+      pendingVersion: "v1.2.3",
+    });
+    mockExistsSync.mockReturnValue(true);
+
+    mockExec.mockImplementation((cmd: string, _opts: unknown, cb?: (err: Error | null, value: { stdout: string; stderr: string }) => void) => {
+      if (!cb) return;
+      if (cmd.includes("--diff-filter=U")) {
+        cb(null, { stdout: "apps/web/page.tsx\n", stderr: "" });
+        return;
+      }
+      cb(null, { stdout: "", stderr: "" });
+    });
+    mockReadFileSync.mockReturnValue(
+      "// header\r\n<<<<<<< HEAD\r\nlocal version\r\n=======\r\nupstream version\r\n>>>>>>> dpf-upstream\r\n",
+    );
+
+    const result = await applyPlatformUpdate();
+
+    expect(result.kind).toBe("conflicts");
+    if (result.kind === "conflicts") {
+      expect(result.conflicts[0]?.localChange).toBe("local version");
+      expect(result.conflicts[0]?.upstreamChange).toBe("upstream version");
+    }
+  });
+
+  it("finishes a resumed merge when all conflicts have already been resolved", async () => {
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      updatePending: true,
+      pendingVersion: "v1.2.3",
+    });
+    mockPrisma.platformDevConfig.update.mockResolvedValue({});
+    mockExistsSync.mockReturnValue(true);
+
+    mockExec.mockImplementation((cmd: string, _opts: unknown, cb?: (err: Error | null, value: { stdout: string; stderr: string }) => void) => {
+      if (!cb) return;
+      if (cmd.includes("--diff-filter=U")) cb(null, { stdout: "", stderr: "" });
+      else if (cmd === "git diff --cached --stat") cb(null, { stdout: " 3 files changed, 9 insertions(+)", stderr: "" });
+      else cb(null, { stdout: "", stderr: "" });
+    });
+
+    const result = await applyPlatformUpdate();
+
+    expect(result.kind).toBe("clean-merge");
+    if (result.kind === "clean-merge") {
+      expect(result.filesUpdated).toBe(3);
+    }
+    const commands = mockExec.mock.calls.map(([cmd]) => cmd);
+    expect(commands.some((cmd) => String(cmd).startsWith('git commit -s -m "chore: merge dpf'))).toBe(true);
+    expect(commands).not.toContain("rm -rf apps/web packages");
+    expect(mockWriteFileSync).toHaveBeenCalled();
+    expect(mockPrisma.platformDevConfig.update).toHaveBeenCalledWith({
+      where: { id: "singleton" },
+      data: { updatePending: false, pendingVersion: null },
+    });
+  });
+
+  it("marks the workspace as a Git safe directory before reading merge state", async () => {
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      updatePending: true,
+      pendingVersion: "v1.2.3",
+    });
+    mockExistsSync.mockReturnValue(true);
+
+    mockExec.mockImplementation((cmd: string, _opts: unknown, cb?: (err: Error | null, value: { stdout: string; stderr: string }) => void) => {
+      if (!cb) return;
+      if (cmd.includes("--diff-filter=U")) {
+        cb(null, { stdout: "apps/web/page.tsx\n", stderr: "" });
+        return;
+      }
+      cb(null, { stdout: "", stderr: "" });
+    });
+    mockReadFileSync.mockReturnValue(
+      "// header\n<<<<<<< HEAD\nlocal version\n=======\nupstream version\n>>>>>>> dpf-upstream\n",
+    );
+
+    const result = await applyPlatformUpdate();
+
+    expect(result.kind).toBe("conflicts");
+    expect(mockExec.mock.calls[0]?.[0]).toBe(
+      "git config --global --add safe.directory '/workspace' >/dev/null 2>&1 || true",
+    );
+    expect(mockExec.mock.calls[1]?.[0]).toBe("git diff --name-only --diff-filter=U");
+  });
+
   it("returns clean-merge after a successful no-conflict merge and clears the pending flag", async () => {
     mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
       updatePending: true,
@@ -198,6 +285,49 @@ describe("applyPlatformUpdate", () => {
     expect(commands).toContain("git branch my-changes HEAD");
     expect(commands).toContain("git add -A apps/web packages");
     expect(commands).not.toContain("git add -A");
+  });
+
+  it("repairs and retries when checkout cannot resolve the managed upstream branch", async () => {
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      updatePending: true,
+      pendingVersion: "v1.2.3",
+    });
+    mockPrisma.platformDevConfig.update.mockResolvedValue({});
+    mockExistsSync.mockReturnValue(false);
+
+    let upstreamCheckoutAttempts = 0;
+    mockExec.mockImplementation((cmd: string, _opts: unknown, cb?: (err: Error | null, value: { stdout: string; stderr: string }) => void) => {
+      if (!cb) return;
+      if (cmd === "git checkout dpf-upstream") {
+        upstreamCheckoutAttempts += 1;
+        if (upstreamCheckoutAttempts === 1) {
+          cb(new Error("pathspec 'dpf-upstream' did not match any file(s) known to git"), {
+            stdout: "",
+            stderr: "pathspec 'dpf-upstream' did not match any file(s) known to git",
+          });
+          return;
+        }
+      }
+      if (cmd === "git rev-parse --verify origin/main") {
+        cb(null, { stdout: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n", stderr: "" });
+        return;
+      }
+      if (cmd === "git diff --name-only origin/main...HEAD -- apps/web packages") {
+        cb(null, { stdout: "", stderr: "" });
+        return;
+      }
+      if (cmd.includes("--diff-filter=U")) cb(null, { stdout: "", stderr: "" });
+      else if (cmd === "git diff --cached --stat") cb(null, { stdout: " 2 files changed, 5 insertions(+)", stderr: "" });
+      else cb(null, { stdout: "", stderr: "" });
+    });
+
+    const result = await applyPlatformUpdate();
+
+    expect(result.kind).toBe("clean-merge");
+    const commands = mockExec.mock.calls.map(([cmd]) => cmd);
+    expect(commands.filter((cmd) => cmd === "git checkout dpf-upstream")).toHaveLength(2);
+    expect(commands).toContain("git branch -f dpf-upstream HEAD");
+    expect(commands).toContain("git checkout my-changes");
   });
 
   it("does not repair missing update branches over committed source changes", async () => {

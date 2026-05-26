@@ -25,7 +25,9 @@ export function SparkLine({
     return <div className={`inline-block ${className}`} style={{ width, height }} />;
   }
 
-  const values = (data[0]?.values ?? []).map(([, v]) => parseFloat(v));
+  const values = (data[0]?.values ?? [])
+    .map(([, v]) => parseFloat(v))
+    .filter((value) => Number.isFinite(value));
   if (values.length === 0) return <div className={`inline-block ${className}`} style={{ width, height }} />;
 
   const min = Math.min(...values);

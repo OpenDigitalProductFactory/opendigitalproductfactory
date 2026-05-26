@@ -559,6 +559,7 @@ model Portfolio {
   epicPortfolios         EpicPortfolio[]
   inventoryEntities      InventoryEntity[]
   portfolioQualityIssues PortfolioQualityIssue[]
+  capabilityMaturityAssessments CapabilityMaturityAssessment[]
   knowledgeArticles      KnowledgeArticlePortfolio[]
   valueStreamTeams       ValueStreamTeam[]
   workQueues             WorkQueue[]
@@ -588,6 +589,7 @@ model DigitalProduct {
   featureBuilds                FeatureBuild[]
   inventoryEntities            InventoryEntity[]
   portfolioQualityIssues       PortfolioQualityIssue[]
+  capabilityMaturityAssessments CapabilityMaturityAssessment[]
   versions                     ProductVersion[]
   serviceOfferings             ServiceOffering[]
   quoteLineItems               QuoteLineItem[]
@@ -913,6 +915,7 @@ model TaxonomyNode {
   fingerprintRules         DiscoveryFingerprintRule[]
   inventoryEntities        InventoryEntity[]
   portfolioQualityIssues   PortfolioQualityIssue[]
+  capabilityMaturityAssessments CapabilityMaturityAssessment[]
   triageSelectionDecisions DiscoveryTriageDecision[]     @relation("DiscoveryTriageDecisionSelectedTaxonomy")
   taxonomyProposalParents  TaxonomyProposal[]            @relation("TaxonomyProposalParent")
   createdTaxonomyProposals TaxonomyProposal[]            @relation("TaxonomyProposalCreatedNode")
@@ -962,6 +965,7 @@ model BacklogItem {
   effortSize              String?
   proposedOutcome         String?
   activeBuildId           String?                       @unique
+  activeEpicId            String?                       @unique
   duplicateOfId           String?
   resolution              String?
   abandonReason           String?
@@ -981,6 +985,8 @@ model BacklogItem {
   upstreamSyncedAt        DateTime?
   accountableEmployee     EmployeeProfile?              @relation("ItemAccountable", fields: [accountableEmployeeId], references: [id])
   activeBuild             FeatureBuild?                 @relation("BacklogItemActiveBuild", fields: [activeBuildId], references: [id])
+  activeEpic              Epic?                         @relation("BacklogItemActiveEpic", fields: [activeEpicId], references: [id])
+  originatingEpic         Epic?                         @relation("EpicOriginatingItem")
   digitalProduct          DigitalProduct?               @relation(fields: [digitalProductId], references: [id])
   duplicateOf             BacklogItem?                  @relation("BacklogItemDuplicates", fields: [duplicateOfId], references: [id])
   duplicates              BacklogItem[]                 @relation("BacklogItemDuplicates")
@@ -1153,29 +1159,44 @@ model RuntimeVerification {
 }
 
 model Epic {
-  id                    String           @id @default(cuid())
-  epicId                String           @unique
-  title                 String
-  description           String?
-  status                String           @default("open")
-  priority              Int?
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @updatedAt
-  submittedById         String?
-  agentId               String?
-  completedAt           DateTime?
-  accountableEmployeeId String?
-  claimedById           String?
-  claimedByAgentId      String?
-  claimedAt             DateTime?
-  claimStatus           String?
-  upstreamIssueNumber   Int?
-  upstreamIssueUrl      String?
-  upstreamSyncedAt      DateTime?
-  items                 BacklogItem[]
-  accountableEmployee   EmployeeProfile? @relation("EpicAccountable", fields: [accountableEmployeeId], references: [id])
-  submittedBy           User?            @relation("EpicSubmissions", fields: [submittedById], references: [id])
-  portfolios            EpicPortfolio[]
+  id                       String                   @id @default(cuid())
+  epicId                   String                   @unique
+  title                    String
+  description              String?
+  status                   String                   @default("open")
+  priority                 Int?
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  submittedById            String?
+  agentId                  String?
+  completedAt              DateTime?
+  accountableEmployeeId    String?
+  claimedById              String?
+  claimedByAgentId         String?
+  claimedAt                DateTime?
+  claimStatus              String?
+  upstreamIssueNumber      Int?
+  upstreamIssueUrl         String?
+  upstreamSyncedAt         DateTime?
+  // Design-time decomposition substrate (Phase 1, spec
+  // docs/superpowers/specs/2026-05-24-build-studio-design-time-decomposition-design.md).
+  // Null on portfolio-organizational Epics (the existing use); populated on
+  // execution-organizational Epics created via the decomposition gate.
+  designDoc                Json?
+  designReview             Json?
+  decompositionState       Json?
+  originatingBacklogItemId String?                  @unique
+  items                    BacklogItem[]
+  originatingBacklogItem   BacklogItem?             @relation("EpicOriginatingItem", fields: [originatingBacklogItemId], references: [id])
+  activeForBacklogItem     BacklogItem?             @relation("BacklogItemActiveEpic")
+  featureBuilds            FeatureBuild[]           @relation("EpicFeatureBuilds")
+  supersededBuilds         FeatureBuild[]           @relation("EpicSupersededBuilds")
+  dependencies             FeatureBuildDependency[] @relation("EpicDependencies")
+  accountableEmployee      EmployeeProfile?         @relation("EpicAccountable", fields: [accountableEmployeeId], references: [id])
+  submittedBy              User?                    @relation("EpicSubmissions", fields: [submittedById], references: [id])
+  portfolios               EpicPortfolio[]
+
+  @@index([originatingBacklogItemId])
 }
 
 model EpicPortfolio {
@@ -4321,6 +4342,14 @@ model FeatureBuild {
   abandonedAt              DateTime?
   abandonReason            String?
   draftApprovedAt          DateTime?
+  // Design-time decomposition substrate (Phase 1). When non-null, this build
+  // is a child of an execution-organizational Epic; its plan implements a
+  // subset of the parent Epic's designDoc ACs. Recursive decomposition is
+  // forbidden (a child cannot itself be decomposed) — enforced at the
+  // invariant layer, not the schema.
+  parentEpicId             String?
+  childOrder               Int?
+  supersededByEpicId       String?
   activities               BuildActivity[]
   dispatchAttempts         BuildDispatchAttempt[]
   artifactRevisions        BuildArtifactRevision[]
@@ -4331,11 +4360,15 @@ model FeatureBuild {
   phaseRuns                BuildPhaseRun[]
   toolExecutionReceipts    ToolExecutionReceipt[]
   taxonomyProposals        TaxonomyProposal[]
+  dependenciesOut          FeatureBuildDependency[] @relation("DependentBuild")
+  dependenciesIn           FeatureBuildDependency[] @relation("DependsOnBuild")
   activeForBacklogItem     BacklogItem?            @relation("BacklogItemActiveBuild")
   accountableEmployee      EmployeeProfile?        @relation("BuildAccountable", fields: [accountableEmployeeId], references: [id])
   createdBy                User                    @relation(fields: [createdById], references: [id])
   digitalProduct           DigitalProduct?         @relation(fields: [digitalProductId], references: [id])
   originator               BacklogItem?            @relation("BacklogItemOriginator", fields: [originatingBacklogItemId], references: [id])
+  parentEpic               Epic?                   @relation("EpicFeatureBuilds", fields: [parentEpicId], references: [id])
+  supersededByEpic         Epic?                   @relation("EpicSupersededBuilds", fields: [supersededByEpicId], references: [id])
   releaseBundle            ReleaseBundle?          @relation(fields: [releaseBundleId], references: [id])
   productVersions          ProductVersion[]
   promotionBackups         PromotionBackup[]
@@ -4350,6 +4383,29 @@ model FeatureBuild {
   @@index([digitalProductId])
   @@index([originatingBacklogItemId])
   @@index([releaseBundleId])
+  @@index([parentEpicId, childOrder])
+  @@index([supersededByEpicId])
+}
+
+// FeatureBuildDependency — sibling-dependency edges between child FeatureBuilds
+// within the same parent Epic. Phase 1 substrate for design-time decomposition.
+// Invariants (enforced at apps/web/lib/build/epic-decomposition-invariants.ts):
+//   - dependent.parentEpicId === dependsOn.parentEpicId === this.parentEpicId
+//   - dependent.id !== dependsOn.id (no self-loops)
+//   - the dependency graph is acyclic
+model FeatureBuildDependency {
+  id               String       @id @default(cuid())
+  dependentBuildId String
+  dependsOnBuildId String
+  parentEpicId     String
+  createdAt        DateTime     @default(now())
+  dependent        FeatureBuild @relation("DependentBuild", fields: [dependentBuildId], references: [id], onDelete: Cascade)
+  dependsOn        FeatureBuild @relation("DependsOnBuild", fields: [dependsOnBuildId], references: [id], onDelete: Cascade)
+  parentEpic       Epic         @relation("EpicDependencies", fields: [parentEpicId], references: [id], onDelete: Cascade)
+
+  @@unique([dependentBuildId, dependsOnBuildId])
+  @@index([parentEpicId])
+  @@index([dependsOnBuildId])
 }
 
 model BusinessBuildBrief {
@@ -4802,6 +4858,12 @@ model TaskRun {
   // deliberation rounds, sandbox pipeline, Codex CLI) so the watchdog can
   // distinguish a live task from a wedged one. See BI-4ab6be39 §6.1.
   lastHeartbeatAt      DateTime?
+  // Timestamp when the Activity Quiescence coordinator flipped this row to
+  // status='quiescing' during a normal→draining transition. Null on rows
+  // that have never been part of a quiescence cycle. See spec
+  // docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md
+  // §5.1 + §6.2. BI-QUIESCE-001.
+  quiescedAt           DateTime?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -4852,6 +4914,97 @@ model StallEvent {
   @@index([buildId])
   @@index([phase, reason])
   @@index([outcome])
+}
+
+// ─── Activity Quiescence Protocol — coordinator audit (BI-QUIESCE-001) ───
+//
+// One row per orchestrated drain attempt. Lifecycle:
+//   pending → preparing → draining → ready-to-swap → swapping → completed
+//                                          │              │
+//                                          └─→ aborted    └─→ failed
+//                            │
+//                            └─→ deferred (hard-blocker exceeded budget)
+//
+// Critical invariant (spec §5.2): every terminal transition emits the
+// "platform.quiescence-cleared" Inngest event so suspended functions resume
+// regardless of outcome. Otherwise a single coordinator crash would wedge
+// the Inngest queue forever.
+//
+// Independent of SelfUpgradeRun because quiescence is also triggerable from
+// manual maintenance and sandbox recovery flows; the trigger field carries
+// the caller, and triggerRefId links back when the caller has its own audit
+// substrate (e.g., SelfUpgradeRun.runId).
+//
+// Spec: docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md §5.1
+model QuiescenceRun {
+  id              String    @id @default(cuid())
+  // Public/human-readable id (e.g., "QR-2026-05-24-abc123"). Used in event
+  // payloads + URLs + log lines; the cuid `id` is internal FK substrate only.
+  runId           String    @unique
+  // Caller category: "self-upgrade" | "manual" | "sandbox-recovery"
+  trigger         String
+  // Caller's external reference (e.g., SelfUpgradeRun.runId). Echoed back
+  // on platform.quiescence-cleared so caller's step.waitForEvent can filter
+  // when multiple non-self-upgrade callers emit in close sequence (spec §5.3).
+  triggerRefId    String?
+
+  // State machine value (see model comment above). String not enum so future
+  // additions don't require a schema migration — application-layer validation
+  // via the QUIESCENCE_RUN_STATUSES constant.
+  status          String
+  startedAt       DateTime  @default(now())
+  // Per-state entry timestamps: { draining: ts, "ready-to-swap": ts, ... }.
+  // JSON-of-timestamps rather than columns per state so adding telemetry
+  // fields later doesn't force a migration per signal added.
+  enteredStateAt  Json      @default("{}")
+  // Swap-window timestamps populated when the caller signals progress past
+  // the ready-to-swap handshake. Distinguished from completedAt because the
+  // outer coordinator lifetime extends past swap (final state transitions).
+  swapStartedAt   DateTime?
+  swapCompletedAt DateTime?
+  completedAt     DateTime?
+  // Coordinator function heartbeat — written every wait-loop tick (~5s).
+  // Stuck-coordinator detection in taskrunWatchdog (BI-QUIESCE-007) keys on
+  // this; mirrors the BI-4ab6be39 TaskRun.lastHeartbeatAt pattern.
+  lastHeartbeatAt DateTime?
+
+  // ActiveSessionBlockers shape (spec §5.6) captured at preparing transition.
+  initialSnapshot Json
+  // Latest snapshot at completion / defer; null while still in flight.
+  finalSnapshot   Json?
+
+  // Expected post-swap identity for boot reconcile (BI-QUIESCE-010). When the
+  // new bundle boots it can correlate against these fields to detect that a
+  // pending QuiescenceRun matches the now-running version.
+  targetVersion    String?
+  targetBundleHash String?
+
+  // Operator-promised wait budget (ms). Coordinator chooses regime at
+  // preparing time and may extend per spec §5.5 max(regimeBudget, phaseBudget)
+  // rule when a BuildPhaseRun blocker is present.
+  budgetMs        Int
+  // Actual wait time at terminal transition. Populated for success/defer paths.
+  actualWaitMs    Int?
+
+  // Defer audit (populated when status='deferred').
+  deferReason     String?
+  deferSurface    String?
+  // List of surfaces force-cancelled past budget (e.g., ship-force override).
+  // JSON array of { surface, reason, forcedAt } objects.
+  forcedSurfaces  Json      @default("[]")
+
+  // Terminal outcome label: succeeded | deferred-by-surface |
+  // aborted-by-operator | failed. Set together with status transition.
+  outcome         String?
+  // Where the terminal transition came from: caller | boot-reconciler | watchdog.
+  // Distinguishes "caller signaled swap-complete cleanly" from "post-swap boot
+  // reconciler had to close out a pending run" from "watchdog forced cleanup".
+  completionSource String?
+  outcomeNotes    String?   @db.Text
+
+  @@index([trigger, startedAt])
+  // Stuck-coordinator query: status NOT IN (terminal) AND lastHeartbeatAt < cutoff.
+  @@index([status, lastHeartbeatAt])
 }
 
 model TaskMessage {
@@ -5245,11 +5398,73 @@ model EaElement {
   toRelationships         EaRelationship[]              @relation("ToElement")
   viewElements            EaViewElement[]
   businessCapabilityLinks BusinessCapabilityTraceLink[] @relation("BusinessCapabilityEaElementLinks")
+  capabilityMaturityAssessments CapabilityMaturityAssessment[]
 
   @@index([portfolioId])
   @@index([taxonomyNodeId])
   @@index([digitalProductId])
   @@index([elementTypeId])
+}
+
+model CapabilityMaturityAssessment {
+  id                            String                         @id @default(cuid())
+  assessmentId                  String                         @unique
+  name                          String
+  capabilityCategory            String
+  riskTier                      String
+  maturityScore                 Int
+  confidenceGrade               String                         @default("claimed")
+  strategicOwnership            String
+  vendorReplacementConfidence   String                         @default("low")
+  installScope                  String                         @default("canonical")
+  archetypeScope                String?
+  productizationStatus          String                         @default("not_eligible")
+  productizationStatusChangedAt DateTime?
+  parityChecklistEvidence       Json                           @default("[]")
+  existingPrimitives            Json                           @default("[]")
+  maturityGaps                  Json                           @default("[]")
+  evidenceSources               Json                           @default("[]")
+  hiveMindSignals               Json                           @default("[]")
+  kernelPrinciples              String[]                       @default([])
+  operationalSurface            String?
+  hasContinuousEvidence         Boolean                        @default(false)
+  evidenceFreshnessAt           DateTime?
+  lastGovernanceReviewAt        DateTime?
+  lastAssessmentAt              DateTime                       @default(now())
+  assessedBy                    String                         @default("seed")
+  portfolioId                   String
+  taxonomyNodeId                String?
+  eaElementId                   String?
+  digitalProductId              String?
+  createdAt                     DateTime                       @default(now())
+  updatedAt                     DateTime                       @updatedAt
+  portfolio                     Portfolio                      @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  taxonomyNode                  TaxonomyNode?                  @relation(fields: [taxonomyNodeId], references: [id], onDelete: SetNull)
+  eaElement                     EaElement?                     @relation(fields: [eaElementId], references: [id], onDelete: SetNull)
+  digitalProduct                DigitalProduct?                @relation(fields: [digitalProductId], references: [id], onDelete: SetNull)
+  dependencies                  CapabilityMaturityDependency[] @relation("CapabilityMaturityDependencyFrom")
+  dependents                    CapabilityMaturityDependency[] @relation("CapabilityMaturityDependencyTo")
+
+  @@index([portfolioId])
+  @@index([taxonomyNodeId])
+  @@index([eaElementId])
+  @@index([digitalProductId])
+  @@index([capabilityCategory])
+  @@index([riskTier])
+  @@index([installScope])
+  @@index([productizationStatus])
+}
+
+model CapabilityMaturityDependency {
+  id           String                       @id @default(cuid())
+  assessmentId String
+  dependencyId String
+  createdAt    DateTime                     @default(now())
+  assessment   CapabilityMaturityAssessment @relation("CapabilityMaturityDependencyFrom", fields: [assessmentId], references: [id], onDelete: Cascade)
+  dependency   CapabilityMaturityAssessment @relation("CapabilityMaturityDependencyTo", fields: [dependencyId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, dependencyId])
+  @@index([dependencyId])
 }
 
 model BusinessCapability {

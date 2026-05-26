@@ -19,6 +19,7 @@ import {
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 import { activeBrandExtractionWhere } from "@/lib/brand/active-extraction";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
+import { createPlatformIssueReport } from "@/lib/quality/platform-issue-reports";
 import {
   MARKETING_CHANNELS,
   MARKETING_REVIEW_CADENCE,
@@ -478,6 +479,78 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         limit: { type: "number", description: "Optional cap for this on-demand sweep. Still constrained by the platform daily cap." },
       },
       required: [],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    // NOTE: this tool is DISTINCT from the existing `propose_decomposition`
+    // (epic + feature-set breakdown for ideation). This one operates on a
+    // passed FeatureBuild design and proposes how to SPLIT it into smaller
+    // builds — a downstream-of-Ideate decomposition, not an upstream-from-
+    // backlog one. Different name avoids the collision.
+    name: "propose_build_decomposition",
+    description: "Phase 4b/7 (BI-2E6CC391). Ask the SE coworker to propose 2-4 candidate decompositions of a passed-design xlarge FeatureBuild. Distinct from `propose_decomposition` (which is an upstream brainstorming tool that generates an Epic + feature-set breakdown). This one is downstream of Ideate — eligible when the build is in `ideate`, has a passed designReview, and the recorded sizeAssessment.decision is `decompose-recommended` or `decompose-required`; Phase 7 also allows a top-level `plan` build whose failed planReview has iteration.oscillating=true, recomputing sizeDesignDoc retroactively when sizeAssessment is missing. Optional `operatorHint` re-runs with guidance ('make the read-first smaller', 'ship the ledger separately'). Persists validated candidates to designReview.decompositionCandidates.latest; prior rounds are preserved under .priorRounds for audit. Returns the validated candidates plus an observability list of rejected ones (model returned them but they failed validateCandidate).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Originating FeatureBuild ID (FB-*)." },
+        operatorHint: {
+          type: "string",
+          description: "Optional regenerate guidance. Empty/omitted on first generation.",
+        },
+      },
+      required: ["buildId"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "approve_decomposition",
+    description: "Phase 4a/7 (BI-2E6CC391). Atomically create an execution-organizational Epic + N child FeatureBuilds + sibling-dependency edges from a pre-validated DecompositionCandidate, and mark the originating FeatureBuild as superseded. The originating build must be in `ideate` phase with a passed designReview, or in `plan` with a failed oscillating planReview as the Phase 7 retroactive escape hatch, and must not itself be a child. Callers (typically the Phase 4b assistant flow) supply the candidate after the operator has chosen and optionally edited it; all invariants from epic-decomposition-invariants run before any DB writes.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Originating FeatureBuild ID (FB-*)." },
+        candidate: {
+          type: "object",
+          description: "The DecompositionCandidate to materialize. See apps/web/lib/build/decomposition-candidates.ts for the full shape.",
+          properties: {
+            candidateId: { type: "string" },
+            rationale: { type: "string" },
+            childScopes: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  childOrder: { type: "number" },
+                  title: { type: "string" },
+                  summary: { type: "string" },
+                  acceptanceCriteriaIndices: { type: "array", items: { type: "number" } },
+                  dependsOn: { type: "array", items: { type: "number" } },
+                },
+                required: ["childOrder", "title", "acceptanceCriteriaIndices", "dependsOn"],
+              },
+            },
+          },
+          required: ["candidateId", "rationale", "childScopes"],
+        },
+      },
+      required: ["buildId", "candidate"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
+    name: "record_decomposition_override",
+    description: "Phase 4a (BI-2E6CC391). Record the operator's 'keep as one build' override on a FeatureBuild whose size assessment is decompose-required. Writes designReview.decompositionOverride for audit and hive-contribution context. Only valid on decompose-required builds; recommended-tier builds proceed without recording an override (single-click path per spec §4.1). Does not enforce — Phase 4b's gate is the consumer of this record.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "FeatureBuild ID (FB-*)." },
+        rationale: { type: "string", description: "Non-empty one-line justification for proceeding monolithically." },
+      },
+      required: ["buildId", "rationale"],
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
@@ -4833,6 +4906,91 @@ export async function executeTool(
         },
       };
     }
+
+    case "propose_build_decomposition": {
+      const buildId = String(params["buildId"] ?? "");
+      if (!buildId.startsWith("FB-")) {
+        return { success: false, error: "invalid_buildId", message: "buildId must use the FB-* format." };
+      }
+      const operatorHint = typeof params["operatorHint"] === "string" ? params["operatorHint"] : undefined;
+      const { proposeDecomposition } = await import("@/lib/build/propose-decomposition");
+      const result = await proposeDecomposition({
+        buildId,
+        userId,
+        agentId: context?.agentId ?? null,
+        ...(operatorHint ? { operatorHint } : {}),
+      });
+      if (!result.ok) {
+        return { success: false, error: result.code, message: result.error };
+      }
+      return {
+        success: true,
+        entityId: buildId,
+        message: `Proposed ${result.candidates.length} candidate decomposition(s) for ${buildId}.${result.rejected.length > 0 ? ` (${result.rejected.length} additional candidate(s) failed validation and were dropped.)` : ""}`,
+        data: {
+          candidates: result.candidates,
+          rejectedCount: result.rejected.length,
+        },
+      };
+    }
+
+    case "approve_decomposition": {
+      // Phase 4a (BI-2E6CC391). The candidate is pre-validated by the
+      // caller (Phase 4b assistant); we revalidate inside
+      // approveDecomposition's pipeline before any DB writes.
+      const buildId = String(params["buildId"] ?? "");
+      const candidateRaw = params["candidate"];
+      if (!buildId.startsWith("FB-")) {
+        return { success: false, error: "invalid_buildId", message: "buildId must use the FB-* format." };
+      }
+      if (!candidateRaw || typeof candidateRaw !== "object") {
+        return { success: false, error: "invalid_candidate", message: "candidate must be an object matching the DecompositionCandidate shape." };
+      }
+      const { approveDecomposition } = await import("@/lib/build/approve-decomposition");
+      const result = await approveDecomposition({
+        buildId,
+        candidate: candidateRaw as Parameters<typeof approveDecomposition>[0]["candidate"],
+        userId,
+        agentId: context?.agentId ?? null,
+      });
+      if (!result.ok) {
+        return { success: false, error: result.code, message: result.error };
+      }
+      return {
+        success: true,
+        entityId: result.epicId,
+        message: `Decomposed ${buildId} into Epic ${result.epicId} with ${result.childBuildIds.length} child build(s).`,
+        data: {
+          epicId: result.epicId,
+          childBuildIds: result.childBuildIds,
+        },
+      };
+    }
+
+    case "record_decomposition_override": {
+      const buildId = String(params["buildId"] ?? "");
+      const rationale = String(params["rationale"] ?? "");
+      if (!buildId.startsWith("FB-")) {
+        return { success: false, error: "invalid_buildId", message: "buildId must use the FB-* format." };
+      }
+      const { recordDecompositionOverride } = await import("@/lib/build/decomposition-override");
+      const result = await recordDecompositionOverride({
+        buildId,
+        rationale,
+        userId,
+        agentId: context?.agentId ?? null,
+      });
+      if (!result.ok) {
+        return { success: false, error: result.code, message: result.error };
+      }
+      return {
+        success: true,
+        entityId: buildId,
+        message: `Decomposition override recorded for ${buildId}.`,
+        data: { override: result.override },
+      };
+    }
+
     case "update_backlog_item": {
       const existing = await prisma.backlogItem.findUnique({ where: { itemId: String(params["itemId"]) } });
       if (!existing) return { success: false, error: "Item not found", message: `Item ${String(params["itemId"])} not found` };
@@ -5662,17 +5820,18 @@ export async function executeTool(
     }
 
     case "report_quality_issue": {
-      const reportId = "PIR-" + Math.random().toString(36).substring(2, 7).toUpperCase();
-      await prisma.platformIssueReport.create({
-        data: {
-          reportId,
-          type: String(params["type"] ?? "user_report"),
-          title: String(params["title"] ?? "Untitled"),
-          ...(typeof params["description"] === "string" ? { description: params["description"] } : {}),
-          severity: String(params["severity"] ?? "medium"),
-          reportedById: userId,
-          source: "ai_assisted",
-        },
+      const { reportId } = await createPlatformIssueReport({
+        type: String(params["type"] ?? "user_report"),
+        title: String(params["title"] ?? "Untitled"),
+        source: "ai_assisted",
+        ...(typeof params["description"] === "string"
+          ? { description: params["description"] }
+          : {}),
+        severity: String(params["severity"] ?? "medium"),
+        reportedById: userId,
+        ...(typeof context?.routeContext === "string"
+          ? { routeContext: context.routeContext }
+          : {}),
       });
       return { success: true, entityId: reportId, message: `Filed report ${reportId}` };
     }
@@ -6681,10 +6840,26 @@ export async function executeTool(
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
         summary: "Review could not be completed — retry.",
       };
-      await prisma.featureBuild.update({ where: { buildId }, data: { designReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
+
+      // Phase 2 of design-time decomposition (BI-2E6CC391, spec
+      // docs/superpowers/specs/2026-05-24-build-studio-design-time-
+      // decomposition-design.md). Run the deterministic sizing counter and
+      // record the assessment alongside the review. Informational only —
+      // no gate, no UX change. Surfaces the rationale ("5 models, 25 ACs,
+      // 4 multipliers → required") so when Phase 3's gate ships, operators
+      // have already seen the signal in passing.
+      const { sizeDesignDoc } = await import("@/lib/build/size-design-doc");
+      const sizeAssessment = sizeDesignDoc(build.designDoc as Parameters<typeof sizeDesignDoc>[0]);
+      const reviewWithSize = { ...review, sizeAssessment };
+      await prisma.featureBuild.update({ where: { buildId }, data: { designReview: reviewWithSize as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "designReview" });
       logBuildActivity(buildId, "reviewDesignDoc", `Design review: ${review.decision}. ${review.summary}`);
+      logBuildActivity(
+        buildId,
+        "design-size-assessed",
+        `Design size: ${sizeAssessment.decision}. ${sizeAssessment.rationale}`,
+      );
 
       // Record a deliberation trail for this dual-reviewer run. The review
       // result above still gates pass/fail; this layer is the honest
@@ -6776,6 +6951,30 @@ export async function executeTool(
               success: true,
               message: `Design review: ${review.decision}. ${review.summary} This governed backlog draft is prepared and now waiting for Approve Start before planning can begin.`,
               data: { review, blocked: true, action: "approve_start" },
+            };
+          }
+
+          // Phase 4b decompose-required gate (BI-2E6CC391). If the build's
+          // size assessment is "decompose-required" AND no decomposition
+          // happened (build still exists in ideate, not superseded) AND no
+          // operator override was recorded, refuse advance and tell the
+          // operator what to do next. Recommended-tier and ok-tier builds
+          // proceed through to plan unchanged.
+          const sizedReview = (updatedBuild.designReview ?? null) as
+            | { sizeAssessment?: { decision?: string }; decompositionOverride?: unknown }
+            | null;
+          const decomposeDecision = sizedReview?.sizeAssessment?.decision ?? null;
+          const hasOverride = sizedReview?.decompositionOverride != null;
+          if (decomposeDecision === "decompose-required" && !hasOverride) {
+            logBuildActivity(
+              buildId,
+              "phase:gate-blocked",
+              "decompose-required gate fired; advance blocked until decomposition or override.",
+            );
+            return {
+              success: true,
+              message: `Design review: ${review.decision}, but the size assessment is decompose-required. Before advancing to Plan, either call approve_decomposition with a chosen DecompositionCandidate (preferred) — see propose_decomposition to generate candidates — OR call record_decomposition_override with a one-line justification to ship monolithically.`,
+              data: { review, blocked: true, action: "decompose_or_override" },
             };
           }
 
@@ -7100,7 +7299,21 @@ export async function executeTool(
       // see the fix in reviewDesignDoc for the backstory.
       try {
         const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState } = await import("@/lib/feature-build-types");
-        const updatedBuild = await prisma.featureBuild.findUnique({ where: { buildId } });
+        const { deriveFeatureBuildDependencyGate, FEATURE_BUILD_DEPENDENCY_GATE_SELECT } = await import("@/lib/build/feature-build-dependencies");
+        const updatedBuild = await prisma.featureBuild.findUnique({
+          where: { buildId },
+          select: {
+            phase: true,
+            plan: true,
+            buildPlan: true,
+            planReview: true,
+            id: true,
+            buildId: true,
+            title: true,
+            parentEpicId: true,
+            dependenciesOut: FEATURE_BUILD_DEPENDENCY_GATE_SELECT.dependenciesOut,
+          },
+        });
         if (updatedBuild && updatedBuild.phase === "plan" && canTransitionPhase("plan", "build")) {
           const plan = (updatedBuild.plan as Record<string, unknown> | null) ?? {};
           const happyPathState = normalizeHappyPathState(plan.happyPathState);
@@ -7110,33 +7323,38 @@ export async function executeTool(
             happyPathState,
           });
           if (gate.allowed) {
-            // Initialize the build branch BEFORE flipping the phase. If the
-            // phase flip lands without buildBranch set, deploy_feature runs
-            // on whatever the current sandbox HEAD is — picking up leftover
-            // work from earlier builds. Gate the transition on the branch
-            // actually being ready so the "phase: build" record is always
-            // paired with a valid buildBranch on the FeatureBuild row.
-            try {
-              const { isSandboxAvailable, startBuildBranch } = await import("@/lib/integrate/sandbox/build-branch");
-              const sandboxUp = await isSandboxAvailable();
-              if (!sandboxUp) {
-                logBuildActivity(buildId, "phase:gate-blocked", "Auto-advance to build blocked: sandbox not running. Start the sandbox, then call start_build.");
-              } else {
-                await startBuildBranch(buildId);
-                // EP-COST Phase 3: record plan-phase cost rollup, start build tracking, and compact thread
-                const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
-                void completeBuildPhaseRun(buildId, "plan");
-                void startBuildPhaseRun(buildId, "build");
-                if (context?.threadId) {
-                  const { persistPhaseHandoffSummary } = await import("@/lib/integrate/phase-compaction-wire");
-                  void persistPhaseHandoffSummary(context.threadId, "plan");
+            const dependencyGate = deriveFeatureBuildDependencyGate(updatedBuild);
+            if (!dependencyGate.allowed) {
+              logBuildActivity(buildId, "phase:gate-blocked", dependencyGate.message);
+            } else {
+              // Initialize the build branch BEFORE flipping the phase. If the
+              // phase flip lands without buildBranch set, deploy_feature runs
+              // on whatever the current sandbox HEAD is — picking up leftover
+              // work from earlier builds. Gate the transition on the branch
+              // actually being ready so the "phase: build" record is always
+              // paired with a valid buildBranch on the FeatureBuild row.
+              try {
+                const { isSandboxAvailable, startBuildBranch } = await import("@/lib/integrate/sandbox/build-branch");
+                const sandboxUp = await isSandboxAvailable();
+                if (!sandboxUp) {
+                  logBuildActivity(buildId, "phase:gate-blocked", "Auto-advance to build blocked: sandbox not running. Start the sandbox, then call start_build.");
+                } else {
+                  await startBuildBranch(buildId);
+                  // EP-COST Phase 3: record plan-phase cost rollup, start build tracking, and compact thread
+                  const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
+                  void completeBuildPhaseRun(buildId, "plan");
+                  void startBuildPhaseRun(buildId, "build");
+                  if (context?.threadId) {
+                    const { persistPhaseHandoffSummary } = await import("@/lib/integrate/phase-compaction-wire");
+                    void persistPhaseHandoffSummary(context.threadId, "plan");
+                  }
+                  await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
+                  if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
+                  logBuildActivity(buildId, "phase:advance", "Phase advanced: plan → build (buildBranch initialized)");
                 }
-                await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
-                if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
-                logBuildActivity(buildId, "phase:advance", "Phase advanced: plan → build (buildBranch initialized)");
+              } catch (branchErr) {
+                logBuildActivity(buildId, "phase:gate-blocked", `startBuildBranch failed: ${(branchErr as Error).message?.slice(0, 200)}`);
               }
-            } catch (branchErr) {
-              logBuildActivity(buildId, "phase:gate-blocked", `startBuildBranch failed: ${(branchErr as Error).message?.slice(0, 200)}`);
             }
           } else {
             logBuildActivity(buildId, "phase:gate-blocked", gate.reason ?? "unknown");
@@ -7361,6 +7579,17 @@ export async function executeTool(
     case "start_build": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
+
+      try {
+        const { assertFeatureBuildDependenciesSatisfied } = await import("@/lib/build/feature-build-dependencies");
+        await assertFeatureBuildDependenciesSatisfied({ db: prisma, buildId });
+      } catch (err) {
+        return {
+          success: false,
+          error: "Dependency gate blocked.",
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
 
       const { isSandboxAvailable, startBuildBranch } = await import("@/lib/integrate/sandbox/build-branch");
 
@@ -8410,6 +8639,10 @@ export async function executeTool(
           await prisma.featureBuild.update({
             where: { buildId },
             data: { phase: "complete" },
+          });
+          const { recordReadyDependentsAfterCompletion } = await import("@/lib/build/feature-build-dependencies");
+          await recordReadyDependentsAfterCompletion({ db: prisma, buildId }).catch((err) => {
+            console.warn("[create_portal_pr] dependency readiness check failed:", err);
           });
 
           const promotion = build.productVersions[0]?.promotions[0];

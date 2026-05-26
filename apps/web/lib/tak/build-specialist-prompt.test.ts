@@ -14,8 +14,8 @@ const PROMPT_PATH = join(REPO_ROOT, "prompts", "route-persona", "build-specialis
 const prompt = readFileSync(PROMPT_PATH, "utf-8");
 
 describe("build-specialist.prompt.md (Operator Contract)", () => {
-  it("has frontmatter version 5 (ideate tool guidance + describe_model guard)", () => {
-    expect(prompt).toMatch(/^version:\s*5$/m);
+  it("has frontmatter version 6 (DPF patterns guidance + describe_model guard)", () => {
+    expect(prompt).toMatch(/^version:\s*6$/m);
   });
 
   it("preserves the role-defining sections", () => {
@@ -48,6 +48,12 @@ describe("build-specialist.prompt.md (Operator Contract)", () => {
     // explicitly disallows describe_model for design-time research.
     expect(prompt).toMatch(/start_ideate_research/);
     expect(prompt).toMatch(/describe_model.*build phase/i);
+  });
+
+  it("points structural decisions at the DPF architecture patterns reference", () => {
+    expect(prompt).toMatch(/docs\/architecture\/dpf-patterns\.md/);
+    expect(prompt).toMatch(/Before proposing new structure/i);
+    expect(prompt).toMatch(/When in \*\*Plan\*\*.*new substrate/i);
   });
 
   it("references all nine contract clauses by intent", () => {

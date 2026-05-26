@@ -1,32 +1,10 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 param(
     [string]$InstallDir,
-    [string]$Version = "latest"
+    [string]$Version = "latest",
+    [switch]$LibraryOnly
 )
 $ErrorActionPreference = "Stop"
-
-# Determine a sensible default: if the script already sits in a project
-# directory (has docker-compose.yml), default to that path.
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-if (-not $InstallDir) {
-    if (Test-Path "$scriptDir\docker-compose.yml") {
-        $defaultDir = $scriptDir
-    } else {
-        $defaultDir = "C:\DPF"
-    }
-
-    Write-Host ""
-    Write-Host "Where would you like to install Digital Product Factory?" -ForegroundColor Cyan
-    $answer = Read-Host "  Install directory [$defaultDir]"
-    if ([string]::IsNullOrWhiteSpace($answer)) {
-        $InstallDir = $defaultDir
-    } else {
-        $InstallDir = $answer.Trim()
-    }
-}
-$DPF_DIR = [System.IO.Path]::GetFullPath($InstallDir)
-$PROGRESS_FILE = "$DPF_DIR\.install-progress"
-$AUTOSTART_TASK_NAME = "DPF-AutoStart"
 
 # --- Helpers ----------------------------------------------------------------
 
@@ -101,6 +79,507 @@ function Register-DPFStartupTask {
         return $false
     }
 }
+
+function Format-DPFGigabytes {
+    param([double]$Value)
+
+    if ([math]::Abs($Value - [math]::Round($Value)) -lt 0.05) {
+        return ([math]::Round($Value)).ToString("0")
+    }
+    return $Value.ToString("0.0")
+}
+
+function Get-DPFDriveDeviceIDFromPath {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $root = [System.IO.Path]::GetPathRoot($Path)
+    if ($root -match "^([A-Za-z]:)") {
+        return $matches[1].ToUpperInvariant()
+    }
+    return $null
+}
+
+function Get-DPFDriveInventory {
+    param([object[]]$LogicalDisks)
+
+    if (-not $LogicalDisks) {
+        try {
+            $LogicalDisks = @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3")
+        } catch {
+            return @()
+        }
+    }
+
+    $inventory = foreach ($disk in $LogicalDisks) {
+        $driveType = if ($null -ne $disk.DriveType) { [int]$disk.DriveType } else { 3 }
+        if ($driveType -ne 3) { continue }
+
+        $deviceId = ([string]$disk.DeviceID).TrimEnd("\").ToUpperInvariant()
+        if ($deviceId -notmatch "^[A-Z]:$") { continue }
+
+        $freeGB = if ($disk.PSObject.Properties.Name -contains "FreeGB") {
+            [double]$disk.FreeGB
+        } elseif ($null -ne $disk.FreeSpace) {
+            [math]::Round([double]$disk.FreeSpace / 1GB, 1)
+        } else {
+            0
+        }
+
+        $sizeGB = if ($disk.PSObject.Properties.Name -contains "SizeGB") {
+            [double]$disk.SizeGB
+        } elseif ($null -ne $disk.Size) {
+            [math]::Round([double]$disk.Size / 1GB, 1)
+        } else {
+            0
+        }
+
+        [PSCustomObject]@{
+            DeviceID   = $deviceId
+            FreeGB     = $freeGB
+            SizeGB     = $sizeGB
+            VolumeName = $disk.VolumeName
+        }
+    }
+
+    return @($inventory | Sort-Object DeviceID)
+}
+
+function Get-DPFDriveFromInventory {
+    param(
+        [object[]]$DriveInventory = @(),
+        [Parameter(Mandatory)][string]$DeviceID
+    )
+
+    $normalized = $DeviceID.TrimEnd("\").ToUpperInvariant()
+    return $DriveInventory | Where-Object { $_.DeviceID -eq $normalized } | Select-Object -First 1
+}
+
+function Join-DPFDrivePath {
+    param(
+        [Parameter(Mandatory)][string]$DeviceID,
+        [Parameter(Mandatory)][string]$ChildPath
+    )
+
+    return "$($DeviceID.TrimEnd("\"))\$($ChildPath.TrimStart("\"))"
+}
+
+function Get-DPFInstallDriveRecommendation {
+    param(
+        [object[]]$DriveInventory = @(),
+        [string]$DefaultInstallDir = "C:\DPF",
+        [double]$RecommendedFreeGB = 50
+    )
+
+    $defaultDrive = Get-DPFDriveDeviceIDFromPath -Path $DefaultInstallDir
+    $defaultDriveInfo = if ($defaultDrive) {
+        Get-DPFDriveFromInventory -DriveInventory $DriveInventory -DeviceID $defaultDrive
+    } else {
+        $null
+    }
+
+    $result = [PSCustomObject]@{
+        Recommended      = $false
+        InstallDir       = $DefaultInstallDir
+        RecommendedDrive = $defaultDrive
+        Message          = $null
+    }
+
+    if ($defaultDrive -ne "C:" -or -not $defaultDriveInfo) {
+        return $result
+    }
+
+    if ([double]$defaultDriveInfo.FreeGB -ge $RecommendedFreeGB) {
+        return $result
+    }
+
+    $candidate = $DriveInventory |
+        Where-Object { $_.DeviceID -ne "C:" -and [double]$_.FreeGB -ge $RecommendedFreeGB } |
+        Sort-Object DeviceID |
+        Select-Object -First 1
+
+    if (-not $candidate) {
+        return $result
+    }
+
+    $installDir = Join-DPFDrivePath -DeviceID $candidate.DeviceID -ChildPath "DPF"
+    return [PSCustomObject]@{
+        Recommended      = $true
+        InstallDir       = $installDir
+        RecommendedDrive = $candidate.DeviceID
+        Message          = "C: has $(Format-DPFGigabytes $defaultDriveInfo.FreeGB) GB free; $($candidate.DeviceID) has $(Format-DPFGigabytes $candidate.FreeGB) GB free, so $installDir is the suggested install location."
+    }
+}
+
+function Get-DPFInstallDriveFreeSpace {
+    param(
+        [Parameter(Mandatory)][string]$InstallDir,
+        [object[]]$DriveInventory = @()
+    )
+
+    $installDrive = Get-DPFDriveDeviceIDFromPath -Path $InstallDir
+    if (-not $installDrive) {
+        return [PSCustomObject]@{
+            DeviceID = $null
+            FreeGB   = 0
+            Missing  = $true
+        }
+    }
+
+    $driveInfo = Get-DPFDriveFromInventory -DriveInventory $DriveInventory -DeviceID $installDrive
+    if (-not $driveInfo) {
+        return [PSCustomObject]@{
+            DeviceID = $installDrive
+            FreeGB   = 0
+            Missing  = $true
+        }
+    }
+
+    return [PSCustomObject]@{
+        DeviceID = $driveInfo.DeviceID
+        FreeGB   = [double]$driveInfo.FreeGB
+        Missing  = $false
+    }
+}
+
+function Get-DPFDockerDesktopDataPath {
+    $candidate = Join-Path $env:LOCALAPPDATA "Docker\wsl\disk"
+    if (Test-Path -LiteralPath $candidate) {
+        return $candidate
+    }
+    return $null
+}
+
+function Get-DPFDockerStorageRecommendation {
+    param(
+        [object[]]$DriveInventory = @(),
+        [string]$DockerDataPath,
+        [double]$RecommendedFreeGB = 100
+    )
+
+    $result = [PSCustomObject]@{
+        ShouldWarn  = $false
+        CurrentPath = $DockerDataPath
+        TargetPath  = $null
+        Message     = $null
+    }
+
+    if ([string]::IsNullOrWhiteSpace($DockerDataPath)) {
+        return $result
+    }
+
+    $currentDrive = Get-DPFDriveDeviceIDFromPath -Path $DockerDataPath
+    if ($currentDrive -ne "C:") {
+        return $result
+    }
+
+    $cDrive = Get-DPFDriveFromInventory -DriveInventory $DriveInventory -DeviceID "C:"
+    if (-not $cDrive -or [double]$cDrive.FreeGB -ge $RecommendedFreeGB) {
+        return $result
+    }
+
+    $candidate = $DriveInventory |
+        Where-Object { $_.DeviceID -ne "C:" -and [double]$_.FreeGB -ge $RecommendedFreeGB } |
+        Sort-Object DeviceID |
+        Select-Object -First 1
+
+    if (-not $candidate) {
+        return $result
+    }
+
+    $targetPath = Join-DPFDrivePath -DeviceID $candidate.DeviceID -ChildPath "DockerDesktop\wsl\disk"
+    return [PSCustomObject]@{
+        ShouldWarn  = $true
+        CurrentPath = $DockerDataPath
+        TargetPath  = $targetPath
+        Message     = "Docker Desktop stores Linux data on C: at $DockerDataPath. If Docker storage starts filling C:, use $targetPath as the relocation target. The installer will not move Docker storage automatically."
+    }
+}
+
+function Get-DPFComposeArgs {
+    param(
+        [Parameter(Mandatory)][string]$InstallDir,
+        [bool]$IncludeEdge = $true,
+        [bool]$IncludeOverride = $true
+    )
+
+    $composeArgs = @("-f", "docker-compose.yml")
+
+    if ($IncludeOverride -and (Test-Path (Join-Path $InstallDir "docker-compose.override.yml"))) {
+        $composeArgs += @("-f", "docker-compose.override.yml")
+    }
+
+    if ($IncludeEdge -and (Test-Path (Join-Path $InstallDir "docker-compose.edge.yml"))) {
+        $composeArgs += @("-f", "docker-compose.edge.yml")
+    }
+
+    return $composeArgs
+}
+
+function Get-DPFEdgeComposeContent {
+    param([string]$Version = "latest")
+
+    return @"
+# Generated by DPF installer (consumer mode) -- do not edit manually
+#
+# Bundled single-host Edge Node. On Windows Docker Desktop this runs
+# inside Docker's Linux VM, so it proves enrollment and Authority
+# connectivity but does not have full host-LAN visibility. Native
+# Windows service Mode 4 is the production path for real Windows LAN
+# discovery once the signed Go service installer ships.
+
+services:
+  edge-node:
+    image: ghcr.io/opendigitalproductfactory/dpf-edge-node:$Version
+    pull_policy: missing
+    restart: unless-stopped
+    environment:
+      DPF_AUTHORITY_URL: `${DPF_AUTHORITY_URL:-http://portal:3000}
+      DPF_BOOTSTRAP_TOKEN: `${DPF_BOOTSTRAP_TOKEN:-}
+      DPF_EDGE_NODE_NAME: `${DPF_EDGE_NODE_NAME:-edge-node-windows}
+      DPF_INSTALL_MODE: `${DPF_INSTALL_MODE:-container-vm}
+      DPF_EDGE_STATE_DIR: /var/lib/dpf-edge-node
+    volumes:
+      - edge_node_state:/var/lib/dpf-edge-node
+    depends_on:
+      portal:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "process.exit(0)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  edge_node_state:
+"@
+}
+
+function Get-DPFStartScriptContent {
+    return @'
+param(
+    [string]$DPF_DIR = $PSScriptRoot,
+    [switch]$NoBrowser
+)
+
+Set-Location $DPF_DIR
+
+$composeArgs = @("-f", "docker-compose.yml")
+if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
+    $composeArgs += @("-f", "docker-compose.override.yml")
+}
+if (Test-Path (Join-Path $DPF_DIR "docker-compose.edge.yml")) {
+    $composeArgs += @("-f", "docker-compose.edge.yml")
+}
+
+docker compose @composeArgs up -d
+
+Write-Host "Waiting for portal to be ready..." -ForegroundColor Cyan
+$attempts = 0
+$maxAttempts = 60
+$healthy = $false
+while ($attempts -lt $maxAttempts) {
+    try {
+        $resp = Invoke-WebRequest -Uri "http://localhost:3000/api/health" `
+                    -UseBasicParsing -TimeoutSec 3 -ErrorAction SilentlyContinue
+        if ($resp -and $resp.StatusCode -eq 200) { $healthy = $true; break }
+    } catch {}
+    Start-Sleep -Seconds 5
+    $attempts++
+}
+
+if (-not $healthy) {
+    Write-Host "[!] Portal did not become healthy after 5 minutes." -ForegroundColor Yellow
+    Write-Host "    Run 'docker compose logs portal' in $DPF_DIR to diagnose." -ForegroundColor Yellow
+} else {
+    $seedScript = Join-Path $DPF_DIR "scripts\seed-worktree-mcp.ps1"
+    if ((Test-Path $seedScript) -and (Get-Command claude -ErrorAction SilentlyContinue)) {
+        Write-Host "Auto-seeding MCP token..." -ForegroundColor Cyan
+        try { & $seedScript } catch { Write-Host "[!] MCP seed skipped: $_" -ForegroundColor Yellow }
+    }
+}
+
+if (-not $NoBrowser) {
+    Start-Process "http://localhost:3000"
+    Write-Host "Digital Product Factory is running at http://localhost:3000" -ForegroundColor Green
+}
+'@
+}
+
+function Get-DPFStopScriptContent {
+    return @'
+param(
+    [string]$DPF_DIR = $PSScriptRoot
+)
+
+Set-Location $DPF_DIR
+
+$composeArgs = @("-f", "docker-compose.yml")
+if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
+    $composeArgs += @("-f", "docker-compose.override.yml")
+}
+if (Test-Path (Join-Path $DPF_DIR "docker-compose.edge.yml")) {
+    $composeArgs += @("-f", "docker-compose.edge.yml")
+}
+
+docker compose @composeArgs down
+Write-Host "Digital Product Factory stopped." -ForegroundColor Yellow
+'@
+}
+
+function Set-DPFEnvFileValue {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Key,
+        [Parameter(Mandatory)][string]$Value
+    )
+
+    $envText = ""
+    if (Test-Path $Path) {
+        $envText = Get-Content -Path $Path -Raw -ErrorAction SilentlyContinue
+        if ($null -eq $envText) { $envText = "" }
+    }
+
+    $line = "$Key=$Value"
+    $pattern = "(?m)^$([System.Text.RegularExpressions.Regex]::Escape($Key))=.*$"
+    if ($envText -match $pattern) {
+        $envText = [System.Text.RegularExpressions.Regex]::Replace($envText, $pattern, $line)
+    } else {
+        if ($envText.Length -gt 0 -and -not $envText.EndsWith("`n")) {
+            $envText += "`n"
+        }
+        $envText += "$line`n"
+    }
+
+    Set-Content -Path $Path -Value $envText -Encoding UTF8 -NoNewline
+}
+
+function Invoke-DPFEdgeNodeBootstrap {
+    param([Parameter(Mandatory)][string]$InstallDir)
+
+    $edgeComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$true
+    if ($edgeComposeArgs -notcontains "docker-compose.edge.yml") {
+        Write-Warn "docker-compose.edge.yml was not found. Skipping bundled Edge Node bootstrap."
+        return $false
+    }
+
+    Write-Action "Bootstrapping bundled Edge Node..."
+    $portalReady = $false
+    for ($i = 0; $i -lt 60; $i++) {
+        try {
+            $resp = Invoke-WebRequest -Uri "http://localhost:3000/api/health" -UseBasicParsing -TimeoutSec 3 -ErrorAction SilentlyContinue
+            if ($resp -and $resp.StatusCode -eq 200) { $portalReady = $true; break }
+        } catch {}
+        Start-Sleep -Seconds 5
+    }
+    if (-not $portalReady) {
+        Write-Warn "Portal did not become healthy in time. Skipping Edge Node bootstrap."
+        return $false
+    }
+
+    $portalContainer = (docker compose @edgeComposeArgs ps -q portal 2>$null) -split "`n" | Select-Object -First 1
+    if (-not $portalContainer) {
+        $portalContainer = "dpf-portal-1"
+    }
+
+    $edgeToken = $null
+    try {
+        $tokenOutput = docker exec $portalContainer sh -c 'cd /app/apps/web-src && /app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-edge-bootstrap-token.ts --ttl-minutes 30 --auto-approve' 2>$null
+        if ($LASTEXITCODE -eq 0 -and $tokenOutput) {
+            $lines = @($tokenOutput) | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -ne "" }
+            $candidate = if ($lines.Count -gt 0) { $lines[-1] } else { "" }
+            if ($candidate -match "^dpfboot_") {
+                $edgeToken = $candidate
+            }
+        }
+    } catch {
+        $edgeToken = $null
+    }
+
+    if (-not $edgeToken) {
+        Write-Warn "Bootstrap token issuance failed. Skipping Edge Node enrollment wiring."
+        Write-Warn "Use the portal Edge Nodes page to issue a token if you need to enroll this node manually."
+        return $false
+    }
+
+    $envPath = Join-Path $InstallDir ".env"
+    Set-DPFEnvFileValue -Path $envPath -Key "DPF_BOOTSTRAP_TOKEN" -Value $edgeToken
+    Set-DPFEnvFileValue -Path $envPath -Key "DPF_EDGE_NODE_NAME" -Value ([System.Net.Dns]::GetHostName())
+    Write-OK "Bootstrap token wired into .env (auto-approve)"
+
+    $oldEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    docker compose @edgeComposeArgs up -d --no-deps --force-recreate edge-node 2>&1 | Out-Null
+    $edgeUpExit = $LASTEXITCODE
+    $ErrorActionPreference = $oldEAP
+    if ($edgeUpExit -ne 0) {
+        Write-Warn "edge-node container start failed."
+        return $false
+    }
+
+    for ($i = 0; $i -lt 12; $i++) {
+        $edgeContainer = (docker compose @edgeComposeArgs ps -q edge-node 2>$null) -split "`n" | Select-Object -First 1
+        if ($edgeContainer) {
+            $state = docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' $edgeContainer 2>$null
+            if ($state -match "^running (healthy|no-healthcheck)") {
+                Write-OK "Edge Node container is $state"
+                return $true
+            }
+        }
+        Start-Sleep -Seconds 5
+    }
+
+    Write-Warn "Edge Node container was started, but did not report healthy within 60 seconds."
+    return $false
+}
+
+if ($LibraryOnly -or $env:DPF_INSTALLER_LIBRARY_ONLY -eq "1") {
+    return
+}
+
+# Determine a sensible default: if the script already sits in a project
+# directory (has docker-compose.yml), default to that path. For one-file
+# downloads, prefer the next fixed non-C drive when C is short on space.
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$driveInventory = Get-DPFDriveInventory
+if (-not $InstallDir) {
+    $installDriveRecommendation = $null
+    if (Test-Path "$scriptDir\docker-compose.yml") {
+        $defaultDir = $scriptDir
+    } else {
+        $installDriveRecommendation = Get-DPFInstallDriveRecommendation `
+            -DriveInventory $driveInventory `
+            -DefaultInstallDir "C:\DPF"
+        $defaultDir = $installDriveRecommendation.InstallDir
+    }
+
+    Write-Host ""
+    Write-Host "Where would you like to install Digital Product Factory?" -ForegroundColor Cyan
+    if ($installDriveRecommendation -and $installDriveRecommendation.Recommended) {
+        Write-Host "  Suggestion: $($installDriveRecommendation.Message)" -ForegroundColor Yellow
+    }
+
+    $dockerStorageRecommendation = Get-DPFDockerStorageRecommendation `
+        -DriveInventory $driveInventory `
+        -DockerDataPath (Get-DPFDockerDesktopDataPath)
+    if ($dockerStorageRecommendation.ShouldWarn) {
+        Write-Host "  Docker storage note: $($dockerStorageRecommendation.Message)" -ForegroundColor Yellow
+    }
+
+    $answer = Read-Host "  Install directory [$defaultDir]"
+    if ([string]::IsNullOrWhiteSpace($answer)) {
+        $InstallDir = $defaultDir
+    } else {
+        $InstallDir = $answer.Trim()
+    }
+}
+$DPF_DIR = [System.IO.Path]::GetFullPath($InstallDir)
+$PROGRESS_FILE = "$DPF_DIR\.install-progress"
+$AUTOSTART_TASK_NAME = "DPF-AutoStart"
 
 $GHCR_PORTAL = "ghcr.io/opendigitalproductfactory/dpf-portal"
 $GHCR_SANDBOX = "ghcr.io/opendigitalproductfactory/dpf-sandbox"
@@ -558,7 +1037,7 @@ services:
       retries: 10
       start_period: 30s
 
-  # ─── Sandbox Database (isolated from production) ────────────────────
+  # Sandbox Database (isolated from production)
   sandbox-postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -575,7 +1054,7 @@ services:
       retries: 5
       start_period: 10s
 
-  # ─── Sandbox Init (migrations on sandbox DB) ──────────────────────
+  # Sandbox Init (migrations on sandbox DB)
   sandbox-init:
     image: $($GHCR_PORTAL):$Version
     command: ["/docker-entrypoint.sh"]
@@ -588,7 +1067,7 @@ services:
       sandbox-postgres:
         condition: service_healthy
 
-  # ─── Sandbox (isolated build environment for Build Studio) ──────────
+  # Sandbox (isolated build environment for Build Studio)
   sandbox:
     image: $($GHCR_SANDBOX):$Version
     restart: unless-stopped
@@ -610,8 +1089,8 @@ services:
       sandbox-init:
         condition: service_completed_successfully
 
-  # ─── Promoter (autonomous deployment pipeline) ─────────────────────
-  # One-shot container — triggered by Build Studio ship phase or ops UI.
+  # Promoter (autonomous deployment pipeline)
+  # One-shot container -- triggered by Build Studio ship phase or ops UI.
   promoter:
     image: dpf-promoter:latest
     entrypoint: ["/promoter/promote.sh"]
@@ -728,6 +1207,7 @@ volumes:
   prometheus_data:
   grafana_data:
 "@ | Set-Content "$DPF_DIR\docker-compose.yml" -Encoding UTF8
+            Get-DPFEdgeComposeContent -Version $Version | Set-Content "$DPF_DIR\docker-compose.edge.yml" -Encoding UTF8
 
             # Write monitoring configuration files (Prometheus + Grafana)
             $monDir = "$DPF_DIR\monitoring"
@@ -885,44 +1365,9 @@ providers:
 
             Write-OK "Created monitoring configuration (Prometheus + Grafana)"
 
-            # Write dpf-start.ps1 for consumer (no .git dependency)
-            @'
-param([switch]$NoBrowser)
-$DPF_DIR = $PSScriptRoot
-Set-Location $DPF_DIR
-docker compose up -d
-
-Write-Host "Waiting for portal to be ready..." -ForegroundColor Cyan
-$attempts = 0; $maxAttempts = 60; $healthy = $false
-while ($attempts -lt $maxAttempts) {
-    try {
-        $resp = Invoke-WebRequest -Uri "http://localhost:3000/api/health" `
-                    -UseBasicParsing -TimeoutSec 3 -ErrorAction SilentlyContinue
-        if ($resp -and $resp.StatusCode -eq 200) { $healthy = $true; break }
-    } catch {}
-    Start-Sleep -Seconds 5
-    $attempts++
-}
-if (-not $healthy) {
-    Write-Host "[!] Portal did not become healthy after 5 minutes." -ForegroundColor Yellow
-} else {
-    $seedScript = Join-Path $DPF_DIR "scripts\seed-worktree-mcp.ps1"
-    if ((Test-Path $seedScript) -and (Get-Command claude -ErrorAction SilentlyContinue)) {
-        Write-Host "Auto-seeding MCP token..." -ForegroundColor Cyan
-        try { & $seedScript } catch { Write-Host "[!] MCP seed skipped: $_" -ForegroundColor Yellow }
-    }
-}
-if (-not $NoBrowser) {
-    Start-Process "http://localhost:3000"
-    Write-Host "Digital Product Factory is running at http://localhost:3000" -ForegroundColor Green
-}
-'@ | Set-Content "$DPF_DIR\dpf-start.ps1" -Encoding UTF8
-
-            @'
-Set-Location $PSScriptRoot
-docker compose down
-Write-Host "Digital Product Factory stopped." -ForegroundColor Yellow
-'@ | Set-Content "$DPF_DIR\dpf-stop.ps1" -Encoding UTF8
+            # Write dpf lifecycle scripts for consumer installs (no .git dependency).
+            Get-DPFStartScriptContent | Set-Content "$DPF_DIR\dpf-start.ps1" -Encoding UTF8
+            Get-DPFStopScriptContent | Set-Content "$DPF_DIR\dpf-stop.ps1" -Encoding UTF8
 
             Write-OK "Platform files written to $DPF_DIR"
         }
@@ -1062,7 +1507,7 @@ if (-not (Test-StepDone "hardware")) {
     $cpu = Get-CimInstance Win32_Processor
     $mem = Get-CimInstance Win32_ComputerSystem
     $gpu = Get-CimInstance Win32_VideoController | Where-Object { $_.Name -match "NVIDIA" } | Select-Object -First 1
-    $disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
+    $disk = Get-DPFInstallDriveFreeSpace -InstallDir $DPF_DIR -DriveInventory (Get-DPFDriveInventory)
 
     $totalRAM_GB = [math]::Round($mem.TotalPhysicalMemory / 1GB, 1)
     $gpuName = if ($gpu) { $gpu.Name } else { $null }
@@ -1080,7 +1525,7 @@ if (-not (Test-StepDone "hardware")) {
             $gpuVRAM_GB = [math]::Round($gpu.AdapterRAM / 1GB, 1)
         }
     }
-    $diskFree_GB = [math]::Round($disk.FreeSpace / 1GB, 1)
+    $diskFree_GB = [double]$disk.FreeGB
 
     $hwSummary = "$totalRAM_GB GB RAM, $($cpu.NumberOfCores)-core CPU"
     if ($gpuName) { $hwSummary += ", $gpuName ($gpuVRAM_GB GB VRAM)" }
@@ -1090,7 +1535,7 @@ if (-not (Test-StepDone "hardware")) {
     # Mirrors apps/web/lib/inference/bootstrap-first-run.ts MODEL_TIERS so the
     # installer's pre-portal model pull agrees with the portal's post-boot
     # bootstrap. Tags are the exact Docker Hub published forms (verified
-    # against https://hub.docker.com/r/ai/qwen3/tags 2026-05-23) — lowercase
+    # against https://hub.docker.com/r/ai/qwen3/tags 2026-05-23) -- lowercase
     # short forms (`ai/qwen3:14b`) 404 against Docker Model Runner.
     #
     # Why Qwen3 over Gemma: the platform's Coworkers catalog tiers Qwen3 as
@@ -1119,7 +1564,8 @@ if (-not (Test-StepDone "hardware")) {
 
     # Check disk space
     if ($diskFree_GB -lt 5) {
-        Write-Warn "Not enough disk space. The platform needs about 5 GB free. You have $diskFree_GB GB."
+        $diskLabel = if ($disk.DeviceID) { $disk.DeviceID } else { "the selected install drive" }
+        Write-Warn "Not enough disk space on $diskLabel. The platform needs about 5 GB free. You have $diskFree_GB GB."
         exit 1
     }
 
@@ -1130,12 +1576,13 @@ if (-not (Test-StepDone "hardware")) {
         ramGB = $totalRAM_GB
         gpuName = $gpuName
         gpuVramGB = $gpuVRAM_GB
+        installDrive = $disk.DeviceID
         diskFreeGB = $diskFree_GB
         selectedModel = $selectedModel
         detectedAt = (Get-Date -Format "o")
     } | ConvertTo-Json -Compress
 
-    # Docker Model Runner uses Docker Desktop's built-in GPU support — no override needed.
+    # Docker Model Runner uses Docker Desktop's built-in GPU support -- no override needed.
 
     # Save for later steps
     $hostProfile | Set-Content "$DPF_DIR\.host-profile.json"
@@ -1193,7 +1640,7 @@ GF_ADMIN_PASSWORD=$adminPass
 #
 # Also handles two upgrade paths:
 #   1. Operators upgrading from PR #1040: the dpf-reinstall.ps1 / uninstall
-#      preserve dance moved backups to $DPF_DIR-backups\ — that location IS
+#      preserve dance moved backups to $DPF_DIR-backups\ -- that location IS
 #      the permanent home now, so leave them alone.
 #   2. Operators upgrading from pre-#1040 (backups still in-tree at
 #      $DPF_DIR\backups\): migrate them forward so the new bind mount sees
@@ -1303,30 +1750,31 @@ Write-Action "Open a new terminal for the PATH change to take effect in other wi
 Write-Step 7 10 "Starting the platform..."
 if (-not (Test-StepDone "started")) {
     Set-Location $DPF_DIR
+    $coreComposeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -IncludeEdge:$false
 
     if ($InstallMode -eq "consumer") {
         Write-Action "Pulling pre-built images (this may take a few minutes, be patient)..."
         $oldEAP = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
-        docker compose --progress plain pull 2>&1 | ForEach-Object { "$_" }
+        docker compose @coreComposeArgs --progress plain pull 2>&1 | ForEach-Object { "$_" }
         $pullExit = $LASTEXITCODE
         $ErrorActionPreference = $oldEAP
         if ($pullExit -ne 0) {
             Write-Warn "Failed to pull images. Check your internet connection."
-            Write-Warn "You can retry with: docker compose pull"
+            Write-Warn "You can retry after fixing connectivity by running dpf-start."
             exit 1
         }
     } else {
         Write-Action "Building the portal (first time takes 3-5 minutes)..."
         $oldEAP = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
-        docker compose build --quiet 2>&1 | Out-Null
+        docker compose @coreComposeArgs build --quiet 2>&1 | Out-Null
         $buildExit = $LASTEXITCODE
         $ErrorActionPreference = $oldEAP
         if ($buildExit -ne 0) {
             $oldEAP = $ErrorActionPreference
             $ErrorActionPreference = "Continue"
-            docker compose build
+            docker compose @coreComposeArgs build
             $buildExit = $LASTEXITCODE
             $ErrorActionPreference = $oldEAP
             if ($buildExit -ne 0) {
@@ -1343,10 +1791,10 @@ if (-not (Test-StepDone "started")) {
     Write-Action "Starting database and portal..."
     $oldEAP = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    docker compose up -d
+    docker compose @coreComposeArgs up -d
     $ErrorActionPreference = $oldEAP
 
-    # Sync postgres password — if the volume was reused from a prior install,
+    # Sync postgres password -- if the volume was reused from a prior install,
     # the DB user still has the old password. Update it to match the new .env.
     Write-Action "Syncing database credentials..."
     $envPgPass = (Get-Content "$DPF_DIR\.env" | Select-String "^POSTGRES_PASSWORD=(.+)$").Matches.Groups[1].Value
@@ -1424,6 +1872,14 @@ if (-not (Test-StepDone "mcp_seed")) {
     Write-OK "Already running"
 }
 
+if (-not (Test-StepDone "edge_bootstrap")) {
+    if (Invoke-DPFEdgeNodeBootstrap -InstallDir $DPF_DIR) {
+        Save-Progress "edge_bootstrap"
+    } else {
+        Write-Warn "Bundled Edge Node bootstrap did not complete. The portal remains usable."
+    }
+}
+
 # --- Step 7: Wait for AI Model -------------------------------------------------
 
 Write-Step 8 10 "Setting up your AI Coworker..."
@@ -1432,11 +1888,11 @@ if (-not (Test-StepDone "model")) {
     #
     # Docker Model Runner is DISABLED by default in fresh Docker Desktop
     # installs. Without explicitly enabling it first, `docker model pull`
-    # fails with "Docker Model Runner is not running" — but the exit code
+    # fails with "Docker Model Runner is not running" -- but the exit code
     # behavior is inconsistent across versions, so the user ends up with
     # .selected-model set, no actual model on disk, and the portal's
     # AI Coworker silently broken ("AI provider is temporarily unavailable"
-    # on first portal load). Enabling is idempotent — no-op if already on.
+    # on first portal load). Enabling is idempotent -- no-op if already on.
     Write-Action "Enabling Docker Model Runner..."
     $oldEAP = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
@@ -1450,7 +1906,7 @@ if (-not (Test-StepDone "model")) {
         Write-Warn "Then re-run this installer."
     } else {
         # Enable GPU-backed inference. Docker Desktop ships this OFF by default
-        # — without it, llama-server processes run on CPU + system RAM instead
+        # Without it, llama-server processes run on CPU + system RAM instead
         # of VRAM, inference is 10-50x slower, and every downstream operation
         # (probes, coworker calls, model evals) silently degrades. The
         # `docker desktop enable model-runner --gpu enable` subcommand is

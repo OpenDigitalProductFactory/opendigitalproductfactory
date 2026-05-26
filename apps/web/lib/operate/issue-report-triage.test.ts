@@ -279,3 +279,46 @@ describe("checkForSpike", () => {
     expect(created).toHaveLength(0);
   });
 });
+
+describe("triage cron filter excludes support-flow statuses", () => {
+  it("ISSUE_REPORT_STATUS.OPEN is the cron's only target status", async () => {
+    // Contract test for the queue function's filter shape.
+    // It guards against accidentally widening the filter to include
+    // support_triage, awaiting_escalation_ack, upstream_pending, or upstream_filed.
+    const { ISSUE_REPORT_STATUS, SUPPORT_FLOW_STATUSES } = await import(
+      "@/lib/quality/issue-report-status"
+    );
+
+    expect(ISSUE_REPORT_STATUS.OPEN).toBe("open");
+    expect(SUPPORT_FLOW_STATUSES).not.toContain("open");
+    expect(SUPPORT_FLOW_STATUSES).toContain("support_triage");
+    expect(SUPPORT_FLOW_STATUSES).toContain("awaiting_escalation_ack");
+    expect(SUPPORT_FLOW_STATUSES).toContain("upstream_pending");
+    expect(SUPPORT_FLOW_STATUSES).toContain("upstream_filed");
+  });
+
+  it("triageIssueReports trusts its input; the cron query is the gate", async () => {
+    // Defensive: if the cron ever receives a support_triage row (e.g. via a
+    // changed query), buildIssueBacklogItem still runs — so the protection
+    // must live at the query layer, not the pure-function layer. This test
+    // documents the boundary: triageIssueReports trusts its input, the cron
+    // filter is the gate. See queue/functions/issue-report-triage.ts.
+    const supportReport = {
+      ...report,
+      id: "r-support",
+      reportId: "PIR-SUP01",
+    };
+    const created: unknown[] = [];
+    await triageIssueReports({
+      getOpenReports: async () => [supportReport],
+      getExistingTitles: async () => [] as string[],
+      createBacklogItem: async (data: unknown) => { created.push(data); },
+      incrementOccurrence: vi.fn(),
+      acknowledgeReport: vi.fn(),
+      resolveProductId: async () => "prod-1",
+      resolveTaxonomyNodeId: async () => "tax-1",
+    });
+    // Pure function still processes whatever is handed in — gate is in queue layer.
+    expect(created).toHaveLength(1);
+  });
+});

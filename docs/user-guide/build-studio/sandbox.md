@@ -3,7 +3,7 @@ title: "Build Runtime (Sandbox)"
 area: build-studio
 order: 3
 lastUpdated: 2026-05-24
-updatedBy: Claude (Software Engineer)
+updatedBy: Codex
 ---
 
 ## Overview
@@ -104,7 +104,7 @@ When the feature is ready to ship, the AI Coworker (or you) triggers the `deploy
 2. Creates a **ChangePromotion** record linking the feature build to the promotion pipeline
 3. Submits the promotion for approval
 
-Once approved, the autonomous promotion pipeline takes over. It builds a new Live portal image that includes the Build runtime changes, swaps it into production, runs health checks, and rolls back automatically if anything fails. See [Feature Deployment](deployment.md) for the full eleven-step pipeline.
+Once approved, the governed promotion pipeline takes over where promotion is enabled. It builds a new Live portal image that includes the Build runtime changes, swaps it into production, runs health checks, and rolls back automatically if anything fails. See [Feature Deployment](deployment.md) for the full eleven-step pipeline.
 
 The key insight is that the Build runtime diff contains only the changes needed for that validation run — not the entire codebase. The Build runtime exists to execute and verify work safely, not to replace the install's shared development workspace.
 

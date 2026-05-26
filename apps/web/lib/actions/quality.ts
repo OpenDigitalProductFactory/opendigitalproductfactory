@@ -2,26 +2,12 @@
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
-
-const ROUTE_PORTFOLIO_MAP: Record<string, string> = {
-  "/portfolio": "foundational",
-  "/ea": "foundational",
-  "/inventory": "foundational",
-  "/platform": "foundational",
-  "/admin": "foundational",
-  "/ops": "manufacturing_and_delivery",
-  "/employee": "for_employees",
-  "/customer": "products_and_services_sold",
-};
-
-function resolvePortfolioSlug(routeContext: string): string | null {
-  for (const [prefix, slug] of Object.entries(ROUTE_PORTFOLIO_MAP)) {
-    if (routeContext === prefix || routeContext.startsWith(prefix + "/")) {
-      return slug;
-    }
-  }
-  return null;
-}
+import { createPlatformIssueReport } from "@/lib/quality/platform-issue-reports";
+import {
+  ISSUE_REPORT_STATUS,
+  type IssueReportStatus,
+} from "@/lib/quality/issue-report-status";
+import { LEGACY_ISSUE_REPORT_STATUS, type LegacyIssueReportStatus } from "@/lib/quality/issue-report-queue";
 
 export async function reportQualityIssue(input: {
   type: "runtime_error" | "user_report" | "feedback";
@@ -34,42 +20,17 @@ export async function reportQualityIssue(input: {
 }): Promise<{ reportId: string } | { error: string }> {
   const session = await auth();
   const userId = session?.user?.id ?? null;
-  const reportId = "PIR-" + Math.random().toString(36).substring(2, 7).toUpperCase();
-
-  // Best-effort route-to-owner resolution
-  let portfolioId: string | null = null;
-  const slug = resolvePortfolioSlug(input.routeContext);
-  if (slug) {
-    const portfolio = await prisma.portfolio.findUnique({
-      where: { slug },
-      select: { id: true },
-    });
-    portfolioId = portfolio?.id ?? null;
-  }
-
-  // All platform issue reports belong to the dpf-portal product
-  let digitalProductId: string | null = null;
-  const dpfPortal = await prisma.digitalProduct.findUnique({
-    where: { productId: "dpf-portal" },
-    select: { id: true },
-  });
-  digitalProductId = dpfPortal?.id ?? null;
 
   try {
-    await prisma.platformIssueReport.create({
-      data: {
-        reportId,
-        type: input.type,
-        severity: input.severity ?? "medium",
-        title: input.title.slice(0, 500),
-        description: input.description?.slice(0, 10000) ?? null,
-        routeContext: input.routeContext,
-        errorStack: input.errorStack?.slice(0, 20000) ?? null,
-        reportedById: userId,
-        source: input.source ?? "ai_assisted",
-        portfolioId,
-        digitalProductId,
-      },
+    const { reportId } = await createPlatformIssueReport({
+      type: input.type,
+      title: input.title,
+      source: input.source ?? "ai_assisted",
+      severity: input.severity ?? "medium",
+      description: input.description ?? null,
+      routeContext: input.routeContext,
+      errorStack: input.errorStack ?? null,
+      reportedById: userId,
     });
     return { reportId };
   } catch {
@@ -107,7 +68,7 @@ export async function getIssueReports(filters?: {
 
 export async function updateIssueReportStatus(
   reportId: string,
-  status: "acknowledged" | "resolved",
+  status: IssueReportStatus | LegacyIssueReportStatus,
 ) {
   return prisma.platformIssueReport.update({
     where: { reportId },
@@ -119,10 +80,41 @@ export async function getIssueReportStats() {
   const now = new Date();
   const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const warmupNoiseWhere = {
+    OR: [
+      { source: "warmup" },
+      { title: { in: ["Model warmup ping", "System warmup check"] } },
+    ],
+  };
+  const activeStatusWhere = {
+    status: {
+      in: [
+        ISSUE_REPORT_STATUS.OPEN,
+        ISSUE_REPORT_STATUS.SUPPORT_TRIAGE,
+        ISSUE_REPORT_STATUS.AWAITING_ESCALATION_ACK,
+        ISSUE_REPORT_STATUS.UPSTREAM_PENDING,
+        ISSUE_REPORT_STATUS.UPSTREAM_FILED,
+      ],
+    },
+  };
 
-  const [byStatus, bySeverity, last24h, last7d, topRoutes] = await Promise.all([
+  const [
+    byStatus,
+    bySeverity,
+    bySource,
+    last24h,
+    last7d,
+    topRoutes,
+    actionable,
+    processGuard,
+    warmupNoise,
+    triaged,
+    resolved,
+    suppressed,
+  ] = await Promise.all([
     prisma.platformIssueReport.groupBy({ by: ["status"], _count: { _all: true } }),
     prisma.platformIssueReport.groupBy({ by: ["severity"], _count: { _all: true } }),
+    prisma.platformIssueReport.groupBy({ by: ["source"], _count: { _all: true } }),
     prisma.platformIssueReport.count({ where: { createdAt: { gte: oneDayAgo } } }),
     prisma.platformIssueReport.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
     prisma.platformIssueReport.groupBy({
@@ -132,13 +124,49 @@ export async function getIssueReportStats() {
       take: 5,
       where: { routeContext: { not: null } },
     }),
+    prisma.platformIssueReport.count({
+      where: {
+        ...activeStatusWhere,
+        NOT: warmupNoiseWhere,
+      },
+    }),
+    prisma.platformIssueReport.count({ where: { source: "agentic-loop-guard" } }),
+    prisma.platformIssueReport.count({ where: warmupNoiseWhere }),
+    prisma.platformIssueReport.count({
+      where: {
+        status: {
+          in: [ISSUE_REPORT_STATUS.TRIAGED_LOCAL, LEGACY_ISSUE_REPORT_STATUS.ACKNOWLEDGED],
+        },
+      },
+    }),
+    prisma.platformIssueReport.count({
+      where: {
+        status: {
+          in: [
+            ISSUE_REPORT_STATUS.RESOLVED_LOCALLY,
+            ISSUE_REPORT_STATUS.RESOLVED_UPSTREAM,
+            LEGACY_ISSUE_REPORT_STATUS.RESOLVED,
+          ],
+        },
+      },
+    }),
+    prisma.platformIssueReport.count({ where: { status: ISSUE_REPORT_STATUS.SUPPRESSED } }),
   ]);
 
   return {
     byStatus: Object.fromEntries(byStatus.map((r) => [r.status, r._count._all])),
     bySeverity: Object.fromEntries(bySeverity.map((r) => [r.severity, r._count._all])),
+    bySource: Object.fromEntries(bySource.map((r) => [r.source, r._count._all])),
     last24h,
     last7d,
     topRoutes: topRoutes.map((r) => ({ route: r.routeContext, count: r._count._all })),
+    queueSummary: {
+      actionable,
+      processGuard,
+      warmupNoise,
+      triaged,
+      resolved,
+      suppressed,
+    },
   };
 }

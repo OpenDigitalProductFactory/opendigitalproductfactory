@@ -1,15 +1,62 @@
 // apps/web/lib/feature-build-data.ts
 import { cache } from "react";
-import { prisma } from "@dpf/db";
+import { Prisma, prisma } from "@dpf/db";
 import type { FeatureBuildRow, FeatureBrief, BuildPhase, BuildDesignDoc, ReviewResult, BuildPlanDoc, TaskResult, VerificationOutput, AcceptanceCriterion, BuildDeliberationSummary } from "./feature-build-types";
 import { normalizeHappyPathState } from "./feature-build-types";
 import type { BuildContext } from "@/lib/build-agent-prompts";
 import type { AttachmentInfo } from "@/lib/agent-coworker-types";
+import { deriveEpicRollup, type EpicRollupView } from "@/lib/build/epic-rollup";
 import { PLAN_READINESS_DOMAIN_CLASS } from "@/lib/decision-perspective/types";
 import {
   DECISION_INTERACTION_GATE_SELECT,
   decisionInteractionRowToGateView,
 } from "@/lib/decision-perspective/view-model";
+
+const EXECUTION_EPIC_ROLLUP_SELECT = {
+  id: true,
+  epicId: true,
+  title: true,
+  updatedAt: true,
+  originatingBacklogItemId: true,
+  items: {
+    orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
+    select: {
+      id: true,
+      itemId: true,
+      title: true,
+      status: true,
+    },
+  },
+  originatingBacklogItem: {
+    select: {
+      id: true,
+      itemId: true,
+      title: true,
+      status: true,
+    },
+  },
+  featureBuilds: {
+    orderBy: [{ childOrder: "asc" }, { updatedAt: "desc" }],
+    select: {
+      id: true,
+      buildId: true,
+      title: true,
+      phase: true,
+      childOrder: true,
+      updatedAt: true,
+    },
+  },
+  dependencies: {
+    select: {
+      dependentBuildId: true,
+      dependsOnBuildId: true,
+    },
+  },
+} satisfies Prisma.EpicSelect;
+
+type ExecutionEpicRollupRow = Prisma.EpicGetPayload<{
+  select: typeof EXECUTION_EPIC_ROLLUP_SELECT;
+}>;
 
 export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBuildRow[]> => {
   // Build Studio is internal-cockpit-only and DPF is single-org-per-install
@@ -25,7 +72,11 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
   // PR for the same reason.
   void userId;
   const rows = await prisma.featureBuild.findMany({
-    where: { phase: { not: "failed" } },
+    where: {
+      phase: { not: "failed" },
+      parentEpicId: null,
+      supersededByEpicId: null,
+    },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
@@ -33,6 +84,7 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
       title: true,
       description: true,
       portfolioId: true,
+      parentEpicId: true,
       originatingBacklogItemId: true,
       brief: true,
       plan: true,
@@ -128,6 +180,41 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
   }));
 });
 
+export const getExecutionEpicRollups = cache(async (userId: string): Promise<EpicRollupView[]> => {
+  void userId;
+  const rows = await prisma.epic.findMany({
+    where: {
+      designDoc: { not: Prisma.DbNull },
+      featureBuilds: { some: {} },
+    },
+    orderBy: { updatedAt: "desc" },
+    select: EXECUTION_EPIC_ROLLUP_SELECT,
+  }) as ExecutionEpicRollupRow[];
+
+  return rows.map((row) => {
+    const items = [...row.items];
+    if (row.originatingBacklogItem && !items.some((item) => item.id === row.originatingBacklogItem?.id)) {
+      items.unshift(row.originatingBacklogItem);
+    }
+
+    return deriveEpicRollup({
+      epic: {
+        id: row.id,
+        epicId: row.epicId,
+        title: row.title,
+        updatedAt: row.updatedAt,
+        originatingBacklogItemId: row.originatingBacklogItemId,
+        items,
+        featureBuilds: row.featureBuilds.map((build) => ({
+          ...build,
+          phase: build.phase as BuildPhase,
+        })),
+        dependencies: row.dependencies,
+      },
+    });
+  });
+});
+
 export const getFeatureBuildById = cache(async (buildId: string): Promise<FeatureBuildRow | null> => {
   const r = await prisma.featureBuild.findUnique({
     where: { buildId },
@@ -137,6 +224,7 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
       title: true,
       description: true,
       portfolioId: true,
+      parentEpicId: true,
       originatingBacklogItemId: true,
       brief: true,
       plan: true,

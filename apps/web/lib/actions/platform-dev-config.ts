@@ -735,6 +735,21 @@ const UPDATE_UPSTREAM_BRANCH = "dpf-upstream";
 const UPDATE_WORK_BRANCH = "my-changes";
 const PLATFORM_UPDATE_SOURCE_PATHS = ["apps/web", "packages"] as const;
 
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+async function ensureWorkspaceSafeDirectory(
+  execUpdate: ExecUpdate,
+  gitOpts: ExecUpdateOptions,
+  workspace: string,
+): Promise<void> {
+  await execUpdate(
+    `git config --global --add safe.directory ${shellQuote(workspace)} >/dev/null 2>&1 || true`,
+    gitOpts,
+  );
+}
+
 async function gitBranchExists(
   execUpdate: ExecUpdate,
   gitOpts: ExecUpdateOptions,
@@ -746,6 +761,30 @@ async function gitBranchExists(
   } catch {
     return false;
   }
+}
+
+function gitErrorText(err: unknown): string {
+  if (!err || typeof err !== "object") {
+    return err instanceof Error ? err.message : String(err);
+  }
+  const record = err as { message?: unknown; stderr?: unknown; stdout?: unknown };
+  return [record.message, record.stderr, record.stdout]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join("\n");
+}
+
+function isMissingGitReferenceError(err: unknown, ref: string): boolean {
+  const text = gitErrorText(err).toLowerCase();
+  const normalizedRef = ref.toLowerCase();
+  return (
+    text.includes(normalizedRef) &&
+    (text.includes("pathspec") ||
+      text.includes("did not match") ||
+      text.includes("not a commit") ||
+      text.includes("unknown revision") ||
+      text.includes("invalid reference") ||
+      text.includes("could not resolve"))
+  );
 }
 
 async function ensureManagedUpdateBranches(
@@ -805,6 +844,25 @@ async function assertBranchRepairCanUseCurrentHead(
   }
 }
 
+async function checkoutManagedUpdateBranch(
+  execUpdate: ExecUpdate,
+  gitOpts: ExecUpdateOptions,
+  branch: string,
+): Promise<void> {
+  try {
+    await execUpdate(`git checkout ${branch}`, gitOpts);
+    return;
+  } catch (err) {
+    if (!isMissingGitReferenceError(err, branch)) {
+      throw err;
+    }
+  }
+
+  await assertBranchRepairCanUseCurrentHead(execUpdate, gitOpts);
+  await execUpdate(`git branch -f ${branch} HEAD`, gitOpts);
+  await execUpdate(`git checkout ${branch}`, gitOpts);
+}
+
 async function collectPlatformUpdateConflicts(
   execUpdate: ExecUpdate,
   gitOpts: ExecUpdateOptions,
@@ -825,8 +883,8 @@ async function collectPlatformUpdateConflicts(
   const { readFileSync } = lazyFs();
   for (const file of conflicted.trim().split("\n").filter(Boolean)) {
     const content = readFileSync(resolvePath(workspace, file), "utf-8");
-    const localMatch = content.match(/<<<<<<< .+?\n([\s\S]*?)=======/);
-    const upstreamMatch = content.match(/=======\n([\s\S]*?)>>>>>>> .+/);
+    const localMatch = content.match(/<<<<<<<[^\r\n]*(?:\r?\n)([\s\S]*?)(?:\r?\n)=======/);
+    const upstreamMatch = content.match(/=======(?:\r?\n)([\s\S]*?)(?:\r?\n)>>>>>>>[^\r\n]*/);
     conflicts.push({
       file,
       upstreamChange: upstreamMatch?.[1]?.trim() ?? "(could not parse)",
@@ -834,6 +892,49 @@ async function collectPlatformUpdateConflicts(
     });
   }
   return conflicts;
+}
+
+async function finishPlatformUpdateMerge(
+  execUpdate: ExecUpdate,
+  gitOpts: ExecUpdateOptions,
+  workspace: string,
+  resolvePath: (...parts: string[]) => string,
+  pendingVersion: string,
+): Promise<Extract<ApplyPlatformUpdateResult, { kind: "clean-merge" }>> {
+  const { stdout: filesChanged } = await execUpdate(
+    "git diff --cached --stat",
+    gitOpts,
+  );
+  const fileCount = parseInt(
+    (filesChanged.match(/(\d+) files? changed/) || ["0", "0"])[1] ?? "0",
+    10,
+  );
+  await execUpdate(
+    `git commit -s -m "chore: merge dpf v${pendingVersion}"`,
+    gitOpts,
+  );
+
+  const { writeFileSync } = lazyFs();
+  writeFileSync(
+    resolvePath(workspace, ".dpf-version"),
+    pendingVersion,
+    "utf-8",
+  );
+
+  await prisma.platformDevConfig.update({
+    where: { id: "singleton" },
+    data: { updatePending: false, pendingVersion: null },
+  });
+
+  revalidatePath("/admin/platform-development");
+  revalidatePath("/", "layout"); // banner lives in shell layout
+
+  return {
+    kind: "clean-merge",
+    message: `Platform updated to v${pendingVersion}. ${fileCount} files updated. No conflicts.`,
+    version: pendingVersion,
+    filesUpdated: fileCount,
+  };
 }
 
 export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> {
@@ -870,6 +971,8 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
     const { existsSync } = lazyFs();
     const { resolve: resolvePath } = lazyPath();
 
+    await ensureWorkspaceSafeDirectory(execUpdate, gitOpts, workspace);
+
     if (existsSync(resolvePath(workspace, ".git", "MERGE_HEAD"))) {
       const conflicts = await collectPlatformUpdateConflicts(
         execUpdate,
@@ -877,6 +980,15 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
         workspace,
         resolvePath,
       );
+      if (conflicts.length === 0) {
+        return await finishPlatformUpdateMerge(
+          execUpdate,
+          gitOpts,
+          workspace,
+          resolvePath,
+          pendingVersion,
+        );
+      }
       return {
         kind: "conflicts",
         message: `A merge is already in progress. ${conflicts.length} conflict(s) remaining.`,
@@ -890,7 +1002,7 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
     await ensureManagedUpdateBranches(execUpdate, gitOpts);
 
     // Step 1-3: Refresh dpf-upstream branch with new source
-    await execUpdate(`git checkout ${UPDATE_UPSTREAM_BRANCH}`, gitOpts);
+    await checkoutManagedUpdateBranch(execUpdate, gitOpts, UPDATE_UPSTREAM_BRANCH);
     await execUpdate("rm -rf apps/web packages", gitOpts);
     await execUpdate("cp -r /app/apps/web-src/. apps/web/", gitOpts);
     await execUpdate("cp -r /app/packages-src/. packages/", gitOpts);
@@ -903,13 +1015,13 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
     );
     if (diffCheck.trim()) {
       await execUpdate(
-        `git commit -m "chore: ${UPDATE_UPSTREAM_BRANCH} v${pendingVersion}"`,
+        `git commit -s -m "chore: ${UPDATE_UPSTREAM_BRANCH} v${pendingVersion}"`,
         gitOpts,
       );
     }
 
     // Step 4: Merge into my-changes
-    await execUpdate(`git checkout ${UPDATE_WORK_BRANCH}`, gitOpts);
+    await checkoutManagedUpdateBranch(execUpdate, gitOpts, UPDATE_WORK_BRANCH);
     try {
       await execUpdate(`git merge ${UPDATE_UPSTREAM_BRANCH} --no-commit --no-ff`, gitOpts);
     } catch {
@@ -935,45 +1047,18 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
     }
 
     // Clean merge — commit, write sentinel, clear pending flag
-    const { stdout: filesChanged } = await execUpdate(
-      "git diff --cached --stat",
+    return await finishPlatformUpdateMerge(
+      execUpdate,
       gitOpts,
-    );
-    const fileCount = parseInt(
-      (filesChanged.match(/(\d+) files? changed/) || ["0", "0"])[1] ?? "0",
-      10,
-    );
-    await execUpdate(
-      `git commit -m "chore: merge dpf v${pendingVersion}"`,
-      gitOpts,
-    );
-
-    const { writeFileSync } = lazyFs();
-    writeFileSync(
-      resolvePath(workspace, ".dpf-version"),
+      workspace,
+      resolvePath,
       pendingVersion,
-      "utf-8",
     );
-
-    await prisma.platformDevConfig.update({
-      where: { id: "singleton" },
-      data: { updatePending: false, pendingVersion: null },
-    });
-
-    revalidatePath("/admin/platform-development");
-    revalidatePath("/", "layout"); // banner lives in shell layout
-
-    return {
-      kind: "clean-merge",
-      message: `Platform updated to v${pendingVersion}. ${fileCount} files updated. No conflicts.`,
-      version: pendingVersion,
-      filesUpdated: fileCount,
-    };
   } catch (err) {
     // Best-effort: leave my-changes checked out so the operator's working
     // copy is in a known state even when the merge step itself crashes.
     try {
-      await execUpdate(`git checkout ${UPDATE_WORK_BRANCH}`, gitOpts);
+      await checkoutManagedUpdateBranch(execUpdate, gitOpts, UPDATE_WORK_BRANCH);
     } catch {
       /* best effort — original error is already captured below */
     }
