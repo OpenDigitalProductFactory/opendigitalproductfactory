@@ -630,6 +630,120 @@ export async function createEngagement(input: {
   return engagement;
 }
 
+export type RouteAcquisitionSignalToEngagementInput = {
+  title: string;
+  contactId: string;
+  accountId?: string | null;
+  source: string;
+  sourceRefId: string;
+  assignedToId?: string | null;
+  notes?: string | null;
+  userId?: string;
+};
+
+export type RouteAcquisitionSignalToEngagementResult = {
+  status: "created" | "linked";
+  engagementId: string;
+  engagementTitle: string;
+};
+
+function requiredTrimmed(value: string | null | undefined, label: string): string {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    throw new Error(`${label} is required`);
+  }
+  return trimmed;
+}
+
+export async function routeAcquisitionSignalToEngagement(
+  input: RouteAcquisitionSignalToEngagementInput,
+): Promise<RouteAcquisitionSignalToEngagementResult> {
+  const title = requiredTrimmed(input.title, "Engagement title");
+  const contactId = requiredTrimmed(input.contactId, "Contact id");
+  const source = requiredTrimmed(input.source, "Signal source");
+  const sourceRefId = requiredTrimmed(input.sourceRefId, "Signal source reference");
+  const requestedAccountId = trimOrNull(input.accountId);
+
+  const contact = await prisma.customerContact.findUnique({
+    where: { id: contactId },
+    select: {
+      id: true,
+      accountId: true,
+    },
+  });
+
+  if (!contact) {
+    throw new Error("Signal contact was not found");
+  }
+
+  const accountId = requestedAccountId ?? contact.accountId;
+  if (requestedAccountId && requestedAccountId !== contact.accountId) {
+    throw new Error("Signal contact does not belong to the selected account");
+  }
+
+  const existing = await prisma.engagement.findFirst({
+    where: {
+      OR: [
+        { source, sourceRefId },
+        {
+          accountId,
+          contactId,
+          source,
+          title,
+        },
+      ],
+    },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+    },
+  });
+
+  if (existing) {
+    return {
+      status: "linked",
+      engagementId: existing.id,
+      engagementTitle: existing.title,
+    };
+  }
+
+  const engagement = await createEngagement({
+    title,
+    contactId,
+    accountId,
+    source,
+    sourceRefId,
+    assignedToId: trimOrNull(input.assignedToId) ?? undefined,
+    notes: trimOrNull(input.notes) ?? undefined,
+    userId: input.userId,
+  });
+
+  return {
+    status: "created",
+    engagementId: engagement.id,
+    engagementTitle: engagement.title,
+  };
+}
+
+export async function createEngagementFromSignalForm(formData: FormData) {
+  const result = await routeAcquisitionSignalToEngagement({
+    title: String(formData.get("title") ?? ""),
+    contactId: String(formData.get("contactId") ?? ""),
+    accountId: String(formData.get("accountId") ?? ""),
+    source: String(formData.get("source") ?? ""),
+    sourceRefId: String(formData.get("sourceRefId") ?? ""),
+    assignedToId: String(formData.get("assignedToId") ?? ""),
+    notes: String(formData.get("notes") ?? ""),
+  });
+
+  revalidatePath("/customer");
+  revalidatePath("/customer/engagements");
+  revalidatePath("/customer/marketing");
+
+  return result;
+}
+
 export async function qualifyEngagement(
   engagementId: string,
   opts: {
