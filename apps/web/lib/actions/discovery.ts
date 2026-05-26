@@ -22,6 +22,49 @@ function revalidateDiscoverySurfaces() {
   DISCOVERY_REVALIDATE_PATHS.forEach((path) => revalidatePath(path));
 }
 
+type UnifiConnectionConfiguration = {
+  site: string;
+  discoverClients: boolean;
+  tlsInsecure: boolean;
+};
+
+function readUnifiConfiguration(configuration: unknown): UnifiConnectionConfiguration {
+  const raw = (configuration ?? {}) as Record<string, unknown>;
+  const site = typeof raw.site === "string" && raw.site.trim().length > 0
+    ? raw.site.trim()
+    : "default";
+
+  return {
+    site,
+    discoverClients: typeof raw.discoverClients === "boolean" ? raw.discoverClients : true,
+    tlsInsecure: typeof raw.tlsInsecure === "boolean" ? raw.tlsInsecure : false,
+  };
+}
+
+function normalizeConnectionConfiguration(
+  collectorType: string,
+  configuration: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (collectorType !== "unifi") return configuration ?? {};
+  return {
+    ...(configuration ?? {}),
+    ...readUnifiConfiguration(configuration),
+  };
+}
+
+function formatConnectionTestMessage(status: string, fallback?: string): string {
+  switch (status) {
+    case "unifi_tls_error":
+      return "The UniFi controller appears to use a self-signed certificate. Enable self-signed certificate support for this closed LAN, or install a trusted certificate on the controller.";
+    case "unifi_auth_failed":
+      return "The UniFi controller rejected the API key. Rotate the key in UniFi OS and paste the new value here.";
+    case "unifi_unreachable":
+      return "The portal could not reach the UniFi controller from this host. Check the controller URL and local network reachability.";
+    default:
+      return fallback ?? status;
+  }
+}
+
 async function requireManageDiscovery(): Promise<{ ok: true } | { ok: false; error: string }> {
   const session = await auth();
   const user = session?.user;
@@ -182,6 +225,7 @@ export async function configureDiscoveryConnection(input: {
   const connectionKey = `${input.collectorType}:${trimTrailingSlashes(stripScheme(endpointUrl))}`;
 
   const encryptedApiKey = input.apiKey ? encryptSecret(input.apiKey) : undefined;
+  const configuration = normalizeConnectionConfiguration(input.collectorType, input.configuration);
 
   // Edit-by-id path: lets URL changes flow without splitting the row.
   if (input.id) {
@@ -192,7 +236,7 @@ export async function configureDiscoveryConnection(input: {
         name: input.name,
         endpointUrl,
         ...(encryptedApiKey ? { encryptedApiKey } : {}),
-        configuration: (input.configuration ?? {}) as Prisma.InputJsonValue,
+        configuration: configuration as Prisma.InputJsonValue,
         ...(encryptedApiKey ? { status: "active" } : {}),
         gatewayEntityId: input.gatewayEntityId ?? null,
       },
@@ -209,7 +253,7 @@ export async function configureDiscoveryConnection(input: {
       collectorType: input.collectorType,
       endpointUrl,
       encryptedApiKey: encryptedApiKey ?? null,
-      configuration: (input.configuration ?? {}) as Prisma.InputJsonValue,
+      configuration: configuration as Prisma.InputJsonValue,
       status: encryptedApiKey ? "active" : "unconfigured",
       gatewayEntityId: input.gatewayEntityId ?? null,
     },
@@ -220,7 +264,7 @@ export async function configureDiscoveryConnection(input: {
       // edit-mode UX intentionally lets operators rotate URL/site without
       // pasting the API key again.
       ...(encryptedApiKey ? { encryptedApiKey } : {}),
-      configuration: (input.configuration ?? {}) as Prisma.InputJsonValue,
+      configuration: configuration as Prisma.InputJsonValue,
       // Only reset status when we just stored a fresh key (re-test will
       // overwrite this in seconds). Without a fresh key, preserve the
       // current status so an edit to URL/site doesn't wipe `active`.
@@ -253,13 +297,14 @@ export async function testDiscoveryConnection(connectionId: string): Promise<
   // Import collector dynamically to avoid circular deps
   const { collectUnifiDiscovery, buildDepsFromConnection } = await import("@dpf/db/discovery-collectors-unifi");
 
-  const config = (conn.configuration ?? {}) as Record<string, unknown>;
+  const config = readUnifiConfiguration(conn.configuration);
   const deps = buildDepsFromConnection({
     endpointUrl: conn.endpointUrl,
     apiKey,
     configuration: {
-      site: (config.site as string) ?? "default",
+      site: config.site,
       discoverClients: false, // never discover clients during test
+      tlsInsecure: config.tlsInsecure,
     },
   });
 
@@ -273,15 +318,16 @@ export async function testDiscoveryConnection(connectionId: string): Promise<
   const deviceCount = result.items.filter((i) =>
     ["router", "switch", "access_point"].includes(i.itemType),
   ).length;
+  const testMessage = hasError
+    ? formatConnectionTestMessage(testStatus, result.warnings?.join(", "))
+    : `Discovered ${deviceCount} devices`;
 
   await prisma.discoveryConnection.update({
     where: { id: connectionId },
     data: {
       lastTestedAt: new Date(),
       lastTestStatus: testStatus,
-      lastTestMessage: hasError
-        ? `Warnings: ${result.warnings?.join(", ")}`
-        : `Discovered ${deviceCount} devices`,
+      lastTestMessage: testMessage,
       status: hasError ? testStatus.replace("unifi_", "") : "active",
     },
   });
@@ -289,7 +335,7 @@ export async function testDiscoveryConnection(connectionId: string): Promise<
   revalidateDiscoverySurfaces();
 
   if (hasError) {
-    return { ok: true, status: testStatus, message: result.warnings?.join(", ") };
+    return { ok: true, status: testStatus, message: testMessage };
   }
   return { ok: true, status: "ok", deviceCount };
 }

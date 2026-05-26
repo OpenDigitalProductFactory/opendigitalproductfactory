@@ -11,6 +11,7 @@ type ExistingConnection = {
   id: string;
   collectorType: string;
   site?: string;
+  tlsInsecure?: boolean;
   /** True if the row already has an encrypted API key; lets the form show "leave blank to keep". */
   hasApiKey: boolean;
 };
@@ -33,6 +34,19 @@ const COLLECTOR_TYPES = [
   { value: "arp_scan", label: "Network Scan (ARP)" },
 ] as const;
 
+function formatConnectionFeedback(status: string, fallback?: string): string {
+  switch (status) {
+    case "unifi_tls_error":
+      return "The UniFi controller appears to use a self-signed certificate. Enable self-signed certificate support for this closed LAN, or install a trusted certificate on the controller.";
+    case "unifi_auth_failed":
+      return "The UniFi controller rejected the API key. Rotate the key in UniFi OS and paste the new value here.";
+    case "unifi_unreachable":
+      return "The portal could not reach the UniFi controller from this host. Check the controller URL and local network reachability.";
+    default:
+      return fallback ?? status;
+  }
+}
+
 export function ConfigureConnectionInline({
   gatewayEntityId,
   gatewayAddress,
@@ -47,6 +61,7 @@ export function ConfigureConnectionInline({
   );
   const [apiKey, setApiKey] = useState("");
   const [site, setSite] = useState(existing?.site ?? "default");
+  const [tlsInsecure, setTlsInsecure] = useState(existing?.tlsInsecure ?? false);
   const [status, setStatus] = useState<"idle" | "saving" | "testing" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -87,7 +102,11 @@ export function ConfigureConnectionInline({
       setMessage("");
 
       const configuration: Record<string, unknown> = {};
-      if (isUnifi) { configuration.site = site; configuration.discoverClients = true; }
+      if (isUnifi) {
+        configuration.site = site;
+        configuration.discoverClients = true;
+        configuration.tlsInsecure = tlsInsecure;
+      }
       if (isSnmp) configuration.community = apiKey || "public";
       if (isArpScan) configuration.subnet = endpointUrl;
 
@@ -96,7 +115,7 @@ export function ConfigureConnectionInline({
         gatewayEntityId,
         name: isArpScan ? `Subnet ${endpointUrl}` : gatewayName,
         collectorType,
-        endpointUrl: isArpScan ? endpointUrl : endpointUrl,
+        endpointUrl,
         // In edit mode without a fresh key, send undefined so the server-side
         // upsert keeps the existing encryptedApiKey.
         apiKey: isUnifi
@@ -118,7 +137,7 @@ export function ConfigureConnectionInline({
       const testResult = await testDiscoveryConnection(result.connectionId);
       if (!testResult.ok) {
         setStatus("error");
-        setMessage(testResult.error);
+        setMessage(formatConnectionFeedback("error", testResult.error));
         return;
       }
 
@@ -130,7 +149,7 @@ export function ConfigureConnectionInline({
         setTimeout(onComplete, 3000);
       } else {
         setStatus("error");
-        setMessage(testResult.message ?? "Connection test failed");
+        setMessage(formatConnectionFeedback(testResult.status, testResult.message ?? "Connection test failed"));
       }
     });
   };
@@ -141,7 +160,7 @@ export function ConfigureConnectionInline({
         Configure Discovery Connection
       </p>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="block">
           <span className="text-xs text-[var(--dpf-muted)]">Discovery Method</span>
           <select
@@ -212,11 +231,30 @@ export function ConfigureConnectionInline({
         </label>
       )}
 
+      {isUnifi && (
+        <label className="flex items-start gap-3 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+          <input
+            type="checkbox"
+            checked={tlsInsecure}
+            onChange={(e) => setTlsInsecure(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] accent-[var(--dpf-accent)]"
+          />
+          <span className="min-w-0">
+            <span className="block text-xs font-medium text-[var(--dpf-text)]">
+              Allow self-signed controller certificate
+            </span>
+            <span className="mt-0.5 block text-[11px] leading-4 text-[var(--dpf-muted)]">
+              Use for trusted closed-LAN UniFi appliances that do not have a public certificate.
+            </span>
+          </span>
+        </label>
+      )}
+
       <div className="flex items-center gap-3">
         <button
           onClick={handleSave}
           disabled={isPending}
-          className="rounded-md bg-[#7c8cf8] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#6b7bf7] disabled:opacity-50 transition-colors"
+          className="rounded-md bg-[var(--dpf-accent)] px-4 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {isPending ? "Connecting..." : "Save & Test"}
         </button>
@@ -225,9 +263,9 @@ export function ConfigureConnectionInline({
           <p
             className={`text-xs ${
               status === "success"
-                ? "text-emerald-400"
+                ? "text-[var(--dpf-success)]"
                 : status === "error"
-                  ? "text-[#fb7185]"
+                  ? "text-[var(--dpf-error)]"
                   : "text-[var(--dpf-muted)]"
             }`}
           >

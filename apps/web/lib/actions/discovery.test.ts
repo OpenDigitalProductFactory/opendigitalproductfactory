@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockUpsert = vi.fn();
 const mockUpdate = vi.fn();
+const mockFindUnique = vi.fn();
+const mockCollectUnifiDiscovery = vi.fn();
+const mockBuildDepsFromConnection = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   auth: vi.fn(),
@@ -17,10 +20,15 @@ vi.mock("@dpf/db", () => ({
     discoveryConnection: {
       upsert: (...args: unknown[]) => mockUpsert(...args),
       update: (...args: unknown[]) => mockUpdate(...args),
+      findUnique: (...args: unknown[]) => mockFindUnique(...args),
     },
   },
   executeBootstrapDiscovery: vi.fn(),
   persistBootstrapDiscoveryRun: vi.fn(),
+}));
+vi.mock("@dpf/db/discovery-collectors-unifi", () => ({
+  collectUnifiDiscovery: (...args: unknown[]) => mockCollectUnifiDiscovery(...args),
+  buildDepsFromConnection: (...args: unknown[]) => mockBuildDepsFromConnection(...args),
 }));
 vi.mock("@/lib/govern/credential-crypto", () => ({
   encryptSecret: (plain: string) => `enc:${plain}`,
@@ -31,7 +39,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { executeBootstrapDiscovery } from "@dpf/db";
-import { configureDiscoveryConnection, triggerBootstrapDiscovery } from "./discovery";
+import { configureDiscoveryConnection, testDiscoveryConnection, triggerBootstrapDiscovery } from "./discovery";
 
 const mockAuth = auth as ReturnType<typeof vi.fn>;
 const mockCan = can as ReturnType<typeof vi.fn>;
@@ -42,6 +50,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockAuth.mockResolvedValue({ user: { platformRole: "HR-000", isSuperuser: true } });
   mockCan.mockReturnValue(true);
+  mockBuildDepsFromConnection.mockReturnValue({
+    fetchFn: vi.fn(),
+    unifiUrl: "https://192.168.0.1",
+    apiKey: "key",
+    site: "default",
+    discoverClients: false,
+    tlsInsecure: false,
+  });
+  mockCollectUnifiDiscovery.mockResolvedValue({ items: [], relationships: [] });
 });
 
 describe("configureDiscoveryConnection — edit path", () => {
@@ -122,5 +139,41 @@ describe("triggerBootstrapDiscovery", () => {
     expect(mockRevalidatePath).toHaveBeenCalledWith("/platform/tools");
     expect(mockRevalidatePath).toHaveBeenCalledWith("/platform/tools/discovery");
     expect(mockRevalidatePath).toHaveBeenCalledWith("/inventory");
+  });
+});
+
+describe("testDiscoveryConnection", () => {
+  it("passes stored per-connection TLS policy into the one-shot UniFi test", async () => {
+    mockFindUnique.mockResolvedValue({
+      id: "conn-1",
+      endpointUrl: "https://192.168.0.1",
+      encryptedApiKey: "enc:key",
+      configuration: {
+        site: "default",
+        discoverClients: true,
+        tlsInsecure: true,
+      },
+    });
+    mockCollectUnifiDiscovery.mockResolvedValue({
+      items: [{ itemType: "router" }],
+      relationships: [],
+    });
+    mockUpdate.mockResolvedValue({ id: "conn-1" });
+
+    await expect(testDiscoveryConnection("conn-1")).resolves.toEqual({
+      ok: true,
+      status: "ok",
+      deviceCount: 1,
+    });
+
+    expect(mockBuildDepsFromConnection).toHaveBeenCalledWith({
+      endpointUrl: "https://192.168.0.1",
+      apiKey: "key",
+      configuration: {
+        site: "default",
+        discoverClients: false,
+        tlsInsecure: true,
+      },
+    });
   });
 });
