@@ -25,6 +25,13 @@ describe("Prometheus substrate configs", () => {
     expect(config).toContain('targets: ["node-exporter:9100"]');
   });
 
+  it("does not page optional Linux exporter jobs through the default ContainerDown rule", () => {
+    const config = readPrometheusConfig("alerts.yml");
+
+    expect(config).toContain('expr: up{job!~"cadvisor|node-exporter"} == 0');
+    expect(config).not.toContain("expr: up == 0");
+  });
+
   it("starts Linux exporter containers when the Linux scrape config is mounted", () => {
     const config = readRepoFile("docker-compose.linux.yml");
 
