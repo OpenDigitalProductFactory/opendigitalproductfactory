@@ -4,7 +4,9 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { saveBuildStudioConfig } from "@/lib/actions/build-studio";
 import type { BuildStudioDispatchConfig } from "@/lib/integrate/build-studio-config";
+import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
+import { ContributorMcpReadinessCard } from "./ContributorMcpReadinessCard";
 
 type ProviderOption = {
   providerId: string;
@@ -18,6 +20,8 @@ type Props = {
   config: BuildStudioDispatchConfig;
   claudeProviders: ProviderOption[];
   codexProviders: ProviderOption[];
+  contributorMcpReadiness: ContributorMcpReadiness;
+  baseUrl: string;
   canWrite: boolean;
 };
 
@@ -55,7 +59,14 @@ function isConfigured(status: string): boolean {
   return status === "ok" || status === "configured" || status === "pending";
 }
 
-export function BuildStudioConfigForm({ config, claudeProviders, codexProviders, canWrite }: Props) {
+export function BuildStudioConfigForm({
+  config,
+  claudeProviders,
+  codexProviders,
+  contributorMcpReadiness,
+  baseUrl,
+  canWrite,
+}: Props) {
   const [provider, setProvider] = useState(config.provider);
   const [claudeProviderId, setClaudeProviderId] = useState(config.claudeProviderId);
   const [codexProviderId, setCodexProviderId] = useState(config.codexProviderId);
@@ -124,6 +135,12 @@ export function BuildStudioConfigForm({ config, claudeProviders, codexProviders,
           </Link>
         </div>
       </section>
+
+      <ContributorMcpReadinessCard
+        initialReadiness={contributorMcpReadiness}
+        baseUrl={baseUrl}
+        canWrite={canWrite}
+      />
 
       {/* Section 1: Active CLI Provider */}
       <section style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 16 }}>

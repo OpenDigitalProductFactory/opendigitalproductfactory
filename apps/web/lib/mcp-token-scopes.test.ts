@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   CODING_AGENT_MCP_TOKEN_SCOPES,
+  CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS,
   MCP_TOKEN_REVOKED_ARCHIVE_DAYS,
   MCP_TOKEN_TEMPLATES,
   WRITE_MCP_TOKEN_SCOPES,
@@ -113,6 +114,14 @@ describe("MCP_TOKEN_TEMPLATES", () => {
 
   it("returns undefined for unknown template ids", () => {
     expect(getMcpTokenTemplate("does_not_exist")).toBeUndefined();
+  });
+
+  it("keeps the development template as a superset of contributor MCP readiness", () => {
+    const development = getMcpTokenTemplate("development");
+    expect(development).toBeDefined();
+    for (const grant of CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS) {
+      expect(development!.grants).toContain(grant);
+    }
   });
 });
 

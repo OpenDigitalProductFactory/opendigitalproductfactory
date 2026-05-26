@@ -1,11 +1,31 @@
 // apps/web/app/(shell)/platform/ai/build-studio/page.tsx
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { headers } from "next/headers";
 import { getProviders } from "@/lib/inference/ai-provider-data";
 import { getBuildStudioConfig } from "@/lib/integrate/build-studio-config";
+import { getContributorMcpReadiness, type ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
+import {
+  CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS,
+  getMcpTokenTemplate,
+} from "@/lib/mcp-token-scopes";
 import { BuildStudioConfigForm } from "@/components/platform/BuildStudioConfigForm";
 import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "@/components/platform/build-studio-route-copy";
 import Link from "next/link";
+
+function unauthenticatedReadiness(): ContributorMcpReadiness {
+  const requiredGrants = [...CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS];
+  return {
+    status: "needs_authorization",
+    recommendedAction: "issue_development_token",
+    identityBinding: "not_available",
+    token: null,
+    missingGrants: [...requiredGrants],
+    requiredGrants,
+    recommendedScopes: [...(getMcpTokenTemplate("development")?.grants ?? requiredGrants)],
+    probe: { status: "not_run" },
+  };
+}
 
 export default async function BuildStudioPage() {
   const session = await auth();
@@ -15,9 +35,17 @@ export default async function BuildStudioPage() {
     "manage_provider_connections",
   );
 
-  const [allProviders, config] = await Promise.all([
+  const hdrs = await headers();
+  const proto = hdrs.get("x-forwarded-proto") ?? "http";
+  const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "localhost:3000";
+  const baseUrl = `${proto}://${host}`;
+
+  const [allProviders, config, contributorMcpReadiness] = await Promise.all([
     getProviders(),
     getBuildStudioConfig(),
+    user
+      ? getContributorMcpReadiness(user.id, { probe: false })
+      : Promise.resolve(unauthenticatedReadiness()),
   ]);
 
   // Dynamic: group providers by cliEngine field instead of hardcoded IDs
@@ -63,6 +91,8 @@ export default async function BuildStudioPage() {
           billingLabel: p.provider.billingLabel,
           costNotes: p.provider.costPerformanceNotes,
         }))}
+        contributorMcpReadiness={contributorMcpReadiness}
+        baseUrl={baseUrl}
         canWrite={canWrite}
       />
     </div>
