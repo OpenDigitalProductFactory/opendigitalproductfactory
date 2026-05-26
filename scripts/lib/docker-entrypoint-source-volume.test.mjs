@@ -36,3 +36,14 @@ test("source-volume snapshot commits add the safe-directory allowance before loc
     /git init -b dpf-upstream\s+ensure_workspace_safe_directory\s+git config user\.email/,
   );
 });
+
+test("workspace dependency install disables pnpm's interactive modules purge prompt", () => {
+  const body = functionBody("install_workspace_dependencies");
+  const matches = [...body.matchAll(/pnpm install(?: --frozen-lockfile)? --config\.confirmModulesPurge=false/g)];
+
+  assert.equal(
+    matches.length,
+    2,
+    "both frozen and fallback pnpm install commands should disable the non-TTY modules purge prompt",
+  );
+});
