@@ -12,6 +12,15 @@ export type SelfUpgradeConfig = {
   checkIntervalHours: number;
   healthTarget: number;
   maintenanceWindows: MaintenanceWindow[];
+  hostInstallPath?: string;
+  hostSourceMountPath?: string;
+  composeProject?: string;
+  portalContainerName?: string;
+  dbContainerName?: string;
+  repositoryRemote?: string;
+  repositoryBranch?: string;
+  healthUrl?: string;
+  promoterImage?: string;
 };
 
 const DEFAULTS: SelfUpgradeConfig = {
@@ -42,19 +51,24 @@ export function isInMaintenanceWindow(config: SelfUpgradeConfig, now?: Date): bo
   });
 }
 
-export const SELF_UPGRADE_CONFIG_KEY = "portal.selfUpgrade";
+export const SELF_UPGRADE_CONFIG_KEY = "self_upgrade";
+const LEGACY_SELF_UPGRADE_CONFIG_KEY = "portal.selfUpgrade";
 
 export async function getSelfUpgradeConfig(): Promise<SelfUpgradeConfig> {
-  const row = await prisma.platformConfig.findUnique({
-    where: { key: "portal.selfUpgrade" },
-  });
+  const row =
+    (await prisma.platformConfig.findUnique({
+      where: { key: SELF_UPGRADE_CONFIG_KEY },
+    })) ??
+    (await prisma.platformConfig.findUnique({
+      where: { key: LEGACY_SELF_UPGRADE_CONFIG_KEY },
+    }));
   return parseSelfUpgradeConfig(row?.value ?? null);
 }
 
 export function parseSelfUpgradeConfig(raw: unknown): SelfUpgradeConfig {
   if (!raw || typeof raw !== "object") return { ...DEFAULTS };
   const cfg = raw as Record<string, unknown>;
-  return {
+  const parsed: SelfUpgradeConfig = {
     enabled: typeof cfg.enabled === "boolean" ? cfg.enabled : DEFAULTS.enabled,
     channel:
       typeof cfg.channel === "string" && cfg.channel.length > 0
@@ -72,6 +86,22 @@ export function parseSelfUpgradeConfig(raw: unknown): SelfUpgradeConfig {
         : DEFAULTS.healthTarget,
     maintenanceWindows: parseWindows(cfg.maintenanceWindows),
   };
+  for (const key of [
+    "hostInstallPath",
+    "hostSourceMountPath",
+    "composeProject",
+    "portalContainerName",
+    "dbContainerName",
+    "repositoryRemote",
+    "repositoryBranch",
+    "healthUrl",
+    "promoterImage",
+  ] as const) {
+    if (typeof cfg[key] === "string" && cfg[key].trim().length > 0) {
+      parsed[key] = cfg[key];
+    }
+  }
+  return parsed;
 }
 
 function parseWindows(raw: unknown): MaintenanceWindow[] {

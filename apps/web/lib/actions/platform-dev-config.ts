@@ -816,9 +816,44 @@ async function assertManagedSourceClean(
   const pathspec = PLATFORM_UPDATE_SOURCE_PATHS.join(" ");
   const { stdout } = await execUpdate(`git status --porcelain -- ${pathspec}`, gitOpts);
   if (stdout.trim()) {
+    const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
+    const hasUntracked = lines.some((line) => line.startsWith("??"));
+    if (!hasUntracked) {
+      const hasRealDiff = await gitDiffHasRealChanges(
+        execUpdate,
+        gitOpts,
+        pathspec,
+        { cached: false },
+      );
+      const hasRealCachedDiff = await gitDiffHasRealChanges(
+        execUpdate,
+        gitOpts,
+        pathspec,
+        { cached: true },
+      );
+      if (!hasRealDiff && !hasRealCachedDiff) return;
+    }
     throw new Error(
       "Workspace has uncommitted changes in apps/web or packages. Commit or resolve those source changes before applying a platform update.",
     );
+  }
+}
+
+async function gitDiffHasRealChanges(
+  execUpdate: ExecUpdate,
+  gitOpts: ExecUpdateOptions,
+  pathspec: string,
+  options: { cached: boolean },
+): Promise<boolean> {
+  const cachedArg = options.cached ? "--cached " : "";
+  try {
+    await execUpdate(
+      `git diff ${cachedArg}--quiet --ignore-cr-at-eol -- ${pathspec}`,
+      gitOpts,
+    );
+    return false;
+  } catch {
+    return true;
   }
 }
 
@@ -850,7 +885,7 @@ async function checkoutManagedUpdateBranch(
   branch: string,
 ): Promise<void> {
   try {
-    await execUpdate(`git checkout ${branch}`, gitOpts);
+    await execUpdate(`git checkout -f ${branch}`, gitOpts);
     return;
   } catch (err) {
     if (!isMissingGitReferenceError(err, branch)) {
@@ -860,7 +895,7 @@ async function checkoutManagedUpdateBranch(
 
   await assertBranchRepairCanUseCurrentHead(execUpdate, gitOpts);
   await execUpdate(`git branch -f ${branch} HEAD`, gitOpts);
-  await execUpdate(`git checkout ${branch}`, gitOpts);
+  await execUpdate(`git checkout -f ${branch}`, gitOpts);
 }
 
 async function collectPlatformUpdateConflicts(
@@ -964,7 +999,7 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
   }
 
   const workspace = process.env["PROJECT_ROOT"] ?? "/workspace";
-  const gitOpts = { cwd: workspace, timeout: 30_000 };
+  const gitOpts = { cwd: workspace, timeout: 180_000 };
 
   try {
     // Check for in-progress merge from a previous interrupted run

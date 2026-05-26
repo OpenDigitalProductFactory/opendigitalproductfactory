@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseSelfUpgradeConfig, getSelfUpgradeConfig, isInMaintenanceWindow } from "./config";
+import {
+  SELF_UPGRADE_CONFIG_KEY,
+  parseSelfUpgradeConfig,
+  getSelfUpgradeConfig,
+  isInMaintenanceWindow,
+} from "./config";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -63,11 +68,29 @@ describe("parseSelfUpgradeConfig", () => {
       enabled: true,
       channel: "beta",
       checkIntervalHours: 12,
+      hostInstallPath: "D:\\DPF",
+      hostSourceMountPath: "/host-dpf",
+      composeProject: "dpf",
+      portalContainerName: "dpf-portal-1",
+      dbContainerName: "dpf-postgres-1",
+      repositoryRemote: "origin",
+      repositoryBranch: "main",
+      healthUrl: "http://localhost:3000/api/health",
+      promoterImage: "dpf-promoter",
       maintenanceWindows: [],
     });
     expect(cfg.enabled).toBe(true);
     expect(cfg.channel).toBe("beta");
     expect(cfg.checkIntervalHours).toBe(12);
+    expect(cfg.hostInstallPath).toBe("D:\\DPF");
+    expect(cfg.hostSourceMountPath).toBe("/host-dpf");
+    expect(cfg.composeProject).toBe("dpf");
+    expect(cfg.portalContainerName).toBe("dpf-portal-1");
+    expect(cfg.dbContainerName).toBe("dpf-postgres-1");
+    expect(cfg.repositoryRemote).toBe("origin");
+    expect(cfg.repositoryBranch).toBe("main");
+    expect(cfg.healthUrl).toBe("http://localhost:3000/api/health");
+    expect(cfg.promoterImage).toBe("dpf-promoter");
   });
 
   it("parses the seeded disabled config", () => {
@@ -301,16 +324,35 @@ describe("getSelfUpgradeConfig", () => {
     });
   });
 
-  it("queries the portal.selfUpgrade key", async () => {
+  it("queries the seeded self_upgrade key", async () => {
     mockFindUnique.mockResolvedValue(null);
     await getSelfUpgradeConfig();
-    expect(mockFindUnique).toHaveBeenCalledWith({ where: { key: "portal.selfUpgrade" } });
+    expect(SELF_UPGRADE_CONFIG_KEY).toBe("self_upgrade");
+    expect(mockFindUnique).toHaveBeenCalledWith({ where: { key: "self_upgrade" } });
+  });
+
+  it("falls back to the legacy portal.selfUpgrade key when the seeded key is absent", async () => {
+    mockFindUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: "legacy",
+        key: "portal.selfUpgrade",
+        value: { enabled: true, channel: "beta", checkIntervalHours: 6 },
+        updatedAt: new Date(),
+      });
+
+    const cfg = await getSelfUpgradeConfig();
+
+    expect(cfg.enabled).toBe(true);
+    expect(cfg.channel).toBe("beta");
+    expect(mockFindUnique).toHaveBeenNthCalledWith(1, { where: { key: "self_upgrade" } });
+    expect(mockFindUnique).toHaveBeenNthCalledWith(2, { where: { key: "portal.selfUpgrade" } });
   });
 
   it("parses the seeded disabled config correctly", async () => {
     mockFindUnique.mockResolvedValue({
       id: "1",
-      key: "portal.selfUpgrade",
+      key: "self_upgrade",
       value: { enabled: false, channel: "stable", checkIntervalHours: 24 },
       updatedAt: new Date(),
     });
@@ -323,7 +365,7 @@ describe("getSelfUpgradeConfig", () => {
   it("returns enabled config when explicitly enabled in DB", async () => {
     mockFindUnique.mockResolvedValue({
       id: "1",
-      key: "portal.selfUpgrade",
+      key: "self_upgrade",
       value: { enabled: true, channel: "beta", checkIntervalHours: 6 },
       updatedAt: new Date(),
     });
@@ -336,7 +378,7 @@ describe("getSelfUpgradeConfig", () => {
   it("handles malformed DB value gracefully", async () => {
     mockFindUnique.mockResolvedValue({
       id: "1",
-      key: "portal.selfUpgrade",
+      key: "self_upgrade",
       value: "corrupted" as unknown as object,
       updatedAt: new Date(),
     });
