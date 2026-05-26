@@ -47,6 +47,14 @@ export default defineConfig({
         replacement: resolve(rootDir, "packages/db/src/discovery-collectors/unifi.ts"),
       },
       {
+        find: "@dpf/db/discovery-collectors-arp-scan",
+        replacement: resolve(rootDir, "packages/db/src/discovery-collectors/arp-scan.ts"),
+      },
+      {
+        find: "@dpf/db/discovery-collectors-snmp",
+        replacement: resolve(rootDir, "packages/db/src/discovery-collectors/snmp.ts"),
+      },
+      {
         find: /^@dpf\/db\/(.+)$/,
         replacement: resolve(rootDir, "packages/db/src/$1.ts"),
       },

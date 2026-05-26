@@ -173,6 +173,29 @@ function stripScheme(input: string): string {
   return input;
 }
 
+function stripPath(input: string): string {
+  const slashIndex = input.indexOf("/");
+  return slashIndex >= 0 ? input.slice(0, slashIndex) : input;
+}
+
+function isIpv4Octet(input: string): boolean {
+  if (input.length === 0 || input.length > 3) return false;
+  for (const char of input) {
+    if (char < "0" || char > "9") return false;
+  }
+  const octet = Number(input);
+  return octet >= 0 && octet <= 255;
+}
+
+function isIpv4Cidr(input: string): boolean {
+  const [ip, cidr, extra] = input.trim().split("/");
+  if (!ip || !cidr || extra !== undefined) return false;
+  const prefix = Number(cidr);
+  if (!Number.isInteger(prefix) || prefix < 16 || prefix > 32) return false;
+  const parts = ip.split(".");
+  return parts.length === 4 && parts.every(isIpv4Octet);
+}
+
 /**
  * Normalize user input into a proper endpoint URL.
  * Accepts: "192.168.0.1", "http://192.168.0.1", "https://192.168.0.1:8443/"
@@ -183,6 +206,8 @@ function normalizeEndpointUrl(raw: string, collectorType: string): string {
 
   // For ARP scan, the input is a subnet not a URL
   if (collectorType === "arp_scan") return url;
+
+  if (collectorType === "snmp") return stripPath(stripScheme(url));
 
   // If no protocol specified, add one. Fixed-prefix checks instead of a
   // regex — no backtracking risk.
@@ -222,6 +247,12 @@ export async function configureDiscoveryConnection(input: {
   if (!authResult.ok) return authResult;
 
   const endpointUrl = normalizeEndpointUrl(input.endpointUrl, input.collectorType);
+  if (input.collectorType === "arp_scan" && !isIpv4Cidr(endpointUrl)) {
+    return {
+      ok: false,
+      error: "Subnet must be CIDR notation, for example 192.168.0.0/24",
+    };
+  }
   const connectionKey = `${input.collectorType}:${trimTrailingSlashes(stripScheme(endpointUrl))}`;
 
   const encryptedApiKey = input.apiKey ? encryptSecret(input.apiKey) : undefined;
@@ -233,6 +264,7 @@ export async function configureDiscoveryConnection(input: {
       where: { id: input.id },
       data: {
         connectionKey,
+        collectorType: input.collectorType,
         name: input.name,
         endpointUrl,
         ...(encryptedApiKey ? { encryptedApiKey } : {}),
@@ -289,38 +321,75 @@ export async function testDiscoveryConnection(connectionId: string): Promise<
     where: { id: connectionId },
   });
   if (!conn) return { ok: false, error: "Connection not found" };
-  if (!conn.encryptedApiKey) return { ok: false, error: "No API key configured" };
+  const collectorType = conn.collectorType ?? "unifi";
+  let testStatus = "ok";
+  let deviceCount = 0;
+  let testMessage = "";
 
-  const apiKey = decryptSecret(conn.encryptedApiKey);
-  if (!apiKey) return { ok: false, error: "Cannot decrypt API key" };
+  if (collectorType === "unifi") {
+    if (!conn.encryptedApiKey) return { ok: false, error: "No API key configured" };
 
-  // Import collector dynamically to avoid circular deps
-  const { collectUnifiDiscovery, buildDepsFromConnection } = await import("@dpf/db/discovery-collectors-unifi");
+    const apiKey = decryptSecret(conn.encryptedApiKey);
+    if (!apiKey) return { ok: false, error: "Cannot decrypt API key" };
 
-  const config = readUnifiConfiguration(conn.configuration);
-  const deps = buildDepsFromConnection({
-    endpointUrl: conn.endpointUrl,
-    apiKey,
-    configuration: {
-      site: config.site,
-      discoverClients: false, // never discover clients during test
-      tlsInsecure: config.tlsInsecure,
-    },
-  });
+    // Import collector dynamically to avoid circular deps
+    const { collectUnifiDiscovery, buildDepsFromConnection } = await import("@dpf/db/discovery-collectors-unifi");
 
-  const result = await collectUnifiDiscovery({ sourceKind: "unifi" }, deps);
-  const hasError = result.warnings?.some((w) =>
-    w.startsWith("unifi_auth") || w === "unifi_unreachable" || w === "unifi_tls_error",
-  );
-  const testStatus = hasError
-    ? (result.warnings?.find((w) => w.startsWith("unifi_")) ?? "error")
-    : "ok";
-  const deviceCount = result.items.filter((i) =>
-    ["router", "switch", "access_point"].includes(i.itemType),
-  ).length;
-  const testMessage = hasError
-    ? formatConnectionTestMessage(testStatus, result.warnings?.join(", "))
-    : `Discovered ${deviceCount} devices`;
+    const config = readUnifiConfiguration(conn.configuration);
+    const deps = buildDepsFromConnection({
+      endpointUrl: conn.endpointUrl,
+      apiKey,
+      configuration: {
+        site: config.site,
+        discoverClients: false, // never discover clients during test
+        tlsInsecure: config.tlsInsecure,
+      },
+    });
+
+    const result = await collectUnifiDiscovery({ sourceKind: "unifi" }, deps);
+    const hasError = result.warnings?.some((w) =>
+      w.startsWith("unifi_auth") || w === "unifi_unreachable" || w === "unifi_tls_error",
+    );
+    testStatus = hasError
+      ? (result.warnings?.find((w) => w.startsWith("unifi_")) ?? "error")
+      : "ok";
+    deviceCount = result.items.filter((i) =>
+      ["router", "switch", "access_point"].includes(i.itemType),
+    ).length;
+    testMessage = hasError
+      ? formatConnectionTestMessage(testStatus, result.warnings?.join(", "))
+      : `Discovered ${deviceCount} devices`;
+  } else if (collectorType === "arp_scan") {
+    const { collectArpScanDiscovery } = await import("@dpf/db/discovery-collectors-arp-scan");
+    const configuration = (conn.configuration ?? {}) as Record<string, unknown>;
+    const subnet = typeof configuration.subnet === "string" ? configuration.subnet : conn.endpointUrl;
+    if (!isIpv4Cidr(subnet)) {
+      return { ok: false, error: "Subnet must be CIDR notation, for example 192.168.0.0/24" };
+    }
+    const result = await collectArpScanDiscovery({ sourceKind: "arp_scan" }, [{ subnet }]);
+    deviceCount = result.items.length;
+    testMessage = result.warnings?.some((warning) => warning.startsWith("arp_scan_empty"))
+      ? "ARP scan completed, but no hosts responded on that subnet"
+      : `Discovered ${deviceCount} ${deviceCount === 1 ? "item" : "items"}`;
+  } else if (collectorType === "snmp") {
+    const { collectSnmpDiscovery } = await import("@dpf/db/discovery-collectors-snmp");
+    const configuration = (conn.configuration ?? {}) as Record<string, unknown>;
+    const encryptedCommunity = conn.encryptedApiKey ? decryptSecret(conn.encryptedApiKey) : null;
+    const community = encryptedCommunity
+      ?? (typeof configuration.community === "string" ? configuration.community : "public");
+    const result = await collectSnmpDiscovery({ sourceKind: "snmp" }, [{
+      address: normalizeEndpointUrl(conn.endpointUrl, "snmp"),
+      community,
+    }]);
+    const errorWarning = result.warnings?.find((warning) => warning.startsWith("snmp_error"));
+    testStatus = errorWarning ? "snmp_error" : "ok";
+    deviceCount = result.items.length;
+    testMessage = errorWarning
+      ? "SNMP test failed. Check the target, community string, and UDP/161 reachability."
+      : `Discovered ${deviceCount} ${deviceCount === 1 ? "item" : "items"}`;
+  } else {
+    return { ok: false, error: `Unsupported discovery method: ${collectorType}` };
+  }
 
   await prisma.discoveryConnection.update({
     where: { id: connectionId },
@@ -328,16 +397,19 @@ export async function testDiscoveryConnection(connectionId: string): Promise<
       lastTestedAt: new Date(),
       lastTestStatus: testStatus,
       lastTestMessage: testMessage,
-      status: hasError ? testStatus.replace("unifi_", "") : "active",
+      status: testStatus === "ok" ? "active" : testStatus.replace("unifi_", "").replace("snmp_error", "unreachable"),
     },
   });
 
   revalidateDiscoverySurfaces();
 
-  if (hasError) {
+  if (testStatus !== "ok") {
     return { ok: true, status: testStatus, message: testMessage };
   }
-  return { ok: true, status: "ok", deviceCount };
+  if (collectorType === "unifi") {
+    return { ok: true, status: "ok", deviceCount };
+  }
+  return { ok: true, status: "ok", deviceCount, message: testMessage };
 }
 
 /** Delete a discovery connection. */

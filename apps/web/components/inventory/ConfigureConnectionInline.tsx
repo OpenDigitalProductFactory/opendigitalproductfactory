@@ -34,6 +34,60 @@ const COLLECTOR_TYPES = [
   { value: "arp_scan", label: "Network Scan (ARP)" },
 ] as const;
 
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 0x2f /* "/" */) end--;
+  return value.slice(0, end);
+}
+
+function stripScheme(value: string): string {
+  if (value.startsWith("https://")) return value.slice(8);
+  if (value.startsWith("http://")) return value.slice(7);
+  if (value.startsWith("HTTPS://")) return value.slice(8);
+  if (value.startsWith("HTTP://")) return value.slice(7);
+  return value;
+}
+
+function stripPath(value: string): string {
+  const slashIndex = value.indexOf("/");
+  return slashIndex >= 0 ? value.slice(0, slashIndex) : value;
+}
+
+function isIpv4Octet(value: string): boolean {
+  if (value.length === 0 || value.length > 3) return false;
+  for (const char of value) {
+    if (char < "0" || char > "9") return false;
+  }
+  const octet = Number(value);
+  return octet >= 0 && octet <= 255;
+}
+
+function toIpv4Subnet(value: string): string {
+  const host = stripPath(stripScheme(trimTrailingSlashes(value.trim())));
+  if (host.includes("/")) return host;
+  const parts = host.split(".");
+  if (parts.length !== 4 || !parts.every(isIpv4Octet)) return "";
+  return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+}
+
+function isIpv4Cidr(value: string): boolean {
+  const [ip, cidr, extra] = value.trim().split("/");
+  if (!ip || !cidr || extra !== undefined) return false;
+  const prefix = Number(cidr);
+  if (!Number.isInteger(prefix) || prefix < 16 || prefix > 32) return false;
+  const parts = ip.split(".");
+  return parts.length === 4 && parts.every(isIpv4Octet);
+}
+
+function defaultEndpointForCollector(collectorType: string, gatewayAddress?: string): string {
+  const raw = gatewayAddress?.trim();
+  if (!raw) return "";
+  if (collectorType === "unifi") return raw.startsWith("http") ? trimTrailingSlashes(raw) : `https://${raw}`;
+  if (collectorType === "snmp") return stripPath(stripScheme(trimTrailingSlashes(raw)));
+  if (collectorType === "arp_scan") return toIpv4Subnet(raw);
+  return raw;
+}
+
 function formatConnectionFeedback(status: string, fallback?: string): string {
   switch (status) {
     case "unifi_tls_error":
@@ -57,7 +111,7 @@ export function ConfigureConnectionInline({
   const isEditMode = !!existing;
   const [collectorType, setCollectorType] = useState(existing?.collectorType ?? "unifi");
   const [endpointUrl, setEndpointUrl] = useState(
-    gatewayAddress ? (gatewayAddress.startsWith("http") ? gatewayAddress : `https://${gatewayAddress}`) : "",
+    defaultEndpointForCollector(existing?.collectorType ?? "unifi", gatewayAddress),
   );
   const [apiKey, setApiKey] = useState("");
   const [site, setSite] = useState(existing?.site ?? "default");
@@ -93,6 +147,11 @@ export function ConfigureConnectionInline({
     }
     if (isArpScan && !endpointUrl) {
       setMessage("Subnet is required (e.g., 192.168.0.0/24)");
+      setStatus("error");
+      return;
+    }
+    if (isArpScan && !isIpv4Cidr(endpointUrl)) {
+      setMessage("Subnet must be CIDR notation, for example 192.168.0.0/24");
       setStatus("error");
       return;
     }
@@ -165,7 +224,13 @@ export function ConfigureConnectionInline({
           <span className="text-xs text-[var(--dpf-muted)]">Discovery Method</span>
           <select
             value={collectorType}
-            onChange={(e) => setCollectorType(e.target.value)}
+            onChange={(e) => {
+              const nextCollectorType = e.target.value;
+              setCollectorType(nextCollectorType);
+              setEndpointUrl(defaultEndpointForCollector(nextCollectorType, gatewayAddress));
+              setStatus("idle");
+              setMessage("");
+            }}
             className="mt-1 block w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
           >
             {COLLECTOR_TYPES.map((ct) => (

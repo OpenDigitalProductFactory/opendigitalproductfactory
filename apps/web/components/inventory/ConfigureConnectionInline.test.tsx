@@ -72,4 +72,35 @@ describe("ConfigureConnectionInline", () => {
     expect(await screen.findByText(/self-signed certificate/i)).toBeTruthy();
     expect(screen.queryByText("unifi_tls_error")).toBeNull();
   });
+
+  it("resets a gateway URL to a subnet when switching to ARP scan", async () => {
+    render(
+      <ConfigureConnectionInline
+        gatewayName="Network Gateway"
+        gatewayAddress="https://192.168.0.1"
+        onComplete={vi.fn()}
+        existing={{
+          id: "conn-1",
+          collectorType: "unifi",
+          site: "default",
+          hasApiKey: true,
+        }}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/discovery method/i), {
+      target: { value: "arp_scan" },
+    });
+    expect((screen.getByLabelText(/subnet to scan/i) as HTMLInputElement).value).toBe("192.168.0.0/24");
+
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    await waitFor(() => expect(mockConfigureDiscoveryConnection).toHaveBeenCalledTimes(1));
+    expect(mockConfigureDiscoveryConnection.mock.calls[0][0]).toMatchObject({
+      id: "conn-1",
+      collectorType: "arp_scan",
+      endpointUrl: "192.168.0.0/24",
+      configuration: { subnet: "192.168.0.0/24" },
+    });
+  });
 });
