@@ -310,6 +310,9 @@ jobs:
       - name: Install pnpm
         run: corepack enable && corepack prepare pnpm@10.33.2 --activate
 
+      - name: Verify digest-pinned release compose image manifests
+        run: node scripts/release/verify-compose-image-manifests.mjs --mode release --platform linux --only digest-pinned
+
       - name: Run install-dpf.sh (release mode, --no-autostart for CI)
         run: bash install-dpf.sh --headless --release --no-autostart
 
@@ -339,8 +342,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: doctor-bundle-release-${{ github.run_id }}
-          path: ~/.dpf/doctor-*.tar.gz
+          path: /home/runner/.dpf/doctor-*.tar.gz
           if-no-files-found: warn
+          include-hidden-files: true
           retention-days: 14
 
       - name: Tear down (uninstall --purge)
