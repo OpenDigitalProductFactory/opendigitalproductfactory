@@ -16,6 +16,8 @@ This plan implements Slice 1 from `docs/superpowers/specs/2026-05-26-pipedrive-i
 
 It must also respect the binding UX-governance rules in `docs/superpowers/specs/2026-04-25-customer-marketing-coworker-led-ux-correction.md`: no card-as-send-button, no surprise prompts to the coworker. Slice 1 only adds navigation links and metric tiles to `/customer`; coworker-launching surfaces stay inside `AgentWorkLauncher` and are out of scope here.
 
+It must also pass the portal UX simplification fit gate before code edits. The feature belongs to Business > Customer and must not add global AppRail entries, Workspace cards, Platform nav entries, or vendor-branded user-facing language. "Pipedrive-inspired" is research language only; visible product copy should use DPF-native labels such as "Today in revenue", "Pipeline", "Engagements", "Quotes", "Orders", and "Marketing".
+
 PR strategy: Slice 1 is theme-aware refactor + dead-code removal + shared-helper extraction. It qualifies as a Claude-led maintenance PR per the `feedback_no_manual_prs` rule and does NOT need to flow through Build Studio. Slices 2–5 from the design spec are feature work and must be filed as backlog items, promoted, and run through Build Studio.
 
 Included:
@@ -115,7 +117,33 @@ Run the project sync script from the root clone after the worktree is created:
 
 Expected: `.mcp.json` and `.vscode/mcp.json` are hardlinked or copied into the new worktree, and the worktree receives its own ignored Compose project configuration so stacks do not collide with sibling sessions.
 
-- [ ] **Step 3: Sweep for concurrent work on the same surface**
+- [ ] **Step 3: Run the UX architecture fit gate**
+
+Before writing code, record the answers in the implementation notes or PR body:
+
+```text
+Owning area: Business > Customer
+Primary route family: /customer and /customer/marketing
+Primary persona: founder/operator managing customer acquisition and revenue attention
+Navigation layer touched: Customer section nav plus local page links only
+Routes that must not be created/promoted: global AppRail, Workspace, Platform, /portal, /storefront
+Existing component/pattern search: KPI/stat/status/badge components under apps/web/components and apps/web/app
+New component justification: only if Customer-specific components converge repeated CRM semantics
+Source truth: existing CRM and marketing models plus pure read helpers
+Empty/failure state: calm setup/next-action state, no wall of zeros
+AI boundary: metric/card/tab clicks navigate or select only; no coworker prompt send
+Evidence: route tests, theme scans, desktop/mobile route exercise
+```
+
+Run a component convergence search before creating `CustomerMetricTile` and `CustomerStatusBadge`:
+
+```powershell
+rg -n "MetricTile|StatusBadge|Kpi|KPI|Stat|Badge" apps/web/components apps/web/app
+```
+
+Expected: record whether existing components can be reused/wrapped or why the new Customer components become the canonical Customer CRM primitives. Do not create a parallel component family without documenting the convergence path.
+
+- [ ] **Step 4: Sweep for concurrent work on the same surface**
 
 Before any edits, check whether another session has open work on `apps/web/app/(shell)/customer` or `apps/web/components/customer`:
 
@@ -126,7 +154,7 @@ git log origin/main --oneline -n 30 -- 'apps/web/app/(shell)/customer' apps/web/
 
 Expected: no concurrent PR touches `apps/web/components/customer/CustomerMetricTile.tsx`, `apps/web/lib/crm/presentation.ts`, `apps/web/components/customer-marketing/MarketingTabNav.tsx`, or the four `(crm)` pages this plan modifies. If overlap is found, pause and reconcile per the `propose-acknowledge-reassign` kernel principle before proceeding.
 
-- [ ] **Step 4: Verify Node, pnpm, Prisma client are aligned**
+- [ ] **Step 5: Verify Node, pnpm, Prisma client are aligned**
 
 Run:
 
@@ -1692,6 +1720,7 @@ pnpm --filter web dev
 Then drive each route in a browser and capture a short structured dynamic-analysis report (drove X, observed Y, signed off Z) — NOT a pile of screenshots:
 
 - `/customer` — `Today in revenue` band renders above the account list; metric tiles link; currency reads "£" not "$"; empty-attention state shows the calm copy.
+- `/customer` — user-facing copy does not say "Pipedrive" or "Revenue Cockpit"; "Today in revenue" is the visible label.
 - `/customer/opportunities` — stage columns use shared tone classes; pipeline totals render in £; dormant badge is theme-aware.
 - `/customer/engagements` — status chips and row badges use shared metadata; no hex colors visible.
 - `/customer/funnel` — funnel bars and stage breakdown use theme tokens; storefront inbox tiles use accent/attention/success/info.
@@ -1702,7 +1731,7 @@ A full docker rebuild is only needed if you change anything outside `apps/web/` 
 
 - [ ] **Step 6: Continuous overlap sweep before push**
 
-Per `feedback_continuous_overlap_check`: re-run the sweep from Task 0 Step 3 now (a concurrent session may have landed a PR mid-slice that touches the same files). If overlap exists, rebase on the latest `origin/main` and re-run Steps 1–5 before continuing.
+Per `feedback_continuous_overlap_check`: re-run the sweep from Task 0 Step 4 now (a concurrent session may have landed a PR mid-slice that touches the same files). If overlap exists, rebase on the latest `origin/main` and re-run Steps 1–5 before continuing.
 
 ```powershell
 git fetch origin
