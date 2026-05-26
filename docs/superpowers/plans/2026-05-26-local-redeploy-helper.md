@@ -28,7 +28,7 @@ Create `scripts/lib/redeploy-portal.test.mjs` that asserts both helper scripts:
 2. resolve a Compose env file from `DPF_COMPOSE_ENV_FILE`, the checkout `.env`, or the conventional install `.env`
 3. build portal and portal-init together
 4. recreate portal-init and portal with --no-build --force-recreate
-5. inspect both containers' .Image values
+5. inspect both containers' .Image values, including the exited `portal-init` one-shot container
 6. fail when those image values differ
 ```
 

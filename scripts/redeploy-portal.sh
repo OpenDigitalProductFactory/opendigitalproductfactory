@@ -67,8 +67,8 @@ docker compose "${compose_args[@]}" build "${build_flags[@]}" portal portal-init
 echo "[redeploy-portal] Recreating portal-init and portal from the built images"
 docker compose "${compose_args[@]}" up -d --no-build --force-recreate portal-init portal
 
-portal_container="$(docker compose "${compose_args[@]}" ps -q portal)"
-portal_init_container="$(docker compose "${compose_args[@]}" ps -q portal-init)"
+portal_container="$(docker compose "${compose_args[@]}" ps -a -q portal | head -n 1)"
+portal_init_container="$(docker compose "${compose_args[@]}" ps -a -q portal-init | head -n 1)"
 
 if [ -z "$portal_container" ] || [ -z "$portal_init_container" ]; then
   echo "[redeploy-portal] Missing portal or portal-init container after recreate." >&2
