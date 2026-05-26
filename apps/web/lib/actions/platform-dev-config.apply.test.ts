@@ -247,6 +247,8 @@ describe("applyPlatformUpdate", () => {
       expect(result.version).toBe("v1.2.3");
       expect(result.filesUpdated).toBe(42);
     }
+    const commands = mockExec.mock.calls.map(([cmd]) => cmd);
+    expect(commands).toContain("git update-index --skip-worktree .dpf-version 2>/dev/null || true");
     expect(mockPrisma.platformDevConfig.update).toHaveBeenCalledWith({
       where: { id: "singleton" },
       data: { updatePending: false, pendingVersion: null },
