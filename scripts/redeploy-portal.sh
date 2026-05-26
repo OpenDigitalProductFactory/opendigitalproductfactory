@@ -11,6 +11,9 @@ Usage:
 Builds portal and portal-init with DPF_VERSION set to the current git HEAD,
 recreates both services without rebuilding again, and verifies both containers
 reference the same image ID.
+
+Set DPF_COMPOSE_ENV_FILE to override the Docker Compose env file. By default,
+the helper uses this checkout's .env, then $HOME/dpf/.env when present.
 EOF
 }
 
@@ -36,17 +39,36 @@ done
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
+compose_env_file="${DPF_COMPOSE_ENV_FILE:-}"
+if [ -z "$compose_env_file" ]; then
+  if [ -f "$repo_root/.env" ]; then
+    compose_env_file="$repo_root/.env"
+  elif [ -f "$HOME/dpf/.env" ]; then
+    compose_env_file="$HOME/dpf/.env"
+  fi
+fi
+
+declare -a compose_args=()
+if [ -n "$compose_env_file" ]; then
+  if [ ! -f "$compose_env_file" ]; then
+    echo "[redeploy-portal] Compose env file not found: $compose_env_file" >&2
+    exit 1
+  fi
+  echo "[redeploy-portal] Using Compose env file: $compose_env_file"
+  compose_args+=(--env-file "$compose_env_file")
+fi
+
 sha="$(git rev-parse HEAD)"
 export DPF_VERSION="$sha"
 echo "[redeploy-portal] Building portal and portal-init with DPF_VERSION=$sha"
 
-docker compose build "${build_flags[@]}" portal portal-init
+docker compose "${compose_args[@]}" build "${build_flags[@]}" portal portal-init
 
 echo "[redeploy-portal] Recreating portal-init and portal from the built images"
-docker compose up -d --no-build --force-recreate portal-init portal
+docker compose "${compose_args[@]}" up -d --no-build --force-recreate portal-init portal
 
-portal_container="$(docker compose ps -q portal)"
-portal_init_container="$(docker compose ps -q portal-init)"
+portal_container="$(docker compose "${compose_args[@]}" ps -q portal)"
+portal_init_container="$(docker compose "${compose_args[@]}" ps -q portal-init)"
 
 if [ -z "$portal_container" ] || [ -z "$portal_init_container" ]; then
   echo "[redeploy-portal] Missing portal or portal-init container after recreate." >&2

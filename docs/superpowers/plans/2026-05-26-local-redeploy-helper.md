@@ -4,7 +4,7 @@
 
 **Goal:** Add one local redeploy helper per shell that builds and recreates `portal-init` and `portal` together so manual rebuilds cannot leave the init image behind the app image.
 
-**Architecture:** Keep `scripts/build-images.{ps1,sh}` as the build-only primitive. Add `scripts/redeploy-portal.{ps1,sh}` as the operator-safe workflow: resolve repo root, stamp `DPF_VERSION` from `git rev-parse HEAD`, build `portal` and `portal-init` together, recreate both services with `--no-build --force-recreate`, and fail if the resulting containers do not reference the same image ID. Update version-check drift guidance to point to the new helper.
+**Architecture:** Keep `scripts/build-images.{ps1,sh}` as the build-only primitive. Add `scripts/redeploy-portal.{ps1,sh}` as the operator-safe workflow: resolve repo root, resolve the Docker Compose env file from an explicit argument or conventional install root, stamp `DPF_VERSION` from `git rev-parse HEAD`, build `portal` and `portal-init` together, recreate both services with `--no-build --force-recreate`, and fail if the resulting containers do not reference the same image ID. Update version-check drift guidance to point to the new helper.
 
 **Tech Stack:** PowerShell 5.1, POSIX shell, Docker Compose, Node built-in test runner.
 
@@ -25,10 +25,11 @@ Create `scripts/lib/redeploy-portal.test.mjs` that asserts both helper scripts:
 
 ```text
 1. stamp DPF_VERSION from git HEAD
-2. build portal and portal-init together
-3. recreate portal-init and portal with --no-build --force-recreate
-4. inspect both containers' .Image values
-5. fail when those image values differ
+2. resolve a Compose env file from `DPF_COMPOSE_ENV_FILE`, the checkout `.env`, or the conventional install `.env`
+3. build portal and portal-init together
+4. recreate portal-init and portal with --no-build --force-recreate
+5. inspect both containers' .Image values
+6. fail when those image values differ
 ```
 
 Also assert `portal-version-check` drift messages mention the new redeploy helper for the matching shell.
