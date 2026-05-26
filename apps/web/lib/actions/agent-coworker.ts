@@ -21,8 +21,9 @@ import {
   extractFormAssistResult,
   type AgentFormAssistContext,
 } from "@/lib/agent-form-assist";
-// mcp-tools is imported dynamically at call sites to avoid NFT whole-project tracing
-import type { BuildPhaseTag, ToolDefinition } from "@/lib/mcp-tools";
+// mcp-tools is imported dynamically at call sites to avoid NFT whole-project tracing;
+// type-only imports are erased at build time and safe.
+import type { ToolDefinition } from "@/lib/mcp-tools";
 import { getActionsForRoute } from "@/lib/agent-action-registry";
 import { getBuildContextSection } from "@/lib/build-agent-prompts";
 import { getFeatureBuildForContext } from "@/lib/feature-build-data";
@@ -66,19 +67,8 @@ import {
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
-function filterToolsForCoworkerRuntime(
-  tools: ToolDefinition[],
-  input: { coworkerMode?: "advise" | "act"; activeBuildPhase: string | null },
-): ToolDefinition[] {
-  return tools.filter((tool) => {
-    if (input.coworkerMode === "advise" && tool.sideEffect) return false;
-    if (input.activeBuildPhase) {
-      if (!tool.buildPhases) return false;
-      return tool.buildPhases.includes(input.activeBuildPhase as BuildPhaseTag);
-    }
-    return true;
-  });
-}
+import { filterToolsForCoworkerRuntime } from "./coworker-tool-filter";
+export { filterToolsForCoworkerRuntime };
 
 async function requireAuthUser() {
   const session = await auth();
