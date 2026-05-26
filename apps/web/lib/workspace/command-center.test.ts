@@ -103,6 +103,26 @@ describe("workspace command center readiness", () => {
     ]);
   });
 
+  it("routes readiness context cells to the canonical wiki surface", () => {
+    const view = buildWorkspaceCommandCenterView(makeInput());
+
+    const contextHrefs = view.readiness
+      .flatMap((row) => row.cells)
+      .filter((cell) => cell.key === "context")
+      .map((cell) => cell.href);
+
+    expect(contextHrefs).not.toContain("/platform/wiki");
+    expect(new Set(contextHrefs)).toEqual(new Set(["/wiki"]));
+  });
+
+  it("describes six-C readiness cells in operator language", () => {
+    expect(
+      deriveReadinessCell("context", {
+        hasFreshEvidence: true,
+      }).description,
+    ).toBe("Evidence, docs, and operating knowledge");
+  });
+
   it("includes AI work in motion when active task runs exist", () => {
     const view = buildWorkspaceCommandCenterView(makeInput());
 
