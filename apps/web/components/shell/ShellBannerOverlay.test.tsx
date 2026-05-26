@@ -12,7 +12,9 @@ describe("ShellBannerOverlay", () => {
     );
 
     expect(html).toContain("fixed");
-    expect(html).toContain("top-20");
+    expect(html).toContain("top-0");
+    expect(html).not.toContain("top-20");
+    expect(html).not.toMatch(/\b(?:[a-z]+:)?pt-/);
     expect(html).toContain("pointer-events-none");
     expect(html).toContain('data-testid="shell-banner-overlay"');
   });
