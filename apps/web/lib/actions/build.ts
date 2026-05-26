@@ -22,6 +22,7 @@ import {
 import { buildDesignReviewPrompt, buildPlanReviewPrompt, parseReviewResponse } from "@/lib/build-reviewers";
 import { queueBuildReviewVerification } from "@/lib/build-review-verification-trigger";
 import { saveBuildArtifactRevision, type BuildArtifactField } from "@/lib/build/build-artifact-provenance";
+import { evaluateBuildStudioDecision } from "@/lib/build/decision-service";
 import {
   assertFeatureBuildDependencyGate,
   FEATURE_BUILD_DEPENDENCY_GATE_SELECT,
@@ -457,6 +458,41 @@ export async function advanceBuildPhase(
       phase: build.phase,
       dependenciesOut: build.dependenciesOut,
     });
+
+    const recommendation = await evaluateBuildStudioDecision({
+      userId,
+      request: {
+        source: "build-studio",
+        routeContext: "/build",
+        buildId,
+        phase: currentPhase,
+        question: `Start implementation for "${build.title ?? buildId}" from the reviewed Build Studio plan?`,
+        options: [
+          {
+            id: "start-implementation",
+            description: "Start implementation from the reviewed Build Studio plan.",
+            operatorLabel: "Start implementation",
+          },
+          {
+            id: "revise-plan",
+            description: "Revise the implementation plan before starting.",
+            operatorLabel: "Revise plan",
+          },
+          {
+            id: "escalate-owner",
+            description: "Escalate to the Build Studio owner before implementation.",
+            operatorLabel: "Escalate to owner",
+          },
+        ],
+      },
+    });
+    prisma.buildActivity.create({
+      data: {
+        buildId,
+        tool: "build-studio-decision",
+        summary: `${recommendation.operatorActionLabel}: ${recommendation.reasonSummary}`,
+      },
+    }).catch(() => {});
 
     const decisionGate = await evaluateBuildStudioPlanAdvancementGate({
       db: prisma,

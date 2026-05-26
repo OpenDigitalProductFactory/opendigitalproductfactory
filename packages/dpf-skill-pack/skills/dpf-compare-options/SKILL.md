@@ -1,0 +1,55 @@
+---
+name: dpf-compare-options
+description: "Use in the DPF codebase after decision context is gathered and 2-4 options need WWMD/kernel scoring. Maps options to principle dimensions, calls principle_decide, and returns a human-readable recommendation with audit detail preserved."
+disable-model-invocation: false
+user-invocable: true
+allowed-tools: mcp__dpf__principle_decide mcp__dpf__wiki_query
+category: governance
+assignTo: ["*"]
+capability: null
+taskType: deliberation
+triggerPattern: "compare options|score options|which option|WWMD compare|kernel scoring|decision options"
+userInvocable: true
+agentInvocable: true
+allowedTools: ["mcp__dpf__principle_decide", "mcp__dpf__wiki_query"]
+composesFrom: ["dpf-retrieve-decision-context"]
+contextRequirements: ["DPF MCP principle_decide reachable; options enumerated"]
+riskBand: low
+enforces:
+  - kernel/principles/architecture-over-shortcuts
+  - kernel/principles/research-before-implementing
+---
+
+# DPF Compare Options
+
+Compare 2-4 architecturally distinct options with WWMD after the context has been gathered.
+
+## When to use
+
+- There are multiple viable implementation, workflow, UX, or governance options.
+- The trade-off should be shaped by founder-kernel principles, not by agent preference.
+- The result needs a recommendation and a clear reason for the operator.
+
+## Enforces
+
+- `kernel/principles/architecture-over-shortcuts`
+- `kernel/principles/research-before-implementing`
+
+## Steps
+
+1. Confirm there are 2-4 real options. If there is only one, return to context retrieval or brainstorming.
+2. Give each option a stable `id`, a concise `description`, and the strongest 3-5 principle-dimension feature scores you can justify.
+3. Call `principle_decide` with the decision context, scored options, and the correct calling population.
+4. Summarize the recommendation, confidence, top contributors, and flags in operator language.
+5. Preserve the raw tool response as audit detail for Build Studio or review surfaces.
+6. If confidence is low or a commandment conflict appears, route the decision to founder review instead of forcing a choice.
+
+## Guardrails
+
+- Do not fabricate feature scores. If a score is uncertain, say why and use the semantic fallback only with strong descriptions.
+- Do not expose raw `principle_decide`, MCP, or skill IDs in the default Build Studio view.
+- Do not proceed on a commandment conflict. Reframe the options or escalate.
+
+## Worked example
+
+A verification decision has `shared-env`, `thread-server`, and `remote-ci-only` options. This skill scores them against capacity, repeatability, architecture, and operator simplicity, calls `principle_decide`, and returns "Recommended next action: use the shared environment" with audit detail behind the evidence view.

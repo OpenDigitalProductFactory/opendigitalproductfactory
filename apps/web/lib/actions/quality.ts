@@ -17,6 +17,11 @@ export async function reportQualityIssue(input: {
   routeContext: string;
   errorStack?: string;
   source?: string;
+  triggerKind?: string;
+  supportSessionId?: string;
+  featureBuildId?: string;
+  threadId?: string;
+  taskRunId?: string;
 }): Promise<{ reportId: string } | { error: string }> {
   const session = await auth();
   const userId = session?.user?.id ?? null;
@@ -30,7 +35,13 @@ export async function reportQualityIssue(input: {
       description: input.description ?? null,
       routeContext: input.routeContext,
       errorStack: input.errorStack ?? null,
+      triggerKind: input.triggerKind ?? null,
+      supportSessionId: input.supportSessionId ?? null,
       reportedById: userId,
+      featureBuildId: input.featureBuildId ?? null,
+      threadId: input.threadId ?? null,
+      taskRunId: input.taskRunId ?? null,
+      ...(input.supportSessionId ? { status: ISSUE_REPORT_STATUS.SUPPORT_TRIAGE } : {}),
     });
     return { reportId };
   } catch {

@@ -1,14 +1,7 @@
 // apps/web/app/(shell)/customer/engagements/page.tsx
-import Link from "next/link";
 import { prisma } from "@dpf/db";
-
-const STATUS_COLOURS: Record<string, string> = {
-  new: "#fbbf24",
-  contacted: "#38bdf8",
-  qualified: "#4ade80",
-  unqualified: "#8888a0",
-  converted: "#a78bfa",
-};
+import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
+import { getEngagementStatusMeta } from "@/lib/crm/presentation";
 
 const SOURCE_LABELS: Record<string, string> = {
   web_inquiry: "Web",
@@ -44,15 +37,14 @@ export default async function EngagementsPage() {
       {/* Status summary chips */}
       <div className="flex flex-wrap gap-2 mb-4">
         {Object.entries(statusCounts).map(([status, count]) => {
-          const color = STATUS_COLOURS[status] ?? "#8888a0";
+          const meta = getEngagementStatusMeta(status);
           return (
-            <span
+            <CustomerStatusBadge
               key={status}
-              className="text-[10px] px-2 py-1 rounded-full"
-              style={{ background: `${color}20`, color }}
-            >
-              {status} ({count})
-            </span>
+              label={`${meta.label} (${count})`}
+              tone={meta.tone}
+              className="px-2 py-1 text-[10px]"
+            />
           );
         })}
       </div>
@@ -60,7 +52,7 @@ export default async function EngagementsPage() {
       {/* Engagement list */}
       <div className="space-y-2">
         {engagements.map((e) => {
-          const color = STATUS_COLOURS[e.status] ?? "#8888a0";
+          const statusMeta = getEngagementStatusMeta(e.status);
           const contactName = [e.contact.firstName, e.contact.lastName]
             .filter(Boolean)
             .join(" ") || e.contact.email;
@@ -68,20 +60,17 @@ export default async function EngagementsPage() {
           return (
             <div
               key={e.id}
-              className="p-4 rounded-lg bg-[var(--dpf-surface-1)] border-l-4 flex items-start justify-between gap-3"
-              style={{ borderLeftColor: color }}
+              className="flex items-start justify-between gap-3 rounded-lg border-l-4 border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] p-4"
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <p className="text-sm font-semibold text-[var(--dpf-text)] truncate">
                     {e.title}
                   </p>
-                  <span
-                    className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0"
-                    style={{ background: `${color}20`, color }}
-                  >
-                    {e.status}
-                  </span>
+                  <CustomerStatusBadge
+                    label={statusMeta.label}
+                    tone={statusMeta.tone}
+                  />
                   {e.source && (
                     <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)] shrink-0">
                       {SOURCE_LABELS[e.source] ?? e.source}

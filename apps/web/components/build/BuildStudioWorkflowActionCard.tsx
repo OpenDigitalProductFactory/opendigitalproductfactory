@@ -177,7 +177,11 @@ export function BuildStudioWorkflowActionCard({
           }),
         );
       } else if (action.kind === "amend-parent-design") {
-        handleCoworkerAction();
+        document.dispatchEvent(
+          new CustomEvent("open-parent-design-amendment", {
+            detail: { buildId: build.buildId },
+          }),
+        );
       }
 
       window.dispatchEvent(

@@ -45,7 +45,7 @@ echo "[version-check] Portal image version: $image_version"
 echo "[version-check] Local origin/main   : $expected"
 
 if [ "$image_source" != "git-sha" ]; then
-  echo "[version-check] Image was built without DPF_VERSION (content-hash fallback) - cannot compare to a SHA. Rebuild with scripts/build-images.sh to stamp a git SHA."
+  echo "[version-check] Image was built without DPF_VERSION (content-hash fallback) - cannot compare to a SHA. Rebuild/redeploy with scripts/redeploy-portal.sh to stamp a git SHA."
   exit 2
 fi
 
@@ -55,5 +55,5 @@ if [ "$(printf '%s' "$image_version" | tr 'A-F' 'a-f')" = "$(printf '%s' "$expec
 fi
 
 echo "[version-check] DRIFT - portal is NOT serving origin/main."
-echo "[version-check] Rebuild with: scripts/build-images.sh (then docker compose up -d portal portal-init)"
+echo "[version-check] Rebuild/redeploy with: scripts/redeploy-portal.sh"
 exit 1

@@ -31,6 +31,37 @@ export type ExecutionPhase = {
   tasks: AssignedTask[];
 };
 
+function stringField(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function normalizePlanFileEntry(value: unknown): PlanFileEntry | null {
+  if (value === null || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const path = stringField(row.path).trim();
+  if (!path) return null;
+
+  const action = row.action === "create" || row.action === "modify"
+    ? row.action
+    : "modify";
+  const purpose = stringField(row.purpose).trim() || stringField(row.change).trim();
+
+  return { path, action, purpose };
+}
+
+function normalizePlanTask(value: unknown, index: number): PlanTask | null {
+  if (value === null || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const title = stringField(row.title).trim() || `Task ${index + 1}`;
+
+  return {
+    title,
+    testFirst: stringField(row.testFirst),
+    implement: stringField(row.implement) || stringField(row.change),
+    verify: stringField(row.verify) || stringField(row.acceptanceCriterion),
+  };
+}
+
 // --- Specialist Assignment ---------------------------------------------------
 
 const SCHEMA_PATTERNS = [/packages\/db\/prisma\//i, /\.prisma$/i, /migration/i];
@@ -116,15 +147,24 @@ export function buildDependencyGraph(
   files: PlanFileEntry[] | null | undefined,
   tasks: PlanTask[],
 ): ExecutionPhase[] {
-  // Tolerate missing fileStructure — the BuildPlanDoc type says required,
-  // but the Prisma JSON column does not enforce shape and some legacy /
-  // partially-written plans store only `tasks`. Without this guard the
-  // client-side process graph crashes the entire /build page when a user
-  // selects a build whose stored buildPlan lacks `fileStructure`.
-  const safeFiles = Array.isArray(files) ? files : [];
+  // Tolerate partial/legacy JSON shapes. BuildPlanDoc is stricter than the
+  // Prisma JSON column, and stored plans can contain `{ path, change }` file
+  // entries or task rows without every optional planning field.
+  const safeFiles = Array.isArray(files)
+    ? files.flatMap((file) => {
+        const normalized = normalizePlanFileEntry(file);
+        return normalized ? [normalized] : [];
+      })
+    : [];
+  const safeTasks = Array.isArray(tasks)
+    ? tasks.flatMap((task, index) => {
+        const normalized = normalizePlanTask(task, index);
+        return normalized ? [normalized] : [];
+      })
+    : [];
 
   // Assign specialists to tasks
-  const assigned = tasks.map((task, i) => assignSpecialist(task, i, safeFiles));
+  const assigned = safeTasks.map((task, i) => assignSpecialist(task, i, safeFiles));
 
   // Group by priority level
   const byPriority = new Map<number, AssignedTask[]>();
