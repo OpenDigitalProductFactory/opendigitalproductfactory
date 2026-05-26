@@ -25,6 +25,18 @@ WWMD decisions already made:
 - Environment process: `two-shared-nonprod-plus-local-ci` over per-thread servers or remote-CI-only, high confidence.
 - Lease storage: `minimal-lease-model` over `ExternalEvidenceRecord`-only, high confidence.
 
+## Live Planning State
+
+Live MCP backlog check on 2026-05-26 confirmed this plan is an integration slice across existing epics, not a new standalone epic:
+
+- `EP-BUILD-STUDIO` is the primary delivery epic. It already contains active reliability and UX-adjacent work such as task-scoped execution context, progress visibility, reset/retry recovery, sandbox baseline refresh, overlap sweeps, and wrong-tool dispatch fixes.
+- `EP-BUILD-STUDIO-UX` owns the broader workflow-primary layout redesign; this plan must not fight that stream. Task 8 should add a small recommendation/evidence projection that can survive the owning layout redesign.
+- `EP-WWMD-MCP` owns the MCP exposure for WWMD read/write tools. Decision-service work in this plan should use the governed MCP contract and should not backdoor DB writes if token scope is insufficient.
+- `EP-BUILD-65837F` owns formal deliberation and constructive-conflict review patterns. Founder Review Queue work should consume that direction instead of creating another review vocabulary.
+- `EP-REDUCTION-GEAR-ARCH` owns the DPF skill-pack formalization substrate. New skills must extend `packages/dpf-skill-pack`; do not create a parallel skill registry.
+
+No backlog item should be filed from this plan without first checking overlap in those epics. If a task exposes a new implementation gap, attach it to the owning epic above rather than creating a new strategy bucket.
+
 ## File Structure
 
 ### Skill Pack
@@ -98,6 +110,30 @@ WWMD decisions already made:
 - Use explicit `git add` commands that list every touched file for each commit.
 - Do not start new app servers directly from a thread. Use the broker once it exists; until then, attach to the existing `localhost` environment unless a task explicitly says the broker is being built.
 - Do not open a PR until the branch is ready to merge under AGENTS.md.
+- Preserve route-to-route handoff context. The human should never have to copy a Build Studio id, TaskRun id, branch name, or evidence summary from one surface to another.
+- Keep raw MCP names, skill ids, lease ids, and trace internals out of the default Build Studio and Founder Review views. They belong behind "View audit" or equivalent drill-down.
+- Spend roughly 20 percent of each implementation slice removing duplicated decision/evidence projection logic, raw trace leakage, or UI-owned branching discovered by that slice.
+
+## User Delight And Trust Gates
+
+This plan has less visual surface area than a portal IA redesign, but the users still need to feel the system is helping rather than making them supervise machinery. Every implementation task must preserve the following user outcomes:
+
+| User | Capability and challenge | Delight condition | Default view must hide | Verification smoke |
+| ---- | ------------------------ | ----------------- | ---------------------- | ------------------ |
+| Founder/operator | Owns final judgment but has limited attention; needs fast confidence and a recovery path | One card says what needs a decision, why, and the safest next action | MCP payloads, skill ids, raw trace dumps, duplicate evidence rows | Founder Review Queue shows grouped decisions with one primary action and links back to build/task context |
+| Build Studio operator | Wants to move a build forward without understanding every tool call | Phase surface shows current state, recommendation, environment readiness, confidence/evidence summary, and one primary action | Null/unknown noise, raw skill routing, hidden source disagreement | `/build` shows a single action spine; audit details are reachable but not competing with the primary action |
+| External Claude/Codex contributor | Works outside Build Studio but needs governed handoff | Evidence handoff records branch, files, tests, unresolved questions, and next action without manual copy-paste | Build Studio-only jargon that hides what the contributor must supply | External evidence intake accepts a complete handoff payload and timeline labels the source clearly |
+| Reviewer/shipper | Needs to know whether work is merge-ready | Local integration gate produces a clear pass/fail/conflict result and blocks push on red | "Passed in my worktree" as final readiness | Local integration evidence is linked from the Build Studio timeline and PR readiness checklist |
+| Platform maintainer | Needs reusable architecture, not one more page-specific branch | Decision, evidence, environment, and timeline projections are typed services used by UI | UI components that directly encode WWMD, lease, or evidence branching | Service tests cover the projection, and Task 8 only renders already-normalized data |
+
+Default language examples:
+
+- Prefer: "Recommended next action: use the shared environment."
+- Avoid in default UI: "Capability pack selected Verification and invoked `dpf-use-shared-nonprod-environment`."
+- Prefer: "Needs founder review: evidence gap."
+- Avoid in default UI: "DecisionInteraction outcomeType=defer, outcomePayload.unresolvedReason=evidence-gap."
+- Prefer: "Merged-code gate failed: conflict with `origin/main`."
+- Avoid in default UI: "local-integration/local-integration-feature branch returned status 1."
 
 ## Task 1: Skill Pack Extension
 
@@ -396,13 +432,15 @@ describe("evaluateBuildStudioDecision", () => {
         phase: "build",
         question: "Which verification environment should this branch use?",
         options: [
-          { id: "shared-env", description: "Use Nonprod A." },
+          { id: "shared-env", description: "Use Nonprod A.", operatorLabel: "Use shared environment" },
           { id: "thread-server", description: "Start a per-thread server." },
         ],
       },
     });
     expect(result.status).toBe("recommended");
     expect(result.recommendation?.optionId).toBe("shared-env");
+    expect(result.operatorActionLabel).toBe("Use shared environment");
+    expect(result.reasonSummary).not.toMatch(/mcp|principle_decide|dpf-/i);
   });
 
   it("blocks when the kernel reports a commandment conflict", async () => {
@@ -424,12 +462,13 @@ describe("evaluateBuildStudioDecision", () => {
         phase: "build",
         question: "Start a new unmanaged server?",
         options: [
-          { id: "shared-env", description: "Use Nonprod A." },
+          { id: "shared-env", description: "Use Nonprod A.", operatorLabel: "Use shared environment" },
           { id: "thread-server", description: "Start a per-thread server." },
         ],
       },
     });
     expect(result.status).toBe("blocked");
+    expect(result.operatorActionLabel).toBe("Resolve blocker before continuing");
   });
 });
 ```
@@ -457,6 +496,7 @@ export type BuildStudioDecisionStatus = "recommended" | "needs-human" | "capture
 export type BuildStudioDecisionOption = {
   id: string;
   description: string;
+  operatorLabel?: string;
   features?: Record<string, number>;
 };
 
@@ -474,6 +514,8 @@ export type BuildStudioDecisionResult = {
   status: BuildStudioDecisionStatus;
   recommendation?: { optionId: string; confidence: string; margin: number };
   reasonSummary: string;
+  operatorActionLabel: string;
+  auditSummary: string;
 };
 
 export type BuildStudioDecisionToolExecutor = (
@@ -482,6 +524,19 @@ export type BuildStudioDecisionToolExecutor = (
   userId: string,
   context: { routeContext: string },
 ) => Promise<{ success?: boolean; data?: any; error?: string }>;
+
+function labelFromOption(option: BuildStudioDecisionOption | undefined, fallback: string) {
+  if (!option) return fallback;
+  return option.operatorLabel ?? option.description.replace(/\.$/, "");
+}
+
+function sanitizeOperatorSummary(value: unknown, fallback: string) {
+  const text = typeof value === "string" && value.trim().length > 0 ? value : fallback;
+  return text
+    .replace(/\bprinciple_decide\b/gi, "the decision service")
+    .replace(/\bmcp\b/gi, "governed tools")
+    .replace(/\bdpf-[a-z0-9-]+\b/gi, "the matching DPF skill");
+}
 
 export async function evaluateBuildStudioDecision(input: {
   request: BuildStudioDecisionRequest;
@@ -503,7 +558,9 @@ export async function evaluateBuildStudioDecision(input: {
   if (!response.success) {
     return {
       status: "captured-gap",
-      reasonSummary: response.error ?? "WWMD did not return a decision.",
+      reasonSummary: sanitizeOperatorSummary(response.error, "WWMD did not return a decision."),
+      operatorActionLabel: "Send to founder review",
+      auditSummary: "Decision service could not obtain a governed recommendation.",
     };
   }
 
@@ -513,7 +570,9 @@ export async function evaluateBuildStudioDecision(input: {
     return {
       status: "blocked",
       recommendation,
-      reasonSummary: response.data?.reasoning ?? "A commandment blocks this decision.",
+      reasonSummary: sanitizeOperatorSummary(response.data?.reasoning, "A commandment blocks this decision."),
+      operatorActionLabel: "Resolve blocker before continuing",
+      auditSummary: `Blocked by governed decision response for ${input.request.question}.`,
     };
   }
 
@@ -521,14 +580,19 @@ export async function evaluateBuildStudioDecision(input: {
     return {
       status: "needs-human",
       recommendation,
-      reasonSummary: response.data?.reasoning ?? "WWMD requires human review.",
+      reasonSummary: sanitizeOperatorSummary(response.data?.reasoning, "WWMD requires human review."),
+      operatorActionLabel: "Ask for human decision",
+      auditSummary: `Decision requires human review for ${input.request.question}.`,
     };
   }
 
+  const recommendedOption = input.request.options.find((option) => option.id === recommendation.optionId);
   return {
     status: "recommended",
     recommendation,
-    reasonSummary: response.data?.reasoning ?? `WWMD recommends ${recommendation.optionId}.`,
+    reasonSummary: sanitizeOperatorSummary(response.data?.reasoning, `WWMD recommends ${recommendation.optionId}.`),
+    operatorActionLabel: labelFromOption(recommendedOption, "Use recommended option"),
+    auditSummary: `Governed decision recommended ${recommendation.optionId} with ${recommendation.confidence} confidence.`,
   };
 }
 ```
@@ -1198,6 +1262,8 @@ describe("founder review queue", () => {
     });
     expect(candidate.id).toBe("DI-1");
     expect(candidate.unresolvedReason).toBe("principle-gap");
+    expect(candidate.unresolvedReasonLabel).toBe("Principle gap");
+    expect(candidate.primaryActionLabel).toBe("Clarify founder principle");
     expect(candidate.links.buildHref).toBe("/build?buildId=FB-1");
   });
 });
@@ -1241,6 +1307,22 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+const ACTION_BY_REASON: Record<FounderReviewUnresolvedReason, string> = {
+  "principle-gap": "Clarify founder principle",
+  "evidence-gap": "Request better evidence",
+  "domain-gap": "Route to domain owner",
+  "ownership-gap": "Assign an accountable owner",
+  "volunteers-dilemma": "Choose the responsible volunteer path",
+};
+
+const LABEL_BY_REASON: Record<FounderReviewUnresolvedReason, string> = {
+  "principle-gap": "Principle gap",
+  "evidence-gap": "Evidence gap",
+  "domain-gap": "Domain gap",
+  "ownership-gap": "Ownership gap",
+  "volunteers-dilemma": "Volunteer's dilemma",
+};
+
 export function projectFounderReviewCandidate(row: DecisionInteractionQueueRow) {
   const payload = asRecord(row.outcomePayload);
   const unresolvedReason = typeof payload.unresolvedReason === "string"
@@ -1251,6 +1333,8 @@ export function projectFounderReviewCandidate(row: DecisionInteractionQueueRow) 
     question: row.question,
     options: Array.isArray(row.options) ? row.options : [],
     unresolvedReason,
+    unresolvedReasonLabel: LABEL_BY_REASON[unresolvedReason] ?? "Review needed",
+    primaryActionLabel: ACTION_BY_REASON[unresolvedReason] ?? "Review decision",
     createdAt: row.createdAt.toISOString(),
     links: {
       buildHref: row.buildId ? `/build?buildId=${row.buildId}` : null,
@@ -1264,6 +1348,13 @@ export function projectFounderReviewCandidate(row: DecisionInteractionQueueRow) 
 - [ ] **Step 4: Create initial page**
 
 Create `apps/web/app/(shell)/platform/ai/founder-review/page.tsx` as a server component that queries `prisma.decisionInteraction.findMany` where `outcomeType` is `defer` or `escalate`, then renders cards through the projection. Use DPF theme variables for all colors.
+
+Default page acceptance:
+
+- Group cards by `unresolvedReasonLabel`, not by raw `outcomeType`.
+- Each card shows question, reason label, primary action label, and build/task links when present.
+- Default cards do not render `DecisionInteraction`, `outcomePayload`, `mcp`, `principle_decide`, or skill ids.
+- Audit details are out of scope for this first page; do not expose them in the default card.
 
 - [ ] **Step 5: Run tests**
 
@@ -1307,16 +1398,20 @@ import { describe, expect, it } from "vitest";
 import { EnvironmentStatusSummary } from "./EnvironmentStatusSummary";
 
 describe("EnvironmentStatusSummary", () => {
-  it("shows the shared environment recommendation without raw trace details", () => {
+  it("shows shared environment readiness without raw trace details", () => {
     render(
       <EnvironmentStatusSummary
         activeCandidate={{ status: "available", url: "http://localhost:53601" }}
         localIntegration={{ status: "passed", summary: "Merged with origin/main and build passed." }}
       />,
     );
-    expect(screen.getByText("Use shared environment")).toBeInTheDocument();
+    expect(screen.getByText("Environment readiness")).toBeInTheDocument();
+    expect(screen.getByText("Shared environment ready")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open environment" })).toHaveAttribute("href", "http://localhost:53601");
     expect(screen.getByText("Merged with origin/main and build passed.")).toBeInTheDocument();
     expect(screen.queryByText(/mcp/i)).toBeNull();
+    expect(screen.queryByText(/lease/i)).toBeNull();
+    expect(screen.queryByText(/localhost:53601/i)).toBeNull();
   });
 });
 ```
@@ -1349,12 +1444,22 @@ export function EnvironmentStatusSummary({
   activeCandidate: EnvironmentState;
   localIntegration: EnvironmentState;
 }) {
+  const environmentMessage = activeCandidate.status === "blocked"
+    ? "Shared environment blocked"
+    : activeCandidate.status === "claimed"
+      ? "Shared environment in use"
+      : "Shared environment ready";
   return (
-    <section className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3 text-[var(--dpf-text)]">
-      <h3 className="text-sm font-semibold">Use shared environment</h3>
+    <section className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3 text-[var(--dpf-text)]" aria-label="Environment readiness">
+      <h3 className="text-sm font-semibold">Environment readiness</h3>
       <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-        {activeCandidate.url ? `Active candidate: ${activeCandidate.url}` : "Active candidate environment is available."}
+        {environmentMessage}
       </p>
+      {activeCandidate.url ? (
+        <a className="mt-2 inline-flex text-sm font-medium text-[var(--dpf-accent)]" href={activeCandidate.url}>
+          Open environment
+        </a>
+      ) : null}
       <p className="mt-2 text-sm text-[var(--dpf-muted)]">
         {localIntegration.summary ?? "Local integration evidence is not recorded yet."}
       </p>
@@ -1384,6 +1489,8 @@ describe("UnifiedEvidenceTimeline", () => {
     );
     expect(screen.getByText("Codex")).toBeInTheDocument();
     expect(screen.getByText("Local integration")).toBeInTheDocument();
+    expect(screen.queryByText(/ExternalEvidenceRecord/i)).toBeNull();
+    expect(screen.queryByText(/ToolExecutionReceipt/i)).toBeNull();
   });
 });
 ```
@@ -1422,6 +1529,8 @@ Modify `apps/web/components/build/WorkflowStageInspector.tsx`:
 - Import `UnifiedEvidenceTimeline`.
 - Place the environment summary below the primary action card.
 - Place timeline behind the existing evidence/details area, not above the primary recommendation.
+- Preserve one primary action above the fold. Evidence, skill ids, MCP receipts, and local integration logs must not compete with the recommendation.
+- Reuse the existing Build Studio status/action card language where possible so the page does not gain a second narrator.
 
 - [ ] **Step 7: Run component tests**
 
@@ -1506,9 +1615,12 @@ Expected: PASS. The branch merges into current `origin/main`; web Vitest, typech
 
 Use Browser against the governed `localhost` environment. Verify:
 
-- Build Studio phase surface shows current state, recommendation, environment status, and one primary action.
-- Audit/timeline reveals skill IDs, external evidence, local integration evidence, and founder review link.
-- Founder Review Queue lists unresolved WWMD decisions.
+- Build Studio phase surface shows current state, recommendation, confidence/evidence summary, environment status, and one primary action above the fold.
+- Default Build Studio surface does not show raw MCP names, skill ids, lease ids, `DecisionInteraction`, `ExternalEvidenceRecord`, or literal `unknown`/`null` state labels.
+- "View audit" or the existing evidence/details affordance reveals skill IDs, external evidence, local integration evidence, and founder review link without changing the primary recommendation.
+- Founder Review Queue lists unresolved WWMD decisions grouped by human-readable reason and shows one primary action per card.
+- Route-to-route links preserve build/task context; the verifier does not need to copy an id from one page to another.
+- Narrow viewport does not overlap text or push the primary action below unrelated evidence details.
 - No extra server is started by the verification session.
 
 - [ ] **Step 7: Push branch**
@@ -1526,11 +1638,13 @@ Expected: branch is pushed after merged-code local integration evidence is green
 - [ ] New skill files pass seed mirror invariant.
 - [ ] Capability pack metadata loads and references existing skill IDs.
 - [ ] Build Studio decision service handles recommend, needs-human, captured-gap, and blocked states.
+- [ ] Decision-service results include operator-facing action labels that do not leak MCP/tool implementation language.
 - [ ] External evidence intake records build/task links and local integration details.
 - [ ] Non-production environment leases enforce one active owner per environment.
 - [ ] Local integration CI blocks push/PR on merge conflict or gate failure.
-- [ ] Founder Review Queue projects unresolved decisions.
-- [ ] Build Studio UI stays recommendation-first and theme-aware.
+- [ ] Founder Review Queue projects unresolved decisions into human-readable groups with one primary action per card.
+- [ ] Build Studio UI stays recommendation-first, theme-aware, and free of raw trace vocabulary in the default view.
+- [ ] Evidence/timeline details remain available behind audit drill-downs.
 - [ ] No unmanaged per-thread server is started during verification.
 - [ ] Focused tests pass.
 - [ ] Typecheck passes.
