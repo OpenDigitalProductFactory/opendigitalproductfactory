@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   AlertTriangle,
   Ban,
@@ -17,6 +18,7 @@ import { type ReactNode, useEffect, useMemo, useState, useTransition } from "rea
 import {
   bulkRevokeMyMcpTokens,
   copyMyMcpToken,
+  getMyContributorMcpReadiness,
   issueMyMcpToken,
   issueMyTemplateMcpToken,
   issueMyWriteMcpToken,
@@ -29,6 +31,7 @@ import {
   upgradeMyMcpTokenForCodingAgent,
   type McpTokenTemplateSummary,
 } from "@/lib/actions/mcp-tokens";
+import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 import {
   defaultMcpTokenScopes,
   MCP_TOKEN_DEFAULT_STALE_DAYS,
@@ -144,8 +147,85 @@ async function writeClipboardText(value: string): Promise<boolean> {
   }
 }
 
+function contributorReadinessCopy(readiness: ContributorMcpReadiness): {
+  tone: "ready" | "attention";
+  message: string;
+  guidance: string;
+} {
+  switch (readiness.status) {
+    case "ready":
+      return {
+        tone: "ready",
+        message: "Claude/Codex MCP readiness is satisfied.",
+        guidance: "Build Studio can use the current development token.",
+      };
+    case "needs_grants":
+      if (readiness.missingGrants.length === 0) {
+        return {
+          tone: "attention",
+          message: "Development token needs attention: read-only token.",
+          guidance: "Use Rotate with edit on the token row to apply development write access.",
+        };
+      }
+      return {
+        tone: "attention",
+        message: `Development token needs attention: missing ${readiness.missingGrants.length} ${readiness.missingGrants.length === 1 ? "grant" : "grants"}.`,
+        guidance: "Use Rotate with edit on the token row to apply the development grant set.",
+      };
+    case "needs_reissue":
+      return {
+        tone: "attention",
+        message: "Development token needs attention: expired or revoked token.",
+        guidance: "Issue a development token to replace the unusable row.",
+      };
+    case "needs_identity_binding":
+      return {
+        tone: "attention",
+        message: "Development token needs attention: peer identity is not GAID-bound.",
+        guidance: "Token grants still gate MCP calls while the identity binding work lands.",
+      };
+    case "needs_authorization":
+      return {
+        tone: "attention",
+        message: "Development token needs attention: no usable development token.",
+        guidance: "Issue a development token above before connecting Claude Code or Codex.",
+      };
+  }
+}
+
+function ContributorReadinessBanner(props: { readiness: ContributorMcpReadiness | null }) {
+  if (!props.readiness) return null;
+
+  const copy = contributorReadinessCopy(props.readiness);
+  const ready = copy.tone === "ready";
+
+  return (
+    <div className="mb-4 flex flex-col gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm md:flex-row md:items-center md:justify-between">
+      <div className="flex min-w-0 items-start gap-2">
+        {ready ? (
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--dpf-success)]" aria-hidden="true" />
+        ) : (
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--dpf-warning)]" aria-hidden="true" />
+        )}
+        <div className="min-w-0">
+          <p className="font-medium text-[var(--dpf-text)]">{copy.message}</p>
+          <p className="mt-0.5 text-xs text-[var(--dpf-muted)]">{copy.guidance}</p>
+        </div>
+      </div>
+      <Link
+        href="/platform/ai/build-studio"
+        className="shrink-0 text-xs font-medium text-[var(--dpf-accent)] underline-offset-2 hover:underline"
+      >
+        Build Studio readiness
+      </Link>
+    </div>
+  );
+}
+
 export function McpTokenManager(props: McpTokenManagerProps) {
   const [tokens, setTokens] = useState<TokenRow[]>([]);
+  const [contributorReadiness, setContributorReadiness] =
+    useState<ContributorMcpReadiness | null>(null);
   const [scopes, setScopes] = useState<string[]>([]);
   const [templates, setTemplates] = useState<McpTokenTemplateSummary[]>([]);
   const [view, setView] = useState<View>({ kind: "idle" });
@@ -181,15 +261,19 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [tokensResult, scopesResult, templatesResult] = await Promise.all([
+      const [tokensResult, scopesResult, templatesResult, readinessResult] = await Promise.all([
         listMyMcpTokens(),
         listAvailableMcpScopes(),
         listMcpTokenTemplates(),
+        getMyContributorMcpReadiness({ probe: false, baseUrl: props.baseUrl }),
       ]);
       if (cancelled) return;
       if (tokensResult.ok) {
         setTokens(tokensResult.tokens);
         setArchivedCount(tokensResult.archivedCount);
+      }
+      if (readinessResult.ok) {
+        setContributorReadiness(readinessResult.readiness);
       }
       const availableScopes = scopesResult.scopes;
       setScopes(availableScopes);
@@ -201,14 +285,20 @@ export function McpTokenManager(props: McpTokenManagerProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [props.baseUrl]);
 
   function refresh() {
     startTransition(async () => {
-      const result = await listMyMcpTokens();
-      if (result.ok) {
-        setTokens(result.tokens);
-        setArchivedCount(result.archivedCount);
+      const [tokensResult, readinessResult] = await Promise.all([
+        listMyMcpTokens(),
+        getMyContributorMcpReadiness({ probe: false, baseUrl: props.baseUrl }),
+      ]);
+      if (tokensResult.ok) {
+        setTokens(tokensResult.tokens);
+        setArchivedCount(tokensResult.archivedCount);
+      }
+      if (readinessResult.ok) {
+        setContributorReadiness(readinessResult.readiness);
       }
     });
   }
@@ -514,6 +604,8 @@ export function McpTokenManager(props: McpTokenManagerProps) {
       </div>
 
       <div className="p-5">
+        <ContributorReadinessBanner readiness={contributorReadiness} />
+
         {inlineError && (
           <div className="mb-4 flex items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm text-[var(--dpf-error)]">
             <AlertTriangle className="h-4 w-4" aria-hidden="true" />

@@ -158,6 +158,20 @@ export type McpTokenTemplate = {
   grants: readonly string[];
 };
 
+export const CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS = [
+  "architecture_read",
+  "backlog_read",
+  "backlog_write",
+  "code_graph_read",
+  "file_read",
+  "spec_plan_read",
+  "work_capsule_read",
+  "work_capsule_write",
+  "work_capsule_adopt",
+  "sandbox_execute",
+  "iac_execute",
+] as const;
+
 const DEVELOPMENT_TEMPLATE_GRANTS = [
   // Reads needed to navigate the codebase, specs, backlog, and architecture
   "architecture_read",

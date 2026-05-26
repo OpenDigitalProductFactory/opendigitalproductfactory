@@ -17,6 +17,10 @@ vi.mock("@/lib/tak/agent-grants", () => ({
   getToolGrantMapping: vi.fn(),
 }));
 
+vi.mock("@/lib/mcp/contributor-readiness", () => ({
+  getContributorMcpReadiness: vi.fn(),
+}));
+
 import { auth } from "@/lib/auth";
 import {
   addScopesToMcpApiToken,
@@ -27,9 +31,11 @@ import {
   rotateMcpApiToken,
 } from "@/lib/auth/mcp-api-token";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
+import { getContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 import {
   bulkRevokeMyMcpTokens,
   copyMyMcpToken,
+  getMyContributorMcpReadiness,
   issueMyMcpToken,
   issueMyTemplateMcpToken,
   issueMyWriteMcpToken,
@@ -106,6 +112,7 @@ const revokeMock = revokeMcpApiToken as unknown as ReturnType<typeof vi.fn>;
 const listMock = listMcpApiTokens as unknown as ReturnType<typeof vi.fn>;
 const rotateMock = rotateMcpApiToken as unknown as ReturnType<typeof vi.fn>;
 const grantMapMock = getToolGrantMapping as unknown as ReturnType<typeof vi.fn>;
+const readinessMock = getContributorMcpReadiness as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -137,6 +144,53 @@ describe("listAvailableMcpScopes", () => {
       "code_graph_read",
       "spec_plan_read",
     ]);
+  });
+});
+
+describe("getMyContributorMcpReadiness", () => {
+  it("rejects unauthenticated callers", async () => {
+    authMock.mockResolvedValue(null);
+
+    const result = await getMyContributorMcpReadiness();
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("unauthorized");
+    expect(readinessMock).not.toHaveBeenCalled();
+  });
+
+  it("returns contributor readiness for the current operator without plaintext", async () => {
+    authMock.mockResolvedValue({ user: { id: "u1" } });
+    readinessMock.mockResolvedValue({
+      status: "ready",
+      recommendedAction: "test_connection",
+      identityBinding: "not_available",
+      token: {
+        id: "tok_1",
+        name: "Development token",
+        prefix: "dpfmcp_DEV",
+        tokenSuffix: "DEV1",
+        scope: "write",
+        scopes: ["backlog_write"],
+        lastUsedAt: null,
+        expiresAt: null,
+      },
+      missingGrants: [],
+      requiredGrants: ["backlog_write"],
+      recommendedScopes: ["backlog_write"],
+      probe: { status: "not_run" },
+    });
+
+    const result = await getMyContributorMcpReadiness({
+      probe: true,
+      baseUrl: "http://localhost:3000",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(readinessMock).toHaveBeenCalledWith("u1", {
+      probe: true,
+      baseUrl: "http://localhost:3000",
+    });
+    expect(JSON.stringify(result)).not.toContain("dpfmcp_SECRET");
   });
 });
 

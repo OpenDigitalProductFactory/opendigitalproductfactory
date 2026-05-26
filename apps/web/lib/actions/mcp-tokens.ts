@@ -15,6 +15,7 @@ import {
 } from "@/lib/auth/mcp-api-token";
 import { buildSetupSnippets } from "@/lib/auth/mcp-setup-snippets";
 import { writeMcpJsonToHost } from "@/lib/auth/mcp-host-writer";
+import { getContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 import {
   CODING_AGENT_MCP_TOKEN_SCOPES,
   deriveIdleDays,
@@ -102,6 +103,22 @@ export async function listMyMcpTokens() {
       createdAt: t.createdAt.toISOString(),
     })),
   };
+}
+
+export async function getMyContributorMcpReadiness(input?: {
+  probe?: boolean;
+  baseUrl?: string;
+}) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false as const, error: "unauthorized" };
+  }
+
+  const readiness = await getContributorMcpReadiness(session.user.id, {
+    probe: input?.probe ?? false,
+    baseUrl: input?.baseUrl,
+  });
+  return { ok: true as const, readiness };
 }
 
 export type IssueTokenActionResult =

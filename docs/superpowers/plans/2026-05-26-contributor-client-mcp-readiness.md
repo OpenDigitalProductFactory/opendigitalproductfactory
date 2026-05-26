@@ -81,7 +81,7 @@ it("keeps the development template as a superset of contributor MCP readiness", 
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/mcp-token-scopes.test.ts
+pnpm --filter web exec vitest run lib/mcp-token-scopes.test.ts
 ```
 
 Expected: fails because `CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS` is not exported.
@@ -111,7 +111,7 @@ export const CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS = [
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/mcp-token-scopes.test.ts
+pnpm --filter web exec vitest run lib/mcp-token-scopes.test.ts
 ```
 
 Expected: all tests in `mcp-token-scopes.test.ts` pass.
@@ -173,7 +173,7 @@ function token(overrides: Partial<ContributorMcpTokenRow> = {}): ContributorMcpT
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/mcp/contributor-readiness.test.ts
+pnpm --filter web exec vitest run lib/mcp/contributor-readiness.test.ts
 ```
 
 Expected: fails because the module does not exist.
@@ -274,7 +274,7 @@ non-empty `tools` array. Do not expose plaintext in the result.
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/mcp/contributor-readiness.test.ts
+pnpm --filter web exec vitest run lib/mcp/contributor-readiness.test.ts
 ```
 
 Expected: all readiness tests pass.
@@ -321,7 +321,7 @@ export async function getMyContributorMcpReadiness(input?: {
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/actions/mcp-tokens.test.ts
+pnpm --filter web exec vitest run lib/actions/mcp-tokens.test.ts
 ```
 
 Expected: action tests pass.
@@ -386,7 +386,7 @@ section.
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/components/platform/ContributorMcpReadinessCard.test.tsx
+pnpm --filter web exec vitest run components/platform/ContributorMcpReadinessCard.test.tsx
 ```
 
 Expected: card tests pass.
@@ -423,7 +423,7 @@ Do not move or duplicate the existing issue/rotate/revoke controls.
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/components/admin/McpTokenManager.test.tsx
+pnpm --filter web exec vitest run components/admin/McpTokenManager.test.tsx
 ```
 
 Expected: token manager tests pass.
@@ -441,11 +441,11 @@ Run:
 
 ```powershell
 pnpm --filter web exec vitest run `
-  apps/web/lib/mcp-token-scopes.test.ts `
-  apps/web/lib/mcp/contributor-readiness.test.ts `
-  apps/web/lib/actions/mcp-tokens.test.ts `
-  apps/web/components/platform/ContributorMcpReadinessCard.test.tsx `
-  apps/web/components/admin/McpTokenManager.test.tsx
+  lib/mcp-token-scopes.test.ts `
+  lib/mcp/contributor-readiness.test.ts `
+  lib/actions/mcp-tokens.test.ts `
+  components/platform/ContributorMcpReadinessCard.test.tsx `
+  components/admin/McpTokenManager.test.tsx
 ```
 
 Expected: all focused tests pass.
