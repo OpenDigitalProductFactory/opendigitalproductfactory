@@ -1,5 +1,6 @@
 import type {
   CommandSeverity,
+  ReadinessCell,
   ReadinessState,
   WorkspaceCommandCenterView,
 } from "@/lib/workspace/command-center";
@@ -27,6 +28,10 @@ const stateLabel: Record<ReadinessState, string> = {
   blocked: "Blocked",
   unknown: "Unknown",
 };
+
+function readinessTitle(cell: ReadinessCell) {
+  return `${cell.label}: ${stateLabel[cell.state]} - ${cell.description}`;
+}
 
 export function BusinessCommandCenter({ view }: Props) {
   return (
@@ -100,7 +105,7 @@ export function BusinessCommandCenter({ view }: Props) {
                   key={`${row.id}-${cell.key}`}
                   href={cell.href ?? row.href}
                   className={`flex min-h-16 flex-col justify-between rounded-md border px-3 py-2 text-xs ${stateClass[cell.state]}`}
-                  title={`${cell.label}: ${stateLabel[cell.state]}`}
+                  title={readinessTitle(cell)}
                 >
                   <span className="font-semibold text-[var(--dpf-muted)]">{cell.label}</span>
                   <span className="font-semibold">{stateLabel[cell.state]}</span>
@@ -136,7 +141,7 @@ export function BusinessCommandCenter({ view }: Props) {
                     <a
                       href={cell.href ?? row.href}
                       className={`inline-flex min-w-20 justify-center rounded-full border px-2 py-1 text-[11px] font-semibold ${stateClass[cell.state]}`}
-                      title={`${cell.label}: ${stateLabel[cell.state]}`}
+                      title={readinessTitle(cell)}
                     >
                       {stateLabel[cell.state]}
                     </a>
