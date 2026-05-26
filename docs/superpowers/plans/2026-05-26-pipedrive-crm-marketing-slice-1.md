@@ -14,6 +14,12 @@
 
 This plan implements Slice 1 from `docs/superpowers/specs/2026-05-26-pipedrive-inspired-crm-marketing-operations-design.md`.
 
+It must also respect the binding UX-governance rules in `docs/superpowers/specs/2026-04-25-customer-marketing-coworker-led-ux-correction.md`: no card-as-send-button, no surprise prompts to the coworker. Slice 1 only adds navigation links and metric tiles to `/customer`; coworker-launching surfaces stay inside `AgentWorkLauncher` and are out of scope here.
+
+It must also pass the portal UX simplification fit gate before code edits. The feature belongs to Business > Customer and must not add global AppRail entries, Workspace cards, Platform nav entries, or vendor-branded user-facing language. "Pipedrive-inspired" is research language only; visible product copy should use DPF-native labels such as "Today in revenue", "Pipeline", "Engagements", "Quotes", "Orders", and "Marketing".
+
+PR strategy: Slice 1 is theme-aware refactor + dead-code removal + shared-helper extraction. It qualifies as a Claude-led maintenance PR per the `feedback_no_manual_prs` rule and does NOT need to flow through Build Studio. Slices 2–5 from the design spec are feature work and must be filed as backlog items, promoted, and run through Build Studio.
+
 Included:
 
 - central CRM stage/status presentation metadata
@@ -33,7 +39,15 @@ Excluded:
 - real `/customer/marketing/campaigns`, `/customer/marketing/funnel`, or `/customer/marketing/automation` routes
 - PR creation before verification
 
-Implementation should happen on a new feature branch/worktree from latest `origin/main`, for example `feat/pipedrive-crm-marketing-slice-1`. The doc branch `doc/pipedrive-crm-marketing` remains the research and planning branch.
+Implementation must happen in a new git worktree branched from `origin/main` (see Task 0). The doc branch `doc/pipedrive-crm-marketing` remains the research and planning branch.
+
+Files left as known refactor debt after Slice 1 (deferred to Slice 1b — file a tracked backlog item before Slice 2 starts):
+
+- `apps/web/app/(shell)/customer/(crm)/[id]/page.tsx` — STATUS_COLOURS
+- `apps/web/app/(shell)/customer/(crm)/quotes/page.tsx` — STATUS_COLOURS
+- `apps/web/app/(shell)/customer/(crm)/sales-orders/page.tsx` — STATUS_COLOURS
+
+These three are intentionally out of Slice 1 to keep the touched-file surface small, but the shared `presentation.ts` helper this slice introduces is what they will consume.
 
 ## File Structure
 
@@ -77,6 +91,79 @@ Modify:
   - use shared stage metadata and DPF CSS variables for touched funnel/status cards
 - `apps/web/components/customer-marketing/MarketingTabNav.tsx`
   - remove disabled placeholder tabs until their routes have meaningful content
+
+## Task 0: Create Worktree from `origin/main` and Verify Base
+
+**Files:** none modified — environment setup only.
+
+- [ ] **Step 1: Fetch latest origin and create the worktree**
+
+Run:
+
+```powershell
+git fetch origin
+git worktree add -b feat/pipedrive-crm-marketing-slice-1 ../DPF-pipedrive-crm-marketing-slice-1 origin/main
+```
+
+Expected: a fresh worktree at `../DPF-pipedrive-crm-marketing-slice-1` on a new branch pointed at `origin/main`. Per the kernel principle `worktree-base-origin-main`, never branch from local `main` — it may carry unpushed commits that sweep into the PR and fail DCO.
+
+- [ ] **Step 2: Seed worktree MCP and IDE config**
+
+Run the project sync script from the root clone after the worktree is created:
+
+```powershell
+.\scripts\sync-mcp-worktrees.ps1
+```
+
+Expected: `.mcp.json` and `.vscode/mcp.json` are hardlinked or copied into the new worktree, and the worktree receives its own ignored Compose project configuration so stacks do not collide with sibling sessions.
+
+- [ ] **Step 3: Run the UX architecture fit gate**
+
+Before writing code, record the answers in the implementation notes or PR body:
+
+```text
+Owning area: Business > Customer
+Primary route family: /customer and /customer/marketing
+Primary persona: founder/operator managing customer acquisition and revenue attention
+Navigation layer touched: Customer section nav plus local page links only
+Routes that must not be created/promoted: global AppRail, Workspace, Platform, /portal, /storefront
+Existing component/pattern search: KPI/stat/status/badge components under apps/web/components and apps/web/app
+New component justification: only if Customer-specific components converge repeated CRM semantics
+Source truth: existing CRM and marketing models plus pure read helpers
+Empty/failure state: calm setup/next-action state, no wall of zeros
+AI boundary: metric/card/tab clicks navigate or select only; no coworker prompt send
+Evidence: route tests, theme scans, desktop/mobile route exercise
+```
+
+Run a component convergence search before creating `CustomerMetricTile` and `CustomerStatusBadge`:
+
+```powershell
+rg -n "MetricTile|StatusBadge|Kpi|KPI|Stat|Badge" apps/web/components apps/web/app
+```
+
+Expected: record whether existing components can be reused/wrapped or why the new Customer components become the canonical Customer CRM primitives. Do not create a parallel component family without documenting the convergence path.
+
+- [ ] **Step 4: Sweep for concurrent work on the same surface**
+
+Before any edits, check whether another session has open work on `apps/web/app/(shell)/customer` or `apps/web/components/customer`:
+
+```powershell
+gh pr list --state open --search "customer marketing OR crm OR pipeline" --limit 20
+git log origin/main --oneline -n 30 -- 'apps/web/app/(shell)/customer' apps/web/components/customer apps/web/components/customer-marketing
+```
+
+Expected: no concurrent PR touches `apps/web/components/customer/CustomerMetricTile.tsx`, `apps/web/lib/crm/presentation.ts`, `apps/web/components/customer-marketing/MarketingTabNav.tsx`, or the four `(crm)` pages this plan modifies. If overlap is found, pause and reconcile per the `propose-acknowledge-reassign` kernel principle before proceeding.
+
+- [ ] **Step 5: Verify Node, pnpm, Prisma client are aligned**
+
+Run:
+
+```powershell
+pnpm install --frozen-lockfile
+pnpm --filter @dpf/db exec prisma generate
+```
+
+Expected: install succeeds; Prisma client regenerates so the new `apps/web/lib/crm/*` modules see `MarketingCampaignBrief`, `MarketingAssetTask`, and `MarketingAutomationCandidate` types.
 
 ## Task 1: Create CRM Presentation Metadata
 
@@ -332,8 +419,13 @@ import { describe, expect, it } from "vitest";
 import { buildRevenueCockpitSummary, formatRevenueAmount } from "./revenue-cockpit";
 
 describe("revenue cockpit summary", () => {
-  it("formats revenue in USD by default", () => {
-    expect(formatRevenueAmount(12500)).toBe("$12,500");
+  it("formats revenue in GBP by default (matches Opportunity.currency default)", () => {
+    expect(formatRevenueAmount(12500)).toBe("£12,500");
+  });
+
+  it("respects a passed currency code", () => {
+    expect(formatRevenueAmount(12500, "USD")).toBe("$12,500");
+    expect(formatRevenueAmount(12500, "EUR")).toBe("€12,500");
   });
 
   it("summarizes pipeline, engagements, quotes, and active orders", () => {
@@ -377,7 +469,7 @@ describe("revenue cockpit summary", () => {
         id: "pipeline",
         label: "Pipeline",
         value: "3",
-        detail: "$6,000 open",
+        detail: "£6,000 open",
         href: "/customer/opportunities",
         tone: "accent",
       },
@@ -425,6 +517,36 @@ describe("revenue cockpit summary", () => {
       {
         id: "marketing-work",
         label: "5 marketing work products are waiting",
+        href: "/customer/marketing",
+        tone: "accent",
+      },
+    ]);
+  });
+
+  it("uses singular phrasing for a single stale opportunity and a single waiting work product", () => {
+    const summary = buildRevenueCockpitSummary({
+      engagementCounts: [],
+      opportunityCounts: [],
+      quoteCounts: [],
+      orderCounts: [],
+      staleOpportunityCount: 1,
+      marketingWork: {
+        campaignBriefsOpen: 1,
+        assetTasksOpen: 0,
+        automationCandidatesOpen: 0,
+      },
+    });
+
+    expect(summary.attentionItems).toEqual([
+      {
+        id: "stale-opportunities",
+        label: "1 stale opportunity needs a next action",
+        href: "/customer/opportunities",
+        tone: "warning",
+      },
+      {
+        id: "marketing-work",
+        label: "1 marketing work product is waiting",
         href: "/customer/marketing",
         tone: "accent",
       },
@@ -496,10 +618,13 @@ export type RevenueCockpitInput = {
   };
 };
 
-export function formatRevenueAmount(value: number): string {
-  return new Intl.NumberFormat("en-US", {
+// Default currency mirrors Opportunity.currency / Quote.priceCurrency Prisma
+// defaults ("GBP"). Multi-currency aggregation is out of scope for Slice 1;
+// callers that touch a different currency must pass it explicitly.
+export function formatRevenueAmount(value: number, currency: string = "GBP"): string {
+  return new Intl.NumberFormat("en-GB", {
     style: "currency",
-    currency: "USD",
+    currency,
     maximumFractionDigits: 0,
   }).format(value);
 }
@@ -630,7 +755,7 @@ describe("CustomerMetricTile", () => {
         href="/customer/opportunities"
         label="Pipeline"
         value="3"
-        detail="$6,000 open"
+        detail="£6,000 open"
         tone="accent"
       />,
     );
@@ -638,7 +763,7 @@ describe("CustomerMetricTile", () => {
     expect(html).toContain('href="/customer/opportunities"');
     expect(html).toContain(">Pipeline<");
     expect(html).toContain(">3<");
-    expect(html).toContain("$6,000 open");
+    expect(html).toContain("£6,000 open");
     expect(html).toContain("border-[var(--dpf-accent)]");
     expect(html).not.toMatch(/#[0-9a-f]{3,6}/i);
   });
@@ -683,7 +808,7 @@ describe("RevenueCockpit", () => {
               id: "pipeline",
               label: "Pipeline",
               value: "3",
-              detail: "$6,000 open",
+              detail: "£6,000 open",
               href: "/customer/opportunities",
               tone: "accent",
             },
@@ -973,19 +1098,22 @@ Replace the `Promise.all` tuple with:
         stage: { in: ["qualification", "discovery", "proposal", "negotiation"] },
       },
     }),
+    // Marketing models currently only ever write the default status "draft"
+    // (see createMarketingCampaignBrief / createMarketingAssetTask /
+    // createMarketingAutomationCandidate in apps/web/lib/marketing.ts).
+    // No lifecycle transitions exist yet, so "open" == "draft" for Slice 1.
+    // Expand the status filter when a real lifecycle ships.
     prisma.marketingCampaignBrief.count({
-      where: { status: { in: ["draft", "pending-review"] } },
+      where: { status: "draft" },
     }),
     prisma.marketingAssetTask.count({
-      where: { status: { in: ["draft", "pending-review", "queued"] } },
+      where: { status: "draft" },
     }),
     prisma.marketingAutomationCandidate.count({
-      where: { status: { in: ["draft", "proposed", "pending-review"] } },
+      where: { status: "draft" },
     }),
   ]);
 ```
-
-If any listed marketing status is not present in seed data, the query still safely returns zero.
 
 - [ ] **Step 3: Build the cockpit summary**
 
@@ -1527,21 +1655,29 @@ git add 'apps/web/app/(shell)/customer/(crm)/funnel/page.tsx'
 git commit -s -m "refactor(crm): make funnel visuals theme-aware"
 ```
 
-## Task 8: Full Verification and Push
+## Task 8: Full Verification, Push, and PR
 
 **Files:**
 
 - Verify all files changed by Tasks 1-7
 
-- [ ] **Step 1: Run the focused unit and component tests**
+- [ ] **Step 1: Run the full web vitest suite (NOT just focused tests)**
+
+Targeted runs are not enough — the pre-commit hook only runs typecheck, so vitest must be run locally before push or PR CI breaks for every other concurrent session.
 
 Run:
 
 ```powershell
-pnpm --filter web exec vitest run apps/web/lib/crm/presentation.test.ts apps/web/lib/crm/revenue-cockpit.test.ts apps/web/components/customer/CustomerMetricTile.test.tsx apps/web/components/customer/CustomerStatusBadge.test.tsx apps/web/components/customer/RevenueCockpit.test.tsx apps/web/components/customer-marketing/MarketingTabNav.test.tsx apps/web/components/customer/CustomerTabNav.test.tsx
+pnpm --filter web test
 ```
 
-Expected: PASS.
+Expected: every web test passes, including the new modules from Tasks 1–7. If unrelated tests fail because of a shared change you introduced (e.g., a re-export), fix the root cause before continuing — do not skip or `xfail`.
+
+If you touched anything under `packages/db`, also run:
+
+```powershell
+pnpm --filter @dpf/db test
+```
 
 - [ ] **Step 2: Run typecheck**
 
@@ -1551,17 +1687,17 @@ Run:
 pnpm --filter web typecheck
 ```
 
-Expected: PASS.
+Expected: PASS. Use the Vitest version already pinned by the repo lockfile and package manifests; do not attempt any dependency bump as part of this slice.
 
 - [ ] **Step 3: Run production build**
 
 Run:
 
 ```powershell
-pnpm --filter web exec next build
+pnpm --filter web build
 ```
 
-Expected: PASS.
+Expected: PASS. A 3-digit warning count in `next build` output is usually NFT cascade (a small number of root causes re-emitted per output asset). Investigate by source-code root cause, not by warning count.
 
 - [ ] **Step 4: Scan touched files for hardcoded colors and phase labels**
 
@@ -1573,42 +1709,48 @@ rg -n "#[0-9a-fA-F]{3,6}|bg-red-|text-red-|border-red-|borderLeftColor|backgroun
 
 Expected: no matches.
 
-- [ ] **Step 5: Verify the route in the Docker-served app**
+- [ ] **Step 5: Functional verification on the contributor preview (NOT a full docker rebuild)**
 
-Run the project-standard Docker rebuild only if the local install is not already serving the updated app:
+Slice 1 is code-only inside `apps/web/`; full `docker compose build --no-cache portal portal-init sandbox` is overkill and burns 10+ minutes for no benefit. Use the contributor preview on port 3001 instead (see the `dev-portal-start` skill):
 
 ```powershell
-docker compose build --no-cache portal portal-init sandbox
-docker compose up -d
+pnpm --filter web dev
 ```
 
-Then authenticate with the install admin credentials and exercise:
+Then drive each route in a browser and capture a short structured dynamic-analysis report (drove X, observed Y, signed off Z) — NOT a pile of screenshots:
 
-- `/customer`
-- `/customer/opportunities`
-- `/customer/engagements`
-- `/customer/funnel`
-- `/customer/marketing`
+- `/customer` — `Today in revenue` band renders above the account list; metric tiles link; currency reads "£" not "$"; empty-attention state shows the calm copy.
+- `/customer` — user-facing copy does not say "Pipedrive" or "Revenue Cockpit"; "Today in revenue" is the visible label.
+- `/customer/opportunities` — stage columns use shared tone classes; pipeline totals render in £; dormant badge is theme-aware.
+- `/customer/engagements` — status chips and row badges use shared metadata; no hex colors visible.
+- `/customer/funnel` — funnel bars and stage breakdown use theme tokens; storefront inbox tiles use accent/attention/success/info.
+- `/customer/marketing` — tab nav shows only **Overview** and **Strategy**; no "Phase 2" / "Phase 3" pills.
+- Resize to mobile width — status badges, metric details, and stage columns don't clip.
 
-Expected:
+A full docker rebuild is only needed if you change anything outside `apps/web/` (Prisma schema, MCP server, seed data, infra). This slice does not.
 
-- `/customer` shows the "Today in revenue" band above account cards.
-- metric tiles link to their target routes.
-- account, engagement, and opportunity status badges are theme-aware.
-- marketing nav shows only Overview and Strategy.
-- no disabled Campaigns, Funnel, Automation phase tabs are visible.
-- mobile widths do not clip status badges or metric details.
+- [ ] **Step 6: Continuous overlap sweep before push**
 
-- [ ] **Step 6: Commit any verification fixes**
+Per `feedback_continuous_overlap_check`: re-run the sweep from Task 0 Step 4 now (a concurrent session may have landed a PR mid-slice that touches the same files). If overlap exists, rebase on the latest `origin/main` and re-run Steps 1–5 before continuing.
 
-If verification forced changes, commit them:
+```powershell
+git fetch origin
+git log origin/main --oneline -n 20 -- 'apps/web/app/(shell)/customer' apps/web/components/customer apps/web/components/customer-marketing
+gh pr list --state open --search "customer marketing OR crm OR pipeline" --limit 20
+```
+
+Expected: no overlapping commits or open PRs on the modified files.
+
+- [ ] **Step 7: Commit any verification fixes**
+
+If verification forced changes, stage only the specific files (per `feedback_git_commit_only_for_concurrent_sessions`, never `git add -A`):
 
 ```powershell
 git add apps/web/lib/crm/presentation.ts apps/web/lib/crm/presentation.test.ts apps/web/lib/crm/revenue-cockpit.ts apps/web/lib/crm/revenue-cockpit.test.ts apps/web/components/customer/CustomerMetricTile.tsx apps/web/components/customer/CustomerMetricTile.test.tsx apps/web/components/customer/CustomerStatusBadge.tsx apps/web/components/customer/CustomerStatusBadge.test.tsx apps/web/components/customer/RevenueCockpit.tsx apps/web/components/customer/RevenueCockpit.test.tsx apps/web/components/customer-marketing/MarketingTabNav.tsx apps/web/components/customer-marketing/MarketingTabNav.test.tsx 'apps/web/app/(shell)/customer/(crm)/page.tsx' 'apps/web/app/(shell)/customer/(crm)/opportunities/page.tsx' 'apps/web/app/(shell)/customer/(crm)/engagements/page.tsx' 'apps/web/app/(shell)/customer/(crm)/funnel/page.tsx'
 git commit -s -m "fix(customer): address crm cockpit verification issues"
 ```
 
-- [ ] **Step 7: Push the implementation branch**
+- [ ] **Step 8: Push the implementation branch**
 
 Run:
 
@@ -1617,6 +1759,35 @@ git status --short --branch
 git push -u origin feat/pipedrive-crm-marketing-slice-1
 ```
 
-Expected: branch pushed and tracking `origin/feat/pipedrive-crm-marketing-slice-1`.
+Expected: branch pushed and tracking `origin/feat/pipedrive-crm-marketing-slice-1`. Every commit must already carry `Signed-off-by:` (used `git commit -s` throughout) — DCO is enforced on PR merge.
 
-Do not open a PR until all verification above passes and the branch is ready to merge.
+- [ ] **Step 9: Open the PR**
+
+This slice is theme-aware refactor + dead-code removal + shared-helper extraction, which qualifies as a Claude-led maintenance PR (per `feedback_no_manual_prs`). Open it now — do not park the branch.
+
+```powershell
+$prBody = @'
+## Summary
+
+- Add `Today in revenue` cockpit band to `/customer` driven by a pure summary helper.
+- Extract theme-aware CRM presentation metadata (`apps/web/lib/crm/presentation.ts`) and replace hardcoded hex / inline color styles in 4 `(crm)` pages.
+- Add reusable `CustomerMetricTile`, `CustomerStatusBadge`, `RevenueCockpit` components.
+- Remove visible `Phase 2` / `Phase 3` placeholder tabs from `MarketingTabNav`; keep only implemented routes (Overview, Strategy).
+
+Implements Slice 1 of `docs/superpowers/specs/2026-05-26-pipedrive-inspired-crm-marketing-operations-design.md`. Respects the UX-governance rules in `docs/superpowers/specs/2026-04-25-customer-marketing-coworker-led-ux-correction.md` (no surprise coworker prompts — metric tiles are nav links, not send-buttons).
+
+Deferred to a tracked follow-up: hardcoded colors in `(crm)/[id]/page.tsx`, `(crm)/quotes/page.tsx`, `(crm)/sales-orders/page.tsx` — these will consume the same shared helper.
+
+## Test plan
+
+- [x] `pnpm --filter web test` passes
+- [x] `pnpm --filter web typecheck` passes
+- [x] `pnpm --filter web build` passes
+- [x] Contributor preview on `:3001` — `/customer`, `/customer/opportunities`, `/customer/engagements`, `/customer/funnel`, `/customer/marketing` render with theme tokens, GBP currency, no phase pills
+- [x] No hex / inline color regressions in touched files
+- [x] Mobile widths do not clip status badges or metric details
+'@
+gh pr create --title "feat(customer): pipedrive-inspired revenue cockpit + crm theme cleanup (slice 1)" --body $prBody
+```
+
+Expected: PR opens against `main`. Watch CI; address any concurrent-merge rebases promptly.
