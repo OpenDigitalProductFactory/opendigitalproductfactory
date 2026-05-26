@@ -11,7 +11,7 @@
 
 DPF has three skill substrates today that are not reconciled, all using the word "skill" to mean different things:
 
-- **Surface A (Claude Code contributors):** generic agentic skills come from a manually-copied snapshot of `obra/superpowers` v5.0.5 at [docs/Reference/superpowers/](../../Reference/superpowers/), with bytes-equivalent duplicates at [.claude/commands/](../../../.claude/commands/) and two DPF-native skills under [.claude/skills/](../../../.claude/skills/). No installer, no plugin manifest, no auto-update, no AGENTS.md cross-reference. A fresh contributor inherits a frozen 5.0.5 snapshot and has no documented path to discover what exists or how to invoke it.
+- **Surface A (Claude Code contributors):** generic agentic skills come from a manually-copied snapshot of `obra/superpowers` v5.0.5 in the retired reference mirror, with bytes-equivalent duplicates at [.claude/commands/](../../../.claude/commands/) and two DPF-native skills under [.claude/skills/](../../../.claude/skills/). No installer, no plugin manifest, no auto-update, no AGENTS.md cross-reference. A fresh contributor inherits a frozen 5.0.5 snapshot and has no documented path to discover what exists or how to invoke it.
 - **Surface B (in-portal coworkers):** 57 skills under [skills/&lt;category&gt;/*.skill.md](../../../skills/), parsed by [packages/db/src/seed-skills.ts](../../../packages/db/src/seed-skills.ts) and upserted to `SkillDefinition` + `SkillAssignment` on every portal seed run. Live and mature: each skill carries DPF-specific frontmatter (`category`, `assignTo`, `capability`, `taskType`, `triggerPattern`, `userInvocable` / `agentInvocable`, `composesFrom`, `contextRequirements`, `riskBand`) and rides a governance lifecycle (`active | stale | pinned | quarantined | archived`) per the Hermes learning loop ([packages/db/src/skill-lifecycle](../../../apps/web/lib/skills/lifecycle.ts)). The runtime is the in-portal coworker — not Claude Code.
 - **Surface C (founder kernel):** principles at [docs/founder-kernel/wiki/principles/](../../founder-kernel/wiki/principles/), retrievable via `wiki_query` and consulted by `principle_decide` ([apps/web/lib/wiki/principle-decide.ts](../../../apps/web/lib/wiki/principle-decide.ts)). Governance for both A and B but installed on neither.
 
@@ -55,7 +55,7 @@ This BI formalizes a **DPF skill pack** authored once in superset-SKILL.md forma
 - *Surface A:* A fresh clone + portal install ends with a contributor who can type `/dpf-decision-via-kernel` (or any DPF skill) and have it work, with no manual `/plugin install` step. A worktree created with `git worktree add` inherits the plugin without manual file copying. Upstream `obra/superpowers` installed alongside the DPF pack does not produce name collisions or ambiguous resolutions.
 - *Surface B:* The same SKILL.md files are visible in the portal at `/admin/skills` as `SkillDefinition` rows after a portal seed run, assigned to the agents named in their frontmatter `assignTo` array. An in-portal coworker invoked on a route that matches the skill's `triggerPattern` resolves the skill from the plugin source, not from a duplicate legacy `.skill.md` file. When a slug collides between plugin and legacy, the plugin wins and a startup warning names the legacy file.
 - *Surface C:* `dpf-decision-via-kernel` invocation from EITHER surface (Claude Code session or in-portal coworker) calls `principle_decide`, surfaces the contribution ledger to the operator, and defers if commandment conflict is flagged.
-- *Cleanup:* [docs/Reference/superpowers/](../../Reference/superpowers/) is deleted; [.claude/commands/](../../../.claude/commands/) is reduced to DPF-only commands not better expressed as skills. AGENTS.md gains a §16 enumerating both surfaces' skill discovery paths in one place.
+- *Cleanup:* The retired superpowers reference mirror is deleted; [.claude/commands/](../../../.claude/commands/) is reduced to DPF-only commands not better expressed as skills. AGENTS.md gains a §16 enumerating both surfaces' skill discovery paths in one place.
 - *Bug fix:* `principle_decide` semantic-fallback path returns non-zero alignment on a `features: {}` call — i.e. the dead-code embedding plumbing at [principle-decide.ts:117](../../../apps/web/lib/wiki/principle-decide.ts:117) is wired through the MCP handler.
 - *Verification evidence:* dynamic-analysis report covering BOTH surfaces (drove every DPF skill from a fresh worktree via Claude Code; verified each appears as a `SkillDefinition` row and is invocable by the assigned coworker via the portal UI; ledger surfaced for `dpf-decision-via-kernel` on both paths).
 
@@ -64,13 +64,13 @@ This BI formalizes a **DPF skill pack** authored once in superset-SKILL.md forma
 ### 3.1 BI — Pre-work audit of existing snapshot edits
 
 ```
-Title:        Audit .claude/commands/ and docs/Reference/superpowers/ for DPF-specific edits
+Title:        Audit .claude/commands/ and the retired superpowers reference mirror for DPF-specific edits
 Type:         product (audit-only)
 Parent:       [parent BI from §2]
 Size:         S
 ```
 
-Before deletion, diff every file under [docs/Reference/superpowers/](../../Reference/superpowers/) and [.claude/commands/](../../../.claude/commands/) against the upstream `obra/superpowers` v5.0.5 release tag. Identify any DPF-specific additions, removals, or wording shifts that someone made on top of the snapshot and that would be lost in the retirement step. Examples of what to look for: the [tool-evaluation.md](../../../.claude/commands/tool-evaluation.md) command (DPF-only, must be preserved); the [build-studio-operator.md](../../../.claude/commands/build-studio-operator.md) command (DPF-only); MCP-tool references like the `search_code_graph` hint at [writing-plans.md:13](../../Reference/superpowers/skills/writing-plans.md:13); any cross-references to DPF specs/paths inside generic-looking skill bodies.
+Before deletion, diff every file under the retired superpowers reference mirror and [.claude/commands/](../../../.claude/commands/) against the upstream `obra/superpowers` v5.0.5 release tag. Identify any DPF-specific additions, removals, or wording shifts that someone made on top of the snapshot and that would be lost in the retirement step. Examples of what to look for: the [tool-evaluation.md](../../../.claude/commands/tool-evaluation.md) command (DPF-only, must be preserved); the [build-studio-operator.md](../../../.claude/commands/build-studio-operator.md) command (DPF-only); MCP-tool references like the `search_code_graph` hint in the retired `writing-plans.md` skill; any cross-references to DPF specs/paths inside generic-looking skill bodies.
 
 **Acceptance criteria**
 
@@ -240,7 +240,7 @@ Add a §16 to [AGENTS.md](../../../AGENTS.md) per the OpenAI Codex AGENTS.md con
 ### 3.6 BI — Retire manual superpowers snapshot and duplicate slash commands
 
 ```
-Title:        Delete docs/Reference/superpowers/ and the duplicated .claude/commands/ files
+Title:        Delete the retired superpowers reference mirror and the duplicated .claude/commands/ files
 Type:         chore
 Parent:       [parent BI from §2]
 Blocked by:   BI 3.1, BI 3.4, BI 3.5
@@ -249,13 +249,13 @@ Size:         XS
 
 Once the audit (3.1) has carried forward DPF-specific edits, the auto-install (3.4) provides equivalent or better skills via the plugin, and AGENTS.md (3.5) tells future contributors where to look, delete:
 
-- The entire [docs/Reference/superpowers/](../../Reference/superpowers/) directory.
+- The entire retired superpowers reference mirror.
 - The duplicated [.claude/commands/](../../../.claude/commands/) files that are bytes-equivalent to superpowers (12 skill commands + 5 prompt commands).
 - Keep [.claude/commands/tool-evaluation.md](../../../.claude/commands/tool-evaluation.md) and [.claude/commands/build-studio-operator.md](../../../.claude/commands/build-studio-operator.md) (DPF-only) for now; consider re-homing them into the plugin in a separate BI if it makes sense after the dust settles.
 
 **Acceptance criteria**
 
-- `git grep` for any reference to `docs/Reference/superpowers/` returns no matches outside of changelog/audit entries.
+- `git grep` for any reference to the retired superpowers reference path returns no matches outside of changelog/audit entries.
 - An agent session started from a fresh clone (with the plugin installed via 3.4) can still answer "what skills do you have for planning?" correctly.
 
 ### 3.7 BI — Fix principle_decide semantic-fallback embedding plumbing

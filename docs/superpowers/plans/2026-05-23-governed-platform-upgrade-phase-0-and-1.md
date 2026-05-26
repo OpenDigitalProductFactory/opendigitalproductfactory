@@ -1266,7 +1266,7 @@ When you reach Phase 2, dispatch a fresh writing-plans run with this section as 
 
 ## Execution Handoff
 
-Recommended execution mode per [superpowers:subagent-driven-development](../../Reference/superpowers/prompts/subagent-driven-development.md):
+Recommended execution mode per `superpowers:subagent-driven-development`:
 
 - **One subagent per task**, fresh context each time
 - **Operator review between tasks** — particularly between Task 5 (deletions) and Task 6 (resolveTargetSha log)
