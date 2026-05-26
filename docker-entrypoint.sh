@@ -93,7 +93,7 @@ install_workspace_dependencies() {
   cd "$WORKSPACE"
   pnpm install --frozen-lockfile --config.confirmModulesPurge=false --ignore-scripts 2>&1 || pnpm install --config.confirmModulesPurge=false --ignore-scripts 2>&1
   echo "  Dependencies installed"
-  pnpm exec prisma generate --schema packages/db/prisma/schema.prisma 2>&1 || echo "  WARN prisma generate failed (non-fatal)"
+  pnpm --filter @dpf/db exec prisma generate --schema prisma/schema.prisma 2>&1 || echo "  WARN prisma generate failed (non-fatal)"
 }
 
 is_workspace_housekeeping_status() {
