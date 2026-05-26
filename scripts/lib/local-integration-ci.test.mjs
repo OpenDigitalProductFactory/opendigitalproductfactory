@@ -7,6 +7,7 @@ describe("createLocalIntegrationPlan", () => {
       candidateBranch: "doc/build-studio-decision-skill-packs",
       mode: "single-branch",
       siblingBranches: [],
+      hostPlatform: "linux",
     });
 
     expect(plan.commands.map((command) => command.join(" "))).toEqual([
@@ -32,6 +33,22 @@ describe("createLocalIntegrationPlan", () => {
     );
     expect(plan.commands.map((command) => command.join(" "))).toContain(
       "git merge --no-ff --no-edit fix/build-studio-copy",
+    );
+  });
+
+  it("uses a Docker production build on Windows hosts", () => {
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "feat/build-studio-decision-skills-slice-1",
+      mode: "single-branch",
+      siblingBranches: [],
+      hostPlatform: "win32",
+    });
+
+    expect(plan.commands.map((command) => command.join(" "))).toContain(
+      "docker build --target build -t dpf-local-integration-feat-build-studio-decision-skills-slice-1-build .",
+    );
+    expect(plan.commands.map((command) => command.join(" "))).not.toContain(
+      "pnpm --filter web exec next build",
     );
   });
 });

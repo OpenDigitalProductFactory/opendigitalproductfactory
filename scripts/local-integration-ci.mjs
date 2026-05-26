@@ -9,6 +9,7 @@ function valueAfter(flag) {
 
 const candidateBranch = valueAfter("--candidate");
 const mode = valueAfter("--mode") || "single-branch";
+const buildStrategy = valueAfter("--build-strategy");
 const siblingBranches = process.argv
   .filter((arg) => arg.startsWith("--sibling="))
   .map((arg) => arg.slice("--sibling=".length));
@@ -18,7 +19,12 @@ if (!candidateBranch) {
   process.exit(2);
 }
 
-const plan = createLocalIntegrationPlan({ candidateBranch, mode, siblingBranches });
+const plan = createLocalIntegrationPlan({
+  candidateBranch,
+  mode,
+  siblingBranches,
+  buildStrategy: buildStrategy || undefined,
+});
 for (const command of plan.commands) {
   console.log(`[local-integration-ci] ${command.join(" ")}`);
   const result = spawnSync(command[0], command.slice(1), {

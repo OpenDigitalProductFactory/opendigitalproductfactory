@@ -7,8 +7,20 @@ export function integrationBranchName(candidateBranch) {
   }`;
 }
 
+export function defaultBuildStrategy(hostPlatform = process.platform) {
+  return hostPlatform === "win32" ? "docker-build" : "host-next";
+}
+
+export function dockerBuildTag(candidateBranch) {
+  return `dpf-${integrationBranchName(candidateBranch).replace(/\//g, "-")}-build`;
+}
+
 export function createLocalIntegrationPlan(input) {
   const branch = integrationBranchName(input.candidateBranch);
+  const buildStrategy = input.buildStrategy ?? defaultBuildStrategy(input.hostPlatform);
+  const productionBuildCommand = buildStrategy === "docker-build"
+    ? ["docker", "build", "--target", "build", "-t", dockerBuildTag(input.candidateBranch), "."]
+    : ["pnpm", "--filter", "web", "exec", "next", "build"];
   const commands = [
     ["git", "fetch", "origin", "main"],
     ["git", "checkout", "-B", branch, "origin/main"],
@@ -16,11 +28,12 @@ export function createLocalIntegrationPlan(input) {
     ...input.siblingBranches.map((sibling) => ["git", "merge", "--no-ff", "--no-edit", sibling]),
     ["pnpm", "--filter", "web", "exec", "vitest", "run"],
     ["pnpm", "--filter", "web", "typecheck"],
-    ["pnpm", "--filter", "web", "exec", "next", "build"],
+    productionBuildCommand,
   ];
   return {
     mode: input.mode,
     integrationBranch: branch,
+    buildStrategy,
     commands,
   };
 }
