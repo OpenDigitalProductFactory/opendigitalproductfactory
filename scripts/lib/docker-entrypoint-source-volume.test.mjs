@@ -47,3 +47,19 @@ test("workspace dependency install disables pnpm's interactive modules purge pro
     "both frozen and fallback pnpm install commands should disable the non-TTY modules purge prompt",
   );
 });
+
+test("workspace dependency install skips lifecycle scripts before explicit Prisma generation", () => {
+  const body = functionBody("install_workspace_dependencies");
+  const installMatches = [...body.matchAll(/pnpm install(?: --frozen-lockfile)? --config\.confirmModulesPurge=false --ignore-scripts/g)];
+
+  assert.equal(
+    installMatches.length,
+    2,
+    "both install commands should skip lifecycle scripts while the node_modules tree is being recreated",
+  );
+  assert.match(
+    body,
+    /pnpm --filter @dpf\/db exec prisma generate/,
+    "Prisma generation should remain an explicit ordered step after dependency installation",
+  );
+});
