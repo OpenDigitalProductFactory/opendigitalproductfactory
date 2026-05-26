@@ -300,6 +300,23 @@ describe("TOOL_TO_GRANTS - Work Capsule entries", () => {
   });
 });
 
+describe("TOOL_TO_GRANTS - External development coordination entries", () => {
+  it("evidence recording tools require backlog_write", () => {
+    expect(isToolAllowedByGrants("record_external_development_evidence", ["backlog_write"])).toBe(true);
+    expect(isToolAllowedByGrants("record_local_integration_result", ["backlog_write"])).toBe(true);
+    expect(isToolAllowedByGrants("record_external_development_evidence", ["registry_read"])).toBe(false);
+    expect(isToolAllowedByGrants("record_local_integration_result", ["work_capsule_write"])).toBe(false);
+  });
+
+  it("nonproduction environment lease tools require work capsule coordination grants", () => {
+    expect(isToolAllowedByGrants("list_nonprod_environment_leases", ["work_capsule_read"])).toBe(true);
+    expect(isToolAllowedByGrants("claim_nonprod_environment_lease", ["work_capsule_write"])).toBe(true);
+    expect(isToolAllowedByGrants("release_nonprod_environment_lease", ["work_capsule_write"])).toBe(true);
+    expect(isToolAllowedByGrants("claim_nonprod_environment_lease", ["sandbox_execute"])).toBe(false);
+    expect(isToolAllowedByGrants("release_nonprod_environment_lease", ["work_capsule_read"])).toBe(false);
+  });
+});
+
 describe("orchestrator with only build-plan grants cannot use sandbox tools", () => {
   const plannerGrants = ["build_plan_write", "backlog_write"];
 

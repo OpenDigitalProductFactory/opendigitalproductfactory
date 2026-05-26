@@ -26,6 +26,8 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   link_backlog_item_to_epic: ["backlog_write"],
   search_specs_and_plans: ["spec_plan_read", "backlog_read"],
   record_execution_evidence: ["backlog_write"],
+  record_external_development_evidence: ["backlog_write"],
+  record_local_integration_result: ["backlog_write"],
   record_functional_failure_evidence: ["backlog_write"],
   get_next_recommended_work: ["backlog_read"],
 
@@ -45,6 +47,9 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   heartbeat_runtime_target: ["work_capsule_write"],
   release_runtime_target: ["work_capsule_write"],
   record_runtime_verification: ["work_capsule_write"],
+  list_nonprod_environment_leases: ["work_capsule_read"],
+  claim_nonprod_environment_lease: ["work_capsule_write"],
+  release_nonprod_environment_lease: ["work_capsule_write"],
 
   // Backlog triage and Build Studio promotion (spec 2026-04-21)
   // These were defined in PLATFORM_TOOLS but missing here, so every call was
