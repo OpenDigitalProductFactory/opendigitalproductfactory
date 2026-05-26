@@ -999,7 +999,7 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
   }
 
   const workspace = process.env["PROJECT_ROOT"] ?? "/workspace";
-  const gitOpts = { cwd: workspace, timeout: 30_000 };
+  const gitOpts = { cwd: workspace, timeout: 180_000 };
 
   try {
     // Check for in-progress merge from a previous interrupted run

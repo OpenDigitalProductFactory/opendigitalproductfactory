@@ -288,6 +288,10 @@ describe("applyPlatformUpdate", () => {
     expect(commands).toContain("git diff --quiet --ignore-cr-at-eol -- apps/web packages");
     expect(commands).toContain("git diff --cached --quiet --ignore-cr-at-eol -- apps/web packages");
     expect(commands).toContain("git checkout dpf-upstream");
+    const diffCall = mockExec.mock.calls.find(
+      ([cmd]) => cmd === "git diff --quiet --ignore-cr-at-eol -- apps/web packages",
+    );
+    expect((diffCall?.[1] as { timeout?: number } | undefined)?.timeout).toBeGreaterThanOrEqual(120_000);
   });
 
   it("repairs missing managed update branches before applying the update", async () => {
