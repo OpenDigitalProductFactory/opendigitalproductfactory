@@ -29,7 +29,7 @@
 
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 
 import { DecompositionAssistantPanel } from "@/components/build/DecompositionAssistantPanel";
 import { DecompositionGateBanner } from "@/components/build/DecompositionGateBanner";
@@ -55,6 +55,8 @@ export type DecompositionCoordinatorProps = {
   /** Already-recorded override, if any. When non-null the banner shows the
    *  chip instead of the action row. */
   existingOverride?: DecompositionOverrideSnapshot | null;
+  /** Phase 7: hidden entry point for D38 Plan-review oscillation. */
+  planOscillationEntry?: boolean;
 };
 
 type FlightState =
@@ -71,6 +73,7 @@ export function DecompositionCoordinator(props: DecompositionCoordinatorProps) {
     assessment,
     initialCandidates,
     existingOverride,
+    planOscillationEntry,
   } = props;
 
   const [_isPending, startTransition] = useTransition();
@@ -81,13 +84,13 @@ export function DecompositionCoordinator(props: DecompositionCoordinatorProps) {
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Self-gate matches the banner's. No render when no signal.
-  if (!assessment || assessment.decision === "ok") return null;
+  const shouldRenderBanner = assessment != null && assessment.decision !== "ok";
+  const shouldHandlePlanOscillation = planOscillationEntry === true;
 
   const decisionLabel: "decompose-required" | "decompose-recommended" =
-    assessment.decision === "decompose-required" ? "decompose-required" : "decompose-recommended";
+    assessment?.decision === "decompose-required" ? "decompose-required" : "decompose-recommended";
 
-  const proposeAndOpen = (operatorHint?: string) => {
+  const proposeAndOpen = useCallback((operatorHint?: string) => {
     setErrorMessage(null);
     setFlight({ kind: "proposing" });
     startTransition(async () => {
@@ -111,9 +114,9 @@ export function DecompositionCoordinator(props: DecompositionCoordinatorProps) {
         setFlight({ kind: "idle" });
       }
     });
-  };
+  }, [buildId, startTransition]);
 
-  const handleProposeSplits = () => {
+  const handleProposeSplits = useCallback(() => {
     // If we already have a persisted candidate set, open the panel directly
     // without a fresh LLM call. Otherwise, propose first.
     if (candidates.length > 0) {
@@ -122,7 +125,20 @@ export function DecompositionCoordinator(props: DecompositionCoordinatorProps) {
       return;
     }
     proposeAndOpen();
-  };
+  }, [candidates.length, proposeAndOpen]);
+
+  useEffect(() => {
+    if (!shouldHandlePlanOscillation) return;
+
+    const handleOpen = (event: Event) => {
+      const detail = (event as CustomEvent<{ buildId?: unknown }>).detail;
+      if (detail?.buildId !== buildId) return;
+      handleProposeSplits();
+    };
+
+    document.addEventListener("open-build-decomposition", handleOpen);
+    return () => document.removeEventListener("open-build-decomposition", handleOpen);
+  }, [buildId, handleProposeSplits, shouldHandlePlanOscillation]);
 
   const handleApprove = (candidate: DecompositionCandidate) => {
     setErrorMessage(null);
@@ -180,15 +196,21 @@ export function DecompositionCoordinator(props: DecompositionCoordinatorProps) {
     });
   };
 
+  if (!shouldRenderBanner && !shouldHandlePlanOscillation && !panelOpen) {
+    return null;
+  }
+
   return (
     <>
-      <DecompositionGateBanner
-        assessment={assessment}
-        onProposeSplits={handleProposeSplits}
-        onRecordOverride={handleRecordOverride}
-        actionsDisabled={flight.kind !== "idle"}
-        existingOverride={existingOverride ?? null}
-      />
+      {shouldRenderBanner && assessment && (
+        <DecompositionGateBanner
+          assessment={assessment}
+          onProposeSplits={handleProposeSplits}
+          onRecordOverride={handleRecordOverride}
+          actionsDisabled={flight.kind !== "idle"}
+          existingOverride={existingOverride ?? null}
+        />
+      )}
       {errorMessage && (
         <p
           data-testid="decomposition-coordinator-error"

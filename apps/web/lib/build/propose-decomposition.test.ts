@@ -83,6 +83,7 @@ type FakeBuildShape = {
   phase: string;
   designDoc: unknown;
   designReview: unknown;
+  planReview: unknown;
   parentEpicId: string | null;
 };
 
@@ -109,6 +110,7 @@ function makeBuild(overrides: Partial<FakeBuildShape> = {}): FakeBuildShape {
     phase: "ideate",
     designDoc: makeDesignDoc(),
     designReview: makeReview("decompose-required"),
+    planReview: null,
     parentEpicId: null,
     ...overrides,
   };
@@ -133,8 +135,8 @@ describe("proposeDecomposition — eligibility checks", () => {
     expect(result.code).toBe("build-not-found");
   });
 
-  it("rejects when build is not in ideate", async () => {
-    const { db } = makeFakeDb(makeBuild({ phase: "plan" }));
+  it("rejects when build is neither ideate nor an oscillating plan build", async () => {
+    const { db } = makeFakeDb(makeBuild({ phase: "build" }));
     const result = await proposeDecomposition({
       buildId: "FB-DALE",
       userId: "u",
@@ -145,6 +147,40 @@ describe("proposeDecomposition — eligibility checks", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
     expect(result.code).toBe("build-not-in-ideate");
+  });
+
+  it("allows an oscillating plan build and writes a retroactive size assessment", async () => {
+    const build = makeBuild({
+      phase: "plan",
+      designReview: makeReview(null),
+      planReview: {
+        decision: "fail",
+        summary: "Plan keeps trading scope issues.",
+        issues: [],
+        iteration: {
+          round: 3,
+          prior: { issueCount: 8, addressed: 2, persisted: 5, newlySurfaced: 3 },
+          oscillating: true,
+        },
+      },
+    });
+    const { db, updates } = makeFakeDb(build);
+    const result = await proposeDecomposition({
+      buildId: "FB-DALE",
+      userId: "u",
+      callAgent: vi.fn(async () => JSON.stringify({ candidates: [makeValidCandidate()] })),
+      db,
+      now: fixedNow,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(updates).toHaveLength(1);
+    const persisted = updates[0]!.data.designReview as {
+      sizeAssessment?: SizeAssessmentSnapshot;
+      decompositionCandidates?: { latest: DecompositionCandidate[] };
+    };
+    expect(persisted.sizeAssessment?.assessedAt).toBe("2026-05-24T20:30:00.000Z");
+    expect(persisted.decompositionCandidates?.latest).toHaveLength(1);
   });
 
   it("rejects when designDoc is missing", async () => {

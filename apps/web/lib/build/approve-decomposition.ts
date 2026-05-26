@@ -30,6 +30,7 @@
 import { prisma } from "@dpf/db";
 import { generateBuildId } from "@/lib/explore/feature-build-types";
 import type { BuildDesignDoc, ReviewResult } from "@/lib/explore/feature-build-types";
+import { isPlanReviewOscillating } from "@/lib/build/plan-oscillation-decomposition";
 
 import {
   candidateToChildDesignDocs,
@@ -142,6 +143,7 @@ export async function approveDecomposition(
       phase: true,
       designDoc: true,
       designReview: true,
+      planReview: true,
       parentEpicId: true,
       originatingBacklogItemId: true,
       digitalProductId: true,
@@ -155,11 +157,15 @@ export async function approveDecomposition(
   }
 
   // 2. Eligibility checks.
-  if (build.phase !== "ideate") {
+  const planReview = (build.planReview ?? null) as ReviewResult | null;
+  const planOscillationEntry =
+    build.phase === "plan" && isPlanReviewOscillating(planReview);
+
+  if (build.phase !== "ideate" && !planOscillationEntry) {
     return {
       ok: false,
       code: "build-not-in-ideate",
-      error: `Build is in phase "${build.phase}". Decomposition is only allowed during ideate.`,
+      error: `Build is in phase "${build.phase}". Decomposition is only allowed during ideate or an oscillating Plan review.`,
     };
   }
   const designDoc = build.designDoc as BuildDesignDoc | null;

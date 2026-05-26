@@ -139,6 +139,10 @@ export function BuildStudioWorkflowActionCard({
         return "Resetting build...";
       case "resume-implementation":
         return "Reopening implementation...";
+      case "decompose-now":
+        return "Opening decomposition...";
+      case "amend-parent-design":
+        return "Opening parent design...";
       default:
         return action.primaryLabel;
     }
@@ -166,6 +170,14 @@ export function BuildStudioWorkflowActionCard({
         await resetBuildExecution(build.buildId);
       } else if (action.kind === "resume-implementation") {
         setLastOutcome(await resumeBuildImplementation(build.buildId));
+      } else if (action.kind === "decompose-now") {
+        document.dispatchEvent(
+          new CustomEvent("open-build-decomposition", {
+            detail: { buildId: build.buildId },
+          }),
+        );
+      } else if (action.kind === "amend-parent-design") {
+        handleCoworkerAction();
       }
 
       window.dispatchEvent(
