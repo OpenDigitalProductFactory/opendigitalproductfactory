@@ -2,7 +2,7 @@
 title: "Development Workspace"
 area: getting-started
 order: 6
-lastUpdated: 2026-04-05
+lastUpdated: 2026-05-26
 updatedBy: Codex
 ---
 
@@ -74,6 +74,35 @@ The recommended branch pattern is:
 
 - one durable branch per install, such as `install/<install-slug>`
 - short-lived export branches only when preparing an upstream PR
+
+## Platform Updates And Notifications
+
+The portal has two related update paths, and they answer different questions.
+
+### Shared-workspace update banner
+
+The banner at the top of the portal is the operator-facing signal that a newer platform image is present but the install's shared workspace still needs attention.
+
+On portal bootstrap, the runtime compares:
+
+- the running image version from `/app/.dpf-image-version`
+- the shared workspace version from `/workspace/.dpf-version`
+
+If the versions match, nothing is shown. If the image is newer and the shared workspace has no user changes, the bootstrap refreshes the managed source workspace from the image and clears the pending-update flag.
+
+If the image is newer and the shared workspace has local/source changes, the bootstrap does not overwrite them. Instead it writes `PlatformDevConfig.updatePending = true` and stores the image version in `PlatformDevConfig.pendingVersion`. Users with `manage_platform` see a portal banner that links to **Admin > Platform Development**, where the **Apply update** panel merges the new platform source into the install's `my-changes` branch.
+
+The apply action preserves customisations. A clean merge writes the new `.dpf-version` value and clears the banner. If Git reports conflicts, the merge pauses in the shared workspace and the panel lists the conflicted files for review instead of guessing a resolution.
+
+This banner is not a browser polling loop. It reflects the latest server-side platform-development state whenever the shell renders. The state is normally changed by bootstrap/redeploy work, or by the apply action clearing a completed update.
+
+### Governed self-upgrade runner
+
+The operations self-upgrade path is separate from the shared-workspace banner. It lives at `/ops/self-upgrade` and records `SelfUpgradeRun` history for governed portal upgrades.
+
+When scheduled Inngest functions are enabled for the install and `PlatformConfig["self_upgrade"].enabled` is true, the `ops/self-upgrade-scheduled` function runs hourly. Each run checks the configured target branch, skips when the install is disabled, outside its maintenance window, already up to date, missing a target, or already running an upgrade, and otherwise runs the same quiescence, promotion, health, and rollback path used by manual self-upgrade requests.
+
+The manual operation uses the `ops/self-upgrade.run` event and the same runner. This path answers "can the running portal upgrade itself under governed operations controls?" The shared-workspace banner answers "does the local install workspace need to merge newer platform source?"
 
 ## Production, Development, And Validation Data
 
