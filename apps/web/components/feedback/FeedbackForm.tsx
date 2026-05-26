@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { FeedbackAutoFilePolicy, FeedbackTriggerKind } from "@/lib/feedback/feedback-event";
 import { submitReport } from "@/lib/quality-queue";
 
 type Props = {
@@ -9,6 +10,9 @@ type Props = {
   errorMessage?: string;
   errorStack?: string;
   source?: string;
+  triggerKind?: FeedbackTriggerKind;
+  supportSessionId?: string;
+  autoFilePolicy?: FeedbackAutoFilePolicy;
   onClose?: () => void;
 };
 
@@ -18,6 +22,9 @@ export function FeedbackForm({
   errorMessage,
   errorStack,
   source,
+  triggerKind,
+  supportSessionId,
+  autoFilePolicy,
   onClose,
 }: Props) {
   const [type, setType] = useState<string>(errorMessage ? "runtime_error" : "user_report");
@@ -36,6 +43,9 @@ export function FeedbackForm({
       ...(errorStack !== undefined && { errorStack }),
       source: source ?? "manual",
       ...(userId != null && { userId }),
+      ...(triggerKind !== undefined && { triggerKind }),
+      ...(supportSessionId !== undefined && { supportSessionId }),
+      ...(autoFilePolicy !== undefined && { autoFilePolicy }),
     });
     if (result.ok && result.reportId) {
       setReportId(result.reportId);
