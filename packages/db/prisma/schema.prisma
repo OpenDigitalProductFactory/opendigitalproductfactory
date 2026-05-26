@@ -4305,6 +4305,34 @@ model ExternalEvidenceRecord {
   @@index([taskRunId, createdAt])
 }
 
+model NonProductionEnvironmentLease {
+  id               String    @id @default(cuid())
+  leaseId          String    @unique
+  environmentKey   String
+  status           String    @default("active")
+  ownerProvider    String
+  ownerSessionId   String
+  purpose          String
+  worktreePath     String?
+  branchName       String?
+  buildId          String?
+  taskRunId        String?
+  url              String
+  ports            Int[]     @default([])
+  cleanupCommand   String?
+  evidenceRecordId String?
+  expiresAt        DateTime
+  releasedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([environmentKey, status])
+  @@index([ownerProvider, ownerSessionId])
+  @@index([buildId, createdAt])
+  @@index([taskRunId, createdAt])
+  @@index([expiresAt])
+}
+
 model FeatureBuild {
   id                       String                  @id @default(cuid())
   buildId                  String                  @unique

@@ -1116,6 +1116,61 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     buildPhases: ["ideate", "plan", "build", "review", "ship"],
   },
   {
+    name: "list_nonprod_environment_leases",
+    description: "List active, unexpired nonproduction environment leases so agents can reuse governed shared localhost environments instead of starting unmanaged servers.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
+    name: "claim_nonprod_environment_lease",
+    description: "Claim a governed shared nonproduction environment lease for preview, UX verification, or local integration. Returns a conflict instead of allowing another unmanaged server.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        environmentKey: { type: "string", enum: ["active-candidate", "local-integration-ci"] },
+        ownerProvider: { type: "string", enum: ["build-studio", "claude", "codex", "coworker"] },
+        ownerSessionId: { type: "string" },
+        purpose: { type: "string" },
+        url: { type: "string" },
+        ports: { type: "array", items: { type: "number" } },
+        expiresAt: { type: "string", description: "ISO timestamp when the lease expires" },
+        worktreePath: { type: "string" },
+        branchName: { type: "string" },
+        buildId: { type: "string" },
+        taskRunId: { type: "string" },
+        cleanupCommand: { type: "string" },
+      },
+      required: ["environmentKey", "ownerProvider", "ownerSessionId", "purpose", "url", "ports", "expiresAt"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+  },
+  {
+    name: "release_nonprod_environment_lease",
+    description: "Release a governed shared nonproduction environment lease after verification is complete or blocked.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        leaseId: { type: "string" },
+      },
+      required: ["leaseId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+  },
+  {
     name: "record_functional_failure_evidence",
     description: "Create or update a deduped backlog item from Playwright FunctionalFailureEvidence. Uses a deterministic testId+route+actual fingerprint and records an evidence activity; the cross-cutting audit lives in ToolExecution. Side-effecting.",
     inputSchema: {
@@ -5669,6 +5724,106 @@ export async function executeTool(
           buildId: buildId ?? null,
           taskRunId: taskRunId ?? null,
         },
+      };
+    }
+
+    case "list_nonprod_environment_leases": {
+      const { listActiveNonprodEnvironmentLeases } = await import("@/lib/nonprod/environment-lease");
+      const leases = await listActiveNonprodEnvironmentLeases({});
+      return {
+        success: true,
+        message: `Found ${leases.length} active nonproduction environment lease(s).`,
+        data: { leases },
+      };
+    }
+
+    case "claim_nonprod_environment_lease": {
+      const { claimNonprodEnvironmentLease } = await import("@/lib/nonprod/environment-lease");
+      const stringValue = (key: string) => (typeof params[key] === "string" ? String(params[key]).trim() : "");
+      const environmentKey = stringValue("environmentKey");
+      const ownerProvider = stringValue("ownerProvider");
+      const ownerSessionId = stringValue("ownerSessionId");
+      const purpose = stringValue("purpose");
+      const url = stringValue("url");
+      const expiresAtText = stringValue("expiresAt");
+      const ports = Array.isArray(params["ports"])
+        ? (params["ports"] as unknown[])
+          .map((value) => typeof value === "number" ? value : Number(value))
+          .filter((value) => Number.isInteger(value) && value > 0)
+        : [];
+      const missing = [
+        ["environmentKey", environmentKey],
+        ["ownerProvider", ownerProvider],
+        ["ownerSessionId", ownerSessionId],
+        ["purpose", purpose],
+        ["url", url],
+        ["expiresAt", expiresAtText],
+      ].filter(([, value]) => !value).map(([key]) => key);
+      if (ports.length === 0) missing.push("ports");
+      if (missing.length > 0) {
+        return {
+          success: false,
+          error: "missing_required",
+          message: `Missing required nonproduction lease field(s): ${missing.join(", ")}`,
+        };
+      }
+      if (!["active-candidate", "local-integration-ci"].includes(environmentKey)) {
+        return { success: false, error: "invalid_environment_key", message: `Unsupported environmentKey: ${environmentKey}` };
+      }
+      if (!["build-studio", "claude", "codex", "coworker"].includes(ownerProvider)) {
+        return { success: false, error: "invalid_owner_provider", message: `Unsupported ownerProvider: ${ownerProvider}` };
+      }
+      const expiresAt = new Date(expiresAtText);
+      if (Number.isNaN(expiresAt.getTime())) {
+        return { success: false, error: "invalid_expires_at", message: "expiresAt must be a valid ISO timestamp" };
+      }
+
+      const result = await claimNonprodEnvironmentLease({
+        environmentKey: environmentKey as "active-candidate" | "local-integration-ci",
+        ownerProvider: ownerProvider as "build-studio" | "claude" | "codex" | "coworker",
+        ownerSessionId,
+        purpose,
+        url,
+        ports,
+        expiresAt,
+        worktreePath: stringValue("worktreePath") || undefined,
+        branchName: stringValue("branchName") || undefined,
+        buildId: stringValue("buildId") || undefined,
+        taskRunId: stringValue("taskRunId") || undefined,
+        cleanupCommand: stringValue("cleanupCommand") || undefined,
+      });
+      if (result.status === "conflict") {
+        return {
+          success: false,
+          error: "lease_conflict",
+          message: "Shared nonproduction environment is already leased.",
+          data: { active: result.active as unknown as Record<string, unknown> },
+        };
+      }
+      return {
+        success: true,
+        entityId: result.lease.leaseId,
+        message: `Claimed nonproduction environment lease ${result.lease.leaseId}.`,
+        data: { lease: result.lease },
+      };
+    }
+
+    case "release_nonprod_environment_lease": {
+      const { releaseNonprodEnvironmentLease } = await import("@/lib/nonprod/environment-lease");
+      const leaseId = typeof params["leaseId"] === "string" ? params["leaseId"].trim() : "";
+      if (!leaseId) {
+        return {
+          success: false,
+          error: "missing_required",
+          message: "leaseId is required",
+        };
+      }
+      const lease = await releaseNonprodEnvironmentLease({ leaseId });
+      return {
+        success: true,
+        entityId: lease.leaseId,
+        message: `Released nonproduction environment lease ${lease.leaseId}.`,
+        data: { lease },
       };
     }
 
