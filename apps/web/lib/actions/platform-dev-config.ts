@@ -956,6 +956,10 @@ async function finishPlatformUpdateMerge(
     pendingVersion,
     "utf-8",
   );
+  await execUpdate(
+    "git update-index --skip-worktree .dpf-version 2>/dev/null || true",
+    gitOpts,
+  );
 
   await prisma.platformDevConfig.update({
     where: { id: "singleton" },
