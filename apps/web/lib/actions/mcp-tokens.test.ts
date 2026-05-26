@@ -180,15 +180,11 @@ describe("getMyContributorMcpReadiness", () => {
       probe: { status: "not_run" },
     });
 
-    const result = await getMyContributorMcpReadiness({
-      probe: true,
-      baseUrl: "http://localhost:3000",
-    });
+    const result = await getMyContributorMcpReadiness({ probe: true });
 
     expect(result.ok).toBe(true);
     expect(readinessMock).toHaveBeenCalledWith("u1", {
       probe: true,
-      baseUrl: "http://localhost:3000",
     });
     expect(JSON.stringify(result)).not.toContain("dpfmcp_SECRET");
   });

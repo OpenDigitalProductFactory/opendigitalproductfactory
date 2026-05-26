@@ -265,7 +265,7 @@ export function McpTokenManager(props: McpTokenManagerProps) {
         listMyMcpTokens(),
         listAvailableMcpScopes(),
         listMcpTokenTemplates(),
-        getMyContributorMcpReadiness({ probe: false, baseUrl: props.baseUrl }),
+        getMyContributorMcpReadiness({ probe: false }),
       ]);
       if (cancelled) return;
       if (tokensResult.ok) {
@@ -285,13 +285,13 @@ export function McpTokenManager(props: McpTokenManagerProps) {
     return () => {
       cancelled = true;
     };
-  }, [props.baseUrl]);
+  }, []);
 
   function refresh() {
     startTransition(async () => {
       const [tokensResult, readinessResult] = await Promise.all([
         listMyMcpTokens(),
-        getMyContributorMcpReadiness({ probe: false, baseUrl: props.baseUrl }),
+        getMyContributorMcpReadiness({ probe: false }),
       ]);
       if (tokensResult.ok) {
         setTokens(tokensResult.tokens);

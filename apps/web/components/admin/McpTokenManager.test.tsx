@@ -158,7 +158,6 @@ describe("McpTokenManager", () => {
     expect(await screen.findByText("Claude/Codex MCP readiness is satisfied.")).toBeTruthy();
     expect(readinessMock).toHaveBeenCalledWith({
       probe: false,
-      baseUrl: "http://localhost:3000",
     });
   });
 

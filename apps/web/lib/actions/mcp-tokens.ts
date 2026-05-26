@@ -107,7 +107,6 @@ export async function listMyMcpTokens() {
 
 export async function getMyContributorMcpReadiness(input?: {
   probe?: boolean;
-  baseUrl?: string;
 }) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -116,7 +115,6 @@ export async function getMyContributorMcpReadiness(input?: {
 
   const readiness = await getContributorMcpReadiness(session.user.id, {
     probe: input?.probe ?? false,
-    baseUrl: input?.baseUrl,
   });
   return { ok: true as const, readiness };
 }

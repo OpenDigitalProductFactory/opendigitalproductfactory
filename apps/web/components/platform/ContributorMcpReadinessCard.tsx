@@ -132,7 +132,7 @@ export function ContributorMcpReadinessCard({
 
     if (readiness.recommendedAction === "test_connection") {
       startTransition(async () => {
-        const result = await getMyContributorMcpReadiness({ probe: true, baseUrl });
+        const result = await getMyContributorMcpReadiness({ probe: true });
         if (!result.ok) {
           setNotice({ kind: "error", message: "Sign in before testing MCP readiness." });
           return;

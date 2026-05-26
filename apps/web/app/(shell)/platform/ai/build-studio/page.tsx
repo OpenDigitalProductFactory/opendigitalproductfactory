@@ -44,7 +44,7 @@ export default async function BuildStudioPage() {
     getProviders(),
     getBuildStudioConfig(),
     user
-      ? getContributorMcpReadiness(user.id, { probe: false, baseUrl })
+      ? getContributorMcpReadiness(user.id, { probe: false })
       : Promise.resolve(unauthenticatedReadiness()),
   ]);
 

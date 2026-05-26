@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth/mcp-api-token", () => ({
   copyMcpApiTokenPlaintext: vi.fn(),
@@ -42,6 +42,11 @@ function token(overrides: Partial<ContributorMcpTokenRow> = {}): ContributorMcpT
 beforeEach(() => {
   vi.resetAllMocks();
   _resetContributorMcpReadinessProbeCacheForTests();
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 describe("getContributorMcpReadiness", () => {
@@ -149,12 +154,10 @@ describe("getContributorMcpReadiness", () => {
 
     const first = await getContributorMcpReadiness("user_1", {
       probe: true,
-      baseUrl: "http://localhost:3000",
       now: new Date("2026-05-26T12:00:00Z"),
     });
     const second = await getContributorMcpReadiness("user_1", {
       probe: true,
-      baseUrl: "http://localhost:3000",
       now: new Date("2026-05-26T12:00:30Z"),
     });
 
@@ -166,7 +169,31 @@ describe("getContributorMcpReadiness", () => {
     expect(second.probe).toEqual(first.probe);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(first)).not.toContain("dpfmcp_SECRET");
-    vi.unstubAllGlobals();
+  });
+
+  it("builds the live probe URL from server configuration only", async () => {
+    vi.stubEnv("APP_URL", "https://portal.example.test/custom/path?tenant=x#fragment");
+    listTokensMock.mockResolvedValue([token()]);
+    copyTokenMock.mockResolvedValue({
+      ok: true,
+      plaintext: "dpfmcp_SECRET",
+      prefix: "dpfmcp_SECR",
+      tokenSuffix: "CRET",
+    });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ result: { tools: [{ name: "list_backlog_items" }] } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getContributorMcpReadiness("user_1", {
+      probe: true,
+      now: new Date("2026-05-26T12:00:00Z"),
+    });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      "https://portal.example.test/api/mcp/v1",
+    );
   });
 
   it("caches failed probe results inside the probe window", async () => {
@@ -186,12 +213,10 @@ describe("getContributorMcpReadiness", () => {
 
     const first = await getContributorMcpReadiness("user_1", {
       probe: true,
-      baseUrl: "http://localhost:3000",
       now: new Date("2026-05-26T12:00:00Z"),
     });
     const second = await getContributorMcpReadiness("user_1", {
       probe: true,
-      baseUrl: "http://localhost:3000",
       now: new Date("2026-05-26T12:00:30Z"),
     });
 
@@ -202,6 +227,5 @@ describe("getContributorMcpReadiness", () => {
     });
     expect(second.probe).toEqual(first.probe);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    vi.unstubAllGlobals();
   });
 });

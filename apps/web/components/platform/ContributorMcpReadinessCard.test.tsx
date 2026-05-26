@@ -119,7 +119,6 @@ describe("ContributorMcpReadinessCard", () => {
     await waitFor(() => {
       expect(getReadinessMock).toHaveBeenCalledWith({
         probe: true,
-        baseUrl: "http://localhost:3000",
       });
     });
     expect(await screen.findByText(/Probe returned 12 MCP tools/i)).toBeTruthy();

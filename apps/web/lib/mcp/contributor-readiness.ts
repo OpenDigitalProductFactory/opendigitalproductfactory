@@ -53,7 +53,6 @@ export type ContributorMcpReadiness = {
 
 export type ContributorMcpReadinessOptions = {
   probe?: boolean;
-  baseUrl?: string;
   now?: Date;
 };
 
@@ -133,7 +132,7 @@ function baseResult(
 
 async function runProbe(
   token: ContributorMcpTokenRow,
-  opts: Required<Pick<ContributorMcpReadinessOptions, "baseUrl" | "now">>,
+  opts: Required<Pick<ContributorMcpReadinessOptions, "now">>,
 ): Promise<ContributorMcpProbe> {
   const cached = probeCache.get(token.id);
   if (cached && opts.now.getTime() - cached.checkedAtMs < PROBE_TTL_MS) {
@@ -150,7 +149,7 @@ async function runProbe(
 
   const checkedAt = opts.now.toISOString();
   try {
-    const response = await fetch(`${opts.baseUrl}/api/mcp/v1`, {
+    const response = await fetch(new URL("/api/mcp/v1", resolveProbeBaseUrl()), {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -224,11 +223,22 @@ export async function getContributorMcpReadiness(
   const result = baseResult("ready", readyToken, []);
   if (opts.probe) {
     result.probe = await runProbe(readyToken, {
-      baseUrl: opts.baseUrl ?? process.env.APP_URL ?? process.env.AUTH_URL ?? "http://127.0.0.1:3000",
       now,
     });
   }
   return result;
+}
+
+function resolveProbeBaseUrl(): string {
+  const rawBaseUrl = process.env.APP_URL ?? process.env.AUTH_URL ?? "http://127.0.0.1:3000";
+  const url = new URL(rawBaseUrl);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("MCP probe base URL must use http or https.");
+  }
+  url.pathname = "/";
+  url.search = "";
+  url.hash = "";
+  return url.toString();
 }
 
 export function _resetContributorMcpReadinessProbeCacheForTests(): void {
