@@ -877,3 +877,74 @@ honest diagnostic signals. The remaining gap (D43: no decomposition
 affordance) is the WIP effort Mark already has in flight; that effort's
 own completion is what unblocks Dale shipping. Phase K should re-run
 after the sizing+decomposition WIP lands.
+
+---
+
+## Phase K — 2026-05-26 resumption after Path A landing + decomposition WIP completion
+
+**Premise.** Path A (D45 ghost-filter + D46 chat-mode contract-guard gate, ~48h orphaned in `festive-davinci-1bd0b7` worktree) landed as PR #1202 (commit `526caf5f`). The sizing+decomposition WIP completed earlier in the week — Phase 1-5 + Phase 7 retroactive escape hatch are all on main (`mcp__dpf__propose_build_decomposition` + `mcp__dpf__approve_decomposition` are MCP-callable). All three "substrate pieces needed together" from Phase J §lessons are shipped: schema (Epic-as-parent on FeatureBuild), tool surface (propose + approve + override), and operator affordance (DecompositionGateBanner + Coordinator + epic-rollup UI).
+
+**Method.** Drive FB-6F7D6AC4 forward in Dale-natural language ("just build the truck list first, drop the parts/usage/live updates stuff"). Hard-reload before chatting. Observe whether the LLM-level decomposition recognition (Phase J D43) now translates into actual structural action.
+
+### K1 — Live portal still on pre-Path-A bundle — phantom PIRs reproduce immediately
+
+Path A merged at 2026-05-26 20:33 UTC. Drove a Dale-natural prompt at 20:36. Within 60s, two fresh PlatformIssueReport rows appeared at `/admin/issue-reports`:
+
+- `coworker-process-…-unsaved-evidence` — `[coworker-process] unsaved-evidence: buildPlan` — process_guard / open / agentic-loop-guard / route /build / 5/26/2026 3:36:12 PM
+- `coworker-process-…-zero-tool-call` — `[coworker-process] zero-tool-call on phase=plan` — process_guard / open / agentic-loop-guard / 5/26/2026 3:36:12 PM
+
+These are exactly the phantom PIRs Path A suppresses in chat mode. Their fresh appearance confirms the running portal container is on the bundle that predates Path A — the agent-coworker `sendMessage` call site is still calling `executeAutonomousAgenticLoop` without the new `interactionMode: "chat"` parameter, so the contract guards still fire on conversational replies. The fix is on main but not in the live install until self-upgrade runs.
+
+This is the predicted behaviour, captured to establish baseline. No new BI — this is the same surface as `project_self_upgrade_kills_in_session_ux` and resolves automatically on next self-upgrade.
+
+### K2 — D43 reproducing on the new substrate — LLM recognises decomposition, structural handoff still doesn't fire
+
+The agent's response to Dale's *"just build the truck list first … we can add parts later"* prompt (captured in the K1 PIR's response excerpt because the response triggered the guards):
+
+> "Plan ready — 12 tasks across 9 files; the reduced truck-roster-first plan has been resubmitted and handed off to move straight into build."
+
+This is the most encouraging signal the dogfood has produced. The LLM:
+- Internalised Dale's scope reduction (97 tasks → 12 tasks — observed via plan-review iteration counter).
+- Named the new scope in Dale's words ("truck-roster-first").
+- Claimed the handoff happened ("resubmitted and handed off to move straight into build").
+
+But the structural reality contradicts the claim:
+- Plan-review banner still says "Plan review failed. … 15 persist, 0 new" — Round counter advanced from 1 → 3, but issue count never converged.
+- `Start Implementation` button still disabled.
+- `mcp__dpf__get_build_progress_visibility` reports `phaseRuns: [{phase: "ideate"}]` and `dispatchHistory: []`.
+- Work Capsule `WC-1C481A3E.workspaceState.buildStudio.phase` still `"ideate"`.
+- No child FeatureBuilds created. No new Epic. The decomposition tools (`propose_build_decomposition` / `approve_decomposition`) were never invoked from this chat surface even though the trigger condition for Phase 7 (top-level plan build with oscillating planReview) should have been met after Round 3 with no convergence.
+
+**Interpretation.** D43 ("decomposition recognition exists at LLM level, no substrate affordance") is reproducing on the new substrate, but the substrate exists this time. The gap has narrowed from "no tool to call" (Phase J) to "tool exists but isn't being invoked from the chat path". The decomposition assistant slide-over panel and Coordinator UI ship on top of the `propose_build_decomposition` MCP tool — both depend on the operator clicking a "Propose splits" CTA, which only renders in the DecompositionGateBanner, which only mounts when `sizeAssessment.decision !== "ok"`. For FB-6F7D6AC4 the original Ideate-exit sizing assessment likely returned `decision="ok"` (or wasn't recorded), so the banner never mounted, so the operator never had a button to click.
+
+The Phase 7 retroactive escape hatch (`build.phase === "plan"` + `iteration.oscillating === true`) is the right late-binding trigger, but I could not find evidence in the live portal that the oscillation surface (PR #1161) automatically prompts the operator with a "Propose splits now?" CTA when the iteration counter persists with non-converging issues. The trajectory chip in the workflow view doesn't include a one-click decomposition path that Dale could see.
+
+**Fix shape.** When `iteration.oscillating === true` AND `iteration.persistent` count is stable across N+2 rounds (i.e. the issues aren't getting addressed), the workflow view should render an inline "This plan keeps failing — want me to try splitting it into smaller pieces?" affordance that calls `propose_build_decomposition` directly, then opens the DecompositionAssistantPanel. The trigger must be visible to Dale without him knowing the words "decomposition", "propose splits", or "iteration oscillation". Title-line wording proposal: *"This plan keeps coming back with problems. Want me to try breaking it into smaller pieces?"*
+
+### K3 — Two stray "continue" buttons still floating in chat panel
+
+The same UX glitch from the earlier session (Phase J informal observation) — two buttons labelled "continue" with no apparent function sit at the top of the chat history. Path A didn't touch chat-panel rendering, so this remains uninvestigated. Separately filable as a small chat-UI hygiene BI when this dogfood is reviewed.
+
+### K4 — Phase J D44 (capsule state desync) still live
+
+`mcp__dpf__get_work_capsule(WC-1C481A3E).workspaceState.buildStudio.phase` returns `"ideate"`. `mcp__dpf__get_build_progress_visibility(FB-6F7D6AC4).phaseRuns` has only one entry (`phase: "ideate"`, `completedAt: null`). But the UI shows the build in Plan with "Plan review failed (Round 3)". Three places report the build's phase; two say ideate, one says plan. The Phase 7 decomposition trigger gates on `build.phase === "plan"`, so whichever projection answers the gate determines whether the retroactive escape hatch can fire at all. K2's missing-affordance behaviour may root-cause here.
+
+### Phase K trajectory table
+
+| Date | Phase reached | Deficiencies surfaced | Outcome |
+| ---- | ------------- | --------------------- | ------- |
+| 2026-05-26 | Plan-iteration retry post Path A merge, with full decomp substrate live on main but not yet in the running portal bundle | K1 (live portal pre-Path-A bundle, phantom PIRs reproduce), K2 (D43 still — LLM proposes decomp + claims handoff, but structural decomp tools never invoked because the late-binding affordance is missing), K3 (stray "continue" buttons), K4 (capsule/phaseRuns/UI all disagree on phase — three projections, two answers) | Path A is durable on main, will become live on next portal self-upgrade. Decomposition substrate is shipped but the trigger that activates the affordance for a Dale-class operator on a plan-stalled build is missing. FB-6F7D6AC4 remains unshipped. Tool-hardening BI filed via portal as the contract-test-suite follow-up (BI-8d562ca9-…). |
+
+### Phase K lesson learned (architectural)
+
+The "three substrate pieces" framing from Phase J was incomplete. **A fourth piece is required: a *trigger* that fires the affordance for the operator without the operator having to know it exists.** All three of Phase J's pieces (schema, tool, UI affordance) are shipped, but the Dale-class operator still cannot reach the affordance — because:
+
+1. The DecompositionGateBanner only mounts at Ideate exit when sizeAssessment.decision is non-`"ok"`.
+2. The Phase 7 retroactive trigger requires the build to be in `phase === "plan"` with `iteration.oscillating === true`, but the capsule/phaseRuns/UI projection disagreement (K4) makes that condition flaky.
+3. The persistent-issue trajectory (15 issues stable across rounds 1→3) is the strongest possible signal that this plan needs splitting, but no UI surface watches the trajectory and prompts the operator.
+
+The trigger has to be diegetic — it has to come to Dale in shop language without requiring him to navigate to a settings page or read a release-notes paragraph. The phrase Dale will type unprompted is *"the plan keeps failing"* — that exact sentence should produce a one-click "want me to try breaking it into smaller pieces?" path. Until that diegetic trigger ships, the substrate exists but is unreachable from Dale's seat.
+
+### Recommendation for Phase L
+
+After portal self-upgrade picks up Path A, file the K2 BI ("late-binding decomposition trigger from stalled plan iteration — diegetic Dale-language CTA") under EP-9FC5D2FD, then drive FB-6F7D6AC4 forward through whatever UX the trigger produces. If the trigger does materialise (it might exist behind a feature flag or in a view I missed) capture the navigation. If not, that BI becomes the next surgical fix and Phase L runs against the post-fix portal.
