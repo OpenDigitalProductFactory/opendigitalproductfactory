@@ -591,7 +591,7 @@ export async function getSelfUpgradeStatus() {
 
   const inMaintenanceWindow = isInMaintenanceWindow(config);
   const deployedSha = getDeployedSha();
-  const targetSha = await resolveTargetSha(config.channel);
+  const targetSha = await resolveTargetSha(config.channel, config);
   const isFresh = targetSha ? isShaFresh(deployedSha, targetSha) : false;
 
   return {

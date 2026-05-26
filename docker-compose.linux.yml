@@ -17,13 +17,29 @@
 #     adds the `ollama` service and overrides LLM_BASE_URL on every
 #     LLM consumer (portal, sandbox, browser-use) to point at it.
 #
-#   - The `linux-monitoring` profile (cadvisor + node-exporter) is
-#     enabled here by default because their bind mounts (/proc, /sys,
-#     /var/lib/docker, /) work natively on Linux. Operators who don't
-#     want host metrics can override with `--profile ""` or by reading
-#     COMPOSE_PROFILES from the environment.
+#   - The Linux-only host telemetry exporters (cadvisor + node-exporter)
+#     are enabled here because their bind mounts (/proc, /sys,
+#     /var/lib/docker, /) work natively on Linux. The base compose file
+#     keeps them behind a profile so Windows/macOS installs do not scrape
+#     targets that cannot exist there.
 
 services:
+  prometheus:
+    volumes:
+      - ./monitoring/prometheus/prometheus.linux.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+
+  cadvisor:
+    # Base compose gates this service behind linux-monitoring. The Linux
+    # overlay removes that profile so the Prometheus scrape config mounted
+    # above always has a matching exporter container.
+    profiles: !reset []
+
+  node-exporter:
+    # Keep Linux host metrics aligned with monitoring/prometheus/prometheus.linux.yml.
+    profiles: !reset []
+
   # Local LLM provider for non-Docker-Desktop substrates. Lightweight
   # CPU-only by default; customers with GPU passthrough can add
   # device reservations.
@@ -61,20 +77,6 @@ services:
   browser-use:
     environment:
       LLM_BASE_URL: ${LLM_BASE_URL:-http://ollama:11434/v1}
-
-# Default to enabling the linux-monitoring profile so cadvisor and
-# node-exporter start with `docker compose up`. Profiles enabled via
-# this top-level key apply to the merged config and persist across
-# subsequent `docker compose` invocations in the same project.
-# Operators who don't want host metrics can override with
-# `COMPOSE_PROFILES=""` or by removing this overlay.
-#
-# (Compose v2.20+ honors `profiles` at the top level via the
-# COMPOSE_PROFILES env var; this overlay sets it via the
-# `x-default-profiles` extension that is read by the
-# scripts/installer/lib/compose.sh helper. For direct `docker compose`
-# usage, pass `--profile linux-monitoring` explicitly or set
-# `COMPOSE_PROFILES=linux-monitoring` in the environment.)
 
 volumes:
   ollama_data:

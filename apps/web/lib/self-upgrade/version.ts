@@ -50,6 +50,12 @@ type VersionStateDeps = {
   execFile: (cmd: string, args: string[]) => Promise<{ stdout: string }>;
 };
 
+type TargetResolverConfig = {
+  hostSourceMountPath?: string;
+  repositoryRemote?: string;
+  repositoryBranch?: string;
+};
+
 async function defaultReadCurrentVersion(): Promise<{ version: string; comparableToGitSha: boolean }> {
   try {
     const { readFile } = await import("node:fs/promises");
@@ -99,16 +105,35 @@ export async function getUpgradeVersionState(
 
 // ─── Compatibility Exports ────────────────────────────────────────────────────
 
-export async function resolveTargetSha(channel: string): Promise<string | null> {
-  // TODO(BI-UPGRADE-003): implement channel manifest resolution
-  // See docs/superpowers/specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md §4.4
-  // Until then, the hourly self-upgrade cron always skips with reason="no-target".
-  console.info("self-upgrade.no-target", {
-    channel,
-    reason: "channel-resolution-not-implemented",
-    tracking: "BI-UPGRADE-003",
+export async function resolveTargetSha(
+  channel: string,
+  config: TargetResolverConfig = {},
+  deps: Pick<VersionStateDeps, "execFile"> = DEFAULT_DEPS,
+): Promise<string | null> {
+  const [, ...gitArgs] = buildRemoteHeadCommand({
+    hostSourcePath: config.hostSourceMountPath ?? process.env.HOST_SOURCE_PATH ?? "/workspace",
+    remote: config.repositoryRemote ?? process.env.REPO_REMOTE ?? "origin",
+    branch: config.repositoryBranch ?? process.env.REPO_BRANCH ?? "main",
   });
-  return null;
+
+  try {
+    const { stdout } = await deps.execFile("git", gitArgs);
+    const targetSha = stdout.trim();
+    if (isGitSha(targetSha)) return targetSha;
+    console.info("self-upgrade.no-target", {
+      channel,
+      reason: "target-not-git-sha",
+      targetSha,
+    });
+    return null;
+  } catch (err) {
+    console.info("self-upgrade.no-target", {
+      channel,
+      reason: "target-resolution-failed",
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
 }
 
 export function isShaFresh(deployedSha: string | null, targetSha: string): boolean {

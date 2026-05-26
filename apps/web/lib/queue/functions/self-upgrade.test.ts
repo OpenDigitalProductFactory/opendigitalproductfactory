@@ -167,6 +167,10 @@ const ENABLED_CONFIG = {
   checkIntervalHours: 24,
   healthTarget: 100,
   maintenanceWindows: [],
+  hostSourceMountPath: "/host-dpf",
+  repositoryRemote: "origin",
+  repositoryBranch: "main",
+  healthUrl: "http://localhost:3000/api/health",
 };
 
 describe("success path", () => {
@@ -191,6 +195,23 @@ describe("success path", () => {
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
     expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-AAAABBBB" });
     expect(mocks.completeRun).toHaveBeenCalledWith("SUR-AAAABBBB");
+  });
+
+  it("resolves the target SHA using the configured source checkout", async () => {
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(mocks.resolveTargetSha).toHaveBeenCalledWith("stable", ENABLED_CONFIG);
+  });
+
+  it("runs the promoter with configured source, backup, and health paths", async () => {
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(mocks.runPromoter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourcePath: "/host-dpf",
+        targetSha: "abc1234deadbeef",
+        backupPath: "/backups/self-upgrade/SUR-AAAABBBB",
+        healthUrl: "http://localhost:3000/api/health",
+      }),
+    );
   });
 
   it("emits upgrade.succeeded notification on promoter success", async () => {
