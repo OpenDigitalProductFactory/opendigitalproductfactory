@@ -733,6 +733,7 @@ type ExecUpdate = (
 
 const UPDATE_UPSTREAM_BRANCH = "dpf-upstream";
 const UPDATE_WORK_BRANCH = "my-changes";
+const HOOKLESS_GIT = "git -c core.hooksPath=/dev/null";
 const PLATFORM_UPDATE_SOURCE_PATHS = ["apps/web", "packages"] as const;
 
 function shellQuote(value: string): string {
@@ -885,7 +886,7 @@ async function checkoutManagedUpdateBranch(
   branch: string,
 ): Promise<void> {
   try {
-    await execUpdate(`git checkout -f ${branch}`, gitOpts);
+    await execUpdate(`${HOOKLESS_GIT} checkout -f ${branch}`, gitOpts);
     return;
   } catch (err) {
     if (!isMissingGitReferenceError(err, branch)) {
@@ -895,7 +896,7 @@ async function checkoutManagedUpdateBranch(
 
   await assertBranchRepairCanUseCurrentHead(execUpdate, gitOpts);
   await execUpdate(`git branch -f ${branch} HEAD`, gitOpts);
-  await execUpdate(`git checkout -f ${branch}`, gitOpts);
+  await execUpdate(`${HOOKLESS_GIT} checkout -f ${branch}`, gitOpts);
 }
 
 async function collectPlatformUpdateConflicts(

@@ -287,7 +287,7 @@ describe("applyPlatformUpdate", () => {
     const commands = mockExec.mock.calls.map(([cmd]) => cmd);
     expect(commands).toContain("git diff --quiet --ignore-cr-at-eol -- apps/web packages");
     expect(commands).toContain("git diff --cached --quiet --ignore-cr-at-eol -- apps/web packages");
-    expect(commands).toContain("git checkout -f dpf-upstream");
+    expect(commands).toContain("git -c core.hooksPath=/dev/null checkout -f dpf-upstream");
     const diffCall = mockExec.mock.calls.find(
       ([cmd]) => cmd === "git diff --quiet --ignore-cr-at-eol -- apps/web packages",
     );
@@ -332,8 +332,38 @@ describe("applyPlatformUpdate", () => {
 
     expect(result.kind).toBe("clean-merge");
     const commands = mockExec.mock.calls.map(([cmd]) => cmd);
-    expect(commands).toContain("git checkout -f dpf-upstream");
-    expect(commands).toContain("git checkout -f my-changes");
+    expect(commands).toContain("git -c core.hooksPath=/dev/null checkout -f dpf-upstream");
+    expect(commands).toContain("git -c core.hooksPath=/dev/null checkout -f my-changes");
+  });
+
+  it("does not run host checkout hooks while switching managed update branches", async () => {
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      updatePending: true,
+      pendingVersion: "v1.2.3",
+    });
+    mockPrisma.platformDevConfig.update.mockResolvedValue({});
+    mockExistsSync.mockReturnValue(false);
+
+    mockExec.mockImplementation((cmd: string, _opts: unknown, cb?: (err: Error | null, value: { stdout: string; stderr: string }) => void) => {
+      if (!cb) return;
+      if (cmd === "git checkout -f dpf-upstream") {
+        cb(new Error("git-lfs was not found on your path"), {
+          stdout: "Switched to branch 'dpf-upstream'",
+          stderr: "This repository is configured for Git LFS but 'git-lfs' was not found on your path.",
+        });
+        return;
+      }
+      if (cmd.includes("--diff-filter=U")) cb(null, { stdout: "", stderr: "" });
+      else if (cmd === "git diff --cached --stat") cb(null, { stdout: " 4 files changed, 12 insertions(+)", stderr: "" });
+      else cb(null, { stdout: "", stderr: "" });
+    });
+
+    const result = await applyPlatformUpdate();
+
+    expect(result.kind).toBe("clean-merge");
+    const commands = mockExec.mock.calls.map(([cmd]) => cmd);
+    expect(commands).toContain("git -c core.hooksPath=/dev/null checkout -f dpf-upstream");
+    expect(commands).toContain("git -c core.hooksPath=/dev/null checkout -f my-changes");
   });
 
   it("repairs missing managed update branches before applying the update", async () => {
@@ -380,7 +410,7 @@ describe("applyPlatformUpdate", () => {
     let upstreamCheckoutAttempts = 0;
     mockExec.mockImplementation((cmd: string, _opts: unknown, cb?: (err: Error | null, value: { stdout: string; stderr: string }) => void) => {
       if (!cb) return;
-      if (cmd === "git checkout -f dpf-upstream") {
+      if (cmd === "git -c core.hooksPath=/dev/null checkout -f dpf-upstream") {
         upstreamCheckoutAttempts += 1;
         if (upstreamCheckoutAttempts === 1) {
           cb(new Error("pathspec 'dpf-upstream' did not match any file(s) known to git"), {
@@ -407,9 +437,9 @@ describe("applyPlatformUpdate", () => {
 
     expect(result.kind).toBe("clean-merge");
     const commands = mockExec.mock.calls.map(([cmd]) => cmd);
-    expect(commands.filter((cmd) => cmd === "git checkout -f dpf-upstream")).toHaveLength(2);
+    expect(commands.filter((cmd) => cmd === "git -c core.hooksPath=/dev/null checkout -f dpf-upstream")).toHaveLength(2);
     expect(commands).toContain("git branch -f dpf-upstream HEAD");
-    expect(commands).toContain("git checkout -f my-changes");
+    expect(commands).toContain("git -c core.hooksPath=/dev/null checkout -f my-changes");
   });
 
   it("does not repair missing update branches over committed source changes", async () => {
