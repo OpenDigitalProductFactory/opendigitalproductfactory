@@ -17,20 +17,13 @@ import { metricsEnvelopeSchema } from "@dpf/validators";
 
 import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
 import { metricsCache } from "@/lib/edge/metrics-cache";
-
-// Per-node rate limiting state — in-memory, per-process.
-// A multi-replica deployment would need a shared store (Redis); for the
-// single-process portal, a Map is correct and sufficient.
-const lastAcceptedAt = new Map<string, number>();
-
-/** Clear the rate-limit state — call in test teardown only. */
-export function _resetRateLimitForTesting(): void {
-  lastAcceptedAt.clear();
-}
+import {
+  getEdgeMetricsRateLimit,
+  markEdgeMetricsAccepted,
+} from "@/lib/edge/metrics-rate-limit";
 
 const BODY_SIZE_CAP_BYTES = 64 * 1024; // 64 KB per spec §11
 const FRESHNESS_WINDOW_MS = 5 * 60 * 1000; // 5 minutes per spec §11
-const RATE_LIMIT_INTERVAL_MS = 5_000; // 5 s minimum between requests per spec §11
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   // 1. Body size check (before auth — avoids large JSON.parse on denial)
@@ -58,15 +51,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const { nodeId } = authResult;
 
   // 3. Per-node rate limit
-  const now = Date.now();
-  const lastAccepted = lastAcceptedAt.get(nodeId) ?? 0;
-  if (now - lastAccepted < RATE_LIMIT_INTERVAL_MS) {
-    const retryAfter = Math.ceil((RATE_LIMIT_INTERVAL_MS - (now - lastAccepted)) / 1000);
+  const rateLimit = getEdgeMetricsRateLimit(nodeId);
+  if (rateLimit.limited) {
     return NextResponse.json(
-      { ok: false, error: "rate_limited", retryAfterSec: retryAfter },
+      { ok: false, error: "rate_limited", retryAfterSec: rateLimit.retryAfterSec },
       {
         status: 429,
-        headers: { "Retry-After": String(retryAfter) },
+        headers: { "Retry-After": String(rateLimit.retryAfterSec) },
       },
     );
   }
@@ -109,7 +100,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // 7. Accept and cache (nodeId always from token, never from body)
-  lastAcceptedAt.set(nodeId, Date.now());
+  markEdgeMetricsAccepted(nodeId);
   metricsCache.set(nodeId, parsed.data);
 
   // 8. TODO(spec §6.3): broadcast topology:metrics:update WebSocket event
