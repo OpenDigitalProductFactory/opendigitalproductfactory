@@ -3,7 +3,7 @@ groups:
     rules:
       # ─── Container Health ──────────────────────────────────
       - alert: ContainerDown
-        expr: up == 0
+        expr: up{job!~"cadvisor|node-exporter"} == 0
         for: 1m
         labels:
           severity: critical
