@@ -115,6 +115,19 @@ describe("workspace command center readiness", () => {
     expect(new Set(contextHrefs)).toEqual(new Set(["/wiki"]));
   });
 
+  it("routes workspace KPI snapshot tiles to canonical shell destinations", () => {
+    const view = buildWorkspaceCommandCenterView(makeInput());
+
+    expect(Object.fromEntries(view.snapshot.map((item) => [item.id, item.href]))).toEqual({
+      ai: "/platform/ai",
+      work: "/ops",
+      customers: "/customer",
+      finance: "/finance",
+      compliance: "/compliance",
+      delivery: "/build",
+    });
+  });
+
   it("describes six-C readiness cells in operator language", () => {
     expect(
       deriveReadinessCell("context", {
