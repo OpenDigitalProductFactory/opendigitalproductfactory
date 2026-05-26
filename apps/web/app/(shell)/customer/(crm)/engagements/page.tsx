@@ -1,24 +1,30 @@
 // apps/web/app/(shell)/customer/engagements/page.tsx
 import { prisma } from "@dpf/db";
+import { AcquisitionSignalRouter } from "@/components/customer/AcquisitionSignalRouter";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
+import { createEngagementFromSignalForm } from "@/lib/actions/crm";
+import { getAcquisitionSignalWorkspace } from "@/lib/crm/acquisition-signal-data";
+import { formatAcquisitionSourceLabel } from "@/lib/crm/acquisition-signals";
 import { getEngagementStatusMeta } from "@/lib/crm/presentation";
 
-const SOURCE_LABELS: Record<string, string> = {
-  web_inquiry: "Web",
-  manual: "Manual",
-  referral: "Referral",
-  import: "Import",
-};
+async function routeSignalToEngagement(formData: FormData) {
+  "use server";
+
+  await createEngagementFromSignalForm(formData);
+}
 
 export default async function EngagementsPage() {
-  const engagements = await prisma.engagement.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      contact: { select: { id: true, email: true, firstName: true, lastName: true } },
-      account: { select: { id: true, accountId: true, name: true } },
-      assignedTo: { select: { id: true, email: true } },
-    },
-  });
+  const [engagements, signalWorkspace] = await Promise.all([
+    prisma.engagement.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        contact: { select: { id: true, email: true, firstName: true, lastName: true } },
+        account: { select: { id: true, accountId: true, name: true } },
+        assignedTo: { select: { id: true, email: true } },
+      },
+    }),
+    getAcquisitionSignalWorkspace(),
+  ]);
 
   const statusCounts = engagements.reduce<Record<string, number>>((acc, e) => {
     acc[e.status] = (acc[e.status] ?? 0) + 1;
@@ -26,13 +32,18 @@ export default async function EngagementsPage() {
   }, {});
 
   return (
-    <div>
+    <div className="space-y-6">
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Engagements</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
           {engagements.length} engagement{engagements.length !== 1 ? "s" : ""}
         </p>
       </div>
+
+      <AcquisitionSignalRouter
+        workspace={signalWorkspace}
+        formAction={routeSignalToEngagement}
+      />
 
       {/* Status summary chips */}
       <div className="flex flex-wrap gap-2 mb-4">
@@ -73,7 +84,7 @@ export default async function EngagementsPage() {
                   />
                   {e.source && (
                     <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)] shrink-0">
-                      {SOURCE_LABELS[e.source] ?? e.source}
+                      {formatAcquisitionSourceLabel(e.source)}
                     </span>
                   )}
                 </div>
@@ -81,7 +92,13 @@ export default async function EngagementsPage() {
                   <span>{contactName}</span>
                   {e.account && <span>{e.account.name}</span>}
                   {e.assignedTo && <span>→ {e.assignedTo.email}</span>}
+                  {e.sourceRefId && <span>Evidence {e.sourceRefId}</span>}
                 </div>
+                {e.notes ? (
+                  <p className="mt-2 line-clamp-2 text-xs text-[var(--dpf-muted)]">
+                    {e.notes}
+                  </p>
+                ) : null}
               </div>
               <p className="text-[9px] text-[var(--dpf-muted)] shrink-0">
                 {new Date(e.createdAt).toLocaleDateString()}

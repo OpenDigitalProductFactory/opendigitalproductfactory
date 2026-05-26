@@ -23,10 +23,17 @@ vi.mock("@dpf/db", () => ({
     customerSiteNode: {
       create: vi.fn(),
     },
+    customerContact: {
+      findUnique: vi.fn(),
+    },
     customerConfigurationItem: {
       create: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+    },
+    engagement: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
     },
     opportunity: {
       findUnique: vi.fn(),
@@ -65,6 +72,8 @@ import {
   advanceOpportunityStage,
   updateOpportunityStageFromForm,
   updateCustomerConfigurationItem,
+  routeAcquisitionSignalToEngagement,
+  createEngagementFromSignalForm,
 } from "./crm";
 
 beforeEach(() => {
@@ -316,6 +325,113 @@ describe("createCustomerConfigurationItem", () => {
     });
     expect(revalidatePath).toHaveBeenCalledWith("/customer");
     expect(revalidatePath).toHaveBeenCalledWith("/customer/acct-1");
+  });
+});
+
+describe("routeAcquisitionSignalToEngagement", () => {
+  it("returns the existing engagement when source evidence was already routed", async () => {
+    vi.mocked(prisma.customerContact.findUnique).mockResolvedValue({
+      id: "contact-1",
+      accountId: "acct-1",
+      email: "bea@example.com",
+      firstName: "Bea",
+      lastName: "Buyer",
+    } as never);
+    vi.mocked(prisma.engagement.findFirst).mockResolvedValue({
+      id: "eng-1",
+      engagementId: "ENG-1",
+      title: "Website inquiry from Bea Buyer",
+      status: "new",
+      source: "web_inquiry",
+      sourceRefId: "inq-1",
+    } as never);
+
+    const result = await routeAcquisitionSignalToEngagement({
+      title: "Website inquiry from Bea Buyer",
+      contactId: "contact-1",
+      accountId: "acct-1",
+      source: "web_inquiry",
+      sourceRefId: "inq-1",
+      notes: "Source: storefront inquiry",
+    });
+
+    expect(result).toEqual({
+      status: "linked",
+      engagementId: "eng-1",
+      engagementTitle: "Website inquiry from Bea Buyer",
+    });
+    expect(prisma.engagement.findFirst).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { source: "web_inquiry", sourceRefId: "inq-1" },
+          {
+            accountId: "acct-1",
+            contactId: "contact-1",
+            source: "web_inquiry",
+            title: "Website inquiry from Bea Buyer",
+          },
+        ],
+      },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+      },
+    });
+    expect(prisma.engagement.create).not.toHaveBeenCalled();
+  });
+
+  it("creates an engagement from an explicit signal routing form and revalidates CRM surfaces", async () => {
+    vi.mocked(prisma.customerContact.findUnique).mockResolvedValue({
+      id: "contact-1",
+      accountId: "acct-1",
+      email: "bea@example.com",
+      firstName: "Bea",
+      lastName: "Buyer",
+    } as never);
+    vi.mocked(prisma.engagement.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.engagement.create).mockResolvedValue({
+      id: "eng-1",
+      engagementId: "ENG-1",
+      title: "Website inquiry from Bea Buyer",
+      status: "new",
+      source: "web_inquiry",
+      sourceRefId: "inq-1",
+      accountId: "acct-1",
+      contactId: "contact-1",
+    } as never);
+    vi.mocked(prisma.activity.create).mockResolvedValue({ id: "act-1" } as never);
+
+    const formData = new FormData();
+    formData.set("title", " Website inquiry from Bea Buyer ");
+    formData.set("contactId", "contact-1");
+    formData.set("accountId", "acct-1");
+    formData.set("source", "web_inquiry");
+    formData.set("sourceRefId", "inq-1");
+    formData.set("notes", " Source: storefront inquiry ");
+
+    const result = await createEngagementFromSignalForm(formData);
+
+    expect(result.status).toBe("created");
+    expect(prisma.engagement.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        title: "Website inquiry from Bea Buyer",
+        status: "new",
+        accountId: "acct-1",
+        contactId: "contact-1",
+        source: "web_inquiry",
+        sourceRefId: "inq-1",
+        notes: "Source: storefront inquiry",
+      }),
+      include: {
+        contact: true,
+        account: true,
+        assignedTo: { select: { id: true, email: true } },
+      },
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/customer");
+    expect(revalidatePath).toHaveBeenCalledWith("/customer/engagements");
+    expect(revalidatePath).toHaveBeenCalledWith("/customer/marketing");
   });
 });
 
