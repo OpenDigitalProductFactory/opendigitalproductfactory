@@ -11,6 +11,8 @@ const LIMITS = {
   routeContext: 500,
   errorStack: 20_000,
   userAgent: 500,
+  triggerKind: 100,
+  supportSessionId: 191,
 } as const;
 
 // Same route → portfolio slug map used today by reportQualityIssue().
@@ -57,6 +59,8 @@ export interface CreatePlatformIssueReportInput {
   routeContext?: string | null;
   errorStack?: string | null;
   userAgent?: string | null;
+  triggerKind?: string | null;
+  supportSessionId?: string | null;
 
   // Identity / linkage
   reportedById?: string | null;
@@ -129,6 +133,8 @@ export async function createPlatformIssueReport(
       routeContext: trimTo(input.routeContext ?? null, LIMITS.routeContext),
       errorStack: trimTo(input.errorStack ?? null, LIMITS.errorStack),
       userAgent: trimTo(input.userAgent ?? null, LIMITS.userAgent),
+      triggerKind: trimTo(input.triggerKind ?? null, LIMITS.triggerKind),
+      supportSessionId: trimTo(input.supportSessionId ?? null, LIMITS.supportSessionId),
       reportedById: input.reportedById ?? null,
       threadId: input.threadId ?? null,
       taskRunId: input.taskRunId ?? null,

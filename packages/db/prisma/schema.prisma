@@ -4229,6 +4229,8 @@ model PlatformIssueReport {
   portfolioId         String?
   agentId             String?
   featureBuildId      String?
+  triggerKind         String?
+  supportSessionId    String?
   source              String        @default("manual")
   // Governed Hermes learning Slice 1: link runtime issues to the thread/run
   // that produced them so reflection can avoid route/time-window heuristics.
@@ -4245,6 +4247,8 @@ model PlatformIssueReport {
   @@index([featureBuildId])
   @@index([threadId, createdAt(sort: Desc)])
   @@index([taskRunId])
+  @@unique([reportedById, supportSessionId])
+  @@index([reportedById, supportSessionId, createdAt(sort: Desc)])
 }
 
 model ImprovementSignal {
