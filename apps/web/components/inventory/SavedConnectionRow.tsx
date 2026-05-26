@@ -38,9 +38,9 @@ const STATUS_LABELS: Record<string, { label: string; tone: "ok" | "warn" | "err"
 };
 
 const TONE_STYLES: Record<"ok" | "warn" | "err" | "muted", { bg: string; fg: string }> = {
-  ok:    { bg: "rgba(52, 211, 153, 0.15)", fg: "#34d399" },
-  warn:  { bg: "rgba(251, 191, 36, 0.15)", fg: "#fbbf24" },
-  err:   { bg: "rgba(251, 113, 133, 0.15)", fg: "#fb7185" },
+  ok:    { bg: "var(--dpf-state-success)", fg: "var(--dpf-success)" },
+  warn:  { bg: "var(--dpf-state-warning)", fg: "var(--dpf-warning)" },
+  err:   { bg: "var(--dpf-state-error)",   fg: "var(--dpf-error)" },
   muted: { bg: "var(--dpf-surface-2)",     fg: "var(--dpf-muted)" },
 };
 
@@ -117,6 +117,7 @@ export function SavedConnectionRow({ connection }: Props) {
             id: connection.id,
             collectorType: connection.collectorType,
             site: (connection.configuration.site as string | undefined) ?? "default",
+            tlsInsecure: (connection.configuration.tlsInsecure as boolean | undefined) ?? false,
             hasApiKey: connection.hasApiKey,
           }}
           onComplete={() => setMode("view")}
@@ -171,7 +172,7 @@ export function SavedConnectionRow({ connection }: Props) {
                 type="button"
                 onClick={handleDelete}
                 disabled={isPending}
-                className="rounded-md bg-[#fb7185] px-2.5 py-1 text-xs font-medium text-white hover:bg-[#f43f5e] disabled:opacity-50"
+                className="rounded-md bg-[var(--dpf-error)] px-2.5 py-1 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
               >
                 {isPending ? "Deleting…" : "Confirm"}
               </button>
@@ -189,7 +190,7 @@ export function SavedConnectionRow({ connection }: Props) {
               type="button"
               onClick={() => setMode("confirming-delete")}
               disabled={isPending}
-              className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-1 text-xs text-[var(--dpf-muted)] hover:border-[#fb7185] hover:text-[#fb7185]"
+              className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-1 text-xs text-[var(--dpf-muted)] hover:border-[var(--dpf-error)] hover:text-[var(--dpf-error)]"
             >
               Delete
             </button>
@@ -200,7 +201,7 @@ export function SavedConnectionRow({ connection }: Props) {
       {lastAction && (
         <p
           className={`mt-3 text-xs ${
-            lastAction.kind === "ok" ? "text-emerald-400" : "text-[#fb7185]"
+            lastAction.kind === "ok" ? "text-[var(--dpf-success)]" : "text-[var(--dpf-error)]"
           }`}
         >
           {lastAction.message}
