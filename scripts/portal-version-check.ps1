@@ -61,7 +61,7 @@ Write-Host "[version-check] Portal image version: $($response.version)"
 Write-Host "[version-check] Local origin/main   : $expected"
 
 if ($response.source -ne "git-sha") {
-  Write-Host "[version-check] Image was built without DPF_VERSION (content-hash fallback) - cannot compare to a SHA. Rebuild with scripts/build-images.ps1 to stamp a git SHA."
+  Write-Host "[version-check] Image was built without DPF_VERSION (content-hash fallback) - cannot compare to a SHA. Rebuild/redeploy with scripts\redeploy-portal.ps1 to stamp a git SHA."
   exit 2
 }
 
@@ -71,5 +71,5 @@ if ($response.version.ToLower() -eq $expected.ToLower()) {
 }
 
 Write-Host "[version-check] DRIFT - portal is NOT serving origin/main."
-Write-Host "[version-check] Rebuild with: scripts\build-images.ps1 (then docker compose up -d portal portal-init)"
+Write-Host "[version-check] Rebuild/redeploy with: scripts\redeploy-portal.ps1"
 exit 1
