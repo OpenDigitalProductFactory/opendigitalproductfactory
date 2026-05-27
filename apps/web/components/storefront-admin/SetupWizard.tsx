@@ -5,6 +5,7 @@ import { FinancialSetupStep } from "./FinancialSetupStep";
 import { seedOnboardingBrandOffer } from "@/lib/actions/seed-onboarding-brand-offer";
 import { financeProfileSlugFromCategory } from "@/lib/finance/setup-profile";
 import { INDUSTRY_OPTIONS } from "@/lib/storefront/industries";
+import type { WorkspaceHomeSetupActivationSummary } from "@/lib/workspace-home";
 
 type Archetype = {
   archetypeId: string;
@@ -15,6 +16,7 @@ type Archetype = {
   itemTemplates: unknown;
   sectionTemplates: unknown;
   activationProfile?: unknown;
+  workspaceHomeActivation?: WorkspaceHomeSetupActivationSummary;
   isBuiltIn?: boolean;
 };
 
@@ -182,6 +184,21 @@ export function SetupWizard({
         itemTemplates: created.itemTemplates,
         sectionTemplates: created.sectionTemplates,
         activationProfile: created.activationProfile,
+        workspaceHomeActivation: {
+          archetypeId: created.archetypeId,
+          archetypeName: created.name,
+          mode: "unconfigured",
+          match: "none",
+          label: "Platform workspace view",
+          status: "not-configured",
+          sourceContributionId: null,
+          primitiveWidgets: [],
+          requiredCanonicalData: [],
+          requiredSignals: [],
+          missingDataBehavior: "platform-fallback",
+          fallback: "platform",
+          setupAction: "choose-or-finish-business-setup",
+        },
         isBuiltIn: false,
       });
       setStep(2);
@@ -406,7 +423,10 @@ export function SetupWizard({
           These sections and items will be created. You can edit them later.
           {selected?.isBuiltIn === false && " This is a custom template."}
         </p>
-        <ArchetypeActivationSummary activationProfile={selected?.activationProfile} />
+        <ArchetypeActivationSummary
+          activationProfile={selected?.activationProfile}
+          workspaceHomeActivation={selected?.workspaceHomeActivation}
+        />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
           <div>
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Sections</div>
