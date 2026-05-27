@@ -248,3 +248,13 @@ export * from "./discovery-fingerprint-rules";
 // NFT pattern. The helper is test-only — import it directly from
 // `./discovery-fingerprint-catalog` in tests, not via the barrel.
 export * from "./discovery-fingerprint-store";
+
+// Contributor-inventory-sync ScheduledJob constants — shared between the
+// seed helper and the apps/web Inngest runner so the heartbeat row's name +
+// schedule strings cannot drift between create (seed) and create-on-miss
+// (runner upsert).
+export {
+  CONTRIBUTOR_INVENTORY_JOB_ID,
+  CONTRIBUTOR_INVENTORY_JOB_NAME,
+  CONTRIBUTOR_INVENTORY_SCHEDULE,
+} from "./seed-contributor-inventory";

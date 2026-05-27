@@ -36,12 +36,14 @@ export function ChangeLanesDashboard({
   generatedAt,
   anySourceWarmingUp = false,
   anySnapshotSourceDegraded = false,
+  isAdmin = false,
 }: {
   lanes: ContributorChangeLane[];
   freshness: LaneReadModelFreshness[];
   generatedAt: string;
   anySourceWarmingUp?: boolean;
   anySnapshotSourceDegraded?: boolean;
+  isAdmin?: boolean;
 }) {
   const [tab, setTab] = useState<TabId>("active");
 
@@ -65,7 +67,7 @@ export function ChangeLanesDashboard({
         </p>
       </header>
 
-      <ChangeLaneSourceSummary freshness={freshness} />
+      <ChangeLaneSourceSummary freshness={freshness} isAdmin={isAdmin} />
 
       <div
         className="flex flex-wrap gap-1 border-b text-xs"

@@ -268,7 +268,22 @@ export type MarketingWorkspaceSnapshot = {
       createdAt: Date;
     }>;
   };
+  pendingDrafts: OutboundDraftRow[];
   staleAreas: string[];
+};
+
+export type OutboundDraftRow = {
+  draftId: string;
+  sourceType: "marketing-asset-task" | "marketing-campaign-brief" | "inbound-channel-message" | "manual";
+  sourceId: string | null;
+  assetTaskTitle: string | null;
+  channelId: string;
+  assetType: string;
+  status: "draft" | "pending-review" | "approved" | "rejected" | "needs-changes" | "stale";
+  body: string;
+  bodyFormat: "markdown" | "html" | "plain";
+  createdByAgentId: string | null;
+  createdAt: Date;
 };
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -1129,6 +1144,7 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
     assetTasks,
     kpiCheckpoints,
     automationCandidates,
+    pendingDraftsRaw,
   ] = await Promise.all([
     prisma.marketingCampaignBrief.findMany({
       where: { strategyId: strategy.strategyId },
@@ -1150,7 +1166,35 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
       orderBy: { createdAt: "desc" },
       take: 5,
     }),
+    prisma.outboundDraft.findMany({
+      where: {
+        organizationId: organization.id,
+        domain: "marketing",
+        status: { in: ["pending-review", "needs-changes"] },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    }),
   ]);
+
+  // Map asset task ids to titles for the queue panel
+  const taskIdToTitle = new Map(assetTasks.map((t) => [t.taskId, t.title]));
+  const pendingDrafts: OutboundDraftRow[] = pendingDraftsRaw.map((draft) => ({
+    draftId: draft.draftId,
+    sourceType: draft.sourceType as OutboundDraftRow["sourceType"],
+    sourceId: draft.sourceId,
+    assetTaskTitle:
+      draft.sourceType === "marketing-asset-task" && draft.sourceId
+        ? taskIdToTitle.get(draft.sourceId) ?? null
+        : null,
+    channelId: draft.channelId,
+    assetType: draft.assetType,
+    status: draft.status as OutboundDraftRow["status"],
+    body: draft.body,
+    bodyFormat: draft.bodyFormat as OutboundDraftRow["bodyFormat"],
+    createdByAgentId: draft.createdByAgentId,
+    createdAt: draft.createdAt,
+  }));
 
   const normalizedSnapshot: MarketingWorkspaceSnapshot = {
     organization: {
@@ -1248,6 +1292,7 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
         createdAt: candidate.createdAt,
       })),
     },
+    pendingDrafts,
     staleAreas: [],
   };
 

@@ -1392,6 +1392,22 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     coworkerArtifact: true,
   },
   {
+    name: "draft_marketing_asset",
+    description: "Turn a saved MarketingAssetTask brief into a channel-shaped, human-reviewable draft. Creates an OutboundDraft with status='pending-review' that appears in the marketing approval queue on /customer/marketing. Phase 1: LinkedIn posts and emails only. No external API call — the draft is internal until a human approves and a publish tool fires.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        assetTaskId: { type: "string", description: "MarketingAssetTask.taskId to draft from" },
+        channelOverride: { type: "string", enum: [...MARKETING_CHANNELS], description: "Override the asset task's channel if drafting a variant" },
+        toneNotes: { type: "string", description: "Optional one-line guidance the drafter should respect (e.g. 'first person, technical, no emojis')" },
+      },
+      required: ["assetTaskId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+    coworkerArtifact: true,
+  },
+  {
     name: "record_marketing_kpi_checkpoint",
     description: "Record a KPI checkpoint or target for the active marketing plan so the workspace can show what will be measured.",
     inputSchema: {
@@ -4142,6 +4158,23 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
+  },
+  {
+    name: "trigger_contributor_inventory_sync",
+    description:
+      "Dispatch an on-demand contributor inventory sync (git worktrees, branches, GitHub PRs) without waiting for the 10-minute cron. Used by agents that just made an external change (pushed a branch, opened a PR) and want the /platform/development/change-lanes dashboard to reflect it on the next refresh. Returns the Inngest event id immediately; the runner creates the ContributorInventorySyncRun row asynchronously.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        reason: {
+          type: "string",
+          description: "Optional short tag propagated to the run row's triggeredBy field for audit.",
+        },
+      },
+    },
+    requiredCapability: "manage_provider_connections",
+    executionMode: "immediate",
+    sideEffect: true,
   },
 ];
 
@@ -13184,6 +13217,31 @@ export async function executeTool(
       };
     }
 
+    case "draft_marketing_asset": {
+      const { draftMarketingAsset } = await import("./marketing/draft-builder");
+      const result = await draftMarketingAsset({
+        assetTaskId: String(params["assetTaskId"] ?? ""),
+        channelOverride: typeof params["channelOverride"] === "string" ? params["channelOverride"] : undefined,
+        toneNotes: typeof params["toneNotes"] === "string" ? params["toneNotes"] : undefined,
+        createdByAgentId: context?.agentId ?? null,
+      });
+
+      if (!result.success) {
+        return {
+          success: false,
+          message: result.message,
+          error: result.error,
+        };
+      }
+
+      return {
+        success: true,
+        entityId: result.draftId,
+        message: result.message,
+        data: result,
+      };
+    }
+
     case "record_marketing_kpi_checkpoint": {
       const result = await recordMarketingKpiCheckpoint({
         checkpoint: {
@@ -13763,6 +13821,32 @@ export async function executeTool(
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return { success: false, error: msg, message: `get_deliberation_outcome failed: ${msg}` };
+      }
+    }
+
+    case "trigger_contributor_inventory_sync": {
+      // BI-063BDF1B Phase 5 — admin-scope handle for agents to dispatch the
+      // on-demand Inngest event. The runner is contributorInventorySyncOnDemand
+      // in apps/web/lib/queue/functions/contributor-inventory-sync.ts.
+      const reason = typeof params["reason"] === "string" ? params["reason"] : null;
+      try {
+        const { inngest } = await import("@/lib/queue/inngest-client");
+        const result = await inngest.send({
+          name: "ops/contributor-inventory-sync.run",
+          data: { triggeredBy: reason ? `mcp:${reason}` : "mcp" },
+        });
+        return {
+          success: true,
+          message: "Queued an on-demand contributor inventory sync.",
+          data: { eventIds: result.ids, status: "queued" },
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          error: msg,
+          message: `trigger_contributor_inventory_sync failed: ${msg}`,
+        };
       }
     }
 

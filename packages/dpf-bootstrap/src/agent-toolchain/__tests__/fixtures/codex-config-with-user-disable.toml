@@ -1,0 +1,19 @@
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+model = "gpt-5.5"
+model_reasoning_effort = "xhigh"
+
+[mcp_servers.dpf]
+url = "http://127.0.0.1:3000/api/mcp/v1"
+bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"
+
+[features]
+multi_agent = true
+
+[plugins."superpowers@openai-curated"]
+enabled = true
+
+# User has manually disabled the DPF plugin for this contributor.
+# The bootstrap must preserve user intent and not silently re-enable it.
+[plugins."dpf-platform"]
+enabled = false

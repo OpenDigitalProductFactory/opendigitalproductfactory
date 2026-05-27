@@ -256,6 +256,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   create_marketing_asset_task:   ["marketing_write"],
   record_marketing_kpi_checkpoint: ["marketing_write"],
   create_marketing_automation_candidate: ["marketing_write"],
+  draft_marketing_asset:         ["marketing_write"],
   analyze_seo_opportunity:      ["marketing_read"],
   generate_custom_archetype:    ["marketing_write"],
   assess_archetype_refinement:  ["marketing_read"],
@@ -285,6 +286,11 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   assess_contribution:    ["backlog_read"],
   contribute_to_hive:     ["backlog_write"],
   apply_platform_update:  ["admin_write"],
+
+  // Contributor inventory sync — admin-scope on-demand trigger so agents
+  // that just pushed a branch / opened a PR can force the cron to run
+  // out-of-band rather than waiting up to 10 minutes (BI-063BDF1B Phase 5).
+  trigger_contributor_inventory_sync: ["admin_write"],
 
   // Design intelligence (read-only references)
   search_design_intelligence: ["file_read"],

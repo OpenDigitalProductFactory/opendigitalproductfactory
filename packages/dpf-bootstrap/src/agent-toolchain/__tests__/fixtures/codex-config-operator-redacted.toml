@@ -1,0 +1,98 @@
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+model = "gpt-5.5"
+model_reasoning_effort = "xhigh"
+
+[mcp_servers.nanobanana-mcp]
+command = "npx"
+args = ["-y", "@ycse/nanobanana-mcp"]
+
+[mcp_servers.youtube_transcript]
+command = "npx"
+args = ["-y", "@emit-ia/youtube-transcript-mcp"]
+
+[mcp_servers.dpf]
+url = "http://127.0.0.1:3000/api/mcp/v1"
+bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"
+
+[mcp_servers.node_repl]
+args = []
+command = 'C:\redacted-path\node_repl.exe'
+startup_timeout_sec = 120
+
+[mcp_servers.node_repl.env]
+BROWSER_USE_AVAILABLE_BACKENDS = "chrome,iab"
+BROWSER_USE_MARKETPLACE_NAME = "openai-bundled"
+CODEX_CLI_PATH = 'C:\redacted-path\codex.exe'
+CODEX_HOME = 'C:\redacted-path\.codex'
+NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS = "1000"
+NODE_REPL_NODE_MODULE_DIRS = ""
+NODE_REPL_NODE_PATH = 'C:\redacted-path\node.exe'
+NODE_REPL_TRUSTED_BROWSER_CLIENT = "<redacted-hash>"
+NODE_REPL_TRUSTED_CODE_PATHS = 'C:\redacted-path\.codex'
+NODE_REPL_UNTRUSTED_ENV_ALLOWLIST = "BROWSER_USE_MARKETPLACE_NAME"
+
+[windows]
+sandbox = "elevated"
+
+[features]
+multi_agent = true
+memories = true
+chronicle = false
+js_repl = false
+
+[projects.'D:\DPF']
+trust_level = "trusted"
+
+[projects.'c:\redacted-path']
+trust_level = "trusted"
+
+[plugins."github@openai-curated"]
+enabled = true
+
+[plugins."superpowers@openai-curated"]
+enabled = true
+
+[plugins."build-ios-apps@openai-curated"]
+enabled = true
+
+[plugins."gmail@openai-curated"]
+enabled = true
+
+[plugins."documents@openai-primary-runtime"]
+enabled = true
+
+[plugins."spreadsheets@openai-primary-runtime"]
+enabled = true
+
+[plugins."presentations@openai-primary-runtime"]
+enabled = true
+
+[plugins."chrome@openai-bundled"]
+enabled = true
+
+[plugins."browser@openai-bundled"]
+enabled = true
+
+[marketplaces.openai-bundled]
+last_updated = "2026-05-27T01:22:29Z"
+source_type = "local"
+source = 'C:\redacted-path\openai-bundled'
+
+[marketplaces.openai-primary-runtime]
+last_updated = "2026-05-21T20:14:04Z"
+source_type = "local"
+source = 'C:\redacted-path\openai-primary-runtime'
+
+[tui.model_availability_nux]
+"gpt-5.5" = 4
+
+[desktop]
+ambient-suggestions-enabled = true
+conversationDetailMode = "STEPS_COMMANDS"
+
+[desktop.open-in-target-preferences]
+global = "fileManager"
+
+[desktop.open-in-target-preferences.perPath]
+'D:\DPF' = "fileManager"
