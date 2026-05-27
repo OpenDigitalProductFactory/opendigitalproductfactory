@@ -18,18 +18,22 @@ principlePublic: false
 authoredAt: 2026-05-22
 authoredBy: mark-bodman
 principleOverlapScan:
-  highestAlignment: 0.55
-  highestAlignmentSlug: worktree-per-session
+  highestAlignment: 0.60
+  highestAlignmentSlug: never-fabricate
+  scanRunAt: 2026-05-26
   rationale: |
-    Adjacent but not redundant. worktree-per-session is a concrete physical-isolation tactic
-    at the filesystem layer; PAR is the upstream protocol that explains why such tactics are
-    needed and generalises to operator/agent, agent/agent, and session/review-pass handoffs
-    that do not touch git at all. human-in-the-loop-at-phase-boundaries is the narrowest
-    second-closest (phase-boundary approval is the canonical operator-acknowledgement
-    surface, but PAR covers handoffs that have no phase to anchor on). Mechanical scan via
-    principle_decide could not be run at promotion time (MCP endpoint unreachable); estimates
-    above are based on reading of nearby principles. Recommend re-running the scan
-    post-merge for telemetry.
+    Below the §4.3 ship-freely threshold of 0.70 — no body-paragraph additivity argument
+    required. Mechanical scan via principle_decide ran with ringScope=universal-ring and
+    returned 10 commandment-tier principles (retrieval cap reached). Highest dimension-vector
+    alignment was 0.60 against Never Fabricate; All Changes Land via PR Against Main and
+    Build Gate Mandatory tied at the same level. These are dimension-vector alignments
+    (do the candidate's features point the same way as the existing principle's vector?),
+    not semantic-redundancy scores — PAR binds a different decision moment from any of
+    those commandments (ack-before-mutate vs PR-lands-on-main / build-gate / don't-invent).
+    Core-tier principles like worktree-per-session and human-in-the-loop-at-phase-boundaries
+    were not returned in the retrieval set (the cap was reached on commandments); the
+    qualitative argument that PAR is upstream of worktree-per-session and adjacent to HITL
+    still holds and is captured in the body's Related-Principles section.
 ---
 
 # Propose, Acknowledge, Reassign (PAR)

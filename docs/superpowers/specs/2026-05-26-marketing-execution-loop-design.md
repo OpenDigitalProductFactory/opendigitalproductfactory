@@ -3,437 +3,589 @@
 | Field | Value |
 | --- | --- |
 | Date | 2026-05-26 |
-| Status | Draft for operator review |
-| Owners | Mark Bodman, Claude |
-| Scope | Content drafter, human-approval queue, channel publishers, inbound responder, KPI pullback, scheduler/autopilot |
+| Review pass | 2026-05-27 chief-architect / UX review |
+| Status | Revised draft for operator review |
+| Owners | Mark Bodman, Claude, Codex review |
+| Scope | Drafter, approval queue, channel publishers, inbound responder, KPI pullback, scheduler/autopilot |
 | Related specs | `2026-05-26-pipedrive-inspired-crm-marketing-operations-design.md`, `2026-04-24-customer-marketing-workspace-design.md`, `2026-04-11-marketing-specialist-skills-design.md` |
-| Related epic | `EP-MARKETING` (in-progress) — extends with new sub-epic `EP-MARKETING-EXEC` |
+| Related backlog | `EP-MARKETING` is live and in-progress; `EP-CRM-MKT-OPS` is also live and in-progress. Proposed execution epic: `EP-MARKETING-EXEC`, not yet created in live backlog. |
 
 ## 1. Purpose
 
-Driving `/customer/marketing` end-to-end as the CEO of Open Digital Product Factory surfaced a real product gap: the Marketing Strategist coworker captures a high-quality plan (4-week launch arc, weekly campaign briefs, content asset tasks, KPI stack) but **nothing in that plan actually executes**. No LinkedIn post is written. No marketing email is sent. No ad is placed. No inbound inquiry gets a reply. The strategist's own response to "save this to the dashboard" was, until 2026-05-26, "I can't save this" — and even after that fix shipped (PR #1208), the system still only persists planning intent. Execution is a separate substrate that does not yet exist.
+Driving `/customer/marketing` end-to-end as the CEO of Open Digital Product Factory surfaced the product gap: the Marketing Strategist can now persist a high-quality plan, but the platform still stops before execution. It can save strategy, campaign briefs, asset tasks, KPI checkpoints, and automation candidates. It does not yet draft the LinkedIn post, route it through approval, publish it, answer inbound replies, or pull channel performance back into the next planning cycle.
 
-This spec defines that execution substrate as one closed loop:
+This spec defines the missing execution loop:
 
+```text
+MarketingStrategy / MarketingAssetTask
+  -> outbound draft
+  -> human approval
+  -> channel publish/send
+  -> inbound response, where applicable
+  -> KPI pullback
+  -> next Marketing Strategist review
 ```
-plan          ─► draft         ─► human approval   ─► channel publish
-(today)          (missing)        (missing)           (missing)
-                                                         │
-KPI checkpoint ◄─ analytics ────  inbound responder ◄────┘
-(today)           (missing)       (missing)
-```
 
-The loop is intentionally one architecture, not five disconnected features. Each channel (LinkedIn, email, ads) is a pluggable adapter over the same draft → approve → publish → measure backbone. The strategist already at the top of the loop, the CRM cockpit already at the bottom — what's missing is the middle.
+The loop is one architecture, not a bundle of unrelated channel features. LinkedIn posts, email campaigns, ads, and inbound replies should use the same draft -> approve -> publish/send -> measure backbone. Channel adapters provide provider-specific behavior; the platform owns state, approvals, audit, scheduling, and UX.
 
 Non-goals:
 
-- Replacing existing strategy capture work (`save_marketing_review`, `create_marketing_campaign_brief`, `create_marketing_asset_task`, `record_marketing_kpi_checkpoint`, `create_marketing_automation_candidate`). They stay as-is; this spec adds the layer that consumes them.
-- Replacing the existing Pipedrive-inspired CRM/marketing workspace spec. That spec defines WHAT the user sees and how the pipeline behaves; this spec defines HOW marketing artifacts get produced and reach external channels.
-- Building a generic workflow engine. The loop is marketing-specific in vocabulary but the channel-adapter pattern is reusable for other coworker domains (customer-advisor outbound, build-specialist contributor recruitment, etc.) if and when those surface the same gap.
-- Removing the human in the loop. Per the marketing-specialist system prompt: "Publishing, sending, scheduling, or changing externally visible marketing requires explicit human approval." Autopilot mode (Phase 5) bounds the human bypass, never eliminates it.
+- Replacing existing strategy capture tools: `save_marketing_review`, `create_marketing_campaign_brief`, `create_marketing_asset_task`, `record_marketing_kpi_checkpoint`, and `create_marketing_automation_candidate`.
+- Replacing the Pipedrive-inspired CRM/marketing workspace spec. That spec defines the daily working surfaces; this spec defines the execution substrate those surfaces can call.
+- Building a generic workflow engine. This is an outbound execution loop with bounded channel adapters, not arbitrary automation.
+- Removing the human in the loop. External publishing, sending, scheduling, ad spend, public profile changes, and customer-facing replies require explicit human approval until a bounded policy allows a specific low-risk path.
 
 ## 2. Current Runtime Grounding
 
-Verified against the live install at `http://localhost:3000` on 2026-05-26 immediately after PR #1208 merged.
+This review re-verified repo state in `D:\DPF\.claude\worktrees\keen-mclaren-5fff2e` on 2026-05-27. MCP backlog access was available; MCP spec search did not return this branch-only document.
 
-**What exists today:**
+What exists today:
 
-- `MarketingStrategy`, `MarketingReview`, `MarketingCampaignBrief`, `MarketingAssetTask`, `MarketingKpiCheckpoint`, `MarketingAutomationCandidate` Prisma models. All have `createdByAgentId` provenance and are read from `getMarketingWorkspaceSnapshot()` in [apps/web/lib/marketing.ts](../../../apps/web/lib/marketing.ts).
-- `marketing-specialist` agent (`AGT-WS-MARKETING`) defined in [packages/db/data/agent_registry.json](../../../packages/db/data/agent_registry.json) with `marketing_write` grant.
-- Strategist tools that capture intent: `save_marketing_review`, `create_marketing_campaign_brief`, `create_marketing_asset_task`, `record_marketing_kpi_checkpoint`, `create_marketing_automation_candidate`. All carry `coworkerArtifact: true` (PR #1208) so they're callable in advise mode.
-- `MarketingStrategyOverview` component renders "Campaign briefs", "Proof and content tasks", "KPI checkpoints", "Automation candidates" panels on `/customer/marketing`.
-- `revenue-cockpit.ts` already counts `campaignBriefsOpen` + `assetTasksOpen` into the CRM cockpit summary.
-- Integration catalog (`apps/web/lib/tools/native-integration-catalog.ts`) already lists HubSpot, Google Marketing Intelligence, Facebook Lead Ads, Google Business Profile, Mailchimp — but none are wired beyond catalog metadata.
-- No `MarketingAssetDraft`, `MarketingApproval`, `MarketingPublishedAsset`, `MarketingInboundReply`, `MarketingScheduledPublish` models exist.
-- No LinkedIn / email / ads OAuth flows exist in `/admin/integrations`.
-- No `draft_marketing_asset`, `publish_*`, `respond_to_inquiry`, `pull_channel_kpis` tools exist.
-- The `MarketingAutomationCandidate.description` field explicitly states: *"This does not publish, send, or schedule anything; external actions still require approval."* — the candidate is intent capture, not an executor.
+- Live backlog includes `EP-MARKETING` in progress with nine items and `EP-CRM-MKT-OPS` in progress with five items.
+- `packages/db/prisma/schema.prisma` already has `MarketingStrategy`, `MarketingReview`, `MarketingCampaignBrief`, `MarketingAssetTask`, `MarketingKpiCheckpoint`, and `MarketingAutomationCandidate`.
+- `apps/web/lib/marketing.ts` owns the marketing enum catalogs, artifact builders, and `getMarketingWorkspaceSnapshot()`.
+- `apps/web/lib/mcp-tools.ts` exposes `get_marketing_summary`, `suggest_campaign_ideas`, `save_marketing_review`, `create_marketing_campaign_brief`, `create_marketing_asset_task`, `record_marketing_kpi_checkpoint`, `create_marketing_automation_candidate`, and `analyze_seo_opportunity`.
+- The write tools require `operate_marketing` platform capability and map to the agent grant `marketing_write` through `apps/web/lib/tak/agent-grants.ts`.
+- `/customer/marketing` resolves to `marketing-specialist` with a prompt that explicitly allows internal drafting/work-product creation but requires human approval for external publish, send, schedule, or public changes.
+- `MarketingStrategyOverview` renders campaign briefs, asset tasks, KPI checkpoints, and automation candidates on `/customer/marketing`.
+- `apps/web/lib/crm/revenue-cockpit.ts` already counts open campaign briefs, asset tasks, and automation candidates into the customer/revenue attention model.
+- `apps/web/lib/tools/native-integration-catalog.ts` includes HubSpot, Google Marketing Intelligence, Facebook Lead Ads, Facebook Pages, Google Business Profile, and Mailchimp. It does not include LinkedIn or Postmark.
+- `IntegrationCredential` already exists as the encrypted polymorphic credential table for native integrations. It uses `fieldsEnc` and `tokenCacheEnc` encrypted by `apps/web/lib/govern/credential-crypto.ts` with `CREDENTIAL_ENCRYPTION_KEY`, not `AUTH_SECRET`.
+- `AgentActionProposal` and `ToolExecution` already exist. They should be reused for audit/proposal linkage where possible, but they do not by themselves provide a route-owned marketing approval queue.
 
-**What this means for design:** the strategy layer is already present and well-shaped. The loop's missing middle slots in on top of existing models — `MarketingAssetTask` becomes the upstream input to a new `MarketingAssetDraft`, and `MarketingKpiCheckpoint` becomes the downstream sink for channel analytics. No prior models need refactoring.
+What is missing:
+
+- No durable outbound draft model.
+- No marketing approval queue item/decision model.
+- No published/sent asset record that links a draft to an external id/url.
+- No scheduler/autopilot policy for outbound execution.
+- No inbound marketing message/reply loop.
+- No LinkedIn publishing connector or OAuth page.
+- No Postmark inbound/outbound connector in the native catalog.
+- No external marketing publish/send MCP tools.
+
+Design implication: existing marketing models should remain the planning source of truth. Execution should sit downstream of `MarketingAssetTask`, link back to existing strategy/campaign records, and feed metrics into `MarketingKpiCheckpoint`. The new durable concepts should not be named only for marketing if they are inherently shared outbound execution concepts.
 
 ## 3. Research and Benchmarking
 
-Per the DPF design-research kernel principle, this section reviews open-source and commercial precedent. References are to canonical project documentation, not abstract patterns.
+Sources checked for this review:
 
-### 3.1 Open-source precedent
+- [Mautic campaigns overview](https://docs.mautic.org/en/5.2/campaigns/campaigns_overview.html) and [Mautic developer campaign docs](https://developer.mautic.org/)
+- [listmonk campaign API docs](https://listmonk.app/docs/apis/campaigns/)
+- [n8n credentials docs](https://docs.n8n.io/credentials/) and [custom operations docs](https://docs.n8n.io/integrations/custom-operations/)
+- [Buffer Publish](https://buffer.com/publish) and [Buffer draft approval docs](https://support.buffer.com/article/665-managing-and-approving-draft-posts)
+- [Customer.io campaign concepts](https://docs.customer.io/journeys/campaigns-in-customerio/)
+- [HubSpot Breeze social post generation docs](https://knowledge.hubspot.com/social/use-hubspots-ai-assistant-to-create-social-posts)
+- [Postmark manual](https://postmarkapp.com/manual)
+- [LinkedIn Posts API docs](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-04)
 
-- **Mautic** (`mautic/mautic`) — OSS marketing automation. Campaign builder modelled as DAG (`Campaign` → `Event` → `Decision/Action/Condition`). Channel actions include email, SMS, web push, focus item. Approval workflow exists as `published`/`unpublished` flag on the campaign, not a per-action gate. Adapter pattern: each channel is a plugin bundle with a `EventSubscriber` listening to campaign events. Patterns worth adopting: event-bus contract between campaign engine and channel plugins; explicit `Stat` table per channel (sent / bounced / opened / clicked). Anti-pattern to reject: weak per-action approval — the whole campaign goes live in one toggle, which is too coarse for DPF's principle.
+Patterns to adopt:
 
-- **listmonk** (`knadh/listmonk`) — OSS mailing list manager (newsletters + transactional). Narrow scope. Strengths: clean SMTP-queue abstraction with retry, bounce-back webhook handling, segment-based audience selection. The `Campaign` model has explicit `status` enum (`draft / scheduled / running / paused / cancelled / finished`) — this is exactly the state machine we want on `MarketingAssetDraft`. Pattern worth adopting: status enum + audit trail. Limitation: no AI drafter — the human writes copy in a Markdown/HTML editor.
+- listmonk's explicit campaign status transitions, adapted to outbound draft states.
+- Buffer's approval queue and side-by-side review experience for social posts.
+- n8n's separation between credential schemas, operations, and node/adaptor capabilities.
+- Customer.io's distinction between one-shot broadcasts and triggered campaigns.
+- Postmark's JSON inbound webhook shape for email replies.
+- HubSpot Breeze's channel-aware drafting inside the work surface.
+- Mautic's event/plugin idea, adapted as small channel adapters rather than a broad workflow builder.
 
-- **n8n** (`n8n-io/n8n`) — workflow automation with first-party LinkedIn, Gmail, Postmark, SendGrid, Google Ads, Facebook Lead Ads nodes. Each integration is a versioned `node` with `credentials` schema + `operations` list. Pattern worth adopting: per-integration credentials schema + capability surface, mirrored in our `Integration` model. n8n's "execute when approved" is a manual user click in the editor — doesn't match our queue, but the integration shape is reusable.
+Patterns to reject:
 
-- **Postal** (`postalserver/postal`) — OSS mail server with HTTP API for sending and inbound webhooks. Useful as a self-hostable Postmark-equivalent for DPF installs that don't want to use a SaaS email provider. Inbound message webhook → JSON → handler is the right shape for the inbound responder phase.
+- Whole-campaign approval toggles. DPF needs per-asset and per-spend approval.
+- One giant marketing suite UX. The first screen must remain a calm operations surface under `/customer/marketing`.
+- Credential brokerage. DPF connector code may exist, but the install owns third-party accounts, OAuth apps where required, API keys, tokens, and stored credentials.
+- "Activate once, run forever" automation. Autopilot is a bounded policy with audit, ceilings, and stop controls.
 
-### 3.2 Commercial precedent
+## 4. Product and UX Principles
 
-- **Buffer** (publishing only) — best-in-class publish queue UX. Patterns to adopt: side-by-side preview (raw markdown vs. rendered LinkedIn / X / Threads) at the approval step; calendar view of "queued for posting"; click-to-reschedule; per-channel posting window. Anti-pattern to reject: no LLM drafter — Buffer assumes you wrote the post yourself. Our queue must show "drafted by marketing-specialist 2 minutes ago, awaiting review" provenance.
+1. Strategy remains first. Execution starts from saved strategy, campaign brief, or asset task context.
+2. The first viewport is operational: pending approvals, scheduled items, recent sends/publishes, and KPI movement. No hero, no marketing landing page, no explanatory card stack.
+3. No-surprise AI. Clicking a metric, tab, card, or pending item navigates or opens review; it does not silently send a coworker prompt or publish anything.
+4. AI may draft and prepare internal artifacts through governed tools. External channel effects require explicit approval and produce audit evidence.
+5. Channel adapters stay small. Drafting, approval, scheduling, and metrics are platform services.
+6. Existing CRM and marketing models are reused before adding new tables.
+7. UI uses DPF theme variables only. No hardcoded colors, inline status hex, disabled future tabs, or nested cards.
+8. The implementation budget reserves roughly 20 percent for refactoring shared presentation, state machines, and integration helpers.
 
-- **Lemlist** (outbound + sequences) — sequence-as-graph with per-step gating. Each step (LinkedIn connection / LinkedIn message / email A / email B / wait) has its own approval and per-prospect personalization. Pattern to adopt: sequence graph with branches, where each node is a `MarketingAssetTask` plus optional wait/condition. Worth adopting: AI-personalization that fills `{{firstName}}` style tokens from CRM context before approval, so the human reviews the actual personalized output, not a template.
+## 5. Architecture
 
-- **Customer.io** (multi-channel orchestration) — `Broadcast` (one-shot) vs. `Campaign` (triggered) distinction. Channels = delivery nodes. "Review and activate" is the only gate. Patterns to adopt: distinction between one-shot (a single LinkedIn post) and triggered (auto-reply to inbound inquiry); per-channel delivery telemetry table. Anti-pattern: "activate once, run forever" — DPF expects re-review per planning cycle.
+### 5.1 Loop
 
-- **HubSpot Breeze** (AI content generation across the marketing suite) — LLM drafter for blog posts, social posts, emails, ad copy. Outputs land directly in the publishing surface as draft. Patterns to adopt: drafter takes brief + brand voice + audience context and produces channel-specific output with channel-appropriate length / hashtag conventions / CTA shape. Anti-pattern to reject: HubSpot's "everything in one giant suite" — we keep the loop composable and conduit-only.
-
-- **Beehiiv** (newsletter + paid acquisition) — bundles email outbound with paid traffic acquisition for newsletter growth. KPI loop is tight: subscriber growth → engagement → ad spend ROI. Pattern worth adopting: per-asset attribution from inquiry / subscriber back to source campaign, surfaced in CRM. Not a primary model for DPF since it's newsletter-specific.
-
-### 3.3 Patterns adopted, adapted, rejected
-
-**Adopt:**
-
-- listmonk's `MarketingAssetDraft.status` state machine (`draft / pending-review / approved / rejected / scheduled / published / failed`).
-- Buffer's side-by-side preview at the approval step.
-- Lemlist's per-step approval gating within a sequence.
-- n8n's `IntegrationCredential` shape per channel adapter.
-- Customer.io's one-shot vs. triggered distinction (`scheduled_publish` vs. `auto_responder`).
-- Mautic's event-bus contract between drafter and channel adapter.
-- HubSpot Breeze's channel-aware drafter (different prompt for LinkedIn vs. email vs. ad copy).
-
-**Adapt:**
-
-- Mautic's campaign DAG → we represent the 4-week strategist plan as a sequence of `MarketingAssetTask`s, where the existing `dueWindow` field acts as the schedule. We don't need a new DAG model; the strategist's plan already encodes the structure.
-- Lemlist's sequence graph → start with linear sequences (week 1 → week 2 → week 3 → week 4). Branch/condition support is a Phase 5 nice-to-have, not a Phase 1 requirement.
-- HubSpot's drafter → DPF's drafter is a coworker tool, not a hidden internal service. Outputs are auditable AgentMessage + ToolExecution rows.
-
-**Reject:**
-
-- Mautic's coarse-grained campaign approval (whole campaign on/off). DPF approves per asset.
-- Bring-your-own-server-with-our-creds patterns. Per DPF's conduit-not-broker principle, every channel adapter requires the customer to bring their own OAuth token / SMTP creds / ad account. DPF never enrolls as partner, never escrows credentials, never proxies API calls through DPF-owned accounts.
-- Implicit approval ("activate once, run forever"). Each external action requires a fresh human approval until the user explicitly opts that channel into bounded autopilot (Phase 5).
-- One-giant-suite UX (HubSpot). The loop stays composable: drafter can be invoked from chat OR from a one-click button next to an asset task; approval queue can be reviewed in the marketing workspace OR consumed via the existing dashboard / inbox surfaces.
-
-## 4. Architecture
-
-### 4.1 The loop
-
-```
-┌─────────────────────────┐
-│ marketing-specialist    │  strategist plans, persists MarketingAssetTask
-│   (existing)            │
-└─────────────┬───────────┘
-              │
-              ▼  draft_marketing_asset(taskId)
-┌─────────────────────────┐
-│ content-drafter agent   │  new agent: takes brief + brand voice + context
-│   (new, Phase 1)        │  produces channel-shaped body, saves as
-└─────────────┬───────────┘  MarketingAssetDraft(status=pending-review)
-              │
-              ▼
-┌─────────────────────────┐
-│ MarketingApprovalQueue  │  human reviews, edits in-place, approves/rejects
-│   (new, Phase 1)        │  audit trail of who approved, what text changed
-└─────────────┬───────────┘
-              │ approved
-              ▼
-┌─────────────────────────┐
-│ channel publisher       │  per-channel adapter: LinkedIn (P2), Email (P3),
-│   (new, P2-P4)          │  Ads (P4). Uses customer's own OAuth/creds.
-└─────────────┬───────────┘  Writes MarketingPublishedAsset on success.
-              │ published
-              ▼
-┌─────────────────────────┐
-│ channel analytics pull  │  per-channel KPI fetcher (post engagement,
-│   (new, Phase 4)        │  email opens, ad CPC). Writes into existing
-└─────────────┬───────────┘  MarketingKpiCheckpoint records.
-              │
-              ▼
-┌─────────────────────────┐
-│ marketing-specialist    │  next cycle: strategist reads checkpoints,
-│   (existing)            │  rewrites plan, loop continues.
-└─────────────────────────┘
+```text
+marketing-specialist
+  creates MarketingCampaignBrief / MarketingAssetTask
+        |
+        v
+draft_marketing_asset(taskId)
+        |
+        v
+OutboundDraft(status = pending-review, domain = marketing)
+        |
+        v
+Approval queue on /customer/marketing
+        |
+        v
+publish/send tool gated by approved draft + connected credential
+        |
+        v
+OutboundPublication + ToolExecution audit
+        |
+        v
+engagement/KPI pullback into MarketingKpiCheckpoint
+        |
+        v
+next strategist review sees real performance
 ```
 
-Inbound side (Phase 3+):
+Inbound path:
 
-```
-inbound email/DM ─► webhook ─► inquiry-responder agent ─► MarketingInboundReply
-                                                           (status=pending-review)
-                                                            │
-                                                            ▼
-                                              MarketingApprovalQueue (shared)
-                                                            │
-                                                            ▼ approved
-                                              outbound channel publisher
-                                                            │
-                                                            ▼ delivered
-                                              CRM Engagement created/updated
+```text
+channel webhook / inbox poll
+  -> InboundChannelMessage(domain = marketing)
+  -> responder drafter
+  -> OutboundDraft(status = pending-review, kind = reply)
+  -> same approval queue
+  -> approved send
+  -> CRM Engagement/Activity linkage where qualified
 ```
 
-### 4.2 Channel adapter contract
+### 5.2 Channel Adapter Contract
 
-Every channel adapter implements one shape (mirrors n8n's node contract but DPF-flavoured):
+Every adapter implements the same shape:
 
 ```typescript
-interface MarketingChannelAdapter {
-  readonly channelId: string;             // "linkedin" | "email-postmark" | "linkedin-ads" | ...
+interface OutboundChannelAdapter {
+  readonly channelId: string;
   readonly displayName: string;
-  readonly capabilities: ChannelCapability[]; // ["publish-post", "send-email", "place-ad", "fetch-engagement"]
-  readonly credentialsSchema: JsonSchema; // OAuth scopes or API key shape
-  readonly assetTypes: string[];          // ["linkedin-post", "linkedin-article", ...]
+  readonly capabilities: Array<
+    "draft-preview" | "publish-post" | "send-email" | "place-ad" | "fetch-engagement" | "receive-inbound"
+  >;
+  readonly credentialIntegrationId: string;
+  readonly credentialsSchema: JsonSchema;
+  readonly assetTypes: string[];
 
-  publish(draft: MarketingAssetDraft, creds: ChannelCredential): Promise<PublishResult>;
-  fetchEngagement?(publishedAsset: MarketingPublishedAsset, creds: ChannelCredential): Promise<EngagementSnapshot>;
-  receiveInbound?(payload: unknown, creds: ChannelCredential): Promise<InboundMessage[]>;
+  validateDraft(draft: OutboundDraft): AdapterValidationResult;
+  publish?(draft: OutboundDraft, credential: IntegrationCredential): Promise<PublishResult>;
+  fetchEngagement?(publication: OutboundPublication, credential: IntegrationCredential): Promise<EngagementSnapshot>;
+  receiveInbound?(payload: unknown, credential: IntegrationCredential): Promise<InboundMessage[]>;
 }
 ```
 
-The adapter lives in `apps/web/lib/marketing/channels/<channel-id>/index.ts` and is registered via the existing tool-evaluation pipeline before going live. Every adapter is small (< 300 lines) because all the loop logic (drafting, approval, scheduling, analytics) lives in the platform, not the adapter.
+Adapters live under `apps/web/lib/marketing/channels/<channel-id>/`. New third-party channels must pass the existing tool evaluation and native integration review before side-effecting operations ship.
 
-### 4.3 Reusability beyond marketing
+### 5.3 Substrate Reuse Decision
 
-The same `Drafter → ApprovalQueue → ChannelPublisher → AnalyticsPull` shape applies to other coworker domains:
+Use generic execution model names now, with marketing as the first domain:
 
-- `customer-advisor` outbound to existing customers (renewal nudges, NPS surveys)
-- `build-specialist` contributor recruitment (starter-issue invitations, contributor-of-the-month posts)
-- `ops-coordinator` status communications (incident postmortems published externally)
+- `OutboundDraft`
+- `OutboundApprovalDecision`
+- `OutboundPublication`
+- `InboundChannelMessage`
+- `ScheduledOutboundAction`
+- `OutboundAutopilotPolicy`
 
-To avoid premature abstraction, Phase 1 builds the marketing-specific tables and tool surface concretely. When the second domain hits the same gap, the substrate is generalized in a follow-up refactor (per the platform's 20% refactoring budget). Models will be named generically (`OutboundDraft`, `ApprovalQueueItem`) but seeded with `domain="marketing"` so the first cut isn't marketing-coupled at the schema level.
+Reason: draft, approval, publication, inbound message, schedule, and autopilot are not marketing-only concepts. Customer-advisor follow-ups, operations status updates, contributor recruitment messages, and customer-facing support replies will need the same substrate. Starting with generic names avoids a later rename migration while still keeping Phase 1 behavior scoped to `/customer/marketing`.
 
-## 5. Data Model Changes
+This is not a generic workflow engine. The generic layer is only for outbound/inbound communication execution with strongly typed domain references and channel adapters.
 
-All additions, no breaking changes. Each Phase only adds the models it needs.
+## 6. Data Model Changes
 
-### 5.1 Phase 1 (drafter + approval queue)
+All status fields added by this work must have matching typed catalogs in a new `apps/web/lib/marketing/execution.ts` (or similarly scoped module) and matching MCP/tool schema enum arrays in the same implementation PR.
+
+### 6.1 Phase 1: Draft and Approval Queue
 
 ```prisma
-// New: durable draft of a marketing asset, produced by the content-drafter
-model MarketingAssetDraft {
+model OutboundDraft {
   draftId          String   @id @default(cuid())
   organizationId   String
+  domain           String   // marketing
+  sourceType       String   // marketing-asset-task | marketing-campaign-brief | inbound-channel-message | manual
+  sourceId         String?
   strategyId       String?
-  assetTaskId      String?  // upstream MarketingAssetTask if drafted from a brief
-  status           String   // pending-review | approved | rejected | scheduled | published | failed
-  channelId        String   // "linkedin" | "email-postmark" | "linkedin-ads" | ...
-  assetType        String   // "linkedin-post" | "linkedin-article" | "email" | "ad-headline" | ...
-  body             String   @db.Text // the actual content the human reviews
-  bodyFormat       String   // "markdown" | "html" | "plain"
-  metadata         Json?    // channel-specific: subject line, hashtags, link preview, ad targeting
+  status           String   // draft | pending-review | approved | rejected | needs-changes | stale
+  channelId        String   // linkedin-personal | mailchimp | postmark | facebook-pages | ...
+  assetType        String   // linkedin-post | email | ad-creative | reply
+  body             String   @db.Text
+  bodyFormat       String   // markdown | html | plain
+  metadata         Json?
   createdByAgentId String?
+  originalPromptId String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  assetTask        MarketingAssetTask? @relation(fields: [assetTaskId], references: [taskId])
-  strategy         MarketingStrategy?  @relation(fields: [strategyId],   references: [strategyId])
-  approvals        MarketingApproval[]
-  publishes        MarketingPublishedAsset[]
+  approvals        OutboundApprovalDecision[]
+  publications     OutboundPublication[]
 
-  @@index([organizationId, status])
-  @@index([assetTaskId])
+  @@index([organizationId, domain, status])
+  @@index([sourceType, sourceId])
+  @@index([channelId, status])
 }
 
-// New: explicit human-approval event with full audit trail
-model MarketingApproval {
-  approvalId       String   @id @default(cuid())
+model OutboundApprovalDecision {
+  decisionId       String   @id @default(cuid())
   draftId          String
   reviewerUserId   String
   decision         String   // approved | rejected | needs-changes
-  editedBody       String?  @db.Text // if reviewer edited inline before approval
+  editedBody       String?  @db.Text
   notes            String?  @db.Text
   decidedAt        DateTime @default(now())
 
-  draft            MarketingAssetDraft @relation(fields: [draftId], references: [draftId])
+  draft            OutboundDraft @relation(fields: [draftId], references: [draftId], onDelete: Cascade)
 
   @@index([draftId])
-  @@index([reviewerUserId])
+  @@index([reviewerUserId, decidedAt])
 }
 ```
 
-### 5.2 Phase 2 (LinkedIn publishing)
+Phase 1 does not call external APIs. It proves the loop from `MarketingAssetTask` to reviewable content and approval audit.
+
+### 6.2 Phase 2: Publication Record
 
 ```prisma
-model MarketingPublishedAsset {
-  publishedId      String   @id @default(cuid())
-  draftId          String
-  channelId        String
-  externalId       String   // LinkedIn post URN, email message-id, ad creative id
-  externalUrl      String?  // shareable URL where visible
-  publishedAt      DateTime @default(now())
-  publishedByUserId String  // person who approved the publish
-  channelMetadata  Json?    // raw response from the channel API for audit
+model OutboundPublication {
+  publicationId      String   @id @default(cuid())
+  draftId            String
+  channelId          String
+  credentialId       String?
+  externalId         String
+  externalUrl        String?
+  publishedAt        DateTime @default(now())
+  publishedByUserId  String
+  toolExecutionId    String?
+  channelMetadata    Json?
+  lastMetricsPolledAt DateTime?
+  lastMetricsSnapshot Json?
 
-  draft            MarketingAssetDraft @relation(fields: [draftId], references: [draftId])
+  draft              OutboundDraft @relation(fields: [draftId], references: [draftId], onDelete: Cascade)
 
   @@unique([channelId, externalId])
   @@index([draftId])
+  @@index([channelId, publishedAt])
 }
 ```
 
-Plus a `ChannelCredential` (or extension of existing `Integration`) to store the customer's OAuth refresh token for LinkedIn. See §7 for conduit posture.
+`credentialId` points to `IntegrationCredential.id`. `toolExecutionId` should be populated when the publish/send tool executes, giving `/platform/ai/authority` a cross-cutting audit trail.
 
-### 5.3 Phase 3 (email + inbound)
+### 6.3 Phase 3: Inbound Messages
 
 ```prisma
-model MarketingInboundReply {
-  inboundId         String   @id @default(cuid())
-  channelId         String
-  externalThreadId  String   // email thread id, LinkedIn conversation id
-  fromAddress       String   // email / linkedin profile / handle
-  subject           String?
-  body              String   @db.Text
-  receivedAt        DateTime @default(now())
-  classification    String?  // "qualified-inquiry" | "spam" | "support" | "other"
-  routedToEngagementId String?
-  draftedReplyId    String?  // optional drafter output
+model InboundChannelMessage {
+  inboundId          String   @id @default(cuid())
+  organizationId     String
+  domain             String   // marketing
+  channelId          String
+  externalThreadId   String
+  externalMessageId  String?
+  fromAddress        String?
+  fromDisplayName    String?
+  subject            String?
+  body               String   @db.Text
+  receivedAt         DateTime @default(now())
+  classification     String?  // qualified-inquiry | support | spam | other
+  routedEngagementId String?
+  metadata           Json?
 
-  @@index([channelId, receivedAt])
+  @@index([organizationId, domain, receivedAt])
+  @@index([channelId, externalThreadId])
   @@index([classification])
 }
 ```
 
-### 5.4 Phase 4 (KPI pullback)
+Inbound responder drafts use `OutboundDraft(sourceType = "inbound-channel-message", sourceId = inboundId, assetType = "reply")`.
 
-No new model required. Channel analytics pulled into existing `MarketingKpiCheckpoint`. Add fields to `MarketingPublishedAsset`:
-
-```prisma
-// added in Phase 4 migration
-lastEngagementPolledAt   DateTime?
-lastEngagementSnapshot   Json?      // {impressions, likes, comments, clicks, ...}
-```
-
-### 5.5 Phase 5 (scheduler + autopilot)
+### 6.4 Phase 5: Scheduling and Autopilot
 
 ```prisma
-model MarketingScheduledPublish {
-  scheduleId       String   @id @default(cuid())
-  draftId          String   @unique
-  scheduledFor     DateTime
-  status           String   // pending | fired | cancelled | failed
-  firedAt          DateTime?
+model ScheduledOutboundAction {
+  scheduleId        String   @id @default(cuid())
+  draftId           String   @unique
+  scheduledFor      DateTime
+  status            String   // pending | paused | fired | cancelled | failed
+  firedAt           DateTime?
   autopilotPolicyId String?
 
   @@index([scheduledFor, status])
 }
 
-model MarketingAutopilotPolicy {
-  policyId         String   @id @default(cuid())
-  channelId        String
-  autoApproveBelow Int?     // auto-approve drafts under N words / ad spend
-  autoPublishAfter Int?     // minutes after draft creation if no human review
-  weeklyCeiling    Int      // hard cap on publishes per week
-  spendCeilingCents Int?    // ad-channel daily / weekly cap
-  enabledByUserId  String
-  enabledAt        DateTime @default(now())
+model OutboundAutopilotPolicy {
+  policyId           String   @id @default(cuid())
+  organizationId      String
+  domain              String   // marketing
+  channelId           String
+  enabled             Boolean  @default(false)
+  autoApproveBelow    Int?
+  autoPublishAfterMin Int?
+  weeklyCeiling       Int
+  spendCeilingCents   Int?
+  enabledByUserId     String
+  enabledAt           DateTime @default(now())
 
-  @@unique([channelId])
+  @@unique([organizationId, domain, channelId])
 }
 ```
 
-## 6. The Five Phases
+No autopilot policy can approve ad spend, inbound customer replies, public profile changes, or content below the drafter confidence threshold.
 
-### Phase 1 — Content drafter + approval queue (no external channel)
+## 7. Implementation Phases
 
-**Scope.** Single PR. New `MarketingAssetDraft` + `MarketingApproval` models + migration. New `content-drafter` coworker agent (or a tool on the existing `marketing-specialist` — TBD in implementation plan, see Open Questions). New `draft_marketing_asset(assetTaskId)` MCP tool. New approval-queue panel on `/customer/marketing` showing pending drafts with inline edit + approve / reject buttons. Output: the human sees a polished LinkedIn post body in the workspace, ready to copy-paste to LinkedIn.
+### Phase 1: Drafter + Approval Queue, No External Channel
 
-**Acceptance.** From the existing "Week 1 LinkedIn Post Asset: Top 5 AI Workflow Leaks Teardown" asset task, the strategist (or a one-click button next to the task) calls `draft_marketing_asset`. Within 30 seconds, a `MarketingAssetDraft` row exists with a full LinkedIn-shaped post body. The body appears in the new "Awaiting your review" panel. Mark clicks Approve. Status moves to `approved`. No external API call yet.
+Deliver:
 
-**Build gate.** Unit tests for the draft state machine. Production build. UX verification: drive the actual flow as Mark and confirm the post body is ready-to-paste quality.
+- `OutboundDraft` and `OutboundApprovalDecision` migrations.
+- `draft_marketing_asset(assetTaskId)` tool, side-effecting but internal only.
+- Approval queue panel on `/customer/marketing`.
+- Inline editing, Approve, Request changes, Reject.
+- Reusable draft status helpers and tests.
 
-### Phase 2 — LinkedIn publish via personal OAuth
+Acceptance:
 
-**Scope.** New `/admin/integrations/linkedin` page with OAuth flow. `Integration` row stores customer's refresh token. New `publish_to_linkedin` tool gated by `approved` draft status. New `MarketingPublishedAsset` row on success with LinkedIn post URN. Approval-queue panel grows a "Publish to LinkedIn" button (only enabled for `approved` drafts in `linkedin` channel).
+- Starting from an existing `MarketingAssetTask`, the user can create a channel-shaped draft.
+- A pending draft appears in `/customer/marketing`.
+- Approving with no edits and approving with edits both write an `OutboundApprovalDecision`.
+- No external API call happens.
+- The first viewport remains scan-first and does not become a tutorial/landing page.
 
-**Acceptance.** Mark connects his LinkedIn account in `/admin/integrations`. Mark approves the Phase 1 draft. Mark clicks "Publish to LinkedIn". Within 5 seconds, the post is live on his LinkedIn feed. The post URL is captured in `MarketingPublishedAsset.externalUrl` and surfaces in the workspace as "Published 2026-MM-DD by Mark Bodman" with a link.
+### Phase 2: LinkedIn Personal Publishing
 
-**Conduit posture.** OAuth scopes requested: `w_member_social` only (post on member's own behalf). No company-page write, no ads-account access (those are separate scopes for Phase 4). DPF never enrolls as partner with LinkedIn; we use LinkedIn's standard OpenID Connect + Marketing Developer Platform self-service application. The customer's refresh token is encrypted at rest with the install's `AUTH_SECRET`.
+Deliver:
 
-### Phase 3 — Email outbound + inbox responder
+- Native integration descriptor for LinkedIn personal publishing, e.g. `linkedin-personal-social`.
+- `/platform/tools/integrations/linkedin-personal-social` connection page.
+- `publish_to_linkedin` tool gated by approved draft status, `operate_marketing`, `marketing_write`, and connected credentials.
+- `OutboundPublication` creation on success.
 
-**Scope.** Email adapter (Postmark by default, SMTP fallback). Outbound: `send_marketing_email` tool gated by `approved` draft. Inbound: webhook endpoint `/api/integrations/email/inbound` accepting Postmark or generic IMAP-relay payloads → `MarketingInboundReply` → `respond_to_inquiry` agent classifies + drafts a reply → reply goes through the same approval queue. Qualified inquiries create/update `Engagement` rows in the existing CRM.
+Acceptance:
 
-**Acceptance.** Mark connects a Postmark account in `/admin/integrations`. Mark sends a test outbound email through the flow (draft → approve → send). Mark sends a test reply to the configured inbound address. Within 30 seconds the reply appears in the marketing inbox panel, classified as `qualified-inquiry` if appropriate, with a drafted reply pending Mark's approval. Approval triggers the outbound send.
+- An approved LinkedIn draft can be published through the connected user's credential.
+- The workspace shows external URL, channel id, publisher, and timestamp.
+- Publish failure leaves the draft approved but not published, with an actionable error.
+- The LinkedIn adapter requests only the minimum needed scope for personal posting, currently `w_member_social` per LinkedIn Posts API docs.
 
-### Phase 4 — Ads with hard spend gates + KPI pullback
+### Phase 3: Email Outbound + Inbound Responder
 
-**Scope.** LinkedIn Ads + Google Ads adapters. Per-campaign spend cap (in cents, hard ceiling). Each ad-spend action requires fresh approval — there is no "approve once, spend forever" path even with autopilot. KPI pullback job (hourly cron): per published asset, fetch engagement / open rate / CPC and update `MarketingKpiCheckpoint`. Dashboard shows real numbers.
+Deliver:
 
-**Acceptance.** Mark connects LinkedIn Ads. Mark drafts an ad creative, approves it, sets a $20 daily ceiling, approves the spend. Ad goes live. Within 24 hours the dashboard shows impressions / clicks / cost-per-click pulled from LinkedIn Ads API into `MarketingKpiCheckpoint`. Spend never exceeds the ceiling (verified by integration test against ads API sandbox).
+- Preferred first path: use the existing Mailchimp Marketing descriptor for marketing campaign context if it can support the target email operation.
+- If reply/inbound webhook support is required, add a new Postmark native integration descriptor and run tool evaluation before write operations.
+- `send_marketing_email` tool gated by approved draft.
+- `/api/integrations/email/inbound` or provider-specific webhook endpoint that creates `InboundChannelMessage`.
+- Responder drafter that creates a pending reply draft; approval triggers outbound send.
+- Qualified inbound messages link to `Engagement` and `Activity` where evidence exists.
 
-### Phase 5 — Scheduler + bounded autopilot
+Acceptance:
 
-**Scope.** Calendar surface showing all `MarketingScheduledPublish` rows. Auto-fire of drafter agents N days before each `MarketingAssetTask.dueWindow` start. `MarketingAutopilotPolicy` per channel with bounded auto-approval (e.g. "auto-approve LinkedIn posts under 250 words written by `marketing-specialist`, hard ceiling 5 posts per week, no auto-approval for ad spend ever"). Override always available to the human.
+- Test outbound email follows draft -> approval -> send -> publication audit.
+- Test inbound email creates an inbound message row, classifies it, drafts a reply, and queues the reply for human review.
+- Inbound replies are never autopilot-approved.
 
-**Acceptance.** Mark sets a LinkedIn policy: auto-publish 24h after draft if no human review, max 3 posts/week. Mark goes on vacation. Week 2's content tasks fire automatically. Mark returns to find 3 LinkedIn posts published with full audit trail (who/what/when, including "auto-approved by policy MAUP-xxx"). Mark can disable the policy with one click; in-flight scheduled publishes pause until re-approved.
+### Phase 4: Ads + KPI Pullback
 
-## 7. Conduit Posture / Bring-Your-Own-Credentials
+Deliver:
 
-DPF is a conduit, never a broker. This means:
+- LinkedIn Ads and/or Google Ads adapter only after the required native integration review.
+- Hard spend ceiling per campaign/action.
+- Hourly metrics pullback into `OutboundPublication.lastMetricsSnapshot`.
+- Aggregation or copied checkpoint notes into existing `MarketingKpiCheckpoint`.
 
-- Every external integration requires the customer's own account at the third party (LinkedIn, Postmark, Google Ads, etc.).
-- The customer completes OAuth or supplies API credentials through `/admin/integrations`. DPF never escrows credentials in a DPF-owned vault and never proxies calls through a DPF-owned account.
-- Each channel's API key / refresh token is encrypted at rest with the install's local `AUTH_SECRET`. Rotation of `AUTH_SECRET` rotates all stored credentials.
-- DPF never enrolls as a Partner / Developer with the third-party service in a way that gives the DPF organization shared access to customer data. Standard self-service developer apps only.
-- This makes DPF-as-product self-hostable: the install owns its data, owns its credentials, owns its publishing rights. Cloud-hosted DPF works the same way — each tenant's credentials are siloed.
+Acceptance:
 
-This rule is non-negotiable per the kernel principle. Any phase that tries to shortcut it (e.g. "we'll set up a DPF LinkedIn app and proxy customer posts through it") gets rejected at design review.
+- Ad creation requires explicit approval of creative, audience, and spend ceiling.
+- Attempting to exceed the spend ceiling is rejected before API call.
+- KPI pullback writes visible evidence used by the next Marketing Strategist review.
 
-## 8. Approval Queue Design
+### Phase 5: Scheduler + Bounded Autopilot
 
-**Surface.** New panel on `/customer/marketing`, plus the existing dashboard's notification feed gets entries when drafts are awaiting review. Approval queue items also surface in the CRM cockpit's "next actions" list.
+Deliver:
 
-**Item shape.** Each pending item shows:
-- Channel + asset type pill (LinkedIn post / Email / LinkedIn ad / etc.)
-- Source: which `MarketingAssetTask` this draft is for, which campaign brief
-- Drafted by: agent name + timestamp
-- Side-by-side: brief (left) vs. drafted body (right) — Buffer-inspired
-- Inline-editable body field (markdown for posts, rich text for emails)
-- Buttons: **Approve**, **Approve with edits**, **Request changes** (sends back to drafter with notes), **Reject**
+- Calendar/list view of scheduled outbound actions.
+- Auto-draft ahead of `MarketingAssetTask.dueWindow`.
+- Autopilot policy with conservative defaults, weekly ceilings, and one-click disable.
+- Clear audit labels for policy-approved actions.
 
-**Audit trail.** Every approval/rejection writes a `MarketingApproval` row. If the reviewer edited the body before approving, the edited text is stored as `editedBody` and that becomes the published version. The original `draft.body` is preserved for comparison.
+Acceptance:
 
-**Permission model.** Reusing existing platform role permissions: `operate_marketing` capability required to approve. `view_marketing` to view the queue. No new capability surface needed.
+- Scheduled drafts pause when credentials disconnect, policies disable, or channel validation fails.
+- Autopilot never applies to ads, inbound replies, public profile changes, or low-confidence drafts.
+- The user can see and stop in-flight scheduled actions without opening chat.
 
-## 9. KPI Pullback Contract
+## 8. UX Architecture Fit Gate
 
-Per channel, the adapter implements `fetchEngagement(publishedAsset, creds)` returning an `EngagementSnapshot`:
+Before Phase 1 implementation, the plan must answer:
+
+```text
+Feature:
+Owning area: Business > Customer > Marketing
+Primary route family: /customer/marketing
+Primary persona: Marketing Strategist
+Job the first viewport helps complete:
+Navigation layer touched: local route / contextual action only
+Existing component or pattern reused:
+New component justified because:
+Source-of-truth model or service:
+Empty state behavior:
+Failure / unavailable behavior:
+AI or coworker action boundary:
+Theme and layout checks:
+Routes to verify:
+Evidence required before merge:
+```
+
+Guardrails:
+
+- Do not add global AppRail, Workspace, or Platform navigation.
+- Do not use vendor-branded language in product UI. "LinkedIn" may appear as a channel; "Pipedrive-inspired" stays in research docs.
+- No disabled future tabs. Show only implemented routes or meaningful read-only routes.
+- Every approval item must have a clear source, channel, action, and risk.
+- The approval action is a button; metric tiles and attention items navigate only.
+- Empty states must say what is missing and offer one next action, not a wall of zeros.
+
+## 9. Approval Queue Design
+
+Surface: `/customer/marketing`, with notification/attention links from the customer revenue cockpit when pending items exist.
+
+Item shape:
+
+- Channel and asset type.
+- Source work product: asset task, campaign brief, inbound message, or manual draft.
+- Drafted by: agent name, timestamp, and optional ToolExecution link.
+- Brief/context pane.
+- Rendered preview pane for channel-specific shape.
+- Editable body.
+- Actions: Approve, Approve with edits, Request changes, Reject.
+- After approval, a separate Publish/Send/Schedule action appears only when the needed channel credential is connected.
+
+Interaction design:
+
+- Keep list rows compact and stable. Open a drawer or focused panel for editing long copy.
+- Use icons for compact controls where lucide icons exist; labels stay on destructive or externally visible actions.
+- Minimum 44px touch targets.
+- Visible focus states and keyboard order matching visual order.
+- No text overlapping badges, previews, or buttons at mobile widths.
+- Use `text-[var(--dpf-text)]`, `text-[var(--dpf-muted)]`, `bg-[var(--dpf-surface-1)]`, `bg-[var(--dpf-surface-2)]`, `border-[var(--dpf-border)]`, and `bg-[var(--dpf-accent)]` only. The sole `text-white` exception is on accent buttons.
+
+Audit behavior:
+
+- Original draft body stays immutable unless a regeneration action explicitly creates a new draft revision.
+- Reviewer edits are stored on the approval decision and become the effective published body.
+- Publish/send tools record `ToolExecution` and link the result to `OutboundPublication`.
+- External failures do not erase approval history.
+
+## 10. Credential and Conduit Posture
+
+DPF is a conduit, not a broker:
+
+- Every side-effecting channel requires the customer's own third-party account and credential.
+- Credentials use the existing `IntegrationCredential` model, `fieldsEnc`, `tokenCacheEnc`, and `CREDENTIAL_ENCRYPTION_KEY` encryption path.
+- The platform should not store channel secrets in new marketing-specific tables.
+- Connector setup must make clear when the customer must create or authorize a third-party developer app.
+- DPF connector code may support a provider; DPF must not proxy customer traffic through a DPF-owned account or shared broker credential.
+- Credential health and key-rotation failure states must surface as "reconnect this integration" before publish/send buttons become active.
+
+## 11. KPI Pullback Contract
+
+Per channel, the adapter can implement:
 
 ```typescript
 interface EngagementSnapshot {
   channelId: string;
   externalId: string;
   polledAt: Date;
-  metrics: Record<string, number>; // impressions, likes, comments, shares, clicks, opens, cpc, etc.
-  raw: unknown; // channel-specific payload for forensics
+  metrics: Record<string, number>;
+  raw: unknown;
 }
 ```
 
-A platform-wide hourly cron (existing inngest scheduler) walks `MarketingPublishedAsset` rows still inside their analytics window (default: 30 days post-publish), calls `fetchEngagement`, persists the snapshot, and aggregates into `MarketingKpiCheckpoint` rows on the rolling cadence the strategist set. Stale snapshots (> 30 days) stop being polled.
+An hourly scheduler walks recent `OutboundPublication` rows still inside their analytics window, calls `fetchEngagement`, updates `lastMetricsSnapshot`, and rolls meaningful metrics into existing `MarketingKpiCheckpoint` records or checkpoint notes.
 
-The strategist's next chat turn already reads `MarketingKpiCheckpoint` via `get_marketing_summary`, so once Phase 4 lands, the next "plan review" turn sees real numbers automatically.
+Default analytics window: 30 days after publish/send. After that, snapshots stop polling unless the user refreshes manually.
 
-## 10. Risks and Mitigations
+## 12. Refactor Budget
 
-- **External API rate limits.** LinkedIn personal-profile posting is rate-limited (~25 posts/day, much less for ads). Mitigation: per-channel rate-limit window enforced by the adapter; approval queue surfaces "would exceed channel rate limit" warnings before approve.
-- **Account suspension from spam-like patterns.** Cold outbound at volume gets accounts banned. Mitigation: Phase 5 autopilot policies have weekly ceilings that default conservative (e.g. 5 LinkedIn posts/week, 100 emails/week). Hard-coded floor on ceiling values prevents user mis-configuration. Ad accounts get even tighter spend caps.
-- **Content quality from LLM drafter.** Bad drafts erode trust faster than no drafts. Mitigation: the drafter agent has a focused system prompt with brand-voice slot, audience profile, and channel-specific style guide. Approval queue is the safety net. Drafter outputs always include "draft confidence" self-assessment (low / medium / high) — anything `low` is flagged for explicit review even under autopilot.
-- **Credential leakage.** Encrypted-at-rest with `AUTH_SECRET` mitigates filesystem exposure; per-tenant siloing mitigates cross-tenant. We do NOT log credentials, response bodies containing tokens, or OAuth redirect URLs. Adapter test fixtures use redacted tokens.
-- **Inbound responder hallucinating commitments.** An auto-drafted reply to a prospect could promise things the org can't deliver. Mitigation: inbound auto-reply is ALWAYS gated through the approval queue (never autopilot, even in Phase 5). The drafter is forbidden from making commitments — its prompt limits it to "I'll check with the team and follow up by X date" style holding patterns.
-- **Inbound spam volume.** Inbound webhook hits could be expensive (LLM classification per message). Mitigation: rule-based spam pre-filter (DKIM/SPF, sender reputation, prior-relationship check) runs before LLM classification. Adapter's `receiveInbound` returns the pre-filtered batch.
-- **Scope creep.** It's tempting to add SMS, push, voice, etc. Mitigation: each new channel is its own PR, follows the adapter contract, and goes through the existing tool-evaluation pipeline. No "add 5 channels in one PR."
+Reserve roughly 20 percent of implementation effort for refactoring that keeps this architecture clean.
 
-## 11. Verification Approach
+Required refactor targets:
 
-Per build-gate-mandatory:
+1. Create a small marketing execution state module for draft, approval, publication, inbound, schedule, and autopilot statuses. Do not scatter string literals across pages, tools, and tests.
+2. Reuse `IntegrationCredential`, native integration descriptors, and credential health helpers. Do not create marketing-specific credential custody.
+3. Extract channel-adapter registration and validation helpers before adding the second channel.
+4. Converge approval queue UI with existing DPF review/attention patterns where they fit; document any new component family before creating it.
+5. Centralize channel label/tone/icon metadata. Do not hardcode provider badges in page files.
+6. Add tests around state transitions before adding external API behavior.
 
-- **Unit tests.** State-machine transitions for `MarketingAssetDraft.status`. Approval audit-trail invariants. Per-adapter mock tests covering happy path + auth failure + rate-limit failure.
-- **Integration tests.** Phase 2+ adapters tested against vendor sandbox accounts when available (LinkedIn has a sandbox via Marketing Developer Platform; Postmark and Google Ads both expose test modes).
-- **UX verification.** Per phase, drive the actual flow against the running portal as the CEO and confirm end-to-end behavior. Documented in the phase's plan doc.
-- **Spend-cap invariant test (Phase 4).** Explicit test that places enough ad-spend requests to exceed the ceiling and confirms the adapter refuses, not approves.
+## 13. Risks and Mitigations
 
-## 12. Open Questions
+- External API volatility and scope gates. Mitigation: each channel adapter has a connection readiness check, mock tests, and a blocked state that disables publish/send before API call.
+- Overpromising LinkedIn access. Mitigation: Phase 2 must verify the connected app and scope path before implementation is considered ready.
+- Account suspension from spam-like patterns. Mitigation: conservative channel defaults, weekly ceilings, and no cold-outbound autopilot.
+- Content quality. Mitigation: channel-specific drafter prompt, brand/context slots, confidence flag, and mandatory review for low-confidence drafts.
+- Credential leakage. Mitigation: existing encrypted credential substrate, no secret logging, redacted fixtures, and credential health checks.
+- Inbound responder hallucinating commitments. Mitigation: inbound replies always go through approval and the prompt forbids promises beyond safe holding language.
+- Cost blowup from inbound classification. Mitigation: rule-based pre-filter before LLM classification.
+- Scope creep. Mitigation: one channel per PR after Phase 1 unless the second channel only exercises the same already-proven substrate.
 
-1. **Drafter as new coworker vs. tool on marketing-specialist?** Option A: introduce a `content-drafter` coworker (`AGT-WS-CONTENT-DRAFTER`) that the strategist delegates to. Pros: cleaner separation of strategy vs. craft; reusable across other coworker domains. Cons: more agent overhead, more prompt engineering. Option B: add `draft_marketing_asset` as another tool on `marketing-specialist`. Pros: minimal change, same chat. Cons: muddles strategist's role. Lean: Option A long-term, but Phase 1 can start as Option B and split out in Phase 5 when other domains adopt the substrate.
-2. **Where does the inbound email actually arrive?** Per-install MX records via Postmark inbound-only addresses (`<install>@inbound.postmarkapp.com`) keep the customer not having to point DNS. Alternative: customer provides a forwarding rule from their existing inbox. Lean: support both, default to Postmark inbound-only for first-run simplicity.
-3. **Should the approval queue have an SLA?** A draft sitting unreviewed for 7 days is stale. Auto-expire after N days? Auto-notify the reviewer at day 2? Lean: auto-notify at 48h, hard-expire at 14 days with `status=stale`. Configurable per install.
-4. **Multi-tenant credential sharing inside one org.** If two users on the same install both connect LinkedIn, do they each get their own connection or share one org-level connection? Lean: per-user for posting (each user posts to their own profile); per-org for ads / shared mailbox / company page. Aligns with how LinkedIn's API auth works anyway.
-5. **Does the strategist need to know about published asset performance to plan?** Yes (Phase 4 KPI pullback closes that loop). Until Phase 4, the strategist has to ask the user for numbers verbally, which is the current state.
+## 14. Verification Approach
 
-## 13. Implementation Plan Pointer
+Doc-only closeout:
 
-Per the platform's "spec → plan → BIs" discipline, each phase gets its own implementation plan at `docs/superpowers/plans/2026-05-26-marketing-execution-loop-phase-<N>.md` once this spec is operator-approved. A new epic `EP-MARKETING-EXEC` (sibling of `EP-MARKETING`) holds the five phase-level backlog items.
+- `git diff --check`
+- Search for unresolved placeholder markers and unsupported future-state claims.
 
-## 14. Definition of Done for this Spec
+Implementation closeout:
 
-- Operator (Mark) reviews and approves on PR.
-- `EP-MARKETING-EXEC` epic exists in the live backlog with five sized backlog items.
-- Phase 1's implementation plan is drafted and ready to enter Build Studio (or to be implemented directly while BS is non-functional, per the time-bound override in memory).
-- The marketing-specialist's system prompt is updated to mention the drafter delegation path and the approval queue once Phase 1 ships.
+- Unit tests for draft/approval/publication/schedule state transitions.
+- Unit tests for channel validation, auth failure, rate limits, and spend ceilings.
+- `pnpm --filter web typecheck`
+- `pnpm --filter web exec next build` or the current project-standard production build command.
+- Migration deploy verification for each migration phase.
+- UX verification against the Docker-served app at `AUTH_URL` / `APP_URL`.
+
+UI verification:
+
+- Desktop and mobile checks for `/customer/marketing`.
+- Light mode, dark mode, and brand token checks.
+- No hardcoded colors in touched files.
+- No clipped text in badges, queue rows, editor controls, or publish buttons.
+- Keyboard approval flow works without mouse.
+
+Agent/tool verification:
+
+- Route contracts still resolve `/customer/marketing` to `marketing-specialist`.
+- Internal draft tools are callable only with the correct capability/grant.
+- Publish/send tools require approved draft status and connected credentials.
+- External side-effect tools create `ToolExecution` evidence.
+
+## 15. Open Questions
+
+1. Should Phase 1 expose `draft_marketing_asset` only through a button next to asset tasks, through chat, or both?
+   - Recommendation: both, but the button is the primary UX proof. Chat can call the same tool.
+
+2. Should LinkedIn personal publishing be Phase 2, or should the first external channel be Mailchimp because it already exists in the native catalog?
+   - Recommendation: keep LinkedIn as Phase 2 only if app/scope verification is done before implementation. Otherwise use Mailchimp/Postmark email as the first external proof.
+
+3. Does the first approval queue need a dedicated route?
+   - Recommendation: start as a panel on `/customer/marketing`; add `/customer/marketing/approvals` only when volume justifies it.
+
+4. Should `OutboundDraft` revisions be modeled as separate rows or version rows?
+   - Recommendation: separate draft rows for regenerated alternatives; approval decisions preserve edits for the approved version. Add draft revision rows only if copy iteration becomes noisy.
+
+5. When should `EP-MARKETING-EXEC` be created?
+   - Recommendation: after operator approval of this revised spec. Link it to `EP-MARKETING` and `EP-CRM-MKT-OPS` rather than burying the execution work under either parent.
+
+## 16. Implementation Plan Pointer
+
+After operator approval, create phase plans at:
+
+- `docs/superpowers/plans/2026-05-26-marketing-execution-loop-phase-1.md`
+- `docs/superpowers/plans/2026-05-26-marketing-execution-loop-phase-2.md`
+- and so on only as each phase becomes ready.
+
+Phase 1 should be the next implementation plan. It must include the UX Architecture Fit Gate, the refactor budget tasks, migration scope, typed status catalogs, tests, and Docker-served UX verification.
+
+## 17. Definition of Done for this Spec
+
+- Operator reviews and approves the revised spec.
+- Live backlog has a scoped `EP-MARKETING-EXEC` epic or an explicit decision to attach Phase 1 to an existing epic.
+- Phase 1 implementation plan exists and is ready for Build Studio or direct implementation.
+- The Marketing Strategist prompt is updated after Phase 1 ships to mention the drafter and approval queue.
+- No implementation starts until the Phase 1 plan identifies the target worktree/branch and confirms no unrelated dirty files will be touched.

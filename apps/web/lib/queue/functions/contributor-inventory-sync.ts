@@ -25,11 +25,18 @@
 
 import { cron } from "inngest";
 
+import {
+  CONTRIBUTOR_INVENTORY_JOB_ID,
+  CONTRIBUTOR_INVENTORY_JOB_NAME,
+  CONTRIBUTOR_INVENTORY_SCHEDULE,
+} from "@dpf/db";
+
 import { inngest } from "../inngest-client";
 import { gateAtEntry } from "../quiescence-gates";
 
-// Re-exported for callers and tests; the actual implementation lives below.
-export const CONTRIBUTOR_INVENTORY_SYNC_JOB_ID = "contributor-inventory-sync";
+// Re-exported for callers and tests; mirrors the canonical seed-side constant
+// so the runner and seed cannot drift on the jobId string.
+export const CONTRIBUTOR_INVENTORY_SYNC_JOB_ID = CONTRIBUTOR_INVENTORY_JOB_ID;
 
 // Cron interval in minutes; reaper threshold is 2× this value.
 const CRON_INTERVAL_MIN = 10;
@@ -167,21 +174,37 @@ export async function runContributorInventorySync(
     },
   });
 
-  // Heartbeat update — runner-owned fields only (does not touch metadata,
-  // which is owned by Phase 4's GitHub etag persistence).
-  await prisma.scheduledJob.update({
-    where: { jobId: CONTRIBUTOR_INVENTORY_SYNC_JOB_ID },
-    data: {
+  // Heartbeat upsert — runner-owned fields only (does not touch metadata,
+  // which is owned by Phase 4's GitHub etag persistence). Upsert (not update)
+  // because upgrade installs that skip `pnpm db seed` leave the heartbeat row
+  // missing; a plain update would throw P2025 RecordNotFound on the first
+  // cron tick. Create + update branches set identical runner-owned fields;
+  // jobId/name/schedule come from the @dpf/db seed constants so the two
+  // sides cannot drift.
+  const lastError =
+    status === "failed"
+      ? Object.values(perSourceResult)
+          .map((r) => r.error)
+          .filter(Boolean)
+          .join("; ") || "all sources failed"
+      : null;
+  const nextRunAt = new Date(now.getTime() + CRON_INTERVAL_MIN * 60_000);
+  await prisma.scheduledJob.upsert({
+    where: { jobId: CONTRIBUTOR_INVENTORY_JOB_ID },
+    create: {
+      jobId: CONTRIBUTOR_INVENTORY_JOB_ID,
+      name: CONTRIBUTOR_INVENTORY_JOB_NAME,
+      schedule: CONTRIBUTOR_INVENTORY_SCHEDULE,
       lastRunAt: now,
       lastStatus: status,
-      lastError:
-        status === "failed"
-          ? Object.values(perSourceResult)
-              .map((r) => r.error)
-              .filter(Boolean)
-              .join("; ") || "all sources failed"
-          : null,
-      nextRunAt: new Date(now.getTime() + CRON_INTERVAL_MIN * 60_000),
+      lastError,
+      nextRunAt,
+    },
+    update: {
+      lastRunAt: now,
+      lastStatus: status,
+      lastError,
+      nextRunAt,
     },
   });
 

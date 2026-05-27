@@ -1392,6 +1392,22 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     coworkerArtifact: true,
   },
   {
+    name: "draft_marketing_asset",
+    description: "Turn a saved MarketingAssetTask brief into a channel-shaped, human-reviewable draft. Creates an OutboundDraft with status='pending-review' that appears in the marketing approval queue on /customer/marketing. Phase 1: LinkedIn posts and emails only. No external API call — the draft is internal until a human approves and a publish tool fires.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        assetTaskId: { type: "string", description: "MarketingAssetTask.taskId to draft from" },
+        channelOverride: { type: "string", enum: [...MARKETING_CHANNELS], description: "Override the asset task's channel if drafting a variant" },
+        toneNotes: { type: "string", description: "Optional one-line guidance the drafter should respect (e.g. 'first person, technical, no emojis')" },
+      },
+      required: ["assetTaskId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+    coworkerArtifact: true,
+  },
+  {
     name: "record_marketing_kpi_checkpoint",
     description: "Record a KPI checkpoint or target for the active marketing plan so the workspace can show what will be measured.",
     inputSchema: {
@@ -13180,6 +13196,31 @@ export async function executeTool(
         success: true,
         entityId: result.taskId,
         message: `${result.message}. The marketing workspace now has a saved proof/content task.`,
+        data: result,
+      };
+    }
+
+    case "draft_marketing_asset": {
+      const { draftMarketingAsset } = await import("./marketing/draft-builder");
+      const result = await draftMarketingAsset({
+        assetTaskId: String(params["assetTaskId"] ?? ""),
+        channelOverride: typeof params["channelOverride"] === "string" ? params["channelOverride"] : undefined,
+        toneNotes: typeof params["toneNotes"] === "string" ? params["toneNotes"] : undefined,
+        createdByAgentId: context?.agentId ?? null,
+      });
+
+      if (!result.success) {
+        return {
+          success: false,
+          message: result.message,
+          error: result.error,
+        };
+      }
+
+      return {
+        success: true,
+        entityId: result.draftId,
+        message: result.message,
         data: result,
       };
     }
