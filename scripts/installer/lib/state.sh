@@ -192,3 +192,41 @@ dpf_state_migrate() {
   # esac
   dpf_state_write schemaVersion "$DPF_STATE_SCHEMA_VERSION"
 }
+
+# Write a top-level key whose value is a JSON object/array/literal. Used by
+# the agent-toolchain bootstrap (Phase 4 of BI-4B17051B) to persist the
+# agentToolchain block. Differs from dpf_state_write in that it parses the
+# value as JSON rather than coercing it to a string.
+#
+# Args: $1 = key, $2 = JSON-encoded value (object / array / true / false / null / number / string)
+dpf_state_write_json() {
+  local key="$1"
+  local value="$2"
+  local path; path="$(dpf_state_path)"
+  if [ ! -f "$path" ]; then
+    echo "dpf_state_write_json: state file missing; call dpf_state_init first" >&2
+    return 1
+  fi
+  if command -v jq >/dev/null 2>&1; then
+    local tmp; tmp="$(mktemp)"
+    jq --arg k "$key" --argjson v "$value" '.[$k] = $v' "$path" > "$tmp"
+    mv "$tmp" "$path"
+    chmod 600 "$path"
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$path" "$key" "$value" <<'PY'
+import json, sys
+path, key, value_text = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(path) as f:
+    state = json.load(f)
+state[key] = json.loads(value_text)
+with open(path, "w") as f:
+    json.dump(state, f, indent=2)
+PY
+    chmod 600 "$path"
+    return 0
+  fi
+  echo "dpf_state_write_json: needs jq or python3 to update JSON object/array values" >&2
+  return 1
+}
