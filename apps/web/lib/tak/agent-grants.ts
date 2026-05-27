@@ -257,6 +257,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   record_marketing_kpi_checkpoint: ["marketing_write"],
   create_marketing_automation_candidate: ["marketing_write"],
   draft_marketing_asset:         ["marketing_write"],
+  publish_to_linkedin:           ["marketing_write"],
   analyze_seo_opportunity:      ["marketing_read"],
   generate_custom_archetype:    ["marketing_write"],
   assess_archetype_refinement:  ["marketing_read"],

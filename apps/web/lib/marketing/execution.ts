@@ -15,6 +15,7 @@ export const OUTBOUND_DRAFT_STATUS = [
   "rejected",
   "needs-changes",
   "stale",
+  "published",
 ] as const;
 export type OutboundDraftStatus = (typeof OUTBOUND_DRAFT_STATUS)[number];
 
@@ -56,9 +57,10 @@ const ALLOWED_TRANSITIONS: Readonly<Record<OutboundDraftStatus, ReadonlyArray<Ou
   draft: ["pending-review", "stale"],
   "pending-review": ["approved", "rejected", "needs-changes", "stale"],
   "needs-changes": ["pending-review", "stale"],
-  approved: [],
+  approved: ["published"], // Phase 2: publish flips approved → published
   rejected: [],
   stale: [],
+  published: [], // terminal — engagement metrics update lastMetricsSnapshot, not status
 };
 
 export function isAllowedDraftTransition(from: OutboundDraftStatus, to: OutboundDraftStatus): boolean {
