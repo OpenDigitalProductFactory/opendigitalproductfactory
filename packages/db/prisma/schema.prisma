@@ -545,60 +545,60 @@ model TerminationRecord {
 }
 
 model Portfolio {
-  id                     String                      @id @default(cuid())
-  slug                   String                      @unique
-  name                   String
-  description            String?
-  rootNodeId             String?
-  createdAt              DateTime                    @default(now())
-  updatedAt              DateTime                    @updatedAt
-  budgetKUsd             Int?
-  agents                 Agent[]
-  products               DigitalProduct[]
-  eaElements             EaElement[]
-  epicPortfolios         EpicPortfolio[]
-  inventoryEntities      InventoryEntity[]
-  portfolioQualityIssues PortfolioQualityIssue[]
+  id                            String                         @id @default(cuid())
+  slug                          String                         @unique
+  name                          String
+  description                   String?
+  rootNodeId                    String?
+  createdAt                     DateTime                       @default(now())
+  updatedAt                     DateTime                       @updatedAt
+  budgetKUsd                    Int?
+  agents                        Agent[]
+  products                      DigitalProduct[]
+  eaElements                    EaElement[]
+  epicPortfolios                EpicPortfolio[]
+  inventoryEntities             InventoryEntity[]
+  portfolioQualityIssues        PortfolioQualityIssue[]
   capabilityMaturityAssessments CapabilityMaturityAssessment[]
-  knowledgeArticles      KnowledgeArticlePortfolio[]
-  valueStreamTeams       ValueStreamTeam[]
-  workQueues             WorkQueue[]
+  knowledgeArticles             KnowledgeArticlePortfolio[]
+  valueStreamTeams              ValueStreamTeam[]
+  workQueues                    WorkQueue[]
 }
 
 model DigitalProduct {
-  id                           String                        @id @default(cuid())
-  productId                    String                        @unique
-  name                         String
-  portfolioId                  String?
-  createdAt                    DateTime                      @default(now())
-  updatedAt                    DateTime                      @updatedAt
-  taxonomyNodeId               String?
-  lifecycleStage               String                        @default("plan")
-  lifecycleStatus              String                        @default("draft")
-  version                      String                        @default("1.0.0")
-  description                  String?
-  observationConfig            Json?
-  backlogItems                 BacklogItem[]
-  manifests                    CodebaseManifest[]
-  assuranceFindings            AssuranceFinding[]
-  assuranceRuns                AssuranceRun[]
-  bomDocuments                 BomDocument[]
-  portfolio                    Portfolio?                    @relation(fields: [portfolioId], references: [id])
-  taxonomyNode                 TaxonomyNode?                 @relation(fields: [taxonomyNodeId], references: [id])
-  eaElements                   EaElement[]
-  featureBuilds                FeatureBuild[]
-  inventoryEntities            InventoryEntity[]
-  portfolioQualityIssues       PortfolioQualityIssue[]
+  id                            String                         @id @default(cuid())
+  productId                     String                         @unique
+  name                          String
+  portfolioId                   String?
+  createdAt                     DateTime                       @default(now())
+  updatedAt                     DateTime                       @updatedAt
+  taxonomyNodeId                String?
+  lifecycleStage                String                         @default("plan")
+  lifecycleStatus               String                         @default("draft")
+  version                       String                         @default("1.0.0")
+  description                   String?
+  observationConfig             Json?
+  backlogItems                  BacklogItem[]
+  manifests                     CodebaseManifest[]
+  assuranceFindings             AssuranceFinding[]
+  assuranceRuns                 AssuranceRun[]
+  bomDocuments                  BomDocument[]
+  portfolio                     Portfolio?                     @relation(fields: [portfolioId], references: [id])
+  taxonomyNode                  TaxonomyNode?                  @relation(fields: [taxonomyNodeId], references: [id])
+  eaElements                    EaElement[]
+  featureBuilds                 FeatureBuild[]
+  inventoryEntities             InventoryEntity[]
+  portfolioQualityIssues        PortfolioQualityIssue[]
   capabilityMaturityAssessments CapabilityMaturityAssessment[]
-  versions                     ProductVersion[]
-  serviceOfferings             ServiceOffering[]
-  quoteLineItems               QuoteLineItem[]
-  changeItems                  ChangeItem[]                  @relation("ChangeItemProduct")
-  businessModels               ProductBusinessModel[]
-  businessModelRoleAssignments BusinessModelRoleAssignment[]
-  knowledgeArticles            KnowledgeArticleProduct[]
-  workQueues                   WorkQueue[]
-  businessCapabilityLinks      BusinessCapabilityTraceLink[] @relation("BusinessCapabilityProductLinks")
+  versions                      ProductVersion[]
+  serviceOfferings              ServiceOffering[]
+  quoteLineItems                QuoteLineItem[]
+  changeItems                   ChangeItem[]                   @relation("ChangeItemProduct")
+  businessModels                ProductBusinessModel[]
+  businessModelRoleAssignments  BusinessModelRoleAssignment[]
+  knowledgeArticles             KnowledgeArticleProduct[]
+  workQueues                    WorkQueue[]
+  businessCapabilityLinks       BusinessCapabilityTraceLink[]  @relation("BusinessCapabilityProductLinks")
 }
 
 model BusinessModel {
@@ -899,28 +899,28 @@ model ServiceOffering {
 }
 
 model TaxonomyNode {
-  id                       String                        @id @default(cuid())
-  nodeId                   String                        @unique
-  name                     String
-  portfolioId              String?
-  parentId                 String?
-  status                   String                        @default("active")
-  governance               Json?
-  description              String?
-  enrichment               Json?
-  backlogItems             BacklogItem[]
-  products                 DigitalProduct[]
-  eaElements               EaElement[]
-  businessCapabilityLinks  BusinessCapabilityTraceLink[] @relation("BusinessCapabilityTaxonomyLinks")
-  fingerprintRules         DiscoveryFingerprintRule[]
-  inventoryEntities        InventoryEntity[]
-  portfolioQualityIssues   PortfolioQualityIssue[]
+  id                            String                         @id @default(cuid())
+  nodeId                        String                         @unique
+  name                          String
+  portfolioId                   String?
+  parentId                      String?
+  status                        String                         @default("active")
+  governance                    Json?
+  description                   String?
+  enrichment                    Json?
+  backlogItems                  BacklogItem[]
+  products                      DigitalProduct[]
+  eaElements                    EaElement[]
+  businessCapabilityLinks       BusinessCapabilityTraceLink[]  @relation("BusinessCapabilityTaxonomyLinks")
+  fingerprintRules              DiscoveryFingerprintRule[]
+  inventoryEntities             InventoryEntity[]
+  portfolioQualityIssues        PortfolioQualityIssue[]
   capabilityMaturityAssessments CapabilityMaturityAssessment[]
-  triageSelectionDecisions DiscoveryTriageDecision[]     @relation("DiscoveryTriageDecisionSelectedTaxonomy")
-  taxonomyProposalParents  TaxonomyProposal[]            @relation("TaxonomyProposalParent")
-  createdTaxonomyProposals TaxonomyProposal[]            @relation("TaxonomyProposalCreatedNode")
-  parent                   TaxonomyNode?                 @relation("TaxonomyTree", fields: [parentId], references: [id])
-  children                 TaxonomyNode[]                @relation("TaxonomyTree")
+  triageSelectionDecisions      DiscoveryTriageDecision[]      @relation("DiscoveryTriageDecisionSelectedTaxonomy")
+  taxonomyProposalParents       TaxonomyProposal[]             @relation("TaxonomyProposalParent")
+  createdTaxonomyProposals      TaxonomyProposal[]             @relation("TaxonomyProposalCreatedNode")
+  parent                        TaxonomyNode?                  @relation("TaxonomyTree", fields: [parentId], references: [id])
+  children                      TaxonomyNode[]                 @relation("TaxonomyTree")
 }
 
 model TaxonomyProposal {
@@ -4312,10 +4312,10 @@ model PlatformIssueReport {
   reportedBy          User?         @relation(fields: [reportedById], references: [id])
   featureBuild        FeatureBuild? @relation(fields: [featureBuildId], references: [id], onDelete: SetNull)
 
+  @@unique([reportedById, supportSessionId])
   @@index([featureBuildId])
   @@index([threadId, createdAt(sort: Desc)])
   @@index([taskRunId])
-  @@unique([reportedById, supportSessionId])
   @@index([reportedById, supportSessionId, createdAt(sort: Desc)])
 }
 
@@ -4402,15 +4402,15 @@ model NonProductionEnvironmentLease {
 }
 
 model FeatureBuild {
-  id                       String                  @id @default(cuid())
-  buildId                  String                  @unique
+  id                       String                   @id @default(cuid())
+  buildId                  String                   @unique
   title                    String
   description              String?
   portfolioId              String?
   originatingBacklogItemId String?
   brief                    Json?
   plan                     Json?
-  phase                    String                  @default("ideate")
+  phase                    String                   @default("ideate")
   sandboxId                String?
   sandboxPort              Int?
   buildBranch              String? // git branch in sandbox: "build/<buildId>"
@@ -4419,15 +4419,15 @@ model FeatureBuild {
   codingProvider           String?
   threadId                 String?
   createdById              String
-  createdAt                DateTime                @default(now())
-  updatedAt                DateTime                @updatedAt
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
   digitalProductId         String?
   designDoc                Json?
   designReview             Json?
   buildPlan                Json?
   planReview               Json?
   taskResults              Json?
-  taskResultsVersion       Int                     @default(0)
+  taskResultsVersion       Int                      @default(0)
   verificationOut          Json?
   acceptanceMet            Json?
   scoutFindings            Json?
@@ -4435,7 +4435,7 @@ model FeatureBuild {
   claimedByAgentId         String?
   claimedAt                DateTime?
   claimStatus              String?
-  gitCommitHashes          String[]                @default([])
+  gitCommitHashes          String[]                 @default([])
   uxTestResults            Json?
   uxVerificationStatus     String? // null | "running" | "complete" | "failed" | "skipped"
   deliberationSummary      Json? // compact BuildDeliberationSummary (see apps/web/lib/feature-build-types.ts)
@@ -4466,14 +4466,14 @@ model FeatureBuild {
   taxonomyProposals        TaxonomyProposal[]
   dependenciesOut          FeatureBuildDependency[] @relation("DependentBuild")
   dependenciesIn           FeatureBuildDependency[] @relation("DependsOnBuild")
-  activeForBacklogItem     BacklogItem?            @relation("BacklogItemActiveBuild")
-  accountableEmployee      EmployeeProfile?        @relation("BuildAccountable", fields: [accountableEmployeeId], references: [id])
-  createdBy                User                    @relation(fields: [createdById], references: [id])
-  digitalProduct           DigitalProduct?         @relation(fields: [digitalProductId], references: [id])
-  originator               BacklogItem?            @relation("BacklogItemOriginator", fields: [originatingBacklogItemId], references: [id])
-  parentEpic               Epic?                   @relation("EpicFeatureBuilds", fields: [parentEpicId], references: [id])
-  supersededByEpic         Epic?                   @relation("EpicSupersededBuilds", fields: [supersededByEpicId], references: [id])
-  releaseBundle            ReleaseBundle?          @relation(fields: [releaseBundleId], references: [id])
+  activeForBacklogItem     BacklogItem?             @relation("BacklogItemActiveBuild")
+  accountableEmployee      EmployeeProfile?         @relation("BuildAccountable", fields: [accountableEmployeeId], references: [id])
+  createdBy                User                     @relation(fields: [createdById], references: [id])
+  digitalProduct           DigitalProduct?          @relation(fields: [digitalProductId], references: [id])
+  originator               BacklogItem?             @relation("BacklogItemOriginator", fields: [originatingBacklogItemId], references: [id])
+  parentEpic               Epic?                    @relation("EpicFeatureBuilds", fields: [parentEpicId], references: [id])
+  supersededByEpic         Epic?                    @relation("EpicSupersededBuilds", fields: [supersededByEpicId], references: [id])
+  releaseBundle            ReleaseBundle?           @relation(fields: [releaseBundleId], references: [id])
   productVersions          ProductVersion[]
   promotionBackups         PromotionBackup[]
   issueReports             PlatformIssueReport[]
@@ -5041,16 +5041,16 @@ model StallEvent {
 //
 // Spec: docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md §5.1
 model QuiescenceRun {
-  id              String    @id @default(cuid())
+  id           String  @id @default(cuid())
   // Public/human-readable id (e.g., "QR-2026-05-24-abc123"). Used in event
   // payloads + URLs + log lines; the cuid `id` is internal FK substrate only.
-  runId           String    @unique
+  runId        String  @unique
   // Caller category: "self-upgrade" | "manual" | "sandbox-recovery"
-  trigger         String
+  trigger      String
   // Caller's external reference (e.g., SelfUpgradeRun.runId). Echoed back
   // on platform.quiescence-cleared so caller's step.waitForEvent can filter
   // when multiple non-self-upgrade callers emit in close sequence (spec §5.3).
-  triggerRefId    String?
+  triggerRefId String?
 
   // State machine value (see model comment above). String not enum so future
   // additions don't require a schema migration — application-layer validation
@@ -5086,25 +5086,25 @@ model QuiescenceRun {
   // Operator-promised wait budget (ms). Coordinator chooses regime at
   // preparing time and may extend per spec §5.5 max(regimeBudget, phaseBudget)
   // rule when a BuildPhaseRun blocker is present.
-  budgetMs        Int
+  budgetMs     Int
   // Actual wait time at terminal transition. Populated for success/defer paths.
-  actualWaitMs    Int?
+  actualWaitMs Int?
 
   // Defer audit (populated when status='deferred').
-  deferReason     String?
-  deferSurface    String?
+  deferReason    String?
+  deferSurface   String?
   // List of surfaces force-cancelled past budget (e.g., ship-force override).
   // JSON array of { surface, reason, forcedAt } objects.
-  forcedSurfaces  Json      @default("[]")
+  forcedSurfaces Json    @default("[]")
 
   // Terminal outcome label: succeeded | deferred-by-surface |
   // aborted-by-operator | failed. Set together with status transition.
-  outcome         String?
+  outcome          String?
   // Where the terminal transition came from: caller | boot-reconciler | watchdog.
   // Distinguishes "caller signaled swap-complete cleanly" from "post-swap boot
   // reconciler had to close out a pending run" from "watchdog forced cleanup".
   completionSource String?
-  outcomeNotes    String?   @db.Text
+  outcomeNotes     String? @db.Text
 
   @@index([trigger, startedAt])
   // Stuck-coordinator query: status NOT IN (terminal) AND lastHeartbeatAt < cutoff.
@@ -5475,33 +5475,33 @@ model EaDqRule {
 }
 
 model EaElement {
-  id                      String                        @id @default(cuid())
-  elementTypeId           String
-  name                    String
-  description             String?
-  properties              Json                          @default("{}")
-  lifecycleStage          String                        @default("plan")
-  lifecycleStatus         String                        @default("draft")
-  createdById             String?
-  digitalProductId        String?
-  infraCiKey              String?
-  portfolioId             String?
-  taxonomyNodeId          String?
-  syncedAt                DateTime?
-  refinementLevel         String?
-  itValueStream           String?
-  ontologyRole            String?
-  createdAt               DateTime                      @default(now())
-  updatedAt               DateTime                      @updatedAt
-  conformanceIssues       EaConformanceIssue[]
-  digitalProduct          DigitalProduct?               @relation(fields: [digitalProductId], references: [id])
-  elementType             EaElementType                 @relation(fields: [elementTypeId], references: [id])
-  portfolio               Portfolio?                    @relation(fields: [portfolioId], references: [id])
-  taxonomyNode            TaxonomyNode?                 @relation(fields: [taxonomyNodeId], references: [id])
-  fromRelationships       EaRelationship[]              @relation("FromElement")
-  toRelationships         EaRelationship[]              @relation("ToElement")
-  viewElements            EaViewElement[]
-  businessCapabilityLinks BusinessCapabilityTraceLink[] @relation("BusinessCapabilityEaElementLinks")
+  id                            String                         @id @default(cuid())
+  elementTypeId                 String
+  name                          String
+  description                   String?
+  properties                    Json                           @default("{}")
+  lifecycleStage                String                         @default("plan")
+  lifecycleStatus               String                         @default("draft")
+  createdById                   String?
+  digitalProductId              String?
+  infraCiKey                    String?
+  portfolioId                   String?
+  taxonomyNodeId                String?
+  syncedAt                      DateTime?
+  refinementLevel               String?
+  itValueStream                 String?
+  ontologyRole                  String?
+  createdAt                     DateTime                       @default(now())
+  updatedAt                     DateTime                       @updatedAt
+  conformanceIssues             EaConformanceIssue[]
+  digitalProduct                DigitalProduct?                @relation(fields: [digitalProductId], references: [id])
+  elementType                   EaElementType                  @relation(fields: [elementTypeId], references: [id])
+  portfolio                     Portfolio?                     @relation(fields: [portfolioId], references: [id])
+  taxonomyNode                  TaxonomyNode?                  @relation(fields: [taxonomyNodeId], references: [id])
+  fromRelationships             EaRelationship[]               @relation("FromElement")
+  toRelationships               EaRelationship[]               @relation("ToElement")
+  viewElements                  EaViewElement[]
+  businessCapabilityLinks       BusinessCapabilityTraceLink[]  @relation("BusinessCapabilityEaElementLinks")
   capabilityMaturityAssessments CapabilityMaturityAssessment[]
 
   @@index([portfolioId])
@@ -6937,6 +6937,54 @@ model MarketingAutomationCandidate {
   @@index([status])
 }
 
+// ─── Outbound execution substrate (EP-MARKETING-EXEC Phase 1) ────────────────
+//
+// Generic outbound-execution tables with a `domain` discriminator. Marketing
+// is the first domain; customer-advisor outbound, ops-coordinator status
+// comms, and build-specialist contributor recruitment join later without a
+// rename migration. Typed status catalog lives at
+// apps/web/lib/marketing/execution.ts.
+
+model OutboundDraft {
+  draftId          String   @id @default(cuid())
+  organizationId   String
+  domain           String // "marketing" today; see OUTBOUND_DOMAIN catalog
+  sourceType       String // "marketing-asset-task" | "marketing-campaign-brief" | "inbound-channel-message" | "manual"
+  sourceId         String?
+  strategyId       String?
+  status           String // "draft" | "pending-review" | "approved" | "rejected" | "needs-changes" | "stale"
+  channelId        String // "linkedin" | "email" | "linkedin-ads" | ...
+  assetType        String // "linkedin-post" | "email" | "ad-creative" | "reply" | ...
+  body             String
+  bodyFormat       String // "markdown" | "html" | "plain"
+  metadata         Json?
+  createdByAgentId String?
+  originalPromptId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  approvals OutboundApprovalDecision[]
+
+  @@index([organizationId, domain, status])
+  @@index([sourceType, sourceId])
+  @@index([channelId, status])
+}
+
+model OutboundApprovalDecision {
+  decisionId     String   @id @default(cuid())
+  draftId        String
+  reviewerUserId String
+  decision       String // "approved" | "rejected" | "needs-changes"
+  editedBody     String?
+  notes          String?
+  decidedAt      DateTime @default(now())
+
+  draft OutboundDraft @relation(fields: [draftId], references: [draftId], onDelete: Cascade)
+
+  @@index([draftId])
+  @@index([reviewerUserId, decidedAt])
+}
+
 model StorefrontSection {
   id           String           @id @default(cuid())
   storefrontId String
@@ -8092,18 +8140,18 @@ model SkillDefinition {
 }
 
 model SkillSeedWarning {
-  id          String   @id @default(cuid())
-  warningId   String   @unique
+  id          String    @id @default(cuid())
+  warningId   String    @unique
   skillId     String
   warningType String
   message     String
   legacyPath  String?
   pluginPath  String?
-  sourceType  String   @default("dpf-platform-plugin")
-  metadata    Json     @default("{}")
+  sourceType  String    @default("dpf-platform-plugin")
+  metadata    Json      @default("{}")
   resolvedAt  DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([skillId])
   @@index([warningType])
