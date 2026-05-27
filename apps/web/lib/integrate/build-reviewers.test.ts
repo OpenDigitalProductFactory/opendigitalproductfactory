@@ -3,6 +3,9 @@ import {
   buildDesignReviewPrompt,
   buildPlanReviewPrompt,
   buildCodeReviewPrompt,
+  buildArchitectureReviewPrompt,
+  architectureAdvisoryFromReview,
+  ARCHITECTURE_REVIEW_REFERENCES,
   parseReviewResponse,
   extractClaimsFromReview,
   buildReviewBranchArtifacts,
@@ -414,5 +417,77 @@ describe("mapCompactSummaryToBuildEntry", () => {
     expect(entry.evidenceQuality).toBe("mixed");
     expect(entry.diversityLabel).toBe("peer-review");
     expect(entry.unresolvedRisks).toEqual([]);
+  });
+});
+
+describe("buildArchitectureReviewPrompt", () => {
+  it("frames the design review as advisory and includes the DPF reference standards", () => {
+    const prompt = buildArchitectureReviewPrompt(
+      {
+        kind: "design",
+        doc: {
+          problemStatement: "Need to store architecture findings",
+          reusePlan: "Considered reusing the ReviewResult JSON column",
+          proposedApproach: "Add a new ArchitectureReview table",
+          acceptanceCriteria: ["Findings persist"],
+        },
+      },
+      "Test project",
+    );
+    expect(prompt).toContain("ADVISORY");
+    expect(prompt).toContain("Enterprise Architect");
+    expect(prompt).toContain("AGENTS.md");
+    expect(prompt).toContain("docs/founder-kernel/wiki/principles/");
+    expect(prompt).toContain("ArchitectureReview table");
+    // The chief-architect lens must invite reference-doc feedback.
+    expect(prompt).toContain("[reference-doc]");
+    expect(prompt).toContain("JSON FORMAT");
+  });
+
+  it("reviews the implementation plan's file structure for canonical placement", () => {
+    const prompt = buildArchitectureReviewPrompt(
+      {
+        kind: "plan",
+        plan: {
+          fileStructure: [{ path: "apps/web/lib/new-thing.ts", action: "create", purpose: "logic" }],
+          tasks: [{ title: "Add logic", testFirst: "t", implement: "write", verify: "tsc" }],
+        },
+      },
+      "",
+    );
+    expect(prompt).toContain("implementation plan");
+    expect(prompt).toContain("apps/web/lib/new-thing.ts");
+    expect(prompt).toContain("canonical home");
+  });
+
+  it("exposes the reference standards as a non-empty, repo-relative list", () => {
+    expect(ARCHITECTURE_REVIEW_REFERENCES.length).toBeGreaterThan(0);
+    expect(ARCHITECTURE_REVIEW_REFERENCES.map((r) => r.path)).toContain("AGENTS.md");
+  });
+});
+
+describe("architectureAdvisoryFromReview", () => {
+  it("returns the compact advisory for a parsed review", () => {
+    const arch: ReviewResult = {
+      decision: "fail",
+      issues: [{ severity: "important", description: "Duplicates a canonical model", suggestion: "Extend it" }],
+      summary: "Aligned with concerns",
+    };
+    expect(architectureAdvisoryFromReview(arch)).toEqual({
+      summary: "Aligned with concerns",
+      issues: arch.issues,
+    });
+  });
+
+  it("treats an absent or parse-error reviewer as no advisory (never fabricates 'no concerns')", () => {
+    expect(architectureAdvisoryFromReview(null)).toBeNull();
+    expect(
+      architectureAdvisoryFromReview({
+        decision: "fail",
+        issues: [],
+        summary: "unparseable",
+        parseError: true,
+      }),
+    ).toBeNull();
   });
 });
