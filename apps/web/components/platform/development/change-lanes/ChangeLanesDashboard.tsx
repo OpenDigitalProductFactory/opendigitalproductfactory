@@ -47,6 +47,9 @@ export function ChangeLanesDashboard({
 
   const filteredLanes = useMemo(() => filterLanes(lanes, tab), [lanes, tab]);
 
+  const githubFresh = freshness.find((f) => f.source === "github-pr");
+  const githubNotConfigured = githubFresh?.state === "not-configured";
+
   return (
     <div className="space-y-4">
       <header className="space-y-1">
@@ -100,6 +103,7 @@ export function ChangeLanesDashboard({
       <ChangeLaneTable
         lanes={filteredLanes}
         anySourceWarmingUp={anySourceWarmingUp}
+        githubNotConfigured={githubNotConfigured}
       />
     </div>
   );

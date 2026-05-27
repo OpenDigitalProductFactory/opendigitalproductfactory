@@ -262,12 +262,14 @@ async function createDefaultReaders(): Promise<SyncSourceReaders> {
       };
     },
     githubPr: async () => {
-      // Phase 2 stub — replaced in Phase 4 by github-rest-reader.ts.
-      return {
-        ok: false,
-        error: "github source not implemented yet (Phase 4)",
-        state: "not-configured",
-      };
+      const { readGithubPullRequests } = await import(
+        "@/lib/contributor-change-lanes/github-rest-reader"
+      );
+      const result = await readGithubPullRequests();
+      if (!result.ok) {
+        return { ok: false, error: result.error, state: result.state };
+      }
+      return { ok: true, rows: result.rows };
     },
   };
 }

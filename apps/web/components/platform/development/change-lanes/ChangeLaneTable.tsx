@@ -6,9 +6,11 @@ import { ChangeLaneStatusBadge } from "./ChangeLaneStatusBadge";
 export function ChangeLaneTable({
   lanes,
   anySourceWarmingUp = false,
+  githubNotConfigured = false,
 }: {
   lanes: ContributorChangeLane[];
   anySourceWarmingUp?: boolean;
+  githubNotConfigured?: boolean;
 }) {
   if (lanes.length === 0) {
     return (
@@ -40,7 +42,17 @@ export function ChangeLaneTable({
             <Th>Branch</Th>
             <Th>Commit</Th>
             <Th>Served</Th>
-            <Th>PR</Th>
+            <Th>
+              <div>PR</div>
+              {githubNotConfigured ? (
+                <div
+                  className="mt-0.5 text-[9px] normal-case font-normal text-[var(--dpf-warning)]"
+                  title="GitHub source is not configured; PR cells reflect only locally-known links."
+                >
+                  GitHub not connected
+                </div>
+              ) : null}
+            </Th>
             <Th>Runtime</Th>
             <Th>Verification</Th>
             <Th>TTL</Th>
