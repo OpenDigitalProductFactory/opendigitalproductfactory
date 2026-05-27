@@ -58,3 +58,10 @@ export {
   readinessCopy,
   type ReadinessCopy,
 } from "./readiness-state";
+
+export {
+  computeAgentToolchainPlan,
+  summarizePlan,
+  type AgentToolchainPlan,
+  type ComputeAgentToolchainPlanOptions,
+} from "./bridge";

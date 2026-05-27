@@ -1849,31 +1849,33 @@ if (-not (Test-StepDone "started")) {
 
     Save-Progress "started"
 
-# --- Auto-seed MCP token for Claude Code (if .mcp.json already exists) -------
+# --- Agent toolchain bootstrap (Claude Code + Codex CLI) ---------------------
+# Per BI-4B17051B (Phase 3): replace command-copy remediation with the
+# state-driven readiness banner. The bootstrap script handles missing CLIs,
+# missing tokens, and stale plugin entries as explicit readiness states with
+# one primary remediation action each. No `.\scripts\...` is suggested to
+# the operator under any path.
 if (-not (Test-StepDone "mcp_seed")) {
+    # Seed per-worktree MCP config first (idempotent; needs the token already
+    # generated at Admin > Platform Development > MCP).
     $seedScript = Join-Path $DPF_DIR "scripts\seed-worktree-mcp.ps1"
     if (Test-Path $seedScript) {
-        if (Get-Command claude -ErrorAction SilentlyContinue) {
-            Write-Action "Seeding MCP token to worktrees..."
-            try {
-                & $seedScript
-                Write-OK "MCP token seeded. Restart Claude Code to use it."
-            } catch {
-                Write-Warn "MCP seed failed (non-fatal): $_"
-            }
-        } else {
-            Write-Warn "Claude Code CLI not found. After installing Claude Code, run:"
-            Write-Warn "  .\scripts\seed-worktree-mcp.ps1"
+        Write-Action "Seeding MCP token to worktrees..."
+        try {
+            & $seedScript
+        } catch {
+            Write-Warn "MCP seed step encountered an issue (non-fatal): $_"
         }
     }
-    $skillPackScript = Join-Path $DPF_DIR "scripts\ensure-dpf-skill-pack.ps1"
-    if (Test-Path $skillPackScript) {
-        Write-Action "Ensuring DPF contributor skill pack..."
+
+    # Converge the agent toolchain (Claude + Codex + kernel memory + state).
+    $bootstrapScript = Join-Path $DPF_DIR "scripts\dpf-bootstrap-agent-toolchain.ps1"
+    if (Test-Path $bootstrapScript) {
+        Write-Action "Converging DPF agent toolchain..."
         try {
-            & $skillPackScript -RepoRoot $DPF_DIR
-            Write-OK "DPF contributor skill pack checked."
+            & $bootstrapScript -RepoRoot $DPF_DIR
         } catch {
-            Write-Warn "DPF contributor skill pack setup failed (non-fatal): $_"
+            Write-Warn "Agent toolchain bootstrap encountered an issue (non-fatal): $_"
         }
     }
     Save-Progress "mcp_seed"
