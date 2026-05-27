@@ -90,6 +90,11 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   assess_my_capabilities: ["registry_read"],
   submit_coworker_capability_need: ["registry_read"],
   list_my_capability_needs: ["registry_read"],
+  // BI-F9E7B780: governance-surface variant — same grant tier (registry_read)
+  // because both surfaces are read-only over the same CoworkerCapabilityNeed
+  // model; the scope difference is "your needs" vs "everyone's needs", not
+  // a privilege difference.
+  list_all_capability_needs: ["registry_read"],
   search_knowledge: ["registry_read"],
   search_knowledge_base: ["registry_read"],
   create_knowledge_article: ["registry_write"],
