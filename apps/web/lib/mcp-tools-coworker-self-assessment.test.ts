@@ -38,16 +38,20 @@ vi.mock("@/lib/coworker-self-assessment/assessment-service", () => ({
 }));
 
 vi.mock("@/lib/coworker-self-assessment/review-service", () => ({
+  // Severities mirror the canonical COWORKER_CAPABILITY_NEED_SEVERITIES enum
+  // ("blocker" | "important" | "minor") from
+  // apps/web/lib/coworker-self-assessment/types.ts — anything else would be
+  // filtered out by the validator in mcp-tools.ts.
   getCoworkerCapabilityNeedReview: vi.fn().mockResolvedValue({
     summary: {
       total: 2,
       byStatus: { submitted: 2 },
-      bySeverity: { high: 1, medium: 1 },
+      bySeverity: { blocker: 1, important: 1 },
       byKind: { tool: 1, skill: 1 },
     },
     filterOptions: {
-      statuses: ["submitted", "triaged"],
-      severities: ["high", "medium"],
+      statuses: ["submitted", "reviewing"],
+      severities: ["blocker", "important", "minor"],
       kinds: ["tool", "skill"],
     },
     needs: [
@@ -56,14 +60,14 @@ vi.mock("@/lib/coworker-self-assessment/review-service", () => ({
         agentId: "AGT-WS-MARKETING",
         status: "submitted",
         kind: "tool",
-        severity: "high",
+        severity: "blocker",
       },
       {
         needId: "CWN-000002",
         agentId: "AGT-WS-FINANCE",
         status: "submitted",
         kind: "skill",
-        severity: "medium",
+        severity: "important",
       },
     ],
   }),
@@ -348,8 +352,15 @@ describe("list_all_capability_needs (BI-F9E7B780)", () => {
     expect(tool?.requiredCapability).toBe("view_platform");
     expect(tool?.sideEffect).toBe(false);
     expect(tool?.annotations?.readOnlyHint).toBe(true);
-    expect(tool?.inputSchema.properties?.agentId).toBeDefined();
-    expect(tool?.inputSchema.required ?? []).toEqual([]);
+    // ToolDefinition.inputSchema is typed as Record<string, unknown>, so the
+    // nested `properties` and `required` keys need a narrow cast before
+    // indexing. We treat the shape locally as a minimal JSON-Schema-ish
+    // object — same approach the runtime code takes elsewhere.
+    const schema = tool?.inputSchema as
+      | { properties?: Record<string, unknown>; required?: string[] }
+      | undefined;
+    expect(schema?.properties?.agentId).toBeDefined();
+    expect(schema?.required ?? []).toEqual([]);
   });
 
   it("returns the all-coworker rollup with no filters (no agentId scoping)", async () => {
@@ -383,7 +394,7 @@ describe("list_all_capability_needs (BI-F9E7B780)", () => {
         agentId: "AGT-WS-FINANCE",
         status: "submitted",
         kind: "skill",
-        severity: "medium",
+        severity: "important",
       },
       "user-1",
     );
@@ -392,7 +403,7 @@ describe("list_all_capability_needs (BI-F9E7B780)", () => {
       agentId: "AGT-WS-FINANCE",
       status: "submitted",
       kind: "skill",
-      severity: "medium",
+      severity: "important",
     });
   });
 
