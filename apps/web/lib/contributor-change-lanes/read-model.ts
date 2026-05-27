@@ -1,7 +1,21 @@
+// apps/web/lib/contributor-change-lanes/read-model.ts
+// Phase 3 of BI-063BDF1B — DB-only read model.
+//
+// The read model no longer accepts inventory runners. Snapshot sources
+// (git-worktree, git-branch, github-pr) come from ContributorInventorySnapshot
+// rows resolved via latest-successful-per-source semantics, so a partial sync
+// preserves prior good data for each source independently. Live Prisma sources
+// (work-capsule, runtime-target, runtime-verification, nonprod-lease) are read
+// at request time as today.
+//
+// Spec: docs/superpowers/specs/2026-05-26-contributor-inventory-sync-design.md
+//   §"Read Model"
+//
+// The deprecated `runners-node.ts` is left on disk through Phase 7 for
+// rollback safety; it is unreferenced from this file or from page.tsx.
+
 import { prisma } from "@dpf/db";
 
-import { mergeFilesystemAndRegisteredWorktrees, parseGitBranchList, parseGitWorktreeList } from "./git-inventory";
-import { parseGhPrListJson } from "./github-inventory";
 import { projectContributorChangeLanes } from "./lane-projection";
 import type {
   ContributorChangeLane,
@@ -16,37 +30,76 @@ import type {
 
 type ReadModelDb = Pick<
   typeof prisma,
-  "workCapsule" | "runtimeTarget" | "runtimeVerification" | "nonProductionEnvironmentLease"
+  | "workCapsule"
+  | "runtimeTarget"
+  | "runtimeVerification"
+  | "nonProductionEnvironmentLease"
+  | "contributorInventorySyncRun"
+  | "credentialEntry"
 >;
 
-export type LaneReadModelSource = "work-capsule" | "runtime-target" | "runtime-verification" | "nonprod-lease" | "git-worktree" | "git-branch" | "github-pr";
+export type LaneReadModelSource =
+  | "work-capsule"
+  | "runtime-target"
+  | "runtime-verification"
+  | "nonprod-lease"
+  | "git-worktree"
+  | "git-branch"
+  | "github-pr";
+
+/** Distinct states the freshness band can render — see spec §"Freshness display". */
+export type LaneReadModelFreshnessState =
+  | "ok"
+  | "stale"
+  | "error"
+  | "not-configured"
+  | "warming-up";
 
 export type LaneReadModelFreshness = {
   source: LaneReadModelSource;
-  ok: boolean;
+  state: LaneReadModelFreshnessState;
   fetchedAt: Date;
-  error: string | null;
+  message: string | null;
   count: number;
 };
 
 export type LaneReadModelResult = {
   lanes: ContributorChangeLane[];
   freshness: LaneReadModelFreshness[];
-};
-
-export type LaneReadModelInventoryRunners = {
-  runGitWorktreeList: () => Promise<string>;
-  runGitForEachRef: () => Promise<string>;
-  runGhPrList: () => Promise<string>;
-  listFilesystemWorktreePaths: () => Promise<string[]>;
+  /** True iff at least one snapshot source has state === "warming-up". */
+  anySourceWarmingUp: boolean;
+  /** True iff any snapshot source has a non-"ok" state (used by tab-count warning). */
+  anySnapshotSourceDegraded: boolean;
 };
 
 export type LaneReadModelArgs = {
   db?: ReadModelDb;
-  runners?: Partial<LaneReadModelInventoryRunners>;
   now?: Date;
+  /** Threshold (ms) past which a snapshot's fetchedAt flips to state "stale". */
   staleHeartbeatThresholdMs?: number;
   staleVerifiedThresholdMs?: number;
+};
+
+const DEFAULT_STALE_THRESHOLD_MS = 20 * 60 * 1000;
+const GITHUB_PR_CREDENTIAL_PROVIDER_ID = "github-pr-sync";
+
+const SNAPSHOT_SOURCES: ("git-worktree" | "git-branch" | "github-pr")[] = [
+  "git-worktree",
+  "git-branch",
+  "github-pr",
+];
+
+type SnapshotRowLike = {
+  payload: unknown;
+};
+
+type SyncRunRowLike = {
+  syncRunId: string;
+  startedAt: Date;
+  completedAt: Date | null;
+  status: string;
+  perSourceResult: unknown;
+  snapshots: SnapshotRowLike[];
 };
 
 export async function loadContributorChangeLaneReadModel(
@@ -54,7 +107,7 @@ export async function loadContributorChangeLaneReadModel(
 ): Promise<LaneReadModelResult> {
   const db = args.db ?? prisma;
   const now = args.now ?? new Date();
-  const runners = args.runners ?? {};
+  const staleThresholdMs = args.staleHeartbeatThresholdMs ?? DEFAULT_STALE_THRESHOLD_MS;
 
   const freshness: LaneReadModelFreshness[] = [];
 
@@ -65,11 +118,27 @@ export async function loadContributorChangeLaneReadModel(
     readActiveLeases(db, freshness, now),
   ]);
 
-  const [worktrees, branches, pullRequests] = await Promise.all([
-    readWorktreeInventory(runners, freshness, now),
-    readBranchInventory(runners, freshness, now),
-    readPullRequestInventory(runners, freshness, now),
+  const [worktrees, branches, pullRequests, githubCredentialBound] = await Promise.all([
+    readSnapshotSource<GitWorktreeSnapshot>(db, "git-worktree", freshness, now, staleThresholdMs, null),
+    readSnapshotSource<GitBranchSnapshot>(db, "git-branch", freshness, now, staleThresholdMs, null),
+    Promise.resolve([] as PullRequestSnapshot[]).then(() => null), // placeholder, see below
+    isGithubPrCredentialBound(db),
   ]);
+
+  // We deferred the github-pr read so we know whether the credential is
+  // bound before deciding whether absence-of-data means "not-configured"
+  // (no credential) or "warming-up" (no run yet).
+  const githubPrRows = await readSnapshotSource<PullRequestSnapshot>(
+    db,
+    "github-pr",
+    freshness,
+    now,
+    staleThresholdMs,
+    githubCredentialBound ? null : "not-configured",
+  );
+
+  // (PR snapshot read above; we drop the placeholder value.)
+  void pullRequests;
 
   const projection = projectContributorChangeLanes({
     workCapsules,
@@ -78,14 +147,126 @@ export async function loadContributorChangeLaneReadModel(
     leases,
     worktrees,
     branches,
-    pullRequests,
+    pullRequests: githubPrRows,
     now,
     staleHeartbeatThresholdMs: args.staleHeartbeatThresholdMs,
     staleVerifiedThresholdMs: args.staleVerifiedThresholdMs,
   });
 
-  return { lanes: projection.lanes, freshness };
+  const snapshotStates = freshness
+    .filter((f) => SNAPSHOT_SOURCES.includes(f.source as (typeof SNAPSHOT_SOURCES)[number]))
+    .map((f) => f.state);
+
+  return {
+    lanes: projection.lanes,
+    freshness,
+    anySourceWarmingUp: snapshotStates.includes("warming-up"),
+    anySnapshotSourceDegraded: snapshotStates.some((s) => s !== "ok"),
+  };
 }
+
+// ─── Snapshot source resolver (latest-successful-per-source) ────────────────
+
+async function readSnapshotSource<T>(
+  db: ReadModelDb,
+  source: "git-worktree" | "git-branch" | "github-pr",
+  freshness: LaneReadModelFreshness[],
+  now: Date,
+  staleThresholdMs: number,
+  forcedNotConfiguredReason: "not-configured" | null,
+): Promise<T[]> {
+  if (forcedNotConfiguredReason === "not-configured") {
+    freshness.push({
+      source,
+      state: "not-configured",
+      fetchedAt: now,
+      message:
+        "GitHub not connected — connect on the Contributor MCP card to populate PR data",
+      count: 0,
+    });
+    return [];
+  }
+
+  let row: SyncRunRowLike | null = null;
+  try {
+    row = (await db.contributorInventorySyncRun.findFirst({
+      where: {
+        // Latest run where this source was OK. Status is not the filter —
+        // the audit-only status field can be "partial" even when this
+        // specific source succeeded; the source's `ok: true` in
+        // perSourceResult is the truth.
+        perSourceResult: { path: [source, "ok"], equals: true },
+      },
+      orderBy: { startedAt: "desc" },
+      select: {
+        syncRunId: true,
+        startedAt: true,
+        completedAt: true,
+        status: true,
+        perSourceResult: true,
+        snapshots: {
+          where: { source },
+          select: { payload: true },
+        },
+      },
+    })) as SyncRunRowLike | null;
+  } catch (err) {
+    freshness.push({
+      source,
+      state: "error",
+      fetchedAt: now,
+      message: (err as Error).message ?? "snapshot read failed",
+      count: 0,
+    });
+    return [];
+  }
+
+  if (!row) {
+    // No successful run for this source yet — warming up.
+    freshness.push({
+      source,
+      state: "warming-up",
+      fetchedAt: now,
+      message: "Syncing — first results within ~10 min",
+      count: 0,
+    });
+    return [];
+  }
+
+  const rows = row.snapshots.map((s) => s.payload as T);
+  const fetchedAt = row.completedAt ?? row.startedAt;
+  const ageMs = now.getTime() - fetchedAt.getTime();
+  const state: LaneReadModelFreshnessState = ageMs > staleThresholdMs ? "stale" : "ok";
+
+  freshness.push({
+    source,
+    state,
+    fetchedAt,
+    message:
+      state === "stale"
+        ? `Last successful sync ${Math.floor(ageMs / 60_000)} min ago`
+        : null,
+    count: rows.length,
+  });
+  return rows;
+}
+
+async function isGithubPrCredentialBound(db: ReadModelDb): Promise<boolean> {
+  try {
+    const cred = await db.credentialEntry.findFirst({
+      where: { providerId: GITHUB_PR_CREDENTIAL_PROVIDER_ID, status: "active" },
+      select: { id: true },
+    });
+    return cred !== null;
+  } catch {
+    // If the credential check itself fails, treat as not-bound — the
+    // surfaced state will be "not-configured" which is the safer message
+    // than "error" for an unconfigured customer install.
+    return false;
+  }
+}
+
+// ─── Live Prisma source readers (unchanged shape from Phase 1) ──────────────
 
 async function readWorkCapsules(
   db: ReadModelDb,
@@ -94,21 +275,25 @@ async function readWorkCapsules(
 ): Promise<WorkCapsuleSnapshot[]> {
   try {
     const rows = await db.workCapsule.findMany({
-      where: {
-        status: { notIn: ["archived"] },
-      },
+      where: { status: { notIn: ["archived"] } },
       orderBy: { updatedAt: "desc" },
       take: 250,
     });
     const out = rows.map(toWorkCapsuleSnapshot);
-    freshness.push({ source: "work-capsule", ok: true, fetchedAt: now, error: null, count: out.length });
+    freshness.push({
+      source: "work-capsule",
+      state: "ok",
+      fetchedAt: now,
+      message: null,
+      count: out.length,
+    });
     return out;
   } catch (err) {
     freshness.push({
       source: "work-capsule",
-      ok: false,
+      state: "error",
       fetchedAt: now,
-      error: (err as Error).message,
+      message: (err as Error).message ?? "read failed",
       count: 0,
     });
     return [];
@@ -122,21 +307,25 @@ async function readRuntimeTargets(
 ): Promise<RuntimeTargetSnapshot[]> {
   try {
     const rows = await db.runtimeTarget.findMany({
-      where: {
-        status: { notIn: ["released", "expired"] },
-      },
+      where: { status: { notIn: ["released", "expired"] } },
       orderBy: { updatedAt: "desc" },
       take: 250,
     });
     const out = rows.map(toRuntimeTargetSnapshot);
-    freshness.push({ source: "runtime-target", ok: true, fetchedAt: now, error: null, count: out.length });
+    freshness.push({
+      source: "runtime-target",
+      state: "ok",
+      fetchedAt: now,
+      message: null,
+      count: out.length,
+    });
     return out;
   } catch (err) {
     freshness.push({
       source: "runtime-target",
-      ok: false,
+      state: "error",
       fetchedAt: now,
-      error: (err as Error).message,
+      message: (err as Error).message ?? "read failed",
       count: 0,
     });
     return [];
@@ -157,18 +346,18 @@ async function readRuntimeVerifications(
     const out = rows.map(toRuntimeVerificationSnapshot);
     freshness.push({
       source: "runtime-verification",
-      ok: true,
+      state: "ok",
       fetchedAt: now,
-      error: null,
+      message: null,
       count: out.length,
     });
     return out;
   } catch (err) {
     freshness.push({
       source: "runtime-verification",
-      ok: false,
+      state: "error",
       fetchedAt: now,
-      error: (err as Error).message,
+      message: (err as Error).message ?? "read failed",
       count: 0,
     });
     return [];
@@ -187,108 +376,27 @@ async function readActiveLeases(
       take: 100,
     });
     const out = rows.map(toLeaseSnapshot);
-    freshness.push({ source: "nonprod-lease", ok: true, fetchedAt: now, error: null, count: out.length });
+    freshness.push({
+      source: "nonprod-lease",
+      state: "ok",
+      fetchedAt: now,
+      message: null,
+      count: out.length,
+    });
     return out;
   } catch (err) {
     freshness.push({
       source: "nonprod-lease",
-      ok: false,
+      state: "error",
       fetchedAt: now,
-      error: (err as Error).message,
+      message: (err as Error).message ?? "read failed",
       count: 0,
     });
     return [];
   }
 }
 
-async function readWorktreeInventory(
-  runners: Partial<LaneReadModelInventoryRunners>,
-  freshness: LaneReadModelFreshness[],
-  now: Date,
-): Promise<GitWorktreeSnapshot[]> {
-  if (!runners.runGitWorktreeList) {
-    freshness.push({ source: "git-worktree", ok: false, fetchedAt: now, error: "no runner configured", count: 0 });
-    return [];
-  }
-  try {
-    const porcelain = await runners.runGitWorktreeList();
-    const registered = parseGitWorktreeList(porcelain);
-    const filesystemPaths = runners.listFilesystemWorktreePaths
-      ? await runners.listFilesystemWorktreePaths()
-      : [];
-    const merged = mergeFilesystemAndRegisteredWorktrees(registered, filesystemPaths);
-    freshness.push({ source: "git-worktree", ok: true, fetchedAt: now, error: null, count: merged.length });
-    return merged;
-  } catch (err) {
-    freshness.push({
-      source: "git-worktree",
-      ok: false,
-      fetchedAt: now,
-      error: (err as Error).message,
-      count: 0,
-    });
-    return [];
-  }
-}
-
-async function readBranchInventory(
-  runners: Partial<LaneReadModelInventoryRunners>,
-  freshness: LaneReadModelFreshness[],
-  now: Date,
-): Promise<GitBranchSnapshot[]> {
-  if (!runners.runGitForEachRef) {
-    freshness.push({ source: "git-branch", ok: false, fetchedAt: now, error: "no runner configured", count: 0 });
-    return [];
-  }
-  try {
-    const raw = await runners.runGitForEachRef();
-    const branches = parseGitBranchList(raw, { remote: "origin" });
-    freshness.push({ source: "git-branch", ok: true, fetchedAt: now, error: null, count: branches.length });
-    return branches;
-  } catch (err) {
-    freshness.push({
-      source: "git-branch",
-      ok: false,
-      fetchedAt: now,
-      error: (err as Error).message,
-      count: 0,
-    });
-    return [];
-  }
-}
-
-async function readPullRequestInventory(
-  runners: Partial<LaneReadModelInventoryRunners>,
-  freshness: LaneReadModelFreshness[],
-  now: Date,
-): Promise<PullRequestSnapshot[]> {
-  if (!runners.runGhPrList) {
-    freshness.push({ source: "github-pr", ok: false, fetchedAt: now, error: "no runner configured", count: 0 });
-    return [];
-  }
-  try {
-    const json = await runners.runGhPrList();
-    const result = parseGhPrListJson(json);
-    const ok = result.errors.length === 0;
-    freshness.push({
-      source: "github-pr",
-      ok,
-      fetchedAt: now,
-      error: ok ? null : result.errors.map((e) => e.message).join("; "),
-      count: result.pullRequests.length,
-    });
-    return result.pullRequests;
-  } catch (err) {
-    freshness.push({
-      source: "github-pr",
-      ok: false,
-      fetchedAt: now,
-      error: (err as Error).message,
-      count: 0,
-    });
-    return [];
-  }
-}
+// ─── Prisma row → snapshot type shims (unchanged from prior implementation) ──
 
 type WorkCapsuleRowLike = {
   capsuleId: string;
@@ -345,7 +453,8 @@ type RuntimeTargetRowLike = {
 
 function toRuntimeTargetSnapshot(row: RuntimeTargetRowLike): RuntimeTargetSnapshot {
   const md = (row.metadata ?? {}) as Record<string, unknown>;
-  const servedCommitSha = typeof md.servedCommitSha === "string" ? md.servedCommitSha : row.serviceVersion;
+  const servedCommitSha =
+    typeof md.servedCommitSha === "string" ? md.servedCommitSha : row.serviceVersion;
   const branchName = typeof md.branchName === "string" ? md.branchName : null;
   return {
     targetId: row.targetId,
@@ -373,7 +482,9 @@ type RuntimeVerificationRowLike = {
   result: unknown;
 };
 
-function toRuntimeVerificationSnapshot(row: RuntimeVerificationRowLike): RuntimeVerificationSnapshot {
+function toRuntimeVerificationSnapshot(
+  row: RuntimeVerificationRowLike,
+): RuntimeVerificationSnapshot {
   const result = (row.result ?? {}) as Record<string, unknown>;
   const summary = typeof result.summary === "string" ? result.summary : null;
   return {

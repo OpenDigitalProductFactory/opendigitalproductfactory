@@ -8,6 +8,8 @@ import {
 } from "@/lib/actions/assurance";
 import type { BomSummary } from "@/lib/assurance/bom-read";
 import type { ActiveAssuranceFindingRow } from "@/lib/assurance/finding-read";
+import { buildTrustMessage } from "@/lib/trust-vector";
+import { TrustBadge } from "@/components/ui/TrustBadge";
 import { AssuranceFindingsList } from "./AssuranceFindingsList";
 
 type RequestState = "idle" | "queued" | "failed";
@@ -44,6 +46,20 @@ function scannerDetail(summary: BomSummary): string {
   return "No approved vulnerability scanner";
 }
 
+function emptyFindingsLabel(summary: BomSummary, hasBom: boolean): string {
+  if (!hasBom) return "Generate a BOM, then run a scan.";
+
+  if (summary.trust && summary.findings.total === 0) {
+    return buildTrustMessage(summary.trust, {
+      currentFact: "No active findings.",
+      lastKnownFact: "No active findings in the latest scan.",
+      lowConfidenceResult: "No active findings in the latest scan.",
+    });
+  }
+
+  return "No active findings.";
+}
+
 export function BuildAssuranceGateCard({
   buildId,
   summary,
@@ -57,7 +73,7 @@ export function BuildAssuranceGateCard({
   const [scanPending, startScanTransition] = useTransition();
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [scanRequestState, setScanRequestState] = useState<RequestState>("idle");
-  const hasBom = summary.state !== "missing" && summary.document;
+  const hasBom = Boolean(summary.state !== "missing" && summary.document);
   const StatusIcon = summary.findings.blocking > 0
     ? ShieldAlert
     : hasBom && summary.scanner.state === "ready"
@@ -87,7 +103,10 @@ export function BuildAssuranceGateCard({
             <StatusIcon className={`h-4 w-4 ${statusColor}`} aria-hidden="true" />
             <h2>Assurance Gate</h2>
           </div>
-          <p className={`mt-1 text-xs font-medium ${statusColor}`}>{statusLabel(summary)}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <p className={`text-xs font-medium ${statusColor}`}>{statusLabel(summary)}</p>
+            {summary.trust && <TrustBadge trust={summary.trust} compact />}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -170,7 +189,7 @@ export function BuildAssuranceGateCard({
         <div className="mt-2">
           <AssuranceFindingsList
             findings={findings}
-            emptyLabel={hasBom ? "No active findings." : "Generate a BOM, then run a scan."}
+            emptyLabel={emptyFindingsLabel(summary, hasBom)}
           />
         </div>
       </div>

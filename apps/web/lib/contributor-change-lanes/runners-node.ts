@@ -1,14 +1,31 @@
+// DEPRECATED — Phase 3 of BI-063BDF1B replaced the per-request runner shape
+// with DB-backed snapshot reads in read-model.ts. This file is left on disk
+// for one rollback window; deletion ships in Phase 8 of
+// docs/superpowers/plans/2026-05-26-contributor-inventory-sync.md.
+//
+// No caller imports this module today. The local `LegacyInventoryRunners`
+// type is the contract the page server-component used pre-Phase 3.
+
 import { execFile } from "node:child_process";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import type { LaneReadModelInventoryRunners } from "./read-model";
-
 const execFileAsync = promisify(execFile);
 
 const DEFAULT_TIMEOUT_MS = 8_000;
 const MAX_BUFFER = 4 * 1024 * 1024;
+
+/**
+ * @deprecated Removed from active read-model in Phase 3. The new read-model
+ * resolves snapshot sources from ContributorInventorySnapshot rows.
+ */
+export type LegacyInventoryRunners = {
+  runGitWorktreeList: () => Promise<string>;
+  runGitForEachRef: () => Promise<string>;
+  runGhPrList: () => Promise<string>;
+  listFilesystemWorktreePaths: () => Promise<string[]>;
+};
 
 export type NodeRunnerOptions = {
   repoCwd: string;
@@ -16,9 +33,10 @@ export type NodeRunnerOptions = {
   timeoutMs?: number;
 };
 
+/** @deprecated See file-header note. */
 export function createNodeInventoryRunners(
   options: NodeRunnerOptions,
-): LaneReadModelInventoryRunners {
+): LegacyInventoryRunners {
   const timeout = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const cwd = options.repoCwd;
 

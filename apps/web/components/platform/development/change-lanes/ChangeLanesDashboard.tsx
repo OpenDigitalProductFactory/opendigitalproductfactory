@@ -34,14 +34,21 @@ export function ChangeLanesDashboard({
   lanes,
   freshness,
   generatedAt,
+  anySourceWarmingUp = false,
+  anySnapshotSourceDegraded = false,
 }: {
   lanes: ContributorChangeLane[];
   freshness: LaneReadModelFreshness[];
   generatedAt: string;
+  anySourceWarmingUp?: boolean;
+  anySnapshotSourceDegraded?: boolean;
 }) {
   const [tab, setTab] = useState<TabId>("active");
 
   const filteredLanes = useMemo(() => filterLanes(lanes, tab), [lanes, tab]);
+
+  const githubFresh = freshness.find((f) => f.source === "github-pr");
+  const githubNotConfigured = githubFresh?.state === "not-configured";
 
   return (
     <div className="space-y-4">
@@ -80,11 +87,24 @@ export function ChangeLanesDashboard({
             <span className="ml-1 text-[10px] text-[var(--dpf-muted)]">
               {countLanes(lanes, t.id)}
             </span>
+            {anySnapshotSourceDegraded ? (
+              <span
+                className="ml-1 cursor-help text-[10px] text-[var(--dpf-warning)]"
+                title="Counts may be incomplete — some inventory sources are not synced."
+                aria-label="counts may be incomplete"
+              >
+                (?)
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
 
-      <ChangeLaneTable lanes={filteredLanes} />
+      <ChangeLaneTable
+        lanes={filteredLanes}
+        anySourceWarmingUp={anySourceWarmingUp}
+        githubNotConfigured={githubNotConfigured}
+      />
     </div>
   );
 }
