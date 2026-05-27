@@ -4312,10 +4312,10 @@ model PlatformIssueReport {
   reportedBy          User?         @relation(fields: [reportedById], references: [id])
   featureBuild        FeatureBuild? @relation(fields: [featureBuildId], references: [id], onDelete: SetNull)
 
-  @@unique([reportedById, supportSessionId])
   @@index([featureBuildId])
   @@index([threadId, createdAt(sort: Desc)])
   @@index([taskRunId])
+  @@unique([reportedById, supportSessionId])
   @@index([reportedById, supportSessionId, createdAt(sort: Desc)])
 }
 
