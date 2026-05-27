@@ -1697,6 +1697,12 @@ model ScheduledJob {
   nextRunAt  DateTime?
   lastStatus String?
   lastError  String?
+  // Per-job durable scratch state owned by the runner. Used today by
+  // jobId="contributor-inventory-sync" to store the GitHub etag
+  // (`githubPrEtag`) so conditional requests survive the retention
+  // sweep that prunes ContributorInventorySyncRun history.
+  // Spec: docs/superpowers/specs/2026-05-26-contributor-inventory-sync-design.md §Etag persistence.
+  metadata   Json?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 }
@@ -1761,6 +1767,68 @@ model BackupRestore {
   @@index([startedAt])
   @@index([status])
   @@index([trigger])
+}
+
+// Per-run audit row for the contributor-inventory-sync Inngest cron. Mirrors
+// BackupRun's role for the postgres-daily-backup cron: the ScheduledJob row
+// with jobId "contributor-inventory-sync" is the live heartbeat surfaced in
+// /platform/development/change-lanes; ContributorInventorySyncRun rows are
+// the durable per-run audit referenced by latest-successful-per-source
+// resolution in the read model.
+//
+// Spec: docs/superpowers/specs/2026-05-26-contributor-inventory-sync-design.md
+model ContributorInventorySyncRun {
+  id              String    @id @default(cuid())
+  syncRunId       String    @unique
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  // "running" | "completed" | "partial" | "failed"
+  // status is audit-only; the read model resolves per-source from
+  // perSourceResult.<source>.ok, not from this rollup.
+  status          String    @default("running")
+  // Per-source result map written by the runner:
+  //   { "git-worktree": { ok, count, error?, ... }, "git-branch": {...}, "github-pr": {...} }
+  perSourceResult Json      @default("{}")
+  // "cron" | "mcp" | "ui" — for audit only.
+  triggeredBy     String    @default("cron")
+  durationMs      Int?
+
+  snapshots ContributorInventorySnapshot[]
+
+  @@index([startedAt])
+  @@index([status, startedAt])
+}
+
+// One row per inventory item, partitioned by source. Rows are written in
+// bulk by the contributor-inventory-sync cron and read by latest-successful-
+// per-source resolution in apps/web/lib/contributor-change-lanes/read-model.ts.
+// The retention sweep deletes rows whose syncRunId belongs to a
+// ContributorInventorySyncRun older than 7 days AND whose syncRunId is not
+// the latest successful for any of the three sources (preservation guard).
+//
+// Spec: docs/superpowers/specs/2026-05-26-contributor-inventory-sync-design.md
+model ContributorInventorySnapshot {
+  id        String   @id @default(cuid())
+  // One of: "git-worktree" | "git-branch" | "github-pr"
+  source    String
+  // Stable identity within a source — branch name, worktree path, PR
+  // number as string. Combined with syncRunId for the dedupe unique key.
+  sourceKey String
+  // The snapshot row payload, shape-compatible with
+  // GitWorktreeSnapshot / GitBranchSnapshot / PullRequestSnapshot from
+  // apps/web/lib/contributor-change-lanes/types.ts. JSON so the projection
+  // layer can evolve its shapes without a migration per shape change —
+  // same pattern as EaSnapshot.graphJson.
+  payload   Json
+  syncRunId String
+  fetchedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  syncRun ContributorInventorySyncRun @relation(fields: [syncRunId], references: [syncRunId], onDelete: Cascade)
+
+  @@unique([source, sourceKey, syncRunId])
+  @@index([source, syncRunId])
+  @@index([source, fetchedAt])
 }
 
 model CodeGraphIndexState {

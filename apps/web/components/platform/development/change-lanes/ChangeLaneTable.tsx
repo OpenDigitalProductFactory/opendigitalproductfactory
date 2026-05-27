@@ -3,14 +3,24 @@ import type { ContributorChangeLane } from "@/lib/contributor-change-lanes/types
 import { ChangeLaneBlockers } from "./ChangeLaneBlockers";
 import { ChangeLaneStatusBadge } from "./ChangeLaneStatusBadge";
 
-export function ChangeLaneTable({ lanes }: { lanes: ContributorChangeLane[] }) {
+export function ChangeLaneTable({
+  lanes,
+  anySourceWarmingUp = false,
+  githubNotConfigured = false,
+}: {
+  lanes: ContributorChangeLane[];
+  anySourceWarmingUp?: boolean;
+  githubNotConfigured?: boolean;
+}) {
   if (lanes.length === 0) {
     return (
       <div
         className="rounded border p-6 text-center text-sm text-[var(--dpf-muted)]"
         style={{ borderColor: "var(--dpf-border)" }}
       >
-        No lanes in this view.
+        {anySourceWarmingUp
+          ? "Inventory is still syncing — first results will appear within ~10 minutes. Refresh the page once the freshness dots turn green."
+          : "No lanes in this view."}
       </div>
     );
   }
@@ -32,7 +42,17 @@ export function ChangeLaneTable({ lanes }: { lanes: ContributorChangeLane[] }) {
             <Th>Branch</Th>
             <Th>Commit</Th>
             <Th>Served</Th>
-            <Th>PR</Th>
+            <Th>
+              <div>PR</div>
+              {githubNotConfigured ? (
+                <div
+                  className="mt-0.5 text-[9px] normal-case font-normal text-[var(--dpf-warning)]"
+                  title="GitHub source is not configured; PR cells reflect only locally-known links."
+                >
+                  GitHub not connected
+                </div>
+              ) : null}
+            </Th>
             <Th>Runtime</Th>
             <Th>Verification</Th>
             <Th>TTL</Th>
