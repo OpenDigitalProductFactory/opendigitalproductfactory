@@ -34,10 +34,14 @@ export function ChangeLanesDashboard({
   lanes,
   freshness,
   generatedAt,
+  anySourceWarmingUp = false,
+  anySnapshotSourceDegraded = false,
 }: {
   lanes: ContributorChangeLane[];
   freshness: LaneReadModelFreshness[];
   generatedAt: string;
+  anySourceWarmingUp?: boolean;
+  anySnapshotSourceDegraded?: boolean;
 }) {
   const [tab, setTab] = useState<TabId>("active");
 
@@ -80,11 +84,23 @@ export function ChangeLanesDashboard({
             <span className="ml-1 text-[10px] text-[var(--dpf-muted)]">
               {countLanes(lanes, t.id)}
             </span>
+            {anySnapshotSourceDegraded ? (
+              <span
+                className="ml-1 cursor-help text-[10px] text-[var(--dpf-warning)]"
+                title="Counts may be incomplete — some inventory sources are not synced."
+                aria-label="counts may be incomplete"
+              >
+                (?)
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
 
-      <ChangeLaneTable lanes={filteredLanes} />
+      <ChangeLaneTable
+        lanes={filteredLanes}
+        anySourceWarmingUp={anySourceWarmingUp}
+      />
     </div>
   );
 }
