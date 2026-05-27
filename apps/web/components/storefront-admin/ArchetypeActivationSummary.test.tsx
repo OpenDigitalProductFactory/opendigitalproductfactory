@@ -61,4 +61,67 @@ describe("ArchetypeActivationSummary", () => {
     expect(html).not.toContain("Customer Estate");
     expect(html).not.toContain("Strict Customer Scope");
   });
+
+  it("renders configured worker home activation beside capability activation", () => {
+    const html = renderToStaticMarkup(
+      <ArchetypeActivationSummary
+        activationProfile={{
+          profileType: "standard",
+          modules: ["integrations"],
+          billingReadinessMode: "none",
+          customerGraph: "none",
+          estateSeparation: "shared",
+        }}
+        workspaceHomeActivation={{
+          archetypeId: "hvac-contractor",
+          archetypeName: "HVAC Contractor",
+          mode: "vertical",
+          match: "exact",
+          label: "HVAC dispatcher home",
+          status: "ready",
+          sourceContributionId: "home-hvac-dispatch",
+          primitiveWidgets: ["service-queue", "customer-map", "coworker-handoffs"],
+          requiredCanonicalData: ["customer-account", "service-location", "work-order"],
+          requiredSignals: ["scheduled-work", "urgent-exception", "coworker-handoff"],
+          missingDataBehavior: "render-empty-state",
+          fallback: null,
+          setupAction: null,
+        }}
+      />,
+    );
+
+    expect(html).toContain("Worker Home");
+    expect(html).toContain("HVAC dispatcher home");
+    expect(html).toContain("Ready");
+    expect(html).toContain("Service Queue");
+    expect(html).toContain("Customer Map");
+    expect(html).toContain("Coworker Handoffs");
+  });
+
+  it("renders honest platform fallback when a worker home is not configured", () => {
+    const html = renderToStaticMarkup(
+      <ArchetypeActivationSummary
+        workspaceHomeActivation={{
+          archetypeId: "training-company",
+          archetypeName: "Training Company",
+          mode: "unconfigured",
+          match: "none",
+          label: "Platform workspace view",
+          status: "not-configured",
+          sourceContributionId: null,
+          primitiveWidgets: [],
+          requiredCanonicalData: [],
+          requiredSignals: [],
+          missingDataBehavior: "platform-fallback",
+          fallback: "platform",
+          setupAction: "choose-or-finish-business-setup",
+        }}
+      />,
+    );
+
+    expect(html).toContain("Worker Home");
+    expect(html).toContain("Platform workspace view");
+    expect(html).toContain("Not Configured");
+    expect(html).not.toMatch(/gear|architecture|contribution|specialist|platform layer|business layer|market vertical/i);
+  });
 });
