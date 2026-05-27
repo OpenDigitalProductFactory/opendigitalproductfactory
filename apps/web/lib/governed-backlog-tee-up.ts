@@ -88,6 +88,12 @@ type PromoteBacklogItemToBuildDraftResult =
     build: { id: string; buildId: string };
     backlogItemId: string;
     capsuleId: string;
+    /** BI-52022707 axis D. True when the promotion auto-approved the draft
+     *  (governed mode + non-empty BI body). The caller is expected to fire
+     *  `dispatchIdeateForApprovedBuild` outside the transaction on this
+     *  build to complete the autopilot path. False on non-governed installs
+     *  or empty-body BIs — those preserve the manual approve-start gate. */
+    autoApprovedDispatchEligible: boolean;
   }
   | {
     kind: "error";
@@ -248,11 +254,49 @@ export async function promoteBacklogItemToBuildDraft(
     });
   }
 
+  // Auto-Approve-Start for backlog-promoted drafts when conditions allow.
+  //
+  // BI-52022707 axis D — the Dale-autopilot pipeline gap. After promotion, the
+  // draft sits at `draftApprovedAt = null` until an operator clicks the
+  // "Record Approve Start" button in /build. That button is the only path
+  // that fires `dispatchIdeateForApprovedBuild`, so without the click the
+  // build is invisible — no Ideate research, no designDoc, no progress.
+  //
+  // Dale's autopilot promise is: the BI title+body IS the human signal.
+  // Under governed-backlog mode, the operator has already confirmed they
+  // want the build by triaging the BI to outcome=build and promoting it.
+  // Requiring a separate "approve start" click for backlog-promoted drafts
+  // duplicates that confirmation. Auto-fire the approval inside the
+  // promotion transaction when:
+  //   - governedBacklogEnabled is true (opt-in flag — preserves the manual
+  //     gate for non-governed installs that may want operator review)
+  //   - the BI body is non-empty (gives Ideate a real research seed)
+  //
+  // The async dispatchIdeateForApprovedBuild fire-and-forget runs OUTSIDE
+  // the transaction (the dynamic import + DB writes don't compose with the
+  // outer prisma.$transaction safely). Wired through the same approveBuildStart
+  // path so the BuildActivity audit trail stays consistent.
+  if (governedBacklogEnabled && (item.body ?? "").trim().length > 0) {
+    const approvedAt = new Date();
+    await tx.featureBuild.update({
+      where: { id: created.id },
+      data: { draftApprovedAt: approvedAt },
+    });
+    await tx.buildActivity.create({
+      data: {
+        buildId: created.buildId,
+        tool: "approve_start",
+        summary: `Auto-approved by governed backlog flow at ${approvedAt.toISOString()} (BI body present — operator confirmation captured at triage+promote).`,
+      },
+    });
+  }
+
   return {
     kind: "success",
     build: created,
     backlogItemId: itemId,
     capsuleId: capsule.capsuleId,
+    autoApprovedAt: governedBacklogEnabled && (item.body ?? "").trim().length > 0 ? new Date() : null,
   };
 }
 
