@@ -22,17 +22,20 @@ principlePublic: false
 authoredAt: 2026-05-18
 authoredBy: mark-bodman
 principleOverlapScan:
-  highestAlignment: 0.60
-  highestAlignmentSlug: human-in-the-loop-at-phase-boundaries
+  highestAlignment: 0.74
+  highestAlignmentSlug: never-fabricate
+  scanRunAt: 2026-05-26
   rationale: |
-    Adjacent but orthogonal. human-in-the-loop-at-phase-boundaries defines WHERE gates fire
-    (the phase boundary, not per-call); this principle defines WHAT they evaluate (evidence,
-    not producer identity). The two compose — a gate fires at a boundary AND evaluates
-    evidence. structural-verification-is-not-functional is the narrower second-closest:
-    it names what counts as evidence at the ship gate specifically, while this principle is
-    the general rule across all gates. Mechanical scan via principle_decide could not be run
-    at promotion time (MCP endpoint unreachable); estimates above are based on reading of
-    nearby principles. Recommend re-running the scan post-merge for telemetry.
+    Crosses the §4.3 ship-freely threshold of 0.70; falls below the 0.85 reject line.
+    Body includes an additivity paragraph (see "Additivity to Never Fabricate" below)
+    explaining why this principle is additive rather than redundant. Mechanical scan via
+    principle_decide ran with ringScope=[ring-2-workflow, ring-4-sandbox-prod] and returned
+    10 commandment-tier principles. Highest dimension-vector alignment was 0.74 against
+    Never Fabricate; Build Gate Mandatory at 0.70, All Changes Land via PR at 0.69, DCO
+    Sign-Off at 0.65 followed. These are dimension-vector alignments (do the candidate's
+    features point the same way as the existing principle's vector?), not semantic-redundancy
+    scores — the alignment is driven by shared dimensions (governance_compliance high,
+    evidence_density high) rather than overlapping decision moments.
 ---
 
 # Governance approves evidence, not provenance
@@ -74,6 +77,19 @@ It can appear to conflict with [`destructive-actions-require-explicit-go`](destr
 - **"Mark complete and skip the gates" as a shortcut.** This is the standing operator-forbidden move, no matter how strong the external evidence appears. The principle is to *use* the gates with the available evidence, not bypass them.
 - **Gate logic that branches on `producer` / `dispatcher` / `sourceAgent` fields.** Audit log, yes. Gate input, no.
 - **Asymmetric trust by author identity** ("Mark's commits skip review; coworker commits get full review"). This compounds in two directions: the platform stops detecting Mark's mistakes, and the coworker can never accumulate trust. Both erode the autonomy ladder.
+
+## Additivity to Never Fabricate
+
+The 2026-05-26 mechanical overlap scan (`principle_decide`, ring scope `[ring-2-workflow, ring-4-sandbox-prod]`) returned a 0.74 dimension-vector alignment against [`never-fabricate`](never-fabricate.md), crossing the §4.3 ship-freely threshold of 0.70 and triggering the additivity-paragraph requirement.
+
+The alignment is dimension-driven, not decision-moment-driven. Both principles score high on `governance_compliance` and `evidence_density` because both protect the truth substrate the platform depends on. But they bind **different decision moments**:
+
+- **Never Fabricate** binds the *producer* moment: "do not invent facts, results, or capabilities you did not actually observe." It governs what a coworker is allowed to *say*.
+- **Governance-approves-evidence-not-provenance** binds the *gate-evaluator* moment: "when a phase gate fires, evaluate the evidence presented, not who or what produced it." It governs how a *gate* is allowed to *decide*.
+
+A coworker that fabricates evidence violates Never Fabricate (the producer rule). A gate that branches on `producer === "AGT-ORCH-300"` violates this principle (the evaluator rule). The two failures occur at different layers, are detected by different audits, and are repaired by different changes. They compose: a healthy system needs both — non-fabricated evidence reaching a gate that evaluates that evidence on quality alone. Removing either makes the other insufficient.
+
+Build Gate Mandatory (0.70 in the same scan) and All Changes Land via PR Against Main (0.69) sit at similar alignment for the same dimensional reason and the same additivity logic applies.
 
 ## Why one rule, not a per-case enumeration
 

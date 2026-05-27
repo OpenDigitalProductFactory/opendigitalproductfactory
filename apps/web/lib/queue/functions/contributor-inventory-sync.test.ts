@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => ({
   syncRunCreate: vi.fn(),
   syncRunUpdate: vi.fn(),
   snapshotCreateMany: vi.fn(),
-  scheduledJobUpdate: vi.fn(),
+  scheduledJobUpsert: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -35,9 +35,16 @@ vi.mock("@dpf/db", () => ({
       createMany: mocks.snapshotCreateMany,
     },
     scheduledJob: {
-      update: mocks.scheduledJobUpdate,
+      upsert: mocks.scheduledJobUpsert,
     },
   },
+  // Constants the runner imports from the @dpf/db barrel — the seed module
+  // re-exports them and the runner uses them to populate the upsert create
+  // branch. Mirror them here so the mocked module surface matches the real
+  // one. Values must match packages/db/src/seed-contributor-inventory.ts.
+  CONTRIBUTOR_INVENTORY_JOB_ID: "contributor-inventory-sync",
+  CONTRIBUTOR_INVENTORY_JOB_NAME: "Contributor inventory sync (platform-managed)",
+  CONTRIBUTOR_INVENTORY_SCHEDULE: "every-10-minutes",
 }));
 
 import { runContributorInventorySync, type SyncSourceReaders } from "./contributor-inventory-sync";
@@ -79,7 +86,7 @@ beforeEach(() => {
   mocks.snapshotCreateMany.mockImplementation(async ({ data }) => ({
     count: data.length,
   }));
-  mocks.scheduledJobUpdate.mockResolvedValue({});
+  mocks.scheduledJobUpsert.mockResolvedValue({});
 });
 
 describe("runContributorInventorySync", () => {
@@ -102,9 +109,17 @@ describe("runContributorInventorySync", () => {
         data: expect.objectContaining({ status: "completed" }),
       }),
     );
-    expect(mocks.scheduledJobUpdate).toHaveBeenCalledWith(
+    expect(mocks.scheduledJobUpsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
+        where: { jobId: "contributor-inventory-sync" },
+        create: expect.objectContaining({
+          jobId: "contributor-inventory-sync",
+          name: "Contributor inventory sync (platform-managed)",
+          schedule: "every-10-minutes",
+          lastStatus: "completed",
+          lastError: null,
+        }),
+        update: expect.objectContaining({
           lastStatus: "completed",
           lastError: null,
         }),
@@ -143,9 +158,13 @@ describe("runContributorInventorySync", () => {
     expect(result.status).toBe("failed");
     expect(result.insertedRows).toBe(0);
     expect(mocks.snapshotCreateMany).not.toHaveBeenCalled();
-    expect(mocks.scheduledJobUpdate).toHaveBeenCalledWith(
+    expect(mocks.scheduledJobUpsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
+        update: expect.objectContaining({
+          lastStatus: "failed",
+          lastError: expect.stringContaining("git not found"),
+        }),
+        create: expect.objectContaining({
           lastStatus: "failed",
           lastError: expect.stringContaining("git not found"),
         }),
@@ -237,9 +256,37 @@ describe("runContributorInventorySync", () => {
       readers: fakeReaders(),
     });
 
-    const updateCall = mocks.scheduledJobUpdate.mock.calls[0]?.[0];
-    expect(updateCall?.data.nextRunAt).toEqual(
-      new Date(FIXED_NOW.getTime() + 10 * 60_000),
-    );
+    const upsertCall = mocks.scheduledJobUpsert.mock.calls[0]?.[0];
+    const expectedNextRunAt = new Date(FIXED_NOW.getTime() + 10 * 60_000);
+    expect(upsertCall?.update.nextRunAt).toEqual(expectedNextRunAt);
+    expect(upsertCall?.create.nextRunAt).toEqual(expectedNextRunAt);
+  });
+
+  it("heartbeat is created if missing — upsert path populates create branch with seed-derived name + schedule", async () => {
+    // The seed helper (packages/db/src/seed-contributor-inventory.ts) is the
+    // only writer of the heartbeat row's jobId/name/schedule on fresh installs.
+    // On upgrade installs where `pnpm db seed` doesn't re-run, the row never
+    // gets created and the first cron tick used to throw P2025. The runner
+    // now uses upsert; this case locks in that the create branch carries the
+    // exact name + schedule strings the seed helper would have written, so
+    // the heartbeat row a missing-seed install ends up with is identical to
+    // a seeded one.
+    await runContributorInventorySync({
+      now: FIXED_NOW,
+      readers: fakeReaders(),
+    });
+
+    expect(mocks.scheduledJobUpsert).toHaveBeenCalledTimes(1);
+    const upsertCall = mocks.scheduledJobUpsert.mock.calls[0]?.[0];
+    expect(upsertCall?.where).toEqual({ jobId: "contributor-inventory-sync" });
+    expect(upsertCall?.create).toEqual({
+      jobId: "contributor-inventory-sync",
+      name: "Contributor inventory sync (platform-managed)",
+      schedule: "every-10-minutes",
+      lastRunAt: FIXED_NOW,
+      lastStatus: "completed",
+      lastError: null,
+      nextRunAt: new Date(FIXED_NOW.getTime() + 10 * 60_000),
+    });
   });
 });
