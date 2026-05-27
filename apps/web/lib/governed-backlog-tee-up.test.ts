@@ -14,6 +14,7 @@ const mockPrisma = {
   },
   featureBuild: {
     create: vi.fn(),
+    update: vi.fn(),
   },
   buildActivity: {
     create: vi.fn(),
@@ -51,6 +52,7 @@ describe("governed backlog tee-up", () => {
       capsuleId: "WC-BUILD01",
     });
     mockPrisma.workCapsuleActivity.create.mockResolvedValue({});
+    mockPrisma.featureBuild.update.mockResolvedValue({});
 
     mockPrisma.$transaction.mockImplementation(async (callback: (tx: typeof mockPrisma) => Promise<unknown>) => {
       return callback(mockPrisma);
@@ -143,7 +145,7 @@ describe("governed backlog tee-up", () => {
     ]);
   });
 
-  it("creates draft builds for the selected items and leaves them awaiting approval", async () => {
+  it("creates draft builds for the selected items and auto-approves them under governed flow (BI-52022707 axis D)", async () => {
     mockPrisma.backlogItem.findMany.mockResolvedValue([
       {
         id: "backlog-epic",
@@ -242,7 +244,33 @@ describe("governed backlog tee-up", () => {
           description: "Implement governed workflow details",
           digitalProductId: "product-1",
           originatingBacklogItemId: "backlog-epic",
+          // BI-52022707 axis D: draft created with draftApprovedAt=null;
+          // the auto-approve happens as a separate featureBuild.update
+          // immediately after creation when governedBacklogEnabled=true
+          // and the BI body is non-empty (verified by the update assertion
+          // and the approve_start activity row assertion below).
           draftApprovedAt: null,
+        }),
+      }),
+    );
+
+    // BI-52022707 axis D — auto-approve fires on governed-mode promotion
+    // when the BI body is non-empty. The approve_start BuildActivity row
+    // pairs with the featureBuild.update that populates draftApprovedAt.
+    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "build-row-1" },
+        data: expect.objectContaining({
+          draftApprovedAt: expect.any(Date),
+        }),
+      }),
+    );
+    expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          buildId: "FB-11111111",
+          tool: "approve_start",
+          summary: expect.stringContaining("Auto-approved by governed backlog flow"),
         }),
       }),
     );

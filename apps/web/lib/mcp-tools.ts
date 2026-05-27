@@ -4972,13 +4972,41 @@ export async function executeTool(
         return { success: false, error: result.error, message: result.message };
       }
 
+      // BI-52022707 axis D — auto-dispatch Ideate after governed promotion.
+      // The transaction inside promoteBacklogItemToBuildDraft set
+      // draftApprovedAt for governed + non-empty-body promotions; that closes
+      // the "Record Approve Start" gate but does NOT fire the Ideate research.
+      // Mirror the approveBuildStart action's fire-and-forget pattern here so
+      // the BS pipeline actually starts work without a second operator click.
+      // Fire-and-forget on purpose: the operator's MCP call returns immediately
+      // with the FB-* id, and the ~3-min Codex research runs async, exactly
+      // like the manual UI button path. Errors are logged + written to
+      // BuildActivity by the helper itself — never thrown out here.
+      if (result.autoApprovedDispatchEligible) {
+        void (async () => {
+          try {
+            const { dispatchIdeateForApprovedBuild } = await import("@/lib/integrate/ideate-on-approval");
+            await dispatchIdeateForApprovedBuild({ buildId: result.build.buildId, userId });
+          } catch (err) {
+            console.error(
+              "[promote_to_build_studio] auto-dispatch Ideate failed (handler swallowed by ideate-on-approval but the dynamic import or top-level invocation rejected):",
+              { buildId: result.build.buildId },
+              err,
+            );
+          }
+        })();
+      }
+
       return {
         success: true,
         entityId: result.build.buildId,
-        message: `Promoted ${itemId} to Build Studio`,
+        message: result.autoApprovedDispatchEligible
+          ? `Promoted ${itemId} to Build Studio (auto-approved under governed flow — Ideate research dispatched)`
+          : `Promoted ${itemId} to Build Studio`,
         data: {
           buildId: result.build.buildId,
           backlogItemId: itemId,
+          autoApprovedDispatchEligible: result.autoApprovedDispatchEligible,
         },
       };
     }
