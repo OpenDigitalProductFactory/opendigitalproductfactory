@@ -396,6 +396,24 @@ if (-not $portalReady) {
 
 Write-Host "========================================================"
 
+# -- Agent toolchain bootstrap (BI-4B17051B) ------------------------------------
+# Converges Claude Code + Codex CLI sessions to a kernel-aware state, seeds
+# kernel-tier memory, and persists agentToolchain readiness state. Designed
+# to never leak substrate paths or command snippets to the operator.
+Write-Step "Converging DPF agent toolchain"
+$bootstrapScript = Join-Path $InstallRoot "scripts\dpf-bootstrap-agent-toolchain.ps1"
+if (Test-Path $bootstrapScript) {
+    try {
+        & $bootstrapScript -RepoRoot $InstallRoot
+    } catch {
+        Write-Warn "Agent toolchain bootstrap encountered an issue (non-fatal): $_"
+    }
+} else {
+    Write-Warn "Agent toolchain bootstrap script missing at $bootstrapScript"
+}
+
+Write-Host "========================================================"
+
 Write-Host ""
 Write-Host "   Fresh install complete!" -ForegroundColor Green
 Write-Host ""

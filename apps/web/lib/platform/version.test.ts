@@ -37,11 +37,32 @@ describe("loadPlatformVersion", () => {
     expect(v.gitSha).toBe("abc1234567890abcdef1234567890abcdef12345");
   });
 
-  it("returns null gitSha when DEPLOYED_SHA is unset", async () => {
+  it("returns null gitSha when DEPLOYED_SHA is unset and image-version is absent", async () => {
     vi.stubEnv("DEPLOYED_SHA", "");
     const { loadPlatformVersion } = await import("./version");
     const v = await loadPlatformVersion();
     expect(v.gitSha).toBeNull();
+  });
+
+  it("exposes imageVersion when /app/.dpf-image-version is readable", async () => {
+    vi.stubEnv("DEPLOYED_SHA", "");
+    vi.doMock("./image-version", () => ({
+      readImageVersion: vi
+        .fn()
+        .mockResolvedValue({
+          raw: "b5cdebc05e7fefb39f3d78b42348de1e81c64bae0e2bd57632387aef9c6ab5b2",
+          source: "content-hash",
+        }),
+    }));
+    const { loadPlatformVersion } = await import("./version");
+    const v = await loadPlatformVersion();
+    expect(v.imageVersion).toEqual({
+      raw: "b5cdebc05e7fefb39f3d78b42348de1e81c64bae0e2bd57632387aef9c6ab5b2",
+      source: "content-hash",
+    });
+    // gitSha stays null because content-hash images aren't comparable.
+    expect(v.gitSha).toBeNull();
+    vi.doUnmock("./image-version");
   });
 
   it("throws a useful error for invalid semver", async () => {

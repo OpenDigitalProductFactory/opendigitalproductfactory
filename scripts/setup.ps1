@@ -175,6 +175,21 @@ foreach ($p in $pointers) {
 }
 Write-Ok "Pointer files intact: $($pointers.Count) tools wired to AGENTS.md"
 
+# -- Agent toolchain bootstrap (BI-4B17051B) -------------------------------------
+# Converges Claude Code + Codex CLI sessions to a kernel-aware state, seeds
+# kernel-tier memory, and persists agentToolchain readiness state.
+Write-Step "Converging DPF agent toolchain"
+$bootstrapScript = Join-Path (Get-Location).Path "scripts\dpf-bootstrap-agent-toolchain.ps1"
+if (Test-Path $bootstrapScript) {
+    try {
+        & $bootstrapScript -RepoRoot (Get-Location).Path
+    } catch {
+        Write-Warn "Agent toolchain bootstrap encountered an issue (non-fatal): $_"
+    }
+} else {
+    Write-Warn "Agent toolchain bootstrap script missing at $bootstrapScript"
+}
+
 # -- Done ------------------------------------------------------------------------
 
 Write-Host ""
