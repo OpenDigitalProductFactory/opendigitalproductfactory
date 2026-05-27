@@ -19,6 +19,10 @@ import {
   governedBacklogTeeUpScheduled,
 } from "./governed-backlog-tee-up";
 import { tokenExpiryMonitor } from "./token-expiry-monitor";
+import {
+  contributorInventorySyncCron,
+  contributorInventorySyncOnDemand,
+} from "./contributor-inventory-sync";
 import { selfUpgradeScheduled, selfUpgradeManual } from "./self-upgrade";
 import { quiescenceRun } from "./quiescence-run";
 import { wikiLint } from "./wiki-lint";
@@ -46,6 +50,7 @@ export const scheduledFunctions = [
   taskrunWatchdog,
   governedBacklogTeeUpScheduled,
   tokenExpiryMonitor,
+  contributorInventorySyncCron,
   wikiLint,
   skillMetricsAggregator,
   skillCurator,
@@ -67,6 +72,7 @@ export const eventFunctions = [
   assuranceScanRun,
   deliberationRun,
   governedBacklogTeeUpRequested,
+  contributorInventorySyncOnDemand,
   gitPromotionSandboxVerification,
   postgresBackupRequested,
   postgresTrialRestoreRequested,
