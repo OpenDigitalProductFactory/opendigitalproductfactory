@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { BuildProgressOperationalPanel } from "./BuildProgressOperationalPanel";
 import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 
@@ -151,5 +151,38 @@ describe("BuildProgressOperationalPanel", () => {
     expect(screen.getByText("Verification")).toBeInTheDocument();
     expect(screen.getByText("Agent has been quiet for 7m")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "view last action" })).toHaveAttribute("href", "#build-dispatch-history");
+  });
+});
+
+describe("BuildProgressOperationalPanel — quiet-agent link dispatches open-last event (BI-9A7DA4AC)", () => {
+  afterEach(() => {
+    // Auto-cleanup is unreliable in this file (sibling describe leaves a
+    // rendered tree behind). Clean explicitly so getByRole sees one match.
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it("dispatches dpf:open-last-dispatch-attempt and preserves anchor + scroll behavior", () => {
+    cleanup();
+    const projection = makeProjection();
+    const dispatchSpy = vi.spyOn(document, "dispatchEvent");
+    render(<BuildProgressOperationalPanel projection={projection} />);
+
+    const link = screen.getByRole("link", { name: "view last action" });
+    // Anchor href must stay so the no-JS fallback still scrolls.
+    expect(link).toHaveAttribute("href", "#build-dispatch-history");
+
+    // Click via a real MouseEvent so we can inspect defaultPrevented afterwards.
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+    link.dispatchEvent(event);
+
+    // The click handler must NOT preventDefault — anchor scroll proceeds.
+    expect(event.defaultPrevented).toBe(false);
+
+    // The custom event must have been dispatched on document with the right name.
+    const customEvents = dispatchSpy.mock.calls
+      .map(([dispatched]) => dispatched)
+      .filter((dispatched): dispatched is CustomEvent => dispatched instanceof CustomEvent);
+    expect(customEvents.some((dispatched) => dispatched.type === "dpf:open-last-dispatch-attempt")).toBe(true);
   });
 });
