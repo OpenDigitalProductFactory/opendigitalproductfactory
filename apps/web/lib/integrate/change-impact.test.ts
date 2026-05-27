@@ -20,6 +20,7 @@ import { prisma } from "@dpf/db";
 import { summarizeCodeGraphCoverage } from "./code-graph-access";
 import { findRelatedTests } from "./code-graph/graph-queries";
 import { analyzeChangeImpact, formatImpactForChat } from "./change-impact";
+import { buildCodeGraphFreshnessTrust } from "@/lib/trust-vector/adapters/code-graph";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -147,5 +148,47 @@ describe("formatImpactForChat", () => {
     expect(chat).toContain("1/2 changed files");
     expect(chat).toContain("Uncommitted local changes");
     expect(chat).toContain("change-impact.test.ts");
+  });
+
+  it("qualifies code-graph summaries with trust wording when trust metadata is present", () => {
+    const trust = buildCodeGraphFreshnessTrust({
+      graphKey: "source-code",
+      available: true,
+      indexStatus: "ready",
+      lastIndexedAt: new Date("2026-05-10T12:00:00.000Z"),
+      workspaceDirty: false,
+      indexedFileCount: 42,
+      lastError: null,
+      asOf: new Date("2026-05-26T12:00:00.000Z"),
+    });
+
+    const chat = formatImpactForChat({
+      routes: { new: [], modified: [], deleted: [] },
+      schemaChanges: [],
+      impactedRoles: [],
+      blastRadius: {
+        newRoutes: 0,
+        modifiedRoutes: 0,
+        deletedRoutes: 0,
+        schemaChanges: 0,
+        totalFilesChanged: 1,
+      },
+      riskLevel: "low",
+      rollbackComplexity: "simple",
+      summary: "Code-only changes",
+      codeGraph: {
+        graphKey: "source-code",
+        available: true,
+        indexStatus: "ready",
+        indexedFiles: ["apps/web/lib/integrate/change-impact.ts"],
+        unindexedFiles: [],
+        warnings: [],
+        summary: "Code graph covers 1/1 changed files at the current indexed commit.",
+        trust,
+      },
+    });
+
+    expect(chat).toContain("Code graph trust: **Low trust**");
+    expect(chat).toContain("Code graph index is 16 days old.");
   });
 });

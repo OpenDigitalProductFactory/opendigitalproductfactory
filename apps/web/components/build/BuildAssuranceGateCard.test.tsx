@@ -21,6 +21,7 @@ import {
   requestBuildAssuranceScan,
   requestBuildBomGeneration,
 } from "@/lib/actions/assurance";
+import { buildAssuranceSummaryTrust } from "@/lib/trust-vector/adapters/assurance";
 
 afterEach(cleanup);
 
@@ -36,6 +37,13 @@ const noScanner = {
   approvedScannerCount: 0,
   scannerNames: [],
   reason: "no-approved-scanner" as const,
+};
+
+const readyScanner = {
+  state: "ready" as const,
+  approvedScannerCount: 1,
+  scannerNames: ["pnpm-audit"],
+  reason: "platform-native-scanner-available" as const,
 };
 
 describe("BuildAssuranceGateCard", () => {
@@ -202,6 +210,39 @@ describe("BuildAssuranceGateCard", () => {
 
     expect(screen.getByText("Active findings")).toBeInTheDocument();
     expect(screen.getByText("Generate a BOM, then run a scan.")).toBeInTheDocument();
+  });
+
+  it("qualifies empty findings when the latest scan is stale", () => {
+    const summary = {
+      state: "current" as const,
+      document: {
+        documentId: "bom_abc",
+        digest: "abc123",
+        generatedAt: new Date("2026-05-22T00:00:00.000Z"),
+        componentCount: 12,
+        sourceKind: "pnpm-lock",
+      },
+      latestAssuranceRunCompletedAt: new Date("2026-04-11T12:00:00.000Z"),
+      counts: { components: 12, models: 2 },
+      findings: emptyFindings,
+      scanner: readyScanner,
+    };
+
+    render(
+      <BuildAssuranceGateCard
+        buildId="BUILD-1"
+        summary={{
+          ...summary,
+          trust: buildAssuranceSummaryTrust(summary, {
+            asOf: new Date("2026-05-26T12:00:00.000Z"),
+          }),
+        }}
+        findings={[]}
+      />,
+    );
+
+    expect(screen.getByText("Medium trust")).toBeInTheDocument();
+    expect(screen.getByText("No active findings in the latest scan. Latest assurance scan completed 45 days ago.")).toBeInTheDocument();
   });
 
   it("renders supplied findings inside the gate card", () => {
