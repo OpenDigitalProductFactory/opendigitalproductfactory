@@ -3,6 +3,8 @@ import type {
   LaneReadModelFreshnessState,
 } from "@/lib/contributor-change-lanes/read-model";
 
+import { RefreshContributorInventoryButton } from "./RefreshContributorInventoryButton";
+
 const SOURCE_LABEL: Record<LaneReadModelFreshness["source"], string> = {
   "work-capsule": "Work Capsules",
   "runtime-target": "Runtime Targets",
@@ -28,8 +30,10 @@ const SNAPSHOT_SOURCES: LaneReadModelFreshness["source"][] = [
 
 export function ChangeLaneSourceSummary({
   freshness,
+  isAdmin = false,
 }: {
   freshness: LaneReadModelFreshness[];
+  isAdmin?: boolean;
 }) {
   const byName = new Map(freshness.map((f) => [f.source, f]));
   const live = LIVE_SOURCES.map((s) => byName.get(s)).filter(
@@ -47,8 +51,9 @@ export function ChangeLaneSourceSummary({
         backgroundColor: "var(--dpf-surface-2)",
       }}
     >
-      <div className="mb-2 text-[var(--dpf-muted)] uppercase tracking-wide text-[10px]">
-        Source freshness
+      <div className="mb-2 flex items-center text-[10px] uppercase tracking-wide text-[var(--dpf-muted)]">
+        <span>Source freshness</span>
+        <RefreshContributorInventoryButton isAdmin={isAdmin} />
       </div>
       <SubGroup label="Live data" rows={live} />
       {live.length > 0 && snapshot.length > 0 ? (

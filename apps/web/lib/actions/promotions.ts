@@ -583,14 +583,14 @@ export async function listSelfUpgradeRuns(opts?: {
 export async function getSelfUpgradeStatus() {
   await requireOpsAccess();
 
-  const [config, latestRun, platformVersion] = await Promise.all([
+  const [config, latestRun, platformVersion, deployedSha] = await Promise.all([
     getSelfUpgradeConfig(),
     getLatestRun(),
     loadPlatformVersion(),
+    getDeployedSha(),
   ]);
 
   const inMaintenanceWindow = isInMaintenanceWindow(config);
-  const deployedSha = getDeployedSha();
   const targetSha = await resolveTargetSha(config.channel, config);
   const isFresh = targetSha ? isShaFresh(deployedSha, targetSha) : false;
 
@@ -599,6 +599,7 @@ export async function getSelfUpgradeStatus() {
     channel: config.channel,
     inMaintenanceWindow,
     deployedSha,
+    deployedShaSource: platformVersion.imageVersion?.source ?? "unknown",
     targetSha,
     isFresh,
     latestRun,
@@ -606,6 +607,7 @@ export async function getSelfUpgradeStatus() {
       version: platformVersion.version,
       publishedAt: platformVersion.publishedAt.toISOString(),
       gitSha: platformVersion.gitSha,
+      imageVersion: platformVersion.imageVersion,
       note: platformVersion.note,
     },
   };

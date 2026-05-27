@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [
+      { "name": "list_backlog_items", "description": "List BIs" },
+      { "name": "get_backlog_item", "description": "Get one BI" },
+      { "name": "list_epics", "description": "List epics" },
+      { "name": "search_specs_and_plans", "description": "Search specs/plans" },
+      { "name": "principle_decide", "description": "Kernel decision" }
+    ]
+  }
+}
