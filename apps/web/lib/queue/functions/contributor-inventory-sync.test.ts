@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => ({
   syncRunCreate: vi.fn(),
   syncRunUpdate: vi.fn(),
   snapshotCreateMany: vi.fn(),
-  scheduledJobUpdate: vi.fn(),
+  scheduledJobUpsert: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -35,7 +35,7 @@ vi.mock("@dpf/db", () => ({
       createMany: mocks.snapshotCreateMany,
     },
     scheduledJob: {
-      update: mocks.scheduledJobUpdate,
+      upsert: mocks.scheduledJobUpsert,
     },
   },
 }));
@@ -79,7 +79,7 @@ beforeEach(() => {
   mocks.snapshotCreateMany.mockImplementation(async ({ data }) => ({
     count: data.length,
   }));
-  mocks.scheduledJobUpdate.mockResolvedValue({});
+  mocks.scheduledJobUpsert.mockResolvedValue({});
 });
 
 describe("runContributorInventorySync", () => {
@@ -102,11 +102,16 @@ describe("runContributorInventorySync", () => {
         data: expect.objectContaining({ status: "completed" }),
       }),
     );
-    expect(mocks.scheduledJobUpdate).toHaveBeenCalledWith(
+    expect(mocks.scheduledJobUpsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
+        where: { jobId: "contributor-inventory-sync" },
+        update: expect.objectContaining({
           lastStatus: "completed",
           lastError: null,
+        }),
+        create: expect.objectContaining({
+          jobId: "contributor-inventory-sync",
+          lastStatus: "completed",
         }),
       }),
     );
@@ -143,9 +148,9 @@ describe("runContributorInventorySync", () => {
     expect(result.status).toBe("failed");
     expect(result.insertedRows).toBe(0);
     expect(mocks.snapshotCreateMany).not.toHaveBeenCalled();
-    expect(mocks.scheduledJobUpdate).toHaveBeenCalledWith(
+    expect(mocks.scheduledJobUpsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
+        update: expect.objectContaining({
           lastStatus: "failed",
           lastError: expect.stringContaining("git not found"),
         }),
@@ -231,15 +236,36 @@ describe("runContributorInventorySync", () => {
     });
   });
 
-  it("scheduledJob nextRunAt is set to now + 10 minutes", async () => {
+  it("scheduledJob nextRunAt is set to now + 10 minutes on both create and update branches of the upsert", async () => {
     await runContributorInventorySync({
       now: FIXED_NOW,
       readers: fakeReaders(),
     });
 
-    const updateCall = mocks.scheduledJobUpdate.mock.calls[0]?.[0];
-    expect(updateCall?.data.nextRunAt).toEqual(
-      new Date(FIXED_NOW.getTime() + 10 * 60_000),
+    const upsertCall = mocks.scheduledJobUpsert.mock.calls[0]?.[0];
+    const expectedNextRun = new Date(FIXED_NOW.getTime() + 10 * 60_000);
+    expect(upsertCall?.update.nextRunAt).toEqual(expectedNextRun);
+    expect(upsertCall?.create.nextRunAt).toEqual(expectedNextRun);
+  });
+
+  it("heartbeat upsert: self-heals when the ScheduledJob row is missing (P2025 avoided)", async () => {
+    // Simulate the row-missing case: real Prisma upsert would silently fall
+    // into the `create` branch. With vi.fn() it's the same call site — the
+    // assertion is that the create payload carries the seed-equivalent
+    // fields so a fresh row is sufficient to keep the runner working.
+    await runContributorInventorySync({
+      now: FIXED_NOW,
+      readers: fakeReaders(),
+    });
+
+    const upsertCall = mocks.scheduledJobUpsert.mock.calls[0]?.[0];
+    expect(upsertCall?.create).toEqual(
+      expect.objectContaining({
+        jobId: "contributor-inventory-sync",
+        name: "Contributor inventory sync (platform-managed)",
+        schedule: "every-10-minutes",
+        lastStatus: "completed",
+      }),
     );
   });
 });

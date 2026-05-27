@@ -167,21 +167,36 @@ export async function runContributorInventorySync(
     },
   });
 
-  // Heartbeat update — runner-owned fields only (does not touch metadata,
-  // which is owned by Phase 4's GitHub etag persistence).
-  await prisma.scheduledJob.update({
+  // Heartbeat upsert — runner-owned fields only (does not touch metadata,
+  // which is owned by Phase 4's GitHub etag persistence). Upsert (not update)
+  // because the seed helper packages/db/src/seed-contributor-inventory.ts
+  // creates the row on install, but upgrade installs that don't re-run the
+  // seed would otherwise throw P2025 RecordNotFound on the first cron tick.
+  // Phase 7 verification surfaced this; the runner is now self-healing.
+  const lastError =
+    status === "failed"
+      ? Object.values(perSourceResult)
+          .map((r) => r.error)
+          .filter(Boolean)
+          .join("; ") || "all sources failed"
+      : null;
+  const nextRunAt = new Date(now.getTime() + CRON_INTERVAL_MIN * 60_000);
+  await prisma.scheduledJob.upsert({
     where: { jobId: CONTRIBUTOR_INVENTORY_SYNC_JOB_ID },
-    data: {
+    create: {
+      jobId: CONTRIBUTOR_INVENTORY_SYNC_JOB_ID,
+      name: "Contributor inventory sync (platform-managed)",
+      schedule: "every-10-minutes",
       lastRunAt: now,
       lastStatus: status,
-      lastError:
-        status === "failed"
-          ? Object.values(perSourceResult)
-              .map((r) => r.error)
-              .filter(Boolean)
-              .join("; ") || "all sources failed"
-          : null,
-      nextRunAt: new Date(now.getTime() + CRON_INTERVAL_MIN * 60_000),
+      lastError,
+      nextRunAt,
+    },
+    update: {
+      lastRunAt: now,
+      lastStatus: status,
+      lastError,
+      nextRunAt,
     },
   });
 
