@@ -10,8 +10,13 @@ vi.mock("node:child_process", () => ({
   execFileSync: vi.fn(),
 }));
 
+vi.mock("@/lib/platform/image-version", () => ({
+  readImageVersion: vi.fn(),
+}));
+
 import { prisma } from "@dpf/db";
 import { execFileSync } from "node:child_process";
+import { readImageVersion } from "@/lib/platform/image-version";
 import { getDeployedSha, shaContains, getBuildMergeSha, isFeatureBuildDeployed } from "./completion";
 
 function mockBuild(gitCommitHash: string | null): void {
@@ -25,18 +30,49 @@ function mockBuild(gitCommitHash: string | null): void {
 beforeEach(() => {
   vi.resetAllMocks();
   delete process.env.DEPLOYED_SHA;
+  vi.mocked(readImageVersion).mockResolvedValue(null);
 });
 
 // ─── getDeployedSha ──────────────────────────────────────────────────────────
 
 describe("getDeployedSha", () => {
-  it("returns null when DEPLOYED_SHA is not set", () => {
-    expect(getDeployedSha()).toBeNull();
+  it("returns null when DEPLOYED_SHA env var and image-version file are absent", async () => {
+    vi.mocked(readImageVersion).mockResolvedValue(null);
+    expect(await getDeployedSha()).toBeNull();
   });
 
-  it("returns the DEPLOYED_SHA env var value", () => {
+  it("returns the DEPLOYED_SHA env var value when set", async () => {
     process.env.DEPLOYED_SHA = "abc123def456";
-    expect(getDeployedSha()).toBe("abc123def456");
+    expect(await getDeployedSha()).toBe("abc123def456");
+  });
+
+  it("falls back to /app/.dpf-image-version (git-sha source) when env var is unset", async () => {
+    vi.mocked(readImageVersion).mockResolvedValue({
+      raw: "abcdef0123456789abcdef0123456789abcdef01",
+      source: "git-sha",
+    });
+    expect(await getDeployedSha()).toBe(
+      "abcdef0123456789abcdef0123456789abcdef01",
+    );
+  });
+
+  it("falls back to /app/.dpf-image-version (content-hash source) when env var is unset", async () => {
+    vi.mocked(readImageVersion).mockResolvedValue({
+      raw: "b5cdebc05e7fefb39f3d78b42348de1e81c64bae0e2bd57632387aef9c6ab5b2",
+      source: "content-hash",
+    });
+    expect(await getDeployedSha()).toBe(
+      "b5cdebc05e7fefb39f3d78b42348de1e81c64bae0e2bd57632387aef9c6ab5b2",
+    );
+  });
+
+  it("prefers DEPLOYED_SHA env var over image-version file", async () => {
+    process.env.DEPLOYED_SHA = "env-sha-wins";
+    vi.mocked(readImageVersion).mockResolvedValue({
+      raw: "image-sha-loses",
+      source: "git-sha",
+    });
+    expect(await getDeployedSha()).toBe("env-sha-wins");
   });
 });
 
@@ -103,7 +139,8 @@ describe("getBuildMergeSha", () => {
 // ─── isFeatureBuildDeployed ──────────────────────────────────────────────────
 
 describe("isFeatureBuildDeployed", () => {
-  it("returns false when DEPLOYED_SHA is not set", async () => {
+  it("returns false when neither DEPLOYED_SHA env nor image-version is set", async () => {
+    vi.mocked(readImageVersion).mockResolvedValue(null);
     mockBuild("abc123def456");
     expect(await isFeatureBuildDeployed("FB-TEST-001")).toBe(false);
   });

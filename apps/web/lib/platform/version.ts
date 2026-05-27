@@ -2,12 +2,25 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { readImageVersion } from "./image-version";
+import { readImageVersion, type ImageVersion } from "./image-version";
 
 export type PlatformVersion = {
   version: string;
   publishedAt: Date;
+  /**
+   * Comparable git SHA for the running image — preferred for freshness
+   * comparison and `compare_versions` lookups. Null when the image was built
+   * without a git-SHA build arg (image-version is a content hash) and no
+   * deploy pipeline set DEPLOYED_SHA.
+   */
   gitSha: string | null;
+  /**
+   * Always populated when the running portal was built from a Dockerfile —
+   * the literal contents of /app/.dpf-image-version plus a classification.
+   * Use this for display when you want to show *some* identity even when no
+   * git SHA is available.
+   */
+  imageVersion: ImageVersion | null;
   note: string | null;
 };
 
@@ -39,6 +52,7 @@ export async function loadPlatformVersion(): Promise<PlatformVersion> {
             : image?.source === "git-sha"
               ? image.raw
               : null,
+        imageVersion: image,
         note: parsed.note ?? null,
       };
     })();
