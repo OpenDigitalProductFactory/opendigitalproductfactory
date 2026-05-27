@@ -1,0 +1,34 @@
+{
+  "version": 2,
+  "plugins": {
+    "dpf-platform@dpf-platform-local": [
+      {
+        "scope": "local",
+        "projectPath": "D:\\DPF-source-bootstrap-pnpm-ci",
+        "installPath": "C:\\redacted-cache\\dpf-platform-local\\dpf-platform\\0.1.0",
+        "version": "0.1.0",
+        "installedAt": "2026-05-26T05:03:29.105Z",
+        "lastUpdated": "2026-05-26T05:03:29.105Z",
+        "gitCommitSha": "redacted-sha-1"
+      },
+      {
+        "scope": "local",
+        "projectPath": "D:\\DPF-source-bootstrap-ignore-scripts",
+        "installPath": "C:\\redacted-cache\\dpf-platform-local\\dpf-platform\\0.1.0",
+        "version": "0.1.0",
+        "installedAt": "2026-05-26T05:38:13.435Z",
+        "lastUpdated": "2026-05-26T05:38:13.435Z",
+        "gitCommitSha": "redacted-sha-2"
+      },
+      {
+        "scope": "local",
+        "projectPath": "D:\\DPF\\.claude\\worktrees\\agent-toolchain-phase-1",
+        "installPath": "C:\\redacted-cache\\dpf-platform-local\\dpf-platform\\0.1.0",
+        "version": "0.1.0",
+        "installedAt": "2026-05-27T01:00:00.000Z",
+        "lastUpdated": "2026-05-27T01:00:00.000Z",
+        "gitCommitSha": "redacted-sha-3"
+      }
+    ]
+  }
+}

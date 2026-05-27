@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "plugins": {
+    "dpf-platform@dpf-platform-local": [
+      {
+        "scope": "local",
+        "projectPath": "D:\\DPF\\.claude\\worktrees\\agent-toolchain-phase-1",
+        "installPath": "C:\\redacted-cache\\dpf-platform-local\\dpf-platform\\0.0.9",
+        "version": "0.0.9",
+        "installedAt": "2026-05-25T10:00:00.000Z",
+        "lastUpdated": "2026-05-25T10:00:00.000Z",
+        "gitCommitSha": "redacted-sha"
+      }
+    ]
+  }
+}
