@@ -400,6 +400,9 @@ export function formatImpactForChat(report: ChangeImpactReport): string {
 
   if (report.codeGraph) {
     lines.push(`- Code graph: ${report.codeGraph.indexStatus} | ${report.codeGraph.summary}`);
+    if (report.codeGraph.trust) {
+      lines.push(`- Code graph trust: **${report.codeGraph.trust.summary}** | ${report.codeGraph.trust.primaryRationale}`);
+    }
     if (report.codeGraph.warnings.length > 0) {
       lines.push(`- Code graph warnings: ${report.codeGraph.warnings.join(" ")}`);
     }

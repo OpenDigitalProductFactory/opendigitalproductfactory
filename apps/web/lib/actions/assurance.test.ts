@@ -97,13 +97,18 @@ describe("assurance actions", () => {
   it("normalizes build summary read failures to a missing state", async () => {
     vi.mocked(prisma.bomDocument.findFirst).mockRejectedValue(new Error("db down"));
 
-    await expect(getBuildBomSummary("BUILD-1")).resolves.toEqual({
+    const summary = await getBuildBomSummary("BUILD-1");
+
+    expect(summary).toMatchObject({
       state: "missing",
       document: null,
       counts: { components: 0, models: 0 },
       findings: emptyFindings,
       scanner: noScanner,
     });
+    expect(summary.latestAssuranceRunCompletedAt).toBeNull();
+    expect(summary.trust?.tier).toBe("low");
+    expect(summary.trust?.action).toBe("refresh-required");
   });
 
   it("forwards finding status updates with the authenticated user id", async () => {

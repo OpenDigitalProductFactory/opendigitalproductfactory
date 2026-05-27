@@ -23,12 +23,17 @@ describe("getLatestBomSummaryForBuild", () => {
   it("returns a missing state when no BOM exists", async () => {
     const db = { bomDocument: { findFirst: vi.fn(async () => null) } };
 
-    await expect(getLatestBomSummaryForBuild(db, "BUILD-1")).resolves.toEqual({
+    await expect(getLatestBomSummaryForBuild(db, "BUILD-1", {
+      now: new Date("2026-05-26T12:00:00.000Z"),
+    })).resolves.toMatchObject({
       state: "missing",
       document: null,
       counts: { components: 0, models: 0 },
       findings: emptyFindings,
       scanner: platformNativeScanner,
+      trust: expect.objectContaining({
+        action: "refresh-required",
+      }),
     });
   });
 
@@ -51,7 +56,9 @@ describe("getLatestBomSummaryForBuild", () => {
       },
     };
 
-    await expect(getLatestBomSummaryForBuild(db, "BUILD-1")).resolves.toEqual({
+    await expect(getLatestBomSummaryForBuild(db, "BUILD-1", {
+      now: new Date("2026-05-22T01:00:00.000Z"),
+    })).resolves.toMatchObject({
       state: "current",
       document: {
         documentId: "bom_1",
@@ -63,10 +70,46 @@ describe("getLatestBomSummaryForBuild", () => {
       counts: { components: 3, models: 1 },
       findings: emptyFindings,
       scanner: platformNativeScanner,
+      trust: expect.objectContaining({
+        statementKind: "current-fact",
+      }),
     });
     expect(db.bomDocument.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: { buildId: "BUILD-1" },
       orderBy: { generatedAt: "desc" },
+    }));
+  });
+
+  it("adds stale scan trust metadata from the latest assurance run", async () => {
+    const generatedAt = new Date("2026-05-22T00:00:00.000Z");
+    const db = {
+      bomDocument: {
+        findFirst: vi.fn(async () => ({
+          documentId: "bom_1",
+          digest: "abc",
+          generatedAt,
+          componentCount: 3,
+          sourceKind: "pnpm-lock",
+          status: "current",
+          occurrences: [],
+        })),
+      },
+      assuranceRun: {
+        findFirst: vi.fn(async () => ({
+          completedAt: new Date("2026-04-11T12:00:00.000Z"),
+        })),
+      },
+    };
+
+    const summary = await getLatestBomSummaryForBuild(db, "BUILD-1", {
+      now: new Date("2026-05-26T12:00:00.000Z"),
+    });
+
+    expect(summary.latestAssuranceRunCompletedAt).toEqual(new Date("2026-04-11T12:00:00.000Z"));
+    expect(summary.trust?.action).toBe("refresh-required");
+    expect(summary.trust?.primaryRationale).toContain("45 days");
+    expect(db.assuranceRun.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { buildId: "BUILD-1", status: "completed" },
     }));
   });
 });
@@ -87,11 +130,14 @@ describe("getLatestBomSummaryForProduct", () => {
       },
     };
 
-    const summary = await getLatestBomSummaryForProduct(db, "product-1");
+    const summary = await getLatestBomSummaryForProduct(db, "product-1", {
+      now: new Date("2026-05-26T12:00:00.000Z"),
+    });
 
     expect(summary.state).toBe("stale");
     expect(summary.findings).toEqual(emptyFindings);
     expect(summary.scanner).toEqual(platformNativeScanner);
+    expect(summary.trust?.statementKind).toBe("last-known-fact");
     expect(db.bomDocument.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: { digitalProductId: "product-1" },
     }));

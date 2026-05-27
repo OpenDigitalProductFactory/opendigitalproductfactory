@@ -1,3 +1,5 @@
+import type { TrustAssessment } from "@/lib/trust-vector";
+
 export type DataSourceKind =
   | "live-db"
   | "connected-account"
@@ -15,6 +17,7 @@ export type DataSourceProvenance = {
   sourceRoute?: string;
   lastVerifiedAt?: string;
   actionHref?: string;
+  trust?: TrustAssessment;
 };
 
 export type ProvenancedMetric<T = string | number> = {
