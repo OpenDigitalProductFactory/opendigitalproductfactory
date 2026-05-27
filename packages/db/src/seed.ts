@@ -32,6 +32,7 @@ import { seedStallThresholds } from "./seed-stall-thresholds.js";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
 import { ensureAllBackupScheduledJobs } from "./seed-platform-backup.js";
+import { ensureContributorInventoryScheduledJob } from "./seed-contributor-inventory.js";
 import { seedAgentControlPlaneMaturity } from "./seed-agent-control-plane-maturity.js";
 import { syncCapabilities } from "./sync-capabilities.js";
 import { defaultGovernanceFor } from "./taxonomy-governance-defaults.js";
@@ -2422,6 +2423,7 @@ async function main(): Promise<void> {
   await ensureDiscoveryTriageScheduledTask(prisma);
   await ensureHiveScoutScheduledTask(prisma);
   await ensureAllBackupScheduledJobs(prisma);
+  await ensureContributorInventoryScheduledJob(prisma);
   await seedMcpServers();
   await seedSandboxPool();
   await seedRuntimeTargets();
