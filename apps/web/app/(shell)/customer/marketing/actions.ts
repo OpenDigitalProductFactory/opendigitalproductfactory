@@ -121,3 +121,27 @@ export async function draftMarketingAssetAction(
   revalidatePath("/customer/marketing");
   return { ok: true, draftId: result.draftId, wordCount: result.wordCount };
 }
+
+export async function publishOutboundDraftAction(
+  draftId: string,
+): Promise<
+  | { ok: true; publicationId: string; externalUrl: string | null }
+  | { ok: false; error: string }
+> {
+  const auth = await requireOperator();
+  if ("error" in auth) return { ok: false, error: auth.error };
+
+  const { publishApprovedDraft } = await import("@/lib/marketing/publish");
+  const result = await publishApprovedDraft({
+    draftId,
+    publishedByUserId: auth.userId,
+  });
+  if (!result.ok) return { ok: false, error: result.error };
+
+  revalidatePath("/customer/marketing");
+  return {
+    ok: true,
+    publicationId: result.publicationId,
+    externalUrl: result.externalUrl,
+  };
+}

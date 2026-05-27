@@ -249,13 +249,24 @@ step "Workspace dependencies"
 pnpm install
 ok "Dependencies installed"
 
-# Contributor coding clients are optional for customer installs. If Claude Code
-# or Codex is present, wire the checked-in dpf-platform skill pack locally.
-step "Contributor skill pack"
-if [ -f scripts/ensure-dpf-skill-pack.sh ]; then
-  bash scripts/ensure-dpf-skill-pack.sh "$REPO_ROOT" || warn "DPF contributor skill pack setup failed (non-fatal)."
+# Agent toolchain bootstrap (BI-4B17051B Phase 4): converges Claude Code +
+# Codex CLI sessions, seeds kernel memory, persists agentToolchain readiness.
+# The script prints a six-state readiness banner (ready / partial /
+# missing_cli / missing_token / needs_refresh / failed_smoke) with no
+# substrate names or command snippets in operator-visible output.
+step "Agent toolchain bootstrap"
+bootstrap_script="$REPO_ROOT/scripts/dpf-bootstrap-agent-toolchain.sh"
+if [ -f "$bootstrap_script" ]; then
+  bootstrap_args=("$REPO_ROOT")
+  if [ "${DPF_HEADLESS:-0}" = "1" ]; then
+    bootstrap_args=(--headless "${bootstrap_args[@]}")
+  fi
+  if [ "${DPF_DRY_RUN:-0}" = "1" ]; then
+    bootstrap_args=(--dry-run "${bootstrap_args[@]}")
+  fi
+  bash "$bootstrap_script" "${bootstrap_args[@]}" || warn "Agent toolchain bootstrap reported an issue (non-fatal)."
 else
-  warn "scripts/ensure-dpf-skill-pack.sh not found; skipping contributor skill pack setup."
+  warn "scripts/dpf-bootstrap-agent-toolchain.sh not found; skipping agent toolchain convergence."
 fi
 
 # 8. Resolve host hardware profile (Phase 5 macOS / Linux detector).

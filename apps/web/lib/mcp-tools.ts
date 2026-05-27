@@ -1392,6 +1392,19 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     coworkerArtifact: true,
   },
   {
+    name: "publish_to_linkedin",
+    description: "Publish an APPROVED marketing OutboundDraft (channelId=linkedin or linkedin-personal-social) to the operator's connected LinkedIn personal feed. Requires the LinkedIn integration to be connected via /platform/tools/integrations/linkedin-personal-social. Fails fast if the draft is not status=approved or no LinkedIn credential is connected. On success, writes an OutboundPublication row and flips the draft to status=published.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        draftId: { type: "string", description: "OutboundDraft.draftId in status='approved' on a LinkedIn channel" },
+      },
+      required: ["draftId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
     name: "draft_marketing_asset",
     description: "Turn a saved MarketingAssetTask brief into a channel-shaped, human-reviewable draft. Creates an OutboundDraft with status='pending-review' that appears in the marketing approval queue on /customer/marketing. Phase 1: LinkedIn posts and emails only. No external API call — the draft is internal until a human approves and a publish tool fires.",
     inputSchema: {
@@ -13213,6 +13226,27 @@ export async function executeTool(
         success: true,
         entityId: result.taskId,
         message: `${result.message}. The marketing workspace now has a saved proof/content task.`,
+        data: result,
+      };
+    }
+
+    case "publish_to_linkedin": {
+      const { publishApprovedDraft } = await import("./marketing/publish");
+      const result = await publishApprovedDraft({
+        draftId: String(params["draftId"] ?? ""),
+        publishedByUserId: userId,
+      });
+      if (!result.ok) {
+        return {
+          success: false,
+          message: result.message,
+          error: result.error,
+        };
+      }
+      return {
+        success: true,
+        entityId: result.publicationId,
+        message: result.message,
         data: result,
       };
     }

@@ -11,9 +11,9 @@ import {
 } from "./execution";
 
 describe("OUTBOUND_DRAFT_STATUS catalog", () => {
-  it("contains the six expected states", () => {
+  it("contains the seven expected states (Phase 2 adds 'published')", () => {
     expect([...OUTBOUND_DRAFT_STATUS].sort()).toEqual(
-      ["approved", "draft", "needs-changes", "pending-review", "rejected", "stale"],
+      ["approved", "draft", "needs-changes", "pending-review", "published", "rejected", "stale"],
     );
   });
 });
@@ -81,6 +81,20 @@ describe("draft state machine", () => {
 
   it("assertDraftTransition does not throw on legal transition", () => {
     expect(() => assertDraftTransition("pending-review", "approved")).not.toThrow();
+  });
+
+  it("allows approved → published (Phase 2 publish flow)", () => {
+    expect(isAllowedDraftTransition("approved", "published")).toBe(true);
+  });
+
+  it("rejects pending-review → published (cannot skip approval)", () => {
+    expect(isAllowedDraftTransition("pending-review", "published")).toBe(false);
+  });
+
+  it("treats published as terminal", () => {
+    expect(isAllowedDraftTransition("published", "approved")).toBe(false);
+    expect(isAllowedDraftTransition("published", "rejected")).toBe(false);
+    expect(isAllowedDraftTransition("published", "stale")).toBe(false);
   });
 });
 

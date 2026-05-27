@@ -340,6 +340,28 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     notes: "Campaign context needs consent and customer-record boundaries before write-back.",
   },
   {
+    id: "linkedin-personal-social",
+    productName: "LinkedIn (personal publishing)",
+    provider: "LinkedIn",
+    kind: "native",
+    nativeIntegrationId: "linkedin-personal-social",
+    category: "Social Publishing",
+    employeeRoles: ["marketer", "owner_operator"],
+    taxonomyNodeIds: [
+      "for_employees/sales_and_marketing/marketing_and_advertising",
+    ],
+    dpfSurfaces: ["/customer/marketing", "/platform/tools/integrations/linkedin-personal-social"],
+    coworkerIds: ["marketing-specialist"],
+    posture: "integration-led",
+    maturity: "write-back",
+    csdmDomain: "application-service",
+    it4itValueStreams: ["strategy-to-portfolio", "request-to-fulfill"],
+    nextBacklogItemId: "BI-FBC9BA03",
+    replacementCriteria:
+      "Conduit-only personal publishing; operator brings their own LinkedIn developer app and credentials.",
+    notes: "Phase 2 of the marketing execution loop. Scope w_member_social only; no company-page write, no ads.",
+  },
+  {
     id: "xero-accounting-benchmark",
     productName: "Xero",
     provider: "Xero",

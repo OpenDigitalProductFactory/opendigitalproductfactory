@@ -269,6 +269,8 @@ export type MarketingWorkspaceSnapshot = {
     }>;
   };
   pendingDrafts: OutboundDraftRow[];
+  approvedDrafts: OutboundDraftRow[];
+  connectedChannels: string[]; // IntegrationCredential.integrationId values with status="connected"
   staleAreas: string[];
 };
 
@@ -279,7 +281,7 @@ export type OutboundDraftRow = {
   assetTaskTitle: string | null;
   channelId: string;
   assetType: string;
-  status: "draft" | "pending-review" | "approved" | "rejected" | "needs-changes" | "stale";
+  status: "draft" | "pending-review" | "approved" | "rejected" | "needs-changes" | "stale" | "published";
   body: string;
   bodyFormat: "markdown" | "html" | "plain";
   createdByAgentId: string | null;
@@ -1145,6 +1147,8 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
     kpiCheckpoints,
     automationCandidates,
     pendingDraftsRaw,
+    approvedDraftsRaw,
+    connectedIntegrations,
   ] = await Promise.all([
     prisma.marketingCampaignBrief.findMany({
       where: { strategyId: strategy.strategyId },
@@ -1175,11 +1179,24 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
       orderBy: { createdAt: "desc" },
       take: 20,
     }),
+    prisma.outboundDraft.findMany({
+      where: {
+        organizationId: organization.id,
+        domain: "marketing",
+        status: "approved",
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 10,
+    }),
+    prisma.integrationCredential.findMany({
+      where: { status: "connected" },
+      select: { integrationId: true },
+    }),
   ]);
 
   // Map asset task ids to titles for the queue panel
   const taskIdToTitle = new Map(assetTasks.map((t) => [t.taskId, t.title]));
-  const pendingDrafts: OutboundDraftRow[] = pendingDraftsRaw.map((draft) => ({
+  const toRow = (draft: typeof pendingDraftsRaw[number]): OutboundDraftRow => ({
     draftId: draft.draftId,
     sourceType: draft.sourceType as OutboundDraftRow["sourceType"],
     sourceId: draft.sourceId,
@@ -1194,7 +1211,10 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
     bodyFormat: draft.bodyFormat as OutboundDraftRow["bodyFormat"],
     createdByAgentId: draft.createdByAgentId,
     createdAt: draft.createdAt,
-  }));
+  });
+  const pendingDrafts: OutboundDraftRow[] = pendingDraftsRaw.map(toRow);
+  const approvedDrafts: OutboundDraftRow[] = approvedDraftsRaw.map(toRow);
+  const connectedChannels = connectedIntegrations.map((i) => i.integrationId);
 
   const normalizedSnapshot: MarketingWorkspaceSnapshot = {
     organization: {
@@ -1293,6 +1313,8 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
       })),
     },
     pendingDrafts,
+    approvedDrafts,
+    connectedChannels,
     staleAreas: [],
   };
 
