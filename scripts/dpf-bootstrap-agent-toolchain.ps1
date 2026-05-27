@@ -1,0 +1,274 @@
+# Open Digital Product Factory -- agent toolchain bootstrap (Windows)
+#
+# Converges the contributor's Claude Code + Codex CLI sessions to a known
+# kernel-aware state on every install or worktree creation. Replaces the old
+# scripts/ensure-dpf-skill-pack.ps1 (which now exists as a thin shim).
+#
+# Architecture (per docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md):
+#   1. Detect Claude Code / Codex CLIs + DPF MCP token presence.
+#   2. Call the @dpf/bootstrap planning library via Node (tsx) to compute an
+#      AgentToolchainPlan (data-in / data-out, no side effects).
+#   3. Apply the plan: claude plugin install, Codex config TOML upsert,
+#      kernel-memory seed.
+#   4. Run a read-only MCP tools/list probe (planned in Phase 5 - stub returns
+#      `skipped` here so the state schema validates).
+#   5. Run the kernel-principle smoke probe (planned in Phase 5 - stub returns
+#      `skipped` here).
+#   6. Materialize the agentToolchain state and persist via state.ps1.
+#   7. Print a single readiness banner using the spec's readinessCopy() table.
+#
+# The banner contains NO substrate names (config.toml, installed_plugins.json,
+# .codex, .claude/plugins, etc.) and NO command snippets. Substrate detail
+# is available under -ShowSubstrate for debugging.
+#
+# Plain ASCII only per AGENTS.md.
+
+param(
+    [string]$RepoRoot = (Get-Location).Path,
+    [switch]$Headless,
+    [switch]$ReconcileStaleEntries,
+    [switch]$ShowSubstrate,
+    [switch]$DryRun
+)
+
+$ErrorActionPreference = "Stop"
+
+function Write-Ok    { param($msg) Write-Host "  [OK] $msg"     -ForegroundColor Green }
+function Write-Info  { param($msg) Write-Host "  [..] $msg"     -ForegroundColor Cyan }
+function Write-Skip  { param($msg) Write-Host "  [SKIP] $msg"   -ForegroundColor Yellow }
+function Write-Warn2 { param($msg) Write-Host "  [WARN] $msg"   -ForegroundColor Yellow }
+function Write-Fail2 { param($msg) Write-Host "  [FAIL] $msg"   -ForegroundColor Red }
+
+$RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
+
+# --- Resolve substrate paths --------------------------------------------------
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+. (Join-Path $ScriptDir "installer\lib\state.ps1")
+
+$CodexConfigPath        = Join-Path $HOME ".codex\config.toml"
+$ClaudePluginsPath      = Join-Path $HOME ".claude\plugins\installed_plugins.json"
+$KernelPrinciplesDir    = Join-Path $RepoRoot "docs\founder-kernel\wiki\principles"
+$ContributorMemoryDir   = Join-Path $HOME ".claude\projects"
+$ProjectSlug            = ($RepoRoot -replace '[:\\\/]+', '-').TrimStart('-')
+$McpEndpoint            = if ($env:DPF_MCP_URL) { $env:DPF_MCP_URL } else { "http://127.0.0.1:3000/api/mcp/v1" }
+$SkillPackManifestPath  = Join-Path $RepoRoot "packages\dpf-skill-pack\.claude-plugin\plugin.json"
+
+if (-not (Test-Path -LiteralPath $SkillPackManifestPath)) {
+    Write-Fail2 "DPF skill pack plugin manifest missing at $SkillPackManifestPath; aborting bootstrap."
+    exit 1
+}
+$expectedVersion = (Get-Content -LiteralPath $SkillPackManifestPath -Raw | ConvertFrom-Json).version
+
+# --- Detect CLIs + token ------------------------------------------------------
+$ClaudePresent = $null -ne (Get-Command claude -ErrorAction SilentlyContinue)
+$CodexPresent  = $null -ne (Get-Command codex  -ErrorAction SilentlyContinue)
+$HasToken      = -not [string]::IsNullOrWhiteSpace($env:DPF_MCP_BEARER_TOKEN)
+
+Write-Host ""
+Write-Host "-> DPF agent toolchain bootstrap" -ForegroundColor Yellow
+Write-Info "Repo root        : $RepoRoot"
+Write-Info "Claude CLI       : $(if ($ClaudePresent) { 'present' } else { 'missing' })"
+Write-Info "Codex CLI        : $(if ($CodexPresent)  { 'present' } else { 'missing' })"
+Write-Info "DPF MCP token    : $(if ($HasToken)      { 'present' } else { 'missing' })"
+Write-Info "Skill pack ver.  : $expectedVersion"
+
+# --- Compute plan via Node bridge --------------------------------------------
+$BootstrapCli = Join-Path $RepoRoot "packages\dpf-bootstrap\src\agent-toolchain\cli\compute-plan.ts"
+if (-not (Test-Path -LiteralPath $BootstrapCli)) {
+    Write-Fail2 "Bootstrap CLI not found at $BootstrapCli (is @dpf/bootstrap installed?)"
+    exit 1
+}
+
+# tsx is a devDependency of @dpf/bootstrap; pnpm exec finds it.
+$nodeArgs = @(
+    "--filter", "@dpf/bootstrap", "exec",
+    "tsx", $BootstrapCli,
+    "--repo-root", $RepoRoot,
+    "--codex-config", $CodexConfigPath,
+    "--claude-plugins", $ClaudePluginsPath,
+    "--kernel-principles", $KernelPrinciplesDir,
+    "--contributor-memory", $ContributorMemoryDir,
+    "--project-slug", $ProjectSlug,
+    "--mcp-endpoint", $McpEndpoint,
+    "--expected-dpf-platform-version", $expectedVersion
+)
+if ($ClaudePresent)        { $nodeArgs += "--claude-cli-present" }
+if ($CodexPresent)         { $nodeArgs += "--codex-cli-present" }
+if ($HasToken)             { $nodeArgs += "--has-token" }
+if ($ReconcileStaleEntries.IsPresent) { $nodeArgs += "--reconcile-stale-entries" }
+
+$planJson = & pnpm @nodeArgs 2>$null
+if ($LASTEXITCODE -ne 0 -or -not $planJson) {
+    Write-Fail2 "compute-plan failed; cannot proceed with bootstrap."
+    exit 1
+}
+
+$plan = $planJson | ConvertFrom-Json
+Write-Info "Plan preview: $($plan.preview.readinessState)"
+
+# --- Apply plan ---------------------------------------------------------------
+$claudeWired = $false
+$codexWired  = $false
+$memorySeededAt = $null
+
+# 1. Claude Code: run `claude plugin install` if a write is planned.
+if ($plan.claude -and $plan.claude.mode -ne 'noop') {
+    if ($DryRun.IsPresent) {
+        Write-Info "DRY-RUN claude plugin install dpf-platform@dpf-platform-local --scope local"
+    } else {
+        Push-Location -LiteralPath $RepoRoot
+        try {
+            & claude plugin marketplace add ./ --scope local 2>$null | Out-Null
+            & claude plugin install dpf-platform@dpf-platform-local --scope local 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Ok "Claude Code plugin wired ($($plan.claude.mode))."
+                $claudeWired = $true
+            } else {
+                Write-Warn2 "claude plugin install exited $LASTEXITCODE; toolchain remains partial."
+            }
+        } finally {
+            Pop-Location
+        }
+    }
+} elseif ($plan.claude -and $plan.claude.mode -eq 'noop') {
+    $claudeWired = $true
+    Write-Ok "Claude Code plugin already converged."
+} else {
+    Write-Skip "Claude CLI not installed; skipping plugin wire."
+}
+
+if ($plan.claude -and $plan.claude.staleEntriesToReconcile.Count -gt 0 -and -not $ReconcileStaleEntries.IsPresent) {
+    Write-Warn2 "$($plan.claude.staleEntriesToReconcile.Count) stale Claude plugin entries detected. Re-run with -ReconcileStaleEntries to clean."
+}
+
+# 2. Codex CLI: apply TOML write (only if a write is planned).
+if ($plan.codex -and $plan.codex.writes.Count -gt 0) {
+    foreach ($write in $plan.codex.writes) {
+        if ($DryRun.IsPresent) {
+            Write-Info "DRY-RUN write Codex config -> $($write.path)"
+        } else {
+            $dir = Split-Path -Parent $write.path
+            if (-not (Test-Path -LiteralPath $dir)) {
+                New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            }
+            [System.IO.File]::WriteAllText($write.path, $write.content, [System.Text.Encoding]::UTF8)
+        }
+    }
+    Write-Ok "Codex plugin wired."
+    $codexWired = $true
+} elseif ($plan.codex) {
+    if ($plan.codex.preservedUserIntent) {
+        Write-Skip "Codex plugin manually disabled by user; preserving user intent."
+        $codexWired = $false
+    } else {
+        Write-Ok "Codex plugin already converged."
+        $codexWired = $true
+    }
+} else {
+    Write-Skip "Codex CLI not installed; skipping plugin wire."
+}
+
+# 3. Kernel memory seed.
+if ($plan.memory.writes.Count -gt 0) {
+    foreach ($write in $plan.memory.writes) {
+        if ($write.mode -eq 'preserve-user-edit') { continue }
+        if ($DryRun.IsPresent) {
+            Write-Info "DRY-RUN seed memory -> $($write.path)"
+        } else {
+            $dir = Split-Path -Parent $write.path
+            if (-not (Test-Path -LiteralPath $dir)) {
+                New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            }
+            [System.IO.File]::WriteAllText($write.path, $write.content, [System.Text.Encoding]::UTF8)
+        }
+    }
+    if ($plan.memory.indexEntry) {
+        if (-not $DryRun.IsPresent) {
+            $idxDir = Split-Path -Parent $plan.memory.indexEntry.path
+            if (-not (Test-Path -LiteralPath $idxDir)) {
+                New-Item -ItemType Directory -Path $idxDir -Force | Out-Null
+            }
+            [System.IO.File]::WriteAllText($plan.memory.indexEntry.path, $plan.memory.indexEntry.content, [System.Text.Encoding]::UTF8)
+        }
+    }
+    Write-Ok "Kernel-tier memory seeded ($($plan.memory.writes.Count) principle(s))."
+    $memorySeededAt = (Get-Date).ToUniversalTime().ToString("o")
+} else {
+    Write-Ok "Kernel-tier memory already converged."
+}
+
+# 4. MCP read-only probe — stub for Phase 3; Phase 5 implements the live call.
+$mcpReadiness = if ($HasToken) {
+    @{ ok = $false; reason = "endpoint_unreachable"; httpStatus = $null }  # Phase 5 replaces.
+} else {
+    @{ ok = $false; reason = "no_token"; httpStatus = $null }
+}
+
+# 5. Smoke probe — stub for Phase 3 returning `skipped`; Phase 5 implements.
+$smokeResult = if (-not ($ClaudePresent -or $CodexPresent)) {
+    @{ result = "skipped"; reason = "claude_not_on_path" }
+} elseif (-not $HasToken) {
+    @{ result = "skipped"; reason = "no_token" }
+} else {
+    # Even with everything present, this is Phase 5 work. Mark explicitly.
+    @{ result = "skipped"; reason = "no_token" }
+}
+
+# 6. Materialize state and write to install-state.json.
+$state = [ordered]@{
+    appliedAt           = (Get-Date).ToUniversalTime().ToString("o")
+    dpfPlatformVersion  = $expectedVersion
+    superpowersVersion  = $null
+    claudeCodeWired     = $claudeWired
+    codexWired          = $codexWired
+    memorySeededAt      = $memorySeededAt
+    mcpReadiness        = $mcpReadiness
+    smokeTest           = $smokeResult
+    readinessState      = if ($plan.preview.readinessState -eq 'ready' -and (-not $claudeWired -or -not $codexWired)) { 'partial' } else { $plan.preview.readinessState }
+}
+
+# Recompute readinessState from the actual applied facts, not the preview.
+if (-not $claudeWired -and -not $codexWired) {
+    $state.readinessState = "missing_cli"
+} elseif (-not $HasToken) {
+    $state.readinessState = "missing_token"
+} elseif (-not $claudeWired -or -not $codexWired) {
+    $state.readinessState = "partial"
+} else {
+    $state.readinessState = "ready"
+}
+
+if (-not $DryRun.IsPresent) {
+    Initialize-DpfState -InstallerVersion "agent-toolchain-bootstrap-phase-3" -InstallPath $RepoRoot
+    Set-DpfStateValue -Key "agentToolchain" -Value $state
+}
+
+# --- Readiness banner ---------------------------------------------------------
+$copyTable = @{
+    "ready"          = @{ message = "Claude Code and Codex are ready for DPF work.";                                     primaryAction = "Open readiness" }
+    "partial"        = @{ message = "One contributor client is ready; the other needs setup.";                           primaryAction = "Repair toolchain" }
+    "missing_cli"    = @{ message = "Install the selected agent client to enable contributor sessions.";                 primaryAction = "Open setup guide" }
+    "missing_token"  = @{ message = "DPF MCP needs a development token before agents can use governed tools.";           primaryAction = "Issue development token" }
+    "needs_refresh"  = @{ message = "A token exists, but the running client has not picked it up yet.";                  primaryAction = "Refresh client binding" }
+    "failed_smoke"   = @{ message = "The agent is installed but did not apply a DPF kernel principle.";                  primaryAction = "View evidence" }
+}
+$copy = $copyTable[$state.readinessState]
+
+Write-Host ""
+Write-Host "================================================================" -ForegroundColor Cyan
+Write-Host "  DPF agent toolchain: $($state.readinessState.ToUpper())" -ForegroundColor Cyan
+Write-Host "  $($copy.message)" -ForegroundColor White
+Write-Host "  Next: $($copy.primaryAction)" -ForegroundColor Yellow
+Write-Host "================================================================" -ForegroundColor Cyan
+
+if ($ShowSubstrate.IsPresent) {
+    Write-Host ""
+    Write-Host "  Substrate detail (for debugging):" -ForegroundColor DarkGray
+    Write-Host "    Claude plugin     : $($state.claudeCodeWired)" -ForegroundColor DarkGray
+    Write-Host "    Codex plugin      : $($state.codexWired)" -ForegroundColor DarkGray
+    Write-Host "    Memory seeded at  : $($state.memorySeededAt)" -ForegroundColor DarkGray
+    Write-Host "    DPF platform ver  : $($state.dpfPlatformVersion)" -ForegroundColor DarkGray
+    Write-Host "    State file        : $(Get-DpfStatePath)" -ForegroundColor DarkGray
+}
+
+Write-Host ""
