@@ -11,8 +11,8 @@
 // Spec: docs/superpowers/specs/2026-05-26-contributor-inventory-sync-design.md
 //   §"Read Model"
 //
-// The deprecated `runners-node.ts` is left on disk through Phase 7 for
-// rollback safety; it is unreferenced from this file or from page.tsx.
+// Phase 8 (BI-063BDF1B) deleted the deprecated `runners-node.ts` after
+// Phases 1-7 had soaked on `main`. No caller imports it anymore.
 
 import { prisma } from "@dpf/db";
 
