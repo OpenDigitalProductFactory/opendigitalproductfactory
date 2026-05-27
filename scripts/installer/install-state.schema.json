@@ -104,6 +104,97 @@
     "lastDoctorBundlePath": {
       "type": ["string", "null"],
       "description": "Absolute path to the most recent doctor bundle, for support reports."
+    },
+    "agentToolchain": {
+      "type": "object",
+      "description": "Result of the most recent dpf-bootstrap-agent-toolchain run. Persisted so re-installs are idempotent and `install-dpf.sh doctor` can report the contributor's kernel-awareness state. Source: docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md.",
+      "required": [
+        "appliedAt",
+        "dpfPlatformVersion",
+        "superpowersVersion",
+        "claudeCodeWired",
+        "codexWired",
+        "memorySeededAt",
+        "mcpReadiness",
+        "smokeTest",
+        "readinessState"
+      ],
+      "properties": {
+        "appliedAt": { "type": "string", "format": "date-time" },
+        "dpfPlatformVersion": { "type": "string" },
+        "superpowersVersion": { "type": ["string", "null"] },
+        "claudeCodeWired": { "type": "boolean" },
+        "codexWired": { "type": "boolean" },
+        "memorySeededAt": { "type": ["string", "null"], "format": "date-time" },
+        "mcpReadiness": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["ok", "toolCount", "observedAt"],
+              "properties": {
+                "ok": { "const": true },
+                "toolCount": { "type": "integer", "minimum": 0 },
+                "observedAt": { "type": "string", "format": "date-time" }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["ok", "reason", "httpStatus"],
+              "properties": {
+                "ok": { "const": false },
+                "reason": {
+                  "type": "string",
+                  "enum": ["no_token", "endpoint_unreachable", "scope_insufficient", "unexpected_shape"]
+                },
+                "httpStatus": { "type": ["integer", "null"] }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "smokeTest": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["result", "kernelPrincipleObserved", "transcript"],
+              "properties": {
+                "result": { "const": "passed" },
+                "kernelPrincipleObserved": { "type": "string" },
+                "transcript": { "type": "string" }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["result", "transcript", "reason"],
+              "properties": {
+                "result": { "const": "failed" },
+                "transcript": { "type": "string" },
+                "reason": { "type": "string" }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["result", "reason"],
+              "properties": {
+                "result": { "const": "skipped" },
+                "reason": {
+                  "type": "string",
+                  "enum": ["claude_not_on_path", "codex_not_on_path", "no_token"]
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "readinessState": {
+          "type": "string",
+          "enum": ["ready", "partial", "missing_cli", "missing_token", "needs_refresh", "failed_smoke"]
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

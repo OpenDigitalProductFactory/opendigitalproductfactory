@@ -75,7 +75,21 @@ export function BuildProgressOperationalPanel({ projection }: Props) {
             <div className="mt-3 rounded border border-[var(--dpf-warning)] bg-[var(--dpf-surface-2)] px-3 py-2 text-xs text-[var(--dpf-text)]">
               Agent has been quiet for {projection.quietAgent.minutesQuiet}m
               <span className="text-[var(--dpf-muted)]"> - </span>
-              <a className="font-semibold text-[var(--dpf-accent)] underline-offset-2 hover:underline" href="#build-dispatch-history">
+              <a
+                className="font-semibold text-[var(--dpf-accent)] underline-offset-2 hover:underline"
+                href="#build-dispatch-history"
+                onClick={() => {
+                  // Layered enhancement: fire a custom event that the
+                  // BuildDispatchHistoryCard listens for and uses to open
+                  // the most-recent attempt's collapsed <details> + briefly
+                  // highlight that row. The anchor scroll behavior is
+                  // preserved — we DO NOT call preventDefault. See spec
+                  // docs/superpowers/specs/2026-05-24-build-studio-quiet-agent-link-shows-last-action.md
+                  // and BI-9A7DA4AC.
+                  if (typeof document === "undefined") return;
+                  document.dispatchEvent(new CustomEvent("dpf:open-last-dispatch-attempt"));
+                }}
+              >
                 view last action
               </a>
             </div>
