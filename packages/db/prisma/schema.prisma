@@ -6963,7 +6963,8 @@ model OutboundDraft {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  approvals OutboundApprovalDecision[]
+  approvals    OutboundApprovalDecision[]
+  publications OutboundPublication[]
 
   @@index([organizationId, domain, status])
   @@index([sourceType, sourceId])
@@ -6983,6 +6984,32 @@ model OutboundApprovalDecision {
 
   @@index([draftId])
   @@index([reviewerUserId, decidedAt])
+}
+
+// Phase 2: external publish/send record. credentialId is a string pointer to
+// IntegrationCredential.id (no FK — keeps the outbound substrate decoupled
+// from the integration custody layer per spec §5.3). toolExecutionId links
+// to the ToolExecution row written by the publish tool for /platform/ai/
+// authority cross-audit.
+model OutboundPublication {
+  publicationId       String    @id @default(cuid())
+  draftId             String
+  channelId           String
+  credentialId        String?
+  externalId          String
+  externalUrl         String?
+  publishedAt         DateTime  @default(now())
+  publishedByUserId   String
+  toolExecutionId     String?
+  channelMetadata     Json?
+  lastMetricsPolledAt DateTime?
+  lastMetricsSnapshot Json?
+
+  draft OutboundDraft @relation(fields: [draftId], references: [draftId], onDelete: Cascade)
+
+  @@unique([channelId, externalId])
+  @@index([draftId])
+  @@index([channelId, publishedAt])
 }
 
 model StorefrontSection {
