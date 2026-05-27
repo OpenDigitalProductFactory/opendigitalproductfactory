@@ -30,6 +30,15 @@
 #   could corrupt production-style data. Use knowingly. Same risk profile as
 #   any local-dev-against-shared-DB workflow — keep the prod portal on :3000
 #   as the stable reference and treat :3001 as the verification surface.
+#
+# What this override injects
+#   - Live DB connection strings (postgres / neo4j / qdrant).
+#   - AUTH_SECRET / CREDENTIAL_ENCRYPTION_KEY from the live install so
+#     encrypted secrets decrypt correctly.
+#   - AUTH_URL / APP_URL / NEXT_PUBLIC_APP_URL pointed at :3001.
+#   - The Inngest event/serve cluster (INNGEST_DEV, INNGEST_EVENT_KEY,
+#     INNGEST_BASE_URL, INNGEST_SERVE_ORIGIN, INNGEST_SIGNING_KEY) so the
+#     dev-portal can register and serve scheduled / event-driven functions.
 
 services:
   dev-portal:
@@ -58,6 +67,22 @@ services:
       DPF_ENVIRONMENT: dev
       INSTANCE_TYPE: dev
       PROJECT_ROOT: /workspace
+      # ─── Inngest event/serve cluster ──────────────────────────────────────
+      # Without these, GET /api/inngest 500s with
+      #   "In cloud mode but no signing key found"
+      # and the dev-portal cannot register or serve scheduled / event-driven
+      # functions. The Live portal on :3000 already has these — match its
+      # values so the single in-cluster Inngest dev server (dpf-inngest-1)
+      # treats both apps consistently. INNGEST_SERVE_ORIGIN points at the
+      # dev-portal hostname inside the compose network so Inngest can call
+      # back to /api/inngest. Discovered during Phase 7 verification of
+      # BI-063BDF1B — the cron in PR #1213 cannot be functionally verified
+      # through :3001 until these env vars are set.
+      INNGEST_DEV: ${INNGEST_DEV:-0}
+      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY:-deadbeefcafebabe}
+      INNGEST_BASE_URL: ${INNGEST_BASE_URL:-http://inngest:8288}
+      INNGEST_SERVE_ORIGIN: http://dev-portal:3001
+      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:-abcdef0123456789}
     # Compose merges depends_on by default, so a plain block here would APPEND
     # to the base file's `dev-init` dep instead of replacing it. We don't want
     # dev-init (it's the sanitized-clone of prod→dev DB, irrelevant when we
