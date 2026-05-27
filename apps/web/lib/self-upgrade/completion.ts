@@ -1,12 +1,28 @@
 import { execFileSync } from "node:child_process";
 import { prisma } from "@dpf/db";
+import { readImageVersion } from "@/lib/platform/image-version";
 
 /**
- * SHA of the currently-running application image.
- * Populated by the deploy pipeline via environment variable.
+ * Identity of the currently-running application image.
+ *
+ * Resolution order:
+ *   1. DEPLOYED_SHA env var — set by the deploy pipeline when it has
+ *      authoritative information (the SHA it just promoted).
+ *   2. /app/.dpf-image-version — baked into the image at build time. Contains
+ *      either a 40-char git SHA (when DPF_VERSION was passed as a build arg,
+ *      e.g. via scripts/build-images.{ps1,sh}) or a 64-char content hash of
+ *      the bundled source as a fallback. Either way, the image has *some*
+ *      identity — returning that is strictly better than "unknown" for the
+ *      operator-facing self-upgrade panel.
+ *
+ * Returns null only when neither source is available (e.g. local `next dev`
+ * outside a built image).
  */
-export function getDeployedSha(): string | null {
-  return process.env.DEPLOYED_SHA ?? null;
+export async function getDeployedSha(): Promise<string | null> {
+  const envSha = process.env.DEPLOYED_SHA;
+  if (envSha && envSha.length > 0) return envSha;
+  const image = await readImageVersion();
+  return image?.raw ?? null;
 }
 
 /**
@@ -58,7 +74,7 @@ export async function getBuildMergeSha(buildId: string): Promise<string | null> 
  * ProductVersion yet.
  */
 export async function isFeatureBuildDeployed(buildId: string): Promise<boolean> {
-  const deployedSha = getDeployedSha();
+  const deployedSha = await getDeployedSha();
   if (!deployedSha) return false;
   const mergeSha = await getBuildMergeSha(buildId);
   if (!mergeSha) return false;

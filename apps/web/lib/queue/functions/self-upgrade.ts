@@ -48,7 +48,7 @@ export async function runSelfUpgrade(
   const targetSha = await resolveTargetSha(config.channel, config);
   if (!targetSha) return { skipped: true, reason: "no-target" };
 
-  const deployedSha = getDeployedSha();
+  const deployedSha = await getDeployedSha();
   if (isShaFresh(deployedSha, targetSha)) return { skipped: true, reason: "up-to-date" };
 
   const latestRun = await getLatestRun();

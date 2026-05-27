@@ -17,11 +17,14 @@ type LatestRun = {
   createdAt: Date | string;
 };
 
+type ImageVersionSource = "git-sha" | "content-hash" | "unknown";
+
 type Props = {
   enabled: boolean;
   channel: string;
   inMaintenanceWindow: boolean;
   deployedSha: string | null;
+  deployedShaSource?: ImageVersionSource;
   targetSha: string | null;
   isFresh: boolean;
   latestRun: LatestRun | null;
@@ -31,9 +34,26 @@ type Props = {
     version: string;
     publishedAt: string;
     gitSha: string | null;
+    imageVersion?: { raw: string; source: ImageVersionSource } | null;
     note: string | null;
   };
 };
+
+function shortSha(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.length > 12 ? `${value.slice(0, 12)}…` : value;
+}
+
+function sourceLabel(source: ImageVersionSource | undefined): string {
+  switch (source) {
+    case "git-sha":
+      return "commit";
+    case "content-hash":
+      return "image hash";
+    default:
+      return "image";
+  }
+}
 
 function formatDuration(start: Date | string, end: Date | string): string {
   const ms = new Date(end).getTime() - new Date(start).getTime();
@@ -65,6 +85,7 @@ export default function SelfUpgradeClient({
   channel,
   inMaintenanceWindow,
   deployedSha,
+  deployedShaSource,
   targetSha,
   isFresh,
   latestRun,
@@ -138,9 +159,10 @@ export default function SelfUpgradeClient({
           <span className="font-mono text-[var(--dpf-text)]">
             {platformVersion.version}
           </span>
-          {platformVersion.gitSha && (
+          {(platformVersion.gitSha || platformVersion.imageVersion?.raw) && (
             <span className="ml-2 font-mono text-[var(--dpf-muted)]">
-              ({platformVersion.gitSha.slice(0, 7)})
+              ({sourceLabel(platformVersion.imageVersion?.source)}{" "}
+              {shortSha(platformVersion.gitSha ?? platformVersion.imageVersion?.raw ?? null)})
             </span>
           )}
         </div>
@@ -148,7 +170,18 @@ export default function SelfUpgradeClient({
           <>
             <div className="text-xs text-[var(--dpf-muted)]">
               <span className="font-medium text-[var(--dpf-text)]">Deployed:</span>{" "}
-              <span className="font-mono">{deployedSha ?? "unknown"}</span>
+              {deployedSha ? (
+                <>
+                  <span className="font-mono">{deployedSha}</span>
+                  {deployedShaSource && deployedShaSource !== "unknown" && (
+                    <span className="ml-2 text-[var(--dpf-muted)]">
+                      ({sourceLabel(deployedShaSource)})
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="font-mono">unknown</span>
+              )}
             </div>
             <div className="text-xs text-[var(--dpf-muted)]">
               <span className="font-medium text-[var(--dpf-text)]">Target:</span>{" "}
@@ -157,7 +190,15 @@ export default function SelfUpgradeClient({
             {isFresh && (
               <div className="text-xs text-[var(--dpf-success)]">Up to date</div>
             )}
-            {!isFresh && targetSha && (
+            {!isFresh && targetSha && deployedShaSource === "content-hash" && (
+              <div className="text-xs text-[var(--dpf-warning)]">
+                Image built without a git-SHA stamp; cannot compare to remote
+                target. Rebuild with{" "}
+                <span className="font-mono">scripts/build-images.ps1</span> to
+                enable freshness checks.
+              </div>
+            )}
+            {!isFresh && targetSha && deployedShaSource !== "content-hash" && (
               <div className="text-xs text-[var(--dpf-warning)]">Update available</div>
             )}
           </>
