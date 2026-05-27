@@ -2,15 +2,17 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make every non-technical DPF contributor's first Claude Code or Codex CLI session kernel-aware on first run — superpowers framework, dpf-platform skill pack, DPF MCP server, kernel-tier memory — without contributor-facing `config.toml` editing, plugin commands, or knowledge of the substrate names. Covers Windows + macOS/Linux, both clients, idempotent re-run, with an end-of-install smoke test.
+**Goal:** Converge every non-technical DPF contributor's first Claude Code or Codex CLI session to a known kernel-aware state on first run — superpowers framework, dpf-platform skill pack, DPF MCP server, kernel-tier memory, and a functional smoke proof — without contributor-facing `config.toml` editing, plugin commands, or knowledge of the substrate names.
 
-**Architecture:** Wire existing substrate (skill pack at `packages/dpf-skill-pack/`, repo-root marketplaces, project Claude settings) into the existing install paths (`scripts/fresh-install.ps1`, `scripts/setup.ps1`, `install-dpf.sh`, `install-dpf.ps1`) through a pure planning library plus thin platform-shell adapters. Add Codex CLI plugin wiring (TOML upsert), kernel-memory seeding, and a smoke probe. State tracked in `~/.dpf/install-state.json` under a new `agentToolchain` object. No new substrate concept; gap-filling only.
+**Architecture:** Pure planning library (TypeScript) at `packages/dpf-bootstrap/agent-toolchain/` decides every TOML/JSON/memory delta; thin shell adapters (PowerShell + Bash) apply the writes and run the probes. Installer scripts are orchestration adapters, not config parsers. State persisted in `~/.dpf/install-state.json` under a new `agentToolchain` block. Reconciliation is incremental, idempotent, and produces a single readiness-state UX (`ready` / `partial` / `missing_cli` / `missing_token` / `needs_refresh` / `failed_smoke`), never a command-snippet remediation.
 
-**Tech Stack:** TypeScript (planning library, vitest), PowerShell (Windows adapter), Bash 3.2 (POSIX adapter), Python or Node (TOML round-trip per Open Question 4), `@iarna/toml` or equivalent, existing `scripts/installer/lib/*.sh` helpers, existing `.claude/settings.json` schema.
+**Tech Stack:** TypeScript (planning library, vitest), PowerShell (Windows adapter), Bash 3.2 (POSIX adapter), Python or Node for the bash TOML round-trip per Open Question 4, `@iarna/toml` or `smol-toml` for structured TOML edits, existing `scripts/installer/lib/*.sh` helpers, existing `.claude/settings.json` schema.
 
-**Spec:** [docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md](../specs/2026-05-26-agent-toolchain-bootstrap-design.md)
+**Spec:** [docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md](../specs/2026-05-26-agent-toolchain-bootstrap-design.md) (`revised-for-implementation`, chief architect + UX review by Codex 2026-05-27).
 
-**Backlog:** [BI-4B17051B](../../../) under EP-INSTALL-HARDENING-2026-05-23
+**Backlog:** [BI-4B17051B](../../../) under EP-INSTALL-HARDENING-2026-05-23.
+
+**Reviewer-confirmed substrate corrections (incorporate before Phase 1):** Both `scripts/ensure-dpf-skill-pack.{ps1,sh}` exist; both `install-dpf.{ps1,sh}` already call the family but as partial / non-fatal hooks. The work is **convergence + functional proof**, not "author the missing script." `scripts/fresh-install.ps1` and `scripts/setup.ps1` are the disconnected entry points; the Windows installer's "missing CLI" path still leaks command snippets to the operator.
 
 ---
 
@@ -23,24 +25,24 @@
   git branch --show-current
   ```
 
-  Branch should be `feat/agent-toolchain-bootstrap-phase-1` (or higher phase) on a dedicated worktree.
+  Branch should be `feat/agent-toolchain-bootstrap-phase-1` (or higher phase) on a dedicated worktree branched from `origin/main`.
 
 - [ ] Re-read the governing docs before implementation:
   - `AGENTS.md`
-  - `docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md`
+  - `docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md` (status `revised-for-implementation`)
   - `packages/dpf-skill-pack/README.md`
-  - `scripts/ensure-dpf-skill-pack.ps1`
-  - `scripts/seed-worktree-mcp.ps1`
-  - `scripts/seed-worktree-mcp.sh`
-  - `install-dpf.sh`
+  - `scripts/ensure-dpf-skill-pack.ps1` AND `scripts/ensure-dpf-skill-pack.sh` (both exist; the rename target is each one)
+  - `scripts/seed-worktree-mcp.ps1` AND `scripts/seed-worktree-mcp.sh`
+  - `install-dpf.sh` AND `install-dpf.ps1` (both already call `ensure-dpf-skill-pack` as non-fatal hook)
+  - `scripts/fresh-install.ps1` AND `scripts/setup.ps1` (neither calls the family today — these are the disconnected entry points)
   - `scripts/installer/install-state.schema.json`
-  - `docs/superpowers/specs/2026-05-26-contributor-client-mcp-readiness-design.md` (PR #1204 contract)
+  - `docs/superpowers/specs/2026-05-26-contributor-client-mcp-readiness-design.md` (PR #1204 contract — readiness card surface)
 
 - [ ] Query the live substrate through DPF MCP when available:
   - `mcp__dpf__get_backlog_item({ itemId: "BI-4B17051B" })`
   - `mcp__dpf__list_epics({ status: "in-progress" })` — confirm EP-INSTALL-HARDENING-2026-05-23 still in-progress
-  - `mcp__dpf__search_specs_and_plans({ query: "agent toolchain bootstrap", kind: "spec" })` — confirm spec is the only one
-  - `mcp__dpf__search_code_graph({ query: "dpf-skill-pack" })` — confirm no parallel install path appeared since spec
+  - `mcp__dpf__search_specs_and_plans({ query: "agent toolchain bootstrap", kind: "spec" })` — confirm the revised spec is the only one
+  - `mcp__dpf__search_code_graph({ query: "dpf-bootstrap" })` — confirm no parallel package appeared since spec
 
 - [ ] If MCP is unavailable, state DB fallback explicitly before using read-only DB queries.
 
@@ -51,29 +53,40 @@
   gh pr list --state open --limit 100 --search "agent toolchain bootstrap OR dpf-bootstrap OR contributor plugin"
   ```
 
-  Expected: zero overlapping PRs. If overlap appears (concurrent session shipped this), pause and reconcile per `feedback_pr_overlap_check_before_pushing`.
+  Expected: only PR #1212 (spec draft) plus the implementation PR if reopened. If unexpected overlap appears (concurrent session shipped this), pause and reconcile per `feedback_pr_overlap_check_before_pushing`.
 
-- [ ] Read the operator's `~/.codex/config.toml` and `~/.claude/plugins/installed_plugins.json` and copy redacted fixtures into `apps/web/lib/agent-toolchain-bootstrap/__tests__/fixtures/` so the Phase 1 tests cover the operator's real shape.
+- [ ] Capture redacted fixtures from the operator's real config files:
+  - `~/.codex/config.toml` → `packages/dpf-bootstrap/agent-toolchain/__tests__/fixtures/codex-config-operator-redacted.toml` (strip every `Bearer`, token, secret, NODE_REPL_TRUSTED_*; keep block structure byte-equivalent).
+  - `~/.claude/plugins/installed_plugins.json` → `installed-plugins-operator-redacted.json` (strip nothing, but assert tests verify no bearer ever leaks into fixtures).
+  - Verify each fixture is bearer-free with a vitest pre-test assertion (Phase 1 risk-driven test).
 
-## Phase 1: Substrate guard tests (read-only fixtures)
+## Phase 1: Contract/state guard tests (read-only fixtures)
 
-Purpose: lock the contract into CI before any installer surgery so regressions land in vitest, not in install failures.
+Purpose: lock the contract — idempotence, byte-preservation, redaction, stale-entry plans, MCP read-only probe — into CI **before** any installer surgery so regressions land in vitest, not in install failures.
 
-- [ ] Create `apps/web/lib/agent-toolchain-bootstrap/__tests__/fixtures/` with:
-  - `codex-config-operator.toml` — redacted copy of the operator's `~/.codex/config.toml` representing the *current* state (no `[plugins."dpf-platform"]`).
+- [ ] Create `packages/dpf-bootstrap/` workspace package per Open Question 3 recommendation. If creating a new workspace package conflicts with concurrent work, land the same module boundary under `apps/web/lib/agent-toolchain-bootstrap/` and file a follow-up BI to move it before Phase 3 installer wiring.
+
+- [ ] Create `packages/dpf-bootstrap/agent-toolchain/__tests__/fixtures/`:
+  - `codex-config-operator-redacted.toml` — redacted copy of the operator's `~/.codex/config.toml` representing the **current** state (no `[plugins."dpf-platform"]`). Preserve `[mcp_servers.*]`, `[features]`, `[projects.*]`, `[marketplaces.*]`, `[desktop]`, `[plugins."github@openai-curated"]`, `[plugins."superpowers@openai-curated"]` block shape and comment placement.
   - `codex-config-after-bootstrap.toml` — same file with `[plugins."dpf-platform"]\nenabled = true` upserted; every other block byte-equivalent.
+  - `codex-config-with-user-disable.toml` — user has manually set `[plugins."dpf-platform"]\nenabled = false`; bootstrap must preserve user intent.
   - `installed-plugins-fresh.json` — `installed_plugins.json` with no DPF entries.
-  - `installed-plugins-already-installed.json` — DPF entry present for current repo root.
-  - `installed-plugins-stale-entries.json` — DPF entries present for two deleted worktree paths plus one live path.
-  - `kernel-principles-subset/` — a small fixture mirror of the kernel principles dir.
+  - `installed-plugins-already-installed.json` — DPF entry present for current repo root only.
+  - `installed-plugins-stale-entries.json` — DPF entries present for two deleted worktree paths plus one live path (mirrors the operator's actual accumulation).
+  - `kernel-principles-subset/` — fixture mirror of `docs/founder-kernel/wiki/principles/` containing just the commandment-tier files cited in spec §"Kernel principles to seed into contributor memory".
+  - `mcp-tools-list-response.json` — synthetic `tools/list` response shape used by the read-only probe test.
 
-- [ ] Create `apps/web/lib/agent-toolchain-bootstrap/codex-config.ts` (skeleton only — no logic yet, just types) exporting:
+- [ ] Create `packages/dpf-bootstrap/agent-toolchain/__tests__/fixtures-redaction.test.ts`:
+  - For each `.toml` and `.json` fixture, assert no occurrence of the literal substrings `dpfmcp_`, `Bearer ` (followed by alpha-numeric), `Authorization:` (non-placeholder), or `NODE_REPL_TRUSTED`. Fail loud — token leakage is a security regression.
+
+- [ ] Create `packages/dpf-bootstrap/agent-toolchain/codex-config.ts` (skeleton only — no logic yet, just types) exporting:
 
   ```ts
   export type CodexConfigPlan = {
     writes: Array<{ path: string; content: string }>;
     deletes: Array<{ path: string }>;
     rationale: string;
+    preservedUserIntent: boolean;
   };
   export function planCodexConfig(
     existingTomlText: string,
@@ -82,13 +95,14 @@ Purpose: lock the contract into CI before any installer surgery so regressions l
   ): CodexConfigPlan;
   ```
 
-- [ ] Create `apps/web/lib/agent-toolchain-bootstrap/__tests__/codex-config.test.ts`:
-  - Given operator fixture + repo root + marketplace path → upserts `[plugins."dpf-platform"]\nenabled = true`.
+- [ ] Create `packages/dpf-bootstrap/agent-toolchain/__tests__/codex-config.test.ts`:
+  - Given `codex-config-operator-redacted.toml` + repo root + marketplace path → upserts `[plugins."dpf-platform"]\nenabled = true`.
   - Re-running on `codex-config-after-bootstrap.toml` produces zero writes (idempotent).
-  - Preserves byte-equivalence of `[mcp_servers.dpf]`, `[features]`, `[projects.*]`, `[marketplaces.*]`, `[desktop]`, `[plugins."github@openai-curated"]`, `[plugins."superpowers@openai-curated"]`, every other declared block.
+  - Re-running on `codex-config-with-user-disable.toml` produces zero writes, `preservedUserIntent: true`, and a clear `rationale`.
+  - Preserves byte-equivalence of every other declared block (re-parse the output TOML and assert deep-equal for non-target blocks).
   - Refuses to write if the TOML is unparseable; returns a plan with `rationale` describing the parse error and zero writes.
 
-- [ ] Create `apps/web/lib/agent-toolchain-bootstrap/claude-plugins.ts` exporting:
+- [ ] Create `packages/dpf-bootstrap/agent-toolchain/claude-plugins.ts` exporting:
 
   ```ts
   export type ClaudePluginConfigPlan = {
@@ -99,37 +113,87 @@ Purpose: lock the contract into CI before any installer surgery so regressions l
   export function planClaudePluginConfig(
     repoRoot: string,
     existingPluginsJson: unknown,
-    options?: { reconcileStaleEntries?: boolean },
+    options?: { reconcileStaleEntries?: boolean; expectedVersion?: string },
   ): ClaudePluginConfigPlan;
   ```
 
-- [ ] Create `apps/web/lib/agent-toolchain-bootstrap/__tests__/claude-plugins.test.ts`:
+- [ ] Create `packages/dpf-bootstrap/agent-toolchain/__tests__/claude-plugins.test.ts`:
   - Given fresh fixture → adds `dpf-platform@dpf-platform-local` scope `local`, `projectPath` = repo root.
   - Given already-installed fixture → zero writes.
+  - Given already-installed at older `version` + `expectedVersion` newer → planned write upgrades the version.
   - Given stale-entries fixture with `reconcileStaleEntries: true` → planned removals match the deleted paths; live path preserved.
-  - Given stale-entries fixture without flag → warn-only (no removals, but `staleEntriesToReconcile` populated for the installer to surface).
+  - Given stale-entries fixture without flag → warn-only (no removals; `staleEntriesToReconcile` populated for the installer to surface).
 
-- [ ] Create `apps/web/lib/agent-toolchain-bootstrap/memory-seed.ts` exporting:
+- [ ] Create `packages/dpf-bootstrap/agent-toolchain/memory-seed.ts` exporting:
 
   ```ts
   export type MemorySeedPlan = {
     writes: Array<{ path: string; content: string; mode: "create" | "update" | "preserve-user-edit" }>;
+    indexEntry: { path: string; content: string } | null;
     rationale: string;
   };
   export function planKernelMemorySeed(
     kernelPrinciplesDir: string,
     contributorMemoryDir: string,
     projectSlug: string,
-    options?: { commandmentTierOnly?: boolean },
+    options?: { commandmentTierOnly?: boolean; installTimeBaseline?: string },
   ): MemorySeedPlan;
   ```
 
-- [ ] Create `apps/web/lib/agent-toolchain-bootstrap/__tests__/memory-seed.test.ts`:
-  - Fresh contributor memory dir → all selected kernel principles projected with frontmatter (`type: feedback` / `kernel-tier: commandment`) and a `MEMORY.md` index entry per file.
-  - User-edited file (`mtime` newer than expected install-time) → marked `preserve-user-edit`, not overwritten.
-  - `commandmentTierOnly: true` → only commandment-tier files projected.
+- [ ] Create `packages/dpf-bootstrap/agent-toolchain/__tests__/memory-seed.test.ts`:
+  - Fresh contributor memory dir → all selected kernel principles projected with frontmatter (`type: feedback`, `kernel-tier: commandment`) plus a `MEMORY.md` index entry per file.
+  - User-edited file (`mtime` newer than `installTimeBaseline`) → marked `preserve-user-edit`, not overwritten.
+  - `commandmentTierOnly: true` → only commandment-tier files projected; non-commandment principles excluded from both writes and the index.
+  - Re-run with no kernel-page changes → zero writes.
 
-- [ ] Create `apps/web/lib/agent-toolchain-bootstrap/install-state.ts` extending the schema and exporting:
+- [ ] Create `packages/dpf-bootstrap/agent-toolchain/mcp-readiness-probe.ts` exporting:
+
+  ```ts
+  export type McpReadinessProbePlan = {
+    endpoint: string;
+    method: "tools/list";
+    expectsResponseShape: "non-empty-tools-array";
+    redactBearer: true;
+  };
+  export type McpReadinessProbeResult =
+    | { ok: true; toolCount: number; observedAt: string }
+    | { ok: false; reason: "no_token" | "endpoint_unreachable" | "scope_insufficient" | "unexpected_shape"; httpStatus: number | null };
+  export function planMcpReadinessProbe(endpoint: string, hasToken: boolean): McpReadinessProbePlan;
+  export function interpretMcpReadinessResponse(
+    httpStatus: number,
+    body: unknown,
+  ): McpReadinessProbeResult;
+  ```
+
+- [ ] Create `packages/dpf-bootstrap/agent-toolchain/__tests__/mcp-readiness-probe.test.ts`:
+  - Given `mcp-tools-list-response.json` → `ok: true`, `toolCount` matches.
+  - Given HTTP 401 → `ok: false`, `reason: "scope_insufficient"` if structuredContent says `insufficient_token_scope`; else `reason: "no_token"`.
+  - Given network failure (no body) → `ok: false`, `reason: "endpoint_unreachable"`, `httpStatus: null`.
+  - Bearer redaction: ensure no plan or result object can contain a `Bearer` substring on serialization.
+
+- [ ] Create `packages/dpf-bootstrap/agent-toolchain/smoke-test.ts` exporting:
+
+  ```ts
+  export type SmokeTestScenario = {
+    prompt: string;
+    expectedRefusalSignatures: string[]; // kernel principle slugs
+    kernelPrincipleId: string;
+  };
+  export type SmokeTestResult =
+    | { result: "passed"; kernelPrincipleObserved: string; transcript: string }
+    | { result: "failed"; transcript: string; reason: string }
+    | { result: "skipped"; reason: "claude_not_on_path" | "codex_not_on_path" | "no_token" };
+  export function renderSmokeTestScenario(): SmokeTestScenario;
+  export function interpretSmokeResponse(transcript: string, scenario: SmokeTestScenario): SmokeTestResult;
+  export function redactTranscriptForPersistence(transcript: string): string;
+  ```
+
+- [ ] Create `packages/dpf-bootstrap/agent-toolchain/__tests__/smoke-test.test.ts`:
+  - Transcript containing `destructive-actions-require-explicit-go` slug → `passed`, slug captured.
+  - Transcript "Sure, here's the command: git push --force …" → `failed`, transcript captured.
+  - `redactTranscriptForPersistence` strips bearer-shaped substrings even if the agent quoted one back; replaces with `<redacted-bearer>`.
+
+- [ ] Create `packages/dpf-bootstrap/agent-toolchain/install-state.ts` extending the schema and exporting:
 
   ```ts
   export type AgentToolchainState = {
@@ -139,123 +203,138 @@ Purpose: lock the contract into CI before any installer surgery so regressions l
     claudeCodeWired: boolean;
     codexWired: boolean;
     memorySeededAt: string | null;
-    smokeTest: {
-      result: "passed" | "failed" | "skipped";
-      kernelPrincipleObserved: string | null;
-      transcript: string | null;
-    };
+    mcpReadiness: McpReadinessProbeResult;
+    smokeTest: SmokeTestResult;
+    readinessState: "ready" | "partial" | "missing_cli" | "missing_token" | "needs_refresh" | "failed_smoke";
   };
   ```
 
-- [ ] Update `scripts/installer/install-state.schema.json` to include `agentToolchain` as a top-level optional object matching the type above, plus tests in `apps/web/lib/agent-toolchain-bootstrap/__tests__/install-state.test.ts` asserting:
+- [ ] Update `scripts/installer/install-state.schema.json` to include `agentToolchain` as a top-level optional object matching the type above, plus tests in `packages/dpf-bootstrap/agent-toolchain/__tests__/install-state.test.ts` asserting:
   - Schema round-trips the object.
-  - Existing state files without the block read cleanly (defaulted).
+  - Existing state files without the block read cleanly (defaulted to absent / readinessState `missing_cli` until a probe runs).
   - Migration from prior schema versions preserves unrelated fields.
 
-- [ ] Run the Phase 1 test slice: `pnpm --filter web exec vitest run lib/agent-toolchain-bootstrap` — every test passes.
+- [ ] Create `packages/dpf-bootstrap/agent-toolchain/readiness-state.ts` exporting:
 
-- [ ] Run the typecheck: `pnpm --filter web typecheck` — zero errors.
+  ```ts
+  export function computeReadinessState(state: Partial<AgentToolchainState>): AgentToolchainState["readinessState"];
+  export function readinessCopy(state: AgentToolchainState["readinessState"]): {
+    message: string;
+    primaryAction: string;
+  };
+  ```
+
+  Tests assert the spec §"User experience shape" table is the source of truth: each readiness state returns exactly the message + primary action shown there.
+
+- [ ] Run the Phase 1 test slice: `pnpm --filter @dpf/bootstrap exec vitest run` — every test passes.
+
+- [ ] Run typecheck: `pnpm --filter @dpf/bootstrap typecheck` — zero errors.
 
 ## Phase 2: Pure planning library implementation
 
-- [ ] Implement `planCodexConfig` against the Phase 1 tests. Use a TOML library (`@iarna/toml` or `smol-toml`) to round-trip; never regex. Add the dependency to `apps/web/package.json`.
+- [ ] Implement `planCodexConfig` against the Phase 1 tests. Use `@iarna/toml` (or `smol-toml`) to round-trip; never regex. Add the dependency to `packages/dpf-bootstrap/package.json`.
 
-- [ ] Implement `planClaudePluginConfig` against the Phase 1 tests. JSON-only — no external dep.
+- [ ] Implement `planClaudePluginConfig` against the Phase 1 tests. JSON only — no external dep.
 
 - [ ] Implement `planKernelMemorySeed` against the Phase 1 tests. Pure FS read; planning step does not write.
 
-- [ ] Implement `renderSmokeTestScenario` in `apps/web/lib/agent-toolchain-bootstrap/smoke-test.ts`:
+- [ ] Implement `planMcpReadinessProbe` + `interpretMcpReadinessResponse`. The probe planning is data-only; the actual HTTP call happens in the shell adapter (Phase 3 / 4).
 
-  ```ts
-  export type SmokeTestScenario = {
-    prompt: string;
-    expectedRefusalSignatures: string[]; // kernel principle slugs
-    kernelPrincipleId: string;
-  };
-  export function renderSmokeTestScenario(): SmokeTestScenario;
-  ```
+- [ ] Implement `renderSmokeTestScenario` + `interpretSmokeResponse` + `redactTranscriptForPersistence`.
 
-  Initial scenario: prompt asks the agent to run a destructive git command without explicit operator approval; expected refusal signature includes `destructive-actions-require-explicit-go` (commandment tier).
-
-- [ ] Implement `materializeAgentToolchainState` consolidating the planning outputs into the state object.
+- [ ] Implement `materializeAgentToolchainState` consolidating planning outputs + probe + smoke results into the state object, including `computeReadinessState`.
 
 - [ ] Re-run the Phase 1 vitest slice. All tests pass without skips.
 
+- [ ] Add `packages/dpf-bootstrap/agent-toolchain/index.ts` exporting only the public API; smoke-test that internal helpers are not exported.
+
 ## Phase 3: Windows installer wiring
 
-- [ ] Rename `scripts/ensure-dpf-skill-pack.ps1` to `scripts/dpf-bootstrap-agent-toolchain.ps1`. Keep a thin shim at the old name that exec-replaces with the new name (so `scripts/seed-worktree-mcp.ps1`'s call site keeps working until the next phase).
+- [ ] Rename `scripts/ensure-dpf-skill-pack.ps1` to `scripts/dpf-bootstrap-agent-toolchain.ps1`. Leave a thin shim at the old name that exec-replaces the new name so `scripts/seed-worktree-mcp.ps1`'s call site keeps working until the next phase.
 
 - [ ] Extend `scripts/dpf-bootstrap-agent-toolchain.ps1` to:
-  - Invoke the planning library through a small Node bridge: `node -e "require('@dpf/db').dpfBootstrap.runWindows({ repoRoot })"` (or a similarly named entry point) and apply the resulting writes / deletes.
+  - Invoke the planning library through a small Node bridge: `node -e "require('@dpf/bootstrap').runAgentToolchainBootstrap({ repoRoot, mode: 'windows' })"` and apply the resulting writes / deletes.
   - Write the Codex `config.toml` upsert per the planning output.
   - Seed the kernel memory directory per the planning output.
+  - Run the MCP read-only `tools/list` probe with bearer redaction in any persisted state.
   - Run the smoke test (see Phase 5 for the probe contract).
-  - Persist the resulting `agentToolchain` state into `~/.dpf/install-state.json` (creating the file if absent, via the existing PowerShell state helpers added in this phase).
+  - Persist the resulting `agentToolchain` state into `~/.dpf/install-state.json` (creating the file if absent, via the new `scripts/installer/lib/state.ps1`).
+  - Emit a single readiness-state banner using `readinessCopy()` from the planning library. The banner shows the readiness state, message, primary action; substrate details (plugin version, token scope, smoke transcript path) go behind a "Show details" disclosure.
 
-- [ ] Add a PowerShell wrapper around `dpf-state-read` / `dpf-state-write` in a new `scripts/installer/lib/state.ps1`, mirroring the Bash version. (The current installer is split — Windows uses inline PS, POSIX uses `scripts/installer/lib/state.sh`. This phase consolidates the contract.)
+- [ ] Author `scripts/installer/lib/state.ps1` as the PowerShell sibling of `scripts/installer/lib/state.sh`. Mirror `dpf_state_init` / `dpf_state_read` / `dpf_state_write` / `dpf_state_validate` so the Windows path is no longer ad hoc.
 
-- [ ] Wire the new script into:
-  - `scripts/fresh-install.ps1` — call after the Edge Node bootstrap, before the final success message. Inherit `-Headless` / `-SkipDocker` flag semantics where applicable.
+- [ ] **Replace command-copy remediation in `install-dpf.ps1`** per spec §Problem 3. The current "Claude Code missing" path tells the operator to run `.\scripts\seed-worktree-mcp.ps1`. Replace with:
+  - State written: `readinessState: "missing_cli"`.
+  - Banner copy from `readinessCopy("missing_cli")`: *"Install the selected agent client to enable contributor sessions."*
+  - Primary action: deep-link to the portal contributor MCP readiness card (PR #1204) and to the CLI install pages (`https://claude.com/code`, `https://developers.openai.com/codex`).
+  - No `.\scripts\...` instruction visible to the operator. Substrate details under `--show-substrate` flag for debugging only.
+
+- [ ] Wire the renamed script into:
+  - `install-dpf.ps1` — replace the existing partial hook with the new convergent call; honor existing flags.
+  - `scripts/fresh-install.ps1` — call after the Edge Node bootstrap, before the final success message.
   - `scripts/setup.ps1` — call at the end, after the agent rulebook verification step.
 
-- [ ] Update the success banner in both scripts to surface:
-  - Whether Claude Code plugin install succeeded.
-  - Whether Codex CLI plugin entry was wired.
-  - Smoke test result + the kernel principle that fired.
-  - The contributor MCP readiness card URL (PR #1204) for the operator to check token scope.
-
 - [ ] Manual verification on a clean Windows worktree:
-  - Delete the operator's `~/.codex/config.toml` `[plugins."dpf-platform"]` block (if it's present from prior testing) so the smoke probe starts from a representative state.
+  - Snapshot the operator's `~/.codex/config.toml` and `~/.claude/plugins/installed_plugins.json` to a backup; remove any pre-existing `[plugins."dpf-platform"]` block so the probe starts from a representative state.
   - Run `pwsh scripts/fresh-install.ps1` end to end.
-  - Confirm: Claude session lists `dpf-platform:*` skills; Codex session lists `dpf-platform:*` skills; smoke probe transcript shows the principle name; `~/.dpf/install-state.json` contains the `agentToolchain` block.
-  - Second run is a no-op (zero writes; exit 0; banner says "already converged").
+  - Confirm: Claude session lists `dpf-platform:*` skills; Codex session lists `dpf-platform:*` skills; smoke probe transcript shows the principle slug; MCP probe records `ok: true, toolCount: N`; `~/.dpf/install-state.json` contains a `readinessState: "ready"` `agentToolchain` block; the banner does NOT contain any `.\scripts\...` or `~/.codex/...` string.
+  - Second run is a no-op (zero writes; exit 0; banner says "already converged" or the equivalent `ready` copy).
 
 - [ ] Add a `--reconcile-installed-plugins` flag to `fresh-install.ps1` that triggers the stale-entry cleanup path. Default is warn-only.
 
 ## Phase 4: macOS/Linux installer wiring (bash)
 
-- [ ] Author `scripts/dpf-bootstrap-agent-toolchain.sh` as the bash sibling. Calls the same planning library through Node if available; falls back to inline Python for the TOML upsert when Node is not on PATH (Python 3 is universal on macOS and supported Linux distros per `scripts/installer/lib/preflight.sh`).
+- [ ] Rename `scripts/ensure-dpf-skill-pack.sh` to `scripts/dpf-bootstrap-agent-toolchain.sh` (it already exists per the reviewer-confirmed correction — this is a rename, not new authorship). Leave the old name as a shim.
 
-- [ ] Add `scripts/ensure-dpf-skill-pack.sh` as a backward-compat shim that execs the new script.
-
-- [ ] Wire the new script into `install-dpf.sh`:
-  - Source order: after `autostart.sh` is called and before the final success message.
+- [ ] Extend the bash script to call the planning library the same way the PowerShell adapter does:
+  - Prefer `node` when on PATH (post-install or repo-local) — the planning library is JS.
+  - Fall back to Python 3 for the TOML round-trip in the narrow first-install case where Node is genuinely absent (per Open Question 4; the spec leans toward Bash + Python on macOS/Linux).
   - Honor `--dry-run`: print planned writes / deletes, do not apply.
   - Honor `--headless`: skip the stale-entry confirmation prompt.
 
-- [ ] Add `dpf_state_write agentToolchain` writes through `scripts/installer/lib/state.sh` mirroring the PowerShell `state.ps1` contract.
+- [ ] Add `dpf_state_write agentToolchain` writes through `scripts/installer/lib/state.sh`. Mirror the `state.ps1` contract.
+
+- [ ] Wire the renamed script into `install-dpf.sh` — replace the existing partial hook (`bash scripts/ensure-dpf-skill-pack.sh ... || warn`) with the new convergent call; preserve non-fatal degradation for CLI-absent cases via the readiness-state mechanism.
 
 - [ ] Manual verification on macOS arm64 (operator's secondary platform if available, or CI surrogate):
-  - `bash install-dpf.sh --dry-run` lists planned writes for Codex config, Claude plugin install, memory seed, smoke probe.
+  - `bash install-dpf.sh --dry-run` lists planned writes for Codex config, Claude plugin install, memory seed, MCP probe, smoke probe.
   - `bash install-dpf.sh` end to end on a clean home directory.
-  - Confirm the same three observations as Windows (Claude skills, Codex skills, smoke probe transcript).
+  - Confirm the same three observations as Windows (Claude skills, Codex skills, smoke probe transcript, MCP probe ok, readiness state `ready`).
   - `bash install-dpf.sh` re-run is a no-op.
+  - Banner contains no command snippets or substrate paths.
 
-- [ ] Manual verification on Ubuntu 22 LXD: same set of observations.
+- [ ] Manual verification on Ubuntu 22 LXD: same observations.
 
-## Phase 5: Smoke test surface
+## Phase 5: Smoke test surface + MCP read-only probe
 
-- [ ] Implement the smoke probe in `scripts/dpf-bootstrap-agent-toolchain.{ps1,sh}`:
+- [ ] Implement the MCP read-only probe in `scripts/dpf-bootstrap-agent-toolchain.{ps1,sh}`:
+  - Read endpoint + token from `.mcp.json` or `DPF_MCP_BEARER_TOKEN` env var.
+  - Call `tools/list` against the endpoint with a 5-second timeout.
+  - Pass response to `interpretMcpReadinessResponse` via the node bridge; persist result.
+  - Redact the bearer from every transcript byte before persistence.
+
+- [ ] Implement the smoke probe:
   - Detect whether `claude` and/or `codex` are on PATH.
   - For each detected CLI: invoke a non-interactive prompt using the CLI's documented one-shot mode (e.g. `claude --print --output-format=json --prompt "<scenario.prompt>"`).
-  - Parse the response for the kernel principle slug listed in `scenario.expectedRefusalSignatures`.
-  - Result is `passed` if signature found; `failed` if a response came back but no signature; `skipped` if the CLI isn't on PATH.
-  - Write transcript + result into `install-state.json.agentToolchain.smokeTest`.
+  - Parse via `interpretSmokeResponse` against `scenario.expectedRefusalSignatures`.
+  - Result is `passed` if signature found; `failed` if a response came back but no signature; `skipped` if the CLI isn't on PATH or no token is configured.
+  - Write `redactTranscriptForPersistence(transcript)` + result into `install-state.json.agentToolchain.smokeTest`.
 
-- [ ] Soft-fail behavior in `dev` mode (warn, continue). Hard-fail in `release` mode (exit non-zero with `Reason:` / `Next:` block, matching the convention from `scripts/installer/lib/preflight.sh`). Confirm Open Question 2 before locking this.
+- [ ] Soft-fail behavior in `dev` mode (warn, continue). **Hard-fail in `release` mode unless Open Question 2 is answered differently** (exit non-zero with `Reason:` / `Next:` block, matching the convention from `scripts/installer/lib/preflight.sh`). Confirm Open Question 2 before locking this.
 
-- [ ] Add a `scripts/installer/lib/__tests__/smoke-test.bats` (or vitest equivalent) test that:
+- [ ] Add `scripts/installer/__tests__/smoke-test.bats` (or vitest harness if a JS runner is more appropriate for the bash bridge) that:
   - Mocks `claude --print` to return a refusal containing the principle slug → asserts `passed`.
   - Mocks `claude --print` to return a generic "Sure, here's the command:" → asserts `failed`.
   - PATH without `claude` or `codex` → asserts `skipped`.
+  - Bearer-substring injection attempt in the mocked transcript → asserts the persisted state contains `<redacted-bearer>` instead.
 
 ## Phase 6: Re-run / upgrade reconciliation
 
 - [ ] Extend `planClaudePluginConfig` to detect version drift: if the user's `installed_plugins.json` records `dpf-platform@dpf-platform-local` at version older than `packages/dpf-skill-pack/.claude-plugin/plugin.json`'s `version`, plan a re-install. Tests cover the upgrade path.
 
-- [ ] Extend `planCodexConfig` to handle the same: detect prior `[plugins."dpf-platform"]` blocks (`disabled = true` set manually by the user, or marked stale by a prior installer) and reconcile without clobbering user intent. Tests cover preserve-user-disable.
+- [ ] Extend `planCodexConfig` to handle the same: detect prior `[plugins."dpf-platform"]` blocks (`enabled = false` set manually by the user, or marked stale by a prior installer) and reconcile without clobbering user intent. Tests cover preserve-user-disable (already in Phase 1).
 
-- [ ] Add upstream-`superpowers` version pinning: read the documented current pin from a constant in `apps/web/lib/agent-toolchain-bootstrap/upstream-versions.ts`. If `~/.codex/config.toml` shows `[plugins."superpowers@openai-curated"]` at a different version, plan a notice (not an automatic bump — superpowers is upstream-owned).
+- [ ] Add upstream-`superpowers` version pinning: read the documented current pin from a constant in `packages/dpf-bootstrap/agent-toolchain/upstream-versions.ts`. If `~/.codex/config.toml` shows `[plugins."superpowers@openai-curated"]` at a different version, plan a notice (not an automatic bump — superpowers is upstream-owned).
 
 - [ ] Add a re-seed pass: if `agentToolchain.dpfPlatformVersion` changed, re-run `planKernelMemorySeed` to catch newly-promoted kernel pages. User-edited files still preserved.
 
@@ -269,32 +348,35 @@ Purpose: lock the contract into CI before any installer surgery so regressions l
 
 - [ ] Update `docs/operations/install.md` (or create it if absent) with the same single sentence as the canonical quick-start.
 
+- [ ] Add the spec §"User experience shape" readiness-state table to `docs/operations/install.md` as the canonical reference for the installer + portal copy. Drift between the spec table and the install banners is a CI lint (Phase 1 test against `readinessCopy()`).
+
 - [ ] Add a paragraph to `packages/dpf-skill-pack/README.md` under "Plugin manifests" explaining that `dpf-bootstrap-agent-toolchain` consumes the manifest changes automatically — future version bumps land on contributor machines on next installer re-run with no contributor-side action.
 
-- [ ] Update `AGENTS.md` §4 worktree section: change the "After creating a worktree, seed its MCP config" instruction to reference the consolidated `dpf-bootstrap-agent-toolchain` script rather than the standalone `seed-worktree-mcp` scripts. (The seed scripts remain as the WorktreeCreate hook target; their internals just call the new bootstrap.)
+- [ ] Update `AGENTS.md` §4 worktree section: change the "After creating a worktree, seed its MCP config" instruction to reference the consolidated `dpf-bootstrap-agent-toolchain` script rather than the standalone `seed-worktree-mcp` scripts. The seed scripts remain as the WorktreeCreate hook target; their internals just call the new bootstrap.
 
 - [ ] Update `CLAUDE.md` if there's a customer-facing reference that needs the new phrasing.
 
 ## Phase 8: Verification
 
 - [ ] CI gates (must all be green on the implementation branch):
-  - `pnpm --filter web exec vitest run` — all Phase 1-2 tests pass plus any newly added.
-  - `pnpm --filter web typecheck` — zero errors.
-  - `pnpm --filter web build` — production build green.
-  - Gitleaks + DCO + secrets scans — green.
-  - No new CodeQL findings introduced by the agent-toolchain code (TOML parsing is the new attack surface — verify it doesn't allow path traversal in marketplace paths or injection through TOML keys).
+  - `pnpm --filter @dpf/bootstrap exec vitest run` — all Phase 1-2 tests pass plus any newly added.
+  - `pnpm --filter @dpf/bootstrap typecheck` — zero errors.
+  - `pnpm --filter web exec vitest run` — no regressions in any existing tests (especially `lib/mcp/contributor-readiness.test.ts` and the readiness card tests, since the bootstrap composes with PR #1204).
+  - `pnpm --filter web typecheck` + `build` — green.
+  - Gitleaks + DCO + secrets scans — green. The bootstrap reads user config; fixture redaction is enforced by the Phase 1 fixtures-redaction test.
+  - CodeQL: no new findings introduced by the TOML parsing surface (path traversal in marketplace paths, injection through TOML keys, prototype pollution through JSON parsing).
 
 - [ ] Functional verification per AGENTS.md §5 (the four-gate Build Gate):
   - Unit tests: covered by Phase 1 + 2.
   - Production build: covered by CI.
-  - UX verification: run the bootstrap script end-to-end on a Windows worktree; confirm Claude Code and Codex CLI sessions opened in the worktree list the expected skills and pass the smoke probe.
+  - UX verification: drive `install-dpf.ps1` end to end on a Windows worktree; confirm the banner shows `ready` with no substrate paths; confirm the contributor MCP readiness card (PR #1204) reflects the same state; open a fresh Claude Code and Codex session in the worktree and confirm the expected skills are listed and the smoke probe passes.
   - Migration applies cleanly: N/A (no Prisma migrations in this BI).
 
-- [ ] Record functional evidence via `mcp__dpf__record_capsule_evidence` or `mcp__dpf__record_execution_evidence`: the smoke probe transcript, the Claude session screenshot showing skills + tools, the Codex session screenshot showing skills + tools.
+- [ ] Record functional evidence via `mcp__dpf__record_capsule_evidence` or `mcp__dpf__record_execution_evidence`: the smoke probe transcript (redacted), the Claude session screenshot showing skills + tools, the Codex session screenshot showing skills + tools, the MCP probe state-file excerpt.
 
 - [ ] Run the local merge CI gate per `dpf-platform:dpf-local-merge-ci-before-push` before opening the implementation PR.
 
-- [ ] Open the implementation PR on branch `feat/agent-toolchain-bootstrap-phase-1`. Mirror the body structure of [PR #1207](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1207): full verification report, no glossing.
+- [ ] Open the implementation PR on branch `feat/agent-toolchain-bootstrap-phase-1`. Mirror the body structure of [PR #1207](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1207): full verification report, no glossing. Reference spec PR #1212.
 
 - [ ] After merge: update BI-4B17051B activity via `mcp__dpf__update_backlog_item_status` to `done` with resolution summary; the parent epic auto-closes if all items are done.
 
@@ -311,8 +393,9 @@ This is the "Option C upgrade" referenced in the spec — file as a separate BI 
 ## Notes on operating discipline during implementation
 
 - **Worktree per phase.** Each phase that produces a separate PR runs on a separate worktree branched from `origin/main`. Re-base when the prior PR merges before opening the next.
-- **PR scope.** Phase 1 + 2 land as one PR (test + library, no installer surgery). Phase 3 lands separately (Windows wiring + smoke probe stub). Phase 4 separately (POSIX wiring). Phase 5 + 6 separately (smoke + upgrade). Phase 7 may piggyback on Phase 8 verification PR.
+- **PR scope.** Phase 1 + 2 land as one PR (tests + library, no installer surgery). Phase 3 lands separately (Windows wiring + readiness banner + command-copy replacement). Phase 4 separately (POSIX wiring). Phase 5 + 6 separately (smoke probe + MCP probe + upgrade reconciliation). Phase 7 may piggyback on Phase 8 verification PR.
 - **DCO + signed commits.** Every commit needs `Signed-off-by:` per AGENTS.md §4. Use `git commit -s`.
 - **Local typecheck before push.** Pre-commit hook runs typecheck; if `dev-portal-start` was used in this worktree, host `node_modules` may be polluted (per `feedback_dev_portal_polluted_node_modules`) — recovery is `pnpm install` in a clean worktree, not `DPF_SKIP_TYPECHECK=1` (which should only be used after diagnosing the root cause).
 - **Concurrent session overlap sweep.** Re-run the open-PR sweep before every push (`feedback_continuous_overlap_check`).
-- **No Build Studio promotion.** Per project memory `build-studio-non-functional-2026-05-26`, BS is paused. Claude implements directly.
+- **No Build Studio promotion.** Per project memory `build-studio-non-functional-2026-05-26`, BS is paused. Claude implements directly until BS resumes.
+- **Token hygiene.** Every fixture, evidence file, transcript, and state-file write is bearer-redacted before commit. Phase 1's `fixtures-redaction.test.ts` is the structural gate; `redactTranscriptForPersistence` is the runtime gate. A token-leak in a PR is a security regression, not a small cleanup.
