@@ -1,6 +1,11 @@
 import { prisma, runCypher } from "@dpf/db";
 import type { CodeGraphEdgeKind } from "./code-graph/types";
 import { CODE_GRAPH_GRAPH_KEY } from "./code-graph/constants";
+import type { TrustAssessment } from "@/lib/trust-vector";
+import {
+  buildCodeGraphCoverageTrust,
+  buildCodeGraphFreshnessTrust,
+} from "@/lib/trust-vector/adapters/code-graph";
 
 const BENCHMARK_REQUIRED_RELATIONSHIPS = [
   "DEFINES",
@@ -25,6 +30,7 @@ export type CodeGraphFreshness = {
   relationshipCounts?: Record<BenchmarkRelationship, number>;
   warnings: string[];
   summary: string;
+  trust?: TrustAssessment;
 };
 
 export type CodeGraphCoverageSummary = {
@@ -35,6 +41,7 @@ export type CodeGraphCoverageSummary = {
   unindexedFiles: string[];
   warnings: string[];
   summary: string;
+  trust?: TrustAssessment;
 };
 
 function buildFreshnessWarnings(input: {
@@ -127,13 +134,24 @@ async function inspectStructuralRelationshipHealth(graphKey: string): Promise<{
 
 export async function getCodeGraphFreshness(
   graphKey = CODE_GRAPH_GRAPH_KEY,
-  options: { inspectStructuralHealth?: boolean } = {},
+  options: { inspectStructuralHealth?: boolean; now?: Date } = {},
 ): Promise<CodeGraphFreshness> {
   const state = await prisma.codeGraphIndexState.findUnique({
     where: { graphKey },
   });
 
   if (!state) {
+    const trust = buildCodeGraphFreshnessTrust({
+      graphKey,
+      available: false,
+      indexStatus: "missing",
+      lastIndexedAt: null,
+      workspaceDirty: false,
+      indexedFileCount: 0,
+      lastError: null,
+      asOf: options.now,
+    });
+
     return {
       graphKey,
       available: false,
@@ -146,6 +164,7 @@ export async function getCodeGraphFreshness(
       lastError: null,
       warnings: ["The code graph has not been built yet."],
       summary: "Code graph has not been built yet for this workspace.",
+      trust,
     };
   }
 
@@ -170,6 +189,17 @@ export async function getCodeGraphFreshness(
       : "No indexed commit recorded yet.",
     ...warnings,
   ].join(" ");
+  const trust = buildCodeGraphFreshnessTrust({
+    graphKey,
+    available: true,
+    indexStatus: state.indexStatus,
+    lastIndexedAt: state.lastIndexedAt,
+    workspaceDirty: state.workspaceDirty,
+    indexedFileCount: state.indexedFileCount,
+    lastError: state.lastError,
+    ...(relationshipHealth ? { relationshipCounts: relationshipHealth.counts } : {}),
+    asOf: options.now,
+  });
 
   return {
     graphKey,
@@ -184,17 +214,29 @@ export async function getCodeGraphFreshness(
     ...(relationshipHealth ? { relationshipCounts: relationshipHealth.counts } : {}),
     warnings,
     summary,
+    trust,
   };
 }
 
 export async function summarizeCodeGraphCoverage(
   filePaths: string[],
   graphKey = CODE_GRAPH_GRAPH_KEY,
+  options: { now?: Date } = {},
 ): Promise<CodeGraphCoverageSummary> {
-  const freshness = await getCodeGraphFreshness(graphKey);
+  const freshness = await getCodeGraphFreshness(graphKey, { now: options.now });
   const uniquePaths = [...new Set(filePaths.filter(Boolean))];
 
   if (!freshness.available || uniquePaths.length === 0) {
+    const trust = buildCodeGraphCoverageTrust({
+      graphKey,
+      available: freshness.available,
+      indexStatus: freshness.indexStatus,
+      indexedFileCount: 0,
+      totalFileCount: uniquePaths.length,
+      warnings: freshness.warnings,
+      asOf: options.now,
+    });
+
     return {
       graphKey,
       available: freshness.available,
@@ -205,6 +247,7 @@ export async function summarizeCodeGraphCoverage(
       summary: uniquePaths.length === 0
         ? "No changed files were available for code-graph coverage analysis."
         : freshness.summary,
+      trust,
     };
   }
 
@@ -230,5 +273,14 @@ export async function summarizeCodeGraphCoverage(
     unindexedFiles,
     warnings: freshness.warnings,
     summary: `Code graph covers ${indexedFiles.length}/${uniquePaths.length} changed files at the current indexed commit.`,
+    trust: buildCodeGraphCoverageTrust({
+      graphKey,
+      available: true,
+      indexStatus: freshness.indexStatus,
+      indexedFileCount: indexedFiles.length,
+      totalFileCount: uniquePaths.length,
+      warnings: freshness.warnings,
+      asOf: options.now,
+    }),
   };
 }
