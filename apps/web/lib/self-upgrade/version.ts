@@ -138,6 +138,11 @@ export async function resolveTargetSha(
 
 export function isShaFresh(deployedSha: string | null, targetSha: string): boolean {
   if (!deployedSha) return false;
-  const minLen = Math.min(deployedSha.length, targetSha.length);
-  return deployedSha.slice(0, minLen) === targetSha.slice(0, minLen);
+  // Both sides must be git-SHA-shaped (40 hex chars) before declaring fresh.
+  // A 64-char content-hash image identity is not comparable to a git SHA;
+  // returning false here preserves the spec invariant that "isFresh => the
+  // running runtime is at the target commit" rather than a coincidental
+  // hex-prefix collision.
+  if (!isGitSha(deployedSha) || !isGitSha(targetSha)) return false;
+  return deployedSha.toLowerCase() === targetSha.toLowerCase();
 }

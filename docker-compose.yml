@@ -137,6 +137,12 @@ services:
       # docker-compose.linux.yml overlay instead (to http://ollama:11434).
       OLLAMA_INTERNAL_URL: ${OLLAMA_INTERNAL_URL:-http://host.docker.internal:11434}
       DEPLOYED_VERSION: ${DEPLOYED_VERSION:-}
+      # Git SHA of the running image — set by the deploy pipeline (or
+      # scripts/build-images.{ps1,sh}) to give /ops/self-upgrade a comparable
+      # identity. When unset, the portal falls back to /app/.dpf-image-version
+      # (baked at build time). See spec §4.1 of
+      # docs/superpowers/specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md.
+      DEPLOYED_SHA: ${DEPLOYED_SHA:-${DPF_VERSION:-}}
       DPF_ENVIRONMENT: production
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
       # Forwarded so scripts/backup-neo4j.sh + scripts/restore-neo4j.sh can

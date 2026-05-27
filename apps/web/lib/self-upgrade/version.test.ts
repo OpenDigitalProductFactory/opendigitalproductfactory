@@ -4,6 +4,7 @@ import {
   buildRemoteHeadCommand,
   compareUpgradeVersions,
   getUpgradeVersionState,
+  isShaFresh,
   resolveTargetSha,
 } from "./version";
 
@@ -55,6 +56,39 @@ describe("getUpgradeVersionState", () => {
 
     expect(state.upToDate).toBe(false);
     expect(state.targetSha).toBe("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+  });
+});
+
+describe("isShaFresh", () => {
+  const SHA_A = "a285216a779f794faa6bdaca95d1d60239bbc264";
+  const SHA_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+  it("returns true when both sides are the same 40-char git SHA", () => {
+    expect(isShaFresh(SHA_A, SHA_A)).toBe(true);
+  });
+
+  it("returns true with case-insensitive comparison", () => {
+    expect(isShaFresh(SHA_A.toUpperCase(), SHA_A)).toBe(true);
+  });
+
+  it("returns false for two different git SHAs", () => {
+    expect(isShaFresh(SHA_A, SHA_B)).toBe(false);
+  });
+
+  it("returns false when deployedSha is null", () => {
+    expect(isShaFresh(null, SHA_A)).toBe(false);
+  });
+
+  it("returns false when deployedSha is a 64-char content hash even if prefix matches", () => {
+    // A 64-char content hash that happens to start with the same chars as a
+    // 40-char git SHA should NOT be reported as fresh — the previous prefix-
+    // based implementation would have incorrectly returned true here.
+    const contentHash = SHA_A + "0".repeat(24);
+    expect(isShaFresh(contentHash, SHA_A)).toBe(false);
+  });
+
+  it("returns false when target is not a git SHA", () => {
+    expect(isShaFresh(SHA_A, "not-a-sha")).toBe(false);
   });
 });
 

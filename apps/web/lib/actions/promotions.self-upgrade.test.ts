@@ -51,6 +51,7 @@ vi.mock("@/lib/platform/version", () => ({
     version: "1.0.0",
     publishedAt: new Date("2026-05-24T00:00:00.000Z"),
     gitSha: "abc1234",
+    imageVersion: { raw: "abc1234", source: "git-sha" as const },
     note: "baseline",
   }),
 }));
@@ -118,7 +119,7 @@ describe("getSelfUpgradeStatus – access control", () => {
   it("checks view_operations permission with user role", async () => {
     vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
     vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(false);
-    vi.mocked(SelfUpgrade.getDeployedSha).mockReturnValue(null);
+    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.isShaFresh).mockReturnValue(false);
     vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
@@ -141,7 +142,7 @@ describe("getSelfUpgradeStatus", () => {
   it("returns config fields, window status, sha info, and latest run", async () => {
     vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
     vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(true);
-    vi.mocked(SelfUpgrade.getDeployedSha).mockReturnValue("abc1234");
+    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue("abc1234");
     vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue("def5678");
     vi.mocked(SelfUpgrade.isShaFresh).mockReturnValue(false);
     vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(mockRun as never);
@@ -164,7 +165,7 @@ describe("getSelfUpgradeStatus", () => {
   it("returns isFresh=true when deployed sha matches target", async () => {
     vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
     vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(false);
-    vi.mocked(SelfUpgrade.getDeployedSha).mockReturnValue("def5678");
+    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue("def5678");
     vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue("def5678");
     vi.mocked(SelfUpgrade.isShaFresh).mockReturnValue(true);
     vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
@@ -178,7 +179,7 @@ describe("getSelfUpgradeStatus", () => {
   it("returns isFresh=false and skips isShaFresh when targetSha is null", async () => {
     vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
     vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(false);
-    vi.mocked(SelfUpgrade.getDeployedSha).mockReturnValue("abc1234");
+    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue("abc1234");
     vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
 
@@ -193,7 +194,7 @@ describe("getSelfUpgradeStatus", () => {
     const disabledConfig = { ...mockConfig, enabled: false };
     vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(disabledConfig as never);
     vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(false);
-    vi.mocked(SelfUpgrade.getDeployedSha).mockReturnValue(null);
+    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
 
@@ -209,7 +210,7 @@ describe("getSelfUpgradeStatus", () => {
     };
     vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(windowConfig as never);
     vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(false);
-    vi.mocked(SelfUpgrade.getDeployedSha).mockReturnValue(null);
+    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
 
@@ -222,7 +223,7 @@ describe("getSelfUpgradeStatus", () => {
     const betaConfig = { ...mockConfig, channel: "beta" };
     vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(betaConfig as never);
     vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(false);
-    vi.mocked(SelfUpgrade.getDeployedSha).mockReturnValue(null);
+    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
 
