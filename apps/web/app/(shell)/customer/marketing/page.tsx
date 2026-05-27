@@ -242,7 +242,11 @@ export default async function CustomerMarketingPage() {
 
       <MarketingStrategyOverview snapshot={snapshot} />
 
-      <ApprovalQueuePanel drafts={snapshot.pendingDrafts} />
+      <ApprovalQueuePanel
+        pendingDrafts={snapshot.pendingDrafts}
+        approvedDrafts={snapshot.approvedDrafts}
+        connectedChannels={snapshot.connectedChannels}
+      />
     </div>
   );
 }

@@ -10,6 +10,7 @@ export type NativeIntegrationId =
   | "google-business-profile"
   | "facebook"
   | "facebook-pages"
+  | "linkedin-personal-social"
   | "mailchimp";
 
 export type NativeIntegrationDescriptor = {
@@ -207,6 +208,21 @@ export const NATIVE_INTEGRATIONS: NativeIntegrationDescriptor[] = [
     enables: ["Audience context", "Campaign context", "Outreach context"],
     relevantAgentIds: ["customer-advisor", "coo"],
     requiredGrantKeys: ["marketing_read"],
+  },
+  {
+    id: "linkedin-personal-social",
+    integrationId: "linkedin-personal-social",
+    provider: "linkedin",
+    name: "LinkedIn (personal publishing)",
+    description: "Publish approved marketing drafts to your own LinkedIn feed. You bring your own LinkedIn developer app; DPF stores the refresh token encrypted in this install.",
+    href: "/platform/tools/integrations/linkedin-personal-social",
+    category: "marketing",
+    pricingModel: "paid",
+    model: "native",
+    tags: ["marketing", "social", "publish", "linkedin"],
+    enables: ["Publish marketing draft to LinkedIn feed"],
+    relevantAgentIds: ["marketing-specialist"],
+    requiredGrantKeys: ["marketing_write"],
   },
 ];
 
