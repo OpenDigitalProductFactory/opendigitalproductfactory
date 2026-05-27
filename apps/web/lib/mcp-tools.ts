@@ -3633,6 +3633,35 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    // BI-F9E7B780: governance-surface rollup. Same shape as
+    // list_my_capability_needs but UN-scoped from the calling agent —
+    // returns all coworker needs across all agents, plus filter-options
+    // and counts-by-status/severity/kind summaries that the existing
+    // /platform/ai/capability-needs admin page already renders. Lets
+    // taxonomy audits query governed capability evidence without direct
+    // SQL fallback.
+    name: "list_all_capability_needs",
+    description:
+      "List capability needs submitted by ALL coworkers (not scoped to the calling agent), optionally filtered by agentId, status, kind, or severity. Returns the rich review shape used by the /platform/ai/capability-needs admin page: summary counts by status/severity/kind, filter-option enums, and the full need list. Read-only governance surface for taxonomy audits.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agentId: { type: "string", description: "Optional — filter to one coworker's needs. Omit to return all." },
+        status: { type: "string", enum: [...COWORKER_CAPABILITY_NEED_STATUSES] },
+        kind: { type: "string", enum: [...COWORKER_CAPABILITY_NEED_KINDS] },
+        severity: { type: "string", enum: [...COWORKER_CAPABILITY_NEED_SEVERITIES] },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+    annotations: {
+      readOnlyHint: true,
+      idempotentHint: true,
+    },
+  },
+  {
     name: "prefill_onboarding_wizard",
     description: "Pre-fill the regulation onboarding wizard with AI-drafted data. Stores a draft and returns the wizard URL for human review.",
     inputSchema: {
@@ -12402,6 +12431,54 @@ export async function executeTool(
         success: true,
         message: `Found ${needs.length} capability need${needs.length === 1 ? "" : "s"}.`,
         data: { needs },
+      };
+    }
+
+    case "list_all_capability_needs": {
+      // BI-F9E7B780 — governance-surface rollup, not scoped to the calling
+      // coworker. Reuses the same review-service helper that powers the
+      // /platform/ai/capability-needs admin page so the MCP surface and the
+      // operator UI agree on shape (summary counts, filter-option enums,
+      // full need list).
+      const { getCoworkerCapabilityNeedReview } = await import(
+        "@/lib/coworker-self-assessment/review-service"
+      );
+      const agentId = typeof params["agentId"] === "string" && params["agentId"].length > 0
+        ? params["agentId"]
+        : undefined;
+      const status = COWORKER_CAPABILITY_NEED_STATUSES.includes(
+        params["status"] as CoworkerCapabilityNeedStatus,
+      )
+        ? (params["status"] as CoworkerCapabilityNeedStatus)
+        : undefined;
+      const kind = COWORKER_CAPABILITY_NEED_KINDS.includes(
+        params["kind"] as CoworkerCapabilityNeedKind,
+      )
+        ? (params["kind"] as CoworkerCapabilityNeedKind)
+        : undefined;
+      const severity = COWORKER_CAPABILITY_NEED_SEVERITIES.includes(
+        params["severity"] as CoworkerCapabilityNeedSeverity,
+      )
+        ? (params["severity"] as CoworkerCapabilityNeedSeverity)
+        : undefined;
+
+      const review = await getCoworkerCapabilityNeedReview({
+        agentId,
+        status,
+        kind,
+        severity,
+      });
+
+      return {
+        success: true,
+        message: `Found ${review.summary.total} capability need${
+          review.summary.total === 1 ? "" : "s"
+        } across all coworkers.`,
+        data: {
+          summary: review.summary,
+          filterOptions: review.filterOptions,
+          needs: review.needs,
+        },
       };
     }
 
