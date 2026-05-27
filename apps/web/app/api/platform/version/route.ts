@@ -15,6 +15,7 @@ export async function GET() {
       version: v.version,
       publishedAt: v.publishedAt.toISOString(),
       gitSha: v.gitSha,
+      imageVersion: v.imageVersion,
       note: v.note,
     },
     { headers: { "cache-control": "no-store" } },

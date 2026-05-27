@@ -42,6 +42,17 @@ export const CONTRIBUTOR_INVENTORY_SYNC_JOB_ID = CONTRIBUTOR_INVENTORY_JOB_ID;
 const CRON_INTERVAL_MIN = 10;
 const STUCK_THRESHOLD_MS = 2 * CRON_INTERVAL_MIN * 60_000;
 
+// Phase 6 — retention + notifications. Spec §"Cleanup strategy" /
+// §"Operator notifications".
+const RETENTION_WINDOW_DAYS = 7;
+const RETENTION_WINDOW_MS = RETENTION_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+const PROLONGED_FAILURE_RUN_COUNT = 6;
+const STALE_CRON_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
+const NOTIFICATION_GITHUB_CATEGORY = "contributor-inventory-github";
+const NOTIFICATION_CRON_CATEGORY = "contributor-inventory-cron";
+const NOTIFICATION_GITHUB_SUBJECT = "github-pr-sync";
+const NOTIFICATION_CRON_SUBJECT = "contributor-inventory-sync";
+
 export type SyncSourceKey = "git-worktree" | "git-branch" | "github-pr";
 
 export type SyncSourceResult =
@@ -73,6 +84,12 @@ export type RunSyncResult = {
   insertedRows: number;
   reaped?: number;
   durationMs: number;
+  /** Phase 6 — rows deleted by the retention sweep; undefined if cleanup failed or was skipped. */
+  cleanupDeletedRuns?: number;
+  /** Phase 6 — notifications written this run (one new row per category that flipped state). */
+  notificationsCreated?: number;
+  /** Phase 6 — notifications resolved (set resolvedAt) this run. */
+  notificationsResolved?: number;
 };
 
 export type PerSourceSummary = {
@@ -189,6 +206,13 @@ export async function runContributorInventorySync(
           .join("; ") || "all sources failed"
       : null;
   const nextRunAt = new Date(now.getTime() + CRON_INTERVAL_MIN * 60_000);
+  // Capture lastRunAt BEFORE the upsert so the stale-cron check below can
+  // see how long the previous run was ago — useful for "cron resumed after
+  // a gap" notifications.
+  const priorHeartbeat = await prisma.scheduledJob.findUnique({
+    where: { jobId: CONTRIBUTOR_INVENTORY_JOB_ID },
+    select: { lastRunAt: true },
+  });
   await prisma.scheduledJob.upsert({
     where: { jobId: CONTRIBUTOR_INVENTORY_JOB_ID },
     create: {
@@ -208,6 +232,49 @@ export async function runContributorInventorySync(
     },
   });
 
+  // Phase 6 — retention + notifications. Each is wrapped in its own try/catch
+  // so a cleanup or notification failure does not fail the run as a whole.
+  // Spec §"Cleanup strategy" / §"Operator notifications".
+  let cleanupDeletedRuns: number | undefined;
+  let notificationsCreated = 0;
+  let notificationsResolved = 0;
+
+  try {
+    cleanupDeletedRuns = await runRetentionSweep(now);
+  } catch (err) {
+    // Cleanup failure is logged but does not break the cron — the next tick
+    // will retry, and the read path is unaffected by stale rows.
+    console.warn(
+      "[contributor-inventory-sync] retention sweep failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+
+  try {
+    const githubResult = await syncGithubFailureNotification(now);
+    notificationsCreated += githubResult.created;
+    notificationsResolved += githubResult.resolved;
+  } catch (err) {
+    console.warn(
+      "[contributor-inventory-sync] github notification sync failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+
+  try {
+    const cronResult = await syncStaleCronNotification(
+      now,
+      priorHeartbeat?.lastRunAt ?? null,
+    );
+    notificationsCreated += cronResult.created;
+    notificationsResolved += cronResult.resolved;
+  } catch (err) {
+    console.warn(
+      "[contributor-inventory-sync] cron heartbeat notification sync failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+
   return {
     syncRunId,
     status,
@@ -215,7 +282,217 @@ export async function runContributorInventorySync(
     insertedRows,
     reaped: reapStuckRuns ? reaped : undefined,
     durationMs,
+    cleanupDeletedRuns,
+    notificationsCreated,
+    notificationsResolved,
   };
+}
+
+// ─── Phase 6 helpers: retention + notifications ─────────────────────────────
+
+/**
+ * Retention sweep — delete ContributorInventorySyncRun rows older than the
+ * 7-day window EXCEPT those that are the latest-successful for any of the
+ * three snapshot sources. The schema has ON DELETE CASCADE from
+ * ContributorInventorySnapshot.syncRunId so the snapshot rows go with their
+ * run row atomically.
+ *
+ * The preservation guard defends against the "cron has been broken for
+ * >7 days" failure mode: even an ancient snapshot stays around as long as
+ * it's still the freshest the dashboard has, so the page never goes blank
+ * after a long outage. Spec §"Cleanup strategy".
+ *
+ * Returns the count of run rows actually deleted (cascade-delete on
+ * snapshot rows is implicit).
+ */
+async function runRetentionSweep(now: Date): Promise<number> {
+  const { prisma } = await import("@dpf/db");
+  const cutoff = new Date(now.getTime() - RETENTION_WINDOW_MS);
+
+  // Find the latest-successful syncRunId per source. At most three.
+  const sources: SyncSourceKey[] = ["git-worktree", "git-branch", "github-pr"];
+  const preserveSet = new Set<string>();
+  for (const source of sources) {
+    const row = await prisma.contributorInventorySyncRun.findFirst({
+      where: { perSourceResult: { path: [source, "ok"], equals: true } },
+      orderBy: { startedAt: "desc" },
+      select: { syncRunId: true },
+    });
+    if (row) preserveSet.add(row.syncRunId);
+  }
+
+  const result = await prisma.contributorInventorySyncRun.deleteMany({
+    where: {
+      startedAt: { lt: cutoff },
+      syncRunId: { notIn: Array.from(preserveSet) },
+    },
+  });
+  return result.count;
+}
+
+/**
+ * Prolonged-GitHub-failure notification.
+ *
+ * Looks at the most recent N completed runs. If the GitHub source was NOT
+ * ok in EVERY one of those runs, fire a warning notification (idempotent via
+ * the existing-row check). If GitHub was ok in ANY of those runs, resolve
+ * any open notification.
+ *
+ * The `not-configured` state (no credential bound) does NOT count as a
+ * failure — that's the normal customer-install posture. Spec
+ * §"Operator notifications" point 3.
+ *
+ * Returns the count of notifications created and resolved this run.
+ */
+async function syncGithubFailureNotification(
+  now: Date,
+): Promise<{ created: number; resolved: number }> {
+  const { prisma } = await import("@dpf/db");
+
+  const recentRuns = await prisma.contributorInventorySyncRun.findMany({
+    where: { status: { in: ["completed", "partial"] } },
+    orderBy: { startedAt: "desc" },
+    take: PROLONGED_FAILURE_RUN_COUNT,
+    select: { perSourceResult: true },
+  });
+
+  if (recentRuns.length < PROLONGED_FAILURE_RUN_COUNT) {
+    // Not enough history yet — neither fire nor resolve.
+    return { created: 0, resolved: 0 };
+  }
+
+  const allFailed = recentRuns.every((r) => {
+    const psr = (r.perSourceResult ?? {}) as Record<
+      string,
+      { ok?: boolean; state?: string }
+    >;
+    const gh = psr["github-pr"];
+    // not-configured is NOT a failure — operator hasn't connected GitHub
+    // and we should not nag them about it.
+    if (gh?.state === "not-configured") return false;
+    return gh?.ok === false;
+  });
+
+  if (allFailed) {
+    const existing = await prisma.platformNotification.findFirst({
+      where: {
+        category: NOTIFICATION_GITHUB_CATEGORY,
+        subjectId: NOTIFICATION_GITHUB_SUBJECT,
+        resolvedAt: null,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (existing && existing.severity === "warning") {
+      return { created: 0, resolved: 0 }; // idempotent — same tier
+    }
+    if (existing) {
+      await prisma.platformNotification.updateMany({
+        where: {
+          category: NOTIFICATION_GITHUB_CATEGORY,
+          subjectId: NOTIFICATION_GITHUB_SUBJECT,
+          resolvedAt: null,
+        },
+        data: { resolvedAt: now },
+      });
+    }
+    await prisma.platformNotification.create({
+      data: {
+        severity: "warning",
+        category: NOTIFICATION_GITHUB_CATEGORY,
+        subjectId: NOTIFICATION_GITHUB_SUBJECT,
+        message:
+          "GitHub inventory sync has been failing for over an hour. Reconnect on the Contributor MCP card.",
+      },
+    });
+    return { created: 1, resolved: existing ? 1 : 0 };
+  }
+
+  // GitHub succeeded in at least one of the most recent N runs — resolve any
+  // open notification.
+  const resolved = await prisma.platformNotification.updateMany({
+    where: {
+      category: NOTIFICATION_GITHUB_CATEGORY,
+      subjectId: NOTIFICATION_GITHUB_SUBJECT,
+      resolvedAt: null,
+    },
+    data: { resolvedAt: now },
+  });
+  return { created: 0, resolved: resolved.count };
+}
+
+/**
+ * Stale-cron-heartbeat notification.
+ *
+ * If the previous `ScheduledJob.lastRunAt` was more than 2 hours ago, fire a
+ * critical notification — the cron resumed after a gap. If it was recent
+ * (or the heartbeat row didn't exist before this run, meaning we're on a
+ * fresh install), resolve any open notification.
+ *
+ * The check is done against the PRIOR lastRunAt captured before the upsert.
+ * That makes "cron has been silent for hours and just woke up" detectable.
+ *
+ * A truly silent cron (one that's never running) cannot fire its own
+ * notification from inside this runner — that's an external-watcher concern
+ * deliberately scoped out of this slice. Spec §"Operator notifications"
+ * point 2.
+ */
+async function syncStaleCronNotification(
+  now: Date,
+  priorLastRunAt: Date | null,
+): Promise<{ created: number; resolved: number }> {
+  const { prisma } = await import("@dpf/db");
+
+  const gapMs = priorLastRunAt ? now.getTime() - priorLastRunAt.getTime() : 0;
+  const isStale = priorLastRunAt !== null && gapMs > STALE_CRON_THRESHOLD_MS;
+
+  const existing = await prisma.platformNotification.findFirst({
+    where: {
+      category: NOTIFICATION_CRON_CATEGORY,
+      subjectId: NOTIFICATION_CRON_SUBJECT,
+      resolvedAt: null,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (isStale) {
+    if (existing && existing.severity === "critical") {
+      return { created: 0, resolved: 0 }; // idempotent
+    }
+    if (existing) {
+      await prisma.platformNotification.updateMany({
+        where: {
+          category: NOTIFICATION_CRON_CATEGORY,
+          subjectId: NOTIFICATION_CRON_SUBJECT,
+          resolvedAt: null,
+        },
+        data: { resolvedAt: now },
+      });
+    }
+    const gapMinutes = Math.round(gapMs / 60_000);
+    await prisma.platformNotification.create({
+      data: {
+        severity: "critical",
+        category: NOTIFICATION_CRON_CATEGORY,
+        subjectId: NOTIFICATION_CRON_SUBJECT,
+        message: `Contributor inventory cron resumed after a ${gapMinutes}-minute gap. Check Inngest health.`,
+      },
+    });
+    return { created: 1, resolved: existing ? 1 : 0 };
+  }
+
+  // Fresh / no-prior-run / recent — resolve any open notification.
+  if (existing) {
+    await prisma.platformNotification.updateMany({
+      where: {
+        category: NOTIFICATION_CRON_CATEGORY,
+        subjectId: NOTIFICATION_CRON_SUBJECT,
+        resolvedAt: null,
+      },
+      data: { resolvedAt: now },
+    });
+    return { created: 0, resolved: 1 };
+  }
+  return { created: 0, resolved: 0 };
 }
 
 function summarize(res: SyncSourceResult): PerSourceSummary {

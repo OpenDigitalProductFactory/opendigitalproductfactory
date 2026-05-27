@@ -47,6 +47,7 @@ const baseStatus = {
   channel: "stable",
   inMaintenanceWindow: false,
   deployedSha: null,
+  deployedShaSource: "unknown" as const,
   targetSha: null,
   isFresh: false,
   latestRun: null,
@@ -54,6 +55,7 @@ const baseStatus = {
     version: "1.0.0",
     publishedAt: "2026-05-24T00:00:00.000Z",
     gitSha: "abc1234",
+    imageVersion: null,
     note: "baseline",
   },
 } as const;

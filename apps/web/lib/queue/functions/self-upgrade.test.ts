@@ -179,7 +179,7 @@ describe("success path", () => {
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
     mocks.isInMaintenanceWindow.mockReturnValue(true);
     mocks.resolveTargetSha.mockResolvedValue("abc1234deadbeef");
-    mocks.getDeployedSha.mockReturnValue("oldsha1");
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
     mocks.isShaFresh.mockReturnValue(false);
     setupQuiescenceReady();
     mocks.getLatestRun.mockResolvedValue(null);
@@ -296,7 +296,7 @@ describe("failure path", () => {
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
     mocks.isInMaintenanceWindow.mockReturnValue(true);
     mocks.resolveTargetSha.mockResolvedValue("abc1234deadbeef");
-    mocks.getDeployedSha.mockReturnValue("oldsha1");
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
     mocks.isShaFresh.mockReturnValue(false);
     setupQuiescenceReady();
     mocks.getLatestRun.mockResolvedValue(null);
@@ -366,7 +366,7 @@ describe("quiescence-defer path (BI-QUIESCE-010)", () => {
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
     mocks.isInMaintenanceWindow.mockReturnValue(true);
     mocks.resolveTargetSha.mockResolvedValue("abc1234deadbeef");
-    mocks.getDeployedSha.mockReturnValue("oldsha1");
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
     mocks.isShaFresh.mockReturnValue(false);
     mocks.getLatestRun.mockResolvedValue(null);
     mocks.createRun.mockResolvedValue({ runId: "SUR-DEFER" });

@@ -30,7 +30,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const config = await getQuiescenceConfig();
-    const sha = getDeployedSha();
+    const sha = await getDeployedSha();
     return NextResponse.json(
       {
         level: config.level,
