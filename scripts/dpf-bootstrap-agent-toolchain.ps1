@@ -197,21 +197,57 @@ if ($plan.memory.writes.Count -gt 0) {
     Write-Ok "Kernel-tier memory already converged."
 }
 
-# 4. MCP read-only probe — stub for Phase 3; Phase 5 implements the live call.
-$mcpReadiness = if ($HasToken) {
-    @{ ok = $false; reason = "endpoint_unreachable"; httpStatus = $null }  # Phase 5 replaces.
-} else {
-    @{ ok = $false; reason = "no_token"; httpStatus = $null }
+# 4 + 5. Live probes (Phase 5). Bridge subprocess runs MCP tools/list probe
+# and kernel-principle smoke probe; results are bearer-redacted by the probe
+# runners themselves before being persisted.
+$mcpReadiness = $null
+$smokeResult  = $null
+
+if (-not $DryRun.IsPresent) {
+    $probesCli = Join-Path $RepoRoot "packages\dpf-bootstrap\src\agent-toolchain\cli\run-probes.ts"
+    if (Test-Path -LiteralPath $probesCli) {
+        $probeArgs = @(
+            "--filter", "@dpf/bootstrap", "exec",
+            "tsx", $probesCli,
+            "--mcp-endpoint", $McpEndpoint
+        )
+        if ($HasToken) {
+            $probeArgs += @("--token", $env:DPF_MCP_BEARER_TOKEN)
+        }
+        try {
+            $probeJson = & pnpm @probeArgs 2>$null
+            if ($LASTEXITCODE -eq 0 -and $probeJson) {
+                $probeResult = $probeJson | ConvertFrom-Json
+                # ConvertFrom-Json returns PSCustomObject — re-serialize as
+                # nested hashtables so Set-DpfStateValue round-trips cleanly.
+                $mcpReadiness = $probeResult.mcpReadiness | ConvertTo-Json -Depth 6 -Compress | ConvertFrom-Json -AsHashtable
+                $smokeResult  = $probeResult.smokeTest    | ConvertTo-Json -Depth 6 -Compress | ConvertFrom-Json -AsHashtable
+            } else {
+                Write-Warn2 "run-probes exited $LASTEXITCODE; recording probes as skipped."
+            }
+        } catch {
+            Write-Warn2 "run-probes invocation failed: $_"
+        }
+    } else {
+        Write-Warn2 "Probes CLI not found at $probesCli; recording probes as skipped."
+    }
 }
 
-# 5. Smoke probe — stub for Phase 3 returning `skipped`; Phase 5 implements.
-$smokeResult = if (-not ($ClaudePresent -or $CodexPresent)) {
-    @{ result = "skipped"; reason = "claude_not_on_path" }
-} elseif (-not $HasToken) {
-    @{ result = "skipped"; reason = "no_token" }
-} else {
-    # Even with everything present, this is Phase 5 work. Mark explicitly.
-    @{ result = "skipped"; reason = "no_token" }
+# Fall through to skip stubs if probes didn't run (dry-run, missing CLI, or
+# probe-runner failure). Skipping is honest and surfaces in the state.
+if ($null -eq $mcpReadiness) {
+    $mcpReadiness = if ($HasToken) {
+        @{ ok = $false; reason = "endpoint_unreachable"; httpStatus = $null }
+    } else {
+        @{ ok = $false; reason = "no_token"; httpStatus = $null }
+    }
+}
+if ($null -eq $smokeResult) {
+    $smokeResult = if (-not ($ClaudePresent -or $CodexPresent)) {
+        @{ result = "skipped"; reason = "claude_not_on_path" }
+    } else {
+        @{ result = "skipped"; reason = "no_token" }
+    }
 }
 
 # 6. Materialize state and write to install-state.json.
@@ -227,11 +263,21 @@ $state = [ordered]@{
     readinessState      = if ($plan.preview.readinessState -eq 'ready' -and (-not $claudeWired -or -not $codexWired)) { 'partial' } else { $plan.preview.readinessState }
 }
 
-# Recompute readinessState from the actual applied facts, not the preview.
+# Recompute readinessState from the applied facts + probe outcomes. Mirrors
+# computeReadinessState() in @dpf/bootstrap/readiness-state.ts: order-of-checks
+# is most-fundamental-first so the primary remediation is unambiguous.
 if (-not $claudeWired -and -not $codexWired) {
     $state.readinessState = "missing_cli"
-} elseif (-not $HasToken) {
-    $state.readinessState = "missing_token"
+} elseif (-not $mcpReadiness.ok) {
+    if ($mcpReadiness.reason -in @("no_token", "scope_insufficient")) {
+        $state.readinessState = "missing_token"
+    } elseif ($mcpReadiness.reason -in @("endpoint_unreachable", "unexpected_shape")) {
+        $state.readinessState = "needs_refresh"
+    } else {
+        $state.readinessState = "needs_refresh"
+    }
+} elseif ($smokeResult.result -eq "failed") {
+    $state.readinessState = "failed_smoke"
 } elseif (-not $claudeWired -or -not $codexWired) {
     $state.readinessState = "partial"
 } else {

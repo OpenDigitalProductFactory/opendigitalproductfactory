@@ -301,28 +301,89 @@ PY
   fi
 fi
 
-# --- Stubs for Phase 5 probes -----------------------------------------------
+# --- Live probes (Phase 5) ---------------------------------------------------
 
-if [ "$HAS_TOKEN" -eq 1 ]; then
-  MCP_READINESS='{"ok": false, "reason": "endpoint_unreachable", "httpStatus": null}'
+# Defaults if probes are skipped (dry-run / no token / runner failure).
+MCP_READINESS=""
+SMOKE_TEST=""
+PROBE_REASON="" # `dry_run` | `no_probes_cli` | `runner_failed` | ""
+
+if [ "$DRY_RUN" -eq 1 ]; then
+  PROBE_REASON="dry_run"
 else
-  MCP_READINESS='{"ok": false, "reason": "no_token", "httpStatus": null}'
+  probes_cli="$REPO_ROOT/packages/dpf-bootstrap/src/agent-toolchain/cli/run-probes.ts"
+  if [ ! -f "$probes_cli" ]; then
+    PROBE_REASON="no_probes_cli"
+  else
+    probe_args=(
+      --filter @dpf/bootstrap exec
+      tsx "$probes_cli"
+      --mcp-endpoint "$MCP_ENDPOINT"
+    )
+    [ $HAS_TOKEN -eq 1 ] && probe_args+=(--token "${DPF_MCP_BEARER_TOKEN:-}")
+
+    PROBE_TMP="$(mktemp)"
+    if pnpm "${probe_args[@]}" > "$PROBE_TMP" 2>/dev/null; then
+      # Bridge stdout is the JSON document. Bash heredoc gotcha (see Phase 4
+      # commit message) is avoided by passing PROBE_FILE as env var.
+      sed -n '/^{/,$p' "$PROBE_TMP" > "${PROBE_TMP}.json"
+      mv "${PROBE_TMP}.json" "$PROBE_TMP"
+      MCP_READINESS="$(PROBE_FILE="$PROBE_TMP" python3 -c '
+import json, os
+with open(os.environ["PROBE_FILE"]) as f:
+    p = json.load(f)
+print(json.dumps(p["mcpReadiness"]))
+')"
+      SMOKE_TEST="$(PROBE_FILE="$PROBE_TMP" python3 -c '
+import json, os
+with open(os.environ["PROBE_FILE"]) as f:
+    p = json.load(f)
+print(json.dumps(p["smokeTest"]))
+')"
+    else
+      PROBE_REASON="runner_failed"
+    fi
+    rm -f "$PROBE_TMP"
+  fi
 fi
 
-if [ "$CLAUDE_PRESENT" -eq 0 ] && [ "$CODEX_PRESENT" -eq 0 ]; then
-  SMOKE_TEST='{"result": "skipped", "reason": "claude_not_on_path"}'
-elif [ "$HAS_TOKEN" -eq 0 ]; then
-  SMOKE_TEST='{"result": "skipped", "reason": "no_token"}'
-else
-  SMOKE_TEST='{"result": "skipped", "reason": "no_token"}'
+if [ -z "$MCP_READINESS" ]; then
+  if [ $HAS_TOKEN -eq 1 ]; then
+    MCP_READINESS='{"ok": false, "reason": "endpoint_unreachable", "httpStatus": null}'
+  else
+    MCP_READINESS='{"ok": false, "reason": "no_token", "httpStatus": null}'
+  fi
 fi
 
-# --- Compute final readiness from applied facts -----------------------------
+if [ -z "$SMOKE_TEST" ]; then
+  if [ $CLAUDE_PRESENT -eq 0 ] && [ $CODEX_PRESENT -eq 0 ]; then
+    SMOKE_TEST='{"result": "skipped", "reason": "claude_not_on_path"}'
+  else
+    SMOKE_TEST='{"result": "skipped", "reason": "no_token"}'
+  fi
+fi
+
+if [ -n "$PROBE_REASON" ] && [ "$PROBE_REASON" != "dry_run" ]; then
+  warn "Probes were not exercised ($PROBE_REASON); readiness recorded from stubs."
+fi
+
+# --- Compute final readiness from applied facts + probe results ------------
+
+# Mirrors computeReadinessState() in @dpf/bootstrap/readiness-state.ts.
+MCP_OK="$(printf '%s' "$MCP_READINESS" | python3 -c 'import json,sys; print(json.load(sys.stdin)["ok"])')"
+MCP_REASON="$(printf '%s' "$MCP_READINESS" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("reason",""))')"
+SMOKE_RESULT="$(printf '%s' "$SMOKE_TEST" | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"])')"
 
 if [ "$CLAUDE_WIRED" -eq 0 ] && [ "$CODEX_WIRED" -eq 0 ]; then
   FINAL_STATE="missing_cli"
-elif [ "$HAS_TOKEN" -eq 0 ]; then
-  FINAL_STATE="missing_token"
+elif [ "$MCP_OK" != "True" ]; then
+  case "$MCP_REASON" in
+    no_token|scope_insufficient) FINAL_STATE="missing_token" ;;
+    endpoint_unreachable|unexpected_shape) FINAL_STATE="needs_refresh" ;;
+    *)                                     FINAL_STATE="needs_refresh" ;;
+  esac
+elif [ "$SMOKE_RESULT" = "failed" ]; then
+  FINAL_STATE="failed_smoke"
 elif [ "$CLAUDE_WIRED" -eq 0 ] || [ "$CODEX_WIRED" -eq 0 ]; then
   FINAL_STATE="partial"
 else
