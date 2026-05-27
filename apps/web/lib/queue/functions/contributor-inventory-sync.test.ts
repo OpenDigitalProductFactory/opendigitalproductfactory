@@ -20,8 +20,15 @@ const mocks = vi.hoisted(() => ({
   syncRunUpdateMany: vi.fn(),
   syncRunCreate: vi.fn(),
   syncRunUpdate: vi.fn(),
+  syncRunFindFirst: vi.fn(),
+  syncRunFindMany: vi.fn(),
+  syncRunDeleteMany: vi.fn(),
   snapshotCreateMany: vi.fn(),
   scheduledJobUpsert: vi.fn(),
+  scheduledJobFindUnique: vi.fn(),
+  notificationFindFirst: vi.fn(),
+  notificationCreate: vi.fn(),
+  notificationUpdateMany: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -30,12 +37,21 @@ vi.mock("@dpf/db", () => ({
       updateMany: mocks.syncRunUpdateMany,
       create: mocks.syncRunCreate,
       update: mocks.syncRunUpdate,
+      findFirst: mocks.syncRunFindFirst,
+      findMany: mocks.syncRunFindMany,
+      deleteMany: mocks.syncRunDeleteMany,
     },
     contributorInventorySnapshot: {
       createMany: mocks.snapshotCreateMany,
     },
     scheduledJob: {
       upsert: mocks.scheduledJobUpsert,
+      findUnique: mocks.scheduledJobFindUnique,
+    },
+    platformNotification: {
+      findFirst: mocks.notificationFindFirst,
+      create: mocks.notificationCreate,
+      updateMany: mocks.notificationUpdateMany,
     },
   },
   // Constants the runner imports from the @dpf/db barrel — the seed module
@@ -87,6 +103,15 @@ beforeEach(() => {
     count: data.length,
   }));
   mocks.scheduledJobUpsert.mockResolvedValue({});
+  // Phase 6 — sane defaults so the heartbeat-only tests don't have to
+  // arrange the retention / notification mocks.
+  mocks.scheduledJobFindUnique.mockResolvedValue({ lastRunAt: null });
+  mocks.syncRunFindFirst.mockResolvedValue(null); // no successful runs yet
+  mocks.syncRunFindMany.mockResolvedValue([]);
+  mocks.syncRunDeleteMany.mockResolvedValue({ count: 0 });
+  mocks.notificationFindFirst.mockResolvedValue(null);
+  mocks.notificationCreate.mockResolvedValue({});
+  mocks.notificationUpdateMany.mockResolvedValue({ count: 0 });
 });
 
 describe("runContributorInventorySync", () => {
@@ -288,5 +313,261 @@ describe("runContributorInventorySync", () => {
       lastError: null,
       nextRunAt: new Date(FIXED_NOW.getTime() + 10 * 60_000),
     });
+  });
+});
+
+// ─── Phase 6 — retention sweep + PlatformNotification writes ────────────────
+
+describe("runContributorInventorySync — Phase 6 retention sweep", () => {
+  it("preserves the latest-successful run per source via syncRunId notIn, regardless of age", async () => {
+    mocks.syncRunFindFirst.mockImplementation(async ({ where }) => {
+      const path = (where.perSourceResult.path as string[])[0];
+      if (path === "git-worktree") return { syncRunId: "civs-wt-keep" };
+      if (path === "git-branch") return { syncRunId: "civs-br-keep" };
+      if (path === "github-pr") return { syncRunId: "civs-gh-keep" };
+      return null;
+    });
+    mocks.syncRunDeleteMany.mockResolvedValue({ count: 5 });
+
+    const result = await runContributorInventorySync({
+      now: FIXED_NOW,
+      readers: fakeReaders(),
+    });
+
+    expect(result.cleanupDeletedRuns).toBe(5);
+
+    const deleteCall = mocks.syncRunDeleteMany.mock.calls[0]?.[0];
+    expect(deleteCall?.where.startedAt.lt).toEqual(
+      new Date(FIXED_NOW.getTime() - 7 * 24 * 60 * 60 * 1000),
+    );
+    const notIn = deleteCall?.where.syncRunId.notIn as string[];
+    expect(notIn.sort()).toEqual(["civs-br-keep", "civs-gh-keep", "civs-wt-keep"]);
+  });
+
+  it("retention sweep failure is caught and logged; the run still returns ok", async () => {
+    mocks.syncRunFindFirst.mockResolvedValue(null);
+    mocks.syncRunDeleteMany.mockRejectedValue(new Error("connection lost"));
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = await runContributorInventorySync({
+      now: FIXED_NOW,
+      readers: fakeReaders(),
+    });
+
+    expect(result.status).toBe("completed");
+    expect(result.cleanupDeletedRuns).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("retention sweep failed"),
+      "connection lost",
+    );
+    warnSpy.mockRestore();
+  });
+});
+
+describe("runContributorInventorySync — Phase 6 GitHub failure notification", () => {
+  function recentRuns(failures: number, total = 6) {
+    // Returns `total` rows; the first `failures` are failed, the rest succeeded.
+    const rows = [];
+    for (let i = 0; i < total; i++) {
+      rows.push({
+        perSourceResult: {
+          "github-pr": {
+            ok: i >= failures,
+            state: i >= failures ? "ok" : "error",
+          },
+        },
+      });
+    }
+    return rows;
+  }
+
+  it("fires a warning when GitHub failed in all 6 most-recent runs and no notification exists", async () => {
+    mocks.syncRunFindMany.mockResolvedValue(recentRuns(6));
+    mocks.notificationFindFirst.mockResolvedValue(null);
+
+    const result = await runContributorInventorySync({
+      now: FIXED_NOW,
+      readers: fakeReaders(),
+    });
+
+    expect(result.notificationsCreated).toBeGreaterThanOrEqual(1);
+    expect(mocks.notificationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          severity: "warning",
+          category: "contributor-inventory-github",
+          subjectId: "github-pr-sync",
+          message: expect.stringContaining("Contributor MCP card"),
+        }),
+      }),
+    );
+  });
+
+  it("is idempotent: does not duplicate an existing open warning at the same severity", async () => {
+    mocks.syncRunFindMany.mockResolvedValue(recentRuns(6));
+    mocks.notificationFindFirst.mockResolvedValueOnce({
+      id: "pn-1",
+      severity: "warning",
+    });
+    // Stale-cron notification path still null:
+    mocks.notificationFindFirst.mockResolvedValueOnce(null);
+
+    const result = await runContributorInventorySync({
+      now: FIXED_NOW,
+      readers: fakeReaders(),
+    });
+
+    expect(result.notificationsCreated).toBe(0);
+    expect(mocks.notificationCreate).not.toHaveBeenCalled();
+  });
+
+  it("resolves the open notification when at least one of the most recent 6 runs succeeded", async () => {
+    mocks.syncRunFindMany.mockResolvedValue(recentRuns(5, 6)); // 5 failed, 1 succeeded
+    mocks.notificationFindFirst.mockResolvedValueOnce({
+      id: "pn-1",
+      severity: "warning",
+    });
+    mocks.notificationFindFirst.mockResolvedValueOnce(null);
+    mocks.notificationUpdateMany.mockResolvedValue({ count: 1 });
+
+    const result = await runContributorInventorySync({
+      now: FIXED_NOW,
+      readers: fakeReaders(),
+    });
+
+    expect(result.notificationsResolved).toBeGreaterThanOrEqual(1);
+    expect(mocks.notificationUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          category: "contributor-inventory-github",
+          resolvedAt: null,
+        }),
+        data: { resolvedAt: FIXED_NOW },
+      }),
+    );
+  });
+
+  it("does NOT fire when GitHub is not-configured (no credential bound) across the recent runs", async () => {
+    mocks.syncRunFindMany.mockResolvedValue(
+      Array.from({ length: 6 }, () => ({
+        perSourceResult: {
+          "github-pr": { ok: false, state: "not-configured" },
+        },
+      })),
+    );
+    mocks.notificationFindFirst.mockResolvedValue(null);
+
+    const result = await runContributorInventorySync({
+      now: FIXED_NOW,
+      readers: fakeReaders(),
+    });
+
+    expect(result.notificationsCreated).toBe(0);
+    expect(mocks.notificationCreate).not.toHaveBeenCalled();
+  });
+
+  it("does NOT fire when fewer than 6 historical runs exist (cold-start window)", async () => {
+    mocks.syncRunFindMany.mockResolvedValue(
+      Array.from({ length: 3 }, () => ({
+        perSourceResult: { "github-pr": { ok: false } },
+      })),
+    );
+
+    const result = await runContributorInventorySync({
+      now: FIXED_NOW,
+      readers: fakeReaders(),
+    });
+
+    expect(result.notificationsCreated).toBe(0);
+  });
+});
+
+describe("runContributorInventorySync — Phase 6 stale-cron notification", () => {
+  it("fires a critical notification when the prior lastRunAt is >2h old (resumed-after-gap)", async () => {
+    const priorLastRunAt = new Date(FIXED_NOW.getTime() - 3 * 60 * 60 * 1000); // 3h ago
+    mocks.scheduledJobFindUnique.mockResolvedValue({ lastRunAt: priorLastRunAt });
+    mocks.notificationFindFirst.mockResolvedValue(null);
+
+    const result = await runContributorInventorySync({
+      now: FIXED_NOW,
+      readers: fakeReaders(),
+    });
+
+    expect(result.notificationsCreated).toBeGreaterThanOrEqual(1);
+    expect(mocks.notificationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          severity: "critical",
+          category: "contributor-inventory-cron",
+          subjectId: "contributor-inventory-sync",
+          message: expect.stringContaining("180-minute gap"),
+        }),
+      }),
+    );
+  });
+
+  it("does NOT fire when prior lastRunAt is within 2h (normal cadence)", async () => {
+    const priorLastRunAt = new Date(FIXED_NOW.getTime() - 15 * 60 * 1000); // 15min ago
+    mocks.scheduledJobFindUnique.mockResolvedValue({ lastRunAt: priorLastRunAt });
+
+    const result = await runContributorInventorySync({
+      now: FIXED_NOW,
+      readers: fakeReaders(),
+    });
+
+    expect(mocks.notificationCreate).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          category: "contributor-inventory-cron",
+        }),
+      }),
+    );
+    expect(result.notificationsCreated).toBe(0);
+  });
+
+  it("does NOT fire on a fresh install where lastRunAt is null", async () => {
+    mocks.scheduledJobFindUnique.mockResolvedValue({ lastRunAt: null });
+
+    const result = await runContributorInventorySync({
+      now: FIXED_NOW,
+      readers: fakeReaders(),
+    });
+
+    expect(mocks.notificationCreate).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          category: "contributor-inventory-cron",
+        }),
+      }),
+    );
+    expect(result.notificationsCreated).toBe(0);
+  });
+
+  it("resolves an open stale-cron notification once the gap closes (lastRunAt is now recent)", async () => {
+    const priorLastRunAt = new Date(FIXED_NOW.getTime() - 5 * 60 * 1000); // 5min ago — recent
+    mocks.scheduledJobFindUnique.mockResolvedValue({ lastRunAt: priorLastRunAt });
+    // syncRunFindMany returns empty by default — the github branch
+    // short-circuits without calling notificationFindFirst at all, so the
+    // stale-cron branch is the only consumer of the mock.
+    mocks.notificationFindFirst.mockResolvedValue({
+      id: "pn-cron-1",
+      severity: "critical",
+    });
+    mocks.notificationUpdateMany.mockResolvedValue({ count: 1 });
+
+    const result = await runContributorInventorySync({
+      now: FIXED_NOW,
+      readers: fakeReaders(),
+    });
+
+    expect(result.notificationsResolved).toBeGreaterThanOrEqual(1);
+    expect(mocks.notificationUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          category: "contributor-inventory-cron",
+          resolvedAt: null,
+        }),
+      }),
+    );
   });
 });
