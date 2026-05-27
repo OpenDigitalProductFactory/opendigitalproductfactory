@@ -30,6 +30,18 @@
 #   could corrupt production-style data. Use knowingly. Same risk profile as
 #   any local-dev-against-shared-DB workflow — keep the prod portal on :3000
 #   as the stable reference and treat :3001 as the verification surface.
+#
+# Inngest env
+#   The base dev-portal service ships with zero Inngest env vars, so
+#   `GET /api/inngest` 500s with "no signing key found" the moment any
+#   feature that registers Inngest functions is exercised (e.g. the cron
+#   that drives contributor inventory sync). We forward the same Inngest
+#   cluster the live portal uses — INNGEST_EVENT_KEY, INNGEST_BASE_URL
+#   (the shared inngest:8288 container), and INNGEST_SIGNING_KEY — plus a
+#   dev-portal-specific INNGEST_SERVE_ORIGIN so sync registrations announce
+#   `http://dev-portal:3000` (Docker-DNS + internal port) instead of the
+#   live portal's hostname. INNGEST_DEV stays `0`: the Inngest container
+#   itself is the dev-mode signal; the apps just need creds to talk to it.
 
 services:
   dev-portal:
@@ -58,6 +70,15 @@ services:
       DPF_ENVIRONMENT: dev
       INSTANCE_TYPE: dev
       PROJECT_ROOT: /workspace
+      # Inngest — same cluster as the live portal (shared inngest:8288), with a
+      # dev-portal-specific serve origin so step-execution callbacks resolve
+      # via Docker DNS (`dev-portal:3000` — internal port, not the :3001 host
+      # mapping). Without these, /api/inngest 500s on every register attempt.
+      INNGEST_BASE_URL: http://inngest:8288
+      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY:-deadbeefcafebabe}
+      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:-abcdef0123456789}
+      INNGEST_DEV: ${INNGEST_DEV:-0}
+      INNGEST_SERVE_ORIGIN: http://dev-portal:3000
     # Compose merges depends_on by default, so a plain block here would APPEND
     # to the base file's `dev-init` dep instead of replacing it. We don't want
     # dev-init (it's the sanitized-clone of prod→dev DB, irrelevant when we
