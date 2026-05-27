@@ -3,6 +3,7 @@ import {
   formatMarketingLabel,
   type MarketingWorkspaceSnapshot,
 } from "@/lib/marketing";
+import { DraftAssetButton } from "./DraftAssetButton";
 
 type Props = {
   snapshot: MarketingWorkspaceSnapshot;
@@ -278,6 +279,7 @@ export function MarketingStrategyOverview({
                       {task.dueWindow ? ` - ${task.dueWindow}` : ""}
                     </p>
                     {task.brief && <p className="mt-1 text-[var(--dpf-text)]">{task.brief}</p>}
+                    <DraftAssetButton assetTaskId={task.taskId} assetTaskTitle={task.title} />
                   </li>
                 ))}
               </ul>
