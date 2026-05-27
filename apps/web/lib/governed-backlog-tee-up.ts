@@ -41,6 +41,7 @@ type GovernedBacklogTeeUpTx = {
   };
   featureBuild: {
     create(args: any): Promise<any>;
+    update(args: any): Promise<any>;
   };
   buildActivity: {
     create(args: any): Promise<any>;
@@ -296,7 +297,8 @@ export async function promoteBacklogItemToBuildDraft(
     build: created,
     backlogItemId: itemId,
     capsuleId: capsule.capsuleId,
-    autoApprovedAt: governedBacklogEnabled && (item.body ?? "").trim().length > 0 ? new Date() : null,
+    autoApprovedDispatchEligible:
+      governedBacklogEnabled && (item.body ?? "").trim().length > 0,
   };
 }
 
