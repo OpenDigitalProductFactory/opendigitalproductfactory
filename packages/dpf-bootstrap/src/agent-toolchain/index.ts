@@ -65,3 +65,9 @@ export {
   type AgentToolchainPlan,
   type ComputeAgentToolchainPlanOptions,
 } from "./bridge";
+
+export {
+  runMcpReadinessProbe,
+  runSmokeProbe,
+  type ClientSmokeResult,
+} from "./probes";
