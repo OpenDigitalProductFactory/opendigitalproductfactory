@@ -1,0 +1,259 @@
+import { scoreTrustVector } from "@/lib/trust-vector/score";
+import type { TrustAssessment, TrustDimensionInput } from "@/lib/trust-vector/types";
+
+type CodeGraphFreshnessTrustInput = {
+  graphKey: string;
+  available: boolean;
+  indexStatus: string;
+  lastIndexedAt: Date | string | null;
+  workspaceDirty: boolean;
+  indexedFileCount: number;
+  lastError: string | null;
+  relationshipCounts?: Record<string, number>;
+  asOf?: Date | string;
+};
+
+type CodeGraphCoverageTrustInput = {
+  graphKey: string;
+  available: boolean;
+  indexStatus: string;
+  indexedFileCount: number;
+  totalFileCount: number;
+  warnings: string[];
+  asOf?: Date | string;
+};
+
+export function buildCodeGraphFreshnessTrust(
+  input: CodeGraphFreshnessTrustInput,
+): TrustAssessment {
+  const asOf = toDate(input.asOf) ?? new Date();
+  const dimensions: TrustDimensionInput[] = [
+    buildFreshnessDimension(input, asOf),
+    buildRuntimeDimension(input),
+    {
+      key: "sourceAuthority",
+      label: "Source authority",
+      score: input.available && input.indexedFileCount > 0 ? 0.9 : 0.6,
+      rationale: input.available
+        ? "CodeGraphIndexState is the authoritative source for graph index freshness."
+        : "No CodeGraphIndexState row exists for this graph.",
+      evidenceRefs: [{
+        kind: "prisma-row",
+        label: "CodeGraphIndexState",
+        ref: input.graphKey,
+        sourceTable: "CodeGraphIndexState",
+      }],
+    },
+  ];
+
+  if (input.relationshipCounts) {
+    dimensions.push(buildStructuralHealthDimension(input.relationshipCounts));
+  }
+
+  return scoreTrustVector({
+    subject: {
+      type: "code-graph",
+      id: input.graphKey,
+      label: "Code graph",
+    },
+    asOf: asOf.toISOString(),
+    dimensions,
+    riskLevel: input.available ? "medium" : "high",
+    sourceSummary: "Code graph trust is derived from index state, runtime health, and optional relationship coverage.",
+  });
+}
+
+export function buildCodeGraphCoverageTrust(
+  input: CodeGraphCoverageTrustInput,
+): TrustAssessment {
+  const asOf = toDate(input.asOf) ?? new Date();
+  const coverageScore = input.totalFileCount === 0
+    ? null
+    : input.indexedFileCount / input.totalFileCount;
+  const dimensions: TrustDimensionInput[] = [
+    {
+      key: "coverageCompleteness",
+      label: "Changed-file coverage",
+      score: coverageScore,
+      weight: 2,
+      rationale: input.totalFileCount === 0
+        ? "No changed files were available for code-graph coverage analysis."
+        : `Code graph covers ${input.indexedFileCount}/${input.totalFileCount} changed files.`,
+      evidenceRefs: [{
+        kind: "prisma-row",
+        label: "CodeGraphFileHash",
+        ref: input.graphKey,
+        sourceTable: "CodeGraphFileHash",
+      }],
+    },
+    {
+      key: "runtimeAvailability",
+      label: "Runtime availability",
+      score: input.available && input.indexStatus === "ready" ? 1 : 0.3,
+      rationale: input.available
+        ? `Code graph index status is ${input.indexStatus}.`
+        : "The code graph has not been built yet.",
+      evidenceRefs: [],
+    },
+    {
+      key: "sourceAuthority",
+      label: "Source authority",
+      score: input.available ? 0.85 : 0.4,
+      rationale: "CodeGraphFileHash is the committed-file coverage source for changed files.",
+      evidenceRefs: [],
+    },
+  ];
+
+  return scoreTrustVector({
+    subject: {
+      type: "code-graph-coverage",
+      id: input.graphKey,
+      label: "Code graph coverage",
+    },
+    asOf: asOf.toISOString(),
+    dimensions,
+    sourceSummary: "Coverage trust is derived from changed files present in CodeGraphFileHash.",
+  });
+}
+
+function buildFreshnessDimension(
+  input: CodeGraphFreshnessTrustInput,
+  asOf: Date,
+): TrustDimensionInput {
+  if (!input.available) {
+    return {
+      key: "freshness",
+      label: "Freshness",
+      score: 0.1,
+      weight: 2,
+      rationale: "The code graph has not been built yet.",
+      evidenceRefs: [],
+    };
+  }
+
+  if (input.workspaceDirty) {
+    return {
+      key: "freshness",
+      label: "Freshness",
+      score: 0.2,
+      weight: 2,
+      rationale: "Uncommitted local changes may not be reflected in graph-backed analysis.",
+      evidenceRefs: [],
+    };
+  }
+
+  const indexedAt = toDate(input.lastIndexedAt);
+  if (!indexedAt) {
+    return {
+      key: "freshness",
+      label: "Freshness",
+      score: 0.2,
+      weight: 2,
+      rationale: "No indexed commit timestamp is recorded for the code graph.",
+      evidenceRefs: [],
+    };
+  }
+
+  const ageMs = Math.max(0, asOf.getTime() - indexedAt.getTime());
+  const ageHours = ageMs / (1000 * 60 * 60);
+  const ageDays = Math.floor(ageHours / 24);
+
+  if (ageHours <= 24) {
+    return {
+      key: "freshness",
+      label: "Freshness",
+      score: 1,
+      weight: 2,
+      rationale: "Code graph was indexed within the last 24 hours.",
+      measuredAt: indexedAt.toISOString(),
+      evidenceRefs: [],
+    };
+  }
+
+  if (ageDays <= 7) {
+    return {
+      key: "freshness",
+      label: "Freshness",
+      score: 0.7,
+      weight: 2,
+      rationale: `Code graph index is ${ageDays} ${ageDays === 1 ? "day" : "days"} old.`,
+      measuredAt: indexedAt.toISOString(),
+      evidenceRefs: [],
+    };
+  }
+
+  return {
+    key: "freshness",
+    label: "Freshness",
+    score: 0.2,
+    weight: 2,
+    rationale: `Code graph index is ${ageDays} ${ageDays === 1 ? "day" : "days"} old.`,
+    measuredAt: indexedAt.toISOString(),
+    evidenceRefs: [],
+  };
+}
+
+function buildRuntimeDimension(input: CodeGraphFreshnessTrustInput): TrustDimensionInput {
+  if (!input.available) {
+    return {
+      key: "runtimeAvailability",
+      label: "Runtime availability",
+      score: 0.7,
+      rationale: "Code graph runtime responded, but no index state exists yet.",
+      evidenceRefs: [],
+    };
+  }
+
+  if (input.lastError) {
+    return {
+      key: "runtimeAvailability",
+      label: "Runtime availability",
+      score: 0.3,
+      rationale: `Last code-graph error: ${input.lastError}`,
+      evidenceRefs: [],
+    };
+  }
+
+  if (input.indexStatus !== "ready") {
+    return {
+      key: "runtimeAvailability",
+      label: "Runtime availability",
+      score: 0.3,
+      rationale: `The code graph is currently ${input.indexStatus}.`,
+      evidenceRefs: [],
+    };
+  }
+
+  return {
+    key: "runtimeAvailability",
+    label: "Runtime availability",
+    score: 1,
+    rationale: "The code graph index is ready.",
+    evidenceRefs: [],
+  };
+}
+
+function buildStructuralHealthDimension(
+  relationshipCounts: Record<string, number>,
+): TrustDimensionInput {
+  const values = Object.values(relationshipCounts);
+  const presentCount = values.filter((count) => count > 0).length;
+  const totalCount = values.length;
+  const score = totalCount === 0 ? null : presentCount / totalCount;
+
+  return {
+    key: "toolReliability",
+    label: "Structural relationship health",
+    score,
+    rationale: totalCount === 0
+      ? "No structural relationship benchmark was available."
+      : `Code graph has ${presentCount}/${totalCount} benchmark relationship types populated.`,
+    evidenceRefs: [],
+  };
+}
+
+function toDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}

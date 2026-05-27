@@ -7741,10 +7741,18 @@ export async function executeTool(
 
     case "get_code_graph_freshness": {
       const { getCodeGraphFreshness } = await import("@/lib/integrate/code-graph-access");
+      const { buildTrustMessage } = await import("@/lib/trust-vector");
       const freshness = await getCodeGraphFreshness(undefined, { inspectStructuralHealth: true });
       return {
         success: true,
-        message: freshness.summary,
+        message: freshness.trust
+          ? buildTrustMessage(freshness.trust, {
+              currentFact: freshness.summary,
+              lastKnownFact: freshness.summary,
+              lowConfidenceResult: freshness.summary,
+              inferredResult: freshness.summary,
+            })
+          : freshness.summary,
         data: freshness,
       };
     }

@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { CodeIntelligenceStatusCard } from "./CodeIntelligenceStatusCard";
 import type { CodeGraphFreshness } from "@/lib/integrate/code-graph-access";
+import { buildCodeGraphFreshnessTrust } from "@/lib/trust-vector/adapters/code-graph";
 
 function freshness(overrides: Partial<CodeGraphFreshness> = {}): CodeGraphFreshness {
   return {
@@ -63,5 +64,26 @@ describe("CodeIntelligenceStatusCard", () => {
     );
 
     expect(html).toContain("Uncommitted local changes");
+  });
+
+  it("renders trust tier and stale rationale when graph freshness is low", () => {
+    const trust = buildCodeGraphFreshnessTrust({
+      graphKey: "source-code",
+      available: true,
+      indexStatus: "ready",
+      lastIndexedAt: new Date("2026-05-10T12:00:00.000Z"),
+      workspaceDirty: false,
+      indexedFileCount: 2756,
+      lastError: null,
+      asOf: new Date("2026-05-26T12:00:00.000Z"),
+    });
+
+    const html = renderToStaticMarkup(
+      <CodeIntelligenceStatusCard freshness={freshness({ trust })} />,
+    );
+
+    expect(html).toContain('data-trust-tier="low"');
+    expect(html).toContain("Low trust");
+    expect(html).toContain("Code graph index is 16 days old.");
   });
 });
