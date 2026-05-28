@@ -429,8 +429,18 @@ if [ "$DPF_PLATFORM" = "darwin" ] && command -v docker >/dev/null 2>&1; then
     fi
 
     if [ -n "$DPF_SELECTED_MODEL" ]; then
-      # Skip pull if the model is already on disk (idempotent re-runs).
-      if docker model list 2>/dev/null | grep -q "$(printf '%s' "$DPF_SELECTED_MODEL" | sed 's|^ai/||; s|:.*$||')"; then
+      # Skip pull if the EXACT selected model (family + tag/quant) is on
+      # disk. The earlier loose check stripped `ai/` and everything after
+      # `:`, so any pre-existing qwen3 quant satisfied the grep and the
+      # detector's recommendation never got pulled. That left users with
+      # whatever they happened to pull manually instead of the strong-tier
+      # model their hardware can run.
+      #
+      # `docker model list` prints rows like `qwen3:30B-A3B-Q4_K_M` (no
+      # `ai/` prefix; tag with quant suffix preserved). Match the full
+      # family:tag pair so 8B ≠ 14B ≠ 30B-A3B.
+      _selected_repo_tag="$(printf '%s' "$DPF_SELECTED_MODEL" | sed 's|^ai/||')"
+      if docker model list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$_selected_repo_tag"; then
         ok "Model $DPF_SELECTED_MODEL already on disk"
       else
         info "Pulling AI model $DPF_SELECTED_MODEL via Docker Model Runner..."
