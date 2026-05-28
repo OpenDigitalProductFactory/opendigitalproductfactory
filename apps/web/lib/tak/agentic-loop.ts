@@ -252,8 +252,22 @@ export function detectFabrication(
   hasProposal: boolean,
   executedToolNames?: string[],
   authoritativeToolNames?: Set<string>,
+  hasAuthoritativeToolAvailable: boolean = true,
 ): boolean {
   if (hasProposal) return false;
+
+  // If the agent has no authoritative (action/build) tool available to call,
+  // a completion-claim or narration in its reply is ordinary conversational
+  // advice — there is no tool-backed work it could have recorded, so there is
+  // nothing to fabricate. This is the normal case for advise-mode coworkers:
+  // e.g. the setup tour, where the route persona is asked to "guide me through
+  // this step" and naturally says things like "once your hours are configured".
+  // Flagging that as fabrication kills a perfectly good reply and replaces it
+  // with the build-oriented failure copy. Note: authoritative ≠ side-effecting
+  // — internal build tools (saveBuildEvidence, reviewBuildPlan, …) are
+  // sideEffect:false yet still authoritative, so the caller computes this flag
+  // against both the side-effecting set and BUILD_TOOL_NAMES.
+  if (!hasAuthoritativeToolAvailable) return false;
 
   // If no tools were called at all, any completion claim is fabrication
   if (executedToolCount === 0) return COMPLETION_CLAIM_PATTERN.test(response);
@@ -1257,12 +1271,16 @@ export async function runAgenticLoop(params: {
         };
       }
 
+      const hasAuthoritativeToolAvailable = tools.some(
+        (tool) => tool.sideEffect || BUILD_TOOL_NAMES.has(tool.name),
+      );
       const looksFabricated = detectFabrication(
         trimmed,
         executedTools.length,
         false,
         executedTools.map((t) => t.name),
         new Set(tools.filter((tool) => tool.sideEffect).map((tool) => tool.name)),
+        hasAuthoritativeToolAvailable,
       );
 
       const isBuildRoute = BUILD_ROUTE_PATTERN.test(routeContext);
@@ -1697,6 +1715,7 @@ export async function runAgenticLoop(params: {
     false,
     executedTools.map((tool) => tool.name),
     new Set(tools.filter((tool) => tool.sideEffect).map((tool) => tool.name)),
+    tools.some((tool) => tool.sideEffect || BUILD_TOOL_NAMES.has(tool.name)),
   );
   const exhaustedMessage = buildMaxIterationsExhaustedMessage({
     downgraded: lastResult?.downgraded ?? false,
