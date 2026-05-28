@@ -425,15 +425,16 @@ export function shouldNudge(params: {
   responseText?: string;
   hasAuthoritativeToolExecution?: boolean;
   /**
-   * Whether the delivered tool list contains at least one authoritative
-   * (side-effecting OR build-progress) tool. When false — e.g. the
-   * coworker is on an advise-mode route like /workspace or /storefront
-   * during the setup tour — a text-only reply is the correct response
-   * and nudging would contradict the route's own "no tool calls"
-   * instruction. Parallel to detectFabrication's same-name guard
-   * landed in c70a7db6.
+   * True when this turn is part of the setup tour. SetupOverlay sends an
+   * auto-message prefixed "[Setup step: …]" whose route persona explicitly
+   * instructs a brief text-only reply ("no tool calls"). On such turns a
+   * nudge to "call a tool now" contradicts the route's own instruction, so we
+   * skip the iteration-0 nudge. Narrowed to this signal (rather than any
+   * no-authoritative-tool route) so routes like /finance still nudge — and the
+   * local-model diagnostic still fires — when a tool ought to have been used.
+   * Companion to detectFabrication's advise-mode guard (c70a7db6).
    */
-  hasAuthoritativeToolAvailable?: boolean;
+  isSetupTourTurn?: boolean;
   allowFirstTurnTextOnlyReply?: boolean;
 }): boolean {
   // One nudge maximum. Extra nudges multiply cost — if the model doesn't respond
@@ -446,16 +447,16 @@ export function shouldNudge(params: {
   if (params.iteration >= params.maxIterations - 1) return false;
   if (!params.hasTools) return false;
 
-  // Advise-mode routes (e.g., /workspace and /storefront during the
-  // setup tour) strip every authoritative tool. A text-only reply is the
-  // correct behavior, and the route's own system prompt explicitly says
-  // "no tool calls" — nudging here injects a contradiction the coworker
-  // is then forced to reconcile out loud. Skip the iteration-0 nudge
-  // entirely when no authoritative tool is even available to call.
+  // Setup-tour turns (SetupOverlay's "[Setup step: …]" auto-message) ask the
+  // coworker for a brief text-only welcome with no tool calls. Nudging there
+  // injects a contradiction the coworker reconciles out loud. Skip the
+  // iteration-0 nudge on those turns only — NOT on every no-authoritative-tool
+  // route, so routes like /finance still nudge a weak local model (and surface
+  // the local-model diagnostic) when it should have queried a tool.
   if (
     params.executedToolCount === 0
     && params.iteration === 0
-    && params.hasAuthoritativeToolAvailable === false
+    && params.isSetupTourTurn === true
   ) {
     return false;
   }
@@ -546,6 +547,17 @@ function latestUserText(messages: ChatMessage[]): string {
     return message.content;
   }
   return "";
+}
+
+/**
+ * True when the latest user turn is a setup-tour auto-message. SetupOverlay
+ * (components/setup/SetupOverlay.tsx) prefixes every step trigger with
+ * "[Setup step: …]", and those route personas are instructed to reply with a
+ * brief text-only welcome and no tool calls — so the iteration-0 nudge should
+ * be suppressed for them specifically (see shouldNudge).
+ */
+export function isSetupTourTurn(messages: ChatMessage[]): boolean {
+  return /^\s*\[setup step:/i.test(latestUserText(messages));
 }
 
 function shouldAllowProviderStatusTextReply(params: {
@@ -1430,12 +1442,7 @@ export async function runAgenticLoop(params: {
             (tool) => tool.name === executedTool.name && tool.sideEffect,
           ),
         ),
-        // Authoritative = side-effecting OR build-progress (build tools
-        // are intentionally sideEffect:false). Mirrors the availability
-        // check used by detectFabrication.
-        hasAuthoritativeToolAvailable: tools.some(
-          (tool) => tool.sideEffect || BUILD_PROGRESS_TOOL_NAMES.has(tool.name),
-        ),
+        isSetupTourTurn: isSetupTourTurn(messages),
         allowFirstTurnTextOnlyReply: shouldAllowProviderStatusTextReply({
           routeContext,
           taskType,
