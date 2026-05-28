@@ -5,12 +5,37 @@
 // returned node token + intervals to the state file, then yields
 // control back to the heartbeat loop.
 
-import type { AuthorityApiClient } from "./api-client";
+import { AuthorityHttpError, type AuthorityApiClient } from "./api-client";
 import { collectHostNetworkSummary } from "./collectors/host-network";
 import type { EdgeNodeConfig } from "./config";
 import { saveState, type EdgeNodeState } from "./state";
 
 const PHASE_0_CAPABILITIES = ["discovery.network"] as const;
+
+// Retry policy for the enrollment HTTP call. Designed for the
+// remote-deployment case: an edge node coming up in a remote data
+// center may hit a transient portal warm-up window or a slow link.
+// Aborts and connect-resets are retried; HTTP errors (4xx/5xx with a
+// response) are not — those are deterministic and need operator action.
+const ENROLL_MAX_ATTEMPTS = 3;
+const ENROLL_BACKOFF_MS = [1_000, 2_000, 4_000];
+
+export function isRetryableEnrollError(err: unknown): boolean {
+  if (err instanceof AuthorityHttpError) return false;
+  if (!(err instanceof Error)) return false;
+  // Undici/Node fetch AbortError + transient connect errors.
+  const name = err.name;
+  const message = err.message;
+  return (
+    name === "AbortError"
+    || /UND_ERR_(?:SOCKET|CONNECT_TIMEOUT|HEADERS_TIMEOUT|BODY_TIMEOUT)/.test(message)
+    || /ECONNREFUSED|ECONNRESET|EAI_AGAIN|ETIMEDOUT/.test(message)
+    || message === "fetch failed"
+  );
+}
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 export type EnrollRunnerOptions = {
   config: EdgeNodeConfig;
@@ -42,7 +67,7 @@ export async function runEnrollment(
   // by its LAN address without SQL'ing the metadata blob.
   const host = collectHostNetworkSummary();
 
-  const result = await api.enroll(config.bootstrapToken, {
+  const enrollBody = {
     displayName: config.edgeNodeName,
     platform: config.platform,
     installMode: config.installMode,
@@ -58,7 +83,31 @@ export async function runEnrollment(
         ipAddresses: host.ipAddresses,
       },
     },
-  });
+  };
+
+  let result: Awaited<ReturnType<typeof api.enroll>> | null = null;
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= ENROLL_MAX_ATTEMPTS; attempt++) {
+    try {
+      result = await api.enroll(config.bootstrapToken, enrollBody);
+      break;
+    } catch (err) {
+      lastErr = err;
+      if (!isRetryableEnrollError(err) || attempt === ENROLL_MAX_ATTEMPTS) {
+        throw err;
+      }
+      const backoff = ENROLL_BACKOFF_MS[attempt - 1] ?? 4_000;
+      log(
+        "warn",
+        `Enrollment attempt ${attempt}/${ENROLL_MAX_ATTEMPTS} failed (${(err as Error).name}: ${(err as Error).message}); retrying in ${backoff}ms`,
+      );
+      await sleep(backoff);
+    }
+  }
+  if (!result) {
+    // Defensive — the loop above either sets result or throws.
+    throw lastErr ?? new Error("Enrollment failed with no captured error");
+  }
 
   log(
     "info",

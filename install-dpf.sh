@@ -631,14 +631,35 @@ fi
 if [ "$DPF_INCLUDE_EDGE" = "1" ]; then
   step "Edge Node bootstrap"
 
-  # Mint a single-use auto-approve token via the same helper the verify
-  # wrapper uses. The token's plaintext appears once on stdout; we
-  # capture it without echoing.
-  if EDGE_TOKEN="$(pnpm --filter web exec tsx scripts/issue-edge-bootstrap-token.ts \
-       --ttl-minutes 30 \
-       --auto-approve 2>/dev/null | tail -1)"; then
+  # Mint a single-use auto-approve token. The script connects to
+  # DATABASE_URL=postgresql://...@postgres:5432/dpf, which is only
+  # resolvable from inside the docker compose network — postgres is NOT
+  # published to the host on customer installs (docker-compose.dev.yml is
+  # the only overlay that publishes 5432, and it's contributor-only). So
+  # we run the script INSIDE the portal-init container via `docker compose
+  # run --rm`, which shares the network and has the full workspace +
+  # tsx available at /workspace.
+  #
+  # The portal-init container's normal entrypoint runs migrations; we
+  # override with `sh -c '<tsx invocation>'` to run just the token script.
+  # Stderr is captured into a logfile (NOT swallowed with 2>/dev/null) so
+  # the next install diagnosis bundle has the actual failure reason
+  # instead of an opaque "output not recognized" warn line.
+  #
+  # History: prior versions ran `pnpm --filter web exec tsx ...` from the
+  # HOST, which always failed with ECONNREFUSED on customer installs (no
+  # exposed postgres port). The error was hidden by `2>/dev/null`, causing
+  # the edge-node container to crashloop indefinitely with an empty
+  # DPF_BOOTSTRAP_TOKEN. See edge-node Phase 0 first-mac postmortem.
+  EDGE_TOKEN_LOG="${TMPDIR:-/tmp}/dpf-edge-token-$$.log"
+  if EDGE_TOKEN="$(docker compose "${DPF_COMPOSE_FILES[@]}" run --rm --no-deps \
+       --entrypoint "" portal-init \
+       sh -c 'cd /workspace/apps/web && /workspace/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-edge-bootstrap-token.ts --ttl-minutes 30 --auto-approve' \
+       2>"$EDGE_TOKEN_LOG" | grep -E '^dpfboot_' | tail -1)"; then
     if [ -z "$EDGE_TOKEN" ] || [[ "$EDGE_TOKEN" != dpfboot_* ]]; then
-      warn "Edge Node bootstrap-token output not recognized; skipping enrollment wiring."
+      warn "Edge Node bootstrap-token issuance produced no token. Stderr captured at $EDGE_TOKEN_LOG"
+      info "  Last 5 lines:"
+      tail -5 "$EDGE_TOKEN_LOG" 2>/dev/null | sed 's|^|    |' >&2 || true
       info "  You can re-issue manually via Admin > Platform Development > Edge Nodes."
     else
       # Append (or replace) DPF_BOOTSTRAP_TOKEN in .env so the
@@ -668,8 +689,16 @@ if [ "$DPF_INCLUDE_EDGE" = "1" ]; then
       fi
     fi
   else
-    warn "Edge Node bootstrap-token issuance failed; skipping enrollment wiring."
+    warn "Edge Node bootstrap-token issuance command failed. Stderr captured at $EDGE_TOKEN_LOG"
+    info "  Last 5 lines:"
+    tail -5 "$EDGE_TOKEN_LOG" 2>/dev/null | sed 's|^|    |' >&2 || true
     info "  You can re-issue manually via Admin > Platform Development > Edge Nodes."
+  fi
+  # Clean up the stderr capture on the happy path; the warn branches above
+  # already printed the relevant tail so the logfile's diagnostic value is
+  # exhausted.
+  if [ -n "${EDGE_TOKEN:-}" ] && [[ "$EDGE_TOKEN" == dpfboot_* ]]; then
+    rm -f "$EDGE_TOKEN_LOG" 2>/dev/null || true
   fi
 else
   info "Edge Node bundling skipped (--no-edge). Add Edge Nodes later from separate hosts via docker-compose.edge-standalone.yml."
