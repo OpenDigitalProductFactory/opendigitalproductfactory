@@ -380,7 +380,7 @@ describe("list_all_capability_needs (BI-F9E7B780)", () => {
     expect(result.data?.summary).toEqual({
       total: 2,
       byStatus: { submitted: 2 },
-      bySeverity: { high: 1, medium: 1 },
+      bySeverity: { blocker: 1, important: 1 },
       byKind: { tool: 1, skill: 1 },
     });
     expect(result.data?.needs).toHaveLength(2);
