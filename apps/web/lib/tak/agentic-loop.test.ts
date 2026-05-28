@@ -79,6 +79,21 @@ describe("shouldNudge", () => {
     })).toBe(true);
   });
 
+  // Regression for the setup-tour /workspace COO contradiction: route persona
+  // says "no tool calls, 2-3 sentences", coworker complies, but nudge fires
+  // "use a tool now" → coworker surfaces the contradiction to the user.
+  // Companion guard to c70a7db6 (which fixed the fabrication-detection arm
+  // of the same problem).
+  it("does not nudge on advise-mode route when no authoritative tool is available", () => {
+    expect(shouldNudge({
+      continuationNudges: 0, iteration: 0, maxIterations: 40,
+      hasTools: true,             // tools delivered (read-only / context tools)
+      hasAuthoritativeToolAvailable: false,  // but none are side-effecting/build
+      executedToolCount: 0, responseLength: 44,
+      responseText: "Welcome to your workspace! Day-to-day work happens here.",
+    })).toBe(false);
+  });
+
   it("does not nudge when response is a short clarifying question", () => {
     // HR case: "add John as employee" → agent correctly asks for last name
     expect(shouldNudge({

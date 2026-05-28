@@ -424,6 +424,16 @@ export function shouldNudge(params: {
   responseLength: number;
   responseText?: string;
   hasAuthoritativeToolExecution?: boolean;
+  /**
+   * Whether the delivered tool list contains at least one authoritative
+   * (side-effecting OR build-progress) tool. When false — e.g. the
+   * coworker is on an advise-mode route like /workspace or /storefront
+   * during the setup tour — a text-only reply is the correct response
+   * and nudging would contradict the route's own "no tool calls"
+   * instruction. Parallel to detectFabrication's same-name guard
+   * landed in c70a7db6.
+   */
+  hasAuthoritativeToolAvailable?: boolean;
   allowFirstTurnTextOnlyReply?: boolean;
 }): boolean {
   // One nudge maximum. Extra nudges multiply cost — if the model doesn't respond
@@ -435,6 +445,20 @@ export function shouldNudge(params: {
   if (params.continuationNudges >= maxNudges) return false;
   if (params.iteration >= params.maxIterations - 1) return false;
   if (!params.hasTools) return false;
+
+  // Advise-mode routes (e.g., /workspace and /storefront during the
+  // setup tour) strip every authoritative tool. A text-only reply is the
+  // correct behavior, and the route's own system prompt explicitly says
+  // "no tool calls" — nudging here injects a contradiction the coworker
+  // is then forced to reconcile out loud. Skip the iteration-0 nudge
+  // entirely when no authoritative tool is even available to call.
+  if (
+    params.executedToolCount === 0
+    && params.iteration === 0
+    && params.hasAuthoritativeToolAvailable === false
+  ) {
+    return false;
+  }
 
   // First iteration with no tools called — nudge UNLESS the response is a
   // clarifying question or a substantive conversational reply. Short questions
@@ -1405,6 +1429,12 @@ export async function runAgenticLoop(params: {
           (executedTool) => executedTool.result.success && tools.some(
             (tool) => tool.name === executedTool.name && tool.sideEffect,
           ),
+        ),
+        // Authoritative = side-effecting OR build-progress (build tools
+        // are intentionally sideEffect:false). Mirrors the availability
+        // check used by detectFabrication.
+        hasAuthoritativeToolAvailable: tools.some(
+          (tool) => tool.sideEffect || BUILD_PROGRESS_TOOL_NAMES.has(tool.name),
         ),
         allowFirstTurnTextOnlyReply: shouldAllowProviderStatusTextReply({
           routeContext,
