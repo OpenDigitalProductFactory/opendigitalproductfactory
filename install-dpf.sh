@@ -216,7 +216,8 @@ step "Docker Engine"
 dpf_docker_ensure_installed; rc=$?
 case "$rc" in
   0) ok "Docker present and reachable"
-     dpf_state_write dockerEndpoint "$(dpf_docker_endpoint)" 2>/dev/null || true ;;
+     dpf_state_write dockerEndpoint "$(dpf_docker_endpoint)" 2>/dev/null || true
+     dpf_preflight_docker_memory ;;
   75) # Docker was just installed; operator must log out / newgrp
       echo ""
       warn "Re-run install-dpf.sh after logging out and back in (or 'newgrp docker')."
@@ -228,6 +229,17 @@ esac
 #    user choice (nvm / brew / distro pkg) outside the installer's
 #    governance. Phase 7 stays clear of language-runtime installation.
 step "Node.js and pnpm"
+if ! command -v node >/dev/null 2>&1; then
+  # Non-interactive shells (bash install-dpf.sh) don't source .zshrc/.bashrc,
+  # so nvm-managed node is invisible. Try to load nvm if present.
+  _nvm_sh="${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+  if [ -s "$_nvm_sh" ]; then
+    info "node not on PATH; sourcing nvm..."
+    # shellcheck source=/dev/null
+    . "$_nvm_sh" 2>/dev/null || true
+    nvm use default 2>/dev/null || nvm use node 2>/dev/null || true
+  fi
+fi
 if ! command -v node >/dev/null 2>&1; then
   fail "Node.js is not installed. Install Node 20+ via your platform's package manager (nvm, brew, apt) and re-run."
 fi
