@@ -372,6 +372,32 @@ describe("detectFabrication", () => {
       new Set(["run_discovery_triage"]),
     )).toBe(false);
   });
+
+  it("does not flag advise-mode guidance when no authoritative tool is available", () => {
+    // Setup-tour case: the route persona is asked to "guide me through this
+    // step" with only read-only tools (wiki_query, search_knowledge). Its
+    // guidance naturally says "configured"/"set up", but with no action/build
+    // tool to call there is nothing it could have fabricated.
+    expect(detectFabrication(
+      "Once your operating hours are configured, bookings and availability stay aligned.",
+      0,
+      false,
+      [],
+      new Set(),
+      false, // hasAuthoritativeToolAvailable
+    )).toBe(false);
+  });
+
+  it("still flags completion claims when an authoritative tool was available but unused", () => {
+    expect(detectFabrication(
+      "I've configured your operating hours.",
+      0,
+      false,
+      [],
+      new Set(["create_backlog_item"]),
+      true, // hasAuthoritativeToolAvailable
+    )).toBe(true);
+  });
 });
 
 describe("runAgenticLoop", () => {
@@ -1245,7 +1271,17 @@ describe("runAgenticLoop", () => {
 
     mockExecuteTool.mockResolvedValueOnce({ success: true, message: "Found Build Studio workflow files." });
 
-    const result = await runAgenticLoop(baseParams);
+    // A real /build session exposes the authoritative build tools — the
+    // scenario is "the plan wasn't persisted via saveBuildEvidence", so those
+    // tools must be present for the read-only-claim to count as fabrication.
+    const result = await runAgenticLoop({
+      ...baseParams,
+      tools: [
+        ...baseParams.tools,
+        { name: "saveBuildEvidence", description: "Save evidence", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false, buildPhases: ["plan"] as const },
+        { name: "reviewBuildPlan", description: "Review plan", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false, buildPhases: ["plan"] as const },
+      ],
+    });
 
     expect(result.content).not.toContain("Plan ready");
     expect(mockExecuteTool).toHaveBeenCalledTimes(1);
