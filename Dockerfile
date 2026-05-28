@@ -34,7 +34,7 @@ RUN pnpm --filter @dpf/db exec prisma generate
 # Node 24 Alpine + Turbopack can crash the separate build worker in Docker
 # with SIGSEGV/SIGTRAP while the same source build passes on the host. Keep the
 # production bundler path but run Turbopack in-process for image builds.
-RUN NEXT_TELEMETRY_DISABLED=1 NEXT_TURBOPACK_USE_WORKER=0 pnpm --filter web build
+RUN NODE_OPTIONS="--max-old-space-size=4096" NEXT_TELEMETRY_DISABLED=1 NEXT_TURBOPACK_USE_WORKER=0 pnpm --filter web build
 
 # ─── Stage 4: init (build source for migrations, seed, Prisma client) ─────────
 FROM deps AS init

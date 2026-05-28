@@ -216,7 +216,8 @@ step "Docker Engine"
 dpf_docker_ensure_installed; rc=$?
 case "$rc" in
   0) ok "Docker present and reachable"
-     dpf_state_write dockerEndpoint "$(dpf_docker_endpoint)" 2>/dev/null || true ;;
+     dpf_state_write dockerEndpoint "$(dpf_docker_endpoint)" 2>/dev/null || true
+     dpf_preflight_docker_memory ;;
   75) # Docker was just installed; operator must log out / newgrp
       echo ""
       warn "Re-run install-dpf.sh after logging out and back in (or 'newgrp docker')."
@@ -228,6 +229,17 @@ esac
 #    user choice (nvm / brew / distro pkg) outside the installer's
 #    governance. Phase 7 stays clear of language-runtime installation.
 step "Node.js and pnpm"
+if ! command -v node >/dev/null 2>&1; then
+  # Non-interactive shells (bash install-dpf.sh) don't source .zshrc/.bashrc,
+  # so nvm-managed node is invisible. Try to load nvm if present.
+  _nvm_sh="${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+  if [ -s "$_nvm_sh" ]; then
+    info "node not on PATH; sourcing nvm..."
+    # shellcheck source=/dev/null
+    . "$_nvm_sh" 2>/dev/null || true
+    nvm use default 2>/dev/null || nvm use node 2>/dev/null || true
+  fi
+fi
 if ! command -v node >/dev/null 2>&1; then
   fail "Node.js is not installed. Install Node 20+ via your platform's package manager (nvm, brew, apt) and re-run."
 fi
@@ -273,11 +285,64 @@ fi
 #    Writes DPF_HOST_PROFILE for docker-entrypoint.sh to consume on
 #    portal-init.
 step "Host hardware profile"
+DPF_SELECTED_MODEL=""
 if DPF_HOST_PROFILE_JSON="$(pnpm --filter @dpf/db exec tsx scripts/detect-hardware-host.ts 2>/dev/null)"; then
   export DPF_HOST_PROFILE="$DPF_HOST_PROFILE_JSON"
-  ok "Hardware profile detected (will be passed to portal-init via DPF_HOST_PROFILE)"
+  DPF_SELECTED_MODEL="$(printf '%s' "$DPF_HOST_PROFILE_JSON" | sed -nE 's/.*"selectedModel"\s*:\s*"([^"]+)".*/\1/p')"
+  if [ -n "$DPF_SELECTED_MODEL" ]; then
+    ok "Hardware profile detected — selected AI model: $DPF_SELECTED_MODEL"
+  else
+    ok "Hardware profile detected (will be passed to portal-init via DPF_HOST_PROFILE)"
+  fi
 else
   warn "Host hardware detection failed (non-fatal); portal-init will skip the profile step."
+fi
+
+# 8b. Set up Docker Model Runner and pull the selected chat model.
+#     Mirrors install-dpf.ps1 §Step 7 (lines 1895-1985). Docker Model
+#     Runner is DISABLED by default on fresh Docker Desktop installs; without
+#     enabling it first, `docker model pull` fails with "Docker Model Runner
+#     is not running" and the portal silently degrades to "AI provider is
+#     temporarily unavailable" on first load.
+step "AI Coworker setup (Docker Model Runner)"
+if [ "$DPF_PLATFORM" = "darwin" ] && command -v docker >/dev/null 2>&1; then
+  info "Enabling Docker Model Runner..."
+  if docker desktop enable model-runner >/dev/null 2>&1; then
+    ok "Docker Model Runner enabled"
+
+    # Wait for Model Runner to be ready before pulling.
+    mr_ready=0
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+      if docker model list >/dev/null 2>&1; then mr_ready=1; break; fi
+      sleep 2
+    done
+    if [ "$mr_ready" -ne 1 ]; then
+      warn "Docker Model Runner did not become ready within 30s. The model pull may fail."
+    fi
+
+    if [ -n "$DPF_SELECTED_MODEL" ]; then
+      # Skip pull if the model is already on disk (idempotent re-runs).
+      if docker model list 2>/dev/null | grep -q "$(printf '%s' "$DPF_SELECTED_MODEL" | sed 's|^ai/||; s|:.*$||')"; then
+        ok "Model $DPF_SELECTED_MODEL already on disk"
+      else
+        info "Pulling AI model $DPF_SELECTED_MODEL via Docker Model Runner..."
+        info "  This may take several minutes depending on your internet speed."
+        if docker model pull "$DPF_SELECTED_MODEL" 2>&1 | grep -v "^Downloaded"; then
+          ok "AI Coworker model ready: $DPF_SELECTED_MODEL"
+        else
+          warn "Model pull may have failed. You can retry later: docker model pull $DPF_SELECTED_MODEL"
+        fi
+      fi
+    else
+      warn "No model selected by hardware detection; skipping chat-model pull."
+    fi
+  else
+    warn "Could not enable Docker Model Runner automatically."
+    warn "  Requires Docker Desktop 4.40+. Enable via Settings → AI → Enable Docker Model Runner,"
+    warn "  then re-run install-dpf.sh."
+  fi
+else
+  info "Skipping Model Runner setup (non-Darwin platform or docker unavailable)."
 fi
 
 # 9. Generate / ensure root .env exists. Mirrors scripts/setup.sh's

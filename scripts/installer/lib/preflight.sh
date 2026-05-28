@@ -127,6 +127,51 @@ dpf_preflight_unsupported_host() {
   return 0
 }
 
+# ── Docker memory preflight ───────────────────────────────────────────────
+# The Next.js production build needs ~4 GB of Node.js heap
+# (NODE_OPTIONS=--max-old-space-size=4096). With parallel image builds and
+# OS overhead the Docker VM needs at least 6 GB total. Docker Desktop on
+# Windows defaults to 2 GB — catch this early rather than letting the build
+# OOM silently inside the container.
+
+DPF_DOCKER_MIN_MEM_MB="${DPF_DOCKER_MIN_MEM_MB:-6144}"   # 6 GB hard floor
+DPF_DOCKER_WARN_MEM_MB="${DPF_DOCKER_WARN_MEM_MB:-8192}" # 8 GB soft target
+
+dpf_preflight_docker_memory() {
+  if ! command -v docker >/dev/null 2>&1; then
+    return 0  # docker.sh will handle a missing daemon later
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    return 0  # daemon not running yet; docker.sh will start it
+  fi
+
+  local mem_bytes mem_mb
+  mem_bytes="$(docker info --format '{{.MemTotal}}' 2>/dev/null || echo 0)"
+  mem_mb=$(( mem_bytes / 1048576 ))
+
+  if [ "$mem_mb" -lt "$DPF_DOCKER_MIN_MEM_MB" ] 2>/dev/null; then
+    if [ "${DPF_FORCE_UNSUPPORTED_HOST:-0}" = "1" ]; then
+      warn "Docker VM memory is ${mem_mb} MB (minimum: ${DPF_DOCKER_MIN_MEM_MB} MB), but DPF_FORCE_UNSUPPORTED_HOST=1 — proceeding."
+      return 0
+    fi
+    printf '\n%bInsufficient Docker memory.%b\n' "${DPF_RED:-}" "${DPF_NC:-}" >&2
+    printf '  %bReason:%b Docker VM has %s MB; the Next.js build requires at least %s MB.\n' \
+      "${DPF_YELLOW:-}" "${DPF_NC:-}" "$mem_mb" "$DPF_DOCKER_MIN_MEM_MB" >&2
+    printf '  %bNext:%b   Open Docker Desktop → Settings → Resources → Memory and set it to 8 GB, then re-run.\n' \
+      "${DPF_YELLOW:-}" "${DPF_NC:-}" >&2
+    printf '\n  Override (advanced): DPF_FORCE_UNSUPPORTED_HOST=1 bash %s\n\n' "$0" >&2
+    return 64
+  fi
+
+  if [ "$mem_mb" -lt "$DPF_DOCKER_WARN_MEM_MB" ] 2>/dev/null; then
+    warn "Docker VM memory is ${mem_mb} MB. 8 GB+ is recommended for parallel image builds."
+    info "  To increase: Docker Desktop → Settings → Resources → Memory."
+  else
+    ok "Docker VM memory: ${mem_mb} MB"
+  fi
+  return 0
+}
+
 # ── Port-conflict preflight ────────────────────────────────────────────────
 # Catches the most common fresh-host install failure: port 3000 is
 # already taken by some local dev process (Next.js, Grafana, Hubot,

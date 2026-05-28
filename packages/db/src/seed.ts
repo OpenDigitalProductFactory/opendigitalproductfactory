@@ -1117,7 +1117,16 @@ async function seedCoworkerAgents(): Promise<void> {
     { agentId: "platform-engineer", slugId: "platform-engineer", name: "AI Ops Engineer", tier: 2, type: "coworker", description: "AI infrastructure, provider management, and cost optimization", valueStream: "operate", sensitivity: "confidential" },
     { agentId: "build-specialist", slugId: "build-specialist", name: "Software Engineer", tier: 2, type: "coworker", description: "Feature development, code generation, and implementation", valueStream: "integrate", sensitivity: "internal" },
     { agentId: "data-architect", slugId: "data-architect", name: "Data Architect", tier: 2, type: "coworker", description: "Schema design, data modeling (3NF/DAMA-DMBOK), migration validation, inverse relation checks, and index optimization. Validates all Prisma schema changes before migration.", valueStream: "integrate", sensitivity: "internal" },
-    { agentId: "admin-assistant", slugId: "admin-assistant", name: "System Admin", tier: 2, type: "coworker", description: "Access control, security posture, and platform configuration", valueStream: "operate", sensitivity: "restricted" },
+    // System Admin: platform configuration + access-control surfaces. Lowered
+    // from `restricted` to `confidential` 2026-05-28 — restricted-tier routing
+    // requires a local-only LLM (govern/activate-provider.ts deriveClearance),
+    // forcing a hard Docker Model Runner dependency for first-run users on a
+    // cloud provider (Anthropic OAuth, OpenAI API). System Admin operations
+    // (RBAC review, provider config, backup status, audit trail) don't
+    // typically include regulated personal data. Operators handling restricted
+    // data can elevate via Admin > Platform Development > AI Providers after
+    // acknowledging their provider's DPA terms.
+    { agentId: "admin-assistant", slugId: "admin-assistant", name: "System Admin", tier: 2, type: "coworker", description: "Access control, security posture, and platform configuration", valueStream: "operate", sensitivity: "confidential" },
     { agentId: "coo", slugId: "coo", name: "COO", tier: 1, type: "coworker", description: "Cross-cutting oversight, workforce orchestration, and strategic priorities", valueStream: "cross-cutting", sensitivity: "confidential" },
     { agentId: "doc-specialist", slugId: "doc-specialist", name: "Documentation Specialist", tier: 2, type: "coworker", description: "Mermaid diagram creation/regeneration, documentation structure/consistency, spec and architecture document quality, renderer compatibility awareness", valueStream: "cross-cutting", sensitivity: "internal" },
     { agentId: "compliance-officer", slugId: "compliance-officer", name: "Compliance Officer", tier: 2, type: "coworker", description: "Regulatory compliance, policy governance, audit readiness, and risk management", valueStream: "cross-cutting", sensitivity: "restricted" },
