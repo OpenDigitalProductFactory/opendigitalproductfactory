@@ -2,7 +2,7 @@
   {
     "id": "architecture",
     "label": "Architecture",
-    "skillIds": ["dpf-retrieve-decision-context", "dpf-compare-options", "dpf-decision-via-kernel"]
+    "skillIds": ["dpf-retrieve-decision-context", "dpf-compare-options", "dpf-decision-via-kernel", "dpf-architecture-review"]
   },
   {
     "id": "design",
@@ -22,7 +22,7 @@
   {
     "id": "review-ship",
     "label": "Review/Ship",
-    "skillIds": ["dpf-pr-with-dco", "dpf-local-merge-ci-before-push", "dpf-record-decision-outcome"]
+    "skillIds": ["dpf-architecture-review", "dpf-pr-with-dco", "dpf-local-merge-ci-before-push", "dpf-record-decision-outcome"]
   },
   {
     "id": "recovery",

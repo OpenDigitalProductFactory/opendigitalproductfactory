@@ -15,4 +15,9 @@ describe("Build Studio capability packs", () => {
     expect(getBuildStudioCapabilityPack("review-ship").skillIds).toContain("dpf-local-merge-ci-before-push");
     expect(getBuildStudioCapabilityPack("implementation").skillIds).toContain("dpf-use-shared-nonprod-environment");
   });
+
+  it("offers the advisory chief-architect review in the planning and review packs", () => {
+    expect(getBuildStudioCapabilityPack("architecture").skillIds).toContain("dpf-architecture-review");
+    expect(getBuildStudioCapabilityPack("review-ship").skillIds).toContain("dpf-architecture-review");
+  });
 });

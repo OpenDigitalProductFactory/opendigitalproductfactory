@@ -7266,12 +7266,19 @@ export async function executeTool(
       let phaseGateBlocker: string | null = null;
       const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true } });
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
-      const { buildDesignReviewPrompt, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
-      const prompt = buildDesignReviewPrompt(build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0], "");
+      const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
+      const designDocTyped = build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0];
+      const prompt = buildDesignReviewPrompt(designDocTyped, "");
+      const archPrompt = buildArchitectureReviewPrompt({ kind: "design", doc: designDocTyped }, "");
       const { routeAndCall } = await import("@/lib/routed-inference");
       const messages = [{ role: "user" as const, content: prompt }];
-      // Run two independent reviewers in parallel — conservative merge flags issues either catches.
-      const [r1settled, r2settled] = await Promise.allSettled([
+      // Run the two checklist reviewers PLUS the advisory architecture reviewer
+      // (chief-architect / Enterprise Architect lens) in parallel. The
+      // architecture reviewer NEVER enters mergeReviews — it is advisory only:
+      // it joins the deliberation trail as the `architect` branch and rides
+      // along on review.architectureAdvisory so the coworker can fold concerns
+      // into the spec, but it cannot gate pass/fail.
+      const [r1settled, r2settled, archSettled] = await Promise.allSettled([
         routeAndCall(messages, "You are a design reviewer.", "internal"),
         routeAndCall(
           messages,
@@ -7279,14 +7286,26 @@ export async function executeTool(
           "internal",
           { budgetClass: "minimize_cost" },
         ),
+        routeAndCall(
+          [{ role: "user" as const, content: archPrompt }],
+          "You are the Enterprise Architect (DPF chief-architect lens) reviewing for architectural alignment. Advisory only — surface concerns and concrete spec edits, never block the gate.",
+          "internal",
+          { budgetClass: "minimize_cost" },
+        ),
       ]);
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
       const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
-      const review = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
+      const archReview = archSettled.status === "fulfilled" ? parseReviewResponse(archSettled.value.content) : null;
+      const architectureAdvisory = architectureAdvisoryFromReview(archReview);
+      const reviewBase = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
         decision: "fail" as const,
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
         summary: "Review could not be completed — retry.",
       };
+      const review = architectureAdvisory ? { ...reviewBase, architectureAdvisory } : reviewBase;
+      const archAdvisoryNote = architectureAdvisory && architectureAdvisory.issues.length > 0
+        ? ` Architecture review (advisory): ${architectureAdvisory.summary} Fold actionable items into the design before building — they do not block this gate.`
+        : "";
 
       // Phase 2 of design-time decomposition (BI-2E6CC391, spec
       // docs/superpowers/specs/2026-05-24-build-studio-design-time-
@@ -7318,6 +7337,9 @@ export async function executeTool(
         const reviewerBranches: ReviewBranchInput[] = [];
         if (r1) reviewerBranches.push({ branchNodeId: "reviewer-1", role: "reviewer", review: r1 });
         if (r2) reviewerBranches.push({ branchNodeId: "reviewer-2", role: "reviewer", review: r2 });
+        // Advisory architecture branch — its objections become unresolved
+        // risks in the deliberation summary but never flip the gate.
+        if (archReview) reviewerBranches.push({ branchNodeId: "architect", role: "architect", review: archReview });
         if (reviewerBranches.length > 0) {
           const { runBuildReviewDeliberation } = await import("@/lib/integrate/build-orchestrator");
           await runBuildReviewDeliberation({
@@ -7341,7 +7363,7 @@ export async function executeTool(
           : review.summary;
         return {
           success: true,
-          message: `Design review FAILED. Blocking issues: ${issueList}. Revise the design document to address these issues, then call saveBuildEvidence with field "designDoc" and re-run reviewDesignDoc.`,
+          message: `Design review FAILED. Blocking issues: ${issueList}. Revise the design document to address these issues, then call saveBuildEvidence with field "designDoc" and re-run reviewDesignDoc.${archAdvisoryNote}`,
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }
@@ -7579,12 +7601,12 @@ export async function executeTool(
         console.error("[reviewDesignDoc] auto-advance failed:", err);
       }
 
-      const reviewMessage = phaseGateBlocker
+      const reviewMessage = (phaseGateBlocker
         ? `Design review: ${review.decision}. ${review.summary}\n\n` +
           `IMPORTANT: Phase did NOT advance to plan. Reason: ${phaseGateBlocker} ` +
           `Call confirm_taxonomy_placement (with the right taxonomyNodeId from suggest_taxonomy_placement) ` +
           `and update_feature_brief (with a concrete constrainedGoal) before re-running reviewDesignDoc.`
-        : `Design review: ${review.decision}. ${review.summary}`;
+        : `Design review: ${review.decision}. ${review.summary}`) + archAdvisoryNote;
       return { success: true, message: reviewMessage, data: { review, phaseGateBlocker } };
     }
 
@@ -7629,7 +7651,7 @@ export async function executeTool(
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }
-      const { buildPlanReviewPrompt, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
+      const { buildPlanReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
       // BI-4396EFEC (D38) — Compute the iteration context up front so we can
       // (a) feed prior issues into the reviewer prompt and (b) populate
       // ReviewResult.iteration on the output. Round is 1-based: first
@@ -7647,10 +7669,15 @@ export async function executeTool(
         ? { round: priorRound, issues: priorIssues }
         : null;
       const prompt = buildPlanReviewPrompt(normalizedPlan.plan, priorContext);
+      const archPrompt = buildArchitectureReviewPrompt({ kind: "plan", plan: normalizedPlan.plan }, "");
       const { routeAndCall } = await import("@/lib/routed-inference");
       const messages = [{ role: "user" as const, content: prompt }];
-      // Run two independent reviewers in parallel — conservative merge flags issues either catches.
-      const [r1settled, r2settled] = await Promise.allSettled([
+      // Two checklist reviewers PLUS the advisory architecture reviewer
+      // (chief-architect / Enterprise Architect lens), all in parallel. The
+      // architecture reviewer is advisory only — it never enters mergeReviews,
+      // it rides along on review.architectureAdvisory and the deliberation
+      // `architect` branch so the coworker can fold concerns into the plan.
+      const [r1settled, r2settled, archSettled] = await Promise.allSettled([
         routeAndCall(messages, "You are a plan reviewer.", "internal"),
         routeAndCall(
           messages,
@@ -7658,9 +7685,20 @@ export async function executeTool(
           "internal",
           { budgetClass: "minimize_cost" },
         ),
+        routeAndCall(
+          [{ role: "user" as const, content: archPrompt }],
+          "You are the Enterprise Architect (DPF chief-architect lens) reviewing for architectural alignment. Advisory only — surface concerns and concrete plan edits, never block the gate.",
+          "internal",
+          { budgetClass: "minimize_cost" },
+        ),
       ]);
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
       const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
+      const archReview = archSettled.status === "fulfilled" ? parseReviewResponse(archSettled.value.content) : null;
+      const architectureAdvisory = architectureAdvisoryFromReview(archReview);
+      const archAdvisoryNote = architectureAdvisory && architectureAdvisory.issues.length > 0
+        ? ` Architecture review (advisory): ${architectureAdvisory.summary} Fold actionable items into the plan before building — they do not block this gate.`
+        : "";
       const mergedReview = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
         decision: "fail" as const,
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
@@ -7670,7 +7708,7 @@ export async function executeTool(
       // round and attach to the ReviewResult. computeReviewDelta + isOscillating
       // live in feature-build-types so they're independently unit-testable.
       const { computeReviewDelta, isOscillating } = await import("@/lib/feature-build-types");
-      const review = (() => {
+      const reviewWithIteration = (() => {
         const base = mergedReview;
         if (priorIssues.length === 0) {
           return { ...base, iteration: { round: currentRound } };
@@ -7685,6 +7723,9 @@ export async function executeTool(
           },
         };
       })();
+      const review = architectureAdvisory
+        ? { ...reviewWithIteration, architectureAdvisory }
+        : reviewWithIteration;
       await prisma.featureBuild.update({ where: { buildId }, data: { planReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "planReview" });
@@ -7698,6 +7739,9 @@ export async function executeTool(
         const reviewerBranches: ReviewBranchInput[] = [];
         if (r1) reviewerBranches.push({ branchNodeId: "reviewer-1", role: "reviewer", review: r1 });
         if (r2) reviewerBranches.push({ branchNodeId: "reviewer-2", role: "reviewer", review: r2 });
+        // Advisory architecture branch — surfaces architectural risk into the
+        // deliberation summary without flipping the gate.
+        if (archReview) reviewerBranches.push({ branchNodeId: "architect", role: "architect", review: archReview });
         if (reviewerBranches.length > 0) {
           const { runBuildReviewDeliberation } = await import("@/lib/integrate/build-orchestrator");
           await runBuildReviewDeliberation({
@@ -7730,7 +7774,7 @@ export async function executeTool(
           : "";
         return {
           success: true,
-          message: `Plan review FAILED. Blocking issues: ${issueList}. Revise the implementation plan to address these issues, then call saveBuildEvidence with field "buildPlan" and re-run reviewBuildPlan.${trajectoryNote}`,
+          message: `Plan review FAILED. Blocking issues: ${issueList}. Revise the implementation plan to address these issues, then call saveBuildEvidence with field "buildPlan" and re-run reviewBuildPlan.${trajectoryNote}${archAdvisoryNote}`,
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }
@@ -7811,7 +7855,7 @@ export async function executeTool(
         console.error("[reviewBuildPlan] auto-advance failed:", err);
       }
 
-      return { success: true, message: `Plan review: ${review.decision}. ${review.summary}`, data: { review } };
+      return { success: true, message: `Plan review: ${review.decision}. ${review.summary}${archAdvisoryNote}`, data: { review } };
     }
 
     case "get_code_graph_freshness": {
