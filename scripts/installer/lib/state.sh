@@ -69,6 +69,7 @@ dpf_state_init() {
   "dockerEndpoint": null,
   "installPath": "${install_path}",
   "stateDir": "${state_dir}",
+  "installMode": null,
   "composeFiles": [],
   "imageTag": null,
   "llmProvider": null,
