@@ -285,11 +285,64 @@ fi
 #    Writes DPF_HOST_PROFILE for docker-entrypoint.sh to consume on
 #    portal-init.
 step "Host hardware profile"
+DPF_SELECTED_MODEL=""
 if DPF_HOST_PROFILE_JSON="$(pnpm --filter @dpf/db exec tsx scripts/detect-hardware-host.ts 2>/dev/null)"; then
   export DPF_HOST_PROFILE="$DPF_HOST_PROFILE_JSON"
-  ok "Hardware profile detected (will be passed to portal-init via DPF_HOST_PROFILE)"
+  DPF_SELECTED_MODEL="$(printf '%s' "$DPF_HOST_PROFILE_JSON" | sed -nE 's/.*"selectedModel"\s*:\s*"([^"]+)".*/\1/p')"
+  if [ -n "$DPF_SELECTED_MODEL" ]; then
+    ok "Hardware profile detected — selected AI model: $DPF_SELECTED_MODEL"
+  else
+    ok "Hardware profile detected (will be passed to portal-init via DPF_HOST_PROFILE)"
+  fi
 else
   warn "Host hardware detection failed (non-fatal); portal-init will skip the profile step."
+fi
+
+# 8b. Set up Docker Model Runner and pull the selected chat model.
+#     Mirrors install-dpf.ps1 §Step 7 (lines 1895-1985). Docker Model
+#     Runner is DISABLED by default on fresh Docker Desktop installs; without
+#     enabling it first, `docker model pull` fails with "Docker Model Runner
+#     is not running" and the portal silently degrades to "AI provider is
+#     temporarily unavailable" on first load.
+step "AI Coworker setup (Docker Model Runner)"
+if [ "$DPF_PLATFORM" = "darwin" ] && command -v docker >/dev/null 2>&1; then
+  info "Enabling Docker Model Runner..."
+  if docker desktop enable model-runner >/dev/null 2>&1; then
+    ok "Docker Model Runner enabled"
+
+    # Wait for Model Runner to be ready before pulling.
+    mr_ready=0
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+      if docker model list >/dev/null 2>&1; then mr_ready=1; break; fi
+      sleep 2
+    done
+    if [ "$mr_ready" -ne 1 ]; then
+      warn "Docker Model Runner did not become ready within 30s. The model pull may fail."
+    fi
+
+    if [ -n "$DPF_SELECTED_MODEL" ]; then
+      # Skip pull if the model is already on disk (idempotent re-runs).
+      if docker model list 2>/dev/null | grep -q "$(printf '%s' "$DPF_SELECTED_MODEL" | sed 's|^ai/||; s|:.*$||')"; then
+        ok "Model $DPF_SELECTED_MODEL already on disk"
+      else
+        info "Pulling AI model $DPF_SELECTED_MODEL via Docker Model Runner..."
+        info "  This may take several minutes depending on your internet speed."
+        if docker model pull "$DPF_SELECTED_MODEL" 2>&1 | grep -v "^Downloaded"; then
+          ok "AI Coworker model ready: $DPF_SELECTED_MODEL"
+        else
+          warn "Model pull may have failed. You can retry later: docker model pull $DPF_SELECTED_MODEL"
+        fi
+      fi
+    else
+      warn "No model selected by hardware detection; skipping chat-model pull."
+    fi
+  else
+    warn "Could not enable Docker Model Runner automatically."
+    warn "  Requires Docker Desktop 4.40+. Enable via Settings → AI → Enable Docker Model Runner,"
+    warn "  then re-run install-dpf.sh."
+  fi
+else
+  info "Skipping Model Runner setup (non-Darwin platform or docker unavailable)."
 fi
 
 # 9. Generate / ensure root .env exists. Mirrors scripts/setup.sh's

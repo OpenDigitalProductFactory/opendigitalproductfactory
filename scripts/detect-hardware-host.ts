@@ -166,31 +166,40 @@ function detectLinux(): HostProfile {
   };
 }
 
-// Model selection mirrors install-dpf.ps1's tiers:
-//   discrete VRAM >= 20GB:  ai/gemma4
-//   discrete VRAM >=  8GB:  ai/gemma3 (12B)
-//   discrete VRAM >=  4GB:  ai/gemma3 (4B)
-//   unified RAM   >= 32GB:  ai/gemma4         (Apple Silicon high-mem)
-//   unified RAM   >= 16GB:  ai/gemma3 (12B)   (Apple Silicon mid-mem)
-//   unified RAM   >=  8GB:  ai/gemma3 (4B)    (Apple Silicon low-mem)
-//   cpu-only RAM  >= 16GB:  ai/gemma3
-//   default:                ai/gemma3
+// Model selection mirrors install-dpf.ps1's tiers (verified against the
+// canonical MODEL_TIERS in apps/web/lib/inference/bootstrap-first-run.ts).
+// Qwen3 — NOT Gemma — because the platform's Coworkers catalog tiers Qwen3
+// as `strong + Tool Use` (F1 0.93 @ 8B, 0.97 @ 14B) while Gemma 3/4 tiers
+// as `adequate`. Default coworkers have `minimumTier: strong`, so a Gemma
+// pick fails routing on first install.
+//
+//   discrete VRAM >= 22GB:  ai/qwen3:30B-A3B-Q4_K_M  (30B MoE)
+//   discrete VRAM >= 12GB:  ai/qwen3:14B-Q6_K        (14B dense)
+//   discrete VRAM >=  6GB:  ai/qwen3:8B-Q4_K_M       (8B dense)
+//   unified RAM   >= 32GB:  ai/qwen3:30B-A3B-Q4_K_M  (Apple Silicon hi-mem)
+//   unified RAM   >= 24GB:  ai/qwen3:14B-Q6_K        (Apple Silicon mid)
+//   unified RAM   >= 16GB:  ai/qwen3:8B-Q4_K_M       (Apple Silicon low-mem)
+//   cpu-only / fallback:    ai/qwen3:4B-UD-Q4_K_XL   (4B dense, CPU-OK)
+//
+// Tags verified against https://hub.docker.com/r/ai/qwen3/tags 2026-05-23.
+// Tags are case-sensitive: `ai/qwen3:14b` returns 404; `ai/qwen3:14B-Q6_K`
+// resolves. Do not drop the quantization suffix.
 function selectModel(p: {
   architecture: Architecture;
   totalGB: number;
   gpu: HostProfile["gpu"];
 }): string {
   if (p.architecture === "discrete" && p.gpu && typeof p.gpu.vramGB === "number") {
-    if (p.gpu.vramGB >= 20) return "ai/gemma4";
-    if (p.gpu.vramGB >= 8) return "ai/gemma3";
-    if (p.gpu.vramGB >= 4) return "ai/gemma3";
+    if (p.gpu.vramGB >= 22) return "ai/qwen3:30B-A3B-Q4_K_M";
+    if (p.gpu.vramGB >= 12) return "ai/qwen3:14B-Q6_K";
+    if (p.gpu.vramGB >= 6) return "ai/qwen3:8B-Q4_K_M";
   }
   if (p.architecture === "unified") {
-    if (p.totalGB >= 32) return "ai/gemma4";
-    if (p.totalGB >= 16) return "ai/gemma3";
+    if (p.totalGB >= 32) return "ai/qwen3:30B-A3B-Q4_K_M";
+    if (p.totalGB >= 24) return "ai/qwen3:14B-Q6_K";
+    if (p.totalGB >= 16) return "ai/qwen3:8B-Q4_K_M";
   }
-  if (p.totalGB >= 16) return "ai/gemma3";
-  return "ai/gemma3";
+  return "ai/qwen3:4B-UD-Q4_K_XL";
 }
 
 function main(): void {
