@@ -57,6 +57,8 @@ LIB_DIR="$REPO_ROOT/scripts/installer/lib"
 . "$LIB_DIR/docker.sh"
 # shellcheck source=scripts/installer/lib/autostart.sh
 . "$LIB_DIR/autostart.sh"
+# shellcheck source=scripts/installer/lib/github-cli.sh
+. "$LIB_DIR/github-cli.sh"
 
 # Installer version (semver-ish; bump per release).
 DPF_INSTALLER_VERSION="2026.05.11-phase10a"
@@ -331,6 +333,22 @@ if [ "$DPF_INSTALL_MODE" = "contributor" ] && [ -d .git ]; then
     ok "Git hooks path set to .githooks"
   else
     warn "Could not set core.hooksPath; run 'git config core.hooksPath .githooks' manually."
+  fi
+fi
+
+# GitHub CLI (contributor mode only). Auto-installs `gh` without Homebrew/sudo
+# so contributors can push branches and open PRs (and Build Studio's contribution
+# flow works) without the manual "install gh" detour on a fresh machine. Sign-in
+# is left to the operator: `gh auth login` is an interactive browser flow and the
+# OAuth path it uses is exempt from the fine-grained-PAT lifetime limits some orgs
+# enforce. Non-fatal: a failed auto-install just prints the manual fallback.
+if [ "$DPF_INSTALL_MODE" = "contributor" ]; then
+  step "GitHub CLI"
+  dpf_ensure_gh || warn "GitHub CLI auto-install incomplete (non-fatal)."
+  if command -v gh >/dev/null 2>&1 && ! gh auth status >/dev/null 2>&1; then
+    info "Sign in to GitHub to enable pushes and PRs (OAuth — avoids PAT lifetime limits):"
+    info "    gh auth login --git-protocol https --web"
+    info "  Then wire git:  gh auth setup-git"
   fi
 fi
 
