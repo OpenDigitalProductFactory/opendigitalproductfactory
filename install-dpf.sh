@@ -13,9 +13,17 @@
 #   - --headless flag: non-interactive (default for CI).
 #   - doctor subcommand: emits a diagnostic bundle for support reports.
 #
-# Companion: scripts/setup.sh is the *contributor* bootstrap (clone,
-# install deps, run the dev loop). install-dpf.sh is the *end-user*
-# installer (release images, full stack, autostart).
+# Install modes (parity with install-dpf.ps1 Step 5): the installer prompts
+# for one of two modes, or takes --customer / --contributor:
+#   - customer    "Ready to go"  — pre-built release images, no contributor
+#                                  tooling. The default in headless/CI.
+#   - contributor "Customizable" — full stack built from local source, with
+#                                  contributor git hooks + agent-toolchain
+#                                  bootstrap.
+#
+# Companion: scripts/setup.sh remains the lightweight *contributor dev*
+# bootstrap (dev DB stack + `pnpm dev`), distinct from this installer's
+# from-source containerized contributor mode.
 #
 # Per the deployment doctrine: this implements Contracts 2 (runtime
 # config), 3 (lifecycle), 8 (secrets — via .env generation), and is
@@ -49,6 +57,8 @@ LIB_DIR="$REPO_ROOT/scripts/installer/lib"
 . "$LIB_DIR/docker.sh"
 # shellcheck source=scripts/installer/lib/autostart.sh
 . "$LIB_DIR/autostart.sh"
+# shellcheck source=scripts/installer/lib/github-cli.sh
+. "$LIB_DIR/github-cli.sh"
 
 # Installer version (semver-ish; bump per release).
 DPF_INSTALLER_VERSION="2026.05.11-phase10a"
@@ -69,12 +79,19 @@ Subcommands:
 Flags:
   --dry-run     Print the planned actions without touching the host.
                 Honors --headless. Useful for CI smoke and pre-flight review.
-  --headless    Non-interactive (no prompts). Defaults are used; required
-                for CI / unattended installs.
-  --release     Use pre-built multi-arch GHCR images
-                (docker-compose.release.yml overlay). Default in Phase 7+.
-  --dev         Build images locally (default for Phase 6 framework slice
-                until release-mode integration lands).
+  --headless    Non-interactive (no prompts). Defaults are used (install
+                mode defaults to "customer"); required for CI / unattended
+                installs.
+  --customer    Ready-to-go install: run the pre-built release images and
+                skip contributor tooling. Skips the interactive mode prompt.
+  --contributor Customizable install: build the full stack from local source,
+                enable contributor git hooks, and run the agent-toolchain
+                bootstrap. Skips the interactive mode prompt.
+  --release     Force the pre-built multi-arch GHCR images
+                (docker-compose.release.yml overlay). Overrides the compose
+                mode that the install mode would otherwise derive.
+  --dev         Force locally-built images. Overrides the derived compose
+                mode (e.g. release images for a customer install).
   --force-unsupported-host
                 Override unsupported-host preflight refusal (advanced).
                 Equivalent to DPF_FORCE_UNSUPPORTED_HOST=1.
@@ -91,11 +108,10 @@ Flags:
                 § Approval policy.
   -h, --help    Show this help.
 
-Status: Phase 6 (framework vertical slice). Full end-user install (Docker
-auto-install, autostart, model pulls) lands in Phase 7. Until then,
-install-dpf.sh validates preflight, persists install-state.json, and
-prints the planned compose chain. Use scripts/setup.sh for contributor
-bootstrap.
+Status: Phase 6+ vertical slice. Full end-user install (Docker
+auto-install, autostart, model pulls) lands incrementally per the roadmap.
+Run with no flags for the interactive customer/contributor mode prompt, or
+pass --customer / --contributor to skip it.
 
 Roadmap: docs/superpowers/plans/2026-05-09-macos-linux-native-support.md
 Doctrine: docs/superpowers/specs/2026-05-09-deployment-contracts.md
@@ -103,7 +119,11 @@ EOF
 }
 
 DPF_DRY_RUN=0
-DPF_MODE="dev"   # dev | release
+DPF_MODE="dev"          # dev | release — compose chain. Derived from the
+                        # install mode below unless set explicitly via a flag.
+DPF_MODE_EXPLICIT=0     # 1 once --dev/--release is passed, so the install-mode
+                        # prompt does not override an explicit compose choice.
+DPF_INSTALL_MODE=""     # customer | contributor — resolved in "Install mode".
 DPF_AUTOSTART=1
 DPF_INCLUDE_EDGE="${DPF_INCLUDE_EDGE:-1}"   # 1 = bundle Edge Node; 0 = skip
 SUBCOMMAND=""
@@ -112,8 +132,10 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run)              DPF_DRY_RUN=1 ;;
     --headless)             DPF_HEADLESS=1; export DPF_HEADLESS ;;
-    --release)              DPF_MODE="release" ;;
-    --dev)                  DPF_MODE="dev" ;;
+    --release)              DPF_MODE="release"; DPF_MODE_EXPLICIT=1 ;;
+    --dev)                  DPF_MODE="dev"; DPF_MODE_EXPLICIT=1 ;;
+    --customer)             DPF_INSTALL_MODE="customer" ;;
+    --contributor)          DPF_INSTALL_MODE="contributor" ;;
     --no-autostart)         DPF_AUTOSTART=0 ;;
     --no-edge)              DPF_INCLUDE_EDGE=0 ;;
     --force-unsupported-host)
@@ -147,7 +169,7 @@ echo "  =================================================================="
 dpf_platform
 dpf_arch
 echo "  Platform: $DPF_PLATFORM ($DPF_ARCH)"
-echo "  Mode: $DPF_MODE$(if [ "$DPF_DRY_RUN" = "1" ]; then echo "  [dry-run]"; fi)"
+if [ "$DPF_DRY_RUN" = "1" ]; then echo "  [dry-run]"; fi
 echo ""
 
 # 1. Preflight: unsupported-host detection + port conflicts.
@@ -190,6 +212,59 @@ case "$rc" in
      dpf_state_migrate ;;
   *) fail "Install state validation failed (see message above)" ;;
 esac
+
+# 2b. Choose install mode (parity with install-dpf.ps1 Step 5). Must run
+#     before the compose chain (Step 3) and the dry-run gate (Step 4) since
+#     it can derive DPF_MODE.
+#       customer    "Ready to go"  → release images, no contributor tooling
+#       contributor "Customizable" → from-source build + git hooks + toolchain
+step "Install mode"
+if [ -z "$DPF_INSTALL_MODE" ]; then
+  # Resume: reuse a previously-selected mode without re-prompting.
+  prior_mode="$(dpf_state_read installMode 2>/dev/null || true)"
+  if [ -n "$prior_mode" ]; then
+    DPF_INSTALL_MODE="$prior_mode"
+    ok "Using previously selected mode: $DPF_INSTALL_MODE"
+  elif [ "${DPF_HEADLESS:-0}" = "1" ] || [ "$DPF_DRY_RUN" = "1" ]; then
+    # Non-interactive (CI / dry-run): default to the end-user install.
+    DPF_INSTALL_MODE="customer"
+    info "Non-interactive run; defaulting to customer mode."
+  else
+    echo ""
+    echo "  How do you want to use Digital Product Factory?"
+    echo ""
+    echo "    [1] Ready to go   - Pre-built: use Build Studio inside the portal to extend the platform."
+    echo "    [2] Customizable  - Full source: Build Studio + your editor work from the same workspace."
+    echo ""
+    printf "  Choose [1/2] (default 1): "
+    read -r mode_choice
+    case "$mode_choice" in
+      2) DPF_INSTALL_MODE="contributor" ;;
+      *) DPF_INSTALL_MODE="customer" ;;
+    esac
+  fi
+fi
+
+case "$DPF_INSTALL_MODE" in
+  customer|contributor) ;;
+  *) fail "Unknown install mode '$DPF_INSTALL_MODE' (expected customer|contributor)." ;;
+esac
+
+# Derive the compose mode unless the operator forced it with --dev/--release.
+if [ "$DPF_MODE_EXPLICIT" = "0" ]; then
+  if [ "$DPF_INSTALL_MODE" = "contributor" ]; then
+    DPF_MODE="dev"      # build the stack from local source
+  else
+    DPF_MODE="release"  # pull pre-built GHCR images
+  fi
+fi
+
+# Persist only on a real run. A --dry-run defaults to customer; persisting it
+# would make a later real run "resume" that default and skip the prompt.
+if [ "$DPF_DRY_RUN" != "1" ]; then
+  dpf_state_write installMode "$DPF_INSTALL_MODE" 2>/dev/null || true
+fi
+ok "Install mode: $DPF_INSTALL_MODE (compose mode: $DPF_MODE)"
 
 # 3. Resolve the compose -f chain (per-platform via compose.sh).
 step "Compose chain"
@@ -261,24 +336,57 @@ step "Workspace dependencies"
 pnpm install
 ok "Dependencies installed"
 
+# Contributor git hooks (contributor mode only). Mirrors scripts/setup.sh:
+# enables the in-repo .githooks/ (Prisma migration guard + secret scan).
+# Idempotent; customer installs skip it (they don't author commits here).
+if [ "$DPF_INSTALL_MODE" = "contributor" ] && [ -d .git ]; then
+  step "Contributor git hooks"
+  if git config core.hooksPath .githooks 2>/dev/null; then
+    ok "Git hooks path set to .githooks"
+  else
+    warn "Could not set core.hooksPath; run 'git config core.hooksPath .githooks' manually."
+  fi
+fi
+
+# GitHub CLI (contributor mode only). Auto-installs `gh` without Homebrew/sudo
+# so contributors can push branches and open PRs (and Build Studio's contribution
+# flow works) without the manual "install gh" detour on a fresh machine. Sign-in
+# is left to the operator: `gh auth login` is an interactive browser flow and the
+# OAuth path it uses is exempt from the fine-grained-PAT lifetime limits some orgs
+# enforce. Non-fatal: a failed auto-install just prints the manual fallback.
+if [ "$DPF_INSTALL_MODE" = "contributor" ]; then
+  step "GitHub CLI"
+  dpf_ensure_gh || warn "GitHub CLI auto-install incomplete (non-fatal)."
+  if command -v gh >/dev/null 2>&1 && ! gh auth status >/dev/null 2>&1; then
+    info "Sign in to GitHub to enable pushes and PRs (OAuth — avoids PAT lifetime limits):"
+    info "    gh auth login --git-protocol https --web"
+    info "  Then wire git:  gh auth setup-git"
+  fi
+fi
+
 # Agent toolchain bootstrap (BI-4B17051B Phase 4): converges Claude Code +
 # Codex CLI sessions, seeds kernel memory, persists agentToolchain readiness.
 # The script prints a six-state readiness banner (ready / partial /
 # missing_cli / missing_token / needs_refresh / failed_smoke) with no
 # substrate names or command snippets in operator-visible output.
-step "Agent toolchain bootstrap"
-bootstrap_script="$REPO_ROOT/scripts/dpf-bootstrap-agent-toolchain.sh"
-if [ -f "$bootstrap_script" ]; then
-  bootstrap_args=("$REPO_ROOT")
-  if [ "${DPF_HEADLESS:-0}" = "1" ]; then
-    bootstrap_args=(--headless "${bootstrap_args[@]}")
+# Contributor mode only — customer installs don't need agent CLIs wired up.
+if [ "$DPF_INSTALL_MODE" = "contributor" ]; then
+  step "Agent toolchain bootstrap"
+  bootstrap_script="$REPO_ROOT/scripts/dpf-bootstrap-agent-toolchain.sh"
+  if [ -f "$bootstrap_script" ]; then
+    bootstrap_args=("$REPO_ROOT")
+    if [ "${DPF_HEADLESS:-0}" = "1" ]; then
+      bootstrap_args=(--headless "${bootstrap_args[@]}")
+    fi
+    if [ "${DPF_DRY_RUN:-0}" = "1" ]; then
+      bootstrap_args=(--dry-run "${bootstrap_args[@]}")
+    fi
+    bash "$bootstrap_script" "${bootstrap_args[@]}" || warn "Agent toolchain bootstrap reported an issue (non-fatal)."
+  else
+    warn "scripts/dpf-bootstrap-agent-toolchain.sh not found; skipping agent toolchain convergence."
   fi
-  if [ "${DPF_DRY_RUN:-0}" = "1" ]; then
-    bootstrap_args=(--dry-run "${bootstrap_args[@]}")
-  fi
-  bash "$bootstrap_script" "${bootstrap_args[@]}" || warn "Agent toolchain bootstrap reported an issue (non-fatal)."
 else
-  warn "scripts/dpf-bootstrap-agent-toolchain.sh not found; skipping agent toolchain convergence."
+  info "Skipping agent toolchain bootstrap (customer mode)."
 fi
 
 # 8. Resolve host hardware profile (Phase 5 macOS / Linux detector).
@@ -462,6 +570,23 @@ export PATH="$SAFETY_BIN:$PATH"
 
 ok "Shell guard installed at $SAFETY_BIN"
 info "  Open a new terminal for the PATH change to take effect in other shells."
+
+# 9c. Customer mode pulls pre-built GHCR images (parity with the Windows
+#     consumer path). During early access those images may require a (free)
+#     GitHub login. Probe once and point the operator at `docker login`
+#     rather than letting `compose up` fail with an opaque manifest error.
+#     We never create accounts or store credentials on the operator's behalf.
+if [ "$DPF_INSTALL_MODE" = "customer" ]; then
+  step "Release image availability"
+  if docker pull ghcr.io/opendigitalproductfactory/dpf-portal:latest >/dev/null 2>&1; then
+    ok "Release images reachable"
+  else
+    warn "Could not pull the pre-built platform image."
+    info "  During early access the images need a free GitHub login:"
+    info "    docker login ghcr.io"
+    info "  Then re-run install-dpf.sh. (Contributor mode builds from source instead.)"
+  fi
+fi
 
 # 10. Bring up the platform-aware compose stack. Per the doctrine's
 #     Contract 9: the entrypoint is provider-aware, so model pulls

@@ -60,12 +60,29 @@ cd ~/dpf
 bash install-dpf.sh
 ```
 
-The installer is interactive by default. For an unattended (CI / scripted)
-install:
+The installer is interactive by default and first asks **how you want to use
+DPF**:
+
+- **`[1] Ready to go` (customer)** — runs the pre-built release images. No
+  contributor tooling. This is the default.
+- **`[2] Customizable` (contributor)** — builds the full stack from your local
+  source, enables the in-repo git hooks, and runs the agent-toolchain
+  bootstrap so Claude Code / Codex are wired up.
+
+Your choice is saved to `~/.dpf/install-state.json` (`installMode`) and reused
+on re-runs without re-prompting. To skip the prompt, pass `--customer` or
+`--contributor`. For an unattended (CI / scripted) install:
 
 ```bash
-bash install-dpf.sh --headless --release
+# Customer (release images) is the headless default:
+bash install-dpf.sh --headless
+
+# Or pick explicitly:
+bash install-dpf.sh --headless --contributor
 ```
+
+`--customer`/`--contributor` set the compose mode automatically (release vs
+source build); `--release`/`--dev` still override it if you need to force one.
 
 ### What the installer does
 
@@ -73,25 +90,41 @@ bash install-dpf.sh --headless --release
    rootless Docker / Podman.
 2. **`~/.dpf/install-state.json`** — initializes or migrates the install
    state file (schema-versioned).
-3. **Compose chain** — assembles `docker-compose.yml` +
+3. **Install mode** — prompts for customer vs contributor (or honors
+   `--customer`/`--contributor`), saves it to `install-state.json`, and
+   derives the compose mode (customer → release images; contributor →
+   source build) unless `--release`/`--dev` forces one.
+4. **Compose chain** — assembles `docker-compose.yml` +
    `docker-compose.macos.yml` + `docker-compose.edge.yml` (+
-   `docker-compose.release.yml` if `--release`). The Edge Node
+   `docker-compose.release.yml` in release/customer mode). The Edge Node
    container is bundled by default for single-host installs; pass
    `--no-edge` to skip it.
-4. **Docker Desktop** — installs the `.dmg` if missing
+5. **Docker Desktop** — installs the `.dmg` if missing
    (`hdiutil attach` + `cp -R /Applications`), then starts it and waits
    for the daemon.
-5. **Node / pnpm sanity check** — refuses if Node < 20 or pnpm missing.
-6. **Workspace dependencies** — `pnpm install`.
-7. **Host hardware profile** — runs `scripts/detect-hardware-host.ts`
+6. **Node / pnpm sanity check** — refuses if Node < 20 or pnpm missing.
+7. **Workspace dependencies** — `pnpm install`. In **contributor** mode the
+   installer also enables the in-repo `.githooks/` (`git config
+   core.hooksPath .githooks`), **auto-installs the GitHub CLI (`gh`)** into
+   `~/.dpf/tools/bin` (no Homebrew/sudo — downloaded from the official
+   release and checksum-verified) and adds it to your `PATH`, then runs the
+   agent-toolchain bootstrap so Claude Code / Codex are wired up. It does
+   **not** sign you in — finish with `gh auth login --git-protocol https
+   --web` (the OAuth flow, which avoids the fine-grained-PAT lifetime limits
+   some orgs enforce) and `gh auth setup-git`. Customer mode skips all of
+   this.
+8. **Host hardware profile** — runs `scripts/detect-hardware-host.ts`
    and emits `DPF_HOST_PROFILE` (Apple Silicon reports
    `architecture: "unified"` for memory).
-8. **`.env` generation** — only on first install; existing `.env` is
+9. **`.env` generation** — only on first install; existing `.env` is
    preserved.
-9. **`docker compose up -d`** on the macOS overlay.
-10. **Health check** — polls `http://localhost:3000/api/health` for up
+10. **Release image availability** (customer mode only) — probes the GHCR
+    portal image and, if it's gated behind early-access auth, points you at
+    `docker login ghcr.io` before bring-up.
+11. **`docker compose up -d`** on the macOS overlay.
+12. **Health check** — polls `http://localhost:3000/api/health` for up
     to 5 minutes (configurable via `DPF_HEALTH_TIMEOUT`).
-11. **Edge Node bootstrap** (unless `--no-edge`) — mints a single-use
+13. **Edge Node bootstrap** (unless `--no-edge`) — mints a single-use
     auto-approve bootstrap token, writes it to `.env` as
     `DPF_BOOTSTRAP_TOKEN`, restarts the `edge-node` container so it
     enrolls. The new EdgeNode lands directly in `trustState=trusted`
@@ -103,9 +136,9 @@ bash install-dpf.sh --headless --release
     native macOS Edge Node binary (T3) — until then, the Edge Node
     here demonstrates the enrollment + heartbeat + submission path
     but not L2 host-network discovery.
-12. **Persist state** — records `lastSuccessfulInstallVersion` and
+14. **Persist state** — records `lastSuccessfulInstallVersion` and
     `lastHealthCheck`.
-13. **LaunchAgent** — installs `~/Library/LaunchAgents/local.dpf-autostart.plist`
+15. **LaunchAgent** — installs `~/Library/LaunchAgents/local.dpf-autostart.plist`
     so the stack auto-starts at login (skip with `--no-autostart`).
 
 Total wall time: ~10 minutes including the AI-model download (varies
