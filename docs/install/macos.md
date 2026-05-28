@@ -105,8 +105,14 @@ source build); `--release`/`--dev` still override it if you need to force one.
 6. **Node / pnpm sanity check** — refuses if Node < 20 or pnpm missing.
 7. **Workspace dependencies** — `pnpm install`. In **contributor** mode the
    installer also enables the in-repo `.githooks/` (`git config
-   core.hooksPath .githooks`) and runs the agent-toolchain bootstrap so
-   Claude Code / Codex are wired up. Customer mode skips both.
+   core.hooksPath .githooks`), **auto-installs the GitHub CLI (`gh`)** into
+   `~/.dpf/tools/bin` (no Homebrew/sudo — downloaded from the official
+   release and checksum-verified) and adds it to your `PATH`, then runs the
+   agent-toolchain bootstrap so Claude Code / Codex are wired up. It does
+   **not** sign you in — finish with `gh auth login --git-protocol https
+   --web` (the OAuth flow, which avoids the fine-grained-PAT lifetime limits
+   some orgs enforce) and `gh auth setup-git`. Customer mode skips all of
+   this.
 8. **Host hardware profile** — runs `scripts/detect-hardware-host.ts`
    and emits `DPF_HOST_PROFILE` (Apple Silicon reports
    `architecture: "unified"` for memory).
