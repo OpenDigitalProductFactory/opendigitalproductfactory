@@ -23,10 +23,11 @@ export type SelfUpgradeRunEventData = {
   dryRun?: boolean;
   buildId?: string;
   /**
-   * Force-apply even when quiescence would defer the upgrade. Operator-
-   * confirmed only; never set by the scheduled cron. Surfaces as a
-   * ship-force-equivalent flag to the coordinator so it records the
-   * override on QuiescenceRun.forcedSurfaces for audit.
+   * Operator emergency override. Bypasses the maintenance-window gate so a
+   * manual trigger runs immediately, AND force-applies even when quiescence
+   * would defer the upgrade (surfaces as ship-force to the coordinator, which
+   * records the override on QuiescenceRun.forcedSurfaces for audit).
+   * Operator-confirmed only; never set by the scheduled cron.
    */
   force?: boolean;
   /**
@@ -43,7 +44,11 @@ export async function runSelfUpgrade(
   const config = await getSelfUpgradeConfig();
 
   if (!config.enabled && !params.dryRun) return { skipped: true, reason: "disabled" };
-  if (!isInMaintenanceWindow(config) && !params.dryRun) return { skipped: true, reason: "outside-window" };
+  // force = operator emergency override: bypass the maintenance window (and,
+  // below, the quiescence defer). Never set by the scheduled cron.
+  if (!isInMaintenanceWindow(config) && !params.dryRun && !params.force) {
+    return { skipped: true, reason: "outside-window" };
+  }
 
   const targetSha = await resolveTargetSha(config.channel, config);
   if (!targetSha) return { skipped: true, reason: "no-target" };

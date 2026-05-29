@@ -32,6 +32,7 @@ vi.mock("@/lib/shared/lazy-node", () => ({
 vi.mock("@/lib/self-upgrade", () => ({
   getSelfUpgradeConfig: vi.fn(),
   isInMaintenanceWindow: vi.fn(),
+  nextMaintenanceWindowStart: vi.fn().mockReturnValue(null),
   resolveTargetSha: vi.fn(),
   isShaFresh: vi.fn(),
   getDeployedSha: vi.fn(),
@@ -101,6 +102,9 @@ beforeEach(() => {
   vi.mocked(can).mockReturnValue(true);
   vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
   vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
+  // Default: treat triggers as in-window so dispatch tests exercise the happy
+  // path. Tests that care about the window gate override this explicitly.
+  vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(true);
 });
 
 // ─── Permission Guard ─────────────────────────────────────────────────────────
@@ -454,6 +458,43 @@ describe("triggerSelfUpgrade – dispatch", () => {
   it("returns { queued: true }", async () => {
     const result = await triggerSelfUpgrade();
     expect(result).toEqual({ queued: true });
+  });
+});
+
+// ─── triggerSelfUpgrade – maintenance window gate + emergency override ─────────
+
+describe("triggerSelfUpgrade – window gate", () => {
+  it("returns queued: false / outside-window when not in a maintenance window", async () => {
+    vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(false);
+
+    const result = await triggerSelfUpgrade();
+
+    expect(result).toEqual(
+      expect.objectContaining({ queued: false, reason: "outside-window" }),
+    );
+    expect(vi.mocked(inngest.send)).not.toHaveBeenCalled();
+  });
+
+  it("force=true bypasses the window gate and dispatches with force in the event", async () => {
+    vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(false);
+
+    const result = await triggerSelfUpgrade({ force: true });
+
+    expect(result).toEqual({ queued: true });
+    expect(vi.mocked(inngest.send)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ force: true }),
+      }),
+    );
+  });
+
+  it("does not include force in the event for a normal in-window trigger", async () => {
+    vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(true);
+
+    await triggerSelfUpgrade();
+
+    const sent = vi.mocked(inngest.send).mock.calls[0][0] as { data: Record<string, unknown> };
+    expect(sent.data).not.toHaveProperty("force");
   });
 });
 

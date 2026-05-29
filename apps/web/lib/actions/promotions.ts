@@ -10,6 +10,7 @@ import { generatePromotionId } from "@/lib/version-tracking";
 import {
   getSelfUpgradeConfig,
   isInMaintenanceWindow,
+  nextMaintenanceWindowStart,
   resolveTargetSha,
   isShaFresh,
   getDeployedSha,
@@ -591,6 +592,8 @@ export async function getSelfUpgradeStatus() {
   ]);
 
   const inMaintenanceWindow = isInMaintenanceWindow(config);
+  const windowConfigured = config.maintenanceWindows.length > 0;
+  const nextWindowStart = nextMaintenanceWindowStart(config)?.toISOString() ?? null;
   const targetSha = await resolveTargetSha(config.channel, config);
   const isFresh = targetSha ? isShaFresh(deployedSha, targetSha) : false;
 
@@ -598,6 +601,8 @@ export async function getSelfUpgradeStatus() {
     enabled: config.enabled,
     channel: config.channel,
     inMaintenanceWindow,
+    windowConfigured,
+    nextWindowStart,
     deployedSha,
     deployedShaSource: platformVersion.imageVersion?.source ?? "unknown",
     targetSha,
@@ -614,13 +619,20 @@ export async function getSelfUpgradeStatus() {
   };
 }
 
-export async function triggerSelfUpgrade(opts?: { dryRun?: boolean }) {
+export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: boolean }) {
   const userId = await requireOpsAccess();
 
   if (!opts?.dryRun) {
     const config = await getSelfUpgradeConfig();
     if (!config.enabled) {
       return { queued: false, reason: "disabled" } as const;
+    }
+    // Honest feedback: a manual trigger outside the maintenance window is a
+    // no-op (runSelfUpgrade skips before creating a run). Surface that here
+    // instead of optimistically reporting "queued". force = emergency
+    // override that bypasses the window.
+    if (!opts?.force && !isInMaintenanceWindow(config)) {
+      return { queued: false, reason: "outside-window" } as const;
     }
   }
 
@@ -634,6 +646,7 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean }) {
     data: {
       triggeredBy: `manual:${userId}`,
       ...(opts?.dryRun !== undefined ? { dryRun: opts.dryRun } : {}),
+      ...(opts?.force ? { force: true } : {}),
     },
   });
   return { queued: true } as const;

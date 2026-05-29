@@ -23,6 +23,8 @@ type Props = {
   enabled: boolean;
   channel: string;
   inMaintenanceWindow: boolean;
+  windowConfigured?: boolean;
+  nextWindowStart?: string | null;
   deployedSha: string | null;
   deployedShaSource?: ImageVersionSource;
   targetSha: string | null;
@@ -85,6 +87,8 @@ export default function SelfUpgradeClient({
   enabled,
   channel,
   inMaintenanceWindow,
+  windowConfigured,
+  nextWindowStart,
   deployedSha,
   deployedShaSource,
   targetSha,
@@ -96,12 +100,14 @@ export default function SelfUpgradeClient({
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [override, setOverride] = useState(false);
   const [triggerResult, setTriggerResult] = useState<{ queued: boolean; reason?: string } | null>(null);
 
   function handleTrigger() {
     setTriggerResult(null);
+    const force = override;
     startTransition(async () => {
-      const result = await triggerSelfUpgrade();
+      const result = await triggerSelfUpgrade(force ? { force: true } : undefined);
       setTriggerResult(result);
       router.refresh();
     });
@@ -126,16 +132,29 @@ export default function SelfUpgradeClient({
         </div>
 
         {enabled && (
-          <button
-            type="button"
-            onClick={handleTrigger}
-            disabled={isPending || latestRun?.status === "running"}
-            aria-busy={isPending}
-            aria-label="Trigger self-upgrade now"
-            className="px-3 py-1.5 text-xs rounded-lg bg-[var(--dpf-accent)]/20 text-[var(--dpf-accent)] border border-[var(--dpf-accent)]/40 hover:bg-[var(--dpf-accent)]/30 transition-colors disabled:opacity-50"
-          >
-            {isPending ? "Triggering..." : "Trigger Now"}
-          </button>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1.5 text-xs text-[var(--dpf-muted)] cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={override}
+                onChange={(e) => setOverride(e.target.checked)}
+                aria-label="Emergency override: bypass maintenance window"
+                className="accent-[var(--dpf-warning)]"
+              />
+              Emergency override
+            </label>
+            <button
+              type="button"
+              onClick={handleTrigger}
+              disabled={isPending || latestRun?.status === "running"}
+              aria-busy={isPending}
+              aria-label="Trigger self-upgrade now"
+              data-override={override ? "true" : "false"}
+              className="px-3 py-1.5 text-xs rounded-lg bg-[var(--dpf-accent)]/20 text-[var(--dpf-accent)] border border-[var(--dpf-accent)]/40 hover:bg-[var(--dpf-accent)]/30 transition-colors disabled:opacity-50"
+            >
+              {isPending ? "Triggering..." : override ? "Force upgrade now" : "Trigger Now"}
+            </button>
+          </div>
         )}
       </div>
 
@@ -217,6 +236,35 @@ export default function SelfUpgradeClient({
           </>
         )}
       </div>
+
+      {enabled && (
+        <div
+          className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-xs"
+          data-window-configured={windowConfigured ? "true" : "false"}
+        >
+          <span className="font-medium text-[var(--dpf-text)]">Schedule:</span>{" "}
+          {!windowConfigured ? (
+            <span className="text-[var(--dpf-warning)]">
+              No maintenance window configured — scheduled upgrades will not run
+              on their own. Use Emergency override to run now.
+            </span>
+          ) : inMaintenanceWindow ? (
+            <span className="text-[var(--dpf-success)]">
+              In maintenance window now — upgrades are evaluated hourly.
+            </span>
+          ) : nextWindowStart ? (
+            <span className="text-[var(--dpf-muted)]">
+              Next maintenance window:{" "}
+              <span className="font-mono">{formatDate(nextWindowStart)}</span> —
+              upgrades are evaluated hourly.
+            </span>
+          ) : (
+            <span className="text-[var(--dpf-muted)]">
+              Maintenance window configured.
+            </span>
+          )}
+        </div>
+      )}
 
       {enabled && !latestRun && (
         <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)]">
