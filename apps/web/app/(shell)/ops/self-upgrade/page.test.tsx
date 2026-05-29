@@ -46,6 +46,8 @@ const baseStatus = {
   enabled: false,
   channel: "stable",
   inMaintenanceWindow: false,
+  windowConfigured: false,
+  nextWindowStart: null,
   deployedSha: null,
   deployedShaSource: "unknown" as const,
   targetSha: null,

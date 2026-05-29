@@ -4,6 +4,7 @@ import {
   parseSelfUpgradeConfig,
   getSelfUpgradeConfig,
   isInMaintenanceWindow,
+  nextMaintenanceWindowStart,
 } from "./config";
 
 vi.mock("@dpf/db", () => ({
@@ -384,5 +385,47 @@ describe("getSelfUpgradeConfig", () => {
     });
     const cfg = await getSelfUpgradeConfig();
     expect(cfg.enabled).toBe(false);
+  });
+});
+
+describe("nextMaintenanceWindowStart", () => {
+  const base = {
+    enabled: true,
+    channel: "stable",
+    checkIntervalHours: 24,
+    healthTarget: 100,
+  };
+
+  it("returns null when no windows are configured", () => {
+    expect(
+      nextMaintenanceWindowStart({ ...base, maintenanceWindows: [] }),
+    ).toBeNull();
+  });
+
+  it("returns `now` when a window is currently active", () => {
+    // 03:00 local, inside a 02:00-04:00 window on the same weekday.
+    const now = new Date(2026, 4, 25, 3, 0, 0, 0);
+    const config = {
+      ...base,
+      maintenanceWindows: [
+        { dayOfWeek: [now.getDay()], startTime: "02:00", endTime: "04:00" },
+      ],
+    };
+    expect(nextMaintenanceWindowStart(config, now)).toBe(now);
+  });
+
+  it("returns the next start time later today when before the window", () => {
+    // 01:00 local, window opens at 02:00 the same day.
+    const now = new Date(2026, 4, 25, 1, 0, 0, 0);
+    const config = {
+      ...base,
+      maintenanceWindows: [
+        { dayOfWeek: [now.getDay()], startTime: "02:00", endTime: "04:00" },
+      ],
+    };
+    const expected = new Date(2026, 4, 25, 2, 0, 0, 0);
+    expect(nextMaintenanceWindowStart(config, now)?.getTime()).toBe(
+      expected.getTime(),
+    );
   });
 });

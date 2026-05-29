@@ -295,6 +295,38 @@ describe("success path", () => {
   });
 });
 
+describe("maintenance window gate + emergency override", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
+    mocks.resolveTargetSha.mockResolvedValue("abc1234deadbeef");
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
+    mocks.isShaFresh.mockReturnValue(false);
+    setupQuiescenceReady();
+    mocks.getLatestRun.mockResolvedValue(null);
+    mocks.createRun.mockResolvedValue({ runId: "SUR-FORCE001" });
+    mocks.startRun.mockResolvedValue({});
+    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
+    mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "promoted", stderr: "" });
+    mocks.completeRun.mockResolvedValue({});
+  });
+
+  it("skips with outside-window when not in a window and no force", async () => {
+    mocks.isInMaintenanceWindow.mockReturnValue(false);
+    const result = await runSelfUpgrade({ triggeredBy: "manual:ops" });
+    expect(result).toMatchObject({ skipped: true, reason: "outside-window" });
+    expect(mocks.createRun).not.toHaveBeenCalled();
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
+  });
+
+  it("force=true bypasses the window gate and runs the promoter", async () => {
+    mocks.isInMaintenanceWindow.mockReturnValue(false);
+    const result = await runSelfUpgrade({ triggeredBy: "manual:ops", force: true });
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+    expect(mocks.runPromoter).toHaveBeenCalled();
+  });
+});
+
 describe("failure path", () => {
   beforeEach(() => {
     vi.clearAllMocks();

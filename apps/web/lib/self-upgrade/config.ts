@@ -51,6 +51,38 @@ export function isInMaintenanceWindow(config: SelfUpgradeConfig, now?: Date): bo
   });
 }
 
+/**
+ * Returns the next datetime a maintenance window opens, scanning the next 7
+ * days. If a window is currently active, returns `now` (the scheduled upgrade
+ * can run on the next hourly cron tick). Returns null when no windows are
+ * configured — meaning scheduled upgrades will never fire on their own.
+ */
+export function nextMaintenanceWindowStart(
+  config: SelfUpgradeConfig,
+  now?: Date,
+): Date | null {
+  if (config.maintenanceWindows.length === 0) return null;
+  const base = now ?? new Date();
+  if (isInMaintenanceWindow(config, base)) return base;
+
+  let best: Date | null = null;
+  for (let offset = 0; offset <= 7; offset++) {
+    const day = new Date(base);
+    day.setDate(base.getDate() + offset);
+    const dow = day.getDay();
+    for (const w of config.maintenanceWindows) {
+      if (!w.dayOfWeek.includes(dow)) continue;
+      const [h, m] = w.startTime.split(":").map(Number);
+      const start = new Date(day);
+      start.setHours(h, m, 0, 0);
+      if (start.getTime() > base.getTime() && (!best || start < best)) {
+        best = start;
+      }
+    }
+  }
+  return best;
+}
+
 export const SELF_UPGRADE_CONFIG_KEY = "self_upgrade";
 const LEGACY_SELF_UPGRADE_CONFIG_KEY = "portal.selfUpgrade";
 
