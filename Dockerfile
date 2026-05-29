@@ -133,6 +133,11 @@ RUN if [ -n "$DPF_VERSION" ]; then \
         | sort -k 2 | sha256sum | cut -d ' ' -f 1 > /app/.dpf-image-version; \
     fi
 
+# Build timestamp (UTC, ISO-8601), surfaced alongside the source identity in
+# /ops/self-upgrade so operators can see when the running image was produced,
+# independent of the static version.json baseline.
+RUN date -u +%Y-%m-%dT%H:%M:%SZ > /app/.dpf-image-built-at
+
 # Promoter build context (autonomous deployment pipeline)
 # These files let the portal build the dpf-promoter image on first use.
 COPY Dockerfile.promoter /promoter/Dockerfile.promoter

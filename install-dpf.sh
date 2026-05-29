@@ -625,6 +625,18 @@ fi
 #     resolves to (Docker Model Runner on Docker Desktop; Ollama on
 #     Linux native Docker via docker-compose.linux.yml).
 step "Bringing up the platform"
+# Stamp the build with the current commit so /ops/self-upgrade can compare the
+# running image to the upgrade target. Contributor mode builds from local
+# source; without this the Dockerfile falls back to a content hash that can
+# never match a git-SHA target, leaving freshness checks inert. Customer mode
+# pulls CI-stamped images, so we leave DPF_VERSION unset there (the host
+# checkout SHA is unrelated to the pulled image and would mislabel DEPLOYED_SHA).
+if [ "$DPF_INSTALL_MODE" = "contributor" ] && [ -d .git ]; then
+  if DPF_VERSION="$(git rev-parse HEAD 2>/dev/null)" && [ -n "$DPF_VERSION" ]; then
+    export DPF_VERSION
+    ok "Stamping local build with DPF_VERSION=$DPF_VERSION"
+  fi
+fi
 docker compose "${DPF_COMPOSE_FILES[@]}" up -d
 ok "docker compose up returned"
 

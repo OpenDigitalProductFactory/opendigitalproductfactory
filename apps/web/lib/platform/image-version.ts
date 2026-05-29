@@ -35,6 +35,25 @@ export async function readImageVersion(
   }
 }
 
+const IMAGE_BUILT_AT_PATH = "/app/.dpf-image-built-at";
+
+/**
+ * Read the build timestamp baked into the running portal image by the
+ * Dockerfile (see /app/.dpf-image-built-at). ISO-8601 UTC. Returns null when
+ * the marker is absent — non-container environments (next dev, vitest) and
+ * images built before this marker existed.
+ */
+export async function readImageBuiltAt(
+  path: string = IMAGE_BUILT_AT_PATH,
+): Promise<string | null> {
+  try {
+    const raw = (await readFile(path, "utf-8")).trim();
+    return raw || null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Classify the version string by shape. A 40-char hex string is treated as a
  * git SHA; a 64-char hex string is treated as a sha256 content hash. Anything
