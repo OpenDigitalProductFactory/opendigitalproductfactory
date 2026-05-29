@@ -21,24 +21,52 @@ export type CodexConfigPlan = {
 };
 
 const DPF_PLUGIN_KEY = "dpf-platform";
+// Mirrors MCP_BEARER_TOKEN_ENV_VAR in apps/web/lib/auth/mcp-setup-snippets.ts.
+// Duplicated as a stable literal because this installer-side package must not
+// depend on the web bundle. Keep the two in lockstep.
+const MCP_BEARER_TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN";
+
+/** Desired `[mcp_servers.dpf]` shape (secret-free — references the env var). */
+function desiredMcpServerBlock(mcpEndpoint: string): Record<string, string> {
+  return { url: mcpEndpoint, bearer_token_env_var: MCP_BEARER_TOKEN_ENV_VAR };
+}
+
+function mcpBlockConverged(
+  existing: { url?: string; bearer_token_env_var?: string } | undefined,
+  mcpEndpoint: string,
+): boolean {
+  return (
+    existing?.url === mcpEndpoint &&
+    existing?.bearer_token_env_var === MCP_BEARER_TOKEN_ENV_VAR
+  );
+}
 
 /**
  * Plan the Codex `config.toml` upsert for this contributor and repo.
+ *
+ * Converges two independent, secret-free blocks:
+ *   - `[plugins."dpf-platform"]` enabled = true (the DPF skill pack)
+ *   - `[mcp_servers.dpf]` url + bearer_token_env_var (the governed MCP transport),
+ *     written only when `mcpEndpoint` is supplied.
  *
  * - `existingTomlText` is the file's current text (or "" for a fresh contributor).
  * - `repoRoot` is the absolute path of the contributor's DPF clone. Recorded in
  *   the plan rationale; not embedded in the TOML.
  * - `configPath` is the absolute path where the plan would write back.
+ * - `mcpEndpoint` is the `/api/mcp/v1` URL. When omitted, the MCP block is left
+ *   untouched (back-compat with callers that only manage the plugin block).
  *
- * Returns zero writes when the file is unparseable (with a rationale), zero
- * writes when the plugin block already matches the desired state, zero writes
- * when the user has explicitly disabled the plugin, and a single write with
- * the upserted block otherwise. Every other block is preserved.
+ * Returns zero writes when the file is unparseable, zero writes when both
+ * blocks already match the desired state, and a single full-file write with
+ * the upserted blocks otherwise. Every other block is preserved byte-for-byte
+ * via smol-toml round-tripping. A user-set `enabled = false` on the plugin is
+ * honored (never silently re-enabled); MCP wiring is independent of that intent.
  */
 export function planCodexConfig(
   existingTomlText: string,
   repoRoot: string,
   configPath: string,
+  mcpEndpoint?: string,
 ): CodexConfigPlan {
   let parsed: Record<string, unknown>;
   try {
@@ -53,45 +81,52 @@ export function planCodexConfig(
   }
 
   const plugins = (parsed["plugins"] as Record<string, unknown> | undefined) ?? {};
-  const existingBlock = plugins[DPF_PLUGIN_KEY] as
-    | { enabled?: boolean }
+  const existingBlock = plugins[DPF_PLUGIN_KEY] as { enabled?: boolean } | undefined;
+  const userDisabledPlugin = existingBlock?.enabled === false;
+  const pluginConverged = existingBlock?.enabled === true || userDisabledPlugin;
+
+  const mcpServers = (parsed["mcp_servers"] as Record<string, unknown> | undefined) ?? {};
+  const existingMcp = mcpServers["dpf"] as
+    | { url?: string; bearer_token_env_var?: string }
     | undefined;
+  const wantMcp = typeof mcpEndpoint === "string" && mcpEndpoint.length > 0;
+  const mcpConverged = !wantMcp || mcpBlockConverged(existingMcp, mcpEndpoint!);
 
-  // User-intent preservation: if the user has explicitly set enabled = false,
-  // the bootstrap never silently re-enables the plugin. Surfaced via rationale.
-  if (existingBlock && existingBlock.enabled === false) {
+  // Nothing to do — both blocks already match desired state.
+  if (pluginConverged && mcpConverged) {
     return {
       writes: [],
       deletes: [],
-      rationale:
-        "Codex plugin [plugins.\"dpf-platform\"] is set to enabled=false by the user; preserving user intent for " +
-        repoRoot,
-      preservedUserIntent: true,
+      rationale: userDisabledPlugin
+        ? `Codex plugin disabled by user (preserved); MCP block ${wantMcp ? "already converged" : "unmanaged"}.`
+        : "Codex plugin + MCP block already converged; no write needed.",
+      preservedUserIntent: userDisabledPlugin,
     };
   }
 
-  // Already converged.
-  if (existingBlock && existingBlock.enabled === true) {
-    return {
-      writes: [],
-      deletes: [],
-      rationale: "Codex plugin already enabled; no write needed.",
-      preservedUserIntent: false,
-    };
+  const nextParsed: Record<string, unknown> = { ...parsed };
+  const rationaleParts: string[] = [];
+
+  // Plugin block: add/enable unless the user explicitly disabled it.
+  if (!pluginConverged) {
+    const nextPlugins: Record<string, unknown> = { ...plugins };
+    nextPlugins[DPF_PLUGIN_KEY] = { ...(existingBlock ?? {}), enabled: true };
+    nextParsed["plugins"] = nextPlugins;
+    rationaleParts.push(`enable [plugins."${DPF_PLUGIN_KEY}"]`);
   }
 
-  // Need to add or upsert.
-  const nextPlugins: Record<string, unknown> = { ...plugins };
-  nextPlugins[DPF_PLUGIN_KEY] = { ...(existingBlock ?? {}), enabled: true };
-
-  const nextParsed: Record<string, unknown> = { ...parsed, plugins: nextPlugins };
-
-  const nextText = stringify(nextParsed);
+  // MCP transport block: independent of plugin-enable intent.
+  if (wantMcp && !mcpConverged) {
+    const nextMcpServers: Record<string, unknown> = { ...mcpServers };
+    nextMcpServers["dpf"] = { ...(existingMcp ?? {}), ...desiredMcpServerBlock(mcpEndpoint!) };
+    nextParsed["mcp_servers"] = nextMcpServers;
+    rationaleParts.push("upsert [mcp_servers.dpf]");
+  }
 
   return {
-    writes: [{ path: configPath, content: nextText }],
+    writes: [{ path: configPath, content: stringify(nextParsed) }],
     deletes: [],
-    rationale: `Upserting [plugins."${DPF_PLUGIN_KEY}"] enabled=true for ${repoRoot}.`,
-    preservedUserIntent: false,
+    rationale: `${rationaleParts.join(" + ")} for ${repoRoot}.`,
+    preservedUserIntent: userDisabledPlugin,
   };
 }
