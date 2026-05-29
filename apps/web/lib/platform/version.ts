@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { readImageVersion, type ImageVersion } from "./image-version";
+import { readImageBuiltAt, readImageVersion, type ImageVersion } from "./image-version";
 
 export type PlatformVersion = {
   version: string;
@@ -21,6 +21,11 @@ export type PlatformVersion = {
    * git SHA is available.
    */
   imageVersion: ImageVersion | null;
+  /**
+   * ISO-8601 UTC timestamp baked into the image at build time
+   * (/app/.dpf-image-built-at). Null in dev/test and pre-marker images.
+   */
+  buildDate: string | null;
   note: string | null;
 };
 
@@ -41,7 +46,10 @@ export async function loadPlatformVersion(): Promise<PlatformVersion> {
       const path = resolveVersionJsonPath();
       const raw = await readFile(path, "utf8");
       const parsed = parseVersionJson(JSON.parse(raw));
-      const image = await readImageVersion();
+      const [image, buildDate] = await Promise.all([
+        readImageVersion(),
+        readImageBuiltAt(),
+      ]);
       const envSha = process.env.DEPLOYED_SHA;
       return {
         version: parsed.version,
@@ -53,6 +61,7 @@ export async function loadPlatformVersion(): Promise<PlatformVersion> {
               ? image.raw
               : null,
         imageVersion: image,
+        buildDate,
         note: parsed.note ?? null,
       };
     })();

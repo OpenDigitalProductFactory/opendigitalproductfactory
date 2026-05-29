@@ -608,6 +608,7 @@ export async function getSelfUpgradeStatus() {
       publishedAt: platformVersion.publishedAt.toISOString(),
       gitSha: platformVersion.gitSha,
       imageVersion: platformVersion.imageVersion,
+      buildDate: platformVersion.buildDate,
       note: platformVersion.note,
     },
   };

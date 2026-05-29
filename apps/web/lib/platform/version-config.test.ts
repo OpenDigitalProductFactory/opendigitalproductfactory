@@ -11,6 +11,7 @@ describe("syncPlatformVersionConfig", () => {
         publishedAt: new Date("2026-05-24T00:00:00.000Z"),
         gitSha: "abc123",
         imageVersion: { raw: "abc123", source: "git-sha" },
+        buildDate: null,
         note: "baseline",
       }),
       platformConfig: { upsert },
