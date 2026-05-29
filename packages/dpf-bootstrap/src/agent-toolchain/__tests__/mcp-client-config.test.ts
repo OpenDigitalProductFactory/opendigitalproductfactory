@@ -42,6 +42,14 @@ describe("planMcpClientConfig", () => {
     expect(second.rationale).toMatch(/already converged/);
   });
 
+  it("normalizes a repoRoot with trailing slashes (ReDoS-safe strip, no double slash)", () => {
+    const plan = planMcpClientConfig("/Users/dev/dpf///", ENDPOINT, null, null);
+    expect(plan.writes.map((w) => w.path)).toEqual([
+      "/Users/dev/dpf/.mcp.json",
+      "/Users/dev/dpf/.vscode/mcp.json",
+    ]);
+  });
+
   it("rewrites only the drifted file (endpoint changed in .mcp.json)", () => {
     const fresh = planMcpClientConfig(REPO, ENDPOINT, null, null);
     const goodVscode = fresh.writes.find((w) => w.path.endsWith("/.vscode/mcp.json"))!.content;

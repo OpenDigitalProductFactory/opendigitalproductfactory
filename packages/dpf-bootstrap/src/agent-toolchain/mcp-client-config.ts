@@ -25,10 +25,34 @@ export type McpClientConfigPlan = {
   rationale: string;
 };
 
+/**
+ * Strip trailing '/' without a regex. `/\/+$/` trips CodeQL's js/polynomial-redos
+ * rule, so we walk back from the end in linear time (no backtracking).
+ */
+function stripTrailingSlashes(p: string): string {
+  let end = p.length;
+  while (end > 0 && p.charCodeAt(end - 1) === 47 /* '/' */) end--;
+  return p.slice(0, end);
+}
+
 /** Posix-join repoRoot + segments (installer paths are always posix on the targets we wire). */
 function joinPath(repoRoot: string, ...segments: string[]): string {
-  const base = repoRoot.replace(/\/+$/, "");
-  return [base, ...segments].join("/");
+  return [stripTrailingSlashes(repoRoot), ...segments].join("/");
+}
+
+/**
+ * The repo-root paths this planner writes. Exported so the bridge reads the
+ * exact same paths it will write (single source — no duplicated path math, no
+ * second ReDoS-prone regex).
+ */
+export function mcpClientConfigPaths(repoRoot: string): {
+  mcpJsonPath: string;
+  vscodeJsonPath: string;
+} {
+  return {
+    mcpJsonPath: joinPath(repoRoot, ".mcp.json"),
+    vscodeJsonPath: joinPath(repoRoot, ".vscode", "mcp.json"),
+  };
 }
 
 function claudeCodeContent(mcpEndpoint: string): string {

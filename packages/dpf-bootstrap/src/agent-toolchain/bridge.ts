@@ -13,7 +13,11 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 
 import { planCodexConfig, type CodexConfigPlan } from "./codex-config";
-import { planMcpClientConfig, type McpClientConfigPlan } from "./mcp-client-config";
+import {
+  planMcpClientConfig,
+  mcpClientConfigPaths,
+  type McpClientConfigPlan,
+} from "./mcp-client-config";
 import {
   planClaudePluginConfig,
   type ClaudePluginConfigPlan,
@@ -161,8 +165,7 @@ export function computeAgentToolchainPlan(
   // MCP client config (.mcp.json + .vscode/mcp.json) — always planned: the
   // files are env-backed (no secret), so they converge whether or not a token
   // exists yet. The clients read the token from DPF_MCP_BEARER_TOKEN at runtime.
-  const mcpJsonPath = `${options.repoRoot.replace(/\/+$/, "")}/.mcp.json`;
-  const vscodeJsonPath = `${options.repoRoot.replace(/\/+$/, "")}/.vscode/mcp.json`;
+  const { mcpJsonPath, vscodeJsonPath } = mcpClientConfigPaths(options.repoRoot);
   const mcpClientConfig = planMcpClientConfig(
     options.repoRoot,
     options.mcpEndpoint,
