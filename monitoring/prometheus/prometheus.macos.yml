@@ -1,0 +1,63 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alerts.yml"
+
+scrape_configs:
+  # ─── Infrastructure ──────────────────────────────────────────
+  # macOS substrate (Apple Silicon, Docker Desktop). No host telemetry
+  # exporter is scraped here:
+  #   - cadvisor / node-exporter need /proc, /sys, /var/lib/docker, and
+  #     rootfs bind mounts that do not work on macOS, so docker-compose.macos.yml
+  #     leaves them behind the linux-monitoring profile (they never start).
+  #   - windows_exporter (`windows-host`) is a native Windows service and has
+  #     no macOS equivalent, so scraping host.docker.internal:9182 would always
+  #     fail and fire a false ContainerDown CRITICAL.
+  # Host metrics on macOS rely on Docker Desktop's own observability per the
+  # Deployment Support Matrix. docker-compose.macos.yml mounts this file.
+
+  # ─── Databases ───────────────────────────────────────────────
+  - job_name: "postgres"
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
+  # Neo4j Community Edition does not expose Prometheus metrics.
+  # Neo4j Enterprise users: uncomment and add NEO4J_server_metrics_prometheus_enabled
+  # to the neo4j service environment in docker-compose.yml.
+  # - job_name: "neo4j"
+  #   scrape_interval: 30s
+  #   static_configs:
+  #     - targets: ["neo4j:2004"]
+  #   metrics_path: /metrics
+
+  - job_name: "qdrant"
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["qdrant:6333"]
+    metrics_path: /metrics
+
+  # ─── Application ────────────────────────────────────────────
+  - job_name: "portal"
+    static_configs:
+      - targets: ["portal:3000"]
+    metrics_path: /api/metrics
+
+  - job_name: "sandbox"
+    static_configs:
+      - targets:
+          - "sandbox:3000"
+    metrics_path: /api/metrics
+
+  # ─── AI Inference ───────────────────────────────────────────
+  # Docker Model Runner does not expose a Prometheus `/metrics` endpoint
+  # (all paths 404). Inference health is tracked via the portal's
+  # `dpf_ai_inference_duration_seconds_*` application metrics instead.
+  # If/when Model Runner ships a metrics endpoint, re-add the scrape here.
+
+  # ─── Self-monitoring ────────────────────────────────────────
+  - job_name: "prometheus"
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["localhost:9090"]
