@@ -72,7 +72,7 @@ dpf_docker_endpoint() {
   # cloud-deployment spec (Phase 5 docker.ts discovery alignment).
   docker context inspect 2>/dev/null \
     | grep -m1 '"Host"' \
-    | sed -E 's/.*"Host"\s*:\s*"([^"]+)".*/\1/' \
+    | sed -E 's/.*"Host"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' \
     || echo ""
 }
 

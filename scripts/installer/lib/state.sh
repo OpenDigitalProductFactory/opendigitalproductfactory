@@ -99,7 +99,7 @@ dpf_state_read() {
     python3 -c "import json,sys; d=json.load(open('$path')); v=d.get('$key',''); print('' if v is None else (v if isinstance(v,str) else json.dumps(v)))"
   else
     # Last-resort scalar grep (string and number top-level fields).
-    grep -E "\"${key}\"\s*:" "$path" | head -1 | sed -E 's/.*:\s*"?([^",}]*)"?.*/\1/'
+    grep -E "\"${key}\"[[:space:]]*:" "$path" | head -1 | sed -E 's/.*:[[:space:]]*"?([^",}]*)"?.*/\1/'
   fi
 }
 
