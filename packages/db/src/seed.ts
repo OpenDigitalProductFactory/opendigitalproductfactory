@@ -1129,8 +1129,14 @@ async function seedCoworkerAgents(): Promise<void> {
     { agentId: "admin-assistant", slugId: "admin-assistant", name: "System Admin", tier: 2, type: "coworker", description: "Access control, security posture, and platform configuration", valueStream: "operate", sensitivity: "confidential" },
     { agentId: "coo", slugId: "coo", name: "COO", tier: 1, type: "coworker", description: "Cross-cutting oversight, workforce orchestration, and strategic priorities", valueStream: "cross-cutting", sensitivity: "confidential" },
     { agentId: "doc-specialist", slugId: "doc-specialist", name: "Documentation Specialist", tier: 2, type: "coworker", description: "Mermaid diagram creation/regeneration, documentation structure/consistency, spec and architecture document quality, renderer compatibility awareness", valueStream: "cross-cutting", sensitivity: "internal" },
-    { agentId: "compliance-officer", slugId: "compliance-officer", name: "Compliance Officer", tier: 2, type: "coworker", description: "Regulatory compliance, policy governance, audit readiness, and risk management", valueStream: "cross-cutting", sensitivity: "restricted" },
-    { agentId: "finance-controller", slugId: "finance-controller", name: "Finance Controller", tier: 2, type: "coworker", description: "Financial controls, budget governance, cost management, and financial reporting", valueStream: "cross-cutting", sensitivity: "restricted" },
+    // Compliance + Finance default to 'confidential' — covers most policy and
+    // budget work without locking out cloud providers (which contractually
+    // support confidential data unconditionally per their Enterprise terms).
+    // Operators escalate to 'restricted' per-deployment when these coworkers
+    // genuinely handle PHI/PII/regulated data, after signing the relevant BAA
+    // / ZDR agreement and clearing the destination channel.
+    { agentId: "compliance-officer", slugId: "compliance-officer", name: "Compliance Officer", tier: 2, type: "coworker", description: "Regulatory compliance, policy governance, audit readiness, and risk management", valueStream: "cross-cutting", sensitivity: "confidential" },
+    { agentId: "finance-controller", slugId: "finance-controller", name: "Finance Controller", tier: 2, type: "coworker", description: "Financial controls, budget governance, cost management, and financial reporting", valueStream: "cross-cutting", sensitivity: "confidential" },
   ];
 
   // Tool grants per hardcoded coworker. Every coworker needs explicit grants —
