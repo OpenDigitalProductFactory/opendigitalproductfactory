@@ -75,6 +75,54 @@ export async function syncPlatformVersionOnBoot(
   }
 }
 
+/**
+ * Reconcile self-upgrade runs on boot. A real upgrade recreates the portal
+ * container, which kills the orchestrating process mid-swap — so it can never
+ * mark its own run succeeded. The NEW portal closes the loop here: any run
+ * left "running" is resolved against the SHA we actually came up on. If the
+ * deployed SHA matches the run's target, the swap landed → succeeded;
+ * otherwise the run is an orphan → failed (also clears the stuck-"running"
+ * state that would otherwise block all future triggers).
+ *
+ * Single-host assumption: at boot, a "running" run belongs to the swap that
+ * just recreated us, not a concurrent replica. Non-fatal.
+ */
+export async function reconcileSelfUpgradeRunsOnBoot(
+  logger: Pick<Console, "log" | "error"> = console,
+): Promise<{ succeeded: number; failed: number } | null> {
+  try {
+    const { prisma } = await import("@dpf/db");
+    const { getDeployedSha } = await import("@/lib/self-upgrade/completion");
+    const { completeRun, failRun } = await import("@/lib/self-upgrade/run-store");
+    const deployedSha = await getDeployedSha();
+    const running = await prisma.selfUpgradeRun.findMany({ where: { status: "running" } });
+    let succeeded = 0;
+    let failed = 0;
+    for (const run of running) {
+      const target = run.targetSha ?? null;
+      if (deployedSha && target && target.toLowerCase() === deployedSha.toLowerCase()) {
+        await completeRun(run.runId);
+        succeeded++;
+        logger.log(`[self-upgrade-reconcile] ${run.runId} -> succeeded (deployed ${deployedSha})`);
+      } else {
+        await failRun(
+          run.runId,
+          `Reconciled on boot: orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} target=${target ?? "unknown"}`,
+        );
+        failed++;
+        logger.log(`[self-upgrade-reconcile] ${run.runId} -> failed (orphaned)`);
+      }
+    }
+    if (succeeded || failed) {
+      logger.log(`[self-upgrade-reconcile] resolved ${succeeded} succeeded, ${failed} failed`);
+    }
+    return { succeeded, failed };
+  } catch (err) {
+    logger.error("[self-upgrade-reconcile] failed (non-fatal):", err);
+    return null;
+  }
+}
+
 export async function enqueueFirstBootEvals(providerId: string): Promise<{
   enqueued: number;
   error: string | null;
@@ -123,6 +171,11 @@ export async function register() {
     // DB-backed runtime metadata matches the canonical file. Non-fatal —
     // logs loudly on failure but does not block startup.
     void syncPlatformVersionOnBoot();
+
+    // Close the loop on any self-upgrade run whose orchestrator died mid-swap
+    // (a real upgrade recreates this very container). Records succeeded when we
+    // came up on the target SHA; fails orphans so triggers aren't blocked.
+    void reconcileSelfUpgradeRunsOnBoot();
 
     const optionalStartupTasksEnabled = areOptionalStartupTasksEnabled();
     if (!optionalStartupTasksEnabled) {
