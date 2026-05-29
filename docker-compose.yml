@@ -511,7 +511,7 @@ services:
       - "--storage.tsdb.retention.time=15d"
       - "--web.enable-lifecycle"
     extra_hosts:
-      - "host.docker.internal:host-gateway"   # required to reach windows-host scrape target on native Linux Docker
+      - "host.docker.internal:host-gateway"   # Windows: reaches the windows-host (windows_exporter) scrape target. Harmless on Docker Desktop / Linux where windows-host is not scraped.
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:9090/-/healthy"]
       interval: 10s
