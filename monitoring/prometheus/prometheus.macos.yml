@@ -15,6 +15,13 @@ scrape_configs:
   #   - windows_exporter (`windows-host`) is a native Windows service and has
   #     no macOS equivalent, so scraping host.docker.internal:9182 would always
   #     fail and fire a false ContainerDown CRITICAL.
+  # Dropping the windows-host scrape here does NOT regress the discovery
+  # network sweep (packages/db/src/discovery-collectors/network.ts): on macOS
+  # the Docker Desktop VM boundary already hides the host's NICs, so the sweep
+  # runs in degraded container-local mode regardless — see the "Network sweep
+  # data path" decision in
+  # docs/superpowers/plans/2026-05-09-macos-linux-native-support.md. The
+  # windows-host scrape stays only in the base prometheus.yml (Windows).
   # Host metrics on macOS rely on Docker Desktop's own observability per the
   # Deployment Support Matrix. docker-compose.macos.yml mounts this file.
 
