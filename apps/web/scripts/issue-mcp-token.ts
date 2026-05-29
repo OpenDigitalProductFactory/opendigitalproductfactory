@@ -152,8 +152,10 @@ function printHelp(): void {
       "  --name <label>         Token display name (default: cli-issued-<timestamp>)",
       "  --scope <scope>        read | write | admin (default: read)",
       "  --capability <c>       Deprecated alias for --scope read|write",
-      "  --scopes <csv>         Comma-separated scope list",
-      "                         (default: coding-agent set from mcp-token-scopes.ts)",
+      "  --scopes <csv>         Comma-separated scope list (overrides the default)",
+      "                         Default by --scope: write -> development role",
+      "                         template (sandbox_execute, iac_execute, build_promote,",
+      "                         ...); admin -> admin template; read -> coding-agent reads.",
       `  --expires-days N|never Token TTL in days, or "never" (default: ${DEFAULT_EXPIRES_DAYS})`,
       "  --format <fmt>         claude-code | codex | vscode | raw (default: claude-code)",
       "  --base-url <url>       Portal base URL",
@@ -186,11 +188,8 @@ async function main(): Promise<void> {
   // Dynamic imports so tsx resolves path aliases correctly at runtime.
   const { issueMcpApiToken } = await import("../lib/auth/mcp-api-token");
   const { buildSetupSnippets } = await import("../lib/auth/mcp-setup-snippets");
-  const {
-    ADMIN_MCP_TOKEN_SCOPES,
-    CODING_AGENT_MCP_TOKEN_SCOPES,
-    WRITE_MCP_TOKEN_SCOPES,
-  } = await import("../lib/mcp-token-scopes");
+  const { templateScopesForTier } = await import("../lib/mcp-token-scopes");
+  const { getToolGrantMapping } = await import("../lib/tak/agent-grants");
 
   const user = await prisma.user.findFirst({ where: { email: args.email } });
   if (!user) {
@@ -201,13 +200,19 @@ async function main(): Promise<void> {
     );
   }
 
-  const defaultScopes =
-    args.scope === "admin"
-      ? ADMIN_MCP_TOKEN_SCOPES
-      : args.scope === "write"
-        ? WRITE_MCP_TOKEN_SCOPES
-        : CODING_AGENT_MCP_TOKEN_SCOPES;
-  const scopes: string[] = args.scopes ?? [...defaultScopes];
+  // Available scopes = the union of every grant this install registers in the
+  // tool→grant catalog. Mirrors listAvailableMcpScopes (lib/actions/mcp-tokens.ts)
+  // so a CLI-issued token resolves the same role-template grants the Admin UI
+  // would — a write token gets the full `development` bundle (sandbox_execute,
+  // iac_execute, build_promote, …), not the narrow legacy write set.
+  const availableScopes = (() => {
+    const set = new Set<string>();
+    for (const grants of Object.values(getToolGrantMapping())) {
+      for (const g of grants) set.add(g);
+    }
+    return [...set];
+  })();
+  const scopes: string[] = args.scopes ?? templateScopesForTier(args.scope, availableScopes);
   const capability: McpTokenCapability = args.scope === "read" ? "read" : "write";
 
   const result = await issueMcpApiToken({
