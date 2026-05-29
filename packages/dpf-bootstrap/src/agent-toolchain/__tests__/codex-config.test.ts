@@ -17,6 +17,7 @@ const withUserDisable = readFileSync(
 
 const REPO = "D:\\DPF";
 const CONFIG_PATH = "C:\\Users\\Test\\.codex\\config.toml";
+const LOCAL_ENDPOINT = "http://127.0.0.1:3000/api/mcp/v1";
 
 describe("planCodexConfig", () => {
   it("upserts [plugins.\"dpf-platform\"] enabled=true on the operator-current fixture", () => {
@@ -25,7 +26,7 @@ describe("planCodexConfig", () => {
     expect(plan.writes).toHaveLength(1);
     expect(plan.deletes).toEqual([]);
     expect(plan.preservedUserIntent).toBe(false);
-    expect(plan.rationale).toMatch(/Upserting/);
+    expect(plan.rationale).toMatch(/enable \[plugins/);
     expect(plan.writes[0].path).toBe(CONFIG_PATH);
 
     const parsed = parse(plan.writes[0].content) as {
@@ -63,7 +64,7 @@ describe("planCodexConfig", () => {
     const secondPlan = planCodexConfig(afterUpsert, REPO, CONFIG_PATH);
 
     expect(secondPlan.writes).toEqual([]);
-    expect(secondPlan.rationale).toMatch(/already enabled/);
+    expect(secondPlan.rationale).toMatch(/already converged/);
   });
 
   it("preserves user intent when the plugin is explicitly disabled", () => {
@@ -71,8 +72,8 @@ describe("planCodexConfig", () => {
 
     expect(plan.writes).toEqual([]);
     expect(plan.preservedUserIntent).toBe(true);
-    expect(plan.rationale).toMatch(/enabled=false/);
-    expect(plan.rationale).toMatch(/preserving user intent/);
+    expect(plan.rationale).toMatch(/disabled by user/);
+    expect(plan.rationale).toMatch(/preserved/);
   });
 
   it("returns zero writes with a parse-error rationale on unparseable TOML", () => {
@@ -90,5 +91,54 @@ describe("planCodexConfig", () => {
     expect(plan.writes).toHaveLength(1);
     const parsed = parse(plan.writes[0].content) as { plugins: Record<string, { enabled: boolean }> };
     expect(parsed.plugins["dpf-platform"]).toEqual({ enabled: true });
+  });
+
+  it("upserts [mcp_servers.dpf] alongside the plugin when an endpoint is supplied", () => {
+    const plan = planCodexConfig("", REPO, CONFIG_PATH, LOCAL_ENDPOINT);
+
+    expect(plan.writes).toHaveLength(1);
+    expect(plan.rationale).toMatch(/upsert \[mcp_servers\.dpf\]/);
+    const parsed = parse(plan.writes[0].content) as {
+      plugins: Record<string, { enabled: boolean }>;
+      mcp_servers: Record<string, { url: string; bearer_token_env_var: string }>;
+    };
+    expect(parsed.plugins["dpf-platform"]).toEqual({ enabled: true });
+    expect(parsed.mcp_servers["dpf"]).toEqual({
+      url: LOCAL_ENDPOINT,
+      bearer_token_env_var: "DPF_MCP_BEARER_TOKEN",
+    });
+  });
+
+  it("leaves an already-converged [mcp_servers.dpf] untouched (idempotent with endpoint)", () => {
+    // operatorRedacted already has [mcp_servers.dpf] at LOCAL_ENDPOINT, but no
+    // bare [plugins."dpf-platform"], so the first pass writes only the plugin.
+    const first = planCodexConfig(operatorRedacted, REPO, CONFIG_PATH, LOCAL_ENDPOINT);
+    expect(first.writes).toHaveLength(1);
+    expect(first.rationale).not.toMatch(/mcp_servers/); // MCP already converged
+    const before = parse(operatorRedacted) as Record<string, unknown>;
+    const after = parse(first.writes[0].content) as Record<string, unknown>;
+    expect(after["mcp_servers"]).toEqual(before["mcp_servers"]);
+
+    const second = planCodexConfig(first.writes[0].content, REPO, CONFIG_PATH, LOCAL_ENDPOINT);
+    expect(second.writes).toEqual([]);
+    expect(second.rationale).toMatch(/already converged/);
+  });
+
+  it("wires [mcp_servers.dpf] even when the user disabled the plugin (MCP is independent)", () => {
+    const novelEndpoint = "http://127.0.0.1:9999/api/mcp/v1";
+    const plan = planCodexConfig(withUserDisable, REPO, CONFIG_PATH, novelEndpoint);
+
+    expect(plan.writes).toHaveLength(1);
+    expect(plan.preservedUserIntent).toBe(true);
+    const parsed = parse(plan.writes[0].content) as {
+      plugins: Record<string, { enabled: boolean }>;
+      mcp_servers: Record<string, { url: string; bearer_token_env_var: string }>;
+    };
+    // Plugin intent preserved (still disabled), MCP block written.
+    expect(parsed.plugins["dpf-platform"].enabled).toBe(false);
+    expect(parsed.mcp_servers["dpf"]).toEqual({
+      url: novelEndpoint,
+      bearer_token_env_var: "DPF_MCP_BEARER_TOKEN",
+    });
   });
 });

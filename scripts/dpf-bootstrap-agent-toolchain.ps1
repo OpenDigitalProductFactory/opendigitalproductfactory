@@ -28,7 +28,13 @@ param(
     [switch]$Headless,
     [switch]$ReconcileStaleEntries,
     [switch]$ShowSubstrate,
-    [switch]$DryRun
+    [switch]$DryRun,
+    # Auto-mint an MCP token (in the portal container) and persist it durably
+    # when none is present. On by default for the contributor bootstrap.
+    [switch]$NoAutoMint,
+    # Scope of the auto-minted token: read | write | admin. `write` gives an
+    # external coding agent all side-effecting MCP tools without admin powers.
+    [string]$MintScope = "write"
 )
 
 $ErrorActionPreference = "Stop"
@@ -71,6 +77,51 @@ Write-Info "Claude CLI       : $(if ($ClaudePresent) { 'present' } else { 'missi
 Write-Info "Codex CLI        : $(if ($CodexPresent)  { 'present' } else { 'missing' })"
 Write-Info "DPF MCP token    : $(if ($HasToken)      { 'present' } else { 'missing' })"
 Write-Info "Skill pack ver.  : $expectedVersion"
+
+# --- Auto-mint + persist MCP token --------------------------------------------
+# The env-backed client config references $env:DPF_MCP_BEARER_TOKEN; without a
+# persisted token the clients cannot call /api/mcp/v1. We mint inside the portal
+# container (it reaches the DB over the compose network and always matches the
+# migrated schema; the host may lack DB access). Mirrors the Edge Node bootstrap
+# pattern in fresh-install.ps1. The plaintext is never logged; only persisted.
+$AutoMint = -not $NoAutoMint.IsPresent
+
+function Resolve-PortalContainer {
+    $c = (& docker compose -f (Join-Path $RepoRoot "docker-compose.yml") ps -q portal 2>$null | Select-Object -First 1)
+    if ($c) { return $c }
+    $c = (& docker ps --filter "name=portal" --filter "status=running" --format "{{.Names}}" 2>$null | Where-Object { $_ -match "portal" } | Select-Object -First 1)
+    if ($c) { return $c }
+    return "dpf-portal-1"
+}
+
+if (-not $HasToken -and $AutoMint) {
+    if ($DryRun.IsPresent) {
+        Write-Info "DRY-RUN: would mint a '$MintScope'-scoped MCP token (in portal container) and persist it (User env)."
+    } elseif ($null -eq (Get-Command docker -ErrorAction SilentlyContinue)) {
+        Write-Warn2 "docker not found; cannot mint an MCP token. Continuing without one."
+    } else {
+        $portal = Resolve-PortalContainer
+        Write-Info "No MCP token found; minting a '$MintScope'-scoped token via portal container ($portal)."
+        try {
+            $mintOut = & docker exec $portal sh -c "cd /app/apps/web-src && /app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-mcp-token.ts --scope '$MintScope' --format raw" 2>$null
+            $mintToken = ($mintOut | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -match '^dpfmcp_' } | Select-Object -Last 1)
+            if ($mintToken) {
+                # Durable persistence for new processes (Windows analog of the
+                # POSIX zshenv + launchctl path). Single source of truth for the
+                # exact line: buildSetupSnippets().envPowerShell.
+                [System.Environment]::SetEnvironmentVariable('DPF_MCP_BEARER_TOKEN', $mintToken, 'User')
+                $env:DPF_MCP_BEARER_TOKEN = $mintToken
+                $HasToken = $true
+                $prefix = ($mintToken -split '_')[0]
+                Write-Ok "MCP token issued and persisted (${prefix}_... , scope=$MintScope)."
+            } else {
+                Write-Warn2 "Token issuance produced no token; continuing without one."
+            }
+        } catch {
+            Write-Warn2 "Token issuance failed (is the portal container running?); continuing without a token."
+        }
+    }
+}
 
 # --- Compute plan via Node bridge --------------------------------------------
 $BootstrapCli = Join-Path $RepoRoot "packages\dpf-bootstrap\src\agent-toolchain\cli\compute-plan.ts"
@@ -166,6 +217,24 @@ if ($plan.codex -and $plan.codex.writes.Count -gt 0) {
     }
 } else {
     Write-Skip "Codex CLI not installed; skipping plugin wire."
+}
+
+# 2b. MCP client config (.mcp.json + .vscode/mcp.json) -- env-backed, no secret.
+if ($plan.mcpClientConfig -and $plan.mcpClientConfig.writes.Count -gt 0) {
+    foreach ($write in $plan.mcpClientConfig.writes) {
+        if ($DryRun.IsPresent) {
+            Write-Info "DRY-RUN write MCP client config -> $($write.path)"
+        } else {
+            $dir = Split-Path -Parent $write.path
+            if (-not (Test-Path -LiteralPath $dir)) {
+                New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            }
+            [System.IO.File]::WriteAllText($write.path, $write.content, [System.Text.Encoding]::UTF8)
+        }
+    }
+    Write-Ok "MCP client config written ($($plan.mcpClientConfig.writes.Count) file(s): .mcp.json / .vscode/mcp.json)."
+} else {
+    Write-Ok "MCP client config already converged."
 }
 
 # 3. Kernel memory seed.

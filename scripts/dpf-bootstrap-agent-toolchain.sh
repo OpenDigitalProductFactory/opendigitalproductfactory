@@ -40,6 +40,14 @@ DRY_RUN=0
 HEADLESS="${DPF_HEADLESS:-0}"
 RECONCILE_STALE=0
 SHOW_SUBSTRATE=0
+# Auto-mint: when no DPF_MCP_BEARER_TOKEN is present, issue one against the local
+# portal and persist it durably (POSIX). On by default for the contributor
+# bootstrap; pass --no-auto-mint for CI / non-contributor paths.
+AUTO_MINT="${DPF_AUTO_MINT:-1}"
+# Scope of the auto-minted token. `write` gives an external coding agent all the
+# side-effecting MCP tools (backlog, evidence, Build Studio handoff) without the
+# token-issuance powers of `admin`. Override with --mint-scope admin|read.
+MINT_SCOPE="${DPF_MINT_SCOPE:-write}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -47,6 +55,12 @@ while [ $# -gt 0 ]; do
     --headless)                 HEADLESS=1 ;;
     --reconcile-stale-entries)  RECONCILE_STALE=1 ;;
     --show-substrate)           SHOW_SUBSTRATE=1 ;;
+    --auto-mint)                AUTO_MINT=1 ;;
+    --no-auto-mint)             AUTO_MINT=0 ;;
+    --mint-scope)
+      if [ -z "${2:-}" ]; then printf '  [FAIL] --mint-scope requires a value\n' >&2; exit 64; fi
+      MINT_SCOPE="$2"; shift
+      ;;
     -h|--help)
       cat <<EOF
 Usage: bash dpf-bootstrap-agent-toolchain.sh [flags] [<repo-root>]
@@ -56,6 +70,9 @@ Flags:
   --headless                  Suppress interactive prompts (default in CI).
   --reconcile-stale-entries   Remove stale installed_plugins.json entries.
   --show-substrate            Show substrate detail under the banner.
+  --auto-mint                 Issue + persist an MCP token if none is present (default).
+  --no-auto-mint              Never issue a token; only wire what a present token allows.
+  --mint-scope <read|write|admin>  Scope for the auto-minted token (default: write).
 
 The bootstrap is idempotent. Re-running on a converged install is a no-op.
 EOF
@@ -121,11 +138,47 @@ EXPECTED_VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1
 
 # --- Detect CLIs + token -----------------------------------------------------
 
+# Detection must not be PATH-only: on macOS the Codex CLI ships inside
+# /Applications/Codex.app and Claude Code is often installed at ~/.claude/local
+# or launched as a GUI app — none of which are on a non-interactive shell PATH.
+# Reporting `missing_cli` for a machine that has both clients is the bug this
+# function set fixes. We resolve the binary path (used by `claude plugin
+# install`) and treat a resolvable client as present.
+
+resolve_claude_bin() {
+  if command -v claude >/dev/null 2>&1; then command -v claude; return 0; fi
+  for c in \
+    "$HOME/.claude/local/claude" \
+    "/opt/homebrew/bin/claude" \
+    "/usr/local/bin/claude" \
+    "$HOME/.local/bin/claude"; do
+    [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
+  done
+  return 1
+}
+
+resolve_codex_bin() {
+  if command -v codex >/dev/null 2>&1; then command -v codex; return 0; fi
+  for c in \
+    "/Applications/Codex.app/Contents/Resources/codex" \
+    "$HOME/.codex/bin/codex" \
+    "/opt/homebrew/bin/codex" \
+    "/usr/local/bin/codex" \
+    "$HOME/.local/bin/codex"; do
+    [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
+  done
+  return 1
+}
+
 CLAUDE_PRESENT=0
 CODEX_PRESENT=0
 HAS_TOKEN=0
-command -v claude >/dev/null 2>&1 && CLAUDE_PRESENT=1
-command -v codex  >/dev/null 2>&1 && CODEX_PRESENT=1
+CLAUDE_BIN="$(resolve_claude_bin || true)"
+CODEX_BIN="$(resolve_codex_bin || true)"
+[ -n "$CLAUDE_BIN" ] && CLAUDE_PRESENT=1
+# Codex wiring is file-based (config.toml), so a present-but-not-on-PATH Codex
+# (or an existing Codex config dir) is still wirable.
+{ [ -n "$CODEX_BIN" ] || [ -f "$CODEX_CONFIG_PATH" ]; } && CODEX_PRESENT=1
 if [ -n "${DPF_MCP_BEARER_TOKEN:-}" ]; then
   HAS_TOKEN=1
 fi
@@ -136,6 +189,88 @@ info "Claude CLI       : $([ $CLAUDE_PRESENT -eq 1 ] && echo present || echo mis
 info "Codex CLI        : $([ $CODEX_PRESENT  -eq 1 ] && echo present || echo missing)"
 info "DPF MCP token    : $([ $HAS_TOKEN      -eq 1 ] && echo present || echo missing)"
 info "Skill pack ver.  : $EXPECTED_VERSION"
+
+# --- Auto-mint + persist MCP token (POSIX) -----------------------------------
+#
+# The env-backed client config (.mcp.json, [mcp_servers.dpf]) references
+# ${DPF_MCP_BEARER_TOKEN}; without a durably-persisted token the clients cannot
+# call /api/mcp/v1. mcp-setup-snippets.ts only emitted a Windows persistence
+# line, so macOS/Linux installs were left with no token at all. We mint one
+# against the local portal (headless DB issuance via issue-mcp-token.ts) and
+# persist it so a new shell, terminal-launched Claude Code, and GUI-launched
+# apps all pick it up. The plaintext is NEVER written to install-state or logs.
+
+# POSIX single-quote escaping via bash parameter expansion (no sed gymnastics):
+# each ' becomes '\'' so the value is safe inside a single-quoted shell string.
+mcp_token_envfile="$HOME/.dpf/agent-toolchain.env"
+
+persist_mcp_token_posix() {
+  _tok="$1"
+  _esc=${_tok//\'/\'\\\'\'}
+  mkdir -p "$HOME/.dpf"
+  ( umask 077; printf '# DPF MCP bearer token — managed by dpf-bootstrap-agent-toolchain.sh\nexport DPF_MCP_BEARER_TOKEN='\''%s'\''\n' "$_esc" > "$mcp_token_envfile" )
+  chmod 600 "$mcp_token_envfile" 2>/dev/null || true
+  # Source the env file from login + non-login shells (idempotent managed line).
+  _src_line=". \"$mcp_token_envfile\"  # dpf-mcp-token"
+  for _prof in "$HOME/.zshenv" "$HOME/.profile"; do
+    if [ -f "$_prof" ] && grep -q 'dpf-mcp-token' "$_prof" 2>/dev/null; then
+      continue
+    fi
+    printf '%s\n' "$_src_line" >> "$_prof"
+  done
+  # GUI-launched apps (e.g. Codex.app) are not started from a shell, so they do
+  # not read the profile. launchctl setenv injects the var for the current boot.
+  # (Reboot persistence for GUI apps is a follow-up; terminal clients are durable.)
+  if [ "$(uname -s)" = "Darwin" ] && command -v launchctl >/dev/null 2>&1; then
+    launchctl setenv DPF_MCP_BEARER_TOKEN "$_tok" 2>/dev/null || true
+  fi
+}
+
+# The token is minted INSIDE the portal container, not on the host: on a
+# dockerized install the host cannot reach the DB (postgres has no published
+# port; DATABASE_URL uses the compose-internal `postgres` host) and consumer
+# installs may not have host Node/pnpm. This mirrors the proven Edge Node
+# bootstrap path in setup.sh / fresh-install.ps1. The plaintext token crosses
+# back to the host only for durable persistence; it is never logged.
+resolve_portal_container() {
+  _c="$(docker compose -f "$REPO_ROOT/docker-compose.yml" ps -q portal 2>/dev/null | head -1)"
+  if [ -n "$_c" ]; then printf '%s\n' "$_c"; return 0; fi
+  _c="$(docker ps --filter 'name=portal' --filter 'status=running' --format '{{.Names}}' 2>/dev/null | grep -E 'portal' | head -1)"
+  if [ -n "$_c" ]; then printf '%s\n' "$_c"; return 0; fi
+  printf 'dpf-portal-1\n'
+}
+
+if [ "$HAS_TOKEN" -eq 0 ] && [ "$AUTO_MINT" -eq 1 ]; then
+  if [ "$DRY_RUN" -eq 1 ]; then
+    info "DRY-RUN: would mint a '$MINT_SCOPE'-scoped MCP token (in portal container) and persist it (POSIX)."
+  elif ! command -v docker >/dev/null 2>&1; then
+    warn "docker not found; cannot mint an MCP token. Continuing without one."
+  else
+    PORTAL_CONTAINER="$(resolve_portal_container)"
+    info "No MCP token found; minting a '$MINT_SCOPE'-scoped token via portal container ($PORTAL_CONTAINER)."
+    MINT_ERR="$(mktemp)"
+    # Run the shipped issuer inside the container (matches the just-migrated
+    # Prisma schema; reaches postgres over the compose network).
+    if MINT_OUT="$(docker exec "$PORTAL_CONTAINER" sh -c \
+          "cd /app/apps/web-src && /app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-mcp-token.ts --scope '$MINT_SCOPE' --format raw" \
+          2>"$MINT_ERR")"; then
+      MINT_TOKEN="$(printf '%s\n' "$MINT_OUT" | grep -E '^dpfmcp_' | tail -n 1)"
+      if [ -n "$MINT_TOKEN" ]; then
+        persist_mcp_token_posix "$MINT_TOKEN"
+        export DPF_MCP_BEARER_TOKEN="$MINT_TOKEN"
+        HAS_TOKEN=1
+        ok "MCP token issued and persisted (${MINT_TOKEN%%_*}_… , scope=$MINT_SCOPE)."
+      else
+        warn "Token issuance produced no token; continuing without one. See diagnostics below."
+        sed -n '1,20p' "$MINT_ERR" >&2 || true
+      fi
+    else
+      warn "Token issuance failed (is the portal container running?); continuing without a token."
+      sed -n '1,20p' "$MINT_ERR" >&2 || true
+    fi
+    rm -f "$MINT_ERR"
+  fi
+fi
 
 # --- Compute plan via Node bridge --------------------------------------------
 
@@ -196,11 +331,13 @@ def shell_var(name, value):
 claude = plan.get("claude") or {}
 codex = plan.get("codex") or {}
 memory = plan.get("memory") or {}
+mcp_client = plan.get("mcpClientConfig") or {}
 
 shell_var("CLAUDE_MODE", claude.get("mode", "skip") if claude else "skip")
 shell_var("CLAUDE_STALE_COUNT", len(claude.get("staleEntriesToReconcile", [])) if claude else 0)
 shell_var("CODEX_WRITES_COUNT", len(codex.get("writes", [])) if codex else 0)
 shell_var("CODEX_PRESERVED_USER_INTENT", "true" if codex.get("preservedUserIntent") else "false")
+shell_var("MCP_CLIENT_WRITES_COUNT", len(mcp_client.get("writes", [])))
 shell_var("MEMORY_WRITES_COUNT", len(memory.get("writes", [])))
 shell_var("PREVIEW_STATE", plan.get("preview", {}).get("readinessState", "missing_cli"))
 PY
@@ -222,8 +359,8 @@ case "$PLAN_CLAUDE_MODE" in
     else
       (
         cd "$REPO_ROOT"
-        claude plugin marketplace add ./ --scope local >/dev/null 2>&1 || true
-        claude plugin install dpf-platform@dpf-platform-local --scope local >/dev/null 2>&1 || true
+        "$CLAUDE_BIN" plugin marketplace add ./ --scope local >/dev/null 2>&1 || true
+        "$CLAUDE_BIN" plugin install dpf-platform@dpf-platform-local --scope local >/dev/null 2>&1 || true
       ) && { ok "Claude Code plugin wired ($PLAN_CLAUDE_MODE)."; CLAUDE_WIRED=1; } \
         || warn "claude plugin install failed; toolchain remains partial."
     fi
@@ -247,6 +384,9 @@ if [ "$DRY_RUN" -eq 1 ]; then
   if [ "${PLAN_CODEX_WRITES_COUNT:-0}" -gt 0 ]; then
     info "DRY-RUN: write Codex config (1 file)"
   fi
+  if [ "${PLAN_MCP_CLIENT_WRITES_COUNT:-0}" -gt 0 ]; then
+    info "DRY-RUN: write $PLAN_MCP_CLIENT_WRITES_COUNT MCP client config file(s) (.mcp.json / .vscode/mcp.json)"
+  fi
   if [ "${PLAN_MEMORY_WRITES_COUNT:-0}" -gt 0 ]; then
     info "DRY-RUN: seed $PLAN_MEMORY_WRITES_COUNT kernel principle(s) to memory"
   fi
@@ -258,6 +398,12 @@ with open(os.environ["PLAN_FILE"]) as f:
 
 # Codex writes.
 for w in (plan.get("codex") or {}).get("writes", []):
+    os.makedirs(os.path.dirname(w["path"]), exist_ok=True)
+    with open(w["path"], "w") as f:
+        f.write(w["content"])
+
+# MCP client config writes (.mcp.json + .vscode/mcp.json — env-backed, no secret).
+for w in (plan.get("mcpClientConfig") or {}).get("writes", []):
     os.makedirs(os.path.dirname(w["path"]), exist_ok=True)
     with open(w["path"], "w") as f:
         f.write(w["content"])
@@ -291,6 +437,12 @@ PY
     fi
   else
     skip "Codex CLI not installed; skipping plugin wire."
+  fi
+
+  if [ "${PLAN_MCP_CLIENT_WRITES_COUNT:-0}" -gt 0 ]; then
+    ok "MCP client config written ($PLAN_MCP_CLIENT_WRITES_COUNT file(s): .mcp.json / .vscode/mcp.json)."
+  else
+    ok "MCP client config already converged."
   fi
 
   if [ "${PLAN_MEMORY_WRITES_COUNT:-0}" -gt 0 ]; then

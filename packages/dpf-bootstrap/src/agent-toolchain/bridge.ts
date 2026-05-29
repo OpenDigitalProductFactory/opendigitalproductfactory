@@ -14,6 +14,11 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 
 import { planCodexConfig, type CodexConfigPlan } from "./codex-config";
 import {
+  planMcpClientConfig,
+  mcpClientConfigPaths,
+  type McpClientConfigPlan,
+} from "./mcp-client-config";
+import {
   planClaudePluginConfig,
   type ClaudePluginConfigPlan,
 } from "./claude-plugins";
@@ -41,6 +46,8 @@ export type AgentToolchainPlan = {
   hasToken: boolean;
   /** TOML upsert plan for the contributor's Codex config (null when Codex CLI absent). */
   codex: CodexConfigPlan | null;
+  /** Repo-root .mcp.json + .vscode/mcp.json writes (env-backed, secret-free). */
+  mcpClientConfig: McpClientConfigPlan;
   /** JSON upsert plan for installed_plugins.json (null when Claude CLI absent). */
   claude: ClaudePluginConfigPlan | null;
   /** Kernel-memory seed plan. */
@@ -115,7 +122,12 @@ export function computeAgentToolchainPlan(
     const codexText = _exists(options.codexConfigPath)
       ? _readFile(options.codexConfigPath, "utf8")
       : "";
-    codex = planCodexConfig(codexText, options.repoRoot, options.codexConfigPath);
+    codex = planCodexConfig(
+      codexText,
+      options.repoRoot,
+      options.codexConfigPath,
+      options.mcpEndpoint,
+    );
   }
 
   // Claude plan (skipped when Claude CLI absent).
@@ -150,6 +162,17 @@ export function computeAgentToolchainPlan(
     },
   );
 
+  // MCP client config (.mcp.json + .vscode/mcp.json) — always planned: the
+  // files are env-backed (no secret), so they converge whether or not a token
+  // exists yet. The clients read the token from DPF_MCP_BEARER_TOKEN at runtime.
+  const { mcpJsonPath, vscodeJsonPath } = mcpClientConfigPaths(options.repoRoot);
+  const mcpClientConfig = planMcpClientConfig(
+    options.repoRoot,
+    options.mcpEndpoint,
+    _exists(mcpJsonPath) ? _readFile(mcpJsonPath, "utf8") : null,
+    _exists(vscodeJsonPath) ? _readFile(vscodeJsonPath, "utf8") : null,
+  );
+
   const mcpProbe = planMcpReadinessProbe(options.mcpEndpoint, options.hasToken);
   const smokeScenario = renderSmokeTestScenario();
 
@@ -172,6 +195,7 @@ export function computeAgentToolchainPlan(
     hasToken: options.hasToken,
     codex,
     claude,
+    mcpClientConfig,
     memory,
     mcpProbe,
     smokeScenario,
@@ -194,6 +218,7 @@ export function summarizePlan(plan: AgentToolchainPlan): string {
   parts.push(`codex=${plan.codexCliPresent ? "present" : "missing"}`);
   parts.push(`token=${plan.hasToken ? "present" : "missing"}`);
   parts.push(`codex-writes=${plan.codex?.writes.length ?? 0}`);
+  parts.push(`mcp-client-writes=${plan.mcpClientConfig.writes.length}`);
   parts.push(`claude-writes=${plan.claude?.writes.length ?? 0}`);
   parts.push(`memory-writes=${plan.memory.writes.length}`);
   parts.push(`stale-claude-entries=${plan.claude?.staleEntriesToReconcile.length ?? 0}`);

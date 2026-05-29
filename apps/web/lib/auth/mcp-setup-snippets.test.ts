@@ -46,6 +46,26 @@ describe("buildSetupSnippets", () => {
     expect(runtimeRefreshPowerShell).toContain(`"token":"${t}"`);
   });
 
+  it("envPosix is an export line carrying the full plaintext token", () => {
+    const t = "dpfmcp_UNIQUETOKEN";
+    const { envPosix } = buildSetupSnippets(t, BASE);
+    expect(envPosix).toBe("export DPF_MCP_BEARER_TOKEN='dpfmcp_UNIQUETOKEN'");
+  });
+
+  it("envLaunchctl uses launchctl setenv so GUI-launched apps inherit the var", () => {
+    const t = "dpfmcp_UNIQUETOKEN";
+    const { envLaunchctl } = buildSetupSnippets(t, BASE);
+    expect(envLaunchctl).toBe("launchctl setenv DPF_MCP_BEARER_TOKEN 'dpfmcp_UNIQUETOKEN'");
+  });
+
+  it("POSIX persistence lines single-quote-escape a token containing a quote", () => {
+    // Defensive: a token must never break out of the shell single-quoted string.
+    const t = "dpfmcp_a'b";
+    const { envPosix, envLaunchctl } = buildSetupSnippets(t, BASE);
+    expect(envPosix).toBe("export DPF_MCP_BEARER_TOKEN='dpfmcp_a'\\''b'");
+    expect(envLaunchctl).toBe("launchctl setenv DPF_MCP_BEARER_TOKEN 'dpfmcp_a'\\''b'");
+  });
+
   it("constructs the url from a non-localhost baseUrl", () => {
     const { claudeCode, runtimeRefreshPowerShell } = buildSetupSnippets(TOKEN, "https://dpf.example.com");
     expect(claudeCode).toContain("https://dpf.example.com/api/mcp/v1");
