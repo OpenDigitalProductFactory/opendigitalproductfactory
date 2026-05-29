@@ -119,10 +119,20 @@ export async function runSelfUpgrade(
   }
 
   const result = await runPromoter({
-    sourcePath: config.hostSourceMountPath ?? process.env.PROMOTE_SOURCE ?? "",
+    // HOST path of the install tree, bind-mounted into the promoter
+    // container. Daemon-resolved, so it must be a host path (not an
+    // in-portal path). hostSourceMountPath is the in-container mount and
+    // is no longer passed — runPromoter mounts to a fixed /host-source.
+    hostInstallPath:
+      config.hostInstallPath ??
+      process.env.DPF_HOST_INSTALL_PATH ??
+      process.env.PROMOTE_SOURCE ??
+      "",
     targetSha,
     backupPath: process.env.PROMOTE_BACKUP_PATH ?? `/backups/self-upgrade/${run.runId}`,
+    backupHostPath: process.env.DPF_BACKUPS_HOST_PATH ?? undefined,
     healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
+    promoterImage: config.promoterImage,
     dryRun: params.dryRun,
   });
 

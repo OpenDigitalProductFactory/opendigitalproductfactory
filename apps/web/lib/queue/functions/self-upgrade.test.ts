@@ -167,7 +167,9 @@ const ENABLED_CONFIG = {
   checkIntervalHours: 24,
   healthTarget: 100,
   maintenanceWindows: [],
+  hostInstallPath: "/Users/me/dpf",
   hostSourceMountPath: "/host-dpf",
+  promoterImage: "dpf-promoter",
   repositoryRemote: "origin",
   repositoryBranch: "main",
   healthUrl: "http://localhost:3000/api/health",
@@ -202,14 +204,17 @@ describe("success path", () => {
     expect(mocks.resolveTargetSha).toHaveBeenCalledWith("stable", ENABLED_CONFIG);
   });
 
-  it("runs the promoter with configured source, backup, and health paths", async () => {
+  it("runs the promoter with the host install path, backup, image, and health paths", async () => {
     await runSelfUpgrade({ triggeredBy: "ops" });
     expect(mocks.runPromoter).toHaveBeenCalledWith(
       expect.objectContaining({
-        sourcePath: "/host-dpf",
+        // The promoter is launched as a sibling container against the HOST
+        // install path (daemon-resolved), not an in-portal source path.
+        hostInstallPath: "/Users/me/dpf",
         targetSha: "abc1234deadbeef",
         backupPath: "/backups/self-upgrade/SUR-AAAABBBB",
         healthUrl: "http://localhost:3000/api/health",
+        promoterImage: "dpf-promoter",
       }),
     );
   });
