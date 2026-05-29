@@ -625,6 +625,18 @@ fi
 #     resolves to (Docker Model Runner on Docker Desktop; Ollama on
 #     Linux native Docker via docker-compose.linux.yml).
 step "Bringing up the platform"
+# Stamp the build with the current commit so /ops/self-upgrade can compare the
+# running image to the upgrade target. Contributor mode builds from local
+# source; without this the Dockerfile falls back to a content hash that can
+# never match a git-SHA target, leaving freshness checks inert. Customer mode
+# pulls CI-stamped images, so we leave DPF_VERSION unset there (the host
+# checkout SHA is unrelated to the pulled image and would mislabel DEPLOYED_SHA).
+if [ "$DPF_INSTALL_MODE" = "contributor" ] && [ -d .git ]; then
+  if DPF_VERSION="$(git rev-parse HEAD 2>/dev/null)" && [ -n "$DPF_VERSION" ]; then
+    export DPF_VERSION
+    ok "Stamping local build with DPF_VERSION=$DPF_VERSION"
+  fi
+fi
 docker compose "${DPF_COMPOSE_FILES[@]}" up -d
 ok "docker compose up returned"
 
@@ -758,11 +770,13 @@ echo "  Password:      see ADMIN_PASSWORD in .env"
 echo ""
 echo "  Lifecycle:"
 echo "    bash install-dpf.sh doctor         Generate a diagnostic bundle"
+echo "    bash dpf-start.sh                   Start the stack"
+echo "    bash dpf-stop.sh                    Stop the stack"
+echo "    bash dpf-reinstall.sh              Clean reinstall (destructive)"
+echo "    bash dpf-release.sh --bump minor   Tag and push a release"
 echo "    docker compose ${DPF_COMPOSE_FILES[*]} logs -f"
 echo "    docker compose ${DPF_COMPOSE_FILES[*]} down"
 echo ""
 echo "  Autostart: $(if [ "$DPF_AUTOSTART" = "1" ]; then echo "enabled (will start at login / boot)"; else echo "DISABLED (run install-dpf.sh again without --no-autostart to enable)"; fi)"
-echo "  dpf-{start,stop,reinstall,release}.sh lifecycle scripts"
-echo "    land with installer-parity Phase 8."
 echo ""
 exit 0

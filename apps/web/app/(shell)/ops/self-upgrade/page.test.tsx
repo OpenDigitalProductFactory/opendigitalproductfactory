@@ -56,6 +56,7 @@ const baseStatus = {
     publishedAt: "2026-05-24T00:00:00.000Z",
     gitSha: "abc1234",
     imageVersion: null,
+    buildDate: null,
     note: "baseline",
   },
 } as const;

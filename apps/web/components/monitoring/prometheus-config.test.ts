@@ -25,6 +25,15 @@ describe("Prometheus substrate configs", () => {
     expect(config).toContain('targets: ["node-exporter:9100"]');
   });
 
+  it("keeps the Windows-only windows-host job out of the Linux scrape config", () => {
+    const config = readPrometheusConfig("prometheus.linux.yml");
+
+    // windows_exporter cannot run on native Linux Docker either, so scraping it
+    // would always fail and fire a false ContainerDown CRITICAL. The Linux sweep
+    // uses node-exporter's node_network_info for host NICs instead.
+    expect(config).not.toContain('job_name: "windows-host"');
+  });
+
   it("keeps the Windows-only windows-host job out of the macOS scrape config", () => {
     const config = readPrometheusConfig("prometheus.macos.yml");
 

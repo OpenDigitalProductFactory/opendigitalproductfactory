@@ -35,6 +35,7 @@ type Props = {
     publishedAt: string;
     gitSha: string | null;
     imageVersion?: { raw: string; source: ImageVersionSource } | null;
+    buildDate?: string | null;
     note: string | null;
   };
 };
@@ -155,16 +156,27 @@ export default function SelfUpgradeClient({
         data-platform-version={platformVersion.version}
       >
         <div className="text-xs text-[var(--dpf-muted)]">
-          <span className="font-medium text-[var(--dpf-text)]">Platform version:</span>{" "}
-          <span className="font-mono text-[var(--dpf-text)]">
-            {platformVersion.version}
-          </span>
-          {(platformVersion.gitSha || platformVersion.imageVersion?.raw) && (
-            <span className="ml-2 font-mono text-[var(--dpf-muted)]">
-              ({sourceLabel(platformVersion.imageVersion?.source)}{" "}
-              {shortSha(platformVersion.gitSha ?? platformVersion.imageVersion?.raw ?? null)})
+          <span className="font-medium text-[var(--dpf-text)]">Platform build:</span>{" "}
+          {platformVersion.gitSha || platformVersion.imageVersion?.raw ? (
+            <span className="font-mono text-[var(--dpf-text)]">
+              {shortSha(platformVersion.gitSha ?? platformVersion.imageVersion?.raw ?? null)}
+            </span>
+          ) : (
+            <span className="font-mono text-[var(--dpf-text)]">dev (unbuilt)</span>
+          )}
+          {platformVersion.imageVersion?.source && (
+            <span className="ml-2 text-[var(--dpf-muted)]">
+              ({sourceLabel(platformVersion.imageVersion.source)})
             </span>
           )}
+          {platformVersion.buildDate && (
+            <span className="ml-2 text-[var(--dpf-muted)]">
+              · built {formatDate(platformVersion.buildDate)}
+            </span>
+          )}
+        </div>
+        <div className="text-[11px] text-[var(--dpf-muted)]">
+          baseline v{platformVersion.version}
         </div>
         {enabled && (
           <>
@@ -192,10 +204,11 @@ export default function SelfUpgradeClient({
             )}
             {!isFresh && targetSha && deployedShaSource === "content-hash" && (
               <div className="text-xs text-[var(--dpf-warning)]">
-                Image built without a git-SHA stamp; cannot compare to remote
-                target. Rebuild with{" "}
-                <span className="font-mono">scripts/build-images.ps1</span> to
-                enable freshness checks.
+                This image wasn&apos;t stamped with a git commit, so it
+                can&apos;t be compared to the upgrade target. Published releases
+                are stamped automatically by CI; for a local build, rebuild with{" "}
+                <span className="font-mono">scripts/build-images.sh</span>{" "}
+                (<span className="font-mono">build-images.ps1</span> on Windows).
               </div>
             )}
             {!isFresh && targetSha && deployedShaSource !== "content-hash" && (
