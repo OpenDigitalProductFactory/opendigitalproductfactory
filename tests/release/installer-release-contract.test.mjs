@@ -36,3 +36,30 @@ test("CI doctor bundle uploads include the hidden .dpf directory", () => {
     assert.match(workflow, /include-hidden-files:\s+true/);
   }
 });
+
+test("autostart persists install-state.autostart as a JSON object, not a quoted string", () => {
+  const autostart = read("scripts/installer/lib/autostart.sh");
+
+  // dpf_state_write quotes its value, so writing the autostart object
+  // through it yields autostart="{...}" (a string). All five sites must
+  // use the object-aware dpf_state_write_json so the field stays an object.
+  assert.doesNotMatch(autostart, /dpf_state_write\s+autostart\s/);
+  assert.match(autostart, /dpf_state_write_json\s+autostart\s+"\{\\"enabled\\":true,\\"kind\\":\\"launchagent\\"\}"/);
+  assert.match(autostart, /dpf_state_write_json\s+autostart\s+"\{\\"enabled\\":true,\\"kind\\":\\"systemd-user\\"\}"/);
+});
+
+test("installer populates the previously-null install-state fields", () => {
+  const installer = read("install-dpf.sh");
+
+  // These were left at their init defaults (null / []) on macOS because
+  // the install flow never wrote them. Each must now be persisted.
+  assert.match(installer, /dpf_state_write\s+dockerContext\s+"\$\(dpf_docker_context\)"/);
+  assert.match(installer, /dpf_state_write_json\s+composeFiles\s+"\$\(dpf_compose_files_json\)"/);
+  assert.match(installer, /dpf_state_write\s+llmProvider\s+"\$DPF_RESOLVED_LLM_PROVIDER"/);
+  assert.match(installer, /dpf_state_write\s+imageTag\s+"\$DPF_RESOLVED_IMAGE_TAG"/);
+});
+
+test("install-state helper functions backing the new fields are defined", () => {
+  assert.match(read("scripts/installer/lib/docker.sh"), /dpf_docker_context\(\)\s*\{/);
+  assert.match(read("scripts/installer/lib/compose.sh"), /dpf_compose_files_json\(\)\s*\{/);
+});

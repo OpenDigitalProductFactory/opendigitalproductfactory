@@ -292,6 +292,8 @@ dpf_docker_ensure_installed; rc=$?
 case "$rc" in
   0) ok "Docker present and reachable"
      dpf_state_write dockerEndpoint "$(dpf_docker_endpoint)" 2>/dev/null || true
+     dpf_state_write dockerContext "$(dpf_docker_context)" 2>/dev/null || true
+     dpf_state_write_json composeFiles "$(dpf_compose_files_json)" 2>/dev/null || true
      dpf_preflight_docker_memory ;;
   75) # Docker was just installed; operator must log out / newgrp
       echo ""
@@ -499,6 +501,25 @@ else
     info "Added DPF_BACKUPS_HOST_PATH=$REPO_ROOT-backups to existing .env"
   fi
 fi
+
+# Record the resolved LLM provider and image tag from the generated .env
+# into install-state.json so lifecycle scripts read them from one place
+# instead of re-parsing .env. An empty DPF_LLM_PROVIDER means "use the
+# platform default" (model-runner on macOS, ollama on Linux) per the
+# deployment LLM-provider contract.
+_dpf_env_value() { grep -E "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2-; }
+DPF_RESOLVED_LLM_PROVIDER="$(_dpf_env_value DPF_LLM_PROVIDER)"
+if [ -z "$DPF_RESOLVED_LLM_PROVIDER" ]; then
+  case "$DPF_PLATFORM" in
+    darwin) DPF_RESOLVED_LLM_PROVIDER="model-runner" ;;
+    linux)  DPF_RESOLVED_LLM_PROVIDER="ollama" ;;
+  esac
+fi
+[ -n "$DPF_RESOLVED_LLM_PROVIDER" ] && \
+  dpf_state_write llmProvider "$DPF_RESOLVED_LLM_PROVIDER" 2>/dev/null || true
+DPF_RESOLVED_IMAGE_TAG="$(_dpf_env_value DPF_IMAGE_TAG)"
+[ -n "$DPF_RESOLVED_IMAGE_TAG" ] && \
+  dpf_state_write imageTag "$DPF_RESOLVED_IMAGE_TAG" 2>/dev/null || true
 
 # Ensure the backups host directory exists. Docker refuses to start the
 # service if a bind-mount source is missing, and the source now lives

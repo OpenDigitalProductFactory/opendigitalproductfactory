@@ -108,7 +108,7 @@ _dpf_autostart_install_darwin() {
     launchctl load -w "$plist_path" 2>/dev/null || warn "  launchctl load also failed; check $plist_path manually"
   fi
 
-  dpf_state_write autostart "{\"enabled\":true,\"kind\":\"launchagent\"}" 2>/dev/null || true
+  dpf_state_write_json autostart "{\"enabled\":true,\"kind\":\"launchagent\"}" 2>/dev/null || true
 }
 
 # Install the systemd user unit (Linux) and enable it.
@@ -124,7 +124,7 @@ _dpf_autostart_install_linux() {
 
   if ! command -v systemctl >/dev/null 2>&1; then
     warn "systemctl not found; skipping autostart unit install."
-    dpf_state_write autostart "{\"enabled\":false,\"kind\":\"none\"}" 2>/dev/null || true
+    dpf_state_write_json autostart "{\"enabled\":false,\"kind\":\"none\"}" 2>/dev/null || true
     return 0
   fi
 
@@ -148,7 +148,7 @@ _dpf_autostart_install_linux() {
     info "  Verify with: systemctl --user status $DPF_AUTOSTART_SYSTEMD_UNIT"
   fi
 
-  dpf_state_write autostart "{\"enabled\":true,\"kind\":\"systemd-user\"}" 2>/dev/null || true
+  dpf_state_write_json autostart "{\"enabled\":true,\"kind\":\"systemd-user\"}" 2>/dev/null || true
 }
 
 # Public entry point. Installs autostart for the current platform.
@@ -169,7 +169,7 @@ dpf_autostart_install() {
     linux)   _dpf_autostart_install_linux  "$install_path" "$compose_chain" "$template_dir" ;;
     *)
       warn "Autostart not implemented for platform: $DPF_PLATFORM"
-      dpf_state_write autostart "{\"enabled\":false,\"kind\":\"none\"}" 2>/dev/null || true
+      dpf_state_write_json autostart "{\"enabled\":false,\"kind\":\"none\"}" 2>/dev/null || true
       return 1
       ;;
   esac
@@ -196,5 +196,5 @@ dpf_autostart_uninstall() {
       ok "systemd user unit removed"
       ;;
   esac
-  dpf_state_write autostart "{\"enabled\":false,\"kind\":\"none\"}" 2>/dev/null || true
+  dpf_state_write_json autostart "{\"enabled\":false,\"kind\":\"none\"}" 2>/dev/null || true
 }
