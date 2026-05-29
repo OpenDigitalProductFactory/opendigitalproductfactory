@@ -72,8 +72,19 @@ dpf_docker_endpoint() {
   # cloud-deployment spec (Phase 5 docker.ts discovery alignment).
   docker context inspect 2>/dev/null \
     | grep -m1 '"Host"' \
-    | sed -E 's/.*"Host"\s*:\s*"([^"]+)".*/\1/' \
+    | sed -E 's/.*"Host"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' \
     || echo ""
+}
+
+# Resolve the name of the active Docker context (e.g. "desktop-linux"
+# on macOS Docker Desktop, "default" on native Linux Docker Engine).
+# Returns empty string if docker is unavailable. Recorded in
+# install-state.json so lifecycle scripts don't re-detect the context.
+dpf_docker_context() {
+  if ! command -v docker >/dev/null 2>&1; then
+    return 0
+  fi
+  docker context show 2>/dev/null || echo ""
 }
 
 # Apple Silicon Docker Desktop .dmg download URL. Hardcoded to the

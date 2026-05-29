@@ -148,6 +148,14 @@ jobs:
           platforms: linux/${{ matrix.platform.arch }}
           provenance: mode=max
           sbom: true
+          # Stamp the published image's source identity (/app/.dpf-image-version)
+          # with the release commit SHA so /ops/self-upgrade can compare a
+          # customer's deployed image to the upgrade target. Without this the
+          # Dockerfile falls back to a content hash that never matches a git SHA,
+          # leaving freshness checks permanently inert on customer installs.
+          # Harmless for images whose Dockerfile ignores DPF_VERSION.
+          build-args: |
+            DPF_VERSION=${{ github.sha }}
           # Push by digest only — the merge job assembles the named
           # tag manifest list. `type=image,name=...,push-by-digest=true`
           # uploads the layers under the digest with no human tag.

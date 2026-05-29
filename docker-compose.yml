@@ -180,6 +180,16 @@ services:
       # Override: TTS_PROVIDER=cartesia or TTS_PROVIDER=fish-audio to use a managed API.
       TTS_PROVIDER: ${TTS_PROVIDER:-chatterbox}
       DPF_TTS_URL: ${DPF_TTS_URL:-http://dpf-tts:8000}
+      # Apple Silicon / non-NVIDIA hosts: set TTS_PROVIDER=mlx and DPF_TTS_URL=
+      # http://host.docker.internal:8770, then provision the native-host sidecar
+      # with scripts/tts/setup-mlx-tts-macos.sh. Docker on macOS has no Metal GPU
+      # passthrough, so cloning TTS runs host-native. DPF_TTS_REFERENCE_HOST_ROOT
+      # is the HOST path of the voice storage dir (the host side of
+      # UPLOAD_STORAGE_PATH) so the sidecar can read reference clips off disk.
+      # Spec: docs/superpowers/specs/2026-05-28-tts-apple-silicon-local-design.md
+      DPF_TTS_REFERENCE_HOST_ROOT: ${DPF_TTS_REFERENCE_HOST_ROOT:-}
+      DPF_TTS_MLX_MODEL: ${DPF_TTS_MLX_MODEL:-}
+      DPF_TTS_MLX_VOICE: ${DPF_TTS_MLX_VOICE:-}
       UPLOAD_STORAGE_PATH: ${UPLOAD_STORAGE_PATH:-/host-dpf/data/uploads}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # ensures host reachable on all platforms
@@ -501,7 +511,7 @@ services:
       - "--storage.tsdb.retention.time=15d"
       - "--web.enable-lifecycle"
     extra_hosts:
-      - "host.docker.internal:host-gateway"   # required to reach windows-host scrape target on native Linux Docker
+      - "host.docker.internal:host-gateway"   # Windows: reaches the windows-host (windows_exporter) scrape target. Harmless on Docker Desktop / Linux where windows-host is not scraped.
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:9090/-/healthy"]
       interval: 10s

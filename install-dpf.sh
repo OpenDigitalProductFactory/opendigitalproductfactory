@@ -292,6 +292,8 @@ dpf_docker_ensure_installed; rc=$?
 case "$rc" in
   0) ok "Docker present and reachable"
      dpf_state_write dockerEndpoint "$(dpf_docker_endpoint)" 2>/dev/null || true
+     dpf_state_write dockerContext "$(dpf_docker_context)" 2>/dev/null || true
+     dpf_state_write_json composeFiles "$(dpf_compose_files_json)" 2>/dev/null || true
      dpf_preflight_docker_memory ;;
   75) # Docker was just installed; operator must log out / newgrp
       echo ""
@@ -396,7 +398,7 @@ step "Host hardware profile"
 DPF_SELECTED_MODEL=""
 if DPF_HOST_PROFILE_JSON="$(pnpm --filter @dpf/db exec tsx scripts/detect-hardware-host.ts 2>/dev/null)"; then
   export DPF_HOST_PROFILE="$DPF_HOST_PROFILE_JSON"
-  DPF_SELECTED_MODEL="$(printf '%s' "$DPF_HOST_PROFILE_JSON" | sed -nE 's/.*"selectedModel"\s*:\s*"([^"]+)".*/\1/p')"
+  DPF_SELECTED_MODEL="$(printf '%s' "$DPF_HOST_PROFILE_JSON" | sed -nE 's/.*"selectedModel"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
   if [ -n "$DPF_SELECTED_MODEL" ]; then
     ok "Hardware profile detected — selected AI model: $DPF_SELECTED_MODEL"
   else
@@ -499,6 +501,25 @@ else
     info "Added DPF_BACKUPS_HOST_PATH=$REPO_ROOT-backups to existing .env"
   fi
 fi
+
+# Record the resolved LLM provider and image tag from the generated .env
+# into install-state.json so lifecycle scripts read them from one place
+# instead of re-parsing .env. An empty DPF_LLM_PROVIDER means "use the
+# platform default" (model-runner on macOS, ollama on Linux) per the
+# deployment LLM-provider contract.
+_dpf_env_value() { grep -E "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2-; }
+DPF_RESOLVED_LLM_PROVIDER="$(_dpf_env_value DPF_LLM_PROVIDER)"
+if [ -z "$DPF_RESOLVED_LLM_PROVIDER" ]; then
+  case "$DPF_PLATFORM" in
+    darwin) DPF_RESOLVED_LLM_PROVIDER="model-runner" ;;
+    linux)  DPF_RESOLVED_LLM_PROVIDER="ollama" ;;
+  esac
+fi
+[ -n "$DPF_RESOLVED_LLM_PROVIDER" ] && \
+  dpf_state_write llmProvider "$DPF_RESOLVED_LLM_PROVIDER" 2>/dev/null || true
+DPF_RESOLVED_IMAGE_TAG="$(_dpf_env_value DPF_IMAGE_TAG)"
+[ -n "$DPF_RESOLVED_IMAGE_TAG" ] && \
+  dpf_state_write imageTag "$DPF_RESOLVED_IMAGE_TAG" 2>/dev/null || true
 
 # Ensure the backups host directory exists. Docker refuses to start the
 # service if a bind-mount source is missing, and the source now lives
@@ -604,6 +625,18 @@ fi
 #     resolves to (Docker Model Runner on Docker Desktop; Ollama on
 #     Linux native Docker via docker-compose.linux.yml).
 step "Bringing up the platform"
+# Stamp the build with the current commit so /ops/self-upgrade can compare the
+# running image to the upgrade target. Contributor mode builds from local
+# source; without this the Dockerfile falls back to a content hash that can
+# never match a git-SHA target, leaving freshness checks inert. Customer mode
+# pulls CI-stamped images, so we leave DPF_VERSION unset there (the host
+# checkout SHA is unrelated to the pulled image and would mislabel DEPLOYED_SHA).
+if [ "$DPF_INSTALL_MODE" = "contributor" ] && [ -d .git ]; then
+  if DPF_VERSION="$(git rev-parse HEAD 2>/dev/null)" && [ -n "$DPF_VERSION" ]; then
+    export DPF_VERSION
+    ok "Stamping local build with DPF_VERSION=$DPF_VERSION"
+  fi
+fi
 docker compose "${DPF_COMPOSE_FILES[@]}" up -d
 ok "docker compose up returned"
 
@@ -737,11 +770,13 @@ echo "  Password:      see ADMIN_PASSWORD in .env"
 echo ""
 echo "  Lifecycle:"
 echo "    bash install-dpf.sh doctor         Generate a diagnostic bundle"
+echo "    bash dpf-start.sh                   Start the stack"
+echo "    bash dpf-stop.sh                    Stop the stack"
+echo "    bash dpf-reinstall.sh              Clean reinstall (destructive)"
+echo "    bash dpf-release.sh --bump minor   Tag and push a release"
 echo "    docker compose ${DPF_COMPOSE_FILES[*]} logs -f"
 echo "    docker compose ${DPF_COMPOSE_FILES[*]} down"
 echo ""
 echo "  Autostart: $(if [ "$DPF_AUTOSTART" = "1" ]; then echo "enabled (will start at login / boot)"; else echo "DISABLED (run install-dpf.sh again without --no-autostart to enable)"; fi)"
-echo "  dpf-{start,stop,reinstall,release}.sh lifecycle scripts"
-echo "    land with installer-parity Phase 8."
 echo ""
 exit 0

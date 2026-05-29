@@ -115,3 +115,21 @@ dpf_compose_chain() {
   dpf_compose_files "$@"
   printf '%s ' "${DPF_COMPOSE_FILES[@]}" | sed 's/ $//'
 }
+
+# Emit the assembled compose chain as a JSON array of filenames (the
+# `-f` flag tokens stripped), e.g. ["docker-compose.yml",
+# "docker-compose.macos.yml"]. Operates on the already-assembled
+# DPF_COMPOSE_FILES so it reflects whatever mode/platform/edge options
+# the prior dpf_compose_files call resolved. Recorded in
+# install-state.json's composeFiles. Compose filenames are repo-literal
+# (no quotes/backslashes), so manual JSON assembly is safe and keeps
+# this dependency-free on hosts without jq.
+dpf_compose_files_json() {
+  local json="[" first=1 tok
+  for tok in "${DPF_COMPOSE_FILES[@]}"; do
+    [ "$tok" = "-f" ] && continue
+    if [ "$first" = "1" ]; then first=0; else json="$json,"; fi
+    json="$json\"$tok\""
+  done
+  printf '%s]' "$json"
+}

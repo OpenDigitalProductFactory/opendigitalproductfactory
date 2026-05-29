@@ -49,6 +49,9 @@ type ServiceStatusInput = {
 const PLATFORM_REQUIRED_JOBS = ["portal", "postgres", "qdrant", "sandbox"];
 const TELEMETRY_JOBS = ["node-exporter", "cadvisor"];
 const TELEMETRY_JOB_SET = new Set(TELEMETRY_JOBS);
+// Host-hardware telemetry exporters, one per substrate (Windows / Linux).
+// macOS ships none; their absence is expected, not a degradation.
+const HOST_TELEMETRY_JOBS = ["windows-host", "node-exporter"];
 
 export const HOST_RESOURCE_QUERIES = {
   compute:
@@ -150,9 +153,20 @@ export function deriveMonitoringSummary({
     };
   }
 
-  const hasHostTelemetry = jobStatus.get("windows-host") === 1 || jobStatus.get("node-exporter") === 1;
-  if (!hasHostTelemetry) {
+  // Host telemetry exporters are substrate-specific: windows_exporter on
+  // Windows (windows-host), node-exporter on Linux. macOS (Docker Desktop)
+  // ships neither — the VM boundary hides the host's NICs — so their absence
+  // is by design, not a degradation. Distinguish "configured but down" (a real
+  // problem to flag) from "not configured on this substrate" (expected): a job
+  // only appears in the `up` results when it is a configured scrape target.
+  const hostTelemetryConfigured = HOST_TELEMETRY_JOBS.some((job) => jobStatus.has(job));
+  const hostTelemetryUp = HOST_TELEMETRY_JOBS.some((job) => jobStatus.get(job) === 1);
+  if (hostTelemetryConfigured && !hostTelemetryUp) {
     return { value: "Degraded", tone: "warning", detail: "Host telemetry is not available" };
+  }
+
+  if (!hostTelemetryConfigured) {
+    return { value: "Active", tone: "success", detail: "Prometheus and platform services are healthy" };
   }
 
   return { value: "Active", tone: "success", detail: "Prometheus and telemetry targets are healthy" };
