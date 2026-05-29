@@ -13,11 +13,22 @@ export type McpSetupSnippets = {
   vscode: string;
   syncCommand: string;
   envPowerShell: string;
+  /** POSIX shell line for ~/.zshenv / ~/.bash_profile (login + non-login shells). */
+  envPosix: string;
+  /** macOS launchctl line so GUI-launched apps (e.g. Codex.app) inherit the var. */
+  envLaunchctl: string;
   runtimeRefreshPowerShell: string;
 };
 
 function psSingleQuoted(value: string): string {
   return value.replace(/'/g, "''");
+}
+
+// POSIX single-quote escaping: close the quote, emit an escaped quote, reopen.
+// Tokens are `dpfmcp_...` (no quotes in practice) but escape defensively so the
+// installer never writes a malformed shell line.
+function shSingleQuoted(value: string): string {
+  return value.replace(/'/g, "'\\''");
 }
 
 function normalizeLocalClientBaseUrl(baseUrl: string): string {
@@ -60,6 +71,8 @@ export function buildSetupSnippets(plaintext: string, baseUrl: string): McpSetup
   const vscode = JSON.stringify({ servers: { dpf: vscodeHttpEntry } }, null, 2);
   const syncCommand = ".\\scripts\\seed-worktree-mcp.ps1";
   const envPowerShell = `[System.Environment]::SetEnvironmentVariable('${MCP_BEARER_TOKEN_ENV_VAR}', '${psSingleQuoted(plaintext)}', 'User')`;
+  const envPosix = `export ${MCP_BEARER_TOKEN_ENV_VAR}='${shSingleQuoted(plaintext)}'`;
+  const envLaunchctl = `launchctl setenv ${MCP_BEARER_TOKEN_ENV_VAR} '${shSingleQuoted(plaintext)}'`;
   const refreshBody = JSON.stringify({ token: plaintext });
   const runtimeRefreshPowerShell =
     `Invoke-RestMethod -Method Post -Uri '${psSingleQuoted(refreshUrl)}' ` +
@@ -70,6 +83,8 @@ export function buildSetupSnippets(plaintext: string, baseUrl: string): McpSetup
     vscode,
     syncCommand,
     envPowerShell,
+    envPosix,
+    envLaunchctl,
     runtimeRefreshPowerShell,
   };
 }
