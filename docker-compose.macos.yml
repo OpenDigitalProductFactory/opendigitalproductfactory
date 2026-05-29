@@ -24,6 +24,14 @@
 #     Docker Desktop's own observability or external tooling per the
 #     Deployment Support Matrix.
 #
+#   - Prometheus mounts monitoring/prometheus/prometheus.macos.yml here
+#     instead of the base prometheus.yml. The base config carries the
+#     Windows-only `windows-host` job (windows_exporter on
+#     host.docker.internal:9182), which can never come up on macOS and
+#     would fire a false ContainerDown CRITICAL in Platform Health. The
+#     macOS config drops that job, mirroring how docker-compose.linux.yml
+#     mounts prometheus.linux.yml for its substrate.
+#
 #   - host.docker.internal is provided automatically by Docker Desktop;
 #     the extra_hosts entries in the base docker-compose.yml are
 #     harmless but redundant on this substrate.
@@ -34,6 +42,14 @@
 # Desktop's defaults align with the platform's needs.
 
 services:
+  prometheus:
+    # Mount the macOS scrape config (no windows-host / no Linux exporters)
+    # in place of the base prometheus.yml. See the header note above.
+    volumes:
+      - ./monitoring/prometheus/prometheus.macos.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+
   portal:
     environment:
       # Re-stating the Docker Desktop default for clarity. The base
