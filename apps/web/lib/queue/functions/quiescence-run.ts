@@ -270,20 +270,24 @@ export const quiescenceRun = inngest.createFunction(
 /**
  * Effective hard-blocker count, applying the shipForce override.
  *
- * When `shipForce` is true, ship-phase BuildPhaseRun blockers are ignored
- * (recorded on QuiescenceRun.forcedSurfaces by the caller). All other hard
- * blockers still count.
+ * `shipForce` is the operator EMERGENCY OVERRIDE (the `force` flag on a manual
+ * self-upgrade). It means "swap now regardless of in-flight work" — so it
+ * bypasses ALL hard blockers, letting the drain reach ready-to-swap
+ * immediately. The override is audit-recorded on QuiescenceRun.forcedSurfaces
+ * by the caller, and the scheduled cron NEVER sets it. Without this, a single
+ * stale/orphaned surface (e.g. a build phase left in-flight by a previously
+ * dead queue) would defer every forced upgrade forever.
+ *
+ * Without shipForce, every hard blocker still counts and the drain waits or
+ * defers as normal.
  */
 function countEffectiveHardBlockers(
   snapshot: ActiveSessionBlockers | null,
   shipForce: boolean,
 ): number {
   if (!snapshot) return 0;
-  return snapshot.surfaces.filter((s) => {
-    if (s.kind !== "hard") return false;
-    if (shipForce && s.surface === "build-studio.phase.ship") return false;
-    return true;
-  }).length;
+  if (shipForce) return 0;
+  return snapshot.surfaces.filter((s) => s.kind === "hard").length;
 }
 
 /**
