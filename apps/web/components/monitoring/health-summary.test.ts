@@ -88,6 +88,36 @@ describe("deriveMonitoringSummary", () => {
     expect(summary.value).toBe("Active");
     expect(summary.tone).toBe("success");
   });
+
+  it("reports active (not degraded) on macOS where no host telemetry exporter is configured", () => {
+    // macOS ships neither windows-host nor node-exporter — they are absent from
+    // the scrape targets, not down. Absence is by design, not a degradation.
+    const summary = deriveMonitoringSummary({
+      checked: true,
+      online: true,
+      upTargets: [up("prometheus"), up("portal"), up("postgres"), up("qdrant"), up("sandbox")],
+      alerts: [],
+    });
+
+    expect(summary.value).toBe("Active");
+    expect(summary.tone).toBe("success");
+    expect(summary.detail).not.toContain("Host telemetry is not available");
+  });
+
+  it("still reports degraded when a configured host telemetry exporter is down", () => {
+    // Windows install whose windows_exporter has stopped: the job is a
+    // configured scrape target reporting up=0, so the signal must survive.
+    const summary = deriveMonitoringSummary({
+      checked: true,
+      online: true,
+      upTargets: [up("prometheus"), up("portal"), up("windows-host", "0")],
+      alerts: [],
+    });
+
+    expect(summary.value).toBe("Degraded");
+    expect(summary.tone).toBe("warning");
+    expect(summary.detail).toContain("Host telemetry is not available");
+  });
 });
 
 describe("deriveServiceStatuses", () => {

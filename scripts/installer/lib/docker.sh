@@ -76,6 +76,17 @@ dpf_docker_endpoint() {
     || echo ""
 }
 
+# Resolve the name of the active Docker context (e.g. "desktop-linux"
+# on macOS Docker Desktop, "default" on native Linux Docker Engine).
+# Returns empty string if docker is unavailable. Recorded in
+# install-state.json so lifecycle scripts don't re-detect the context.
+dpf_docker_context() {
+  if ! command -v docker >/dev/null 2>&1; then
+    return 0
+  fi
+  docker context show 2>/dev/null || echo ""
+}
+
 # Apple Silicon Docker Desktop .dmg download URL. Hardcoded to the
 # canonical Docker Desktop endpoint; can be overridden via env var
 # for mirror / corporate-proxy setups.

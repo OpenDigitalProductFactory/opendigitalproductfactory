@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef, useCallback } from "react"
 import { VoiceConsentForm } from "@/components/admin/VoiceConsentForm"
 import { setVoiceEnabled, resetVoiceProfile } from "@/lib/actions/voice-profile"
-import { selectSupportedMimeType } from "@/components/agent/hooks/mime-probe"
+import { resolveRecordingBlobMimeType, selectSupportedMimeType } from "@/components/agent/hooks/mime-probe"
 import { useVoiceSynth } from "@/components/agent/hooks/useVoiceSynth"
 import { LoaderCircle, Pause, Play, VolumeX } from "lucide-react"
 
@@ -317,7 +317,11 @@ function MicRecorder({ profileId }: { profileId: string }) {
 
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
       recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: mimeType ?? "audio/webm" })
+        // Tag the blob with the container the recorder ACTUALLY produced so the
+        // <audio> preview can decode it (see resolveRecordingBlobMimeType).
+        const blob = new Blob(chunksRef.current, {
+          type: resolveRecordingBlobMimeType(recorder.mimeType, mimeType),
+        })
         const url = URL.createObjectURL(blob)
         setAudioUrl(url)
         setAudioBlob(blob)
