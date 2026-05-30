@@ -347,6 +347,55 @@ resolves a git ref as described here; afterwards the resolved artifact is the
 manifest's signed image and the same "stamp describes the built bytes"
 invariant carries over unchanged.
 
+### 5.0.1 Upgrade impact summary (on-demand, install-tailored)
+
+> Added 2026-05-29. Operator-requested: when weighing an upgrade, show *what's
+> in it* phrased for THIS install — most-impactful first — not a generic
+> changelog. Advisory: informs the go/defer decision, does not gate it.
+
+The Upgrade Center exposes a **"What's in this update?"** action that generates
+an impact summary on demand for the current→target span. Pipeline —
+deterministic classification, LLM phrasing:
+
+1. **Change set.** `git log <currentLineageSha>..<targetSha>` over the host
+   clone (`currentLineageSha` = the upstream SHA the running build contains —
+   the latest succeeded run's `targetSha`, per the §5.0 lineage rule;
+   `targetSha` = resolved upstream HEAD). DPF squashes PRs with Conventional
+   Commits, so each commit subject carries a type. When the GitHub API is
+   reachable, enrich with PR title / labels / body; offline, commit subjects +
+   changed-path stats suffice.
+2. **Classify.** Conventional-commit type per change → New features (`feat`),
+   Bug fixes (`fix`), Performance (`perf`), Breaking changes (`!` /
+   `BREAKING CHANGE`), Other. Counts feed the headline ("3 new features, 12 fixes").
+3. **Score relevance to THIS install.** Map each change's changed paths / area
+   to the install's own state and weight:
+   - **Archetype / industry** (`StorefrontConfig.archetypeId`,
+     `Organization.industry`) — changes in the active archetype's surface rank
+     high; other archetypes' changes are de-emphasised or hidden.
+   - **Enabled capabilities / features the org uses** — changes there rank high.
+   - **Near a reported problem** — changes touching files/areas with open PIRs /
+     issues for this install ("fixes the `/build` crash you reported").
+   - **Near a customization** — changes touching files the install has local
+     commits / `FeaturePack`s on. Doubly valuable: most relevant ("affects a
+     feature you customised") AND an early merge-conflict warning, shared with
+     the §5.0 merge preflight.
+   Impact = `base(type) × relevance multipliers`; sort desc, take top N.
+4. **Phrase.** Render an operator-readable summary via `ai-inference`: a
+   headline, the top items each with a one-line plain description and WHY it is
+   relevant, a "touches your customizations" callout when applicable, and a
+   foldable full list. No SHAs or file paths in the default view.
+
+On-demand and cacheable per `(currentLineageSha, targetSha)`. Surfaced as an
+Upgrade Center action and an MCP tool.
+
+**Research & benchmarking.** Conventional Commits; Keep a Changelog; GitHub
+auto-generated release notes / compare view; semantic-release; Renovate /
+Dependabot release-note surfacing. *Adopted:* type-from-commit classification +
+counts. *Rejected:* a single generic `releaseNotesUrl` (§4.4) as the operator's
+primary view — not install-pertinent. *Gap filled:* per-install relevance
+ranking against archetype / capabilities / reported issues / customizations,
+which none of the above do.
+
 ### 5.1 Detection
 
 The newer `apps/web/lib/queue/functions/self-upgrade.ts` path becomes the canonical detector after Phase 0 cleans up the legacy stubs:
@@ -730,6 +779,7 @@ Proposed breakdown (each a Build Studio brief once spec is approved):
 
 - `BI-UPGRADE-000` — Self-upgrade substrate stabilization: one Inngest path, target SHA resolver, schema/DTO alignment, `/ops/self-upgrade` run listing, event-bus claim cleanup (Phase 0)
 - `BI-UPGRADE-000a` — Durable per-install branch (§5.0 prerequisite): commit Build-Studio promotions as real commits on a persistent install branch in the portal's build tree, so customizations survive container rebuild / Docker update / upgrade. Closes the `mcp-tools.ts:8891` "lost on rebuild" hazard. Independent of contribution mode (Phase 0)
+- `BI-UPGRADE-000c` — Upgrade impact summary (§5.0.1): on-demand, install-tailored "what's in this update?" digest. `git log currentLineage..target` → conventional-commit classify → score relevance against archetype / capabilities / open PIRs / local customizations → LLM-phrased headline + top items + "touches your customizations" callout. Upgrade Center action + MCP tool. Depends on the §5.0 lineage marker (Phase 4, summary core can land earlier)
 - `BI-UPGRADE-000b` — Merge-based upgrade source (§5.0): `git fetch` upstream target + **merge** into the install branch (not clean-checkout-replace); build merged result; stamp the true merge-commit SHA (non-circular sha-verify); track upstream lineage separately; clean auto-merge on disjoint files; genuine code conflicts surface in the Upgrade Center as keep-mine/take-upstream/show-diff (never a CLI ask), unresolved → defer and stay on current build. Extends §3.3/§6 3-way merge from seeded content to git/code (Phase 0/4)
 - `BI-UPGRADE-001` — Platform version baseline + `version.json` + `PlatformConfig["platform.version"]` + `/api/platform/version` (Phase 1)
 - `BI-UPGRADE-002` — Release-impact lint + release CI tag/build/GHCR publish/GitHub Releases metadata (Phase 2)
