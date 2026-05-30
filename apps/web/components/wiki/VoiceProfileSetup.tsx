@@ -244,7 +244,7 @@ function VoiceSampleCapture({ profileId }: { profileId: string }) {
   return (
     <div className="rounded-md border border-border p-4 space-y-4">
       <p className="text-sm text-muted-foreground">
-        Provide 5–30 seconds of clean speech. Chatterbox clones your voice immediately — no training wait.
+        Provide 15–30 seconds of clean, single-speaker speech in a quiet room. Your voice is cloned immediately — no training wait.
       </p>
 
       {/* Mode toggle */}
