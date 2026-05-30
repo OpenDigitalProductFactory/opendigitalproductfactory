@@ -162,6 +162,33 @@ describe.skipIf(!GIT_AVAILABLE)("prepareUpgradeSource — real git", () => {
     expect(existsSync(join(install, "upstream.txt"))).toBe(true);
   });
 
+  it("refuses up front on an uncommitted working tree (does not switch branch or merge)", async () => {
+    const { upstream, install, root } = makeWorld();
+    cleanup.push(root);
+    commit(upstream, "upstream.txt", "x\n", "feat: x");
+
+    // Uncommitted local change in the install clone — the real-world case
+    // (e.g. WIP edits). The merge would otherwise abort with "local changes
+    // would be overwritten" and surface as an empty, misleading merge-conflict.
+    const startBranch = git(install, "rev-parse", "--abbrev-ref", "HEAD").trim();
+    writeFileSync(join(install, "base.txt"), "uncommitted edit\n");
+
+    const r = await prepareUpgradeSource(
+      { sourceMode: "upstream", hostSourcePath: install, remote: "origin", branch: "main", installBranch: "dpf/install" },
+      defaultGitRunner,
+    );
+
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("dirty-tree");
+    expect(r.message).toContain("base.txt");
+    expect(r.message).toContain("uncommitted");
+    // The clone is untouched: still on the original branch, never switched to
+    // the install branch, no merge in progress.
+    expect(git(install, "rev-parse", "--abbrev-ref", "HEAD").trim()).toBe(startBranch);
+    expect(existsSync(join(install, ".git", "MERGE_HEAD"))).toBe(false);
+  });
+
   it("local mode stamps the working tree HEAD, with -dirty when uncommitted", async () => {
     const { install, root } = makeWorld();
     cleanup.push(root);
