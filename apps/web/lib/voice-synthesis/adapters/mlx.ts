@@ -88,11 +88,15 @@ export async function synthesizeWithMlx(
   const baseUrl = getTtsUrl()
   const refPath = resolveReferenceHostPath(config.providerVoiceId)
 
+  // Per-profile tuning (set by the user on the voice page). Each field is only
+  // sent when present so the sidecar/provider falls back to its own default.
+  const s = config.settings ?? {}
+
   const body: Record<string, unknown> = {
     model: getModel(),
     input: text,
     response_format: "wav",
-    speed: config.speed ?? 1.0,
+    speed: s.speed ?? config.speed ?? 1.0,
   }
 
   if (refPath) {
@@ -100,10 +104,12 @@ export async function synthesizeWithMlx(
     // ref_text must be non-empty or CSM throws (see DEFAULT_REF_TEXT).
     body.ref_audio = refPath
     body.ref_text = config.referenceText?.trim() || DEFAULT_REF_TEXT
-    // Conservative sampler — lower temperature curbs the degenerate runs that
-    // produce empty/truncated output; CSM ignores these fields harmlessly when
-    // not applicable, and other models accept the same OpenAI-style keys.
-    body.temperature = 0.6
+    // Expressiveness + pacing knobs (Chatterbox: exaggeration/cfg_weight; both
+    // engines accept temperature). Conservative defaults curb CSM's degenerate
+    // runs; per-profile settings override when present.
+    if (s.exaggeration !== undefined) body.exaggeration = s.exaggeration
+    if (s.cfgWeight !== undefined) body.cfg_weight = s.cfgWeight
+    body.temperature = s.temperature ?? 0.6
     body.top_k = 50
   } else {
     // No host-visible reference → fixed named voice (non-cloning fallback).

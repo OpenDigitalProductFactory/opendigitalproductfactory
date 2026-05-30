@@ -48,6 +48,13 @@ if (-not $sha) {
 $env:DPF_VERSION = $sha
 Write-Host "[build-images] Stamping images with DPF_VERSION=$sha"
 
+# Real platform version from the repo's git release tags (e.g. "5.6.0").
+$platformVersion = (git describe --tags --always 2>$null) -replace '^v',''
+if ($platformVersion) {
+  $env:DPF_PLATFORM_VERSION = $platformVersion
+  Write-Host "[build-images] Stamping images with DPF_PLATFORM_VERSION=$platformVersion"
+}
+
 $buildArgs = @("compose", "build")
 if ($NoCache) { $buildArgs += "--no-cache" }
 $buildArgs += $Services
