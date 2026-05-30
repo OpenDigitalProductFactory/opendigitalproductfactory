@@ -24,6 +24,7 @@ import {
 // mcp-tools is imported dynamically at call sites to avoid NFT whole-project tracing;
 // type-only imports are erased at build time and safe.
 import type { ToolDefinition } from "@/lib/mcp-tools";
+import { sanitizeForLog } from "@/lib/security/safe-log";
 import { getActionsForRoute } from "@/lib/agent-action-registry";
 import { getBuildContextSection } from "@/lib/build-agent-prompts";
 import { getFeatureBuildForContext } from "@/lib/feature-build-data";
@@ -1035,13 +1036,14 @@ export async function sendMessage(input: {
   // Log tools available so we can diagnose why a model claims it can't see a
   // tool that should be in scope. Logged for every coworker call, not just
   // build-phase ones — chat coworkers on /workspace etc. were silent before.
-  // CodeQL js/log-injection: input.routeContext + agent.agentId + tool
-  // names are user-influenced. JSON.stringify on each interpolation.
-  console.log(
+  // CodeQL js/log-injection: input.routeContext + agent.agentId + tool names
+  // are user-influenced. Compose the line, then route it through the registered
+  // sanitizeForLog sanitizer so embedded control chars can't forge log entries.
+  const toolsLogLine =
     `[tools] route=${JSON.stringify(input.routeContext)} agent=${JSON.stringify(agent.agentId)} ` +
     `${activeBuildPhase ? `buildPhase=${JSON.stringify(activeBuildPhase)} ` : ""}` +
-    `count=${availableTools.length} tools=[${availableTools.map(t => JSON.stringify(t.name)).join(", ")}]`,
-  );
+    `count=${availableTools.length} tools=[${availableTools.map(t => JSON.stringify(t.name)).join(", ")}]`;
+  console.log(sanitizeForLog(toolsLogLine));
   if (activeBuildPhase) {
 
     // Inject PhaseHandoff context — structured summary from the previous phase
