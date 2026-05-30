@@ -14,7 +14,12 @@ const ENV_KEYS = [
   "DPF_TTS_MLX_MODEL",
   "DPF_TTS_MLX_VOICE",
   "DPF_TTS_REFERENCE_HOST_ROOT",
+  "DPF_TTS_MLX_MAX_ATTEMPTS",
 ] as const
+
+// A "valid" clip must clear the adapter's MIN_VALID_AUDIO_BYTES (16 KB) gate.
+const VALID_AUDIO = new ArrayBuffer(40 * 1024)
+const SHORT_AUDIO = new ArrayBuffer(4 * 1024) // simulates CSM empty/truncated run
 
 describe("synthesizeWithMlx", () => {
   let saved: Record<string, string | undefined>
@@ -32,20 +37,38 @@ describe("synthesizeWithMlx", () => {
     }
   })
 
-  function stubFetch(impl: { ok: boolean; status?: number }) {
+  // Resolves every call to the same valid response.
+  function stubOk(buf: ArrayBuffer = VALID_AUDIO) {
     const fetchMock = vi.fn().mockResolvedValue({
-      ok: impl.ok,
-      status: impl.status ?? 200,
-      arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
-      text: () => Promise.resolve("err"),
+      ok: true,
+      status: 200,
+      arrayBuffer: () => Promise.resolve(buf),
+      text: () => Promise.resolve(""),
     })
     vi.stubGlobal("fetch", fetchMock)
     return fetchMock
   }
 
-  it("clones from the host reference path when DPF_TTS_REFERENCE_HOST_ROOT is set", async () => {
+  // Returns a sequence of responses (objects), one per call.
+  function stubSequence(responses: Array<{ ok: boolean; status?: number; buf?: ArrayBuffer }>) {
+    let i = 0
+    const fetchMock = vi.fn().mockImplementation(() => {
+      const r = responses[Math.min(i, responses.length - 1)]
+      i++
+      return Promise.resolve({
+        ok: r.ok,
+        status: r.status ?? (r.ok ? 200 : 500),
+        arrayBuffer: () => Promise.resolve(r.buf ?? VALID_AUDIO),
+        text: () => Promise.resolve("err"),
+      })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    return fetchMock
+  }
+
+  it("clones from the host reference path + sends sampler params", async () => {
     process.env.DPF_TTS_REFERENCE_HOST_ROOT = "/host/voice-storage"
-    const fetchMock = stubFetch({ ok: true })
+    const fetchMock = stubOk()
 
     await synthesizeWithMlx("Proceed to build.", { ...baseConfig, referenceText: "sample transcript" })
 
@@ -57,22 +80,25 @@ describe("synthesizeWithMlx", () => {
     expect(body.response_format).toBe("wav")
     expect(body.ref_audio).toBe("/host/voice-storage/voices/mark-dpf-platform/reference.wav")
     expect(body.ref_text).toBe("sample transcript")
+    expect(body.temperature).toBe(0.6)
+    expect(body.top_k).toBe(50)
     expect(body.voice).toBeUndefined()
   })
 
-  it("omits ref_text when no transcript is provided but still clones", async () => {
+  it("sends a non-empty default ref_text when no transcript is provided (CSM requires it)", async () => {
     process.env.DPF_TTS_REFERENCE_HOST_ROOT = "/host/voice-storage"
-    const fetchMock = stubFetch({ ok: true })
+    const fetchMock = stubOk()
 
     await synthesizeWithMlx("hi", baseConfig)
 
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
     expect(body.ref_audio).toBe("/host/voice-storage/voices/mark-dpf-platform/reference.wav")
-    expect(body.ref_text).toBeUndefined()
+    expect(typeof body.ref_text).toBe("string")
+    expect((body.ref_text as string).length).toBeGreaterThan(0)
   })
 
   it("falls back to a named voice (no cloning) when the host root is unset", async () => {
-    const fetchMock = stubFetch({ ok: true })
+    const fetchMock = stubOk()
 
     await synthesizeWithMlx("hi", baseConfig)
 
@@ -85,7 +111,7 @@ describe("synthesizeWithMlx", () => {
     process.env.DPF_TTS_URL = "http://127.0.0.1:9000"
     process.env.DPF_TTS_MLX_MODEL = "mlx-community/Kokoro-82M-bf16"
     process.env.DPF_TTS_MLX_VOICE = "bf_emma"
-    const fetchMock = stubFetch({ ok: true })
+    const fetchMock = stubOk()
 
     await synthesizeWithMlx("hi", baseConfig)
 
@@ -96,22 +122,54 @@ describe("synthesizeWithMlx", () => {
     expect(body.voice).toBe("bf_emma")
   })
 
-  it("returns audioBuffer + provider mlx on success", async () => {
-    const fakeAudio = new ArrayBuffer(16)
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({ ok: true, arrayBuffer: () => Promise.resolve(fakeAudio) }),
-    )
-
+  it("returns audioBuffer + provider mlx on a valid first response", async () => {
+    stubOk(VALID_AUDIO)
     const result = await synthesizeWithMlx("Hello.", baseConfig)
-    expect(result.audioBuffer).toBe(fakeAudio)
+    expect(result.audioBuffer).toBe(VALID_AUDIO)
     expect(result.provider).toBe("mlx")
     expect(result.ttsCostUnits).toBe("Hello.".length)
   })
 
-  it("throws VoiceSynthesisError on non-2xx", async () => {
-    stubFetch({ ok: false, status: 503 })
+  it("RETRIES on empty/truncated cloning output and returns the first valid clip", async () => {
+    process.env.DPF_TTS_REFERENCE_HOST_ROOT = "/host/voice-storage"
+    // Two CSM duds, then a good clip — the documented stochastic failure mode.
+    const fetchMock = stubSequence([
+      { ok: true, buf: SHORT_AUDIO },
+      { ok: true, buf: new ArrayBuffer(0) },
+      { ok: true, buf: VALID_AUDIO },
+    ])
+
+    const result = await synthesizeWithMlx("Proceed.", baseConfig)
+    expect(result.audioBuffer.byteLength).toBe(VALID_AUDIO.byteLength)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it("RETRIES on a transient 5xx (CSM IndexError) then succeeds", async () => {
+    process.env.DPF_TTS_REFERENCE_HOST_ROOT = "/host/voice-storage"
+    const fetchMock = stubSequence([
+      { ok: false, status: 500 },
+      { ok: true, buf: VALID_AUDIO },
+    ])
+
+    const result = await synthesizeWithMlx("Proceed.", baseConfig)
+    expect(result.provider).toBe("mlx")
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("gives up after DPF_TTS_MLX_MAX_ATTEMPTS and throws", async () => {
+    process.env.DPF_TTS_REFERENCE_HOST_ROOT = "/host/voice-storage"
+    process.env.DPF_TTS_MLX_MAX_ATTEMPTS = "3"
+    const fetchMock = stubSequence([{ ok: true, buf: SHORT_AUDIO }]) // always short
+
     await expect(synthesizeWithMlx("x", baseConfig)).rejects.toThrow("VoiceSynthesisError [mlx]")
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it("does NOT retry a short named-voice (non-cloning) clip — it's deterministic", async () => {
+    // No host root → named-voice path; a short clip there won't improve on retry.
+    const fetchMock = stubSequence([{ ok: true, buf: SHORT_AUDIO }])
+    await expect(synthesizeWithMlx("x", baseConfig)).rejects.toThrow("VoiceSynthesisError [mlx]")
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })
 

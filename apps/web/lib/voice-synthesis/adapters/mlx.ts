@@ -38,6 +38,15 @@ function getFallbackVoice(): string {
   return process.env.DPF_TTS_MLX_VOICE ?? "af_heart"
 }
 
+// CSM (sesame) builds its generation context from the reference transcript and
+// crashes with `IndexError: list index out of range` (sesame.py: context[0])
+// when ref_audio is supplied with an empty ref_text. DPF does not yet transcribe
+// the reference clip at registration, so until it does we send a neutral
+// non-empty placeholder. Cloning still keys off ref_audio; an accurate
+// transcript only improves prosody alignment.
+const DEFAULT_REF_TEXT =
+  "This is a reference recording of my voice for the platform."
+
 export interface MlxSynthesisConfig extends VoiceSynthesisConfig {
   /**
    * Transcript of the reference clip. mlx-audio cloning models (e.g. CSM) use
@@ -60,6 +69,18 @@ export function resolveReferenceHostPath(providerVoiceId: string | undefined | n
   return path.join(root, providerVoiceId)
 }
 
+// CSM generation is stochastic: identical requests intermittently return empty
+// or truncated audio (measured ~50% failure). The model's own docs say to
+// "rerun generation" and tune the sampler. So we (a) set conservative sampler
+// params and (b) retry until the output passes a validity check. A 24 kHz mono
+// 16-bit WAV is ~48 KB/sec; real 1-2 sentence clips are >100 KB, while the
+// failure mode is 0–~8 KB (empty / sub-0.2s). 16 KB (~0.33s) is a safe floor.
+const MIN_VALID_AUDIO_BYTES = 16 * 1024
+function getMaxAttempts(): number {
+  const n = Number(process.env.DPF_TTS_MLX_MAX_ATTEMPTS)
+  return Number.isFinite(n) && n >= 1 ? Math.min(n, 8) : 4
+}
+
 export async function synthesizeWithMlx(
   text: string,
   config: MlxSynthesisConfig,
@@ -76,24 +97,55 @@ export async function synthesizeWithMlx(
 
   if (refPath) {
     // Zero-shot cloning from the stored reference clip on the host.
+    // ref_text must be non-empty or CSM throws (see DEFAULT_REF_TEXT).
     body.ref_audio = refPath
-    if (config.referenceText) body.ref_text = config.referenceText
+    body.ref_text = config.referenceText?.trim() || DEFAULT_REF_TEXT
+    // Conservative sampler — lower temperature curbs the degenerate runs that
+    // produce empty/truncated output; CSM ignores these fields harmlessly when
+    // not applicable, and other models accept the same OpenAI-style keys.
+    body.temperature = 0.6
+    body.top_k = 50
   } else {
     // No host-visible reference → fixed named voice (non-cloning fallback).
     body.voice = getFallbackVoice()
   }
 
-  const res = await fetch(`${baseUrl}/v1/audio/speech`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  })
+  const maxAttempts = getMaxAttempts()
+  let lastErr: VoiceSynthesisError | null = null
 
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "unknown")
-    throw new VoiceSynthesisError(detail, "mlx", res.status)
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let audioBuffer: ArrayBuffer
+    try {
+      const res = await fetch(`${baseUrl}/v1/audio/speech`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "unknown")
+        lastErr = new VoiceSynthesisError(detail, "mlx", res.status)
+        continue // transient server error (CSM IndexError etc.) — retry
+      }
+      audioBuffer = await res.arrayBuffer()
+    } catch (err) {
+      // Network/abort — retry rather than fail the whole synthesis.
+      lastErr = new VoiceSynthesisError(String(err), "mlx")
+      continue
+    }
+
+    // Validity gate: reject empty/truncated output and regenerate.
+    if (audioBuffer.byteLength >= MIN_VALID_AUDIO_BYTES) {
+      return { audioBuffer, provider: "mlx", ttsCostUnits: text.length }
+    }
+    lastErr = new VoiceSynthesisError(
+      `Output too short (${audioBuffer.byteLength} bytes) on attempt ${attempt}/${maxAttempts}`,
+      "mlx",
+      502,
+    )
+    // Non-cloning (named-voice) output is deterministic; if a short clip comes
+    // back there, retrying won't help — surface it instead of looping.
+    if (!refPath) break
   }
 
-  const audioBuffer = await res.arrayBuffer()
-  return { audioBuffer, provider: "mlx", ttsCostUnits: text.length }
+  throw lastErr ?? new VoiceSynthesisError("Synthesis failed", "mlx", 502)
 }
