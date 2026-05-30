@@ -6,6 +6,7 @@ import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference
 import { detectRepeatedToolCall, recordRepeatedToolIssue } from "@/lib/tak/runtime-issues";
 import { PLATFORM_TOOLS, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
+import { sanitizeForLog } from "@/lib/security/safe-log";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { prisma } from "@dpf/db";
 import { agentEventBus } from "./agent-event-bus";
@@ -1519,7 +1520,14 @@ export async function runAgenticLoop(params: {
         const nudgeContent = mentionedTool
           ? `Stop narrating — call ${mentionedTool} now. Do not respond with text.`
           : `You have tools available — call one directly instead of describing what you want to do. Available: ${toolListStr}. Call the most relevant one now.`;
-        console.log(`[agentic-loop] nudging (tools used=${executedTools.length}, short response, mentioned=${mentionedTool ?? "none"})`);
+        // Tool names are user-influenced; route through the registered
+        // sanitizeForLog sanitizer (strips control chars) so a CR/LF can't
+        // forge a log entry, and use %s substitution (CodeQL js/log-injection).
+        console.log(
+          "[agentic-loop] nudging (tools used=%d, short response, mentioned=%s)",
+          executedTools.length,
+          sanitizeForLog(mentionedTool ?? "none"),
+        );
         messages = [
           ...messages,
           ...(trimmed.length > 0
