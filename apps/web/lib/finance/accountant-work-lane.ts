@@ -2,6 +2,7 @@ import {
   buildQuickBooksReadinessDescriptor,
   type QuickBooksReadinessConnection,
 } from "@/lib/integrate/quickbooks/readiness";
+import { loadQuickBooksReadinessConnection } from "@/lib/integrate/quickbooks/connection-state";
 
 type LaneRoute = {
   label: string;
@@ -53,28 +54,28 @@ export type AccountantWorkLane = {
   };
 };
 
-const connectedQuickBooks: QuickBooksReadinessConnection = {
-  status: "connected",
-  companyName: "Example company",
-  realmId: "example-realm",
-  lastErrorMsg: null,
-  lastTestedAt: "2026-05-19T00:00:00.000Z",
-  environment: "sandbox",
-};
+/**
+ * Build the bookkeeper/accountant work lane from a REAL QuickBooks connection.
+ * QuickBooks coverage is derived from the live readiness descriptor for the
+ * passed connection — an unconfigured install yields empty current coverage,
+ * not a fabricated "connected / Example company" fixture.
+ */
+export function buildBookkeeperAccountantWorkLane(
+  quickBooksConnection: QuickBooksReadinessConnection,
+): AccountantWorkLane {
+  const quickBooksReadiness = buildQuickBooksReadinessDescriptor({
+    connection: quickBooksConnection,
+  });
 
-const quickBooksReadiness = buildQuickBooksReadinessDescriptor({
-  connection: connectedQuickBooks,
-});
+  const quickBooksReadCoverage = quickBooksReadiness.capabilities
+    .filter((capability) => capability.state === "read" || capability.state === "import-ready")
+    .map((capability) => capability.label);
 
-const quickBooksReadCoverage = quickBooksReadiness.capabilities
-  .filter((capability) => capability.state === "read" || capability.state === "import-ready")
-  .map((capability) => capability.label);
+  const quickBooksMissingCoverage = quickBooksReadiness.capabilities
+    .filter((capability) => capability.state !== "read" && capability.state !== "import-ready")
+    .map((capability) => capability.label);
 
-const quickBooksMissingCoverage = quickBooksReadiness.capabilities
-  .filter((capability) => capability.state !== "read" && capability.state !== "import-ready")
-  .map((capability) => capability.label);
-
-export const BOOKKEEPER_ACCOUNTANT_WORK_LANE: AccountantWorkLane = {
+  return {
   roleId: "bookkeeper_accountant",
   roleLabel: "Bookkeeper / Accountant",
   taxonomyNodeId: "for_employees/financial_management",
@@ -196,12 +197,18 @@ export const BOOKKEEPER_ACCOUNTANT_WORK_LANE: AccountantWorkLane = {
     reason:
       "The accountant lane needs persisted review candidates and explicit entity links before reconciliation or write-back gates.",
   },
-};
-
-export function getBookkeeperAccountantWorkLane(): AccountantWorkLane {
-  return BOOKKEEPER_ACCOUNTANT_WORK_LANE;
+  };
 }
 
-export function getAccountantLaneRouteHrefs(lane = BOOKKEEPER_ACCOUNTANT_WORK_LANE): string[] {
+/**
+ * Load the accountant work lane with the install's REAL QuickBooks connection
+ * state. Async because it reads the integration-credential substrate.
+ */
+export async function getBookkeeperAccountantWorkLane(): Promise<AccountantWorkLane> {
+  const quickBooksConnection = await loadQuickBooksReadinessConnection();
+  return buildBookkeeperAccountantWorkLane(quickBooksConnection);
+}
+
+export function getAccountantLaneRouteHrefs(lane: AccountantWorkLane): string[] {
   return Array.from(new Set(lane.workstreams.flatMap((workstream) => workstream.routes.map((route) => route.href))));
 }

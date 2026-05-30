@@ -1,12 +1,31 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildBookkeeperAccountantWorkLane,
   getAccountantLaneRouteHrefs,
-  getBookkeeperAccountantWorkLane,
 } from "@/lib/finance/accountant-work-lane";
+import type { QuickBooksReadinessConnection } from "@/lib/integrate/quickbooks/readiness";
+
+const CONNECTED: QuickBooksReadinessConnection = {
+  status: "connected",
+  companyName: "Test Bookkeeping Co",
+  realmId: "realm-test",
+  lastErrorMsg: null,
+  lastTestedAt: "2026-05-19T00:00:00.000Z",
+  environment: "sandbox",
+};
+
+const UNCONFIGURED: QuickBooksReadinessConnection = {
+  status: "unconfigured",
+  companyName: null,
+  realmId: null,
+  lastErrorMsg: null,
+  lastTestedAt: null,
+  environment: null,
+};
 
 describe("bookkeeper accountant work lane", () => {
   it("maps the current DPF finance routes into one accountant lane", () => {
-    const lane = getBookkeeperAccountantWorkLane();
+    const lane = buildBookkeeperAccountantWorkLane(CONNECTED);
     const routes = getAccountantLaneRouteHrefs(lane);
 
     expect(lane.roleLabel).toBe("Bookkeeper / Accountant");
@@ -27,7 +46,7 @@ describe("bookkeeper accountant work lane", () => {
   });
 
   it("keeps AI coworker responsibilities explicit without misclassifying employee approvals", () => {
-    const lane = getBookkeeperAccountantWorkLane();
+    const lane = buildBookkeeperAccountantWorkLane(CONNECTED);
 
     expect(lane.handoffs.map((handoff) => handoff.actorId)).toEqual(
       expect.arrayContaining([
@@ -44,8 +63,8 @@ describe("bookkeeper accountant work lane", () => {
     );
   });
 
-  it("derives QuickBooks import-ready and missing entity families from the readiness descriptor", () => {
-    const lane = getBookkeeperAccountantWorkLane();
+  it("derives QuickBooks import-ready and missing entity families from a connected readiness descriptor", () => {
+    const lane = buildBookkeeperAccountantWorkLane(CONNECTED);
     const quickBooks = lane.providerBoundaries.find((boundary) => boundary.provider === "quickbooks");
 
     expect(quickBooks?.currentCoverage).toEqual([
@@ -70,8 +89,20 @@ describe("bookkeeper accountant work lane", () => {
     expect(quickBooks?.nextBacklogItemId).toBe("BI-4025EF5F");
   });
 
+  it("shows NO QuickBooks read coverage when the install has no real connection", () => {
+    const lane = buildBookkeeperAccountantWorkLane(UNCONFIGURED);
+    const quickBooks = lane.providerBoundaries.find((boundary) => boundary.provider === "quickbooks");
+
+    // The previous fixture hardcoded "connected" and always showed full read
+    // coverage. An unconfigured install must show none.
+    expect(quickBooks?.currentCoverage).toEqual([]);
+    expect(quickBooks?.missingCoverage).toEqual(
+      expect.arrayContaining(["Company profile", "Customers", "Invoices"]),
+    );
+  });
+
   it("anchors Stripe and bank feeds as reconciliation dependencies, not replacement claims", () => {
-    const lane = getBookkeeperAccountantWorkLane();
+    const lane = buildBookkeeperAccountantWorkLane(CONNECTED);
     const stripe = lane.providerBoundaries.find((boundary) => boundary.provider === "stripe");
     const bankFeeds = lane.providerBoundaries.find((boundary) => boundary.provider === "bank-feed-provider");
 
