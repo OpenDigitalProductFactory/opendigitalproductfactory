@@ -54,19 +54,36 @@ describe("FilterBar", () => {
     expect(html).toMatch(/var\(--dpf-accent\)/);
   });
 
-  it("url mode renders pills as links via hrefBuilder", () => {
+  it("url mode renders pills as links built from basePath + value", () => {
+    const html = renderToStaticMarkup(
+      <FilterBar mode="url" facets={FACETS} value={{}} basePath="/finance/payments" />,
+    );
+    expect(html).toContain('href="/finance/payments?direction=in"');
+    expect(html).toContain('href="/finance/payments?direction=out"');
+  });
+
+  it("url mode preserves other facet values in the href and toggles active off", () => {
     const html = renderToStaticMarkup(
       <FilterBar
         mode="url"
         facets={FACETS}
-        value={{}}
-        hrefBuilder={(key, value) =>
-          value ? `?${key}=${value}` : `?${key}=`
-        }
+        value={{ direction: "in", status: "paid" }}
+        basePath="/finance/payments"
       />,
     );
-    expect(html).toContain('href="?direction=in"');
-    expect(html).toContain('href="?direction=out"');
+    // switching direction keeps status=paid
+    expect(html).toContain("direction=out");
+    expect(html).toContain("status=paid");
+    // the active "in" pill links back to a cleared direction (just status)
+    expect(html).toContain('href="/finance/payments?status=paid"');
+  });
+
+  it("url mode renders search/select as GET forms targeting basePath", () => {
+    const html = renderToStaticMarkup(
+      <FilterBar mode="url" facets={FACETS} value={{}} basePath="/finance/payments" />,
+    );
+    expect(html).toContain('action="/finance/payments"');
+    expect(html).toContain('method="get"');
   });
 
   it("singularizes the result count", () => {
