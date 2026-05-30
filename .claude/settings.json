@@ -1,19 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep -r \"enum.*Portfolio\\\\|enum.*BusinessModel\\\\|type.*Portfolio\" /h/opendigitalproductfactory/apps /h/opendigitalproductfactory/packages --include=*.ts --include=*.tsx)",
       "Bash(xargs grep:*)",
       "Bash(git fetch:*)",
-      "Bash(EP002_ID=\"6ac3b596-fe41-47d6-acd5-25c7dd4ed2a9\")",
-      "Bash(__NEW_LINE_867a1779880fcd4b__ docker exec dpf-postgres-1 psql -U dpf -d dpf -c \":*)",
       "Bash(docker compose:*)",
-      "Bash(pnpm --filter @dpf/db exec prisma migrate dev --name add_archimate4_ontology_graph)",
+      "Bash(curl -s http://localhost:3000/api/health)",
       "WebFetch(domain:skillsllm.com)",
       "WebFetch(domain:skillsmp.com)",
-      "Read(//d/DPF/**)",
-      "Bash(MSYS_NO_PATHCONV=1 docker exec dpf-sandbox-1 env)",
-      "Bash(curl -s http://localhost:3000/api/health)",
-      "Read(//d/backups//**)",
       "mcp__dpf__propose_improvement"
     ]
   },
@@ -22,26 +15,12 @@
     "dpf"
   ],
   "hooks": {
-    "WorktreeCreate": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "Set-Location 'D:\\DPF'; .\\scripts\\sync-mcp-worktrees.ps1",
-            "shell": "powershell",
-            "statusMessage": "Syncing MCP config to new worktree...",
-            "async": true
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File \"D:\\DPF\\scripts\\safety\\transcript-snapshot.ps1\"",
-            "shell": "powershell",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/hooks/run-hook.mjs\" safety/transcript-snapshot",
             "async": true
           }
         ]
@@ -52,8 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File \"D:\\DPF\\scripts\\safety\\transcript-snapshot.ps1\"",
-            "shell": "powershell",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/hooks/run-hook.mjs\" safety/transcript-snapshot",
             "async": false
           }
         ]
