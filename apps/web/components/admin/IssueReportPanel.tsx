@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { Archive, Bot, CheckCircle2, Filter, ShieldAlert, Wrench } from "lucide-react";
 import { updateIssueReportStatus, sendIssueReportToBuildStudioAsFix } from "@/lib/actions/quality";
 import { ISSUE_REPORT_STATUS, type IssueReportStatus } from "@/lib/quality/issue-report-status";
@@ -61,7 +60,6 @@ export function IssueReportPanel({
   const [activeFilter, setActiveFilter] = useState<QueueFilter>("needs_action");
   const [sendError, setSendError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const router = useRouter();
 
   const classifiedItems = useMemo(
     () =>
@@ -103,7 +101,10 @@ export function IssueReportPanel({
           report.reportId === reportId ? { ...report, status: ISSUE_REPORT_STATUS.TRIAGED_LOCAL } : report,
         ),
       );
-      router.push(result.href);
+      // Navigate to the new build. window.location keeps this component free of
+      // a render-time router hook (which throws outside an app-router context,
+      // e.g. in the server-rendered admin panel unit test).
+      if (typeof window !== "undefined") window.location.assign(result.href);
     });
   }
 
