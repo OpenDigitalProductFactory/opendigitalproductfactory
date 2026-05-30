@@ -2,6 +2,12 @@
 
 import { useCallback, useRef, useState } from "react"
 
+// Minimal valid silent WAV (44-byte header, zero samples). Used to "unlock" an
+// HTMLAudioElement during the user gesture so a later play() — after the async
+// synthesis fetch resolves — is not rejected by the browser autoplay policy.
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA="
+
 export interface VoiceSynthHook {
   synthesize: (text: string, voiceProfileId?: string) => Promise<void>
   isPlaying: boolean
@@ -67,6 +73,18 @@ export function useVoiceSynth(): VoiceSynthHook {
       // Stop any in-flight playback before starting a new request
       stop()
 
+      // Unlock playback WITHIN the user-gesture call stack: create the audio
+      // element now (synchronously, before the await below) and start it on a
+      // silent clip. This grants the element user activation, so the real
+      // play() after the multi-second synthesis fetch is not rejected by the
+      // browser autoplay policy (Safari/Chrome). Without this, synthesis
+      // succeeds but play() throws NotAllowedError and the speaker goes silent.
+      const audio = new Audio()
+      audioRef.current = audio
+      audio.muted = true
+      audio.src = SILENT_WAV
+      void audio.play().catch(() => {})
+
       setIsSynthesizing(true)
       try {
         const res = await fetch("/api/voice/synthesize", {
@@ -97,8 +115,15 @@ export function useVoiceSynth(): VoiceSynthHook {
         const url = URL.createObjectURL(blob)
         blobUrlRef.current = url
 
-        const audio = new Audio(url)
-        audioRef.current = audio
+        // Reuse the gesture-unlocked element from above; swap to the real clip.
+        if (audioRef.current !== audio) {
+          // stop() was called (e.g. user toggled off) — abort playback.
+          URL.revokeObjectURL(url)
+          blobUrlRef.current = null
+          return
+        }
+        audio.muted = false
+        audio.src = url
 
         audio.onended = () => {
           setIsPlaying(false)
