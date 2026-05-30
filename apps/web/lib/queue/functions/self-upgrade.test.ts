@@ -4,6 +4,9 @@ const mocks = vi.hoisted(() => ({
   getSelfUpgradeConfig: vi.fn(),
   isUpgradeWindowOpen: vi.fn(),
   resolveOperatingScheduleForSystem: vi.fn().mockResolvedValue({ schedule: {}, timezone: "UTC" }),
+  getLastCheckedAt: vi.fn().mockResolvedValue(null),
+  recordCheckedAt: vi.fn().mockResolvedValue(undefined),
+  isCheckIntervalElapsed: vi.fn().mockReturnValue(true),
   defaultGitRunner: vi.fn(),
   prepareUpgradeSource: vi.fn(),
   getDeployedSha: vi.fn(),
@@ -33,6 +36,12 @@ vi.mock("@/lib/self-upgrade/window", () => ({
 
 vi.mock("@/lib/operating-hours-read", () => ({
   resolveOperatingScheduleForSystem: mocks.resolveOperatingScheduleForSystem,
+}));
+
+vi.mock("@/lib/self-upgrade/last-check", () => ({
+  getLastCheckedAt: mocks.getLastCheckedAt,
+  recordCheckedAt: mocks.recordCheckedAt,
+  isCheckIntervalElapsed: mocks.isCheckIntervalElapsed,
 }));
 
 // Real (pure) argv builders so the orchestrator constructs proper git commands;
@@ -459,6 +468,45 @@ describe("failure path", () => {
     await runSelfUpgrade({ triggeredBy: "ops" });
     expect(mocks.failQuiescenceSwap).toHaveBeenCalledWith("QR-2026-05-24-test1234", "fatal");
     expect(mocks.signalSwapComplete).not.toHaveBeenCalled();
+  });
+});
+
+describe("checkIntervalHours throttle (scheduled only)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
+    mocks.isUpgradeWindowOpen.mockReturnValue(true);
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
+    setupSourceReady();
+    setupQuiescenceReady();
+    mocks.getLatestRun.mockResolvedValue(null);
+    mocks.createRun.mockResolvedValue({ runId: "SUR-INTERVAL" });
+    mocks.startRun.mockResolvedValue({});
+    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
+    mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    mocks.completeRun.mockResolvedValue({});
+  });
+
+  it("skips a scheduled run when the check interval has not elapsed", async () => {
+    mocks.isCheckIntervalElapsed.mockReturnValue(false);
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
+    expect(result).toMatchObject({ skipped: true, reason: "interval-not-elapsed" });
+    expect(mocks.recordCheckedAt).not.toHaveBeenCalled();
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
+  });
+
+  it("proceeds (and resets the clock) when the interval has elapsed", async () => {
+    mocks.isCheckIntervalElapsed.mockReturnValue(true);
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+    expect(mocks.recordCheckedAt).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT throttle a manual run even when the interval has not elapsed", async () => {
+    mocks.isCheckIntervalElapsed.mockReturnValue(false);
+    const result = await runSelfUpgrade({ triggeredBy: "manual:ops" }); // scheduled unset
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+    expect(mocks.recordCheckedAt).toHaveBeenCalledTimes(1);
   });
 });
 
