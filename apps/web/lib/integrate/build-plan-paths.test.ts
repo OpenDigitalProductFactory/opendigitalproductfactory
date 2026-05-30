@@ -76,4 +76,19 @@ describe("normalizeBuildPlanPaths", () => {
       "apps/web/components/build-studio/MissingPanel.tsx",
     ]);
   });
+
+  it("does not throw when a fileStructure entry has an undefined path (BI-PIR-de54cc63)", () => {
+    const plan = makePlan({
+      // path intentionally absent — LLM-authored plans / JSONB round-trips can
+      // omit it. Previously crashed normalizeRelativePath with .trim() of undefined.
+      fileStructure: [
+        { action: "create", purpose: "new file" } as BuildPlanDoc["fileStructure"][number],
+      ],
+      tasks: [],
+    });
+
+    expect(() => normalizeBuildPlanPaths(plan, { exists: () => false })).not.toThrow();
+    const normalized = normalizeBuildPlanPaths(plan, { exists: () => false });
+    expect(normalized.plan.fileStructure[0]?.path).toBe("");
+  });
 });
