@@ -44,6 +44,13 @@ COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY prompts/ ./prompts/
 COPY skills/ ./skills/
+# Deliberation pattern definitions — markdown sources read at seed time by
+# seed-deliberation.ts (seed.ts:2480). Without this COPY the seed logs
+# "deliberation/ directory not found — skipping" and the DeliberationPattern
+# table stays empty, so reviewDesignDoc cannot select the "review" pattern,
+# the Build Studio review-gate trail never records, and every build wedges in
+# Ideate (Ideate -> Plan never opens). Mirrors prompts/skills handling.
+COPY deliberation/ ./deliberation/
 COPY docker-entrypoint.sh ./
 COPY docs/user-guide/ ./docs/user-guide/
 # Founder kernel content — markdown sources + wiki pages + manifest +
@@ -93,6 +100,9 @@ COPY --from=init /app/docs/user-guide ./docs/user-guide
 COPY --from=init /app/docs/founder-kernel ./docs/founder-kernel
 COPY --from=init /app/prompts ./prompts
 COPY --from=init /app/skills ./skills
+# Deliberation pattern sources must reach the runtime image too — the seed
+# runs in this unified runner stage at boot, reading /app/deliberation.
+COPY --from=init /app/deliberation ./deliberation
 COPY --from=init /app/docs/Reference ./docs/Reference
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
