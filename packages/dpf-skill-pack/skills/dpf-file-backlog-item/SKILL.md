@@ -29,7 +29,7 @@ enforces:
 
 # DPF File a Backlog Item
 
-When a piece of work needs to enter the DPF queue — feature gap, bug, tool gap, skill gap, doc gap — **it goes through `mcp__dpf__create_backlog_item`**, not into a floating spec or a TODO comment. The DPF BI lifecycle gate sits in front of the planning step: a plan is for a BI, not for floating intent. This skill walks the verify → file → size → triage → link-epic flow with the live MCP tools so the BI lands with the right shape and the right epic on the first try.
+When a piece of work needs to enter the DPF queue — feature gap, bug, tool gap, skill gap, doc gap — **it goes through `mcp__dpf__create_backlog_item`**, not into a floating spec or a TODO comment. The DPF BI lifecycle gate sits in front of the planning step ([`dpf-writing-plans`](../dpf-writing-plans/SKILL.md)): a plan is for a BI, not for floating intent. This skill walks the verify → file → size → triage → link-epic flow with the live MCP tools so the BI lands with the right shape and the right epic on the first try.
 
 ## When to use
 
