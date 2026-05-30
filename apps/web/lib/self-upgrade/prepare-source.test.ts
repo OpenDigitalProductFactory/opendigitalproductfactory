@@ -109,6 +109,18 @@ describe("prepareUpgradeSource — upstream mode", () => {
     expect(git.calls.some((c) => c.join(" ").includes("merge --abort"))).toBe(true);
   });
 
+  it("refuses on an uncommitted working tree before fetching or checking out", async () => {
+    const git = fakeGit([
+      ["status --porcelain", ok(" M apps/web/x.ts\n?? apps/web/y.ts\n")],
+    ]);
+    const r = await prepareUpgradeSource(baseUpstream, git);
+    expect(r).toMatchObject({ ok: false, reason: "dirty-tree" });
+    if (r.ok || r.reason !== "dirty-tree") return;
+    expect(r.message).toContain("apps/web/x.ts");
+    // Fails fast: no fetch, checkout, or merge against a dirty tree.
+    expect(git.calls.some((c) => c.includes("fetch") || c.includes("checkout") || c.includes("merge"))).toBe(false);
+  });
+
   it("returns no-target when the upstream ref cannot be resolved", async () => {
     const git = fakeGit([
       ["fetch origin main", ok()],
