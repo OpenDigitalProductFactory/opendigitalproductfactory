@@ -15,14 +15,9 @@ name: "DPF CodeQL Config"
 queries:
   - uses: security-extended
 
-# Load our custom data-extensions model pack so the JS sanitiser
-# declarations apply at scan time.
-#
-# IMPORTANT — path-based packs must be in the flat list form. The
-# per-language map form (`packs: { javascript: [...] }`) is only for
-# *published* registry packs; path entries are silently rejected with
-# "Invalid CodeQL pack specification" and the pack is ignored. The pack
-# itself declares its target language via `extensionTargets:` in
-# `.github/codeql/dpf-sanitizers/qlpack.yml`.
-packs:
-  - ./.github/codeql/dpf-sanitizers
+# NOTE: the local data-extension pack is loaded via the init action's
+# `packs:` input in .github/workflows/codeql.yml — NOT here. A relative PATH
+# in this config file's `packs:` list is rejected by the codeql-action
+# ("Invalid CodeQL pack specification: './.github/codeql/dpf-sanitizers'.
+# Ignoring."), which silently disabled every DPF sanitiser. Do not re-add a
+# path-based `packs:` entry here.
