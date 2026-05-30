@@ -6789,7 +6789,7 @@ export async function executeTool(
       if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
       const latestBuild = await prisma.featureBuild.findUnique({
         where: { buildId },
-        select: { buildId: true, phase: true, threadId: true, designDoc: true, designReview: true, buildPlan: true, planReview: true, verificationOut: true, acceptanceMet: true, uxTestResults: true, uxVerificationStatus: true, brief: true, plan: true },
+        select: { buildId: true, phase: true, kind: true, threadId: true, designDoc: true, designReview: true, buildPlan: true, planReview: true, verificationOut: true, acceptanceMet: true, uxTestResults: true, uxVerificationStatus: true, brief: true, plan: true },
       });
       if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
 
@@ -6859,11 +6859,13 @@ export async function executeTool(
         if (canTransitionPhase(latestBuild.phase as import("@/lib/feature-build-types").BuildPhase, toPhase as import("@/lib/feature-build-types").BuildPhase)) {
           const plan = (latestBuild.plan as Record<string, unknown> | null) ?? {};
           const happyPathState = normalizeHappyPathState(plan.happyPathState);
-          const handoffBrief = latestBuild.brief as { acceptanceCriteria?: string[] } | null;
+          const handoffBrief = latestBuild.brief as { acceptanceCriteria?: string[]; fixContext?: import("@/lib/feature-build-types").FixContext } | null;
           const gate = checkPhaseGate(
             latestBuild.phase as import("@/lib/feature-build-types").BuildPhase,
             toPhase as import("@/lib/feature-build-types").BuildPhase,
             {
+              kind: latestBuild.kind,
+              fixContext: handoffBrief?.fixContext,
               designDoc: latestBuild.designDoc, designReview: latestBuild.designReview,
               buildPlan: latestBuild.buildPlan, planReview: latestBuild.planReview,
               verificationOut: latestBuild.verificationOut, acceptanceMet: latestBuild.acceptanceMet,
@@ -7264,7 +7266,53 @@ export async function executeTool(
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       let phaseGateBlocker: string | null = null;
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true } });
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, kind: true, brief: true } });
+
+      // Fix flow: a fix build has no feature design doc — it carries a structured
+      // diagnosis (fixContext) on its brief. Review the diagnosis for completeness
+      // and advance ideate → plan, instead of running the feature design reviewers.
+      if (build?.kind === "fix") {
+        const { isFixContextComplete, checkPhaseGate } = await import("@/lib/feature-build-types");
+        const fixBrief = (build.brief ?? null) as import("@/lib/feature-build-types").FeatureBrief | null;
+        const fc = fixBrief?.fixContext;
+        const complete = isFixContextComplete(fc);
+        const review = complete
+          ? { decision: "pass" as const, issues: [] as Array<{ severity: string; description: string }>, summary: "Fix diagnosis is complete: reproduction, root cause, and fix approach are all present." }
+          : { decision: "fail" as const, issues: [{ severity: "critical", description: "Fix diagnosis is incomplete. Reproduction steps, root cause, and fix approach are all required — use update_feature_brief to fill fixContext." }], summary: "Incomplete fix diagnosis." };
+        await prisma.featureBuild.update({ where: { buildId }, data: { designReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
+        const { agentEventBus } = await import("@/lib/agent-event-bus");
+        if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "designReview" });
+        logBuildActivity(buildId, "reviewDesignDoc", `Fix review: ${review.decision}. ${review.summary}`);
+        if (review.decision === "fail") {
+          return { success: true, message: `Fix review FAILED. ${review.issues[0]?.description ?? review.summary}`, data: { review, blocked: true, action: "revise_and_resubmit" } };
+        }
+        let fixPhaseGateBlocker: string | null = null;
+        try {
+          const gate = checkPhaseGate("ideate", "plan", { kind: "fix", fixContext: fc, designReview: review });
+          if (gate.allowed) {
+            const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
+            void completeBuildPhaseRun(buildId, "ideate");
+            void startBuildPhaseRun(buildId, "plan");
+            if (context?.threadId) {
+              const { persistPhaseHandoffSummary } = await import("@/lib/integrate/phase-compaction-wire");
+              void persistPhaseHandoffSummary(context.threadId, "ideate");
+            }
+            await prisma.featureBuild.update({ where: { buildId }, data: { phase: "plan" } });
+            if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "plan" });
+            logBuildActivity(buildId, "phase:advance", "Phase advanced: ideate → plan (fix)");
+          } else {
+            logBuildActivity(buildId, "phase:gate-blocked", gate.reason ?? "unknown");
+            fixPhaseGateBlocker = gate.reason ?? null;
+          }
+        } catch (err) {
+          console.error("[reviewDesignDoc:fix] auto-advance failed:", err);
+        }
+        const fixMsg = fixPhaseGateBlocker
+          ? `Fix review: ${review.decision}. ${review.summary}\n\nPhase did NOT advance to plan. Reason: ${fixPhaseGateBlocker}`
+          : `Fix review: ${review.decision}. ${review.summary} Phase advanced to plan.`;
+        return { success: true, message: fixMsg, data: { review, phaseGateBlocker: fixPhaseGateBlocker } };
+      }
+
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
       const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
       const designDocTyped = build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0];
@@ -7801,6 +7849,7 @@ export async function executeTool(
             id: true,
             buildId: true,
             title: true,
+            kind: true,
             parentEpicId: true,
             dependenciesOut: FEATURE_BUILD_DEPENDENCY_GATE_SELECT.dependenciesOut,
           },
@@ -7809,6 +7858,7 @@ export async function executeTool(
           const plan = (updatedBuild.plan as Record<string, unknown> | null) ?? {};
           const happyPathState = normalizeHappyPathState(plan.happyPathState);
           const gate = checkPhaseGate("plan", "build", {
+            kind: updatedBuild.kind,
             buildPlan: updatedBuild.buildPlan,
             planReview: updatedBuild.planReview,
             happyPathState,

@@ -16,10 +16,11 @@ const report = {
 beforeEach(() => _resetCache());
 
 describe("buildIssueBacklogItem", () => {
-  it("creates item with BI-PIR prefix and issue_report source", () => {
+  it("creates item with BI-PIR prefix and canonical bug source", () => {
     const item = buildIssueBacklogItem(report, "prod-1", "tax-1");
     expect(item.itemId).toMatch(/^BI-PIR-/);
-    expect(item.source).toBe("issue_report");
+    // Canonical source per BACKLOG_SOURCE_VALUES; maps to FeatureBuild.kind="fix".
+    expect(item.source).toBe("bug");
     expect(item.type).toBe("product");
     expect(item.priority).toBe(1); // critical → 1
     expect(item.digitalProductId).toBe("prod-1");

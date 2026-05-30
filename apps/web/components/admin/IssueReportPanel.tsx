@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Archive, Bot, CheckCircle2, Filter, ShieldAlert } from "lucide-react";
-import { updateIssueReportStatus } from "@/lib/actions/quality";
+import { useRouter } from "next/navigation";
+import { Archive, Bot, CheckCircle2, Filter, ShieldAlert, Wrench } from "lucide-react";
+import { updateIssueReportStatus, sendIssueReportToBuildStudioAsFix } from "@/lib/actions/quality";
 import { ISSUE_REPORT_STATUS, type IssueReportStatus } from "@/lib/quality/issue-report-status";
 import {
   classifyIssueReport,
@@ -58,7 +59,9 @@ export function IssueReportPanel({
   const [items, setItems] = useState(initialItems);
   const [expandedId, setExpandedId] = useState<string | null>(items[0]?.id ?? null);
   const [activeFilter, setActiveFilter] = useState<QueueFilter>("needs_action");
+  const [sendError, setSendError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   const classifiedItems = useMemo(
     () =>
@@ -83,6 +86,24 @@ export function IssueReportPanel({
       setItems((prev) =>
         prev.map((report) => (report.reportId === reportId ? { ...report, status: newStatus } : report)),
       );
+    });
+  }
+
+  function handleSendToFix(reportId: string) {
+    startTransition(async () => {
+      const result = await sendIssueReportToBuildStudioAsFix(reportId);
+      if (result.status === "blocked") {
+        setSendError(`${reportId}: ${result.error}`);
+        return;
+      }
+      setSendError(null);
+      // The report is now triaged_local; reflect it locally before navigating.
+      setItems((prev) =>
+        prev.map((report) =>
+          report.reportId === reportId ? { ...report, status: ISSUE_REPORT_STATUS.TRIAGED_LOCAL } : report,
+        ),
+      );
+      router.push(result.href);
     });
   }
 
@@ -205,10 +226,16 @@ export function IssueReportPanel({
                 onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)}
                 onAskAdmin={() => handleAskAdmin(item)}
                 onStatusChange={handleStatusChange}
+                onSendToFix={handleSendToFix}
                 isPending={isPending}
               />
             ))}
           </div>
+        )}
+        {sendError && (
+          <p className="border-t border-[var(--dpf-border)] px-4 py-2 text-xs text-[var(--dpf-error)]">
+            Could not send to Build Studio — {sendError}
+          </p>
         )}
       </section>
     </div>
@@ -221,6 +248,7 @@ function IssueReportRow({
   onToggle,
   onAskAdmin,
   onStatusChange,
+  onSendToFix,
   isPending,
 }: {
   report: ReportRow;
@@ -228,6 +256,7 @@ function IssueReportRow({
   onToggle: () => void;
   onAskAdmin: () => void;
   onStatusChange: (reportId: string, status: IssueReportStatus) => void;
+  onSendToFix: (reportId: string) => void;
   isPending: boolean;
 }) {
   const classification = classifyIssueReport(report);
@@ -275,6 +304,18 @@ function IssueReportRow({
             >
               <Archive className="h-3.5 w-3.5" aria-hidden="true" />
               Suppress
+            </button>
+          )}
+          {status.isActive && classification.category !== "warmup_noise" && (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => onSendToFix(report.reportId)}
+              title="Create a bug backlog item and start a fix-kind Build Studio build from this report"
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)] disabled:opacity-50"
+            >
+              <Wrench className="h-3.5 w-3.5" aria-hidden="true" />
+              Send to Build Studio as a fix
             </button>
           )}
           {status.isActive && (

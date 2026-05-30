@@ -369,6 +369,7 @@ async function stepGenerateCode(
   const buildContext = await getBuildContextSection({
     buildId,
     phase: "build",
+    kind: build.kind as import("@/lib/feature-build-types").FeatureBuildKind,
     title: brief?.title ?? "Feature",
     brief,
     portfolioId: build.portfolioId,
