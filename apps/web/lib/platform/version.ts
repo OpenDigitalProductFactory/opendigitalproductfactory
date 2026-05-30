@@ -6,6 +6,7 @@ import {
   readImageBuiltAt,
   readImageVersion,
   readSourceContentHash,
+  readPlatformVersionTag,
   type ImageVersion,
 } from "./image-version";
 
@@ -58,15 +59,20 @@ export async function loadPlatformVersion(): Promise<PlatformVersion> {
       const path = resolveVersionJsonPath();
       const raw = await readFile(path, "utf8");
       const parsed = parseVersionJson(JSON.parse(raw));
-      const [image, buildDate, sourceContentHash] = await Promise.all([
+      const [image, buildDate, sourceContentHash, tag] = await Promise.all([
         readImageVersion(),
         readImageBuiltAt(),
         readSourceContentHash(),
+        readPlatformVersionTag(),
       ]);
       const envSha = process.env.DEPLOYED_SHA;
+      // The REAL version comes from the repo's git release tags
+      // (git describe), baked into the image at build time. version.json is
+      // only a dev/non-git fallback — its hand-edited value was chronically
+      // stale (claimed "1.0.0" while the repo shipped v5.x).
       return {
-        version: parsed.version,
-        publishedAt: new Date(parsed.publishedAt),
+        version: tag ?? parsed.version,
+        publishedAt: new Date(tag && buildDate ? buildDate : parsed.publishedAt),
         gitSha:
           envSha && envSha.length > 0
             ? envSha
