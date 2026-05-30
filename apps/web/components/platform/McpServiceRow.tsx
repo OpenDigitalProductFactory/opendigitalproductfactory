@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { LocalTime } from "@/components/ui/LocalTime";
 import type { McpServerGridRow } from "@/lib/ai-provider-types";
 
 const HEALTH_COLORS: Record<string, string> = {
@@ -137,13 +138,19 @@ export function McpServiceRow({ server }: { server: McpServerGridRow }) {
             <DetailItem label="Transport" value={server.transport ?? "—"} />
             <DetailItem
               label="Last Health Check"
-              value={server.lastHealthCheck ? new Date(server.lastHealthCheck).toLocaleString() : "Never"}
+              node={
+                server.lastHealthCheck ? (
+                  <LocalTime value={server.lastHealthCheck} />
+                ) : (
+                  "Never"
+                )
+              }
             />
             <DetailItem label="Tool Namespace" value={`${server.serverId}__*`} mono />
             {server.activatedAt && (
               <DetailItem
                 label="Activated"
-                value={new Date(server.activatedAt).toLocaleDateString()}
+                node={<LocalTime value={server.activatedAt} mode="date" />}
               />
             )}
           </div>
@@ -193,7 +200,17 @@ export function McpServiceRow({ server }: { server: McpServerGridRow }) {
   );
 }
 
-function DetailItem({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function DetailItem({
+  label,
+  value,
+  node,
+  mono,
+}: {
+  label: string;
+  value?: string;
+  node?: React.ReactNode;
+  mono?: boolean;
+}) {
   return (
     <div>
       <div style={{ color: "var(--dpf-muted)", fontSize: 9, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2 }}>
@@ -210,7 +227,7 @@ function DetailItem({ label, value, mono }: { label: string; value: string; mono
         }}
         title={value}
       >
-        {value}
+        {node ?? value}
       </div>
     </div>
   );

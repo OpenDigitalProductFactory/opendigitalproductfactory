@@ -5,6 +5,7 @@ import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { InvoiceSendButton } from "@/components/finance/InvoiceSendButton";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -116,13 +117,13 @@ export default async function InvoiceDetailPage({ params }: Props) {
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Issue Date</p>
           <p className="text-sm font-semibold text-[var(--dpf-text)]">
-            {new Date(invoice.issueDate).toLocaleDateString("en-GB")}
+            <LocalTime value={invoice.issueDate} utc />
           </p>
         </div>
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Due Date</p>
           <p className="text-sm font-semibold text-[var(--dpf-text)]">
-            {new Date(invoice.dueDate).toLocaleDateString("en-GB")}
+            <LocalTime value={invoice.dueDate} utc />
           </p>
         </div>
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
@@ -267,11 +268,11 @@ export default async function InvoiceDetailPage({ params }: Props) {
                       {alloc.payment.method}
                     </td>
                     <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                      {alloc.payment.receivedAt
-                        ? new Date(alloc.payment.receivedAt).toLocaleDateString(
-                            "en-GB"
-                          )
-                        : "—"}
+                      {alloc.payment.receivedAt ? (
+                        <LocalTime value={alloc.payment.receivedAt} mode="date" />
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-right font-semibold text-[#4ade80]">
                       {sym}{formatMoney(Number(alloc.amount))}

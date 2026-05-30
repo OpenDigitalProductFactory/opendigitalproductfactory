@@ -1,6 +1,7 @@
 import { getEvidence } from "@/lib/actions/compliance";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -63,7 +64,7 @@ export default async function EvidenceDetailPage({ params }: Props) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Collected At</p>
-          <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(evidence.collectedAt).toLocaleString()}</p>
+          <LocalTime value={evidence.collectedAt} className="text-sm font-semibold text-[var(--dpf-text)]" />
         </div>
         {evidence.collectedBy && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
@@ -80,7 +81,7 @@ export default async function EvidenceDetailPage({ params }: Props) {
         {evidence.retentionUntil && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Retain Until</p>
-            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(evidence.retentionUntil).toLocaleDateString()}</p>
+            <LocalTime value={evidence.retentionUntil} utc className="text-sm font-semibold text-[var(--dpf-text)]" />
           </div>
         )}
       </div>
