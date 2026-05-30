@@ -1,3 +1,4 @@
+import { EmailInput } from "@/components/ui/EmailInput";
 import { bootstrapFirstRunOwner } from "@/lib/actions/first-run-account-bootstrap";
 import { AccountBootstrapSubmitButton } from "./AccountBootstrapSubmitButton";
 
@@ -52,10 +53,9 @@ export function AccountBootstrapForm({ setupId }: Props) {
             <label className="block text-sm font-medium text-[var(--dpf-text)] mb-1" htmlFor="first-run-owner-email">
               Your Email
             </label>
-            <input
+            <EmailInput
               id="first-run-owner-email"
               name="email"
-              type="email"
               autoComplete="email"
               required
               className="w-full rounded-lg"

@@ -2,6 +2,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@dpf/db";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 export default async function AccountPage() {
   const session = await auth();
@@ -53,7 +54,7 @@ export default async function AccountPage() {
             <div>
               <span style={{ fontSize: 13, color: "var(--dpf-text)" }}>{c.email}</span>
               <span style={{ fontSize: 10, color: "var(--dpf-muted)", marginLeft: 8 }}>
-                since {new Date(c.createdAt).toLocaleDateString()}
+                since <LocalTime value={c.createdAt} mode="date" />
               </span>
             </div>
             <span style={{

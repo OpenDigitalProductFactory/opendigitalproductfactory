@@ -3,6 +3,7 @@ import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
 import { CRM_TONE_CLASSES, getQuoteStatusMeta } from "@/lib/crm/presentation";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 export default async function QuotesPage() {
   const quotes = await prisma.quote.findMany({
@@ -63,7 +64,7 @@ export default async function QuotesPage() {
                     {q.currency} {Number(q.totalAmount).toLocaleString()}
                   </p>
                   <p className="text-[9px] text-[var(--dpf-muted)]">
-                    Valid until {new Date(q.validUntil).toLocaleDateString()}
+                    Valid until <LocalTime value={q.validUntil} utc />
                   </p>
                 </div>
               </div>

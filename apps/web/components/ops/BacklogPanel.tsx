@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { createBacklogItem, updateBacklogItem } from "@/lib/actions/backlog";
 import { registerActiveFormAssist } from "@/lib/agent-form-assist";
 import { AGENT_NAME_MAP } from "@/lib/agent-routing";
@@ -273,12 +274,12 @@ export function BacklogPanel({
         {item && (
           <div className="px-5 py-3 border-t border-[var(--dpf-border)] space-y-1">
             <p className="text-[10px] text-[var(--dpf-muted)]">
-              Created: {new Date(item.createdAt).toLocaleString()}
+              Created: <LocalTime value={item.createdAt} />
               {item.submittedBy ? ` by ${item.submittedBy.email}` : ""}
               {item.agentId ? ` (${AGENT_NAME_MAP[item.agentId] ?? item.agentId})` : ""}
             </p>
             <p className="text-[10px] text-[var(--dpf-muted)]">
-              Completed: {item.completedAt ? new Date(item.completedAt).toLocaleString() : "—"}
+              Completed: <LocalTime value={item.completedAt} />
             </p>
           </div>
         )}

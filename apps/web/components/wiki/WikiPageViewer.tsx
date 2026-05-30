@@ -11,6 +11,8 @@ import {
   isPrincipleTier,
 } from "@dpf/db/wiki-taxonomy";
 
+import { LocalTime } from "@/components/ui/LocalTime";
+
 import { WikiBodyRenderer } from "./WikiBodyRenderer";
 import { WikiPageKindBadge } from "./WikiPageKindBadge";
 import { WikiSourceCitations, type WikiSourceCitation } from "./WikiSourceCitations";
@@ -234,9 +236,9 @@ export function WikiPageViewer({ page }: Props): ReactNode {
 
       <footer className="mt-6 text-xs text-[var(--dpf-muted)]">
         {page.lastReviewedAt && (
-          <span>Last reviewed {page.lastReviewedAt.toISOString().slice(0, 10)} · </span>
+          <span>Last reviewed <LocalTime value={page.lastReviewedAt} mode="date" /> · </span>
         )}
-        Updated {page.updatedAt.toISOString().slice(0, 10)}
+        Updated <LocalTime value={page.updatedAt} mode="date" />
       </footer>
     </article>
   );

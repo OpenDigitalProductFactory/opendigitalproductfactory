@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { KnowledgeCategoryBadge } from "./KnowledgeCategoryBadge";
 import { StalenessIndicator } from "./StalenessIndicator";
 
@@ -53,7 +54,7 @@ export function KnowledgeArticleCard({ article }: { article: KnowledgeArticleSum
       <div className="flex items-center gap-3 text-[10px] text-[var(--dpf-muted)] mt-auto pt-1">
         <span>{article.articleId}</span>
         <span>{authorName}</span>
-        <span className="ml-auto">{article.updatedAt.toLocaleDateString()}</span>
+        <LocalTime value={article.updatedAt} mode="date" className="ml-auto" />
       </div>
     </Link>
   );

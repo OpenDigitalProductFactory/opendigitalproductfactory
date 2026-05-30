@@ -4,6 +4,7 @@
 
 import { prisma } from "@dpf/db";
 import { notFound } from "next/navigation";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -63,7 +64,7 @@ export default async function ProductVersionsPage({ params }: Props) {
               )}
               <div className="flex gap-3 text-[10px] text-[var(--dpf-muted)]">
                 <span className="font-mono">{v.gitTag}</span>
-                <span>Shipped {v.shippedAt.toLocaleDateString()}</span>
+                <span>Shipped <LocalTime value={v.shippedAt} mode="date" /></span>
                 {v.changeCount > 0 && <span>{v.changeCount} changes</span>}
                 <span>by {v.shippedBy}</span>
               </div>

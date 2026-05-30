@@ -2,6 +2,7 @@
 import { prisma } from "@dpf/db";
 import { RegulatoryAlerts } from "@/components/compliance/RegulatoryAlerts";
 import { ScanStatus } from "@/components/compliance/ScanStatus";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 export default async function CompliancePage() {
   const [
@@ -94,7 +95,7 @@ export default async function CompliancePage() {
               {upcomingDeadlines.map((e) => (
                 <li key={e.id} className="text-sm text-[var(--dpf-text)] flex justify-between">
                   <span>{e.title}</span>
-                  <span className="text-[var(--dpf-muted)]">{new Date(e.startAt).toLocaleDateString()}</span>
+                  <LocalTime value={e.startAt} mode="date" className="text-[var(--dpf-muted)]" />
                 </li>
               ))}
             </ul>
@@ -110,7 +111,7 @@ export default async function CompliancePage() {
               {recentActivity.map((log) => (
                 <li key={log.id} className="text-sm text-[var(--dpf-muted)]">
                   <span className="text-[var(--dpf-text)]">{log.performedBy?.displayName ?? log.agentId ?? "System"}</span>{" "}
-                  {log.action} {log.entityType} — {new Date(log.performedAt).toLocaleString()}
+                  {log.action} {log.entityType} — <LocalTime value={log.performedAt} />
                 </li>
               ))}
             </ul>

@@ -3,6 +3,7 @@ import { listBankAccounts } from "@/lib/actions/banking";
 import Link from "next/link";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 export default async function BankingPage() {
   const accounts = await listBankAccounts();
@@ -124,9 +125,14 @@ export default async function BankingPage() {
                     </span>
                   </div>
                   <p className="text-[9px] text-[var(--dpf-muted)]">
-                    {account.lastReconciledAt
-                      ? `Reconciled ${new Date(account.lastReconciledAt).toLocaleDateString("en-GB")}`
-                      : "Never reconciled"}
+                    {account.lastReconciledAt ? (
+                      <>
+                        Reconciled{" "}
+                        <LocalTime value={account.lastReconciledAt} mode="date" />
+                      </>
+                    ) : (
+                      "Never reconciled"
+                    )}
                   </p>
                 </div>
               </Link>

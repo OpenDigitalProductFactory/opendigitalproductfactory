@@ -4,6 +4,7 @@
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { McpSyncButton } from "@/components/platform/McpSyncButton";
 import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
 import { getScheduledJobs } from "@/lib/ai-provider-data";
@@ -50,7 +51,7 @@ export default async function IntegrationsSyncPage() {
           <div className="border rounded-lg p-4 space-y-1 text-sm">
             <p>
               Last sync:{" "}
-              <strong>{new Date(lastSync.startedAt).toLocaleString()}</strong> —{" "}
+              <strong><LocalTime value={lastSync.startedAt} /></strong> —{" "}
               <span
                 className={
                   lastSync.status === "success"
@@ -109,7 +110,7 @@ export default async function IntegrationsSyncPage() {
           <tbody>
             {recentSyncs.map((s) => (
               <tr key={s.id} className="border-t">
-                <td className="p-2">{new Date(s.startedAt).toLocaleDateString()}</td>
+                <td className="p-2"><LocalTime value={s.startedAt} mode="date" /></td>
                 <td className="p-2">{s.triggeredBy}</td>
                 <td className="p-2">{s.totalFetched ?? "—"}</td>
                 <td className="p-2">{s.totalNew ?? "—"}</td>
