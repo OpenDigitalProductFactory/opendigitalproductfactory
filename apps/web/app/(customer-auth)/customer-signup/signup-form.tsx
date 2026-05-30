@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { customerSignup } from "@/lib/actions/customer-auth";
 import { SocialButtons, SocialDivider } from "@/components/social-buttons";
+import { EmailInput } from "@/components/ui/EmailInput";
 
 export function CustomerSignupForm({ socialEnabled }: { socialEnabled: boolean }) {
   const router = useRouter();
@@ -88,10 +89,9 @@ export function CustomerSignupForm({ socialEnabled }: { socialEnabled: boolean }
 
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: "block", color: "var(--dpf-muted)", fontSize: 12, marginBottom: 4 }}>Email</label>
-            <input
-              type="email"
+            <EmailInput
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onValueChange={(v) => setEmail(v)}
               required
               placeholder="you@company.com"
               style={{

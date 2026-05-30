@@ -1,5 +1,6 @@
 // apps/web/app/(shell)/compliance/posture/page.tsx
 import { getCompliancePosture, getPostureTrend, takeComplianceSnapshot } from "@/lib/actions/reporting";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 export default async function PosturePage() {
   const [posture, trend] = await Promise.all([
@@ -85,7 +86,7 @@ export default async function PosturePage() {
               <tbody>
                 {trend.map((s) => (
                   <tr key={s.snapshotId} className="border-b border-[var(--dpf-border)]">
-                    <td className="py-2 pr-4 text-[var(--dpf-text)]">{new Date(s.takenAt).toLocaleDateString()}</td>
+                    <td className="py-2 pr-4 text-[var(--dpf-text)]"><LocalTime value={s.takenAt} mode="date" /></td>
                     <td className="py-2 pr-4">
                       <span className={`font-semibold ${s.overallScore >= 80 ? "text-green-400" : s.overallScore >= 60 ? "text-yellow-400" : "text-red-400"}`}>
                         {s.overallScore}

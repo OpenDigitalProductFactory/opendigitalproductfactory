@@ -5,6 +5,7 @@ import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { AssetDisposalForm } from "@/components/finance/AssetDisposalForm";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const CATEGORY_COLOURS: Record<string, string> = {
   equipment: "#38bdf8",
@@ -117,7 +118,7 @@ export default async function AssetDetailPage({ params }: Props) {
         <div className="p-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
           <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-1">Purchase Date</p>
           <p className="text-sm text-[var(--dpf-text)]">
-            {new Date(asset.purchaseDate).toLocaleDateString("en-GB")}
+            <LocalTime value={asset.purchaseDate} utc />
           </p>
         </div>
         <div className="p-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">

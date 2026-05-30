@@ -1,4 +1,5 @@
 // apps/web/app/(auth)/login/page.tsx
+import { EmailInput } from "@/components/ui/EmailInput";
 import { signIn } from "@/lib/auth";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
@@ -45,10 +46,9 @@ export default async function LoginPage({ searchParams }: Props) {
             <label className="block text-sm text-[var(--dpf-muted)] mb-1" htmlFor="email">
               Email
             </label>
-            <input
+            <EmailInput
               id="email"
               name="email"
-              type="email"
               required
               className="w-full px-3 py-2 rounded-lg bg-[var(--dpf-bg)] border border-[var(--dpf-border)] text-[var(--dpf-text)] text-sm focus:outline-none focus:border-[var(--dpf-accent)]"
             />

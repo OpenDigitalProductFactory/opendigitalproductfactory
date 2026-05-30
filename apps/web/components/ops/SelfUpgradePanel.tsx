@@ -1,12 +1,9 @@
 import type { SelfUpgradeDashboard } from "@/lib/actions/self-upgrade";
 import { requestPortalSelfUpgradeAction } from "@/lib/actions/self-upgrade";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 function shortSha(value: string | null): string {
   return value ? value.slice(0, 12) : "unknown";
-}
-
-function formatDate(value: string | null): string {
-  return value ? new Date(value).toLocaleString() : "not recorded";
 }
 
 function statusLabel(value: string): string {
@@ -102,8 +99,14 @@ export function SelfUpgradePanel({ dashboard }: { dashboard: SelfUpgradeDashboar
                     )}
                   </div>
                   <div className="text-xs text-[var(--dpf-muted)] md:text-right">
-                    <div>started {formatDate(run.startedAt)}</div>
-                    <div>updated {formatDate(run.updatedAt)}</div>
+                    <div>
+                      started{" "}
+                      <LocalTime value={run.startedAt} fallback="not recorded" />
+                    </div>
+                    <div>
+                      updated{" "}
+                      <LocalTime value={run.updatedAt} fallback="not recorded" />
+                    </div>
                   </div>
                 </div>
               </article>

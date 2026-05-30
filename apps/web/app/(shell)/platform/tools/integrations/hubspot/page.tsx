@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@dpf/db";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { decryptJson } from "@/lib/govern/credential-crypto";
@@ -174,7 +175,7 @@ function HubSpotPreviewSection({
           </p>
         </div>
         <p className="text-xs text-[var(--dpf-muted)]">
-          Loaded {formatDateTime(previewData.loadedAt)}
+          Loaded <LocalTime value={previewData.loadedAt} options={{ year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }} />
         </p>
       </div>
 
@@ -278,19 +279,6 @@ function formatContactName(contact: {
   return full || (contact.properties?.email ?? undefined);
 }
 
-function formatDateTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
 
 function formatNumber(value: unknown): string | null {
   if (typeof value !== "number" || Number.isNaN(value)) return null;

@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { submitBooking } from "@/lib/storefront-actions";
+import { EmailInput } from "@/components/ui/EmailInput";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -776,12 +778,12 @@ function FormStep({
 
         <div style={fieldStyle}>
           <label style={labelStyle}>Email address *</label>
-          <input type="email" name="email" required style={inputStyle} autoComplete="email" />
+          <EmailInput name="email" required style={inputStyle} />
         </div>
 
         <div style={fieldStyle}>
           <label style={labelStyle}>Phone (optional)</label>
-          <input type="tel" name="phone" style={inputStyle} autoComplete="tel" />
+          <PhoneInput name="phone" style={inputStyle} />
         </div>
 
         <div style={fieldStyle}>

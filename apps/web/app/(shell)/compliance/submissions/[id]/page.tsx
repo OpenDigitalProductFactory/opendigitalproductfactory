@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSubmission, transitionSubmissionStatus } from "@/lib/actions/reporting";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -91,7 +92,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Due Date</p>
             <p className={`text-sm font-semibold ${daysRemaining !== null && daysRemaining < 0 ? "text-red-400" : daysRemaining !== null && daysRemaining < 7 ? "text-yellow-400" : "text-[var(--dpf-text)]"}`}>
-              {new Date(submission.dueDate).toLocaleDateString()}
+              <LocalTime value={submission.dueDate} utc />
               {daysRemaining !== null && (
                 <span className="text-xs ml-1">({daysRemaining < 0 ? `${Math.abs(daysRemaining)}d overdue` : `${daysRemaining}d remaining`})</span>
               )}
@@ -101,7 +102,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
         {submission.submittedAt && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Submitted</p>
-            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(submission.submittedAt).toLocaleDateString()}</p>
+            <LocalTime value={submission.submittedAt} mode="date" className="text-sm font-semibold text-[var(--dpf-text)]" />
           </div>
         )}
         {submission.confirmationRef && (

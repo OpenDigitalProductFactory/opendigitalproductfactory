@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@dpf/db";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { decryptJson } from "@/lib/govern/credential-crypto";
@@ -182,7 +183,7 @@ function Microsoft365CommunicationsPreviewSection({
           </p>
         </div>
         <p className="text-xs text-[var(--dpf-muted)]">
-          Loaded {formatDateTime(previewData.loadedAt)}
+          Loaded <LocalTime value={previewData.loadedAt} options={{ year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }} />
         </p>
       </div>
 

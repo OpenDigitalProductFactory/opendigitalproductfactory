@@ -8,6 +8,7 @@ import Link from "next/link";
 import { KnowledgeCategoryBadge } from "@/components/knowledge/KnowledgeCategoryBadge";
 import { StalenessIndicator } from "@/components/knowledge/StalenessIndicator";
 import { KnowledgeArticleActions } from "@/components/knowledge/KnowledgeArticleActions";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = {
   params: Promise<{ articleId: string }>;
@@ -86,9 +87,9 @@ export default async function KnowledgeArticleDetailPage({ params }: Props) {
           <h1 className="text-lg font-semibold text-[var(--dpf-text)]">{article.title}</h1>
           <div className="flex items-center gap-3 mt-1 text-[10px] text-[var(--dpf-muted)]">
             <span>By {authorName}</span>
-            <span>Updated {article.updatedAt.toLocaleDateString()}</span>
+            <span>Updated <LocalTime value={article.updatedAt} mode="date" /></span>
             {article.lastReviewedAt && (
-              <span>Reviewed {article.lastReviewedAt.toLocaleDateString()}</span>
+              <span>Reviewed <LocalTime value={article.lastReviewedAt} mode="date" /></span>
             )}
           </div>
         </div>
@@ -163,7 +164,7 @@ export default async function KnowledgeArticleDetailPage({ params }: Props) {
                 <span className="font-medium text-[var(--dpf-text)]">v{rev.version}</span>
                 <span>{rev.changeSummary ?? "No summary"}</span>
                 <span className="ml-auto">{rev.createdBy?.email?.split("@")[0] ?? "system"}</span>
-                <span>{rev.createdAt.toLocaleDateString()}</span>
+                <LocalTime value={rev.createdAt} mode="date" />
               </div>
             ))}
           </div>

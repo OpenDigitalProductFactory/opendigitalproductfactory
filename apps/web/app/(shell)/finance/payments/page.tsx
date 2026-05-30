@@ -3,6 +3,7 @@ import { prisma } from "@dpf/db";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
+import { LocalTime } from "@/components/ui/LocalTime";
 import Link from "next/link";
 
 type Props = { searchParams: Promise<{ direction?: string }> };
@@ -167,9 +168,10 @@ export default async function PaymentsPage({ searchParams }: Props) {
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                      {pmt.receivedAt
-                        ? new Date(pmt.receivedAt).toLocaleDateString("en-GB")
-                        : new Date(pmt.createdAt).toLocaleDateString("en-GB")}
+                      <LocalTime
+                        value={pmt.receivedAt ?? pmt.createdAt}
+                        mode="date"
+                      />
                     </td>
                     <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                       {sym}{formatMoney(Number(pmt.amount))}

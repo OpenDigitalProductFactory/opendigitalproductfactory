@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { EaTabNav } from "@/components/ea/EaTabNav";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const LAYOUT_LABELS: Record<string, string> = {
   graph:    "Graph",
@@ -62,7 +63,7 @@ export default async function EaViewsPage() {
                 <div className="flex items-center gap-3 text-[10px] text-[var(--dpf-muted)]">
                   <span>{SCOPE_LABELS[v.scopeType] ?? v.scopeType}{v.scopeRef ? ` · ${v.scopeRef}` : ""}</span>
                   <span>{v._count.viewElements} element{v._count.viewElements !== 1 ? "s" : ""}</span>
-                  <span>{new Date(v.createdAt).toLocaleDateString()}</span>
+                  <LocalTime value={v.createdAt} mode="date" />
                 </div>
               </div>
             </Link>

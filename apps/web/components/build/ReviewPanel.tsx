@@ -3,6 +3,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { formatText } from "@/lib/actions/local-format";
 import { DeliberationSummaryCard } from "@/components/deliberation/DeliberationSummaryCard";
 import type {
@@ -551,7 +552,7 @@ function VerificationSection({ verification }: { verification: NormalizedVerific
         )}
         {verification.observedAt && (
           <div className="text-[10px] text-[var(--dpf-muted)]">
-            Run at: {new Date(verification.observedAt).toLocaleString()}
+            Run at: <LocalTime value={verification.observedAt} />
           </div>
         )}
       </div>
