@@ -4,6 +4,12 @@
 import { useState } from "react";
 
 import { LocalTime } from "@/components/ui/LocalTime";
+import {
+  DataTable,
+  FilterBar,
+  StatusBadge,
+  type Column,
+} from "@/components/ui/report-kit";
 
 type Complaint = {
   id: string;
@@ -15,18 +21,12 @@ type Complaint = {
   createdAt: string;
 };
 
-const SEVERITY_COLORS: Record<string, string> = {
-  low: "#22c55e",
-  medium: "#eab308",
-  high: "#f97316",
-  critical: "#ef4444",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  open: "#3b82f6",
-  investigating: "#a855f7",
-  resolved: "#22c55e",
-  closed: "#6b7280",
+// Severity ordering for the sortable column (low → critical).
+const SEVERITY_RANK: Record<Complaint["severity"], number> = {
+  low: 0,
+  medium: 1,
+  high: 2,
+  critical: 3,
 };
 
 const DEMO_COMPLAINTS: Complaint[] = [
@@ -39,14 +39,65 @@ const DEMO_COMPLAINTS: Complaint[] = [
 
 const CATEGORIES = ["Billing", "Product", "Account", "Performance", "Data", "Other"];
 const SEVERITIES: Complaint["severity"][] = ["low", "medium", "high", "critical"];
+const STATUSES: Complaint["status"][] = ["open", "investigating", "resolved", "closed"];
+
+const COLUMNS: Column<Complaint>[] = [
+  { key: "id", header: "ID", cell: (c) => c.id, mono: true },
+  {
+    key: "customer",
+    header: "Customer",
+    cell: (c) => <span className="font-medium text-[var(--dpf-text)]">{c.customerName}</span>,
+    sortAccessor: (c) => c.customerName,
+  },
+  {
+    key: "description",
+    header: "Description",
+    cell: (c) => <span className="block max-w-[320px] truncate">{c.description}</span>,
+  },
+  {
+    key: "severity",
+    header: "Severity",
+    cell: (c) => (
+      <StatusBadge domain="complaintSeverity" status={c.severity} variant="soft" uppercase={false} />
+    ),
+    sortAccessor: (c) => SEVERITY_RANK[c.severity],
+  },
+  {
+    key: "category",
+    header: "Category",
+    cell: (c) => <span className="text-[var(--dpf-muted)]">{c.category}</span>,
+  },
+  {
+    key: "status",
+    header: "Status",
+    cell: (c) => (
+      <StatusBadge domain="complaintStatus" status={c.status} variant="soft" uppercase={false} />
+    ),
+    sortAccessor: (c) => c.status,
+  },
+  {
+    key: "date",
+    header: "Date",
+    cell: (c) => (
+      <span className="text-[var(--dpf-muted)]">
+        <LocalTime value={c.createdAt} mode="date" />
+      </span>
+    ),
+    sortAccessor: (c) => c.createdAt,
+  },
+];
 
 export function ComplaintsClient() {
   const [complaints, setComplaints] = useState<Complaint[]>(DEMO_COMPLAINTS);
   const [showForm, setShowForm] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+  // Empty status = "all".
+  const [filters, setFilters] = useState<Record<string, string>>({ status: "" });
   const [formData, setFormData] = useState({ customerName: "", description: "", severity: "medium" as Complaint["severity"], category: "Other" });
 
-  const filtered = filterStatus === "all" ? complaints : complaints.filter((c) => c.status === filterStatus);
+  const activeStatus = filters.status ?? "";
+  const filtered = activeStatus
+    ? complaints.filter((c) => c.status === activeStatus)
+    : complaints;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -64,26 +115,24 @@ export function ComplaintsClient() {
   return (
     <div>
       {/* Toolbar */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex gap-2">
-          {["all", "open", "investigating", "resolved", "closed"].map((s) => (
-            <button
-              key={s}
-              onClick={() => setFilterStatus(s)}
-              className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
-              style={{
-                background: filterStatus === s ? "var(--dpf-accent)" : "var(--dpf-surface-2)",
-                color: filterStatus === s ? "#fff" : "var(--dpf-muted)",
-                border: `1px solid ${filterStatus === s ? "var(--dpf-accent)" : "var(--dpf-border)"}`,
-              }}
-            >
-              {s === "all" ? "All" : s.charAt(0).toUpperCase() + s.slice(1)}
-            </button>
-          ))}
-        </div>
+      <div className="flex items-center justify-between gap-4 mb-4">
+        <FilterBar
+          mode="client"
+          facets={[
+            {
+              kind: "pills",
+              key: "status",
+              label: "Status",
+              options: STATUSES.map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) })),
+            },
+          ]}
+          value={filters}
+          onChange={setFilters}
+          resultCount={filtered.length}
+        />
         <button
           onClick={() => setShowForm(!showForm)}
-          className="px-4 py-1.5 text-sm font-semibold text-white rounded-md transition-opacity hover:opacity-90"
+          className="shrink-0 px-4 py-1.5 text-sm font-semibold text-white rounded-md transition-opacity hover:opacity-90"
           style={{ background: "var(--dpf-accent)" }}
         >
           {showForm ? "Cancel" : "+ New Complaint"}
@@ -155,55 +204,19 @@ export function ComplaintsClient() {
       )}
 
       {/* Complaints Table */}
-      <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--dpf-border)" }}>
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ background: "var(--dpf-surface-2)" }}>
-              <th className="text-left px-4 py-2.5 font-medium" style={{ color: "var(--dpf-muted)" }}>ID</th>
-              <th className="text-left px-4 py-2.5 font-medium" style={{ color: "var(--dpf-muted)" }}>Customer</th>
-              <th className="text-left px-4 py-2.5 font-medium" style={{ color: "var(--dpf-muted)" }}>Description</th>
-              <th className="text-left px-4 py-2.5 font-medium" style={{ color: "var(--dpf-muted)" }}>Severity</th>
-              <th className="text-left px-4 py-2.5 font-medium" style={{ color: "var(--dpf-muted)" }}>Category</th>
-              <th className="text-left px-4 py-2.5 font-medium" style={{ color: "var(--dpf-muted)" }}>Status</th>
-              <th className="text-left px-4 py-2.5 font-medium" style={{ color: "var(--dpf-muted)" }}>Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((c) => (
-              <tr key={c.id} style={{ borderTop: "1px solid var(--dpf-border)" }}>
-                <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--dpf-muted)" }}>{c.id}</td>
-                <td className="px-4 py-3 font-medium" style={{ color: "var(--dpf-text)" }}>{c.customerName}</td>
-                <td className="px-4 py-3 max-w-[300px] truncate" style={{ color: "var(--dpf-text)" }}>{c.description}</td>
-                <td className="px-4 py-3">
-                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: `${SEVERITY_COLORS[c.severity]}20`, color: SEVERITY_COLORS[c.severity] }}>
-                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: SEVERITY_COLORS[c.severity] }} />
-                    {c.severity}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-xs" style={{ color: "var(--dpf-muted)" }}>{c.category}</td>
-                <td className="px-4 py-3">
-                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: `${STATUS_COLORS[c.status]}20`, color: STATUS_COLORS[c.status] }}>
-                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: STATUS_COLORS[c.status] }} />
-                    {c.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-xs" style={{ color: "var(--dpf-muted)" }}><LocalTime value={c.createdAt} mode="date" /></td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-sm" style={{ color: "var(--dpf-muted)" }}>
-                  No complaints match the current filter.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div className="rounded-lg p-1" style={{ border: "1px solid var(--dpf-border)" }}>
+        <DataTable
+          columns={COLUMNS}
+          rows={filtered}
+          getRowKey={(c) => c.id}
+          initialSort={{ key: "date", dir: "desc" }}
+          empty="No complaints match the current filter."
+        />
       </div>
 
       <p className="mt-3 text-xs" style={{ color: "var(--dpf-muted)" }}>
         {filtered.length} complaint{filtered.length !== 1 ? "s" : ""} shown
-        {filterStatus !== "all" ? ` (filtered: ${filterStatus})` : ""}
+        {activeStatus ? ` (filtered: ${activeStatus})` : ""}
       </p>
     </div>
   );
