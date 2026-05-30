@@ -80,6 +80,11 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     resolved: "success",
     closed: "neutral",
   },
+  // Payment direction (was raw hex in finance/payments — now token-backed).
+  paymentDirection: {
+    inbound: "success",
+    outbound: "warning",
+  },
   // Generic severity ramp, reusable by any surface that has none of its own.
   severity: {
     info: "info",
