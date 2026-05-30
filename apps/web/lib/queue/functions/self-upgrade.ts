@@ -1,9 +1,17 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
 import { getSelfUpgradeConfig, isInMaintenanceWindow } from "@/lib/self-upgrade/config";
-import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
+import { buildFetchCommand, buildRemoteHeadCommand } from "@/lib/self-upgrade/version";
+import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepare-source";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
-import { createRun, startRun, completeRun, failRun, getLatestRun } from "@/lib/self-upgrade/run-store";
+import {
+  createRun,
+  startRun,
+  completeRun,
+  failRun,
+  getLatestRun,
+  getLatestSucceededRun,
+} from "@/lib/self-upgrade/run-store";
 import { runPromoter } from "@/lib/self-upgrade/promoter";
 import { emitUpgradeEvent } from "@/lib/self-upgrade/notifications";
 import {
@@ -50,21 +58,91 @@ export async function runSelfUpgrade(
     return { skipped: true, reason: "outside-window" };
   }
 
-  const targetSha = await resolveTargetSha(config.channel, config);
-  if (!targetSha) return { skipped: true, reason: "no-target" };
+  const gitRun = defaultGitRunner;
+  const hostSourcePath =
+    config.hostSourceMountPath ??
+    process.env.DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT ??
+    process.env.HOST_SOURCE_PATH ??
+    "/host-dpf";
+  const remote = config.repositoryRemote ?? process.env.REPO_REMOTE ?? "origin";
+  const branch = config.repositoryBranch ?? process.env.REPO_BRANCH ?? "main";
 
-  const deployedSha = await getDeployedSha();
-  if (isShaFresh(deployedSha, targetSha)) return { skipped: true, reason: "up-to-date" };
+  // ── Detection: resolve the upstream target and apply the lineage gate ──────
+  // In upstream mode we fetch first (fresh ref) and skip when the running build
+  // already contains this upstream SHA. The running deployedSha is the merge
+  // identity, NOT the upstream SHA it absorbed, so freshness is gated on the
+  // latest succeeded run's targetSha (the upstream lineage marker), per §5.0.
+  let upstreamSha: string | null = null;
+  if (config.sourceMode === "upstream") {
+    await gitRun(buildFetchCommand({ hostSourcePath, remote, branch }).slice(1));
+    const head = await gitRun(buildRemoteHeadCommand({ hostSourcePath, remote, branch }).slice(1));
+    upstreamSha = head.code === 0 ? head.stdout.trim() : null;
+    if (!upstreamSha) return { skipped: true, reason: "no-target" };
+
+    const lastOk = await getLatestSucceededRun();
+    if (!params.dryRun && !params.force && lastOk?.targetSha === upstreamSha) {
+      return { skipped: true, reason: "up-to-date", upstreamSha };
+    }
+  }
 
   const latestRun = await getLatestRun();
   if (latestRun?.status === "running") {
     return { skipped: true, reason: "active-run", runId: latestRun.runId };
   }
 
+  const deployedSha = await getDeployedSha();
+
+  // ── Source preparation: merge upstream into the durable install branch
+  // (upstream) or stamp the working tree (local). The honest stamp returned
+  // here is the identity the promoter must build and verify. dryRun must not
+  // mutate the host clone, so the merge is skipped and a placeholder stamp used.
+  let builtStamp: string;
+  if (params.dryRun) {
+    builtStamp = upstreamSha ?? deployedSha ?? "dry-run";
+  } else {
+    const prep = await prepareUpgradeSource(
+      {
+        sourceMode: config.sourceMode,
+        hostSourcePath,
+        remote,
+        branch,
+        installBranch: config.installBranch,
+      },
+      gitRun,
+    );
+    if (!prep.ok) {
+      // Conflict / no-target / prep-error: record for audit, do NOT drain or
+      // swap. A merge conflict defers (operator resolves in the Upgrade Center);
+      // the current build keeps running.
+      const failedRun = await createRun({
+        triggeredBy: params.triggeredBy,
+        fromVersion: deployedSha ?? undefined,
+        toVersion: upstreamSha ?? undefined,
+      });
+      const reason =
+        prep.reason === "merge-conflict"
+          ? `merge-conflict: ${prep.conflictFiles.join(", ")}`
+          : `${prep.reason}: ${prep.message}`;
+      await failRun(failedRun.runId, reason);
+      await emitUpgradeEvent({ type: "upgrade.failed", runId: failedRun.runId });
+      return {
+        ok: false,
+        status: prep.reason === "merge-conflict" ? "deferred-conflict" : "failed",
+        runId: failedRun.runId,
+        reason: prep.reason,
+        conflictFiles: prep.reason === "merge-conflict" ? prep.conflictFiles : undefined,
+      };
+    }
+    builtStamp = prep.stamp;
+    upstreamSha = prep.upstreamSha ?? upstreamSha;
+  }
+
   const run = await createRun({
     triggeredBy: params.triggeredBy,
     fromVersion: deployedSha ?? undefined,
-    toVersion: targetSha,
+    // targetSha column carries the upstream lineage marker (what the build
+    // contains), falling back to the built stamp in local mode.
+    toVersion: upstreamSha ?? builtStamp,
   });
   await startRun(run.runId);
   await emitUpgradeEvent({ type: "upgrade.started", runId: run.runId });
@@ -130,7 +208,10 @@ export async function runSelfUpgrade(
         process.env.DPF_HOST_INSTALL_PATH ??
         process.env.PROMOTE_SOURCE ??
         "",
-      targetSha,
+      // The honest built identity from source prep (merge-commit SHA in upstream
+      // mode, HEAD/-dirty in local mode). promote.sh re-derives this from the
+      // tree's HEAD and cross-checks against it.
+      targetSha: builtStamp,
       backupPath: process.env.PROMOTE_BACKUP_PATH ?? `/backups/self-upgrade/${run.runId}`,
       backupHostPath: process.env.DPF_BACKUPS_HOST_PATH ?? undefined,
       healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
