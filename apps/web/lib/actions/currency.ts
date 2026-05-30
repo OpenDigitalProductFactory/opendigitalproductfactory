@@ -79,12 +79,14 @@ export async function calculateFxGainLoss(invoiceAmountBase: number, paymentAmou
 
 export async function storeExchangeRates(
   rates: Array<{ base: string; target: string; rate: number }>,
+  source = "ecb",
 ) {
   return prisma.exchangeRate.createMany({
     data: rates.map((r) => ({
       baseCurrency: r.base,
       targetCurrency: r.target,
       rate: r.rate,
+      source,
     })),
     skipDuplicates: true,
   });
