@@ -2,6 +2,7 @@ import { getCorrectiveAction } from "@/lib/actions/compliance";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EditCorrectiveActionForm } from "@/components/compliance/EditCorrectiveActionForm";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -60,13 +61,13 @@ export default async function CorrectiveActionDetailPage({ params }: Props) {
         {action.dueDate && (
           <div className={`p-3 rounded-lg border ${isOverdue ? "border-red-500/50" : "border-[var(--dpf-border)]"}`}>
             <p className="text-xs text-[var(--dpf-muted)]">Due Date</p>
-            <p className={`text-sm font-semibold ${isOverdue ? "text-red-400" : "text-[var(--dpf-text)]"}`}>{new Date(action.dueDate).toLocaleDateString()}</p>
+            <LocalTime value={action.dueDate} utc className={`text-sm font-semibold ${isOverdue ? "text-red-400" : "text-[var(--dpf-text)]"}`} />
           </div>
         )}
         {action.completedAt && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Completed At</p>
-            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(action.completedAt).toLocaleDateString()}</p>
+            <LocalTime value={action.completedAt} mode="date" className="text-sm font-semibold text-[var(--dpf-text)]" />
           </div>
         )}
         {action.owner && (
@@ -99,7 +100,7 @@ export default async function CorrectiveActionDetailPage({ params }: Props) {
             {action.verificationDate && (
               <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
                 <p className="text-xs text-[var(--dpf-muted)]">Verification Date</p>
-                <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(action.verificationDate).toLocaleDateString()}</p>
+                <LocalTime value={action.verificationDate} utc className="text-sm font-semibold text-[var(--dpf-text)]" />
               </div>
             )}
             {action.verifiedBy && (

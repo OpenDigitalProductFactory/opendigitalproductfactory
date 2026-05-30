@@ -3,6 +3,7 @@ import { listPurchaseOrders } from "@/lib/actions/ap";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
+import { LocalTime } from "@/components/ui/LocalTime";
 import Link from "next/link";
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -147,9 +148,7 @@ export default async function PurchaseOrdersPage({ searchParams }: Props) {
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                      {po.deliveryDate
-                        ? new Date(po.deliveryDate).toLocaleDateString("en-GB")
-                        : "—"}
+                      <LocalTime value={po.deliveryDate} utc />
                     </td>
                     <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                       {sym}{formatMoney(po.totalAmount)}

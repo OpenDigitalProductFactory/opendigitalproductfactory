@@ -3,6 +3,7 @@ import { getBankAccount, getReconciliationSummary } from "@/lib/actions/banking"
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const MATCH_STATUS_COLOURS: Record<string, string> = {
   unmatched: "#fbbf24",
@@ -97,9 +98,11 @@ export default async function BankAccountDetailPage({ params }: Props) {
           },
           {
             label: "Last Reconciled",
-            value: account.lastReconciledAt
-              ? new Date(account.lastReconciledAt).toLocaleDateString("en-GB")
-              : "Never",
+            value: account.lastReconciledAt ? (
+              <LocalTime value={account.lastReconciledAt} mode="date" />
+            ) : (
+              "Never"
+            ),
           },
           {
             label: "Bank Rules",
@@ -202,7 +205,7 @@ export default async function BankAccountDetailPage({ params }: Props) {
                       className="border-b border-[var(--dpf-border)] last:border-0 hover:bg-[var(--dpf-surface-2)] transition-colors"
                     >
                       <td className="px-4 py-2.5 text-[var(--dpf-muted)] whitespace-nowrap">
-                        {new Date(tx.transactionDate).toLocaleDateString("en-GB")}
+                        <LocalTime value={tx.transactionDate} utc />
                       </td>
                       <td className="px-4 py-2.5 text-[var(--dpf-text)] max-w-[200px] truncate">
                         {tx.description}

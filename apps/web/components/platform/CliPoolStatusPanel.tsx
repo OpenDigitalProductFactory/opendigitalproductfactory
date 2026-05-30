@@ -4,6 +4,7 @@
 // Shows a banner only when at least one pool is exhausted; hidden when all
 // pools are healthy. No persistent exhaustion rows means no banner.
 
+import { LocalTime } from "@/components/ui/LocalTime";
 import type { CliPoolState } from "@/lib/routing/cli-pool-status";
 
 interface Props {
@@ -97,7 +98,7 @@ export function CliPoolStatusPanel({ statuses }: Props) {
               </span>
             ) : (
               <span style={{ color: "var(--dpf-muted)" }}>
-                Previously limited {new Date(s.rateLimitedAt).toLocaleTimeString()} · pool recovered
+                Previously limited <LocalTime value={s.rateLimitedAt} mode="time" /> · pool recovered
               </span>
             )}
 

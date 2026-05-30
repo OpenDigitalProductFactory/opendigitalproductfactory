@@ -5,6 +5,7 @@ import { getMcpServerDetail, deactivateMcpServer } from "@/lib/actions/mcp-servi
 import { HealthCheckButton } from "@/components/platform/HealthCheckButton";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const HEALTH_LABELS: Record<string, { text: string; className: string }> = {
   healthy: { text: "Healthy", className: "text-green-600" },
@@ -52,7 +53,7 @@ export default async function ToolsServiceDetailPage({
         <div className="border rounded-lg p-4 space-y-2 text-sm">
           <p>Status: <span className={`font-medium ${health.className}`}>{health.text}</span></p>
           {server.lastHealthCheck && (
-            <p>Last checked: {new Date(server.lastHealthCheck).toLocaleString()}</p>
+            <p>Last checked: <LocalTime value={server.lastHealthCheck} /></p>
           )}
           {server.lastHealthError && (
             <p className="text-destructive text-xs">{server.lastHealthError}</p>
@@ -105,11 +106,11 @@ export default async function ToolsServiceDetailPage({
         <h2 className="text-lg font-semibold">Metadata</h2>
         <div className="border rounded-lg p-4 text-sm space-y-1">
           {server.activatedBy && <p>Activated by: {server.activatedBy}</p>}
-          {server.activatedAt && <p>Activated: {new Date(server.activatedAt).toLocaleString()}</p>}
+          {server.activatedAt && <p>Activated: <LocalTime value={server.activatedAt} /></p>}
           {server.integration && (
             <p>Catalog entry: <Link href="/platform/tools/catalog" className="text-primary hover:underline">{server.integration.name}</Link></p>
           )}
-          {server.deactivatedAt && <p className="text-destructive">Deactivated: {new Date(server.deactivatedAt).toLocaleString()}</p>}
+          {server.deactivatedAt && <p className="text-destructive">Deactivated: <LocalTime value={server.deactivatedAt} /></p>}
         </div>
       </section>
 

@@ -4,6 +4,7 @@
 
 import { getExpenseClaimByApprovalToken } from "@/lib/actions/expenses";
 import { notFound } from "next/navigation";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { ExpenseApprovalForm } from "./ExpenseApprovalForm";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -157,7 +158,7 @@ export default async function ExpenseApprovePage({ params }: Props) {
               {claim.items.map((item, i) => (
                 <tr key={i} style={{ borderBottom: "1px solid #f3f4f6" }}>
                   <td style={{ padding: "10px 0", fontSize: 14, color: "#6b7280" }}>
-                    {new Date(item.date).toLocaleDateString("en-GB")}
+                    <LocalTime value={item.date} utc />
                   </td>
                   <td style={{ padding: "10px 0", fontSize: 14, color: "#374151" }}>
                     {CATEGORY_LABELS[item.category] ?? item.category}

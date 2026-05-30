@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { LinkObligationForm } from "@/components/compliance/LinkObligationForm";
 import { UnlinkControlButton } from "@/components/compliance/UnlinkControlButton";
 import { EditControlForm } from "@/components/compliance/EditControlForm";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -96,7 +97,7 @@ export default async function ControlDetailPage({ params }: Props) {
         {control.nextReviewDate && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Next Review</p>
-            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(control.nextReviewDate).toLocaleDateString()}</p>
+            <LocalTime value={control.nextReviewDate} utc className="text-sm font-semibold text-[var(--dpf-text)]" />
           </div>
         )}
       </div>
@@ -152,7 +153,7 @@ export default async function ControlDetailPage({ params }: Props) {
                   <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{ev.evidenceType}</span>
                 </div>
               </div>
-              <span className="text-xs text-[var(--dpf-muted)]">{new Date(ev.collectedAt).toLocaleDateString()}</span>
+              <LocalTime value={ev.collectedAt} mode="date" className="text-xs text-[var(--dpf-muted)]" />
             </div>
           ))}
         </div>

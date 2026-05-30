@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CreateObligationForm } from "@/components/compliance/CreateObligationForm";
 import { EditRegulationForm } from "@/components/compliance/EditRegulationForm";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -62,7 +63,7 @@ export default async function RegulationDetailPage({ params }: Props) {
         {regulation.effectiveDate && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Effective Date</p>
-            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(regulation.effectiveDate).toLocaleDateString()}</p>
+            <LocalTime value={regulation.effectiveDate} utc className="text-sm font-semibold text-[var(--dpf-text)]" />
           </div>
         )}
       </div>

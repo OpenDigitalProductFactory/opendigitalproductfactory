@@ -12,6 +12,8 @@ import type { WorkforceStatus, EmployeeProfileRecord } from "@/lib/workforce-typ
 import type { AddressWithHierarchy } from "@/lib/address-types";
 import AddressSection from "@/components/employee/AddressSection";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { EmailInput } from "@/components/ui/EmailInput";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 
 const HIRE_STATUSES: WorkforceStatus[] = ["offer", "onboarding", "active"];
 
@@ -227,20 +229,18 @@ export function EmployeeFormPanel({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="flex flex-col gap-1">
                 <span className={labelClasses}>Work Email</span>
-                <input
-                  type="email"
+                <EmailInput
                   value={form.workEmail ?? ""}
-                  onChange={(e) => setField("workEmail", e.target.value)}
+                  onValueChange={(v) => setField("workEmail", v)}
                   className={inputClasses}
                   placeholder="jane@company.com"
                 />
               </label>
               <label className="flex flex-col gap-1">
                 <span className={labelClasses}>Personal Email</span>
-                <input
-                  type="email"
+                <EmailInput
                   value={form.personalEmail ?? ""}
-                  onChange={(e) => setField("personalEmail", e.target.value)}
+                  onValueChange={(v) => setField("personalEmail", v)}
                   className={inputClasses}
                   placeholder="jane@personal.com"
                 />
@@ -251,32 +251,29 @@ export function EmployeeFormPanel({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <label className="flex flex-col gap-1">
                 <span className={labelClasses}>Work Phone</span>
-                <input
-                  type="tel"
+                <PhoneInput
                   value={form.phoneWork ?? ""}
-                  onChange={(e) => setField("phoneWork", e.target.value)}
+                  onValueChange={(v) => setField("phoneWork", v)}
                   className={inputClasses}
-                  placeholder="+14155551234"
+                  placeholder="(415) 555-1234"
                 />
               </label>
               <label className="flex flex-col gap-1">
                 <span className={labelClasses}>Mobile Phone</span>
-                <input
-                  type="tel"
+                <PhoneInput
                   value={form.phoneMobile ?? ""}
-                  onChange={(e) => setField("phoneMobile", e.target.value)}
+                  onValueChange={(v) => setField("phoneMobile", v)}
                   className={inputClasses}
-                  placeholder="+14155551234"
+                  placeholder="(415) 555-1234"
                 />
               </label>
               <label className="flex flex-col gap-1">
                 <span className={labelClasses}>Emergency Phone</span>
-                <input
-                  type="tel"
+                <PhoneInput
                   value={form.phoneEmergency ?? ""}
-                  onChange={(e) => setField("phoneEmergency", e.target.value)}
+                  onValueChange={(v) => setField("phoneEmergency", v)}
                   className={inputClasses}
-                  placeholder="+14155551234"
+                  placeholder="(415) 555-1234"
                 />
               </label>
             </div>

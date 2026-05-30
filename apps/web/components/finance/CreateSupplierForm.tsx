@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupplier } from "@/lib/actions/ap";
+import { EmailInput } from "@/components/ui/EmailInput";
 
 const inputClasses =
   "bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-[var(--dpf-text)] rounded px-3 py-2 text-sm focus:border-[var(--dpf-accent)] focus:outline-none placeholder:text-[var(--dpf-muted)] w-full";
@@ -80,10 +81,9 @@ export function CreateSupplierForm() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div>
           <label className={labelClasses}>Email</label>
-          <input
-            type="email"
+          <EmailInput
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onValueChange={(v) => setEmail(v)}
             placeholder="accounts@supplier.com"
             className={inputClasses}
           />

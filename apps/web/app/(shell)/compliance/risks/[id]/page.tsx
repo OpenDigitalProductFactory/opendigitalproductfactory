@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LinkRiskControlForm } from "@/components/compliance/LinkRiskControlForm";
 import { UnlinkRiskControlButton } from "@/components/compliance/UnlinkRiskControlButton";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -93,12 +94,12 @@ export default async function RiskDetailPage({ params }: Props) {
         )}
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Assessed At</p>
-          <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(risk.assessedAt).toLocaleDateString()}</p>
+          <LocalTime value={risk.assessedAt} mode="date" className="text-sm font-semibold text-[var(--dpf-text)]" />
         </div>
         {risk.nextReviewDate && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Next Review</p>
-            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(risk.nextReviewDate).toLocaleDateString()}</p>
+            <LocalTime value={risk.nextReviewDate} utc className="text-sm font-semibold text-[var(--dpf-text)]" />
           </div>
         )}
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
@@ -190,7 +191,7 @@ export default async function RiskDetailPage({ params }: Props) {
                       </span>
                     </div>
                   </div>
-                  <span className="text-xs text-[var(--dpf-muted)]">{new Date(inc.occurredAt).toLocaleDateString()}</span>
+                  <LocalTime value={inc.occurredAt} mode="date" className="text-xs text-[var(--dpf-muted)]" />
                 </div>
               </Link>
             );
