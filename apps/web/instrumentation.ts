@@ -123,6 +123,40 @@ export async function reconcileSelfUpgradeRunsOnBoot(
   }
 }
 
+/**
+ * Self-heal a stuck quiescence level on boot. A real upgrade flips the level to
+ * "draining"/"swapping" and recreates the portal — killing both the
+ * orchestrator and the coordinator before either can flip it back to "normal".
+ * The new portal would then read the stuck level and refuse all gated requests
+ * ("portal_quiescing" 503) forever. We just booted, so any prior quiescence is
+ * over: reset to normal. Non-fatal.
+ */
+export async function resetStuckQuiescenceLevelOnBoot(
+  logger: Pick<Console, "log" | "error"> = console,
+): Promise<boolean> {
+  try {
+    const { prisma } = await import("@dpf/db");
+    const { QUIESCENCE_CONFIG_KEY, setQuiescenceLevel } = await import(
+      "@/lib/self-upgrade/quiescence"
+    );
+    const row = await prisma.platformConfig.findUnique({
+      where: { key: QUIESCENCE_CONFIG_KEY },
+    });
+    const level = (row?.value as { level?: string } | null)?.level ?? "normal";
+    if (level !== "normal") {
+      await setQuiescenceLevel("normal", null);
+      logger.log(
+        `[quiescence-reset] level was "${level}" on boot — reset to normal (post-swap self-heal)`,
+      );
+      return true;
+    }
+    return false;
+  } catch (err) {
+    logger.error("[quiescence-reset] failed (non-fatal):", err);
+    return false;
+  }
+}
+
 export async function enqueueFirstBootEvals(providerId: string): Promise<{
   enqueued: number;
   error: string | null;
@@ -171,6 +205,11 @@ export async function register() {
     // DB-backed runtime metadata matches the canonical file. Non-fatal —
     // logs loudly on failure but does not block startup.
     void syncPlatformVersionOnBoot();
+
+    // Self-heal a quiescence level left stuck by a swap that killed the
+    // coordinator mid-protocol — otherwise the portal refuses gated requests
+    // ("portal_quiescing") forever. Must run before reconciliation.
+    void resetStuckQuiescenceLevelOnBoot();
 
     // Close the loop on any self-upgrade run whose orchestrator died mid-swap
     // (a real upgrade recreates this very container). Records succeeded when we
