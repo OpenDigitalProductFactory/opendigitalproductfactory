@@ -9192,6 +9192,10 @@ model VoiceProfile {
   totalSampleDurationMs Int                        @default(0)
   qualityScore          Float?
   language              String                     @default("en")
+  // Per-profile TTS tuning chosen by the user on the voice page (speed,
+  // expressiveness, etc). Shape: { speed?, exaggeration?, cfgWeight?, temperature? }.
+  // Null = use the deployment/provider defaults. Applied on every synthesis.
+  voiceSettings         Json?
   createdAt             DateTime                   @default(now())
   updatedAt             DateTime                   @updatedAt
   profile               DecisionPerspectiveProfile @relation(fields: [profileId], references: [profileId], onDelete: Cascade)
