@@ -155,8 +155,20 @@ function errMsg(err: unknown): string {
  */
 export async function defaultGitRunner(args: string[]): Promise<GitResult> {
   const { execFile } = await import("node:child_process");
+  // Run prep's internal git ops with repo hooks DISABLED. The host clone ships a
+  // Git LFS post-checkout/post-merge hook (the repo uses filter=lfs), but the
+  // portal container has no git-lfs binary — so the hook exits non-zero and makes
+  // an otherwise-successful `git checkout`/`merge` look like it failed, aborting
+  // the whole upgrade at prep. Prep is mechanical (move branches, merge for a
+  // build) and never needs LFS smudging, so force core.hooksPath empty and skip
+  // LFS smudge. `-c` is a git GLOBAL option and must precede the subcommand —
+  // prepend it ahead of the caller's args (which start with "-C <path> <cmd>").
+  const safeArgs = ["-c", "core.hooksPath=/dev/null", ...args];
   return new Promise<GitResult>((resolve) => {
-    execFile("git", args, { maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile("git", safeArgs, {
+      maxBuffer: 10 * 1024 * 1024,
+      env: { ...process.env, GIT_LFS_SKIP_SMUDGE: "1" },
+    }, (err, stdout, stderr) => {
       const out = stdout?.toString() ?? "";
       const errOut = stderr?.toString() ?? "";
       if (err) {
