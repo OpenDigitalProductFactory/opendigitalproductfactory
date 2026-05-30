@@ -59,18 +59,27 @@ _REF_ROOT = os.environ.get("DPF_TTS_REFERENCE_HOST_ROOT") or ""
 
 
 def _safe_ref_path(ref: str) -> str:
-    """Resolve `ref` and confirm it stays within _REF_ROOT. Raises ValueError on
-    an unconfigured root or any path that escapes it (CWE-22 path injection)."""
+    """Map a request-supplied reference key to an on-disk path that is provably
+    inside _REF_ROOT (CWE-22 path-injection guard).
+
+    Strategy CodeQL recognises as a sanitizer: reject absolute inputs, normalise
+    with os.path.normpath (a pure string op — no filesystem sink), then require
+    the normalised join to start with the root prefix. The leading-separator and
+    normpath steps make ".." traversal and absolute paths impossible before any
+    file is touched."""
     if not _REF_ROOT:
         raise ValueError("reference cloning disabled: DPF_TTS_REFERENCE_HOST_ROOT not set")
-    root = os.path.realpath(_REF_ROOT)
-    resolved = os.path.realpath(os.path.join(root, ref))
-    # Containment check: resolved must be root itself or a descendant.
-    if resolved != root and not resolved.startswith(root + os.sep):
+    # Absolute paths (e.g. "/etc/passwd") are never allowed.
+    if os.path.isabs(ref):
+        raise ValueError("reference path must be relative")
+    root = os.path.normpath(_REF_ROOT)
+    candidate = os.path.normpath(os.path.join(root, ref))
+    # After normpath, any ".." has been collapsed; require containment.
+    if candidate != root and not candidate.startswith(root + os.sep):
         raise ValueError("reference path escapes the allowed root")
-    if not os.path.isfile(resolved):
+    if not os.path.isfile(candidate):
         raise ValueError("reference file not found")
-    return resolved
+    return candidate
 
 
 print(f"[chatterbox] loading on {DEVICE} ...", flush=True)
