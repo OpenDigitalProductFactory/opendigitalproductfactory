@@ -70,6 +70,20 @@ export async function getLatestRun() {
   });
 }
 
+/**
+ * The most-recent successfully-completed run. Its `targetSha` is the upstream
+ * lineage marker the running build contains — the basis for the §5.0 freshness
+ * gate (don't re-merge an upstream we already carry). Distinct from the running
+ * `deployedSha`, which in merge mode is the merge-commit identity, not the
+ * upstream SHA it absorbed.
+ */
+export async function getLatestSucceededRun() {
+  return prisma.selfUpgradeRun.findFirst({
+    where: { status: "succeeded" },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
 export async function getRun(runId: string) {
   return prisma.selfUpgradeRun.findUnique({ where: { runId } });
 }

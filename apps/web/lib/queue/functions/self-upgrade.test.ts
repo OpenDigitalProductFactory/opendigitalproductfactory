@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mocks = vi.hoisted(() => ({
   getSelfUpgradeConfig: vi.fn(),
   isInMaintenanceWindow: vi.fn(),
-  resolveTargetSha: vi.fn(),
-  isShaFresh: vi.fn(),
+  defaultGitRunner: vi.fn(),
+  prepareUpgradeSource: vi.fn(),
   getDeployedSha: vi.fn(),
   isFeatureBuildDeployed: vi.fn(),
   createRun: vi.fn(),
@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   completeRun: vi.fn(),
   failRun: vi.fn(),
   getLatestRun: vi.fn(),
+  getLatestSucceededRun: vi.fn(),
   runPromoter: vi.fn(),
   emitUpgradeEvent: vi.fn(),
   // BI-QUIESCE-010 — caller API consumed by runSelfUpgrade.
@@ -26,9 +27,29 @@ vi.mock("@/lib/self-upgrade/config", () => ({
   isInMaintenanceWindow: mocks.isInMaintenanceWindow,
 }));
 
+// Real (pure) argv builders so the orchestrator constructs proper git commands;
+// the mocked defaultGitRunner branches on them.
 vi.mock("@/lib/self-upgrade/version", () => ({
-  resolveTargetSha: mocks.resolveTargetSha,
-  isShaFresh: mocks.isShaFresh,
+  buildFetchCommand: (i: { hostSourcePath: string; remote: string; branch: string }) => [
+    "git",
+    "-C",
+    i.hostSourcePath,
+    "fetch",
+    i.remote,
+    i.branch,
+  ],
+  buildRemoteHeadCommand: (i: { hostSourcePath: string; remote: string; branch: string }) => [
+    "git",
+    "-C",
+    i.hostSourcePath,
+    "rev-parse",
+    `${i.remote}/${i.branch}`,
+  ],
+}));
+
+vi.mock("@/lib/self-upgrade/prepare-source", () => ({
+  prepareUpgradeSource: mocks.prepareUpgradeSource,
+  defaultGitRunner: mocks.defaultGitRunner,
 }));
 
 vi.mock("@/lib/self-upgrade/completion", () => ({
@@ -42,6 +63,7 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   completeRun: mocks.completeRun,
   failRun: mocks.failRun,
   getLatestRun: mocks.getLatestRun,
+  getLatestSucceededRun: mocks.getLatestSucceededRun,
 }));
 
 vi.mock("@/lib/self-upgrade/promoter", () => ({
@@ -97,6 +119,26 @@ function setupQuiescenceReady(quiescenceRunId = "QR-2026-05-24-test1234"): void 
   mocks.signalSwapStarting.mockResolvedValue(undefined);
   mocks.signalSwapComplete.mockResolvedValue(undefined);
   mocks.failQuiescenceSwap.mockResolvedValue(undefined);
+}
+
+/**
+ * Set up the source-prep happy path: upstream resolves to `stamp` via the
+ * mocked git runner (rev-parse), no prior succeeded run (lineage gate open),
+ * and prepareUpgradeSource returns a clean merge with `stamp` as the identity.
+ */
+function setupSourceReady(stamp = "abc1234deadbeef"): void {
+  mocks.defaultGitRunner.mockImplementation(async (args: string[]) =>
+    args.includes("rev-parse")
+      ? { stdout: `${stamp}\n`, stderr: "", code: 0 }
+      : { stdout: "", stderr: "", code: 0 },
+  );
+  mocks.getLatestSucceededRun.mockResolvedValue(null);
+  mocks.prepareUpgradeSource.mockResolvedValue({
+    ok: true,
+    mode: "upstream",
+    stamp,
+    upstreamSha: stamp,
+  });
 }
 
 describe("cron metadata", () => {
@@ -173,6 +215,8 @@ const ENABLED_CONFIG = {
   repositoryRemote: "origin",
   repositoryBranch: "main",
   healthUrl: "http://localhost:3000/api/health",
+  sourceMode: "upstream" as const,
+  installBranch: "dpf/install",
 };
 
 describe("success path", () => {
@@ -180,9 +224,8 @@ describe("success path", () => {
     vi.clearAllMocks();
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
     mocks.isInMaintenanceWindow.mockReturnValue(true);
-    mocks.resolveTargetSha.mockResolvedValue("abc1234deadbeef");
     mocks.getDeployedSha.mockResolvedValue("oldsha1");
-    mocks.isShaFresh.mockReturnValue(false);
+    setupSourceReady();
     setupQuiescenceReady();
     mocks.getLatestRun.mockResolvedValue(null);
     mocks.createRun.mockResolvedValue({ runId: "SUR-AAAABBBB" });
@@ -199,9 +242,25 @@ describe("success path", () => {
     expect(mocks.completeRun).toHaveBeenCalledWith("SUR-AAAABBBB");
   });
 
-  it("resolves the target SHA using the configured source checkout", async () => {
+  it("prepares the upgrade source with the configured mode/remote/branch/install branch", async () => {
     await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(mocks.resolveTargetSha).toHaveBeenCalledWith("stable", ENABLED_CONFIG);
+    expect(mocks.prepareUpgradeSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceMode: "upstream",
+        remote: "origin",
+        branch: "main",
+        installBranch: "dpf/install",
+      }),
+      expect.any(Function),
+    );
+  });
+
+  it("skips with up-to-date when the running build already contains the upstream SHA", async () => {
+    mocks.getLatestSucceededRun.mockResolvedValue({ targetSha: "abc1234deadbeef" });
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled" });
+    expect(result).toMatchObject({ skipped: true, reason: "up-to-date" });
+    expect(mocks.prepareUpgradeSource).not.toHaveBeenCalled();
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
   });
 
   it("runs the promoter with the host install path, backup, image, and health paths", async () => {
@@ -299,9 +358,8 @@ describe("maintenance window gate + emergency override", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
-    mocks.resolveTargetSha.mockResolvedValue("abc1234deadbeef");
     mocks.getDeployedSha.mockResolvedValue("oldsha1");
-    mocks.isShaFresh.mockReturnValue(false);
+    setupSourceReady();
     setupQuiescenceReady();
     mocks.getLatestRun.mockResolvedValue(null);
     mocks.createRun.mockResolvedValue({ runId: "SUR-FORCE001" });
@@ -332,9 +390,8 @@ describe("failure path", () => {
     vi.clearAllMocks();
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
     mocks.isInMaintenanceWindow.mockReturnValue(true);
-    mocks.resolveTargetSha.mockResolvedValue("abc1234deadbeef");
     mocks.getDeployedSha.mockResolvedValue("oldsha1");
-    mocks.isShaFresh.mockReturnValue(false);
+    setupSourceReady();
     setupQuiescenceReady();
     mocks.getLatestRun.mockResolvedValue(null);
     mocks.createRun.mockResolvedValue({ runId: "SUR-FAILTEST" });
@@ -397,14 +454,53 @@ describe("failure path", () => {
   });
 });
 
+describe("merge-conflict defer (source prep, §5.0)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
+    mocks.isInMaintenanceWindow.mockReturnValue(true);
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
+    setupSourceReady();
+    mocks.getLatestRun.mockResolvedValue(null);
+    mocks.createRun.mockResolvedValue({ runId: "SUR-CONFLICT" });
+    mocks.failRun.mockResolvedValue({});
+    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
+  });
+
+  it("defers without draining or promoting when the upstream merge conflicts", async () => {
+    mocks.prepareUpgradeSource.mockResolvedValue({
+      ok: false,
+      reason: "merge-conflict",
+      conflictFiles: ["apps/web/a.ts", "apps/web/b.ts"],
+      upstreamSha: "abc1234deadbeef",
+      message: "upstream merge conflicts in 2 file(s)",
+    });
+
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled" });
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: "deferred-conflict",
+      reason: "merge-conflict",
+      conflictFiles: ["apps/web/a.ts", "apps/web/b.ts"],
+    });
+    // The running build is untouched: no drain, no swap.
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
+    expect(mocks.failRun).toHaveBeenCalledWith(
+      "SUR-CONFLICT",
+      "merge-conflict: apps/web/a.ts, apps/web/b.ts",
+    );
+  });
+});
+
 describe("quiescence-defer path (BI-QUIESCE-010)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
     mocks.isInMaintenanceWindow.mockReturnValue(true);
-    mocks.resolveTargetSha.mockResolvedValue("abc1234deadbeef");
     mocks.getDeployedSha.mockResolvedValue("oldsha1");
-    mocks.isShaFresh.mockReturnValue(false);
+    setupSourceReady();
     mocks.getLatestRun.mockResolvedValue(null);
     mocks.createRun.mockResolvedValue({ runId: "SUR-DEFER" });
     mocks.startRun.mockResolvedValue({});
