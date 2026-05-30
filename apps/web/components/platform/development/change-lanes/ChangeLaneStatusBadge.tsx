@@ -1,24 +1,21 @@
 import type { ContributorLaneStatus } from "@/lib/contributor-change-lanes/types";
+import { StatusBadge, type Intent } from "@/components/ui/report-kit";
 
-const STATUS_COLOR_CLASSES: Record<ContributorLaneStatus, string> = {
-  blocked: "border-[var(--dpf-error)] text-[var(--dpf-error)]",
-  starting: "border-[var(--dpf-warning)] text-[var(--dpf-warning)]",
-  verifying: "border-[var(--dpf-warning)] text-[var(--dpf-warning)]",
-  running: "border-[var(--dpf-accent)] text-[var(--dpf-accent)]",
-  "ready-for-review": "border-[var(--dpf-success)] text-[var(--dpf-success)]",
-  claimed: "border-[var(--dpf-muted)] text-[var(--dpf-text)]",
-  available: "border-[var(--dpf-border)] text-[var(--dpf-muted)]",
-  released: "border-[var(--dpf-border)] text-[var(--dpf-muted)]",
-  stale: "border-[var(--dpf-warning)] text-[var(--dpf-warning)]",
+// Contributor-lane status → semantic intent. Kept local (rather than in the
+// shared STATUS_INTENT registry) because lane status is niche to this surface;
+// the shared StatusBadge still owns all rendering + token color.
+const LANE_INTENT: Record<ContributorLaneStatus, Intent> = {
+  blocked: "danger",
+  starting: "warning",
+  verifying: "warning",
+  running: "accent",
+  "ready-for-review": "success",
+  claimed: "neutral",
+  available: "neutral",
+  released: "neutral",
+  stale: "warning",
 };
 
 export function ChangeLaneStatusBadge({ status }: { status: ContributorLaneStatus }) {
-  const classes = STATUS_COLOR_CLASSES[status];
-  return (
-    <span
-      className={`inline-flex items-center rounded border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${classes}`}
-    >
-      {status}
-    </span>
-  );
+  return <StatusBadge intent={LANE_INTENT[status]} label={status} variant="outline" />;
 }
