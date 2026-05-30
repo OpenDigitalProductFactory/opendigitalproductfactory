@@ -51,6 +51,28 @@ def _clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
 
 
+# Reference clips must live under this root (the host side of the portal's voice
+# storage). Constraining ref_audio to it prevents path traversal — an attacker
+# can't make the server read arbitrary files like /etc/passwd. When unset, no
+# reference cloning is allowed (the request must omit ref_audio).
+_REF_ROOT = os.environ.get("DPF_TTS_REFERENCE_HOST_ROOT") or ""
+
+
+def _safe_ref_path(ref: str) -> str:
+    """Resolve `ref` and confirm it stays within _REF_ROOT. Raises ValueError on
+    an unconfigured root or any path that escapes it (CWE-22 path injection)."""
+    if not _REF_ROOT:
+        raise ValueError("reference cloning disabled: DPF_TTS_REFERENCE_HOST_ROOT not set")
+    root = os.path.realpath(_REF_ROOT)
+    resolved = os.path.realpath(os.path.join(root, ref))
+    # Containment check: resolved must be root itself or a descendant.
+    if resolved != root and not resolved.startswith(root + os.sep):
+        raise ValueError("reference path escapes the allowed root")
+    if not os.path.isfile(resolved):
+        raise ValueError("reference file not found")
+    return resolved
+
+
 print(f"[chatterbox] loading on {DEVICE} ...", flush=True)
 _t0 = time.time()
 MODEL = ChatterboxTTS.from_pretrained(device=DEVICE)
@@ -122,17 +144,28 @@ async def speech(req: Request):
     temperature = _clamp(float(body.get("temperature", _envf("DPF_CB_TEMPERATURE", 0.8))), 0.2, 1.2)
     speed = _clamp(float(body.get("speed", _envf("DPF_CB_SPEED", 1.0))), 0.5, 2.0)
 
+    # Validate the reference path up front (path-injection guard). A bad/escaping
+    # path is a client error, not a server failure.
+    safe_ref = None
+    if ref:
+        try:
+            safe_ref = _safe_ref_path(ref)
+        except ValueError:
+            return JSONResponse({"error": "invalid reference audio"}, status_code=400)
+
     cleanup = None
     t0 = time.time()
     try:
         kwargs = {"exaggeration": exaggeration, "cfg_weight": cfg_weight, "temperature": temperature}
-        if ref:
-            ref_path, cleanup = _decode_to_wav(ref)
+        if safe_ref:
+            ref_path, cleanup = _decode_to_wav(safe_ref)
             kwargs["audio_prompt_path"] = ref_path
         wav = MODEL.generate(text, **kwargs)
-    except Exception as exc:  # noqa: BLE001 — surface a clean error to the portal
+    except Exception as exc:  # noqa: BLE001
+        # Log the detail server-side; return a generic message so internal
+        # details / stack traces are not exposed to the caller (CWE-209).
         print(f"[chatterbox] generate failed: {exc}", flush=True)
-        return JSONResponse({"error": f"synthesis failed: {exc}"}, status_code=502)
+        return JSONResponse({"error": "synthesis failed"}, status_code=502)
     finally:
         if cleanup:
             try:

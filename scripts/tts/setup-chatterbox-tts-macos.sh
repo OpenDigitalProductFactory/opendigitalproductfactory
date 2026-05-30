@@ -104,6 +104,9 @@ export DPF_CB_EXAGGERATION="${DPF_CB_EXAGGERATION}"
 export DPF_CB_CFG_WEIGHT="${DPF_CB_CFG_WEIGHT}"
 export DPF_CB_TEMPERATURE="${DPF_CB_TEMPERATURE}"
 export DPF_CB_SPEED="${DPF_CB_SPEED}"
+# Reference clips must live under this root; the server rejects any ref_audio
+# path that escapes it (path-injection guard). Matches the portal's value.
+export DPF_TTS_REFERENCE_HOST_ROOT="${DATA_ROOT}"
 cd "${CB_HOME}"
 exec "${VENV_DIR}/bin/python" -m uvicorn chatterbox_server:app --host 127.0.0.1 --port ${PORT}
 EOF
