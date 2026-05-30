@@ -163,6 +163,8 @@ function getPhaseGateReason(
   targetPhase: BuildPhase,
 ): string | null {
   const gate = checkPhaseGate(build.phase, targetPhase, {
+    kind: build.kind ?? "feature",
+    fixContext: build.brief?.fixContext,
     designDoc: build.designDoc,
     designReview: build.designReview,
     happyPathState: normalizeHappyPathState(build.happyPathState),

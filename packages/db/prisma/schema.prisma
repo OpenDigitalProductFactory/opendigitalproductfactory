@@ -4406,6 +4406,11 @@ model FeatureBuild {
   buildId                  String                   @unique
   title                    String
   description              String?
+  // Work kind discriminator (FEATURE_BUILD_KIND_VALUES in
+  // apps/web/lib/explore/feature-build-types.ts): "feature" | "fix".
+  // Default "feature" backfills all existing/in-flight builds with no behavior
+  // change. Derived from BacklogItem.source ("bug" -> "fix") at promote time.
+  kind                     String                   @default("feature")
   portfolioId              String?
   originatingBacklogItemId String?
   brief                    Json?
