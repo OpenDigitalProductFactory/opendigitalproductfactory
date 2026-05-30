@@ -240,6 +240,31 @@ resolve_portal_container() {
   printf 'dpf-portal-1\n'
 }
 
+# --- Reconcile an under-provisioned token (BI-A3DE9A31) ----------------------
+#
+# "token present" != "token sufficient". A token minted before the
+# write->development-template fix carries a narrow legacy scope set MISSING
+# `registry_read`, so registry-gated tools (e.g. principle_decide / WWMD)
+# refuse. Probe a registry_read-gated, read-only, no-arg tool; on an
+# UNAMBIGUOUS scope failure naming registry_read, force a re-mint by clearing
+# HAS_TOKEN so the mint+persist block below issues a full development token.
+# Fail safe: leave the token untouched on unreachable/ambiguous responses.
+# Markers mirror interpretScopeCoverageProbe in @dpf/bootstrap (SSOT).
+if [ "$HAS_TOKEN" -eq 1 ] && [ "$AUTO_MINT" -eq 1 ] && [ "$DRY_RUN" -eq 0 ] \
+   && command -v curl >/dev/null 2>&1; then
+  _scope_probe="$(curl -s --max-time 5 -X POST "$MCP_ENDPOINT" \
+    -H "Authorization: Bearer ${DPF_MCP_BEARER_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
+    --data '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_my_coworker_profile","arguments":{}}}' \
+    2>/dev/null)"
+  if printf '%s' "$_scope_probe" | grep -q 'lacks the required scope' \
+     && printf '%s' "$_scope_probe" | grep -q 'registry_read'; then
+    warn "Present MCP token is under-provisioned (missing registry_read); re-minting with the full development template."
+    HAS_TOKEN=0
+  fi
+fi
+
 if [ "$HAS_TOKEN" -eq 0 ] && [ "$AUTO_MINT" -eq 1 ]; then
   if [ "$DRY_RUN" -eq 1 ]; then
     info "DRY-RUN: would mint a '$MINT_SCOPE'-scoped MCP token (in portal container) and persist it (POSIX)."
