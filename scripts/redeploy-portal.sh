@@ -62,13 +62,18 @@ sha="$(git rev-parse HEAD)"
 export DPF_VERSION="$sha"
 echo "[redeploy-portal] Building portal and portal-init with DPF_VERSION=$sha"
 
-docker compose "${compose_args[@]}" build "${build_flags[@]}" portal portal-init
+# Expand possibly-empty arrays with the bash 3.2-safe idiom: bare
+# "${arr[@]}" on an empty array under `set -u` aborts with "unbound variable"
+# on macOS's stock bash 3.2 (it's tolerated on bash 4.4+). build_flags is empty
+# unless --no-cache/flags are passed, and compose_args is empty when no env
+# file is found, so guard both.
+docker compose ${compose_args[@]+"${compose_args[@]}"} build ${build_flags[@]+"${build_flags[@]}"} portal portal-init
 
 echo "[redeploy-portal] Recreating portal-init and portal from the built images"
-docker compose "${compose_args[@]}" up -d --no-build --force-recreate portal-init portal
+docker compose ${compose_args[@]+"${compose_args[@]}"} up -d --no-build --force-recreate portal-init portal
 
-portal_container="$(docker compose "${compose_args[@]}" ps -a -q portal | head -n 1)"
-portal_init_container="$(docker compose "${compose_args[@]}" ps -a -q portal-init | head -n 1)"
+portal_container="$(docker compose ${compose_args[@]+"${compose_args[@]}"} ps -a -q portal | head -n 1)"
+portal_init_container="$(docker compose ${compose_args[@]+"${compose_args[@]}"} ps -a -q portal-init | head -n 1)"
 
 if [ -z "$portal_container" ] || [ -z "$portal_init_container" ]; then
   echo "[redeploy-portal] Missing portal or portal-init container after recreate." >&2
