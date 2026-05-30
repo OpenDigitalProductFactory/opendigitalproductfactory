@@ -26,6 +26,8 @@ describe("parseSelfUpgradeConfig", () => {
       checkIntervalHours: 24,
       healthTarget: 100,
       maintenanceWindows: [],
+      sourceMode: "upstream",
+      installBranch: "dpf/install",
     });
   });
 
@@ -36,6 +38,8 @@ describe("parseSelfUpgradeConfig", () => {
       checkIntervalHours: 24,
       healthTarget: 100,
       maintenanceWindows: [],
+      sourceMode: "upstream",
+      installBranch: "dpf/install",
     });
   });
 
@@ -46,6 +50,8 @@ describe("parseSelfUpgradeConfig", () => {
       checkIntervalHours: 24,
       healthTarget: 100,
       maintenanceWindows: [],
+      sourceMode: "upstream",
+      installBranch: "dpf/install",
     });
     expect(parseSelfUpgradeConfig(42)).toEqual({
       enabled: false,
@@ -53,6 +59,8 @@ describe("parseSelfUpgradeConfig", () => {
       checkIntervalHours: 24,
       healthTarget: 100,
       maintenanceWindows: [],
+      sourceMode: "upstream",
+      installBranch: "dpf/install",
     });
   });
 
@@ -322,6 +330,8 @@ describe("getSelfUpgradeConfig", () => {
       checkIntervalHours: 24,
       healthTarget: 100,
       maintenanceWindows: [],
+      sourceMode: "upstream",
+      installBranch: "dpf/install",
     });
   });
 

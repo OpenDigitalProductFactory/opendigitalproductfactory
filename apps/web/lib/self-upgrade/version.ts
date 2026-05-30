@@ -43,6 +43,63 @@ export function buildRemoteHeadCommand(input: {
   return ["git", "-C", input.hostSourcePath, "rev-parse", `${input.remote}/${input.branch}`];
 }
 
+// ─── Source-Preparation Command Builders ──────────────────────────────────────
+// Pure argv builders shared by the TS source-prep orchestrator and mirrored by
+// scripts/promote.sh, so both sides resolve the upgrade source identically and
+// the deployed stamp always describes the bytes that were actually built.
+// See the governed-upgrade-lifecycle spec §5.0.
+
+/** `git -C <path> fetch <remote> <branch>` — freshen the ref before resolving. */
+export function buildFetchCommand(input: {
+  hostSourcePath: string;
+  remote: string;
+  branch: string;
+}): string[] {
+  return ["git", "-C", input.hostSourcePath, "fetch", input.remote, input.branch];
+}
+
+/** `git -C <path> rev-parse HEAD` — the true identity of the tree on disk. */
+export function buildHeadShaCommand(hostSourcePath: string): string[] {
+  return ["git", "-C", hostSourcePath, "rev-parse", "HEAD"];
+}
+
+/** `git -C <path> status --porcelain` — empty stdout ⇒ clean working tree. */
+export function buildDirtyCheckCommand(hostSourcePath: string): string[] {
+  return ["git", "-C", hostSourcePath, "status", "--porcelain"];
+}
+
+/**
+ * `git -C <path> merge --no-edit --no-ff <remote>/<branch>` — merge the upstream
+ * target into the currently checked-out install branch. `--no-ff` guarantees a
+ * real merge commit whose SHA becomes the honest deployed stamp (so a
+ * fast-forward can't make the stamp ambiguous with upstream's own SHA).
+ */
+export function buildMergeCommand(input: {
+  hostSourcePath: string;
+  remote: string;
+  branch: string;
+}): string[] {
+  return [
+    "git",
+    "-C",
+    input.hostSourcePath,
+    "merge",
+    "--no-edit",
+    "--no-ff",
+    `${input.remote}/${input.branch}`,
+  ];
+}
+
+/**
+ * The deployed identity stamp for the bytes actually built. A dirty tree yields
+ * a non-40-hex `<sha>-dirty` token so `compareUpgradeVersions` honestly reports
+ * it as not-a-tracked-release rather than colliding with a real commit SHA.
+ */
+export function deriveDeployedStamp(headSha: string, dirty: boolean): string {
+  const trimmed = headSha.trim();
+  return dirty ? `${trimmed}-dirty` : trimmed;
+}
+
 // ─── Version State Resolution ─────────────────────────────────────────────────
 
 type VersionStateDeps = {

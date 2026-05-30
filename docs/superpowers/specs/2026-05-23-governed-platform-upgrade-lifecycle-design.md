@@ -235,6 +235,118 @@ These are enforced by the release CI as hard rules:
 
 ## 5. Design — Install Side
 
+### 5.0 Upgrade source resolution — two explicit modes
+
+> Added 2026-05-29 to resolve the source/label conflation found in the
+> current machinery. This section is the canonical decision; §2.2 and
+> Phase 0 (`BI-UPGRADE-000a`) implement it.
+
+**The defect being closed.** Today the *label* and the *bytes* of an upgrade
+come from two different places, and nothing reconciles them:
+
+- `version.ts:95-99` resolves `targetSha = git rev-parse <remote>/<branch>`
+  (default `origin/main`) — but nothing runs `git fetch` first, so the ref
+  may be stale.
+- `scripts/promote.sh:85-89` builds the portal image from `PROMOTE_SOURCE` —
+  the bind-mounted **host install working tree** (`promoter.ts:90`) — and
+  stamps it `DPF_VERSION=$PROMOTE_TARGET_SHA`. It never checks out the target
+  SHA (confirmed: no `git fetch`/`checkout`/`clone` anywhere in the
+  self-upgrade path).
+- `promote.sh:117-132` "sha-verify" reads `/api/health/sha`, which echoes
+  `DEPLOYED_SHA=DPF_VERSION` (`docker-compose.yml:145`) — i.e. it confirms the
+  stamp it just set, not that the built bytes equal the resolved ref. The
+  verification is **circular**.
+
+Consequence: the image is built from *whatever is checked out in the host
+tree* (a feature branch, a worktree, local commits, dirty edits) while being
+labeled and "verified" as `origin/main`. On managed installs the tree is
+usually clean at `origin/main` and the two coincide; on self-hosted /
+contributor / dev installs they routinely diverge, producing a build whose
+reported SHA is a lie. This is the misinformation symptom recorded against the
+first macOS self-upgrade run.
+
+**The local delta is real, and it has two trees and no durable home.** Build
+Studio builds on `client/<id>`→`build/<id>` branches inside a *separate*
+sandbox container's `/workspace` (the `sandbox_workspace` volume), while the
+portal builds from `dpf-source-code`. But the sandbox output does **not** only
+travel the long way (contribute → PR → `main` → pull): `sandbox-promotion.ts`
+extracts the build's diff and `git apply`s it **directly into the running
+portal** ("apply patch → health check → mark deployed", lines 130/495). In
+`fork_only` with no git remote those applied patches are committed to no
+durable branch — `mcp-tools.ts:8891` warns the operator outright that the
+features "could be lost in a container rebuild, Docker update, or system
+recovery." So a non-technical, private operator's customizations exist only as
+mutations of the running container's source.
+
+**This makes the naive fix actively dangerous.** A "build from a clean
+checkout of `origin/main`" upgrade would *wipe* exactly the customizations a
+non-technical user cannot recreate. The dominant real population — private
+installs that never contribute upstream but still need upstream bug fixes and
+new archetypes — needs **both** their local delta preserved **and** upstream
+evolution merged in. "Upstream-only" and "local-only" are the degenerate ends;
+the general case is a **merge**.
+
+**Decision: the upgrade source is `upstream-lineage ⊕ local-delta`, reconciled
+by a system-driven merge onto one durable per-install branch. The deployed
+stamp always describes the merged bytes that were actually built.**
+
+1. **Durable install branch (prerequisite).** Promotions are committed as real
+   commits onto a persistent per-install branch *in the tree the portal builds
+   from* — not left as uncommitted container mutations. This closes the
+   "lost on rebuild" hazard regardless of contribution mode, and gives the
+   merge a real `ours` side.
+
+   **Canonical tree = the host clone (`DPF_HOST_INSTALL_PATH`)** (resolved
+   2026-05-29). Today three trees split the responsibilities with nothing
+   syncing them — the promoter builds from the host clone (`/host-source:ro`),
+   `sandbox-promotion` git-applies customizations into the `dpf-source-code`
+   volume (`/workspace`), and Build Studio's `client/<clientId>` branches live
+   in `sandbox_workspace`. Because the build source ≠ the customization-apply
+   target, an upgrade rebuild never contains the customizations — the root of
+   the "lost on rebuild" hazard. The host clone is chosen as the single
+   canonical install tree because it is already the promoter's build source, is
+   a real git repo with the `origin` remote wired (native `fetch`/`merge`), is
+   host-persistent and operator-backup-able (a folder, not a Docker volume),
+   and is already writable by the portal at `/host-dpf`. The fix converges all
+   three responsibilities here: promotion commits land on the install branch in
+   the host clone (replacing ephemeral `/workspace` mutation), upstream merges
+   into it, the promoter builds it. The sandbox `client/<clientId>` branch
+   remains the build-staging area; promotion is the bridge into the canonical
+   tree. *Implementation nuance, not part of this decision:* on a contributor
+   machine the host clone is the human's working tree, so that case needs an
+   isolated install branch/clone; managed customer installs (the target
+   population) have no human editing the tree.
+2. **Merge, don't replace.** On upgrade: `git fetch` the upstream target, then
+   **merge** it into the install branch. Where upstream and local touch
+   disjoint files (the common case) the merge is clean and automatic. Build
+   the merged result; stamp with the **merge-commit SHA** (true → sha-verify is
+   real). Track *upstream lineage* (which upstream version is contained)
+   separately so "are we current with upstream?" stays answerable even though
+   the running SHA ≠ upstream SHA.
+3. **Conflicts are an in-portal decision, never a CLI ask.** When upstream and
+   local edit the same code, attempt a 3-way merge; genuine conflicts surface
+   in the Upgrade Center (§5.2.4 / §6) as an operator card — *keep mine / take
+   upstream / show diff* — honoring `never-ask-user-to-run-commands`. If
+   unresolved, **defer** that upgrade and keep running the current
+   install-branch build: the operator is never broken, only not-yet-updated.
+4. **Degenerate postures fall out for free.** No local delta → the merge is a
+   fast-forward to upstream (the simple managed-install case). Contributed
+   delta (`selective`/`contribute_all`) → once it lands upstream the merge is
+   trivial because `ours` and `theirs` converge. Contribution mode therefore
+   governs only whether local commits *also* flow outward; it never gates
+   whether upstream flows in.
+
+This extends the spec's existing customization-fingerprint / 3-way-merge
+machinery (§3.3, §6 — currently scoped to *seeded DB content*) to the
+**git/code** delta, under the same `base`/`ours`/`theirs` model.
+
+**Scope boundary.** This section governs *which bytes get built and how they
+are identified*. It is deliberately upstream of the channel-manifest detection
+in §5.1: until manifests ship (Phase 4 / `BI-UPGRADE-010`), `upstream` mode
+resolves a git ref as described here; afterwards the resolved artifact is the
+manifest's signed image and the same "stamp describes the built bytes"
+invariant carries over unchanged.
+
 ### 5.1 Detection
 
 The newer `apps/web/lib/queue/functions/self-upgrade.ts` path becomes the canonical detector after Phase 0 cleans up the legacy stubs:
@@ -617,6 +729,8 @@ Each phase is a Build Studio brief, each ships independently, each is reversible
 Proposed breakdown (each a Build Studio brief once spec is approved):
 
 - `BI-UPGRADE-000` — Self-upgrade substrate stabilization: one Inngest path, target SHA resolver, schema/DTO alignment, `/ops/self-upgrade` run listing, event-bus claim cleanup (Phase 0)
+- `BI-UPGRADE-000a` — Durable per-install branch (§5.0 prerequisite): commit Build-Studio promotions as real commits on a persistent install branch in the portal's build tree, so customizations survive container rebuild / Docker update / upgrade. Closes the `mcp-tools.ts:8891` "lost on rebuild" hazard. Independent of contribution mode (Phase 0)
+- `BI-UPGRADE-000b` — Merge-based upgrade source (§5.0): `git fetch` upstream target + **merge** into the install branch (not clean-checkout-replace); build merged result; stamp the true merge-commit SHA (non-circular sha-verify); track upstream lineage separately; clean auto-merge on disjoint files; genuine code conflicts surface in the Upgrade Center as keep-mine/take-upstream/show-diff (never a CLI ask), unresolved → defer and stay on current build. Extends §3.3/§6 3-way merge from seeded content to git/code (Phase 0/4)
 - `BI-UPGRADE-001` — Platform version baseline + `version.json` + `PlatformConfig["platform.version"]` + `/api/platform/version` (Phase 1)
 - `BI-UPGRADE-002` — Release-impact lint + release CI tag/build/GHCR publish/GitHub Releases metadata (Phase 2)
 - `BI-UPGRADE-003` — Channel manifest publication + signing + DPF release feed host (Phase 2)
