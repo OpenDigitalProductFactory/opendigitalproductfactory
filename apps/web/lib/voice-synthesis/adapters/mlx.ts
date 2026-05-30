@@ -38,6 +38,15 @@ function getFallbackVoice(): string {
   return process.env.DPF_TTS_MLX_VOICE ?? "af_heart"
 }
 
+// CSM (sesame) builds its generation context from the reference transcript and
+// crashes with `IndexError: list index out of range` (sesame.py: context[0])
+// when ref_audio is supplied with an empty ref_text. DPF does not yet transcribe
+// the reference clip at registration, so until it does we send a neutral
+// non-empty placeholder. Cloning still keys off ref_audio; an accurate
+// transcript only improves prosody alignment.
+const DEFAULT_REF_TEXT =
+  "This is a reference recording of my voice for the platform."
+
 export interface MlxSynthesisConfig extends VoiceSynthesisConfig {
   /**
    * Transcript of the reference clip. mlx-audio cloning models (e.g. CSM) use
@@ -76,8 +85,9 @@ export async function synthesizeWithMlx(
 
   if (refPath) {
     // Zero-shot cloning from the stored reference clip on the host.
+    // ref_text must be non-empty or CSM throws (see DEFAULT_REF_TEXT).
     body.ref_audio = refPath
-    if (config.referenceText) body.ref_text = config.referenceText
+    body.ref_text = config.referenceText?.trim() || DEFAULT_REF_TEXT
   } else {
     // No host-visible reference → fixed named voice (non-cloning fallback).
     body.voice = getFallbackVoice()
