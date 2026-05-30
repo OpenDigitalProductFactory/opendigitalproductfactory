@@ -9,7 +9,7 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@dpf/db"
 import { resolveVoiceStorageRoot } from "@/lib/voice-synthesis/storage-root"
-import { synthesizeSpeech, VoiceSynthesisError } from "@/lib/voice-synthesis/voice-service"
+import { synthesizeSpeech, VoiceSynthesisError, defaultProvider } from "@/lib/voice-synthesis/voice-service"
 import type { TTSProvider } from "@/lib/voice-synthesis/types"
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
@@ -99,10 +99,16 @@ export async function POST(req: Request): Promise<Response> {
     )
   }
 
-  // Synthesize — reference audio passed inline for zero-shot cloning
+  // Synthesize — reference audio passed inline for zero-shot cloning.
+  // Prefer the deployment-configured provider (TTS_PROVIDER env) over the value
+  // stored on the profile at registration time. A profile registered as
+  // "chatterbox" must still route to "mlx" when the install switched providers
+  // (e.g. Apple Silicon hosts where dpf-tts can't run). defaultProvider()
+  // falls back to "chatterbox" when the env is unset, preserving prior behaviour.
+  const provider = defaultProvider()
   try {
     const result = await synthesizeSpeech(text.trim(), {
-      provider: voiceProfile.provider as TTSProvider,
+      provider,
       providerVoiceId: voiceProfile.providerVoiceId,
       language: voiceProfile.language,
       referenceAudioBuffer,

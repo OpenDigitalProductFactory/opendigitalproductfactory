@@ -1,7 +1,7 @@
 import { prisma } from "@dpf/db"
 import { buildNarrationText } from "./narration-builder"
 import { applyPersonaStyle } from "./persona-style"
-import { synthesizeSpeech, VoiceSynthesisError } from "./voice-service"
+import { synthesizeSpeech, VoiceSynthesisError, defaultProvider } from "./voice-service"
 import { writeAudioBlob } from "./audio-storage"
 import type { NarrationOutcomeType } from "./types"
 
@@ -48,8 +48,11 @@ export async function runVoiceSynthesisJob(interactionId: string): Promise<void>
   })
 
   try {
+    // Honor the deployment-configured provider (TTS_PROVIDER env), not the
+    // value stored on the profile at registration time — same reasoning as
+    // /api/voice/synthesize. defaultProvider() falls back to "chatterbox".
     const synthesis = await synthesizeSpeech(narrationText, {
-      provider: vp.provider as any,
+      provider: defaultProvider(),
       providerVoiceId: vp.providerVoiceId,
       language: vp.language,
     })

@@ -26,6 +26,7 @@ vi.mock("./voice-service", () => ({
     provider: "cartesia",
     ttsCostUnits: 10,
   }),
+  defaultProvider: vi.fn().mockReturnValue("chatterbox"),
   VoiceSynthesisError: class VoiceSynthesisError extends Error {
     constructor(message: string) {
       super(message)
