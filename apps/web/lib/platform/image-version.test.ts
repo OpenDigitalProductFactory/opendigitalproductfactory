@@ -6,11 +6,19 @@ import {
   classifyImageVersion,
   compareImageVersionToSha,
   readImageVersion,
+  readSourceContentHash,
 } from "./image-version";
 
 function makeTempVersionFile(contents: string): string {
   const dir = mkdtempSync(join(tmpdir(), "dpf-image-version-test-"));
   const path = join(dir, ".dpf-image-version");
+  writeFileSync(path, contents);
+  return path;
+}
+
+function makeTempHashFile(contents: string): string {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-source-hash-test-"));
+  const path = join(dir, ".dpf-source-content-hash");
   writeFileSync(path, contents);
   return path;
 }
@@ -77,6 +85,33 @@ describe("readImageVersion", () => {
     try {
       const result = await readImageVersion(path);
       expect(result).toBeNull();
+    } finally {
+      rmSync(path, { force: true });
+    }
+  });
+});
+
+describe("readSourceContentHash", () => {
+  it("returns the trimmed content hash when the marker is present", async () => {
+    const hash = "b".repeat(64);
+    const path = makeTempHashFile(`${hash}\n`);
+    try {
+      expect(await readSourceContentHash(path)).toBe(hash);
+    } finally {
+      rmSync(path, { force: true });
+    }
+  });
+
+  it("returns null when the marker is missing (dev/test/pre-marker images)", async () => {
+    expect(
+      await readSourceContentHash("/tmp/this-source-hash-should-not-exist-dpf-test"),
+    ).toBeNull();
+  });
+
+  it("returns null when the marker is empty post-trim", async () => {
+    const path = makeTempHashFile("  \n");
+    try {
+      expect(await readSourceContentHash(path)).toBeNull();
     } finally {
       rmSync(path, { force: true });
     }

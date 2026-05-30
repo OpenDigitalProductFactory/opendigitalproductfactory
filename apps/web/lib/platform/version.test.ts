@@ -54,6 +54,7 @@ describe("loadPlatformVersion", () => {
           source: "content-hash",
         }),
       readImageBuiltAt: vi.fn().mockResolvedValue(null),
+      readSourceContentHash: vi.fn().mockResolvedValue(null),
     }));
     const { loadPlatformVersion } = await import("./version");
     const v = await loadPlatformVersion();

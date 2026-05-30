@@ -125,22 +125,33 @@ RUN rm -rf /app/apps/web-src/.next \
 # See docs/superpowers/specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md §4.1, §4.2.
 COPY version.json ./version.json
 
-# Version file baked in at build time. If a release version is not supplied,
-# derive one from the bundled source so managed /workspace volumes can detect
-# that the image source changed even during local dev builds.
+# Source content hash — ALWAYS computed from the bundled source bytes,
+# independent of the DPF_VERSION label. This is the honest fingerprint of what
+# actually went into the image: the self-upgrade promoter compares it between
+# the freshly built image and the recreated container (content-verify guard),
+# and it is the fallback identity when no explicit version is supplied.
+# Decoupling it from DPF_VERSION is the fix for BI-C8E90A79 — a stamped label
+# can no longer mask which source was built. Exclusions keep it reproducible
+# across builds of the same source (node_modules / .next / generated / tsbuildinfo).
+RUN (find /app/apps/web-src /app/packages-src /app/scripts -type f \
+      -not -path '*/node_modules/*' \
+      -not -path '*/.pnpm-store/*' \
+      -not -path '*/.next/*' \
+      -not -path '*/generated/*' \
+      -not -name '*.tsbuildinfo' \
+      -exec sha256sum {} +; \
+     sha256sum /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json /app/.gitignore) \
+      | sort -k 2 | sha256sum | cut -d ' ' -f 1 > /app/.dpf-source-content-hash
+
+# Operator-facing image version baked in at build time. The explicit
+# DPF_VERSION (a git SHA when built via scripts/build-images.{ps1,sh} or the
+# promoter) when supplied, else the source content hash so managed /workspace
+# volumes can still detect that the image source changed during local dev builds.
 ARG DPF_VERSION=
 RUN if [ -n "$DPF_VERSION" ]; then \
       echo "$DPF_VERSION" > /app/.dpf-image-version; \
     else \
-      (find /app/apps/web-src /app/packages-src /app/scripts -type f \
-        -not -path '*/node_modules/*' \
-        -not -path '*/.pnpm-store/*' \
-        -not -path '*/.next/*' \
-        -not -path '*/generated/*' \
-        -not -name '*.tsbuildinfo' \
-        -exec sha256sum {} +; \
-       sha256sum /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json /app/.gitignore) \
-        | sort -k 2 | sha256sum | cut -d ' ' -f 1 > /app/.dpf-image-version; \
+      cp /app/.dpf-source-content-hash /app/.dpf-image-version; \
     fi
 
 # Build timestamp (UTC, ISO-8601), surfaced alongside the source identity in
