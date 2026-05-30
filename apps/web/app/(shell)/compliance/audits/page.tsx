@@ -2,6 +2,7 @@ import { listAudits } from "@/lib/actions/compliance";
 import { AUDIT_TYPES, AUDIT_STATUSES } from "@/lib/compliance-types";
 import Link from "next/link";
 import { CreateAuditForm } from "@/components/compliance/CreateAuditForm";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const STATUS_COLORS: Record<string, string> = {
   planned: "bg-blue-900/30 text-blue-400",
@@ -82,7 +83,7 @@ export default async function AuditsPage({ searchParams }: Props) {
                   </div>
                 </div>
                 <div className="text-right text-xs text-[var(--dpf-muted)]">
-                  {a.scheduledAt && <p>Scheduled: {new Date(a.scheduledAt).toLocaleDateString()}</p>}
+                  {a.scheduledAt && <p>Scheduled: <LocalTime value={a.scheduledAt} mode="date" /></p>}
                   <p>{a._count.findings} finding{a._count.findings !== 1 ? "s" : ""}</p>
                   {a.auditor && <p>{a.auditor.displayName}</p>}
                 </div>

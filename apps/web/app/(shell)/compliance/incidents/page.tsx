@@ -2,6 +2,7 @@ import { listIncidents } from "@/lib/actions/compliance";
 import { INCIDENT_SEVERITIES, INCIDENT_STATUSES } from "@/lib/compliance-types";
 import Link from "next/link";
 import { CreateIncidentForm } from "@/components/compliance/CreateIncidentForm";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const SEVERITY_COLORS: Record<string, string> = {
   low: "bg-green-900/30 text-green-400",
@@ -100,12 +101,12 @@ export default async function IncidentsPage({ searchParams }: Props) {
                     </div>
                     {isNotifiable && inc.notificationDeadline && isOpen && (
                       <p className="text-[9px] text-red-400 mt-1">
-                        Notification deadline: {new Date(inc.notificationDeadline).toLocaleString()}
+                        Notification deadline: <LocalTime value={inc.notificationDeadline} />
                       </p>
                     )}
                   </div>
                   <div className="text-right text-xs text-[var(--dpf-muted)]">
-                    <p>{new Date(inc.occurredAt).toLocaleDateString()}</p>
+                    <LocalTime value={inc.occurredAt} mode="date" />
                     <p>{inc._count.correctiveActions} action{inc._count.correctiveActions !== 1 ? "s" : ""}</p>
                     {inc.reportedBy && <p>{inc.reportedBy.displayName}</p>}
                   </div>

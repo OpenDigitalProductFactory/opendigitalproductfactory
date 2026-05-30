@@ -3,6 +3,7 @@
 
 import { getInvoiceByPayToken, markInvoiceViewed } from "@/lib/actions/finance";
 import { notFound } from "next/navigation";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = { params: Promise<{ token: string }> };
 
@@ -100,11 +101,11 @@ export default async function PayPage({ params }: Props) {
                 </p>
                 <p style={{ margin: "8px 0 0", color: "var(--dpf-muted)", fontSize: 13 }}>
                   Due{" "}
-                  {new Date(invoice.dueDate).toLocaleDateString("en-GB", {
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  })}
+                  <LocalTime
+                    value={invoice.dueDate}
+                    utc
+                    options={{ day: "numeric", month: "long", year: "numeric" }}
+                  />
                 </p>
               </>
             )}

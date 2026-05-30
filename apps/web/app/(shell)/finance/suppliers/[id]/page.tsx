@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getAiSupplierFinanceDetail } from "@/lib/finance/ai-provider-finance";
 import { AiSupplierFinancePanel } from "@/components/finance/AiSupplierFinancePanel";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const BILL_STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -153,9 +154,7 @@ export default async function SupplierDetailPage({ params }: Props) {
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                        {bill.dueDate
-                          ? new Date(bill.dueDate).toLocaleDateString("en-GB")
-                          : "—"}
+                        <LocalTime value={bill.dueDate} utc />
                       </td>
                       <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                         {sym}{formatMoney(bill.totalAmount)}

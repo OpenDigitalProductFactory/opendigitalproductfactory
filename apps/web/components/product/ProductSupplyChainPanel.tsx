@@ -7,15 +7,10 @@ import type {
 } from "@/lib/assurance/bom-read";
 import type { ActiveAssuranceFindingRow } from "@/lib/assurance/finding-read";
 import { AssuranceFindingsList } from "@/components/build/AssuranceFindingsList";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 export type ProductSupplyChainComponent = ProductSupplyChainComponentRow;
 export type ProductSupplyChainLatestBom = NonNullable<ProductSupplyChainBomRows["latestBom"]>;
-
-function formatGeneratedAt(value: Date | string): string {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "unknown";
-  return date.toLocaleString();
-}
 
 function shortDigest(value: string): string {
   return value.length > 16 ? value.slice(0, 16) : value;
@@ -92,7 +87,7 @@ export function ProductSupplyChainPanel({
               icon={<PackageCheck className="h-4 w-4" aria-hidden="true" />}
               label="Components"
               value={packageCountLabel}
-              detail={`Generated ${formatGeneratedAt(latestBom.generatedAt)}`}
+              detail={<>Generated <LocalTime value={latestBom.generatedAt} /></>}
             />
             <Metric
               icon={<BrainCircuit className="h-4 w-4" aria-hidden="true" />}
@@ -176,7 +171,7 @@ function Metric({
   icon: ReactNode;
   label: string;
   value: string;
-  detail: string;
+  detail: ReactNode;
 }) {
   return (
     <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
@@ -185,7 +180,7 @@ function Metric({
         {label}
       </div>
       <p className="mt-2 text-base font-semibold text-[var(--dpf-text)]">{value}</p>
-      <p className="mt-1 truncate text-xs text-[var(--dpf-muted)]" title={detail}>{detail}</p>
+      <p className="mt-1 truncate text-xs text-[var(--dpf-muted)]" title={typeof detail === "string" ? detail : undefined}>{detail}</p>
     </div>
   );
 }

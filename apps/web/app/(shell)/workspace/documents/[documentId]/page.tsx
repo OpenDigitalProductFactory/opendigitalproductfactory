@@ -5,6 +5,7 @@ import { Archive, ArchiveRestore, ArrowLeft, CheckCircle2, FileText } from "luci
 import { auth } from "@/lib/auth";
 import { listManagedDocumentReferences, loadManagedDocument } from "@/lib/documents/document-store";
 import { changeDocumentStateAction } from "../actions";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = {
   params: Promise<{ documentId: string }>;
@@ -56,7 +57,7 @@ export default async function DocumentDetailPage({ params }: Props) {
           </div>
           <h1 className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">{document.title}</h1>
           <p className="mt-2 max-w-3xl text-sm text-[var(--dpf-muted)]">
-            Updated {document.updatedAt.toLocaleString()} by {document.createdByName ?? document.ownerName ?? "unknown principal"}.
+            Updated <LocalTime value={document.updatedAt} /> by {document.createdByName ?? document.ownerName ?? "unknown principal"}.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -118,7 +119,7 @@ export default async function DocumentDetailPage({ params }: Props) {
                 <div key={version.id} className="border-l-2 border-[var(--dpf-border)] pl-3 text-sm">
                   <p className="font-medium text-[var(--dpf-text)]">v{version.version}</p>
                   <p className="text-xs text-[var(--dpf-muted)]">{version.summary ?? "No summary"}</p>
-                  <p className="text-[11px] text-[var(--dpf-muted)]">{version.createdAt.toLocaleString()}</p>
+                  <LocalTime value={version.createdAt} className="text-[11px] text-[var(--dpf-muted)]" />
                 </div>
               ))}
             </div>
@@ -137,7 +138,7 @@ export default async function DocumentDetailPage({ params }: Props) {
                     </p>
                     <p className="text-xs text-[var(--dpf-muted)]">{event.reason ?? "No reason recorded"}</p>
                     <p className="text-[11px] text-[var(--dpf-muted)]">
-                      {event.createdAt.toLocaleString()} {event.actorName ? `by ${event.actorName}` : ""}
+                      <LocalTime value={event.createdAt} /> {event.actorName ? `by ${event.actorName}` : ""}
                     </p>
                   </div>
                 ))

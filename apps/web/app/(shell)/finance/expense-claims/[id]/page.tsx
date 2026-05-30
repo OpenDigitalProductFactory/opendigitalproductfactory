@@ -7,6 +7,7 @@ import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ExpenseClaimActions } from "@/components/finance/ExpenseClaimActions";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -86,9 +87,11 @@ export default async function ExpenseClaimDetailPage({ params }: Props) {
         {[
           {
             label: "Submitted",
-            value: claim.submittedAt
-              ? new Date(claim.submittedAt).toLocaleDateString("en-GB")
-              : "—",
+            value: claim.submittedAt ? (
+              <LocalTime value={claim.submittedAt} mode="date" />
+            ) : (
+              "—"
+            ),
           },
           {
             label: "Approved By",
@@ -96,9 +99,11 @@ export default async function ExpenseClaimDetailPage({ params }: Props) {
           },
           {
             label: "Approved Date",
-            value: claim.approvedAt
-              ? new Date(claim.approvedAt).toLocaleDateString("en-GB")
-              : "—",
+            value: claim.approvedAt ? (
+              <LocalTime value={claim.approvedAt} mode="date" />
+            ) : (
+              "—"
+            ),
           },
           {
             label: "Total Amount",
@@ -152,7 +157,7 @@ export default async function ExpenseClaimDetailPage({ params }: Props) {
                     className="border-b border-[var(--dpf-border)] last:border-0"
                   >
                     <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                      {new Date(item.date).toLocaleDateString("en-GB")}
+                      <LocalTime value={item.date} utc />
                     </td>
                     <td className="px-4 py-2.5">
                       <span

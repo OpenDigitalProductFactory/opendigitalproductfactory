@@ -4,6 +4,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { LocalTime } from "@/components/ui/LocalTime";
+
 // ─── Public types ───────────────────────────────────────────────────────────
 
 export type LintFindingRow = {
@@ -105,9 +107,11 @@ export function LintFindingCard({ finding }: Props): ReactNode {
             overlay · {finding.organizationId}
           </span>
         )}
-        <span className="ml-auto text-[10px] text-[var(--dpf-muted)]">
-          {finding.createdAt.toISOString().slice(0, 10)}
-        </span>
+        <LocalTime
+          value={finding.createdAt}
+          mode="date"
+          className="ml-auto text-[10px] text-[var(--dpf-muted)]"
+        />
       </header>
 
       <div className="mt-1 text-sm text-[var(--dpf-text)]">

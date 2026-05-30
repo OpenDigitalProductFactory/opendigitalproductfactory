@@ -15,6 +15,7 @@ import { getAllCliPoolStatuses } from "@/lib/routing/cli-pool-status";
 import { CliPoolStatusPanel } from "@/components/platform/CliPoolStatusPanel";
 import { getRecentBudgetEvents, countRecentRejections } from "@/lib/inference/budget-events-data";
 import { AgentBudgetEventsPanel } from "@/components/platform/AgentBudgetEventsPanel";
+import { LocalTime } from "@/components/ui/LocalTime";
 import Link from "next/link";
 
 
@@ -68,7 +69,7 @@ export default async function ProvidersPage() {
         <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>Providers &amp; Routing</h1>
         <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
           {aiProviders.length} provider{aiProviders.length !== 1 ? "s" : ""} registered
-          {lastSync ? ` · last synced ${new Date(lastSync).toLocaleDateString()}` : ""}
+          {lastSync ? <> · last synced <LocalTime value={lastSync} mode="date" /></> : ""}
         </p>
       </div>
 

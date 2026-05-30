@@ -3,6 +3,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { deleteEpic } from "@/lib/actions/backlog";
 import {
   type EpicWithRelations,
@@ -97,10 +98,10 @@ export function EpicCard({ epic, sort, hideDoneItems, onEdit, onItemEdit, focuse
           {epic.title}
           <span className="ml-1.5 text-[9px] text-[var(--dpf-muted)] tabular-nums">({totalCount})</span>
           <span className="ml-2 text-[9px] text-[var(--dpf-muted)]">
-            {new Date(epic.createdAt).toLocaleDateString()}
+            <LocalTime value={epic.createdAt} mode="date" />
             {epic.agentId ? ` · ${AGENT_NAME_MAP[epic.agentId] ?? epic.agentId}` : ""}
             {epic.submittedBy ? ` · ${epic.submittedBy.email}` : ""}
-            {epic.completedAt ? ` · done ${new Date(epic.completedAt).toLocaleDateString()}` : ""}
+            {epic.completedAt ? <> · done <LocalTime value={epic.completedAt} mode="date" /></> : ""}
           </span>
         </p>
 

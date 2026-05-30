@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { LocalTime } from "@/components/ui/LocalTime";
 import type {
   IntegrationReadinessDescriptor,
   IntegrationReadinessState,
@@ -40,7 +42,16 @@ export function IntegrationReadinessPanel({ descriptor }: IntegrationReadinessPa
       <dl className="mt-4 grid gap-3 text-sm md:grid-cols-3">
         <ContextItem label="Company" value={descriptor.entityContext.companyName} />
         <ContextItem label="Realm" value={descriptor.entityContext.realmId} />
-        <ContextItem label="Last verified" value={formatDateTime(descriptor.health.lastSuccessfulProbeAt)} />
+        <ContextItem
+          label="Last verified"
+          value={
+            <LocalTime
+              value={descriptor.health.lastSuccessfulProbeAt}
+              options={{ year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }}
+              fallback="Not available"
+            />
+          }
+        />
       </dl>
 
       {descriptor.health.lastProbeErrorCategory && (
@@ -201,11 +212,12 @@ function ImportStagingPosture({ descriptor }: { descriptor: IntegrationImportSta
   );
 }
 
-function ContextItem({ label, value }: { label: string; value: string | null | undefined }) {
+function ContextItem({ label, value }: { label: string; value: ReactNode }) {
+  const display = value == null || value === "" ? "Not available" : value;
   return (
     <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
       <dt className="text-xs uppercase text-[var(--dpf-muted)]">{label}</dt>
-      <dd className="mt-1 font-medium text-[var(--dpf-text)]">{value || "Not available"}</dd>
+      <dd className="mt-1 font-medium text-[var(--dpf-text)]">{display}</dd>
     </div>
   );
 }
@@ -271,22 +283,4 @@ function formatMode(mode: string): string {
     .split("-")
     .map((word) => word.slice(0, 1).toUpperCase() + word.slice(1))
     .join(" ");
-}
-
-function formatDateTime(iso: string | null | undefined): string | null {
-  if (!iso) {
-    return null;
-  }
-
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
 }
