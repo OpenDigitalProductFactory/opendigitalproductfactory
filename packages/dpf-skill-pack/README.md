@@ -38,6 +38,8 @@ DPF therefore treats `dpf-platform` as the project-default plugin, not merely a 
 | [`dpf-brainstorming`](skills/dpf-brainstorming/SKILL.md) | (DPF-native; predecessor to `dpf-decision-via-kernel`) | `["*"]` | Generate 2-4 substrate-grounded options before converging; replaces upstream `brainstorming` |
 | [`dpf-systematic-debugging`](skills/dpf-systematic-debugging/SKILL.md) | dpf-evidence-before-diagnosis, dpf-verify-substrate-first | `["*"]` | 4-phase root cause, DPF-gated: evidence-first, peer-session check, substrate check, functional (not structural) verification; replaces upstream `systematic-debugging` |
 | [`dpf-finishing-a-development-branch`](skills/dpf-finishing-a-development-branch/SKILL.md) | (DPF-native; successor `dpf-pr-with-dco`) | `["*"]` | Decide integration shape (one PR / stack / split), confirm green + signed, then hand off PR mechanics; replaces upstream `finishing-a-development-branch` |
+| [`dpf-writing-plans`](skills/dpf-writing-plans/SKILL.md) | dpf-file-backlog-item (predecessor) | `["*"]` | Phased implementation plan for a filed BI, grounded in substrate, saved to `docs/superpowers/plans/`; replaces upstream `writing-plans` |
+| [`dpf-tdd`](skills/dpf-tdd/SKILL.md) | (DPF-native) | `["*"]` | Test-first red-green-refactor, DPF-gated: failing test first for fixes, functional (not structural) green, never report an unrun pass; replaces upstream `test-driven-development` |
 | [`dpf-retrieve-decision-context`](skills/dpf-retrieve-decision-context/SKILL.md) | dpf-verify-substrate-first | `["*"]` | Pull repo, specs, live backlog, and kernel context before WWMD scoring |
 | [`dpf-compare-options`](skills/dpf-compare-options/SKILL.md) | dpf-retrieve-decision-context | `["*"]` | Score 2-4 options through `principle_decide` and return operator-safe recommendations |
 | [`dpf-record-decision-outcome`](skills/dpf-record-decision-outcome/SKILL.md) | dpf-decision-via-kernel | `["*"]` | Persist decision result, evidence summary, and next action through governed MCP |
@@ -46,6 +48,14 @@ DPF therefore treats `dpf-platform` as the project-default plugin, not merely a 
 | [`dpf-use-shared-nonprod-environment`](skills/dpf-use-shared-nonprod-environment/SKILL.md) | dpf-worktree-per-session | `["build-specialist", "platform-engineer", "ops-coordinator"]` | Claim and release governed shared localhost environments instead of unmanaged servers |
 | [`dpf-local-merge-ci-before-push`](skills/dpf-local-merge-ci-before-push/SKILL.md) | dpf-pr-with-dco | `["build-specialist", "platform-engineer"]` | Run merged-code local integration gates and record results before push or PR |
 | [`dpf-architecture-review`](skills/dpf-architecture-review/SKILL.md) | dpf-retrieve-decision-context, dpf-decision-via-kernel | `["ea-architect", "build-specialist", "platform-engineer"]` | Chief-architect lens: review a spec/design/plan for architectural alignment against DPF standards, propose concrete edits, feed new standards back to the reference docs. Advisory `architect` reviewer at the Build Studio Ideate + Plan gates |
+
+### Upstream superpowers capabilities NOT re-authored (do not re-propose)
+
+The pack owns DPF-native equivalents only for the superpowers capabilities it actually composed with. The rest are deliberately not re-authored — assessed under BI-E3638D04:
+
+- **Already covered by DPF — don't duplicate:** `spec-reviewer` / `plan-document-reviewer` → `dpf-architecture-review`; `code-quality-reviewer` / `requesting-`/`receiving-code-review` → harness `/code-review`, `/review`, `/security-review`, `/simplify`; `subagent-driven-development` / `dispatching-parallel-agents` → `dpf-worktree-per-session` + Build Studio orchestrator-worker + the `Workflow` tool; `writing-skills` → `skill-creator` + this authoring contract.
+- **Left as optional upstream install:** `implementer`, `executing-plans` (Build Studio's build-specialist + `dpf-promote-to-build-studio` cover the DPF path).
+- **Folded, not authored:** `verification-before-completion` → `build-gate-mandatory` + `/verify` + `dpf-systematic-debugging` Phase 4 (kernel-ratified fold-in, not a standalone skill).
 
 ## Build Studio capability packs
 
