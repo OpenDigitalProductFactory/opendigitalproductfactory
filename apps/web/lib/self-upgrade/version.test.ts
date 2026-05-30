@@ -2,6 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   buildRemoteHeadCommand,
+  buildFetchCommand,
+  buildHeadShaCommand,
+  buildDirtyCheckCommand,
+  buildMergeCommand,
+  deriveDeployedStamp,
   compareUpgradeVersions,
   getUpgradeVersionState,
   isShaFresh,
@@ -37,6 +42,52 @@ describe("buildRemoteHeadCommand", () => {
       "rev-parse",
       "origin/main",
     ]);
+  });
+});
+
+describe("source-preparation command builders", () => {
+  const at = { hostSourcePath: "/host-source", remote: "origin", branch: "main" };
+
+  it("buildFetchCommand freshens the configured remote branch", () => {
+    expect(buildFetchCommand(at)).toEqual(["git", "-C", "/host-source", "fetch", "origin", "main"]);
+  });
+
+  it("buildHeadShaCommand resolves the tree's own HEAD (the true built identity)", () => {
+    expect(buildHeadShaCommand("/host-source")).toEqual(["git", "-C", "/host-source", "rev-parse", "HEAD"]);
+  });
+
+  it("buildDirtyCheckCommand asks for porcelain status", () => {
+    expect(buildDirtyCheckCommand("/host-source")).toEqual(["git", "-C", "/host-source", "status", "--porcelain"]);
+  });
+
+  it("buildMergeCommand forces a real merge commit (--no-ff) of the upstream target", () => {
+    expect(buildMergeCommand(at)).toEqual([
+      "git",
+      "-C",
+      "/host-source",
+      "merge",
+      "--no-edit",
+      "--no-ff",
+      "origin/main",
+    ]);
+  });
+});
+
+describe("deriveDeployedStamp", () => {
+  const sha = "cccccccccccccccccccccccccccccccccccccccc";
+
+  it("returns the bare HEAD sha for a clean tree (comparable to a release)", () => {
+    const stamp = deriveDeployedStamp(`${sha}\n`, false);
+    expect(stamp).toBe(sha);
+    expect(compareUpgradeVersions(stamp, sha)).toMatchObject({ comparable: true, upToDate: true });
+  });
+
+  it("appends -dirty for an uncommitted tree so it reads as not-a-tracked-release", () => {
+    const stamp = deriveDeployedStamp(sha, true);
+    expect(stamp).toBe(`${sha}-dirty`);
+    // A -dirty token is not a 40-hex SHA, so the comparator refuses to grade it.
+    expect(compareUpgradeVersions(stamp, sha)).toMatchObject({ comparable: false });
+    expect(isShaFresh(stamp, sha)).toBe(false);
   });
 });
 
