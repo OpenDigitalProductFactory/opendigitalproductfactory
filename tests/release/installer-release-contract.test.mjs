@@ -136,3 +136,33 @@ test("no shipped dpf-*.sh script is still advertised as Windows-only / Phase 8 i
     }
   }
 });
+
+test("portal image bundles every directory the seed reads, so seed-* steps don't silently skip", () => {
+  const dockerfile = read("Dockerfile");
+
+  // seed-deliberation.ts reads deliberation/ at seed time; the seed runs in
+  // the unified runner stage at boot. The dir must be COPYed into the init
+  // stage AND forwarded into the runner, exactly like prompts/ and skills/.
+  // Missing this leaves DeliberationPattern empty -> reviewDesignDoc cannot
+  // pick the "review" pattern -> every Build Studio build wedges in Ideate.
+  assert.match(
+    dockerfile,
+    /^COPY deliberation\/ \.\/deliberation\//m,
+    "init stage must COPY deliberation/ (seed-deliberation.ts reads it; see seed.ts:2480)",
+  );
+  assert.match(
+    dockerfile,
+    /^COPY --from=init \/app\/deliberation \.\/deliberation$/m,
+    "runner stage must forward /app/deliberation from init (the seed runs in the runner at boot)",
+  );
+
+  // Guard the sibling seed dirs that share this failure mode so a future
+  // refactor can't drop one silently.
+  for (const dir of ["prompts", "skills", "deliberation"]) {
+    assert.match(
+      dockerfile,
+      new RegExp(`^COPY ${dir}/ \\./${dir}/`, "m"),
+      `init stage must COPY ${dir}/`,
+    );
+  }
+});
