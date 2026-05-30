@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
 import { ScheduleEditor } from "./ScheduleEditor";
+import { EmailInput } from "@/components/ui/EmailInput";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 
 type AvailabilityRow = {
   id: string;
@@ -217,18 +219,16 @@ export function TeamManager({
               onChange={(e) => setNewName(e.target.value)}
               style={{ padding: "8px 10px", border: "1px solid var(--dpf-border)", borderRadius: 5, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
             />
-            <input
+            <EmailInput
               placeholder="Email"
-              type="email"
               value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
+              onValueChange={setNewEmail}
               style={{ padding: "8px 10px", border: "1px solid var(--dpf-border)", borderRadius: 5, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
             />
-            <input
+            <PhoneInput
               placeholder="Phone"
-              type="tel"
               value={newPhone}
-              onChange={(e) => setNewPhone(e.target.value)}
+              onValueChange={setNewPhone}
               style={{ padding: "8px 10px", border: "1px solid var(--dpf-border)", borderRadius: 5, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
             />
             {addError && <div style={{ fontSize: 12, color: "var(--dpf-error, #ef4444)" }}>{addError}</div>}
@@ -281,18 +281,16 @@ export function TeamManager({
                         onChange={(e) => patchEdit(p.id, { name: e.target.value })}
                         style={{ flex: 1, minWidth: 140, padding: "6px 10px", border: "1px solid var(--dpf-border)", borderRadius: 5, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 13 }}
                       />
-                      <input
+                      <EmailInput
                         placeholder="Email"
-                        type="email"
                         value={edit.email}
-                        onChange={(e) => patchEdit(p.id, { email: e.target.value })}
+                        onValueChange={(v) => patchEdit(p.id, { email: v })}
                         style={{ flex: 1, minWidth: 140, padding: "6px 10px", border: "1px solid var(--dpf-border)", borderRadius: 5, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 13 }}
                       />
-                      <input
+                      <PhoneInput
                         placeholder="Phone"
-                        type="tel"
                         value={edit.phone}
-                        onChange={(e) => patchEdit(p.id, { phone: e.target.value })}
+                        onValueChange={(v) => patchEdit(p.id, { phone: v })}
                         style={{ flex: 1, minWidth: 120, padding: "6px 10px", border: "1px solid var(--dpf-border)", borderRadius: 5, background: "var(--dpf-surface-2)", color: "inherit", fontSize: 13 }}
                       />
                     </div>
