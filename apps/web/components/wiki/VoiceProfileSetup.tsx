@@ -244,7 +244,7 @@ function VoiceSampleCapture({ profileId }: { profileId: string }) {
   return (
     <div className="rounded-md border border-border p-4 space-y-4">
       <p className="text-sm text-muted-foreground">
-        Provide 15–30 seconds of clean, single-speaker speech in a quiet room. Your voice is cloned immediately — no training wait.
+        Provide about 6–12 seconds of clean, single-speaker speech in a quiet room, spoken at your natural conversational pace. Your voice is cloned immediately — no training wait.
       </p>
 
       {/* Mode toggle */}
@@ -414,17 +414,14 @@ function MicRecorder({ profileId }: { profileId: string }) {
             <button onClick={() => setShowScript(false)} className="text-xs text-muted-foreground hover:text-foreground">dismiss</button>
           </div>
           <p className="text-sm text-muted-foreground italic leading-relaxed">
-            "My name is [your name], and I consent to this voice profile being
-            used for AI-narrated decision feedback through the platform. I'm
-            reading this short passage at a natural, steady pace so the system can
-            learn how my voice really sounds. The quick brown fox jumps over the
-            lazy dog, while bright autumn leaves drift quietly past the open
-            window. I'm happy to help the team make clearer, faster decisions."
+            "My name is [your name], and I consent to this voice being used for
+            AI-narrated decision feedback. I'm speaking at my normal pace so the
+            system learns how I really sound."
           </p>
           <p className="text-xs text-muted-foreground">
-            Read it all the way through ({MIN_RECORDING_SECONDS}–{RECOMMENDED_MAX_SECONDS}s).
-            A quiet room, a steady pace, and your normal speaking voice give the
-            best clone.
+            Read it once at a natural, conversational pace (~{MIN_RECORDING_SECONDS}–{RECOMMENDED_MAX_SECONDS}s).
+            Keep it short — a quiet room and your everyday speaking voice give the
+            best clone. A long or slowly-read clip makes the cloned voice drawl.
           </p>
         </div>
       )}
