@@ -10,8 +10,18 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@dpf/db"
 import { resolveVoiceStorageRoot } from "@/lib/voice-synthesis/storage-root"
+import { defaultProvider } from "@/lib/voice-synthesis/voice-service"
+import type { TTSProvider } from "@/lib/voice-synthesis/types"
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
+
+// Health-check path per provider. The chatterbox server answers GET
+// /v1/audio/voices; the mlx-audio server (Apple Silicon) returns 404 there but
+// answers GET /v1/models. Using the wrong path leaves the profile stuck at
+// pending_reference, so synthesis is rejected with voice_profile_not_ready.
+export function healthPath(provider: TTSProvider): string {
+  return provider === "mlx" ? "/v1/models" : "/v1/audio/voices"
+}
 
 const MAX_BYTES = 50 * 1024 * 1024
 
