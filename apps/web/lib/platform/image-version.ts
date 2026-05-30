@@ -35,6 +35,31 @@ export async function readImageVersion(
   }
 }
 
+const SOURCE_CONTENT_HASH_PATH = "/app/.dpf-source-content-hash";
+
+/**
+ * Read the source content hash baked into the running portal image by the
+ * Dockerfile (see /app/.dpf-source-content-hash). This is a sha256 over the
+ * bundled source bytes, computed ALWAYS — independent of the DPF_VERSION label.
+ *
+ * It is the honest fingerprint of what actually went into the image: the
+ * self-upgrade promoter compares it between the freshly built image and the
+ * recreated container, and surfacing it next to gitSha lets operators detect a
+ * label/source divergence (the BI-C8E90A79 failure mode). Returns null when the
+ * marker is absent — non-container environments (next dev, vitest) and images
+ * built before this marker existed.
+ */
+export async function readSourceContentHash(
+  path: string = SOURCE_CONTENT_HASH_PATH,
+): Promise<string | null> {
+  try {
+    const raw = (await readFile(path, "utf-8")).trim();
+    return raw || null;
+  } catch {
+    return null;
+  }
+}
+
 const IMAGE_BUILT_AT_PATH = "/app/.dpf-image-built-at";
 
 /**

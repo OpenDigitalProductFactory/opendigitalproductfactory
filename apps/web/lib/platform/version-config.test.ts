@@ -12,6 +12,7 @@ describe("syncPlatformVersionConfig", () => {
         gitSha: "abc123",
         imageVersion: { raw: "abc123", source: "git-sha" },
         buildDate: null,
+        sourceContentHash: null,
         note: "baseline",
       }),
       platformConfig: { upsert },

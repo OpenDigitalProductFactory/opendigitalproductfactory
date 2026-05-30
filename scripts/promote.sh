@@ -106,6 +106,16 @@ if [[ $_dry_run -eq 0 ]]; then
   export DPF_VERSION="$_built_sha"
   docker compose --project-directory "$PROMOTE_SOURCE" -p "$_project" \
     "${_f_args[@]}" build portal
+  # Capture the source content hash baked into the FRESHLY BUILT image. It is
+  # computed from the actual bundled source bytes (Dockerfile) independent of
+  # the DPF_VERSION label, so the content-verify step can prove the recreated
+  # container is this image and not a stale one. Portal has no `image:` field,
+  # so compose tags the built image ${_project}-portal.
+  _built_hash=$(docker run --rm "${_project}-portal" cat /app/.dpf-source-content-hash 2>/dev/null | tr -d '[:space:]' || true)
+  [[ -n "$_built_hash" ]] || {
+    printf 'error: freshly built image has no /app/.dpf-source-content-hash\n' >&2
+    exit 1
+  }
 fi
 
 # --- Step 4: docker-up ---
@@ -151,6 +161,25 @@ if [[ $_dry_run -eq 0 ]]; then
   [[ $_match -eq 1 ]] || {
     printf 'error: deployed SHA %s does not match built SHA %s\n' \
       "${_deployed_sha:-unknown}" "$_built_sha" >&2
+    exit 1
+  }
+fi
+
+# --- Step 7: content-verify ---
+# Structural-verification-is-not-functional guard (BI-C8E90A79): prove the
+# RUNNING container is the image we just built by comparing the source content
+# hash baked into each. This catches a recreate that silently kept a STALE
+# image — which sha-verify cannot, because a stale image left from a prior
+# (broken) upgrade can carry the same SHA label. Neither hash is the
+# DPF_VERSION we set; both are computed from actual source bytes, so the check
+# is capable of failing.
+emit_step content-verify
+if [[ $_dry_run -eq 0 ]]; then
+  _running_hash=$(docker compose --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+    "${_f_args[@]}" exec -T portal cat /app/.dpf-source-content-hash 2>/dev/null | tr -d '[:space:]' || true)
+  [[ -n "$_running_hash" && "$_running_hash" == "$_built_hash" ]] || {
+    printf 'error: running content hash %s does not match freshly built %s — recreate did not deploy the new image\n' \
+      "${_running_hash:-unknown}" "$_built_hash" >&2
     exit 1
   }
   printf 'step=done target=%s\n' "$_built_sha"
