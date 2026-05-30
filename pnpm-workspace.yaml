@@ -26,6 +26,56 @@ overrides:
   mermaid: '^11.15.0'
   ip-address: '^10.2.0'
   qs: '^6.15.2'
+  # --- jest 30 unification (apps/mobile) ---
+  # Force the ENTIRE jest family to a single major (30) so apps/mobile runs a
+  # unified jest 30 install. jest-expo@~56 (Expo SDK 55/56) still *declares* jest
+  # 29 transitive deps; without these overrides a jest 30 bump produces a MIXED
+  # 29/30 tree (jest-runtime@30 + jest-mock@29) that breaks every mobile suite at
+  # load with "clearMocksOnScope is not a function" (see reverted PRs #1053, #1288).
+  # jest-expo's code already tolerates jest 30, so a unified 30 tree works.
+  # Keep in sync with scripts/check-mobile-jest-pin.mjs (REQUIRED_MAJOR).
+  jest: '^30.0.0'
+  jest-cli: '^30.0.0'
+  jest-config: '^30.0.0'
+  jest-runner: '^30.0.0'
+  jest-runtime: '^30.0.0'
+  jest-circus: '^30.0.0'
+  jest-snapshot: '^30.0.0'
+  jest-mock: '^30.0.0'
+  jest-each: '^30.0.0'
+  jest-util: '^30.0.0'
+  jest-message-util: '^30.0.0'
+  jest-resolve: '^30.0.0'
+  jest-resolve-dependencies: '^30.0.0'
+  jest-haste-map: '^30.0.0'
+  jest-environment-node: '^30.0.0'
+  jest-environment-jsdom: '^30.0.0'
+  jest-validate: '^30.0.0'
+  jest-watcher: '^30.0.0'
+  jest-worker: '^30.0.0'
+  jest-regex-util: '^30.0.0'
+  jest-docblock: '^30.0.0'
+  jest-changed-files: '^30.0.0'
+  jest-leak-detector: '^30.0.0'
+  babel-jest: '^30.0.0'
+  expect: '^30.0.0'
+  pretty-format: '^30.0.0'
+  '@jest/globals': '^30.0.0'
+  '@jest/types': '^30.0.0'
+  '@jest/core': '^30.0.0'
+  '@jest/reporters': '^30.0.0'
+  '@jest/transform': '^30.0.0'
+  '@jest/test-sequencer': '^30.0.0'
+  '@jest/console': '^30.0.0'
+  '@jest/environment': '^30.0.0'
+  '@jest/fake-timers': '^30.0.0'
+  '@jest/source-map': '^30.0.0'
+  '@jest/test-result': '^30.0.0'
+  '@jest/expect': '^30.0.0'
+  '@jest/expect-utils': '^30.0.0'
+  '@jest/schemas': '^30.0.0'
+  '@jest/create-cache-key-function': '^30.0.0'
+  jest-watch-typeahead: '^3.0.0'
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
