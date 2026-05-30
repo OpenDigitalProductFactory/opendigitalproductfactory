@@ -353,6 +353,7 @@ export async function advanceBuildPhase(
       buildId: true,
       title: true,
       phase: true,
+      kind: true,
       createdById: true,
       originatingBacklogItemId: true,
       draftApprovedAt: true,
@@ -415,8 +416,10 @@ export async function advanceBuildPhase(
     }
   }
 
-  const brief = build.brief as { acceptanceCriteria?: string[] } | null;
+  const brief = build.brief as { acceptanceCriteria?: string[]; fixContext?: import("@/lib/feature-build-types").FixContext } | null;
   const gate = checkPhaseGate(currentPhase, targetPhase, {
+    kind: build.kind,
+    fixContext: brief?.fixContext,
     designDoc: build.designDoc,
     designReview: build.designReview,
     happyPathState: normalizeHappyPathState((build.plan as Record<string, unknown> | null)?.happyPathState ?? null),

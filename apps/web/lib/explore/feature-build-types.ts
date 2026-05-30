@@ -16,6 +16,37 @@ import type { DecisionInteractionGateView } from "@/lib/decision-perspective/typ
 export const UX_VERIFICATION_STATUSES = ["running", "complete", "failed", "skipped"] as const;
 export type UxVerificationStatus = typeof UX_VERIFICATION_STATUSES[number];
 
+/**
+ * Canonical values for FeatureBuild.kind — the work-kind discriminator that
+ * lets the Build Studio pipeline run a build as a new-capability *feature* or a
+ * targeted defect *fix*. `feature-build-types.ts` is the canonical home (kind is
+ * a FeatureBuild concern; BacklogItem.source stays owned by backlog.ts). The DB
+ * column is plain TEXT defaulting to "feature"; this array is the authority for
+ * valid values. Adding a value requires updating any MCP tool mirror in the same
+ * commit, before any data uses it.
+ */
+export const FEATURE_BUILD_KIND_VALUES = ["feature", "fix"] as const;
+export type FeatureBuildKind = typeof FEATURE_BUILD_KIND_VALUES[number];
+
+/**
+ * Structured defect context for a `kind: "fix"` build. Carried additively on
+ * `FeatureBrief` (not a discriminated union) so every structural reader of the
+ * brief keeps compiling. Populated at promote time from the originating
+ * `PlatformIssueReport`; `rootCause`/`fixApproach` are filled during ideate.
+ */
+export type FixContext = {
+  severity?: string;
+  originatingIssueReportId?: string;
+  originatingIssueReportPublicId?: string;
+  routeContext?: string;
+  errorStackExcerpt?: string;
+  reproSteps?: string;
+  expected?: string;
+  actual?: string;
+  rootCause?: string;
+  fixApproach?: string;
+};
+
 export type FeatureBrief = {
   title: string;
   description: string;
@@ -24,6 +55,8 @@ export type FeatureBrief = {
   inputs: string[];
   dataNeeds: string;
   acceptanceCriteria: string[];
+  /** Present iff the owning build's kind === "fix". */
+  fixContext?: FixContext;
 };
 
 export type TaxonomyAttributionView = {
@@ -368,6 +401,9 @@ export type FeatureBuildRow = {
   buildId: string;
   title: string;
   description: string | null;
+  // Optional for back-compat: rows loaded from selects that predate the kind
+  // column read as undefined and are treated as "feature".
+  kind?: FeatureBuildKind | null;
   portfolioId: string | null;
   parentEpicId?: string | null;
   originatingBacklogItemId: string | null;
@@ -706,6 +742,16 @@ function missingHappyPathAnchors(state: HappyPathState): string[] {
   return missing;
 }
 
+/**
+ * A fix build's diagnosis is "complete enough" to plan against when it has
+ * reproduction steps, a root cause, and a fix approach. This is the fix-flow
+ * analogue of requiring a design document before planning a feature.
+ */
+export function isFixContextComplete(fc: FixContext | null | undefined): boolean {
+  if (!fc) return false;
+  return Boolean(fc.reproSteps?.trim() && fc.rootCause?.trim() && fc.fixApproach?.trim());
+}
+
 export function checkPhaseGate(
   from: BuildPhase,
   to: BuildPhase,
@@ -714,7 +760,23 @@ export function checkPhaseGate(
   if (to === "failed") return { allowed: true };
   if (from === "review" && to === "build") return { allowed: true };
 
+  // Work-kind discriminator. Threaded through `evidence.kind` so existing call
+  // sites that omit it default to feature behavior (byte-identical).
+  const isFix = evidence.kind === "fix";
+
   if (from === "ideate" && to === "plan") {
+    if (isFix) {
+      // Fix flow: a complete diagnosis substitutes for the feature design doc;
+      // taxonomy/epic placement is optional (a defect is not a portfolio feature).
+      if (!isFixContextComplete(evidence.fixContext as FixContext | undefined)) {
+        return { allowed: false, reason: "A complete fix diagnosis (reproduction steps, root cause, and fix approach) is required before planning." };
+      }
+      const fixReview = evidence.designReview as { decision?: string } | undefined;
+      if (fixReview?.decision === "fail") {
+        return { allowed: false, reason: "Fix review failed. Revise the diagnosis and re-run the review before advancing." };
+      }
+      return { allowed: true };
+    }
     if (!evidence.designDoc) return { allowed: false, reason: "A design document is required before planning." };
     if (!evidence.designReview) return { allowed: false, reason: "Design review is required before planning." };
     // Review must pass — a failed review blocks advancement until revision + re-review
@@ -742,10 +804,14 @@ export function checkPhaseGate(
       // count is the "consider splitting scope" signal.
       return { allowed: false, reason: describePlanReviewFailure(planReview) };
     }
-    const happyPathState = normalizeHappyPathState(evidence.happyPathState);
-    if (!isHappyPathIntakeReady(happyPathState)) {
-      const missing = missingHappyPathAnchors(happyPathState).join(", ");
-      return { allowed: false, reason: `Intake is incomplete. Link taxonomy, backlog item, epic, and a constrained goal before building. Missing: ${missing}.` };
+    // Feature builds must anchor in the portfolio (taxonomy + epic) before
+    // building. Fix builds are exempt — a defect is not a portfolio feature.
+    if (!isFix) {
+      const happyPathState = normalizeHappyPathState(evidence.happyPathState);
+      if (!isHappyPathIntakeReady(happyPathState)) {
+        const missing = missingHappyPathAnchors(happyPathState).join(", ");
+        return { allowed: false, reason: `Intake is incomplete. Link taxonomy, backlog item, epic, and a constrained goal before building. Missing: ${missing}.` };
+      }
     }
     return { allowed: true };
   }
@@ -760,7 +826,11 @@ export function checkPhaseGate(
   }
 
   if (from === "review" && to === "ship") {
-    if (!evidence.designDoc) return { allowed: false, reason: "Design document is missing." };
+    if (isFix) {
+      if (!evidence.fixContext) return { allowed: false, reason: "Fix diagnosis is missing." };
+    } else {
+      if (!evidence.designDoc) return { allowed: false, reason: "Design document is missing." };
+    }
     if (!evidence.buildPlan) return { allowed: false, reason: "Implementation plan is missing." };
     if (!evidence.verificationOut) return { allowed: false, reason: "Verification output is missing." };
     if (!evidence.acceptanceMet) return { allowed: false, reason: "Acceptance criteria not evaluated." };

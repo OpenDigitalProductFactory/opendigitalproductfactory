@@ -4,6 +4,7 @@ import type {
   BuildPhase,
   BuildPlanDoc,
   FeatureBrief,
+  FeatureBuildKind,
   ReviewResult,
   UxVerificationStatus,
   VerificationOutput,
@@ -494,7 +495,82 @@ GUARDRAILS:
 If Dev mode is enabled, show the registration details, diff summary, deployment window info, assessment criteria scores, and IT4IT stage references.`,
 };
 
-export async function getBuildPhasePrompt(phase: BuildPhase): Promise<string> {
+// ─── Fix-flow phase prompts ──────────────────────────────────────────────────
+// Used when FeatureBuild.kind === "fix". Only the phases that are still
+// feature-shaped are overridden (ideate/plan/review). The `build` phase reuses
+// the feature prompt (it already documents a "WORKFLOW FOR BUG FIXES AND
+// MODIFICATIONS" path), and `ship` is identical for both kinds.
+const PHASE_PROMPTS_FIX: Record<string, string> = {
+  ideate: `You are diagnosing a reported defect. This is a FIX, not a new feature — do not design new capability.
+
+${PROJECT_CONTEXT}
+
+You are given a fix diagnosis (the "Fix Diagnosis" block in the Build Studio Context) carrying the originating issue report: severity, route, an error-stack excerpt, and reproduction notes.
+
+YOUR JOB — produce a complete diagnosis, then advance:
+  1. REPRODUCE: confirm the failing behavior from the report (route + steps). State the expected vs actual behavior plainly.
+  2. ROOT CAUSE: trace the defect to its source. Name the file/function and the specific cause — not a symptom.
+  3. SCOPE THE SMALLEST CORRECT FIX: the narrowest change that fixes the root cause without redesigning surrounding code. Prefer modifying existing files over adding new capability. Do NOT generalize, parameterize, or expand scope.
+
+Do NOT ask reusability/taxonomy/portfolio questions — a defect is not a portfolio feature.
+
+WHEN THE DIAGNOSIS IS COMPLETE: call update_feature_brief to persist fixContext with reproSteps, expected, actual, rootCause, and fixApproach all filled. Then call reviewDesignDoc — it reviews the diagnosis (not a design doc) and advances to plan when reproSteps + rootCause + fixApproach are all present.
+
+Keep responses short. The defect + reproduction IS the spec — you do not need a full design document.`,
+
+  plan: `You are planning a targeted defect fix. The diagnosis (fixContext) is approved.
+
+${PROJECT_CONTEXT}
+
+DO THIS NOW — in order. Use the approved fixContext (rootCause, fixApproach); do NOT re-research scope.
+
+STEP 1 — SAVE THE PLAN: call saveBuildEvidence with field "buildPlan" containing EXACTLY:
+  {
+    "fileStructure": [
+      { "path": "apps/web/lib/...", "action": "modify", "purpose": "Fix <root cause> at <function>" },
+      ...every file the fix touches — fixes almost always "modify", rarely "create"
+    ],
+    "tasks": [
+      { "title": "Fix <root cause>", "testFirst": "add a regression test that fails on the current bug", "implement": "Edit <full monorepo path> — apply the smallest change that addresses the root cause", "verify": "run the regression test + NODE_ENV=production pnpm --filter web build" },
+      ...keep tasks minimal — a fix is targeted, not a feature build
+    ]
+  }
+  Same format rules as feature plans: top-level "fileStructure" and "tasks" arrays, full monorepo-relative paths.
+  A FIX MUST INCLUDE A REGRESSION TEST: a test that fails against the current (buggy) behavior and passes after the fix. Make it an explicit task.
+
+STEP 2: call reviewBuildPlan. If it fails, revise and re-review.
+STEP 3: one sentence — "Fix plan ready — [N] tasks. Building now." — then call save_phase_handoff.
+
+RULES: do not ask questions; do not expand scope beyond the diagnosed root cause; maximum 1 sentence per response.`,
+
+  review: `You are verifying a defect fix. Acceptance for a fix is "the reported behavior is gone," not "a new capability works."
+
+${PROJECT_CONTEXT}
+
+VERIFY, IN ORDER:
+  1. The originally reported defect NO LONGER REPRODUCES — exercise the exact route/steps from the fix diagnosis.
+  2. A REGRESSION TEST was added that fails against the old behavior and passes now.
+  3. No collateral regressions — run the affected tests and the production build (NODE_ENV=production pnpm --filter web build).
+
+Record acceptance against the diagnosis: each fixContext expected/actual pair should now hold the expected behavior. Then advance toward ship.
+
+Keep responses short. Do not request new-feature acceptance criteria — the success criterion is the absence of the reported defect.`,
+};
+
+export async function getBuildPhasePrompt(
+  phase: BuildPhase,
+  kind: FeatureBuildKind = "feature",
+): Promise<string> {
+  if (kind === "fix") {
+    const fixHardcoded = PHASE_PROMPTS_FIX[phase];
+    if (fixHardcoded) {
+      // DB-overridable via Admin > Prompts under the "<phase>-fix" slug; falls
+      // back to the hardcoded fix prompt (never empty) for active phases.
+      return loadPrompt("build-phase", `${phase}-fix`, fixHardcoded);
+    }
+    // Phases without a fix variant (build/ship/terminal) fall through to the
+    // feature prompt, preserving terminal-phase empty-prompt behavior below.
+  }
   const hardcoded = PHASE_PROMPTS[phase] ?? "";
   if (!hardcoded) return "";
   return loadPrompt("build-phase", phase, hardcoded);
@@ -513,6 +589,8 @@ export type PhaseHandoffSummary = {
 export type BuildContext = {
   buildId: string;
   phase: BuildPhase;
+  /** Work kind. Absent/null is treated as "feature". */
+  kind?: FeatureBuildKind | null;
   title: string;
   brief: FeatureBrief | null;
   designDoc?: BuildDesignDoc | null;
@@ -652,6 +730,23 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
     if (Array.isArray(ctx.brief.acceptanceCriteria) && ctx.brief.acceptanceCriteria.length > 0) {
       lines.push(`  Acceptance criteria: ${ctx.brief.acceptanceCriteria.join("; ")}`);
     }
+
+    // Fix flow: surface the structured defect diagnosis so the coworker starts
+    // from the reproduction + root cause rather than a blank brief.
+    const fc = ctx.brief.fixContext;
+    if (fc) {
+      lines.push("");
+      lines.push("Fix Diagnosis (this is a FIX, not a new feature):");
+      if (fc.severity) lines.push(`  Severity: ${fc.severity}`);
+      if (fc.originatingIssueReportPublicId) lines.push(`  Issue report: ${fc.originatingIssueReportPublicId}`);
+      if (fc.routeContext) lines.push(`  Route: ${fc.routeContext}`);
+      if (fc.reproSteps) lines.push(`  Reproduction: ${fc.reproSteps}`);
+      if (fc.expected) lines.push(`  Expected: ${fc.expected}`);
+      if (fc.actual) lines.push(`  Actual: ${fc.actual}`);
+      if (fc.rootCause) lines.push(`  Root cause: ${fc.rootCause}`);
+      if (fc.fixApproach) lines.push(`  Fix approach: ${fc.fixApproach}`);
+      if (fc.errorStackExcerpt) lines.push(`  Error stack (excerpt):\n${fc.errorStackExcerpt.slice(0, 1500)}`);
+    }
   }
 
   if (ctx.designDoc) {
@@ -746,7 +841,7 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
   }
 
   lines.push("");
-  lines.push(await getBuildPhasePrompt(ctx.phase));
+  lines.push(await getBuildPhasePrompt(ctx.phase, ctx.kind ?? "feature"));
 
   // Contribution mode awareness for all phases — agent should know this for design decisions
   if (ctx.contributionMode) {
