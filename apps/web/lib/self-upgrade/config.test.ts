@@ -404,6 +404,8 @@ describe("nextMaintenanceWindowStart", () => {
     channel: "stable",
     checkIntervalHours: 24,
     healthTarget: 100,
+    sourceMode: "upstream" as const,
+    installBranch: "dpf/install",
   };
 
   it("returns null when no windows are configured", () => {
