@@ -1,6 +1,9 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
-import { getSelfUpgradeConfig, isInMaintenanceWindow } from "@/lib/self-upgrade/config";
+import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
+import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
+import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
+import { getLastCheckedAt, recordCheckedAt, isCheckIntervalElapsed } from "@/lib/self-upgrade/last-check";
 import { buildFetchCommand, buildRemoteHeadCommand } from "@/lib/self-upgrade/version";
 import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepare-source";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
@@ -44,6 +47,12 @@ export type SelfUpgradeRunEventData = {
    * raise/lower per upgrade attempt.
    */
   budgetMs?: number;
+  /**
+   * Set only by the scheduled cron. Gates the run on checkIntervalHours so the
+   * hourly tick polls no more often than the operator configured. Manual runs
+   * leave this unset and are never interval-throttled.
+   */
+  scheduled?: boolean;
 };
 
 export async function runSelfUpgrade(
@@ -52,11 +61,35 @@ export async function runSelfUpgrade(
   const config = await getSelfUpgradeConfig();
 
   if (!config.enabled && !params.dryRun) return { skipped: true, reason: "disabled" };
-  // force = operator emergency override: bypass the maintenance window (and,
-  // below, the quiescence defer). Never set by the scheduled cron.
-  if (!isInMaintenanceWindow(config) && !params.dryRun && !params.force) {
-    return { skipped: true, reason: "outside-window" };
+  // The upgrade window is "whenever the storefront is closed", derived from the
+  // operator's operating hours (single source of truth — no separate window to
+  // configure, no "enabled but no window → never runs" dead-end). An explicit
+  // maintenanceWindows config still overrides for bespoke schedules.
+  // force = operator emergency override: bypass the window (and, below, the
+  // quiescence defer). Never set by the scheduled cron.
+  if (!params.dryRun && !params.force) {
+    const { schedule, timezone } = await resolveOperatingScheduleForSystem();
+    const allowed = isUpgradeWindowOpen({
+      explicitWindows: config.maintenanceWindows,
+      schedule,
+      timeZone: timezone,
+    });
+    if (!allowed) return { skipped: true, reason: "outside-window" };
   }
+
+  // checkIntervalHours throttle: only the scheduled cron is rate-limited, so the
+  // hourly tick polls no more often than the operator configured. Manual/forced
+  // runs are never throttled (the operator is asking now) but still reset the
+  // clock below.
+  if (params.scheduled && !params.dryRun && !params.force) {
+    const lastCheckedAt = await getLastCheckedAt();
+    if (!isCheckIntervalElapsed(lastCheckedAt, config.checkIntervalHours, new Date())) {
+      return { skipped: true, reason: "interval-not-elapsed" };
+    }
+  }
+  // A real check is proceeding now — reset the interval clock (scheduled, manual,
+  // or forced; never on dryRun).
+  if (!params.dryRun) await recordCheckedAt(new Date());
 
   const gitRun = defaultGitRunner;
   const hostSourcePath =
@@ -271,7 +304,7 @@ export const selfUpgradeScheduled = inngest.createFunction(
   },
   async ({ step }) => {
     return await step.run("run-self-upgrade-scheduled", () =>
-      runSelfUpgrade({ triggeredBy: "scheduled" }),
+      runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true }),
     );
   },
 );

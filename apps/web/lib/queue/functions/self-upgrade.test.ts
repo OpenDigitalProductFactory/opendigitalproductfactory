@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getSelfUpgradeConfig: vi.fn(),
-  isInMaintenanceWindow: vi.fn(),
+  isUpgradeWindowOpen: vi.fn(),
+  resolveOperatingScheduleForSystem: vi.fn().mockResolvedValue({ schedule: {}, timezone: "UTC" }),
+  getLastCheckedAt: vi.fn().mockResolvedValue(null),
+  recordCheckedAt: vi.fn().mockResolvedValue(undefined),
+  isCheckIntervalElapsed: vi.fn().mockReturnValue(true),
   defaultGitRunner: vi.fn(),
   prepareUpgradeSource: vi.fn(),
   getDeployedSha: vi.fn(),
@@ -24,7 +28,20 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/self-upgrade/config", () => ({
   getSelfUpgradeConfig: mocks.getSelfUpgradeConfig,
-  isInMaintenanceWindow: mocks.isInMaintenanceWindow,
+}));
+
+vi.mock("@/lib/self-upgrade/window", () => ({
+  isUpgradeWindowOpen: mocks.isUpgradeWindowOpen,
+}));
+
+vi.mock("@/lib/operating-hours-read", () => ({
+  resolveOperatingScheduleForSystem: mocks.resolveOperatingScheduleForSystem,
+}));
+
+vi.mock("@/lib/self-upgrade/last-check", () => ({
+  getLastCheckedAt: mocks.getLastCheckedAt,
+  recordCheckedAt: mocks.recordCheckedAt,
+  isCheckIntervalElapsed: mocks.isCheckIntervalElapsed,
 }));
 
 // Real (pure) argv builders so the orchestrator constructs proper git commands;
@@ -223,7 +240,7 @@ describe("success path", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
-    mocks.isInMaintenanceWindow.mockReturnValue(true);
+    mocks.isUpgradeWindowOpen.mockReturnValue(true);
     mocks.getDeployedSha.mockResolvedValue("oldsha1");
     setupSourceReady();
     setupQuiescenceReady();
@@ -370,7 +387,7 @@ describe("maintenance window gate + emergency override", () => {
   });
 
   it("skips with outside-window when not in a window and no force", async () => {
-    mocks.isInMaintenanceWindow.mockReturnValue(false);
+    mocks.isUpgradeWindowOpen.mockReturnValue(false);
     const result = await runSelfUpgrade({ triggeredBy: "manual:ops" });
     expect(result).toMatchObject({ skipped: true, reason: "outside-window" });
     expect(mocks.createRun).not.toHaveBeenCalled();
@@ -378,7 +395,7 @@ describe("maintenance window gate + emergency override", () => {
   });
 
   it("force=true bypasses the window gate and runs the promoter", async () => {
-    mocks.isInMaintenanceWindow.mockReturnValue(false);
+    mocks.isUpgradeWindowOpen.mockReturnValue(false);
     const result = await runSelfUpgrade({ triggeredBy: "manual:ops", force: true });
     expect(result).toMatchObject({ ok: true, status: "succeeded" });
     expect(mocks.runPromoter).toHaveBeenCalled();
@@ -389,7 +406,7 @@ describe("failure path", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
-    mocks.isInMaintenanceWindow.mockReturnValue(true);
+    mocks.isUpgradeWindowOpen.mockReturnValue(true);
     mocks.getDeployedSha.mockResolvedValue("oldsha1");
     setupSourceReady();
     setupQuiescenceReady();
@@ -454,11 +471,50 @@ describe("failure path", () => {
   });
 });
 
+describe("checkIntervalHours throttle (scheduled only)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
+    mocks.isUpgradeWindowOpen.mockReturnValue(true);
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
+    setupSourceReady();
+    setupQuiescenceReady();
+    mocks.getLatestRun.mockResolvedValue(null);
+    mocks.createRun.mockResolvedValue({ runId: "SUR-INTERVAL" });
+    mocks.startRun.mockResolvedValue({});
+    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
+    mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    mocks.completeRun.mockResolvedValue({});
+  });
+
+  it("skips a scheduled run when the check interval has not elapsed", async () => {
+    mocks.isCheckIntervalElapsed.mockReturnValue(false);
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
+    expect(result).toMatchObject({ skipped: true, reason: "interval-not-elapsed" });
+    expect(mocks.recordCheckedAt).not.toHaveBeenCalled();
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
+  });
+
+  it("proceeds (and resets the clock) when the interval has elapsed", async () => {
+    mocks.isCheckIntervalElapsed.mockReturnValue(true);
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+    expect(mocks.recordCheckedAt).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT throttle a manual run even when the interval has not elapsed", async () => {
+    mocks.isCheckIntervalElapsed.mockReturnValue(false);
+    const result = await runSelfUpgrade({ triggeredBy: "manual:ops" }); // scheduled unset
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+    expect(mocks.recordCheckedAt).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("merge-conflict defer (source prep, §5.0)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
-    mocks.isInMaintenanceWindow.mockReturnValue(true);
+    mocks.isUpgradeWindowOpen.mockReturnValue(true);
     mocks.getDeployedSha.mockResolvedValue("oldsha1");
     setupSourceReady();
     mocks.getLatestRun.mockResolvedValue(null);
@@ -498,7 +554,7 @@ describe("quiescence-defer path (BI-QUIESCE-010)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
-    mocks.isInMaintenanceWindow.mockReturnValue(true);
+    mocks.isUpgradeWindowOpen.mockReturnValue(true);
     mocks.getDeployedSha.mockResolvedValue("oldsha1");
     setupSourceReady();
     mocks.getLatestRun.mockResolvedValue(null);
