@@ -28,6 +28,25 @@ export async function getLatestDiscoveryRun() {
   });
 }
 
+/**
+ * Count "stale" inventory entities: active entities whose most recent
+ * observation (`lastSeenAt`) predates the latest discovery sweep — i.e. they
+ * exist in inventory but the last sweep did not re-observe them. Staleness is
+ * undefined without a baseline sweep, so with no run we report 0.
+ *
+ * This replaces a previously hardcoded `staleEntities: 0` so the Discovery
+ * "Stale" tile reflects a real measurement rather than a fabricated constant.
+ */
+export async function countStaleEntitiesSince(latestRunStartedAt: Date | null): Promise<number> {
+  if (!latestRunStartedAt) return 0;
+  return prisma.inventoryEntity.count({
+    where: {
+      status: "active",
+      lastSeenAt: { lt: latestRunStartedAt },
+    },
+  });
+}
+
 export async function getInventoryEntitiesForPage() {
   return prisma.inventoryEntity.findMany({
     orderBy: [{ providerView: "asc" }, { name: "asc" }],

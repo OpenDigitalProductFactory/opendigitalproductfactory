@@ -3,6 +3,7 @@ import { prisma } from "@dpf/db";
 
 import { PORTFOLIO_COLOURS } from "@/lib/portfolio";
 import {
+  countStaleEntitiesSince,
   getInventoryEntitiesGroupedBySubnet,
   getInventoryTriageQueues,
   getLatestDiscoveryRun,
@@ -70,9 +71,11 @@ export async function DiscoveryOperationsPage({
     .find((address) => address && !address.startsWith("172."))
     ?? null;
 
+  const staleEntities = await countStaleEntitiesSince(latestRun?.startedAt ?? null);
+
   const health = summarizeDiscoveryHealth({
     totalEntities: groupedInventory.totalCount,
-    staleEntities: 0,
+    staleEntities,
     openIssues: openIssues.length,
   });
 

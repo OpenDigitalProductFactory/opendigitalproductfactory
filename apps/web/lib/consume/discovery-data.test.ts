@@ -4,6 +4,7 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     inventoryEntity: {
       findMany: vi.fn(),
+      count: vi.fn(),
     },
     discoveryTriageDecision: {
       findMany: vi.fn(),
@@ -22,15 +23,40 @@ vi.mock("@dpf/db", () => ({
 
 import { prisma } from "@dpf/db";
 import {
+  countStaleEntitiesSince,
   getDiscoveryTriageDecisionHistory,
   getInventoryTriageQueues,
   summarizeDiscoveryHealth,
 } from "./discovery-data";
 
 const mockPrisma = prisma as unknown as {
-  inventoryEntity: { findMany: ReturnType<typeof vi.fn> };
+  inventoryEntity: { findMany: ReturnType<typeof vi.fn>; count: ReturnType<typeof vi.fn> };
   discoveryTriageDecision: { findMany: ReturnType<typeof vi.fn> };
 };
+
+describe("countStaleEntitiesSince", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns 0 without querying when there is no baseline run", async () => {
+    const result = await countStaleEntitiesSince(null);
+    expect(result).toBe(0);
+    expect(mockPrisma.inventoryEntity.count).not.toHaveBeenCalled();
+  });
+
+  it("counts active entities not re-observed by the latest sweep", async () => {
+    const runStartedAt = new Date("2026-05-30T00:00:00Z");
+    mockPrisma.inventoryEntity.count.mockResolvedValue(4);
+
+    const result = await countStaleEntitiesSince(runStartedAt);
+
+    expect(result).toBe(4);
+    expect(mockPrisma.inventoryEntity.count).toHaveBeenCalledWith({
+      where: { status: "active", lastSeenAt: { lt: runStartedAt } },
+    });
+  });
+});
 
 describe("summarizeDiscoveryHealth", () => {
   it("summarizes inventory freshness and unresolved quality issues", () => {
