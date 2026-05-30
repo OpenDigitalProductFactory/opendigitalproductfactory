@@ -636,6 +636,12 @@ if [ "$DPF_INSTALL_MODE" = "contributor" ] && [ -d .git ]; then
     export DPF_VERSION
     ok "Stamping local build with DPF_VERSION=$DPF_VERSION"
   fi
+  # Real platform version from git release tags (e.g. "5.6.0"); shown in the
+  # portal instead of the stale version.json baseline.
+  if DPF_PLATFORM_VERSION="$(git describe --tags --always 2>/dev/null | sed 's/^v//')" && [ -n "$DPF_PLATFORM_VERSION" ]; then
+    export DPF_PLATFORM_VERSION
+    ok "Stamping local build with DPF_PLATFORM_VERSION=$DPF_PLATFORM_VERSION"
+  fi
 fi
 docker compose "${DPF_COMPOSE_FILES[@]}" up -d
 ok "docker compose up returned"

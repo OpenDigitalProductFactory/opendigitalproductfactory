@@ -78,6 +78,17 @@ if [[ $_dry_run -eq 0 ]]; then
   printf '%s\n' "${_prev_sha:-unknown}" > "$PROMOTE_BACKUP_PATH/previous-sha.txt" 2>/dev/null || true
 fi
 
+# Real platform version from the source's git release tags, baked into the new
+# image so the portal keeps showing a real version (not version.json) after a
+# self-upgrade. safe.directory: the mounted source is owned by the host user,
+# not root, so git refuses to read it without this.
+export DPF_PLATFORM_VERSION=""
+if [[ $_dry_run -eq 0 ]]; then
+  git config --global --add safe.directory '*' 2>/dev/null || true
+  DPF_PLATFORM_VERSION="$(git -C "$PROMOTE_SOURCE" describe --tags --always 2>/dev/null | sed 's/^v//' || true)"
+  export DPF_PLATFORM_VERSION
+fi
+
 # --- Step 3: docker-build ---
 # Rebuild the portal image from the host source. The DPF_VERSION stamp is
 # derived from the ACTUAL bytes being built — `rev-parse HEAD` of the build
@@ -88,7 +99,8 @@ fi
 # PROMOTE_TARGET_SHA is the orchestrator's EXPECTED identity (the stamp it
 # computed after preparing/merging the source); a mismatch is surfaced as a
 # warning so drift between prepare and build is visible without coupling this
-# script to the orchestrator's rollout state.
+# script to the orchestrator's rollout state. The real platform version
+# (DPF_PLATFORM_VERSION, computed above from git tags) is baked in the same build.
 emit_step docker-build
 if [[ $_dry_run -eq 0 ]]; then
   _built_sha=$(git -C "$PROMOTE_SOURCE" rev-parse HEAD 2>/dev/null | tr -d '[:space:]' || true)
@@ -127,7 +139,7 @@ emit_step docker-up
 if [[ $_dry_run -eq 0 ]]; then
   docker compose --project-directory "$PROMOTE_SOURCE" -p "$_project" \
     "${_f_args[@]}" up -d --no-deps --force-recreate portal
-fi
+fi  # DPF_PLATFORM_VERSION stays exported from above so any rebuild keeps the stamp
 
 # --- Step 5: health ---
 # Wait for the recreated portal to report healthy (it takes time to boot).

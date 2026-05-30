@@ -172,27 +172,30 @@ export default function SelfUpgradeClient({
         data-platform-version={platformVersion.version}
       >
         <div className="text-xs text-[var(--dpf-muted)]">
-          <span className="font-medium text-[var(--dpf-text)]">Platform build:</span>{" "}
+          <span className="font-medium text-[var(--dpf-text)]">Platform version:</span>{" "}
+          <span className="font-mono text-[var(--dpf-text)]">
+            v{platformVersion.version}
+          </span>
+        </div>
+        <div className="text-[11px] text-[var(--dpf-muted)]">
+          build{" "}
           {platformVersion.gitSha || platformVersion.imageVersion?.raw ? (
-            <span className="font-mono text-[var(--dpf-text)]">
+            <span className="font-mono">
               {shortSha(platformVersion.gitSha ?? platformVersion.imageVersion?.raw ?? null)}
             </span>
           ) : (
-            <span className="font-mono text-[var(--dpf-text)]">dev (unbuilt)</span>
+            <span className="font-mono">dev (unbuilt)</span>
           )}
           {platformVersion.imageVersion?.source && (
-            <span className="ml-2 text-[var(--dpf-muted)]">
+            <span className="ml-1">
               ({sourceLabel(platformVersion.imageVersion.source)})
             </span>
           )}
           {platformVersion.buildDate && (
-            <span className="ml-2 text-[var(--dpf-muted)]">
+            <span className="ml-1">
               · built <LocalTime value={platformVersion.buildDate} />
             </span>
           )}
-        </div>
-        <div className="text-[11px] text-[var(--dpf-muted)]">
-          baseline v{platformVersion.version}
         </div>
         {enabled && (
           <>
