@@ -73,6 +73,89 @@ export function interpretMcpReadinessResponse(
   return { ok: false, reason: "unexpected_shape", httpStatus };
 }
 
+/**
+ * Scope-coverage reconciliation (BI-A3DE9A31).
+ *
+ * Tokens minted before the `write -> development` template fix carry a narrow
+ * legacy scope set MISSING `registry_read` (and the other development reads),
+ * so registry-gated tools like `principle_decide` (WWMD) refuse. The bootstrap
+ * must treat "token present" as distinct from "token sufficient": probe a
+ * registry_read-gated, read-only, no-arg tool and re-mint when it reports a
+ * scope failure.
+ *
+ * This is the SSOT for the probe tool name + the failure markers; the shell
+ * adapters (dpf-bootstrap-agent-toolchain.{sh,ps1}) mirror the marker strings.
+ */
+export const SCOPE_COVERAGE_PROBE = {
+  /** Read-only, no-arg, registry_read-gated tool — the cheapest scope probe. */
+  tool: "get_my_coworker_profile",
+  /** The dev-template scope a legacy "write" token is missing. */
+  requiredScope: "registry_read",
+  /** Substring the DPF MCP emits when a token lacks a required scope. */
+  scopeFailureMarker: "lacks the required scope",
+} as const;
+
+export type ScopeCoverageResult =
+  | { sufficient: true }
+  | { sufficient: false; missingScope: string }
+  | { sufficient: null; reason: "unreachable" | "inconclusive" };
+
+/**
+ * Interpret the `tools/call` response for {@link SCOPE_COVERAGE_PROBE.tool}.
+ *
+ * The DPF MCP returns a scope failure as HTTP 200 with `result.isError === true`
+ * and a content text like "Token lacks the required scope for X. Required: one
+ * of registry_read; …" — NOT as 401/403. So this keys on the tool-call result.
+ *
+ * - `sufficient: true`  — the call succeeded; the token carries the gated scope.
+ * - `sufficient: false` — explicit scope failure naming `requiredScope`.
+ * - `sufficient: null`  — unreachable / ambiguous. **Callers MUST NOT re-mint**
+ *   on null; only an unambiguous `false` justifies replacing a present token.
+ */
+export function interpretScopeCoverageProbe(
+  httpStatus: number,
+  body: unknown,
+  requiredScope: string = SCOPE_COVERAGE_PROBE.requiredScope,
+): ScopeCoverageResult {
+  if (httpStatus === 0 || httpStatus >= 500) {
+    return { sufficient: null, reason: "unreachable" };
+  }
+  if (httpStatus !== 200) {
+    return { sufficient: null, reason: "inconclusive" };
+  }
+  const result = extractToolCallResult(body);
+  if (!result) return { sufficient: null, reason: "inconclusive" };
+
+  if (result.isError && typeof result.text === "string") {
+    const t = result.text;
+    if (t.includes(SCOPE_COVERAGE_PROBE.scopeFailureMarker) && t.includes(requiredScope)) {
+      return { sufficient: false, missingScope: requiredScope };
+    }
+    // An error for some other reason — don't assume under-provisioned.
+    return { sufficient: null, reason: "inconclusive" };
+  }
+
+  // 200 + a non-error tool result => the registry_read-gated call ran.
+  if (result.isError === false || result.isError === undefined) {
+    return { sufficient: true };
+  }
+  return { sufficient: null, reason: "inconclusive" };
+}
+
+function extractToolCallResult(
+  body: unknown,
+): { isError?: boolean; text?: string } | null {
+  if (!body || typeof body !== "object") return null;
+  const b = body as Record<string, unknown>;
+  const result = b.result as
+    | { isError?: boolean; content?: Array<{ text?: unknown }> }
+    | undefined;
+  if (!result || typeof result !== "object") return null;
+  const first = Array.isArray(result.content) ? result.content[0] : undefined;
+  const text = first && typeof first.text === "string" ? first.text : undefined;
+  return { isError: result.isError, text };
+}
+
 function looksLikeInsufficientScope(body: unknown): boolean {
   if (!body || typeof body !== "object") return false;
   const b = body as Record<string, unknown>;

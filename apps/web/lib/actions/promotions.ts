@@ -9,13 +9,14 @@ import { generateRfcId } from "./change-management";
 import { generatePromotionId } from "@/lib/version-tracking";
 import {
   getSelfUpgradeConfig,
-  isInMaintenanceWindow,
   nextMaintenanceWindowStart,
   resolveTargetSha,
   isShaFresh,
   getDeployedSha,
   getLatestRun,
 } from "@/lib/self-upgrade";
+import { isStoreOpen, isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
+import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { loadPlatformVersion } from "@/lib/platform/version";
 import { inngest } from "@/lib/queue/inngest-client";
 import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
@@ -591,9 +592,27 @@ export async function getSelfUpgradeStatus() {
     getDeployedSha(),
   ]);
 
-  const inMaintenanceWindow = isInMaintenanceWindow(config);
-  const windowConfigured = config.maintenanceWindows.length > 0;
-  const nextWindowStart = nextMaintenanceWindowStart(config)?.toISOString() ?? null;
+  // Upgrade timing follows the storefront's open/closed state (single source of
+  // truth: operating hours). inMaintenanceWindow = "upgrades may run now" =
+  // store closed (or inside an explicit override window). storeOpen lets the
+  // panel explain WHY truthfully.
+  const { schedule, timezone } = await resolveOperatingScheduleForSystem();
+  const hasExplicitWindows = config.maintenanceWindows.length > 0;
+  const storeOpen = isStoreOpen(schedule, new Date(), timezone);
+  const inMaintenanceWindow = isUpgradeWindowOpen({
+    explicitWindows: config.maintenanceWindows,
+    schedule,
+    timeZone: timezone,
+  });
+  // The window is always defined now (derived from operating hours), so it is
+  // never "unconfigured". windowSource tells the panel which model is in play.
+  const windowConfigured = true;
+  const windowSource: "explicit" | "operating-hours" = hasExplicitWindows
+    ? "explicit"
+    : "operating-hours";
+  const nextWindowStart = hasExplicitWindows
+    ? nextMaintenanceWindowStart(config)?.toISOString() ?? null
+    : null;
   const targetSha = await resolveTargetSha(config.channel, config);
   const isFresh = targetSha ? isShaFresh(deployedSha, targetSha) : false;
 
@@ -602,6 +621,8 @@ export async function getSelfUpgradeStatus() {
     channel: config.channel,
     inMaintenanceWindow,
     windowConfigured,
+    windowSource,
+    storeOpen,
     nextWindowStart,
     deployedSha,
     deployedShaSource: platformVersion.imageVersion?.source ?? "unknown",
@@ -627,12 +648,18 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: bool
     if (!config.enabled) {
       return { queued: false, reason: "disabled" } as const;
     }
-    // Honest feedback: a manual trigger outside the maintenance window is a
-    // no-op (runSelfUpgrade skips before creating a run). Surface that here
-    // instead of optimistically reporting "queued". force = emergency
-    // override that bypasses the window.
-    if (!opts?.force && !isInMaintenanceWindow(config)) {
-      return { queued: false, reason: "outside-window" } as const;
+    // Honest feedback: a manual trigger while the store is open (outside the
+    // upgrade window) is a no-op (runSelfUpgrade skips before creating a run).
+    // Surface that here instead of optimistically reporting "queued". force =
+    // emergency override that bypasses the window.
+    if (!opts?.force) {
+      const { schedule, timezone } = await resolveOperatingScheduleForSystem();
+      const allowed = isUpgradeWindowOpen({
+        explicitWindows: config.maintenanceWindows,
+        schedule,
+        timeZone: timezone,
+      });
+      if (!allowed) return { queued: false, reason: "outside-window" } as const;
     }
   }
 
