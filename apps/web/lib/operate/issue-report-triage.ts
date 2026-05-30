@@ -49,7 +49,9 @@ export function buildIssueBacklogItem(
     status: "open",
     type: digitalProductId ? "product" : "portfolio",
     priority: severityToPriority((report.severity || "medium") as Severity),
-    source: "issue_report",
+    // Canonical backlog source (BACKLOG_SOURCE_VALUES). Issue-report-originated
+    // items are bugs; "bug" is what maps to FeatureBuild.kind="fix" at promote.
+    source: "bug",
     digitalProductId,
     taxonomyNodeId,
   };
@@ -251,7 +253,7 @@ export async function checkForSpike(deps: {
     status: "open",
     type: "product",
     priority: 1,
-    source: "issue_report",
+    source: "bug",
     digitalProductId: null,
     taxonomyNodeId: null,
   });

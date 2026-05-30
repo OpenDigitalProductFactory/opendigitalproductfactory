@@ -58,7 +58,7 @@ export const issueReportTriage = inngest.createFunction(
 
         getExistingTitles: async () => {
           const items = await prisma.backlogItem.findMany({
-            where: { source: { in: ["issue_report", "process_observer"] } },
+            where: { source: { in: ["bug", "process_observer"] } },
             select: { title: true },
           });
           return items.map((i) => i.title);
@@ -72,7 +72,7 @@ export const issueReportTriage = inngest.createFunction(
           const existing = await prisma.backlogItem.findFirst({
             where: {
               title: { contains: title, mode: "insensitive" },
-              source: "issue_report",
+              source: "bug",
             },
           });
           if (existing) {
@@ -127,7 +127,7 @@ export const issueReportTriage = inngest.createFunction(
 
         getExistingTitles: async () => {
           const items = await prisma.backlogItem.findMany({
-            where: { source: "issue_report", title: { startsWith: "Issue report spike detected" } },
+            where: { source: "bug", title: { startsWith: "Issue report spike detected" } },
             select: { title: true },
           });
           return items.map((i) => i.title);
