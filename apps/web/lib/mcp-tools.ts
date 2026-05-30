@@ -4540,6 +4540,28 @@ export async function executeTool(
   // Strip empty optional object params that models send as schema artifacts
   const params = sanitizeToolParams(toolName, rawParams);
 
+  // ─── Build-context hint (BI-2DAB02B4 / BI-F4A30FCB) ────────────────────────
+  // When the coworker is messaging from a specific build, that build is plumbed
+  // here as context.featureBuildId (a cuid). Resolve it to the FB- buildId and
+  // set params.buildId so phase-scoped tools (update_feature_brief,
+  // reviewDesignDoc, saveBuildEvidence, …) target THAT build via
+  // extractBuildIdHint — instead of resolveActiveBuildId silently falling back
+  // to the user's most-recently-updated non-terminal build, which
+  // cross-contaminates when several builds are active (the wrong-build-context
+  // bug). Only fills when the caller didn't pass an explicit buildId, and is
+  // inert for non-build tools (they never read params.buildId).
+  if (context?.featureBuildId && typeof params["buildId"] !== "string") {
+    try {
+      const ctxBuild = await prisma.featureBuild.findUnique({
+        where: { id: context.featureBuildId },
+        select: { buildId: true },
+      });
+      if (ctxBuild?.buildId) params["buildId"] = ctxBuild.buildId;
+    } catch {
+      // Non-fatal — fall back to the existing hint / active-build resolution.
+    }
+  }
+
   // ─── Runtime kernel-commandment gate (BI-43F95F77) ─────────────────────────
   // Consult the gate BEFORE the switch. If a tier-1 commandment matches this
   // tool name in the active session class, refuse (autonomous) or surface a
