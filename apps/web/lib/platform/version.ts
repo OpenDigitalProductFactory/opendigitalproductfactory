@@ -2,7 +2,12 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { readImageBuiltAt, readImageVersion, type ImageVersion } from "./image-version";
+import {
+  readImageBuiltAt,
+  readImageVersion,
+  readSourceContentHash,
+  type ImageVersion,
+} from "./image-version";
 
 export type PlatformVersion = {
   version: string;
@@ -26,6 +31,13 @@ export type PlatformVersion = {
    * (/app/.dpf-image-built-at). Null in dev/test and pre-marker images.
    */
   buildDate: string | null;
+  /**
+   * sha256 of the bundled source bytes, baked into every image independent of
+   * the gitSha/DPF_VERSION label (/app/.dpf-source-content-hash). The honest
+   * fingerprint of what was actually built — surfaced so a label/source
+   * divergence is observable (BI-C8E90A79). Null in dev/test and pre-marker images.
+   */
+  sourceContentHash: string | null;
   note: string | null;
 };
 
@@ -46,9 +58,10 @@ export async function loadPlatformVersion(): Promise<PlatformVersion> {
       const path = resolveVersionJsonPath();
       const raw = await readFile(path, "utf8");
       const parsed = parseVersionJson(JSON.parse(raw));
-      const [image, buildDate] = await Promise.all([
+      const [image, buildDate, sourceContentHash] = await Promise.all([
         readImageVersion(),
         readImageBuiltAt(),
+        readSourceContentHash(),
       ]);
       const envSha = process.env.DEPLOYED_SHA;
       return {
@@ -62,6 +75,7 @@ export async function loadPlatformVersion(): Promise<PlatformVersion> {
               : null,
         imageVersion: image,
         buildDate,
+        sourceContentHash,
         note: parsed.note ?? null,
       };
     })();

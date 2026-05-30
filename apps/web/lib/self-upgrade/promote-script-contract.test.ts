@@ -144,6 +144,7 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       "step=docker-up",
       "step=health",
       "step=sha-verify",
+      "step=content-verify",
     ] as const;
 
     let dryRunResult: ReturnType<typeof runScript>;
@@ -180,7 +181,11 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       expect(dryRunResult.stdout).toContain("step=sha-verify");
     });
 
-    it("steps appear in order: prepare → backup → docker-build → docker-up → health → sha-verify", () => {
+    it("emits content-verify step", () => {
+      expect(dryRunResult.stdout).toContain("step=content-verify");
+    });
+
+    it("steps appear in order: prepare → backup → docker-build → docker-up → health → sha-verify → content-verify", () => {
       const positions = STEPS.map((s) => dryRunResult.stdout.indexOf(s));
       for (let i = 1; i < positions.length; i++) {
         expect(positions[i]).toBeGreaterThan(positions[i - 1]);
