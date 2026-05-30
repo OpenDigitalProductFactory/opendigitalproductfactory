@@ -66,6 +66,21 @@ describe("synthesizeWithMlx", () => {
     return fetchMock
   }
 
+  it("forwards per-profile tuning (speed/exaggeration/cfg_weight/temperature)", async () => {
+    process.env.DPF_TTS_REFERENCE_HOST_ROOT = "/host/voice-storage"
+    const fetchMock = stubOk()
+    await synthesizeWithMlx("Proceed.", {
+      ...baseConfig,
+      referenceText: "ref",
+      settings: { speed: 1.12, exaggeration: 0.7, cfgWeight: 0.3, temperature: 0.9 },
+    } as Parameters<typeof synthesizeWithMlx>[1])
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect(body.speed).toBe(1.12)
+    expect(body.exaggeration).toBe(0.7)
+    expect(body.cfg_weight).toBe(0.3)
+    expect(body.temperature).toBe(0.9)
+  })
+
   it("clones from the host reference path + sends sampler params", async () => {
     process.env.DPF_TTS_REFERENCE_HOST_ROOT = "/host/voice-storage"
     const fetchMock = stubOk()

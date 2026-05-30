@@ -8,8 +8,15 @@ import { useCallback, useRef, useState } from "react"
 const SILENT_WAV =
   "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA="
 
+export interface VoiceSynthSettings {
+  speed?: number
+  exaggeration?: number
+  cfgWeight?: number
+  temperature?: number
+}
+
 export interface VoiceSynthHook {
-  synthesize: (text: string, voiceProfileId?: string) => Promise<void>
+  synthesize: (text: string, voiceProfileId?: string, settings?: VoiceSynthSettings) => Promise<void>
   isPlaying: boolean
   isSynthesizing: boolean
   /** false when synthesis cannot run until service/configuration changes */
@@ -66,7 +73,7 @@ export function useVoiceSynth(): VoiceSynthHook {
   }, [])
 
   const synthesize = useCallback(
-    async (text: string, voiceProfileId?: string): Promise<void> => {
+    async (text: string, voiceProfileId?: string, settings?: VoiceSynthSettings): Promise<void> => {
       // SSR guard
       if (typeof window === "undefined" || typeof Audio === "undefined") return
 
@@ -90,7 +97,11 @@ export function useVoiceSynth(): VoiceSynthHook {
         const res = await fetch("/api/voice/synthesize", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, ...(voiceProfileId ? { voiceProfileId } : {}) }),
+          body: JSON.stringify({
+            text,
+            ...(voiceProfileId ? { voiceProfileId } : {}),
+            ...(settings ? { settings } : {}),
+          }),
         })
 
         if (!res.ok) {

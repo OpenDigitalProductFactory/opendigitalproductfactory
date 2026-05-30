@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useCallback } from "react"
 import { VoiceConsentForm } from "@/components/admin/VoiceConsentForm"
-import { setVoiceEnabled, resetVoiceProfile } from "@/lib/actions/voice-profile"
+import { setVoiceEnabled, resetVoiceProfile, saveVoiceSettings } from "@/lib/actions/voice-profile"
 import { resolveRecordingBlobMimeType, selectSupportedMimeType } from "@/components/agent/hooks/mime-probe"
 import { useVoiceSynth } from "@/components/agent/hooks/useVoiceSynth"
 import { LoaderCircle, Pause, Play, VolumeX } from "lucide-react"
@@ -14,6 +14,20 @@ interface ConsentRecord {
   revokedAt: Date | string | null
 }
 
+interface VoiceTuning {
+  speed?: number
+  exaggeration?: number
+  cfgWeight?: number
+  temperature?: number
+}
+
+const TUNING_DEFAULTS: Required<VoiceTuning> = {
+  speed: 1.0,
+  exaggeration: 0.5,
+  cfgWeight: 0.5,
+  temperature: 0.8,
+}
+
 interface VoiceProfileData {
   id: string
   provider: string
@@ -23,6 +37,7 @@ interface VoiceProfileData {
   qualityScore: number | null
   language: string
   consentRecord: ConsentRecord | null
+  voiceSettings?: VoiceTuning | null
 }
 
 interface Props {
@@ -47,6 +62,14 @@ export function VoiceProfileSetup({
   const [isPending, startTransition] = useTransition()
   const [resetting, setResetting] = useState(false)
   const voiceSynth = useVoiceSynth()
+
+  // Per-profile voice tuning (sliders). Seed from saved settings, else defaults.
+  const [tuning, setTuning] = useState<Required<VoiceTuning>>({
+    ...TUNING_DEFAULTS,
+    ...(voiceProfile?.voiceSettings ?? {}),
+  })
+  const [savingTuning, setSavingTuning] = useState(false)
+  const [tuningSaved, setTuningSaved] = useState(false)
 
   const hasValidConsent =
     voiceProfile?.consentRecord &&
@@ -138,6 +161,7 @@ export function VoiceProfileSetup({
         {!hasValidConsent ? (
           <p className="text-sm text-muted-foreground pl-8">Complete step 1 first.</p>
         ) : voiceProfile?.status === "ready" ? (
+          <>
           <div className="rounded-md border border-green-500/20 bg-green-500/5 px-4 py-3 text-sm flex flex-wrap items-center gap-3">
             <span>
               Voice profile ready.
@@ -154,7 +178,7 @@ export function VoiceProfileSetup({
                 if (voiceSynth.isPlaying) {
                   voiceSynth.stop()
                 } else {
-                  voiceSynth.synthesize(PREVIEW_TEXT, profileId)
+                  voiceSynth.synthesize(PREVIEW_TEXT, profileId, tuning)
                 }
               }}
               disabled={!voiceSynth.available || voiceSynth.isSynthesizing}
@@ -207,6 +231,69 @@ export function VoiceProfileSetup({
               {resetting ? "Resetting…" : "↺ Replace voice sample"}
             </button>
           </div>
+
+          {/* Voice tuning — adjust pace + expressiveness, hear via Preview above, then Save. */}
+          <div className="mt-3 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium uppercase tracking-wide text-[var(--dpf-muted)]">Voice tuning</p>
+              <button
+                type="button"
+                onClick={() => { setTuning(TUNING_DEFAULTS); setTuningSaved(false) }}
+                className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+              >
+                Reset to default
+              </button>
+            </div>
+
+            {([
+              { key: "speed", label: "Speed", min: 0.5, max: 2.0, step: 0.01, hint: "slower ↔ faster" },
+              { key: "exaggeration", label: "Enthusiasm", min: 0.25, max: 1.0, step: 0.01, hint: "calm ↔ energetic" },
+              { key: "cfgWeight", label: "Pacing", min: 0.2, max: 1.0, step: 0.01, hint: "natural ↔ deliberate" },
+              { key: "temperature", label: "Variation", min: 0.2, max: 1.2, step: 0.01, hint: "consistent ↔ varied" },
+            ] as const).map(({ key, label, min, max, step, hint }) => (
+              <div key={key} className="space-y-1">
+                <div className="flex items-center justify-between text-xs text-[var(--dpf-text)]">
+                  <span className="font-medium">{label}</span>
+                  <span className="text-[var(--dpf-muted)] tabular-nums">{tuning[key].toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={min} max={max} step={step}
+                  value={tuning[key]}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value)
+                    setTuning((t: Required<VoiceTuning>) => ({ ...t, [key]: v }))
+                    setTuningSaved(false)
+                  }}
+                  className="w-full accent-[var(--dpf-accent)]"
+                  aria-label={label}
+                />
+                <p className="text-[10px] text-[var(--dpf-muted)]">{hint}</p>
+              </div>
+            ))}
+
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setSavingTuning(true)
+                  startTransition(async () => {
+                    await saveVoiceSettings(profileId, tuning)
+                    setSavingTuning(false)
+                    setTuningSaved(true)
+                  })
+                }}
+                disabled={savingTuning}
+                className="rounded bg-[var(--dpf-accent)] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+              >
+                {savingTuning ? "Saving…" : "Save tuning"}
+              </button>
+              <span className="text-xs text-[var(--dpf-muted)]">
+                {tuningSaved ? "Saved — used for all narration." : "Use Preview above to hear changes before saving."}
+              </span>
+            </div>
+          </div>
+          </>
         ) : (
           <VoiceSampleCapture profileId={profileId} />
         )}
