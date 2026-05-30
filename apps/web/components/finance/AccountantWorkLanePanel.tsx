@@ -1,7 +1,7 @@
 import { ArrowRight, Plug, ShieldCheck, Workflow } from "lucide-react";
 import Link from "next/link";
 import {
-  getBookkeeperAccountantWorkLane,
+  type AccountantWorkLane,
   type AccountantProviderBoundary,
   type AccountantWorkstream,
 } from "@/lib/finance/accountant-work-lane";
@@ -13,9 +13,7 @@ const POSTURE_LABELS: Record<AccountantProviderBoundary["posture"], string> = {
   "not-mapped": "Not mapped",
 };
 
-export function AccountantWorkLanePanel() {
-  const lane = getBookkeeperAccountantWorkLane();
-
+export function AccountantWorkLanePanel({ lane }: { lane: AccountantWorkLane }) {
   return (
     <section className="mb-8 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

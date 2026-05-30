@@ -62,15 +62,14 @@ beforeEach(() => {
 // DYNAMIC FORMS — STUBS
 // ===========================================================================
 describe("GET /api/v1/dynamic/forms", () => {
-  it("returns empty list", async () => {
+  it("returns 404 NOT_IMPLEMENTED (not a fake empty list)", async () => {
     (authenticateRequest as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_AUTH);
 
     const res = await formsListHandler(getRequest("/api/v1/dynamic/forms"));
     const body = await res.json();
 
-    expect(res.status).toBe(200);
-    expect(body.data).toEqual([]);
-    expect(body.nextCursor).toBeNull();
+    expect(res.status).toBe(404);
+    expect(body.code).toBe("NOT_IMPLEMENTED");
   });
 
   it("returns 401 when unauthenticated", async () => {
@@ -118,15 +117,14 @@ describe("POST /api/v1/dynamic/forms/:id/submit", () => {
 // DYNAMIC VIEWS — STUBS
 // ===========================================================================
 describe("GET /api/v1/dynamic/views", () => {
-  it("returns empty list", async () => {
+  it("returns 404 NOT_IMPLEMENTED (not a fake empty list)", async () => {
     (authenticateRequest as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_AUTH);
 
     const res = await viewsListHandler(getRequest("/api/v1/dynamic/views"));
     const body = await res.json();
 
-    expect(res.status).toBe(200);
-    expect(body.data).toEqual([]);
-    expect(body.nextCursor).toBeNull();
+    expect(res.status).toBe(404);
+    expect(body.code).toBe("NOT_IMPLEMENTED");
   });
 });
 

@@ -176,9 +176,22 @@ describe("storeExchangeRates", () => {
     expect(mockPrisma.exchangeRate.createMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: [
-          { baseCurrency: "GBP", targetCurrency: "USD", rate: 1.27 },
-          { baseCurrency: "GBP", targetCurrency: "EUR", rate: 1.17 },
+          { baseCurrency: "GBP", targetCurrency: "USD", rate: 1.27, source: "ecb" },
+          { baseCurrency: "GBP", targetCurrency: "EUR", rate: 1.17, source: "ecb" },
         ],
+        skipDuplicates: true,
+      }),
+    );
+  });
+
+  it("tags rows with the provided provenance source", async () => {
+    mockPrisma.exchangeRate.createMany.mockResolvedValue({ count: 1 });
+
+    await storeExchangeRates([{ base: "EUR", target: "USD", rate: 1.09 }], "fallback-static");
+
+    expect(mockPrisma.exchangeRate.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [{ baseCurrency: "EUR", targetCurrency: "USD", rate: 1.09, source: "fallback-static" }],
         skipDuplicates: true,
       }),
     );

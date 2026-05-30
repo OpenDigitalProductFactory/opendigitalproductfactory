@@ -1,14 +1,10 @@
 import { redirect } from "next/navigation";
-import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { decryptJson } from "@/lib/govern/credential-crypto";
-import {
-  QuickBooksConnectPanel,
-  type QuickBooksConnectionState,
-} from "@/components/integrations/QuickBooksConnectPanel";
+import { QuickBooksConnectPanel } from "@/components/integrations/QuickBooksConnectPanel";
 import { IntegrationReadinessPanel } from "@/components/integrations/IntegrationReadinessPanel";
 import { buildQuickBooksReadinessDescriptor } from "@/lib/integrate/quickbooks/readiness";
+import { loadQuickBooksReadinessConnection } from "@/lib/integrate/quickbooks/connection-state";
 
 export default async function QuickBooksIntegrationPage() {
   const session = await auth();
@@ -23,11 +19,7 @@ export default async function QuickBooksIntegrationPage() {
     redirect("/platform/tools");
   }
 
-  const record = await prisma.integrationCredential.findUnique({
-    where: { integrationId: "quickbooks-online-accounting" },
-  });
-
-  const initialState = toConnectionState(record);
+  const initialState = await loadQuickBooksReadinessConnection();
   const readiness = buildQuickBooksReadinessDescriptor({ connection: initialState });
 
   return (
@@ -64,39 +56,4 @@ export default async function QuickBooksIntegrationPage() {
       </aside>
     </div>
   );
-}
-
-type IntegrationCredentialRow = Awaited<
-  ReturnType<typeof prisma.integrationCredential.findUnique>
->;
-
-function toConnectionState(record: IntegrationCredentialRow): QuickBooksConnectionState {
-  if (!record) {
-    return {
-      status: "unconfigured",
-      companyName: null,
-      realmId: null,
-      lastErrorMsg: null,
-      lastTestedAt: null,
-      environment: null,
-    };
-  }
-
-  const decoded = decryptJson<{
-    companyName?: string;
-    realmId?: string;
-    environment?: string;
-  }>(record.fieldsEnc);
-
-  return {
-    status: record.status === "connected" || record.status === "error" ? record.status : "unconfigured",
-    companyName: typeof decoded?.companyName === "string" ? decoded.companyName : null,
-    realmId: typeof decoded?.realmId === "string" ? decoded.realmId : null,
-    lastErrorMsg: record.lastErrorMsg,
-    lastTestedAt: record.lastTestedAt ? record.lastTestedAt.toISOString() : null,
-    environment:
-      decoded?.environment === "sandbox" || decoded?.environment === "production"
-        ? decoded.environment
-        : null,
-  };
 }

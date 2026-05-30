@@ -5,6 +5,7 @@ import { getFinancialSetupStatus } from "@/lib/actions/financial-setup";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { AccountantWorkLanePanel } from "@/components/finance/AccountantWorkLanePanel";
+import { getBookkeeperAccountantWorkLane } from "@/lib/finance/accountant-work-lane";
 import { FinanceSummaryCard } from "@/components/finance/FinanceSummaryCard";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 
@@ -31,6 +32,8 @@ export default async function FinancePage() {
 
   const thirtyDaysAgo = new Date(now);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const accountantLane = await getBookkeeperAccountantWorkLane();
 
   const [
     totalOutstanding,
@@ -271,7 +274,7 @@ export default async function FinancePage() {
         />
       </div>
 
-      <AccountantWorkLanePanel />
+      <AccountantWorkLanePanel lane={accountantLane} />
 
       {/* Row 1: Cash Position + 30-day Forecast + Outstanding + Overdue */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
