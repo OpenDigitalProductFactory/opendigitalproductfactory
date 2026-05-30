@@ -1,6 +1,7 @@
 // apps/web/app/(shell)/finance/recurring/[id]/page.tsx
 import { getRecurringSchedule } from "@/lib/actions/recurring";
 import { ScheduleStatusButtons } from "@/components/finance/ScheduleStatusButtons";
+import { LocalTime } from "@/components/ui/LocalTime";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -105,21 +106,19 @@ export default async function RecurringDetailPage({ params }: Props) {
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Start Date</p>
           <p className="text-sm font-semibold text-[var(--dpf-text)]">
-            {new Date(schedule.startDate).toLocaleDateString("en-GB")}
+            <LocalTime value={schedule.startDate} utc />
           </p>
         </div>
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">End Date</p>
           <p className="text-sm font-semibold text-[var(--dpf-text)]">
-            {schedule.endDate
-              ? new Date(schedule.endDate).toLocaleDateString("en-GB")
-              : "Ongoing"}
+            <LocalTime value={schedule.endDate} utc fallback="Ongoing" />
           </p>
         </div>
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Next Invoice</p>
           <p className="text-sm font-semibold text-[var(--dpf-text)]">
-            {new Date(schedule.nextInvoiceDate).toLocaleDateString("en-GB")}
+            <LocalTime value={schedule.nextInvoiceDate} utc />
           </p>
         </div>
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
@@ -242,10 +241,10 @@ export default async function RecurringDetailPage({ params }: Props) {
                         </Link>
                       </td>
                       <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                        {new Date(inv.issueDate).toLocaleDateString("en-GB")}
+                        <LocalTime value={inv.issueDate} utc />
                       </td>
                       <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                        {new Date(inv.dueDate).toLocaleDateString("en-GB")}
+                        <LocalTime value={inv.dueDate} utc />
                       </td>
                       <td className="px-4 py-2.5">
                         <span

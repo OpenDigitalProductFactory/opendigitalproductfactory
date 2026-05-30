@@ -1,37 +1,42 @@
 #!/usr/bin/env node
 /**
- * CI guard — apps/mobile must stay on jest ^29.x.
+ * CI guard — apps/mobile must run a UNIFIED jest ^30.x install.
  *
  * Background
  * ----------
- * PR #1053 ("fix(mobile): downgrade jest 30 → 29 — restores mobile test suite")
- * walked back a Dependabot-driven bump to jest 30 that broke every mobile
- * test simultaneously and blocked every open PR for hours. jest 30 changes
- * defaults that jest-expo 56.x is not yet compatible with.
+ * PR #1053 and PR #1288 (both reverted) bumped only apps/mobile's direct jest
+ * dep to 30 while jest-expo@~56 (Expo SDK 55/56) kept pulling jest 29 transitive
+ * deps. That produced a MIXED 29/30 install (jest-runtime@30 + jest-mock@29) and
+ * broke every mobile suite at load with "clearMocksOnScope is not a function".
  *
- * This script asserts the pin holds. It runs in CI as a binding gate so a
- * future Dependabot PR cannot silently re-introduce the same break.
+ * The supported fix is the inverse of the old pin: force the WHOLE jest family
+ * to 30 via the `overrides` block in pnpm-workspace.yaml so there is exactly one
+ * jest version. (pnpm 10 reads overrides from pnpm-workspace.yaml, not the
+ * package.json "pnpm" field.) jest-expo's code already tolerates jest 30 even
+ * though its declared ranges still say ^29, so a single unified jest 30 tree works.
+ *
+ * This script now asserts apps/mobile is on jest ^30, not ^29. It runs in CI as
+ * a binding gate so a future Dependabot PR cannot silently regress the pin (in
+ * either direction) and re-introduce the mixed-tree break.
  *
  * When this script fails
  * ----------------------
- *   1. Confirm the pin is intentional (it is, as of this writing).
- *   2. Close the offending dependency bump PR with a comment pointing at
- *      PR #1053 and this script.
- *   3. If jest 30 is now safe (jest-expo compatibility landed, etc.),
- *      remove or relax this guard in the same PR that does the bump.
- *      Don't bypass — fix the guard.
+ *   1. If jest was bumped to a NEW major, confirm jest-expo tolerates it and the
+ *      mobile suite still loads, then update REQUIRED_MAJOR here in the same PR.
+ *   2. If jest regressed to 29, restore the jest 30 pin and the
+ *      pnpm-workspace.yaml overrides block — do not bypass this guard.
  *
  * Exit codes
  * ----------
  *   0  Pin OK.
- *   1  Pin violated (jest devDep missing or not satisfying ^29).
+ *   1  Pin violated (jest devDep missing or not satisfying ^30).
  */
 
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const MOBILE_PKG = resolve("apps/mobile/package.json");
-const REQUIRED_MAJOR = 29;
+const REQUIRED_MAJOR = 30;
 
 let pkg;
 try {
@@ -44,7 +49,7 @@ try {
 const declared = pkg.devDependencies?.jest;
 if (typeof declared !== "string") {
   console.error("ERROR: apps/mobile devDependencies.jest is missing.");
-  console.error("Expected a string satisfying ^29 (e.g. '~29.7.0' or '^29.7.0').");
+  console.error("Expected a string satisfying ^30 (e.g. '~30.4.2' or '^30.0.0').");
   process.exit(1);
 }
 
@@ -53,19 +58,20 @@ if (typeof declared !== "string") {
 const match = declared.match(/^[~^>=<\s]*(\d+)\./);
 if (!match) {
   console.error(`ERROR: Could not parse major version from jest devDep "${declared}".`);
-  console.error("Expected a semver range like '^29.7.0' or '~29.7.0'.");
+  console.error("Expected a semver range like '^30.0.0' or '~30.4.2'.");
   process.exit(1);
 }
 
 const major = Number(match[1]);
 if (major !== REQUIRED_MAJOR) {
   console.error(`ERROR: apps/mobile jest is pinned to "${declared}" (major ${major}).`);
-  console.error(`The mobile suite requires jest ^${REQUIRED_MAJOR}.x — see PR #1053.`);
+  console.error(`The mobile suite requires a unified jest ^${REQUIRED_MAJOR}.x install`);
+  console.error("(enforced via the overrides block in pnpm-workspace.yaml).");
   console.error("");
-  console.error("If this bump is intentional and jest-expo compatibility has");
-  console.error("landed, remove this guard in scripts/check-mobile-jest-pin.mjs");
-  console.error("in the same PR that bumps the version, and document the");
-  console.error("compatibility evidence in docs/testing/pre-pr-gate.md.");
+  console.error("If this is an intentional new-major bump, confirm jest-expo");
+  console.error("tolerates it and the mobile suite still loads, then update");
+  console.error("REQUIRED_MAJOR in scripts/check-mobile-jest-pin.mjs and the");
+  console.error("pnpm-workspace.yaml overrides in the SAME PR. Don't bypass — fix the guard.");
   process.exit(1);
 }
 

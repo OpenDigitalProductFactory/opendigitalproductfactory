@@ -2,6 +2,7 @@
 import { listPaymentRuns, listBills } from "@/lib/actions/ap";
 import { PaymentRunBuilder } from "@/components/finance/PaymentRunBuilder";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
+import { LocalTime } from "@/components/ui/LocalTime";
 import Link from "next/link";
 
 export default async function PaymentRunsPage() {
@@ -94,7 +95,7 @@ export default async function PaymentRunsPage() {
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                        {run.receivedAt ? new Date(run.receivedAt).toLocaleDateString("en-GB") : "—"}
+                        <LocalTime value={run.receivedAt} mode="date" />
                       </td>
                       <td className="px-4 py-2.5">
                         <span

@@ -94,6 +94,28 @@ function Resolve-PortalContainer {
     return "dpf-portal-1"
 }
 
+# Reconcile an under-provisioned token (BI-A3DE9A31). "token present" !=
+# "token sufficient": a token minted before the write->development-template fix
+# lacks `registry_read`, so registry-gated tools (principle_decide / WWMD)
+# refuse. Probe a registry_read-gated, read-only, no-arg tool; on an
+# unambiguous scope failure naming registry_read, force a re-mint by clearing
+# $HasToken. Fail safe: leave the token untouched on unreachable/ambiguous
+# responses. Markers mirror interpretScopeCoverageProbe in @dpf/bootstrap (SSOT).
+if ($HasToken -and $AutoMint -and -not $DryRun.IsPresent) {
+    try {
+        $body = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_my_coworker_profile","arguments":{}}}'
+        $headers = @{ "Authorization" = "Bearer $($env:DPF_MCP_BEARER_TOKEN)"; "Accept" = "application/json, text/event-stream" }
+        $resp = Invoke-WebRequest -Uri $McpEndpoint -Method Post -ContentType "application/json" -Headers $headers -Body $body -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+        $probe = $resp.Content
+        if ($probe -match 'lacks the required scope' -and $probe -match 'registry_read') {
+            Write-Warn2 "Present MCP token is under-provisioned (missing registry_read); re-minting with the full development template."
+            $HasToken = $false
+        }
+    } catch {
+        # Unreachable / ambiguous — fail safe, leave the present token untouched.
+    }
+}
+
 if (-not $HasToken -and $AutoMint) {
     if ($DryRun.IsPresent) {
         Write-Info "DRY-RUN: would mint a '$MintScope'-scoped MCP token (in portal container) and persist it (User env)."

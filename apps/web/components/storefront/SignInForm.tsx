@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { EmailInput } from "@/components/ui/EmailInput";
 
 export function SignInForm({ orgSlug }: { orgSlug?: string }) {
   const router = useRouter();
@@ -30,10 +31,9 @@ export function SignInForm({ orgSlug }: { orgSlug?: string }) {
         {error && <div style={{ color: "var(--dpf-error)", fontSize: 13 }}>{error}</div>}
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <label style={{ fontSize: 13, fontWeight: 500 }}>Email address</label>
-          <input
-            type="email"
+          <EmailInput
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onValueChange={(v) => setEmail(v)}
             required
             style={{ padding: "8px 12px", border: "1px solid var(--dpf-border)", borderRadius: 6, fontSize: 14 }}
           />

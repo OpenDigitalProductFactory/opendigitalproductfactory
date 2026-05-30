@@ -37,6 +37,7 @@ import {
   resolveCockpitRowLabels,
 } from "@/lib/cockpit/install-terminology";
 import { GraduationVetoButton } from "@/components/cockpit/GraduationVetoButton";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 // All four ring interfaces. Phase 0 only emits at 1→2; the others render as
 // "no data" lanes so the operator sees the gear train honestly, not hidden.
@@ -392,7 +393,7 @@ export default async function CockpitPage({
               );
               return (
                 <li key={g.id} className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[var(--dpf-muted)]">{g.recordedAt.toISOString()}</span>
+                  <LocalTime value={g.recordedAt} className="text-[var(--dpf-muted)]" />
                   <span className="font-semibold">{labels.capabilityLabel}</span>
                   <span className="text-[var(--dpf-muted)]">for</span>
                   <span>{labels.agentLabel}</span>
@@ -476,7 +477,7 @@ export default async function CockpitPage({
                   return (
                     <tr key={row.id} className="border-t" style={{ borderColor: "var(--dpf-border)" }}>
                       <td className="py-1.5 pr-3 text-[var(--dpf-muted)] whitespace-nowrap">
-                        {row.recordedAt.toISOString().slice(11, 19)}
+                        <LocalTime value={row.recordedAt} mode="time" />
                       </td>
                       <td className="px-3 py-1.5 truncate" title={labels.interfaceLabel}>
                         {labels.interfaceLabel}

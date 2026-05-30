@@ -1,6 +1,7 @@
 import { prisma } from "@dpf/db";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -50,13 +51,13 @@ export default async function AuditDetailPage({ params }: Props) {
         {audit.scheduledAt && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Scheduled</p>
-            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(audit.scheduledAt).toLocaleDateString()}</p>
+            <LocalTime value={audit.scheduledAt} mode="date" className="text-sm font-semibold text-[var(--dpf-text)]" />
           </div>
         )}
         {audit.conductedAt && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Conducted</p>
-            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(audit.conductedAt).toLocaleDateString()}</p>
+            <LocalTime value={audit.conductedAt} mode="date" className="text-sm font-semibold text-[var(--dpf-text)]" />
           </div>
         )}
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
@@ -98,7 +99,7 @@ export default async function AuditDetailPage({ params }: Props) {
                 </div>
               </div>
               <div className="text-right text-xs text-[var(--dpf-muted)]">
-                {f.dueDate && <p>Due: {new Date(f.dueDate).toLocaleDateString()}</p>}
+                {f.dueDate && <p>Due: <LocalTime value={f.dueDate} utc /></p>}
                 <p>{f._count.correctiveActions} action{f._count.correctiveActions !== 1 ? "s" : ""}</p>
               </div>
             </div>

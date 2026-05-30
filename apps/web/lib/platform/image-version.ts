@@ -79,6 +79,30 @@ export async function readImageBuiltAt(
   }
 }
 
+const PLATFORM_VERSION_TAG_PATH = "/app/.dpf-platform-version";
+
+/**
+ * Read the REAL platform version baked into the image at build time — the
+ * `git describe --tags` value (e.g. "5.6.0" or "5.6.0-35-gbcaa30a8"), sourced
+ * from the repo's actual release tags rather than a hand-edited version.json.
+ *
+ * Priority: DPF_PLATFORM_VERSION env (set by build scripts / dev) →
+ * /app/.dpf-platform-version (baked) → null (fall back to version.json). A
+ * leading "v" is stripped so the value is SemVer-shaped.
+ */
+export async function readPlatformVersionTag(
+  path: string = PLATFORM_VERSION_TAG_PATH,
+): Promise<string | null> {
+  const env = process.env.DPF_PLATFORM_VERSION;
+  if (env && env.trim()) return env.trim().replace(/^v/, "");
+  try {
+    const raw = (await readFile(path, "utf-8")).trim();
+    return raw ? raw.replace(/^v/, "") : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Classify the version string by shape. A 40-char hex string is treated as a
  * git SHA; a 64-char hex string is treated as a sha256 content hash. Anything

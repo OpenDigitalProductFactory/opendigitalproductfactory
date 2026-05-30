@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 
 import { requestPasswordReset } from "@/lib/actions/users";
+import { EmailInput } from "@/components/ui/EmailInput";
 
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
@@ -23,11 +24,10 @@ export function ForgotPasswordForm() {
       </p>
       <label className="block">
         <span className="block text-sm text-[var(--dpf-muted)] mb-1">Email</span>
-        <input
+        <EmailInput
           value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          onValueChange={(v) => setEmail(v)}
           name="email"
-          type="email"
           required
           className="w-full px-3 py-2 rounded-lg bg-[var(--dpf-bg)] border border-[var(--dpf-border)] text-[var(--dpf-text)] text-sm focus:outline-none focus:border-[var(--dpf-accent)]"
         />

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@dpf/db";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { decryptJson } from "@/lib/govern/credential-crypto";
@@ -173,7 +174,7 @@ function WhatsAppBusinessPreviewSection({
           </p>
         </div>
         <p className="text-xs text-[var(--dpf-muted)]">
-          Loaded {formatDateTime(previewData.loadedAt)}
+          Loaded <LocalTime value={previewData.loadedAt} options={{ year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }} />
         </p>
       </div>
 
@@ -303,16 +304,3 @@ function hasContent(content: React.ReactNode): boolean {
   return Boolean(content);
 }
 
-function formatDateTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}

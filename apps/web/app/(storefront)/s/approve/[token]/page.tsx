@@ -4,6 +4,7 @@
 
 import { getBillByApprovalToken } from "@/lib/actions/ap";
 import { notFound } from "next/navigation";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { ApprovalForm } from "./ApprovalForm";
 
 type Props = { params: Promise<{ token: string }> };
@@ -111,11 +112,11 @@ export default async function ApproveBillPage({ params }: Props) {
             >
               <span style={{ fontSize: 14, color: "var(--dpf-muted)" }}>Due Date</span>
               <span style={{ fontSize: 14, color: "var(--dpf-text)" }}>
-                {new Date(bill.dueDate).toLocaleDateString("en-GB", {
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                })}
+                <LocalTime
+                  value={bill.dueDate}
+                  utc
+                  options={{ day: "numeric", month: "long", year: "numeric" }}
+                />
               </span>
             </div>
             <div

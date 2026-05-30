@@ -1,5 +1,7 @@
 import { CheckCircle2, Clock3, PauseCircle, XCircle } from "lucide-react";
 
+import { LocalTime } from "@/components/ui/LocalTime";
+
 export type ReachabilityBinding = {
   channel: string;
   label: string;
@@ -14,16 +16,6 @@ const statusIcons = {
   failed: XCircle,
   disabled: PauseCircle,
 } satisfies Record<ReachabilityBinding["status"], typeof CheckCircle2>;
-
-function formatLastTested(value: string | null): string {
-  if (!value) return "Not tested";
-
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  }).format(new Date(value));
-}
 
 export function EmployeeReachabilityPanel({
   bindings,
@@ -67,7 +59,7 @@ export function EmployeeReachabilityPanel({
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-                    Last tested {formatLastTested(binding.lastTestedAt)}
+                    Last tested <LocalTime value={binding.lastTestedAt} mode="date" fallback="Not tested" />
                   </p>
                 </div>
 

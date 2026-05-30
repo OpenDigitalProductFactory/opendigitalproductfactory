@@ -60,12 +60,28 @@ export type PrepareSourceResult =
     }
   | {
       ok: false;
-      reason: "no-target" | "prep-error";
+      reason: "no-target" | "prep-error" | "dirty-tree";
       message: string;
     };
 
 function trim(s: string): string {
   return s.trim();
+}
+
+/**
+ * Repo-relative paths of TRACKED modifications (staged or unstaged) from
+ * `git status --porcelain`, or [] when none. Untracked entries ("??") are
+ * excluded: they don't block a merge the way modified tracked files do, and
+ * counting them would trip on benign artifacts. Note: do NOT trim the whole
+ * porcelain blob first — that would strip the leading status space of the first
+ * line and corrupt the `slice(3)` path extraction.
+ */
+function dirtyFiles(porcelain: string): string[] {
+  return porcelain
+    .split("\n")
+    .filter((l) => l.trim().length > 0 && !l.startsWith("??"))
+    .map((l) => l.slice(3).trim()) // strip the 2-char status + 1 space prefix
+    .filter(Boolean);
 }
 
 async function readHeadStamp(run: GitRunner, hostSourcePath: string): Promise<string> {
@@ -95,6 +111,26 @@ export async function prepareUpgradeSource(
 
   // ── upstream ──────────────────────────────────────────────────────────────
   try {
+    // Refuse FAST on an uncommitted working tree. The merge below would abort
+    // with "local changes would be overwritten" — git reports that as exit 1
+    // with NO conflict markers, so the generic merge path would surface an
+    // empty, misleading "merge-conflict". This design preserves *committed*
+    // local delta (on the install branch); uncommitted changes are unmergeable
+    // and must be committed to the install branch or stashed first. Detecting
+    // them up front (before any checkout) keeps the clone untouched and gives
+    // the operator an actionable message.
+    const preDirty = await run(buildDirtyCheckCommand(hostSourcePath).slice(1));
+    const pending = dirtyFiles(preDirty.stdout);
+    if (pending.length > 0) {
+      const sample = pending.slice(0, 5).join(", ");
+      const more = pending.length > 5 ? `, +${pending.length - 5} more` : "";
+      return {
+        ok: false,
+        reason: "dirty-tree",
+        message: `the install clone has ${pending.length} uncommitted change(s) (${sample}${more}); commit them to ${installBranch} or stash before upgrading`,
+      };
+    }
+
     const fetch = await run(buildFetchCommand({ hostSourcePath, remote, branch }).slice(1));
     if (fetch.code !== 0) {
       return { ok: false, reason: "prep-error", message: `fetch failed: ${trim(fetch.stderr) || fetch.code}` };

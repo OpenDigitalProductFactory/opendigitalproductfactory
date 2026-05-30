@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { triggerSelfUpgrade } from "@/lib/actions/promotions";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type LatestRun = {
   runId: string;
@@ -67,10 +68,6 @@ function formatDuration(start: Date | string, end: Date | string): string {
   if (minutes === 0) return `${seconds}s`;
   if (seconds === 0) return `${minutes}m`;
   return `${minutes}m ${seconds}s`;
-}
-
-function formatDate(d: Date | string): string {
-  return new Date(d).toISOString().slice(0, 16).replace("T", " ") + " UTC";
 }
 
 const RUN_STATUS_STYLES: Record<string, string> = {
@@ -175,27 +172,30 @@ export default function SelfUpgradeClient({
         data-platform-version={platformVersion.version}
       >
         <div className="text-xs text-[var(--dpf-muted)]">
-          <span className="font-medium text-[var(--dpf-text)]">Platform build:</span>{" "}
+          <span className="font-medium text-[var(--dpf-text)]">Platform version:</span>{" "}
+          <span className="font-mono text-[var(--dpf-text)]">
+            v{platformVersion.version}
+          </span>
+        </div>
+        <div className="text-[11px] text-[var(--dpf-muted)]">
+          build{" "}
           {platformVersion.gitSha || platformVersion.imageVersion?.raw ? (
-            <span className="font-mono text-[var(--dpf-text)]">
+            <span className="font-mono">
               {shortSha(platformVersion.gitSha ?? platformVersion.imageVersion?.raw ?? null)}
             </span>
           ) : (
-            <span className="font-mono text-[var(--dpf-text)]">dev (unbuilt)</span>
+            <span className="font-mono">dev (unbuilt)</span>
           )}
           {platformVersion.imageVersion?.source && (
-            <span className="ml-2 text-[var(--dpf-muted)]">
+            <span className="ml-1">
               ({sourceLabel(platformVersion.imageVersion.source)})
             </span>
           )}
           {platformVersion.buildDate && (
-            <span className="ml-2 text-[var(--dpf-muted)]">
-              · built {formatDate(platformVersion.buildDate)}
+            <span className="ml-1">
+              · built <LocalTime value={platformVersion.buildDate} />
             </span>
           )}
-        </div>
-        <div className="text-[11px] text-[var(--dpf-muted)]">
-          baseline v{platformVersion.version}
         </div>
         {enabled && (
           <>
@@ -255,7 +255,7 @@ export default function SelfUpgradeClient({
           ) : nextWindowStart ? (
             <span className="text-[var(--dpf-muted)]">
               Next maintenance window:{" "}
-              <span className="font-mono">{formatDate(nextWindowStart)}</span> —
+              <LocalTime className="font-mono" value={nextWindowStart} /> —
               upgrades are evaluated hourly.
             </span>
           ) : (
@@ -307,7 +307,7 @@ export default function SelfUpgradeClient({
           {latestRun.startedAt && (
             <div className="text-xs text-[var(--dpf-muted)]">
               Started:{" "}
-              <span className="font-mono">{formatDate(latestRun.startedAt)}</span>
+              <LocalTime className="font-mono" value={latestRun.startedAt} />
               {latestRun.completedAt && (
                 <> · {formatDuration(latestRun.startedAt, latestRun.completedAt)}</>
               )}

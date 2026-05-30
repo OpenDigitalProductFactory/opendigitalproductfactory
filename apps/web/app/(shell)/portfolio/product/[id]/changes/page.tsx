@@ -5,6 +5,7 @@
 import { prisma } from "@dpf/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -86,9 +87,11 @@ export default async function ProductChangesPage({ params }: Props) {
                 <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">
                   {b.phase}
                 </span>
-                <span className="text-[10px] text-[var(--dpf-muted)]">
-                  {b.createdAt.toLocaleDateString()}
-                </span>
+                <LocalTime
+                  value={b.createdAt}
+                  mode="date"
+                  className="text-[10px] text-[var(--dpf-muted)]"
+                />
               </div>
             ))}
           </div>
@@ -122,9 +125,11 @@ export default async function ProductChangesPage({ params }: Props) {
                   <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">
                     {c.itemType}
                   </span>
-                  <span className="text-[10px] text-[var(--dpf-muted)]">
-                    {c.createdAt.toLocaleDateString()}
-                  </span>
+                  <LocalTime
+                    value={c.createdAt}
+                    mode="date"
+                    className="text-[10px] text-[var(--dpf-muted)]"
+                  />
                 </div>
               );
             })}

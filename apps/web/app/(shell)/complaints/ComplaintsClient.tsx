@@ -3,6 +3,8 @@
 
 import { useState } from "react";
 
+import { LocalTime } from "@/components/ui/LocalTime";
+
 type Complaint = {
   id: string;
   customerName: string;
@@ -185,7 +187,7 @@ export function ComplaintsClient() {
                     {c.status}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-xs" style={{ color: "var(--dpf-muted)" }}>{new Date(c.createdAt).toLocaleDateString()}</td>
+                <td className="px-4 py-3 text-xs" style={{ color: "var(--dpf-muted)" }}><LocalTime value={c.createdAt} mode="date" /></td>
               </tr>
             ))}
             {filtered.length === 0 && (

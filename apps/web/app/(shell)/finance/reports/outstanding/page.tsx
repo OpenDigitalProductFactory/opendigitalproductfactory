@@ -1,5 +1,6 @@
 // apps/web/app/(shell)/finance/reports/outstanding/page.tsx
 import Link from "next/link";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { getOutstandingInvoicesReport } from "@/lib/actions/reports";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
@@ -111,7 +112,7 @@ export default async function OutstandingInvoicesPage() {
                       {formatMoney(inv.amountDue)}
                     </td>
                     <td className="px-4 py-2.5 text-right text-[var(--dpf-muted)]">
-                      {new Date(inv.dueDate).toLocaleDateString("en-GB")}
+                      <LocalTime value={inv.dueDate} utc />
                     </td>
                     <td
                       className="px-4 py-2.5 text-right font-semibold"

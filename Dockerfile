@@ -159,6 +159,15 @@ RUN if [ -n "$DPF_VERSION" ]; then \
 # independent of the static version.json baseline.
 RUN date -u +%Y-%m-%dT%H:%M:%SZ > /app/.dpf-image-built-at
 
+# Real platform version from the repo's git release tags (git describe),
+# supplied by the build (scripts/build-images.*, installer, CI, promoter).
+# When set, this is the authoritative version shown in the portal — version.json
+# is only a dev fallback. Leading "v" is normalized at read time.
+ARG DPF_PLATFORM_VERSION=
+RUN if [ -n "$DPF_PLATFORM_VERSION" ]; then \
+      echo "$DPF_PLATFORM_VERSION" > /app/.dpf-platform-version; \
+    fi
+
 # Promoter build context (autonomous deployment pipeline)
 # These files let the portal build the dpf-promoter image on first use.
 COPY Dockerfile.promoter /promoter/Dockerfile.promoter

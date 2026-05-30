@@ -2,6 +2,7 @@ import { getIncident } from "@/lib/actions/compliance";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EditIncidentForm } from "@/components/compliance/EditIncidentForm";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -70,12 +71,12 @@ export default async function IncidentDetailPage({ params }: Props) {
           </div>
           {incident.notificationDeadline && (
             <p className={`text-xs ${deadlinePassed && !incident.notifiedAt ? "text-red-400" : "text-amber-400"}`}>
-              Notification deadline: {new Date(incident.notificationDeadline).toLocaleString()}
+              Notification deadline: <LocalTime value={incident.notificationDeadline} />
               {deadlinePassed && !incident.notifiedAt && " — OVERDUE"}
             </p>
           )}
           {incident.notifiedAt && (
-            <p className="text-xs text-green-400">Notified at: {new Date(incident.notifiedAt).toLocaleString()}</p>
+            <p className="text-xs text-green-400">Notified at: <LocalTime value={incident.notifiedAt} /></p>
           )}
         </div>
       )}
@@ -84,12 +85,12 @@ export default async function IncidentDetailPage({ params }: Props) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Occurred At</p>
-          <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(incident.occurredAt).toLocaleString()}</p>
+          <LocalTime value={incident.occurredAt} className="text-sm font-semibold text-[var(--dpf-text)]" />
         </div>
         {incident.detectedAt && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Detected At</p>
-            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(incident.detectedAt).toLocaleString()}</p>
+            <LocalTime value={incident.detectedAt} className="text-sm font-semibold text-[var(--dpf-text)]" />
           </div>
         )}
         {incident.category && (
@@ -171,7 +172,7 @@ export default async function IncidentDetailPage({ params }: Props) {
                   </div>
                   {a.dueDate && (
                     <span className={`text-xs ${isOverdue ? "text-red-400" : "text-[var(--dpf-muted)]"}`}>
-                      Due: {new Date(a.dueDate).toLocaleDateString()}
+                      Due: <LocalTime value={a.dueDate} utc />
                     </span>
                   )}
                 </div>
