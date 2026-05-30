@@ -1,6 +1,6 @@
 ---
 name: dpf-file-backlog-item
-description: "Use when working in the DPF codebase and a new piece of work needs to enter the backlog — feature gap, bug, tool gap, skill gap, doc gap, automated detection, user request. The DPF BI lifecycle gate sits in front of superpowers:writing-plans: a plan is for a BI, not for floating intent. This skill walks the substrate-verify → file → size → triage → link-epic flow with the live MCP backlog tools so the BI lands with the right shape and the right epic on the first try."
+description: "Use when working in the DPF codebase and a new piece of work needs to enter the backlog — feature gap, bug, tool gap, skill gap, doc gap, automated detection, user request. The DPF BI lifecycle gate sits in front of the planning step: a plan is for a BI, not for floating intent. This skill walks the substrate-verify → file → size → triage → link-epic flow with the live MCP backlog tools so the BI lands with the right shape and the right epic on the first try."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
@@ -29,7 +29,7 @@ enforces:
 
 # DPF File a Backlog Item
 
-When a piece of work needs to enter the DPF queue — feature gap, bug, tool gap, skill gap, doc gap — **it goes through `mcp__dpf__create_backlog_item`**, not into a floating spec or a TODO comment. The DPF BI lifecycle gate sits in front of `superpowers:writing-plans`: a plan is for a BI, not for floating intent. This skill walks the verify → file → size → triage → link-epic flow with the live MCP tools so the BI lands with the right shape and the right epic on the first try.
+When a piece of work needs to enter the DPF queue — feature gap, bug, tool gap, skill gap, doc gap — **it goes through `mcp__dpf__create_backlog_item`**, not into a floating spec or a TODO comment. The DPF BI lifecycle gate sits in front of the planning step: a plan is for a BI, not for floating intent. This skill walks the verify → file → size → triage → link-epic flow with the live MCP tools so the BI lands with the right shape and the right epic on the first try.
 
 ## When to use
 

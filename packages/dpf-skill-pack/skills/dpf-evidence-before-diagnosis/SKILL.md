@@ -1,6 +1,6 @@
 ---
 name: dpf-evidence-before-diagnosis
-description: "Use when working in the DPF codebase and tempted to claim a cause for an observed symptom. Before naming the cause, query the live DB / status fields / log streams / runtime state for evidence — don't read a log line and assume its suggested cause without verification. Composes with superpowers:systematic-debugging as the predecessor evidence-gathering step. Encodes the evidence-before-diagnosis kernel principle plus the structural-verification-is-not-functional commandment."
+description: "Use when working in the DPF codebase and tempted to claim a cause for an observed symptom. Before naming the cause, query the live DB / status fields / log streams / runtime state for evidence — don't read a log line and assume its suggested cause without verification. Composes with dpf-systematic-debugging as the predecessor evidence-gathering step. Encodes the evidence-before-diagnosis kernel principle plus the structural-verification-is-not-functional commandment."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
@@ -16,7 +16,7 @@ triggerPattern: "what's wrong|why is .* failing|why does .* not work|the cause i
 userInvocable: true
 agentInvocable: true
 allowedTools: ["Bash", "Grep", "mcp__dpf__get_backlog_item", "mcp__dpf__get_build_progress_visibility", "mcp__dpf__get_build_sandbox_state", "mcp__dpf__list_build_activity_since", "mcp__dpf__get_build_dispatch_history", "mcp__dpf__diagnose_sandbox"]
-composesFrom: ["systematic-debugging"]
+composesFrom: ["dpf-systematic-debugging"]
 contextRequirements: []
 riskBand: low
 
@@ -32,7 +32,7 @@ enforces:
 
 A log line says "X failed because Y." The agent reads it and reports "Y is the problem." **Stop.** Before naming Y as the cause, query the live state — DB row, status field, runtime ledger, tool return value — that would either confirm or refute the log's suggested cause. Logs are written by code that itself can be wrong; their suggested causes are hypotheses, not findings.
 
-This skill is the DPF-specific operationalization of the `evidence-before-diagnosis` and `structural-verification-is-not-functional` commandments. It composes with `superpowers:systematic-debugging` as the evidence-gathering step that comes before hypothesis testing.
+This skill is the DPF-specific operationalization of the `evidence-before-diagnosis` and `structural-verification-is-not-functional` commandments. It composes with `dpf-systematic-debugging` as the evidence-gathering step that comes before hypothesis testing.
 
 ## When to use
 
@@ -44,7 +44,7 @@ This skill is the DPF-specific operationalization of the `evidence-before-diagno
 
 ## When NOT to use
 
-- The "cause" is purely hypothetical (brainstorming candidate root causes) — that's `superpowers:systematic-debugging` territory.
+- The "cause" is purely hypothetical (brainstorming candidate root causes) — that's `dpf-systematic-debugging` territory.
 - Pure code review (no runtime state to verify against) — read for code-correctness directly.
 - Operator has explicitly authorized speculative reasoning (rare).
 
@@ -133,7 +133,7 @@ Had this skill been skipped, the diagnosis "my change broke these tests" would h
 - Kernel commandment: [`structural-verification-is-not-functional`](../../../../docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md)
 - Kernel principle: [`evidence-before-diagnosis`](../../../../docs/founder-kernel/wiki/principles/evidence-before-diagnosis.md)
 - Kernel principle: [`check-tool-signals-first`](../../../../docs/founder-kernel/wiki/principles/check-tool-signals-first.md)
-- Composes with: `superpowers:systematic-debugging` (4-phase root cause process)
+- Composes with: `dpf-systematic-debugging` (4-phase root cause process)
 - Memory: `feedback_dynamic_analysis_is_evidence` (dynamic-analysis output discipline)
 - Memory: `project_proposal_trap_silent_failure` (success-message mistrust)
 - Tool-trace logging: `project_tool_trace_logging` (`[tool-trace]` log entries to read first)

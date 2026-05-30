@@ -1,6 +1,6 @@
 ---
 name: dpf-pr-with-dco
-description: "Use when ready to open a DPF pull request. Encodes the full DPF PR contract: branch from origin/main, sign every commit (-s) for DCO, push and let CI evidence accumulate, overlap-sweep against open PRs before push, open the PR only when ready to merge (not as a parking place). Composes with superpowers:finishing-a-development-branch as the successor: that skill decides the integration shape; this one operationalizes the DPF-specific PR mechanics."
+description: "Use when ready to open a DPF pull request. Encodes the full DPF PR contract: branch from origin/main, sign every commit (-s) for DCO, push and let CI evidence accumulate, overlap-sweep against open PRs before push, open the PR only when ready to merge (not as a parking place). Composes with dpf-finishing-a-development-branch as the successor: that skill decides the integration shape; this one operationalizes the DPF-specific PR mechanics."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
@@ -16,7 +16,7 @@ triggerPattern: "open (a |the )?PR|pull request|push (and|to) PR|land this|ship 
 userInvocable: true
 agentInvocable: true
 allowedTools: ["Bash"]
-composesFrom: ["finishing-a-development-branch"]
+composesFrom: ["dpf-finishing-a-development-branch"]
 contextRequirements: ["git available; gh CLI authenticated; DCO app enabled on repo"]
 riskBand: high
 
@@ -41,7 +41,7 @@ DPF's PR contract is strict and non-negotiable: **every change lands via PR**, *
 
 ## When NOT to use
 
-- Build gate not green — finish the work first (run `superpowers:verification-before-completion`).
+- Build gate not green — finish the work first (the build gate must pass; verify functionally per `dpf-systematic-debugging` Phase 4, where a structural pass is not verification).
 - Branch is unsigned mid-stream — fix sign-off via `git commit --amend --no-edit -s` (or for older commits, `git rebase --signoff`) BEFORE running this skill.
 - PR would be a "parking place" for in-flight work — keep the branch pushed but don't open the PR. The "PR creation means ready to merge" rule is explicit in AGENTS.md §4.
 - Concurrent session is already opening a PR for the same fix — coordinate (operator) before pushing.
@@ -167,5 +167,5 @@ All three commits carry `Signed-off-by: Mark Bodman <markdbodman@gmail.com>` and
 
 - AGENTS.md §4 (Branching, Commits & PRs) — full canonical doctrine
 - Predecessor skill: [`dpf-worktree-per-session`](../dpf-worktree-per-session/SKILL.md)
-- Composes with: `superpowers:finishing-a-development-branch` (integration-shape decisions)
+- Composes with: `dpf-finishing-a-development-branch` (integration-shape decisions)
 - Kernel principles: [`all-changes-land-via-pr`](../../../../docs/founder-kernel/wiki/principles/all-changes-land-via-pr.md), [`dco-sign-off-required`](../../../../docs/founder-kernel/wiki/principles/dco-sign-off-required.md), [`branch-guard-before-implementation`](../../../../docs/founder-kernel/wiki/principles/branch-guard-before-implementation.md)
