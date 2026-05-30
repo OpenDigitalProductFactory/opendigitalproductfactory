@@ -364,6 +364,7 @@ export async function getFeatureBuildForContext(
       buildId: true,
       title: true,
       phase: true,
+      kind: true,
       brief: true,
       designDoc: true,
       designReview: true,
@@ -589,6 +590,7 @@ export async function getFeatureBuildForContext(
   return {
     buildId: r.buildId,
     phase: r.phase as BuildPhase,
+    kind: r.kind as import("@/lib/feature-build-types").FeatureBuildKind,
     title: r.title,
     brief: r.brief as FeatureBrief | null,
     designDoc: r.designDoc as BuildDesignDoc | null,

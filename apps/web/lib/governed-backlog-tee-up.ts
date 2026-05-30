@@ -58,6 +58,11 @@ type GovernedBacklogTeeUpTx = {
   workCapsuleActivity: {
     create(args: any): Promise<any>;
   };
+  platformIssueReport: {
+    findUnique(args: any): Promise<any>;
+    findFirst(args: any): Promise<any>;
+    updateMany(args: any): Promise<any>;
+  };
 };
 
 type GovernedBacklogTeeUpPrisma = GovernedBacklogTeeUpTx & {
@@ -203,11 +208,64 @@ export async function promoteBacklogItemToBuildDraft(
     },
   });
 
+  // Work-kind derivation + fix-context carry-through.
+  // A bug-sourced backlog item becomes a "fix" build; everything else stays a
+  // "feature". For fixes, pull the originating PlatformIssueReport (linked from
+  // the triage-created BI body as "Source report: PIR-XXXXX") so the build
+  // starts from the real diagnosis (severity, route, error stack) instead of a
+  // blank brief. reproSteps/rootCause/fixApproach are left for ideate to fill.
+  const kind: "feature" | "fix" = item.source === "bug" ? "fix" : "feature";
+  let fixBrief: Record<string, unknown> | null = null;
+  let originatingReportId: string | null = null;
+  if (kind === "fix") {
+    let report: {
+      id: string;
+      reportId: string;
+      severity: string | null;
+      routeContext: string | null;
+      errorStack: string | null;
+      description: string | null;
+    } | null = null;
+    try {
+      const publicIdMatch = (item.body ?? "").match(/PIR-[A-Z0-9]+/);
+      if (publicIdMatch) {
+        report = await tx.platformIssueReport.findUnique({
+          where: { reportId: publicIdMatch[0] },
+          select: { id: true, reportId: true, severity: true, routeContext: true, errorStack: true, description: true },
+        });
+      }
+    } catch {
+      // Non-fatal — proceed with a body-only fix context.
+    }
+    originatingReportId = report?.id ?? null;
+    const fixContext: Record<string, unknown> = {
+      ...(report?.severity ? { severity: report.severity } : {}),
+      ...(report?.id ? { originatingIssueReportId: report.id } : {}),
+      ...(report?.reportId ? { originatingIssueReportPublicId: report.reportId } : {}),
+      ...(report?.routeContext ? { routeContext: report.routeContext } : {}),
+      ...(report?.errorStack ? { errorStackExcerpt: report.errorStack.slice(0, 2000) } : {}),
+      // Seed "actual" from the report/BI body; ideate refines repro/expected/root cause/fix approach.
+      ...((report?.description ?? item.body) ? { actual: (report?.description ?? item.body).slice(0, 2000) } : {}),
+    };
+    fixBrief = {
+      title: item.title,
+      description: item.body ?? item.title,
+      portfolioContext: "",
+      targetRoles: [],
+      inputs: [],
+      dataNeeds: "",
+      acceptanceCriteria: [],
+      fixContext,
+    };
+  }
+
   const created = await tx.featureBuild.create({
     data: {
       buildId: generateBuildId(),
       title: item.title,
+      kind,
       ...(item.body ? { description: item.body } : {}),
+      ...(fixBrief ? { brief: fixBrief } : {}),
       createdById: userId,
       digitalProductId: item.digitalProductId ?? null,
       originatingBacklogItemId: item.id,
@@ -215,6 +273,20 @@ export async function promoteBacklogItemToBuildDraft(
       plan,
     },
   });
+
+  // Back-link the originating issue report to this build, in-transaction so a
+  // rollback cannot orphan the link. updateMany avoids a throw if the report
+  // was already linked/removed.
+  if (originatingReportId) {
+    try {
+      await tx.platformIssueReport.updateMany({
+        where: { id: originatingReportId, featureBuildId: null },
+        data: { featureBuildId: created.id },
+      });
+    } catch {
+      // Non-fatal — the build is the source of truth; the link is a convenience.
+    }
+  }
 
   await tx.backlogItem.update({
     where: { itemId },

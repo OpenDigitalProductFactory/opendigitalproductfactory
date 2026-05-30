@@ -29,6 +29,11 @@ const mockPrisma = {
   workCapsuleActivity: {
     create: vi.fn(),
   },
+  platformIssueReport: {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    updateMany: vi.fn(),
+  },
   $transaction: vi.fn(),
 };
 
@@ -53,6 +58,9 @@ describe("governed backlog tee-up", () => {
     });
     mockPrisma.workCapsuleActivity.create.mockResolvedValue({});
     mockPrisma.featureBuild.update.mockResolvedValue({});
+    mockPrisma.platformIssueReport.findUnique.mockResolvedValue(null);
+    mockPrisma.platformIssueReport.findFirst.mockResolvedValue(null);
+    mockPrisma.platformIssueReport.updateMany.mockResolvedValue({ count: 0 });
 
     mockPrisma.$transaction.mockImplementation(async (callback: (tx: typeof mockPrisma) => Promise<unknown>) => {
       return callback(mockPrisma);
@@ -431,6 +439,62 @@ describe("governed backlog tee-up", () => {
         taxonomyNodeId: "taxonomy-cuid-ops",
         constrainedGoal: "Add taxonomy filter to operations map",
         failureReason: null,
+      });
+    });
+
+    it("promotes a bug-sourced item as kind=fix, carries fixContext, and back-links the issue report", async () => {
+      mockPrisma.backlogItem.findUnique.mockResolvedValueOnce({
+        id: "bi-cuid-bug",
+        itemId: "BI-PIR-abcd1234",
+        title: "Contact form 500s on submit",
+        body: "Server error on submit\n\nRoute: /portal/contact\n\nSource report: PIR-ABCDE",
+        status: "open",
+        triageOutcome: "build",
+        effortSize: "small",
+        activeBuildId: null,
+        digitalProductId: null,
+        epicId: null,
+        taxonomyNodeId: null,
+        source: "bug",
+        epic: null,
+      });
+      mockPrisma.platformIssueReport.findUnique.mockResolvedValueOnce({
+        id: "pir-row-1",
+        reportId: "PIR-ABCDE",
+        severity: "high",
+        routeContext: "/portal/contact",
+        errorStack: "TypeError: cannot read 'format' of undefined\n  at submitContact",
+        description: "500 error when submitting the contact form",
+      });
+      mockPrisma.epic.create.mockResolvedValueOnce({ id: "epic-cuid-fix", epicId: "EP-BUILD-FIX001" });
+      mockPrisma.featureBuild.create.mockResolvedValueOnce({ id: "build-row-fix", buildId: "FB-FIX00001" });
+
+      const { promoteBacklogItemToBuildDraft } = await import("./governed-backlog-tee-up");
+      const result = await promoteBacklogItemToBuildDraft({
+        tx: mockPrisma,
+        itemId: "BI-PIR-abcd1234",
+        userId: "user-1",
+        governedBacklogEnabled: true,
+      });
+
+      expect(result.kind).toBe("success");
+
+      const createData = mockPrisma.featureBuild.create.mock.calls[0]![0].data;
+      expect(createData.kind).toBe("fix");
+      expect(createData.brief.fixContext).toEqual(
+        expect.objectContaining({
+          severity: "high",
+          originatingIssueReportId: "pir-row-1",
+          originatingIssueReportPublicId: "PIR-ABCDE",
+          routeContext: "/portal/contact",
+        }),
+      );
+      expect(createData.brief.fixContext.errorStackExcerpt).toContain("TypeError");
+
+      // Back-link written in-transaction, guarded on featureBuildId: null.
+      expect(mockPrisma.platformIssueReport.updateMany).toHaveBeenCalledWith({
+        where: { id: "pir-row-1", featureBuildId: null },
+        data: { featureBuildId: "build-row-fix" },
       });
     });
 

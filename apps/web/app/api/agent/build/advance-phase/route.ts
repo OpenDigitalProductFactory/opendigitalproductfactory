@@ -48,6 +48,8 @@ export async function POST(request: NextRequest): Promise<Response> {
       buildId: true,
       title: true,
       phase: true,
+      kind: true,
+      brief: true,
       originatingBacklogItemId: true,
       draftApprovedAt: true,
       designDoc: true,
@@ -99,7 +101,10 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
 
+  const advanceBrief = build.brief as { fixContext?: import("@/lib/feature-build-types").FixContext } | null;
   const gate = checkPhaseGate(currentPhase, targetPhase, {
+    kind: build.kind,
+    fixContext: advanceBrief?.fixContext,
     designDoc: build.designDoc,
     designReview: build.designReview,
     happyPathState: normalizeHappyPathState((build.plan as Record<string, unknown> | null)?.happyPathState ?? null),
