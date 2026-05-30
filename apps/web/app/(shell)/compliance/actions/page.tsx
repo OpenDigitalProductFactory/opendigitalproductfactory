@@ -2,6 +2,7 @@ import { listCorrectiveActions } from "@/lib/actions/compliance";
 import { CORRECTIVE_ACTION_STATUSES, CORRECTIVE_ACTION_SOURCE_TYPES } from "@/lib/compliance-types";
 import Link from "next/link";
 import { CreateCorrectiveActionForm } from "@/components/compliance/CreateCorrectiveActionForm";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = { searchParams: Promise<{ status?: string; sourceType?: string; overdue?: string }> };
 
@@ -94,7 +95,7 @@ export default async function ActionsPage({ searchParams }: Props) {
                     </div>
                   </div>
                   <div className="text-right text-xs text-[var(--dpf-muted)]">
-                    {a.dueDate && <p className={isOverdue ? "text-red-400" : ""}>Due: {new Date(a.dueDate).toLocaleDateString()}</p>}
+                    {a.dueDate && <p className={isOverdue ? "text-red-400" : ""}>Due: <LocalTime value={a.dueDate} utc /></p>}
                     {a.owner && <p>{a.owner.displayName}</p>}
                   </div>
                 </div>

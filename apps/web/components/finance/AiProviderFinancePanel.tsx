@@ -1,3 +1,4 @@
+import { LocalTime } from "@/components/ui/LocalTime";
 import type { getAiProviderFinanceDetail } from "@/lib/finance/ai-provider-finance";
 
 type ProviderFinanceDetail = Awaited<ReturnType<typeof getAiProviderFinanceDetail>>;
@@ -66,7 +67,7 @@ export function AiProviderFinancePanel({ detail }: { detail: ProviderFinanceDeta
           <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--dpf-muted)]">Latest utilization</p>
           <p className="mt-1 text-sm text-[var(--dpf-text)]">
             {latestSnapshot.utilizationPct?.toFixed(1) ?? "0.0"}% utilized on{" "}
-            {new Date(latestSnapshot.snapshotDate).toLocaleDateString("en-US")}
+            <LocalTime value={latestSnapshot.snapshotDate} utc />
           </p>
         </div>
       )}

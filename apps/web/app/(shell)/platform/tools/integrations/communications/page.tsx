@@ -1,5 +1,6 @@
 import { Bell, Building2, MessagesSquare } from "lucide-react";
 import { listCommunicationChannelBindings } from "@/lib/communications/channel-binding-store";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { SpeechToTextCard } from "@/components/admin/SpeechToTextCard";
 
 const groups = [
@@ -163,7 +164,7 @@ export default async function CommunicationsPage() {
                     {binding.allowedUrgencies.join(", ")}
                   </span>
                   <span className="text-xs text-[var(--dpf-muted)]">
-                    {binding.lastTestedAt ? `Tested ${formatBindingDate(binding.lastTestedAt)}` : "Not tested"}
+                    {binding.lastTestedAt ? <>Tested <LocalTime value={binding.lastTestedAt} mode="date" /></> : "Not tested"}
                   </span>
                   {binding.lastError && (
                     <span className="basis-full text-xs text-[var(--dpf-muted)] lg:text-right">
@@ -187,12 +188,4 @@ function BindingMetric({ label, value }: { label: string; value: string }) {
       <dd className="mt-1 text-lg font-semibold text-[var(--dpf-text)]">{value}</dd>
     </div>
   );
-}
-
-function formatBindingDate(value: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(value));
 }

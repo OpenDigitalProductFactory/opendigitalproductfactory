@@ -11,6 +11,7 @@
 
 import type { ReactElement } from "react";
 import type { DigitalProductView } from "@/lib/portfolio/digital-product-view-model";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { FreshnessBadge } from "./FreshnessBadge";
 
 type Props = { vm: DigitalProductView };
@@ -164,7 +165,7 @@ function LinkedEntitiesSection({ vm }: { vm: DigitalProductView }): ReactElement
                     : entity.attributionConfidence.toFixed(2)}
                 </td>
                 <td className="py-2 pr-3 text-[var(--dpf-muted)] text-xs">
-                  {entity.lastSeenAt.toISOString().slice(0, 10)}
+                  <LocalTime value={entity.lastSeenAt} mode="date" />
                 </td>
               </tr>
             ))}

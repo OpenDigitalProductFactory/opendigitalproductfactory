@@ -7,6 +7,7 @@ import { PipelineStageInspector } from "@/components/customer/PipelineStageInspe
 import { updateOpportunityStageFromForm } from "@/lib/actions/crm";
 import { getPipelineInspectorView } from "@/lib/crm/pipeline-inspector-data";
 import { getOpportunityStageMeta, getQuoteStatusMeta } from "@/lib/crm/presentation";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const ACTIVITY_ICONS: Record<string, string> = {
   note: "📝", call: "📞", email: "📧", meeting: "📅", task: "☑️",
@@ -104,9 +105,11 @@ export default async function OpportunityDetailPage({
         {opportunity.expectedClose && (
           <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
             <p className="text-[10px] text-[var(--dpf-muted)]">Expected Close</p>
-            <p className="text-sm text-[var(--dpf-text)]">
-              {new Date(opportunity.expectedClose).toLocaleDateString()}
-            </p>
+            <LocalTime
+              value={opportunity.expectedClose}
+              utc
+              className="text-sm text-[var(--dpf-text)]"
+            />
           </div>
         )}
         {opportunity.assignedTo && (
@@ -138,7 +141,7 @@ export default async function OpportunityDetailPage({
                       <p className="text-[10px] text-[var(--dpf-muted)] mt-0.5 line-clamp-2">{act.body}</p>
                     )}
                     <div className="flex gap-2 mt-1 text-[9px] text-[var(--dpf-muted)]">
-                      <span>{new Date(act.createdAt).toLocaleString()}</span>
+                      <LocalTime value={act.createdAt} />
                       {act.createdBy && <span>by {act.createdBy.email}</span>}
                     </div>
                   </div>

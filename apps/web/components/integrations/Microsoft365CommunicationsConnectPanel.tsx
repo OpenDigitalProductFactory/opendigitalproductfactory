@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { EmailInput } from "@/components/ui/EmailInput";
 
 export interface Microsoft365CommunicationsConnectionState {
   status: "unconfigured" | "connected" | "error";
@@ -147,10 +148,9 @@ export function Microsoft365CommunicationsConnectPanel({
           label="Mailbox user principal name"
           hint="The mailbox UPN DPF should use for read-first inbox and calendar preview."
         >
-          <input
-            type="email"
+          <EmailInput
             value={mailboxUserPrincipalName}
-            onChange={(event) => setMailboxUserPrincipalName(event.target.value)}
+            onValueChange={(v) => setMailboxUserPrincipalName(v)}
             required
             autoComplete="off"
             className="w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-bg)] px-3 py-2 font-mono text-sm text-[var(--dpf-text)]"

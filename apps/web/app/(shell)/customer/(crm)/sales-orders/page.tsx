@@ -3,6 +3,7 @@ import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
 import { CRM_TONE_CLASSES, getSalesOrderStatusMeta } from "@/lib/crm/presentation";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 export default async function SalesOrdersPage() {
   const orders = await prisma.salesOrder.findMany({
@@ -53,9 +54,11 @@ export default async function SalesOrdersPage() {
                 <p className="text-sm font-mono font-semibold text-[var(--dpf-text)]">
                   {o.currency} {Number(o.totalAmount).toLocaleString()}
                 </p>
-                <p className="text-[9px] text-[var(--dpf-muted)]">
-                  {new Date(o.createdAt).toLocaleDateString()}
-                </p>
+                <LocalTime
+                  value={o.createdAt}
+                  mode="date"
+                  className="text-[9px] text-[var(--dpf-muted)]"
+                />
               </div>
             </div>
           );

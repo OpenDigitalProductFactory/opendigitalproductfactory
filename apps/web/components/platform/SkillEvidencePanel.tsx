@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 
+import { LocalTime } from "@/components/ui/LocalTime";
 import type {
   SkillEvidenceRefs,
   SkillEvidenceResult,
@@ -92,7 +93,11 @@ function EvidenceRow({ item }: { item: SkillEvidenceResult }) {
         <span style={badgeStyle}>{kindLabels[item.kind]}</span>
         <span style={labelStyle}>{item.label}</span>
         <time dateTime={item.createdAt} style={timeStyle}>
-          {formatDate(item.createdAt)}
+          <LocalTime
+            value={item.createdAt}
+            options={{ dateStyle: "medium", timeStyle: "short" }}
+            withZone={false}
+          />
         </time>
       </div>
       <p style={summaryStyle}>{item.summary}</p>
@@ -107,12 +112,6 @@ function EvidenceRow({ item }: { item: SkillEvidenceResult }) {
       )}
     </article>
   );
-}
-
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
 const rootStyle: CSSProperties = {

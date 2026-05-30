@@ -4,6 +4,7 @@ import { Archive, FileText, Search } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { searchManagedDocuments } from "@/lib/documents/document-store";
 import { prisma } from "@dpf/db";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = {
   searchParams: Promise<{
@@ -184,7 +185,9 @@ export default async function DocumentsPage({ searchParams }: Props) {
                       ))}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-right text-xs text-[var(--dpf-muted)]">{doc.updatedAt.toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-right text-xs text-[var(--dpf-muted)]">
+                    <LocalTime value={doc.updatedAt} mode="date" />
+                  </td>
                 </tr>
               ))}
             </tbody>

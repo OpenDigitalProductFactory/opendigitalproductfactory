@@ -3,6 +3,7 @@ import { SUBMISSION_STATUSES, SUBMISSION_TYPES } from "@/lib/compliance-types";
 import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { CreateSubmissionForm } from "@/components/compliance/CreateSubmissionForm";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-gray-900/30 text-gray-400",
@@ -92,13 +93,13 @@ export default async function SubmissionsPage({ searchParams }: Props) {
                 <div className="text-right text-xs text-[var(--dpf-muted)]">
                   {s.dueDate && (
                     <p className={daysRemaining !== null && daysRemaining < 0 ? "text-red-400" : daysRemaining !== null && daysRemaining < 7 ? "text-yellow-400" : undefined}>
-                      Due: {new Date(s.dueDate).toLocaleDateString()}
+                      Due: <LocalTime value={s.dueDate} utc />
                       {daysRemaining !== null && (
                         <span className="ml-1">({daysRemaining < 0 ? `${Math.abs(daysRemaining)}d overdue` : `${daysRemaining}d`})</span>
                       )}
                     </p>
                   )}
-                  {s.submittedAt && <p>Submitted: {new Date(s.submittedAt).toLocaleDateString()}</p>}
+                  {s.submittedAt && <p>Submitted: <LocalTime value={s.submittedAt} mode="date" /></p>}
                   {s.confirmationRef && <p>Ref: {s.confirmationRef}</p>}
                   {s.submittedBy && <p>{s.submittedBy.displayName}</p>}
                 </div>
