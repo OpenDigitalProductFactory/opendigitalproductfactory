@@ -274,6 +274,12 @@ function VoiceSampleCapture({ profileId }: { profileId: string }) {
 
 // ─── Mic recorder ─────────────────────────────────────────────────────────────
 
+// Zero-shot cloning quality scales with reference length: a 3s clip clones
+// poorly and aggravates model instability. ~15-30s of clean, continuous speech
+// is the recipe sweet spot. Gate stop at the minimum; recommend the range.
+const MIN_RECORDING_SECONDS = 15
+const RECOMMENDED_MAX_SECONDS = 30
+
 function MicRecorder({ profileId }: { profileId: string }) {
   const [recState, setRecState] = useState<RecordState>("idle")
   const [error, setError] = useState<string | null>(null)
@@ -307,7 +313,19 @@ function MicRecorder({ profileId }: { profileId: string }) {
     setRecState("permission")
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // Capture recipe for good zero-shot cloning: clean, single-speaker audio.
+      // echo/noise/gain processing lifts SNR on laptop mics in untreated rooms,
+      // which every cloning model depends on; 48 kHz mono is the capture ideal
+      // (downsampled server-side as needed).
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: 48000,
+        },
+      })
       streamRef.current = stream
 
       const mimeType = selectSupportedMimeType() ?? undefined
@@ -396,9 +414,17 @@ function MicRecorder({ profileId }: { profileId: string }) {
             <button onClick={() => setShowScript(false)} className="text-xs text-muted-foreground hover:text-foreground">dismiss</button>
           </div>
           <p className="text-sm text-muted-foreground italic leading-relaxed">
-            "I'm recording this voice sample to enable AI-narrated decision feedback
-            through the platform. My name is [your name] and I consent to this
-            voice profile being used for that purpose."
+            "My name is [your name], and I consent to this voice profile being
+            used for AI-narrated decision feedback through the platform. I'm
+            reading this short passage at a natural, steady pace so the system can
+            learn how my voice really sounds. The quick brown fox jumps over the
+            lazy dog, while bright autumn leaves drift quietly past the open
+            window. I'm happy to help the team make clearer, faster decisions."
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Read it all the way through ({MIN_RECORDING_SECONDS}–{RECOMMENDED_MAX_SECONDS}s).
+            A quiet room, a steady pace, and your normal speaking voice give the
+            best clone.
           </p>
         </div>
       )}
@@ -425,11 +451,18 @@ function MicRecorder({ profileId }: { profileId: string }) {
           </span>
           <button
             onClick={stopRecording}
-            disabled={elapsed < 3}
+            disabled={elapsed < MIN_RECORDING_SECONDS}
             className="rounded border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-40"
           >
-            {elapsed < 3 ? `Stop (${3 - elapsed}s min)` : "Stop"}
+            {elapsed < MIN_RECORDING_SECONDS
+              ? `Stop (${MIN_RECORDING_SECONDS - elapsed}s min)`
+              : "Stop"}
           </button>
+          {elapsed >= MIN_RECORDING_SECONDS && elapsed < RECOMMENDED_MAX_SECONDS && (
+            <span className="text-xs text-muted-foreground">
+              Good — keep going to ~{RECOMMENDED_MAX_SECONDS}s for the best clone.
+            </span>
+          )}
         </div>
       )}
 
