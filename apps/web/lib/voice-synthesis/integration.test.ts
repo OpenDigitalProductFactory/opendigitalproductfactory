@@ -18,6 +18,7 @@ vi.mock("./voice-service", () => ({
     provider: "chatterbox",  // default provider is now self-hosted Chatterbox
     ttsCostUnits: 10,
   }),
+  defaultProvider: vi.fn().mockReturnValue("chatterbox"),
   VoiceSynthesisError: class VoiceSynthesisError extends Error {
     constructor(message: string) {
       super(message)
@@ -96,14 +97,18 @@ describe("Voice Synthesis End-to-End Integration", () => {
     expect(mockPrisma.decisionInteractionVoiceOutput.create).not.toHaveBeenCalled()
   })
 
-  it("routes to chatterbox adapter when provider field is chatterbox", async () => {
+  it("routes to the deployment-configured provider (defaultProvider), not the stored profile field", async () => {
     mockPrisma.decisionInteraction.findUnique.mockResolvedValue(fakeInteractionVoiceEnabled)
     mockPrisma.decisionInteractionVoiceOutput.create.mockResolvedValue({ id: "vo-2" })
 
+    const { synthesizeSpeech, defaultProvider } = await import("./voice-service")
+    // Simulate an install that switched to mlx (e.g. Apple Silicon) even though
+    // the profile was registered as chatterbox.
+    vi.mocked(defaultProvider).mockReturnValueOnce("mlx")
+
     await runVoiceSynthesisJob("DI-abc")
 
-    const { synthesizeSpeech } = await import("./voice-service")
     const callArgs = vi.mocked(synthesizeSpeech).mock.calls[0]
-    expect(callArgs[1].provider).toBe("chatterbox")
+    expect(callArgs[1].provider).toBe("mlx")
   })
 })
