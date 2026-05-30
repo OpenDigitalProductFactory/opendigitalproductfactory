@@ -2,6 +2,7 @@
 "use client";
 
 import { useState } from "react";
+import { LocalTime } from "@/components/ui/LocalTime";
 import type {
   SkillEntry,
   FinishingPassEntry,
@@ -149,9 +150,11 @@ export function SkillsObservatoryPanel({
                         {fp.passType}
                       </span>
                     )}
-                    <span className="text-[10px] text-[var(--dpf-muted)] ml-auto shrink-0">
-                      {new Date(fp.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                    </span>
+                    <LocalTime
+                      value={fp.createdAt}
+                      options={{ month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }}
+                      className="text-[10px] text-[var(--dpf-muted)] ml-auto shrink-0"
+                    />
                   </div>
                   <p className="text-xs text-[var(--dpf-text-secondary)] mt-0.5 leading-relaxed">{fp.summary}</p>
                   <span className="text-[10px] text-[var(--dpf-muted)]">Build: {fp.buildId}</span>
@@ -188,9 +191,11 @@ export function SkillsObservatoryPanel({
                 {ex.durationMs !== null && (
                   <span className="text-[10px] text-[var(--dpf-muted)]">{ex.durationMs}ms</span>
                 )}
-                <span className="text-[10px] text-[var(--dpf-muted)] shrink-0">
-                  {new Date(ex.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                </span>
+                <LocalTime
+                  value={ex.createdAt}
+                  options={{ month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }}
+                  className="text-[10px] text-[var(--dpf-muted)] shrink-0"
+                />
               </div>
             ))
           )}

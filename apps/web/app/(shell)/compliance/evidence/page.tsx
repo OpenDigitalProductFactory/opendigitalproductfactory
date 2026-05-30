@@ -3,6 +3,7 @@ import { EVIDENCE_TYPES } from "@/lib/compliance-types";
 import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { CreateEvidenceForm } from "@/components/compliance/CreateEvidenceForm";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = { searchParams: Promise<{ evidenceType?: string; status?: string }> };
 
@@ -75,7 +76,7 @@ export default async function EvidencePage({ searchParams }: Props) {
                   </div>
                 </div>
                 <div className="text-right text-xs text-[var(--dpf-muted)]">
-                  <p>{new Date(e.collectedAt).toLocaleDateString()}</p>
+                  <LocalTime value={e.collectedAt} mode="date" />
                   {e.collectedBy && <p>{e.collectedBy.displayName}</p>}
                 </div>
               </div>

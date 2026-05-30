@@ -4,6 +4,7 @@ import Link from "next/link";
 import { LinkControlForm } from "@/components/compliance/LinkControlForm";
 import { UnlinkControlButton } from "@/components/compliance/UnlinkControlButton";
 import { EditObligationForm } from "@/components/compliance/EditObligationForm";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -90,7 +91,7 @@ export default async function ObligationDetailPage({ params }: Props) {
         {obligation.reviewDate && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Review Date</p>
-            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(obligation.reviewDate).toLocaleDateString()}</p>
+            <LocalTime value={obligation.reviewDate} utc className="text-sm font-semibold text-[var(--dpf-text)]" />
           </div>
         )}
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
@@ -185,8 +186,8 @@ export default async function ObligationDetailPage({ params }: Props) {
                 </div>
               </div>
               <div className="text-right text-xs text-[var(--dpf-muted)]">
-                <p>{new Date(e.collectedAt).toLocaleDateString()}</p>
-                {e.retentionUntil && <p>Retain until: {new Date(e.retentionUntil).toLocaleDateString()}</p>}
+                <LocalTime value={e.collectedAt} mode="date" />
+                {e.retentionUntil && <p>Retain until: <LocalTime value={e.retentionUntil} utc /></p>}
               </div>
             </div>
           ))}

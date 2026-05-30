@@ -1,3 +1,5 @@
+import { LocalTime } from "@/components/ui/LocalTime";
+
 type LifecycleEvent = {
   id: string;
   eventId: string;
@@ -10,14 +12,6 @@ type LifecycleEvent = {
 type Props = {
   events: LifecycleEvent[];
 };
-
-function formatDate(value: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  }).format(value);
-}
 
 export function LifecycleEventPanel({ events }: Props) {
   return (
@@ -43,7 +37,11 @@ export function LifecycleEventPanel({ events }: Props) {
                   <p className="text-xs font-semibold text-[var(--dpf-text)]">{event.eventType}</p>
                   <p className="text-[10px] font-mono text-[var(--dpf-muted)]">{event.eventId}</p>
                 </div>
-                <p className="text-[10px] text-[var(--dpf-muted)]">{formatDate(event.effectiveAt)}</p>
+                <LocalTime
+                  value={event.effectiveAt}
+                  utc
+                  className="text-[10px] text-[var(--dpf-muted)]"
+                />
               </div>
               {event.reason && <p className="mt-2 text-xs text-[var(--dpf-muted)]">{event.reason}</p>}
             </article>

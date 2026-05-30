@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { transitionPolicyStatus } from "@/lib/actions/policy";
 import { EditPolicyForm } from "@/components/compliance/EditPolicyForm";
 import { LinkPolicyObligationForm } from "@/components/compliance/LinkPolicyObligationForm";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -216,7 +217,7 @@ export default async function PolicyDetailPage({ params }: Props) {
           {policy.acknowledgments.map((a) => (
             <div key={a.id} className="flex justify-between text-sm">
               <span className="text-[var(--dpf-text)]">{a.employeeProfile.displayName}</span>
-              <span className="text-[var(--dpf-muted)]">v{a.policyVersion} — {new Date(a.acknowledgedAt).toLocaleDateString()}</span>
+              <span className="text-[var(--dpf-muted)]">v{a.policyVersion} — <LocalTime value={a.acknowledgedAt} mode="date" /></span>
             </div>
           ))}
         </div>

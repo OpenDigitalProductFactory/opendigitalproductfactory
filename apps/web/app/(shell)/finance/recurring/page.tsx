@@ -1,6 +1,7 @@
 // apps/web/app/(shell)/finance/recurring/page.tsx
 import { listRecurringSchedules } from "@/lib/actions/recurring";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
+import { LocalTime } from "@/components/ui/LocalTime";
 import Link from "next/link";
 
 const SCHEDULE_STATUS_COLOURS: Record<string, string> = {
@@ -162,9 +163,7 @@ export default async function RecurringPage({ searchParams }: Props) {
                       {sched.currency} {formatMoney(Number(sched.amount))}
                     </td>
                     <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                      {new Date(sched.nextInvoiceDate).toLocaleDateString(
-                        "en-GB",
-                      )}
+                      <LocalTime value={sched.nextInvoiceDate} utc />
                     </td>
                     <td className="px-4 py-2.5">
                       <span

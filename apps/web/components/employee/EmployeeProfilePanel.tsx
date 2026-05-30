@@ -1,3 +1,4 @@
+import { LocalTime } from "@/components/ui/LocalTime";
 import type { EmployeeProfileRecord } from "@/lib/workforce-types";
 import type { AddressWithHierarchy } from "@/lib/address-types";
 
@@ -5,15 +6,6 @@ type Props = {
   employee: EmployeeProfileRecord | null;
   addresses?: AddressWithHierarchy[];
 };
-
-function formatDate(value: Date | null): string {
-  if (!value) return "Not set";
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  }).format(value);
-}
 
 function formatAddress(a: AddressWithHierarchy["address"]): string {
   const parts = [a.addressLine1];
@@ -78,15 +70,21 @@ export function EmployeeProfilePanel({ employee, addresses = [] }: Props) {
               </div>
               <div>
                 <dt className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Start date</dt>
-                <dd className="text-[var(--dpf-text)]">{formatDate(employee.startDate)}</dd>
+                <dd className="text-[var(--dpf-text)]">
+                  <LocalTime value={employee.startDate} utc fallback="Not set" />
+                </dd>
               </div>
               <div>
                 <dt className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Confirmation date</dt>
-                <dd className="text-[var(--dpf-text)]">{formatDate(employee.confirmationDate)}</dd>
+                <dd className="text-[var(--dpf-text)]">
+                  <LocalTime value={employee.confirmationDate} utc fallback="Not set" />
+                </dd>
               </div>
               <div>
                 <dt className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">End date</dt>
-                <dd className="text-[var(--dpf-text)]">{formatDate(employee.endDate)}</dd>
+                <dd className="text-[var(--dpf-text)]">
+                  <LocalTime value={employee.endDate} utc fallback="Not set" />
+                </dd>
               </div>
             </dl>
           </div>

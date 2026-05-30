@@ -2,6 +2,7 @@
 import { getOrgSettings } from "@/lib/actions/currency";
 import { prisma } from "@dpf/db";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
+import { LocalTime } from "@/components/ui/LocalTime";
 import Link from "next/link";
 import { BaseCurrencySelector } from "@/components/finance/BaseCurrencySelector";
 import { FetchRatesButton } from "@/components/finance/FetchRatesButton";
@@ -138,7 +139,7 @@ export default async function CurrencySettingsPage() {
                     {Number(rate.rate).toFixed(4)}
                   </td>
                   <td className="py-2.5 text-right text-[var(--dpf-muted)]">
-                    {new Date(rate.fetchedAt).toLocaleDateString("en-GB")}
+                    <LocalTime value={rate.fetchedAt} mode="date" />
                   </td>
                 </tr>
               ))}

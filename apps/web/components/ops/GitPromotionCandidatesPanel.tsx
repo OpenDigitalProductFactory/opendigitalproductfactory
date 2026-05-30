@@ -1,4 +1,5 @@
 import { AlertTriangle, CheckCircle2, Clock3, GitBranch, LoaderCircle, PackageCheck } from "lucide-react";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 export type GitPromotionCandidateRow = {
   id: string;
@@ -166,7 +167,7 @@ export function GitPromotionCandidatesPanel({
                     </div>
                   </div>
                   <div className="space-y-2 text-right text-xs text-[var(--dpf-muted)]">
-                    <div>{new Date(candidate.createdAt).toLocaleString()}</div>
+                    <div><LocalTime value={candidate.createdAt} /></div>
                     {candidate.sandboxId && <div className="mt-1 font-mono">{candidate.sandboxId}</div>}
                     {candidate.promotionReview ? (
                       <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-left">

@@ -6,6 +6,7 @@ import { createEngagementFromSignalForm } from "@/lib/actions/crm";
 import { getAcquisitionSignalWorkspace } from "@/lib/crm/acquisition-signal-data";
 import { formatAcquisitionSourceLabel } from "@/lib/crm/acquisition-signals";
 import { getEngagementStatusMeta } from "@/lib/crm/presentation";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 async function routeSignalToEngagement(formData: FormData) {
   "use server";
@@ -100,9 +101,11 @@ export default async function EngagementsPage() {
                   </p>
                 ) : null}
               </div>
-              <p className="text-[9px] text-[var(--dpf-muted)] shrink-0">
-                {new Date(e.createdAt).toLocaleDateString()}
-              </p>
+              <LocalTime
+                value={e.createdAt}
+                mode="date"
+                className="text-[9px] text-[var(--dpf-muted)] shrink-0"
+              />
             </div>
           );
         })}

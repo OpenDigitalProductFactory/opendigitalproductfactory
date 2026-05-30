@@ -1,5 +1,6 @@
 "use client";
 
+import { LocalTime } from "@/components/ui/LocalTime";
 import type { BrandDesignSystem } from "@/lib/brand/types";
 
 type Props = {
@@ -13,20 +14,6 @@ type Props = {
 const SCALE_KEYS: Array<keyof BrandDesignSystem["typography"]["scale"]> = [
   "xs", "sm", "base", "lg", "xl", "2xl", "3xl", "4xl",
 ];
-
-const EXTRACTED_AT_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-  timeZone: "UTC",
-  timeZoneName: "short",
-});
-
-function formatExtractedAt(value: string) {
-  return EXTRACTED_AT_FORMATTER.format(new Date(value));
-}
 
 function ConfidenceBadge({ value }: { value: number }) {
   const pct = Math.round(value * 100);
@@ -91,7 +78,7 @@ export function BrandPreview({ system, onApply, applying = false, applyError = n
           <ConfidenceBadge value={confidence} />
         </div>
         <p style={{ fontSize: 12, color: "var(--dpf-muted)", margin: "4px 0 0 0" }}>
-          Extracted {formatExtractedAt(system.extractedAt)} from {system.sources.length}{" "}
+          Extracted <LocalTime value={system.extractedAt} /> from {system.sources.length}{" "}
           source{system.sources.length === 1 ? "" : "s"}.
         </p>
         {system.gaps.length > 0 && (
@@ -222,7 +209,7 @@ export function BrandPreview({ system, onApply, applying = false, applyError = n
           )}
           {!applyError && appliedAt && (
             <span style={{ fontSize: 12, color: "var(--dpf-muted)" }}>
-              Applied {appliedAt.toLocaleTimeString()}
+              Applied <LocalTime value={appliedAt} mode="time" />
             </span>
           )}
         </div>

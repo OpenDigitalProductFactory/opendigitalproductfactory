@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { createEpic, updateEpic, type EpicOverlap } from "@/lib/actions/backlog";
 import {
   validateEpicInput,
@@ -207,12 +208,12 @@ export function EpicPanel({ isOpen, onClose, epic, portfolios }: Props) {
         {epic && (
           <div className="px-5 py-3 border-t border-[var(--dpf-border)] space-y-1">
             <p className="text-[10px] text-[var(--dpf-muted)]">
-              Created: {new Date(epic.createdAt).toLocaleString()}
+              Created: <LocalTime value={epic.createdAt} />
               {epic.submittedBy ? ` by ${epic.submittedBy.email}` : ""}
               {epic.agentId ? ` (${AGENT_NAME_MAP[epic.agentId] ?? epic.agentId})` : ""}
             </p>
             <p className="text-[10px] text-[var(--dpf-muted)]">
-              Completed: {epic.completedAt ? new Date(epic.completedAt).toLocaleString() : "—"}
+              Completed: <LocalTime value={epic.completedAt} />
             </p>
           </div>
         )}

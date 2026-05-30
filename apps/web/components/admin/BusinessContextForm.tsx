@@ -6,6 +6,8 @@ import {
   resolveArchetypeSummaryState,
   type ArchetypeSummary,
 } from "./business-context-form-state";
+import { EmailInput } from "@/components/ui/EmailInput";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 
 const COMPANY_SIZE_OPTIONS = [
   { value: "solo", label: "Solo", description: "Just me" },
@@ -253,10 +255,9 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <label style={labelStyle}>
             <div style={fieldLabelStyle}>Contact email</div>
-            <input
-              type="email"
+            <EmailInput
               value={data.contactEmail}
-              onChange={(e) => update("contactEmail", e.target.value)}
+              onValueChange={(v) => update("contactEmail", v)}
               placeholder="info@example.com"
               style={inputStyle}
             />
@@ -264,11 +265,10 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
           </label>
           <label style={labelStyle}>
             <div style={fieldLabelStyle}>Contact phone</div>
-            <input
-              type="tel"
+            <PhoneInput
               value={data.contactPhone}
-              onChange={(e) => update("contactPhone", e.target.value)}
-              placeholder="+1 555 000 0000"
+              onValueChange={(v) => update("contactPhone", v)}
+              placeholder="(415) 555-1234"
               style={inputStyle}
             />
             {autoFilledFields?.includes("contactPhone") && <AutoFillHint field="contactPhone" editedFields={editedFields} />}
