@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DPF Chatterbox TTS sidecar LaunchAgent template.
+  Rendered by scripts/tts/setup-chatterbox-tts-macos.sh with these
+  @@PLACEHOLDERS@@ substituted at setup time:
+
+    @@DPF_CB_LAUNCH_SCRIPT@@  absolute path to the generated launch script
+                              (typically ~/.dpf/chatterbox/run-chatterbox.sh)
+    @@DPF_CB_LOG_DIR@@        absolute path to the log directory
+                              (typically ~/.dpf/chatterbox/logs)
+
+  KeepAlive=true makes launchd restart the sidecar on crash — the host
+  analogue of compose `restart: unless-stopped`. The Label MUST stay
+  reverse-DNS-prefixed for launchctl semantics.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.dpf-chatterbox-tts</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>@@DPF_CB_LAUNCH_SCRIPT@@</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>@@DPF_CB_LOG_DIR@@/chatterbox.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>@@DPF_CB_LOG_DIR@@/chatterbox.err.log</string>
+</dict>
+</plist>
