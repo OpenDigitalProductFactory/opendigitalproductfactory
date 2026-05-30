@@ -33,7 +33,11 @@ describe("buildPromoterCommand", () => {
     expect(args).toContain("PROMOTE_SOURCE=/host-source");
     expect(args).toContain("PROMOTE_TARGET_SHA=abc1234");
     expect(args).toContain("PROMOTE_BACKUP_PATH=/backups/self-upgrade/run-1");
-    expect(args).toContain("PROMOTE_HEALTH_URL=http://localhost:3000/api/health");
+    // localhost is rewritten to host.docker.internal so the sibling promoter
+    // container can reach the recreated portal's published host port.
+    expect(args).toContain("PROMOTE_HEALTH_URL=http://host.docker.internal:3000/api/health");
+    expect(args).toContain("--add-host");
+    expect(args).toContain("host.docker.internal:host-gateway");
     // Image is a positional arg followed by the entrypoint flag.
     expect(args).toContain("dpf-promoter");
     expect(args).toContain("--self-upgrade");

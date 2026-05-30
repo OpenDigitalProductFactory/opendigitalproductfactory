@@ -118,23 +118,35 @@ export async function runSelfUpgrade(
     await signalSwapStarting(quiescenceRunId);
   }
 
-  const result = await runPromoter({
-    // HOST path of the install tree, bind-mounted into the promoter
-    // container. Daemon-resolved, so it must be a host path (not an
-    // in-portal path). hostSourceMountPath is the in-container mount and
-    // is no longer passed — runPromoter mounts to a fixed /host-source.
-    hostInstallPath:
-      config.hostInstallPath ??
-      process.env.DPF_HOST_INSTALL_PATH ??
-      process.env.PROMOTE_SOURCE ??
-      "",
-    targetSha,
-    backupPath: process.env.PROMOTE_BACKUP_PATH ?? `/backups/self-upgrade/${run.runId}`,
-    backupHostPath: process.env.DPF_BACKUPS_HOST_PATH ?? undefined,
-    healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
-    promoterImage: config.promoterImage,
-    dryRun: params.dryRun,
-  });
+  let result: { exitCode: number; stdout: string; stderr: string };
+  try {
+    result = await runPromoter({
+      // HOST path of the install tree, bind-mounted into the promoter
+      // container. Daemon-resolved, so it must be a host path (not an
+      // in-portal path). hostSourceMountPath is the in-container mount and
+      // is no longer passed — runPromoter mounts to a fixed /host-source.
+      hostInstallPath:
+        config.hostInstallPath ??
+        process.env.DPF_HOST_INSTALL_PATH ??
+        process.env.PROMOTE_SOURCE ??
+        "",
+      targetSha,
+      backupPath: process.env.PROMOTE_BACKUP_PATH ?? `/backups/self-upgrade/${run.runId}`,
+      backupHostPath: process.env.DPF_BACKUPS_HOST_PATH ?? undefined,
+      healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
+      promoterImage: config.promoterImage,
+      dryRun: params.dryRun,
+    });
+  } catch (err) {
+    // The promoter failed to even spawn (e.g. docker missing). Without this
+    // catch the rejection would bubble up as an Inngest function error and
+    // leave the run stuck "running" — blocking every future trigger.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, msg);
+    await failRun(run.runId, `promoter-spawn-error: ${msg}`);
+    await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
+    return { ok: false, status: "failed", runId: run.runId, quiescenceRunId, excerpt: msg };
+  }
 
   if (result.exitCode === 0) {
     // Signal swap-complete BEFORE marking the upgrade succeeded so the

@@ -65,9 +65,21 @@ export function buildPromoterCommand(
       ? params.promoterImage
       : DEFAULT_PROMOTER_IMAGE;
 
+  // The promoter runs in its own container, so the portal's "localhost" health
+  // URL is unreachable (that loopback is the promoter's own). Rewrite it to
+  // host.docker.internal so curl hits the portal's published host port — the
+  // new portal that the promoter just recreated.
+  const healthUrl = params.healthUrl.replace(
+    /\/\/(localhost|127\.0\.0\.1)(?=[:/]|$)/,
+    "//host.docker.internal",
+  );
+
   const args = [
     "run",
     "--rm",
+    // Reach the recreated portal's published host port for health/sha verify.
+    "--add-host",
+    "host.docker.internal:host-gateway",
     // Sibling-container control: the promoter drives the daemon to rebuild
     // and recreate the portal.
     "-v",
@@ -89,7 +101,7 @@ export function buildPromoterCommand(
     "-e",
     `PROMOTE_BACKUP_PATH=${params.backupPath}`,
     "-e",
-    `PROMOTE_HEALTH_URL=${params.healthUrl}`,
+    `PROMOTE_HEALTH_URL=${healthUrl}`,
     image,
     "--self-upgrade",
   );
