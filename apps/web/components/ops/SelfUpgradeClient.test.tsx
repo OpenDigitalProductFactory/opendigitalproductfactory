@@ -454,7 +454,7 @@ describe("SelfUpgradeClient – config summary null SHAs", () => {
 describe("SelfUpgradeClient – platform version", () => {
   it("renders the Platform version label and value", () => {
     const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain("Platform build:");
+    expect(html).toContain("Platform version:");
     expect(html).toContain("1.0.0");
   });
 
@@ -476,7 +476,7 @@ describe("SelfUpgradeClient – platform version", () => {
         }}
       />,
     );
-    expect(html).toContain("Platform build:");
+    expect(html).toContain("Platform version:");
     expect(html).toContain("1.0.0");
     expect(html).not.toContain("9f8e7d6");
   });
@@ -485,7 +485,7 @@ describe("SelfUpgradeClient – platform version", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient {...baseStatus} enabled={false} />,
     );
-    expect(html).toContain("Platform build:");
+    expect(html).toContain("Platform version:");
     expect(html).toContain("1.0.0");
   });
 });
