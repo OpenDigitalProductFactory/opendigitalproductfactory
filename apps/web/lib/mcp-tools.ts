@@ -1653,6 +1653,18 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         inputs: { type: "array", items: { type: "string" }, description: "User inputs the feature accepts" },
         dataNeeds: { type: "string", description: "What data the feature stores" },
         acceptanceCriteria: { type: "array", items: { type: "string" }, description: "What done looks like" },
+        fixContext: {
+          type: "object",
+          description: "For fix builds (kind=fix): the defect diagnosis. reproSteps, rootCause, and fixApproach are all required before a fix build can advance to plan. Merged into any existing fixContext, so partial updates accumulate.",
+          properties: {
+            reproSteps: { type: "string", description: "How to reproduce the defect" },
+            expected: { type: "string", description: "Expected behavior" },
+            actual: { type: "string", description: "Actual (buggy) behavior" },
+            rootCause: { type: "string", description: "Identified root cause (file/function + why)" },
+            fixApproach: { type: "string", description: "Smallest correct fix + regression test" },
+            severity: { type: "string" },
+          },
+        },
       },
       required: ["title", "description", "portfolioContext", "targetRoles", "dataNeeds", "acceptanceCriteria"],
     },
@@ -6450,17 +6462,38 @@ export async function executeTool(
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
       const { updateFeatureBrief } = await import("@/lib/actions/build");
+      // Merge OVER the existing brief. updateFeatureBrief persists the whole
+      // brief object, so rebuilding it from scratch would clobber any field the
+      // caller omits — notably fixContext, which the fix-flow ideate phase fills
+      // incrementally. A fix build is also promoted with title/description
+      // pre-seeded; without this merge a fixContext-only update would blank them
+      // and fail validateFeatureBrief.
+      const prior = (await prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: { brief: true },
+      }))?.brief as Partial<import("@/lib/feature-build-types").FeatureBrief> | null;
+      const str = (key: string, fallback: string) =>
+        params[key] != null ? String(params[key]) : fallback;
+      const arr = (key: string, fallback: string[]) =>
+        Array.isArray(params[key]) ? (params[key] as unknown[]).map(String) : fallback;
+      const incomingFix = params["fixContext"] && typeof params["fixContext"] === "object" && !Array.isArray(params["fixContext"])
+        ? (params["fixContext"] as Record<string, unknown>)
+        : null;
+      const mergedFix = (prior?.fixContext || incomingFix)
+        ? { ...(prior?.fixContext ?? {}), ...(incomingFix ?? {}) }
+        : undefined;
       const brief = {
-        title: String(params["title"] ?? ""),
-        description: String(params["description"] ?? ""),
-        portfolioContext: String(params["portfolioContext"] ?? ""),
-        targetRoles: Array.isArray(params["targetRoles"]) ? params["targetRoles"].map(String) : [],
-        inputs: Array.isArray(params["inputs"]) ? params["inputs"].map(String) : [],
-        dataNeeds: String(params["dataNeeds"] ?? ""),
-        acceptanceCriteria: Array.isArray(params["acceptanceCriteria"]) ? params["acceptanceCriteria"].map(String) : [],
+        title: str("title", prior?.title ?? ""),
+        description: str("description", prior?.description ?? ""),
+        portfolioContext: str("portfolioContext", prior?.portfolioContext ?? ""),
+        targetRoles: arr("targetRoles", prior?.targetRoles ?? []),
+        inputs: arr("inputs", prior?.inputs ?? []),
+        dataNeeds: str("dataNeeds", prior?.dataNeeds ?? ""),
+        acceptanceCriteria: arr("acceptanceCriteria", prior?.acceptanceCriteria ?? []),
+        ...(mergedFix ? { fixContext: mergedFix } : {}),
       };
       try {
-        await updateFeatureBrief(buildId, brief);
+        await updateFeatureBrief(buildId, brief as import("@/lib/feature-build-types").FeatureBrief);
         await updateBuildHappyPathState(userId, {
           intake: {
             constrainedGoal: brief.title || null,
