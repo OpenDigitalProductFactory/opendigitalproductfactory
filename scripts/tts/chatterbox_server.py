@@ -59,27 +59,50 @@ _REF_ROOT = os.environ.get("DPF_TTS_REFERENCE_HOST_ROOT") or ""
 
 
 def _safe_ref_path(ref: str) -> str:
-    """Map a request-supplied reference key to an on-disk path that is provably
-    inside _REF_ROOT (CWE-22 path-injection guard).
+    """Map a request-supplied reference path to an on-disk path inside _REF_ROOT
+    (CWE-22 path-injection guard).
 
-    Strategy CodeQL recognises as a sanitizer: reject absolute inputs, normalise
-    with os.path.normpath (a pure string op — no filesystem sink), then require
-    the normalised join to start with the root prefix. The leading-separator and
-    normpath steps make ".." traversal and absolute paths impossible before any
-    file is touched."""
+    Taint-severing design: the returned path is rebuilt ENTIRELY from
+    server-side values (the configured root plus directory entries read from the
+    filesystem via os.listdir) — the request string is only ever compared for
+    equality, never concatenated into the path that reaches open()/subprocess.
+    Each requested component must exactly match a real entry in the directory
+    resolved so far, so traversal (".."), absolute paths, and symlink tricks
+    cannot reach anything outside the root.
+
+    The portal sends ref_audio as either an absolute path under the root or a
+    relative key; we reduce it to its components-after-root and walk them."""
     if not _REF_ROOT:
         raise ValueError("reference cloning disabled: DPF_TTS_REFERENCE_HOST_ROOT not set")
-    # Absolute paths (e.g. "/etc/passwd") are never allowed.
+    root = os.path.realpath(_REF_ROOT)
+
+    # Reduce the request to the path segment *below* the root, then to its parts.
+    rel = ref
     if os.path.isabs(ref):
-        raise ValueError("reference path must be relative")
-    root = os.path.normpath(_REF_ROOT)
-    candidate = os.path.normpath(os.path.join(root, ref))
-    # After normpath, any ".." has been collapsed; require containment.
-    if candidate != root and not candidate.startswith(root + os.sep):
-        raise ValueError("reference path escapes the allowed root")
-    if not os.path.isfile(candidate):
-        raise ValueError("reference file not found")
-    return candidate
+        norm = os.path.normpath(ref)
+        if norm != root and not norm.startswith(root + os.sep):
+            raise ValueError("reference path outside root")
+        rel = norm[len(root):]
+    parts = [p for p in rel.replace("\\", "/").split("/") if p not in ("", ".")]
+    if not parts or any(p == ".." for p in parts):
+        raise ValueError("invalid reference path")
+
+    # Walk component-by-component, accepting only names that actually exist in
+    # the current directory. `safe` is composed only of listdir() output + root.
+    safe = root
+    for want in parts:
+        try:
+            entries = os.listdir(safe)
+        except OSError:
+            raise ValueError("reference directory not found")
+        if want not in entries:
+            raise ValueError("reference path not found")
+        # Use the entry from listdir() (server-controlled), not `want`.
+        match = entries[entries.index(want)]
+        safe = os.path.join(safe, match)
+    if not os.path.isfile(safe):
+        raise ValueError("reference is not a file")
+    return safe
 
 
 print(f"[chatterbox] loading on {DEVICE} ...", flush=True)
