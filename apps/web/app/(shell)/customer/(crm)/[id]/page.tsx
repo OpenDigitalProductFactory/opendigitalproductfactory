@@ -15,6 +15,7 @@ import {
   readActivationProfile,
 } from "@/lib/storefront/archetype-activation";
 import { getAccountStatusMeta } from "@/lib/crm/presentation";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const ACTIVITY_ICONS: Record<string, string> = {
   note: "📝",
@@ -276,7 +277,7 @@ export default async function AccountDetailPage({
                       </p>
                     )}
                     <div className="flex gap-2 mt-1 text-[9px] text-[var(--dpf-muted)]">
-                      <span>{new Date(act.createdAt).toLocaleString()}</span>
+                      <LocalTime value={act.createdAt} />
                       {act.createdBy && <span>by {act.createdBy.email}</span>}
                       {act.opportunity && (
                         <Link

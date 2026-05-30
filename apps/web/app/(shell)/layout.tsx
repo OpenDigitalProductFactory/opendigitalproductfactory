@@ -18,6 +18,8 @@ import { SetupOverlay } from "@/components/setup/SetupOverlay";
 import { getShellNavSections } from "@/lib/permissions";
 import { AppRail } from "@/components/shell/AppRail";
 import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
+import { resolveHomePhoneCountry } from "@/lib/phone-country.server";
+import { PhoneCountryProvider } from "@/components/ui/PhoneCountryContext";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   // First-run check — redirect to setup if no org exists.
@@ -37,23 +39,25 @@ export default async function ShellLayout({ children }: { children: React.ReactN
 
   const user = session.user;
 
-  const [latestDiscoveryRun, activeBranding, organization, useUnifiedCoworker] = await Promise.all([
-    prisma.discoveryRun.findFirst({
-      orderBy: { startedAt: "desc" },
-      select: { id: true },
-    }),
-    prisma.brandingConfig.findUnique({
-      where: { scope: "organization" },
-      select: {
-        logoUrlLight: true,
-        tokens: true,
-      },
-    }),
-    prisma.organization.findFirst({
-      select: { name: true, logoUrl: true },
-    }),
-    isUnifiedCoworkerEnabled(),
-  ]);
+  const [latestDiscoveryRun, activeBranding, organization, useUnifiedCoworker, phoneCountry] =
+    await Promise.all([
+      prisma.discoveryRun.findFirst({
+        orderBy: { startedAt: "desc" },
+        select: { id: true },
+      }),
+      prisma.brandingConfig.findUnique({
+        where: { scope: "organization" },
+        select: {
+          logoUrlLight: true,
+          tokens: true,
+        },
+      }),
+      prisma.organization.findFirst({
+        select: { name: true, logoUrl: true },
+      }),
+      isUnifiedCoworkerEnabled(),
+      resolveHomePhoneCountry(),
+    ]);
 
   if (!latestDiscoveryRun) {
     await executeBootstrapDiscovery(prisma as never, {
@@ -126,7 +130,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       });
 
   return (
-    <>
+    <PhoneCountryProvider country={phoneCountry}>
       {brandingCss && <style dangerouslySetInnerHTML={{ __html: brandingCss }} />}
       <div className="min-h-screen flex flex-col bg-[var(--dpf-bg)]">
         {activeSetup && (
@@ -200,6 +204,6 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         <QueueFlusher />
         <ModelWarmup />
       </div>
-    </>
+    </PhoneCountryProvider>
   );
 }

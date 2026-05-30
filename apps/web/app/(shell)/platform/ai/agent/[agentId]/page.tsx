@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { getAgentGaidMap } from "@/lib/identity/principal-linking";
 import { AgentModelRoutingCard } from "@/components/platform/AgentModelRoutingCard";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const TIER_LABELS: Record<number, string> = {
   1: "Orchestrator",
@@ -280,7 +281,7 @@ export default async function AgentDetailPage({
                       {p.evaluationCount > 0 ? `${((p.successCount / p.evaluationCount) * 100).toFixed(0)}%` : "n/a"}
                     </td>
                     <td style={tdStyle}>{p.profileConfidence}</td>
-                    <td style={tdStyle}>{p.lastEvaluatedAt ? new Date(p.lastEvaluatedAt).toLocaleDateString() : "never"}</td>
+                    <td style={tdStyle}>{p.lastEvaluatedAt ? <LocalTime value={p.lastEvaluatedAt} mode="date" /> : "never"}</td>
                   </tr>
                 ))}
               </tbody>

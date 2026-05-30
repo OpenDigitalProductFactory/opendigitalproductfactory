@@ -5,6 +5,7 @@ import { listExpenseClaims } from "@/lib/actions/expenses";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
+import { LocalTime } from "@/components/ui/LocalTime";
 import Link from "next/link";
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -180,9 +181,11 @@ export default async function ExpenseClaimsPage({ searchParams }: Props) {
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                      {claim.submittedAt
-                        ? new Date(claim.submittedAt).toLocaleDateString("en-GB")
-                        : "—"}
+                      {claim.submittedAt ? (
+                        <LocalTime value={claim.submittedAt} mode="date" />
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                       {sym}{formatMoney(claim.totalAmount)}

@@ -136,6 +136,32 @@ describe.skipIf(!GIT_AVAILABLE)("prepareUpgradeSource — real git", () => {
     expect(git(install, "rev-parse", "HEAD").trim()).toBe(beforeHead);
   });
 
+  it("survives a hard-failing post-checkout hook (e.g. Git LFS hook with no git-lfs binary)", async () => {
+    const { upstream, install, root } = makeWorld();
+    cleanup.push(root);
+    commit(upstream, "upstream.txt", "x\n", "feat: x");
+
+    // Reproduce the Mac/container blocker: the clone has a post-checkout hook
+    // that exits non-zero (the git-lfs hook does exactly this when git-lfs is
+    // absent). Without hook-bypassing, `git checkout` returns non-zero and prep
+    // would abort with prep-error even though the checkout itself succeeds.
+    const hooksDir = join(install, ".dpf-hooks");
+    execFileSync("mkdir", ["-p", hooksDir]);
+    const hook = join(hooksDir, "post-checkout");
+    writeFileSync(hook, "#!/bin/sh\necho 'git-lfs not found' >&2\nexit 2\n");
+    execFileSync("chmod", ["+x", hook]);
+    git(install, "config", "core.hooksPath", hooksDir);
+
+    const r = await prepareUpgradeSource(
+      { sourceMode: "upstream", hostSourcePath: install, remote: "origin", branch: "main", installBranch: "dpf/install" },
+      defaultGitRunner,
+    );
+
+    expect(r.ok).toBe(true);
+    expect(git(install, "rev-parse", "--abbrev-ref", "HEAD").trim()).toBe("dpf/install");
+    expect(existsSync(join(install, "upstream.txt"))).toBe(true);
+  });
+
   it("local mode stamps the working tree HEAD, with -dirty when uncommitted", async () => {
     const { install, root } = makeWorld();
     cleanup.push(root);

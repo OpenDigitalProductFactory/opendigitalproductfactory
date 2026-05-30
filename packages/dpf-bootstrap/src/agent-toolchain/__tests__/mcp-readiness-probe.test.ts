@@ -5,6 +5,8 @@ import { join } from "node:path";
 import {
   planMcpReadinessProbe,
   interpretMcpReadinessResponse,
+  interpretScopeCoverageProbe,
+  SCOPE_COVERAGE_PROBE,
 } from "../mcp-readiness-probe";
 
 const FIXTURES = join(__dirname, "fixtures");
@@ -77,5 +79,56 @@ describe("interpretMcpReadinessResponse", () => {
     const body = { structuredContent: { error: "insufficient_token_scope", requiredScope: "write" } };
     const result = interpretMcpReadinessResponse(403, body, OBSERVED);
     expect(result).toEqual({ ok: false, reason: "scope_insufficient", httpStatus: 403 });
+  });
+});
+
+describe("interpretScopeCoverageProbe (BI-A3DE9A31)", () => {
+  const scopeFailureBody = {
+    jsonrpc: "2.0",
+    id: 1,
+    result: {
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: `Token lacks the required scope for ${SCOPE_COVERAGE_PROBE.tool}. Required: one of ${SCOPE_COVERAGE_PROBE.requiredScope}; token has: backlog_read, backlog_write.`,
+        },
+      ],
+    },
+  };
+  const successBody = {
+    jsonrpc: "2.0",
+    id: 1,
+    result: {
+      isError: false,
+      content: [{ type: "text", text: JSON.stringify({ success: true, data: { coworker: "x" } }) }],
+    },
+  };
+
+  it("flags an under-provisioned token (explicit registry_read scope failure)", () => {
+    expect(interpretScopeCoverageProbe(200, scopeFailureBody)).toEqual({
+      sufficient: false,
+      missingScope: "registry_read",
+    });
+  });
+
+  it("treats a successful registry-gated call as sufficient", () => {
+    expect(interpretScopeCoverageProbe(200, successBody)).toEqual({ sufficient: true });
+  });
+
+  it("returns null (never re-mint) when the endpoint is unreachable", () => {
+    expect(interpretScopeCoverageProbe(0, null)).toEqual({ sufficient: null, reason: "unreachable" });
+    expect(interpretScopeCoverageProbe(503, null)).toEqual({ sufficient: null, reason: "unreachable" });
+  });
+
+  it("returns null (inconclusive) for a non-scope error — does not assume under-provisioned", () => {
+    const otherError = {
+      result: { isError: true, content: [{ type: "text", text: "Coworker profile not found." }] },
+    };
+    expect(interpretScopeCoverageProbe(200, otherError)).toEqual({ sufficient: null, reason: "inconclusive" });
+  });
+
+  it("returns null for an unrecognized body shape", () => {
+    expect(interpretScopeCoverageProbe(200, {})).toEqual({ sufficient: null, reason: "inconclusive" });
   });
 });

@@ -2,6 +2,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@dpf/db";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const URGENCY_ORDER: Record<string, number> = {
   emergency: 0,
@@ -83,7 +84,7 @@ export default async function MyQueuePage() {
                 <p className="text-sm text-[var(--dpf-text-secondary)] mt-0.5 line-clamp-2">{item.description}</p>
                 {item.dueAt && (
                   <p className="text-xs text-[var(--dpf-muted)] mt-1">
-                    Due: {new Date(item.dueAt).toLocaleDateString()}
+                    Due: <LocalTime value={item.dueAt} mode="date" />
                   </p>
                 )}
               </div>
