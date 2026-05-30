@@ -15,6 +15,7 @@ import { computeReadinessState } from "./readiness-state";
 export type MaterializeInputs = {
   appliedAt: string;
   dpfPlatformVersion: string;
+  /** @deprecated Advisory only; see AgentToolchainState.superpowersVersion. Expect `null`. */
   superpowersVersion: string | null;
   claudeCodeWired: boolean;
   codexWired: boolean;

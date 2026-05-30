@@ -1,6 +1,6 @@
 ---
 name: dpf-worktree-per-session
-description: "Use when starting a concurrent DPF coding session that touches the working tree. Each thread gets its own git worktree (not a shared clone), its own .mcp.json + .vscode/mcp.json seeded from the root, and its own COMPOSE_PROJECT_NAME so docker-compose stacks don't collide. Composes with superpowers:finishing-a-development-branch as the predecessor isolation step. Encodes the worktree-per-session kernel principle plus the propose-acknowledge-reassign concurrency discipline."
+description: "Use when starting a concurrent DPF coding session that touches the working tree. Each thread gets its own git worktree (not a shared clone), its own .mcp.json + .vscode/mcp.json seeded from the root, and its own COMPOSE_PROJECT_NAME so docker-compose stacks don't collide. Composes with dpf-finishing-a-development-branch as the predecessor isolation step. Encodes the worktree-per-session kernel principle plus the propose-acknowledge-reassign concurrency discipline."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false

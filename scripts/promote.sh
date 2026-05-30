@@ -79,22 +79,42 @@ if [[ $_dry_run -eq 0 ]]; then
 fi
 
 # --- Step 3: docker-build ---
-# Rebuild the portal image from the host source, STAMPED with the target SHA
-# (DPF_VERSION build-arg) so the new image reports a comparable git SHA.
+# Rebuild the portal image from the host source. The DPF_VERSION stamp is
+# derived from the ACTUAL bytes being built — `rev-parse HEAD` of the build
+# source (plus a `-dirty` suffix when the tree has uncommitted changes) — NOT
+# from the caller-supplied target. This is the load-bearing truth fix: the
+# image can only ever report the identity of the code it actually contains, so
+# the later sha-verify is a real check rather than reading back a value we set.
+# PROMOTE_TARGET_SHA is the orchestrator's EXPECTED identity (the stamp it
+# computed after preparing/merging the source); a mismatch is surfaced as a
+# warning so drift between prepare and build is visible without coupling this
+# script to the orchestrator's rollout state.
 emit_step docker-build
 if [[ $_dry_run -eq 0 ]]; then
-  export DPF_VERSION="$PROMOTE_TARGET_SHA"
+  _built_sha=$(git -C "$PROMOTE_SOURCE" rev-parse HEAD 2>/dev/null | tr -d '[:space:]' || true)
+  [[ -n "$_built_sha" ]] || {
+    printf 'error: cannot resolve HEAD of build source %s\n' "$PROMOTE_SOURCE" >&2
+    exit 1
+  }
+  if [[ -n "$(git -C "$PROMOTE_SOURCE" status --porcelain 2>/dev/null || true)" ]]; then
+    _built_sha="${_built_sha}-dirty"
+  fi
+  if [[ -n "${PROMOTE_TARGET_SHA:-}" && "$PROMOTE_TARGET_SHA" != "$_built_sha" ]]; then
+    printf 'warning: build source identity %s differs from expected %s\n' \
+      "$_built_sha" "$PROMOTE_TARGET_SHA" >&2
+  fi
+  export DPF_VERSION="$_built_sha"
   docker compose --project-directory "$PROMOTE_SOURCE" -p "$_project" \
     "${_f_args[@]}" build portal
 fi
 
 # --- Step 4: docker-up ---
 # Recreate ONLY the portal from the freshly built image. --no-deps leaves
-# postgres/neo4j/etc. running. DEPLOYED_SHA resolves to DPF_VERSION (target)
-# via compose, so the new portal reports the target SHA at /api/health/sha.
+# postgres/neo4j/etc. running. DEPLOYED_SHA resolves to DPF_VERSION (the
+# derived built identity) via compose, so the new portal reports exactly the
+# SHA of the code it is running at /api/health/sha.
 emit_step docker-up
 if [[ $_dry_run -eq 0 ]]; then
-  export DPF_VERSION="$PROMOTE_TARGET_SHA"
   docker compose --project-directory "$PROMOTE_SOURCE" -p "$_project" \
     "${_f_args[@]}" up -d --no-deps --force-recreate portal
 fi
@@ -115,20 +135,23 @@ if [[ $_dry_run -eq 0 ]]; then
 fi
 
 # --- Step 6: sha-verify ---
-# Confirm the running deployment reports the expected target SHA.
+# Confirm the running deployment reports the SHA of the code we actually built
+# ($_built_sha from step 3) — NOT the caller-supplied target. Because the stamp
+# is derived from the build source's own HEAD, this genuinely proves the running
+# runtime is at the built commit rather than echoing a value we chose.
 emit_step sha-verify
 if [[ $_dry_run -eq 0 ]]; then
   _match=0
   _deployed_sha=""
   for _i in $(seq 1 30); do
     _deployed_sha=$(curl -fsS "${PROMOTE_HEALTH_URL}/sha" 2>/dev/null | tr -d '[:space:]' || true)
-    if [[ "$_deployed_sha" == "$PROMOTE_TARGET_SHA" ]]; then _match=1; break; fi
+    if [[ "$_deployed_sha" == "$_built_sha" ]]; then _match=1; break; fi
     sleep 3
   done
   [[ $_match -eq 1 ]] || {
-    printf 'error: deployed SHA %s does not match target %s\n' \
-      "${_deployed_sha:-unknown}" "$PROMOTE_TARGET_SHA" >&2
+    printf 'error: deployed SHA %s does not match built SHA %s\n' \
+      "${_deployed_sha:-unknown}" "$_built_sha" >&2
     exit 1
   }
-  printf 'step=done target=%s\n' "$PROMOTE_TARGET_SHA"
+  printf 'step=done target=%s\n' "$_built_sha"
 fi

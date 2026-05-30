@@ -6,6 +6,21 @@ export type MaintenanceWindow = {
   endTime: string;
 };
 
+/**
+ * Where the bytes of an upgrade come from. See the governed-upgrade-lifecycle
+ * spec §5.0.
+ * - `upstream` (default): the install tracks an upstream release train. On
+ *   upgrade the orchestrator fetches the upstream target and MERGES it into the
+ *   durable install branch in the host clone, preserving local commits, then
+ *   builds the merged tree. The deployed stamp is the real merge-commit SHA.
+ * - `local`: self-hosted / contributor / air-gapped. The working tree is built
+ *   as-is and stamped with its own HEAD (plus `-dirty` when uncommitted), never
+ *   labelled with an upstream SHA it does not contain.
+ */
+export type UpgradeSourceMode = "upstream" | "local";
+
+export const DEFAULT_INSTALL_BRANCH = "dpf/install";
+
 export type SelfUpgradeConfig = {
   enabled: boolean;
   channel: string;
@@ -21,6 +36,13 @@ export type SelfUpgradeConfig = {
   repositoryBranch?: string;
   healthUrl?: string;
   promoterImage?: string;
+  /** How the upgrade source is resolved. Defaults to "upstream". */
+  sourceMode: UpgradeSourceMode;
+  /**
+   * The durable per-install branch in the host clone that carries local
+   * commits and receives the upstream merge. Defaults to `dpf/install`.
+   */
+  installBranch: string;
 };
 
 const DEFAULTS: SelfUpgradeConfig = {
@@ -29,6 +51,8 @@ const DEFAULTS: SelfUpgradeConfig = {
   checkIntervalHours: 24,
   healthTarget: 100,
   maintenanceWindows: [],
+  sourceMode: "upstream",
+  installBranch: DEFAULT_INSTALL_BRANCH,
 };
 
 /**
@@ -117,6 +141,13 @@ export function parseSelfUpgradeConfig(raw: unknown): SelfUpgradeConfig {
         ? cfg.healthTarget
         : DEFAULTS.healthTarget,
     maintenanceWindows: parseWindows(cfg.maintenanceWindows),
+    // Only "upstream" | "local" are valid; anything else falls back to the
+    // safe default rather than silently building an unknown source posture.
+    sourceMode: cfg.sourceMode === "local" ? "local" : DEFAULTS.sourceMode,
+    installBranch:
+      typeof cfg.installBranch === "string" && cfg.installBranch.trim().length > 0
+        ? cfg.installBranch.trim()
+        : DEFAULTS.installBranch,
   };
   for (const key of [
     "hostInstallPath",

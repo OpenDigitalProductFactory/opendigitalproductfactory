@@ -28,13 +28,16 @@ DPF therefore treats `dpf-platform` as the project-default plugin, not merely a 
 
 | Slug | Composes with (Surface A) | Coworker `assignTo` (Surface B) | What it adds |
 |---|---|---|---|
-| [`dpf-decision-via-kernel`](skills/dpf-decision-via-kernel/SKILL.md) | superpowers:brainstorming | `["*"]` | Maps options to `PRINCIPLE_DIMENSIONS`, invokes `principle_decide`, surfaces ledger, defers on commandment conflict |
+| [`dpf-decision-via-kernel`](skills/dpf-decision-via-kernel/SKILL.md) | dpf-brainstorming | `["*"]` | Maps options to `PRINCIPLE_DIMENSIONS`, invokes `principle_decide`, surfaces ledger, defers on commandment conflict |
 | [`dpf-verify-substrate-first`](skills/dpf-verify-substrate-first/SKILL.md) | (no analog) | `["*"]` | Grep + live-backlog + main-branch sweep before naming new types/tables/epics |
-| [`dpf-file-backlog-item`](skills/dpf-file-backlog-item/SKILL.md) | superpowers:writing-plans (predecessor) | `["build-specialist", "ops-coordinator", "platform-engineer"]` | Verify substrate → file BI → size → triage → link epic |
+| [`dpf-file-backlog-item`](skills/dpf-file-backlog-item/SKILL.md) | dpf-verify-substrate-first (`dpf-writing-plans` pending — slice 2) | `["build-specialist", "ops-coordinator", "platform-engineer"]` | Verify substrate → file BI → size → triage → link epic |
 | [`dpf-promote-to-build-studio`](skills/dpf-promote-to-build-studio/SKILL.md) | (no analog) | `["build-specialist", "ops-coordinator"]` | BI → promote → approve Ideate → let BS run |
-| [`dpf-worktree-per-session`](skills/dpf-worktree-per-session/SKILL.md) | superpowers:finishing-a-development-branch (predecessor) | `["build-specialist", "platform-engineer"]` | `git worktree add` + MCP seed + `COMPOSE_PROJECT_NAME` discipline |
-| [`dpf-pr-with-dco`](skills/dpf-pr-with-dco/SKILL.md) | superpowers:finishing-a-development-branch (successor) | `["build-specialist", "platform-engineer"]` | Branch from `origin/main`, `-s` sign-off, overlap-sweep, PR-when-ready |
-| [`dpf-evidence-before-diagnosis`](skills/dpf-evidence-before-diagnosis/SKILL.md) | superpowers:systematic-debugging (predecessor) | `["*"]` | Query DB/status before claiming cause; dynamic-analysis output discipline |
+| [`dpf-worktree-per-session`](skills/dpf-worktree-per-session/SKILL.md) | dpf-finishing-a-development-branch (predecessor) | `["build-specialist", "platform-engineer"]` | `git worktree add` + MCP seed + `COMPOSE_PROJECT_NAME` discipline |
+| [`dpf-pr-with-dco`](skills/dpf-pr-with-dco/SKILL.md) | dpf-finishing-a-development-branch (successor) | `["build-specialist", "platform-engineer"]` | Branch from `origin/main`, `-s` sign-off, overlap-sweep, PR-when-ready |
+| [`dpf-evidence-before-diagnosis`](skills/dpf-evidence-before-diagnosis/SKILL.md) | dpf-systematic-debugging (predecessor) | `["*"]` | Query DB/status before claiming cause; dynamic-analysis output discipline |
+| [`dpf-brainstorming`](skills/dpf-brainstorming/SKILL.md) | (DPF-native; predecessor to `dpf-decision-via-kernel`) | `["*"]` | Generate 2-4 substrate-grounded options before converging; replaces upstream `brainstorming` |
+| [`dpf-systematic-debugging`](skills/dpf-systematic-debugging/SKILL.md) | dpf-evidence-before-diagnosis, dpf-verify-substrate-first | `["*"]` | 4-phase root cause, DPF-gated: evidence-first, peer-session check, substrate check, functional (not structural) verification; replaces upstream `systematic-debugging` |
+| [`dpf-finishing-a-development-branch`](skills/dpf-finishing-a-development-branch/SKILL.md) | (DPF-native; successor `dpf-pr-with-dco`) | `["*"]` | Decide integration shape (one PR / stack / split), confirm green + signed, then hand off PR mechanics; replaces upstream `finishing-a-development-branch` |
 | [`dpf-retrieve-decision-context`](skills/dpf-retrieve-decision-context/SKILL.md) | dpf-verify-substrate-first | `["*"]` | Pull repo, specs, live backlog, and kernel context before WWMD scoring |
 | [`dpf-compare-options`](skills/dpf-compare-options/SKILL.md) | dpf-retrieve-decision-context | `["*"]` | Score 2-4 options through `principle_decide` and return operator-safe recommendations |
 | [`dpf-record-decision-outcome`](skills/dpf-record-decision-outcome/SKILL.md) | dpf-decision-via-kernel | `["*"]` | Persist decision result, evidence summary, and next action through governed MCP |
