@@ -39,6 +39,15 @@ vi.mock("@/lib/self-upgrade", () => ({
   getLatestRun: vi.fn(),
 }));
 
+vi.mock("@/lib/self-upgrade/window", () => ({
+  isStoreOpen: vi.fn().mockReturnValue(false),
+  isUpgradeWindowOpen: vi.fn().mockReturnValue(true),
+}));
+
+vi.mock("@/lib/operating-hours-read", () => ({
+  resolveOperatingScheduleForSystem: vi.fn().mockResolvedValue({ schedule: {}, timezone: "UTC" }),
+}));
+
 vi.mock("@/lib/queue/inngest-client", () => ({
   inngest: {
     send: vi.fn().mockResolvedValue(undefined),
@@ -61,6 +70,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import * as SelfUpgrade from "@/lib/self-upgrade";
+import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
 import { inngest } from "@/lib/queue/inngest-client";
 import { getSelfUpgradeStatus, listSelfUpgradeRuns, triggerSelfUpgrade } from "./promotions";
 
@@ -104,7 +114,7 @@ beforeEach(() => {
   vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
   // Default: treat triggers as in-window so dispatch tests exercise the happy
   // path. Tests that care about the window gate override this explicitly.
-  vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(true);
+  vi.mocked(isUpgradeWindowOpen).mockReturnValue(true);
 });
 
 // ─── Permission Guard ─────────────────────────────────────────────────────────
@@ -122,7 +132,7 @@ describe("getSelfUpgradeStatus – access control", () => {
 
   it("checks view_operations permission with user role", async () => {
     vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
-    vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(false);
+    vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
     vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.isShaFresh).mockReturnValue(false);
@@ -145,7 +155,7 @@ describe("getSelfUpgradeStatus – access control", () => {
 describe("getSelfUpgradeStatus", () => {
   it("returns config fields, window status, sha info, and latest run", async () => {
     vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
-    vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(true);
+    vi.mocked(isUpgradeWindowOpen).mockReturnValue(true);
     vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue("abc1234");
     vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue("def5678");
     vi.mocked(SelfUpgrade.isShaFresh).mockReturnValue(false);
@@ -168,7 +178,7 @@ describe("getSelfUpgradeStatus", () => {
 
   it("returns isFresh=true when deployed sha matches target", async () => {
     vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
-    vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(false);
+    vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
     vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue("def5678");
     vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue("def5678");
     vi.mocked(SelfUpgrade.isShaFresh).mockReturnValue(true);
@@ -182,7 +192,7 @@ describe("getSelfUpgradeStatus", () => {
 
   it("returns isFresh=false and skips isShaFresh when targetSha is null", async () => {
     vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
-    vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(false);
+    vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
     vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue("abc1234");
     vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
@@ -197,7 +207,7 @@ describe("getSelfUpgradeStatus", () => {
   it("returns disabled status when self-upgrade is disabled", async () => {
     const disabledConfig = { ...mockConfig, enabled: false };
     vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(disabledConfig as never);
-    vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(false);
+    vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
     vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
@@ -207,26 +217,30 @@ describe("getSelfUpgradeStatus", () => {
     expect(result.enabled).toBe(false);
   });
 
-  it("passes config to isInMaintenanceWindow", async () => {
-    const windowConfig = {
-      ...mockConfig,
-      maintenanceWindows: [{ dayOfWeek: [2], startTime: "02:00", endTime: "04:00" }],
-    };
+  it("evaluates the upgrade window from explicit windows + operating-hours schedule", async () => {
+    const explicit = [{ dayOfWeek: [2], startTime: "02:00", endTime: "04:00" }];
+    const windowConfig = { ...mockConfig, maintenanceWindows: explicit };
     vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(windowConfig as never);
-    vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(false);
+    vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
     vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
 
-    await getSelfUpgradeStatus();
+    const result = await getSelfUpgradeStatus();
 
-    expect(SelfUpgrade.isInMaintenanceWindow).toHaveBeenCalledWith(windowConfig);
+    // The window is derived (store-closed) with explicit windows as override.
+    expect(isUpgradeWindowOpen).toHaveBeenCalledWith(
+      expect.objectContaining({ explicitWindows: explicit, timeZone: "UTC" }),
+    );
+    expect(result.inMaintenanceWindow).toBe(false);
+    // Explicit windows present → windowSource reflects the override.
+    expect(result.windowSource).toBe("explicit");
   });
 
   it("passes channel and source config to resolveTargetSha", async () => {
     const betaConfig = { ...mockConfig, channel: "beta" };
     vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(betaConfig as never);
-    vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(false);
+    vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
     vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue(null);
     vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
@@ -465,7 +479,7 @@ describe("triggerSelfUpgrade – dispatch", () => {
 
 describe("triggerSelfUpgrade – window gate", () => {
   it("returns queued: false / outside-window when not in a maintenance window", async () => {
-    vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(false);
+    vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
 
     const result = await triggerSelfUpgrade();
 
@@ -476,7 +490,7 @@ describe("triggerSelfUpgrade – window gate", () => {
   });
 
   it("force=true bypasses the window gate and dispatches with force in the event", async () => {
-    vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(false);
+    vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
 
     const result = await triggerSelfUpgrade({ force: true });
 
@@ -489,7 +503,7 @@ describe("triggerSelfUpgrade – window gate", () => {
   });
 
   it("does not include force in the event for a normal in-window trigger", async () => {
-    vi.mocked(SelfUpgrade.isInMaintenanceWindow).mockReturnValue(true);
+    vi.mocked(isUpgradeWindowOpen).mockReturnValue(true);
 
     await triggerSelfUpgrade();
 

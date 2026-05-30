@@ -1,6 +1,8 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
-import { getSelfUpgradeConfig, isInMaintenanceWindow } from "@/lib/self-upgrade/config";
+import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
+import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
+import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { buildFetchCommand, buildRemoteHeadCommand } from "@/lib/self-upgrade/version";
 import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepare-source";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
@@ -52,10 +54,20 @@ export async function runSelfUpgrade(
   const config = await getSelfUpgradeConfig();
 
   if (!config.enabled && !params.dryRun) return { skipped: true, reason: "disabled" };
-  // force = operator emergency override: bypass the maintenance window (and,
-  // below, the quiescence defer). Never set by the scheduled cron.
-  if (!isInMaintenanceWindow(config) && !params.dryRun && !params.force) {
-    return { skipped: true, reason: "outside-window" };
+  // The upgrade window is "whenever the storefront is closed", derived from the
+  // operator's operating hours (single source of truth — no separate window to
+  // configure, no "enabled but no window → never runs" dead-end). An explicit
+  // maintenanceWindows config still overrides for bespoke schedules.
+  // force = operator emergency override: bypass the window (and, below, the
+  // quiescence defer). Never set by the scheduled cron.
+  if (!params.dryRun && !params.force) {
+    const { schedule, timezone } = await resolveOperatingScheduleForSystem();
+    const allowed = isUpgradeWindowOpen({
+      explicitWindows: config.maintenanceWindows,
+      schedule,
+      timeZone: timezone,
+    });
+    if (!allowed) return { skipped: true, reason: "outside-window" };
   }
 
   const gitRun = defaultGitRunner;
