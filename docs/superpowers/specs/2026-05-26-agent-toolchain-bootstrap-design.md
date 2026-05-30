@@ -302,9 +302,11 @@ The first three phases are the minimum viable contract for Windows contributors 
 
 ## Acceptance Criteria
 
+> **Addendum (2026-05-30):** the `superpowers:*` requirement in criteria 1-2 is **superseded**. The composed capabilities are now DPF-native skills in `packages/dpf-skill-pack` (`dpf-brainstorming`, `dpf-systematic-debugging`, `dpf-finishing-a-development-branch`), so the pack no longer depends on upstream `obra/superpowers`. Read "lists `dpf-platform:*` skills and `superpowers:*` skills" as "lists `dpf-platform:*` skills (which now include the DPF-native capability equivalents)". Upstream superpowers is an optional convenience, not a readiness requirement. See [2026-05-30-dpf-native-skill-equivalents-design.md](2026-05-30-dpf-native-skill-equivalents-design.md).
+
 A fresh Windows, macOS, or Linux install of DPF, on a machine where the contributor has just installed Claude Code (or Codex CLI) for the first time and never edited any config file, must produce:
 
-1. A Claude Code session opened from the repo root that lists `dpf-platform:*` skills and `superpowers:*` skills in its available-skills list and that responds to the destructive-action smoke prompt by naming `destructive-actions-require-explicit-go`.
+1. A Claude Code session opened from the repo root that lists `dpf-platform:*` skills (including the DPF-native capability equivalents per the 2026-05-30 addendum above) in its available-skills list and that responds to the destructive-action smoke prompt by naming `destructive-actions-require-explicit-go`.
 2. A Codex CLI session that lists the same set and refuses the same prompt.
 3. `mcp__dpf__*` tools available without re-issuance, and a non-mutating `tools/list` probe recorded in `agentToolchain`.
 4. Re-running the installer is a no-op on a clean install (zero file writes, exit 0) and is reconciling on a drifted install (writes only the deltas, preserves user comments / edits).

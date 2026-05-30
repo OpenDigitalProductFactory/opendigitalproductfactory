@@ -1,7 +1,7 @@
 ---
 # Single fields shared by both surfaces
 name: dpf-decision-via-kernel
-description: "Use when working in the DPF codebase and facing an open question with 2+ architecturally-distinct options. Maps each option to the closed PRINCIPLE_DIMENSIONS registry, invokes the principle_decide MCP tool, surfaces the contribution ledger to the operator, and defers if a commandment conflict is flagged. Composes with superpowers:brainstorming as the predecessor step. The DPF gate that sits in front of any decision the kernel can weigh."
+description: "Use when working in the DPF codebase and facing an open question with 2+ architecturally-distinct options. Maps each option to the closed PRINCIPLE_DIMENSIONS registry, invokes the principle_decide MCP tool, surfaces the contribution ledger to the operator, and defers if a commandment conflict is flagged. Composes with dpf-brainstorming as the predecessor step. The DPF gate that sits in front of any decision the kernel can weigh."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
@@ -17,7 +17,7 @@ triggerPattern: "open question|trade-off|which approach|2-3 options|architectura
 userInvocable: true
 agentInvocable: true
 allowedTools: ["mcp__dpf__principle_decide", "mcp__dpf__wiki_query"]
-composesFrom: ["brainstorming"]
+composesFrom: ["dpf-brainstorming"]
 contextRequirements: ["principle_decide MCP tool reachable"]
 riskBand: low
 
@@ -30,11 +30,11 @@ enforces:
 
 # DPF Decision via Kernel (WWMD)
 
-When you face an open question with 2+ architecturally-distinct options inside the DPF codebase, **do not pick by gut**. Map each option to the closed `PRINCIPLE_DIMENSIONS` registry, call the `principle_decide` MCP tool, and surface the contribution ledger to the operator. This is "What Would Mark Do" (WWMD) as a tool, not a guess — and it sits in front of `superpowers:brainstorming` whenever the brainstorm produces multiple viable options.
+When you face an open question with 2+ architecturally-distinct options inside the DPF codebase, **do not pick by gut**. Map each option to the closed `PRINCIPLE_DIMENSIONS` registry, call the `principle_decide` MCP tool, and surface the contribution ledger to the operator. This is "What Would Mark Do" (WWMD) as a tool, not a guess — and it sits in front of `dpf-brainstorming` whenever the brainstorm produces multiple viable options.
 
 ## When to use
 
-- Authoring a spec and `superpowers:brainstorming` produced 2-3 candidate approaches.
+- Authoring a spec and `dpf-brainstorming` produced 2-3 candidate approaches.
 - Reviewing a design doc with open questions in §X.
 - Mid-implementation choice: refactor vs special-case, schema migration shape A vs B, tool surface async vs sync, eager vs lazy materialization.
 - Operator asks "which way should we go on X?" with no obvious answer.
@@ -43,7 +43,7 @@ When you face an open question with 2+ architecturally-distinct options inside t
 
 - The decision is purely empirical (perf benchmark, security audit, load test). Use evidence, not principles.
 - The decision is operator-only (business strategy, naming, branding). Surface the trade-off; let the operator decide.
-- The options are not yet enumerated. Brainstorm first (`superpowers:brainstorming`), then return here.
+- The options are not yet enumerated. Brainstorm first (`dpf-brainstorming`), then return here.
 - Single-option situations. The kernel doesn't add value when there's nothing to weigh.
 
 ## Read first

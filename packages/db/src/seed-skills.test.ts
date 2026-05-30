@@ -250,6 +250,28 @@ describe("dpf-platform mirror-field invariant", () => {
     expect(issues).toEqual([]);
   });
 
+  it("has no dangling composesFrom — every slug resolves to a pack skill (no bare upstream slugs)", () => {
+    const pluginSkillsDir = join(__dirname, "..", "..", "..", "packages", "dpf-skill-pack", "skills");
+    const frontmatters = readdirSync(pluginSkillsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(pluginSkillsDir, entry.name, "SKILL.md"))
+      .map((filePath) => parseFrontmatter(readFileSync(filePath, "utf-8")).frontmatter);
+
+    const names = new Set(frontmatters.map((fm) => fm.name));
+
+    // Every composesFrom slug must be the name of another skill in this pack.
+    // Bare upstream slugs (e.g. "brainstorming", "systematic-debugging") are
+    // invalid even if a contributor happens to have an upstream plugin
+    // installed — the pack must be self-sufficient.
+    const dangling = frontmatters.flatMap((fm) =>
+      (Array.isArray(fm.composesFrom) ? fm.composesFrom : [])
+        .filter((slug) => !names.has(slug))
+        .map((slug) => `${fm.name} -> ${slug}`),
+    );
+
+    expect(dangling).toEqual([]);
+  });
+
   it("parses scoped allowed-tools entries without splitting spaces inside scopes", () => {
     expect(parseAllowedTools("Bash(git worktree *) Bash(scripts/seed-worktree-mcp*) Grep")).toEqual([
       "Bash(git worktree *)",

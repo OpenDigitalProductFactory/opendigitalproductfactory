@@ -64,6 +64,15 @@ export type ReadinessState =
 export type AgentToolchainState = {
   appliedAt: string;
   dpfPlatformVersion: string;
+  /**
+   * @deprecated Advisory only; not part of readiness. DPF no longer depends on
+   * upstream `obra/superpowers` — the composed capabilities (brainstorming,
+   * systematic-debugging, finishing-a-development-branch) are now DPF-native
+   * skills in `packages/dpf-skill-pack` (see
+   * docs/superpowers/specs/2026-05-30-dpf-native-skill-equivalents-design.md).
+   * Retained as a nullable field for install-state backward-compat; expect
+   * `null`. Slated for removal under a substrate-cleanup BI.
+   */
   superpowersVersion: string | null;
   claudeCodeWired: boolean;
   codexWired: boolean;
