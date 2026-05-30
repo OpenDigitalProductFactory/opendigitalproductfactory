@@ -28,6 +28,11 @@ const LEGACY_BUILD_STUDIO_TEXT_ALIASES: Array<{ from: RegExp; to: string }> = [
 ];
 
 function normalizeRelativePath(relativePath: string): string {
+  // Guard: buildPlan entries (LLM-authored, JSONB round-tripped) can arrive with
+  // an undefined / non-string path. Calling .trim() on that crashed
+  // saveBuildEvidence's buildPlan normalization with "Cannot read properties of
+  // undefined (reading 'trim')", stranding builds in plan phase (BI-PIR-de54cc63).
+  if (typeof relativePath !== "string") return "";
   return relativePath.trim().replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
