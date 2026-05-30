@@ -60,7 +60,7 @@ describe("synthesizeWithMlx", () => {
     expect(body.voice).toBeUndefined()
   })
 
-  it("omits ref_text when no transcript is provided but still clones", async () => {
+  it("sends a non-empty default ref_text when no transcript is provided (CSM requires it)", async () => {
     process.env.DPF_TTS_REFERENCE_HOST_ROOT = "/host/voice-storage"
     const fetchMock = stubFetch({ ok: true })
 
@@ -68,7 +68,9 @@ describe("synthesizeWithMlx", () => {
 
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
     expect(body.ref_audio).toBe("/host/voice-storage/voices/mark-dpf-platform/reference.wav")
-    expect(body.ref_text).toBeUndefined()
+    // CSM (sesame) crashes on empty ref_text; the adapter must supply a default.
+    expect(typeof body.ref_text).toBe("string")
+    expect((body.ref_text as string).length).toBeGreaterThan(0)
   })
 
   it("falls back to a named voice (no cloning) when the host root is unset", async () => {
