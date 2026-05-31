@@ -27,6 +27,17 @@ describe("composeInvoiceEmail", () => {
     expect(result.to).toBe("jane@acme.com");
   });
 
+  it("names the issuing org in the subject when provided", () => {
+    const result = composeInvoiceEmail({ ...params, orgName: "Acme Trading Ltd" });
+    expect(result.subject).toBe("Invoice INV-2026-0001 from Acme Trading Ltd");
+  });
+
+  it("omits the issuer clause (no 'your provider' placeholder) when org is unknown", () => {
+    const result = composeInvoiceEmail(params);
+    expect(result.subject).toBe("Invoice INV-2026-0001");
+    expect(result.subject).not.toContain("your provider");
+  });
+
   it("includes pay URL in html body", () => {
     const result = composeInvoiceEmail(params);
     expect(result.html).toContain("https://example.com/s/pay/abc123");

@@ -5,6 +5,7 @@ import { authenticateRequest } from "@/lib/api/auth-middleware";
 import { ApiError, apiError } from "@/lib/api/error";
 import { apiSuccess } from "@/lib/api/response";
 import { getInvoice, sendInvoice } from "@/lib/actions/finance";
+import { getOrgIdentity } from "@/lib/org-identity";
 import { generateInvoicePdf, getInvoicePdfFilename } from "@/lib/invoice-pdf";
 import { sendEmail, composeInvoiceEmail } from "@/lib/email";
 
@@ -28,13 +29,15 @@ export async function POST(
       "http://localhost:3000";
     const payUrl = `${baseUrl}/s/pay/${payToken}`;
 
-    const pdf = await generateInvoicePdf(invoice);
+    const issuer = await getOrgIdentity();
+    const pdf = await generateInvoicePdf({ ...invoice, issuer });
     const filename = getInvoicePdfFilename(invoice.invoiceRef, invoice.account.name);
 
     const email = composeInvoiceEmail({
       to: invoice.contact.email,
       invoiceRef: invoice.invoiceRef,
       accountName: invoice.account.name,
+      orgName: issuer?.name ?? null,
       totalAmount: Number(invoice.totalAmount).toLocaleString("en-GB", {
         minimumFractionDigits: 2,
       }),
@@ -49,6 +52,7 @@ export async function POST(
 
     await sendEmail({
       ...email,
+      from: issuer?.email ? `${issuer.name} <${issuer.email}>` : undefined,
       attachments: [{ filename, content: pdf, contentType: "application/pdf" }],
     });
 
