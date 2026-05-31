@@ -8,21 +8,8 @@ import { AccountantWorkLanePanel } from "@/components/finance/AccountantWorkLane
 import { getBookkeeperAccountantWorkLane } from "@/lib/finance/accountant-work-lane";
 import { FinanceSummaryCard } from "@/components/finance/FinanceSummaryCard";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
-
-const STATUS_COLOURS: Record<string, string> = {
-  draft: "var(--dpf-muted)",
-  sent: "var(--dpf-info)",
-  viewed: "var(--dpf-accent)",
-  overdue: "var(--dpf-error)",
-  partially_paid: "var(--dpf-warning)",
-  paid: "var(--dpf-success)",
-  void: "var(--dpf-muted)",
-  written_off: "var(--dpf-muted)",
-};
-
-const POSITIVE_COLOUR = "var(--dpf-success)";
-const ATTENTION_COLOUR = "var(--dpf-error)";
-const MUTED_COLOUR = "var(--dpf-muted)";
+import { StatCard } from "@/components/ui/report-kit";
+import { RecentInvoicesTable, type RecentInvoiceRow } from "./RecentInvoicesTable";
 
 export default async function FinancePage() {
   const now = new Date();
@@ -191,6 +178,14 @@ export default async function FinancePage() {
   const formatMoney = (amount: number) =>
     amount.toLocaleString("en-GB", { minimumFractionDigits: 2 });
 
+  const recentInvoiceRows: RecentInvoiceRow[] = recentInvoices.map((inv) => ({
+    id: inv.id,
+    invoiceRef: inv.invoiceRef,
+    accountName: inv.account.name,
+    status: inv.status,
+    amount: Number(inv.totalAmount),
+  }));
+
   return (
     <div>
       {/* Setup prompt banner */}
@@ -278,196 +273,111 @@ export default async function FinancePage() {
 
       {/* Row 1: Cash Position + 30-day Forecast + Outstanding + Overdue */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        {/* Widget 1: Cash Position */}
-        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
-            Cash Position
-          </p>
-          {bankAccounts.length === 0 ? (
-            <div>
-              <p className="text-xs text-[var(--dpf-muted)] mb-2">No bank accounts</p>
-              <Link
-                href="/finance/banking"
-                className="text-[10px] text-[var(--dpf-accent)] hover:underline"
-              >
+        {bankAccounts.length === 0 ? (
+          <StatCard
+            label="Cash Position"
+            value="No accounts"
+            intent="neutral"
+            hint={
+              <Link href="/finance/banking" className="text-[var(--dpf-accent)] hover:underline">
                 Add one →
               </Link>
-            </div>
-          ) : (
-            <>
-              <p
-                className="text-2xl font-bold"
-                style={{ color: totalCash >= 0 ? POSITIVE_COLOUR : ATTENTION_COLOUR }}
-              >
-                {sym}{formatMoney(totalCash)}
-              </p>
-              <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
-                across {bankAccounts.length} account{bankAccounts.length !== 1 ? "s" : ""}
-              </p>
-            </>
-          )}
-        </div>
-
-        {/* Widget 2: 30-Day Cash Flow Forecast */}
-        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
-            30-Day Forecast
-          </p>
-          <p
-            className="text-2xl font-bold"
-            style={{ color: forecastBalance >= totalCash ? POSITIVE_COLOUR : ATTENTION_COLOUR }}
-          >
-            {sym}{formatMoney(forecastBalance)}
-          </p>
-          <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
-            +{sym}{formatMoney(inflowsIn30)} in · -{sym}{formatMoney(outflowsIn30)} out
-          </p>
-        </div>
-
-        {/* Widget 3: Outstanding Invoices */}
-        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
-            Money Owed To You
-          </p>
-          <p className="text-2xl font-bold text-[var(--dpf-text)]">
-            {sym}{formatMoney(owedAmount)}
-          </p>
-          <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
-            {owedCount} invoice{owedCount !== 1 ? "s" : ""} outstanding
-          </p>
-        </div>
-
-        {/* Widget 4: Overdue */}
-        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
-            Overdue
-          </p>
-          <p
-            className="text-2xl font-bold"
-            style={{ color: overdueCount > 0 ? ATTENTION_COLOUR : POSITIVE_COLOUR }}
-          >
-            {overdueCount}
-          </p>
-          {overdueCount > 0 && oldestOverdue ? (
-            <p className="text-[10px] text-[var(--dpf-muted)] mt-1 truncate">
-              Oldest:{" "}
-              <span className="text-[var(--dpf-text)]">{oldestOverdue.account.name}</span>
-            </p>
-          ) : (
-            <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
-              All up to date
-            </p>
-          )}
-        </div>
+            }
+          />
+        ) : (
+          <StatCard
+            label="Cash Position"
+            value={`${sym}${formatMoney(totalCash)}`}
+            intent={totalCash >= 0 ? "success" : "danger"}
+            hint={`across ${bankAccounts.length} account${bankAccounts.length !== 1 ? "s" : ""}`}
+          />
+        )}
+        <StatCard
+          label="30-Day Forecast"
+          value={`${sym}${formatMoney(forecastBalance)}`}
+          intent={forecastBalance >= totalCash ? "success" : "danger"}
+          hint={`+${sym}${formatMoney(inflowsIn30)} in · -${sym}${formatMoney(outflowsIn30)} out`}
+        />
+        <StatCard
+          label="Money Owed To You"
+          value={`${sym}${formatMoney(owedAmount)}`}
+          hint={`${owedCount} invoice${owedCount !== 1 ? "s" : ""} outstanding`}
+        />
+        <StatCard
+          label="Overdue"
+          value={overdueCount}
+          intent={overdueCount > 0 ? "danger" : "success"}
+          hint={
+            overdueCount > 0 && oldestOverdue ? (
+              <>Oldest: <span className="text-[var(--dpf-text)]">{oldestOverdue.account.name}</span></>
+            ) : (
+              "All up to date"
+            )
+          }
+        />
       </div>
 
       {/* Row 2: Money In + Money You Owe + Active Recurring + Overdue >30 days */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {/* Money In This Month */}
-        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
-            Money In This Month
-          </p>
-          <p className="text-2xl font-bold text-[var(--dpf-text)]">
-            {sym}{formatMoney(paidAmount)}
-          </p>
-          <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
-            {paidCount} invoice{paidCount !== 1 ? "s" : ""} paid
-          </p>
-        </div>
-
-        {/* Money You Owe */}
-        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
-            Money You Owe
-          </p>
-          <p
-            className="text-2xl font-bold"
-            style={{ color: moneyOweAmount > 0 ? ATTENTION_COLOUR : POSITIVE_COLOUR }}
-          >
-            {sym}{formatMoney(moneyOweAmount)}
-          </p>
-          <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
-            {moneyOweCount} bill{moneyOweCount !== 1 ? "s" : ""} awaiting payment
-          </p>
-        </div>
-
-        {/* Active Recurring */}
-        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
-            Active Recurring
-          </p>
-          <p
-            className="text-2xl font-bold"
-            style={{ color: activeRecurringCount > 0 ? POSITIVE_COLOUR : MUTED_COLOUR }}
-          >
-            {activeRecurringCount}
-          </p>
-          <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
+        <StatCard
+          label="Money In This Month"
+          value={`${sym}${formatMoney(paidAmount)}`}
+          hint={`${paidCount} invoice${paidCount !== 1 ? "s" : ""} paid`}
+        />
+        <StatCard
+          label="Money You Owe"
+          value={`${sym}${formatMoney(moneyOweAmount)}`}
+          intent={moneyOweAmount > 0 ? "danger" : "success"}
+          hint={`${moneyOweCount} bill${moneyOweCount !== 1 ? "s" : ""} awaiting payment`}
+        />
+        <StatCard
+          label="Active Recurring"
+          value={activeRecurringCount}
+          intent={activeRecurringCount > 0 ? "success" : "neutral"}
+          hint={
             <Link href="/finance/recurring" className="hover:underline">
               schedule{activeRecurringCount !== 1 ? "s" : ""} running →
             </Link>
-          </p>
-        </div>
-
-        {/* Overdue > 30 days */}
-        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
-            Overdue &gt; 30 Days
-          </p>
-          <p
-            className="text-2xl font-bold"
-            style={{ color: overdueGt30Amount > 0 ? ATTENTION_COLOUR : POSITIVE_COLOUR }}
-          >
-            {sym}{formatMoney(overdueGt30Amount)}
-          </p>
-          <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
+          }
+        />
+        <StatCard
+          label="Overdue > 30 Days"
+          value={`${sym}${formatMoney(overdueGt30Amount)}`}
+          intent={overdueGt30Amount > 0 ? "danger" : "success"}
+          hint={
             <Link href="/finance/reports/aged-debtors" className="hover:underline">
               view aged debtors →
             </Link>
-          </p>
-        </div>
+          }
+        />
       </div>
 
       {/* Row 3: People + Asset widgets */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {/* Pending Expenses */}
-        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
-            Pending Expenses
-          </p>
-          <p
-            className="text-2xl font-bold"
-            style={{ color: pendingExpenseCount > 0 ? "var(--dpf-accent)" : POSITIVE_COLOUR }}
-          >
-            {pendingExpenseCount}
-          </p>
-          <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
+        <StatCard
+          label="Pending Expenses"
+          value={pendingExpenseCount}
+          intent={pendingExpenseCount > 0 ? "accent" : "success"}
+          hint={
             <Link href="/finance/expense-claims?status=submitted" className="hover:underline">
               claim{pendingExpenseCount !== 1 ? "s" : ""} awaiting approval →
             </Link>
-          </p>
-        </div>
-
-        {/* Total Asset Value */}
-        <div className="p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
-            Total Asset Value
-          </p>
-          <p
-            className="text-2xl font-bold"
-            style={{ color: totalAssetValue > 0 ? POSITIVE_COLOUR : MUTED_COLOUR }}
-          >
-            {sym}{formatMoney(totalAssetValue)}
-          </p>
-          <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
-            {activeAssets.length} asset{activeAssets.length !== 1 ? "s" : ""} across{" "}
-            {assetCategoryCount} categor{assetCategoryCount !== 1 ? "ies" : "y"} ·{" "}
-            <Link href="/finance/assets" className="hover:underline">
-              view register →
-            </Link>
-          </p>
-        </div>
+          }
+        />
+        <StatCard
+          label="Total Asset Value"
+          value={`${sym}${formatMoney(totalAssetValue)}`}
+          intent={totalAssetValue > 0 ? "success" : "neutral"}
+          hint={
+            <>
+              {activeAssets.length} asset{activeAssets.length !== 1 ? "s" : ""} across{" "}
+              {assetCategoryCount} categor{assetCategoryCount !== 1 ? "ies" : "y"} ·{" "}
+              <Link href="/finance/assets" className="hover:underline">
+                view register →
+              </Link>
+            </>
+          }
+        />
       </div>
 
       {/* Navigation links */}
@@ -628,68 +538,7 @@ export default async function FinancePage() {
             No invoices yet. Create your first invoice to get started.
           </p>
         ) : (
-          <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-[var(--dpf-border)]">
-                  <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                    Ref
-                  </th>
-                  <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                    Account
-                  </th>
-                  <th className="text-left text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                    Status
-                  </th>
-                  <th className="text-right text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] px-4 py-2 font-normal">
-                    Amount
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentInvoices.map((inv) => {
-                  const colour = STATUS_COLOURS[inv.status] ?? MUTED_COLOUR;
-                  return (
-                    <tr
-                      key={inv.id}
-                      className="border-b border-[var(--dpf-border)] last:border-0 hover:bg-[var(--dpf-surface-1)] transition-colors"
-                    >
-                      <td className="px-4 py-2.5">
-                        <Link
-                          href={`/finance/invoices/${inv.id}`}
-                          className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
-                        >
-                          {inv.invoiceRef}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <Link
-                          href={`/finance/invoices/${inv.id}`}
-                          className="text-[var(--dpf-text)] hover:underline"
-                        >
-                          {inv.account.name}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <span
-                          className="text-[9px] px-1.5 py-0.5 rounded-full"
-                          style={{
-                            color: colour,
-                            backgroundColor: `color-mix(in srgb, ${colour} 16%, transparent)`,
-                          }}
-                        >
-                          {inv.status.replace("_", " ")}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
-                        {sym}{formatMoney(Number(inv.totalAmount))}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <RecentInvoicesTable rows={recentInvoiceRows} currencySymbol={sym} />
         )}
       </section>
     </div>
