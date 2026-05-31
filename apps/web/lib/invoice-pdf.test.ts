@@ -39,6 +39,22 @@ describe("generateInvoicePdf", () => {
     const header = result.subarray(0, 5).toString("ascii");
     expect(header).toBe("%PDF-");
   });
+
+  it("generates a valid PDF when an issuer (org identity) is supplied", async () => {
+    const withIssuer = {
+      ...mockInvoice,
+      issuer: {
+        name: "Acme Trading Ltd",
+        email: "billing@acme.example",
+        addressLines: ["1 High St", "London", "EC1A 1BB"],
+        vatNumber: "GB123456789",
+        bank: { bankName: "Big Bank", accountName: "Acme Current", accountNumber: "12345678", sortCode: "12-34-56", iban: null },
+      },
+    };
+    const result = await generateInvoicePdf(withIssuer as never);
+    expect(result.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+    expect(result.length).toBeGreaterThan(100);
+  });
 });
 
 describe("getInvoicePdfFilename", () => {
