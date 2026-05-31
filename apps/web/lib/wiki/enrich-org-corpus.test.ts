@@ -236,8 +236,9 @@ describe("enrichOrgCorpus (BI-7C9D6198)", () => {
       profileId: "org-perspective-org_acme",
       profileVersionId: "v1",
       evidenceGrade: "A",
-      reviewStatus: "approved",
-      promotionState: "promoted",
+      // Draft by default (BI-1378): even first-party enrichment awaits review.
+      reviewStatus: "draft",
+      promotionState: "candidate",
       direction: "support",
       freshness: "current",
     });
@@ -271,7 +272,7 @@ describe("enrichOrgCorpus (BI-7C9D6198)", () => {
     expect(matArg.create.confidenceWeight).toBeLessThan(0.5);
   });
 
-  it("derived trust → grade B, approved/promoted (uploaded-doc extraction shape)", async () => {
+  it("derived trust → grade B, draft/candidate (uploaded-doc extraction; draft by default)", async () => {
     const { db, spies } = makeDbStub();
     const infer = makeProposalInfer({ claimSlug: "entities/extracted-fact", pageKind: "entity" });
 
@@ -285,10 +286,12 @@ describe("enrichOrgCorpus (BI-7C9D6198)", () => {
     });
 
     const matArg = spies.materialUpsert.mock.calls[0][0] as { create: Record<string, unknown> };
+    // Per BI-1378: document-derived material lands as a draft for review, not
+    // auto-promoted. The grade still reflects derived-from-first-party-doc trust.
     expect(matArg.create).toMatchObject({
       evidenceGrade: "B",
-      reviewStatus: "approved",
-      promotionState: "promoted",
+      reviewStatus: "draft",
+      promotionState: "candidate",
     });
   });
 
