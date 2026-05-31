@@ -19,7 +19,7 @@ export interface StatDelta {
 export interface StatCardProps {
   label: string;
   value: React.ReactNode;
-  hint?: string;
+  hint?: React.ReactNode;
   /** Colors the left accent border (and is the default delta basis). */
   intent?: Intent;
   delta?: StatDelta;
