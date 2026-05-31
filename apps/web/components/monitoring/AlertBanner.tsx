@@ -7,15 +7,22 @@ import { useAlertQuery } from "./useAlertQuery";
 
 type Props = {
   className?: string;
+  // Alert summaries already represented elsewhere on the page (e.g. by the
+  // Platform Status StatCard). The banner suppresses any matching alert so the
+  // user doesn't see "Service sandbox is down" twice on the same screen.
+  suppressSummaries?: string[];
 };
 
-export function AlertBanner({ className = "" }: Props) {
+export function AlertBanner({ className = "", suppressSummaries = [] }: Props) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const { alerts, offline } = useAlertQuery();
 
-  const visibleAlerts = getActiveAlerts(alerts).filter(
-    (a) => !dismissed.has(a.labels.alertname ?? ""),
-  );
+  const suppressed = new Set(suppressSummaries.filter(Boolean));
+  const visibleAlerts = getActiveAlerts(alerts).filter((a) => {
+    if (dismissed.has(a.labels.alertname ?? "")) return false;
+    const summary = a.annotations.summary ?? a.labels.alertname ?? "";
+    return !suppressed.has(summary);
+  });
 
   if (offline || visibleAlerts.length === 0) return null;
 

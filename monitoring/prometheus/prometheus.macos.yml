@@ -57,6 +57,14 @@ scrape_configs:
           - "sandbox:3000"
     metrics_path: /api/metrics
 
+  # ─── Background jobs (Inngest) ──────────────────────────────
+  # Same rationale as the base prometheus.yml: scrape /metrics so the
+  # Health tab catches a wedged Inngest before background jobs silently
+  # back up.
+  - job_name: "inngest"
+    static_configs:
+      - targets: ["inngest:8288"]
+
   # ─── AI Inference ───────────────────────────────────────────
   # Docker Model Runner does not expose a Prometheus `/metrics` endpoint
   # (all paths 404). Inference health is tracked via the portal's
