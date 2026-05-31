@@ -31,6 +31,19 @@ export {
 } from "./FilterBar";
 
 export {
+  StatCard,
+  type StatCardProps,
+  type StatDelta,
+} from "./StatCard";
+
+export {
+  ExportButton,
+  toCsv,
+  type ExportButtonProps,
+  type ExportColumn,
+} from "./ExportButton";
+
+export {
   intentStyle,
   resolveIntent,
   STATUS_INTENT,
