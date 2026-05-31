@@ -363,6 +363,25 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
 
   // HR — query
   query_employees: ["consumer_read", "registry_read"],
+
+  // ─── Pseudo-User Contract: screen_* view-command family (BI-DF6079E9) ─────
+  // Three finer grants (coworker_screen_read / drive / fill) carry the view-
+  // command surface. screen_scroll_to is read-class per the chief-architect
+  // review (PR #1361). screen_dispatch_action gates on coworker_screen_drive
+  // at the entry; the underlying tool resolved from the envelope's
+  // manifestActionId carries its own grant check (BI-0F9C291C will wire
+  // the second-key resolution).
+  screen_describe:         ["coworker_screen_read"],
+  screen_get_state:        ["coworker_screen_read"],
+  screen_scroll_to:        ["coworker_screen_read"],
+  screen_select_entity:    ["coworker_screen_drive"],
+  screen_navigate:         ["coworker_screen_drive"],
+  screen_open_panel:       ["coworker_screen_drive"],
+  screen_close_panel:      ["coworker_screen_drive"],
+  screen_focus_field:      ["coworker_screen_drive"],
+  screen_propose_action:   ["coworker_screen_drive"],
+  screen_dispatch_action:  ["coworker_screen_drive"],
+  screen_set_input:        ["coworker_screen_fill"],
 };
 
 const grantCache = new Map<string, string[]>();
