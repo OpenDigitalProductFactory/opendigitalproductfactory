@@ -22,11 +22,11 @@ export async function applyFinancialProfile(
   if (existing) {
     await prisma.orgSettings.update({
       where: { id: existing.id },
-      data: { baseCurrency, autoFetchRates: true },
+      data: { baseCurrency, autoFetchRates: true, appliedProfileSlug: profileSlug },
     });
   } else {
     await prisma.orgSettings.create({
-      data: { baseCurrency, autoFetchRates: true },
+      data: { baseCurrency, autoFetchRates: true, appliedProfileSlug: profileSlug },
     });
   }
 
