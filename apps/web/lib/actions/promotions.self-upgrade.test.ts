@@ -42,6 +42,7 @@ vi.mock("@/lib/self-upgrade", () => ({
 vi.mock("@/lib/self-upgrade/window", () => ({
   isStoreOpen: vi.fn().mockReturnValue(false),
   isUpgradeWindowOpen: vi.fn().mockReturnValue(true),
+  nextUpgradeWindowOpen: vi.fn().mockReturnValue(null),
 }));
 
 vi.mock("@/lib/operating-hours-read", () => ({
