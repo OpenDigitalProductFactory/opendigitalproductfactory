@@ -42,6 +42,7 @@ const baseStatus = {
   enabled: true,
   channel: "stable",
   inMaintenanceWindow: false,
+  nextScheduledCheckAt: "2026-05-24T18:00:00.000Z",
   deployedSha: "abc1234",
   targetSha: "def5678",
   isFresh: false,
@@ -139,6 +140,8 @@ describe("SelfUpgradeClient – enabled", () => {
       <SelfUpgradeClient {...baseStatus} inMaintenanceWindow={true} />,
     );
     expect(html).toContain("maintenance window");
+    expect(html).toContain("next scheduled check");
+    expect(html).toContain("May 24, 2026");
   });
 });
 

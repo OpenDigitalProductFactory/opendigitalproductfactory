@@ -27,6 +27,7 @@ type Props = {
   inMaintenanceWindow: boolean;
   windowConfigured?: boolean;
   nextWindowStart?: string | null;
+  nextScheduledCheckAt?: string | null;
   deployedSha: string | null;
   deployedShaSource?: ImageVersionSource;
   targetSha: string | null;
@@ -87,6 +88,7 @@ export default function SelfUpgradeClient({
   inMaintenanceWindow,
   windowConfigured,
   nextWindowStart,
+  nextScheduledCheckAt,
   deployedSha,
   deployedShaSource,
   targetSha,
@@ -165,7 +167,18 @@ export default function SelfUpgradeClient({
 
       {enabled && inMaintenanceWindow && (
         <div className="p-3 rounded-lg bg-[var(--dpf-success)]/10 border border-[var(--dpf-success)]/30 text-sm text-[var(--dpf-text)]">
-          Currently in maintenance window — upgrades are scheduled.
+          Currently in maintenance window — next scheduled check: {" "}
+          {nextScheduledCheckAt ? (
+            <>
+              <LocalTime className="font-mono" value={nextScheduledCheckAt} />
+              <span>. If an update is still available, it can start then.</span>
+            </>
+          ) : (
+            <>
+              <span className="font-mono">pending scheduler tick</span>
+              <span>. If an update is still available, it can start then.</span>
+            </>
+          )}
         </div>
       )}
 
@@ -252,13 +265,31 @@ export default function SelfUpgradeClient({
             </span>
           ) : inMaintenanceWindow ? (
             <span className="text-[var(--dpf-success)]">
-              In maintenance window now — upgrades are evaluated hourly.
+              In maintenance window now — next scheduled check: {" "}
+              {nextScheduledCheckAt ? (
+                <>
+                  <LocalTime className="font-mono" value={nextScheduledCheckAt} />
+                  <span>.</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-mono">pending scheduler tick</span>
+                  <span>.</span>
+                </>
+              )}
             </span>
           ) : nextWindowStart ? (
             <span className="text-[var(--dpf-muted)]">
               Next maintenance window:{" "}
               <LocalTime className="font-mono" value={nextWindowStart} /> —
-              upgrades are evaluated hourly.
+              {nextScheduledCheckAt ? (
+                <>
+                  {" "}next scheduled check: {" "}
+                  <LocalTime className="font-mono" value={nextScheduledCheckAt} />.
+                </>
+              ) : (
+                " upgrades are evaluated hourly."
+              )}
             </span>
           ) : (
             <span className="text-[var(--dpf-muted)]">

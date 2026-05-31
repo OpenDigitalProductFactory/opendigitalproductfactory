@@ -21,9 +21,52 @@ import {
   nextUpgradeWindowOpen,
 } from "@/lib/self-upgrade/window";
 import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
+import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
 import { loadPlatformVersion } from "@/lib/platform/version";
 import { inngest } from "@/lib/queue/inngest-client";
 import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
+
+const HOUR_MS = 60 * 60 * 1000;
+
+function nextHourlyCronAtOrAfter(base: Date, now: Date): Date {
+  let candidate = new Date(base);
+  candidate.setUTCMinutes(0, 0, 0);
+  if (candidate.getTime() < base.getTime()) {
+    candidate = new Date(candidate.getTime() + HOUR_MS);
+  }
+  if (candidate.getTime() <= now.getTime()) {
+    candidate = new Date(candidate.getTime() + HOUR_MS);
+  }
+  return candidate;
+}
+
+function computeNextScheduledUpgradeCheckAt(args: {
+  enabled: boolean;
+  inMaintenanceWindow: boolean;
+  nextWindowStart: Date | null;
+  lastCheckedAt: Date | null;
+  checkIntervalHours: number;
+  now: Date;
+}): Date | null {
+  if (!args.enabled) return null;
+
+  const intervalEligibleAt =
+    args.lastCheckedAt && args.checkIntervalHours > 0
+      ? new Date(args.lastCheckedAt.getTime() + args.checkIntervalHours * HOUR_MS)
+      : args.now;
+
+  if (!args.inMaintenanceWindow && !args.nextWindowStart) return null;
+
+  const base = new Date(
+    Math.max(
+      args.now.getTime(),
+      intervalEligibleAt.getTime(),
+      args.inMaintenanceWindow ? args.now.getTime() : args.nextWindowStart?.getTime() ?? 0,
+    ),
+  );
+
+  return nextHourlyCronAtOrAfter(base, args.now);
+}
 
 async function requireOpsAccess(): Promise<string> {
   const session = await auth();
@@ -589,11 +632,12 @@ export async function listSelfUpgradeRuns(opts?: {
 export async function getSelfUpgradeStatus() {
   await requireOpsAccess();
 
-  const [config, latestRun, platformVersion, deployedSha] = await Promise.all([
+  const [config, latestRun, platformVersion, deployedSha, lastCheckedAt] = await Promise.all([
     getSelfUpgradeConfig(),
     getLatestRun(),
     loadPlatformVersion(),
     getDeployedSha(),
+    getLastCheckedAt(),
   ]);
 
   // Upgrade timing follows the storefront's open/closed state (single source of
@@ -625,6 +669,15 @@ export async function getSelfUpgradeStatus() {
     : inMaintenanceWindow
       ? null
       : nextUpgradeWindowOpen(schedule, now, timezone)?.toISOString() ?? null;
+  const nextWindowStartDate = nextWindowStart ? new Date(nextWindowStart) : null;
+  const nextScheduledCheckAt = computeNextScheduledUpgradeCheckAt({
+    enabled: config.enabled,
+    inMaintenanceWindow,
+    nextWindowStart: nextWindowStartDate,
+    lastCheckedAt,
+    checkIntervalHours: config.checkIntervalHours,
+    now,
+  });
   const targetSha = await resolveTargetSha(config.channel, config);
   const isFresh = targetSha ? isShaFresh(deployedSha, targetSha) : false;
 
@@ -636,6 +689,7 @@ export async function getSelfUpgradeStatus() {
     windowSource,
     storeOpen,
     nextWindowStart,
+    nextScheduledCheckAt: nextScheduledCheckAt?.toISOString() ?? null,
     deployedSha,
     deployedShaSource: platformVersion.imageVersion?.source ?? "unknown",
     targetSha,

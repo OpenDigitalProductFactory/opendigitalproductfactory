@@ -50,6 +50,7 @@ const baseStatus = {
   windowSource: "operating-hours" as const,
   storeOpen: false,
   nextWindowStart: null,
+  nextScheduledCheckAt: null,
   deployedSha: null,
   deployedShaSource: "unknown" as const,
   targetSha: null,
