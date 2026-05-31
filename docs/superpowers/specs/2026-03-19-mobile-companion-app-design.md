@@ -1,8 +1,17 @@
 # Mobile Companion App — iOS & Android
 
 **Date:** 2026-03-19
-**Status:** Draft
-**Depends on:** REST API layer (Epic 1, built as prerequisite)
+**Last updated:** 2026-05-09 (see addendum)
+**Status:** Active design — core spec stable; parts superseded by the 2026-05-09 deployment-doctrine addendum (auth model, deployment knobs)
+**Depends on:**
+- REST API layer (Epic 1, built as prerequisite)
+- Deployment doctrine — `docs/superpowers/specs/2026-05-09-deployment-contracts.md` (Contract 10: client packaging targets)
+- Enterprise Auth — `docs/superpowers/specs/2026-04-22-enterprise-auth-directory-federation-design.md` (dual auth mode)
+- Edge Node — `docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md` (`MobileDevice` vs `EdgeNode` separation)
+
+> **Reading order:** the core spec below reflects the original v1 design. The addendum at the
+> end (2026-05-09 deployment-doctrine alignment) refines and in places **supersedes** it. Where
+> they conflict, the addendum wins. Superseded passages are flagged inline.
 
 ---
 
@@ -32,7 +41,7 @@ The app also includes a dynamic content rendering engine that displays custom fo
 - Apple Watch / Wear OS companion
 - White-labeling / per-customer app store listings
 - Real-time collaboration / presence indicators
-- SSO/SAML authentication (future enhancement)
+- ~~SSO/SAML authentication (future enhancement)~~ — **superseded** by the 2026-05-09 addendum: dual auth mode (`local-password` | `identity-edge-oidc-pkce`) is an architecture commitment, not deferred work. The app router and token store must accommodate OIDC PKCE from day one.
 
 ## Technology Stack
 
@@ -213,11 +222,11 @@ HTTP status codes: 400 (validation), 401 (unauthenticated), 403 (insufficient ca
 
 **Mobile user types:** v1 supports workforce/admin users only (those with `PlatformRole` assignments). `CustomerContact` users cannot authenticate via mobile in v1 — this is a future enhancement. The login endpoint validates that the authenticated user has at least one `UserGroup` entry.
 
-- All endpoints enforce the same capability gates as existing server actions
+**Capability enforcement:** All `/api/v1/*` endpoints enforce the same capability gates as the existing server actions; authentication establishes identity, but per-action authorization is unchanged from the web path.
 
 ### New Database Models Required
 
-**Notification** (for push notification feed):
+**Notification + PushDeviceRegistration** (push notification feed and token delivery):
 ```prisma
 model Notification {
   id          String    @id @default(cuid())
