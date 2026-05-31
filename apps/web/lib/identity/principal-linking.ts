@@ -405,3 +405,31 @@ export async function resolvePrincipalIdForUser(
 
   return alias?.principal?.principalId ?? null;
 }
+
+/**
+ * Resolve the Principal id behind an agent (coworker) id, via the
+ * `aliasType: "agent"` PrincipalAlias (principal-convergence, AGENTS.md §11).
+ * Sibling of resolvePrincipalIdForUser; used by decision caller-context
+ * resolution so a coworker decision can be attributed to its principal.
+ */
+export async function resolvePrincipalIdForAgent(
+  agentId: string,
+  db: PrincipalDb = prisma,
+): Promise<string | null> {
+  const alias = await db.principalAlias.findFirst({
+    where: {
+      aliasType: "agent",
+      aliasValue: agentId,
+      issuer: INTERNAL_ISSUER,
+    },
+    include: {
+      principal: {
+        select: {
+          principalId: true,
+        },
+      },
+    },
+  });
+
+  return alias?.principal?.principalId ?? null;
+}
