@@ -236,13 +236,20 @@ describe("transcriptionAdapter", () => {
   });
 });
 
+// prom-client's Counter#get returns MetricObjectWithValues<MetricValue<L>>
+// where the value's `labels` is Partial<Record<L, string | number>> — wider
+// than our helper needs. We accept the wider shape and string-compare both
+// sides so a numeric label (unusual but valid) still matches.
+type MetricSnapshot = {
+  values: Array<{ labels: Partial<Record<string, string | number>>; value: number }>;
+};
 async function getCounter(
-  counter: { get(): Promise<{ values: Array<{ labels: Record<string, string>; value: number }> }> },
+  counter: { get(): Promise<MetricSnapshot> },
   labels: Record<string, string>,
 ): Promise<number> {
   const snapshot = await counter.get();
   const match = snapshot.values.find((v) =>
-    Object.entries(labels).every(([k, val]) => v.labels[k] === val),
+    Object.entries(labels).every(([k, val]) => String(v.labels[k]) === val),
   );
   return match?.value ?? 0;
 }
