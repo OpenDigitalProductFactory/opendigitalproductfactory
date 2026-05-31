@@ -54,6 +54,7 @@
     "react-force-graph-2d": "^1.29.1",
     "react-markdown": "^10.1.0",
     "read-excel-file": "9.0.10",
+    "recharts": "^3.8.1",
     "sharp": "^0.34.5",
     "undici": "^8.3.0",
     "zod": "^4.4.3"

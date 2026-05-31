@@ -43,6 +43,11 @@ export {
   type ExportColumn,
 } from "./ExportButton";
 
+// NOTE: Chart is intentionally NOT re-exported here. It pulls in recharts
+// (client-only, heavy), so it is imported via subpath to keep this barrel
+// — and every server component that uses it — recharts-free:
+//   import { Chart } from "@/components/ui/report-kit/Chart";
+
 export {
   intentStyle,
   resolveIntent,

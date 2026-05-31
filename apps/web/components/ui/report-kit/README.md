@@ -27,12 +27,17 @@ import {
 | `DataTable` | client¹ | tabular lists with sort, paging, empty/loading states |
 | `FilterBar` | client¹ | search + select + pill facets above a table |
 | `ExportButton` / `toCsv` | client | CSV export of rows (papaparse-backed) |
+| `Chart` | client² | business-data line / bar / area charts (recharts) |
 | `statusColors` (`intentStyle`, `resolveIntent`, `STATUS_INTENT`) | ✅ | the one place status→color semantics live |
 
 ¹ `DataTable` / `FilterBar` are `"use client"` (they manage sort/page/onChange
 state). A server page uses them by rendering them inside a small client child —
 the page still fetches data on the server and passes rows down. A pure
 server-rendered (URL-driven) table mode is a documented follow-up.
+
+² `Chart` pulls in **recharts** (client-only, heavy), so it is **not** re-exported
+from the barrel — import it by subpath to keep the barrel and server components
+recharts-free: `import { Chart } from "@/components/ui/report-kit/Chart"`.
 
 ## The intent model (always use tokens, never hex)
 
@@ -157,6 +162,29 @@ CSV export for a list/table, backed by papaparse. `toCsv` is exported and pure
 />
 ```
 
+## Chart
+
+Token-themed line / bar / area charts over **recharts**, for arbitrary in-memory
+business data (distinct from the Prometheus-bound monitoring SVG charts). Client
+component — a server page passes serialized data down (like `DataTable`). Series
+colors resolve from tokens (explicit `color`, an `intent`, or the default ramp).
+
+```tsx
+import { Chart } from "@/components/ui/report-kit/Chart";
+
+<Chart
+  type="area"
+  data={monthly}            // [{ month: "Jan", revenue: 1200, spend: 800 }, …]
+  xKey="month"
+  series={[
+    { key: "revenue", label: "Revenue", intent: "success" },
+    { key: "spend", label: "Spend", intent: "danger" },
+  ]}
+  height={260}
+  showLegend
+/>
+```
+
 ## Conventions
 
 - **No raw hex.** Colors come from `intentStyle` / `--dpf-*` tokens only.
@@ -169,6 +197,6 @@ CSV export for a list/table, backed by papaparse. `toCsv` is exported and pure
 - **Phase 1 (this):** primitives + tests + this doc. Additive only.
 - **Phase 2:** migrate reference surfaces (complaints, finance/payments), grow
   `STATUS_INTENT`, fold `ChangeLaneStatusBadge` onto `StatusBadge`.
-- **Phase 3:** ✅ `StatCard` + `ExportButton` (CSV via papaparse). Remaining:
-  PDF export (`@react-pdf`), business-data charting decision, server-rendered
-  `DataTable` URL mode.
+- **Phase 3:** ✅ `StatCard` + `ExportButton` (CSV via papaparse) + `Chart`
+  (recharts — charting decision resolved). Remaining: PDF export (`@react-pdf`),
+  server-rendered `DataTable` URL mode.
