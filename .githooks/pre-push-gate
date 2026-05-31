@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+
+if [ "${DPF_SKIP_PREPUSH_GATE:-}" = "1" ]; then
+  echo "[pre-push-gate] DPF_SKIP_PREPUSH_GATE=1 - skipping local-CI gate check."
+  exit 0
+fi
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+sha="$(git rev-parse HEAD)"
+state_file="$(git rev-parse --git-path dpf-local-ci-gate.json)"
+
+if [ ! -f "$state_file" ]; then
+  echo "[pre-push-gate] No local-CI gate record exists for this worktree."
+  echo "[pre-push-gate] Run: scripts/gate-worktree.sh"
+  exit 1
+fi
+
+node -e '
+const fs = require("node:fs");
+const [file, branch, sha] = process.argv.slice(1);
+const state = JSON.parse(fs.readFileSync(file, "utf8"));
+if (state.branch !== branch || state.sha !== sha || state.gatePassed !== true) {
+  console.error("[pre-push-gate] Latest local-CI gate does not pass for this HEAD.");
+  console.error(`[pre-push-gate] expected ${branch}@${sha}`);
+  console.error(`[pre-push-gate] found ${state.branch || "(none)"}@${state.sha || "(none)"} gatePassed=${state.gatePassed}`);
+  process.exit(1);
+}
+' "$state_file" "$branch" "$sha"
+
+echo "[pre-push-gate] local-CI gate passed for $branch@$sha"
