@@ -4,6 +4,7 @@
 
 import { lazyFs, lazyPath } from "@/lib/shared/lazy-node";
 import { isDevInstance } from "@/lib/codebase-tools";
+import { CANONICAL_PRIMITIVES, type CanonicalPrimitive } from "@/lib/canonical-primitives";
 
 function getProjectRoot(): string {
   return lazyPath().resolve(process.cwd(), "..", "..");
@@ -35,6 +36,8 @@ export type CodebaseManifestData = {
   capabilityMap: Record<string, unknown>;
   externalDependencies: ExternalDependency[];
   boundaries: Record<string, unknown>;
+  /** Canonical first-party reusable component palettes (compose, don't hand-roll). */
+  canonicalPrimitives: CanonicalPrimitive[];
   statistics: ManifestStatistics;
 };
 
@@ -73,6 +76,10 @@ export function mergeManifest(
     capabilityMap: (base.capabilityMap ?? {}) as Record<string, unknown>,
     externalDependencies: auto.externalDependencies,
     boundaries: (base.boundaries ?? {}) as Record<string, unknown>,
+    // Sourced from the in-code registry (single source of truth), NOT a
+    // hand-maintained base file — so it can't drift and never misrepresents the
+    // full module inventory as a single seeded module.
+    canonicalPrimitives: [...CANONICAL_PRIMITIVES],
     statistics: auto.statistics,
   };
 }

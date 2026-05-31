@@ -57,6 +57,7 @@ This skill carries forward the substrate-sweep discipline added by [PR #1104](ht
 | Live backlog | `mcp__dpf__list_epics`, `mcp__dpf__list_backlog_items`, `mcp__dpf__query_backlog` | Active epics + open BIs may already cover the work |
 | Main-branch history | `git log origin/main --oneline -- <topic-path>` | Worktrees can be 100+ PRs behind; verify the spec's "not implemented" claim against `origin/main` |
 | Specs and plans | `docs/superpowers/specs/`, `docs/superpowers/plans/` | An approved design may already exist |
+| Canonical UI primitives | `apps/web/lib/canonical-primitives.ts`, `apps/web/components/ui/report-kit/README.md`; `read_codebase_manifest().canonicalPrimitives`; `analyze_reusability` surfaces matches | Reporting/data-display UI (status badges, tables, KPI cards, filters, charts) is a solved palette — compose `report-kit`, don't hand-roll (principle `compose-report-kit-for-reporting-ux`) |
 
 ## Enforces
 
