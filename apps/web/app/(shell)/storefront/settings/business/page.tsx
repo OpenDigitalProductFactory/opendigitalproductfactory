@@ -1,11 +1,12 @@
 import { prisma } from "@dpf/db";
 import { BusinessContextForm } from "@/components/admin/BusinessContextForm";
 import { getSetupContext } from "@/lib/actions/setup-progress";
+import { suggestMission } from "@/lib/onboarding/mission-suggestion";
 
 export default async function StorefrontBusinessSettingsPage() {
   const [org, setupContext, storefrontConfig] = await Promise.all([
     prisma.organization.findFirst({
-      select: { id: true, email: true, phone: true },
+      select: { id: true, name: true, email: true, phone: true },
     }),
     getSetupContext(),
     prisma.storefrontConfig.findFirst({
@@ -28,6 +29,7 @@ export default async function StorefrontBusinessSettingsPage() {
 
   const initial = {
     description: businessContext?.description ?? suggestions?.description ?? "",
+    mission: businessContext?.mission ?? "",
     targetMarket: businessContext?.targetMarket ?? "",
     companySize: businessContext?.companySize ?? null,
     geographicScope: businessContext?.geographicScope ?? suggestions?.geographicScope ?? null,
@@ -35,6 +37,13 @@ export default async function StorefrontBusinessSettingsPage() {
     contactEmail: org?.email ?? suggestions?.contactEmail ?? "",
     contactPhone: org?.phone ?? suggestions?.contactPhone ?? "",
   };
+
+  const missionSuggestion = suggestMission({
+    industry: storefrontConfig?.archetype?.category ?? setupContext?.suggestedIndustry ?? null,
+    archetypeName: storefrontConfig?.archetype?.name ?? setupContext?.suggestedArchetypeName ?? null,
+    description: initial.description || null,
+    orgName: org?.name ?? null,
+  });
 
   const autoFilledFields = suggestions
     ? Object.entries(suggestions)
@@ -60,6 +69,7 @@ export default async function StorefrontBusinessSettingsPage() {
         archetypeSummary={archetypeSummary}
         isEdit={!!businessContext}
         autoFilledFields={autoFilledFields}
+        missionSuggestion={missionSuggestion}
       />
     </div>
   );
