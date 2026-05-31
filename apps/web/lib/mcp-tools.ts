@@ -11996,8 +11996,22 @@ export async function executeTool(
         semanticFallbackWarnRatio: semanticWarnRatio,
       });
 
+      // BI-E1FB2307: resolve which decision-perspective profile governs this
+      // caller (WWMD platform vs WWWD organization) and name it in the response
+      // so agents/operators know which kernel weighed in. Additive — does not
+      // change scoring yet; Gate-routed scoring + boundary enforcement is the
+      // follow-on (C2b). callingPopulation was validated above.
+      const { resolveDecisionCallerContext } = await import(
+        "@/lib/decision/caller-context"
+      );
+      const governingProfile = await resolveDecisionCallerContext({
+        callingPopulation:
+          callingPopulation as "in_platform_coworker" | "external_coding_agent" | "human",
+        agentId: context?.agentId ?? null,
+      });
+
       const summary = result.recommendation
-        ? `Recommends ${result.recommendation.optionId} (confidence: ${result.recommendation.confidence}, composite ${result.recommendation.composite.toFixed(3)})`
+        ? `Recommends ${result.recommendation.optionId} (confidence: ${result.recommendation.confidence}, composite ${result.recommendation.composite.toFixed(3)}; governing profile: ${governingProfile.governingProfileKind})`
         : "No applicable principles to evaluate.";
 
       return {
@@ -12009,6 +12023,11 @@ export async function executeTool(
           flags: result.flags,
           reasoning: result.reasoning,
           appliedPrincipleCount: cappedPrinciples.length,
+          governingProfile: {
+            profileId: governingProfile.governingProfileId,
+            kind: governingProfile.governingProfileKind,
+            resolvedVia: governingProfile.resolvedVia,
+          },
         },
       };
     }
