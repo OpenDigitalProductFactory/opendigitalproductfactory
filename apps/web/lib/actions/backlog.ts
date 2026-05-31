@@ -41,6 +41,9 @@ export async function createBacklogItem(input: BacklogItemInput): Promise<void> 
     itemId:           `BI-${crypto.randomUUID()}`,
     title:            input.title.trim(),
     type:             input.type,
+    workType:         input.workType,
+    // Hand-filed BIs from the ops UI are human requests by definition.
+    source:           input.source ?? "user-request",
     status:           input.status,
     priority:         input.priority ?? null,
     taxonomyNodeId:   input.taxonomyNodeId ?? null,
@@ -64,6 +67,8 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
   const updateData = {
     title:            input.title.trim(),
     type:             input.type,
+    workType:         input.workType,
+    ...(input.source !== undefined ? { source: input.source } : {}),
     status:           input.status,
     priority:         input.priority ?? null,
     taxonomyNodeId:   input.taxonomyNodeId ?? null,

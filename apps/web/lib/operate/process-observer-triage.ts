@@ -19,7 +19,12 @@ export interface BacklogItemData {
   status: string;
   type: string;
   priority: number;
+  // Intake-origin (BACKLOG_SOURCE_VALUES in apps/web/lib/explore/backlog.ts):
+  // "user-request" | "automated-detection".
   source: string;
+  // Work-type (BACKLOG_WORK_TYPE_VALUES in apps/web/lib/explore/backlog.ts):
+  // "bug" | "feature" | "chore" | "doc" | "tool" | "skill" | "refactor".
+  workType: string;
   digitalProductId: string | null;
   taxonomyNodeId: string | null;
 }
@@ -76,7 +81,9 @@ export function buildBacklogItemData(
     status: "open",
     type: digitalProductId ? "product" : "portfolio",
     priority: severityToPriority(finding.severity),
-    source: "process_observer",
+    // Process observer is an automated detector; findings are defect-class.
+    source: "automated-detection",
+    workType: "bug",
     digitalProductId,
     taxonomyNodeId,
   };

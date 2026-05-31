@@ -2,13 +2,7 @@ import { listRiskAssessments } from "@/lib/actions/compliance";
 import { RISK_LEVELS } from "@/lib/compliance-types";
 import Link from "next/link";
 import { CreateRiskAssessmentForm } from "@/components/compliance/CreateRiskAssessmentForm";
-
-const RISK_COLORS: Record<string, string> = {
-  low: "bg-green-900/30 text-green-400",
-  medium: "bg-yellow-900/30 text-yellow-400",
-  high: "bg-orange-900/30 text-orange-400",
-  critical: "bg-red-900/30 text-red-400",
-};
+import { StatusBadge } from "@/components/ui/report-kit";
 
 type Props = { searchParams: Promise<{ inherentRisk?: string; status?: string }> };
 
@@ -70,13 +64,9 @@ export default async function RisksPage({ searchParams }: Props) {
                 <div>
                   <span className="text-sm text-[var(--dpf-text)]">{r.title}</span>
                   <div className="flex gap-2 mt-1">
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${RISK_COLORS[r.inherentRisk] ?? "bg-gray-900/30 text-gray-400"}`}>
-                      Inherent: {r.inherentRisk}
-                    </span>
+                    <StatusBadge domain="severity" status={r.inherentRisk} label={`Inherent: ${r.inherentRisk}`} variant="soft" uppercase={false} />
                     {r.residualRisk && (
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${RISK_COLORS[r.residualRisk] ?? "bg-gray-900/30 text-gray-400"}`}>
-                        Residual: {r.residualRisk}
-                      </span>
+                      <StatusBadge domain="severity" status={r.residualRisk} label={`Residual: ${r.residualRisk}`} variant="soft" uppercase={false} />
                     )}
                     <span className="text-[9px] text-[var(--dpf-muted)]">{r.likelihood} / {r.severity}</span>
                   </div>

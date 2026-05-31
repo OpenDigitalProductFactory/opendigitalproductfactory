@@ -23,6 +23,7 @@ export type StorefrontInquiryBacklogDraft = {
   type: "product";
   status: "triaging";
   source: "user-request";
+  workType: "feature";
   priority: number;
   body: string;
   recommendedTriageOutcome: "build";
@@ -103,6 +104,9 @@ export function createStorefrontInquiryBacklogDraft(
     type: "product",
     status: "triaging",
     source: "user-request",
+    // Storefront inquiries become product feature work — the operator chose
+    // to engage. The eventual build will design + ship a new capability.
+    workType: "feature",
     priority: 2,
     recommendedTriageOutcome: "build",
     signalLabel: "customer-zero",

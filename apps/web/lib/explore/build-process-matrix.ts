@@ -390,24 +390,34 @@ export function normalizeSize(
 
 /**
  * Single source of truth for "given this BI, what build-process type does it
- * become?". The fix-flow design landed `bug -> fix`; this extends to docs
- * and (Phase 1 conservatively) chores via a body-line marker. The parallel
- * unified-BI-work-type branch will eventually replace this with a direct
- * read of `BacklogItem.workType`; when it does, this is the one site that
- * changes.
+ * become?". Reads the clean `BacklogItem.workType` closed enum (introduced
+ * in BI-FD37173A / 2026-05-30) and maps it to the build-process type:
+ *   - workType="bug"       -> "fix"   (fix-flow spec, 2026-05-29)
+ *   - workType="doc"       -> "doc"   (#1348 right-sizing)
+ *   - workType="chore"     -> "chore" (#1348 right-sizing)
+ *   - workType in {feature,tool,skill,refactor} -> "feature"
+ *     (all four are feature-shaped builds — design, plan, ship a change;
+ *      a future spec can split them further if a distinct prompt/gate path
+ *      proves useful)
+ *
+ * Legacy fallback: if workType is NULL (rows from the freeform-tail backfill
+ * that pre-date BI-FD37173A and the operator has not yet reclassified), fall
+ * back to the previous body-marker heuristic for chore. Eventually retire
+ * this fallback once Phase 1 makes workType non-null at the DB level.
  *
  * Accepts a structurally-minimal subset of BacklogItem fields so the helper
  * is callable from anywhere (promote, MCP tool wiring, tests) without
  * dragging in the full Prisma row type.
  */
 export function deriveBuildProcessType(
-  bi: Pick<BacklogItemWithRelations, "body"> & { source?: string | null },
+  bi: Pick<BacklogItemWithRelations, "body"> & { workType?: string | null },
 ): BuildProcessType {
-  const source = bi.source ?? null;
-  if (source === "bug") return "fix";
-  if (source === "doc-gap") return "doc";
-  // Phase 1 conservative chore detection: body starts (line-wise) with
-  // "chore:" (case-insensitive). Phase 2 replaces with a BI workType field.
+  const workType = bi.workType ?? null;
+  if (workType === "bug") return "fix";
+  if (workType === "doc") return "doc";
+  if (workType === "chore") return "chore";
+  if (workType) return "feature";
+  // Legacy unclassified-row fallback (deleted in Phase 1).
   if (/^\s*chore\s*:/im.test(bi.body ?? "")) return "chore";
   return "feature";
 }

@@ -74,25 +74,34 @@ describe("normalizeType / normalizeSize", () => {
   });
 });
 
-describe("deriveBuildProcessType — source-to-kind mapping", () => {
-  it("maps source=bug to fix", () => {
-    expect(deriveBuildProcessType({ source: "bug", body: null })).toBe("fix");
+describe("deriveBuildProcessType — workType-to-kind mapping", () => {
+  it("maps workType=bug to fix", () => {
+    expect(deriveBuildProcessType({ workType: "bug", body: null })).toBe("fix");
   });
 
-  it("maps source=doc-gap to doc", () => {
-    expect(deriveBuildProcessType({ source: "doc-gap", body: null })).toBe("doc");
+  it("maps workType=doc to doc", () => {
+    expect(deriveBuildProcessType({ workType: "doc", body: null })).toBe("doc");
   });
 
-  it("detects chores via a body-line marker (Phase 1 conservative path)", () => {
-    expect(deriveBuildProcessType({ source: "feature-gap", body: "chore: bump react to 18.4" })).toBe("chore");
-    expect(deriveBuildProcessType({ source: null, body: "Chore: rename internal helpers" })).toBe("chore");
-    expect(deriveBuildProcessType({ source: null, body: "Some unrelated body" })).toBe("feature");
+  it("maps workType=chore to chore", () => {
+    expect(deriveBuildProcessType({ workType: "chore", body: null })).toBe("chore");
   });
 
-  it("defaults everything else to feature (back-compat)", () => {
-    expect(deriveBuildProcessType({ source: "feature-gap", body: null })).toBe("feature");
-    expect(deriveBuildProcessType({ source: "user-request", body: null })).toBe("feature");
-    expect(deriveBuildProcessType({ source: null, body: null })).toBe("feature");
+  it("maps the feature-shaped workTypes to feature (feature | tool | skill | refactor)", () => {
+    expect(deriveBuildProcessType({ workType: "feature", body: null })).toBe("feature");
+    expect(deriveBuildProcessType({ workType: "tool", body: null })).toBe("feature");
+    expect(deriveBuildProcessType({ workType: "skill", body: null })).toBe("feature");
+    expect(deriveBuildProcessType({ workType: "refactor", body: null })).toBe("feature");
+  });
+
+  it("legacy unclassified-row fallback: body-line chore marker still detected when workType is NULL", () => {
+    expect(deriveBuildProcessType({ workType: null, body: "chore: bump react to 18.4" })).toBe("chore");
+    expect(deriveBuildProcessType({ workType: null, body: "Chore: rename internal helpers" })).toBe("chore");
+  });
+
+  it("defaults to feature when workType is NULL and no body marker matches (back-compat)", () => {
+    expect(deriveBuildProcessType({ workType: null, body: null })).toBe("feature");
+    expect(deriveBuildProcessType({ workType: null, body: "Some unrelated body" })).toBe("feature");
   });
 });
 

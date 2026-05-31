@@ -961,6 +961,7 @@ model BacklogItem {
   taxonomyNodeId          String?
   epicId                  String?
   source                  String?
+  workType                String?
   triageOutcome           String?
   effortSize              String?
   proposedOutcome         String?
@@ -7996,12 +7997,15 @@ model Complaint {
 }
 
 model OrgSettings {
-  id              String    @id @default(cuid())
-  baseCurrency    String    @default("GBP")
-  autoFetchRates  Boolean   @default(true)
-  lastRateFetchAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                 String    @id @default(cuid())
+  baseCurrency       String    @default("GBP")
+  autoFetchRates     Boolean   @default(true)
+  lastRateFetchAt    DateTime?
+  // Archetype finance profile actually applied during setup. Lets surfaces
+  // render the org's real profile instead of a hardcoded default.
+  appliedProfileSlug String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 }
 
 // ─── Build Studio Stall Detection (BI-4ab6be39) ───────────────────

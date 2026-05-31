@@ -75,7 +75,7 @@ describe("applyFinancialProfile", () => {
     expect(result.applied).toBe(true);
     expect(result.profileName).toBe("Healthcare & Wellness");
     expect(mockPrisma.orgSettings.create).toHaveBeenCalledWith({
-      data: { baseCurrency: "GBP", autoFetchRates: true },
+      data: { baseCurrency: "GBP", autoFetchRates: true, appliedProfileSlug: "healthcare_wellness" },
     });
   });
 
@@ -88,7 +88,7 @@ describe("applyFinancialProfile", () => {
 
     expect(mockPrisma.orgSettings.update).toHaveBeenCalledWith({
       where: { id: "existing-1" },
-      data: { baseCurrency: "GBP", autoFetchRates: true },
+      data: { baseCurrency: "GBP", autoFetchRates: true, appliedProfileSlug: "professional_services" },
     });
     expect(mockPrisma.orgSettings.create).not.toHaveBeenCalled();
   });
@@ -118,7 +118,7 @@ describe("applyFinancialProfile", () => {
     await applyFinancialProfile("retail", { baseCurrency: "USD" });
 
     expect(mockPrisma.orgSettings.create).toHaveBeenCalledWith({
-      data: { baseCurrency: "USD", autoFetchRates: true },
+      data: { baseCurrency: "USD", autoFetchRates: true, appliedProfileSlug: "retail" },
     });
   });
 
