@@ -386,17 +386,26 @@ describe("maintenance window gate + emergency override", () => {
     mocks.completeRun.mockResolvedValue({});
   });
 
-  it("skips with outside-window when not in a window and no force", async () => {
+  it("SCHEDULED run skips with outside-window when the store is open", async () => {
     mocks.isUpgradeWindowOpen.mockReturnValue(false);
-    const result = await runSelfUpgrade({ triggeredBy: "manual:ops" });
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
     expect(result).toMatchObject({ skipped: true, reason: "outside-window" });
     expect(mocks.createRun).not.toHaveBeenCalled();
     expect(mocks.runPromoter).not.toHaveBeenCalled();
   });
 
-  it("force=true bypasses the window gate and runs the promoter", async () => {
+  it("MANUAL run is NOT window-gated — runs even when the store is open", async () => {
     mocks.isUpgradeWindowOpen.mockReturnValue(false);
-    const result = await runSelfUpgrade({ triggeredBy: "manual:ops", force: true });
+    const result = await runSelfUpgrade({ triggeredBy: "manual:ops" }); // scheduled unset
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+    expect(mocks.runPromoter).toHaveBeenCalled();
+    // a manual trigger doesn't even consult the window gate
+    expect(mocks.isUpgradeWindowOpen).not.toHaveBeenCalled();
+  });
+
+  it("force=true bypasses the window gate on the scheduled path too", async () => {
+    mocks.isUpgradeWindowOpen.mockReturnValue(false);
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true, force: true });
     expect(result).toMatchObject({ ok: true, status: "succeeded" });
     expect(mocks.runPromoter).toHaveBeenCalled();
   });

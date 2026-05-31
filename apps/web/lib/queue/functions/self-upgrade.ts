@@ -61,13 +61,13 @@ export async function runSelfUpgrade(
   const config = await getSelfUpgradeConfig();
 
   if (!config.enabled && !params.dryRun) return { skipped: true, reason: "disabled" };
-  // The upgrade window is "whenever the storefront is closed", derived from the
-  // operator's operating hours (single source of truth — no separate window to
-  // configure, no "enabled but no window → never runs" dead-end). An explicit
-  // maintenanceWindows config still overrides for bespoke schedules.
-  // force = operator emergency override: bypass the window (and, below, the
-  // quiescence defer). Never set by the scheduled cron.
-  if (!params.dryRun && !params.force) {
+  // The upgrade window ("whenever the storefront is closed", derived from
+  // operating hours) gates ONLY the unattended scheduled poll. A manual operator
+  // trigger means "upgrade now" — the operator has explicitly chosen this moment,
+  // so it is NOT window-gated (it still drains via quiescence below unless force).
+  // An explicit maintenanceWindows config overrides the derived window for the
+  // scheduled path. force never set by the cron.
+  if (params.scheduled && !params.force) {
     const { schedule, timezone } = await resolveOperatingScheduleForSystem();
     const allowed = isUpgradeWindowOpen({
       explicitWindows: config.maintenanceWindows,
