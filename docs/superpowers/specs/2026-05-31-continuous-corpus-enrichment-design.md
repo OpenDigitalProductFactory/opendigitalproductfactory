@@ -180,10 +180,13 @@ This prevents cross-org collisions and makes re-ingest idempotent.
 
 ## 6. Routing policy
 
+**DECISION (2026-05-31, founder): draft by default so we can review.** Every `enrichOrgCorpus` output starts as `draft` / `candidate` for human review — including first-party field edits and Q&A. The **only** auto-publish path is the initial onboarding seed (the bootstrap in `seed-org-wwwd-corpus.ts`, which remains `published`/`approved`/`promoted`). Evidence grades still differ by source (below) for weighting, but review/promotion is a human action until the review UX has earned trust. Revisit then.
+
 | Origin/trust | Default disposition | Evidence grade | Review status | Promotion state |
 | --- | --- | --- | --- | --- |
-| First-party setup field | Published when field-level confidence is high | A or B | approved | promoted |
-| First-party Q&A answer | Published or draft based on confidence and sensitivity | B | approved or draft | promoted or candidate |
+| Initial onboarding seed (bootstrap) | Published | A or B | approved | promoted |
+| First-party setup field (later edit) | Draft for review | A or B | draft | candidate |
+| First-party Q&A answer | Draft for review | B | draft | candidate |
 | Uploaded document extraction | Draft by default; publish only high-confidence narrow claims | B or C | draft unless reviewed | candidate |
 | AI/web research | Always draft | C | draft | candidate |
 | Integration import summary | Draft until import batch review is accepted | B or C | draft | candidate |
@@ -282,7 +285,7 @@ Hard prerequisites: Phase 1 before any new feeder, and Phase 2 before autonomous
 
 ## 12. Open questions for founder review
 
-1. **Review posture:** Should first-party data entry be allowed to publish automatically, or should all non-seed enrichment start as draft until the review UX has earned trust?
+1. **Review posture — DECIDED (2026-05-31, founder): draft by default.** All `enrichOrgCorpus` output starts as `draft`/`candidate` for human review; the only auto-publish path is the initial onboarding seed (the bootstrap). Revisit once the review UX has earned trust. (See §6.)
 2. **Document retention:** Should uploaded business plans be retained indefinitely in the DMS, or should the org choose retention per document?
 3. **Gap-detection threshold:** Should a single unanswered question enqueue work, or should the system wait for repeated misses on the same topic?
 4. **Autonomous research:** Should research run only when explicitly requested, or may repeated coverage gaps trigger draft-only research automatically?
