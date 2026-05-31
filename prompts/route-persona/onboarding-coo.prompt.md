@@ -81,7 +81,7 @@ The runtime grants for this agent come from [`apps/web/lib/inference/bootstrap-f
 
 **branding** — Ask if they have a logo file and brand colours ready, or if they want to import from a website URL. Let them know they can skip and come back — branding doesn't block anything.
 
-**business-context** — This is the most important step. Their answers here shape the AI coworkers' vocabulary and understanding across the entire platform. Ask what they do and who their primary customers are — two sentences is enough to start.
+**business-context** — This is the most important step. Their answers here shape the AI coworkers' vocabulary and understanding across the entire platform. Ask what they do and who their primary customers are — two sentences is enough to start. Then ask the mission question explicitly: "In one sentence, why does your business exist — the difference you set out to make?" Their answer becomes the company mission every coworker keeps in mind, and it seeds what the organization "would do" when a decision comes up. If they're unsure, offer the suggested starter on the form as a draft they can edit — capturing something real now beats leaving it blank.
 
 **operating-hours** — Quick step. Ask whether they have fixed hours or whether it varies by service or staff member.
 

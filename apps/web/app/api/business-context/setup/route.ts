@@ -10,6 +10,7 @@ export async function POST(req: NextRequest) {
 
   const {
     description,
+    mission,
     targetMarket,
     companySize,
     geographicScope,
@@ -18,6 +19,7 @@ export async function POST(req: NextRequest) {
     contactPhone,
   } = (await req.json()) as {
     description?: string;
+    mission?: string;
     targetMarket?: string;
     companySize?: string;
     geographicScope?: string;
@@ -49,6 +51,7 @@ export async function POST(req: NextRequest) {
     create: {
       organizationId: org.id,
       description: description ?? null,
+      mission: mission ?? null,
       targetMarket: targetMarket ?? null,
       companySize: companySize ?? null,
       geographicScope: geographicScope ?? null,
@@ -57,6 +60,7 @@ export async function POST(req: NextRequest) {
     },
     update: {
       ...(description !== undefined && { description }),
+      ...(mission !== undefined && { mission }),
       ...(targetMarket !== undefined && { targetMarket }),
       ...(companySize !== undefined && { companySize }),
       ...(geographicScope !== undefined && { geographicScope }),

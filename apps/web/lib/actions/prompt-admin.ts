@@ -55,6 +55,7 @@ export type PromptTemplateDetail = {
 // ─── Category Labels ────────────────────────────────────────────────────────
 
 const CATEGORY_LABELS: Record<string, string> = {
+  "platform-mission": "Company Mission",
   "platform-identity": "Platform Identity",
   "platform-preamble": "Platform Preamble",
   "route-persona": "Route Personas",
@@ -65,6 +66,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const CATEGORY_ORDER = [
+  "platform-mission",
   "platform-identity",
   "platform-preamble",
   "route-persona",
