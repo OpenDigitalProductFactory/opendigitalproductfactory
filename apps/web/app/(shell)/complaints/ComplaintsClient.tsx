@@ -1,9 +1,10 @@
 // apps/web/app/(shell)/complaints/ComplaintsClient.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 
 import { LocalTime } from "@/components/ui/LocalTime";
+import { createComplaint, type ComplaintView } from "@/lib/actions/complaints";
 import {
   DataTable,
   FilterBar,
@@ -11,15 +12,7 @@ import {
   type Column,
 } from "@/components/ui/report-kit";
 
-type Complaint = {
-  id: string;
-  customerName: string;
-  description: string;
-  severity: "low" | "medium" | "high" | "critical";
-  category: string;
-  status: "open" | "investigating" | "resolved" | "closed";
-  createdAt: string;
-};
+type Complaint = ComplaintView;
 
 // Severity ordering for the sortable column (low → critical).
 const SEVERITY_RANK: Record<Complaint["severity"], number> = {
@@ -28,14 +21,6 @@ const SEVERITY_RANK: Record<Complaint["severity"], number> = {
   high: 2,
   critical: 3,
 };
-
-const DEMO_COMPLAINTS: Complaint[] = [
-  { id: "C-001", customerName: "Sarah Chen", description: "Payment processing error during checkout — charged twice for order #4521", severity: "high", category: "Billing", status: "investigating", createdAt: "2026-03-28T14:30:00Z" },
-  { id: "C-002", customerName: "Marcus Johnson", description: "Product page shows incorrect pricing for the Enterprise tier", severity: "medium", category: "Product", status: "open", createdAt: "2026-03-29T09:15:00Z" },
-  { id: "C-003", customerName: "Emily Rodriguez", description: "Cannot reset password — reset email never arrives", severity: "high", category: "Account", status: "open", createdAt: "2026-03-29T10:45:00Z" },
-  { id: "C-004", customerName: "David Kim", description: "Dashboard loading time exceeds 30 seconds on mobile", severity: "low", category: "Performance", status: "resolved", createdAt: "2026-03-27T16:00:00Z" },
-  { id: "C-005", customerName: "Lisa Patel", description: "Data export missing records from February", severity: "critical", category: "Data", status: "investigating", createdAt: "2026-03-28T11:20:00Z" },
-];
 
 const CATEGORIES = ["Billing", "Product", "Account", "Performance", "Data", "Other"];
 const SEVERITIES: Complaint["severity"][] = ["low", "medium", "high", "critical"];
@@ -87,12 +72,14 @@ const COLUMNS: Column<Complaint>[] = [
   },
 ];
 
-export function ComplaintsClient() {
-  const [complaints, setComplaints] = useState<Complaint[]>(DEMO_COMPLAINTS);
+export function ComplaintsClient({ initialComplaints }: { initialComplaints: Complaint[] }) {
+  const [complaints, setComplaints] = useState<Complaint[]>(initialComplaints);
   const [showForm, setShowForm] = useState(false);
   // Empty status = "all".
   const [filters, setFilters] = useState<Record<string, string>>({ status: "" });
   const [formData, setFormData] = useState({ customerName: "", description: "", severity: "medium" as Complaint["severity"], category: "Other" });
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   const activeStatus = filters.status ?? "";
   const filtered = activeStatus
@@ -101,15 +88,17 @@ export function ComplaintsClient() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const newComplaint: Complaint = {
-      id: `C-${String(complaints.length + 1).padStart(3, "0")}`,
-      ...formData,
-      status: "open",
-      createdAt: new Date().toISOString(),
-    };
-    setComplaints([newComplaint, ...complaints]);
-    setFormData({ customerName: "", description: "", severity: "medium", category: "Other" });
-    setShowForm(false);
+    setError(null);
+    startTransition(async () => {
+      const result = await createComplaint(formData);
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      setComplaints((prev) => [result.complaint, ...prev]);
+      setFormData({ customerName: "", description: "", severity: "medium", category: "Other" });
+      setShowForm(false);
+    });
   }
 
   return (
@@ -193,12 +182,16 @@ export function ComplaintsClient() {
               style={{ background: "var(--dpf-surface-2)", border: "1px solid var(--dpf-border)", color: "var(--dpf-text)" }}
             />
           </div>
+          {error && (
+            <p className="mb-3 text-sm" style={{ color: "var(--dpf-error)" }}>{error}</p>
+          )}
           <button
             type="submit"
-            className="px-5 py-2 text-sm font-semibold text-white rounded-md transition-opacity hover:opacity-90"
+            disabled={isPending}
+            className="px-5 py-2 text-sm font-semibold text-white rounded-md transition-opacity hover:opacity-90 disabled:opacity-50"
             style={{ background: "var(--dpf-accent)" }}
           >
-            Submit Complaint
+            {isPending ? "Submitting…" : "Submit Complaint"}
           </button>
         </form>
       )}
