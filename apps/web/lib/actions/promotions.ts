@@ -15,7 +15,11 @@ import {
   getDeployedSha,
   getLatestRun,
 } from "@/lib/self-upgrade";
-import { isStoreOpen, isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
+import {
+  isStoreOpen,
+  isUpgradeWindowOpen,
+  nextUpgradeWindowOpen,
+} from "@/lib/self-upgrade/window";
 import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { loadPlatformVersion } from "@/lib/platform/version";
 import { inngest } from "@/lib/queue/inngest-client";
@@ -610,9 +614,17 @@ export async function getSelfUpgradeStatus() {
   const windowSource: "explicit" | "operating-hours" = hasExplicitWindows
     ? "explicit"
     : "operating-hours";
+  // Next time the upgrade window opens, so the panel can show WHEN scheduled
+  // upgrades will next be eligible. Explicit windows use their configured start;
+  // the operating-hours model derives it from the next store-close transition
+  // (null only while already in-window or for a 24/7 store, where the panel
+  // already explains the state).
+  const now = new Date();
   const nextWindowStart = hasExplicitWindows
-    ? nextMaintenanceWindowStart(config)?.toISOString() ?? null
-    : null;
+    ? nextMaintenanceWindowStart(config, now)?.toISOString() ?? null
+    : inMaintenanceWindow
+      ? null
+      : nextUpgradeWindowOpen(schedule, now, timezone)?.toISOString() ?? null;
   const targetSha = await resolveTargetSha(config.channel, config);
   const isFresh = targetSha ? isShaFresh(deployedSha, targetSha) : false;
 

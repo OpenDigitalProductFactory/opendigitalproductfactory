@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isStoreOpen, isUpgradeWindowOpen, zonedDayAndTime } from "./window";
+import {
+  isStoreOpen,
+  isUpgradeWindowOpen,
+  nextUpgradeWindowOpen,
+  zonedDayAndTime,
+} from "./window";
 import type { WeeklySchedule } from "@/lib/operating-hours-types";
 
 // 9–5 weekdays, closed weekends (the GENERIC_DEFAULTS shape / the user's "until 5PM").
@@ -67,5 +72,40 @@ describe("isUpgradeWindowOpen", () => {
   });
   it("no schedule and no windows → allowed (never silently block forever)", () => {
     expect(isUpgradeWindowOpen({ now: MON_1200_UTC })).toBe(true);
+  });
+});
+
+describe("nextUpgradeWindowOpen", () => {
+  it("returns the next store-close when the store is open now", () => {
+    // Monday noon, open until 17:00 UTC → window opens at 17:00 the same day.
+    const next = nextUpgradeWindowOpen(NINE_TO_FIVE, MON_1200_UTC, "UTC");
+    expect(next?.toISOString()).toBe("2026-05-25T17:00:00.000Z");
+  });
+
+  it("returns `now` when the store is already closed (window open)", () => {
+    // Monday 23:00 → store closed → upgrade window is open right now.
+    const next = nextUpgradeWindowOpen(NINE_TO_FIVE, MON_2300_UTC, "UTC");
+    expect(next).toBe(MON_2300_UTC);
+  });
+
+  it("respects the store timezone when projecting the next close", () => {
+    // 15:00 UTC is 11:00 in New York (EDT) — within 09:00–17:00 local, so the
+    // store is open and the next close is 17:00 local = 21:00 UTC.
+    const monday1500Utc = new Date("2026-05-25T15:00:00Z");
+    const next = nextUpgradeWindowOpen(NINE_TO_FIVE, monday1500Utc, "America/New_York");
+    expect(next?.toISOString()).toBe("2026-05-25T21:00:00.000Z");
+  });
+
+  it("returns null for a 24/7 store that never closes within the horizon", () => {
+    const allDay: WeeklySchedule = {
+      monday: { enabled: true, open: "00:00", close: "24:00" },
+      tuesday: { enabled: true, open: "00:00", close: "24:00" },
+      wednesday: { enabled: true, open: "00:00", close: "24:00" },
+      thursday: { enabled: true, open: "00:00", close: "24:00" },
+      friday: { enabled: true, open: "00:00", close: "24:00" },
+      saturday: { enabled: true, open: "00:00", close: "24:00" },
+      sunday: { enabled: true, open: "00:00", close: "24:00" },
+    };
+    expect(nextUpgradeWindowOpen(allDay, MON_1200_UTC, "UTC")).toBeNull();
   });
 });
