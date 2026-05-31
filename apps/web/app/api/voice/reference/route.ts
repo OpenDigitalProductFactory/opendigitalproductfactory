@@ -19,7 +19,7 @@ import * as path from "node:path"
 // /v1/audio/voices; the mlx-audio server (Apple Silicon) returns 404 there but
 // answers GET /v1/models. Using the wrong path leaves the profile stuck at
 // pending_reference, so synthesis is rejected with voice_profile_not_ready.
-export function healthPath(provider: TTSProvider): string {
+function healthPath(provider: TTSProvider): string {
   return provider === "mlx" ? "/v1/models" : "/v1/audio/voices"
 }
 
