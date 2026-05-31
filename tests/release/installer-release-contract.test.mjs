@@ -166,3 +166,58 @@ test("portal image bundles every directory the seed reads, so seed-* steps don't
     );
   }
 });
+
+// BI-0856A4CE Phase 1 — install-state schema gains devWorkspacePath; the bash
+// installer accepts --dev-workspace-path and writes DPF_DEV_WORKSPACE_PATH to
+// .env when contributor mode + the path differs from REPO_ROOT. The new-dev-
+// worktree script honors that env var and refuses to compute a target outside
+// its computed sibling worktree base. These three pieces have to ship together
+// or the dev-loop-isolation cluster's structural root is incomplete.
+test("install-state schema declares devWorkspacePath as part of BI-0856A4CE", () => {
+  const schema = JSON.parse(read("scripts/installer/install-state.schema.json"));
+  assert.ok(schema.properties.devWorkspacePath, "schema must declare devWorkspacePath");
+  // Nullable / optional: back-compat single-tree mode is signalled by the
+  // field being absent or null. The installer only sets it when the operator
+  // passes --dev-workspace-path AND it resolves distinct from REPO_ROOT.
+  assert.deepEqual(
+    schema.properties.devWorkspacePath.type,
+    ["string", "null"],
+    "devWorkspacePath must be nullable so single-tree mode round-trips through the schema",
+  );
+  assert.match(
+    schema.properties.devWorkspacePath.description ?? "",
+    /BI-0856A4CE|DPF_DEV_WORKSPACE_PATH/,
+    "schema description must cite the BI + env var for grep-discovery",
+  );
+});
+
+test("install-dpf.sh accepts --dev-workspace-path and persists it (BI-0856A4CE)", () => {
+  const installer = read("install-dpf.sh");
+  assert.match(installer, /--dev-workspace-path/, "flag must appear in arg parser + usage");
+  assert.match(installer, /DPF_DEV_WORKSPACE_PATH=/, "must write the env var to .env");
+  assert.match(installer, /dpf_state_write\s+devWorkspacePath/, "must persist to install-state");
+  // Single-tree mode preserved: when the resolved path equals REPO_ROOT, the
+  // installer must SKIP writing (so .env stays clean for back-compat). The
+  // implementation does this; the test pins it so a future refactor can't
+  // accidentally drop the guard.
+  assert.match(
+    installer,
+    /resolves to the install path; single-tree mode/,
+    "must skip the .env write when the path equals REPO_ROOT (single-tree back-compat)",
+  );
+});
+
+test("new-dev-worktree.sh honors DPF_DEV_WORKSPACE_PATH and refuses out-of-base targets (BI-0856A4CE)", () => {
+  const script = read("scripts/new-dev-worktree.sh");
+  assert.match(script, /DPF_DEV_WORKSPACE_PATH/, "script must consult the env var");
+  // Both discovery routes (env var + .env file) must be present so the script
+  // works whether the operator sourced .env first or runs raw.
+  assert.match(script, /\.env/, "script must also read .env as a fallback");
+  // Refuse-out-of-base guard: the proto-version of the BI-6B02FEE5 wrapper
+  // refusing worktree creation inside the install path.
+  assert.match(
+    script,
+    /is not under the worktree base/,
+    "script must refuse to compute a target outside the sibling worktree base",
+  );
+});

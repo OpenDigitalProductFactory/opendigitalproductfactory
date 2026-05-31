@@ -73,6 +73,29 @@ For unattended (CI / scripted) install:
 bash install-dpf.sh --headless --release
 ```
 
+#### Contributor: separate dev workspace from install (recommended, BI-0856A4CE Phase 1)
+
+The clone at the install path doubles as a dev tree by default — that works,
+but the dev tree can collide with the running portal and the self-upgrade
+merge loop (BI-A8A7CCFD). Pass `--dev-workspace-path` to register a
+**separate** clone as the dev workspace; the dev-loop scripts then branch
+new worktrees from there:
+
+```bash
+# 1. Install (production tree = $REPO_ROOT, the cwd):
+bash install-dpf.sh --headless --contributor --dev-workspace-path ~/dpf-dev
+
+# 2. Clone the dev workspace separately (one-time):
+git clone https://github.com/OpenDigitalProductFactory/opendigitalproductfactory ~/dpf-dev
+
+# 3. Use ~/dpf-dev for all dev work; worktrees go in ~/dpf-dev-worktrees/:
+cd ~/dpf-dev
+bash scripts/new-dev-worktree.sh my-feature
+```
+
+Omitting `--dev-workspace-path` (or pointing it at the install path) keeps
+single-tree mode — the current default and fully back-compat.
+
 ### What the installer does
 
 1. **Preflight** — refuses to run on WSL2-without-DD / rootless Docker /
