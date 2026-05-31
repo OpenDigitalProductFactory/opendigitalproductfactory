@@ -10,17 +10,17 @@
 #     Time-to-first-audio approx 1-2s regardless of total text length.
 #
 # Spec: docs/superpowers/specs/2026-05-28-tts-apple-silicon-local-design.md
-import io, os, re, shutil, struct, subprocess, tempfile, time, wave
+import io, os, shutil, struct, subprocess, tempfile, time, wave
 from typing import AsyncGenerator
 import numpy as np, torch
 import torchaudio as ta  # noqa: F401
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from chatterbox.tts import ChatterboxTTS
+from chatterbox_text import split_speech_chunks
 
 DEVICE = os.environ.get("DPF_CB_DEVICE") or ("mps" if torch.backends.mps.is_available() else "cpu")
 FFMPEG = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
-MIN_SENTENCE_CHARS = 12
 
 
 def _envf(key, default):
@@ -96,19 +96,6 @@ def _to_wav(wav_tensor, speed):
     return data
 
 
-def _split_sentences(text):
-    raw = re.split(r"(?<=[.!?])\s+", text.strip())
-    merged, carry = [], ""
-    for s in raw:
-        carry = (carry + " " + s).strip() if carry else s
-        if len(carry) >= MIN_SENTENCE_CHARS:
-            merged.append(carry); carry = ""
-    if carry:
-        if merged: merged[-1] = merged[-1] + " " + carry
-        else: merged.append(carry)
-    return merged or [text]
-
-
 def _params(body):
     ex  = _clamp(float(body.get("exaggeration", _envf("DPF_CB_EXAGGERATION", 0.5))), 0.25, 1.0)
     cfg = _clamp(float(body.get("cfg_weight",   _envf("DPF_CB_CFG_WEIGHT",   0.5))), 0.2,  1.0)
@@ -164,7 +151,7 @@ async def speech_stream(req: Request):
     try: decoded_ref, cleanup = _resolve_ref(body)
     except ValueError: return JSONResponse({"error": "invalid reference audio"}, status_code=400)
     ex, cfg, tmp, spd = _params(body)
-    sentences = _split_sentences(text)
+    sentences = split_speech_chunks(text)
     kw_base = _make_kw(decoded_ref, ex, cfg, tmp)
     print(f"[chatterbox/stream] {len(sentences)} sentences ex={ex} cfg={cfg} spd={spd}", flush=True)
 
