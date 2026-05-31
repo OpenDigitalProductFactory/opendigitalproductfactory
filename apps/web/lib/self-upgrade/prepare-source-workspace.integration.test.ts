@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, existsSync, rmSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -130,7 +130,8 @@ describe.skipIf(!GIT_AVAILABLE)("prepareUpgradeSource — workspace-isolated (BI
     // still carries their unstaged edit.
     expect(git(install, "rev-parse", "--abbrev-ref", "HEAD").trim()).toBe("feat/operator-wip");
     expect(existsSync(join(install, "wip.txt"))).toBe(true);
-    const baseAfter = execFileSync("cat", [join(install, "base.txt")], { encoding: "utf8" });
+    // CodeQL: use readFileSync rather than execFileSync("cat") — no process needed.
+    const baseAfter = readFileSync(join(install, "base.txt"), "utf8");
     expect(baseAfter).toBe("v1 + operator edit\n");
 
     // The install clone's dpf/install ref WAS advanced (push-back happened),
