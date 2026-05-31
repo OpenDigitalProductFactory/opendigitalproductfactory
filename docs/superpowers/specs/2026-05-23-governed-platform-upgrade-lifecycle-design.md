@@ -347,6 +347,113 @@ resolves a git ref as described here; afterwards the resolved artifact is the
 manifest's signed image and the same "stamp describes the built bytes"
 invariant carries over unchanged.
 
+### 5.0.1 Upgrade impact summary — on demand, install-tailored
+
+> Added 2026-05-31 to make "what's in this update?" answerable from the
+> operator surface without a CLI ask. Lands as `BI-C26F7EE1`
+> (PR [#1364](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1364)).
+
+**The decision being closed.** Apply-vs-defer needs more than two SHAs. An
+operator looking at the `/ops/self-upgrade` panel today sees `currentSha →
+targetSha` and a "Update available" badge — both true, neither useful for
+deciding whether *this* upgrade is worth taking *now*. The §5.0 lineage
+marker makes the *bytes* honest; this section makes the *meaning* of those
+bytes legible.
+
+**Pipeline (deterministic classification + LLM phrasing, no fabrication).**
+The summary is produced on demand — operator click in the Upgrade Center, or
+MCP call — and is cacheable per (`currentLineageSha`, `targetSha`) so a
+follow-up read is free.
+
+1. **Change set.** `git log <currentLineageSha>..<targetSha>` over the host
+   clone. `currentLineageSha` = the latest succeeded
+   `SelfUpgradeRun.targetSha` (the §5.0 upstream lineage marker — *not*
+   `deployedSha`, which in merge mode is the merge-commit identity).
+   `targetSha` = the resolved upstream HEAD from `version.ts:resolveTargetSha`.
+   Reuses the no-auth dep-injected `execFile` pattern from `version.ts` and
+   the host-clone read pattern from `operating-hours-read.ts`. No `git
+   fetch` here — the caller is expected to have already freshened the ref
+   via `buildFetchCommand`.
+2. **Classify by Conventional Commits.** DPF squashes PRs with Conventional
+   subjects, so the subject is the load-bearing signal. Parse `type(scope)!:
+   description (#NNNN)`, bucket as
+   `breaking | feature | fix | performance | other`. Counts drive the
+   headline. Non-Conventional subjects bucket as `other` rather than drop —
+   nothing is silently invisible to the operator.
+3. **Enrich (best effort).** When reachable, fetch each commit's PR title,
+   labels, and a truncated body from the GitHub API. Offline or unauthorized
+   → fall through to commit subjects + changed-path stats only. Never
+   invents enrichment.
+4. **Score relevance to THIS install.** `score = baseWeight(type, breaking)
+   × relevanceMultiplier(install signals)`. Base weight encodes the
+   "what kind of change" axis (breaking > feature > perf > fix > other);
+   relevance multiplier amplifies commits whose scope, files, or PR labels
+   match install state. Signals are sourced from live DB:
+   - `StorefrontConfig.archetypeId` (single source of truth for portal
+     industry — see §2 portal archetype rule),
+   - `Organization.industry` (derived from archetype; kept for legacy
+     match),
+   - `FeaturePack.manifest` paths and `applicableVerticals` (the only
+     DB-visible record of install customization today; absorbs the durable
+     install-branch signal from §5.0 once it lands without changing the
+     public type),
+   - open `PortfolioQualityIssue` summaries → keyword themes.
+
+   Path overlap between a commit and a `FeaturePack`-touched file is
+   **both** a relevance signal **and** a §5.0 merge-conflict early
+   warning — surfaced via a `touchesCustomizations` flag and a
+   whole-summary callout so the operator hears about it before
+   `prepare-source` does.
+5. **Phrase via the LLM.** A strict-JSON call through
+   `apps/web/lib/llm-call.ts` (`callLLM`, the internal-sensitivity
+   `minimize_cost` routed utility helper) produces the headline + per-item
+   one-line description + per-item "why relevant to you" + customizations
+   callout. Hard validators reject malformed JSON, length mismatches, and
+   reordering; on any failure the orchestrator returns the deterministic
+   shape with `phrased: null` and the UI falls back to raw commit
+   descriptions rather than fabricate. The LLM **never** adds, drops, or
+   reorders items — those are decided deterministically upstream.
+6. **Cacheable.** A process-local map keyed by
+   (`currentLineageSha`, `targetSha`) — a given pair is immutable until a
+   successful self-upgrade flips the lineage marker. The cache exists to
+   make a repeat operator click and a follow-up MCP read free.
+
+**Surfaces.** The same summary is rendered in two places, both read-only and
+advisory — neither queues nor applies the upgrade:
+
+- **`/ops/self-upgrade` Upgrade Center action** — the "What's in this
+  update?" panel. Operator clicks **Summarize update**; sees headline,
+  counts ribbon, top-N items (each with a one-line description and a
+  one-line "why relevant to you"), the customizations callout when
+  present, a foldable full list, and a provenance line ("GitHub
+  reachable / served from cache"). **Default view never shows SHAs or
+  file paths** — those are intentionally absent from the operator-facing
+  text, with the full list and SHA-bearing detail available on demand.
+- **MCP tool `summarize_upgrade_impact`** — `view_operations` scope,
+  read-only. Params: `refresh`, `topN`, `skipPhrasing`. Returns the same
+  `SummaryResult` discriminated union the server action exposes.
+
+**No-fabrication contract.** Every layer prefers to say "unavailable" over
+inventing data. Concretely:
+
+- `no-lineage` (no succeeded self-upgrade on record), `no-target`
+  (couldn't resolve upstream HEAD), `lineage-equals-target` (already
+  current), and `git-log-failed` are typed `SummaryResult` cases the UI
+  renders plainly.
+- Path-overlap is calculated, not guessed; if FeaturePack manifests carry
+  no paths, no overlap is claimed.
+- GitHub enrichment failures degrade silently to commit-subject mode and
+  the UI says so ("GitHub unreachable — summary built from commit
+  subjects only.").
+- LLM failures degrade to the raw deterministic shape; the operator never
+  sees a fluent headline that wasn't grounded in the change set.
+
+**Scope boundary.** This section governs the *summary the operator reads*,
+not the *gates the upgrade passes*. The four-layer preflight (§5.2) and the
+bump-type gate (§5.4) remain authoritative for go/no-go; the impact summary
+informs the operator's decision when they look — it does not itself defer,
+block, or apply.
+
 ### 5.1 Detection
 
 The newer `apps/web/lib/queue/functions/self-upgrade.ts` path becomes the canonical detector after Phase 0 cleans up the legacy stubs:
@@ -731,6 +838,7 @@ Proposed breakdown (each a Build Studio brief once spec is approved):
 - `BI-UPGRADE-000` — Self-upgrade substrate stabilization: one Inngest path, target SHA resolver, schema/DTO alignment, `/ops/self-upgrade` run listing, event-bus claim cleanup (Phase 0)
 - `BI-UPGRADE-000a` — Durable per-install branch (§5.0 prerequisite): commit Build-Studio promotions as real commits on a persistent install branch in the portal's build tree, so customizations survive container rebuild / Docker update / upgrade. Closes the `mcp-tools.ts:8891` "lost on rebuild" hazard. Independent of contribution mode (Phase 0)
 - `BI-UPGRADE-000b` — Merge-based upgrade source (§5.0): `git fetch` upstream target + **merge** into the install branch (not clean-checkout-replace); build merged result; stamp the true merge-commit SHA (non-circular sha-verify); track upstream lineage separately; clean auto-merge on disjoint files; genuine code conflicts surface in the Upgrade Center as keep-mine/take-upstream/show-diff (never a CLI ask), unresolved → defer and stay on current build. Extends §3.3/§6 3-way merge from seeded content to git/code (Phase 0/4)
+- `BI-C26F7EE1` — Upgrade impact summary (§5.0.1): on-demand, install-tailored "what's in this update?" digest in the `/ops/self-upgrade` Upgrade Center and as the `summarize_upgrade_impact` MCP tool. Pipeline: `git log <currentLineageSha>..<targetSha>` → Conventional-Commits classify → relevance score against install signals (archetype / industry / FeaturePack-touched paths and verticals / open `PortfolioQualityIssue` keyword themes) → best-effort GitHub PR enrichment → strict-JSON LLM phrasing. Advisory only; never queues or applies. Path overlap with FeaturePack-touched files doubles as the §5.0 merge-conflict early warning. Cacheable per (`currentLineageSha`, `targetSha`).
 - `BI-UPGRADE-001` — Platform version baseline + `version.json` + `PlatformConfig["platform.version"]` + `/api/platform/version` (Phase 1)
 - `BI-UPGRADE-002` — Release-impact lint + release CI tag/build/GHCR publish/GitHub Releases metadata (Phase 2)
 - `BI-UPGRADE-003` — Channel manifest publication + signing + DPF release feed host (Phase 2)
