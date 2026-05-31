@@ -2782,6 +2782,9 @@ model BusinessContext {
   // What the company does (richer than tagline)
   description      String?
   valueProposition String?
+  // Why the company exists — captured at onboarding (business-context step).
+  // Seeds the company-mission prompt (Block 0) and the org WWWD corpus.
+  mission          String?
 
   // Who they serve
   targetMarket     String?

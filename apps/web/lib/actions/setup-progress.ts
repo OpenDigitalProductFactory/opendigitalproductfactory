@@ -2,6 +2,34 @@
 
 import { prisma } from "@dpf/db";
 import { SETUP_STEPS, type SetupStep, type StepStatus, type SetupContext } from "./setup-constants";
+import { seedOrgWwwdCorpus } from "@/lib/onboarding/seed-org-wwwd-corpus";
+import { applyMissionPrompt } from "@/lib/onboarding/apply-mission-prompt";
+
+/**
+ * Runs once when initial setup completes: persist the captured mission into
+ * the company-mission prompt (visible to every coworker) and seed the per-org
+ * WWWD corpus. Fail-open and idempotent — onboarding completion must never
+ * block on embedding/seeding errors, and the seed is safe to re-run.
+ */
+async function finalizeSetupCompletion(organizationId: string | null): Promise<void> {
+  try {
+    const orgId =
+      organizationId ??
+      (await prisma.organization.findFirst({ select: { id: true } }))?.id ??
+      null;
+    if (!orgId) return;
+
+    const bc = await prisma.businessContext.findUnique({
+      where: { organizationId: orgId },
+      select: { mission: true },
+    });
+
+    await applyMissionPrompt({ mission: bc?.mission ?? null });
+    await seedOrgWwwdCorpus({ organizationId: orgId });
+  } catch (err) {
+    console.warn("[setup] mission/WWWD seeding on completion failed (fail-open):", err);
+  }
+}
 
 const BOOTSTRAP_PLATFORM_ORG = {
   orgId: "ORG-PLATFORM",
@@ -75,7 +103,7 @@ export async function advanceStep(
   const nextIdx = currentIdx + 1;
   const nextStep = nextIdx < SETUP_STEPS.length ? SETUP_STEPS[nextIdx] : null;
 
-  return prisma.platformSetupProgress.update({
+  const updated = await prisma.platformSetupProgress.update({
     where: { id: progressId },
     data: {
       currentStep: nextStep ?? progress.currentStep,
@@ -84,6 +112,9 @@ export async function advanceStep(
       ...(nextStep === null ? { completedAt: new Date() } : {}),
     },
   });
+
+  if (nextStep === null) await finalizeSetupCompletion(progress.organizationId);
+  return updated;
 }
 
 /** Mark current step skipped and advance. */
@@ -105,7 +136,7 @@ export async function skipStep(progressId: string) {
   const nextIdx = currentIdx + 1;
   const nextStep = nextIdx < SETUP_STEPS.length ? SETUP_STEPS[nextIdx] : null;
 
-  return prisma.platformSetupProgress.update({
+  const updated = await prisma.platformSetupProgress.update({
     where: { id: progressId },
     data: {
       currentStep: nextStep ?? progress.currentStep,
@@ -114,6 +145,9 @@ export async function skipStep(progressId: string) {
       ...(nextStep === null ? { completedAt: new Date() } : {}),
     },
   });
+
+  if (nextStep === null) await finalizeSetupCompletion(progress.organizationId);
+  return updated;
 }
 
 /** Record that the COO auto-message trigger has fired for this step.
@@ -145,10 +179,13 @@ export async function pauseSetup(progressId: string) {
 
 /** Mark setup as complete. */
 export async function completeSetup(progressId: string) {
-  return prisma.platformSetupProgress.update({
+  const updated = await prisma.platformSetupProgress.update({
     where: { id: progressId },
     data: { completedAt: new Date() },
+    select: { id: true, organizationId: true, completedAt: true },
   });
+  await finalizeSetupCompletion(updated.organizationId);
+  return updated;
 }
 
 /** Link setup progress to a user after account creation (Step 2). */
