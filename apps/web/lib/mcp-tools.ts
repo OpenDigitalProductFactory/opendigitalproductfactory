@@ -1023,7 +1023,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "update_backlog_item_status",
-    description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table in apps/web/lib/backlog/transitions.ts; same-status calls are no-op successes. Setting status='triaging' on an already-triaged item is the *retriage* path — clears triageOutcome and effortSize so triage_backlog_item can re-decide. Setting status='done' requires a resolution. Writes a status_change activity row and may auto-close the parent epic.",
+    description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table in apps/web/lib/backlog/transitions.ts; same-status calls are no-op successes. Setting status='triaging' on an already-triaged item is the *retriage* path — clears triageOutcome and effortSize so triage_backlog_item can re-decide. Setting status='done' requires a resolution. Writes a status_change activity row and may auto-close the parent epic. NOTE: this only changes the status field — it does NOT start work. For a triageOutcome=build item, starting the work means promote_to_build_studio (creates the FeatureBuild + Build Studio Ideate); flipping such an item to in-progress returns an advisory and does not build anything.",
     inputSchema: {
       type: "object",
       properties: {
@@ -5595,7 +5595,7 @@ export async function executeTool(
       // (Reason is checked against the *current* status below, after the item is loaded.)
       const item = await prisma.backlogItem.findUnique({
         where: { itemId: itemIdRaw },
-        select: { id: true, status: true, epicId: true, triageOutcome: true, effortSize: true },
+        select: { id: true, status: true, epicId: true, triageOutcome: true, effortSize: true, activeBuildId: true },
       });
       if (!item)
         return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
@@ -5680,11 +5680,28 @@ export async function executeTool(
         }
         return next;
       });
+      // Advisory: flipping a build item to in-progress is not the same as
+      // starting the work — surface the promote_to_build_studio path so the
+      // coworker can't report a no-op status change as "throughput".
+      const { buildPromoteAdvisory } = await import("@/lib/backlog/promote-advisory");
+      const promoteAdvisory = buildPromoteAdvisory({
+        itemId: updated.itemId,
+        targetStatus: updated.status,
+        triageOutcome: item.triageOutcome,
+        hasActiveBuild: item.activeBuildId != null,
+      });
       return {
         success: true,
         entityId: updated.itemId,
-        message: `${updated.itemId}: ${item.status} → ${updated.status}`,
-        data: { itemId: updated.itemId, status: updated.status, completedAt: updated.completedAt },
+        message:
+          `${updated.itemId}: ${item.status} → ${updated.status}` +
+          (promoteAdvisory ? ` — ADVISORY: ${promoteAdvisory}` : ""),
+        data: {
+          itemId: updated.itemId,
+          status: updated.status,
+          completedAt: updated.completedAt,
+          ...(promoteAdvisory ? { advisory: promoteAdvisory } : {}),
+        },
       };
     }
 
