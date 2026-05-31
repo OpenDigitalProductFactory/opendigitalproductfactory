@@ -10,7 +10,8 @@ import { MetricTable } from "./MetricTable";
 import { ContainerResourceTable } from "./ContainerResourceTable";
 import { AiCoworkerHealthPanel } from "./AiCoworkerHealthPanel";
 import { RecentAlertsPanel } from "./RecentAlertsPanel";
-import { HOST_RESOURCE_QUERIES } from "./health-summary";
+import { HOST_RESOURCE_QUERIES, isHostTelemetryConfigured } from "./health-summary";
+import { useMetricQuery } from "./useMetricQuery";
 
 export function SystemHealthDashboard() {
   return (
@@ -48,6 +49,7 @@ function MonitoringOfflineBanner() {
 
 function SystemHealthContent() {
   const { online, checked } = useMonitoringStatus();
+  const { data: upTargets } = useMetricQuery("up");
 
   if (!checked || !online) {
     return (
@@ -57,6 +59,8 @@ function SystemHealthContent() {
     );
   }
 
+  const showHostResources = isHostTelemetryConfigured(upTargets);
+
   return (
     <div className="space-y-6">
       {/* Firing alerts */}
@@ -65,30 +69,34 @@ function SystemHealthContent() {
       {/* Service status grid */}
       <ServiceStatusGrid services={DPF_SERVICES} />
 
-      {/* Host resource gauges */}
-      <section>
-        <h3 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-wider mb-2">
-          Host Resources
-        </h3>
-        <div className="grid grid-cols-3 gap-3">
-          <MetricGauge
-            query={HOST_RESOURCE_QUERIES.compute}
-            label="CPU"
-            thresholds={{ warning: 70, critical: 85 }}
-          />
-          <MetricGauge
-            query={HOST_RESOURCE_QUERIES.memory}
-            label="Memory"
-            thresholds={{ warning: 70, critical: 85 }}
-          />
-          <MetricGauge
-            query={HOST_RESOURCE_QUERIES.storage}
-            label="Disk"
-            hint="Highest drive usage"
-            thresholds={{ warning: 70, critical: 90 }}
-          />
-        </div>
-      </section>
+      {/* Host resource gauges — only rendered when a host telemetry exporter is
+          a configured scrape target (Linux node-exporter or Windows
+          windows_exporter). macOS Docker Desktop has neither. */}
+      {showHostResources && (
+        <section>
+          <h3 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-wider mb-2">
+            Host Resources
+          </h3>
+          <div className="grid grid-cols-3 gap-3">
+            <MetricGauge
+              query={HOST_RESOURCE_QUERIES.compute}
+              label="CPU"
+              thresholds={{ warning: 70, critical: 85 }}
+            />
+            <MetricGauge
+              query={HOST_RESOURCE_QUERIES.memory}
+              label="Memory"
+              thresholds={{ warning: 70, critical: 85 }}
+            />
+            <MetricGauge
+              query={HOST_RESOURCE_QUERIES.storage}
+              label="Disk"
+              hint="Highest drive usage"
+              thresholds={{ warning: 70, critical: 90 }}
+            />
+          </div>
+        </section>
+      )}
 
       {/* AI Coworker health */}
       <AiCoworkerHealthPanel />
