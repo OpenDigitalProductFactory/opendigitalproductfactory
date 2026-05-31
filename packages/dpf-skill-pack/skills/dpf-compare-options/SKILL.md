@@ -30,6 +30,8 @@ Compare 2-4 architecturally distinct options with WWMD after the context has bee
 - The trade-off should be shaped by founder-kernel principles, not by agent preference.
 - The result needs a recommendation and a clear reason for the operator.
 
+> **Platform vs business decisions.** `principle_decide` scores against the **founder kernel** — that's the right lens for *platform/WWMD* options. For a *business/WWWD* option set ("which way should the **organization** go?"), the deciding doctrine is the org's **mission + WWWD corpus**, not the platform kernel: gather it with `dpf-retrieve-decision-context`, weigh the options against the org's own stance first, and only lean on `principle_decide`/kernel reasoning where the org corpus is silent. Don't let platform doctrine override a business call the org has a stated stance on.
+
 ## Enforces
 
 - `kernel/principles/architecture-over-shortcuts`

@@ -1,6 +1,6 @@
 ---
 name: dpf-retrieve-decision-context
-description: "Use in the DPF codebase before a WWMD/kernel decision when the agent needs repo, backlog, spec, evidence, or principle context. Queries DPF MCP and local repo state before options are scored."
+description: "Use before a WWMD/kernel OR a WWWD/business decision when the agent needs context. Queries DPF MCP and local repo state — and, for business decisions, the organization's own mission + WWWD corpus (org-overlay stance/principle pages) — before options are scored."
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: mcp__dpf__wiki_query mcp__dpf__search_specs_and_plans mcp__dpf__list_backlog_items mcp__dpf__list_epics Bash(rg *)
@@ -23,13 +23,14 @@ enforces:
 
 # DPF Retrieve Decision Context
 
-Gather the evidence needed before a WWMD decision. Query current specs, live backlog, and relevant principles before scoring options.
+Gather the evidence needed before a decision. For a **platform/WWMD** decision, query current specs, live backlog, and founder-kernel principles. For a **business/WWWD** decision ("what would *we* do?"), also gather the organization's own context first: its **mission** and its **WWWD corpus** — the org-overlay `stance` / `heuristic` / `principle` pages seeded at onboarding from the company mission + archetype. The org speaks for itself before the platform kernel does.
 
 ## When to use
 
 - A Build Studio, Claude, Codex, or coworker thread has an open architecture or workflow decision.
 - The options mention new tables, tools, skills, epics, agent behavior, routing, or verification policy.
 - The answer depends on live backlog state, current specs, founder-kernel principles, or repo substrate.
+- **A business/WWWD decision** turns on how *this organization* operates — who it serves, what it stands for, how it weighs trade-offs. Its mission + WWWD corpus are the primary evidence; the platform kernel is only the fallback when that corpus is silent.
 
 ## Enforces
 
@@ -39,12 +40,13 @@ Gather the evidence needed before a WWMD decision. Query current specs, live bac
 
 ## Steps
 
-1. Restate the decision question in one sentence.
-2. Query `wiki_query` for directly relevant principles, using `pageKind = "principle"` when available.
-3. Search specs and plans for the domain terms in the question.
-4. Query current epics and backlog items for overlapping work.
-5. Use `rg` for local code, skill, schema, and route substrate before proposing new artifacts.
-6. Return a compact context bundle: relevant principles, existing substrate, live backlog overlap, missing evidence, and any assumptions that remain.
+1. Restate the decision question in one sentence, and classify it: **platform/WWMD** (how the *platform* should be built) or **business/WWWD** (how the *organization* should act).
+2. **For a business/WWWD decision, retrieve the org's own doctrine first.** Query `wiki_query` for the organization's WWWD corpus — `pageKind = "stance"`, then `"heuristic"`, then `"principle"` — phrasing the query around the decision topic. These org-overlay pages (origin `overlay`, seeded at onboarding from the company mission + archetype) are the primary evidence. The company **mission** is already in the coworker's context as Block 0, and also lives as the `org-mission` overlay page. Distinguish `overlay` (this org) from `kernel` (platform) origin in what you return.
+3. For a platform/WWMD decision (or as the fallback when the org corpus is silent), query `wiki_query` for directly relevant founder-kernel principles, using `pageKind = "principle"`.
+4. Search specs and plans for the domain terms in the question.
+5. Query current epics and backlog items for overlapping work.
+6. Use `rg` for local code, skill, schema, and route substrate before proposing new artifacts.
+7. Return a compact context bundle: the org's mission + WWWD stance (for business decisions), relevant kernel principles, existing substrate, live backlog overlap, missing evidence, and any assumptions that remain. Label org-overlay vs kernel sources so the next step knows which doctrine spoke.
 
 ## Guardrails
 
