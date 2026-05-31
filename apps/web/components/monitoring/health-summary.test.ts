@@ -144,6 +144,63 @@ describe("deriveServiceStatuses", () => {
       }),
     ]);
   });
+
+  it("hides optional services whose job is not a configured scrape target", () => {
+    // Customer install: prometheus.yml does NOT have dev-portal as a target,
+    // so the Contributor Preview tile must NOT render — otherwise customers
+    // see a phantom DOWN tile they can never fix.
+    const services: ServiceDefinition[] = [
+      { name: "Portal", job: "portal" },
+      { name: "Contributor Preview", job: "dev-portal", optional: true },
+    ];
+
+    const rows = deriveServiceStatuses({
+      services,
+      upTargets: [up("portal")],
+      loading: false,
+      offline: false,
+    });
+
+    expect(rows.map((r) => r.name)).toEqual(["Portal"]);
+  });
+
+  it("shows optional services once their job is a configured target", () => {
+    // Contributor install with --profile dev: dev-portal appears in `up`.
+    // The Contributor Preview tile must render and reflect the live state.
+    const services: ServiceDefinition[] = [
+      { name: "Portal", job: "portal" },
+      { name: "Contributor Preview", job: "dev-portal", optional: true },
+    ];
+
+    const rows = deriveServiceStatuses({
+      services,
+      upTargets: [up("portal"), up("dev-portal")],
+      loading: false,
+      offline: false,
+    });
+
+    expect(rows).toEqual([
+      expect.objectContaining({ name: "Portal", state: "up" }),
+      expect.objectContaining({ name: "Contributor Preview", state: "up", label: "UP" }),
+    ]);
+  });
+
+  it("keeps optional services visible while loading so they don't flicker on hydrate", () => {
+    const services: ServiceDefinition[] = [
+      { name: "Contributor Preview", job: "dev-portal", optional: true },
+    ];
+
+    const rows = deriveServiceStatuses({
+      services,
+      upTargets: null,
+      loading: true,
+      offline: false,
+    });
+
+    expect(rows).toEqual([
+      expect.objectContaining({ name: "Contributor Preview", state: "loading" }),
+    ]);
+  });
 });
 
 describe("HOST_RESOURCE_QUERIES", () => {

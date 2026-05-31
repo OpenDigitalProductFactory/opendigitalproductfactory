@@ -23,6 +23,12 @@ export type ServiceDefinition = {
   job?: string;
   detail?: string;
   statusHint?: string;
+  // Optional services only render when their `job` actually appears in the
+  // current Prometheus `up` results. Used for profile-gated targets like the
+  // contributor preview (`dev-portal`): customer installs never load that
+  // overlay, so the tile never renders for them — but contributors who run
+  // `--profile dev` see it appear as soon as Prometheus picks it up.
+  optional?: boolean;
 };
 
 export type ServiceStatus = ServiceDefinition & {
@@ -180,35 +186,62 @@ export function deriveServiceStatuses({
 }: ServiceStatusInput): ServiceStatus[] {
   const jobStatus = buildJobStatusMap(upTargets);
 
-  return services.map((service) => {
+  const rows: ServiceStatus[] = [];
+  for (const service of services) {
+    // Optional services (e.g. profile-gated contributor preview) only render
+    // when their job is a configured scrape target. We can't make this
+    // determination while loading or offline, so we keep the row visible in
+    // those transient states and only hide it once we have a real result and
+    // confirm the job is absent.
+    if (
+      service.optional &&
+      service.job &&
+      !loading &&
+      !offline &&
+      !jobStatus.has(service.job)
+    ) {
+      continue;
+    }
+
     if (offline) {
-      return { ...service, state: "offline", label: "Offline", tone: "neutral" };
+      rows.push({ ...service, state: "offline", label: "Offline", tone: "neutral" });
+      continue;
     }
 
     if (loading) {
-      return { ...service, state: "loading", label: "...", tone: "neutral" };
+      rows.push({ ...service, state: "loading", label: "...", tone: "neutral" });
+      continue;
     }
 
     if (!service.job) {
-      return {
+      rows.push({
         ...service,
         state: "not-monitored",
         label: service.statusHint ?? "Not monitored",
         tone: "neutral",
-      };
+      });
+      continue;
     }
 
     const status = jobStatus.get(service.job);
     if (status === 1) {
-      return { ...service, state: "up", label: service.detail ? `UP ${service.detail}` : "UP", tone: "success" };
+      rows.push({
+        ...service,
+        state: "up",
+        label: service.detail ? `UP ${service.detail}` : "UP",
+        tone: "success",
+      });
+      continue;
     }
 
     if (status === 0) {
-      return { ...service, state: "down", label: "DOWN", tone: "critical" };
+      rows.push({ ...service, state: "down", label: "DOWN", tone: "critical" });
+      continue;
     }
 
-    return { ...service, state: "unknown", label: "Unknown", tone: "neutral" };
-  });
+    rows.push({ ...service, state: "unknown", label: "Unknown", tone: "neutral" });
+  }
+  return rows;
 }
 
 // True iff a host-telemetry exporter is a configured scrape target on this

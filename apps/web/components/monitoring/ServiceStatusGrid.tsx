@@ -41,6 +41,19 @@ export function ServiceStatusGrid({ services, className = "" }: Props) {
 // Past iterations rendered "Sandbox 1/2/3" — three cards reading the same
 // `up{job="sandbox"}` series, which always moved in lockstep and implied
 // multi-sandbox capacity that doesn't exist.
+//
+// Services without a `job` are intentionally unscraped: their /metrics
+// endpoint is missing (ADP returns 404, redis needs a redis-exporter
+// sidecar, whisper-server ships without one) so we show them as neutral
+// "Not scraped" tiles rather than pretending they're up. Follow-up: ship
+// missing /metrics endpoints or add the exporter sidecars and promote
+// these to scraped jobs.
+//
+// Services with `optional: true` only render when their job actually
+// appears in the Prometheus `up` results. That's how we surface the
+// contributor preview (`dev-portal`) on contributor installs without
+// firing a false ContainerDown CRITICAL on customer installs that don't
+// load the dev-overlay scrape config.
 export const DPF_SERVICES: ServiceDefinition[] = [
   { name: "Portal", job: "portal" },
   { name: "PostgreSQL", job: "postgres" },
@@ -48,4 +61,9 @@ export const DPF_SERVICES: ServiceDefinition[] = [
   { name: "Qdrant", job: "qdrant" },
   { name: "AI Inference", statusHint: "Portal metrics" },
   { name: "Sandbox", job: "sandbox" },
+  { name: "Inngest", job: "inngest" },
+  { name: "Redis", statusHint: "Not scraped" },
+  { name: "ADP", statusHint: "Not scraped" },
+  { name: "Voice STT", statusHint: "Not scraped" },
+  { name: "Contributor Preview", job: "dev-portal", optional: true },
 ];
