@@ -31,6 +31,10 @@ vi.mock("@/lib/email", () => ({
   sendEmail: vi.fn().mockResolvedValue({ messageId: "msg-1" }),
 }));
 
+vi.mock("@/lib/org-identity", () => ({
+  getOrgIdentity: vi.fn().mockResolvedValue(null),
+}));
+
 import { prisma } from "@dpf/db";
 import { composeDunningEmail, sendEmail } from "@/lib/email";
 import {
