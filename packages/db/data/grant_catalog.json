@@ -373,26 +373,40 @@
     },
     {
       "key": "coworker_screen_drive",
-      "description": "Pseudo-User Contract (BI-B2F7ABF5): drive the screen the user is on — select entities, navigate routes, open/close panels, focus fields, scroll. Read-only for the user (the coworker drives). No tools honored yet; consumers land in BI-DF6079E9 (screen_* view-command tool family).",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): drive the screen the user is on — select entities, navigate routes, open/close panels, focus fields. Read-only for the user (the coworker drives).",
       "category": "platform",
       "sensitivity": "internal",
-      "honored_by_tools": [],
+      "honored_by_tools": [
+        "screen_close_panel",
+        "screen_dispatch_action",
+        "screen_focus_field",
+        "screen_navigate",
+        "screen_open_panel",
+        "screen_propose_action",
+        "screen_select_entity"
+      ],
       "implies": []
     },
     {
       "key": "coworker_screen_fill",
-      "description": "Pseudo-User Contract (BI-B2F7ABF5): pre-fill form fields on behalf of the user. Higher tier than coworker_screen_drive — the user can still override before submit, but the coworker is setting input without explicit user keystrokes. Consumers land in BI-DF6079E9 (screen_set_input).",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): pre-fill form fields on behalf of the user. Higher tier than coworker_screen_drive — the user can still override before submit, but the coworker is setting input without explicit user keystrokes.",
       "category": "platform",
       "sensitivity": "internal",
-      "honored_by_tools": [],
+      "honored_by_tools": [
+        "screen_set_input"
+      ],
       "implies": []
     },
     {
       "key": "coworker_screen_read",
-      "description": "Pseudo-User Contract (BI-B2F7ABF5): read the current screen's state — selected entities, focused field, open panels, route. Read-only side of the coworker view-command surface. Consumers land in BI-DF6079E9 (screen_describe, screen_get_state).",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): read the current screen's state — selected entities, focused field, open panels, route, scroll anchor. Read-only side of the coworker view-command surface (POLA-aligned per chief-architect review of PR #1361 — screen_scroll_to is read-class).",
       "category": "platform",
       "sensitivity": "internal",
-      "honored_by_tools": [],
+      "honored_by_tools": [
+        "screen_describe",
+        "screen_get_state",
+        "screen_scroll_to"
+      ],
       "implies": []
     },
     {
