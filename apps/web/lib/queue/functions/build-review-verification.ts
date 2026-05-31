@@ -35,7 +35,7 @@ export const buildReviewVerification = inngest.createFunction(
       const { prisma } = await import("@dpf/db");
       return prisma.featureBuild.findUnique({
         where: { buildId },
-        select: { sandboxId: true, sandboxPort: true, brief: true, threadId: true },
+        select: { sandboxId: true, sandboxPort: true, brief: true, threadId: true, kind: true },
       });
     });
 
@@ -43,8 +43,20 @@ export const buildReviewVerification = inngest.createFunction(
       return { skipped: true, reason: "sandbox or build missing" };
     }
 
-    const brief = build.brief as { acceptanceCriteria?: string[] } | null;
-    const testCases = brief?.acceptanceCriteria ?? [];
+    const { deriveFixUxTestCases } = await import("@/lib/explore/feature-build-types");
+    const brief = build.brief as {
+      acceptanceCriteria?: string[];
+      fixContext?: import("@/lib/explore/feature-build-types").FixContext;
+    } | null;
+    // For a fix build, `acceptanceCriteria` is often polluted with fixContext
+    // prose (the brief reuses the feature shape), which produced nonsense
+    // browser-use navigations like `https://fixContext.reproSteps`. Derive the
+    // UX assertion from the structured fix diagnosis instead — verify the
+    // reported defect no longer reproduces on its route. (BI-AC5CFDB0)
+    const testCases =
+      build.kind === "fix"
+        ? deriveFixUxTestCases(brief?.fixContext)
+        : brief?.acceptanceCriteria ?? [];
 
     await step.run("start-verification", async () => {
       const { prisma } = await import("@dpf/db");
