@@ -15,6 +15,12 @@ describe("normalizeGapTopic", () => {
   it("caps length", () => {
     expect(normalizeGapTopic("x".repeat(500)).length).toBeLessThanOrEqual(160);
   });
+  it("handles long whitespace/punctuation runs correctly (ReDoS-safe linear trim)", () => {
+    // Pathological input the old anchored /[?!.\s]+$/ backtracked on; the
+    // char-walk trim is linear. Correctness here + CodeQL re-scan confirm the fix.
+    const input = `${"\t".repeat(5000)}what would we do${" ".repeat(5000)}???`;
+    expect(normalizeGapTopic(input)).toBe("what would we do");
+  });
 });
 
 describe("gapFingerprint", () => {

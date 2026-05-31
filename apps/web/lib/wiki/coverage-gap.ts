@@ -19,15 +19,24 @@ import { upsertWikiPage, appendRevision } from "@dpf/db/wiki-store";
 
 const MAX_TOPIC_LEN = 160;
 
+/** Trailing characters stripped from a normalised topic (punctuation + space). */
+const TRAILING_TRIM_CHARS = "?!. ";
+
 /** Normalise a query into a stable topic key: lowercase, collapse whitespace,
- *  strip trailing punctuation, cap length. */
+ *  strip trailing punctuation, cap length.
+ *
+ *  Note: the trailing strip is a char-walk loop, NOT an anchored regex like
+ *  `/[?!.\s]+$/`. That pattern is a polynomial-ReDoS vector on user-controlled
+ *  input (CodeQL js/polynomial-redos) — it backtracks badly on long runs of
+ *  whitespace. After `\s+ → " "` collapse there is at most one trailing space
+ *  anyway, so a linear walk is both safe and sufficient. */
 export function normalizeGapTopic(query: string): string {
-  return query
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .replace(/[?!.\s]+$/g, "")
-    .slice(0, MAX_TOPIC_LEN);
+  const collapsed = query.trim().toLowerCase().replace(/\s+/g, " ");
+  let end = collapsed.length;
+  while (end > 0 && TRAILING_TRIM_CHARS.includes(collapsed.charAt(end - 1))) {
+    end--;
+  }
+  return collapsed.slice(0, end).slice(0, MAX_TOPIC_LEN);
 }
 
 /** Deterministic, org-scoped fingerprint of a gap topic (16 hex chars). */
