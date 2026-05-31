@@ -33,6 +33,12 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "not-needed-for-local")
 EVIDENCE_DIR = os.environ.get("EVIDENCE_DIR", "/evidence")
 SESSION_TIMEOUT_SECONDS = int(os.environ.get("SESSION_TIMEOUT_SECONDS", "600"))
+# The Dockerfile installs the system Chromium at /usr/bin/chromium. browser-use
+# 0.12.x otherwise looks for a Playwright-managed browser (not installed in this
+# image), so its BrowserSession never connects and every navigate fails with
+# "CDP client not initialized - browser may not be connected yet". Point it at
+# the installed binary explicitly. Overridable via CHROME_BIN.
+CHROME_BIN = os.environ.get("CHROME_BIN") or "/usr/bin/chromium"
 
 os.makedirs(EVIDENCE_DIR, exist_ok=True)
 
@@ -94,9 +100,17 @@ class SessionManager:
     async def open(self, url: str | None = None) -> BrowserSessionWrapper:
         session_id = str(uuid.uuid4())[:8]
         # BrowserSession takes profile fields directly as kwargs in 0.12.x.
-        # --no-sandbox is required because the container doesn't run as an
-        # unprivileged user with user-namespace support.
-        browser = BrowserSession(headless=True, args=["--no-sandbox"])
+        # executable_path pins the installed system Chromium (no Playwright
+        # browser is bundled). chromium_sandbox=False + --no-sandbox because the
+        # container doesn't run as an unprivileged user with user-namespace
+        # support; --disable-dev-shm-usage avoids crashes on the small default
+        # /dev/shm in containers; --disable-gpu for headless servers.
+        browser = BrowserSession(
+            headless=True,
+            executable_path=CHROME_BIN,
+            chromium_sandbox=False,
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+        )
         await browser.start()
         session = BrowserSessionWrapper(session_id=session_id, browser=browser)
 
