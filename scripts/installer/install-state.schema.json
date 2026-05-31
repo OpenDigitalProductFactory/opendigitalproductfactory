@@ -53,7 +53,11 @@
     },
     "installPath": {
       "type": "string",
-      "description": "Absolute path to the repo root on the host. Mirrors DPF_HOST_INSTALL_PATH."
+      "description": "Absolute path to the repo root on the host. Mirrors DPF_HOST_INSTALL_PATH. In contributor installs this is the PRODUCTION install — the bytes the running portal reads. Should be treated as platform-owned (BI-0856A4CE Phase 1)."
+    },
+    "devWorkspacePath": {
+      "type": ["string", "null"],
+      "description": "Absolute path to the contributor's writable dev workspace, where 'git worktree add' creates feature branches and where Claude/Codex sessions open their cwd. Distinct from installPath in BI-0856A4CE's two-tree model. Defaults to installPath (back-compat / single-tree mode) — when distinct, the dev-loop scripts refuse to create worktrees inside installPath. Mirrors DPF_DEV_WORKSPACE_PATH in .env. Null/absent → single-tree mode (current behavior)."
     },
     "stateDir": {
       "type": "string",
