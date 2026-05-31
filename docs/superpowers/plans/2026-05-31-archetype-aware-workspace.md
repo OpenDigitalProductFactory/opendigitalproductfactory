@@ -41,7 +41,7 @@ Backlog routing after review:
 
 | Plan slice | Existing BI to use | Notes |
 | --- | --- | --- |
-| Resolver, contribution, layering audit, setup-activation summary | `BI-1CCC6264` | Extend `apps/web/lib/workspace-home/registry.ts` + `types.ts` (and the proposed `contributions/` boundary from parent §9). Add audit fields (`omittedBlocks`, `explanations`, `sourceLayers`) onto the existing `WorkspaceHomeResolution`. Do NOT introduce a parallel `WorkspaceCompositionResolution`. |
+| Resolver, contribution, layering audit, setup-activation summary | `BI-1CCC6264` | Extend `apps/web/lib/workspace-home/registry.ts` + `types.ts` (and the proposed `contributions/` boundary from parent §9). Add audit fields (`omittedSlots`, `explanations`, `sourceLayers`) onto the existing `WorkspaceHomeResolution`. Do NOT introduce a parallel resolver union. |
 | Compose canonical primitives + per-slot priority/zone metadata | `BI-5B8FE5C1` | BI-5B8FE5C1 is the **typed primitive registry contract** (11 primitive specs, applicability metadata) — not a "block registry". This plan slice contributes new slot bindings + applicability rows where category sweeps reveal gaps. Primitive-key additions (e.g. a potential `kpi-strip`) are filed as parent-spec amendments. |
 | Signal/projection-driven states | `BI-3E8D2CF5` | Reuse `loadWorkspaceHomeSignals(...)` (GearInterface + Calibrator + Governor unified). Forbid direct `prisma.gearInterface` reads from block components. |
 | WWWD/coworker explanations via WikiPages | `EP-CORPUS-BOOTSTRAP` items plus `EP-COWORKER-INTERACTIVITY` PUC items | Consume `recallWikiContext` with `principleRingScope = worker`. The `DecisionPerspectiveProfile` chain remains a forward-looking input — gated on **BI-230C9EF7** (per-org profile resolver). File a narrow BI only if explanation persistence cannot fit existing corpus/coworker work. |
@@ -69,7 +69,7 @@ Files likely to change:
 
 Implementation notes:
 
-- Add `WorkspaceCompositionAudit` and a typed `WorkspaceCompositionResolution = WorkspaceHomeResolution & { audit }` alias. Do NOT introduce a parallel union.
+- Add `WorkspaceCompositionAudit` and a typed `AuditedWorkspaceHomeResolution = WorkspaceHomeResolution & { audit }` alias. Do NOT introduce a parallel union.
 - Preserve existing `WorkspaceHomeContribution` shape. If `WorkspaceHomeSlotSpec` needs `priority`, `zone`, `explanationPolicy`, prefer adding them as optional fields on the parent type (parent-spec amendment) over duplicating the slot shape.
 - Match exact semantic `StorefrontArchetype.archetypeId` slug before category fallback. `StorefrontConfig.archetypeId` is the FK read path, never the match key.
 - Return explainable omitted slots with reasons (`permission-hidden`, `missing-required-source`, `archetype-mismatch`, etc.).
@@ -274,10 +274,11 @@ Files likely to change:
 
 Implementation notes:
 
-- First use an existing preference/config store if one fits.
-- If no existing store fits, file a separate schema-backed BI before adding `WorkspacePreference`.
-- V1 admin overrides: enable optional blocks, reorder within zones, set block thresholds.
-- V1 user preferences: collapse, density, saved filters.
+- No existing general-purpose workspace preference store is approved for V1. `CommunicationChannelBinding.preferences` is channel-specific, and `BuildPhaseHandoff.userPreferences` is build-evidence context, not portal UI state.
+- V1 may ship server-rendered defaults and ephemeral client collapse state only.
+- Durable org/user overrides require a separate substrate sweep and schema-backed BI before adding `WorkspacePreference`.
+- Admin authority uses existing grants: `manage_business_models` for org/archetype composition choices, `manage_platform` for registry/primitive definitions and platform fallback behavior.
+- Coworker recommendations route through `CoworkerActionEnvelope` and then the same admin override command path; until a durable override store exists, they can open setup tasks or explain gaps but cannot persist layout changes.
 
 Tests:
 
@@ -323,7 +324,7 @@ Per DPF rulebook, implementation is not done until:
 
 ## Acceptance Checklist
 
-- [ ] Existing `WorkspaceHomeContribution` + 11-primitive substrate is extended, not duplicated. No new `WorkspaceBlock*` types or parallel `WorkspaceCompositionResolution` introduced.
+- [ ] Existing `WorkspaceHomeContribution` + 11-primitive substrate is extended, not duplicated. No new `WorkspaceBlock*` types or parallel resolver union introduced.
 - [ ] Every contribution satisfies the parent-mandated slot covenant (today/now, exceptions/needs-review, coworker-handoffs).
 - [ ] Composition matches on `StorefrontArchetype.archetypeId` semantic slug; the `StorefrontConfig.archetypeId` FK is never the match key.
 - [ ] Category contributions produce materially different first-screen compositions.

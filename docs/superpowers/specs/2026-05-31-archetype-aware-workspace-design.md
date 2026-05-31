@@ -25,7 +25,7 @@
 4. **Projection service is the canonical signal source.** Block "why-this-matters" and confidence overlays flow through `loadWorkspaceHomeSignals(...)` from `apps/web/lib/workspace-home/signals/` (BI-3E8D2CF5), which unifies GearInterface raw stream + Calibrator + Governor outputs. Block components MUST NOT call `prisma.gearInterface` or `getSlipByReason` directly. (Parent §5.7.)
 5. **Ring-scope discipline (BI-4AA1074B).** Any wiki recall/decide MCP call from a workspace block scopes by `principleRingScope = worker`. Platform-engineering principles must not surface into the in-trench surface.
 6. **Banned-copy lint applies.** Worker-facing strings from any configured slot pass the parent's banned-copy token list (`gear`, `ring`, `torque`, `slip`, `wear`, `triple`, `shaft`, `calibration`, `contribution model`, `cockpit`, `reduction-gear`, `GearInterface`, architecture-loop language). Every new component ships at least one fixture exercising rendered slot output against the lint. (Parent primitive-registry spec §7.)
-7. **Resolver type reused.** The resolver returns the canonical `WorkspaceHomeResolution` (or a typed extension carrying `omittedBlocks` / `explanations` / `sourceLayers` audit fields), not a new `WorkspaceCompositionResolution` parallel type.
+7. **Resolver type reused.** The resolver returns the canonical `WorkspaceHomeResolution` (or a typed extension carrying `omittedSlots` / `explanations` / `sourceLayers` audit fields), not a new parallel resolution type.
 8. **Archetype identity match-key clarified.** Composition matches on `StorefrontArchetype.archetypeId` *semantic slug* only. `StorefrontConfig.archetypeId` is the FK used to load the row; it is never the match key. (Parent §5.3; gated on BI-44C34478 normalization.)
 9. **Plan file boundary aligns to parent.** The implementation plan's "Files likely to change" lists are updated to land under `apps/web/lib/workspace-home/{contributions,primitives,signals}/` per parent §9, not a new `blocks.ts` / `block-resolution.ts` boundary.
 
@@ -177,7 +177,7 @@ Secondary blocks follow in dense sections. Reporting-heavy blocks use report-kit
 
 ## Configuration Layering Model
 
-Workspace resolution should produce an audited `WorkspaceCompositionResolution` at render time.
+Workspace resolution should produce an audited extension of the canonical `WorkspaceHomeResolution` at render time. The extension carries source-layer and explanation metadata; it does not replace the resolver type from the anchor spec.
 
 ```ts
 type WorkspaceConfigurationLayer =
@@ -189,29 +189,28 @@ type WorkspaceConfigurationLayer =
   | "coworker-recommendation"
   | "user-preference";
 
-type WorkspaceCompositionResolution = {
-  organizationId: string;
-  archetypeSlug: string | null;
-  category: string | null;
-  roleKey: string;
-  blocks: WorkspaceBlockInstance[];
-  omittedBlocks: WorkspaceOmittedBlock[];
-  explanations: WorkspaceBlockExplanation[];
+type WorkspaceCompositionAudit = {
   sourceLayers: WorkspaceConfigurationLayer[];
+  omittedSlots: WorkspaceOmittedSlot[];
+  explanations: WorkspaceSlotExplanation[];
+};
+
+type AuditedWorkspaceHomeResolution = WorkspaceHomeResolution & {
+  audit: WorkspaceCompositionAudit;
 };
 ```
 
 Layer order:
 
-1. **DPF seed:** baseline block registry and universal block constraints.
+1. **DPF seed:** baseline primitive registry and universal slot constraints.
 2. **Archetype category:** default composition for broad category, such as field service, retail, hospitality, professional services, SaaS, MSP.
 3. **Exact archetype:** semantic slug-specific overrides, such as `hvac-contractor`.
-4. **Organization override:** bounded admin choices: enable/disable optional blocks, reorder within allowed zones, choose saved filters, set target thresholds.
-5. **Role projection:** hide or down-rank blocks/actions the user cannot use.
+4. **Organization override:** bounded admin choices: enable/disable optional slots, reorder within allowed zones, choose saved filters, set target thresholds.
+5. **Role projection:** hide or down-rank slots/actions the user cannot use.
 6. **Coworker recommendation:** pending proposed change, not automatic mutation.
 7. **User preference:** collapse/expand, density, saved filters, default time window.
 
-Conflict rule: a lower layer cannot re-enable a block/action forbidden by a higher governed layer or by permissions. The UI must be able to show "hidden because role lacks X" or "recommended because WWWD material Y says Z."
+Conflict rule: a lower layer cannot re-enable a slot/action forbidden by a higher governed layer or by permissions. The UI must be able to show "hidden because role lacks X" or "recommended because WWWD material Y says Z."
 
 ## Workspace Block ↔ Primitive Mapping
 
@@ -236,16 +235,16 @@ If a future archetype proves an operating model the existing 11 primitives genui
 
 ### Audit fields layered onto the resolver
 
-The Configuration Layering Model (above) produces an audited resolution. To preserve the canonical resolver shape, the audit fields ride on `WorkspaceHomeResolution` (or a thin typed extension) rather than introducing a parallel `WorkspaceCompositionResolution`:
+The Configuration Layering Model (above) produces an audited resolution. To preserve the canonical resolver shape, the audit fields ride on `WorkspaceHomeResolution` (or a thin typed extension) rather than introducing a parallel resolver union:
 
 ```ts
 type WorkspaceCompositionAudit = {
   sourceLayers: WorkspaceConfigurationLayer[];   // which layers contributed to the resolved composition
-  omittedBlocks: WorkspaceOmittedBlock[];        // slot definitions that were dropped, with reason
-  explanations: WorkspaceBlockExplanation[];     // per-slot "why this is here" with cited WikiPage / signal refs
+  omittedSlots: WorkspaceOmittedSlot[];          // slot definitions that were dropped, with reason
+  explanations: WorkspaceSlotExplanation[];      // per-slot "why this is here" with cited WikiPage / signal refs
 };
 
-type WorkspaceCompositionResolution = WorkspaceHomeResolution & { audit: WorkspaceCompositionAudit };
+type AuditedWorkspaceHomeResolution = WorkspaceHomeResolution & { audit: WorkspaceCompositionAudit };
 ```
 
 Implementation MAY put the audit on the existing resolution union; implementation MUST NOT replace `WorkspaceHomeResolution` with a parallel type. Slot priority / zone / explanation-policy fields are either added as optional members of `WorkspaceHomeSlotSpec` (preferred, parent-spec amendment) or ride on the audit (acceptable fallback). The implementation BI picks one after sweeping current `WorkspaceHomeSlotSpec` consumers.
@@ -427,13 +426,18 @@ Do not add a generic `Dashboard`, `Widget`, or `PageBuilder` table for V1.
 | Archetype mismatch via FK vs semantic slug | Match contribution manifests on `StorefrontArchetype.archetypeId` semantic slug only. |
 | Page becomes card-heavy and slow | Limit primary blocks, prioritize queues/actions, lazy-load secondary charts. |
 
-## Open Questions
+## Resolved Review Questions
 
-1. Which existing preference/config store should carry org/user workspace overrides, or is a small `WorkspacePreference` table justified after V1?
-2. Should accepted coworker layout recommendations be persisted as org overrides immediately, or as reviewed recommendations applied at render time?
-3. What is the first exact archetype after MSP and HVAC: retail, restaurant/hospitality, professional-services, or SaaS operator?
-4. Which role/capability grants should own workspace configuration separate from storefront setup?
-5. How much of the existing `PlatformWorkspaceHome` should remain visible to admins when an archetype workspace is active?
+1. **Preference persistence.** No existing general-purpose org/user workspace preference store was found in schema. `CommunicationChannelBinding.preferences` is channel-specific, and `BuildPhaseHandoff.userPreferences` is build-evidence context, not portal UI preference storage. V1 therefore implements no durable user reordering beyond server-rendered defaults. If Slice 7 needs persistence, file a narrow `WorkspacePreference` schema BI after another substrate sweep.
+2. **Accepted coworker recommendations.** Accepted recommendations do not mutate layout directly. They resolve through PAR (`CoworkerActionEnvelope`) into the same admin/org override command path a human would use. Until a durable override store exists, coworker recommendations can open setup tasks or explain gaps, but they cannot create persistent layout changes.
+3. **Next exact archetype after HVAC and MSP.** Retail/ecommerce is the next proving archetype because it stress-tests revenue snapshot, inventory/supplier risk, customer activity, and the likely `kpi-strip` primitive amendment. It should route through existing `BI-3F3B535D` / `BI-E0D7B790` work rather than a new BI.
+4. **Configuration authority.** V1 uses existing grants: `manage_business_models` owns org/archetype workspace composition choices; `manage_platform` owns registry/primitive definitions and platform fallback behavior; `view_storefront` remains read/setup visibility only. A new `manage_workspace_home` grant is deferred until implementation proves the existing split is too coarse.
+5. **Platform fallback visibility.** When an archetype workspace is active, `PlatformWorkspaceHome` is not blended into the worker home. Authorized operators with `view_platform` or `manage_platform` get an explicit operator switch or link to the platform fallback. Ordinary workers stay in the archetype workspace.
+
+## Remaining Open Questions
+
+1. Should `WorkspaceHomeSlotSpec` grow optional fields (`explanationPolicy`, `recommendationsConsumed`, `zone`) or should all audit metadata ride on `AuditedWorkspaceHomeResolution`? This is deliberately left to `BI-1CCC6264` after a local consumer sweep.
+2. Is `kpi-strip` a justified primitive-registry amendment, or can retail/SaaS express header metrics with existing primitives plus report-kit `StatCard` composition? Decide in `BI-5B8FE5C1` / retail implementation evidence.
 
 ## Acceptance Criteria
 
