@@ -3,6 +3,7 @@ import {
   FEATURE_BUILD_KIND_VALUES,
   isFixContextComplete,
   checkPhaseGate,
+  deriveFixUxTestCases,
   type FixContext,
 } from "./feature-build-types";
 import { getBuildPhasePrompt } from "@/lib/integrate/build-agent-prompts";
@@ -134,5 +135,44 @@ describe("getBuildPhasePrompt — fix variants", () => {
   it("terminal phases keep empty-prompt behavior for both kinds", async () => {
     expect(await getBuildPhasePrompt("complete", "fix")).toBe("");
     expect(await getBuildPhasePrompt("failed", "fix")).toBe("");
+  });
+});
+
+describe("deriveFixUxTestCases — fix UX verification source (BI-AC5CFDB0)", () => {
+  it("navigates to the affected route and asserts the defect is gone", () => {
+    const cases = deriveFixUxTestCases({
+      routeContext: "/admin/diagnostics",
+      expected: "the diagnostics table renders",
+      actual: "the page throws a runtime error",
+    });
+    expect(cases).toHaveLength(1);
+    const assertion = cases[0]!;
+    expect(assertion).toContain("Navigate to /admin/diagnostics");
+    expect(assertion).toContain("the diagnostics table renders");
+    expect(assertion).toContain("the page throws a runtime error");
+    // Never emits a fixContext field name as a literal URL — that was the bug
+    // (browser-use tried to visit `https://fixContext.reproSteps`).
+    expect(assertion).not.toContain("fixContext");
+    expect(assertion).not.toContain("https://");
+  });
+
+  it("works from expected-only context with no route", () => {
+    const cases = deriveFixUxTestCases({ expected: "the form submits successfully" });
+    expect(cases).toHaveLength(1);
+    expect(cases[0]).not.toContain("Navigate to");
+    expect(cases[0]).toContain("the form submits successfully");
+  });
+
+  it("returns [] when there's nothing browser-verifiable (caller skips UX)", () => {
+    expect(deriveFixUxTestCases(null)).toEqual([]);
+    expect(deriveFixUxTestCases(undefined)).toEqual([]);
+    // a pure server/tool fix with diagnosis but no route or expected behavior
+    expect(deriveFixUxTestCases({ rootCause: "off-by-one in parser", reproSteps: "call parse('')" })).toEqual([]);
+  });
+
+  it("does not leak the polluted feature acceptanceCriteria shape", () => {
+    // Even with an empty/whitespace route, it must not produce a bare URL nav.
+    const cases = deriveFixUxTestCases({ routeContext: "   ", expected: "ok" });
+    expect(cases[0]).not.toContain("Navigate to    ");
   });
 });
