@@ -153,8 +153,12 @@ describe("synthesizeWithMlx", () => {
       { ok: true, buf: new ArrayBuffer(0) },
       { ok: true, buf: VALID_AUDIO },
     ])
-
-    const result = await synthesizeWithMlx("Proceed.", baseConfig)
+    // Run synthesis + advance fake timers for the retry delays concurrently.
+    vi.useFakeTimers()
+    const p = synthesizeWithMlx("Proceed.", baseConfig)
+    await vi.runAllTimersAsync()
+    const result = await p
+    vi.useRealTimers()
     expect(result.audioBuffer.byteLength).toBe(VALID_AUDIO.byteLength)
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
@@ -165,8 +169,11 @@ describe("synthesizeWithMlx", () => {
       { ok: false, status: 500 },
       { ok: true, buf: VALID_AUDIO },
     ])
-
-    const result = await synthesizeWithMlx("Proceed.", baseConfig)
+    vi.useFakeTimers()
+    const p = synthesizeWithMlx("Proceed.", baseConfig)
+    await vi.runAllTimersAsync()
+    const result = await p
+    vi.useRealTimers()
     expect(result.provider).toBe("mlx")
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
@@ -175,8 +182,11 @@ describe("synthesizeWithMlx", () => {
     process.env.DPF_TTS_REFERENCE_HOST_ROOT = "/host/voice-storage"
     process.env.DPF_TTS_MLX_MAX_ATTEMPTS = "3"
     const fetchMock = stubSequence([{ ok: true, buf: SHORT_AUDIO }]) // always short
-
-    await expect(synthesizeWithMlx("x", baseConfig)).rejects.toThrow("VoiceSynthesisError [mlx]")
+    vi.useFakeTimers()
+    const p = synthesizeWithMlx("x", baseConfig)
+    await vi.runAllTimersAsync()
+    await expect(p).rejects.toThrow("VoiceSynthesisError [mlx]")
+    vi.useRealTimers()
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
