@@ -44,6 +44,7 @@ import {
 } from "@/lib/skills/runtime";
 import { recordSkillUsageEvents } from "@/lib/skills/usage-events";
 import { recallWikiContext } from "@/lib/wiki/recall";
+import { recordCoverageGap } from "@/lib/wiki/coverage-gap";
 import {
   classifyPerspective,
   extractPageTopic,
@@ -764,9 +765,22 @@ export async function sendMessage(input: {
         ? PERSPECTIVE_PAGE_KINDS[perspective.perspective]
         : undefined,
     });
+    // BI-741B6329: capture the WWWD coverage gap BEFORE the hint is folded into
+    // wikiContext below (which makes it non-null). Empty recall on a WWWD query
+    // means the org has no recorded stance on this topic yet.
+    const wwwdRecallEmpty = perspective.perspective === "wwwd" && !wikiContext;
     if (perspective.perspective) {
       const hint = buildPerspectiveHint(perspective.perspective, pageTopic);
       wikiContext = wikiContext ? `${hint}\n\n${wikiContext}` : hint;
+    }
+    // Continuous enrichment (EP-CORPUS-BOOTSTRAP): record the unanswered WWWD
+    // question as a deduplicated draft "open question" so the gap surfaces for
+    // review/enrichment. Fire-and-forget + fail-open — never block or break the
+    // response path. (Autonomous research to fill it is gated on open-Q#4.)
+    if (wwwdRecallEmpty && wikiOrg?.id) {
+      void recordCoverageGap({ organizationId: wikiOrg.id, query: input.content }).catch(
+        (e) => console.warn("[coverage-gap] record failed (fail-open):", e),
+      );
     }
 
     // Governed Hermes learning Slice 1: eligible skills go into the prompt
