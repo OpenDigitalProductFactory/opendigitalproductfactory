@@ -1,11 +1,16 @@
 // apps/web/app/(shell)/compliance/gaps/page.tsx
 import { getGapAssessment } from "@/lib/actions/reporting";
+import { intentStyle, type Intent } from "@/components/ui/report-kit";
 
-const GAP_COLORS: Record<string, string> = {
-  covered: "bg-green-400",
-  partial: "bg-yellow-400",
-  uncovered: "bg-red-400",
+const GAP_INTENT: Record<string, Intent> = {
+  covered: "success",
+  partial: "warning",
+  uncovered: "danger",
 };
+
+function coverageIntent(pct: number): Intent {
+  return pct >= 80 ? "success" : pct >= 50 ? "warning" : "danger";
+}
 
 export default async function GapsPage() {
   const gaps = await getGapAssessment();
@@ -36,7 +41,7 @@ export default async function GapsPage() {
                   <span className="text-sm font-semibold text-[var(--dpf-text)]">{reg.shortName}</span>
                   <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{reg.jurisdiction}</span>
                 </div>
-                <span className={`text-sm font-semibold ${reg.coveragePercent >= 80 ? "text-green-400" : reg.coveragePercent >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                <span className="text-sm font-semibold" style={{ color: intentStyle(coverageIntent(reg.coveragePercent)).fg }}>
                   {reg.coveredObligations}/{reg.totalObligations} covered ({reg.coveragePercent}%)
                 </span>
               </div>
@@ -48,7 +53,7 @@ export default async function GapsPage() {
                   {reg.obligations.map((obl) => (
                     <div key={obl.id} className="flex items-center justify-between py-1">
                       <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${GAP_COLORS[obl.status]}`} />
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: intentStyle(GAP_INTENT[obl.status] ?? "neutral").fg }} />
                         <span className="text-sm text-[var(--dpf-text)]">{obl.title}</span>
                         {obl.reference && <span className="text-[9px] text-[var(--dpf-muted)]">{obl.reference}</span>}
                       </div>
