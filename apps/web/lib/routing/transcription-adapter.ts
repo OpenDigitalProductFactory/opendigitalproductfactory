@@ -11,6 +11,11 @@
 
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
 import { InferenceError, classifyHttpError } from "@/lib/ai-inference";
+import {
+  voiceSttCallsTotal,
+  voiceSttDuration,
+  voiceSttErrors,
+} from "@/lib/operate/metrics";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -124,6 +129,13 @@ export const transcriptionAdapter: ExecutionAdapterHandler = {
         signal: AbortSignal.timeout(300_000), // transcription of long audio can take minutes
       });
     } catch (e) {
+      // Record the failed call so the Health tab sees STT calls firing even
+      // when the upstream is unreachable — otherwise a network outage looks
+      // identical to "no traffic at all".
+      const durationSeconds = (Date.now() - startMs) / 1000;
+      voiceSttDuration.observe({ provider: providerId, model: modelId }, durationSeconds);
+      voiceSttCallsTotal.inc({ provider: providerId, model: modelId, outcome: "error" });
+      voiceSttErrors.inc({ provider: providerId, error_type: "network" });
       throw new InferenceError(
         `Network error calling ${providerId} transcription: ${e instanceof Error ? e.message : String(e)}`,
         "network",
@@ -131,11 +143,16 @@ export const transcriptionAdapter: ExecutionAdapterHandler = {
       );
     }
     const inferenceMs = Date.now() - startMs;
+    voiceSttDuration.observe({ provider: providerId, model: modelId }, inferenceMs / 1000);
 
     if (!res.ok) {
+      voiceSttCallsTotal.inc({ provider: providerId, model: modelId, outcome: "error" });
+      voiceSttErrors.inc({ provider: providerId, error_type: `http_${res.status}` });
       const errBody = await res.text().catch(() => "");
       throw classifyHttpError(res.status, providerId, errBody, res.headers);
     }
+
+    voiceSttCallsTotal.inc({ provider: providerId, model: modelId, outcome: "ok" });
 
     const data = (await res.json()) as Record<string, unknown>;
 

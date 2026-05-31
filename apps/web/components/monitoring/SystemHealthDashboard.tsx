@@ -2,7 +2,7 @@
 
 import { MonitoringProvider, useMonitoringStatus } from "./MonitoringContext";
 import { AlertBanner } from "./AlertBanner";
-import { ServiceStatusGrid, DPF_SERVICES } from "./ServiceStatusGrid";
+import { ServiceStatusGrid } from "./ServiceStatusGrid";
 import { MetricGauge } from "./MetricGauge";
 import { MetricTimeSeries } from "./MetricTimeSeries";
 import { MetricStat } from "./MetricStat";
@@ -66,8 +66,9 @@ function SystemHealthContent() {
       {/* Firing alerts */}
       <AlertBanner />
 
-      {/* Service status grid */}
-      <ServiceStatusGrid services={DPF_SERVICES} />
+      {/* Service status grid — targets-driven (one tile per active scrape
+          target). See ServiceStatusGrid for the legacy fallback shape. */}
+      <ServiceStatusGrid />
 
       {/* Host resource gauges — only rendered when a host telemetry exporter is
           a configured scrape target (Linux node-exporter or Windows

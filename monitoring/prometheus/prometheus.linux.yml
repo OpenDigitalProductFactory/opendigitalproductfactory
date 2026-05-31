@@ -57,6 +57,16 @@ scrape_configs:
     static_configs:
       - targets: ["inngest:8288"]
 
+  # ─── ADP (payroll/HRIS MCP) ─────────────────────────────────
+  - job_name: "adp"
+    static_configs:
+      - targets: ["adp:8600"]
+
+  # ─── Redis (via redis-exporter sidecar) ─────────────────────
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+
   # ─── AI Inference ───────────────────────────────────────────
   # Docker Model Runner does not expose a Prometheus `/metrics` endpoint
   # (all paths 404). Inference health is tracked via the portal's

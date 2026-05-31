@@ -191,4 +191,58 @@ describe("transcriptionAdapter", () => {
     expect(result.raw).toBeDefined();
     expect((result.raw as any).segments).toBeDefined();
   });
+
+  // ── Prometheus metric instrumentation ────────────────────────────────────
+  // whisper-server doesn't expose a /metrics endpoint, so the Health tab's
+  // visibility into STT is the portal-side counters set here. Smoke-test
+  // they fire on the success and network-error paths so accidental refactors
+  // don't silently break observability.
+
+  it("records dpf_voice_stt_calls_total{outcome=ok} on success", async () => {
+    const { voiceSttCallsTotal } = await import("@/lib/operate/metrics");
+    const before = await getCounter(voiceSttCallsTotal, {
+      provider: "openai",
+      model: "whisper-1",
+      outcome: "ok",
+    });
+    stubFetchOk({ text: "ok" });
+    await transcriptionAdapter.execute(makeRequest());
+    const after = await getCounter(voiceSttCallsTotal, {
+      provider: "openai",
+      model: "whisper-1",
+      outcome: "ok",
+    });
+    expect(after).toBeGreaterThan(before);
+  });
+
+  it("records dpf_voice_stt_errors_total{error_type=network} on network failure", async () => {
+    const { voiceSttErrors } = await import("@/lib/operate/metrics");
+    const before = await getCounter(voiceSttErrors, {
+      provider: "openai",
+      error_type: "network",
+    });
+    mockFetch.mockRejectedValueOnce(new Error("ECONNREFUSED"));
+    try {
+      await transcriptionAdapter.execute(makeRequest());
+      expect.unreachable("Should have thrown");
+    } catch {
+      /* swallow — we only care that the counter incremented */
+    }
+    const after = await getCounter(voiceSttErrors, {
+      provider: "openai",
+      error_type: "network",
+    });
+    expect(after).toBeGreaterThan(before);
+  });
 });
+
+async function getCounter(
+  counter: { get(): Promise<{ values: Array<{ labels: Record<string, string>; value: number }> }> },
+  labels: Record<string, string>,
+): Promise<number> {
+  const snapshot = await counter.get();
+  const match = snapshot.values.find((v) =>
+    Object.entries(labels).every(([k, val]) => v.labels[k] === val),
+  );
+  return match?.value ?? 0;
+}
