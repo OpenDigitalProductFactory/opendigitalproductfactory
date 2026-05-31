@@ -141,9 +141,9 @@ describe("seedOrgWwwdCorpus", () => {
     expect(fake.versions).toHaveLength(1);
     expect(fake.versions[0]).toMatchObject({ versionId: result.versionId, versionNumber: 1 });
 
-    // Three materials, each linked to a wiki page + the version
-    expect(result.materialCount).toBe(3);
-    expect(fake.materials).toHaveLength(3);
+    // Four materials, each linked to a wiki page + the version
+    expect(result.materialCount).toBe(4);
+    expect(fake.materials).toHaveLength(4);
     for (const m of fake.materials) {
       expect(m.profileVersionId).toBe(result.versionId);
       expect(m.domainClass).toBe("plan-readiness");
@@ -152,8 +152,8 @@ describe("seedOrgWwwdCorpus", () => {
       expect(m.sourceRef.wikiPageId).toBeTruthy();
     }
 
-    // Three published, org-scoped, non-kernel wiki pages
-    expect(fake.wikiPages).toHaveLength(3);
+    // Four published, org-scoped, non-kernel wiki pages
+    expect(fake.wikiPages).toHaveLength(4);
     for (const p of fake.wikiPages) {
       expect(p.status).toBe("published");
       expect(p.organizationId).toBe(ORG);
@@ -162,6 +162,7 @@ describe("seedOrgWwwdCorpus", () => {
     expect(fake.wikiPages.map((p) => p.slug).sort()).toEqual([
       "org-how-we-decide",
       "org-mission",
+      "org-supply-chain",
       "org-who-we-serve",
     ]);
 
@@ -172,9 +173,9 @@ describe("seedOrgWwwdCorpus", () => {
     expect(mission!.pageKind).toBe("principle");
 
     // Every published page was embedded into Qdrant
-    expect(embed).toHaveBeenCalledTimes(3);
+    expect(embed).toHaveBeenCalledTimes(4);
     expect(result.embedded).toBe(true);
-    expect(result.wikiPageIds).toHaveLength(3);
+    expect(result.wikiPageIds).toHaveLength(4);
   });
 
   it("is idempotent — re-running produces no duplicate profile/version/material/page rows", async () => {
@@ -194,11 +195,11 @@ describe("seedOrgWwwdCorpus", () => {
 
     expect(fake.profiles).toHaveLength(1);
     expect(fake.versions).toHaveLength(1);
-    expect(fake.materials).toHaveLength(3);
-    expect(fake.wikiPages).toHaveLength(3);
+    expect(fake.materials).toHaveLength(4);
+    expect(fake.wikiPages).toHaveLength(4);
     // Body unchanged on the 2nd run → no extra revision, no re-embed
-    expect(fake.revisions).toHaveLength(3);
-    expect(embed).toHaveBeenCalledTimes(3);
+    expect(fake.revisions).toHaveLength(4);
+    expect(embed).toHaveBeenCalledTimes(4);
   });
 
   it("still seeds a non-empty corpus when no mission was captured (archetype fallback)", async () => {
@@ -210,7 +211,7 @@ describe("seedOrgWwwdCorpus", () => {
 
     const result = await seedOrgWwwdCorpus({ organizationId: ORG, db: fake.db, embed });
 
-    expect(result.materialCount).toBe(3);
+    expect(result.materialCount).toBe(4);
     const mission = fake.wikiPages.find((p) => p.slug === "org-mission");
     expect(mission).toBeDefined();
     expect(mission!.body.trim().length).toBeGreaterThan(20);
@@ -229,7 +230,64 @@ describe("seedOrgWwwdCorpus", () => {
 
     expect(result.embedded).toBe(false);
     // DB rows still created despite embedding failure
-    expect(fake.wikiPages).toHaveLength(3);
-    expect(fake.materials).toHaveLength(3);
+    expect(fake.wikiPages).toHaveLength(4);
+    expect(fake.materials).toHaveLength(4);
+  });
+
+  it("seeds an archetype-aware org-supply-chain stance page + material", async () => {
+    // Food-hospitality industry → its profile.supplyChain should drive the
+    // page body (perishables / cold-chain / local-supplier posture).
+    const fake = makeFakeDb({
+      businessContext: {
+        mission: "Feed our neighbourhood food worth coming back for.",
+        description: "We run a small neighbourhood restaurant.",
+        targetMarket: "locals and regulars",
+        industry: "food-hospitality",
+      },
+      archetype: { name: "Restaurant", category: "food-hospitality" },
+      orgName: "Corner Kitchen",
+    });
+
+    const result = await seedOrgWwwdCorpus({ organizationId: ORG, db: fake.db, embed });
+
+    const page = fake.wikiPages.find((p) => p.slug === "org-supply-chain");
+    expect(page).toBeDefined();
+    expect(page!.pageKind).toBe("stance");
+    expect(page!.status).toBe("published");
+    expect(page!.organizationId).toBe(ORG);
+    expect(page!.isKernel).toBe(false);
+    // Page body reflects food-hospitality's characteristic supply posture.
+    expect(page!.body.toLowerCase()).toMatch(/perish|cold[- ]chain|local/);
+    expect(page!.abstract.trim().length).toBeGreaterThan(20);
+
+    // Material follows the same linkage pattern as the other seeded materials.
+    const material = fake.materials.find((m) => m.materialId === `${result.profileId}:org-supply-chain`);
+    expect(material).toBeDefined();
+    expect(material!.sourceType).toBe("stance");
+    expect(material!.domainClass).toBe("plan-readiness");
+    expect(material!.direction).toBe("support");
+    expect(material!.evidenceGrade).toBe("B");
+    expect(material!.reviewStatus).toBe("approved");
+    expect(material!.promotionState).toBe("promoted");
+    expect(material!.sourceRef.wikiPageId).toBe(page!.id);
+    expect(material!.sourceRef.slug).toBe("org-supply-chain");
+    expect(material!.sourceRef.organizationId).toBe(ORG);
+  });
+
+  it("falls back to a brief generic supply-chain stance when the industry is unknown", async () => {
+    const fake = makeFakeDb({
+      businessContext: { mission: "M", description: null, targetMarket: null, industry: null },
+      archetype: null,
+      orgName: null,
+    });
+
+    await seedOrgWwwdCorpus({ organizationId: ORG, db: fake.db, embed });
+
+    const page = fake.wikiPages.find((p) => p.slug === "org-supply-chain");
+    expect(page).toBeDefined();
+    expect(page!.body.trim().length).toBeGreaterThan(20);
+    expect(page!.pageKind).toBe("stance");
+    // Generic body is intentionally short / honest — no fabricated specifics.
+    expect(page!.body.toLowerCase()).not.toMatch(/perish|cold[- ]chain|dropship/);
   });
 });
