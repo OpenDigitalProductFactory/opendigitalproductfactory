@@ -219,14 +219,20 @@ export async function promoteBacklogItemToBuildDraft(
   const plan = { ...planBase, processSize };
 
   // Work-kind derivation + fix-context carry-through.
-  // deriveBuildProcessType is the single source of truth for source→kind
-  // mapping; today it returns "fix" for bug-sourced BIs, "doc" for doc-gap,
-  // "chore" for body-marked chores, "feature" otherwise. For fixes we pull
-  // the originating PlatformIssueReport (linked from the triage-created BI
-  // body as "Source report: PIR-XXXXX") so the build starts from the real
-  // diagnosis (severity, route, error stack) instead of a blank brief.
-  // reproSteps/rootCause/fixApproach are left for ideate to fill.
-  const kind = deriveBuildProcessType({ source: item.source ?? null, body: item.body });
+  // deriveBuildProcessType is the single source of truth for "given this BI,
+  // what build-process type does it become?" — see build-process-matrix.ts.
+  // After BI-FD37173A (this PR) it reads the clean `BacklogItem.workType`
+  // closed enum: workType="bug" -> "fix", "doc" -> "doc", "chore" -> "chore",
+  // everything else (feature | tool | skill | refactor) -> "feature".
+  // Pre-2026-05-30 BIs whose source was "bug" were backfilled to
+  // workType="bug" in 20260530170000_backlog_item_work_type, so this is
+  // byte-identical for every existing row.
+  //
+  // For fixes we pull the originating PlatformIssueReport (linked from the
+  // triage-created BI body as "Source report: PIR-XXXXX") so the build starts
+  // from the real diagnosis (severity, route, error stack) instead of a blank
+  // brief. reproSteps/rootCause/fixApproach are left for ideate to fill.
+  const kind = deriveBuildProcessType({ workType: item.workType ?? null, body: item.body });
   let fixBrief: Record<string, unknown> | null = null;
   let originatingReportId: string | null = null;
   if (kind === "fix") {

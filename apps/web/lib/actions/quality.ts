@@ -151,7 +151,7 @@ export async function sendIssueReportToBuildStudioAsFix(
   // cron and this action both embed the public report id in the BI body.
   let itemId: string | null = null;
   const existingItem = await prisma.backlogItem.findFirst({
-    where: { source: "bug", body: { contains: report.reportId } },
+    where: { workType: "bug", body: { contains: report.reportId } },
     orderBy: { createdAt: "desc" },
     select: { itemId: true, status: true, triageOutcome: true, effortSize: true, activeBuild: { select: { buildId: true } } },
   });
@@ -188,7 +188,11 @@ export async function sendIssueReportToBuildStudioAsFix(
         body: bodyParts.join("\n\n"),
         status: "open",
         type: report.digitalProductId ? "product" : "portfolio",
-        source: "bug",
+        // Operator clicked the admin "Send to Build Studio as a fix" action —
+        // that is a human request acting on automated runtime evidence. The
+        // originating PIR is linked via the body + back-link.
+        source: "user-request",
+        workType: "bug",
         triageOutcome: "build",
         effortSize: "small",
         priority: SEVERITY_PRIORITY[report.severity ?? "medium"] ?? 3,

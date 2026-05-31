@@ -10,7 +10,7 @@ import { kernelGateDecisionsTotal } from "@/lib/operate/metrics";
 import * as crypto from "crypto";
 import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { mergeHappyPathStateIntoPlan, generateBuildId } from "@/lib/feature-build-types";
-import { BACKLOG_SOURCE_VALUES, BACKLOG_STATUS_VALUES, EPIC_STATUSES } from "@/lib/explore/backlog";
+import { BACKLOG_SOURCE_VALUES, BACKLOG_STATUS_VALUES, BACKLOG_WORK_TYPE_VALUES, EPIC_STATUSES } from "@/lib/explore/backlog";
 import {
   analyzePublicWebsiteBranding,
   fetchPublicWebsiteEvidence,
@@ -406,7 +406,8 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         type: { type: "string", enum: ["portfolio", "product"], description: "Item type" },
         status: { type: "string", enum: ["triaging", "open", "in-progress"], description: "Initial status (defaults to triaging). Non-triaging requires a paired triageOutcome." },
         triageOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Required when status is not triaging" },
-        source: { type: "string", enum: ["feature-gap", "bug", "tool-gap", "skill-gap", "doc-gap", "user-request", "automated-detection"], description: "What kind of gap or signal produced this item" },
+        workType: { type: "string", enum: [...BACKLOG_WORK_TYPE_VALUES], description: "What kind of work this is (closed enum). bug == defect; feature == new capability; chore | doc | tool | skill | refactor for the corresponding work categories." },
+        source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "Intake origin — how did this item arrive. user-request (a human asked for it) or automated-detection (the platform observed it). Defaults to user-request when omitted." },
         proposedOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Advisory suggestion for Scrum Master triage (non-binding)" },
         priority: { type: "integer", description: "Optional ranked priority within the open pool (lower = higher priority)." },
         effortSize: { type: "string", enum: ["small", "medium", "large", "xlarge"], description: "Required when triageOutcome=build (skipping triage). Otherwise applied if provided." },
@@ -414,7 +415,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         epicId: { type: "string", description: "Epic ID to link to (optional)" },
         itemId: { type: "string", description: "Optional custom item ID (e.g. BI-PORT-005). Auto-generated if omitted." },
       },
-      required: ["title", "type", "source"],
+      required: ["title", "type", "workType"],
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
@@ -577,7 +578,8 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         status: { type: "string", enum: [...BACKLOG_STATUS_VALUES], description: "Update status. For triaged items only; use triage_backlog_item to leave triaging." },
         priority: { type: "number", description: "Priority number (lower = higher priority)" },
         body: { type: "string", description: "Updated description" },
-        source: { type: "string", enum: ["feature-gap", "bug", "tool-gap", "skill-gap", "doc-gap", "user-request", "automated-detection"], description: "Reclassify the source signal" },
+        workType: { type: "string", enum: [...BACKLOG_WORK_TYPE_VALUES], description: "Reclassify what kind of work this is (closed enum)." },
+        source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "Reclassify the intake origin." },
         proposedOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Advisory recommendation; non-binding on triage" },
       },
       required: ["itemId"],
@@ -990,12 +992,14 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "list_backlog_items",
-    description: "List backlog items filtered by status, type, epic, claim state, or active-build state. Read-only. Returns semantic IDs (BI-*, EP-*) — never cuids.",
+    description: "List backlog items filtered by status, type, workType, source, epic, claim state, or active-build state. Read-only. Returns semantic IDs (BI-*, EP-*) — never cuids.",
     inputSchema: {
       type: "object",
       properties: {
         status: { type: "string", enum: ["triaging", "open", "in-progress", "done", "deferred"] },
         type: { type: "string", enum: ["portfolio", "product"] },
+        workType: { type: "string", enum: [...BACKLOG_WORK_TYPE_VALUES], description: "Filter by work-type (bug | feature | chore | doc | tool | skill | refactor)." },
+        source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "Filter by intake origin (user-request | automated-detection)." },
         epicId: { type: "string", description: "Semantic epic id (EP-*) to filter to" },
         unclaimed: { type: "boolean", description: "Only items with no user/agent claim" },
         hasActiveBuild: { type: "boolean", description: "Only items currently linked to a Build Studio build" },
@@ -4803,10 +4807,25 @@ export async function executeTool(
         : `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
       const status = typeof params["status"] === "string" ? params["status"] : "triaging";
       const triageOutcome = typeof params["triageOutcome"] === "string" ? params["triageOutcome"] : null;
-      const source = typeof params["source"] === "string" ? params["source"] : null;
+      // workType is required by the tool schema; default to "feature" defensively
+      // so a missing payload field surfaces as a Prisma validation error rather
+      // than a silent insert with workType=NULL.
+      const workType = typeof params["workType"] === "string" ? params["workType"] : null;
+      // source defaults to "user-request" (the MCP tool is human-driven by
+      // contract — agents calling it on behalf of an operator are forwarding a
+      // human request).
+      const source = typeof params["source"] === "string" ? params["source"] : "user-request";
       const proposedOutcome = typeof params["proposedOutcome"] === "string" ? params["proposedOutcome"] : null;
       const effortSize = typeof params["effortSize"] === "string" ? params["effortSize"] : null;
       const priority = typeof params["priority"] === "number" ? params["priority"] : null;
+
+      if (!workType) {
+        return {
+          success: false,
+          error: "workType is required",
+          message: "workType is required (bug | feature | chore | doc | tool | skill | refactor).",
+        };
+      }
 
       // Validate the status / triageOutcome pairing rule from the tool description:
       // "supply status+triageOutcome together only when explicitly skipping triage"
@@ -4858,7 +4877,8 @@ export async function executeTool(
           ...(status === "done" ? { completedAt: new Date() } : {}),
           ...(typeof params["body"] === "string" ? { body: params["body"] } : {}),
           ...(epicCuid ? { epicId: epicCuid } : {}),
-          ...(source ? { source } : {}),
+          workType,
+          source,
           ...(triageOutcome ? { triageOutcome } : {}),
           ...(proposedOutcome ? { proposedOutcome } : {}),
           ...(effortSize ? { effortSize } : {}),
@@ -5284,6 +5304,7 @@ export async function executeTool(
       }
       if (typeof params["priority"] === "number") data["priority"] = params["priority"];
       if (typeof params["body"] === "string") data["body"] = params["body"];
+      if (typeof params["workType"] === "string") data["workType"] = params["workType"];
       if (typeof params["source"] === "string") data["source"] = params["source"];
       if (typeof params["proposedOutcome"] === "string") data["proposedOutcome"] = params["proposedOutcome"];
       await prisma.backlogItem.update({ where: { itemId: String(params["itemId"]) }, data });
@@ -5413,6 +5434,8 @@ export async function executeTool(
       const where: Record<string, unknown> = {};
       if (typeof params["status"] === "string") where["status"] = params["status"];
       if (typeof params["type"] === "string") where["type"] = params["type"];
+      if (typeof params["workType"] === "string") where["workType"] = params["workType"];
+      if (typeof params["source"] === "string") where["source"] = params["source"];
       if (typeof params["epicId"] === "string" && params["epicId"].trim()) {
         const epicRow = await prisma.epic.findFirst({
           where: { OR: [{ epicId: params["epicId"].trim() }, { id: params["epicId"].trim() }] },
@@ -5443,6 +5466,8 @@ export async function executeTool(
           title: true,
           status: true,
           type: true,
+          workType: true,
+          source: true,
           priority: true,
           effortSize: true,
           activeBuildId: true,
@@ -5458,6 +5483,8 @@ export async function executeTool(
         title: i.title,
         status: i.status,
         type: i.type,
+        workType: i.workType,
+        source: i.source,
         priority: i.priority,
         effortSize: i.effortSize,
         triageOutcome: i.triageOutcome,
@@ -5520,6 +5547,8 @@ export async function executeTool(
           title: item.title,
           status: item.status,
           type: item.type,
+          workType: item.workType,
+          source: item.source,
           priority: item.priority,
           effortSize: item.effortSize,
           triageOutcome: item.triageOutcome,
