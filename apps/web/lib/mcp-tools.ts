@@ -99,7 +99,15 @@ type ToolExecutionContext = {
 
 /** MCP tool annotation hints (from MCP spec + n8n-MCP pattern).
  *  These let the agent router and governance layer make safety decisions
- *  without parsing the tool description text. */
+ *  without parsing the tool description text.
+ *
+ *  MCP-spec fields are advisory client hints, not server-side enforcement —
+ *  the grant system in agent-grants.ts is the authoritative check.
+ *  `irreversibleHint` is a DPF extension layered on top: every irreversible
+ *  tool is also destructive, but not every destructive tool is irreversible.
+ *  The envelope flow (Pseudo-User Contract spec §6.4 — BI-0F9C291C) uses
+ *  irreversibleHint to enforce the typed-phrase hard floor — irreversible
+ *  actions cannot be auto-approved by per-turn elevation. */
 export type ToolAnnotations = {
   /** Tool only reads data — never mutates state */
   readOnlyHint?: boolean;
@@ -109,6 +117,13 @@ export type ToolAnnotations = {
   idempotentHint?: boolean;
   /** Tool reaches outside the platform boundary (network, external API) */
   openWorldHint?: boolean;
+  /** DPF extension. Tool's effect cannot be undone by any existing inverse
+   *  tool — e.g. data deletion with no soft-delete column, a network send
+   *  that the recipient has already acted on, a financial transfer. Always
+   *  implies `destructiveHint: true`. Used by the Pseudo-User Contract
+   *  envelope flow (BI-0F9C291C) to require an explicit typed-phrase
+   *  confirmation regardless of per-turn elevation. */
+  irreversibleHint?: boolean;
 };
 
 export type ToolDefinition = {
@@ -135,6 +150,13 @@ export type ToolDefinition = {
   buildPhases?: BuildPhaseTag[] | null;
   /** MCP-spec tool annotations for governance and safety classification */
   annotations?: ToolAnnotations;
+  /** Pseudo-User Contract (spec §6.1 — BI-D9487754): the ScreenManifest
+   *  surface this tool is meaningful in. Used by the manifest CI lint to
+   *  validate that domain actions a manifest exposes have a matching tool
+   *  entry, and by the chat handler to filter the tool catalog by current
+   *  routeContext. Undefined = surface-agnostic (the tool is callable from
+   *  any context — most tools fall here). */
+  screenSurface?: string;
   /**
    * Predicate that lets an `executionMode: "proposal"` tool skip the proposal
    * card and execute immediately when the user has already pre-authorized the
@@ -270,13 +292,25 @@ export function resolveSavePhaseHandoffTransition(
 }
 
 /** Tools that perform destructive or irreversible actions beyond what
- *  sideEffect/executionMode already captures. */
+ *  sideEffect/executionMode already captures. Used by resolveAnnotations
+ *  to set destructiveHint on tools that don't carry an explicit
+ *  `annotations` block. */
 const DESTRUCTIVE_TOOLS = new Set([
   "deploy_feature",
   "execute_promotion",
   "transition_employee_status",
   "contribute_to_hive",
   "apply_platform_update",
+  // Pseudo-User Contract (BI-B2F7ABF5): build-phase and lifecycle ops that
+  // advance the FeatureBuild state machine are destructive in the
+  // can't-quietly-take-back sense. Promote/process write FeatureBuild rows
+  // and dispatch coworker work; approve_decomposition commits the
+  // decomposition that drives the Plan phase; start_build kicks off the
+  // sandbox/code-generation chain.
+  "promote_to_build_studio",
+  "process_backlog_for_build_studio",
+  "approve_decomposition",
+  "start_build",
 ]);
 
 export type ToolResult = {
