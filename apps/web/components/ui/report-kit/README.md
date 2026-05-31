@@ -23,8 +23,10 @@ import {
 | Primitive | Server-usable? | Use it for |
 |---|---|---|
 | `StatusBadge` | ✅ (pure) | status / severity / lifecycle pills |
+| `StatCard` | ✅ (pure) | KPI / metric tiles (value + delta + drill-down) |
 | `DataTable` | client¹ | tabular lists with sort, paging, empty/loading states |
 | `FilterBar` | client¹ | search + select + pill facets above a table |
+| `ExportButton` / `toCsv` | client | CSV export of rows (papaparse-backed) |
 | `statusColors` (`intentStyle`, `resolveIntent`, `STATUS_INTENT`) | ✅ | the one place status→color semantics live |
 
 ¹ `DataTable` / `FilterBar` are `"use client"` (they manage sort/page/onChange
@@ -130,6 +132,31 @@ One facet model, two modes.
 />
 ```
 
+## StatCard
+
+KPI tile — pure, server-usable. Delta intent auto-derives from direction
+(`up`→success, `down`→danger) and can be overridden (e.g. rising spend is bad).
+
+```tsx
+<StatCard label="Outstanding" value={`${sym}${formatMoney(total)}`}
+  hint="across 8 invoices" intent="warning"
+  delta={{ label: "+12%", direction: "up" }}
+  href="/finance/invoices" />
+```
+
+## ExportButton
+
+CSV export for a list/table, backed by papaparse. `toCsv` is exported and pure
+(unit-testable). Pairs with `DataTable` — pass the same rows.
+
+```tsx
+<ExportButton
+  rows={invoices}
+  columns={[{ key: "ref", header: "Invoice" }, { key: "amount", header: "Total" }]}
+  filename="invoices.csv"
+/>
+```
+
 ## Conventions
 
 - **No raw hex.** Colors come from `intentStyle` / `--dpf-*` tokens only.
@@ -142,6 +169,6 @@ One facet model, two modes.
 - **Phase 1 (this):** primitives + tests + this doc. Additive only.
 - **Phase 2:** migrate reference surfaces (complaints, finance/payments), grow
   `STATUS_INTENT`, fold `ChangeLaneStatusBadge` onto `StatusBadge`.
-- **Phase 3 (follow-up):** `StatCard`, `ExportButton` (papaparse / `@react-pdf`
-  are already installed), business-data charting decision, server-rendered
+- **Phase 3:** ✅ `StatCard` + `ExportButton` (CSV via papaparse). Remaining:
+  PDF export (`@react-pdf`), business-data charting decision, server-rendered
   `DataTable` URL mode.
