@@ -3,123 +3,104 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { renderHook, act, waitFor } from "@testing-library/react"
 import { useVoiceSynth } from "./useVoiceSynth"
 
-// Tracks every Audio element constructed during a test so we can assert the
-// gesture-unlock behaviour (created with no src, primed on a silent clip during
-// the user gesture, then swapped to the real blob after the fetch resolves).
-let audioInstances: MockAudio[] = []
-
-class MockAudio {
-  public onended: (() => void) | null = null
-  public onerror: (() => void) | null = null
-  public src = ""
-  public muted = false
-  public play = vi.fn().mockResolvedValue(undefined)
-  public pause = vi.fn()
-  constructor(src?: string) {
-    if (src) this.src = src
-    audioInstances.push(this)
-  }
+// ── AudioContext mock ───────────────────────────────────────────────────────
+class MockAudioBufferSource {
+  buffer: null = null
+  onended: (() => void) | null = null
+  connect = vi.fn()
+  start = vi.fn()
+  stop = vi.fn()
 }
 
-describe("useVoiceSynth", () => {
-  let originalAudio: typeof Audio
+class MockAudioContext {
+  state = "running"
+  currentTime = 0
+  sampleRate = 44100
+  createBuffer = vi.fn(() => ({} as AudioBuffer))
+  createBufferSource = vi.fn(() => new MockAudioBufferSource())
+  decodeAudioData = vi.fn(() =>
+    Promise.resolve({ duration: 2.0, numberOfChannels: 1, sampleRate: 24000 } as AudioBuffer),
+  )
+  resume = vi.fn()
+  destination = {} as AudioDestinationNode
+}
+
+function makeChunk() {
+  const wavBytes = new Uint8Array(44).fill(0)
+  const length = wavBytes.length
+  const buf = new Uint8Array(4 + length)
+  buf[0] = (length >> 24) & 0xff
+  buf[1] = (length >> 16) & 0xff
+  buf[2] = (length >> 8) & 0xff
+  buf[3] = length & 0xff
+  buf.set(wavBytes, 4)
+  return buf
+}
+
+describe("useVoiceSynth (streaming)", () => {
   let originalFetch: typeof fetch
-  let originalCreateURL: typeof URL.createObjectURL
-  let originalRevokeURL: typeof URL.revokeObjectURL
+  let originalAudioContext: typeof AudioContext
 
   beforeEach(() => {
-    audioInstances = []
-    originalAudio = global.Audio
     originalFetch = global.fetch
-    originalCreateURL = URL.createObjectURL
-    originalRevokeURL = URL.revokeObjectURL
-    global.Audio = MockAudio as unknown as typeof Audio
-    URL.createObjectURL = vi.fn(() => "blob:mock-url")
-    URL.revokeObjectURL = vi.fn()
+    originalAudioContext = global.AudioContext
+    vi.spyOn(console, "warn").mockImplementation(() => {})
+    global.AudioContext = MockAudioContext as unknown as typeof AudioContext
   })
 
   afterEach(() => {
-    global.Audio = originalAudio
     global.fetch = originalFetch
-    URL.createObjectURL = originalCreateURL
-    URL.revokeObjectURL = originalRevokeURL
-    vi.clearAllMocks()
+    global.AudioContext = originalAudioContext
+    vi.restoreAllMocks()
   })
 
-  it("calls /api/voice/synthesize and plays the synthesized audio on success", async () => {
-    const mockBlob = new Blob(["audio"], { type: "audio/wav" })
+  it("calls /api/voice/synthesize/stream", async () => {
+    const chunk = makeChunk()
+    const readable = new ReadableStream({
+      start(controller) { controller.enqueue(chunk); controller.close() },
+    })
     global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      blob: () => Promise.resolve(mockBlob),
+      ok: true, body: readable,
+      headers: new Headers({ "X-Sentence-Count": "1" }),
     }) as unknown as typeof fetch
 
     const { result } = renderHook(() => useVoiceSynth())
-
-    await act(async () => {
-      await result.current.synthesize("Hello world")
-    })
+    await act(async () => { await result.current.synthesize("Hello world") })
 
     expect(global.fetch).toHaveBeenCalledWith(
-      "/api/voice/synthesize",
+      "/api/voice/synthesize/stream",
       expect.objectContaining({ method: "POST" }),
     )
-    // One audio element is created synchronously (gesture unlock) and reused.
-    expect(audioInstances).toHaveLength(1)
-    const audio = audioInstances[0]
-    // Primed on the silent clip during the gesture, then swapped to the blob.
-    expect(audio.play).toHaveBeenCalledTimes(2)
-    expect(audio.src).toBe("blob:mock-url")
-    expect(audio.muted).toBe(false)
-    await waitFor(() => expect(result.current.isPlaying).toBe(true))
   })
 
-  it("unlocks audio within the gesture before the async fetch resolves", async () => {
-    let resolveFetch: (v: unknown) => void = () => {}
-    global.fetch = vi.fn().mockReturnValue(
-      new Promise((r) => {
-        resolveFetch = r
-      }),
-    ) as unknown as typeof fetch
-
-    const { result } = renderHook(() => useVoiceSynth())
-
-    let pending: Promise<void> = Promise.resolve()
-    act(() => {
-      pending = result.current.synthesize("Hello")
-    })
-
-    // Before the fetch resolves, the audio element already exists and play()
-    // was called once (the silent-clip unlock) — this is what survives the
-    // autoplay policy after the await.
-    expect(audioInstances).toHaveLength(1)
-    expect(audioInstances[0].play).toHaveBeenCalledTimes(1)
-    expect(audioInstances[0].muted).toBe(true)
-
-    await act(async () => {
-      resolveFetch({
-        ok: true,
-        blob: () => Promise.resolve(new Blob(["a"], { type: "audio/wav" })),
-      })
-      await pending
-    })
-  })
-
-  it("sets isPlaying false and available false on 503", async () => {
+  it("marks available false on 503 tts_unavailable", async () => {
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 503,
+      ok: false, status: 503,
       json: () => Promise.resolve({ code: "tts_unavailable" }),
     }) as unknown as typeof fetch
 
     const { result } = renderHook(() => useVoiceSynth())
-
-    await act(async () => {
-      await result.current.synthesize("Hello")
-    })
+    await act(async () => { await result.current.synthesize("Hello") })
 
     await waitFor(() => {
       expect(result.current.available).toBe(false)
       expect(result.current.unavailableReason).toBe("Text-to-speech service is not running.")
     })
+  })
+
+  it("stop() aborts the stream and clears state", async () => {
+    let abortCalled = false
+    global.fetch = vi.fn().mockImplementation((_url: string, opts: RequestInit) => {
+      (opts.signal as AbortSignal).addEventListener("abort", () => { abortCalled = true })
+      return new Promise(() => {})
+    }) as unknown as typeof fetch
+
+    const { result } = renderHook(() => useVoiceSynth())
+    act(() => { void result.current.synthesize("Hello") })
+    await act(async () => { result.current.stop() })
+
+    expect(abortCalled).toBe(true)
+    expect(result.current.isPlaying).toBe(false)
+    expect(result.current.isSynthesizing).toBe(false)
   })
 })
