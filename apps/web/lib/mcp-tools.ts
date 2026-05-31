@@ -6872,6 +6872,21 @@ export async function executeTool(
         contributionReadiness = "low";
       }
 
+      // Surface canonical first-party palettes the agent should COMPOSE instead
+      // of hand-rolling (e.g. report-kit for reporting/data-display UX). Sourced
+      // from the in-code registry; each carries its governing kernel principle.
+      const { matchCanonicalPrimitives } = await import("@/lib/canonical-primitives");
+      const reusablePrimitives = matchCanonicalPrimitives(
+        `${featureDescription} ${domainConcepts.join(" ")} ${abstractionBoundary}`,
+      ).map((p) => ({
+        name: p.name,
+        path: p.path,
+        purpose: p.purpose,
+        exports: p.exports,
+        principle: p.principleSlug,
+        docs: p.docs,
+      }));
+
       const analysis = {
         scope: userScope,
         domainEntities,
@@ -6879,11 +6894,18 @@ export async function executeTool(
           ? "Feature is designed for a single use case."
           : "Domain-specific values should be stored as configuration rather than hardcoded."),
         contributionReadiness,
+        reusablePrimitives,
       };
+
+      const primitiveHint = reusablePrimitives.length
+        ? ` Compose the existing palette instead of hand-rolling: ${reusablePrimitives
+            .map((p) => `${p.name} (${p.exports.slice(0, 3).join(", ")}…; principle ${p.principle})`)
+            .join("; ")}.`
+        : "";
 
       return {
         success: true,
-        message: `Reusability: ${userScope} — ${domainEntities.length} parameterizable concept(s), contribution readiness: ${contributionReadiness}.`,
+        message: `Reusability: ${userScope} — ${domainEntities.length} parameterizable concept(s), contribution readiness: ${contributionReadiness}.${primitiveHint}`,
         data: analysis as unknown as Record<string, unknown>,
       };
     }
