@@ -85,6 +85,20 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     inbound: "success",
     outbound: "warning",
   },
+  // Compliance control implementation status (was raw Tailwind palette classes).
+  controlStatus: {
+    planned: "info",
+    "in-progress": "warning",
+    implemented: "success",
+    "not-applicable": "neutral",
+  },
+  // Compliance control effectiveness.
+  controlEffectiveness: {
+    effective: "success",
+    "partially-effective": "warning",
+    ineffective: "danger",
+    "not-assessed": "neutral",
+  },
   // Generic severity ramp, reusable by any surface that has none of its own.
   severity: {
     info: "info",
