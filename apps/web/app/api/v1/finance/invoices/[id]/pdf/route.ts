@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/api/auth-middleware";
 import { ApiError, apiError } from "@/lib/api/error";
 import { getInvoice } from "@/lib/actions/finance";
+import { getOrgIdentity } from "@/lib/org-identity";
 import { generateInvoicePdf, getInvoicePdfFilename } from "@/lib/invoice-pdf";
 
 export async function GET(
@@ -16,7 +17,8 @@ export async function GET(
     const invoice = await getInvoice(id);
     if (!invoice) throw apiError("NOT_FOUND", "Invoice not found", 404);
 
-    const pdfBuffer = await generateInvoicePdf(invoice);
+    const issuer = await getOrgIdentity();
+    const pdfBuffer = await generateInvoicePdf({ ...invoice, issuer });
     const filename = getInvoicePdfFilename(invoice.invoiceRef, invoice.account.name);
 
     return new Response(new Uint8Array(pdfBuffer), {
