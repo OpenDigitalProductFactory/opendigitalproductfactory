@@ -3,7 +3,7 @@
 - Status: **DRAFT** (planning artifact — wires existing substrate; no new schema)
 - Authored: 2026-05-31
 - Builds on: PR #1389 (isolated upgrade workspace), the existing `RuntimeTarget` model, the existing `nonprod-environment-lease` MCP surface, the existing dev-DB stack, and the existing `dpf-use-shared-nonprod-environment` skill.
-- BI cluster: BI-F7E02898 (auto-claim leases), BI-6701C6BF (active-candidate stack), BI-166C59F3 (local-CI gate), BI-AD949172 (janitor activation), BI-C05E79AF (skill auto-trigger)
+- BI cluster: BI-F7E02898 (auto-claim leases), BI-6701C6BF (active-candidate stack), BI-166C59F3 (local-CI gate), BI-AD949172 (janitor activation), BI-C05E79AF (skill auto-trigger), **BI-0856A4CE (install-time tier separation — the structural root)**, **BI-6B02FEE5 (Claude/Codex worktree-lifecycle parity)**
 - Epic: EP-WORKTREE-HYGIENE (extending — see §8 for whether to spin a dedicated EP)
 
 ---
@@ -62,11 +62,13 @@ The pattern: **the substrate exists for everything the operator is asking for; t
 
 The lifecycle is **already supported by today's substrate**. Today most steps are skipped: no lease at (1), no `pregate` at (3), no merge trigger at (6), no verification at (8-9), no gate check at (10).
 
-## 4. The 5 BIs — what each one wires
+## 4. The 7 BIs — what each one wires
 
 | BI | Surface | Adds |
 |---|---|---|
+| **BI-0856A4CE** | Installer (install-dpf.sh / install-dpf.ps1 + 'dpf install relocate') | **The structural root.** Splits the install into TWO trees: production install (read-only after setup, owned by the platform, lives under `~/.dpf/install/` or platform-conventional path) AND dev workspace (`~/dpf` or contributor's preferred root — where worktrees branch from). The conflation of these two roles is the single cause of every collision in §1. Until this lands, every other BI is fighting structure. |
 | **BI-F7E02898** | Claude Code, Codex, BS coworkers | SessionStart hook → `claim_nonprod_environment_lease`; SessionEnd → release. Every agent session shows up in the coordination map. |
+| **BI-6B02FEE5** | Claude Code + Codex + 'dpf worktree' CLI wrapper | Client-tool worktree-lifecycle parity. A `dpf worktree new/rm/list` wrapper that both clients call (via their own hooks); seeds MCP, claims lease, registers RuntimeTarget, refuses creation inside the production install path. Both clients behave the same regardless of which one the contributor uses. |
 | **BI-6701C6BF** | Compose + Inngest + UI | Long-lived `RT-DEV-PORTAL` at :3001 backed by dev DBs. Auto-merge-into-active-candidate Inngest job. Promotion gate: production self-upgrade refuses unless same SHA passed verification on active-candidate. `/ops/self-upgrade` shows both tiers. |
 | **BI-166C59F3** | Per-worktree script + pre-push hook | `pnpm run pregate` claims `local-integration-ci` lease, runs vitest + typecheck + next build, marks `gatePassed=true`. Pre-push hook refuses ungated pushes (with `DPF_SKIP_PREPUSH=1` bypass). |
 | **BI-AD949172** | Inngest scheduled + `/ops/dev-loop` UI | Worktree janitor (no commits + no PR + no lease + no build linkage → prune after grace). RuntimeTarget heartbeat sweep (stale `running` → `expired`). |
@@ -75,24 +77,34 @@ The lifecycle is **already supported by today's substrate**. Today most steps ar
 ## 5. Composition + ordering
 
 ```
-BI-F7E02898 (auto-claim) ─┬─→ BI-C05E79AF (skill auto-trigger reinforces it)
-                          │
-                          └─→ BI-AD949172 (janitor uses lease state to decide what to prune)
-                                       │
-BI-166C59F3 (local-CI) ────────────────┤
-                                       │
-BI-6701C6BF (active-candidate) ────────┴─→ Promotion gate to production self-upgrade
+BI-0856A4CE (install-time separation) ─── the STRUCTURAL ROOT; all others assume it
+        │
+        ├──→ BI-6B02FEE5 (client-tool parity: Claude + Codex behave identically
+        │                  against the new two-tree install layout)
+        │           │
+        │           └──→ BI-F7E02898 (auto-claim leases, per-client wiring)
+        │                       │
+        │                       ├──→ BI-C05E79AF (skill auto-trigger reinforces it)
+        │                       └──→ BI-AD949172 (janitor uses lease state to prune)
+        │
+        ├──→ BI-166C59F3 (local-CI gate runs in the dev workspace, never in install)
+        │
+        └──→ BI-6701C6BF (active-candidate stack ≠ production install; clean lineage)
+                        │
+                        └──→ Promotion gate to production self-upgrade
 ```
 
-Suggested build order:
+Suggested build order (revised):
 
-1. **BI-F7E02898** (auto-claim) — foundational. Once this lands, every subsequent BI has lease audit data to work from.
-2. **BI-AD949172** (janitor) — gives the operator one screen + one cleanup pass. Immediately shrinks the 63-worktree backlog.
-3. **BI-166C59F3** (local-CI gate) — pre-push enforcement; pairs naturally with the auto-claim lease.
-4. **BI-C05E79AF** (skill auto-trigger) — small, can land anywhere in the sequence.
-5. **BI-6701C6BF** (active-candidate stack) — biggest piece; needs the other tiers in place to be useful, and is the substantive promotion-gate enforcer.
+1. **BI-0856A4CE** (install-time separation) — the structural root. **Land first or every other BI is fighting collision-by-construction.** Includes the 'dpf install relocate' migration command so existing installs (including the founder's) move cleanly.
+2. **BI-6B02FEE5** (client-tool parity) — gives both Claude and Codex a uniform worktree wrapper that respects the new install/dev split. Without this, one client could still drop worktrees in the wrong place.
+3. **BI-F7E02898** (auto-claim leases) — both clients' hooks now have a shared substrate to call into. Foundational for the next two.
+4. **BI-AD949172** (janitor) — immediate visible cleanup; gives the operator one screen.
+5. **BI-166C59F3** (local-CI gate) — pre-push enforcement; pairs naturally with the auto-claim lease.
+6. **BI-C05E79AF** (skill auto-trigger) — small, can land anywhere in the sequence.
+7. **BI-6701C6BF** (active-candidate stack) — biggest piece; needs the other tiers in place to be useful, and is the substantive promotion-gate enforcer.
 
-Each BI is independently shippable. None require new schema.
+Each BI is independently shippable AFTER its predecessor in the chain. None require new schema (the install-time BI changes ON-DISK layout + PlatformConfig fields, but the existing models cover both).
 
 ## 6. What does NOT belong in this cluster
 
@@ -115,22 +127,80 @@ Filed under `EP-WORKTREE-HYGIENE` because the existing epic already owns the jan
 
 If the founder prefers a dedicated epic (e.g. `EP-DEV-LOOP-ISOLATION`) for surfacing in the backlog UI, the BIs can be re-linked cheaply — no body changes needed.
 
-## 9. Acceptance (cluster-level, when all 5 land)
+## 9. Acceptance (cluster-level, when all 7 land)
 
-- Mark's install: 63 worktrees → curated count after janitor's first cycle; one operator-facing UI shows every active surface.
+- Mark's install: migrated via `dpf install relocate` to the two-tree layout (production install at the platform path, dev workspace at `~/dpf`). 63 worktrees → curated count after janitor's first cycle; one operator-facing UI shows every active surface.
 - Starting a new Claude / Codex session in a worktree auto-creates a lease, visible in the coordination map within seconds.
 - A push from a worktree without a passing local-CI gate is refused (with bypass).
 - A PR merge to main lands on the active-candidate :3001 stack within 60s; verification runs; production self-upgrade waits for the gate.
 - `RT-BUILD-SANDBOX-FB-892ECD67` (and equivalents) no longer linger past their heartbeat.
 - Zero new schema. The substrate map in §2 stays accurate after the cluster ships — we just made it true.
 
-## 10. Worktree sweep snapshot (taken authoring this spec)
+## 10. Install-time tier separation (BI-0856A4CE — the structural root, expanded)
+
+The user's framing at session-end 2026-05-31: *"we need to consider the installation options, and how we move the development off a production worktree, and firmly into the sub prod worktree. This is where the collision is setup to happen from the beginning."*
+
+The current install pattern conflates three roles into one tree at `~/dpf`:
+
+1. **Production install** — what the running portal reads (docker-compose source, bind-mounts, the bytes the user pays for).
+2. **Dev tree** — the contributor's daily-driver branch + WIP + editor cwd.
+3. **Worktree base** — the `.git` directory that every `git worktree add` branches from.
+
+PR #1389's isolated upgrade workspace was role #1's escape hatch (the upgrade no longer touches the dev tree during a merge). But roles #2 and #3 still overlap on the SAME physical clone. The first wrong action — an agent or operator switching branches with uncommitted WIP, an agent creating a worktree at the wrong root, a self-upgrade racing operator commits — happens because the install IS the dev tree.
+
+**Target layout (BI-0856A4CE):**
+
+```
+~/.dpf/install/                          ← Production install (role #1)
+├── docker-compose.yml                   ← Bind-mounted into containers
+├── .env                                 ← Runtime config
+├── .upgrade-workspace/                  ← PR #1389's isolated merge target
+└── (... DPF source tree ...)            ← Read-only after setup
+
+~/dpf/                                   ← Dev workspace (roles #2 + #3)
+├── .git/                                ← Worktree base
+├── (... DPF source tree, contributor-writable ...)
+└── (active branch the contributor edits)
+
+~/dpf-worktrees/                         ← Created BY contributor work
+├── <topic-1>/
+└── <topic-2>/
+```
+
+The dev workspace and production install share a remote (github.com/...) but are physically separate clones. The `dpf install relocate` migration command does the one-shot split for existing installs without losing local commits or worktrees.
+
+Customer installs (non-contributor mode) only get role #1 — no dev workspace, no contributor prompts.
+
+## 11. Client-tool worktree-lifecycle parity (BI-6B02FEE5)
+
+Claude Code and Codex each ship their own worktree management. They differ in non-trivial ways:
+
+| Concern | Claude Code | Codex |
+|---|---|---|
+| Session hook mechanism | `.claude/settings.json` hooks (SessionStart, SessionStop, PreToolUse, etc.) | `~/.codex/config.toml` + startup wrapper script |
+| MCP config seeding | `.mcp.json` per worktree | `bearer_token_env_var` in `~/.codex/config.toml`; per-worktree MCP block |
+| Worktree creation surface | Slash commands + skill triggers (manual or auto) | Built-in `/worktree` command |
+| Agent identity for DCO sign-off | From `git config user.email` in worktree | Same, but reads from a different env path |
+| Default cwd after worktree creation | Claude may auto-cd via the slash command | Codex auto-cd's into the new worktree |
+
+A DPF-layer contract makes both clients call the same `dpf worktree new/rm/list` CLI wrapper. The wrapper:
+
+1. Refuses to create a worktree inside the production install path (`~/.dpf/install/`) — points the operator at the dev workspace.
+2. Creates the worktree under `<dev-workspace>-worktrees/<topic>/`.
+3. Runs `scripts/seed-worktree-mcp.sh` to write both `.mcp.json` (Claude) and the Codex MCP block.
+4. Sets `COMPOSE_PROJECT_NAME=dpf-<topic>` in the worktree's `.env`.
+5. Calls `mcp__dpf__register_runtime_target` (kind=`external-preview` or `ad-hoc-debug`).
+6. Calls `mcp__dpf__claim_nonprod_environment_lease` (kind=`local-integration-ci`, owner = `claude` or `codex` depending on caller, sessionId = client-provided).
+7. Returns the worktree path + lease id to the calling client, which then handles its own UX (auto-cd, open editor, etc.).
+
+Both clients now produce the same on-disk + DB state regardless of which CLI initiated the worktree.
+
+## 12. Worktree sweep snapshot (taken authoring this spec)
 
 For posterity (and as the janitor's first input when BI-AD949172 ships):
 
-- Total: 63 worktrees
-- With open PRs (preserve): ~3 (bs-ideate-dispatch [#1367 merged], corpus-enrichment [#1374], upgrade-workspace-isolation [#1389], plus this spec's own worktree)
-- Inactive-for-weeks candidates: ~50+
-- This thread alone added 4 worktrees today; 2 are still live (corpus-enrichment, upgrade-workspace-isolation pending PR-merge), 2 should be pruned post-merge (bs-ideate-dispatch already merged, perspective-voice-spec already pruned)
-
-The janitor pass run alongside this spec authoring removes the prune-now candidates and reports the rest.
+- Total: 63 worktrees → 60 after the manual conservative sweep alongside this spec authoring.
+- Pruned: `doc/tts-apple-silicon-local`, `fix/voice-recording-playback-mime`, `doc/voice-apple-silicon-retro` (all merged + clean).
+- With open PRs (preserve): ~4 (corpus-enrichment [#1374], upgrade-workspace-isolation [#1389], dev-loop-isolation-spec [this PR #1391], plus the post-merge `bs-ideate-dispatch` already pruned via the spec's earlier session).
+- Inactive-for-weeks unmerged candidates: ~50. Real cleanup needs BI-AD949172's no-commits-in-N-days + no-open-PR heuristics — manual pruning is too risky without those signals.
+- This thread alone created 4 worktrees today; net contribution after pruning + PR-merge cycles: 0 (acceptable steady state).
