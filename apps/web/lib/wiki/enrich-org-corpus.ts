@@ -36,20 +36,23 @@ import {
 } from "./embeddings";
 
 // ─── Trust → routing rules ──────────────────────────────────────────────────
-// Spec §4 routing rule, made concrete:
-//   first-party (operator typed)         → committed, grade A, approved+promoted
-//   derived    (extracted from upload)   → committed, grade B, approved+promoted
-//   researched (AI found, must be vetted)→ committed at the WikiPage level (so
-//                                          the operator can see the candidate),
-//                                          but the linked PerspectiveMaterial
-//                                          lands in draft+candidate state — it
-//                                          will NOT influence WWWD answers
-//                                          until a human promotes it.
+// FOUNDER DECISION (2026-05-31, BI-1378 / design §6): DRAFT BY DEFAULT so we can
+// review. EVERY enrichOrgCorpus output lands as draft + candidate — regardless
+// of trust — so a human reviews before it becomes authoritative. The ONLY
+// auto-publish path in the platform is the initial onboarding seed
+// (seed-org-wwwd-corpus.ts), which is a separate bootstrap, not this façade.
 //
-// Page status itself follows the existing commit-step convention: NEW pages
-// land as status="draft" regardless, NEW APPENDS to existing published pages
-// go straight in. Reviewers publish drafts via the existing review affordance.
-// We layer trust as PerspectiveMaterial state, NOT as a parallel page status.
+// Trust no longer changes review/promotion state; it only sets the evidence
+// grade + confidence weight (for later weighting) so the review surface can
+// still distinguish first-party facts from AI-found research:
+//   first-party (operator typed)       → draft, candidate, grade A
+//   derived     (extracted from upload)→ draft, candidate, grade B
+//   researched  (AI found, vetted)     → draft, candidate, grade C
+//
+// Page status follows the existing commit-step convention: NEW pages land as
+// status="draft"; appends to already-published pages go straight in. Reviewers
+// publish drafts via the existing review affordance (list_wiki_overlay_drafts).
+// We layer trust as PerspectiveMaterial grade, NOT as a parallel page status.
 
 export type EnrichmentTrust = "first-party" | "derived" | "researched";
 
@@ -61,17 +64,18 @@ type MaterialTrustShape = {
 };
 
 const TRUST_TO_MATERIAL: Record<EnrichmentTrust, MaterialTrustShape> = {
+  // Draft by default (BI-1378): trust sets grade/weight, NOT review state.
   "first-party": {
     evidenceGrade: "A",
     confidenceWeight: 0.85,
-    reviewStatus: "approved",
-    promotionState: "promoted",
+    reviewStatus: "draft",
+    promotionState: "candidate",
   },
   derived: {
     evidenceGrade: "B",
     confidenceWeight: 0.65,
-    reviewStatus: "approved",
-    promotionState: "promoted",
+    reviewStatus: "draft",
+    promotionState: "candidate",
   },
   researched: {
     evidenceGrade: "C",
@@ -450,13 +454,15 @@ export async function enrichOrgCorpus(
           },
           summary: row.abstract,
           freshness: "current",
-          // Re-enrichment of an existing material from a fresher source can
-          // upgrade the trust shape, but we never DOWNGRADE — a previously-
-          // approved material does not get demoted by a later researched feed.
-          ...(trustShape.reviewStatus === "approved"
+          // Enrichment never sets review/promotion state (draft by default,
+          // BI-1378) — and crucially never DEMOTES: if a human has since
+          // reviewed this material to approved/promoted, re-enrichment must
+          // preserve that. So on update we refresh only content-derived grading
+          // (evidenceGrade/confidenceWeight) and leave reviewStatus/promotionState
+          // untouched. trustShape.reviewStatus is always "draft" now, so this
+          // guard is belt-and-suspenders against a future non-draft trust shape.
+          ...(trustShape.reviewStatus === "draft"
             ? {
-                reviewStatus: trustShape.reviewStatus,
-                promotionState: trustShape.promotionState,
                 evidenceGrade: trustShape.evidenceGrade,
                 confidenceWeight: trustShape.confidenceWeight,
               }
