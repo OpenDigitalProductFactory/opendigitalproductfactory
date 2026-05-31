@@ -99,6 +99,38 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     ineffective: "danger",
     "not-assessed": "neutral",
   },
+  // Compliance module lifecycle statuses (were raw Tailwind palette classes).
+  complianceAudit: {
+    planned: "info",
+    "in-progress": "warning",
+    completed: "success",
+    cancelled: "neutral",
+  },
+  complianceAction: {
+    open: "warning",
+    "in-progress": "warning",
+    completed: "info",
+    verified: "success",
+    "not-applicable": "neutral",
+  },
+  complianceSubmission: {
+    draft: "neutral",
+    pending: "warning",
+    submitted: "info",
+    acknowledged: "success",
+    rejected: "danger",
+  },
+  compliancePolicy: {
+    draft: "neutral",
+    "in-review": "warning",
+    approved: "info",
+    published: "success",
+    retired: "neutral",
+  },
+  complianceRegulation: {
+    active: "success",
+    inactive: "danger",
+  },
   // Generic severity ramp, reusable by any surface that has none of its own.
   severity: {
     info: "info",
