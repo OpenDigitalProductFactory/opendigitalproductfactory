@@ -80,9 +80,13 @@ export async function syncPlatformVersionOnBoot(
  * container, which kills the orchestrating process mid-swap — so it can never
  * mark its own run succeeded. The NEW portal closes the loop here: any run
  * left "running" is resolved against the SHA we actually came up on. If the
- * deployed SHA matches the run's target, the swap landed → succeeded;
+ * deployed SHA matches the run's expected deployed identity, the swap landed → succeeded;
  * otherwise the run is an orphan → failed (also clears the stuck-"running"
  * state that would otherwise block all future triggers).
+ *
+ * In upstream mode `targetSha` is the upstream lineage marker. The deployed
+ * identity is the install-branch merge commit stored in `deployedSha` when the
+ * run is created; falling back to targetSha preserves local-mode and legacy rows.
  *
  * Single-host assumption: at boot, a "running" run belongs to the swap that
  * just recreated us, not a concurrent replica. Non-fatal.
@@ -99,15 +103,19 @@ export async function reconcileSelfUpgradeRunsOnBoot(
     let succeeded = 0;
     let failed = 0;
     for (const run of running) {
-      const target = run.targetSha ?? null;
-      if (deployedSha && target && target.toLowerCase() === deployedSha.toLowerCase()) {
+      const expectedDeployedSha = run.deployedSha ?? run.targetSha ?? null;
+      if (
+        deployedSha &&
+        expectedDeployedSha &&
+        expectedDeployedSha.toLowerCase() === deployedSha.toLowerCase()
+      ) {
         await completeRun(run.runId);
         succeeded++;
         logger.log(`[self-upgrade-reconcile] ${run.runId} -> succeeded (deployed ${deployedSha})`);
       } else {
         await failRun(
           run.runId,
-          `Reconciled on boot: orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} target=${target ?? "unknown"}`,
+          `Reconciled on boot: orchestrator did not complete the swap. deployed=${deployedSha ?? "unknown"} expected=${expectedDeployedSha ?? "unknown"} target=${run.targetSha ?? "unknown"}`,
         );
         failed++;
         logger.log(`[self-upgrade-reconcile] ${run.runId} -> failed (orphaned)`);

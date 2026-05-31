@@ -3,15 +3,44 @@ import {
   areOptionalStartupTasksEnabled,
   isInngestSelfSyncOnBootEnabled,
   isStartupModelRevalidationEnabled,
+  reconcileSelfUpgradeRunsOnBoot,
   warnIfLegacyHiveTokenEnvSet,
   syncPlatformVersionOnBoot,
 } from "./instrumentation";
 
 const syncPlatformVersionConfigMock = vi.fn();
+const getDeployedShaMock = vi.fn();
+const completeRunMock = vi.fn();
+const failRunMock = vi.fn();
+const selfUpgradeRunFindManyMock = vi.fn();
 
 vi.mock("@/lib/platform/version-config", () => ({
   syncPlatformVersionConfig: (...args: unknown[]) => syncPlatformVersionConfigMock(...args),
 }));
+
+vi.mock("@/lib/self-upgrade/completion", () => ({
+  getDeployedSha: () => getDeployedShaMock(),
+}));
+
+vi.mock("@/lib/self-upgrade/run-store", () => ({
+  completeRun: (...args: unknown[]) => completeRunMock(...args),
+  failRun: (...args: unknown[]) => failRunMock(...args),
+}));
+
+vi.mock("@dpf/db", () => ({
+  prisma: {
+    selfUpgradeRun: {
+      findMany: (...args: unknown[]) => selfUpgradeRunFindManyMock(...args),
+    },
+  },
+}));
+
+beforeEach(() => {
+  getDeployedShaMock.mockReset();
+  completeRunMock.mockReset();
+  failRunMock.mockReset();
+  selfUpgradeRunFindManyMock.mockReset();
+});
 
 describe("warnIfLegacyHiveTokenEnvSet", () => {
   let originalEnvToken: string | undefined;
@@ -82,6 +111,53 @@ describe("syncPlatformVersionOnBoot", () => {
     expect(error.mock.calls[0]![0]).toContain("[platform-version]");
     expect(error.mock.calls[0]![0]).toContain("Failed");
     expect(error.mock.calls[0]![1]).toBe(boom);
+  });
+});
+
+describe("reconcileSelfUpgradeRunsOnBoot", () => {
+  it("marks an upstream-mode run succeeded when deployed SHA matches expected deployed merge SHA", async () => {
+    getDeployedShaMock.mockResolvedValueOnce("merge-sha");
+    selfUpgradeRunFindManyMock.mockResolvedValueOnce([
+      { runId: "SUR-MERGE", deployedSha: "merge-sha", targetSha: "upstream-sha" },
+    ]);
+    completeRunMock.mockResolvedValueOnce({});
+    const log = vi.fn();
+    const error = vi.fn();
+
+    const result = await reconcileSelfUpgradeRunsOnBoot({ log, error });
+
+    expect(result).toEqual({ succeeded: 1, failed: 0 });
+    expect(completeRunMock).toHaveBeenCalledWith("SUR-MERGE");
+    expect(failRunMock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to targetSha for legacy/local rows without deployedSha", async () => {
+    getDeployedShaMock.mockResolvedValueOnce("same-sha");
+    selfUpgradeRunFindManyMock.mockResolvedValueOnce([
+      { runId: "SUR-LOCAL", deployedSha: null, targetSha: "same-sha" },
+    ]);
+    completeRunMock.mockResolvedValueOnce({});
+
+    const result = await reconcileSelfUpgradeRunsOnBoot({ log: vi.fn(), error: vi.fn() });
+
+    expect(result).toEqual({ succeeded: 1, failed: 0 });
+    expect(completeRunMock).toHaveBeenCalledWith("SUR-LOCAL");
+  });
+
+  it("fails an orphaned run with deployed, expected, and target evidence", async () => {
+    getDeployedShaMock.mockResolvedValueOnce("actual-sha");
+    selfUpgradeRunFindManyMock.mockResolvedValueOnce([
+      { runId: "SUR-ORPHAN", deployedSha: "expected-sha", targetSha: "upstream-sha" },
+    ]);
+    failRunMock.mockResolvedValueOnce({});
+
+    const result = await reconcileSelfUpgradeRunsOnBoot({ log: vi.fn(), error: vi.fn() });
+
+    expect(result).toEqual({ succeeded: 0, failed: 1 });
+    expect(failRunMock).toHaveBeenCalledWith(
+      "SUR-ORPHAN",
+      expect.stringContaining("deployed=actual-sha expected=expected-sha target=upstream-sha"),
+    );
   });
 });
 

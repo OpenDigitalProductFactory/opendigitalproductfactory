@@ -12,6 +12,7 @@ export async function createRun(params: {
   triggeredBy?: string;
   fromVersion?: string;
   toVersion?: string;
+  expectedDeployedSha?: string;
 }) {
   const runId = `SUR-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
   return prisma.selfUpgradeRun.create({
@@ -21,6 +22,7 @@ export async function createRun(params: {
       trigger: params.triggeredBy ?? "unknown",
       currentSha: params.fromVersion ?? null,
       targetSha: params.toVersion ?? null,
+      deployedSha: params.expectedDeployedSha ?? null,
     },
   });
 }
