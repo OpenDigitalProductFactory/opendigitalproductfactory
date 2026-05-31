@@ -10477,12 +10477,23 @@ export async function executeTool(
     case "run_ux_test": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, sandboxPort: true, brief: true } });
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, sandboxPort: true, brief: true, kind: true } });
       if (!build?.sandboxPort || !build.sandboxId || !build.brief) return { success: false, error: "Sandbox or brief not ready.", message: "Launch sandbox and save brief first." };
 
-      const brief = build.brief as { acceptanceCriteria?: string[] };
-      const testCases = (params.tests as string[] | undefined) ?? brief.acceptanceCriteria ?? [];
-      if (testCases.length === 0) return { success: false, error: "No test cases.", message: "No acceptance criteria or test cases to run." };
+      const { deriveFixUxTestCases } = await import("@/lib/explore/feature-build-types");
+      const brief = build.brief as {
+        acceptanceCriteria?: string[];
+        fixContext?: import("@/lib/explore/feature-build-types").FixContext;
+      };
+      // Explicit `tests` always win. Otherwise, for a fix build derive the
+      // assertion from the structured fix diagnosis (defect-gone on its route)
+      // rather than the polluted feature acceptanceCriteria. (BI-AC5CFDB0)
+      const testCases =
+        (params.tests as string[] | undefined) ??
+        (build.kind === "fix"
+          ? deriveFixUxTestCases(brief.fixContext)
+          : brief.acceptanceCriteria ?? []);
+      if (testCases.length === 0) return { success: false, error: "No test cases.", message: build.kind === "fix" ? "No fix context (route/expected) or test cases to verify." : "No acceptance criteria or test cases to run." };
 
       try {
         const BROWSER_USE_URL = process.env.BROWSER_USE_URL || "http://browser-use:8500/mcp";
