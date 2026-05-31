@@ -207,6 +207,13 @@ For each domain, define:
 - steward capability gate,
 - publishing read model.
 
+The **steward capability gate** is not a new role: it is a `PlatformCapability`
+entry (`capabilityId`) checked at the steward action boundary, exactly as other
+governed actions are gated. Each steward decision (link, merge, reject,
+create-new) is recorded as a `ToolExecution` carrying that `capabilityId` —
+reusing the existing tool-execution audit envelope rather than a bespoke
+steward-action log.
+
 ### 6.2 Source crosswalk
 
 Add a reusable crosswalk only after confirming no existing domain-specific
@@ -262,6 +269,18 @@ string-enum columns: register their values in `apps/web/lib/backlog.ts` and
 AGENTS.md §3, and constrain `trustTier` to the `TrustTier` set
 (`high | medium | low | unknown`) rather than a free string.
 
+**Referential integrity (polymorphic by design).** `(domain, canonicalId)` is a
+polymorphic pointer with no foreign key, because one table spans many canonical
+models. The cost is that the database cannot enforce the link: deleting a
+`CustomerAccount` does not cascade, and a merge must repoint crosswalk rows from
+the losing canonical id to the surviving one. The spec therefore requires
+application-level integrity: (a) the merge flow (§6.6) repoints all
+`MasterDataSourceRef` rows for the losing id, and (b) an orphan sweep reconciles
+crosswalk rows whose `canonicalId` no longer resolves. Whether the highest-volume
+domains (`customer-account`, `supplier`) instead warrant a typed nullable FK
+column for DB-enforced integrity is an open decision (§10) for
+`dpf-decision-via-kernel`, not settled here.
+
 ### 6.3 Match candidate queue
 
 Possible duplicates and source conflicts should become reviewable work:
@@ -300,6 +319,15 @@ Represent survivorship as config, not hidden code:
 | Industry/archetype | `StorefrontConfig.archetypeId` wins for portal vocabulary; imported industry is evidence only. |
 | Supplier payment terms | Finance-approved supplier record wins over imported bill/vendor text. |
 
+**Where the config lives.** "Config, not hidden code" means these rules are
+stored as governed rule-as-JSON, following the existing precedents
+(`EaDqRule.rule`, `PolicyRule`, `ApprovalRule`) rather than a new bespoke
+shape — a `rule` JSON payload scoped by `domain` + attribute class, with
+`severity` and lifecycle. The survivorship rule set is itself a mastered
+**reference-data domain** (§5.5): versioned, deactivatable, and usage-impact
+reported before change. It must not be a hardcoded constant that silently
+re-decides survivorship on deploy.
+
 ### 6.5 Data quality dimensions
 
 Data quality must be expressed as `TrustDimension[]` using the canonical
@@ -325,6 +353,24 @@ The three net-new MDM-specific dimensions must be added to the
 single registry), not introduced as an MDM-only vocabulary. They then surface
 in admin/steward views and coworker/tool payloads through the existing
 `TrustAssessment` envelope — no bespoke MDM quality shape.
+
+### 6.6 Merge audit and reversibility
+
+Doctrine §5.4 requires every merge to be audited and reversible where possible;
+this section places that requirement on existing substrate rather than a new
+audit table. A merge is a governed steward action and is recorded as a
+`ToolExecution` (+ `ToolExecutionReceipt`) carrying the steward `capabilityId`,
+the surviving and losing `canonicalId`s, and the field-level survivorship
+outcomes; authorization is captured in `AuthorizationDecisionLog` as for other
+gated actions.
+
+Reversibility requires a **pre-merge snapshot**: the losing record's attributes,
+its `MasterDataSourceRef` rows, and its relationships, captured as receipt
+evidence on that `ToolExecution` before mutation. Reversal repoints crosswalk
+rows back and restores the snapshot; it is itself a governed, audited steward
+action. Destructive hard-delete of the losing canonical row is deferred (§7
+step 3) until this snapshot/reversal path exists — until then a "merge" is a
+link + supersede, never a delete.
 
 ## 7. Implementation Sequence
 
@@ -374,3 +420,41 @@ in admin/steward views and coworker/tool payloads through the existing
   `TrustAssessment` envelope (`kind: "data-trust-vector"`) attached to the
   published read model's `DataSourceProvenance.trust` — not a bespoke MDM
   payload shape.
+- A steward merge produces an auditable `ToolExecution` with a pre-merge
+  snapshot, and crosswalk rows are repointed (not orphaned) to the surviving
+  canonical id.
+- Survivorship rules are stored as governed, versioned config — not a code
+  constant — and a change shows usage impact before it takes effect.
+
+## 10. Open Decisions and Backlog Linkage
+
+**Open decisions (for `dpf-decision-via-kernel`, not settled here):**
+
+- **Crosswalk integrity shape.** Polymorphic `(domain, canonicalId)` with
+  application-enforced integrity (this spec's default) vs. typed nullable FK
+  columns per high-volume domain for DB-enforced cascade. Trade-off: one
+  reusable table vs. referential safety on `customer-account`/`supplier`.
+- **Merge severity.** Whether v1 ever hard-deletes a losing canonical row once
+  the snapshot/reversal path exists, or permanently keeps it as a superseded
+  tombstone.
+
+**Backlog linkage.** Per DPF doctrine a spec is built against a backlog item,
+not floating intent. This design still needs an epic + sized BIs filed and
+promoted to Build Studio, sequenced per §7. One BI is **cross-spec**: adding
+`validityConformity`, `uniqueness`, and `relationshipIntegrity` to the
+`TrustDimensionKey` registry in
+`docs/superpowers/specs/2026-05-26-graph-data-trust-vector-design.md` must land
+before MDM consumes them, so it is a coordinated dependency, not an MDM-internal
+task. Status stays `draft` until the epic is filed and the two open decisions
+are resolved.
+
+## 11. Architecture Review Notes
+
+This spec passed two `dpf-architecture-review` passes. The first aligned trust
+vocabulary, identity crosswalk, and import-staging reuse (PR #1328). The second
+closed data-model integrity gaps the doctrine had promised but the foundation
+had not placed: polymorphic-crosswalk referential integrity (§6.2), merge
+audit/reversibility on the existing `ToolExecution` envelope (§6.6),
+survivorship config storage (§6.4), and the steward gate bound to
+`PlatformCapability` (§6.1). No new audit, config, or steward-action tables were
+introduced — each concern was placed on substrate that already exists.
