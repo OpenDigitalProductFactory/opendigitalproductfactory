@@ -12,12 +12,12 @@ import {
 
 describe("validateBacklogInput()", () => {
   it("returns null for a valid portfolio-type item", () => {
-    const input: BacklogItemInput = { title: "My item", type: "portfolio", status: "open" };
+    const input: BacklogItemInput = { title: "My item", type: "portfolio", workType: "feature", status: "open" };
     expect(validateBacklogInput(input)).toBeNull();
   });
 
   it("returns an error string for a product-type item missing digitalProductId", () => {
-    const input: BacklogItemInput = { title: "My item", type: "product", status: "open" };
+    const input: BacklogItemInput = { title: "My item", type: "product", workType: "feature", status: "open" };
     expect(validateBacklogInput(input)).toMatch(/digital product/i);
   });
 
@@ -25,6 +25,7 @@ describe("validateBacklogInput()", () => {
     const input: BacklogItemInput = {
       title: "My item",
       type: "product",
+      workType: "feature",
       status: "open",
       digitalProductId: "clxabc123",
     };
@@ -32,7 +33,7 @@ describe("validateBacklogInput()", () => {
   });
 
   it("returns an error for a blank title", () => {
-    const input: BacklogItemInput = { title: "   ", type: "portfolio", status: "open" };
+    const input: BacklogItemInput = { title: "   ", type: "portfolio", workType: "feature", status: "open" };
     expect(validateBacklogInput(input)).toMatch(/title/i);
   });
 });

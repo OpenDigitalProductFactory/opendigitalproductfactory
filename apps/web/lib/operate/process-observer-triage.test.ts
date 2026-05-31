@@ -25,9 +25,11 @@ describe("resolveBacklogTarget", () => {
 });
 
 describe("buildBacklogItemData", () => {
-  it("creates item with observer source", () => {
+  it("creates item with workType=bug, source=automated-detection", () => {
     const d = buildBacklogItemData(finding, "t1", "p1");
-    expect(d.source).toBe("process_observer");
+    // Process observer is an automated detector; every finding is bug-class.
+    expect(d.source).toBe("automated-detection");
+    expect(d.workType).toBe("bug");
     expect(d.itemId).toMatch(/^BI-OBS-/);
     expect(d.priority).toBe(2);
   });
