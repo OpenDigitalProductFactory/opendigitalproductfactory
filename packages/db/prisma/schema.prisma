@@ -3859,6 +3859,16 @@ model ToolExecution {
   receipt                 ToolExecutionReceipt?
   assuranceRun            AssuranceRun?
   documentLifecycleEvents DocumentLifecycleEvent[]
+  // Pseudo-User Contract (spec §6.5 + §8). Dual-principal audit + envelope:
+  // delegatingUserId is the human the coworker acted for (distinct from
+  // userId which is the executing identity); chatMessageId is the
+  // AgentMessage that initiated this execution (null for non-chat runs);
+  // envelopeId points to the CoworkerActionEnvelope that approved a
+  // destructive action (null for non-envelope executions).
+  delegatingUserId        String?
+  chatMessageId           String?
+  envelopeId              String?
+  envelope                CoworkerActionEnvelope?  @relation(fields: [envelopeId], references: [id])
 
   @@index([agentId, createdAt])
   @@index([userId, createdAt])
@@ -3869,6 +3879,37 @@ model ToolExecution {
   @@index([apiTokenId, createdAt(sort: Desc)])
   @@index([taskRunId, createdAt(sort: Desc)])
   @@index([skillId, createdAt(sort: Desc)])
+  @@index([envelopeId])
+  @@index([delegatingUserId, createdAt(sort: Desc)])
+}
+
+// Pseudo-User Contract (spec §6.4 + §8): destructive-action confirmation
+// envelope. A coworker proposes a destructive action via screen_propose_action;
+// the user approves/declines; the underlying tool executes (or not) and the
+// outcome is recorded. Lifecycle: proposed → approved|declined →
+// executed|failed|cancelled (resolved). Coworker identity is captured as
+// coworkerAgentId (Agent.agentId semantic id), matching the existing
+// ToolExecution.agentId convention; Principal convergence is via
+// PrincipalAlias lookup at query time (AGENTS.md §11), not a direct FK.
+model CoworkerActionEnvelope {
+  id               String    @id @default(cuid())
+  coworkerAgentId  String
+  delegatingUserId String
+  threadId         String
+  chatMessageId    String?
+  manifestActionId String
+  argsJson         Json
+  rationale        String
+  status           String    @default("proposed")
+  createdAt        DateTime  @default(now())
+  resolvedAt       DateTime?
+
+  toolExecutions ToolExecution[]
+
+  @@index([threadId, createdAt(sort: Desc)])
+  @@index([coworkerAgentId, createdAt(sort: Desc)])
+  @@index([status])
+  @@index([chatMessageId])
 }
 
 model ToolExecutionReceipt {
