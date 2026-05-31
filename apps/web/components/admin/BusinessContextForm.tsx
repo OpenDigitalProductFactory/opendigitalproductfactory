@@ -9,6 +9,7 @@ import {
 import { EmailInput } from "@/components/ui/EmailInput";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { BusinessDocumentUpload } from "@/components/admin/BusinessDocumentUpload";
+import { MarketContextFields } from "@/components/admin/MarketContextFields";
 
 const COMPANY_SIZE_OPTIONS = [
   { value: "solo", label: "Solo", description: "Just me" },
@@ -237,6 +238,9 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
             Your stakeholders — the people who interact with your business. These aren't always "customers."
           </div>
         </label>
+
+        {/* Market & competitive context (optional) */}
+        <MarketContextFields />
 
         {/* Company size */}
         <div style={labelStyle}>
