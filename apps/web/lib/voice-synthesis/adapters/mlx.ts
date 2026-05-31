@@ -1,24 +1,22 @@
-// MLX TTS adapter — native-host Apple Silicon voice synthesis via mlx-audio.
+// MLX TTS adapter — host-native voice synthesis for Apple Silicon.
 //
-// Talks to an mlx-audio OpenAI-compatible server (POST /v1/audio/speech). On
-// macOS that server runs on the HOST, not in a container: Docker Desktop on
-// macOS has no Metal GPU passthrough, so cloning-grade neural TTS must run
-// host-native and is reached from the portal container via host.docker.internal.
-// This mirrors how DPF already runs local LLMs (Docker Model Runner).
+// On macOS, Docker Desktop has no Metal GPU passthrough, so cloning-grade TTS
+// must run as a native host process. This adapter talks to a host-native sidecar
+// (Chatterbox on :8771 by default, provisioned by setup-chatterbox-tts-macos.sh)
+// via host.docker.internal — the same pattern DPF uses for Docker Model Runner.
 //
-// Unlike the chatterbox adapter, mlx-audio has NO multipart upload endpoint —
-// it clones from a reference audio FILE PATH (ref_audio) that the server reads
-// off disk. We therefore pass the host-visible path of the stored reference
-// clip, computed from DPF_TTS_REFERENCE_HOST_ROOT + providerVoiceId. When that
-// root is not configured (so the host cannot see the clip), we fall back to a
-// fixed named voice (non-cloning) rather than failing.
+// The "mlx" name is historical; the adapter is provider-agnostic: it POSTs to
+// whichever OpenAI-compatible /v1/audio/speech server DPF_TTS_URL points at.
+// The current recommended Mac sidecar is Chatterbox (MIT, ~7s/utterance via MPS,
+// zero-shot cloning). CSM/mlx-audio is available as a fallback.
 //
 // Env:
-//   DPF_TTS_URL                  default http://host.docker.internal:8770
-//   DPF_TTS_MLX_MODEL            default mlx-community/csm-1b (cloning model)
-//   DPF_TTS_MLX_VOICE            default af_heart (fallback named voice)
-//   DPF_TTS_REFERENCE_HOST_ROOT  host path where the voice storage root is
-//                                visible to the mlx-audio process (enables cloning)
+//   DPF_TTS_URL                  sidecar URL — default http://host.docker.internal:8771
+//                                (Chatterbox). Change to :8770 for CSM/mlx-audio.
+//   DPF_TTS_MLX_MODEL            only used by CSM/mlx-audio path (ignored by Chatterbox)
+//   DPF_TTS_MLX_VOICE            fallback named voice when no reference clip is set
+//   DPF_TTS_REFERENCE_HOST_ROOT  host path of the voice storage root so the
+//                                sidecar can read reference clips off disk
 //
 // Spec: docs/superpowers/specs/2026-05-28-tts-apple-silicon-local-design.md
 
@@ -27,7 +25,9 @@ import type { VoiceSynthesisConfig } from "../types"
 import { VoiceSynthesisError, type RawSynthesisResult } from "./cartesia"
 
 function getTtsUrl(): string {
-  return process.env.DPF_TTS_URL ?? "http://host.docker.internal:8770"
+  // Default to Chatterbox on :8771 (provisioned by setup-chatterbox-tts-macos.sh).
+  // Use :8770 for the legacy CSM/mlx-audio sidecar (setup-mlx-tts-macos.sh).
+  return process.env.DPF_TTS_URL ?? "http://host.docker.internal:8771"
 }
 
 function getModel(): string {
