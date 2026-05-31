@@ -478,21 +478,21 @@ describe("triggerSelfUpgrade – dispatch", () => {
 
 // ─── triggerSelfUpgrade – maintenance window gate + emergency override ─────────
 
-describe("triggerSelfUpgrade – window gate", () => {
-  it("returns queued: false / outside-window when not in a maintenance window", async () => {
+describe("triggerSelfUpgrade – manual is not window-gated", () => {
+  it("QUEUES even when the store is open — the operator chose now", async () => {
+    // Manual trigger must run regardless of the (store-closed) window; the window
+    // only governs the unattended scheduled poll. (BI-F0E4272B)
     vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
 
     const result = await triggerSelfUpgrade();
 
-    expect(result).toEqual(
-      expect.objectContaining({ queued: false, reason: "outside-window" }),
-    );
-    expect(vi.mocked(inngest.send)).not.toHaveBeenCalled();
+    expect(result).toEqual({ queued: true });
+    expect(vi.mocked(inngest.send)).toHaveBeenCalled();
+    // It doesn't even consult the window for a manual trigger.
+    expect(vi.mocked(isUpgradeWindowOpen)).not.toHaveBeenCalled();
   });
 
-  it("force=true bypasses the window gate and dispatches with force in the event", async () => {
-    vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
-
+  it("emergency override dispatches with force (bypasses the quiescence drain)", async () => {
     const result = await triggerSelfUpgrade({ force: true });
 
     expect(result).toEqual({ queued: true });
@@ -503,9 +503,7 @@ describe("triggerSelfUpgrade – window gate", () => {
     );
   });
 
-  it("does not include force in the event for a normal in-window trigger", async () => {
-    vi.mocked(isUpgradeWindowOpen).mockReturnValue(true);
-
+  it("does not include force in the event for a normal manual trigger", async () => {
     await triggerSelfUpgrade();
 
     const sent = vi.mocked(inngest.send).mock.calls[0][0] as { data: Record<string, unknown> };
