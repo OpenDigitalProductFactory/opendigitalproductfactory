@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { isToolAllowedByGrants, getAgentToolGrants, getToolGrantMapping } from "./agent-grants";
+import {
+  GRANT_IMPLICATIONS,
+  expandGrants,
+  isToolAllowedByGrants,
+  getAgentToolGrants,
+  getToolGrantMapping,
+} from "./agent-grants";
 
 describe("TOOL_TO_GRANTS — Build / Sandbox entries", () => {
   it("write_sandbox_file requires sandbox_execute", () => {
@@ -507,5 +513,166 @@ describe("agent registry grant lookup", () => {
     expect(isToolAllowedByGrants("admin_query_db", grants ?? [])).toBe(true);
     expect(isToolAllowedByGrants("admin_read_file", grants ?? [])).toBe(true);
     expect(isToolAllowedByGrants("create_backlog_item", grants ?? [])).toBe(true);
+  });
+});
+
+// Pseudo-User Contract Phase 1 (BI-B2F7ABF5) — grant implications + finer
+// build-scoped grants. Verifies backwards-compat (existing roles still work)
+// and forward correctness (new finer grants resolve, do not over-grant).
+describe("GRANT_IMPLICATIONS — Pseudo-User Contract (BI-B2F7ABF5)", () => {
+  it("expandGrants is a no-op for grants with no implications", () => {
+    expect(expandGrants(["sandbox_execute"])).toEqual(["sandbox_execute"]);
+    expect(expandGrants(["registry_read", "file_read"])).toEqual(["registry_read", "file_read"]);
+  });
+
+  it("expandGrants adds build_evidence + build_phase_advance when backlog_write is held", () => {
+    const expanded = expandGrants(["backlog_write"]);
+    expect(expanded).toContain("backlog_write");
+    expect(expanded).toContain("build_evidence");
+    expect(expanded).toContain("build_phase_advance");
+  });
+
+  it("expandGrants adds build_lifecycle when build_promote is held", () => {
+    const expanded = expandGrants(["build_promote"]);
+    expect(expanded).toContain("build_promote");
+    expect(expanded).toContain("build_lifecycle");
+  });
+
+  it("implications are one-way — build_evidence does NOT imply backlog_write", () => {
+    const expanded = expandGrants(["build_evidence"]);
+    expect(expanded).not.toContain("backlog_write");
+    expect(expanded).not.toContain("build_phase_advance");
+  });
+
+  it("expandGrants does not duplicate implied grants already held explicitly", () => {
+    const expanded = expandGrants(["backlog_write", "build_evidence"]);
+    // expandGrants returns an array of unique entries.
+    expect(expanded.filter((g) => g === "build_evidence")).toHaveLength(1);
+  });
+
+  it("GRANT_IMPLICATIONS is readonly at the type layer", () => {
+    // Smoke: the exported constant carries the expected mappings. We don't
+    // mutate it at runtime (it's TS readonly + frozen by convention).
+    expect(GRANT_IMPLICATIONS).toMatchObject({
+      backlog_write: expect.arrayContaining(["build_evidence", "build_phase_advance"]),
+      build_promote: expect.arrayContaining(["build_lifecycle"]),
+    });
+  });
+});
+
+describe("Refactored build-scoped tools — backwards compat via implications", () => {
+  // Tools refactored from backlog_write → build_evidence (BI-B2F7ABF5).
+  it("record_execution_evidence accepts the new build_evidence grant", () => {
+    expect(isToolAllowedByGrants("record_execution_evidence", ["build_evidence"])).toBe(true);
+  });
+
+  it("record_execution_evidence still accepts the legacy backlog_write via implications", () => {
+    expect(isToolAllowedByGrants("record_execution_evidence", ["backlog_write"])).toBe(true);
+  });
+
+  it("record_execution_evidence still denies an unrelated grant", () => {
+    expect(isToolAllowedByGrants("record_execution_evidence", ["registry_read"])).toBe(false);
+    expect(isToolAllowedByGrants("record_execution_evidence", ["build_lifecycle"])).toBe(false);
+  });
+
+  it("save_build_notes and saveBuildEvidence accept build_evidence or legacy backlog_write", () => {
+    for (const tool of ["save_build_notes", "saveBuildEvidence"]) {
+      expect(isToolAllowedByGrants(tool, ["build_evidence"])).toBe(true);
+      expect(isToolAllowedByGrants(tool, ["backlog_write"])).toBe(true);
+      expect(isToolAllowedByGrants(tool, ["build_phase_advance"])).toBe(false);
+    }
+  });
+
+  // Tools refactored from backlog_write → build_phase_advance (BI-B2F7ABF5).
+  it("approve_decomposition accepts build_phase_advance or legacy backlog_write", () => {
+    expect(isToolAllowedByGrants("approve_decomposition", ["build_phase_advance"])).toBe(true);
+    expect(isToolAllowedByGrants("approve_decomposition", ["backlog_write"])).toBe(true);
+    expect(isToolAllowedByGrants("approve_decomposition", ["build_evidence"])).toBe(false);
+  });
+
+  it("propose_build_decomposition and record_decomposition_override follow the same pattern", () => {
+    for (const tool of ["propose_build_decomposition", "record_decomposition_override"]) {
+      expect(isToolAllowedByGrants(tool, ["build_phase_advance"])).toBe(true);
+      expect(isToolAllowedByGrants(tool, ["backlog_write"])).toBe(true);
+      expect(isToolAllowedByGrants(tool, ["registry_read"])).toBe(false);
+    }
+  });
+
+  // Tools refactored from build_promote → build_lifecycle (BI-B2F7ABF5).
+  it("promote_to_build_studio accepts build_lifecycle or legacy build_promote", () => {
+    expect(isToolAllowedByGrants("promote_to_build_studio", ["build_lifecycle"])).toBe(true);
+    expect(isToolAllowedByGrants("promote_to_build_studio", ["build_promote"])).toBe(true);
+    expect(isToolAllowedByGrants("promote_to_build_studio", ["backlog_write"])).toBe(false);
+  });
+
+  it("process_backlog_for_build_studio accepts build_lifecycle or legacy build_promote", () => {
+    expect(isToolAllowedByGrants("process_backlog_for_build_studio", ["build_lifecycle"])).toBe(true);
+    expect(isToolAllowedByGrants("process_backlog_for_build_studio", ["build_promote"])).toBe(true);
+  });
+
+  // Tools NOT refactored — should remain on their original grants.
+  it("record_external_development_evidence still requires backlog_write directly", () => {
+    expect(isToolAllowedByGrants("record_external_development_evidence", ["backlog_write"])).toBe(true);
+    expect(isToolAllowedByGrants("record_external_development_evidence", ["build_evidence"])).toBe(false);
+  });
+
+  it("update_backlog_item_status keeps backlog_write (not yet split for build-scope)", () => {
+    expect(isToolAllowedByGrants("update_backlog_item_status", ["backlog_write"])).toBe(true);
+    expect(isToolAllowedByGrants("update_backlog_item_status", ["build_phase_advance"])).toBe(false);
+  });
+});
+
+describe("Build-evidence-scoped coworker — narrow grant does not overreach", () => {
+  // A future coworker token issued with ONLY build_evidence (the goal of the
+  // refactor) must be able to record evidence but must NOT be able to e.g.
+  // create new backlog items or mutate non-build backlog state.
+  const buildEvidenceOnly = ["build_evidence"];
+
+  it("can call build-evidence tools", () => {
+    expect(isToolAllowedByGrants("record_execution_evidence", buildEvidenceOnly)).toBe(true);
+    expect(isToolAllowedByGrants("save_build_notes", buildEvidenceOnly)).toBe(true);
+    expect(isToolAllowedByGrants("saveBuildEvidence", buildEvidenceOnly)).toBe(true);
+  });
+
+  it("cannot call broader backlog mutation tools", () => {
+    expect(isToolAllowedByGrants("create_backlog_item", buildEvidenceOnly)).toBe(false);
+    expect(isToolAllowedByGrants("create_epic", buildEvidenceOnly)).toBe(false);
+    expect(isToolAllowedByGrants("update_backlog_item_status", buildEvidenceOnly)).toBe(false);
+    expect(isToolAllowedByGrants("retire_backlog_item", buildEvidenceOnly)).toBe(false);
+  });
+
+  it("cannot call build-phase-advance tools (different finer grant)", () => {
+    expect(isToolAllowedByGrants("approve_decomposition", buildEvidenceOnly)).toBe(false);
+    expect(isToolAllowedByGrants("propose_build_decomposition", buildEvidenceOnly)).toBe(false);
+  });
+
+  it("cannot call build-lifecycle tools (different finer grant)", () => {
+    expect(isToolAllowedByGrants("promote_to_build_studio", buildEvidenceOnly)).toBe(false);
+  });
+});
+
+describe("Existing coworkers — no behavior regression from the refactor", () => {
+  // The COO grants set (already covered above for sandbox denial) — confirm
+  // it ALSO retains access to the refactored build-evidence and build-phase
+  // tools via the backlog_write implication. This is the critical
+  // backwards-compat invariant.
+  const cooGrants = ["backlog_read", "backlog_write", "file_read", "registry_read", "decision_record_create"];
+
+  it("COO retains access to record_execution_evidence", () => {
+    expect(isToolAllowedByGrants("record_execution_evidence", cooGrants)).toBe(true);
+  });
+
+  it("COO retains access to approve_decomposition", () => {
+    expect(isToolAllowedByGrants("approve_decomposition", cooGrants)).toBe(true);
+  });
+
+  it("COO retains access to save_build_notes / saveBuildEvidence", () => {
+    expect(isToolAllowedByGrants("save_build_notes", cooGrants)).toBe(true);
+    expect(isToolAllowedByGrants("saveBuildEvidence", cooGrants)).toBe(true);
+  });
+
+  it("COO still cannot call build-lifecycle (build_promote not in their set)", () => {
+    // Sanity: backlog_write does NOT imply build_lifecycle (separate finer grant).
+    expect(isToolAllowedByGrants("promote_to_build_studio", cooGrants)).toBe(false);
   });
 });
