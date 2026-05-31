@@ -36,8 +36,10 @@ CB_HOME="${HOME}/.dpf/chatterbox"
 VENV_DIR="${CB_HOME}/venv"
 LOG_DIR="${CB_HOME}/logs"
 SERVER_DEST="${CB_HOME}/chatterbox_server.py"
+TEXT_DEST="${CB_HOME}/chatterbox_text.py"
 LAUNCH_SCRIPT="${CB_HOME}/run-chatterbox.sh"
 SERVER_SRC="${SCRIPT_DIR}/chatterbox_server.py"
+TEXT_SRC="${SCRIPT_DIR}/chatterbox_text.py"
 PLIST_TMPL="${SCRIPT_DIR}/com.dpf.chatterbox-tts.plist.tmpl"
 PLIST_LABEL="local.dpf-chatterbox-tts"
 PLIST_DEST="${HOME}/Library/LaunchAgents/${PLIST_LABEL}.plist"
@@ -58,6 +60,7 @@ die() { printf '[chatterbox setup] ERROR: %s\n' "$1" >&2; exit 1; }
 [ "$(uname -s)" = "Darwin" ] || die "macOS only (uname=$(uname -s))."
 [ "$(uname -m)" = "arm64" ] || die "Apple Silicon (arm64) only; this host is $(uname -m)."
 [ -f "$SERVER_SRC" ] || die "server source missing: ${SERVER_SRC}"
+[ -f "$TEXT_SRC" ] || die "text helper source missing: ${TEXT_SRC}"
 
 UV="$(command -v uv || true)"
 [ -n "$UV" ] || UV="/opt/homebrew/bin/uv"
@@ -91,6 +94,8 @@ log "deps installed"
 # --- Install server + launch script ------------------------------------------
 cp "$SERVER_SRC" "$SERVER_DEST"
 log "server: ${SERVER_DEST}"
+cp "$TEXT_SRC" "$TEXT_DEST"
+log "text helper: ${TEXT_DEST}"
 
 cat > "$LAUNCH_SCRIPT" <<EOF
 #!/usr/bin/env bash

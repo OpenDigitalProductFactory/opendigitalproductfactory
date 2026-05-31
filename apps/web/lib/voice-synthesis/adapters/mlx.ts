@@ -44,7 +44,7 @@ function getFallbackVoice(): string {
 // the reference clip at registration, so until it does we send a neutral
 // non-empty placeholder. Cloning still keys off ref_audio; an accurate
 // transcript only improves prosody alignment.
-const DEFAULT_REF_TEXT =
+export const DEFAULT_REF_TEXT =
   "This is a reference recording of my voice for the platform."
 
 export interface MlxSynthesisConfig extends VoiceSynthesisConfig {

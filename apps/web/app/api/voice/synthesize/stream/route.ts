@@ -8,10 +8,8 @@
 
 import { auth } from "@/lib/auth"
 import { prisma } from "@dpf/db"
-import { resolveVoiceStorageRoot } from "@/lib/voice-synthesis/storage-root"
 import { defaultProvider } from "@/lib/voice-synthesis/voice-service"
-import { resolveReferenceHostPath } from "@/lib/voice-synthesis/adapters/mlx"
-import * as path from "node:path"
+import { DEFAULT_REF_TEXT, resolveReferenceHostPath } from "@/lib/voice-synthesis/adapters/mlx"
 
 interface StreamBody {
   text: string
@@ -25,7 +23,7 @@ interface StreamBody {
 }
 
 function getTtsStreamUrl(): string {
-  const base = process.env.DPF_TTS_URL ?? "http://host.docker.internal:8770"
+  const base = process.env.DPF_TTS_URL ?? "http://host.docker.internal:8771"
   return `${base}/v1/audio/speech/stream`
 }
 
@@ -110,6 +108,7 @@ export async function POST(req: Request): Promise<Response> {
     const refPath = resolveReferenceHostPath(voiceProfile.providerVoiceId)
     if (refPath) {
       sidecarBody.ref_audio = refPath
+      sidecarBody.ref_text = DEFAULT_REF_TEXT
       if (settings?.exaggeration !== undefined) sidecarBody.exaggeration = settings.exaggeration
       if (settings?.cfgWeight !== undefined) sidecarBody.cfg_weight = settings.cfgWeight
       sidecarBody.temperature = settings?.temperature ?? 0.6
