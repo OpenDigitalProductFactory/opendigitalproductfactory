@@ -78,6 +78,31 @@ export type FeatureBrief = {
   fixContext?: FixContext;
 };
 
+/**
+ * Derive the UX-verification assertion(s) for a fix build from its diagnosis.
+ * A fix's UX check is "the reported defect no longer reproduces on the affected
+ * route" — NOT the feature `acceptanceCriteria` (which on a fix build can be
+ * polluted with fixContext prose, producing nonsense browser-use navigations
+ * like `https://fixContext.reproSteps`). Returns [] when there's nothing
+ * actionable to verify in a browser. (BI-AC5CFDB0)
+ */
+export function deriveFixUxTestCases(fixContext: FixContext | null | undefined): string[] {
+  if (!fixContext) return [];
+  const route = fixContext.routeContext?.trim();
+  const expected = fixContext.expected?.trim();
+  const actual = fixContext.actual?.trim();
+  // Nothing browser-verifiable (e.g. a pure server/tool fix with no route) →
+  // let the caller skip UX rather than invent a navigation target.
+  if (!route && !expected) return [];
+  const where = route ? `Navigate to ${route} and ` : "";
+  const wasClause = actual ? ` (previously: ${actual})` : "";
+  const expectClause = expected ? ` Expected: ${expected}.` : "";
+  return [
+    `${where}verify the previously-reported defect no longer occurs${wasClause}.` +
+      `${expectClause} The page must load without a runtime error overlay or blank-screen crash.`,
+  ];
+}
+
 export type TaxonomyAttributionView = {
   method: "rule" | "heuristic" | "ai_proposed" | "manual" | "invalid_portfolio";
   confidence: number;
