@@ -3,7 +3,9 @@
 export type BacklogItemInput = {
   title: string;
   type: "product" | "portfolio";
+  workType: BacklogWorkType;
   status: BacklogStatus;
+  source?: BacklogSource;
   priority?: number;
   body?: string;
   taxonomyNodeId?: string;
@@ -17,6 +19,8 @@ export type BacklogItemWithRelations = {
   title: string;
   status: string;
   type: string;
+  workType: string | null;
+  source: string | null;
   body: string | null;
   priority: number | null;
   epicId: string | null;
@@ -119,16 +123,38 @@ export const BACKLOG_TRIAGE_OUTCOMES = [
 ] as const;
 export type BacklogTriageOutcome = (typeof BACKLOG_TRIAGE_OUTCOMES)[number];
 
+// Pure intake-origin enum. The previous mixed-axis values
+// (feature-gap, bug, tool-gap, skill-gap, doc-gap) moved into
+// BACKLOG_WORK_TYPE_VALUES below; this enum now answers "how did it arrive"
+// not "what kind of work is it".
+//
+// New values are added only when a writer needs them
+// (single-source-of-truth + YAGNI).
 export const BACKLOG_SOURCE_VALUES = [
-  "feature-gap",
-  "bug",
-  "tool-gap",
-  "skill-gap",
-  "doc-gap",
   "user-request",
   "automated-detection",
 ] as const;
 export type BacklogSource = (typeof BACKLOG_SOURCE_VALUES)[number];
+
+// Closed work-type enum (the WHAT). Required on every new BacklogItem.
+// Aligned with the Conventional Commits subset that maps cleanly to today's
+// BI consumers: bug == fix, feature == feat, plus chore | doc | tool | skill |
+// refactor. perf | test | security | ci | style | revert are deferred until a
+// writer needs them.
+//
+// Adding a value requires updating this enum AND the mirror in
+// apps/web/lib/mcp-tools.ts (create_backlog_item, update_backlog_item,
+// list_backlog_items) in the same commit per AGENTS.md §3.
+export const BACKLOG_WORK_TYPE_VALUES = [
+  "bug",
+  "feature",
+  "chore",
+  "doc",
+  "tool",
+  "skill",
+  "refactor",
+] as const;
+export type BacklogWorkType = (typeof BACKLOG_WORK_TYPE_VALUES)[number];
 
 export const BACKLOG_EFFORT_SIZES = ["small", "medium", "large", "xlarge"] as const;
 export type BacklogEffortSize = (typeof BACKLOG_EFFORT_SIZES)[number];

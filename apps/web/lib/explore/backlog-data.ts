@@ -21,6 +21,8 @@ export const getBacklogItems = cache(async (): Promise<BacklogItemWithRelations[
       title: true,
       status: true,
       type: true,
+      workType: true,
+      source: true,
       body: true,
       priority: true,
       epicId: true,
