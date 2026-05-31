@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { groupFounderReviewCandidates, projectFounderReviewCandidate } from "./queue";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import type { WikiPerspective } from "@/lib/wiki/perspective-intent";
+import {
+  groupFounderReviewCandidates,
+  projectFounderReviewCandidate,
+  type FounderReviewCandidate,
+} from "./queue";
 
 describe("founder review queue", () => {
   it("projects unresolved decision interactions into review cards", () => {
@@ -19,7 +24,39 @@ describe("founder review queue", () => {
     expect(candidate.unresolvedReason).toBe("principle-gap");
     expect(candidate.unresolvedReasonLabel).toBe("Principle gap");
     expect(candidate.primaryActionLabel).toBe("Clarify founder principle");
+    expect(candidate.perspective).toBe("wwmd");
     expect(candidate.links.buildHref).toBe("/build?buildId=FB-1");
+    expect(candidate.links.decisionCanvasHref).toBe("/platform/ai/decisions/DI-1");
+  });
+
+  it("uses operating-policy wording for WWWD principle gaps", () => {
+    const candidate = projectFounderReviewCandidate({
+      interactionId: "DI-ORG",
+      question: "Should we change the guarantee?",
+      options: [],
+      outcomeType: "defer",
+      outcomePayload: { unresolvedReason: "principle-gap" },
+      buildId: null,
+      taskRunId: null,
+      routeContext: "/storefront",
+      createdAt: new Date("2026-05-26T12:00:00.000Z"),
+      profile: {
+        profileId: "profile-org",
+        name: "WWWD Organization",
+        kind: "organization",
+      },
+    });
+
+    expect(candidate.perspective).toBe("wwwd");
+    expect(candidate.profileLabel).toBe("WWWD Organization");
+    expect(candidate.primaryActionLabel).toBe("Clarify operating policy");
+  });
+
+  // Reconciliation with PR #1343 (BI-F5179C9E): the candidate's perspective
+  // field must use the canonical WikiPerspective enum. The default for a
+  // missing profile is "wwmd" (founder-review queue legacy default).
+  it("types `perspective` as the canonical WikiPerspective", () => {
+    expectTypeOf<FounderReviewCandidate["perspective"]>().toEqualTypeOf<WikiPerspective>();
   });
 
   it("groups projected candidates by human-readable reason", () => {
