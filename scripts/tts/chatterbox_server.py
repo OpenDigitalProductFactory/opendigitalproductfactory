@@ -34,7 +34,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from chatterbox.tts import ChatterboxTTS
 
-DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
+DEVICE = os.environ.get("DPF_CB_DEVICE") or ("mps" if torch.backends.mps.is_available() else "cpu")
 # Resolve ffmpeg from PATH (launchd prepends Homebrew via the launch script);
 # fall back to the common Homebrew location.
 FFMPEG = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
