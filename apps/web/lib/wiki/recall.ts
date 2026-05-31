@@ -65,10 +65,45 @@ async function runSeedSearch(
       db: prisma,
     });
   }
+
+  const limit = input.limit ?? 4;
+
+  // Perspective-biased path (WWMD/WWWD): search the preferred kinds first,
+  // then top up with a general search to `limit`, deduped by pageId. This keeps
+  // perspective answers grounded in stance/heuristic pages without ever
+  // returning fewer results than the plain generic search would.
+  if (input.preferredPageKinds && input.preferredPageKinds.length > 0) {
+    const preferred = await searchWikiPages({
+      query: input.query,
+      organizationId: input.organizationId,
+      limit,
+      scoreThreshold: input.scoreThreshold,
+      pageKinds: input.preferredPageKinds,
+    });
+    if (preferred.length >= limit) return preferred;
+
+    const general = await searchWikiPages({
+      query: input.query,
+      organizationId: input.organizationId,
+      limit,
+      scoreThreshold: input.scoreThreshold,
+    });
+    const seen = new Set(preferred.map((r) => r.pageId));
+    const merged = [...preferred];
+    for (const r of general) {
+      if (merged.length >= limit) break;
+      if (!seen.has(r.pageId)) {
+        merged.push(r);
+        seen.add(r.pageId);
+      }
+    }
+    return merged;
+  }
+
   return searchWikiPages({
     query: input.query,
     organizationId: input.organizationId,
-    limit: input.limit ?? 4,
+    limit,
     scoreThreshold: input.scoreThreshold,
   });
 }
@@ -86,6 +121,13 @@ export type RecallWikiContextInput = {
   limit?: number;
   /** Cosine score threshold per pass. Default 0.55 (matches `searchWikiPages`). */
   scoreThreshold?: number;
+  /**
+   * Soft bias toward these page kinds (perspective routing — WWMD/WWWD).
+   * When set, the vector path searches these kinds first, then tops up with a
+   * general search so a sparse corpus never yields fewer results than today.
+   * No effect on the PPR path (graph traversal isn't kind-filtered).
+   */
+  preferredPageKinds?: string[];
 };
 
 // ─── Pure formatter ─────────────────────────────────────────────────────────
