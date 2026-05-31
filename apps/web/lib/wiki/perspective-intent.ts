@@ -125,11 +125,12 @@ export function extractPageTopic(
     if (segment) {
       const humanised = segment
         .replace(/[-_]+/g, " ")
-        // Strip Next.js dynamic-segment brackets ([buildId] -> buildId). Use
-        // [^\]]+ rather than a lazy .+? so the match is unambiguous and
-        // linear-time — avoids the polynomial-ReDoS class (js/polynomial-redos)
-        // on a route value CodeQL treats as user-controlled.
-        .replace(/\[([^\]]+)\]/g, "$1")
+        // Strip Next.js dynamic-segment brackets ([buildId] -> buildId). Match
+        // the bracket characters with a linear character class rather than a
+        // pair-matching regex: any /\[...\]/ form backtracks at every "[" under
+        // the global flag (O(n^2) on adversarial input with no "]"), which is
+        // the polynomial-ReDoS class CodeQL flags on this user-controlled route.
+        .replace(/[[\]]/g, "")
         .trim();
       if (humanised) return humanised.slice(0, 120);
     }
