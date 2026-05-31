@@ -91,3 +91,15 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+
+  # Swap Prometheus to the contributor overlay so the Health tab gains a
+  # "Contributor Preview" tile while dev-portal is running. Customer installs
+  # never load this file, so they keep the substrate-default scrape set and
+  # never fire a false ContainerDown alert for the absent dev-portal target.
+  # See monitoring/prometheus/prometheus.dev.yml for the contributor scrape
+  # superset (it adds the `dev-portal` job on top of substrate parity).
+  prometheus:
+    volumes: !reset
+      - ./monitoring/prometheus/prometheus.dev.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus

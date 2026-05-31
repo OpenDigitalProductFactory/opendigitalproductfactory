@@ -5,6 +5,7 @@ import {
   deriveMonitoringSummary,
   derivePlatformSummary,
   deriveServiceStatuses,
+  isHostTelemetryConfigured,
   type MonitoringAlert,
   type PrometheusInstantResult,
   type ServiceDefinition,
@@ -143,6 +144,63 @@ describe("deriveServiceStatuses", () => {
       }),
     ]);
   });
+
+  it("hides optional services whose job is not a configured scrape target", () => {
+    // Customer install: prometheus.yml does NOT have dev-portal as a target,
+    // so the Contributor Preview tile must NOT render — otherwise customers
+    // see a phantom DOWN tile they can never fix.
+    const services: ServiceDefinition[] = [
+      { name: "Portal", job: "portal" },
+      { name: "Contributor Preview", job: "dev-portal", optional: true },
+    ];
+
+    const rows = deriveServiceStatuses({
+      services,
+      upTargets: [up("portal")],
+      loading: false,
+      offline: false,
+    });
+
+    expect(rows.map((r) => r.name)).toEqual(["Portal"]);
+  });
+
+  it("shows optional services once their job is a configured target", () => {
+    // Contributor install with --profile dev: dev-portal appears in `up`.
+    // The Contributor Preview tile must render and reflect the live state.
+    const services: ServiceDefinition[] = [
+      { name: "Portal", job: "portal" },
+      { name: "Contributor Preview", job: "dev-portal", optional: true },
+    ];
+
+    const rows = deriveServiceStatuses({
+      services,
+      upTargets: [up("portal"), up("dev-portal")],
+      loading: false,
+      offline: false,
+    });
+
+    expect(rows).toEqual([
+      expect.objectContaining({ name: "Portal", state: "up" }),
+      expect.objectContaining({ name: "Contributor Preview", state: "up", label: "UP" }),
+    ]);
+  });
+
+  it("keeps optional services visible while loading so they don't flicker on hydrate", () => {
+    const services: ServiceDefinition[] = [
+      { name: "Contributor Preview", job: "dev-portal", optional: true },
+    ];
+
+    const rows = deriveServiceStatuses({
+      services,
+      upTargets: null,
+      loading: true,
+      offline: false,
+    });
+
+    expect(rows).toEqual([
+      expect.objectContaining({ name: "Contributor Preview", state: "loading" }),
+    ]);
+  });
 });
 
 describe("HOST_RESOURCE_QUERIES", () => {
@@ -150,5 +208,27 @@ describe("HOST_RESOURCE_QUERIES", () => {
     expect(HOST_RESOURCE_QUERIES.compute).toContain("windows_cpu_time_total");
     expect(HOST_RESOURCE_QUERIES.memory).toContain("windows_os_physical_memory_free_bytes");
     expect(HOST_RESOURCE_QUERIES.storage).toContain("windows_logical_disk_free_bytes");
+  });
+});
+
+describe("isHostTelemetryConfigured", () => {
+  it("is true when node-exporter is a scrape target", () => {
+    expect(isHostTelemetryConfigured([up("node-exporter")])).toBe(true);
+  });
+
+  it("is true when windows-host is a scrape target, even if down", () => {
+    expect(isHostTelemetryConfigured([up("windows-host", "0")])).toBe(true);
+  });
+
+  it("is false on macOS Docker Desktop (no host telemetry exporter ships)", () => {
+    expect(
+      isHostTelemetryConfigured([up("portal"), up("postgres"), up("qdrant"), up("sandbox")]),
+    ).toBe(false);
+  });
+
+  it("is false for null/empty input", () => {
+    expect(isHostTelemetryConfigured(null)).toBe(false);
+    expect(isHostTelemetryConfigured(undefined)).toBe(false);
+    expect(isHostTelemetryConfigured([])).toBe(false);
   });
 });
