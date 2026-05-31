@@ -56,10 +56,21 @@ Do not start implementation until the active WWMD MCP Sprint 1 substrate and gen
 - `docs/superpowers/specs/2026-05-31-wwmd-explainability-layer-design.md`
 - `apps/web/lib/decision-perspective/*`
 - `apps/web/lib/wiki/principle-decide.ts`
+- `apps/web/lib/wiki/perspective-intent.ts` (lands via PR #1343, BI-F5179C9E — see "Reconciliation with PR #1343" below)
 - `apps/web/lib/mcp-tools.ts` `principle_decide` handler
 - `packages/db/prisma/schema.prisma` `DecisionInteraction`, `PerspectiveMaterial`, `WikiPage`, `WikiPageLink`, `WikiPageSource`, `RawSource`
 
 If Sprint 1 has not landed locally, implement this plan behind fixtures and typed adapters so it can attach cleanly after Sprint 1 merges.
+
+## Reconciliation with PR #1343 (BI-F5179C9E)
+
+PR #1343 ("route WWMD/WWWD perspective questions + resolve 'this'") merges first and ships the perspective primitives our spec was about to re-derive. There is no textual git conflict (`git merge-tree HEAD pr-1343` is clean), but the following semantic overlaps must be reconciled before our PR lands:
+
+- **Reuse `WikiPerspective`, do not parallel it.** PR #1343 exports `export type WikiPerspective = "wwmd" | "wwwd"` from `apps/web/lib/wiki/perspective-intent.ts`. Our canvas/queue/projection types must import this directly instead of declaring a sibling string-union. If a "custom" mode is genuinely needed at the projection layer, extend the canonical type in `perspective-intent.ts` (one commit, one BI footnote) rather than adding `WikiPerspective | "custom"` at the call sites.
+- **Reuse `classifyPerspective`, do not parallel it.** Where the canvas page or review inbox needs to derive a perspective hint from a free-text question (e.g. when a `DecisionInteraction` lacks a profile id), call `classifyPerspective(question)` from the same module. Re-implementing the WWMD/WWWD regex set is a single-source-of-truth violation.
+- **Honor the WWWD fall-through rule.** PR #1343 documents that WWWD currently falls back to platform/WWMD doctrine because product==business for DPF, and the seeded-doctrine caveat is surfaced in the prompt hint. Tasks 1, 3, and 5 below must surface the same caveat: WWWD cards/headings render the owner/operator-review label and a short "seeded from WWMD doctrine" note until the org-perspective corpus is populated. Do not pretend WWWD has its own settled doctrine when it does not.
+- **Echo the persona answering doctrine in canvas sanitization.** PR #1343 adds an `IDENTITY_BLOCK` perspective rule and a COO persona update: *"attribute Mark's recorded view to Mark; never invent his view; frame WWWD framing as a collective decision and flag the seeded-doctrine caveat."* The Decision Canvas projection must not generate prose that invents a Mark stance not present in the row's `sources`/`evidence`. Add a canvas-side test that asserts no "Mark thinks…" string appears in the default view unless the underlying material id is preserved in `audit`.
+- **Slice C3 reconciliation.** PR #1343 was filed standalone to reconcile with EP-WWMD-MCP slice C3 (plan #1304) later. Our plan IS the C3 experience layer. File a one-line follow-up BI on EP-WWMD-MCP recording that perspective-intent now lives at `lib/wiki/perspective-intent.ts` (not `decision-perspective/`) and that future moves should happen in one consolidating commit. Do not relocate it speculatively as part of this PR.
 
 ## Task 0 - Substrate Check
 
@@ -73,6 +84,7 @@ Files: read-only.
 - Confirm whether `questionFingerprint` has landed. If not, avoid depending on it outside optional links.
 - Confirm whether any WWWD/business-profile naming exists. If not, keep new service names generic and profile-aware.
 - If `apps/web/lib/wwmd-explainability/` exists in the worktree from pre-staged work, plan its relocation into `apps/web/lib/decision-perspective/` as the first commit of Task 1 (one move per file, no logic change, so the rename is reviewable on its own).
+- Check whether PR #1343 (`apps/web/lib/wiki/perspective-intent.ts`, `classifyPerspective`, `WikiPerspective`) has merged. If yes, every new module that touches a perspective string imports the type from there. If no, scaffold against the expected signature behind a typed adapter so the merge order does not matter.
 
 Verification:
 
@@ -80,7 +92,8 @@ Verification:
 git status --short --branch
 rg -n "wwmd_evaluate|DecisionInteraction|DecisionPerspectiveProfile|principle_decide|founder-review|PerspectiveMaterial" apps/web packages/db
 rg -n "DECISION_INTERACTION_GATE_SELECT|projectFounderReviewCandidate|FounderReviewUnresolvedReason" apps/web/lib
-ls apps/web/lib/decision-perspective apps/web/lib/founder-review apps/web/lib/wwmd-explainability 2>/dev/null
+rg -n "WikiPerspective|classifyPerspective" apps/web/lib
+ls apps/web/lib/decision-perspective apps/web/lib/founder-review apps/web/lib/wwmd-explainability apps/web/lib/wiki/perspective-intent.ts 2>/dev/null
 ```
 
 ## Task 1 - Decision Canvas Projection Service
@@ -103,7 +116,8 @@ Design:
 - Include a generic profile block in the view model:
   - `profileId`
   - `profileLabel`
-  - `perspectiveMode: "wwmd" | "wwwd" | "custom"`
+  - `perspective: WikiPerspective | null` — import `WikiPerspective` from `apps/web/lib/wiki/perspective-intent.ts` (PR #1343). `null` means a generic profile that is neither WWMD nor WWWD; do not introduce a parallel `"custom"` literal here.
+  - `seededFromWwmd: boolean` — true when `perspective === "wwwd"` and the row's profile has no own corpus, per the PR #1343 fall-through rule. Drives the "seeded from WWMD doctrine" caveat in the rendered card.
 - Output is an operator-safe view model:
   - `header`
   - `options`
@@ -121,6 +135,8 @@ Rules:
 - Do not query the DB from this module.
 - Do not use WWMD-specific names in output types unless the field is explicitly profile metadata.
 - Keep `recommendation`, `materialPulls`, and `sources` generic enough to carry either principle rows or organization material rows. Keep `principlePulls` only as a compatibility alias if existing UI depends on it.
+- Honor the PR #1343 persona doctrine: the projection must not synthesize an attribution to Mark that is not grounded in a `materialId` carried on the row. Any "Mark thinks…" string in the default view must trace back to a `source.materialId`; if none, render the neutral framing.
+- When `seededFromWwmd` is true, append a short "seeded from WWMD doctrine" note to the recommendation block so the operator does not mistake the fall-through for a settled WWWD position.
 
 Tests:
 
@@ -129,8 +145,10 @@ Tests:
 - profile metadata can identify WWMD and WWWD without branching the model
 - WWMD defer outcome produces founder-review next action
 - WWWD defer outcome produces owner/operator review next action
+- WWWD row with no own corpus sets `seededFromWwmd: true` and surfaces the caveat note
 - commandment conflict sets blocked state
 - raw MCP/tool language is hidden from default labels
+- no "Mark thinks…" string appears in the default view unless a source `materialId` backs it
 - audit model preserves ids
 
 Run:
@@ -204,7 +222,7 @@ Design:
 - Server page loads the decision row and calls the projection service.
 - Component renders the canvas blocks from the spec.
 - The route is generic. WWMD/WWWD labeling comes from the profile.
-- The page chooses review labels from `perspectiveMode`: founder review for WWMD, owner/operator review for WWWD/custom.
+- The page chooses review labels from the canvas's `perspective` field (typed `WikiPerspective | null` from `lib/wiki/perspective-intent.ts`): founder review for WWMD; owner/operator review for WWWD or null. When `seededFromWwmd` is true, render the "seeded from WWMD doctrine" caveat beside the heading.
 - Default view is dense, operational, and theme-aware.
 - Audit drawer is collapsed by default.
 
@@ -278,9 +296,9 @@ Files to extend (not create):
 
 Design - generalize in place:
 
-- Add an optional `perspectiveMode` and `profileLabel` field to `FounderReviewCandidate` (sourced from the row's `DecisionPerspectiveProfile` via the existing select). The persisted enum and queue shape are unchanged; only the projection grows.
+- Add an optional `perspective: WikiPerspective | null` and `profileLabel` field to `FounderReviewCandidate` (sourced from the row's `DecisionPerspectiveProfile` via the existing select). Import `WikiPerspective` from `apps/web/lib/wiki/perspective-intent.ts` (PR #1343); do not declare a sibling string-union. The persisted enum and queue shape are unchanged; only the projection grows.
 - Add a "View Decision Canvas" link on every card pointing at the Task 3 route (`/platform/ai/decisions/[interactionId]`).
-- Choose the page-level heading and per-card primary-action label from `perspectiveMode`: WWMD -> "Founder Review" / "Clarify founder principle"; WWWD or `custom` -> "Owner/Operator Review" / "Clarify operating policy".
+- Choose the page-level heading and per-card primary-action label from `perspective`: `"wwmd"` -> "Founder Review" / "Clarify founder principle"; `"wwwd"` or `null` -> "Owner/Operator Review" / "Clarify operating policy". When the row's profile has no own corpus, render the "seeded from WWMD doctrine" caveat on the card so the operator understands the fall-through (matches PR #1343's prompt-hint caveat).
 - If a profile-mode filter is needed in V1, add it as a URL query param (`?mode=wwmd|wwwd`) handled in the page, not as a second route.
 - Record-outcome action is split out (see below).
 
@@ -300,6 +318,8 @@ Tests (extend `page.test.tsx` and `queue.test.ts`):
 - each card renders a "View Decision Canvas" link to `/platform/ai/decisions/[interactionId]`
 - WWMD card primary action says "Clarify founder principle"
 - WWWD card primary action says "Clarify operating policy"
+- WWWD card with no own-corpus row renders the "seeded from WWMD doctrine" caveat
+- `perspective` field on `FounderReviewCandidate` is typed as the imported `WikiPerspective | null` (type-only assertion in `queue.test.ts` to catch any future sibling redeclaration)
 - if `conflict-review` is added: `normalizeReason("conflict-review")` round-trips, and the label/action maps both contain the key
 - raw outcome payload is not shown in default card
 - record-outcome button is disabled with the Sprint 1 gate tooltip until the MCP handler exists
@@ -327,7 +347,7 @@ Design:
 - Mark all outputs as draft/review-needed.
 - Return proposed `WikiPage` or `PerspectiveMaterial` candidates only as draft shapes. Do not write in the pure adapter.
 - Candidate output must target an explicit profile id; WWMD and WWWD capture use the same shape.
-- Candidate output must carry a `targetProfileId` and `targetPerspectiveMode` so review can route it to founder review or owner/operator review.
+- Candidate output must carry a `targetProfileId` and `targetPerspective: WikiPerspective | null` so review can route it to founder review or owner/operator review. Import `WikiPerspective` from `apps/web/lib/wiki/perspective-intent.ts` (PR #1343); do not introduce a sibling enum.
 
 Rules:
 
