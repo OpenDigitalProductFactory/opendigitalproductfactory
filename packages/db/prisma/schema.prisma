@@ -7978,6 +7978,23 @@ model ExchangeRate {
   @@index([baseCurrency, targetCurrency])
 }
 
+// ─── Customer Complaints ───────────────────────────────────────────
+
+model Complaint {
+  id           String   @id @default(cuid())
+  reference    String   @unique
+  customerName String
+  description  String
+  severity     String   @default("medium")
+  category     String   @default("Other")
+  status       String   @default("open")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
 model OrgSettings {
   id              String    @id @default(cuid())
   baseCurrency    String    @default("GBP")

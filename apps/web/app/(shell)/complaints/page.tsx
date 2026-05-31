@@ -1,8 +1,11 @@
 // apps/web/app/(shell)/complaints/page.tsx
 // Customer Complaint Tracker — built by AI Coworker (Build Studio FB-BB6567DC)
+import { listComplaints } from "@/lib/actions/complaints";
 import { ComplaintsClient } from "./ComplaintsClient";
 
-export default function ComplaintsPage() {
+export default async function ComplaintsPage() {
+  const complaints = await listComplaints();
+
   return (
     <div>
       <div className="mb-6">
@@ -11,7 +14,7 @@ export default function ComplaintsPage() {
           Track and manage customer complaints from submission to resolution
         </p>
       </div>
-      <ComplaintsClient />
+      <ComplaintsClient initialComplaints={complaints} />
     </div>
   );
 }
