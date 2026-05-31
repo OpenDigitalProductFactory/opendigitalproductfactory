@@ -196,6 +196,10 @@ export async function runSelfUpgrade(
     // targetSha column carries the upstream lineage marker (what the build
     // contains), falling back to the built stamp in local mode.
     toVersion: upstreamSha ?? builtStamp,
+    // deployedSha carries the expected runtime identity the rebuilt image will
+    // report after boot. In upstream mode this is the install-branch merge
+    // commit, not the upstream lineage marker above.
+    expectedDeployedSha: builtStamp,
   });
   await startRun(run.runId);
   await emitUpgradeEvent({ type: "upgrade.started", runId: run.runId });

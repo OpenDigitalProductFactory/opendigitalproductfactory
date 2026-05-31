@@ -8,13 +8,32 @@
  * with a real Postgres + Prisma; those are tracked separately under
  * BI-QUIESCE-002 follow-up integration work.
  */
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const prismaMock = vi.hoisted(() => ({
+  taskRunFindMany: vi.fn(),
+  buildPhaseRunFindMany: vi.fn(),
+  buildPhaseRunUpdateMany: vi.fn(),
+  toolExecutionFindMany: vi.fn(),
+}));
 
 vi.mock("@dpf/db", () => ({
-  prisma: {},
+  prisma: {
+    taskRun: {
+      findMany: (...args: unknown[]) => prismaMock.taskRunFindMany(...args),
+    },
+    buildPhaseRun: {
+      findMany: (...args: unknown[]) => prismaMock.buildPhaseRunFindMany(...args),
+      updateMany: (...args: unknown[]) => prismaMock.buildPhaseRunUpdateMany(...args),
+    },
+    toolExecution: {
+      findMany: (...args: unknown[]) => prismaMock.toolExecutionFindMany(...args),
+    },
+  },
 }));
 
 import {
+  captureActiveSessionBlockers,
   getQuiescenceConfig,
   invalidateQuiescenceCache,
   isTerminalQuiescenceStatus,
@@ -23,10 +42,19 @@ import {
   pickPrimaryBlocker,
   QuiescingError,
   QUIESCENCE_RUN_STATUSES,
+  reconcileTerminalBuildPhaseRuns,
   TERMINAL_QUIESCENCE_STATUSES,
   type ActiveSessionBlockers,
   type SurfaceBlocker,
 } from "./quiescence";
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  prismaMock.taskRunFindMany.mockResolvedValue([]);
+  prismaMock.buildPhaseRunFindMany.mockResolvedValue([]);
+  prismaMock.buildPhaseRunUpdateMany.mockResolvedValue({ count: 0 });
+  prismaMock.toolExecutionFindMany.mockResolvedValue([]);
+});
 
 describe("parseQuiescenceConfig", () => {
   it("returns default config on null", () => {
@@ -137,6 +165,50 @@ describe("phaseBudgetMs", () => {
 
   it("returns 5min default for unknown phase (defensive)", () => {
     expect(phaseBudgetMs("garbage")).toBe(5 * 60 * 1000);
+  });
+});
+
+describe("reconcileTerminalBuildPhaseRuns", () => {
+  it("closes open phase runs whose parent build is terminal or abandoned", async () => {
+    const now = new Date("2026-05-31T19:30:00.000Z");
+    prismaMock.buildPhaseRunUpdateMany.mockResolvedValueOnce({ count: 3 });
+
+    await expect(reconcileTerminalBuildPhaseRuns(now)).resolves.toBe(3);
+
+    expect(prismaMock.buildPhaseRunUpdateMany).toHaveBeenCalledWith({
+      where: {
+        completedAt: null,
+        build: {
+          OR: [
+            { phase: { in: ["complete", "failed", "abandoned"] } },
+            { abandonedAt: { not: null } },
+          ],
+        },
+      },
+      data: { completedAt: now },
+    });
+  });
+});
+
+describe("captureActiveSessionBlockers", () => {
+  it("repairs terminal build phase rows and only queries non-terminal parent builds as blockers", async () => {
+    const now = new Date("2026-05-31T19:30:00.000Z");
+
+    const snapshot = await captureActiveSessionBlockers({ now, thresholdMs: 300_000 });
+
+    expect(snapshot.hardBlockers).toBe(0);
+    expect(prismaMock.buildPhaseRunUpdateMany).toHaveBeenCalledOnce();
+    expect(prismaMock.buildPhaseRunFindMany).toHaveBeenCalledWith({
+      where: {
+        completedAt: null,
+        build: {
+          phase: { notIn: ["complete", "failed", "abandoned"] },
+          abandonedAt: null,
+        },
+      },
+      select: { buildId: true, phase: true, startedAt: true },
+      take: 25,
+    });
   });
 });
 

@@ -544,6 +544,28 @@ export type BlockerSignal =
 
 const TOOL_EXECUTION_RECENCY_MS = 5 * 60 * 1000;
 const EDGE_AGENT_PREFIX = "edge-node:";
+const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
+
+/**
+ * Repair stale phase-run rows from terminal builds before blocker capture.
+ * Abandon/fail paths that predate BI-2CC024DB can leave completedAt null, which
+ * otherwise makes quiescence defer forever on work that is no longer active.
+ */
+export async function reconcileTerminalBuildPhaseRuns(now: Date = new Date()): Promise<number> {
+  const result = await prisma.buildPhaseRun.updateMany({
+    where: {
+      completedAt: null,
+      build: {
+        OR: [
+          { phase: { in: [...TERMINAL_BUILD_PHASES] } },
+          { abandonedAt: { not: null } },
+        ],
+      },
+    },
+    data: { completedAt: now },
+  });
+  return result.count;
+}
 
 /**
  * Capture a snapshot of every surface that has in-flight work right now.
@@ -561,6 +583,8 @@ export async function captureActiveSessionBlockers(opts?: {
   const now = opts?.now ?? new Date();
   const thresholdMs = opts?.thresholdMs ?? TOOL_EXECUTION_RECENCY_MS;
   const surfaces: SurfaceBlocker[] = [];
+
+  await reconcileTerminalBuildPhaseRuns(now);
 
   // A-class: coworker reasoning loops (TaskRun in working/active)
   const activeTaskRuns = await prisma.taskRun.findMany({
@@ -595,7 +619,13 @@ export async function captureActiveSessionBlockers(opts?: {
 
   // A-class: BuildPhaseRun in flight (phase mid-execution)
   const inFlightPhases = await prisma.buildPhaseRun.findMany({
-    where: { completedAt: null },
+    where: {
+      completedAt: null,
+      build: {
+        phase: { notIn: [...TERMINAL_BUILD_PHASES] },
+        abandonedAt: null,
+      },
+    },
     select: { buildId: true, phase: true, startedAt: true },
     take: 25,
   });
