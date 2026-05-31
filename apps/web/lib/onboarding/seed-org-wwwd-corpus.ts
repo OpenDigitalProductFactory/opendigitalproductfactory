@@ -173,6 +173,19 @@ function buildPages(
       ].join("\n"),
       abstract: profile.howWeDecide,
     },
+    {
+      slug: "org-supply-chain",
+      title: "How we work with suppliers",
+      pageKind: "stance",
+      body: [
+        "# How we work with suppliers",
+        "",
+        profile.supplyChain,
+        "",
+        `This is ${orgLabel}'s starting supplier and supply-chain stance, derived from how this kind of business typically runs. Refine it as actual suppliers, vendors, and purchasing rhythms are captured.`,
+      ].join("\n"),
+      abstract: profile.supplyChain,
+    },
   ];
   return pages;
 }
