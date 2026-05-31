@@ -631,6 +631,26 @@ export function describePlanReviewFailure(planReview: ReviewResult): string {
   return `${base} (${round}: ${trajectory})${oscillation}`;
 }
 
+/** Build the operator-facing reason string for a failed designReview, including
+ *  iteration trajectory when present. Mirror of describePlanReviewFailure for
+ *  the design path (BI-CE49D82E). Same convergence/oscillation language so the
+ *  operator's mental model is consistent across phase gates. */
+export function describeDesignReviewFailure(designReview: ReviewResult): string {
+  const base = "Design review failed. Revise the design document and re-run reviewDesignDoc before advancing.";
+  const iter = designReview.iteration;
+  if (!iter) return base;
+  const round = `Round ${iter.round}`;
+  if (!iter.prior) {
+    return `${base} (${round})`;
+  }
+  const trajectory =
+    `${iter.prior.addressed} addressed, ${iter.prior.persisted} persist, ${iter.prior.newlySurfaced} new`;
+  const oscillation = iter.oscillating
+    ? " — issue count is not decreasing across rounds. Consider splitting this feature into smaller scopes before continuing to iterate."
+    : "";
+  return `${base} (${round}: ${trajectory})${oscillation}`;
+}
+
 // ─── Phase Transitions ──────────────────────────────────────────────────────
 
 const ALLOWED_TRANSITIONS: Record<BuildPhase, BuildPhase[]> = {
