@@ -752,8 +752,9 @@ if (!(options.body instanceof FormData)) {
 if (token) headers["Authorization"] = `Bearer ${token}`;
 ```
 
-Tracked as a follow-up backlog item; needs unit-test coverage for
-the FormData branch before merge.
+Tracked as **BI-CCBAECBC**. Fixed in `packages/api-client/src/client.ts`
+with vitest coverage (`client.test.ts`) for the FormData branch
+(asserts no JSON content-type is set, bearer token still attached).
 
 ### Identity convergence — links to Enterprise Auth addendum
 
