@@ -4234,6 +4234,32 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: true,
   },
+  {
+    name: "summarize_upgrade_impact",
+    description:
+      "On-demand, install-tailored \"What's in this update?\" summary (BI-C26F7EE1). Compares the upstream lineage marker (latest succeeded SelfUpgradeRun.targetSha) to the resolved upstream HEAD, classifies the change set by Conventional Commit type, scores each commit's relevance to this install (archetype, industry, customization paths, open quality-issue themes), and returns a headline + ordered top-N items (most impactful first) plus the full list and a 'touches your customizations' callout that doubles as a §5.0 merge-conflict early warning. Advisory only — never queues or applies an upgrade. Cacheable per (currentLineageSha, targetSha); set refresh=true to bypass.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        refresh: {
+          type: "boolean",
+          description: "Bypass the per-process cache and recompute. Default false.",
+        },
+        topN: {
+          type: "number",
+          description: "Cap on items in the headline list (default 8). The full list is always returned alongside.",
+        },
+        skipPhrasing: {
+          type: "boolean",
+          description: "Return only the deterministic shape (no LLM phrasing). Default false. Useful when an external client wants to render its own copy.",
+        },
+      },
+      required: [],
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -14273,6 +14299,42 @@ export async function executeTool(
           success: false,
           error: msg,
           message: `trigger_contributor_inventory_sync failed: ${msg}`,
+        };
+      }
+    }
+
+    case "summarize_upgrade_impact": {
+      // BI-C26F7EE1 — on-demand install-tailored upgrade impact summary.
+      // Read-only, advisory; does not queue or apply anything.
+      const refresh = params["refresh"] === true;
+      const skipPhrasing = params["skipPhrasing"] === true;
+      const topNRaw = params["topN"];
+      const topN =
+        typeof topNRaw === "number" && Number.isFinite(topNRaw) && topNRaw > 0
+          ? Math.floor(topNRaw)
+          : undefined;
+      try {
+        const { summarizeUpgradeImpact } = await import("@/lib/self-upgrade/impact");
+        const result = await summarizeUpgradeImpact({ refresh, skipPhrasing, topN });
+        if (!result.ok) {
+          return {
+            success: true,
+            message: result.detail,
+            data: { ok: false, reason: result.reason, detail: result.detail },
+          };
+        }
+        return {
+          success: true,
+          message: result.summary.phrased?.headline
+            ?? `Upgrade impact summary: ${result.summary.counts.total} commit(s) since the last lineage marker.`,
+          data: result.summary as unknown as Record<string, unknown>,
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          error: msg,
+          message: `summarize_upgrade_impact failed: ${msg}`,
         };
       }
     }
