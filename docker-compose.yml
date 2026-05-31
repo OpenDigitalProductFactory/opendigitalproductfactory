@@ -280,6 +280,17 @@ services:
       DPF_ENVIRONMENT: sandbox
     extra_hosts:
       - "host.docker.internal:host-gateway"   # required on native Linux Docker; harmless on Docker Desktop
+    # Without this healthcheck the sandbox process can wedge (e.g. on a
+    # background DB compaction loop) while the container keeps reporting
+    # "Up" — the Health tab flips to Critical via Prometheus, but `docker ps`
+    # still looks fine. Mirrors the portal service probe so wedges surface
+    # at the Docker layer too.
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
     depends_on:
       sandbox-init:
         condition: service_completed_successfully
