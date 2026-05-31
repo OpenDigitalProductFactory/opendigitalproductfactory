@@ -271,6 +271,9 @@ export async function runSelfUpgrade(
       targetSha: builtStamp,
       backupPath: process.env.PROMOTE_BACKUP_PATH ?? `/backups/self-upgrade/${run.runId}`,
       backupHostPath: process.env.DPF_BACKUPS_HOST_PATH ?? undefined,
+      composeEnvFileHostPath: hostInstallPathResolved
+        ? `${hostInstallPathResolved.replace(/\/$/, "")}/.env`
+        : undefined,
       healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
       promoterImage: config.promoterImage,
       dryRun: params.dryRun,
