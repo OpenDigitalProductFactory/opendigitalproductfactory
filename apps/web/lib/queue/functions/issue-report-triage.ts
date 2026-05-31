@@ -57,8 +57,13 @@ export const issueReportTriage = inngest.createFunction(
           }),
 
         getExistingTitles: async () => {
+          // Dedup pool = every bug-class BI regardless of intake origin.
+          // Pre-2026-05-30 BIs carried the legacy mixed source values
+          // (source IN ('bug','process_observer')); the workType backfill
+          // landed them all as workType='bug', so this single predicate
+          // returns the same row set.
           const items = await prisma.backlogItem.findMany({
-            where: { source: { in: ["bug", "process_observer"] } },
+            where: { workType: "bug" },
             select: { title: true },
           });
           return items.map((i) => i.title);
@@ -72,7 +77,7 @@ export const issueReportTriage = inngest.createFunction(
           const existing = await prisma.backlogItem.findFirst({
             where: {
               title: { contains: title, mode: "insensitive" },
-              source: "bug",
+              workType: "bug",
             },
           });
           if (existing) {
@@ -127,7 +132,7 @@ export const issueReportTriage = inngest.createFunction(
 
         getExistingTitles: async () => {
           const items = await prisma.backlogItem.findMany({
-            where: { source: "bug", title: { startsWith: "Issue report spike detected" } },
+            where: { workType: "bug", title: { startsWith: "Issue report spike detected" } },
             select: { title: true },
           });
           return items.map((i) => i.title);

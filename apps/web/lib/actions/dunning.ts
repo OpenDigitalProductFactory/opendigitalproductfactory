@@ -2,6 +2,8 @@
 
 import { prisma } from "@dpf/db";
 import { composeDunningEmail, sendEmail } from "@/lib/email";
+import { getOrgIdentity } from "@/lib/org-identity";
+import { resolveAppBaseUrl } from "@/lib/app-url";
 
 // ─── Default dunning sequence ─────────────────────────────────────────────────
 
@@ -90,6 +92,11 @@ export async function runDunning(): Promise<{ remindersSent: number }> {
   const sequence = await getDefaultDunningSequence();
   if (!sequence || sequence.steps.length === 0) return { remindersSent: 0 };
 
+  // Resolve sender identity + base URL once for the whole run.
+  const issuer = await getOrgIdentity();
+  const fromHeader = issuer?.email ? `${issuer.name} <${issuer.email}>` : undefined;
+  const baseUrl = resolveAppBaseUrl();
+
   // Find invoices that need dunning (not paid/void/draft)
   const invoices = await prisma.invoice.findMany({
     where: {
@@ -130,9 +137,8 @@ export async function runDunning(): Promise<{ remindersSent: number }> {
 
     // Compose and send reminder email
     if (recipientEmail) {
-      const payUrl = invoice.payToken
-        ? `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/pay/${invoice.payToken}`
-        : undefined;
+      const payUrl =
+        baseUrl && invoice.payToken ? `${baseUrl}/pay/${invoice.payToken}` : undefined;
 
       const emailParams = composeDunningEmail({
         to: recipientEmail,
@@ -145,7 +151,7 @@ export async function runDunning(): Promise<{ remindersSent: number }> {
         payUrl,
       });
 
-      await sendEmail(emailParams);
+      await sendEmail({ ...emailParams, from: fromHeader });
     }
 
     // Log the dunning action

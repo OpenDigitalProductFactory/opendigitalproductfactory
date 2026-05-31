@@ -961,6 +961,7 @@ model BacklogItem {
   taxonomyNodeId          String?
   epicId                  String?
   source                  String?
+  workType                String?
   triageOutcome           String?
   effortSize              String?
   proposedOutcome         String?

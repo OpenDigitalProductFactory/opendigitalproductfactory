@@ -140,8 +140,13 @@ export async function observeConversation(
     { digitalProductId, routeContext },
     {
       getExistingTitles: async () => {
+        // Dedup pool = every bug-class BI filed via automated detection.
+        // The pre-2026-05-30 process-observer drift value
+        // (source='process_observer') backfilled to workType='bug' +
+        // source='automated-detection', so this predicate returns the
+        // same row set without depending on the legacy literal.
         const items = await prisma.backlogItem.findMany({
-          where: { source: "process_observer" },
+          where: { workType: "bug", source: "automated-detection" },
           select: { title: true },
         });
         return items.map((i) => i.title);
