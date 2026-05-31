@@ -19,7 +19,32 @@ describe("founder review queue", () => {
     expect(candidate.unresolvedReason).toBe("principle-gap");
     expect(candidate.unresolvedReasonLabel).toBe("Principle gap");
     expect(candidate.primaryActionLabel).toBe("Clarify founder principle");
+    expect(candidate.perspectiveMode).toBe("wwmd");
     expect(candidate.links.buildHref).toBe("/build?buildId=FB-1");
+    expect(candidate.links.decisionCanvasHref).toBe("/platform/ai/decisions/DI-1");
+  });
+
+  it("uses operating-policy wording for WWWD principle gaps", () => {
+    const candidate = projectFounderReviewCandidate({
+      interactionId: "DI-ORG",
+      question: "Should we change the guarantee?",
+      options: [],
+      outcomeType: "defer",
+      outcomePayload: { unresolvedReason: "principle-gap" },
+      buildId: null,
+      taskRunId: null,
+      routeContext: "/storefront",
+      createdAt: new Date("2026-05-26T12:00:00.000Z"),
+      profile: {
+        profileId: "profile-org",
+        name: "WWWD Organization",
+        kind: "organization",
+      },
+    });
+
+    expect(candidate.perspectiveMode).toBe("wwwd");
+    expect(candidate.profileLabel).toBe("WWWD Organization");
+    expect(candidate.primaryActionLabel).toBe("Clarify operating policy");
   });
 
   it("groups projected candidates by human-readable reason", () => {

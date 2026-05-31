@@ -5,6 +5,8 @@ export type FounderReviewUnresolvedReason =
   | "ownership-gap"
   | "volunteers-dilemma";
 
+export type DecisionPerspectiveMode = "wwmd" | "wwwd" | "custom";
+
 export type DecisionInteractionQueueRow = {
   interactionId: string;
   question: string;
@@ -15,6 +17,11 @@ export type DecisionInteractionQueueRow = {
   taskRunId: string | null;
   routeContext: string | null;
   createdAt: Date;
+  profile?: {
+    profileId: string;
+    name: string;
+    kind: string;
+  } | null;
 };
 
 export type FounderReviewCandidate = ReturnType<typeof projectFounderReviewCandidate>;
@@ -53,20 +60,51 @@ function normalizeReason(value: unknown): FounderReviewUnresolvedReason {
     : "principle-gap";
 }
 
+export function perspectiveModeForProfile(
+  profile: DecisionInteractionQueueRow["profile"],
+): DecisionPerspectiveMode {
+  if (!profile) return "wwmd";
+  const name = profile.name.toLowerCase();
+  if (profile.kind === "platform" || name.includes("wwmd")) return "wwmd";
+  if (
+    profile.kind === "organization" ||
+    profile.kind === "customer" ||
+    profile.kind === "team" ||
+    name.includes("wwwd")
+  ) {
+    return "wwwd";
+  }
+  return "custom";
+}
+
+function actionForReason(
+  reason: FounderReviewUnresolvedReason,
+  mode: DecisionPerspectiveMode,
+): string {
+  if (reason === "principle-gap" && mode !== "wwmd") {
+    return "Clarify operating policy";
+  }
+  return ACTION_BY_REASON[reason];
+}
+
 export function projectFounderReviewCandidate(row: DecisionInteractionQueueRow) {
   const payload = asRecord(row.outcomePayload);
   const unresolvedReason = normalizeReason(payload.unresolvedReason);
+  const perspectiveMode = perspectiveModeForProfile(row.profile);
   return {
     id: row.interactionId,
     question: row.question,
     options: Array.isArray(row.options) ? row.options : [],
+    profileLabel: row.profile?.name ?? "WWMD Platform",
+    perspectiveMode,
     unresolvedReason,
     unresolvedReasonLabel: LABEL_BY_REASON[unresolvedReason],
-    primaryActionLabel: ACTION_BY_REASON[unresolvedReason],
+    primaryActionLabel: actionForReason(unresolvedReason, perspectiveMode),
     createdAt: row.createdAt.toISOString(),
     links: {
       buildHref: row.buildId ? `/build?buildId=${encodeURIComponent(row.buildId)}` : null,
       taskRunHref: row.taskRunId ? `/platform/ai/history?taskRunId=${encodeURIComponent(row.taskRunId)}` : null,
+      decisionCanvasHref: `/platform/ai/decisions/${encodeURIComponent(row.interactionId)}`,
       routeContext: row.routeContext,
     },
   };
