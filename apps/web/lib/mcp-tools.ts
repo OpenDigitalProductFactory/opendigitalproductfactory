@@ -4294,6 +4294,200 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
   },
+
+  // ─── Pseudo-User Contract: screen_* view-command tool family (BI-DF6079E9) ──
+  // Spec §6.2. Each tool returns a structured `data.event` payload describing
+  // the requested screen action; the chat SSE stream emits the payload and the
+  // client-side relay (AgentCoworkerPanel.tsx) dispatches it as a window
+  // CustomEvent that the active page handles via its registered ScreenManifest
+  // (BI-D9487754). Per-tool MCP annotations are exact — destructiveHint flags
+  // propose_action and dispatch_action explicitly; the rest are advisory UI
+  // mutations the user can still see and override.
+  //
+  // The SSE emission + window-event relay plumbing lands as the follow-on
+  // half of this BI. For now the handlers return the event payload
+  // structurally so the chat surface is queryable and grant-checked.
+
+  {
+    name: "screen_describe",
+    description:
+      "Pseudo-User Contract (spec §6.1, BI-D9487754/BI-DF6079E9). Return the active ScreenManifest summary for the chat's current routeContext — the list of selections, navigations, panels, forms, and domain actions the coworker may invoke on this page. Read-only. Call once at the start of a turn to discover what's available before dispatching screen_* actions. Returns the manifest's serialisable metadata; live handlers stay on the client.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  {
+    name: "screen_get_state",
+    description:
+      "Pseudo-User Contract. Return the current observable state of the active screen — selected entities (by selectionId), focused field id, open panel ids, current scroll anchor, current form values. Read-only. Source of truth is the page; this tool returns the snapshot the chat session plumbed in via screenState. Call screen_describe first for the manifest shape, then screen_get_state for the live values.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  },
+  {
+    name: "screen_select_entity",
+    description:
+      "Pseudo-User Contract. Change the active screen's selection — e.g. switch which FeatureBuild is currently focused in Build Studio. The selectionId must match one declared by the active ScreenManifest; the entityId must come from that selection's listSource. Dispatches via the chat SSE channel; the page applies the change through its registered handler.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selectionId: { type: "string", description: "Manifest selection id (e.g. \"build\")." },
+        entityId: { type: "string", description: "Id of the entity to select (from the manifest's listSource enumeration)." },
+      },
+      required: ["selectionId", "entityId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    screenSurface: "*",
+  },
+  {
+    name: "screen_navigate",
+    description:
+      "Pseudo-User Contract. Navigate to another route within the portal — e.g. /build → /storefront. Conditionally destructive: if the current page has unsaved form state the chat handler auto-wraps the call in an envelope (spec §6.4). Cross-coworker-ownership navigations will fire a HITL handoff gate when BI-A32801C5 lands.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        route: { type: "string", description: "Target route path, e.g. \"/build/FB-5E20E793\"." },
+        params: { type: "object", description: "Optional path/query parameters." },
+      },
+      required: ["route"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    screenSurface: "*",
+  },
+  {
+    name: "screen_open_panel",
+    description:
+      "Pseudo-User Contract. Open a panel registered in the active manifest — drawer, collapsible section, modal. Idempotent: opening an already-open panel is a no-op.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        panelId: { type: "string", description: "Manifest panel id." },
+      },
+      required: ["panelId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    screenSurface: "*",
+  },
+  {
+    name: "screen_close_panel",
+    description:
+      "Pseudo-User Contract. Close a panel registered in the active manifest. Idempotent.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        panelId: { type: "string", description: "Manifest panel id." },
+      },
+      required: ["panelId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    screenSurface: "*",
+  },
+  {
+    name: "screen_focus_field",
+    description:
+      "Pseudo-User Contract. Focus a specific form field on the active screen — useful when guiding the user to fix a validation error or fill in a missing value. The field must belong to a form declared in the manifest. Idempotent; cosmetic if the field is already focused.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        formId: { type: "string", description: "Manifest form id." },
+        fieldId: { type: "string", description: "Field id within the form." },
+      },
+      required: ["formId", "fieldId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    screenSurface: "*",
+  },
+  {
+    name: "screen_set_input",
+    description:
+      "Pseudo-User Contract. Pre-fill a form field on the user's behalf. The user can still review and modify before submit; the visual cue contract (BI-5696B4D7) highlights coworker-set fields with an amber affordance + \"Set by <Coworker>\" tooltip. Not destructive by itself (reversible until submit) — submit is the destructive action and goes through the envelope flow.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        formId: { type: "string", description: "Manifest form id." },
+        fieldId: { type: "string", description: "Field id within the form." },
+        value: { description: "Value to set. Type depends on the field's declared type." },
+      },
+      required: ["formId", "fieldId", "value"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    screenSurface: "*",
+  },
+  {
+    name: "screen_scroll_to",
+    description:
+      "Pseudo-User Contract. Scroll the page to a named anchor — useful when surfacing a row, section, or message that's currently off-screen. Read-class side effect (page state, no domain mutation).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        anchor: { type: "string", description: "Anchor id, route fragment, or manifest-declared landmark." },
+      },
+      required: ["anchor"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    screenSurface: "*",
+  },
+  {
+    name: "screen_propose_action",
+    description:
+      "Pseudo-User Contract (spec §6.4 — destructive-action envelope flow). Propose a domain action that needs explicit user approval before execution. Creates a CoworkerActionEnvelope (BI-D887CD3B schema) in `proposed` status, emits the proposal to the chat UI, and returns the envelope id so the chat handler can correlate the user's approve/deny response. Subject to the per-turn N=3 destructive auto-approval cap (spec §6.4); irreversible actions require an explicit typed-phrase floor and ignore elevation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        manifestActionId: { type: "string", description: "actionId from the active manifest's domainActions list." },
+        args: { type: "object", description: "Arguments to pass to the underlying MCP tool when the envelope is approved." },
+        rationale: { type: "string", description: "One-line plain-English reason shown to the user in the approval card." },
+      },
+      required: ["manifestActionId", "rationale"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false, irreversibleHint: false },
+    screenSurface: "*",
+  },
+  {
+    name: "screen_dispatch_action",
+    description:
+      "Pseudo-User Contract. Execute a previously-proposed envelope by id once it's been approved (spec §6.4). Resolves the underlying tool from the envelope's manifestActionId + the active manifest's domainActions, runs it with the merged args, and records the outcome on the envelope (`executed` | `failed`). Destructive in the same sense as the underlying tool — the destructiveHint reflects the proposal's intent.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        envelopeId: { type: "string", description: "CoworkerActionEnvelope id returned by screen_propose_action." },
+      },
+      required: ["envelopeId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false, irreversibleHint: false },
+    screenSurface: "*",
+  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -14393,6 +14587,238 @@ export async function executeTool(
           message: `summarize_upgrade_impact failed: ${msg}`,
         };
       }
+    }
+
+    // ─── Pseudo-User Contract: screen_* view-command handlers (BI-DF6079E9) ─
+    // Each handler validates its args and returns a structured event payload
+    // under `data.event`. The chat SSE relay (a follow-on integration —
+    // tracked as the second half of this BI) will plumb the payload through
+    // /api/agent/stream so the client's screen-event listener can dispatch
+    // the corresponding action on the page via its registered manifest. For
+    // now the handler shape is testable and grant-checked; the actual SSE
+    // emission is wired by the chat handler in a focused follow-on PR.
+
+    case "screen_describe": {
+      const routeContext = context?.routeContext;
+      return {
+        success: true,
+        message: routeContext
+          ? `Active screen manifest discovery requested for ${routeContext}.`
+          : "Active screen manifest discovery requested (no routeContext plumbed).",
+        data: {
+          event: {
+            type: "screen:describe_requested",
+            payload: { routeContext: routeContext ?? null },
+          },
+          // The actual manifest summary will be returned by the chat handler
+          // once it plumbs the active manifest into the executeTool context
+          // (tracked in BI-DF6079E9 follow-on). Returning the request shape
+          // here makes the tool callable and grant-checked today.
+          note: "Manifest summary plumbing lands in BI-DF6079E9 follow-on.",
+        },
+      };
+    }
+
+    case "screen_get_state": {
+      return {
+        success: true,
+        message: "Screen state snapshot requested.",
+        data: {
+          event: {
+            type: "screen:state_requested",
+            payload: { routeContext: context?.routeContext ?? null },
+          },
+          note: "Screen state plumbing lands in BI-DF6079E9 follow-on.",
+        },
+      };
+    }
+
+    case "screen_select_entity": {
+      const selectionId = typeof params["selectionId"] === "string" ? params["selectionId"].trim() : "";
+      const entityId = typeof params["entityId"] === "string" ? params["entityId"].trim() : "";
+      if (!selectionId || !entityId) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: "screen_select_entity requires non-empty selectionId and entityId.",
+        };
+      }
+      return {
+        success: true,
+        message: `Selection ${selectionId} → ${entityId} dispatched.`,
+        data: {
+          event: {
+            type: "screen:select_entity",
+            payload: { selectionId, entityId },
+          },
+        },
+      };
+    }
+
+    case "screen_navigate": {
+      const route = typeof params["route"] === "string" ? params["route"].trim() : "";
+      if (!route) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: "screen_navigate requires a non-empty route.",
+        };
+      }
+      const navParams =
+        params["params"] && typeof params["params"] === "object" && !Array.isArray(params["params"])
+          ? (params["params"] as Record<string, unknown>)
+          : undefined;
+      return {
+        success: true,
+        message: `Navigation to ${route} dispatched.`,
+        data: {
+          event: {
+            type: "screen:navigate",
+            payload: navParams ? { route, params: navParams } : { route },
+          },
+        },
+      };
+    }
+
+    case "screen_open_panel":
+    case "screen_close_panel": {
+      const panelId = typeof params["panelId"] === "string" ? params["panelId"].trim() : "";
+      if (!panelId) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: `${toolName} requires a non-empty panelId.`,
+        };
+      }
+      const opening = toolName === "screen_open_panel";
+      return {
+        success: true,
+        message: `Panel ${panelId} ${opening ? "open" : "close"} dispatched.`,
+        data: {
+          event: {
+            type: opening ? "screen:open_panel" : "screen:close_panel",
+            payload: { panelId },
+          },
+        },
+      };
+    }
+
+    case "screen_focus_field": {
+      const formId = typeof params["formId"] === "string" ? params["formId"].trim() : "";
+      const fieldId = typeof params["fieldId"] === "string" ? params["fieldId"].trim() : "";
+      if (!formId || !fieldId) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: "screen_focus_field requires non-empty formId and fieldId.",
+        };
+      }
+      return {
+        success: true,
+        message: `Focus dispatched: ${formId}/${fieldId}.`,
+        data: { event: { type: "screen:focus_field", payload: { formId, fieldId } } },
+      };
+    }
+
+    case "screen_set_input": {
+      const formId = typeof params["formId"] === "string" ? params["formId"].trim() : "";
+      const fieldId = typeof params["fieldId"] === "string" ? params["fieldId"].trim() : "";
+      if (!formId || !fieldId) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: "screen_set_input requires non-empty formId and fieldId.",
+        };
+      }
+      if (!("value" in params)) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: "screen_set_input requires a value (any type).",
+        };
+      }
+      return {
+        success: true,
+        message: `Field ${formId}/${fieldId} set dispatched (visual cue BI-5696B4D7 will land alongside this in the client).`,
+        data: {
+          event: {
+            type: "screen:set_input",
+            payload: { formId, fieldId, value: params["value"] },
+          },
+        },
+      };
+    }
+
+    case "screen_scroll_to": {
+      const anchor = typeof params["anchor"] === "string" ? params["anchor"].trim() : "";
+      if (!anchor) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: "screen_scroll_to requires a non-empty anchor.",
+        };
+      }
+      return {
+        success: true,
+        message: `Scroll to ${anchor} dispatched.`,
+        data: { event: { type: "screen:scroll_to", payload: { anchor } } },
+      };
+    }
+
+    case "screen_propose_action": {
+      const manifestActionId =
+        typeof params["manifestActionId"] === "string" ? params["manifestActionId"].trim() : "";
+      const rationale = typeof params["rationale"] === "string" ? params["rationale"].trim() : "";
+      if (!manifestActionId || !rationale) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: "screen_propose_action requires manifestActionId and rationale.",
+        };
+      }
+      const args =
+        params["args"] && typeof params["args"] === "object" && !Array.isArray(params["args"])
+          ? (params["args"] as Record<string, unknown>)
+          : {};
+      // The actual CoworkerActionEnvelope row creation (and per-turn N=3 cap
+      // + irreversible typed-phrase floor) lands in BI-0F9C291C. Until then
+      // the tool returns the structured proposal payload so the agent can
+      // see what would be proposed, and the chat handler can stub-write the
+      // envelope when wiring SSE emission.
+      return {
+        success: true,
+        message: `Proposal '${manifestActionId}' dispatched.`,
+        data: {
+          event: {
+            type: "screen:action_proposed",
+            payload: { manifestActionId, rationale, args },
+          },
+          note: "Envelope creation + per-turn cap enforcement lands in BI-0F9C291C.",
+        },
+      };
+    }
+
+    case "screen_dispatch_action": {
+      const envelopeId =
+        typeof params["envelopeId"] === "string" ? params["envelopeId"].trim() : "";
+      if (!envelopeId) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: "screen_dispatch_action requires an envelopeId.",
+        };
+      }
+      return {
+        success: true,
+        message: `Envelope ${envelopeId} dispatch requested.`,
+        data: {
+          event: {
+            type: "screen:dispatch_requested",
+            payload: { envelopeId },
+          },
+          note: "Envelope execution (read row → run underlying tool → mark executed) lands in BI-0F9C291C.",
+        },
+      };
     }
 
     default: {
