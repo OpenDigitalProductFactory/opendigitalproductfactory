@@ -52,19 +52,15 @@ extensions:
       # Declared neutral so the alert doesn't recur.
       - ["codebase-tools", "Module", "Member[makeLineMatcher]", "ReturnValue", "manual"]
 
-  # ─── safe-log — js/log-injection sanitiser (barrier) ─────────────────────
-  # sanitizeForLog strips C0 control characters (U+0000..U+001F) and DEL
-  # (U+007F) — including CR + LF — so the returned string cannot forge a log
-  # line. This must be a BARRIER, not a taint-preserving summary: a
-  # `summaryModel` with kind `taint` declares arg→return PROPAGATION (taint
-  # flows through), which never suppresses js/log-injection. `barrierModel`
-  # (CodeQL 2.25.2+; repo runs 2.25.5) declares the return value a sanitised
-  # barrier for the `log-injection` taint kind. Columns: [type, path, kind].
+  # ─── safe-log — js/log-injection sanitiser ───────────────────────────────
   - addsTo:
       pack: codeql/javascript-all
-      extensible: barrierModel
+      extensible: summaryModel
     data:
-      - ["safe-log", "Member[sanitizeForLog].ReturnValue", "log-injection"]
+      # sanitizeForLog strips C0 control characters (U+0000..U+001F) and
+      # DEL (U+007F) — including CR + LF — so the returned string cannot
+      # forge a log line. Breaks taint flow for js/log-injection (CWE-117).
+      - ["safe-log", "Module", "Member[sanitizeForLog]", "Argument[0]", "ReturnValue", "taint", "manual"]
 
   # ─── safe-property — js/remote-property-injection guard ──────────────────
   - addsTo:

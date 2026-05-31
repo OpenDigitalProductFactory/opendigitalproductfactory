@@ -63,12 +63,6 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           config-file: ./.github/codeql/codeql-config.yml
-          # Load the local data-extension pack via the init `packs:` input.
-          # A relative PATH in the config file's `packs:` list is rejected by
-          # the codeql-action ("Invalid CodeQL pack specification … Ignoring",
-          # verified in run 26695341527), so the DPF sanitizers never loaded.
-          # The init `packs:` input does resolve a local path pack.
-          packs: ./.github/codeql/dpf-sanitizers
 
       # continue-on-error keeps this workflow non-blocking until the one-time
       # "Settings → Code security → CodeQL → Advanced" toggle flips. While
