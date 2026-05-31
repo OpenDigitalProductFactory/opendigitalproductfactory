@@ -59,6 +59,17 @@ services:
       # value to scope the override to non-macOS deployments.
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
 
+      # Voice / TTS — Apple Silicon path.
+      # The native-host Chatterbox sidecar (provisioned by
+      # scripts/tts/setup-chatterbox-tts-macos.sh) listens on :8771.
+      # Docker Desktop has no Metal GPU passthrough so TTS must run
+      # host-native; the portal reaches it via host.docker.internal.
+      # Run the setup script once to provision the sidecar; it is
+      # idempotent and safe to re-run after updates.
+      TTS_PROVIDER: ${TTS_PROVIDER:-mlx}
+      DPF_TTS_URL: ${DPF_TTS_URL:-http://host.docker.internal:8771}
+      DPF_TTS_REFERENCE_HOST_ROOT: ${DPF_TTS_REFERENCE_HOST_ROOT:-}
+
   browser-use:
     environment:
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}

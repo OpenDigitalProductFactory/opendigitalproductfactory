@@ -88,7 +88,7 @@ describe("synthesizeWithMlx", () => {
     await synthesizeWithMlx("Proceed to build.", { ...baseConfig, referenceText: "sample transcript" })
 
     const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe("http://host.docker.internal:8770/v1/audio/speech")
+    expect(url).toBe("http://host.docker.internal:8771/v1/audio/speech")
     const body = JSON.parse(options.body as string)
     expect(body.model).toBe("mlx-community/csm-1b")
     expect(body.input).toBe("Proceed to build.")
