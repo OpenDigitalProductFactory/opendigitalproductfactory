@@ -5,15 +5,9 @@ import { LinkControlForm } from "@/components/compliance/LinkControlForm";
 import { UnlinkControlButton } from "@/components/compliance/UnlinkControlButton";
 import { EditObligationForm } from "@/components/compliance/EditObligationForm";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { StatusBadge } from "@/components/ui/report-kit";
 
 type Props = { params: Promise<{ id: string }> };
-
-const IMPL_COLORS: Record<string, string> = {
-  implemented: "bg-green-900/30 text-green-400",
-  "in-progress": "bg-yellow-900/30 text-yellow-400",
-  planned: "bg-blue-900/30 text-blue-400",
-  "not-applicable": "bg-gray-900/30 text-gray-400",
-};
 
 export default async function ObligationDetailPage({ params }: Props) {
   const { id } = await params;
@@ -46,9 +40,7 @@ export default async function ObligationDetailPage({ params }: Props) {
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
           <h1 className="text-xl font-bold text-[var(--dpf-text)]">{obligation.title}</h1>
-          <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${obligation.status === "active" ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>
-            {obligation.status}
-          </span>
+          <StatusBadge intent={obligation.status === "active" ? "success" : "danger"} label={obligation.status} variant="soft" uppercase={false} />
           <EditObligationForm id={obligation.id} obligation={obligation} />
         </div>
         {obligation.description && (
@@ -121,7 +113,7 @@ export default async function ObligationDetailPage({ params }: Props) {
         >
           <span className="text-sm font-semibold text-[var(--dpf-text)]">{obligation.regulation.shortName}</span>
           <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{obligation.regulation.jurisdiction}</span>
-          <span className="text-xs text-blue-400">View</span>
+          <span className="text-xs text-[var(--dpf-info)]">View</span>
         </Link>
       </div>
 
@@ -151,9 +143,7 @@ export default async function ObligationDetailPage({ params }: Props) {
                 </Link>
                 <div className="flex gap-2 mt-1">
                   <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{link.control.controlType}</span>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${IMPL_COLORS[link.control.implementationStatus] ?? "bg-gray-900/30 text-gray-400"}`}>
-                    {link.control.implementationStatus}
-                  </span>
+                  <StatusBadge domain="controlStatus" status={link.control.implementationStatus} variant="soft" uppercase={false} />
                   {link.control.effectiveness && (
                     <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{link.control.effectiveness}</span>
                   )}
