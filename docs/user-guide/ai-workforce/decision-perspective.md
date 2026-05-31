@@ -2,8 +2,8 @@
 title: "Decision Perspective & Persona Voice"
 area: ai-workforce
 order: 5
-lastUpdated: 2026-05-21
-updatedBy: Claude (docs)
+lastUpdated: 2026-05-31
+updatedBy: Codex
 ---
 
 ## What This Covers
@@ -131,10 +131,23 @@ Re-training is allowed when sample quality improves or the existing voice degrad
 ## What an Operator Sees Today
 
 - **Build Studio Decision Perspective Gate Panel** — the primary surface; shows the active profile, the gate outcome, the rationale text (with audio player when voice is enabled), the cited materials, and any dissenting view
+- **Decision Canvas** — a read surface for a single `DecisionInteraction`; shows the question, options, recommendation, confidence, material pulls, evidence sources, and audit identifiers without exposing internal tool names in the default view
+- **Material Backlinks** — a bounded local neighborhood for the cited principle or profile material; shows related stances and heuristics, citations, and prior decisions when the material has been approved and promoted
+- **Founder / owner review queue** — unresolved decisions grouped by human-readable gap reason. WWMD decisions use founder-review wording; WWWD and custom profiles use owner/operator wording.
 - **`/wiki/personas/[id]`** — profile detail with materials, generation style, and voice configuration
 - **`/wiki/personas/[id]/voice`** — voice training, consent record, training job status, provider voice ID
 - **`DecisionInteraction` ledger** — every gate invocation; queryable for "what did the gate decide for this build, and on what basis?"
 - **Operations Map** — decision-pressure overlays appear alongside cost-pressure overlays so an operator can see when escalation rates rise on a particular profile
+
+## Canvas, Backlinks, and Capture
+
+The decision is the primary artifact. A **Decision Canvas** is the operator-readable projection of a recorded decision: what was asked, which options were available, what the active profile recommended or deferred, which materials pulled the result, and what action comes next.
+
+A **material backlink** is supporting context, not a second decision. It answers "what else is connected to this cited principle or material?" by showing related stances, heuristics, citations, and prior decisions. Draft or candidate material is held as review material and is not presented as active doctrine.
+
+**Research capture** is proposal-only. Captured notes, web clips, or Markdown become draft source/material candidates for an explicit target profile. They do not become published wiki pages, promoted profile material, or operational doctrine until reviewed.
+
+Use **founder review** when a WWMD platform decision needs a missing principle, a founder judgment call, or a platform-governance resolution. Use **owner/operator review** when a WWWD or custom profile needs organization-local policy, customer-commitment guidance, or an accountable business owner.
 
 ## Boundaries
 
