@@ -28,6 +28,7 @@ describe("parseSelfUpgradeConfig", () => {
       maintenanceWindows: [],
       sourceMode: "upstream",
       installBranch: "dpf/install",
+      useIsolatedWorkspace: true,
     });
   });
 
@@ -40,6 +41,7 @@ describe("parseSelfUpgradeConfig", () => {
       maintenanceWindows: [],
       sourceMode: "upstream",
       installBranch: "dpf/install",
+      useIsolatedWorkspace: true,
     });
   });
 
@@ -52,6 +54,7 @@ describe("parseSelfUpgradeConfig", () => {
       maintenanceWindows: [],
       sourceMode: "upstream",
       installBranch: "dpf/install",
+      useIsolatedWorkspace: true,
     });
     expect(parseSelfUpgradeConfig(42)).toEqual({
       enabled: false,
@@ -61,6 +64,7 @@ describe("parseSelfUpgradeConfig", () => {
       maintenanceWindows: [],
       sourceMode: "upstream",
       installBranch: "dpf/install",
+      useIsolatedWorkspace: true,
     });
   });
 
@@ -111,6 +115,32 @@ describe("parseSelfUpgradeConfig", () => {
     expect(cfg.enabled).toBe(false);
     expect(cfg.channel).toBe("stable");
     expect(cfg.checkIntervalHours).toBe(24);
+  });
+
+  // BI-A8A7CCFD — isolated upgrade workspace config surface
+  it("defaults useIsolatedWorkspace to true (default-on isolation)", () => {
+    expect(parseSelfUpgradeConfig({}).useIsolatedWorkspace).toBe(true);
+    expect(parseSelfUpgradeConfig(null).useIsolatedWorkspace).toBe(true);
+  });
+
+  it("honors an explicit useIsolatedWorkspace=false opt-out", () => {
+    const cfg = parseSelfUpgradeConfig({ useIsolatedWorkspace: false });
+    expect(cfg.useIsolatedWorkspace).toBe(false);
+  });
+
+  it("ignores non-boolean useIsolatedWorkspace values and falls back to the safe default", () => {
+    // Defensive: a malformed value MUST NOT silently flip behavior either way.
+    expect(parseSelfUpgradeConfig({ useIsolatedWorkspace: "yes" }).useIsolatedWorkspace).toBe(true);
+    expect(parseSelfUpgradeConfig({ useIsolatedWorkspace: 1 }).useIsolatedWorkspace).toBe(true);
+  });
+
+  it("accepts explicit workspace path overrides for in-container and host", () => {
+    const cfg = parseSelfUpgradeConfig({
+      upgradeWorkspaceMountPath: "/host-dpf/.custom-workspace",
+      upgradeWorkspaceHostPath: "/Users/op/dpf/.custom-workspace",
+    });
+    expect(cfg.upgradeWorkspaceMountPath).toBe("/host-dpf/.custom-workspace");
+    expect(cfg.upgradeWorkspaceHostPath).toBe("/Users/op/dpf/.custom-workspace");
   });
 
   it("falls back to default channel when channel is empty string (malformed)", () => {
@@ -332,6 +362,7 @@ describe("getSelfUpgradeConfig", () => {
       maintenanceWindows: [],
       sourceMode: "upstream",
       installBranch: "dpf/install",
+      useIsolatedWorkspace: true,
     });
   });
 
@@ -406,6 +437,7 @@ describe("nextMaintenanceWindowStart", () => {
     healthTarget: 100,
     sourceMode: "upstream" as const,
     installBranch: "dpf/install",
+    useIsolatedWorkspace: true,
   };
 
   it("returns null when no windows are configured", () => {

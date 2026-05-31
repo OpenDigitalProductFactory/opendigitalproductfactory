@@ -99,6 +99,22 @@ export async function runSelfUpgrade(
     "/host-dpf";
   const remote = config.repositoryRemote ?? process.env.REPO_REMOTE ?? "origin";
   const branch = config.repositoryBranch ?? process.env.REPO_BRANCH ?? "main";
+  // BI-A8A7CCFD — workspace-isolated upgrade source. The workspace lives as a
+  // subdirectory of the install clone so it's visible inside BOTH the portal
+  // container's existing `/host-dpf` mount AND the promoter's `/host-source`
+  // mount, with no docker-compose change required.
+  const upgradeWorkspaceMountPath = config.useIsolatedWorkspace
+    ? config.upgradeWorkspaceMountPath ?? `${hostSourcePath.replace(/\/$/, "")}/.upgrade-workspace`
+    : undefined;
+  const hostInstallPathResolved =
+    config.hostInstallPath ??
+    process.env.DPF_HOST_INSTALL_PATH ??
+    process.env.PROMOTE_SOURCE ??
+    "";
+  const upgradeWorkspaceHostPath =
+    config.useIsolatedWorkspace && hostInstallPathResolved
+      ? config.upgradeWorkspaceHostPath ?? `${hostInstallPathResolved.replace(/\/$/, "")}/.upgrade-workspace`
+      : undefined;
 
   // ── Detection: resolve the upstream target and apply the lineage gate ──────
   // In upstream mode we fetch first (fresh ref) and skip when the running build
@@ -140,6 +156,10 @@ export async function runSelfUpgrade(
         remote,
         branch,
         installBranch: config.installBranch,
+        // BI-A8A7CCFD — pass the in-container workspace path when isolation is
+        // enabled. prepare-source switches to the workspace-merge code path
+        // automatically; undefined falls back to the legacy direct-merge.
+        workspacePath: upgradeWorkspaceMountPath,
       },
       gitRun,
     );
@@ -236,11 +256,11 @@ export async function runSelfUpgrade(
       // container. Daemon-resolved, so it must be a host path (not an
       // in-portal path). hostSourceMountPath is the in-container mount and
       // is no longer passed — runPromoter mounts to a fixed /host-source.
-      hostInstallPath:
-        config.hostInstallPath ??
-        process.env.DPF_HOST_INSTALL_PATH ??
-        process.env.PROMOTE_SOURCE ??
-        "",
+      // BI-A8A7CCFD — when isolated workspace is on, the promoter builds from
+      // the workspace HOST path (which holds the merged tree), not the
+      // operator's install clone. The promoter mounts whatever we hand it
+      // here at `/host-source:ro` — same contract, just a different host dir.
+      hostInstallPath: upgradeWorkspaceHostPath ?? hostInstallPathResolved,
       // The honest built identity from source prep (merge-commit SHA in upstream
       // mode, HEAD/-dirty in local mode). promote.sh re-derives this from the
       // tree's HEAD and cross-checks against it.
