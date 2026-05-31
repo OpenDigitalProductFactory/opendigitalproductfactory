@@ -161,7 +161,7 @@ export default async function ObligationsPage({ searchParams }: Props) {
             <span className="text-[9px] text-transparent uppercase tracking-widest">&nbsp;</span>
             <Link
               href="/compliance/obligations"
-              className="text-[10px] px-2 py-1 rounded border border-[var(--dpf-border)] text-red-400 hover:border-red-400 transition-colors"
+              className="text-[10px] px-2 py-1 rounded border border-[var(--dpf-border)] text-[var(--dpf-error)] hover:border-[var(--dpf-error)] transition-colors"
             >
               Clear filters
             </Link>
@@ -174,7 +174,7 @@ export default async function ObligationsPage({ searchParams }: Props) {
       ) : (
         <div className="space-y-2">
           {obligations.map((o) => {
-            const coverage = o._count.controls > 0 ? "bg-green-400" : "bg-red-400";
+            const coverage = o._count.controls > 0 ? "var(--dpf-success)" : "var(--dpf-error)";
             return (
               <Link
                 key={o.id}
@@ -184,7 +184,7 @@ export default async function ObligationsPage({ searchParams }: Props) {
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${coverage}`} />
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: coverage }} />
                       <span className="text-sm text-[var(--dpf-text)]">{o.title}</span>
                     </div>
                     <div className="flex gap-2 mt-1">

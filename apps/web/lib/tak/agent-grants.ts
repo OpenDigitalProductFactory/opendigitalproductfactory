@@ -4,8 +4,52 @@ import agentRegistryData from "../../../../packages/db/data/agent_registry.json"
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 
 /**
+ * Implications between agent grant categories. A grant on the left of the
+ * mapping implicitly satisfies every grant on the right. Used to refactor
+ * coarse grants (e.g. `backlog_write`) into finer ones (e.g. `build_evidence`)
+ * without breaking existing roles that hold the coarse grant.
+ *
+ * Pseudo-User Contract (spec §6.3): the finer grants let coworker tokens be
+ * scoped tightly (e.g. a coworker that should record build evidence but not
+ * mutate the broader backlog) while existing roles with the coarse grants
+ * continue to satisfy the refactored tool requirements unchanged.
+ *
+ * Implications are ONE-WAY. Holding `backlog_write` implies `build_evidence`;
+ * holding `build_evidence` does NOT imply `backlog_write`. That's the whole
+ * point — narrowing is a real scope reduction.
+ *
+ * BI-B2F7ABF5 / EP-COWORKER-INTERACTIVITY.
+ */
+export const GRANT_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
+  // `backlog_write` is the legacy broad grant for any backlog mutation.
+  // The Pseudo-User Contract introduces build-scoped finer grants; anyone
+  // who currently has backlog_write retains access to those tools.
+  backlog_write: ["build_evidence", "build_phase_advance"],
+  // `build_promote` was the legacy promotion grant; `build_lifecycle` is the
+  // broader Pseudo-User Contract grant covering reopen + cancel + promote.
+  build_promote: ["build_lifecycle"],
+};
+
+/** Expand a list of held grants by applying GRANT_IMPLICATIONS one-way.
+ *  Returns a new array; does not mutate the input. Idempotent: applying twice
+ *  yields the same set as applying once (implications are not transitive in
+ *  the current taxonomy; if a new implication chain is added the implementation
+ *  should switch to fixed-point expansion). */
+export function expandGrants(grants: readonly string[]): string[] {
+  const expanded = new Set<string>(grants);
+  for (const g of grants) {
+    const implied = GRANT_IMPLICATIONS[g];
+    if (implied) {
+      for (const i of implied) expanded.add(i);
+    }
+  }
+  return Array.from(expanded);
+}
+
+/**
  * Maps platform tool names to agent grant categories.
- * A tool is allowed if the agent has ANY of the grants it maps to.
+ * A tool is allowed if the agent has ANY of the grants it maps to —
+ * directly OR via GRANT_IMPLICATIONS expansion (see expandGrants).
  * Tools not in this map are DENIED by default — every tool must have an entry.
  */
 const TOOL_TO_GRANTS: Record<string, string[]> = {
@@ -25,7 +69,12 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   retire_backlog_item: ["backlog_write"],
   link_backlog_item_to_epic: ["backlog_write"],
   search_specs_and_plans: ["spec_plan_read", "backlog_read"],
-  record_execution_evidence: ["backlog_write"],
+  // Build-scoped evidence recording — refactored to the finer `build_evidence`
+  // grant (BI-B2F7ABF5). Backwards-compat preserved by GRANT_IMPLICATIONS
+  // (backlog_write → build_evidence).
+  record_execution_evidence: ["build_evidence"],
+  // Non-build-scoped evidence remains on the broad backlog_write grant —
+  // these tools coordinate across the whole backlog surface, not just build.
   record_external_development_evidence: ["backlog_write"],
   record_local_integration_result: ["backlog_write"],
   record_functional_failure_evidence: ["backlog_write"],
@@ -57,8 +106,11 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Build Studio handoff path through any coworker chat.
   triage_backlog_item:              ["backlog_triage"],
   size_backlog_item:                ["backlog_triage"],
-  promote_to_build_studio:          ["build_promote"],
-  process_backlog_for_build_studio: ["build_promote"],
+  // Build lifecycle ops — refactored to the finer `build_lifecycle` grant
+  // (BI-B2F7ABF5). Backwards-compat preserved by GRANT_IMPLICATIONS
+  // (build_promote → build_lifecycle).
+  promote_to_build_studio:          ["build_lifecycle"],
+  process_backlog_for_build_studio: ["build_lifecycle"],
 
   // Deliberation (multi-branch peer review / debate)
   start_deliberation:        ["deliberation_create"],
@@ -148,13 +200,17 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Design-time decomposition Phase 4a/4b (BI-2E6CC391). These three tools
   // are downstream of Ideate (operating on a passed FeatureBuild design),
   // distinct from the upstream `propose_decomposition` brainstorming tool
-  // above. Same capability tier — all three touch backlog/build state.
-  propose_build_decomposition: ["backlog_write"],
-  approve_decomposition: ["backlog_write"],
-  record_decomposition_override: ["backlog_write"],
+  // above. Refactored to the finer `build_phase_advance` grant (BI-B2F7ABF5);
+  // backwards-compat preserved by GRANT_IMPLICATIONS (backlog_write →
+  // build_phase_advance).
+  propose_build_decomposition: ["build_phase_advance"],
+  approve_decomposition: ["build_phase_advance"],
+  record_decomposition_override: ["build_phase_advance"],
   register_tech_debt: ["backlog_write"],
-  save_build_notes: ["backlog_write"],
-  saveBuildEvidence: ["backlog_write"],
+  // Build-evidence persistence — refactored to the finer `build_evidence`
+  // grant (BI-B2F7ABF5). Backwards-compat preserved by GRANT_IMPLICATIONS.
+  save_build_notes: ["build_evidence"],
+  saveBuildEvidence: ["build_evidence"],
   reviewDesignDoc: ["architecture_read"],
   reviewBuildPlan: ["build_plan_write"],
   diagnose_sandbox: ["sandbox_execute", "work_capsule_read"],
@@ -292,6 +348,9 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   assess_contribution:    ["backlog_read"],
   contribute_to_hive:     ["backlog_write"],
   apply_platform_update:  ["admin_write"],
+  // BI-C26F7EE1: read-only operator preview of the upstream change set —
+  // paired with apply_platform_update's admin_write as the read tier.
+  summarize_upgrade_impact: ["admin_read"],
 
   // Contributor inventory sync — admin-scope on-demand trigger so agents
   // that just pushed a branch / opened a PR can force the cron to run
@@ -364,7 +423,10 @@ export async function getAgentToolGrantsAsync(agentId: string): Promise<string[]
   return getAgentToolGrants(agentId) ?? [];
 }
 
-/** Check if a specific tool is allowed by an agent's grants. */
+/** Check if a specific tool is allowed by an agent's grants. The agent's
+ *  held grants are expanded through GRANT_IMPLICATIONS before the check, so
+ *  a coarse legacy grant (e.g. `backlog_write`) still satisfies a tool that
+ *  has been refactored to require a finer grant (e.g. `build_evidence`). */
 export function isToolAllowedByGrants(
   toolName: string,
   agentGrants: string[],
@@ -377,8 +439,10 @@ export function isToolAllowedByGrants(
     console.warn(`[agent-grants] Tool ${JSON.stringify(toolName)} has no TOOL_TO_GRANTS entry — denied by default`);
     return false;
   }
-  // Agent must have at least ONE of the required grants
-  return requiredGrants.some((g) => agentGrants.includes(g));
+  // Expand the agent's grants through GRANT_IMPLICATIONS, then check that the
+  // expanded set includes at least one of the required grants.
+  const expanded = expandGrants(agentGrants);
+  return requiredGrants.some((g) => expanded.includes(g));
 }
 
 export type EffectivePermission = {

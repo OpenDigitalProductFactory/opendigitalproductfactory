@@ -87,6 +87,12 @@ export type SearchWikiPagesInput = {
   organizationId: string | null;
   /** Optional filter to one page kind. */
   pageKind?: string;
+  /**
+   * Optional OR-filter across several page kinds (Qdrant `match: { any }`).
+   * Used for perspective-biased recall (WWMD/WWWD) where stance/heuristic/etc.
+   * should be preferred. Takes precedence over `pageKind` when both are set.
+   */
+  pageKinds?: string[];
   /** Total results to return across both passes. Default 5. */
   limit?: number;
   /** Cosine score threshold per pass. Default 0.55, matching `searchKnowledgeArticles`. */
@@ -233,7 +239,9 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
     { key: "entityType", match: { value: ENTITY_TYPE } },
     { key: "status", match: { value: "published" } },
   ];
-  if (input.pageKind) {
+  if (input.pageKinds && input.pageKinds.length > 0) {
+    baseFilter.push({ key: "pageKind", match: { any: input.pageKinds } });
+  } else if (input.pageKind) {
     baseFilter.push({ key: "pageKind", match: { value: input.pageKind } });
   }
   // Principle-only filters. Translated to Qdrant payload-key matchers

@@ -442,7 +442,7 @@ describe("governed backlog tee-up", () => {
       });
     });
 
-    it("promotes a bug-sourced item as kind=fix, carries fixContext, and back-links the issue report", async () => {
+    it("promotes a bug workType item as kind=fix, carries fixContext, and back-links the issue report", async () => {
       mockPrisma.backlogItem.findUnique.mockResolvedValueOnce({
         id: "bi-cuid-bug",
         itemId: "BI-PIR-abcd1234",
@@ -455,7 +455,11 @@ describe("governed backlog tee-up", () => {
         digitalProductId: null,
         epicId: null,
         taxonomyNodeId: null,
-        source: "bug",
+        // workType drives kind derivation (post 2026-05-30 spec). The legacy
+        // source value is left at the canonicalized origin so any reader of
+        // source sees the intake channel, not the work-type.
+        workType: "bug",
+        source: "automated-detection",
         epic: null,
       });
       mockPrisma.platformIssueReport.findUnique.mockResolvedValueOnce({

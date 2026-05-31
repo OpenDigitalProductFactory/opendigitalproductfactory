@@ -1,6 +1,10 @@
 import * as crypto from "crypto";
 import { generateBuildId, mergeHappyPathStateIntoPlan } from "@/lib/feature-build-types";
 import {
+  deriveBuildProcessType,
+  deriveBuildProcessSize,
+} from "@/lib/explore/build-process-matrix";
+import {
   attachBuildStudioWorkCapsule,
   type BuildStudioCapsuleDb,
 } from "@/lib/work-capsules/build-studio-attachment";
@@ -193,7 +197,12 @@ export async function promoteBacklogItemToBuildDraft(
   }
 
   const constrainedGoal = item.title.trim().slice(0, 280);
-  const plan = mergeHappyPathStateIntoPlan(null, {
+  // Right-sizing matrix: persist the BI's effortSize onto the build's plan
+  // so the prompt selector + phase gate can pick the matching lifecycle
+  // policy. Default "medium" preserves today's behavior for BIs without an
+  // explicit effortSize. See build-process-matrix.ts.
+  const processSize = deriveBuildProcessSize({ effortSize: item.effortSize ?? null });
+  const planBase = mergeHappyPathStateIntoPlan(null, {
     intake: {
       status: "ready",
       backlogItemId: item.itemId,
@@ -207,14 +216,23 @@ export async function promoteBacklogItemToBuildDraft(
       constrainedGoal,
     },
   });
+  const plan = { ...planBase, processSize };
 
   // Work-kind derivation + fix-context carry-through.
-  // A bug-sourced backlog item becomes a "fix" build; everything else stays a
-  // "feature". For fixes, pull the originating PlatformIssueReport (linked from
-  // the triage-created BI body as "Source report: PIR-XXXXX") so the build
-  // starts from the real diagnosis (severity, route, error stack) instead of a
-  // blank brief. reproSteps/rootCause/fixApproach are left for ideate to fill.
-  const kind: "feature" | "fix" = item.source === "bug" ? "fix" : "feature";
+  // deriveBuildProcessType is the single source of truth for "given this BI,
+  // what build-process type does it become?" — see build-process-matrix.ts.
+  // After BI-FD37173A (this PR) it reads the clean `BacklogItem.workType`
+  // closed enum: workType="bug" -> "fix", "doc" -> "doc", "chore" -> "chore",
+  // everything else (feature | tool | skill | refactor) -> "feature".
+  // Pre-2026-05-30 BIs whose source was "bug" were backfilled to
+  // workType="bug" in 20260530170000_backlog_item_work_type, so this is
+  // byte-identical for every existing row.
+  //
+  // For fixes we pull the originating PlatformIssueReport (linked from the
+  // triage-created BI body as "Source report: PIR-XXXXX") so the build starts
+  // from the real diagnosis (severity, route, error stack) instead of a blank
+  // brief. reproSteps/rootCause/fixApproach are left for ideate to fill.
+  const kind = deriveBuildProcessType({ workType: item.workType ?? null, body: item.body });
   let fixBrief: Record<string, unknown> | null = null;
   let originatingReportId: string | null = null;
   if (kind === "fix") {

@@ -961,6 +961,7 @@ model BacklogItem {
   taxonomyNodeId          String?
   epicId                  String?
   source                  String?
+  workType                String?
   triageOutcome           String?
   effortSize              String?
   proposedOutcome         String?
@@ -2781,6 +2782,9 @@ model BusinessContext {
   // What the company does (richer than tagline)
   description      String?
   valueProposition String?
+  // Why the company exists — captured at onboarding (business-context step).
+  // Seeds the company-mission prompt (Block 0) and the org WWWD corpus.
+  mission          String?
 
   // Who they serve
   targetMarket     String?
@@ -3855,6 +3859,16 @@ model ToolExecution {
   receipt                 ToolExecutionReceipt?
   assuranceRun            AssuranceRun?
   documentLifecycleEvents DocumentLifecycleEvent[]
+  // Pseudo-User Contract (spec §6.5 + §8). Dual-principal audit + envelope:
+  // delegatingUserId is the human the coworker acted for (distinct from
+  // userId which is the executing identity); chatMessageId is the
+  // AgentMessage that initiated this execution (null for non-chat runs);
+  // envelopeId points to the CoworkerActionEnvelope that approved a
+  // destructive action (null for non-envelope executions).
+  delegatingUserId        String?
+  chatMessageId           String?
+  envelopeId              String?
+  envelope                CoworkerActionEnvelope?  @relation(fields: [envelopeId], references: [id])
 
   @@index([agentId, createdAt])
   @@index([userId, createdAt])
@@ -3865,6 +3879,37 @@ model ToolExecution {
   @@index([apiTokenId, createdAt(sort: Desc)])
   @@index([taskRunId, createdAt(sort: Desc)])
   @@index([skillId, createdAt(sort: Desc)])
+  @@index([envelopeId])
+  @@index([delegatingUserId, createdAt(sort: Desc)])
+}
+
+// Pseudo-User Contract (spec §6.4 + §8): destructive-action confirmation
+// envelope. A coworker proposes a destructive action via screen_propose_action;
+// the user approves/declines; the underlying tool executes (or not) and the
+// outcome is recorded. Lifecycle: proposed → approved|declined →
+// executed|failed|cancelled (resolved). Coworker identity is captured as
+// coworkerAgentId (Agent.agentId semantic id), matching the existing
+// ToolExecution.agentId convention; Principal convergence is via
+// PrincipalAlias lookup at query time (AGENTS.md §11), not a direct FK.
+model CoworkerActionEnvelope {
+  id               String    @id @default(cuid())
+  coworkerAgentId  String
+  delegatingUserId String
+  threadId         String
+  chatMessageId    String?
+  manifestActionId String
+  argsJson         Json
+  rationale        String
+  status           String    @default("proposed")
+  createdAt        DateTime  @default(now())
+  resolvedAt       DateTime?
+
+  toolExecutions ToolExecution[]
+
+  @@index([threadId, createdAt(sort: Desc)])
+  @@index([coworkerAgentId, createdAt(sort: Desc)])
+  @@index([status])
+  @@index([chatMessageId])
 }
 
 model ToolExecutionReceipt {
@@ -7996,12 +8041,15 @@ model Complaint {
 }
 
 model OrgSettings {
-  id              String    @id @default(cuid())
-  baseCurrency    String    @default("GBP")
-  autoFetchRates  Boolean   @default(true)
-  lastRateFetchAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                 String    @id @default(cuid())
+  baseCurrency       String    @default("GBP")
+  autoFetchRates     Boolean   @default(true)
+  lastRateFetchAt    DateTime?
+  // Archetype finance profile actually applied during setup. Lets surfaces
+  // render the org's real profile instead of a hardcoded default.
+  appliedProfileSlug String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 }
 
 // ─── Build Studio Stall Detection (BI-4ab6be39) ───────────────────

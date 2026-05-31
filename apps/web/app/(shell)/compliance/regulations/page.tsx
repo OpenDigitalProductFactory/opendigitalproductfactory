@@ -1,6 +1,7 @@
 import { prisma } from "@dpf/db";
 import Link from "next/link";
 import { CreateRegulationForm } from "@/components/compliance/CreateRegulationForm";
+import { StatusBadge } from "@/components/ui/report-kit";
 
 type Props = { searchParams: Promise<{ type?: string }> };
 
@@ -50,9 +51,7 @@ export default async function RegulationsPage({ searchParams }: Props) {
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-sm font-semibold text-[var(--dpf-text)]">{r.shortName}</span>
                 <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{r.jurisdiction}</span>
-                <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${r.status === "active" ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>
-                  {r.status}
-                </span>
+                <StatusBadge domain="complianceRegulation" status={r.status} variant="soft" uppercase={false} />
               </div>
               <p className="text-xs text-[var(--dpf-muted)] mb-1">{r.name}</p>
               <p className="text-xs text-[var(--dpf-muted)]">

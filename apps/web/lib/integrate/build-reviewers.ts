@@ -23,12 +23,25 @@ import type {
 
 // ─── Prompt Templates ────────────────────────────────────────────────────────
 
-export function buildDesignReviewPrompt(doc: BuildDesignDoc, projectContext: string): string {
+export function buildDesignReviewPrompt(
+  doc: BuildDesignDoc,
+  projectContext: string,
+  prior?: ReviewPriorContext | null,
+): string {
   // Detect whether this feature has a UI component. Backend-only features
   // (cron jobs, API routes, data models) shouldn't be flagged for accessibility.
   const approachLower = (doc.proposedApproach ?? "").toLowerCase();
   const hasUI = /\bui\b|page\.tsx|component|dashboard|panel|form|modal|button|card|tab/i.test(approachLower)
     || /\b(shell)\b.*page/i.test(approachLower);
+
+  // BI-CE49D82E — Delta-aware design review prompt, mirror of the plan path
+  // added in BI-4396EFEC (D38). Live repro: FB-5E20E793 (Voice Slice 1.6)
+  // looped on the same "missing accessibility section" complaint round after
+  // round because the reviewer re-evaluated from scratch each call. With the
+  // prior issues injected, round 2+ judges resolution instead of re-litigating.
+  const priorSection = prior && prior.issues.length > 0
+    ? `\n\nPRIOR REVIEW CONTEXT (this is review round ${prior.round + 1}):\nThe immediately-prior review of this design surfaced these ${prior.issues.length} issues:\n${prior.issues.map((i, idx) => `  ${idx + 1}. [${i.severity}] ${i.description}`).join("\n")}\n\nDelta-aware review protocol:\n- For each prior issue, judge whether the new design addresses it. If yes, do NOT re-surface it.\n- If a prior issue is still present, re-surface it but reuse the SAME description so the operator sees persistence.\n- Only add NEW issues that this revision genuinely introduces or that the prior round missed.\n- Goal: convergence, not re-litigation. Avoid trading one set of issues for another.\n`
+    : "";
 
   return `You are reviewing a design document for a platform feature.
 
@@ -43,7 +56,7 @@ ${doc.reusabilityAnalysis ? `Reusability Analysis: Scope=${doc.reusabilityAnalys
 ${(doc as { accessibility?: string }).accessibility ? `Accessibility: ${(doc as { accessibility?: string }).accessibility}` : ""}
 
 PROJECT CONTEXT:
-${projectContext}
+${projectContext}${priorSection}
 
 REVIEW CHECKLIST — evaluate EVERY item before responding:
 1. Is the problem statement clear and specific?
@@ -70,18 +83,19 @@ RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 }`;
 }
 
-/** Optional prior-round context passed to plan review on iterations 2+.
- *  Lets the reviewer judge which prior issues the new plan addresses, so
+/** Optional prior-round context passed to design / plan review on iterations 2+.
+ *  Lets the reviewer judge which prior issues the new artifact addresses, so
  *  the operator sees converging trajectory instead of issue-set churn.
- *  BI-4396EFEC (D38). */
-export type PlanReviewPriorContext = {
+ *  BI-4396EFEC (D38) introduced this for plan review; BI-CE49D82E generalized
+ *  the type so design review uses the same shape. */
+export type ReviewPriorContext = {
   round: number;
   issues: ReadonlyArray<{ severity: string; description: string }>;
 };
 
 export function buildPlanReviewPrompt(
   plan: BuildPlanDoc,
-  prior?: PlanReviewPriorContext | null,
+  prior?: ReviewPriorContext | null,
 ): string {
   const tasks = Array.isArray(plan?.tasks) ? plan.tasks : [];
   const files = Array.isArray(plan?.fileStructure) ? plan.fileStructure : [];

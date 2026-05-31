@@ -48,6 +48,8 @@ function item(overrides: Partial<BacklogItemWithRelations>): BacklogItemWithRela
     title: "Backlog item",
     status: "open",
     type: "product",
+    workType: "feature",
+    source: "user-request",
     body: null,
     priority: 1,
     epicId: "epic-id",

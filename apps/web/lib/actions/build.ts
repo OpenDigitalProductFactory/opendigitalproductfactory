@@ -417,12 +417,20 @@ export async function advanceBuildPhase(
   }
 
   const brief = build.brief as { acceptanceCriteria?: string[]; fixContext?: import("@/lib/feature-build-types").FixContext } | null;
+  // Right-sizing matrix: read processSize from plan.processSize (written at
+  // promote time) and pass it to checkPhaseGate so the policy lookup picks
+  // the matching LifecyclePolicy. Default "medium" preserves the byte-
+  // identical default cell. See
+  // docs/superpowers/specs/2026-05-30-build-studio-right-sizing-design.md.
+  const buildPlanState = (build.plan as Record<string, unknown> | null) ?? null;
+  const processSize = (buildPlanState?.["processSize"] as string | undefined) ?? "medium";
   const gate = checkPhaseGate(currentPhase, targetPhase, {
     kind: build.kind,
+    processSize,
     fixContext: brief?.fixContext,
     designDoc: build.designDoc,
     designReview: build.designReview,
-    happyPathState: normalizeHappyPathState((build.plan as Record<string, unknown> | null)?.happyPathState ?? null),
+    happyPathState: normalizeHappyPathState(buildPlanState?.happyPathState ?? null),
     buildPlan: build.buildPlan,
     planReview: build.planReview,
     taskResults: build.taskResults,

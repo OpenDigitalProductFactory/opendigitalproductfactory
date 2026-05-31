@@ -10,7 +10,7 @@ import { kernelGateDecisionsTotal } from "@/lib/operate/metrics";
 import * as crypto from "crypto";
 import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { mergeHappyPathStateIntoPlan, generateBuildId } from "@/lib/feature-build-types";
-import { BACKLOG_SOURCE_VALUES, BACKLOG_STATUS_VALUES, EPIC_STATUSES } from "@/lib/explore/backlog";
+import { BACKLOG_SOURCE_VALUES, BACKLOG_STATUS_VALUES, BACKLOG_WORK_TYPE_VALUES, EPIC_STATUSES } from "@/lib/explore/backlog";
 import {
   analyzePublicWebsiteBranding,
   fetchPublicWebsiteEvidence,
@@ -99,7 +99,15 @@ type ToolExecutionContext = {
 
 /** MCP tool annotation hints (from MCP spec + n8n-MCP pattern).
  *  These let the agent router and governance layer make safety decisions
- *  without parsing the tool description text. */
+ *  without parsing the tool description text.
+ *
+ *  MCP-spec fields are advisory client hints, not server-side enforcement —
+ *  the grant system in agent-grants.ts is the authoritative check.
+ *  `irreversibleHint` is a DPF extension layered on top: every irreversible
+ *  tool is also destructive, but not every destructive tool is irreversible.
+ *  The envelope flow (Pseudo-User Contract spec §6.4 — BI-0F9C291C) uses
+ *  irreversibleHint to enforce the typed-phrase hard floor — irreversible
+ *  actions cannot be auto-approved by per-turn elevation. */
 export type ToolAnnotations = {
   /** Tool only reads data — never mutates state */
   readOnlyHint?: boolean;
@@ -109,6 +117,13 @@ export type ToolAnnotations = {
   idempotentHint?: boolean;
   /** Tool reaches outside the platform boundary (network, external API) */
   openWorldHint?: boolean;
+  /** DPF extension. Tool's effect cannot be undone by any existing inverse
+   *  tool — e.g. data deletion with no soft-delete column, a network send
+   *  that the recipient has already acted on, a financial transfer. Always
+   *  implies `destructiveHint: true`. Used by the Pseudo-User Contract
+   *  envelope flow (BI-0F9C291C) to require an explicit typed-phrase
+   *  confirmation regardless of per-turn elevation. */
+  irreversibleHint?: boolean;
 };
 
 export type ToolDefinition = {
@@ -135,6 +150,13 @@ export type ToolDefinition = {
   buildPhases?: BuildPhaseTag[] | null;
   /** MCP-spec tool annotations for governance and safety classification */
   annotations?: ToolAnnotations;
+  /** Pseudo-User Contract (spec §6.1 — BI-D9487754): the ScreenManifest
+   *  surface this tool is meaningful in. Used by the manifest CI lint to
+   *  validate that domain actions a manifest exposes have a matching tool
+   *  entry, and by the chat handler to filter the tool catalog by current
+   *  routeContext. Undefined = surface-agnostic (the tool is callable from
+   *  any context — most tools fall here). */
+  screenSurface?: string;
   /**
    * Predicate that lets an `executionMode: "proposal"` tool skip the proposal
    * card and execute immediately when the user has already pre-authorized the
@@ -270,13 +292,25 @@ export function resolveSavePhaseHandoffTransition(
 }
 
 /** Tools that perform destructive or irreversible actions beyond what
- *  sideEffect/executionMode already captures. */
+ *  sideEffect/executionMode already captures. Used by resolveAnnotations
+ *  to set destructiveHint on tools that don't carry an explicit
+ *  `annotations` block. */
 const DESTRUCTIVE_TOOLS = new Set([
   "deploy_feature",
   "execute_promotion",
   "transition_employee_status",
   "contribute_to_hive",
   "apply_platform_update",
+  // Pseudo-User Contract (BI-B2F7ABF5): build-phase and lifecycle ops that
+  // advance the FeatureBuild state machine are destructive in the
+  // can't-quietly-take-back sense. Promote/process write FeatureBuild rows
+  // and dispatch coworker work; approve_decomposition commits the
+  // decomposition that drives the Plan phase; start_build kicks off the
+  // sandbox/code-generation chain.
+  "promote_to_build_studio",
+  "process_backlog_for_build_studio",
+  "approve_decomposition",
+  "start_build",
 ]);
 
 export type ToolResult = {
@@ -406,7 +440,8 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         type: { type: "string", enum: ["portfolio", "product"], description: "Item type" },
         status: { type: "string", enum: ["triaging", "open", "in-progress"], description: "Initial status (defaults to triaging). Non-triaging requires a paired triageOutcome." },
         triageOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Required when status is not triaging" },
-        source: { type: "string", enum: ["feature-gap", "bug", "tool-gap", "skill-gap", "doc-gap", "user-request", "automated-detection"], description: "What kind of gap or signal produced this item" },
+        workType: { type: "string", enum: [...BACKLOG_WORK_TYPE_VALUES], description: "What kind of work this is (closed enum). bug == defect; feature == new capability; chore | doc | tool | skill | refactor for the corresponding work categories." },
+        source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "Intake origin — how did this item arrive. user-request (a human asked for it) or automated-detection (the platform observed it). Defaults to user-request when omitted." },
         proposedOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Advisory suggestion for Scrum Master triage (non-binding)" },
         priority: { type: "integer", description: "Optional ranked priority within the open pool (lower = higher priority)." },
         effortSize: { type: "string", enum: ["small", "medium", "large", "xlarge"], description: "Required when triageOutcome=build (skipping triage). Otherwise applied if provided." },
@@ -414,7 +449,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         epicId: { type: "string", description: "Epic ID to link to (optional)" },
         itemId: { type: "string", description: "Optional custom item ID (e.g. BI-PORT-005). Auto-generated if omitted." },
       },
-      required: ["title", "type", "source"],
+      required: ["title", "type", "workType"],
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
@@ -577,7 +612,8 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         status: { type: "string", enum: [...BACKLOG_STATUS_VALUES], description: "Update status. For triaged items only; use triage_backlog_item to leave triaging." },
         priority: { type: "number", description: "Priority number (lower = higher priority)" },
         body: { type: "string", description: "Updated description" },
-        source: { type: "string", enum: ["feature-gap", "bug", "tool-gap", "skill-gap", "doc-gap", "user-request", "automated-detection"], description: "Reclassify the source signal" },
+        workType: { type: "string", enum: [...BACKLOG_WORK_TYPE_VALUES], description: "Reclassify what kind of work this is (closed enum)." },
+        source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "Reclassify the intake origin." },
         proposedOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Advisory recommendation; non-binding on triage" },
       },
       required: ["itemId"],
@@ -990,12 +1026,14 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "list_backlog_items",
-    description: "List backlog items filtered by status, type, epic, claim state, or active-build state. Read-only. Returns semantic IDs (BI-*, EP-*) — never cuids.",
+    description: "List backlog items filtered by status, type, workType, source, epic, claim state, or active-build state. Read-only. Returns semantic IDs (BI-*, EP-*) — never cuids.",
     inputSchema: {
       type: "object",
       properties: {
         status: { type: "string", enum: ["triaging", "open", "in-progress", "done", "deferred"] },
         type: { type: "string", enum: ["portfolio", "product"] },
+        workType: { type: "string", enum: [...BACKLOG_WORK_TYPE_VALUES], description: "Filter by work-type (bug | feature | chore | doc | tool | skill | refactor)." },
+        source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "Filter by intake origin (user-request | automated-detection)." },
         epicId: { type: "string", description: "Semantic epic id (EP-*) to filter to" },
         unclaimed: { type: "boolean", description: "Only items with no user/agent claim" },
         hasActiveBuild: { type: "boolean", description: "Only items currently linked to a Build Studio build" },
@@ -1023,7 +1061,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "update_backlog_item_status",
-    description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table in apps/web/lib/backlog/transitions.ts; same-status calls are no-op successes. Setting status='triaging' on an already-triaged item is the *retriage* path — clears triageOutcome and effortSize so triage_backlog_item can re-decide. Setting status='done' requires a resolution. Writes a status_change activity row and may auto-close the parent epic.",
+    description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table in apps/web/lib/backlog/transitions.ts; same-status calls are no-op successes. Setting status='triaging' on an already-triaged item is the *retriage* path — clears triageOutcome and effortSize so triage_backlog_item can re-decide. Setting status='done' requires a resolution. Writes a status_change activity row and may auto-close the parent epic. NOTE: this only changes the status field — it does NOT start work. For a triageOutcome=build item, starting the work means promote_to_build_studio (creates the FeatureBuild + Build Studio Ideate); flipping such an item to in-progress returns an advisory and does not build anything.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1039,7 +1077,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "link_backlog_item_to_epic",
-    description: "Link a backlog item to an epic (or unlink with epicId=null). Recomputes target epic status — if a done epic gains a new open item, it flips back to open. Writes an epic_link activity row.",
+    description: "Link a backlog item to an epic (or unlink with epicId=null). Recomputes target epic status — if a done epic gains a new open item, it flips back to open. Writes an epic_link activity row. NOTE: linking is organizational only — it does NOT triage the item (use triage_backlog_item) and does NOT promote it or create a build (use promote_to_build_studio). Linking an untriaged/unpromoted item returns an advisory; never report an epic link as 'triaged' or 'promoted'.",
     inputSchema: {
       type: "object",
       properties: {
@@ -4230,6 +4268,32 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: true,
   },
+  {
+    name: "summarize_upgrade_impact",
+    description:
+      "On-demand, install-tailored \"What's in this update?\" summary (BI-C26F7EE1). Compares the upstream lineage marker (latest succeeded SelfUpgradeRun.targetSha) to the resolved upstream HEAD, classifies the change set by Conventional Commit type, scores each commit's relevance to this install (archetype, industry, customization paths, open quality-issue themes), and returns a headline + ordered top-N items (most impactful first) plus the full list and a 'touches your customizations' callout that doubles as a §5.0 merge-conflict early warning. Advisory only — never queues or applies an upgrade. Cacheable per (currentLineageSha, targetSha); set refresh=true to bypass.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        refresh: {
+          type: "boolean",
+          description: "Bypass the per-process cache and recompute. Default false.",
+        },
+        topN: {
+          type: "number",
+          description: "Cap on items in the headline list (default 8). The full list is always returned alongside.",
+        },
+        skipPhrasing: {
+          type: "boolean",
+          description: "Return only the deterministic shape (no LLM phrasing). Default false. Useful when an external client wants to render its own copy.",
+        },
+      },
+      required: [],
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
 ];
 
 // ─── Capability Filtering ────────────────────────────────────────────────────
@@ -4803,10 +4867,25 @@ export async function executeTool(
         : `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
       const status = typeof params["status"] === "string" ? params["status"] : "triaging";
       const triageOutcome = typeof params["triageOutcome"] === "string" ? params["triageOutcome"] : null;
-      const source = typeof params["source"] === "string" ? params["source"] : null;
+      // workType is required by the tool schema; default to "feature" defensively
+      // so a missing payload field surfaces as a Prisma validation error rather
+      // than a silent insert with workType=NULL.
+      const workType = typeof params["workType"] === "string" ? params["workType"] : null;
+      // source defaults to "user-request" (the MCP tool is human-driven by
+      // contract — agents calling it on behalf of an operator are forwarding a
+      // human request).
+      const source = typeof params["source"] === "string" ? params["source"] : "user-request";
       const proposedOutcome = typeof params["proposedOutcome"] === "string" ? params["proposedOutcome"] : null;
       const effortSize = typeof params["effortSize"] === "string" ? params["effortSize"] : null;
       const priority = typeof params["priority"] === "number" ? params["priority"] : null;
+
+      if (!workType) {
+        return {
+          success: false,
+          error: "workType is required",
+          message: "workType is required (bug | feature | chore | doc | tool | skill | refactor).",
+        };
+      }
 
       // Validate the status / triageOutcome pairing rule from the tool description:
       // "supply status+triageOutcome together only when explicitly skipping triage"
@@ -4858,7 +4937,8 @@ export async function executeTool(
           ...(status === "done" ? { completedAt: new Date() } : {}),
           ...(typeof params["body"] === "string" ? { body: params["body"] } : {}),
           ...(epicCuid ? { epicId: epicCuid } : {}),
-          ...(source ? { source } : {}),
+          workType,
+          source,
           ...(triageOutcome ? { triageOutcome } : {}),
           ...(proposedOutcome ? { proposedOutcome } : {}),
           ...(effortSize ? { effortSize } : {}),
@@ -5284,6 +5364,7 @@ export async function executeTool(
       }
       if (typeof params["priority"] === "number") data["priority"] = params["priority"];
       if (typeof params["body"] === "string") data["body"] = params["body"];
+      if (typeof params["workType"] === "string") data["workType"] = params["workType"];
       if (typeof params["source"] === "string") data["source"] = params["source"];
       if (typeof params["proposedOutcome"] === "string") data["proposedOutcome"] = params["proposedOutcome"];
       await prisma.backlogItem.update({ where: { itemId: String(params["itemId"]) }, data });
@@ -5413,6 +5494,8 @@ export async function executeTool(
       const where: Record<string, unknown> = {};
       if (typeof params["status"] === "string") where["status"] = params["status"];
       if (typeof params["type"] === "string") where["type"] = params["type"];
+      if (typeof params["workType"] === "string") where["workType"] = params["workType"];
+      if (typeof params["source"] === "string") where["source"] = params["source"];
       if (typeof params["epicId"] === "string" && params["epicId"].trim()) {
         const epicRow = await prisma.epic.findFirst({
           where: { OR: [{ epicId: params["epicId"].trim() }, { id: params["epicId"].trim() }] },
@@ -5443,6 +5526,8 @@ export async function executeTool(
           title: true,
           status: true,
           type: true,
+          workType: true,
+          source: true,
           priority: true,
           effortSize: true,
           activeBuildId: true,
@@ -5458,6 +5543,8 @@ export async function executeTool(
         title: i.title,
         status: i.status,
         type: i.type,
+        workType: i.workType,
+        source: i.source,
         priority: i.priority,
         effortSize: i.effortSize,
         triageOutcome: i.triageOutcome,
@@ -5520,6 +5607,8 @@ export async function executeTool(
           title: item.title,
           status: item.status,
           type: item.type,
+          workType: item.workType,
+          source: item.source,
           priority: item.priority,
           effortSize: item.effortSize,
           triageOutcome: item.triageOutcome,
@@ -5595,7 +5684,7 @@ export async function executeTool(
       // (Reason is checked against the *current* status below, after the item is loaded.)
       const item = await prisma.backlogItem.findUnique({
         where: { itemId: itemIdRaw },
-        select: { id: true, status: true, epicId: true, triageOutcome: true, effortSize: true },
+        select: { id: true, status: true, epicId: true, triageOutcome: true, effortSize: true, activeBuildId: true },
       });
       if (!item)
         return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
@@ -5680,11 +5769,28 @@ export async function executeTool(
         }
         return next;
       });
+      // Advisory: flipping a build item to in-progress is not the same as
+      // starting the work — surface the promote_to_build_studio path so the
+      // coworker can't report a no-op status change as "throughput".
+      const { buildPromoteAdvisory } = await import("@/lib/backlog/promote-advisory");
+      const promoteAdvisory = buildPromoteAdvisory({
+        itemId: updated.itemId,
+        targetStatus: updated.status,
+        triageOutcome: item.triageOutcome,
+        hasActiveBuild: item.activeBuildId != null,
+      });
       return {
         success: true,
         entityId: updated.itemId,
-        message: `${updated.itemId}: ${item.status} → ${updated.status}`,
-        data: { itemId: updated.itemId, status: updated.status, completedAt: updated.completedAt },
+        message:
+          `${updated.itemId}: ${item.status} → ${updated.status}` +
+          (promoteAdvisory ? ` — ADVISORY: ${promoteAdvisory}` : ""),
+        data: {
+          itemId: updated.itemId,
+          status: updated.status,
+          completedAt: updated.completedAt,
+          ...(promoteAdvisory ? { advisory: promoteAdvisory } : {}),
+        },
       };
     }
 
@@ -5710,7 +5816,14 @@ export async function executeTool(
       }
       const item = await prisma.backlogItem.findUnique({
         where: { itemId: itemIdRaw },
-        select: { id: true, epicId: true, status: true, epic: { select: { epicId: true } } },
+        select: {
+          id: true,
+          epicId: true,
+          status: true,
+          triageOutcome: true,
+          activeBuildId: true,
+          epic: { select: { epicId: true } },
+        },
       });
       if (!item)
         return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
@@ -5755,11 +5868,28 @@ export async function executeTool(
           }
         }
       });
+      // Advisory: a coworker asked to "triage + promote" may call this and then
+      // report the item as triaged/promoted, when an epic link is purely
+      // organizational. Surface the real triage_backlog_item / promote_to_build_studio
+      // path when triage/promotion is genuinely unfinished (BI-6C86ADEB).
+      const { buildEpicLinkAdvisory } = await import("@/lib/backlog/promote-advisory");
+      const epicLinkAdvisory = buildEpicLinkAdvisory({
+        itemId: itemIdRaw,
+        targetEpicId: targetEpicSemantic,
+        triageOutcome: item.triageOutcome,
+        hasActiveBuild: item.activeBuildId != null,
+      });
       return {
         success: true,
         entityId: itemIdRaw,
-        message: `Linked ${itemIdRaw} to ${targetEpicSemantic ?? "(no epic)"}`,
-        data: { itemId: itemIdRaw, epicId: targetEpicSemantic },
+        message:
+          `Linked ${itemIdRaw} to ${targetEpicSemantic ?? "(no epic)"}` +
+          (epicLinkAdvisory ? ` — ADVISORY: ${epicLinkAdvisory}` : ""),
+        data: {
+          itemId: itemIdRaw,
+          epicId: targetEpicSemantic,
+          ...(epicLinkAdvisory ? { advisory: epicLinkAdvisory } : {}),
+        },
       };
     }
 
@@ -6776,6 +6906,21 @@ export async function executeTool(
         contributionReadiness = "low";
       }
 
+      // Surface canonical first-party palettes the agent should COMPOSE instead
+      // of hand-rolling (e.g. report-kit for reporting/data-display UX). Sourced
+      // from the in-code registry; each carries its governing kernel principle.
+      const { matchCanonicalPrimitives } = await import("@/lib/canonical-primitives");
+      const reusablePrimitives = matchCanonicalPrimitives(
+        `${featureDescription} ${domainConcepts.join(" ")} ${abstractionBoundary}`,
+      ).map((p) => ({
+        name: p.name,
+        path: p.path,
+        purpose: p.purpose,
+        exports: p.exports,
+        principle: p.principleSlug,
+        docs: p.docs,
+      }));
+
       const analysis = {
         scope: userScope,
         domainEntities,
@@ -6783,11 +6928,18 @@ export async function executeTool(
           ? "Feature is designed for a single use case."
           : "Domain-specific values should be stored as configuration rather than hardcoded."),
         contributionReadiness,
+        reusablePrimitives,
       };
+
+      const primitiveHint = reusablePrimitives.length
+        ? ` Compose the existing palette instead of hand-rolling: ${reusablePrimitives
+            .map((p) => `${p.name} (${p.exports.slice(0, 3).join(", ")}…; principle ${p.principle})`)
+            .join("; ")}.`
+        : "";
 
       return {
         success: true,
-        message: `Reusability: ${userScope} — ${domainEntities.length} parameterizable concept(s), contribution readiness: ${contributionReadiness}.`,
+        message: `Reusability: ${userScope} — ${domainEntities.length} parameterizable concept(s), contribution readiness: ${contributionReadiness}.${primitiveHint}`,
         data: analysis as unknown as Record<string, unknown>,
       };
     }
@@ -6920,6 +7072,8 @@ export async function executeTool(
             toPhase as import("@/lib/feature-build-types").BuildPhase,
             {
               kind: latestBuild.kind,
+              // Right-sizing matrix: persisted on plan.processSize at promote time.
+              processSize: (plan.processSize as string | undefined) ?? "medium",
               fixContext: handoffBrief?.fixContext,
               designDoc: latestBuild.designDoc, designReview: latestBuild.designReview,
               buildPlan: latestBuild.buildPlan, planReview: latestBuild.planReview,
@@ -7321,7 +7475,16 @@ export async function executeTool(
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       let phaseGateBlocker: string | null = null;
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, kind: true, brief: true } });
+      // Right-sizing matrix: also select plan (carries processSize) so the
+      // fix-flow gate picks the (fix, small | medium | large | xlarge) cell
+      // rather than always falling back to (fix, medium). plan is also
+      // needed below for the standard feature path's intake fallback.
+      // BI-CE49D82E — also select prior designReview so we can pass its issues
+      // to the reviewer prompt for delta-awareness and surface the iteration
+      // trajectory in the operator-facing gate reason (mirror of BI-4396EFEC
+      // for the plan path). Live repro: FB-5E20E793 oscillated on the same
+      // "missing accessibility" complaint round after round.
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, designReview: true, kind: true, brief: true, plan: true } });
 
       // Fix flow: a fix build has no feature design doc — it carries a structured
       // diagnosis (fixContext) on its brief. Review the diagnosis for completeness
@@ -7329,6 +7492,7 @@ export async function executeTool(
       if (build?.kind === "fix") {
         const { isFixContextComplete, checkPhaseGate } = await import("@/lib/feature-build-types");
         const fixBrief = (build.brief ?? null) as import("@/lib/feature-build-types").FeatureBrief | null;
+        const fixProcessSize = ((build.plan as Record<string, unknown> | null)?.processSize as string | undefined) ?? "medium";
         const fc = fixBrief?.fixContext;
         const complete = isFixContextComplete(fc);
         const review = complete
@@ -7343,7 +7507,7 @@ export async function executeTool(
         }
         let fixPhaseGateBlocker: string | null = null;
         try {
-          const gate = checkPhaseGate("ideate", "plan", { kind: "fix", fixContext: fc, designReview: review });
+          const gate = checkPhaseGate("ideate", "plan", { kind: "fix", processSize: fixProcessSize, fixContext: fc, designReview: review });
           if (gate.allowed) {
             const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
             void completeBuildPhaseRun(buildId, "ideate");
@@ -7371,7 +7535,26 @@ export async function executeTool(
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
       const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
       const designDocTyped = build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0];
-      const prompt = buildDesignReviewPrompt(designDocTyped, "");
+      // BI-CE49D82E — Compute the iteration context up front so we can
+      // (a) feed prior issues into the reviewer prompt and (b) populate
+      // ReviewResult.iteration on the output. Round is 1-based: first
+      // review = 1, every subsequent reviewDesignDoc call increments.
+      const priorDesignReview = (build.designReview ?? null) as
+        | { issues?: Array<{ severity?: string; description?: string }>; iteration?: { round?: number } }
+        | null;
+      const priorRound = priorDesignReview?.iteration?.round ?? 0;
+      const priorIssues = Array.isArray(priorDesignReview?.issues)
+        ? priorDesignReview!.issues!
+            .filter((i): i is { severity: string; description: string } =>
+              typeof i?.severity === "string" && typeof i?.description === "string",
+            )
+            .map((i) => ({ severity: i.severity, description: i.description }))
+        : [];
+      const currentRound = priorRound + 1;
+      const priorContext = priorIssues.length > 0
+        ? { round: priorRound, issues: priorIssues }
+        : null;
+      const prompt = buildDesignReviewPrompt(designDocTyped, "", priorContext);
       const archPrompt = buildArchitectureReviewPrompt({ kind: "design", doc: designDocTyped }, "");
       const { routeAndCall } = await import("@/lib/routed-inference");
       const messages = [{ role: "user" as const, content: prompt }];
@@ -7405,7 +7588,26 @@ export async function executeTool(
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
         summary: "Review could not be completed — retry.",
       };
-      const review = architectureAdvisory ? { ...reviewBase, architectureAdvisory } : reviewBase;
+      // BI-CE49D82E — Compute the iteration delta against the prior round and
+      // attach to the ReviewResult. computeReviewDelta + isOscillating live in
+      // feature-build-types so they're independently unit-testable and shared
+      // with the plan path.
+      const { computeReviewDelta, isOscillating } = await import("@/lib/feature-build-types");
+      const reviewWithIteration = (() => {
+        if (priorIssues.length === 0) {
+          return { ...reviewBase, iteration: { round: currentRound } };
+        }
+        const delta = computeReviewDelta(priorIssues, reviewBase.issues);
+        return {
+          ...reviewBase,
+          iteration: {
+            round: currentRound,
+            prior: delta,
+            oscillating: isOscillating(delta, reviewBase.issues.length),
+          },
+        };
+      })();
+      const review = architectureAdvisory ? { ...reviewWithIteration, architectureAdvisory } : reviewWithIteration;
       const archAdvisoryNote = architectureAdvisory && architectureAdvisory.issues.length > 0
         ? ` Architecture review (advisory): ${architectureAdvisory.summary} Fold actionable items into the design before building — they do not block this gate.`
         : "";
@@ -7464,9 +7666,18 @@ export async function executeTool(
         const issueList = criticalIssues.length > 0
           ? criticalIssues.map((i: { description: string }) => i.description).join("; ")
           : review.summary;
+        // BI-CE49D82E — Include the iteration trajectory in the agent-facing
+        // message so the implementer model sees when its revisions are trading
+        // one set of issues for another instead of converging. The oscillating
+        // signal recommends a scope split rather than another iteration —
+        // matching the plan path established by BI-4396EFEC (D38).
+        const iter = review.iteration;
+        const trajectoryNote = iter?.prior
+          ? ` (Round ${iter.round}: ${iter.prior.addressed} addressed, ${iter.prior.persisted} persist, ${iter.prior.newlySurfaced} new${iter.oscillating ? " — issues are not net-decreasing across rounds; consider proposing a scope split rather than another revision." : ""}.)`
+          : "";
         return {
           success: true,
-          message: `Design review FAILED. Blocking issues: ${issueList}. Revise the design document to address these issues, then call saveBuildEvidence with field "designDoc" and re-run reviewDesignDoc.${archAdvisoryNote}`,
+          message: `Design review FAILED. Blocking issues: ${issueList}. Revise the design document to address these issues, then call saveBuildEvidence with field "designDoc" and re-run reviewDesignDoc.${trajectoryNote}${archAdvisoryNote}`,
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }
@@ -7496,6 +7707,10 @@ export async function executeTool(
           where: { buildId },
           select: {
             phase: true,
+            // Right-sizing matrix: kind drives policy selection in
+            // checkPhaseGate; pre-existing rows default to "feature" via
+            // the schema default, so this is back-compat-safe.
+            kind: true,
             originatingBacklogItemId: true,
             draftApprovedAt: true,
             designDoc: true,
@@ -7673,6 +7888,8 @@ export async function executeTool(
           }
 
           const gate = checkPhaseGate("ideate", "plan", {
+            kind: updatedBuild.kind,
+            processSize: ((updatedBuild.plan as Record<string, unknown> | null)?.processSize as string | undefined) ?? "medium",
             designDoc: updatedBuild.designDoc,
             designReview: updatedBuild.designReview,
             happyPathState,
@@ -7914,6 +8131,8 @@ export async function executeTool(
           const happyPathState = normalizeHappyPathState(plan.happyPathState);
           const gate = checkPhaseGate("plan", "build", {
             kind: updatedBuild.kind,
+            // Right-sizing matrix: persisted on plan.processSize at promote time.
+            processSize: (plan.processSize as string | undefined) ?? "medium",
             buildPlan: updatedBuild.buildPlan,
             planReview: updatedBuild.planReview,
             happyPathState,
@@ -10416,12 +10635,23 @@ export async function executeTool(
     case "run_ux_test": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, sandboxPort: true, brief: true } });
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, sandboxPort: true, brief: true, kind: true } });
       if (!build?.sandboxPort || !build.sandboxId || !build.brief) return { success: false, error: "Sandbox or brief not ready.", message: "Launch sandbox and save brief first." };
 
-      const brief = build.brief as { acceptanceCriteria?: string[] };
-      const testCases = (params.tests as string[] | undefined) ?? brief.acceptanceCriteria ?? [];
-      if (testCases.length === 0) return { success: false, error: "No test cases.", message: "No acceptance criteria or test cases to run." };
+      const { deriveFixUxTestCases } = await import("@/lib/explore/feature-build-types");
+      const brief = build.brief as {
+        acceptanceCriteria?: string[];
+        fixContext?: import("@/lib/explore/feature-build-types").FixContext;
+      };
+      // Explicit `tests` always win. Otherwise, for a fix build derive the
+      // assertion from the structured fix diagnosis (defect-gone on its route)
+      // rather than the polluted feature acceptanceCriteria. (BI-AC5CFDB0)
+      const testCases =
+        (params.tests as string[] | undefined) ??
+        (build.kind === "fix"
+          ? deriveFixUxTestCases(brief.fixContext)
+          : brief.acceptanceCriteria ?? []);
+      if (testCases.length === 0) return { success: false, error: "No test cases.", message: build.kind === "fix" ? "No fix context (route/expected) or test cases to verify." : "No acceptance criteria or test cases to run." };
 
       try {
         const BROWSER_USE_URL = process.env.BROWSER_USE_URL || "http://browser-use:8500/mcp";
@@ -11900,8 +12130,22 @@ export async function executeTool(
         semanticFallbackWarnRatio: semanticWarnRatio,
       });
 
+      // BI-E1FB2307: resolve which decision-perspective profile governs this
+      // caller (WWMD platform vs WWWD organization) and name it in the response
+      // so agents/operators know which kernel weighed in. Additive — does not
+      // change scoring yet; Gate-routed scoring + boundary enforcement is the
+      // follow-on (C2b). callingPopulation was validated above.
+      const { resolveDecisionCallerContext } = await import(
+        "@/lib/decision/caller-context"
+      );
+      const governingProfile = await resolveDecisionCallerContext({
+        callingPopulation:
+          callingPopulation as "in_platform_coworker" | "external_coding_agent" | "human",
+        agentId: context?.agentId ?? null,
+      });
+
       const summary = result.recommendation
-        ? `Recommends ${result.recommendation.optionId} (confidence: ${result.recommendation.confidence}, composite ${result.recommendation.composite.toFixed(3)})`
+        ? `Recommends ${result.recommendation.optionId} (confidence: ${result.recommendation.confidence}, composite ${result.recommendation.composite.toFixed(3)}; governing profile: ${governingProfile.governingProfileKind})`
         : "No applicable principles to evaluate.";
 
       return {
@@ -11913,6 +12157,11 @@ export async function executeTool(
           flags: result.flags,
           reasoning: result.reasoning,
           appliedPrincipleCount: cappedPrinciples.length,
+          governingProfile: {
+            profileId: governingProfile.governingProfileId,
+            kind: governingProfile.governingProfileKind,
+            resolvedVia: governingProfile.resolvedVia,
+          },
         },
       };
     }
@@ -14106,6 +14355,42 @@ export async function executeTool(
           success: false,
           error: msg,
           message: `trigger_contributor_inventory_sync failed: ${msg}`,
+        };
+      }
+    }
+
+    case "summarize_upgrade_impact": {
+      // BI-C26F7EE1 — on-demand install-tailored upgrade impact summary.
+      // Read-only, advisory; does not queue or apply anything.
+      const refresh = params["refresh"] === true;
+      const skipPhrasing = params["skipPhrasing"] === true;
+      const topNRaw = params["topN"];
+      const topN =
+        typeof topNRaw === "number" && Number.isFinite(topNRaw) && topNRaw > 0
+          ? Math.floor(topNRaw)
+          : undefined;
+      try {
+        const { summarizeUpgradeImpact } = await import("@/lib/self-upgrade/impact");
+        const result = await summarizeUpgradeImpact({ refresh, skipPhrasing, topN });
+        if (!result.ok) {
+          return {
+            success: true,
+            message: result.detail,
+            data: { ok: false, reason: result.reason, detail: result.detail },
+          };
+        }
+        return {
+          success: true,
+          message: result.summary.phrased?.headline
+            ?? `Upgrade impact summary: ${result.summary.counts.total} commit(s) since the last lineage marker.`,
+          data: result.summary as unknown as Record<string, unknown>,
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          error: msg,
+          message: `summarize_upgrade_impact failed: ${msg}`,
         };
       }
     }

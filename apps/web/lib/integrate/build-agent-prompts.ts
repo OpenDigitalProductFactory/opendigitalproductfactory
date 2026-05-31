@@ -495,11 +495,16 @@ GUARDRAILS:
 If Dev mode is enabled, show the registration details, diff summary, deployment window info, assessment criteria scores, and IT4IT stage references.`,
 };
 
-// ─── Fix-flow phase prompts ──────────────────────────────────────────────────
-// Used when FeatureBuild.kind === "fix". Only the phases that are still
-// feature-shaped are overridden (ideate/plan/review). The `build` phase reuses
-// the feature prompt (it already documents a "WORKFLOW FOR BUG FIXES AND
-// MODIFICATIONS" path), and `ship` is identical for both kinds.
+// ─── Per-variant phase prompts ──────────────────────────────────────────────
+//
+// Right-sizing matrix:
+// docs/superpowers/specs/2026-05-30-build-studio-right-sizing-design.md
+//
+// Each LifecyclePolicy.promptVariant ∈ {feature, fix, chore, doc} maps to a
+// hardcoded prompt set below. Missing variant cells fall through to the
+// feature prompt for that phase, which preserves the original "fix flow
+// reuses the feature build prompt" behavior.
+
 const PHASE_PROMPTS_FIX: Record<string, string> = {
   ideate: `You are diagnosing a reported defect. This is a FIX, not a new feature — do not design new capability.
 
@@ -557,23 +562,145 @@ Record acceptance against the diagnosis: each fixContext expected/actual pair sh
 Keep responses short. Do not request new-feature acceptance criteria — the success criterion is the absence of the reported defect.`,
 };
 
+// Chore prompts — intent-driven cleanup / refactor. No design research,
+// no portfolio anchoring, no acceptance ceremony. Plan + verify is the work.
+const PHASE_PROMPTS_CHORE: Record<string, string> = {
+  ideate: `This build is a CHORE. There is no feature to design — advance to plan immediately.
+
+${PROJECT_CONTEXT}
+
+CHORES are intent-driven cleanups (refactors, dep bumps, internal moves, log noise reductions). The BI body IS the spec. You do NOT need a design document, taxonomy placement, or portfolio anchor.
+
+Read the BI title + body once. If the intent is already clear, call save_phase_handoff with a one-line summary and move on. If the intent is ambiguous, ask ONE clarifying question (e.g. "is this purely internal or is there any user-visible side?"). Do not generate a design doc.`,
+
+  plan: `You are planning a chore (refactor, cleanup, dep bump, internal move). The BI body is the spec.
+
+${PROJECT_CONTEXT}
+
+STEP 1 — SAVE THE PLAN via saveBuildEvidence field "buildPlan":
+  {
+    "fileStructure": [
+      { "path": "apps/web/...", "action": "modify", "purpose": "<what the cleanup changes here>" }
+    ],
+    "tasks": [
+      { "title": "<smallest unit of cleanup>", "testFirst": "<assertion that the cleanup preserves existing behavior — usually a typecheck or the relevant vitest>", "implement": "<full-path edit>", "verify": "pnpm --filter web typecheck" }
+    ]
+  }
+  Top-level "fileStructure" and "tasks" arrays. Full monorepo-relative paths.
+  A CHORE MUST PRESERVE BEHAVIOR. If your plan changes behavior, this is not a chore — escalate by updating the BI source/kind.
+
+STEP 2: call reviewBuildPlan. Minimal review is fine — chores don't need design deliberation, just a sanity check that the plan preserves behavior and isn't accidentally feature-shaped.
+
+STEP 3: one sentence — "Chore plan ready — [N] tasks. Building now." — then save_phase_handoff.
+
+RULES: no design questions; no scope expansion; max 1 sentence per response.`,
+
+  review: `You are verifying a chore. Acceptance for a chore is "behavior is unchanged and the cleanup intent is achieved".
+
+${PROJECT_CONTEXT}
+
+VERIFY, IN ORDER:
+  1. Typecheck passes (pnpm --filter web typecheck).
+  2. Relevant tests still pass.
+  3. The cleanup intent from the BI is visible in the diff (e.g. the deprecated import is gone, the dep is bumped, the dead code is deleted).
+
+Do NOT generate acceptance-criteria evaluation entries — chores don't have user-visible acceptance criteria. Save a one-line acceptance note covering the three checks above and advance to ship.
+
+Keep responses short.`,
+};
+
+// Doc prompts — content edits. No sandbox boot in spirit; the verification
+// still typechecks anything that imports embedded code samples, but UX
+// verification and acceptance-criteria evaluation are skipped.
+const PHASE_PROMPTS_DOC: Record<string, string> = {
+  ideate: `This build is a DOC gap. There is no feature to design — advance to plan immediately.
+
+${PROJECT_CONTEXT}
+
+A doc-gap fix is a content edit. The BI body identifies what needs to be added/corrected. You do NOT need a design document, portfolio anchor, or sandbox session.
+
+If the BI body names the target file(s), advance to plan with a one-line summary. If it does not, ask ONE clarifying question about which doc surface to edit.`,
+
+  plan: `You are planning a doc-gap fix. The BI body identifies the target.
+
+${PROJECT_CONTEXT}
+
+STEP 1 — SAVE THE PLAN via saveBuildEvidence field "buildPlan":
+  {
+    "fileStructure": [
+      { "path": "docs/...", "action": "create" | "modify", "purpose": "<what the doc edit covers>" }
+    ],
+    "tasks": [
+      { "title": "<doc edit unit>", "testFirst": "<link check / typecheck for embedded code / wiki-lint>", "implement": "<full-path edit>", "verify": "wiki_lint or pnpm --filter web typecheck if code samples are embedded" }
+    ]
+  }
+  Top-level "fileStructure" and "tasks" arrays. Full monorepo-relative paths.
+
+STEP 2: call reviewBuildPlan. Minimal review.
+
+STEP 3: one sentence — "Doc plan ready — [N] edits. Writing now." — then save_phase_handoff.
+
+RULES: no design questions; no scope expansion; max 1 sentence per response.`,
+
+  review: `You are verifying a doc-gap fix. Acceptance is "the doc reads correctly and any embedded code/links resolve".
+
+${PROJECT_CONTEXT}
+
+VERIFY, IN ORDER:
+  1. Any embedded code samples typecheck (or are explicitly marked non-runnable).
+  2. Links resolve (wiki_lint or equivalent).
+  3. The gap the BI identified is closed by the edit.
+
+Do NOT generate acceptance-criteria evaluation entries beyond the three checks above. Advance to ship.
+
+Keep responses short.`,
+};
+
+const PHASE_PROMPTS_BY_VARIANT: Record<string, Record<string, string>> = {
+  feature: PHASE_PROMPTS,
+  fix: PHASE_PROMPTS_FIX,
+  chore: PHASE_PROMPTS_CHORE,
+  doc: PHASE_PROMPTS_DOC,
+};
+
+/**
+ * Resolve the phase prompt for a build. Generalizes the previous
+ * (phase, kind) selector to consult the right-sizing matrix:
+ *
+ *   1. getProcessPolicy(kind, size) yields a LifecyclePolicy.
+ *   2. If `phase` is not in policy.phases, the prompt is empty
+ *      (the phase is effectively skipped — its gate auto-passes).
+ *   3. Otherwise, pick the variant's hardcoded prompt; if none exists for
+ *      this (variant, phase), fall through to the feature prompt for that
+ *      phase. This preserves the original "fix reuses feature build prompt"
+ *      behavior and gives chore/doc graceful fallbacks while the variant
+ *      prompts mature.
+ *   4. Load the DB override at slug "<phase>-<variant>" (or just "<phase>"
+ *      for feature), with the hardcoded prompt as fallback.
+ *
+ * Back-compat: getBuildPhasePrompt(phase) with no kind/size returns the
+ * exact same string as before for every (phase, "feature") pair.
+ */
 export async function getBuildPhasePrompt(
   phase: BuildPhase,
   kind: FeatureBuildKind = "feature",
+  size: import("@/lib/feature-build-types").BuildProcessSize = "medium",
 ): Promise<string> {
-  if (kind === "fix") {
-    const fixHardcoded = PHASE_PROMPTS_FIX[phase];
-    if (fixHardcoded) {
-      // DB-overridable via Admin > Prompts under the "<phase>-fix" slug; falls
-      // back to the hardcoded fix prompt (never empty) for active phases.
-      return loadPrompt("build-phase", `${phase}-fix`, fixHardcoded);
-    }
-    // Phases without a fix variant (build/ship/terminal) fall through to the
-    // feature prompt, preserving terminal-phase empty-prompt behavior below.
-  }
-  const hardcoded = PHASE_PROMPTS[phase] ?? "";
+  const { getProcessPolicy, normalizeType, normalizeSize } = await import("@/lib/explore/build-process-matrix");
+  const policy = getProcessPolicy(normalizeType(kind), normalizeSize(size));
+
+  // Phase not in this policy's visible set → empty prompt (skip). Terminal
+  // phases ("complete", "failed") were always empty; this keeps them so for
+  // every variant.
+  if (!policy.phases.includes(phase)) return "";
+
+  const variant = policy.promptVariant;
+  const variantPrompts = PHASE_PROMPTS_BY_VARIANT[variant] ?? PHASE_PROMPTS;
+  const hardcoded = variantPrompts[phase] ?? PHASE_PROMPTS[phase] ?? "";
   if (!hardcoded) return "";
-  return loadPrompt("build-phase", phase, hardcoded);
+
+  const slug = variant === "feature" ? phase : `${phase}-${variant}`;
+  return loadPrompt("build-phase", slug, hardcoded);
 }
 
 export type PhaseHandoffSummary = {
@@ -591,6 +718,11 @@ export type BuildContext = {
   phase: BuildPhase;
   /** Work kind. Absent/null is treated as "feature". */
   kind?: FeatureBuildKind | null;
+  /** Right-sizing process size, drawn from the originating BI's effortSize
+   *  and persisted at promote time in plan.processSize. Absent/null is
+   *  treated as "medium" — the default policy cell, byte-identical to
+   *  pre-matrix behavior. */
+  size?: import("@/lib/feature-build-types").BuildProcessSize | null;
   title: string;
   brief: FeatureBrief | null;
   designDoc?: BuildDesignDoc | null;
@@ -841,7 +973,7 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
   }
 
   lines.push("");
-  lines.push(await getBuildPhasePrompt(ctx.phase, ctx.kind ?? "feature"));
+  lines.push(await getBuildPhasePrompt(ctx.phase, ctx.kind ?? "feature", ctx.size ?? "medium"));
 
   // Contribution mode awareness for all phases — agent should know this for design decisions
   if (ctx.contributionMode) {

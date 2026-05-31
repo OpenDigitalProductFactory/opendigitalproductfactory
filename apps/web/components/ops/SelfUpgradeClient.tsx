@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { triggerSelfUpgrade } from "@/lib/actions/promotions";
 import { LocalTime } from "@/components/ui/LocalTime";
+import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
 
 type LatestRun = {
   runId: string;
@@ -135,7 +136,8 @@ export default function SelfUpgradeClient({
                 type="checkbox"
                 checked={override}
                 onChange={(e) => setOverride(e.target.checked)}
-                aria-label="Emergency override: bypass maintenance window"
+                aria-label="Emergency override: bypass the safety drain"
+                title="Bypass the quiescence safety drain. Only for emergencies — it can interrupt in-flight work."
                 className="accent-[var(--dpf-warning)]"
               />
               Emergency override
@@ -145,11 +147,11 @@ export default function SelfUpgradeClient({
               onClick={handleTrigger}
               disabled={isPending || latestRun?.status === "running"}
               aria-busy={isPending}
-              aria-label="Trigger self-upgrade now"
+              aria-label="Upgrade now"
               data-override={override ? "true" : "false"}
               className="px-3 py-1.5 text-xs rounded-lg bg-[var(--dpf-accent)]/20 text-[var(--dpf-accent)] border border-[var(--dpf-accent)]/40 hover:bg-[var(--dpf-accent)]/30 transition-colors disabled:opacity-50"
             >
-              {isPending ? "Triggering..." : override ? "Force upgrade now" : "Trigger Now"}
+              {isPending ? "Upgrading..." : override ? "Force upgrade now" : "Upgrade now"}
             </button>
           </div>
         )}
@@ -265,6 +267,8 @@ export default function SelfUpgradeClient({
           )}
         </div>
       )}
+
+      <UpgradeImpactPanel enabled={enabled} />
 
       {enabled && !latestRun && (
         <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)]">

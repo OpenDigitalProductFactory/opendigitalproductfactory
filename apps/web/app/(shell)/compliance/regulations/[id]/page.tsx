@@ -41,7 +41,7 @@ export default async function RegulationDetailPage({ params }: Props) {
         <p className="text-sm text-[var(--dpf-muted)]">{regulation.name}</p>
         {regulation.sourceUrl && (
           <a href={regulation.sourceUrl} target="_blank" rel="noopener noreferrer"
-            className="text-xs text-blue-400 hover:underline mt-1 inline-block">
+            className="text-xs text-[var(--dpf-info)] hover:underline mt-1 inline-block">
             Source document
           </a>
         )}
@@ -85,7 +85,7 @@ export default async function RegulationDetailPage({ params }: Props) {
               <div key={o.id} className="p-3 rounded-lg border border-[var(--dpf-border)] flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${hasControls ? "bg-green-400" : "bg-red-400"}`} />
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: hasControls ? "var(--dpf-success)" : "var(--dpf-error)" }} />
                     <span className="text-sm text-[var(--dpf-text)]">{o.title}</span>
                   </div>
                   <div className="flex gap-2 mt-1">

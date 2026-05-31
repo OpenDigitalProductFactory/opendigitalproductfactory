@@ -2,7 +2,7 @@
   "generatedAt": "2026-04-29T05:50:51.037Z",
   "spec": "docs/superpowers/specs/2026-04-27-coworker-tool-grant-spec-design.md",
   "invariantsChecked": 6,
-  "errorCount": 73,
+  "errorCount": 76,
   "warnCount": 0,
   "findings": [
     {
@@ -203,14 +203,6 @@
       "agentId": null,
       "file": "packages/db/data/grant_catalog.json",
       "summary": "Catalog grant 'financial_read' has no honored_by_tools",
-      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
-    },
-    {
-      "invariantId": "GRANT-002",
-      "severity": "error",
-      "agentId": null,
-      "file": "packages/db/data/grant_catalog.json",
-      "summary": "Catalog grant 'financial_report_create' has no honored_by_tools",
       "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
     },
     {
@@ -587,6 +579,38 @@
       "agentId": null,
       "file": "packages/db/data/grant_catalog.json",
       "summary": "Catalog grant 'vulnerability_scan' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'build_promote' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'coworker_screen_drive' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'coworker_screen_fill' has no honored_by_tools",
+      "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
+    },
+    {
+      "invariantId": "GRANT-002",
+      "severity": "error",
+      "agentId": null,
+      "file": "packages/db/data/grant_catalog.json",
+      "summary": "Catalog grant 'coworker_screen_read' has no honored_by_tools",
       "detail": "Aspirational grant: declared in registry, present in catalog, but no tool implementation in apps/web/lib/tak/agent-grants.ts checks it. Either implement a tool that requires this grant or remove the grant from the registry and catalog."
     }
   ]

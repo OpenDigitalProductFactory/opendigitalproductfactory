@@ -28,6 +28,14 @@ vi.mock("@/lib/actions/promotions", () => ({
   triggerSelfUpgrade: vi.fn(),
 }));
 
+// The global useState mock above keys off `initial === null`, so any child
+// component with its own `useState<X | null>(null)` would otherwise receive
+// `shared.triggerResult` and try to render it. Stub the impact panel so the
+// trigger-control tests stay focused on this component's behavior.
+vi.mock("@/components/ops/UpgradeImpactPanel", () => ({
+  default: () => null,
+}));
+
 import SelfUpgradeClient from "./SelfUpgradeClient";
 
 const baseStatus = {
@@ -77,11 +85,11 @@ describe("SelfUpgradeClient – disabled", () => {
     expect(html).toContain("Disabled");
   });
 
-  it("does not render the Trigger Now button when disabled", () => {
+  it("does not render the Upgrade now button when disabled", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient {...baseStatus} enabled={false} />,
     );
-    expect(html).not.toContain("Trigger Now");
+    expect(html).not.toContain("Upgrade now");
   });
 
   it("shows the disabled notice copy", () => {
@@ -101,9 +109,9 @@ describe("SelfUpgradeClient – enabled", () => {
     expect(html).toContain("stable");
   });
 
-  it("renders the Trigger Now button when enabled", () => {
+  it("renders the Upgrade now button when enabled", () => {
     const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain("Trigger Now");
+    expect(html).toContain("Upgrade now");
   });
 
   it("shows the deployed and target SHA values", () => {
@@ -236,7 +244,7 @@ describe("SelfUpgradeClient – trigger control", () => {
 
   it("button is not disabled when no run is active", () => {
     const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain("Trigger Now");
+    expect(html).toContain("Upgrade now");
     expect(html).not.toContain('disabled=""');
   });
 
@@ -251,11 +259,13 @@ describe("SelfUpgradeClient – trigger control", () => {
 // ─── Loading state ────────────────────────────────────────────────────────────
 
 describe("SelfUpgradeClient – loading", () => {
-  it("shows Triggering... text when pending", () => {
+  it("shows Upgrading... text when pending", () => {
     shared.isPending = true;
     const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain("Triggering...");
-    expect(html).not.toContain("Trigger Now");
+    expect(html).toContain("Upgrading...");
+    // The idle button label ">Upgrade now<" is replaced while pending (the
+    // aria-label "Upgrade now" stays, so assert on the visible button text).
+    expect(html).not.toContain(">Upgrade now<");
   });
 
   it("button is disabled while pending", () => {

@@ -44,6 +44,13 @@ import {
 } from "@/lib/skills/runtime";
 import { recordSkillUsageEvents } from "@/lib/skills/usage-events";
 import { recallWikiContext } from "@/lib/wiki/recall";
+import {
+  classifyPerspective,
+  extractPageTopic,
+  buildPerspectiveQuery,
+  buildPerspectiveHint,
+  PERSPECTIVE_PAGE_KINDS,
+} from "@/lib/wiki/perspective-intent";
 import { getGrantedCapabilities, getDeniedCapabilities } from "@/lib/permissions";
 import { classifyTask } from "@/lib/task-classifier";
 import { getTaskType } from "@/lib/task-types";
@@ -737,11 +744,30 @@ export async function sendMessage(input: {
     const wikiOrg = await prisma.organization
       .findFirst({ select: { id: true } })
       .catch(() => null);
-    const wikiContext = await recallWikiContext({
-      query: input.content,
+
+    // BI-F5179C9E: perspective routing. "what would Mark think/do" (WWMD) and
+    // "what would we / should we" (WWWD) carry an intent the generic recall
+    // misses. Detect it, resolve deictic pronouns ("this") against the page the
+    // employee is viewing, bias retrieval toward the right corpus, and inject a
+    // framing hint so the coworker attributes correctly instead of dead-ending
+    // on "'this' isn't specific".
+    const perspective = classifyPerspective(input.content);
+    const pageTopic = extractPageTopic(selectedPageData, input.routeContext);
+    const wikiQuery = perspective.needsPageContext
+      ? buildPerspectiveQuery(input.content, pageTopic)
+      : input.content;
+    let wikiContext = await recallWikiContext({
+      query: wikiQuery,
       organizationId: wikiOrg?.id ?? null,
       limit: 4,
+      preferredPageKinds: perspective.perspective
+        ? PERSPECTIVE_PAGE_KINDS[perspective.perspective]
+        : undefined,
     });
+    if (perspective.perspective) {
+      const hint = buildPerspectiveHint(perspective.perspective, pageTopic);
+      wikiContext = wikiContext ? `${hint}\n\n${wikiContext}` : hint;
+    }
 
     // Governed Hermes learning Slice 1: eligible skills go into the prompt
     // alongside domain context, and we emit SkillUsageEvent telemetry for
