@@ -320,6 +320,34 @@ export const qdrantBackupDurationSeconds = new Histogram({
   registers: [metricsRegistry],
 });
 
+// ─── Voice STT (speech-to-text adapter call) ──────────────────────────────
+// The hwdsl2/whisper-server image we ship doesn't expose a Prometheus
+// /metrics endpoint, so the only place we can observe its health is from
+// the caller side. Lives on the portal's /api/metrics surface; the Health
+// tab's "Voice STT" tile reads from these instead of from a direct scrape.
+
+export const voiceSttDuration = new Histogram({
+  name: "dpf_voice_stt_duration_seconds",
+  help: "Voice STT transcription call duration in seconds, by provider and model",
+  labelNames: ["provider", "model"] as const,
+  buckets: [0.5, 1, 2.5, 5, 10, 20, 30, 60, 120],
+  registers: [metricsRegistry],
+});
+
+export const voiceSttCallsTotal = new Counter({
+  name: "dpf_voice_stt_calls_total",
+  help: "Voice STT transcription calls by outcome (ok | error) and provider",
+  labelNames: ["provider", "model", "outcome"] as const,
+  registers: [metricsRegistry],
+});
+
+export const voiceSttErrors = new Counter({
+  name: "dpf_voice_stt_errors_total",
+  help: "Voice STT transcription errors by provider and classified error_type",
+  labelNames: ["provider", "error_type"] as const,
+  registers: [metricsRegistry],
+});
+
 // ─── Voice Slice 2 — Transcript Cleanup ─────────────────────────────────────
 // Spec: docs/superpowers/specs/2026-05-16-voice-input-and-transcription-design.md §9
 
