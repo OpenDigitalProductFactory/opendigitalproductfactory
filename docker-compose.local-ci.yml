@@ -1,0 +1,45 @@
+name: ${COMPOSE_PROJECT_NAME:-dpf-local-ci}
+
+services:
+  local-ci-portal:
+    build:
+      context: .
+      target: runner
+      args:
+        DPF_VERSION: ${DPF_VERSION:-}
+        DPF_PLATFORM_VERSION: ${DPF_PLATFORM_VERSION:-}
+    restart: unless-stopped
+    profiles: ["local-ci"]
+    ports:
+      - "3010:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dpf-local-ci-source-code:/workspace
+    environment:
+      DATABASE_URL: ${LOCAL_CI_DATABASE_URL:-postgresql://dpf:dpf_dev@host.docker.internal:5433/dpf}
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set - run scripts/setup.ps1 or scripts/setup.sh first}
+      AUTH_TRUST_HOST: "true"
+      PUBLIC_URL: ${LOCAL_CI_PUBLIC_URL:-http://localhost:3010}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY must be set - run scripts/setup.ps1 or scripts/setup.sh first}
+      NEO4J_URI: ${LOCAL_CI_NEO4J_URI:-bolt://host.docker.internal:7688}
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-dpf_dev_password}
+      QDRANT_INTERNAL_URL: ${LOCAL_CI_QDRANT_INTERNAL_URL:-http://host.docker.internal:6334}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
+      OLLAMA_INTERNAL_URL: ${OLLAMA_INTERNAL_URL:-http://host.docker.internal:11434}
+      DPF_ENVIRONMENT: local-ci
+      INSTANCE_TYPE: dev
+      PROJECT_ROOT: /workspace
+      APP_URL: http://localhost:3010
+      MCP_INSECURE_INTERNAL_HOSTS: ${MCP_INSECURE_INTERNAL_HOSTS:-portal,host.docker.internal,sandbox,local-ci-portal}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  dpf-local-ci-source-code:

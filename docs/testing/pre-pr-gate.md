@@ -49,6 +49,35 @@ pnpm --filter mobile test
 pnpm test
 ```
 
+## Pre-PR gate (local-CI sandbox)
+
+BI-166C59F3 Phase 1 adds the shared local-CI convergence sandbox workflow.
+The sandbox runtime is declared in `docker-compose.local-ci.yml` behind the
+`local-ci` profile, uses `COMPOSE_PROJECT_NAME=dpf-local-ci`, serves the portal
+on `http://localhost:3010`, and connects to the existing dev data services on
+host ports `5433`, `6334`, and `7475`/`7688`.
+
+From a worktree, the opt-in gate is:
+
+```bash
+pnpm run pregate
+```
+
+The script pushes the current branch, claims a `local-integration-ci` lease,
+waits if the sandbox is already leased, runs the Phase 1 sandbox checkout/build
+stub (`gate passed`), records a local-integration evidence record with the lease
+id and `gatePassed`, releases the lease, and writes the latest passing HEAD to
+Git-local state. Phase 2 replaces the stub with the canonical build and runtime
+verification commands.
+
+The opt-in pre-push hook is `.githooks/pre-push-gate`. It refuses a push when
+the latest local-CI gate record is missing, belongs to another branch/SHA, or
+has `gatePassed=false`. Emergency bypass:
+
+```bash
+DPF_SKIP_PREPUSH_GATE=1 git push
+```
+
 The `apps/web` suite alone runs in roughly 2–4 minutes on a modern laptop;
 the full root `pnpm test` adds another 1–2 minutes for `@dpf/db` and the
 mobile jest suite.
