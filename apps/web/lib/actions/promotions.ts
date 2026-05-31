@@ -660,19 +660,10 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: bool
     if (!config.enabled) {
       return { queued: false, reason: "disabled" } as const;
     }
-    // Honest feedback: a manual trigger while the store is open (outside the
-    // upgrade window) is a no-op (runSelfUpgrade skips before creating a run).
-    // Surface that here instead of optimistically reporting "queued". force =
-    // emergency override that bypasses the window.
-    if (!opts?.force) {
-      const { schedule, timezone } = await resolveOperatingScheduleForSystem();
-      const allowed = isUpgradeWindowOpen({
-        explicitWindows: config.maintenanceWindows,
-        schedule,
-        timeZone: timezone,
-      });
-      if (!allowed) return { queued: false, reason: "outside-window" } as const;
-    }
+    // A manual trigger is NOT window-gated: the operator clicking "Upgrade now"
+    // has chosen this moment. The store-closed window only governs the unattended
+    // scheduled poll (runSelfUpgrade skips the window for non-scheduled runs).
+    // `force` is reserved for bypassing the quiescence drain in an emergency.
   }
 
   const latestRun = await getLatestRun();
