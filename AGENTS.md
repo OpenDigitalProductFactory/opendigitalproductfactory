@@ -40,13 +40,17 @@ Tool-specific files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/cop
 
 DB string columns with fixed valid values are canonical enums. Source of truth: `apps/web/lib/backlog.ts` (`EPIC_STATUSES`, union types) and `apps/web/lib/mcp-tools.ts` (`enum:` arrays). Match exactly.
 
-| Model         | Field    | Valid values                                |
-| ------------- | -------- | ------------------------------------------- |
-| `Epic`        | `status` | `open`, `in-progress`, `done`               |
-| `BacklogItem` | `status` | `open`, `in-progress`, `done`, `deferred`   |
-| `BacklogItem` | `type`   | `portfolio`, `product`                      |
+| Model         | Field      | Valid values                                                                |
+| ------------- | ---------- | --------------------------------------------------------------------------- |
+| `Epic`        | `status`   | `open`, `in-progress`, `done`                                               |
+| `BacklogItem` | `status`   | `open`, `in-progress`, `done`, `deferred`                                   |
+| `BacklogItem` | `type`     | `portfolio`, `product`                                                      |
+| `BacklogItem` | `workType` | `bug`, `feature`, `chore`, `doc`, `tool`, `skill`, `refactor`               |
+| `BacklogItem` | `source`   | `user-request`, `automated-detection`                                       |
 
 Hyphens, not underscores. Adding a new value requires updating both `backlog.ts` and the MCP tool definition in the same commit, before any data uses it.
+
+`BacklogItem.workType` is the closed *work-type* axis (the WHAT) and `BacklogItem.source` is the closed *intake-origin* axis (the HOW). Together they replace the legacy mixed-axis `source` enum (which had `feature-gap`, `bug`, `tool-gap`, `skill-gap`, `doc-gap`, `user-request`, `automated-detection` in one list). `FeatureBuild.kind` is derived from `workType` at promote time (`workType==="bug" ? "fix" : "feature"`). Spec: [`docs/superpowers/specs/2026-05-30-unified-backlog-worktype-design.md`](docs/superpowers/specs/2026-05-30-unified-backlog-worktype-design.md).
 
 ## 4. Branching, Commits & PRs
 

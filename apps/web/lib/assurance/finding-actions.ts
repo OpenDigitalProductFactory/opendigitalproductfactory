@@ -219,6 +219,8 @@ export async function createBacklogItemFromFinding(
       body,
       status: "triaging",
       source: "automated-detection",
+      // Assurance/supply-chain findings are bug-class remediation work.
+      workType: "bug",
       proposedOutcome: "build",
       effortSize: "medium",
       epicId: epic?.id ?? null,
