@@ -6,6 +6,8 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { sendEmail, composeApprovalEmail } from "@/lib/email";
+import { getOrgIdentity } from "@/lib/org-identity";
+import { resolveAppBaseUrl } from "@/lib/app-url";
 import type { CreateSupplierInput, CreateBillInput, CreatePOInput, CreatePaymentRunInput } from "@/lib/ap-validation";
 
 // ─── Auth guard ───────────────────────────────────────────────────────────────
@@ -244,8 +246,12 @@ export async function submitBillForApproval(billId: string): Promise<void> {
     },
   });
 
-  // Create a BillApproval record per matching rule
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  // Create a BillApproval record per matching rule. The record (and its
+  // in-portal approval queue) is always created; the email is only sent when a
+  // real base URL is available so we never mail a dead localhost approve link.
+  const issuer = await getOrgIdentity();
+  const fromHeader = issuer?.email ? `${issuer.name} <${issuer.email}>` : undefined;
+  const baseUrl = resolveAppBaseUrl();
 
   for (const rule of rules) {
     const token = nanoid(32);
@@ -258,7 +264,13 @@ export async function submitBillForApproval(billId: string): Promise<void> {
       },
     });
 
-    // Send approval email
+    // Send approval email (only with a usable link)
+    if (!baseUrl) {
+      console.warn(
+        `[ap] No app base URL configured; skipped approval email for bill ${bill.billRef} (approval still queued in-portal)`,
+      );
+      continue;
+    }
     const approveUrl = `${baseUrl}/finance/ap/approvals/${token}`;
     const emailPayload = composeApprovalEmail({
       to: rule.approver.email,
@@ -268,7 +280,7 @@ export async function submitBillForApproval(billId: string): Promise<void> {
       currency: bill.currency,
       approveUrl,
     });
-    await sendEmail(emailPayload);
+    await sendEmail({ ...emailPayload, from: fromHeader });
   }
 
   await prisma.bill.update({
