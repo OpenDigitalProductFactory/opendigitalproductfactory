@@ -302,9 +302,17 @@ export async function sendEmail(options: EmailOptions): Promise<{ messageId: str
   const pass = process.env.SMTP_PASS;
   const from = process.env.SMTP_FROM || "noreply@example.com";
 
-  // In dev without SMTP config, log to console
+  // Without SMTP config: in production this is a hard failure — returning a
+  // fake success would let callers record an email as "sent" that never went
+  // out (silently dropping invoices, dunning, approvals). Only the dev path
+  // may log-and-continue.
   if (!host) {
-    console.log("[email] No SMTP configured. Would send:", {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "[email] SMTP is not configured (SMTP_HOST unset); refusing to report a fake send in production",
+      );
+    }
+    console.log("[email] No SMTP configured (dev). Would send:", {
       to: options.to,
       subject: options.subject,
       attachments: options.attachments?.map((a) => a.filename),
