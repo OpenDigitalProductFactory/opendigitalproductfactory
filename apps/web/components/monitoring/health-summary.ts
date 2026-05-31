@@ -5,6 +5,17 @@ export type PrometheusInstantResult = {
   value: [number, string];
 };
 
+// /api/v1/targets active-target entry. Used by the targets-driven Service
+// Status grid so we can render one tile per *instance*, not per job — e.g.
+// three sandboxes show as three tiles instead of collapsing onto one row.
+export type PrometheusActiveTarget = {
+  labels: { job?: string; instance?: string } & Record<string, string | undefined>;
+  health: "up" | "down" | "unknown" | string;
+  lastScrape?: string;
+  lastScrapeDuration?: number;
+  lastError?: string;
+};
+
 export type MonitoringAlert = {
   labels: Record<string, string | undefined>;
   annotations: Record<string, string | undefined>;
@@ -242,6 +253,128 @@ export function deriveServiceStatuses({
     rows.push({ ...service, state: "unknown", label: "Unknown", tone: "neutral" });
   }
   return rows;
+}
+
+// Friendly display name + presentation hints per Prometheus scrape job.
+// Used by deriveServiceStatusesFromTargets to dress up the raw job/instance
+// strings the targets API returns. Jobs not in the map render with their
+// raw job name (forward compatibility: adding a new scrape job auto-creates
+// a tile, no UI change required — but the tile gets a friendlier name as a
+// follow-up commit).
+export type JobPresentation = {
+  name: string;
+  // Optional: tiles whose job appears in this map but with `hidden: true` are
+  // dropped from the grid even when scraped. Use for jobs we expose for
+  // alerting only (e.g. prometheus self-target) without cluttering the UI.
+  hidden?: boolean;
+  // Self-monitoring / internal targets. We still want the tile but tag it
+  // visually so it doesn't read as a customer-facing surface.
+  internal?: boolean;
+};
+
+export const JOB_PRESENTATION: Record<string, JobPresentation> = {
+  portal: { name: "Portal" },
+  sandbox: { name: "Sandbox" },
+  postgres: { name: "PostgreSQL" },
+  qdrant: { name: "Qdrant" },
+  inngest: { name: "Inngest" },
+  redis: { name: "Redis" },
+  adp: { name: "ADP" },
+  "dev-portal": { name: "Contributor Preview" },
+  "windows-host": { name: "Windows Host", internal: true },
+  "node-exporter": { name: "Node Exporter", internal: true },
+  cadvisor: { name: "cAdvisor", internal: true },
+  prometheus: { name: "Prometheus", hidden: true }, // self-monitoring; alert-only
+};
+
+// Services that have no Prometheus scrape target but the user should still
+// see on the Health tab — either because they exist but ship without a
+// /metrics endpoint (Neo4j Community, whisper-server), or because they're
+// observable through a different channel (AI Inference + Voice STT both
+// flow through portal application metrics on /api/metrics, not their own
+// scrape job). These tiles render as neutral "Not scraped" / "Portal
+// metrics" — the same pattern the older hardcoded grid used for Neo4j.
+export const UNSCRAPED_SERVICES: ServiceDefinition[] = [
+  { name: "Neo4j", statusHint: "Not scraped" },
+  { name: "AI Inference", statusHint: "Portal metrics" },
+  { name: "Voice STT", statusHint: "Portal metrics" },
+];
+
+// Targets-driven service status. Renders one row per active target, joined
+// with JOB_PRESENTATION for friendly names. Falls back to the raw job string
+// when a job isn't in the map.
+//
+// Per-instance: three sandboxes scrape targets in prometheus.yml -> three
+// tiles, each labelled with its short instance name. That's how this design
+// future-proofs multi-sandbox installs vs the old hardcoded list.
+export function deriveServiceStatusesFromTargets({
+  targets,
+  loading,
+  offline,
+}: {
+  targets: PrometheusActiveTarget[] | null | undefined;
+  loading: boolean;
+  offline: boolean;
+}): ServiceStatus[] {
+  if (offline) {
+    return [];
+  }
+  if (loading) {
+    // Don't flicker an empty grid on first paint — render a placeholder row
+    // so the grid section keeps its height.
+    return [
+      { name: "Loading…", state: "loading", label: "...", tone: "neutral" },
+    ];
+  }
+
+  // Group by job so we can disambiguate single-instance jobs (label as just
+  // the friendly name) from multi-instance jobs (append an instance suffix).
+  const byJob = new Map<string, PrometheusActiveTarget[]>();
+  for (const t of targets ?? []) {
+    const job = t.labels.job ?? "(no-job)";
+    if (!byJob.has(job)) byJob.set(job, []);
+    byJob.get(job)!.push(t);
+  }
+
+  const rows: ServiceStatus[] = [];
+  for (const [job, instances] of byJob) {
+    const presentation = JOB_PRESENTATION[job];
+    if (presentation?.hidden) continue;
+    const baseName = presentation?.name ?? job;
+    const multi = instances.length > 1;
+
+    for (const t of instances) {
+      const name = multi ? `${baseName} (${shortInstance(t.labels.instance)})` : baseName;
+      const def: ServiceDefinition = { name, job };
+      if (t.health === "up") {
+        rows.push({ ...def, state: "up", label: "UP", tone: "success" });
+      } else if (t.health === "down") {
+        rows.push({
+          ...def,
+          state: "down",
+          // The most actionable thing the grid can show on a DOWN tile is
+          // *why*; lastError is short enough to fit.
+          label: t.lastError ? `DOWN: ${truncate(t.lastError, 40)}` : "DOWN",
+          tone: "critical",
+        });
+      } else {
+        rows.push({ ...def, state: "unknown", label: "Unknown", tone: "neutral" });
+      }
+    }
+  }
+
+  return rows;
+}
+
+function shortInstance(instance: string | undefined): string {
+  if (!instance) return "?";
+  // "sandbox:3000" -> "sandbox", "host.docker.internal:9182" -> "host.docker.internal"
+  const colon = instance.indexOf(":");
+  return colon === -1 ? instance : instance.slice(0, colon);
+}
+
+function truncate(s: string, n: number): string {
+  return s.length <= n ? s : s.slice(0, n - 1) + "…";
 }
 
 // True iff a host-telemetry exporter is a configured scrape target on this

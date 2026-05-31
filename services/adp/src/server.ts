@@ -1,7 +1,13 @@
 // ADP MCP server entry point.
-// HTTP JSON-RPC over POST /mcp. Health at GET /health.
+// HTTP JSON-RPC over POST /mcp. Health at GET /health. Metrics at GET /metrics.
 
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
+import {
+  collectDefaultMetrics,
+  Counter,
+  Histogram,
+  Registry,
+} from "prom-client";
 import { listWorkers, TOOL_DEFINITION as LIST_WORKERS_DEF } from "./tools/list-workers.js";
 import {
   getPayStatements,
@@ -19,6 +25,36 @@ import {
 const PORT = Number.parseInt(process.env.PORT ?? "8600", 10);
 const SERVICE_NAME = "adp";
 const SERVICE_VERSION = "0.4.0";
+
+// ─── Prometheus metrics ─────────────────────────────────────────────────────
+// Surfaced at GET /metrics so the platform Health tab can show the service as
+// UP instead of "Not scraped". The metric names follow the portal's
+// `dpf_<feature>_<metric>_<unit>` convention (apps/web/lib/operate/metrics.ts).
+export const metricsRegistry = new Registry();
+metricsRegistry.setDefaultLabels({ service: SERVICE_NAME });
+collectDefaultMetrics({ register: metricsRegistry });
+
+export const adpToolCallDuration = new Histogram({
+  name: "dpf_adp_tool_call_duration_seconds",
+  help: "Duration of ADP MCP tool calls in seconds",
+  labelNames: ["tool", "outcome"] as const,
+  buckets: [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
+  registers: [metricsRegistry],
+});
+
+export const adpToolCallErrors = new Counter({
+  name: "dpf_adp_tool_call_errors_total",
+  help: "Count of ADP MCP tool calls that returned an error",
+  labelNames: ["tool", "reason"] as const,
+  registers: [metricsRegistry],
+});
+
+export const adpMcpRequests = new Counter({
+  name: "dpf_adp_mcp_requests_total",
+  help: "Count of JSON-RPC requests received over POST /mcp",
+  labelNames: ["method"] as const,
+  registers: [metricsRegistry],
+});
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -104,12 +140,16 @@ async function handleMcp(request: JsonRpcRequest): Promise<JsonRpcResponse> {
         coworkerId: params?._meta?.coworkerId ?? "unknown",
         userId: params?._meta?.userId ?? null,
       };
+      const stop = adpToolCallDuration.startTimer({ tool: toolName });
       try {
         const result = await TOOLS[toolName]!.handler(params?.arguments, ctx);
+        stop({ outcome: "ok" });
         return { jsonrpc: "2.0", id: request.id, result };
       } catch (err) {
+        stop({ outcome: "error" });
         const message = err instanceof Error ? err.message : "unknown error";
         const code = err instanceof Error && "code" in err ? String((err as { code: unknown }).code) : undefined;
+        adpToolCallErrors.inc({ tool: toolName, reason: code ?? "exception" });
         return {
           jsonrpc: "2.0",
           id: request.id,
@@ -126,9 +166,22 @@ async function handleMcp(request: JsonRpcRequest): Promise<JsonRpcResponse> {
   }
 }
 
-const server = createServer(async (req, res) => {
+// Exported so tests can hit it without binding the port. The production path
+// passes this to `createServer` and `listen`s; tests just call it with a mock
+// IncomingMessage / ServerResponse.
+export async function handleRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
   if (req.method === "GET" && req.url === "/health") {
     sendJson(res, 200, { ok: true, service: SERVICE_NAME, version: SERVICE_VERSION });
+    return;
+  }
+
+  if (req.method === "GET" && req.url === "/metrics") {
+    const body = await metricsRegistry.metrics();
+    res.writeHead(200, { "Content-Type": metricsRegistry.contentType });
+    res.end(body);
     return;
   }
 
@@ -144,6 +197,7 @@ const server = createServer(async (req, res) => {
         });
         return;
       }
+      adpMcpRequests.inc({ method: request.method });
       sendJson(res, 200, await handleMcp(request));
     } catch {
       sendJson(res, 400, {
@@ -156,13 +210,24 @@ const server = createServer(async (req, res) => {
   }
 
   sendJson(res, 404, { error: "Not found" });
-});
+}
 
-server.listen(PORT, () => {
-  console.log(`[${SERVICE_NAME}] listening on :${PORT} (v${SERVICE_VERSION})`);
-});
+// Don't bind the port when this module is imported by a test runner — vitest
+// imports server.ts to read the exported registry, and we'd otherwise fight
+// for :8600 across parallel tests. The simple heuristic: only listen when
+// invoked as the program entry point.
+const isMainEntry =
+  process.argv[1] !== undefined &&
+  (process.argv[1].endsWith("/server.js") || process.argv[1].endsWith("/server.ts"));
 
-process.on("SIGTERM", () => {
-  console.log(`[${SERVICE_NAME}] SIGTERM received, closing`);
-  server.close(() => process.exit(0));
-});
+if (isMainEntry) {
+  const server = createServer(handleRequest);
+  server.listen(PORT, () => {
+    console.log(`[${SERVICE_NAME}] listening on :${PORT} (v${SERVICE_VERSION})`);
+  });
+
+  process.on("SIGTERM", () => {
+    console.log(`[${SERVICE_NAME}] SIGTERM received, closing`);
+    server.close(() => process.exit(0));
+  });
+}

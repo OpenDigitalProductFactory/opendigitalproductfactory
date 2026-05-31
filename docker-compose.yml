@@ -621,6 +621,23 @@ services:
       interval: 5s
       timeout: 5s
 
+  # redis-exporter — ~4 MB sidecar that scrapes the redis:6379 INFO output and
+  # exposes it on :9121/metrics in Prometheus format. Lets the platform Health
+  # tab promote the "Redis" tile from "Not scraped" to a real UP/DOWN tile.
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    restart: unless-stopped
+    command: ["--redis.addr=redis://redis:6379"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9121/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   inngest:
     image: inngest/inngest:latest
     restart: unless-stopped

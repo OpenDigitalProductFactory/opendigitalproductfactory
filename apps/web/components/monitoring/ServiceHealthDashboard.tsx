@@ -8,7 +8,7 @@
 
 import { MonitoringProvider, useMonitoringStatus } from "./MonitoringContext";
 import { AlertBanner } from "./AlertBanner";
-import { ServiceStatusGrid, DPF_SERVICES } from "./ServiceStatusGrid";
+import { ServiceStatusGrid } from "./ServiceStatusGrid";
 import { MetricGauge } from "./MetricGauge";
 import { MetricTimeSeries } from "./MetricTimeSeries";
 import { MetricTable } from "./MetricTable";
@@ -88,8 +88,10 @@ function ServiceHealthContent({
       {/* Active alerts (deduped against the Platform Status StatCard above) */}
       <AlertBanner suppressSummaries={suppressBannerSummaries} />
 
-      {/* Service status */}
-      <ServiceStatusGrid services={DPF_SERVICES} />
+      {/* Service status — targets-driven, so adding a Prometheus scrape job
+          automatically adds a tile (no UI change required) and three sandbox
+          targets render as three tiles instead of collapsing onto one row. */}
+      <ServiceStatusGrid />
 
       {/* Platform resource utilization — only rendered on substrates that ship
           a host telemetry exporter (Linux node-exporter, Windows windows_exporter).

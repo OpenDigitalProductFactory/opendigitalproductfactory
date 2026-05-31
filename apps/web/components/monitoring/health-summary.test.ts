@@ -5,11 +5,26 @@ import {
   deriveMonitoringSummary,
   derivePlatformSummary,
   deriveServiceStatuses,
+  deriveServiceStatusesFromTargets,
   isHostTelemetryConfigured,
   type MonitoringAlert,
+  type PrometheusActiveTarget,
   type PrometheusInstantResult,
   type ServiceDefinition,
 } from "./health-summary";
+
+function target(
+  job: string,
+  instance: string,
+  health: "up" | "down" | "unknown" = "up",
+  extra: Partial<PrometheusActiveTarget> = {},
+): PrometheusActiveTarget {
+  return {
+    labels: { job, instance },
+    health,
+    ...extra,
+  };
+}
 
 function up(job: string, value: "0" | "1" = "1"): PrometheusInstantResult {
   return {
@@ -200,6 +215,110 @@ describe("deriveServiceStatuses", () => {
     expect(rows).toEqual([
       expect.objectContaining({ name: "Contributor Preview", state: "loading" }),
     ]);
+  });
+});
+
+describe("deriveServiceStatusesFromTargets", () => {
+  it("maps active up targets to friendly named tiles", () => {
+    const rows = deriveServiceStatusesFromTargets({
+      targets: [
+        target("portal", "portal:3000"),
+        target("postgres", "postgres-exporter:9187"),
+        target("sandbox", "sandbox:3000"),
+        target("inngest", "inngest:8288"),
+      ],
+      loading: false,
+      offline: false,
+    });
+
+    // Order matches the input groupings; verify names + states.
+    const byName = Object.fromEntries(rows.map((r) => [r.name, r]));
+    expect(byName["Portal"]).toMatchObject({ state: "up", label: "UP" });
+    expect(byName["PostgreSQL"]).toMatchObject({ state: "up" });
+    expect(byName["Sandbox"]).toMatchObject({ state: "up" });
+    expect(byName["Inngest"]).toMatchObject({ state: "up" });
+  });
+
+  it("renders one tile per instance when a job has multiple targets", () => {
+    // Multi-sandbox future: prometheus.yml lists three sandbox targets ->
+    // three tiles, each labelled with its short instance name.
+    const rows = deriveServiceStatusesFromTargets({
+      targets: [
+        target("sandbox", "sandbox-1:3000"),
+        target("sandbox", "sandbox-2:3000", "down", { lastError: "context deadline exceeded" }),
+        target("sandbox", "sandbox-3:3000"),
+      ],
+      loading: false,
+      offline: false,
+    });
+
+    expect(rows.map((r) => r.name)).toEqual([
+      "Sandbox (sandbox-1)",
+      "Sandbox (sandbox-2)",
+      "Sandbox (sandbox-3)",
+    ]);
+    expect(rows[1]).toMatchObject({ state: "down", label: expect.stringContaining("DOWN") });
+  });
+
+  it("hides self-monitoring (prometheus) and shows internal exporters under their job name", () => {
+    const rows = deriveServiceStatusesFromTargets({
+      targets: [
+        target("prometheus", "localhost:9090"),
+        target("node-exporter", "node-exporter:9100"),
+      ],
+      loading: false,
+      offline: false,
+    });
+
+    expect(rows.find((r) => r.name === "Prometheus")).toBeUndefined();
+    expect(rows.find((r) => r.name === "Node Exporter")).toBeTruthy();
+  });
+
+  it("falls back to the raw job name when no presentation is registered", () => {
+    // Forward-compat: adding a scrape job to prometheus.yml without touching
+    // JOB_PRESENTATION still gets a tile, just with the raw job string.
+    const rows = deriveServiceStatusesFromTargets({
+      targets: [target("brand-new-thing", "brand-new-thing:9000")],
+      loading: false,
+      offline: false,
+    });
+
+    expect(rows.find((r) => r.name === "brand-new-thing")).toBeTruthy();
+  });
+
+  it("emits a single loading placeholder row instead of an empty grid", () => {
+    const rows = deriveServiceStatusesFromTargets({
+      targets: null,
+      loading: true,
+      offline: false,
+    });
+
+    expect(rows).toEqual([
+      expect.objectContaining({ state: "loading", label: "..." }),
+    ]);
+  });
+
+  it("emits zero rows when the monitoring stack is offline (parent component shows the banner)", () => {
+    const rows = deriveServiceStatusesFromTargets({
+      targets: null,
+      loading: false,
+      offline: true,
+    });
+
+    expect(rows).toEqual([]);
+  });
+
+  it("includes lastError on DOWN tiles, truncated to fit the label", () => {
+    const longError = "x".repeat(100);
+    const rows = deriveServiceStatusesFromTargets({
+      targets: [target("portal", "portal:3000", "down", { lastError: longError })],
+      loading: false,
+      offline: false,
+    });
+
+    expect(rows[0]?.state).toBe("down");
+    expect(rows[0]?.label).toContain("DOWN:");
+    expect(rows[0]?.label.length).toBeLessThanOrEqual("DOWN: ".length + 40);
   });
 });
 

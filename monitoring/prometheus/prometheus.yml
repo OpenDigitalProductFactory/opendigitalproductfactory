@@ -51,12 +51,24 @@ scrape_configs:
     static_configs:
       - targets: ["inngest:8288"]
 
+  # ─── ADP (payroll/HRIS MCP) ─────────────────────────────────
+  # GET /metrics added in services/adp/src/server.ts. Default-process
+  # metrics + per-tool latency histogram + error counter.
+  - job_name: "adp"
+    static_configs:
+      - targets: ["adp:8600"]
+
+  # ─── Redis (via redis-exporter sidecar) ─────────────────────
+  # The redis-exporter container scrapes redis:6379 INFO and exposes it on
+  # :9121/metrics. Defined in docker-compose.yml alongside redis itself.
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+
   # ─── Services without a /metrics endpoint ───────────────────
-  # Redis (needs redis-exporter sidecar), ADP (only ships /health, not
-  # /metrics), and dpf-stt (whisper-server) are intentionally NOT scraped.
-  # The Health tab surfaces them as "Not scraped" tiles so contributors
-  # know they exist but aren't observed. Adding real scrape coverage is
-  # tracked as follow-up tech debt.
+  # dpf-stt (whisper-server) ships without /metrics — STT visibility is
+  # via portal-side counters (dpf_voice_stt_*) exposed on the portal's
+  # /api/metrics. The Health tab surfaces it as a "Portal metrics" tile.
 
   # ─── AI Inference ───────────────────────────────────────────
   # Docker Model Runner does not expose a Prometheus `/metrics` endpoint

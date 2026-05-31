@@ -49,6 +49,16 @@ scrape_configs:
     static_configs:
       - targets: ["inngest:8288"]
 
+  # ─── ADP (payroll/HRIS MCP) ─────────────────────────────────
+  - job_name: "adp"
+    static_configs:
+      - targets: ["adp:8600"]
+
+  # ─── Redis (via redis-exporter sidecar) ─────────────────────
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+
   # ─── Contributor preview (dev-portal, port 3001 on host) ────
   # Only present in this overlay so customer installs never see it.
   # The Health tab tile is gated by ServiceDefinition.optional, which means
