@@ -226,6 +226,31 @@ if [ "${DPF_SKIP_EDGE_BOOTSTRAP:-0}" != "1" ]; then
   fi
 fi
 
+# ── Voice / TTS sidecar (Apple Silicon only) ─────────────────────────────────
+# Provisions the native-host Chatterbox TTS sidecar so voice cloning works
+# on macOS without a GPU. Idempotent — safe to re-run. Linux/Windows installs
+# use the dpf-tts Docker container instead; skip this step there.
+
+if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
+  step "Provisioning Chatterbox TTS sidecar (Apple Silicon)"
+  if bash scripts/tts/setup-chatterbox-tts-macos.sh \
+       --data-root "$(pwd)/data/uploads" 2>/dev/null; then
+    # The script prints the .env values it needs; wire them in if not set.
+    if ! grep -qE "^TTS_PROVIDER=" .env 2>/dev/null; then
+      printf '\n# Voice / TTS (Apple Silicon — written by setup.sh)\n' >> .env
+      printf 'TTS_PROVIDER=mlx\n' >> .env
+      printf 'DPF_TTS_URL=http://host.docker.internal:8771\n' >> .env
+      printf 'DPF_TTS_REFERENCE_HOST_ROOT=%s/data/uploads\n' "$(pwd)" >> .env
+    fi
+    ok "Chatterbox TTS sidecar provisioned (port 8771)"
+  else
+    warn "TTS sidecar setup failed. Voice cloning will not work until you run:"
+    warn "  bash scripts/tts/setup-chatterbox-tts-macos.sh"
+  fi
+else
+  ok "TTS sidecar (skipped — Linux/Windows uses the dpf-tts Docker container)"
+fi
+
 # ── Agent rulebook conformance ───────────────────────────────────────────────
 # Per AGENTS.md: every install must ship the canonical AGENTS.md plus pointer
 # files for each supported AI tool. Fail the install if any are missing or

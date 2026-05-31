@@ -1,4 +1,14 @@
 #!/usr/bin/env bash
+# DEPRECATED — CSM/mlx-audio sidecar (legacy fallback).
+#
+# This script provisions mlx-audio serving CSM-1b. It works but produces
+# lower-quality cloned speech than Chatterbox and is no longer the recommended
+# engine for Apple Silicon.
+#
+# Use setup-chatterbox-tts-macos.sh instead (Chatterbox, MIT, ~7s/utterance,
+# Windows-quality voice cloning). This script is retained only for users who
+# need the faster-but-lower-quality CSM path or want to A/B test.
+#
 # Provision the native-host MLX TTS sidecar for DPF on Apple Silicon.
 #
 # Docker Desktop on macOS has no Metal GPU passthrough, so cloning-grade neural
