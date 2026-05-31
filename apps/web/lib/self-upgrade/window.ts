@@ -103,3 +103,33 @@ export function isUpgradeWindowOpen(args: {
   }
   return true;
 }
+
+const SCAN_STEP_MS = 60_000; // 1-minute resolution — close times are HH:mm aligned
+const SCAN_HORIZON_MS = 8 * 24 * 60 * 60 * 1000; // 8 days covers any weekly schedule
+
+/**
+ * The next instant the operating-hours upgrade window OPENS — i.e. the next time
+ * the store is closed. Returns `now` when the store is already closed (the
+ * window is open right now). Returns null when the store never closes within an
+ * 8-day horizon (e.g. 24/7 hours), meaning there is no scheduled window to show.
+ *
+ * Minute-resolution forward scan that reuses isStoreOpen so all timezone and
+ * overnight-span handling stays in one place. Pure + deterministic (inject
+ * `now`) to match the rest of this module and stay cron-safe.
+ */
+export function nextUpgradeWindowOpen(
+  schedule: WeeklySchedule,
+  now: Date,
+  timeZone?: string,
+): Date | null {
+  if (!isStoreOpen(schedule, now, timeZone)) return now;
+  // Align to the next whole minute so the boundary lands on the schedule's
+  // close time (e.g. 17:00) rather than an arbitrary second within it.
+  const start = Math.ceil(now.getTime() / SCAN_STEP_MS) * SCAN_STEP_MS;
+  const limit = now.getTime() + SCAN_HORIZON_MS;
+  for (let t = start; t <= limit; t += SCAN_STEP_MS) {
+    const probe = new Date(t);
+    if (!isStoreOpen(schedule, probe, timeZone)) return probe;
+  }
+  return null;
+}

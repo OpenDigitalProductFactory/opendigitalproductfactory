@@ -368,6 +368,29 @@ describe("SelfUpgradeClient – run history", () => {
     const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
     expect(html).not.toContain("Run History");
   });
+
+  it("renders a When column header for the timestamps", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        history={[makeRun("succeeded")]}
+        historyNextCursor={null}
+      />,
+    );
+    expect(html).toContain("When");
+  });
+
+  it("renders each run's duration in the history table", () => {
+    // baseStatus.latestRun is null, so the only 5m span comes from history.
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        history={[makeRun("succeeded")]}
+        historyNextCursor={null}
+      />,
+    );
+    expect(html).toContain("5m");
+  });
 });
 
 // ─── Latest run – timestamps ──────────────────────────────────────────────────
@@ -396,6 +419,34 @@ describe("SelfUpgradeClient – latest run timestamps", () => {
       />,
     );
     expect(html).not.toContain("5m");
+  });
+
+  it("shows a Completed label when a succeeded run has completedAt", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} latestRun={makeRun("succeeded")} />,
+    );
+    expect(html).toContain("Completed:");
+  });
+
+  it("labels the end timestamp as Failed for a failed run", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("failed", { failureLog: "boom" })}
+      />,
+    );
+    expect(html).toContain("Failed:");
+  });
+
+  it("falls back to a Created label when the run never started", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("skipped", { startedAt: null, completedAt: null })}
+      />,
+    );
+    expect(html).toContain("Created:");
+    expect(html).not.toContain("Started:");
   });
 });
 

@@ -304,13 +304,25 @@ export default function SelfUpgradeClient({
             </div>
           )}
 
-          {latestRun.startedAt && (
+          {latestRun.startedAt ? (
             <div className="text-xs text-[var(--dpf-muted)]">
               Started:{" "}
               <LocalTime className="font-mono" value={latestRun.startedAt} />
               {latestRun.completedAt && (
                 <> · {formatDuration(latestRun.startedAt, latestRun.completedAt)}</>
               )}
+            </div>
+          ) : (
+            <div className="text-xs text-[var(--dpf-muted)]">
+              Created:{" "}
+              <LocalTime className="font-mono" value={latestRun.createdAt} />
+            </div>
+          )}
+
+          {latestRun.completedAt && (
+            <div className="text-xs text-[var(--dpf-muted)]">
+              {latestRun.status === "failed" ? "Failed" : "Completed"}:{" "}
+              <LocalTime className="font-mono" value={latestRun.completedAt} />
             </div>
           )}
 
@@ -333,11 +345,19 @@ export default function SelfUpgradeClient({
             <span className="text-xs font-medium text-[var(--dpf-text)]">Run History</span>
           </div>
           <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[var(--dpf-muted)] text-left">
+                <th className="px-3 py-1.5 font-medium">Status</th>
+                <th className="px-3 py-1.5 font-medium">Run</th>
+                <th className="px-3 py-1.5 font-medium">Change</th>
+                <th className="px-3 py-1.5 font-medium text-right">When</th>
+              </tr>
+            </thead>
             <tbody>
               {history.map((run) => (
                 <tr
                   key={run.runId}
-                  className="border-b border-[var(--dpf-border)] last:border-0"
+                  className="border-t border-[var(--dpf-border)]"
                   data-run-id={run.runId}
                 >
                   <td className="px-3 py-2 w-24 shrink-0">
@@ -358,6 +378,14 @@ export default function SelfUpgradeClient({
                         <span className="font-mono">{run.targetSha}</span>
                       </>
                     ) : null}
+                  </td>
+                  <td className="px-3 py-2 text-right text-[var(--dpf-muted)] whitespace-nowrap align-top">
+                    <LocalTime value={run.startedAt ?? run.createdAt} />
+                    {run.startedAt && run.completedAt && (
+                      <span className="ml-1 opacity-70">
+                        · {formatDuration(run.startedAt, run.completedAt)}
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
