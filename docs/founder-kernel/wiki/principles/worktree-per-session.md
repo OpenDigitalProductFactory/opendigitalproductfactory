@@ -2,7 +2,7 @@
 title: One Thread = One Branch + One Git Worktree
 pageKind: principle
 status: published
-abstract: Concurrent sessions need separate worktrees. Sharing a working tree across sessions causes index/HEAD collisions and cross-thread file sweeps.
+abstract: Concurrent sessions need separate worktrees for source-control isolation — index, branch, staged files. Functional verification of runtime-bound behavior still happens against the canonical install; a worktree is not a runtime clone.
 principleTier: core
 principleDirection: Each concurrent agent or human session operates in its own git worktree on its own branch.
 principleDimensionVector: {"blast_radius": 0.7, "evidence_density": 0.4, "governance_compliance": 0.4}
@@ -51,3 +51,7 @@ When starting a new concurrent session, create a worktree: `git worktree add ../
 ## Sources
 
 (Rendered from the `sources:` frontmatter by `WikiSourceCitations`.)
+
+## Scope: Source Control Only
+
+This principle covers the *source-control* side of concurrent work. The *runtime* side — where functional verification happens — is governed by [`worktree-is-source-control-not-runtime`](worktree-is-source-control-not-runtime.md). Together they say: each thread gets its own working tree; verification against the running platform happens on the canonical install (or a governed shared nonprod environment), not inside the worktree.

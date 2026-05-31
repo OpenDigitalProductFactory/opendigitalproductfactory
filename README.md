@@ -114,6 +114,19 @@ Self-developing installs use one shared workspace per install:
 - Production promotion is governed through the portal.
 - Contribution policy (`fork_only` / `selective` / `contribute_all`) is configured later in the portal.
 
+### Source isolation vs. runtime isolation
+
+Worktrees created by `scripts/new-dev-worktree.sh` give you **source-control** isolation — your branch, your working tree, your commits — so concurrent sessions and the self-upgrade loop don't reset your work. They are **not** a second runtime.
+
+For each change:
+
+- Edit and commit from the worktree.
+- Cheap source-local checks (targeted Vitest, `pnpm typecheck` on the changed package) can run in the worktree if its deps resolve cleanly.
+- For anything that exercises the live platform — portal routes, server actions, MCP tools, DB-bound behavior, Build Studio flows — verify against the canonical install at the root clone (or a leased shared nonprod environment), and capture that evidence in the PR.
+- If the worktree can't run a build/test because pnpm/corepack isn't on PATH, workspace symlinks point outside the worktree, the Prisma client is missing, or Turbopack rejects a cross-workspace symlink — that's a harness limitation, not a product defect. Don't burn the thread making the worktree fully runnable; that's a separate platform BI.
+
+Full rule: [AGENTS.md §5](AGENTS.md) and [`worktree-is-source-control-not-runtime`](docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md). The `Quick dev commands` below assume you're either in the root install or a worktree whose dep graph already resolves — they are not a claim that every worktree is a standalone runtime.
+
 ### Quick dev commands
 
 | Task | Command |

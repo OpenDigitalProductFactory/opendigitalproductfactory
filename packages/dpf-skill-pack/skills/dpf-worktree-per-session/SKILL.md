@@ -32,6 +32,12 @@ enforces:
 
 Concurrent DPF coding sessions DO NOT share a working tree. **One session = one branch + one git worktree.** Branches alone are insufficient — the index, HEAD, and untracked files all live in the working tree, so two sessions in the same tree collide on commits, file sweeps, and stale buffer state. This skill walks the canonical worktree-creation flow with the MCP-seed step + COMPOSE_PROJECT_NAME isolation that makes the worktree usable end-to-end.
 
+## What a worktree is — and isn't
+
+A thread worktree is **source-control isolation**: its own branch, index, HEAD, untracked-file space. It is **not** a second DPF runtime. The MCP seed and `COMPOSE_PROJECT_NAME` set in the steps below are collision-avoidance, not an instruction to spin up a parallel runtime for every task.
+
+For normal feature/fix work: commit from the worktree, verify against the canonical local install or a governed shared nonprod environment. See [AGENTS.md §4 worktree bullet](../../../../AGENTS.md) and [`worktree-is-source-control-not-runtime`](../../../../docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md). Reserve "make this worktree fully runnable" for tasks where a disposable runtime clone is the actual deliverable — file a platform process BI; do not fold it into an incidental feature/fix thread.
+
 ## When to use
 
 - Starting a second (or third, fourth...) DPF Claude / Codex / contributor session.
@@ -115,6 +121,7 @@ Concurrent DPF coding sessions DO NOT share a working tree. **One session = one 
 - **Never base a topic branch on local `main`.** Always `origin/main` after `git fetch`.
 - **Never commit MCP config files.** `.mcp.json` and `.vscode/mcp.json` are gitignored for a reason — they carry bearer tokens.
 - **Never modify the root clone's working tree for active feature work.** The root clone is the merge/release worktree per `keep-root-clone-as-merge-worktree`.
+- Don't treat the worktree as a runtime by default. Commit from the worktree, verify against the canonical install. 'Make the worktree runnable' is a dedicated platform task, not a side-effect of every feature thread.
 
 ## Worked example (this session, 2026-05-24)
 

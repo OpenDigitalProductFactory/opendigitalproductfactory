@@ -49,7 +49,12 @@ This is the **decision** step; `dpf-pr-with-dco` is the **execution** step that 
 
 1. **Decide the integration shape.** Default to **one concern per PR** (`one-concern-per-pr`). If the branch mixes concerns (a fix + an unrelated refactor + a doc change), plan to split — by file set or by interactive cherry-pick onto separate branches off `origin/main`. A stack is appropriate when later work genuinely depends on earlier work; otherwise prefer independent PRs.
 
-2. **Confirm the branch is green.** `build-gate-mandatory`: the required gates must pass on the branch before it lands. If the gate is red, the work is not finished — return to it. Where local merged-code verification is needed before push, compose [`dpf-local-merge-ci-before-push`](../dpf-local-merge-ci-before-push/SKILL.md).
+2. **Confirm the branch is green — in the right place.** `build-gate-mandatory`: the required gates must pass before the branch lands. The thread worktree is source-control isolation, not a runtime, so run gates where they belong ([AGENTS.md §5](../../../../AGENTS.md)):
+   - Source-local checks (typecheck, targeted unit tests, lint) — in the worktree.
+   - Runtime-bound checks (portal build, UX, MCP-touching suites, migration smoke) — against the canonical local install or a governed shared nonprod environment (`dpf-use-shared-nonprod-environment`).
+   - Local merged-code verification before push — `dpf-local-merge-ci-before-push`, which itself routes runtime-bound gates to the canonical install.
+
+   A gate that did not execute because the worktree could not host its runtime is an **unrun gate, not a red gate**: re-run it against the canonical install and capture that evidence in the PR. If the gate is genuinely red on the canonical install, the work is not finished — return to it.
 
 3. **Sweep for loose ends.** `mention-uncommitted-changes`: run `git status` and account for every modified/untracked file — staged into this work, deliberately left, or belonging to a different concern. Never let an unrelated stray file ride along silently.
 

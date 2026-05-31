@@ -23,7 +23,7 @@ sources:
 
 ## Rule
 
-Treat the root clone (`d:\DPF` on Windows, `~/dpf` on macOS/Linux) as read-only for active feature work. Topic worktrees live alongside: `d:\DPF-<topic>` or `~/dpf-worktrees/<topic>`. The root clone is reserved for merges, releases, and verifying that the latest main state is operational.
+Treat the root clone (`d:\DPF` on Windows, `~/dpf` on macOS/Linux) as read-only for active feature work. The root clone is reserved for merges, releases, AND for functional verification of runtime-bound behavior originating in topic worktrees — see [`worktree-is-source-control-not-runtime`](worktree-is-source-control-not-runtime.md). Topic worktrees live alongside: `d:\DPF-<topic>` or `~/dpf-worktrees/<topic>`.
 
 ## Why
 
@@ -36,6 +36,8 @@ Humans and AI agents running git locally. Symmetric. Applies to every feature, f
 ## How To Apply
 
 When starting a new piece of feature work, create a worktree: `git worktree add ../DPF-<topic> -b <prefix>/<topic>`. Do the work there. Push from there. Open the PR from there. Return to the root clone only for `git pull` on main and for occasional inspection of the canonical state. When a worktree is no longer needed (PR merged, branch deleted), run `git worktree remove ../DPF-<topic>` to clean up.
+
+- When a change in a topic worktree touches runtime-bound behavior (server routes, Prisma client, Docker-served portal, installer flows), commit from the worktree but run functional verification against the root clone / canonical install. Do not invest thread time in making the topic worktree a runnable DPF stack unless that is the object of the BI.
 
 ## Decision Dimensions
 

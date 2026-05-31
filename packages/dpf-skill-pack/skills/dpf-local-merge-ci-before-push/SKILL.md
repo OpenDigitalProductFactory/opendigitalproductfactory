@@ -24,6 +24,17 @@ enforces:
 
 Run a local merged-code gate before pushing work that Build Studio or reviewers might treat as ready.
 
+## Worktree vs. runtime — where "local" actually means
+
+The thread worktree is source-control isolation, not a runtime. The "isolated merge path" below is a *merge workspace* (clean checkout of `origin/main` + branch tip in a scratch directory so the merge result is reproducible) — it is NOT a second full DPF runtime stood up inside the worktree.
+
+Run this skill's gates per [AGENTS.md §5 "Where each gate runs"](../../../../AGENTS.md):
+
+- **Canonical local install** (root clone, port 3000, shared dev DB, already-running portal/MCP stack) — runtime-bound gates: portal build, UX, MCP-touching tests, migration smoke.
+- **Thread worktree directly** — cheap source-local checks: `tsc --noEmit`, targeted unit specs, lint.
+
+If a gate cannot run in the worktree because pnpm/corepack is missing, workspace links point outside the worktree, the Prisma client wasn't generated there, or Next rejects symlinked `node_modules` — **classify as harness limitation, not gate failure** ([`worktree-is-source-control-not-runtime`](../../../../docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md)). Re-run the gate against the canonical install, capture *that* run's evidence in the PR, and file the worktree-runnability gap as a separate platform BI.
+
 ## When to use
 
 - A branch is ready to push, open a PR, or hand back to Build Studio.
@@ -49,6 +60,8 @@ Run a local merged-code gate before pushing work that Build Studio or reviewers 
 - Do not treat "passed in my worktree" as merge readiness.
 - Do not run destructive Compose cleanup against the root `dpf` project.
 - Do not push or open a PR while the local integration gate is red unless the operator explicitly reclassifies the branch as a blocked handoff.
+- A gate that did not run is an unrun gate, not a red gate; re-run it against the canonical install and record the result there.
+- Do not invest the current thread in making the worktree a full DPF runtime to satisfy this gate. Reserve "make worktree runnable" for a dedicated platform-process BI.
 
 ## Worked example
 

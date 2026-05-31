@@ -33,7 +33,7 @@ In-platform coworkers, external coding agents, and humans operating the platform
 
 ## How To Apply
 
-When uncertain, take one of three actions and never the fourth: (1) query the source (read the code, hit the DB, read the spec); (2) say "I don't know" plainly; (3) ask a narrow clarifying question. Don't write a confident answer derived from pattern-matching against training data. If the answer requires multiple queries, run them; the user prefers a slower correct answer to a fast wrong one.
+When uncertain, take one of three actions and never the fourth: (1) query the source (read the code, hit the DB, read the spec); (2) say "I don't know" plainly; (3) ask a narrow clarifying question. Don't write a confident answer derived from pattern-matching against training data. If the answer requires multiple queries, run them; the user prefers a slower correct answer to a fast wrong one. When a verification claim is at stake, also ground the *substrate* the claim came from: a build/UX/migration result observed in a thread worktree is not equivalent to the same result observed on the canonical install, and the PR / status report must name which one the evidence came from (see [`worktree-is-source-control-not-runtime`](worktree-is-source-control-not-runtime.md)).
 
 ## Decision Dimensions
 
