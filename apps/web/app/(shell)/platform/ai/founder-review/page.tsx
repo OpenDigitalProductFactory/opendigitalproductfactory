@@ -3,20 +3,23 @@ import Link from "next/link";
 import {
   groupFounderReviewCandidates,
   projectFounderReviewCandidate,
-  type DecisionPerspectiveMode,
   type DecisionInteractionQueueRow,
 } from "@/lib/founder-review/queue";
+import type { WikiPerspective } from "@/lib/wiki/perspective-intent";
 
 type PageProps = {
   searchParams?: Promise<{ mode?: string }>;
 };
 
-function normalizeMode(value: string | undefined): DecisionPerspectiveMode | null {
-  return value === "wwmd" || value === "wwwd" || value === "custom" ? value : null;
+// Mode filter only narrows to WWMD or WWWD — no `"custom"` literal. Use the
+// canonical `WikiPerspective` enum from `lib/wiki/perspective-intent.ts`
+// (PR #1343); a sibling string union is forbidden here.
+function normalizeMode(value: string | undefined): WikiPerspective | null {
+  return value === "wwmd" || value === "wwwd" ? value : null;
 }
 
-function titleForMode(mode: DecisionPerspectiveMode | null) {
-  if (mode === "wwwd" || mode === "custom") return "Owner/Operator Review";
+function titleForMode(mode: WikiPerspective | null) {
+  if (mode === "wwwd") return "Owner/Operator Review";
   return "Founder Review";
 }
 
@@ -51,7 +54,7 @@ export default async function FounderReviewPage({ searchParams }: PageProps) {
 
   const candidates = rows
     .map((row) => projectFounderReviewCandidate(row as DecisionInteractionQueueRow))
-    .filter((candidate) => !mode || candidate.perspectiveMode === mode);
+    .filter((candidate) => !mode || candidate.perspective === mode);
   const groups = groupFounderReviewCandidates(candidates);
   const title = titleForMode(mode);
 

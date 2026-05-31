@@ -5,7 +5,16 @@ import type {
   DecisionPerspectiveEvaluationResult,
   DecisionRiskTier,
 } from "@/lib/decision-perspective/types";
+import type { WikiPerspective } from "@/lib/wiki/perspective-intent";
 import { decisionInteractionRowToEvaluation } from "./persistence";
+
+// `WikiPerspective` is the canonical perspective enum, owned by PR #1343 at
+// `apps/web/lib/wiki/perspective-intent.ts`. Do not redeclare locally — every
+// projection that names WWMD vs WWWD must import from there so the codebase has
+// exactly one source of truth (`single-source-of-truth`,
+// `substrate-cleanup-before-substrate-addition`). When the spec's `"custom"`
+// fallback is meant, use `WikiPerspective | null`; `null` means "neither WWMD
+// nor WWWD" — do not add a sibling `"custom"` literal.
 
 export type DecisionCanvasContribution = {
   principleId: string;
@@ -29,7 +38,17 @@ export type DecisionCanvasInput = {
   interactionId?: string | null;
   profileId?: string | null;
   profileLabel?: string | null;
-  perspectiveMode?: "wwmd" | "wwwd" | "custom";
+  /** `null` means a profile that is neither WWMD nor WWWD. Do not pass `"custom"`. */
+  perspective?: WikiPerspective | null;
+  /**
+   * When true, render the "seeded from WWMD doctrine" caveat in the
+   * recommendation block. Per PR #1343: WWWD currently falls back to platform
+   * WWMD doctrine because product == business for DPF, and operators must not
+   * mistake the fall-through for a settled WWWD position. If unset, the
+   * projection infers it from `perspective === "wwwd"` plus
+   * `resolvedProfileChain.length > 1`.
+   */
+  seededFromWwmd?: boolean;
   profileVersionId?: string | null;
   routeContext?: string | null;
   createdAt?: Date | string | null;
@@ -63,7 +82,10 @@ export type DecisionCanvasViewModel = {
     interactionId: string | null;
     profileId: string | null;
     profileLabel: string;
-    perspectiveMode: "wwmd" | "wwwd" | "custom";
+    /** `null` means a profile that is neither WWMD nor WWWD. */
+    perspective: WikiPerspective | null;
+    /** See `DecisionCanvasInput.seededFromWwmd`. */
+    seededFromWwmd: boolean;
     question: string;
     domainClass: DecisionDomainClass;
     riskTier: DecisionRiskTier;
@@ -84,6 +106,12 @@ export type DecisionCanvasViewModel = {
     state: "recommended" | "needs-review" | "blocked" | "deferred";
     operatorMessage: string;
     nextActionLabel: string;
+    /**
+     * Short note attached to the recommendation when the row's WWWD profile
+     * has no own corpus and fell back to WWMD doctrine. Empty string when no
+     * caveat applies. Matches PR #1343's prompt-hint caveat for the coworker.
+     */
+    caveat: string;
   };
   materialPulls: {
     positive: DecisionCanvasContribution[];
@@ -159,15 +187,19 @@ function stateFor(input: DecisionPerspectiveEvaluationResult): DecisionCanvasVie
 function nextActionFor(
   state: DecisionCanvasViewModel["recommendation"]["state"],
   outcomeType: DecisionOutcomeType,
-  mode: DecisionCanvasViewModel["header"]["perspectiveMode"],
+  perspective: WikiPerspective | null,
 ): string {
   if (state === "blocked") return "Resolve blocker before continuing";
   if (outcomeType === "defer") {
-    return mode === "wwmd" ? "Send to founder review" : "Send to owner review";
+    // WWMD -> founder review (Mark's voice); WWWD or unspecified -> owner/operator review.
+    return perspective === "wwmd" ? "Send to founder review" : "Send to owner review";
   }
   if (outcomeType === "escalate") return "Ask for human decision";
   return "Use recommended option";
 }
+
+const SEEDED_FROM_WWMD_CAVEAT =
+  "Seeded from WWMD doctrine — the organization perspective has no approved material of its own yet.";
 
 function inferRecommendedOption(
   evaluation: DecisionPerspectiveEvaluationResult,
@@ -211,18 +243,34 @@ function sourcesFromEvaluation(
   }));
 }
 
-function perspectiveModeForProfile(profile: DecisionCanvasInteractionRow["profile"]) {
-  const name = (profile?.name ?? "").toLowerCase();
-  if (profile?.kind === "platform" || name.includes("wwmd")) return "wwmd";
+/**
+ * Map a `DecisionPerspectiveProfile`-shaped row into the canonical
+ * `WikiPerspective` enum from `lib/wiki/perspective-intent.ts` (PR #1343).
+ *
+ * Returns `null` for a profile that is neither WWMD nor WWWD (formerly the
+ * `"custom"` sentinel). Exported so `lib/founder-review/queue.ts` and any
+ * other caller share a single implementation rather than maintaining a
+ * sibling copy.
+ *
+ * Callers that need a non-null default (e.g. the founder-review queue, where
+ * a missing profile historically meant "treat as Mark's review") apply their
+ * own `?? "wwmd"` at the call site.
+ */
+export function perspectiveForProfile(
+  profile: { kind: string; name: string } | null | undefined,
+): WikiPerspective | null {
+  if (!profile) return null;
+  const name = profile.name.toLowerCase();
+  if (profile.kind === "platform" || name.includes("wwmd")) return "wwmd";
   if (
-    profile?.kind === "organization" ||
-    profile?.kind === "customer" ||
-    profile?.kind === "team" ||
+    profile.kind === "organization" ||
+    profile.kind === "customer" ||
+    profile.kind === "team" ||
     name.includes("wwwd")
   ) {
     return "wwwd";
   }
-  return "custom";
+  return null;
 }
 
 function humanOutcomeFrom(value: unknown): DecisionCanvasInput["humanOutcome"] {
@@ -244,7 +292,7 @@ export function fromDecisionInteractionRow(row: DecisionCanvasInteractionRow): D
     interactionId: row.interactionId,
     profileId: row.profileId,
     profileLabel: row.profile?.name ?? "Decision Perspective",
-    perspectiveMode: perspectiveModeForProfile(row.profile),
+    perspective: perspectiveForProfile(row.profile),
     profileVersionId: row.profileVersionId,
     routeContext: row.routeContext ?? null,
     createdAt: row.createdAt ?? null,
@@ -273,13 +321,20 @@ export function projectDecisionCanvas(
     evaluation,
     input.recommendedOption,
   );
-  const perspectiveMode = input.perspectiveMode ?? "custom";
+  const perspective = input.perspective ?? null;
+  // WWWD currently falls back to platform/WWMD doctrine because product==business
+  // for DPF (per PR #1343, BI-F5179C9E). When the caller hasn't explicitly set
+  // the flag, infer it: WWWD selected AND the evaluator resolved through a
+  // fallback profile chain.
+  const seededFromWwmd =
+    input.seededFromWwmd
+      ?? (perspective === "wwwd" && (evaluation.resolvedProfileChain?.length ?? 0) > 1);
   const humanChosen = input.humanOutcome?.chosenOption ?? null;
   const state = stateFor(evaluation);
   const nextActionLabel = nextActionFor(
     state,
     evaluation.outcomeType,
-    perspectiveMode,
+    perspective,
   );
   const operatorMessage =
     state === "recommended"
@@ -296,7 +351,8 @@ export function projectDecisionCanvas(
       interactionId: input.interactionId ?? null,
       profileId: input.profileId ?? evaluation.selectedProfileId,
       profileLabel: input.profileLabel ?? "Decision Perspective",
-      perspectiveMode,
+      perspective,
+      seededFromWwmd,
       question: evaluation.question,
       domainClass: evaluation.domainClass,
       riskTier: evaluation.riskTier,
@@ -317,6 +373,7 @@ export function projectDecisionCanvas(
       state,
       operatorMessage: sanitizeOperatorText(operatorMessage, nextActionLabel),
       nextActionLabel,
+      caveat: seededFromWwmd ? SEEDED_FROM_WWMD_CAVEAT : "",
     },
     materialPulls,
     principlePulls: materialPulls,

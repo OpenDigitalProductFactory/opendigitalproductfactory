@@ -1,12 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import type { DecisionPerspectiveEvaluationResult } from "@/lib/decision-perspective/types";
+import type { WikiPerspective } from "@/lib/wiki/perspective-intent";
 
 import {
   fromDecisionInteractionRow,
   projectDecisionCanvas,
   sanitizeOperatorText,
   type DecisionCanvasContribution,
+  type DecisionCanvasViewModel,
 } from "./canvas";
 
 function evaluation(
@@ -81,7 +83,7 @@ describe("projectDecisionCanvas", () => {
     const view = projectDecisionCanvas({
       interactionId: "DI-1",
       profileLabel: "WWMD Platform",
-      perspectiveMode: "wwmd",
+      perspective: "wwmd",
       evaluation: evaluation(),
       recommendedOption: "Build projection service",
       createdAt: new Date("2026-05-31T12:00:00.000Z"),
@@ -90,7 +92,7 @@ describe("projectDecisionCanvas", () => {
 
     expect(view.header.interactionId).toBe("DI-1");
     expect(view.header.profileLabel).toBe("WWMD Platform");
-    expect(view.header.perspectiveMode).toBe("wwmd");
+    expect(view.header.perspective).toBe("wwmd");
     expect(view.header.createdAt).toBe("2026-05-31T12:00:00.000Z");
     expect(view.recommendation.state).toBe("recommended");
     expect(view.recommendation.recommendedOption).toBe(
@@ -108,7 +110,7 @@ describe("projectDecisionCanvas", () => {
       interactionId: "DI-ROW",
       profileId: "profile-mark",
       profileLabel: "WWMD Platform",
-      perspectiveMode: "wwmd",
+      perspective: "wwmd",
       evaluation: evaluation(),
       createdAt: new Date("2026-05-31T12:00:00.000Z"),
       routeContext: "/build",
@@ -161,7 +163,7 @@ describe("projectDecisionCanvas", () => {
     const view = projectDecisionCanvas({
       profileId: "profile-org",
       profileLabel: "WWWD Organization",
-      perspectiveMode: "wwwd",
+      perspective: "wwwd",
       evaluation: evaluation({
         selectedProfileId: "profile-org",
         question: "Should we comp the customer?",
@@ -173,7 +175,7 @@ describe("projectDecisionCanvas", () => {
 
     expect(view.header.profileId).toBe("profile-org");
     expect(view.header.profileLabel).toBe("WWWD Organization");
-    expect(view.header.perspectiveMode).toBe("wwwd");
+    expect(view.header.perspective).toBe("wwwd");
     expect(view.recommendation.recommendedOption).toBe("Offer a credit");
   });
 
@@ -181,7 +183,7 @@ describe("projectDecisionCanvas", () => {
     const view = projectDecisionCanvas({
       profileId: "profile-org",
       profileLabel: "WWWD Organization",
-      perspectiveMode: "wwwd",
+      perspective: "wwwd",
       evaluation: evaluation({
         selectedProfileId: "profile-org",
         outcomeType: "defer",
@@ -198,7 +200,7 @@ describe("projectDecisionCanvas", () => {
 
   it("projects WWMD defer outcomes as founder-review next actions without selecting an option", () => {
     const view = projectDecisionCanvas({
-      perspectiveMode: "wwmd",
+      perspective: "wwmd",
       evaluation: evaluation({
         outcomeType: "defer",
         confidenceScore: 0.2,
@@ -296,5 +298,88 @@ describe("projectDecisionCanvas", () => {
     expect(view.options.find((option) => option.humanSelected)?.id).toBe(
       "Add a new decision engine",
     );
+  });
+
+  // Reconciliation with PR #1343 (BI-F5179C9E): the canvas perspective field
+  // must use the canonical WikiPerspective enum, not a sibling string union.
+  // This type-only assertion catches any future redeclaration in code review
+  // before it ships a second source of truth.
+  it("types `header.perspective` as the canonical WikiPerspective | null", () => {
+    expectTypeOf<DecisionCanvasViewModel["header"]["perspective"]>().toEqualTypeOf<
+      WikiPerspective | null
+    >();
+  });
+
+  it("infers seededFromWwmd for WWWD rows that resolved through a fallback profile chain", () => {
+    const view = projectDecisionCanvas({
+      perspective: "wwwd",
+      evaluation: evaluation({
+        selectedProfileId: "profile-org",
+        resolvedProfileChain: ["profile-org", "profile-mark"],
+      }),
+    });
+
+    expect(view.header.seededFromWwmd).toBe(true);
+    expect(view.recommendation.caveat).toContain("Seeded from WWMD doctrine");
+  });
+
+  it("does not flag seededFromWwmd for a WWWD row with its own corpus", () => {
+    const view = projectDecisionCanvas({
+      perspective: "wwwd",
+      evaluation: evaluation({
+        selectedProfileId: "profile-org",
+        resolvedProfileChain: ["profile-org"],
+      }),
+    });
+
+    expect(view.header.seededFromWwmd).toBe(false);
+    expect(view.recommendation.caveat).toBe("");
+  });
+
+  it("does not flag seededFromWwmd for WWMD rows", () => {
+    const view = projectDecisionCanvas({
+      perspective: "wwmd",
+      evaluation: evaluation({
+        resolvedProfileChain: ["profile-mark", "fallback-profile"],
+      }),
+    });
+
+    expect(view.header.seededFromWwmd).toBe(false);
+    expect(view.recommendation.caveat).toBe("");
+  });
+
+  it("honors an explicit seededFromWwmd override from the caller", () => {
+    const view = projectDecisionCanvas({
+      perspective: "wwwd",
+      seededFromWwmd: true,
+      evaluation: evaluation({
+        selectedProfileId: "profile-org",
+        resolvedProfileChain: ["profile-org"],
+      }),
+    });
+
+    expect(view.header.seededFromWwmd).toBe(true);
+    expect(view.recommendation.caveat).toContain("Seeded from WWMD doctrine");
+  });
+
+  // PR #1343 persona doctrine: coworkers must attribute Mark's recorded view
+  // to Mark, never invent one. The canvas projection must not generate prose
+  // mentioning Mark unless a backing source material id is preserved in audit.
+  it("does not produce a 'Mark thinks…' attribution string in default prose without a backing material id", () => {
+    const view = projectDecisionCanvas({
+      perspective: "wwwd",
+      profileLabel: "WWWD Organization",
+      evaluation: evaluation({
+        selectedProfileId: "profile-org",
+        question: "Should we offer a refund?",
+        rationale: "Customer-promise material recommends a refund.",
+        materialScores: [],
+        sources: [],
+      }),
+    });
+
+    expect(view.recommendation.operatorMessage.toLowerCase()).not.toContain("mark thinks");
+    expect(view.recommendation.operatorMessage.toLowerCase()).not.toContain("mark's view");
+    expect(view.audit.materialIds).toEqual([]);
   });
 });

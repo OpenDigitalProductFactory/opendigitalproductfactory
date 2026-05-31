@@ -5,7 +5,7 @@ describe("captureResearchCandidate", () => {
   it("maps markdown frontmatter into draft source metadata", () => {
     const candidate = captureResearchCandidate({
       targetProfileId: "profile-mark",
-      targetPerspectiveMode: "wwmd",
+      targetPerspective: "wwmd",
       content: [
         "---",
         "title: Obsidian Backlinks",
@@ -42,7 +42,7 @@ describe("captureResearchCandidate", () => {
   it("creates a local-source candidate when no URL is supplied", () => {
     const candidate = captureResearchCandidate({
       targetProfileId: "profile-org",
-      targetPerspectiveMode: "wwwd",
+      targetPerspective: "wwwd",
       title: "Local customer promise note",
       content: "The organization promises same-day escalation for urgent cases.",
     });
@@ -51,7 +51,7 @@ describe("captureResearchCandidate", () => {
     expect(candidate.rawSource?.sourceType).toBe("doc");
     expect(candidate.rawSource?.url).toBeNull();
     expect(candidate.rawSource?.locator.captureMode).toBe("local-note");
-    expect(candidate.materialCandidate?.targetPerspectiveMode).toBe("wwwd");
+    expect(candidate.materialCandidate?.targetPerspective).toBe("wwwd");
   });
 
   it("flags secret-looking input and blocks automatic capture", () => {

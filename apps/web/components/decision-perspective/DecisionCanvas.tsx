@@ -23,21 +23,21 @@ function stateLabel(state: DecisionCanvasViewModel["recommendation"]["state"]) {
   return "Recommended";
 }
 
-function profileModeLabel(mode: DecisionCanvasViewModel["header"]["perspectiveMode"]) {
-  if (mode === "wwmd") return "WWMD";
-  if (mode === "wwwd") return "WWWD";
+function perspectiveLabel(perspective: DecisionCanvasViewModel["header"]["perspective"]) {
+  if (perspective === "wwmd") return "WWMD";
+  if (perspective === "wwwd") return "WWWD";
   return "Decision Perspective";
 }
 
 export function DecisionCanvas({ viewModel }: { viewModel: DecisionCanvasViewModel }) {
-  const profileMode = profileModeLabel(viewModel.header.perspectiveMode);
+  const perspective = perspectiveLabel(viewModel.header.perspective);
 
   return (
     <section className="space-y-5 text-[var(--dpf-text)]" aria-label="Decision canvas">
       <div className="flex flex-col gap-3 border-b border-[var(--dpf-border)] pb-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap gap-2 text-xs text-[var(--dpf-muted)]">
-            <span>{profileMode}</span>
+            <span>{perspective}</span>
             <span aria-hidden="true">/</span>
             <span>{viewModel.header.profileLabel}</span>
             <span aria-hidden="true">/</span>
@@ -47,6 +47,11 @@ export function DecisionCanvas({ viewModel }: { viewModel: DecisionCanvasViewMod
           <p className="text-sm text-[var(--dpf-muted)]">
             {viewModel.header.routeContext ?? "No route context"} / {formatDate(viewModel.header.createdAt)}
           </p>
+          {viewModel.header.seededFromWwmd ? (
+            <p className="text-xs italic text-[var(--dpf-muted)]" data-testid="seeded-from-wwmd">
+              Seeded from WWMD doctrine — the organization perspective has no approved material of its own yet.
+            </p>
+          ) : null}
         </div>
         <div className="grid min-w-[12rem] gap-1 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
           <span className="text-xs font-medium text-[var(--dpf-muted)]">{stateLabel(viewModel.recommendation.state)}</span>

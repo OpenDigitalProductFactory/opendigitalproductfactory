@@ -1,8 +1,12 @@
-export type ResearchCapturePerspectiveMode = "wwmd" | "wwwd" | "custom";
+import type { WikiPerspective } from "@/lib/wiki/perspective-intent";
 
+// `targetPerspective: WikiPerspective | null` replaces the prior local
+// `targetPerspectiveMode` field. `null` represents "neither WWMD nor WWWD"
+// (formerly `"custom"`). Import from `lib/wiki/perspective-intent.ts`
+// (PR #1343) — do not declare a sibling enum here (`single-source-of-truth`).
 export type ResearchCaptureInput = {
   targetProfileId?: string | null;
-  targetPerspectiveMode?: ResearchCapturePerspectiveMode;
+  targetPerspective?: WikiPerspective | null;
   content: string;
   title?: string | null;
   url?: string | null;
@@ -35,11 +39,11 @@ export type ResearchCaptureCandidate = {
     status: "review-needed";
     bodyPreview: string;
     targetProfileId: string;
-    targetPerspectiveMode: ResearchCapturePerspectiveMode;
+    targetPerspective: WikiPerspective | null;
   } | null;
   materialCandidate: {
     targetProfileId: string;
-    targetPerspectiveMode: ResearchCapturePerspectiveMode;
+    targetPerspective: WikiPerspective | null;
     sourceType: string;
     sourceRef: {
       sourceKey: string;
@@ -153,7 +157,7 @@ export function captureResearchCandidate(input: ResearchCaptureInput): ResearchC
   const url = input.url ?? metadataString(parsed.metadata, "url");
   const retrievedAt = asIso(input.retrievedAt ?? metadataString(parsed.metadata, "retrievedAt"));
   const sourceType = sourceTypeFrom(input, parsed.metadata);
-  const targetPerspectiveMode = input.targetPerspectiveMode ?? "custom";
+  const targetPerspective: WikiPerspective | null = input.targetPerspective ?? null;
   const excerpt = compact(body).slice(0, 800);
   const sourceKey = `${slugify(url ?? title)}-${slugify(sourceType)}`;
   const flags: ResearchCaptureCandidate["flags"] = detectSecret(input.content)
@@ -203,11 +207,11 @@ export function captureResearchCandidate(input: ResearchCaptureInput): ResearchC
       status: "review-needed",
       bodyPreview: body.slice(0, 2000),
       targetProfileId: input.targetProfileId,
-      targetPerspectiveMode,
+      targetPerspective,
     },
     materialCandidate: {
       targetProfileId: input.targetProfileId,
-      targetPerspectiveMode,
+      targetPerspective,
       sourceType,
       sourceRef: {
         sourceKey,

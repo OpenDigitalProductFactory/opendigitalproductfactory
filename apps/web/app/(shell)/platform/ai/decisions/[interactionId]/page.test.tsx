@@ -160,6 +160,10 @@ describe("DecisionInteractionPage", () => {
       outcomePayload: {
         confidenceScore: 0.2,
         coverageGap: true,
+        // PR #1343 fall-through: the WWWD profile had no own material, so the
+        // evaluator resolved through the platform/WWMD profile as fallback.
+        // The canvas reads this chain length to set `seededFromWwmd`.
+        resolvedProfileChain: ["profile-org", "profile-mark"],
       },
       humanOutcome: null,
       createdAt: new Date("2026-05-31T12:00:00.000Z"),
@@ -186,5 +190,10 @@ describe("DecisionInteractionPage", () => {
     expect(html).toContain("WWWD");
     expect(html).toContain("Send to owner review");
     expect(html).not.toContain("Send to founder review");
+    // PR #1343 reconciliation: WWWD rows that fall through to WWMD doctrine
+    // must surface the seeded-doctrine caveat so operators do not mistake the
+    // fall-through for a settled WWWD position. This fixture has no own
+    // material and a fallback profile chain, so the caveat must render.
+    expect(html).toContain("Seeded from WWMD doctrine");
   });
 });

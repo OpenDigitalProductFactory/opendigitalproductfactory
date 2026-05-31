@@ -1,3 +1,6 @@
+import { perspectiveForProfile } from "@/lib/decision-perspective/canvas";
+import type { WikiPerspective } from "@/lib/wiki/perspective-intent";
+
 export type FounderReviewUnresolvedReason =
   | "principle-gap"
   | "evidence-gap"
@@ -5,7 +8,12 @@ export type FounderReviewUnresolvedReason =
   | "ownership-gap"
   | "volunteers-dilemma";
 
-export type DecisionPerspectiveMode = "wwmd" | "wwwd" | "custom";
+// Re-export the canonical perspective type from PR #1343 so callers in this
+// module don't need a second import. `null` represents "neither WWMD nor
+// WWWD" — formerly the `"custom"` sentinel. The founder-review queue applies
+// its own `?? "wwmd"` default (see `projectFounderReviewCandidate`) so a row
+// with no profile information continues to render with founder-review wording.
+export type { WikiPerspective };
 
 export type DecisionInteractionQueueRow = {
   interactionId: string;
@@ -60,28 +68,11 @@ function normalizeReason(value: unknown): FounderReviewUnresolvedReason {
     : "principle-gap";
 }
 
-export function perspectiveModeForProfile(
-  profile: DecisionInteractionQueueRow["profile"],
-): DecisionPerspectiveMode {
-  if (!profile) return "wwmd";
-  const name = profile.name.toLowerCase();
-  if (profile.kind === "platform" || name.includes("wwmd")) return "wwmd";
-  if (
-    profile.kind === "organization" ||
-    profile.kind === "customer" ||
-    profile.kind === "team" ||
-    name.includes("wwwd")
-  ) {
-    return "wwwd";
-  }
-  return "custom";
-}
-
 function actionForReason(
   reason: FounderReviewUnresolvedReason,
-  mode: DecisionPerspectiveMode,
+  perspective: WikiPerspective,
 ): string {
-  if (reason === "principle-gap" && mode !== "wwmd") {
+  if (reason === "principle-gap" && perspective !== "wwmd") {
     return "Clarify operating policy";
   }
   return ACTION_BY_REASON[reason];
@@ -90,16 +81,18 @@ function actionForReason(
 export function projectFounderReviewCandidate(row: DecisionInteractionQueueRow) {
   const payload = asRecord(row.outcomePayload);
   const unresolvedReason = normalizeReason(payload.unresolvedReason);
-  const perspectiveMode = perspectiveModeForProfile(row.profile);
+  // Default a missing profile to WWMD: the founder-review queue predates the
+  // WWWD profile and a row with no profile is historically a Mark decision.
+  const perspective: WikiPerspective = perspectiveForProfile(row.profile) ?? "wwmd";
   return {
     id: row.interactionId,
     question: row.question,
     options: Array.isArray(row.options) ? row.options : [],
     profileLabel: row.profile?.name ?? "WWMD Platform",
-    perspectiveMode,
+    perspective,
     unresolvedReason,
     unresolvedReasonLabel: LABEL_BY_REASON[unresolvedReason],
-    primaryActionLabel: actionForReason(unresolvedReason, perspectiveMode),
+    primaryActionLabel: actionForReason(unresolvedReason, perspective),
     createdAt: row.createdAt.toISOString(),
     links: {
       buildHref: row.buildId ? `/build?buildId=${encodeURIComponent(row.buildId)}` : null,
