@@ -46,6 +46,14 @@ _f_args=()
 for _f in "${_compose_files[@]}"; do
   _f_args+=(-f "$PROMOTE_SOURCE/$_f")
 done
+_env_args=()
+if [[ -n "${PROMOTE_COMPOSE_ENV_FILE:-}" ]]; then
+  [[ -f "$PROMOTE_COMPOSE_ENV_FILE" ]] || {
+    printf 'error: PROMOTE_COMPOSE_ENV_FILE is not readable\n' >&2
+    exit 1
+  }
+  _env_args+=(--env-file "$PROMOTE_COMPOSE_ENV_FILE")
+fi
 
 # Emit a tagged step line; always prints in both dry-run and real modes.
 # Only the step name and target SHA are printed — never source/backup/health
@@ -116,7 +124,7 @@ if [[ $_dry_run -eq 0 ]]; then
       "$_built_sha" "$PROMOTE_TARGET_SHA" >&2
   fi
   export DPF_VERSION="$_built_sha"
-  docker compose --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
     "${_f_args[@]}" build portal
   # Capture the source content hash baked into the FRESHLY BUILT image. It is
   # computed from the actual bundled source bytes (Dockerfile) independent of
@@ -137,7 +145,7 @@ fi
 # SHA of the code it is running at /api/health/sha.
 emit_step docker-up
 if [[ $_dry_run -eq 0 ]]; then
-  docker compose --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
     "${_f_args[@]}" up -d --no-deps --force-recreate portal
 fi  # DPF_PLATFORM_VERSION stays exported from above so any rebuild keeps the stamp
 
@@ -187,7 +195,7 @@ fi
 # is capable of failing.
 emit_step content-verify
 if [[ $_dry_run -eq 0 ]]; then
-  _running_hash=$(docker compose --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+  _running_hash=$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
     "${_f_args[@]}" exec -T portal cat /app/.dpf-source-content-hash 2>/dev/null | tr -d '[:space:]' || true)
   [[ -n "$_running_hash" && "$_running_hash" == "$_built_hash" ]] || {
     printf 'error: running content hash %s does not match freshly built %s — recreate did not deploy the new image\n' \

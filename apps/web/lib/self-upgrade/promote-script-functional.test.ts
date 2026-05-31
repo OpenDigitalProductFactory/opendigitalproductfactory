@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, chmodSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, chmodSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -45,7 +45,7 @@ function makeFakeBin(root: string): string {
   // `docker compose exec`) returns a single stable hash so built==running.
   writeFileSync(
     join(bin, "docker"),
-    '#!/bin/sh\ncase "$*" in\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
+    '#!/bin/sh\n[ -n "$DOCKER_LOG" ] && printf "%s\\n" "$*" >> "$DOCKER_LOG"\ncase "$*" in\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
   );
   // For any URL ending in /sha, report the stamped DPF_VERSION (inherited from
   // the script's exported env) — modelling a correctly-stamped portal. Other
@@ -64,6 +64,8 @@ function runPromote(opts: {
   backup: string;
   targetSha: string;
   fakeBin: string;
+  composeEnvFile?: string;
+  dockerLog?: string;
 }): { status: number | null; stdout: string; stderr: string } {
   const r = spawnSync("bash", [SCRIPT, "--self-upgrade"], {
     encoding: "utf8",
@@ -77,6 +79,8 @@ function runPromote(opts: {
       PROMOTE_BACKUP_PATH: opts.backup,
       PROMOTE_HEALTH_URL: "http://127.0.0.1:9/api/health",
       PROMOTE_COMPOSE_PROJECT: "dpf-functest",
+      ...(opts.composeEnvFile ? { PROMOTE_COMPOSE_ENV_FILE: opts.composeEnvFile } : {}),
+      ...(opts.dockerLog ? { DOCKER_LOG: opts.dockerLog } : {}),
     },
   });
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
@@ -129,6 +133,26 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       // It still stamps the TRUTH (HEAD), and flags the drift.
       expect(r.stdout).toContain(`step=done target=${head}`);
       expect(r.stderr).toContain("warning: build source identity");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("passes the canonical install env file to docker compose when configured", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    try {
+      const envFile = join(root, "install.env");
+      const dockerLog = join(root, "docker.log");
+      writeFileSync(envFile, "AUTH_SECRET=test-secret\n");
+
+      const r = runPromote({ source, backup, targetSha: head, fakeBin, composeEnvFile: envFile, dockerLog });
+
+      expect(r.status).toBe(0);
+      const log = readFileSync(dockerLog, "utf8");
+      expect(log).toContain(`compose --env-file ${envFile} --project-directory ${source}`);
+      expect(log).toContain("build portal");
+      expect(log).toContain("up -d --no-deps --force-recreate portal");
+      expect(log).toContain("exec -T portal cat /app/.dpf-source-content-hash");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

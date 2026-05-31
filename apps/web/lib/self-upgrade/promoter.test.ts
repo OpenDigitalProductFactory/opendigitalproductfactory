@@ -63,4 +63,16 @@ describe("buildPromoterCommand", () => {
     const withBackup = buildPromoterCommand({ ...BASE, backupHostPath: "/Users/me/dpf-backups" });
     expect(withBackup.args).toContain("/Users/me/dpf-backups:/backups");
   });
+
+  it("mounts the install env file for compose interpolation when provided", () => {
+    const { args } = buildPromoterCommand({
+      ...BASE,
+      hostInstallPath: "/Users/me/dpf/.upgrade-workspace",
+      composeEnvFileHostPath: "/Users/me/dpf/.env",
+    });
+
+    expect(args).toContain("/Users/me/dpf/.upgrade-workspace:/host-source:ro");
+    expect(args).toContain("/Users/me/dpf/.env:/install-env/.env:ro");
+    expect(args).toContain("PROMOTE_COMPOSE_ENV_FILE=/install-env/.env");
+  });
 });
