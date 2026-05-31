@@ -33,7 +33,7 @@ Run this skill's gates per [AGENTS.md §5 "Where each gate runs"](../../../../AG
 - **Canonical local install** (root clone, port 3000, shared dev DB, already-running portal/MCP stack) — runtime-bound gates: portal build, UX, MCP-touching tests, migration smoke.
 - **Thread worktree directly** — cheap source-local checks: `tsc --noEmit`, targeted unit specs, lint.
 
-If a gate cannot run in the worktree because pnpm/corepack is missing, workspace links point outside the worktree, the Prisma client wasn't generated there, or Next rejects symlinked `node_modules` — **classify as harness limitation, not gate failure** ([`worktree-is-source-control-not-runtime`](../../../../docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md)). Re-run the gate against the canonical install, capture *that* run's evidence in the PR, and file the worktree-runnability gap as a separate platform BI.
+If a gate cannot run in the worktree because pnpm/corepack is missing, workspace links point outside the worktree, the Prisma client wasn't generated there, or Next rejects symlinked `node_modules` — **classify as harness limitation, not gate failure** ([`worktree-is-source-control-not-runtime`](../../../../docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md)). Route the gate to the **shared local-CI convergence sandbox** via `claim_nonprod_environment_lease(environmentKey="local-integration-ci")` — one shared runtime that all worktrees lease sequentially — and capture that run's evidence in the PR. Per-worktree runnable runtimes don't scale at DPF's expected 1k–10k concurrent worktrees; the sandbox is the only tenable verification substrate.
 
 ## When to use
 
@@ -61,7 +61,7 @@ If a gate cannot run in the worktree because pnpm/corepack is missing, workspace
 - Do not run destructive Compose cleanup against the root `dpf` project.
 - Do not push or open a PR while the local integration gate is red unless the operator explicitly reclassifies the branch as a blocked handoff.
 - A gate that did not run is an unrun gate, not a red gate; re-run it against the canonical install and record the result there.
-- Do not invest the current thread in making the worktree a full DPF runtime to satisfy this gate. Reserve "make worktree runnable" for a dedicated platform-process BI.
+- Do not invest the current thread in making the worktree a full DPF runtime to satisfy this gate. Runtime-bound verification routes through the **shared local-CI convergence sandbox** via lease — per-worktree runtimes are deliberately rejected at scale.
 
 ## Worked example
 

@@ -36,7 +36,7 @@ Concurrent DPF coding sessions DO NOT share a working tree. **One session = one 
 
 A thread worktree is **source-control isolation**: its own branch, index, HEAD, untracked-file space. It is **not** a second DPF runtime. The MCP seed and `COMPOSE_PROJECT_NAME` set in the steps below are collision-avoidance, not an instruction to spin up a parallel runtime for every task.
 
-For normal feature/fix work: commit from the worktree, verify against the canonical local install or a governed shared nonprod environment. See [AGENTS.md §4 worktree bullet](../../../../AGENTS.md) and [`worktree-is-source-control-not-runtime`](../../../../docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md). Reserve "make this worktree fully runnable" for tasks where a disposable runtime clone is the actual deliverable — file a platform process BI; do not fold it into an incidental feature/fix thread.
+For normal feature/fix work: commit from the worktree, then route runtime-bound verification through the **shared local-CI convergence sandbox** by claiming a lease (`claim_nonprod_environment_lease(environmentKey="local-integration-ci")`). The sandbox is one shared runtime that every worktree uses sequentially — making each individual worktree runnable doesn't scale past tens of concurrent worktrees, let alone the 1,000–10,000 DPF expects. See [AGENTS.md §4 worktree bullet](../../../../AGENTS.md) and [`worktree-is-source-control-not-runtime`](../../../../docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md). The rare exception (destructive compose experiment where a disposable runtime IS the deliverable) is a dedicated platform task, not incidental scope on a feature/fix thread.
 
 ## When to use
 
