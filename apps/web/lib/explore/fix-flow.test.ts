@@ -22,8 +22,15 @@ const completeFix: FixContext = {
 };
 
 describe("FEATURE_BUILD_KIND_VALUES", () => {
-  it("is a closed two-value enum", () => {
-    expect(FEATURE_BUILD_KIND_VALUES).toEqual(["feature", "fix"]);
+  it("is a closed enum that still contains feature and fix (extended for right-sizing)", () => {
+    // The 2026-05-30 right-sizing matrix extends this enum with `chore` and
+    // `doc`. The closed-enum guarantee is preserved — adding values still
+    // requires updating mcp-tools.ts mirrors and the matrix at the same time.
+    expect(FEATURE_BUILD_KIND_VALUES).toContain("feature");
+    expect(FEATURE_BUILD_KIND_VALUES).toContain("fix");
+    expect(FEATURE_BUILD_KIND_VALUES).toContain("chore");
+    expect(FEATURE_BUILD_KIND_VALUES).toContain("doc");
+    expect(FEATURE_BUILD_KIND_VALUES).toHaveLength(4);
   });
 });
 

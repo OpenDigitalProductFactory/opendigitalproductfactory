@@ -6937,6 +6937,8 @@ export async function executeTool(
             toPhase as import("@/lib/feature-build-types").BuildPhase,
             {
               kind: latestBuild.kind,
+              // Right-sizing matrix: persisted on plan.processSize at promote time.
+              processSize: (plan.processSize as string | undefined) ?? "medium",
               fixContext: handoffBrief?.fixContext,
               designDoc: latestBuild.designDoc, designReview: latestBuild.designReview,
               buildPlan: latestBuild.buildPlan, planReview: latestBuild.planReview,
@@ -7338,7 +7340,11 @@ export async function executeTool(
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       let phaseGateBlocker: string | null = null;
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, kind: true, brief: true } });
+      // Right-sizing matrix: also select plan (carries processSize) so the
+      // fix-flow gate picks the (fix, small | medium | large | xlarge) cell
+      // rather than always falling back to (fix, medium). plan is also
+      // needed below for the standard feature path's intake fallback.
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, kind: true, brief: true, plan: true } });
 
       // Fix flow: a fix build has no feature design doc — it carries a structured
       // diagnosis (fixContext) on its brief. Review the diagnosis for completeness
@@ -7346,6 +7352,7 @@ export async function executeTool(
       if (build?.kind === "fix") {
         const { isFixContextComplete, checkPhaseGate } = await import("@/lib/feature-build-types");
         const fixBrief = (build.brief ?? null) as import("@/lib/feature-build-types").FeatureBrief | null;
+        const fixProcessSize = ((build.plan as Record<string, unknown> | null)?.processSize as string | undefined) ?? "medium";
         const fc = fixBrief?.fixContext;
         const complete = isFixContextComplete(fc);
         const review = complete
@@ -7360,7 +7367,7 @@ export async function executeTool(
         }
         let fixPhaseGateBlocker: string | null = null;
         try {
-          const gate = checkPhaseGate("ideate", "plan", { kind: "fix", fixContext: fc, designReview: review });
+          const gate = checkPhaseGate("ideate", "plan", { kind: "fix", processSize: fixProcessSize, fixContext: fc, designReview: review });
           if (gate.allowed) {
             const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
             void completeBuildPhaseRun(buildId, "ideate");
@@ -7513,6 +7520,10 @@ export async function executeTool(
           where: { buildId },
           select: {
             phase: true,
+            // Right-sizing matrix: kind drives policy selection in
+            // checkPhaseGate; pre-existing rows default to "feature" via
+            // the schema default, so this is back-compat-safe.
+            kind: true,
             originatingBacklogItemId: true,
             draftApprovedAt: true,
             designDoc: true,
@@ -7690,6 +7701,8 @@ export async function executeTool(
           }
 
           const gate = checkPhaseGate("ideate", "plan", {
+            kind: updatedBuild.kind,
+            processSize: ((updatedBuild.plan as Record<string, unknown> | null)?.processSize as string | undefined) ?? "medium",
             designDoc: updatedBuild.designDoc,
             designReview: updatedBuild.designReview,
             happyPathState,
@@ -7931,6 +7944,8 @@ export async function executeTool(
           const happyPathState = normalizeHappyPathState(plan.happyPathState);
           const gate = checkPhaseGate("plan", "build", {
             kind: updatedBuild.kind,
+            // Right-sizing matrix: persisted on plan.processSize at promote time.
+            processSize: (plan.processSize as string | undefined) ?? "medium",
             buildPlan: updatedBuild.buildPlan,
             planReview: updatedBuild.planReview,
             happyPathState,
