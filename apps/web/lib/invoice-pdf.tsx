@@ -1,9 +1,28 @@
 import React from "react";
 import { Document, Page, Text, View, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
 
+export type InvoiceIssuer = {
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  addressLines?: string[];
+  vatNumber?: string | null;
+  bank?: {
+    bankName?: string | null;
+    accountName?: string | null;
+    accountNumber?: string | null;
+    sortCode?: string | null;
+    iban?: string | null;
+  } | null;
+};
+
 export type InvoiceForPdf = {
   invoiceRef: string;
   type: string;
+  // The issuing business. Optional so callers that have not yet resolved org
+  // identity still render, but the download path supplies it from live DB.
+  issuer?: InvoiceIssuer | null;
   status: string;
   issueDate: Date | string;
   dueDate: Date | string;
@@ -84,6 +103,19 @@ const styles = StyleSheet.create({
   headerMetaValue: {
     minWidth: 80,
     textAlign: "right",
+  },
+  // From (issuer)
+  fromBlock: {
+    marginBottom: 20,
+  },
+  fromName: {
+    fontFamily: "Helvetica-Bold",
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  fromLine: {
+    color: "#444",
+    marginBottom: 1,
   },
   // Bill To
   sectionLabel: {
@@ -215,6 +247,17 @@ function InvoiceDocument({ invoice }: { invoice: InvoiceForPdf }) {
   const taxNum = toNum(invoice.taxAmount);
   const sortedItems = [...invoice.lineItems].sort((a, b) => a.sortOrder - b.sortOrder);
 
+  const bank = invoice.issuer?.bank;
+  const bankLines = bank
+    ? [
+        bank.bankName ? `Bank: ${bank.bankName}` : null,
+        bank.accountName ? `Account name: ${bank.accountName}` : null,
+        bank.accountNumber ? `Account number: ${bank.accountNumber}` : null,
+        bank.sortCode ? `Sort code: ${bank.sortCode}` : null,
+        bank.iban ? `IBAN: ${bank.iban}` : null,
+      ].filter((l): l is string => Boolean(l))
+    : [];
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -236,6 +279,23 @@ function InvoiceDocument({ invoice }: { invoice: InvoiceForPdf }) {
             </View>
           </View>
         </View>
+
+        {/* From (issuer identity) */}
+        {invoice.issuer ? (
+          <View style={styles.fromBlock}>
+            <Text style={styles.sectionLabel}>From</Text>
+            <Text style={styles.fromName}>{invoice.issuer.name}</Text>
+            {(invoice.issuer.addressLines ?? []).map((line, i) => (
+              <Text key={i} style={styles.fromLine}>{line}</Text>
+            ))}
+            {invoice.issuer.email ? <Text style={styles.fromLine}>{invoice.issuer.email}</Text> : null}
+            {invoice.issuer.phone ? <Text style={styles.fromLine}>{invoice.issuer.phone}</Text> : null}
+            {invoice.issuer.website ? <Text style={styles.fromLine}>{invoice.issuer.website}</Text> : null}
+            {invoice.issuer.vatNumber ? (
+              <Text style={styles.fromLine}>VAT No: {invoice.issuer.vatNumber}</Text>
+            ) : null}
+          </View>
+        ) : null}
 
         {/* Bill To */}
         <View style={styles.billToBlock}>
@@ -325,13 +385,21 @@ function InvoiceDocument({ invoice }: { invoice: InvoiceForPdf }) {
           </View>
         </View>
 
-        {/* Footer: Payment Terms + Notes */}
-        {(invoice.paymentTerms || invoice.notes) ? (
+        {/* Footer: Payment Terms + Bank Details + Notes */}
+        {(invoice.paymentTerms || invoice.notes || bankLines.length > 0) ? (
           <View style={styles.footer}>
             {invoice.paymentTerms ? (
               <>
                 <Text style={styles.footerLabel}>PAYMENT TERMS</Text>
                 <Text style={styles.footerText}>{invoice.paymentTerms}</Text>
+              </>
+            ) : null}
+            {bankLines.length > 0 ? (
+              <>
+                <Text style={styles.footerLabel}>BANK DETAILS</Text>
+                {bankLines.map((line, i) => (
+                  <Text key={i} style={styles.footerText}>{line}</Text>
+                ))}
               </>
             ) : null}
             {invoice.notes ? (
