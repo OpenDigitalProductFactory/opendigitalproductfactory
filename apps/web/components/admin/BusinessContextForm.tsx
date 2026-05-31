@@ -25,6 +25,7 @@ const GEOGRAPHIC_SCOPE_OPTIONS = [
 
 type BusinessContextData = {
   description: string;
+  mission: string;
   targetMarket: string;
   companySize: string | null;
   geographicScope: string | null;
@@ -41,6 +42,8 @@ type BusinessContextFormProps = {
   isEdit?: boolean;
   /** Fields that were auto-populated from URL import during setup. */
   autoFilledFields?: string[];
+  /** Archetype-aware starter mission the operator can apply with one click. */
+  missionSuggestion?: string;
 };
 
 function AutoFillHint({ field, editedFields }: { field: string; editedFields: Set<string> }) {
@@ -53,7 +56,7 @@ function AutoFillHint({ field, editedFields }: { field: string; editedFields: Se
   );
 }
 
-export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFilledFields }: BusinessContextFormProps) {
+export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFilledFields, missionSuggestion }: BusinessContextFormProps) {
   const archetypeState = resolveArchetypeSummaryState(archetypeSummary);
   const [data, setData] = useState<BusinessContextData>(initial);
   const [submitting, setSubmitting] = useState(false);
@@ -179,6 +182,41 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
             Your AI coworker uses this to understand your business when building features and providing guidance.
           </div>
           {autoFilledFields?.includes("description") && <AutoFillHint field="description" editedFields={editedFields} />}
+        </label>
+
+        {/* Mission */}
+        <label style={labelStyle}>
+          <div style={{ ...fieldLabelStyle, display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+            <span>Why does your business exist?</span>
+            {missionSuggestion && data.mission.trim() === "" && (
+              <button
+                type="button"
+                onClick={() => update("mission", missionSuggestion)}
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "var(--dpf-accent)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: 0,
+                }}
+              >
+                Suggest a starter
+              </button>
+            )}
+          </div>
+          <textarea
+            value={data.mission}
+            onChange={(e) => update("mission", e.target.value)}
+            placeholder={missionSuggestion ?? "Your mission in a sentence — the difference you set out to make"}
+            rows={2}
+            style={{ ...inputStyle, resize: "none" }}
+          />
+          <div style={hintStyle}>
+            Your company mission. Every AI coworker keeps this in mind, and it seeds what your
+            organization &quot;would do&quot; when a decision comes up.
+          </div>
         </label>
 
         {/* Target market */}
