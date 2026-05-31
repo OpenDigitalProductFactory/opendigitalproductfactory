@@ -16,6 +16,10 @@ on:
   pull_request:
     paths:
       - "packages/db/prisma/schema.prisma"
+      # Also trigger when the guard machinery itself changes so a guard
+      # regression can't slip through without exercising the CI path.
+      - "packages/db/scripts/schema-regression-guard.mjs"
+      - ".github/workflows/schema-regression-guard.yml"
 
 jobs:
   schema-regression-guard:
@@ -27,34 +31,11 @@ jobs:
           fetch-depth: 0
 
       - name: Detect removed schema fields
+        # Reorder-tolerant set-based comparison per model/enum. Lives in
+        # packages/db/scripts/schema-regression-guard.mjs and is reused by
+        # .githooks/pre-commit (Guard 5) so contributors get the same check
+        # locally as in CI. Algorithm + fixtures are covered by
+        # packages/db/scripts/schema-regression-guard.test.ts.
         run: |
           git fetch origin main --depth=50
-
-          # Lines removed from schema.prisma that look like:
-          #   - Prisma field definitions (2-space indent + identifier)
-          #   - model / enum declarations
-          # "+" lines and diff headers are excluded.
-          #
-          # `-w` suppresses pairs where the line content is unchanged modulo
-          # whitespace — those are formatter / column-alignment edits, not
-          # real field removals. A genuine drop (or a type / attribute change)
-          # still produces non-whitespace-equivalent +/- pairs, which awk
-          # still reports.
-          REMOVED=$(
-            git diff -w origin/main...HEAD -- packages/db/prisma/schema.prisma \
-              | awk '/^-/ && !/^---/ && (/^-  [a-zA-Z@]/ || /^-(model|enum) /) { print }'
-          )
-
-          if [ -n "$REMOVED" ]; then
-            echo "❌ Schema regression detected."
-            echo ""
-            echo "The following lines were removed from packages/db/prisma/schema.prisma:"
-            echo "$REMOVED"
-            echo ""
-            echo "Existing model fields and enum values must never be removed in a feature PR."
-            echo "If this diff came from a Build Studio sandbox, the sandbox image is likely"
-            echo "stale. Rebuild the sandbox from a fresh portal image and re-run the build."
-            exit 1
-          fi
-
-          echo "✅ No schema regressions detected."
+          node packages/db/scripts/schema-regression-guard.mjs origin/main
