@@ -2,13 +2,14 @@ import { getEvidence } from "@/lib/actions/compliance";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { StatusBadge, type Intent } from "@/components/ui/report-kit";
 
 type Props = { params: Promise<{ id: string }> };
 
-const STATUS_COLORS: Record<string, string> = {
-  active: "bg-green-900/30 text-green-400",
-  superseded: "bg-yellow-900/30 text-yellow-400",
-  archived: "bg-gray-900/30 text-gray-400",
+const EVIDENCE_INTENT: Record<string, Intent> = {
+  active: "success",
+  superseded: "warning",
+  archived: "neutral",
 };
 
 export default async function EvidenceDetailPage({ params }: Props) {
@@ -36,9 +37,7 @@ export default async function EvidenceDetailPage({ params }: Props) {
           <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">
             {evidence.evidenceType}
           </span>
-          <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${STATUS_COLORS[evidence.status] ?? "bg-gray-900/30 text-gray-400"}`}>
-            {evidence.status}
-          </span>
+          <StatusBadge intent={EVIDENCE_INTENT[evidence.status] ?? "neutral"} label={evidence.status} variant="soft" uppercase={false} />
         </div>
         {evidence.description && (
           <p className="text-sm text-[var(--dpf-muted)]">{evidence.description}</p>
@@ -47,15 +46,15 @@ export default async function EvidenceDetailPage({ params }: Props) {
 
       {/* Superseded banner */}
       {evidence.status === "superseded" && evidence.supersededBy && (
-        <div className="mb-6 p-3 rounded-lg border border-yellow-500/50 bg-yellow-900/10">
-          <p className="text-xs text-yellow-400 mb-1">This evidence has been superseded.</p>
+        <div className="mb-6 p-3 rounded-lg border border-[color-mix(in_srgb,var(--dpf-warning)_50%,transparent)] bg-[color-mix(in_srgb,var(--dpf-warning)_10%,transparent)]">
+          <p className="text-xs text-[var(--dpf-warning)] mb-1">This evidence has been superseded.</p>
           <Link
             href={`/compliance/evidence/${evidence.supersededBy.id}`}
-            className="inline-flex items-center gap-2 text-sm text-[var(--dpf-text)] hover:text-blue-400 transition-colors"
+            className="inline-flex items-center gap-2 text-sm text-[var(--dpf-text)] hover:text-[var(--dpf-info)] transition-colors"
           >
             <span>{evidence.supersededBy.title}</span>
             <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{evidence.supersededBy.evidenceId}</span>
-            <span className="text-xs text-blue-400">View replacement</span>
+            <span className="text-xs text-[var(--dpf-info)]">View replacement</span>
           </Link>
         </div>
       )}
@@ -96,7 +95,7 @@ export default async function EvidenceDetailPage({ params }: Props) {
           >
             <span className="text-sm font-semibold text-[var(--dpf-text)]">{evidence.obligation.title}</span>
             <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{evidence.obligation.obligationId}</span>
-            <span className="text-xs text-blue-400">View</span>
+            <span className="text-xs text-[var(--dpf-info)]">View</span>
           </Link>
         </div>
       )}
@@ -111,7 +110,7 @@ export default async function EvidenceDetailPage({ params }: Props) {
           >
             <span className="text-sm font-semibold text-[var(--dpf-text)]">{evidence.control.title}</span>
             <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{evidence.control.controlId}</span>
-            <span className="text-xs text-blue-400">View</span>
+            <span className="text-xs text-[var(--dpf-info)]">View</span>
           </Link>
         </div>
       )}
