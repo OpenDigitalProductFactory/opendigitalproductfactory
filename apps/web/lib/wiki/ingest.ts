@@ -186,7 +186,79 @@ function parseDate(value: string | undefined): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-// ─── Orchestrator ───────────────────────────────────────────────────────────
+// ─── Shared upsert + audit primitive ───────────────────────────────────────
+
+/**
+ * Normalised payload accepted by both the file-path and text/buffer entry
+ * points. Once a caller has produced sourceKey + sourceType + title + the
+ * mutable RawSource fields, the work is identical: upsert the row and write
+ * the audit event. Factored so the two entry points stay in lockstep.
+ */
+type CommitRawSourcePayload = {
+  sourceKey: string;
+  sourceType: RawSourceType;
+  title: string;
+  authors?: string[];
+  publishedAt?: Date | null;
+  url?: string | null;
+  doi?: string | null;
+  abstract?: string | null;
+  excerpt?: string | null;
+  license?: string | null;
+  locator?: Record<string, unknown> | null;
+  organizationId?: string | null;
+  isKernel?: boolean;
+  agentId?: string | null;
+  userId?: string | null;
+  kernelVersion?: string | null;
+};
+
+async function commitRawSourceAndAudit(
+  db: IngestClient,
+  payload: CommitRawSourcePayload,
+): Promise<IngestRawSourceResult> {
+  const retrievedAt = new Date();
+  const row = (await upsertRawSource(db, {
+    sourceKey: payload.sourceKey,
+    sourceType: payload.sourceType,
+    title: payload.title,
+    authors: payload.authors,
+    publishedAt: payload.publishedAt ?? null,
+    url: payload.url ?? null,
+    doi: payload.doi ?? null,
+    locator: payload.locator ?? null,
+    abstract: payload.abstract ?? null,
+    excerpt: payload.excerpt ?? null,
+    license: payload.license ?? null,
+    retrievedAt,
+    organizationId: payload.organizationId ?? null,
+    isKernel: payload.isKernel ?? false,
+  })) as { id: string; createdAt: Date; updatedAt: Date };
+
+  const isNew =
+    row.createdAt instanceof Date && row.updatedAt instanceof Date
+      ? row.createdAt.getTime() === row.updatedAt.getTime()
+      : false;
+
+  const event = (await recordIngestEvent(db, {
+    sourceId: row.id,
+    organizationId: payload.organizationId ?? null,
+    touchedPageIds: [],
+    agentId: payload.agentId ?? null,
+    userId: payload.userId ?? null,
+    kernelVersion: payload.kernelVersion ?? null,
+  })) as { id: string };
+
+  return {
+    rawSourceId: row.id,
+    sourceKey: payload.sourceKey,
+    sourceType: payload.sourceType,
+    isNew,
+    eventId: event.id,
+  };
+}
+
+// ─── Orchestrator: file-path entry ─────────────────────────────────────────
 
 /**
  * Read a raw-source file from disk, upsert the `RawSource` row, and append
@@ -197,6 +269,10 @@ function parseDate(value: string | undefined): Date | null {
  * touch any wiki page, does not write to Qdrant. The returned event row
  * carries `touchedPageIds: []` until Phase 2.2/2.3 wires the proposal
  * pipeline through.
+ *
+ * Path-injection trust model unchanged (CodeQL #62): MCP-callable entry
+ * points must run `assertAllowedIngestPath()` first; library callers trust
+ * their own input.
  */
 export async function ingestRawSourceFromFile(
   db: IngestClient,
@@ -227,8 +303,7 @@ export async function ingestRawSourceFromFile(
     );
   }
 
-  const retrievedAt = new Date();
-  const row = (await upsertRawSource(db, {
+  return commitRawSourceAndAudit(db, {
     sourceKey,
     sourceType,
     title,
@@ -239,30 +314,91 @@ export async function ingestRawSourceFromFile(
     abstract: frontmatter.abstract ?? null,
     excerpt: body.trim().length > 0 ? body : null,
     license: frontmatter.license ?? null,
-    retrievedAt,
     organizationId: input.organizationId ?? null,
     isKernel: input.isKernel ?? false,
-  })) as { id: string; createdAt: Date; updatedAt: Date };
-
-  const isNew =
-    row.createdAt instanceof Date && row.updatedAt instanceof Date
-      ? row.createdAt.getTime() === row.updatedAt.getTime()
-      : false;
-
-  const event = (await recordIngestEvent(db, {
-    sourceId: row.id,
-    organizationId: input.organizationId ?? null,
-    touchedPageIds: [],
     agentId: input.agentId ?? null,
     userId: input.userId ?? null,
     kernelVersion: input.kernelVersion ?? null,
-  })) as { id: string };
+  });
+}
 
-  return {
-    rawSourceId: row.id,
-    sourceKey,
-    sourceType,
-    isNew,
-    eventId: event.id,
-  };
+// ─── Orchestrator: text/buffer entry ───────────────────────────────────────
+
+/**
+ * Sibling of `ingestRawSourceFromFile` for sources that did NOT originate as
+ * a markdown file under one of the allow-listed roots — e.g. an uploaded
+ * business plan (DocumentBlob → extracted text), an AI research result, a
+ * Q&A answer, a QuickBooks supplier record summary, a coverage-gap synthesis.
+ *
+ * The caller supplies the normalised payload directly: sourceKey, sourceType,
+ * title, body text, and any provenance fields. There is NO filesystem read,
+ * NO frontmatter parsing, NO derivation from a path, and NO allow-list gate —
+ * the trust model lives with the caller, who is responsible for stamping the
+ * provenance object so the audit trail records WHERE this content came from.
+ *
+ * Same idempotency contract as the file-path entry: keyed on `sourceKey @unique`,
+ * re-ingesting the same logical source upserts the row and writes a new audit
+ * event. The path-injection posture of `ingestRawSourceFromFile` is preserved
+ * for that variant; this entry simply does not expose a path to gate.
+ *
+ * BI-7C9D6198 (EP-CORPUS-BOOTSTRAP Phase 1) — the foundational gap fill that
+ * unblocks every continuous-enrichment source per the corpus design.
+ */
+export type IngestRawSourceFromTextInput = {
+  /** Stable, caller-controlled idempotency key (e.g. `enrich:<orgId>:<provider>:<recordId>`). */
+  sourceKey: string;
+  sourceType: RawSourceType;
+  title: string;
+  /** The content body — what the LLM proposer will eventually read. */
+  body: string;
+  abstract?: string | null;
+  authors?: string[];
+  publishedAt?: Date | null;
+  url?: string | null;
+  doi?: string | null;
+  license?: string | null;
+  /** Free-form structured pointer — use it to capture provider/recordId/etc. */
+  locator?: Record<string, unknown> | null;
+  /** Org-scoped ingests pass an organizationId; kernel ingests omit it. */
+  organizationId?: string | null;
+  isKernel?: boolean;
+  agentId?: string | null;
+  userId?: string | null;
+  kernelVersion?: string | null;
+};
+
+export async function ingestRawSourceFromText(
+  db: IngestClient,
+  input: IngestRawSourceFromTextInput,
+): Promise<IngestRawSourceResult> {
+  const title = input.title.trim();
+  if (!title) {
+    throw new Error(
+      `ingestRawSourceFromText: title is required (got empty string).`,
+    );
+  }
+  if (!input.sourceKey.trim()) {
+    throw new Error(
+      `ingestRawSourceFromText: sourceKey is required (got empty string).`,
+    );
+  }
+
+  return commitRawSourceAndAudit(db, {
+    sourceKey: input.sourceKey,
+    sourceType: input.sourceType,
+    title,
+    authors: input.authors,
+    publishedAt: input.publishedAt ?? null,
+    url: input.url ?? null,
+    doi: input.doi ?? null,
+    abstract: input.abstract ?? null,
+    excerpt: input.body.trim().length > 0 ? input.body : null,
+    license: input.license ?? null,
+    locator: input.locator ?? null,
+    organizationId: input.organizationId ?? null,
+    isKernel: input.isKernel ?? false,
+    agentId: input.agentId ?? null,
+    userId: input.userId ?? null,
+    kernelVersion: input.kernelVersion ?? null,
+  });
 }
