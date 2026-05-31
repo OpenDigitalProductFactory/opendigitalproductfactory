@@ -8,6 +8,7 @@ import {
 } from "./business-context-form-state";
 import { EmailInput } from "@/components/ui/EmailInput";
 import { PhoneInput } from "@/components/ui/PhoneInput";
+import { BusinessDocumentUpload } from "@/components/admin/BusinessDocumentUpload";
 
 const COMPANY_SIZE_OPTIONS = [
   { value: "solo", label: "Solo", description: "Just me" },
@@ -218,6 +219,9 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
             organization &quot;would do&quot; when a decision comes up.
           </div>
         </label>
+
+        {/* Business document upload (optional) */}
+        <BusinessDocumentUpload />
 
         {/* Target market */}
         <label style={labelStyle}>

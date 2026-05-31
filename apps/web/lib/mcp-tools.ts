@@ -99,7 +99,15 @@ type ToolExecutionContext = {
 
 /** MCP tool annotation hints (from MCP spec + n8n-MCP pattern).
  *  These let the agent router and governance layer make safety decisions
- *  without parsing the tool description text. */
+ *  without parsing the tool description text.
+ *
+ *  MCP-spec fields are advisory client hints, not server-side enforcement —
+ *  the grant system in agent-grants.ts is the authoritative check.
+ *  `irreversibleHint` is a DPF extension layered on top: every irreversible
+ *  tool is also destructive, but not every destructive tool is irreversible.
+ *  The envelope flow (Pseudo-User Contract spec §6.4 — BI-0F9C291C) uses
+ *  irreversibleHint to enforce the typed-phrase hard floor — irreversible
+ *  actions cannot be auto-approved by per-turn elevation. */
 export type ToolAnnotations = {
   /** Tool only reads data — never mutates state */
   readOnlyHint?: boolean;
@@ -109,6 +117,13 @@ export type ToolAnnotations = {
   idempotentHint?: boolean;
   /** Tool reaches outside the platform boundary (network, external API) */
   openWorldHint?: boolean;
+  /** DPF extension. Tool's effect cannot be undone by any existing inverse
+   *  tool — e.g. data deletion with no soft-delete column, a network send
+   *  that the recipient has already acted on, a financial transfer. Always
+   *  implies `destructiveHint: true`. Used by the Pseudo-User Contract
+   *  envelope flow (BI-0F9C291C) to require an explicit typed-phrase
+   *  confirmation regardless of per-turn elevation. */
+  irreversibleHint?: boolean;
 };
 
 export type ToolDefinition = {
@@ -135,6 +150,13 @@ export type ToolDefinition = {
   buildPhases?: BuildPhaseTag[] | null;
   /** MCP-spec tool annotations for governance and safety classification */
   annotations?: ToolAnnotations;
+  /** Pseudo-User Contract (spec §6.1 — BI-D9487754): the ScreenManifest
+   *  surface this tool is meaningful in. Used by the manifest CI lint to
+   *  validate that domain actions a manifest exposes have a matching tool
+   *  entry, and by the chat handler to filter the tool catalog by current
+   *  routeContext. Undefined = surface-agnostic (the tool is callable from
+   *  any context — most tools fall here). */
+  screenSurface?: string;
   /**
    * Predicate that lets an `executionMode: "proposal"` tool skip the proposal
    * card and execute immediately when the user has already pre-authorized the
@@ -270,13 +292,25 @@ export function resolveSavePhaseHandoffTransition(
 }
 
 /** Tools that perform destructive or irreversible actions beyond what
- *  sideEffect/executionMode already captures. */
+ *  sideEffect/executionMode already captures. Used by resolveAnnotations
+ *  to set destructiveHint on tools that don't carry an explicit
+ *  `annotations` block. */
 const DESTRUCTIVE_TOOLS = new Set([
   "deploy_feature",
   "execute_promotion",
   "transition_employee_status",
   "contribute_to_hive",
   "apply_platform_update",
+  // Pseudo-User Contract (BI-B2F7ABF5): build-phase and lifecycle ops that
+  // advance the FeatureBuild state machine are destructive in the
+  // can't-quietly-take-back sense. Promote/process write FeatureBuild rows
+  // and dispatch coworker work; approve_decomposition commits the
+  // decomposition that drives the Plan phase; start_build kicks off the
+  // sandbox/code-generation chain.
+  "promote_to_build_studio",
+  "process_backlog_for_build_studio",
+  "approve_decomposition",
+  "start_build",
 ]);
 
 export type ToolResult = {
@@ -6872,6 +6906,21 @@ export async function executeTool(
         contributionReadiness = "low";
       }
 
+      // Surface canonical first-party palettes the agent should COMPOSE instead
+      // of hand-rolling (e.g. report-kit for reporting/data-display UX). Sourced
+      // from the in-code registry; each carries its governing kernel principle.
+      const { matchCanonicalPrimitives } = await import("@/lib/canonical-primitives");
+      const reusablePrimitives = matchCanonicalPrimitives(
+        `${featureDescription} ${domainConcepts.join(" ")} ${abstractionBoundary}`,
+      ).map((p) => ({
+        name: p.name,
+        path: p.path,
+        purpose: p.purpose,
+        exports: p.exports,
+        principle: p.principleSlug,
+        docs: p.docs,
+      }));
+
       const analysis = {
         scope: userScope,
         domainEntities,
@@ -6879,11 +6928,18 @@ export async function executeTool(
           ? "Feature is designed for a single use case."
           : "Domain-specific values should be stored as configuration rather than hardcoded."),
         contributionReadiness,
+        reusablePrimitives,
       };
+
+      const primitiveHint = reusablePrimitives.length
+        ? ` Compose the existing palette instead of hand-rolling: ${reusablePrimitives
+            .map((p) => `${p.name} (${p.exports.slice(0, 3).join(", ")}…; principle ${p.principle})`)
+            .join("; ")}.`
+        : "";
 
       return {
         success: true,
-        message: `Reusability: ${userScope} — ${domainEntities.length} parameterizable concept(s), contribution readiness: ${contributionReadiness}.`,
+        message: `Reusability: ${userScope} — ${domainEntities.length} parameterizable concept(s), contribution readiness: ${contributionReadiness}.${primitiveHint}`,
         data: analysis as unknown as Record<string, unknown>,
       };
     }
@@ -7423,7 +7479,12 @@ export async function executeTool(
       // fix-flow gate picks the (fix, small | medium | large | xlarge) cell
       // rather than always falling back to (fix, medium). plan is also
       // needed below for the standard feature path's intake fallback.
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, kind: true, brief: true, plan: true } });
+      // BI-CE49D82E — also select prior designReview so we can pass its issues
+      // to the reviewer prompt for delta-awareness and surface the iteration
+      // trajectory in the operator-facing gate reason (mirror of BI-4396EFEC
+      // for the plan path). Live repro: FB-5E20E793 oscillated on the same
+      // "missing accessibility" complaint round after round.
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, designReview: true, kind: true, brief: true, plan: true } });
 
       // Fix flow: a fix build has no feature design doc — it carries a structured
       // diagnosis (fixContext) on its brief. Review the diagnosis for completeness
@@ -7474,7 +7535,26 @@ export async function executeTool(
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
       const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
       const designDocTyped = build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0];
-      const prompt = buildDesignReviewPrompt(designDocTyped, "");
+      // BI-CE49D82E — Compute the iteration context up front so we can
+      // (a) feed prior issues into the reviewer prompt and (b) populate
+      // ReviewResult.iteration on the output. Round is 1-based: first
+      // review = 1, every subsequent reviewDesignDoc call increments.
+      const priorDesignReview = (build.designReview ?? null) as
+        | { issues?: Array<{ severity?: string; description?: string }>; iteration?: { round?: number } }
+        | null;
+      const priorRound = priorDesignReview?.iteration?.round ?? 0;
+      const priorIssues = Array.isArray(priorDesignReview?.issues)
+        ? priorDesignReview!.issues!
+            .filter((i): i is { severity: string; description: string } =>
+              typeof i?.severity === "string" && typeof i?.description === "string",
+            )
+            .map((i) => ({ severity: i.severity, description: i.description }))
+        : [];
+      const currentRound = priorRound + 1;
+      const priorContext = priorIssues.length > 0
+        ? { round: priorRound, issues: priorIssues }
+        : null;
+      const prompt = buildDesignReviewPrompt(designDocTyped, "", priorContext);
       const archPrompt = buildArchitectureReviewPrompt({ kind: "design", doc: designDocTyped }, "");
       const { routeAndCall } = await import("@/lib/routed-inference");
       const messages = [{ role: "user" as const, content: prompt }];
@@ -7508,7 +7588,26 @@ export async function executeTool(
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
         summary: "Review could not be completed — retry.",
       };
-      const review = architectureAdvisory ? { ...reviewBase, architectureAdvisory } : reviewBase;
+      // BI-CE49D82E — Compute the iteration delta against the prior round and
+      // attach to the ReviewResult. computeReviewDelta + isOscillating live in
+      // feature-build-types so they're independently unit-testable and shared
+      // with the plan path.
+      const { computeReviewDelta, isOscillating } = await import("@/lib/feature-build-types");
+      const reviewWithIteration = (() => {
+        if (priorIssues.length === 0) {
+          return { ...reviewBase, iteration: { round: currentRound } };
+        }
+        const delta = computeReviewDelta(priorIssues, reviewBase.issues);
+        return {
+          ...reviewBase,
+          iteration: {
+            round: currentRound,
+            prior: delta,
+            oscillating: isOscillating(delta, reviewBase.issues.length),
+          },
+        };
+      })();
+      const review = architectureAdvisory ? { ...reviewWithIteration, architectureAdvisory } : reviewWithIteration;
       const archAdvisoryNote = architectureAdvisory && architectureAdvisory.issues.length > 0
         ? ` Architecture review (advisory): ${architectureAdvisory.summary} Fold actionable items into the design before building — they do not block this gate.`
         : "";
@@ -7567,9 +7666,18 @@ export async function executeTool(
         const issueList = criticalIssues.length > 0
           ? criticalIssues.map((i: { description: string }) => i.description).join("; ")
           : review.summary;
+        // BI-CE49D82E — Include the iteration trajectory in the agent-facing
+        // message so the implementer model sees when its revisions are trading
+        // one set of issues for another instead of converging. The oscillating
+        // signal recommends a scope split rather than another iteration —
+        // matching the plan path established by BI-4396EFEC (D38).
+        const iter = review.iteration;
+        const trajectoryNote = iter?.prior
+          ? ` (Round ${iter.round}: ${iter.prior.addressed} addressed, ${iter.prior.persisted} persist, ${iter.prior.newlySurfaced} new${iter.oscillating ? " — issues are not net-decreasing across rounds; consider proposing a scope split rather than another revision." : ""}.)`
+          : "";
         return {
           success: true,
-          message: `Design review FAILED. Blocking issues: ${issueList}. Revise the design document to address these issues, then call saveBuildEvidence with field "designDoc" and re-run reviewDesignDoc.${archAdvisoryNote}`,
+          message: `Design review FAILED. Blocking issues: ${issueList}. Revise the design document to address these issues, then call saveBuildEvidence with field "designDoc" and re-run reviewDesignDoc.${trajectoryNote}${archAdvisoryNote}`,
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }

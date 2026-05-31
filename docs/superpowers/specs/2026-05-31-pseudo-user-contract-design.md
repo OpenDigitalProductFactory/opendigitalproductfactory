@@ -620,6 +620,43 @@ Fold these edits (now applied in-place above) and proceed to BI filing for Phase
 
 ---
 
+## 19. Captured extensions (parked 2026-05-31)
+
+Two refinements surfaced in the founder conversation after the substrate was being built. Both depend on Phase 1 primitives landing first; captured here so they aren't lost when implementation work resumes.
+
+### 19.1 Visual agency cue for `screen_set_input` + per-form confirmation envelope
+
+**Backlog item:** [`BI-5696B4D7`](#) — *"PUC visual cue: highlight coworker-set fields + per-form confirmation envelope"*
+
+The `screen_set_input` tool (§6.2) lets a coworker pre-fill form fields on the user's behalf. The spec as written defines the tool but not the UX contract for what the user sees while the fill is happening. The founder direction is:
+
+- Every field set by the coworker carries a **transient highlight** (proposed: amber/yellow border or background) plus a tooltip showing which coworker set it. The highlight persists until the user modifies that field, confirms the batch, or cancels.
+- When the coworker has set N fields in a form during a single turn, a **per-form confirmation card** appears at the form footer: *"<CoworkerName> proposes these N field changes — Approve and submit / Modify / Cancel."*
+- **Per-turn elevation** (§6.4) is the consent floor. Once the user has elevated in this turn (e.g. typed "go"), subsequent fills in the same form go through without re-confirmation — but the visual cue stays so the user can still see what's changing in real time. This is the trust-but-visible pattern.
+- **Cancel** reverts the fills (restores prior field values) and emits a structured `screen_set_input_reverted` event on the coworker-screen-event channel so the coworker can re-plan.
+
+Why this matters: the spec already gates destructive actions behind the envelope. Form fills are below the destructive threshold (they're reversible until submit), but they're invisible without an affordance. The cue is the bridge that makes the AI's agency legible.
+
+### 19.2 Cross-page coworker handoff via A2A protocol with HITL approval gate
+
+**Backlog item:** [`BI-A32801C5`](#) — *"PUC cross-page coworker handoff via A2A protocol with HITL approval gate"*
+
+The substrate as designed gives the coworker the ability to drive the screen the user is on. The natural follow-on: when the user (or the coworker via `screen_navigate`) leaves a page owned by Coworker A and lands on a page owned by Coworker B, the coworker context should follow them — not reset to a fresh chat.
+
+A hard-coded variant of this **already exists in the onboarding flow**: the COO persona walks the user from `/storefront` through admin business-context setup pages, preserving conversational intent end-to-end. See `apps/web/lib/onboarding/` (merged in commit `deb7072f`). This BI generalises that pattern across the whole portal.
+
+**Mechanism — composes three substrates:**
+
+- **A2A protocol** (epic `EP-A2A` — agent-to-agent coworker team orchestration). The handoff IS an A2A message: a `CoworkerHandoffEnvelope` carrying inferred intent, recent conversational state, current screen-state snapshot, and any in-flight task references. The existing A2A routing layer just needs a navigation trigger.
+- **Pseudo-User Contract** — `screen_navigate` (§6.2) is the navigation primitive; the envelope flow (§6.4) is the gate primitive. This BI composes them: navigation that crosses a coworker-ownership boundary fires the envelope.
+- **HITL** — the gate IS the human's consent point: *"`A` is handing you to `B` for `<inferred-intent>`. Continue / Stay here / Cancel."* Same shape as the envelope card; just handoff-specific copy. Same-coworker navigations skip the gate.
+
+**Why this matters and why it's parked:** without it, the screen-driving primitive works only within a single page; with it, coworkers become a continuous companion across the entire product. But it depends on three things that need to land first — `EP-A2A` spec maturity, `BI-DF6079E9` (screen_navigate fires the gate before completing), `BI-0F9C291C` (envelope UI is what the handoff card reuses). Founder direction is to capture the requirement and the onboarding precedent now, design and implement after Phase 1 substrate lands.
+
+**Reference implementation:** `apps/web/lib/onboarding/` plus the COO persona scripting. Read this before designing the generalisation — there's a real working version with lessons embedded.
+
+---
+
 ## Sign-off checklist
 
 - [ ] Founder review (founder kernel commandment scan)
