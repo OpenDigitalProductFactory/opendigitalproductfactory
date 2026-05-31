@@ -32,6 +32,8 @@ enforces:
 
 When you face an open question with 2+ architecturally-distinct options inside the DPF codebase, **do not pick by gut**. Map each option to the closed `PRINCIPLE_DIMENSIONS` registry, call the `principle_decide` MCP tool, and surface the contribution ledger to the operator. This is "What Would Mark Do" (WWMD) as a tool, not a guess — and it sits in front of `dpf-brainstorming` whenever the brainstorm produces multiple viable options.
 
+> **Surface boundary (WWMD vs WWWD).** This skill is the **platform-development (WWMD)** decision surface — it scores against the founder kernel and is for DPF contributors and Build Studio *platform* work. It is **not** the path for a customer's *business* decision: those route through the Decision Perspective Gate against the organization's **WWWD** profile, which enforces the non-inherit boundary (a customer profile does not inherit platform business judgment as authority). The two surfaces are being consolidated so the Gate is the single governed door (BI-E1FB2307). See AGENTS.md §16 and `docs/user-guide/ai-workforce/decision-perspective.md`.
+
 ## When to use
 
 - Authoring a spec and `dpf-brainstorming` produced 2-3 candidate approaches.
