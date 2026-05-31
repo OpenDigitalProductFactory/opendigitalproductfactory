@@ -84,6 +84,34 @@ bash install-dpf.sh --headless --contributor
 `--customer`/`--contributor` set the compose mode automatically (release vs
 source build); `--release`/`--dev` still override it if you need to force one.
 
+#### Contributor: separate dev workspace from install (recommended, BI-0856A4CE Phase 1)
+
+Contributor installs default to single-tree mode — the cloned repo at the
+install path doubles as your dev workspace where `git worktree add` creates
+feature branches. That works, but the dev tree can collide with the running
+portal and the self-upgrade merge loop (BI-A8A7CCFD).
+
+Pass `--dev-workspace-path` to register a **separate** clone as the dev
+workspace. The dev-loop scripts (`scripts/new-dev-worktree.sh`) then branch
+new worktrees from THERE instead of the install path, so the production
+install is left alone:
+
+```bash
+# 1. Install (production tree at $REPO_ROOT — the cwd):
+bash install-dpf.sh --headless --contributor --dev-workspace-path ~/dpf-dev
+
+# 2. Clone the dev workspace separately (one-time):
+git clone git@github.com:OpenDigitalProductFactory/opendigitalproductfactory.git ~/dpf-dev
+
+# 3. From now on, run dev-loop scripts from the dev workspace:
+cd ~/dpf-dev
+bash scripts/new-dev-worktree.sh my-feature
+#   → creates ~/dpf-dev-worktrees/my-feature
+```
+
+When `--dev-workspace-path` is omitted (or resolves to the install path),
+single-tree mode persists — current behavior, full back-compat.
+
 ### What the installer does
 
 1. **Preflight** — refuses to run on Intel Macs / older macOS / WSL2 /

@@ -45,10 +45,51 @@ if [ -z "${root:-}" ] || [ ! -e "$root/.git" ]; then
     exit 1
 fi
 
-# Worktrees live in a sibling "<root>-worktrees" dir (matches ~/dpf-worktrees).
+# BI-0856A4CE Phase 1 — when DPF_DEV_WORKSPACE_PATH is set + distinct from the
+# install ($root), branch worktrees off the DEV WORKSPACE clone instead. This is
+# the contributor's writable tree; $root in that posture is the production
+# install (read-only by convention, owned by the platform / self-upgrade loop).
+#
+# Discovery order:
+#   1. DPF_DEV_WORKSPACE_PATH env var (set by .env loaders, or exported manually)
+#   2. .env in $root if it carries the line
+#   3. fallback: $root itself (single-tree mode — current behavior)
+dev_workspace="${DPF_DEV_WORKSPACE_PATH:-}"
+if [ -z "$dev_workspace" ] && [ -f "$root/.env" ]; then
+    # `|| true` so a missing line under `set -e -o pipefail` does not abort the
+    # whole script — the absent env value just leaves $dev_workspace empty and
+    # we fall through to single-tree mode below.
+    dev_workspace="$( { grep -E '^DPF_DEV_WORKSPACE_PATH=' "$root/.env" 2>/dev/null || true; } | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+fi
+if [ -n "$dev_workspace" ] && [ "$dev_workspace" != "$root" ]; then
+    if [ ! -d "$dev_workspace/.git" ] && [ ! -f "$dev_workspace/.git" ]; then
+        printf '  [FAIL] DPF_DEV_WORKSPACE_PATH=%s is not a git working tree.\n' "$dev_workspace" >&2
+        printf '         Either clone the dev workspace there or unset DPF_DEV_WORKSPACE_PATH.\n' >&2
+        exit 1
+    fi
+    printf '  [info] using dev workspace %s (install is %s)\n' "$dev_workspace" "$root"
+    root="$dev_workspace"
+fi
+
+# Worktrees live in a sibling "<root>-worktrees" dir (matches ~/dpf-worktrees
+# in single-tree mode; the dev-workspace's sibling dir when the split is in
+# effect — so each contributor's worktrees stay near their dev clone).
 wt_base="$(dirname "$root")/$(basename "$root")-worktrees"
 target="$wt_base/$slug"
 branch="$prefix/$slug"
+
+# Refuse to create a worktree inside the production install path. This is the
+# Phase-1 form of the BI-0856A4CE / BI-6B02FEE5 contract: even if the operator
+# nudges --dev-workspace-path back to $REPO_ROOT, the worktree-base-is-sibling
+# rule keeps the worktree out of the install tree. Full enforcement (refusing
+# from ANY caller, including direct `git worktree add`) lands in later phases.
+case "$target" in
+    "$wt_base"/*) : ;;
+    *)
+        printf '  [FAIL] computed worktree target %s is not under the worktree base %s\n' "$target" "$wt_base" >&2
+        exit 1
+        ;;
+esac
 
 mkdir -p "$wt_base"
 

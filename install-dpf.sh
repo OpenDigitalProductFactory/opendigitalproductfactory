@@ -87,6 +87,14 @@ Flags:
   --contributor Customizable install: build the full stack from local source,
                 enable contributor git hooks, and run the agent-toolchain
                 bootstrap. Skips the interactive mode prompt.
+  --dev-workspace-path <path>
+                Contributor-only. Absolute path to the operator's dev workspace
+                (where 'git worktree add' creates feature branches and where
+                Claude / Codex sessions open). Distinct from the install path
+                so the dev tree never collides with the production install or
+                the self-upgrade merge. Defaults to the install path (single-
+                tree mode — current behavior). When distinct, dev-loop scripts
+                refuse to create worktrees inside the install path. BI-0856A4CE.
   --release     Force the pre-built multi-arch GHCR images
                 (docker-compose.release.yml overlay). Overrides the compose
                 mode that the install mode would otherwise derive.
@@ -126,6 +134,10 @@ DPF_MODE_EXPLICIT=0     # 1 once --dev/--release is passed, so the install-mode
 DPF_INSTALL_MODE=""     # customer | contributor — resolved in "Install mode".
 DPF_AUTOSTART=1
 DPF_INCLUDE_EDGE="${DPF_INCLUDE_EDGE:-1}"   # 1 = bundle Edge Node; 0 = skip
+# BI-0856A4CE Phase 1 — optional contributor-only path that, when distinct from
+# the install path, becomes the worktree base. Empty = single-tree mode (current
+# behavior). Future phases will turn this into a hard install/dev separation.
+DPF_DEV_WORKSPACE_PATH_ARG=""
 SUBCOMMAND=""
 
 while [ $# -gt 0 ]; do
@@ -136,6 +148,8 @@ while [ $# -gt 0 ]; do
     --dev)                  DPF_MODE="dev"; DPF_MODE_EXPLICIT=1 ;;
     --customer)             DPF_INSTALL_MODE="customer" ;;
     --contributor)          DPF_INSTALL_MODE="contributor" ;;
+    --dev-workspace-path)   shift; DPF_DEV_WORKSPACE_PATH_ARG="${1:-}" ;;
+    --dev-workspace-path=*) DPF_DEV_WORKSPACE_PATH_ARG="${1#*=}" ;;
     --no-autostart)         DPF_AUTOSTART=0 ;;
     --no-edge)              DPF_INCLUDE_EDGE=0 ;;
     --force-unsupported-host)
@@ -499,6 +513,35 @@ else
     printf '# OUTSIDE install root so repo wipes cannot destroy them).\n' >> .env
     printf 'DPF_BACKUPS_HOST_PATH=%s-backups\n' "$REPO_ROOT" >> .env
     info "Added DPF_BACKUPS_HOST_PATH=$REPO_ROOT-backups to existing .env"
+  fi
+fi
+
+# BI-0856A4CE Phase 1 — record DPF_DEV_WORKSPACE_PATH when the contributor
+# passed --dev-workspace-path. This is the path where 'git worktree add' will
+# create feature branches; distinct from the install path so the dev tree and
+# the production install never collide. When unset, single-tree mode persists
+# (current behavior) and dev-loop scripts fall back to REPO_ROOT.
+if [ "$DPF_INSTALL_MODE" = "contributor" ] && [ -n "$DPF_DEV_WORKSPACE_PATH_ARG" ]; then
+  # Resolve to an absolute path (caller may have passed a relative path or ~/).
+  case "$DPF_DEV_WORKSPACE_PATH_ARG" in
+    \~*) DPF_DEV_WORKSPACE_PATH_ABS="${HOME}${DPF_DEV_WORKSPACE_PATH_ARG#\~}" ;;
+    /*)  DPF_DEV_WORKSPACE_PATH_ABS="$DPF_DEV_WORKSPACE_PATH_ARG" ;;
+    *)   DPF_DEV_WORKSPACE_PATH_ABS="$(cd "$DPF_DEV_WORKSPACE_PATH_ARG" 2>/dev/null && pwd)" \
+           || DPF_DEV_WORKSPACE_PATH_ABS="$(pwd)/$DPF_DEV_WORKSPACE_PATH_ARG" ;;
+  esac
+  if [ "$DPF_DEV_WORKSPACE_PATH_ABS" = "$REPO_ROOT" ]; then
+    info "--dev-workspace-path resolves to the install path; single-tree mode (skipping)."
+  else
+    if grep -q "^DPF_DEV_WORKSPACE_PATH=" .env 2>/dev/null; then
+      dpf_sed_inplace "s|^DPF_DEV_WORKSPACE_PATH=.*|DPF_DEV_WORKSPACE_PATH=$DPF_DEV_WORKSPACE_PATH_ABS|" .env
+    else
+      printf '\n# Contributor dev workspace (BI-0856A4CE Phase 1) — where git worktrees\n' >> .env
+      printf '# branch from. Distinct from DPF_HOST_INSTALL_PATH (the production install)\n' >> .env
+      printf '# so the dev tree never collides with the running portal or self-upgrade.\n' >> .env
+      printf 'DPF_DEV_WORKSPACE_PATH=%s\n' "$DPF_DEV_WORKSPACE_PATH_ABS" >> .env
+    fi
+    dpf_state_write devWorkspacePath "$DPF_DEV_WORKSPACE_PATH_ABS" 2>/dev/null || true
+    ok "Dev workspace path: $DPF_DEV_WORKSPACE_PATH_ABS (distinct from install $REPO_ROOT)"
   fi
 fi
 
