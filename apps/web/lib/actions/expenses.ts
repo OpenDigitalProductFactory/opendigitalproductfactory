@@ -153,6 +153,7 @@ export async function submitExpenseClaim(id: string): Promise<void> {
     where: { id },
     include: {
       employee: { select: { id: true, displayName: true, workEmail: true, userId: true } },
+      _count: { select: { items: true } },
     },
   });
   if (!claim) throw new Error("Expense claim not found");
@@ -208,7 +209,7 @@ export async function submitExpenseClaim(id: string): Promise<void> {
       title: claim.title,
       totalAmount: Number(claim.totalAmount).toFixed(2),
       currency: claim.currency,
-      itemCount: 0, // items count will be fetched separately if needed
+      itemCount: claim._count.items,
       approveUrl,
     });
     await sendEmail(emailPayload);

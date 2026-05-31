@@ -42,6 +42,22 @@ scrape_configs:
           - "sandbox:3000"
     metrics_path: /api/metrics
 
+  # ─── Background jobs (Inngest) ──────────────────────────────
+  # If inngest wedges, scheduled tasks (builds, promotions, hive ingests,
+  # release-bundle automation) queue forever and never run while
+  # Prometheus / the portal still look healthy. Scrape its /metrics so the
+  # Health tab can surface the outage instead.
+  - job_name: "inngest"
+    static_configs:
+      - targets: ["inngest:8288"]
+
+  # ─── Services without a /metrics endpoint ───────────────────
+  # Redis (needs redis-exporter sidecar), ADP (only ships /health, not
+  # /metrics), and dpf-stt (whisper-server) are intentionally NOT scraped.
+  # The Health tab surfaces them as "Not scraped" tiles so contributors
+  # know they exist but aren't observed. Adding real scrape coverage is
+  # tracked as follow-up tech debt.
+
   # ─── AI Inference ───────────────────────────────────────────
   # Docker Model Runner does not expose a Prometheus `/metrics` endpoint
   # (all paths 404). Inference health is tracked via the portal's
