@@ -16,13 +16,11 @@ export default async function FinancialSettingsPage() {
     prisma.taxRegistration.count(),
   ]);
 
-  // Derive profile-specific values. If profile isn't applied we show defaults.
-  // We use baseCurrency as a proxy signal — any profile that was applied set it.
-  // We can't look up the profile by slug because we don't store which slug was
-  // applied, so we fall back to the professional_services profile defaults when
-  // configured but no slug is known, or to bare defaults when not configured.
-  const profile = setupStatus.isConfigured
-    ? getFinancialProfile("professional_services") // sensible cross-profile defaults
+  // Derive profile-specific values from the profile the org actually applied
+  // (persisted on OrgSettings.appliedProfileSlug). Falls back to bare defaults
+  // when no profile has been applied — never another archetype's values.
+  const profile = orgSettings.appliedProfileSlug
+    ? getFinancialProfile(orgSettings.appliedProfileSlug)
     : null;
 
   const paymentTerms = profile?.defaultPaymentTerms ?? "Net 30";
