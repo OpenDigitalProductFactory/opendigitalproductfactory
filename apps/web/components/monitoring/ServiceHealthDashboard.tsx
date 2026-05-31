@@ -15,7 +15,13 @@ import { MetricTable } from "./MetricTable";
 import { AiCoworkerHealthPanel } from "./AiCoworkerHealthPanel";
 import { RecentAlertsPanel } from "./RecentAlertsPanel";
 import { PortalHealthSummary } from "./PortalHealthSummary";
-import { HOST_RESOURCE_QUERIES } from "./health-summary";
+import {
+  HOST_RESOURCE_QUERIES,
+  derivePlatformSummary,
+  isHostTelemetryConfigured,
+} from "./health-summary";
+import { useAlertQuery } from "./useAlertQuery";
+import { useMetricQuery } from "./useMetricQuery";
 
 type ServiceHealthDashboardProps = {
   openBacklogItems?: number;
@@ -35,6 +41,8 @@ function ServiceHealthContent({
   backlogHref,
 }: ServiceHealthDashboardProps) {
   const { online, checked } = useMonitoringStatus();
+  const { data: upTargets, loading: upTargetsLoading } = useMetricQuery("up");
+  const { alerts } = useAlertQuery();
 
   if (!checked) {
     return (
@@ -56,42 +64,62 @@ function ServiceHealthContent({
     );
   }
 
+  // The Platform Status StatCard surfaces the worst critical alert summary;
+  // suppress the matching AlertBanner row so the same line doesn't render
+  // twice on the same screen.
+  const platform = derivePlatformSummary({
+    checked,
+    online,
+    upTargets,
+    upTargetsLoading,
+    alerts,
+  });
+  const suppressBannerSummaries =
+    platform.tone === "critical" ? [platform.detail] : [];
+
+  const showHostResources = isHostTelemetryConfigured(upTargets);
+
   return (
     <div className="space-y-6">
       {openBacklogItems !== undefined && backlogHref && (
         <PortalHealthSummary openBacklogItems={openBacklogItems} backlogHref={backlogHref} />
       )}
 
-      {/* Active alerts */}
-      <AlertBanner />
+      {/* Active alerts (deduped against the Platform Status StatCard above) */}
+      <AlertBanner suppressSummaries={suppressBannerSummaries} />
 
       {/* Service status */}
       <ServiceStatusGrid services={DPF_SERVICES} />
 
-      {/* Platform resource utilization */}
-      <section>
-        <h3 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-wider mb-2">
-          Platform Resource Utilization
-        </h3>
-        <div className="grid grid-cols-3 gap-3">
-          <MetricGauge
-            query={HOST_RESOURCE_QUERIES.compute}
-            label="Compute"
-            thresholds={{ warning: 70, critical: 85 }}
-          />
-          <MetricGauge
-            query={HOST_RESOURCE_QUERIES.memory}
-            label="Memory"
-            thresholds={{ warning: 70, critical: 85 }}
-          />
-          <MetricGauge
-            query={HOST_RESOURCE_QUERIES.storage}
-            label="Storage"
-            hint="Highest drive usage"
-            thresholds={{ warning: 70, critical: 90 }}
-          />
-        </div>
-      </section>
+      {/* Platform resource utilization — only rendered on substrates that ship
+          a host telemetry exporter (Linux node-exporter, Windows windows_exporter).
+          macOS Docker Desktop has neither, so we hide the section entirely
+          rather than showing three "No data" gauges. */}
+      {showHostResources && (
+        <section>
+          <h3 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-wider mb-2">
+            Platform Resource Utilization
+          </h3>
+          <div className="grid grid-cols-3 gap-3">
+            <MetricGauge
+              query={HOST_RESOURCE_QUERIES.compute}
+              label="Compute"
+              thresholds={{ warning: 70, critical: 85 }}
+            />
+            <MetricGauge
+              query={HOST_RESOURCE_QUERIES.memory}
+              label="Memory"
+              thresholds={{ warning: 70, critical: 85 }}
+            />
+            <MetricGauge
+              query={HOST_RESOURCE_QUERIES.storage}
+              label="Storage"
+              hint="Highest drive usage"
+              thresholds={{ warning: 70, critical: 90 }}
+            />
+          </div>
+        </section>
+      )}
 
       {/* AI Coworker health */}
       <AiCoworkerHealthPanel />

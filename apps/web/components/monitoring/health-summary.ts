@@ -211,6 +211,17 @@ export function deriveServiceStatuses({
   });
 }
 
+// True iff a host-telemetry exporter is a configured scrape target on this
+// substrate. macOS Docker Desktop ships neither node-exporter nor
+// windows_exporter, so the host gauges have no source — callers use this to
+// hide the Host Resources section instead of rendering empty "No data" gauges.
+export function isHostTelemetryConfigured(
+  upTargets: PrometheusInstantResult[] | null | undefined,
+): boolean {
+  const jobStatus = buildJobStatusMap(upTargets);
+  return HOST_TELEMETRY_JOBS.some((job) => jobStatus.has(job));
+}
+
 export function getActiveAlerts(alerts: MonitoringAlert[]): MonitoringAlert[] {
   return alerts.filter((alert) => alert.state === "firing" || alert.state === "pending");
 }

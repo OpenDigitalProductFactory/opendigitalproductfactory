@@ -5,6 +5,7 @@ import {
   deriveMonitoringSummary,
   derivePlatformSummary,
   deriveServiceStatuses,
+  isHostTelemetryConfigured,
   type MonitoringAlert,
   type PrometheusInstantResult,
   type ServiceDefinition,
@@ -150,5 +151,27 @@ describe("HOST_RESOURCE_QUERIES", () => {
     expect(HOST_RESOURCE_QUERIES.compute).toContain("windows_cpu_time_total");
     expect(HOST_RESOURCE_QUERIES.memory).toContain("windows_os_physical_memory_free_bytes");
     expect(HOST_RESOURCE_QUERIES.storage).toContain("windows_logical_disk_free_bytes");
+  });
+});
+
+describe("isHostTelemetryConfigured", () => {
+  it("is true when node-exporter is a scrape target", () => {
+    expect(isHostTelemetryConfigured([up("node-exporter")])).toBe(true);
+  });
+
+  it("is true when windows-host is a scrape target, even if down", () => {
+    expect(isHostTelemetryConfigured([up("windows-host", "0")])).toBe(true);
+  });
+
+  it("is false on macOS Docker Desktop (no host telemetry exporter ships)", () => {
+    expect(
+      isHostTelemetryConfigured([up("portal"), up("postgres"), up("qdrant"), up("sandbox")]),
+    ).toBe(false);
+  });
+
+  it("is false for null/empty input", () => {
+    expect(isHostTelemetryConfigured(null)).toBe(false);
+    expect(isHostTelemetryConfigured(undefined)).toBe(false);
+    expect(isHostTelemetryConfigured([])).toBe(false);
   });
 });

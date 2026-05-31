@@ -37,13 +37,15 @@ export function ServiceStatusGrid({ services, className = "" }: Props) {
   );
 }
 
+// Prometheus scrapes exactly one sandbox target (see monitoring/prometheus/prometheus.yml).
+// Past iterations rendered "Sandbox 1/2/3" — three cards reading the same
+// `up{job="sandbox"}` series, which always moved in lockstep and implied
+// multi-sandbox capacity that doesn't exist.
 export const DPF_SERVICES: ServiceDefinition[] = [
   { name: "Portal", job: "portal" },
   { name: "PostgreSQL", job: "postgres" },
   { name: "Neo4j", statusHint: "Not scraped" },
   { name: "Qdrant", job: "qdrant" },
   { name: "AI Inference", statusHint: "Portal metrics" },
-  { name: "Sandbox 1", job: "sandbox" },
-  { name: "Sandbox 2", job: "sandbox" },
-  { name: "Sandbox 3", job: "sandbox" },
+  { name: "Sandbox", job: "sandbox" },
 ];
