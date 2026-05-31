@@ -177,6 +177,67 @@ describe("recallWikiContext", () => {
       expect.objectContaining({ limit: 10 }),
     );
   });
+
+  // BI-F5179C9E: perspective-biased recall (preferredPageKinds).
+  const mkResult = (id: string, kind: string) => ({
+    pageId: id,
+    slug: `${kind}/${id}`,
+    title: id,
+    pageKind: kind,
+    contentPreview: `${id} preview`,
+    isKernel: true,
+    organizationId: null,
+    kernelPageId: null,
+    score: 0.7,
+    source: "kernel" as const,
+  });
+
+  it("searches preferred page kinds first when preferredPageKinds is set", async () => {
+    searchWikiPages.mockResolvedValueOnce([
+      mkResult("s1", "stance"),
+      mkResult("s2", "heuristic"),
+      mkResult("s3", "stance"),
+      mkResult("s4", "decision"),
+    ]);
+    const out = await recallWikiContext({
+      query: "what would mark do",
+      organizationId: null,
+      preferredPageKinds: ["stance", "heuristic", "decision"],
+    });
+    // Filled to limit by the preferred pass — no general top-up call.
+    expect(searchWikiPages).toHaveBeenCalledTimes(1);
+    expect(searchWikiPages).toHaveBeenCalledWith(
+      expect.objectContaining({ pageKinds: ["stance", "heuristic", "decision"] }),
+    );
+    expect(out).toContain("stance/s1");
+  });
+
+  it("tops up with a general search and dedupes when preferred pass is sparse", async () => {
+    searchWikiPages
+      .mockResolvedValueOnce([mkResult("s1", "stance")]) // preferred pass
+      .mockResolvedValueOnce([
+        mkResult("s1", "stance"), // duplicate — must be dropped
+        mkResult("e1", "entity"),
+        mkResult("e2", "entity"),
+        mkResult("e3", "entity"),
+      ]); // general top-up
+    const out = await recallWikiContext({
+      query: "what would mark do about this",
+      organizationId: null,
+      limit: 4,
+      preferredPageKinds: ["stance", "heuristic"],
+    });
+    expect(searchWikiPages).toHaveBeenCalledTimes(2);
+    // Second call is the unfiltered top-up (no pageKinds).
+    expect(searchWikiPages).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ pageKinds: expect.anything() }),
+    );
+    expect(out).toContain("stance/s1");
+    expect(out).toContain("entity/e1");
+    expect(out).toContain("entity/e3");
+    // s1 appears once despite being in both passes.
+    expect(out!.match(/stance\/s1/g)).toHaveLength(1);
+  });
 });
 
 describe("recallWikiContextWithPrinciples", () => {
