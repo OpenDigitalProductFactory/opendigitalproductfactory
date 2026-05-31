@@ -184,8 +184,13 @@ describe("synthesizeWithMlx", () => {
     const fetchMock = stubSequence([{ ok: true, buf: SHORT_AUDIO }]) // always short
     vi.useFakeTimers()
     const p = synthesizeWithMlx("x", baseConfig)
-    await vi.runAllTimersAsync()
-    await expect(p).rejects.toThrow("VoiceSynthesisError [mlx]")
+    // Advance timers and catch the rejection atomically — if we await timers
+    // before attaching the rejection handler, the VoiceSynthesisError escapes
+    // as an unhandled rejection and causes a CI unhandled-error failure.
+    await Promise.all([
+      vi.runAllTimersAsync(),
+      expect(p).rejects.toThrow("VoiceSynthesisError [mlx]"),
+    ])
     vi.useRealTimers()
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
