@@ -3,6 +3,7 @@ import { CORRECTIVE_ACTION_STATUSES, CORRECTIVE_ACTION_SOURCE_TYPES } from "@/li
 import Link from "next/link";
 import { CreateCorrectiveActionForm } from "@/components/compliance/CreateCorrectiveActionForm";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { StatusBadge } from "@/components/ui/report-kit";
 
 type Props = { searchParams: Promise<{ status?: string; sourceType?: string; overdue?: string }> };
 
@@ -71,31 +72,29 @@ export default async function ActionsPage({ searchParams }: Props) {
           {actions.map((a) => {
             const isOverdue = a.dueDate && a.dueDate < now && !["completed", "verified"].includes(a.status);
             return (
-              <Link key={a.id} href={`/compliance/actions/${a.id}`} className={`block p-3 rounded-lg border ${isOverdue ? "border-red-500/50" : "border-[var(--dpf-border)]"} hover:border-[var(--dpf-accent)] transition-colors`}>
+              <Link key={a.id} href={`/compliance/actions/${a.id}`} className={`block p-3 rounded-lg border ${isOverdue ? "border-[color-mix(in_srgb,var(--dpf-error)_50%,transparent)]" : "border-[var(--dpf-border)]"} hover:border-[var(--dpf-accent)] transition-colors`}>
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-[var(--dpf-text)]">{a.title}</span>
                       {isOverdue && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-900/30 text-red-400 font-semibold">OVERDUE</span>
+                        <StatusBadge intent="danger" label="Overdue" variant="soft" />
                       )}
                     </div>
                     <div className="flex gap-2 mt-1">
                       <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{a.sourceType}</span>
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
-                        a.status === "verified" ? "bg-green-900/30 text-green-400" :
-                        a.status === "completed" ? "bg-blue-900/30 text-blue-400" :
-                        a.status === "open" ? "bg-yellow-900/30 text-yellow-400" :
-                        "bg-gray-900/30 text-gray-400"
-                      }`}>
-                        {a.status}
-                      </span>
+                      <StatusBadge
+                        intent={a.status === "verified" ? "success" : a.status === "completed" ? "info" : a.status === "open" ? "warning" : "neutral"}
+                        label={a.status}
+                        variant="soft"
+                        uppercase={false}
+                      />
                       {a.incident && <span className="text-[9px] text-[var(--dpf-muted)]">&larr; {a.incident.title}</span>}
                       {a.auditFinding && <span className="text-[9px] text-[var(--dpf-muted)]">&larr; {a.auditFinding.title}</span>}
                     </div>
                   </div>
                   <div className="text-right text-xs text-[var(--dpf-muted)]">
-                    {a.dueDate && <p className={isOverdue ? "text-red-400" : ""}>Due: <LocalTime value={a.dueDate} utc /></p>}
+                    {a.dueDate && <p className={isOverdue ? "text-[var(--dpf-error)]" : ""}>Due: <LocalTime value={a.dueDate} utc /></p>}
                     {a.owner && <p>{a.owner.displayName}</p>}
                   </div>
                 </div>
