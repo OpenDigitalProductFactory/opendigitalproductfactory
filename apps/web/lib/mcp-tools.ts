@@ -1043,7 +1043,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "link_backlog_item_to_epic",
-    description: "Link a backlog item to an epic (or unlink with epicId=null). Recomputes target epic status — if a done epic gains a new open item, it flips back to open. Writes an epic_link activity row.",
+    description: "Link a backlog item to an epic (or unlink with epicId=null). Recomputes target epic status — if a done epic gains a new open item, it flips back to open. Writes an epic_link activity row. NOTE: linking is organizational only — it does NOT triage the item (use triage_backlog_item) and does NOT promote it or create a build (use promote_to_build_studio). Linking an untriaged/unpromoted item returns an advisory; never report an epic link as 'triaged' or 'promoted'.",
     inputSchema: {
       type: "object",
       properties: {
@@ -5756,7 +5756,14 @@ export async function executeTool(
       }
       const item = await prisma.backlogItem.findUnique({
         where: { itemId: itemIdRaw },
-        select: { id: true, epicId: true, status: true, epic: { select: { epicId: true } } },
+        select: {
+          id: true,
+          epicId: true,
+          status: true,
+          triageOutcome: true,
+          activeBuildId: true,
+          epic: { select: { epicId: true } },
+        },
       });
       if (!item)
         return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
@@ -5801,11 +5808,28 @@ export async function executeTool(
           }
         }
       });
+      // Advisory: a coworker asked to "triage + promote" may call this and then
+      // report the item as triaged/promoted, when an epic link is purely
+      // organizational. Surface the real triage_backlog_item / promote_to_build_studio
+      // path when triage/promotion is genuinely unfinished (BI-6C86ADEB).
+      const { buildEpicLinkAdvisory } = await import("@/lib/backlog/promote-advisory");
+      const epicLinkAdvisory = buildEpicLinkAdvisory({
+        itemId: itemIdRaw,
+        targetEpicId: targetEpicSemantic,
+        triageOutcome: item.triageOutcome,
+        hasActiveBuild: item.activeBuildId != null,
+      });
       return {
         success: true,
         entityId: itemIdRaw,
-        message: `Linked ${itemIdRaw} to ${targetEpicSemantic ?? "(no epic)"}`,
-        data: { itemId: itemIdRaw, epicId: targetEpicSemantic },
+        message:
+          `Linked ${itemIdRaw} to ${targetEpicSemantic ?? "(no epic)"}` +
+          (epicLinkAdvisory ? ` — ADVISORY: ${epicLinkAdvisory}` : ""),
+        data: {
+          itemId: itemIdRaw,
+          epicId: targetEpicSemantic,
+          ...(epicLinkAdvisory ? { advisory: epicLinkAdvisory } : {}),
+        },
       };
     }
 

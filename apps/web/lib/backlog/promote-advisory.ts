@@ -46,3 +46,58 @@ export function buildPromoteAdvisory(
     `item must be returned to open first. Do NOT report this status change as work started, in progress, or building.`
   );
 }
+
+// Advisory guard for the "epic link mistaken for triage/promotion" failure.
+// BI-6C86ADEB (Scrum Master over-claim guard). Relates to EP-BUILD-STUDIO.
+//
+// Asked to "triage BI-X to build and promote it," a Scrum Master coworker
+// edited the body and called link_backlog_item_to_epic(EP-BUILD-STUDIO), then
+// reported "triaged as build and promoted into the Build Studio epic queue."
+// But linking to an epic is purely organizational: triageOutcome stayed null,
+// effortSize stayed null, and NO FeatureBuild was created. It conflated "linked
+// to the Build Studio epic" with "triaged" and "promoted" — a
+// structural-verification-is-not-functional violation.
+//
+// Like buildPromoteAdvisory, this is a NON-BLOCKING advisory attached to the
+// successful link result, so prompt drift can't silently re-introduce the
+// over-claim.
+
+export type EpicLinkAdvisoryInput = {
+  itemId: string;
+  /** The semantic epic id the item is being linked to (null when unlinking). */
+  targetEpicId: string | null;
+  /** The item's triage outcome ("build" items go through Build Studio). */
+  triageOutcome: string | null;
+  /** Whether the item already has an active FeatureBuild linked. */
+  hasActiveBuild: boolean;
+};
+
+/**
+ * Return an advisory string when linking a backlog item to an epic could be
+ * mistaken for triaging or promoting it — i.e. the item is being attached to an
+ * epic while its triage/promotion work is genuinely unfinished. Returns null
+ * for the common, unambiguous cases (unlinking, or an item that is already
+ * triaged AND, if a build item, already has its build).
+ */
+export function buildEpicLinkAdvisory(
+  input: EpicLinkAdvisoryInput,
+): string | null {
+  // Unlinking (or a no-op to no-epic) can't be confused with triage/promote.
+  if (!input.targetEpicId) return null;
+
+  const notTriaged = input.triageOutcome == null;
+  const buildNotPromoted = input.triageOutcome === "build" && !input.hasActiveBuild;
+  if (!notTriaged && !buildNotPromoted) return null;
+
+  const next = notTriaged
+    ? `This item is not triaged yet (triageOutcome is null). To triage it, use triage_backlog_item; ` +
+      `if it triages to build, then use promote_to_build_studio to create the FeatureBuild and begin Ideate.`
+    : `This item is triaged to build but has no FeatureBuild yet. To actually promote it, use ` +
+      `promote_to_build_studio (which creates the FeatureBuild and begins Ideate).`;
+
+  return (
+    `Linking ${input.itemId} to ${input.targetEpicId} is organizational only — it does NOT triage the item, ` +
+    `does NOT set a triageOutcome or effortSize, and does NOT create any build or engage Build Studio. ` +
+    `${next} Do NOT report this epic link as "triaged" or "promoted".`
+  );
+}
