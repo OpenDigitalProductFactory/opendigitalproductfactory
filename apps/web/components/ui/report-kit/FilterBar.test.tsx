@@ -86,6 +86,33 @@ describe("FilterBar", () => {
     expect(html).toContain('method="get"');
   });
 
+  it("url mode groups multiple select/search facets under a single Apply form", () => {
+    const multiSelect: FacetDef[] = [
+      { kind: "select", key: "type", label: "Type", options: [{ value: "a", label: "A" }] },
+      { kind: "select", key: "status", label: "Status", options: [{ value: "x", label: "X" }] },
+      { kind: "select", key: "eff", label: "Eff", options: [{ value: "ok", label: "OK" }] },
+    ];
+    const html = renderToStaticMarkup(
+      <FilterBar mode="url" facets={multiSelect} value={{}} basePath="/compliance/controls" />,
+    );
+    // exactly one form and one Apply button for all three selects
+    expect(html.match(/<form/g)).toHaveLength(1);
+    expect(html.match(/Apply/g)).toHaveLength(1);
+  });
+
+  it("url mode preserves pill selections as hidden inputs in the field form", () => {
+    const html = renderToStaticMarkup(
+      <FilterBar
+        mode="url"
+        facets={FACETS}
+        value={{ direction: "in" }}
+        basePath="/finance/payments"
+      />,
+    );
+    expect(html).toContain('type="hidden"');
+    expect(html).toContain('name="direction"');
+  });
+
   it("singularizes the result count", () => {
     const html = renderToStaticMarkup(
       <FilterBar

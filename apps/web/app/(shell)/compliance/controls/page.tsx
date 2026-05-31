@@ -1,13 +1,7 @@
 import { listControls } from "@/lib/actions/compliance";
 import { CreateControlForm } from "@/components/compliance/CreateControlForm";
+import { FilterBar, StatusBadge } from "@/components/ui/report-kit";
 import Link from "next/link";
-
-const STATUS_COLORS: Record<string, string> = {
-  implemented: "bg-green-900/30 text-green-400",
-  "in-progress": "bg-yellow-900/30 text-yellow-400",
-  planned: "bg-blue-900/30 text-blue-400",
-  "not-applicable": "bg-gray-900/30 text-gray-400",
-};
 
 type Props = { searchParams: Promise<{ controlType?: string; implementationStatus?: string; effectiveness?: string }> };
 
@@ -30,46 +24,61 @@ export default async function ControlsPage({ searchParams }: Props) {
         <CreateControlForm />
       </div>
 
-      {/* Filter bar */}
-      <form className="flex flex-wrap gap-3 mb-6">
-        <select name="controlType" defaultValue={sp.controlType ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
-          <option value="">All types</option>
-          <option value="preventive">Preventive</option>
-          <option value="detective">Detective</option>
-          <option value="corrective">Corrective</option>
-        </select>
-
-        <select name="implementationStatus" defaultValue={sp.implementationStatus ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
-          <option value="">All statuses</option>
-          <option value="planned">Planned</option>
-          <option value="in-progress">In Progress</option>
-          <option value="implemented">Implemented</option>
-          <option value="not-applicable">Not Applicable</option>
-        </select>
-
-        <select name="effectiveness" defaultValue={sp.effectiveness ?? ""}
-          className="text-xs px-2 py-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]">
-          <option value="">All effectiveness</option>
-          <option value="effective">Effective</option>
-          <option value="partially-effective">Partially Effective</option>
-          <option value="ineffective">Ineffective</option>
-          <option value="not-assessed">Not Assessed</option>
-        </select>
-
-        <button type="submit"
-          className="text-xs px-3 py-1.5 rounded-md bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity">
-          Filter
-        </button>
-
+      {/* Filter bar — report-kit FilterBar in url mode (server-rendered) */}
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <FilterBar
+          mode="url"
+          basePath="/compliance/controls"
+          value={{
+            ...(sp.controlType ? { controlType: sp.controlType } : {}),
+            ...(sp.implementationStatus ? { implementationStatus: sp.implementationStatus } : {}),
+            ...(sp.effectiveness ? { effectiveness: sp.effectiveness } : {}),
+          }}
+          facets={[
+            {
+              kind: "select",
+              key: "controlType",
+              label: "Type",
+              options: [
+                { value: "preventive", label: "Preventive" },
+                { value: "detective", label: "Detective" },
+                { value: "corrective", label: "Corrective" },
+              ],
+            },
+            {
+              kind: "select",
+              key: "implementationStatus",
+              label: "Status",
+              options: [
+                { value: "planned", label: "Planned" },
+                { value: "in-progress", label: "In Progress" },
+                { value: "implemented", label: "Implemented" },
+                { value: "not-applicable", label: "Not Applicable" },
+              ],
+            },
+            {
+              kind: "select",
+              key: "effectiveness",
+              label: "Effectiveness",
+              options: [
+                { value: "effective", label: "Effective" },
+                { value: "partially-effective", label: "Partially Effective" },
+                { value: "ineffective", label: "Ineffective" },
+                { value: "not-assessed", label: "Not Assessed" },
+              ],
+            },
+          ]}
+          resultCount={controls.length}
+        />
         {Object.keys(filters).length > 0 && (
-          <Link href="/compliance/controls"
-            className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors">
+          <Link
+            href="/compliance/controls"
+            className="text-xs px-3 py-1.5 rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
+          >
             Clear
           </Link>
         )}
-      </form>
+      </div>
 
       {controls.length === 0 ? (
         <p className="text-sm text-[var(--dpf-muted)]">No controls match the current filters.</p>
@@ -81,13 +90,21 @@ export default async function ControlsPage({ searchParams }: Props) {
               <div className="flex items-start justify-between">
                 <div>
                   <span className="text-sm text-[var(--dpf-text)]">{c.title}</span>
-                  <div className="flex gap-2 mt-1">
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{c.controlType}</span>
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${STATUS_COLORS[c.implementationStatus] ?? "bg-gray-900/30 text-gray-400"}`}>
-                      {c.implementationStatus}
-                    </span>
+                  <div className="flex flex-wrap gap-2 mt-1.5">
+                    <StatusBadge intent="neutral" label={c.controlType} variant="soft" uppercase={false} />
+                    <StatusBadge
+                      domain="controlStatus"
+                      status={c.implementationStatus}
+                      variant="soft"
+                      uppercase={false}
+                    />
                     {c.effectiveness && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{c.effectiveness}</span>
+                      <StatusBadge
+                        domain="controlEffectiveness"
+                        status={c.effectiveness}
+                        variant="soft"
+                        uppercase={false}
+                      />
                     )}
                   </div>
                 </div>

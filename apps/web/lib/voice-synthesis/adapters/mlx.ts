@@ -81,6 +81,94 @@ function getMaxAttempts(): number {
   return Number.isFinite(n) && n >= 1 ? Math.min(n, 8) : 4
 }
 
+/**
+ * Stream sentence-level WAV chunks from the sidecar's /v1/audio/speech/stream
+ * endpoint. Each yielded ArrayBuffer is a complete, self-contained WAV clip
+ * for one sentence — decode and play as they arrive for low time-to-first-audio.
+ *
+ * The response body is length-prefixed: [4-byte big-endian uint32][WAV bytes]…
+ * Throws VoiceSynthesisError on connection failure or HTTP error.
+ */
+export async function* synthesizeWithMlxStream(
+  text: string,
+  config: MlxSynthesisConfig,
+): AsyncGenerator<ArrayBuffer> {
+  const baseUrl = getTtsUrl()
+  const refPath = resolveReferenceHostPath(config.providerVoiceId)
+  const s = config.settings ?? {}
+
+  const body: Record<string, unknown> = {
+    input: text,
+    response_format: "wav",
+    speed: s.speed ?? config.speed ?? 1.0,
+  }
+
+  if (refPath) {
+    body.ref_audio = refPath
+    body.ref_text = config.referenceText?.trim() || DEFAULT_REF_TEXT
+    if (s.exaggeration !== undefined) body.exaggeration = s.exaggeration
+    if (s.cfgWeight !== undefined) body.cfg_weight = s.cfgWeight
+    body.temperature = s.temperature ?? 0.6
+  } else {
+    body.voice = getFallbackVoice()
+  }
+
+  let res: Response
+  try {
+    res = await fetch(`${baseUrl}/v1/audio/speech/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+  } catch (err) {
+    throw new VoiceSynthesisError(String(err), "mlx")
+  }
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "unknown")
+    throw new VoiceSynthesisError(detail, "mlx", res.status)
+  }
+
+  if (!res.body) throw new VoiceSynthesisError("no response body", "mlx", 502)
+
+  const reader = res.body.getReader()
+  let buf = new Uint8Array(0)
+
+  const append = (chunk: Uint8Array): void => {
+    const next = new Uint8Array(buf.length + chunk.length)
+    next.set(buf)
+    next.set(chunk, buf.length)
+    buf = next
+  }
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (value) append(value)
+      if (done) break
+
+      // Parse all complete length-prefixed WAV chunks out of the buffer.
+      while (buf.length >= 4) {
+        const length =
+          (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3]
+        if (buf.length < 4 + length) break
+        const wav = buf.slice(4, 4 + length).buffer as ArrayBuffer
+        buf = buf.slice(4 + length)
+        yield wav
+      }
+    }
+    // Drain any final chunk after stream closes.
+    while (buf.length >= 4) {
+      const length = (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3]
+      if (buf.length < 4 + length) break
+      yield buf.slice(4, 4 + length).buffer as ArrayBuffer
+      buf = buf.slice(4 + length)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
 export async function synthesizeWithMlx(
   text: string,
   config: MlxSynthesisConfig,
