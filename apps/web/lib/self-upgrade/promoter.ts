@@ -29,6 +29,7 @@ const DEFAULT_PROMOTER_IMAGE = "dpf-promoter";
 // Matches the `promoter` service's `:/host-source:ro` mount in
 // docker-compose.yml so promote.sh sees the same path either way.
 const PROMOTER_CONTAINER_SOURCE = "/host-source";
+const PROMOTER_COMPOSE_ENV_FILE = "/install-env/.env";
 
 export type PromoterParams = {
   /** HOST path of the install tree; bind-mounted into the promoter. */
@@ -43,6 +44,8 @@ export type PromoterParams = {
   promoterImage?: string;
   /** HOST path for the backups volume; mounted to /backups when provided. */
   backupHostPath?: string;
+  /** HOST path to the canonical install .env; mounted read-only for compose interpolation. */
+  composeEnvFileHostPath?: string;
   dryRun?: boolean;
 };
 
@@ -93,6 +96,10 @@ export function buildPromoterCommand(
     args.push("-v", `${params.backupHostPath}:/backups`);
   }
 
+  if (params.composeEnvFileHostPath && params.composeEnvFileHostPath.length > 0) {
+    args.push("-v", `${params.composeEnvFileHostPath}:${PROMOTER_COMPOSE_ENV_FILE}:ro`);
+  }
+
   args.push(
     "-e",
     `PROMOTE_SOURCE=${PROMOTER_CONTAINER_SOURCE}`,
@@ -102,6 +109,13 @@ export function buildPromoterCommand(
     `PROMOTE_BACKUP_PATH=${params.backupPath}`,
     "-e",
     `PROMOTE_HEALTH_URL=${healthUrl}`,
+  );
+
+  if (params.composeEnvFileHostPath && params.composeEnvFileHostPath.length > 0) {
+    args.push("-e", `PROMOTE_COMPOSE_ENV_FILE=${PROMOTER_COMPOSE_ENV_FILE}`);
+  }
+
+  args.push(
     image,
     "--self-upgrade",
   );
