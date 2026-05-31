@@ -7397,7 +7397,12 @@ export async function executeTool(
       // fix-flow gate picks the (fix, small | medium | large | xlarge) cell
       // rather than always falling back to (fix, medium). plan is also
       // needed below for the standard feature path's intake fallback.
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, kind: true, brief: true, plan: true } });
+      // BI-CE49D82E — also select prior designReview so we can pass its issues
+      // to the reviewer prompt for delta-awareness and surface the iteration
+      // trajectory in the operator-facing gate reason (mirror of BI-4396EFEC
+      // for the plan path). Live repro: FB-5E20E793 oscillated on the same
+      // "missing accessibility" complaint round after round.
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, designReview: true, kind: true, brief: true, plan: true } });
 
       // Fix flow: a fix build has no feature design doc — it carries a structured
       // diagnosis (fixContext) on its brief. Review the diagnosis for completeness
@@ -7448,7 +7453,26 @@ export async function executeTool(
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
       const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
       const designDocTyped = build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0];
-      const prompt = buildDesignReviewPrompt(designDocTyped, "");
+      // BI-CE49D82E — Compute the iteration context up front so we can
+      // (a) feed prior issues into the reviewer prompt and (b) populate
+      // ReviewResult.iteration on the output. Round is 1-based: first
+      // review = 1, every subsequent reviewDesignDoc call increments.
+      const priorDesignReview = (build.designReview ?? null) as
+        | { issues?: Array<{ severity?: string; description?: string }>; iteration?: { round?: number } }
+        | null;
+      const priorRound = priorDesignReview?.iteration?.round ?? 0;
+      const priorIssues = Array.isArray(priorDesignReview?.issues)
+        ? priorDesignReview!.issues!
+            .filter((i): i is { severity: string; description: string } =>
+              typeof i?.severity === "string" && typeof i?.description === "string",
+            )
+            .map((i) => ({ severity: i.severity, description: i.description }))
+        : [];
+      const currentRound = priorRound + 1;
+      const priorContext = priorIssues.length > 0
+        ? { round: priorRound, issues: priorIssues }
+        : null;
+      const prompt = buildDesignReviewPrompt(designDocTyped, "", priorContext);
       const archPrompt = buildArchitectureReviewPrompt({ kind: "design", doc: designDocTyped }, "");
       const { routeAndCall } = await import("@/lib/routed-inference");
       const messages = [{ role: "user" as const, content: prompt }];
@@ -7482,7 +7506,26 @@ export async function executeTool(
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
         summary: "Review could not be completed — retry.",
       };
-      const review = architectureAdvisory ? { ...reviewBase, architectureAdvisory } : reviewBase;
+      // BI-CE49D82E — Compute the iteration delta against the prior round and
+      // attach to the ReviewResult. computeReviewDelta + isOscillating live in
+      // feature-build-types so they're independently unit-testable and shared
+      // with the plan path.
+      const { computeReviewDelta, isOscillating } = await import("@/lib/feature-build-types");
+      const reviewWithIteration = (() => {
+        if (priorIssues.length === 0) {
+          return { ...reviewBase, iteration: { round: currentRound } };
+        }
+        const delta = computeReviewDelta(priorIssues, reviewBase.issues);
+        return {
+          ...reviewBase,
+          iteration: {
+            round: currentRound,
+            prior: delta,
+            oscillating: isOscillating(delta, reviewBase.issues.length),
+          },
+        };
+      })();
+      const review = architectureAdvisory ? { ...reviewWithIteration, architectureAdvisory } : reviewWithIteration;
       const archAdvisoryNote = architectureAdvisory && architectureAdvisory.issues.length > 0
         ? ` Architecture review (advisory): ${architectureAdvisory.summary} Fold actionable items into the design before building — they do not block this gate.`
         : "";
@@ -7541,9 +7584,18 @@ export async function executeTool(
         const issueList = criticalIssues.length > 0
           ? criticalIssues.map((i: { description: string }) => i.description).join("; ")
           : review.summary;
+        // BI-CE49D82E — Include the iteration trajectory in the agent-facing
+        // message so the implementer model sees when its revisions are trading
+        // one set of issues for another instead of converging. The oscillating
+        // signal recommends a scope split rather than another iteration —
+        // matching the plan path established by BI-4396EFEC (D38).
+        const iter = review.iteration;
+        const trajectoryNote = iter?.prior
+          ? ` (Round ${iter.round}: ${iter.prior.addressed} addressed, ${iter.prior.persisted} persist, ${iter.prior.newlySurfaced} new${iter.oscillating ? " — issues are not net-decreasing across rounds; consider proposing a scope split rather than another revision." : ""}.)`
+          : "";
         return {
           success: true,
-          message: `Design review FAILED. Blocking issues: ${issueList}. Revise the design document to address these issues, then call saveBuildEvidence with field "designDoc" and re-run reviewDesignDoc.${archAdvisoryNote}`,
+          message: `Design review FAILED. Blocking issues: ${issueList}. Revise the design document to address these issues, then call saveBuildEvidence with field "designDoc" and re-run reviewDesignDoc.${trajectoryNote}${archAdvisoryNote}`,
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }

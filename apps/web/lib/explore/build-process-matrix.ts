@@ -435,6 +435,7 @@ import {
   normalizeHappyPathState,
   isHappyPathIntakeReady,
   describePlanReviewFailure,
+  describeDesignReviewFailure,
 } from "./feature-build-types";
 import type { FixContext, ReviewResult } from "./feature-build-types";
 
@@ -462,15 +463,15 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
       return { allowed: true };
     }
     case "designReview-passed": {
-      const review = evidence.designReview as { decision?: string } | undefined;
+      const review = evidence.designReview as ReviewResult | undefined;
       if (!review) return { allowed: false, reason: "Design review is required before planning." };
-      if (review.decision === "fail") {
+      if ((review as { decision?: string }).decision === "fail") {
         const isFix = evidence.kind === "fix";
         return {
           allowed: false,
           reason: isFix
             ? "Fix review failed. Revise the diagnosis and re-run the review before advancing."
-            : "Design review failed. Revise the design document and re-run reviewDesignDoc before advancing.",
+            : describeDesignReviewFailure(review),
         };
       }
       return { allowed: true };
