@@ -117,9 +117,16 @@ export async function synthesizeWithMlx(
   }
 
   const maxAttempts = getMaxAttempts()
+  // Delay between retries so the loop outlasts a sidecar restart window.
+  // The Chatterbox host sidecar takes ~6-12s to reload after a Jetsam kill;
+  // 4s between each of 4 attempts covers 16s — enough to survive one restart.
+  const RETRY_DELAY_MS = 4_000
   let lastErr: VoiceSynthesisError | null = null
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (attempt > 1) {
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS))
+    }
     let audioBuffer: ArrayBuffer
     try {
       const res = await fetch(`${baseUrl}/v1/audio/speech`, {
@@ -130,11 +137,11 @@ export async function synthesizeWithMlx(
       if (!res.ok) {
         const detail = await res.text().catch(() => "unknown")
         lastErr = new VoiceSynthesisError(detail, "mlx", res.status)
-        continue // transient server error (CSM IndexError etc.) — retry
+        continue // transient server error — retry after delay
       }
       audioBuffer = await res.arrayBuffer()
     } catch (err) {
-      // Network/abort — retry rather than fail the whole synthesis.
+      // Network/abort (e.g. sidecar mid-restart) — wait then retry.
       lastErr = new VoiceSynthesisError(String(err), "mlx")
       continue
     }
