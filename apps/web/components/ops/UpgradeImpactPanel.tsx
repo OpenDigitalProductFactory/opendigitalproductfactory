@@ -14,7 +14,6 @@
 // Advisory only — no buttons here queue or apply the upgrade.
 
 import { useState, useTransition } from "react";
-import { getUpgradeImpactSummary } from "@/lib/actions/upgrade-impact";
 import type { SummaryResult, ImpactItem } from "@/lib/self-upgrade/impact/types";
 
 const CATEGORY_LABEL: Record<ImpactItem["category"], string> = {
@@ -96,6 +95,42 @@ function ItemRow({
   );
 }
 
+function isSummaryResult(value: unknown): value is SummaryResult {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as { ok?: unknown };
+  return candidate.ok === true || candidate.ok === false;
+}
+
+async function fetchUpgradeImpactSummary(refresh: boolean): Promise<SummaryResult> {
+  const params = new URLSearchParams();
+  if (refresh) params.set("refresh", "true");
+  const query = params.toString();
+
+  const res = await fetch(
+    `/api/ops/self-upgrade/impact-summary${query ? `?${query}` : ""}`,
+    {
+      method: "GET",
+      cache: "no-store",
+    },
+  );
+
+  const body: unknown = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    const message =
+      body && typeof body === "object" && "error" in body && typeof body.error === "string"
+        ? body.error
+        : `Summary request failed with HTTP ${res.status}`;
+    throw new Error(message);
+  }
+
+  if (!isSummaryResult(body)) {
+    throw new Error("Unexpected summary response from the server.");
+  }
+
+  return body;
+}
+
 export default function UpgradeImpactPanel({ enabled }: { enabled: boolean }) {
   const [isPending, startTransition] = useTransition();
   const [result, setResult] = useState<SummaryResult | null>(null);
@@ -106,7 +141,7 @@ export default function UpgradeImpactPanel({ enabled }: { enabled: boolean }) {
     setError(null);
     startTransition(async () => {
       try {
-        const r = await getUpgradeImpactSummary({ refresh });
+        const r = await fetchUpgradeImpactSummary(refresh);
         setResult(r);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
