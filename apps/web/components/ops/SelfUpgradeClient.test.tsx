@@ -28,6 +28,14 @@ vi.mock("@/lib/actions/promotions", () => ({
   triggerSelfUpgrade: vi.fn(),
 }));
 
+// The global useState mock above keys off `initial === null`, so any child
+// component with its own `useState<X | null>(null)` would otherwise receive
+// `shared.triggerResult` and try to render it. Stub the impact panel so the
+// trigger-control tests stay focused on this component's behavior.
+vi.mock("@/components/ops/UpgradeImpactPanel", () => ({
+  default: () => null,
+}));
+
 import SelfUpgradeClient from "./SelfUpgradeClient";
 
 const baseStatus = {

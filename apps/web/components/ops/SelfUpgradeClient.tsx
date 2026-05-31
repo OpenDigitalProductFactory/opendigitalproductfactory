@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { triggerSelfUpgrade } from "@/lib/actions/promotions";
 import { LocalTime } from "@/components/ui/LocalTime";
+import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
 
 type LatestRun = {
   runId: string;
@@ -266,6 +267,8 @@ export default function SelfUpgradeClient({
           )}
         </div>
       )}
+
+      <UpgradeImpactPanel enabled={enabled} />
 
       {enabled && !latestRun && (
         <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)]">
