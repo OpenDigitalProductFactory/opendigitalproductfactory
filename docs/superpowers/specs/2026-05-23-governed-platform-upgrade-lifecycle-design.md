@@ -347,6 +347,8 @@ resolves a git ref as described here; afterwards the resolved artifact is the
 manifest's signed image and the same "stamp describes the built bytes"
 invariant carries over unchanged.
 
+The contributor-machine nuance noted above is one instance of the broader source-control-isolation-vs-runtime-validation rule (canonical at [`worktree-is-source-control-not-runtime`](../../founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md); design context in the tiered-dev-loop spec §2.1). The upgrade lifecycle commits to that model: thread worktrees do not impersonate the canonical install for upgrade verification.
+
 ### 5.0.1 Upgrade impact summary — on demand, install-tailored
 
 > Added 2026-05-31 to make "what's in this update?" answerable from the

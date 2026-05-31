@@ -45,13 +45,22 @@ Write the test that defines "done" **before** the code that satisfies it. Generi
 
 ## The loop (DPF-gated)
 
+### Where to run the test
+
+Match the test to the runtime it needs:
+
+- **Source-local tests** (targeted Vitest/Jest specs, typechecks, pure-function unit tests) — run in the thread worktree.
+- **Runtime-bound tests** (anything that needs the portal up, the dev DB seeded, MCP reachable, Prisma client generated, Next/Turbopack serving, Build Studio executing) — run against the canonical local install or a governed shared nonprod environment (see `dpf-use-shared-nonprod-environment`).
+
+This is [AGENTS.md §5 "Where each gate runs"](../../../../AGENTS.md) applied to TDD. Do not spend cycles making the thread worktree into a full DPF runtime so a runtime-bound test will run there — that is harness work, not test work. A suite that did not execute because the worktree could not host its runtime is an **unrun gate, not a red gate**.
+
 1. **Red — write the failing test first.** Name the behavior; assert the expected result; run it and **watch it fail for the right reason**. For a bug fix this is mandatory: a test that reproduces the symptom (generalizing `security-fix-needs-regression-test-first` beyond security). Use `mcp__dpf__find_related_tests` to place it with its siblings and match the suite's conventions.
 
 2. **Green — minimum code to pass.** Write only enough to make the test pass. Run the test; confirm it now passes **for the right reason** (not because the assertion is trivially true).
 
 3. **Refactor — clean under the green.** With the test guarding behavior, improve the code. Re-run after each change.
 
-4. **Gate — functional, not structural.** `build-gate-mandatory`: the suite must pass at merge. `structural-verification-is-not-functional`: a typecheck/lint pass is **not** a test pass. Run the actual tests and read the actual result.
+4. **Gate — functional, not structural.** `build-gate-mandatory`: the suite must pass at merge. `structural-verification-is-not-functional`: a typecheck/lint pass is **not** a test pass. Run the actual tests and read the actual result. Run the suite against the runtime it was written for — source-local in the worktree, runtime-bound against the canonical install — and quote the result from that run.
 
 ## Guardrails
 

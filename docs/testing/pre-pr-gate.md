@@ -53,6 +53,10 @@ The `apps/web` suite alone runs in roughly 2–4 minutes on a modern laptop;
 the full root `pnpm test` adds another 1–2 minutes for `@dpf/db` and the
 mobile jest suite.
 
+### Where "locally" means
+
+"Locally" here means any host where the DPF runtime is wired up — your root install, the **shared local-CI convergence sandbox** (leased via `local-integration-ci`), or the binding CI job. A thread/worktree clone provides source-control isolation, NOT runtime isolation: pnpm/corepack on PATH, workspace symlinks, generated Prisma client, and Next/Turbopack workspace-root constraints are install concerns, not per-worktree concerns. If a worktree-side `pnpm test` is blocked by missing runtime harness, route the gate through the convergence-sandbox lease — that is the equivalent evidence, not a product defect. Per-worktree runnable runtimes are deliberately NOT the model: at DPF's expected 1k–10k concurrent worktrees the per-worktree harness path is structurally untenable. See [AGENTS.md §5](../../AGENTS.md) and [`worktree-is-source-control-not-runtime`](../founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md).
+
 ## The pre-commit typecheck gate
 
 A separate guard at `.githooks/pre-commit` runs `pnpm --filter <affected>

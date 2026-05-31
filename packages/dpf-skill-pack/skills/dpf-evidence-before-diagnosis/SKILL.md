@@ -80,9 +80,18 @@ This skill is the DPF-specific operationalization of the `evidence-before-diagno
    - Structural: code is in the bundle, types pass, route returns 4xx on malformed input. **None of this proves the feature works.**
    - Functional: you drove the happy path on the live install and observed the expected behavior. **This is the evidence the commandment requires.**
 
-6. **Write the diagnosis as a structured report**, not screenshots (per `feedback_dynamic_analysis_is_evidence`). Structure: drove X, observed Y, signed off Z.
+6. **Distinguish product defects from worktree-harness artifacts.** Before naming the cause of any runtime symptom observed inside a thread worktree, ask: did this symptom reproduce against the canonical local install (root clone, port 3000, shared dev DB)? Worktree-only symptoms have a known taxonomy of harness causes that are NOT product defects:
+   - `pnpm: command not found` or corepack missing on the worktree PATH
+   - Workspace package resolution pointing outside the worktree root
+   - Prisma client absent because `prisma generate` only ran in the root clone
+   - Next/Turbopack refusing a `node_modules` symlink that escapes the workspace
+   - Docker/compose collisions when `COMPOSE_PROJECT_NAME` isn't isolated
 
-7. **Surface to operator** for ratification before mutating anything. Diagnoses can be wrong even when they're well-grounded.
+   If the symptom only appears in the worktree, the diagnosis is "worktree harness limitation" — file a platform process BI if it's worth closing, and verify the product behavior against the canonical install. Do NOT report the symptom as a product failure unless you reproduced it on the canonical install. See [`worktree-is-source-control-not-runtime`](../../../../docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md).
+
+7. **Write the diagnosis as a structured report**, not screenshots (per `feedback_dynamic_analysis_is_evidence`). Structure: drove X, observed Y, signed off Z.
+
+8. **Surface to operator** for ratification before mutating anything. Diagnoses can be wrong even when they're well-grounded.
 
 ## Output template
 
@@ -113,6 +122,7 @@ feature works. Recommend a functional verification pass before claiming complete
 - **Never trust an agent / coworker's "I succeeded" report at face value.** Per `project_proposal_trap_silent_failure` and `project_hive_contribution_gaps`, success messages have been wrong frequently enough that verification IS the default, not the exception.
 - **Never delete evidence before reporting.** Logs, tool returns, DB rows — preserve them in the report so the operator can audit.
 - **Never paraphrase the symptom.** Quote it. Paraphrase introduces interpretation that may itself be wrong.
+- Never diagnose a worktree-only symptom as a product defect without reproducing it on the canonical local install. Harness friction (pnpm PATH, workspace links, generated Prisma client, symlinked node_modules) is a known taxonomy of NOT-the-product causes.
 
 ## Worked example (this session, 2026-05-24)
 

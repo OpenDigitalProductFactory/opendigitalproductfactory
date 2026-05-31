@@ -38,6 +38,10 @@ The pattern: **the substrate exists for everything the operator is asking for; t
 
 `acceptanceRole` is derived from `kind`: `root-portal` → `final-acceptance`, the rest → `non-prod-verification`. The promotion gate is already conceptually wired — the runtime-coordination-map's `verifications` array is the audit surface.
 
+### 2.1 Source-control isolation vs runtime validation
+
+The tiers above are substrate tiers, not validation surfaces. The rule (canonical statement at [`worktree-is-source-control-not-runtime`](../../founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md), operational summary at [AGENTS.md §5](../../../AGENTS.md)): thread worktrees provide source-control isolation, not runtime isolation. Source-local checks run in the worktree; runtime-bound checks (next build, UX, migration smoke, MCP-touching suites) run against the canonical local install or a governed shared nonprod environment. Harness friction in the worktree (pnpm/corepack PATH, workspace links, generated Prisma client, Next/Turbopack symlink constraints) is a **harness limitation, not a product defect** — re-run against the canonical install. "Make the worktree itself runnable" is reserved for a dedicated platform-process BI, never absorbed into a feature/fix thread.
+
 ## 3. Lifecycle of a single change (target state)
 
 ```

@@ -24,6 +24,12 @@ enforces:
 
 Use governed shared localhost environments for preview and UX verification instead of starting unmanaged servers.
 
+## Worktree vs. runtime, restated
+
+Thread worktrees give source-control isolation. They do not give a runtime. When a task needs runtime-bound verification (portal up, MCP reachable, Build Studio executing, a route rendered in a real browser), the answer is **this skill**, not "make the worktree runnable." The canonical local install and the governed shared nonprod environments are where runtime verification happens; the worktree is where the diff under test lives. See [`worktree-is-source-control-not-runtime`](../../../../docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md) and [AGENTS.md §5](../../../../AGENTS.md).
+
+If no shared environment is available and the canonical local install is the right target, verify there and record the URL + run evidence in the PR. Reserve "spin up a disposable runtime clone" for the rare task whose explicit deliverable is exactly that.
+
 ## When to use
 
 - A thread is about to verify UI, Build Studio, routes, or workflows in a browser.
@@ -49,6 +55,7 @@ Use governed shared localhost environments for preview and UX verification inste
 - Do not start a thread-owned preview server when a shared environment is available.
 - Do not hold a lease after the thread is complete, blocked, or handed off.
 - Do not show lease IDs or raw tool names in the default UI. Show "Shared environment ready", "in use", or "blocked."
+- Don't treat this skill as optional when runtime-bound verification is needed in a thread worktree — it IS the runtime path; the worktree is not.
 
 ## Worked example
 

@@ -131,6 +131,22 @@ cat <<EOF
       in a working tree
     • open the PR from the worktree
 
+  Source-vs-runtime (read this before you try to 'pnpm dev' here):
+    • this worktree is SOURCE-CONTROL isolation, not RUNTIME isolation
+    • cheap source-local checks are fine in the worktree (targeted unit
+      tests, 'pnpm typecheck' on changed packages)
+    • for anything that exercises the running platform (portal routes, MCP
+      tools, DB-bound behavior, Build Studio flows), verify against the
+      canonical install at $root (or a leased shared nonprod environment),
+      NOT a freshly-stood-up runtime inside this worktree
+    • if a build/test fails in the worktree because pnpm/corepack isn\'t on
+      PATH, workspace symlinks point outside the worktree, the Prisma client
+      is missing, or Turbopack rejects a node_modules symlink — that is a
+      HARNESS limitation, NOT a product defect; capture canonical-runtime
+      evidence in the PR instead, and file a separate platform BI if you
+      want the worktree itself to become runnable
+    • see AGENTS.md §5 + docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md
+
   When the PR is merged:
     git -C "$root" worktree remove "$target"
 EOF

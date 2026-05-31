@@ -91,9 +91,7 @@ Before claiming a feature is complete, ALL of:
 - **End-to-end smoke check** as the LAST step of every implementation
   slice, BEFORE the status report. Documented in the PR's test plan as
   a checked box, not a `[ ] Manual verification (describe below)` stub.
-- **Verify on the exact install posture an operator gets** — not on a
-  worktree, not in dev mode, not with environment overrides. The live
-  install is the ground truth.
+- **Verify on the exact install posture an operator gets** — not on a worktree, not in dev mode, not with environment overrides. The live install is the ground truth. A worktree is a source-control isolation surface, not a runtime clone (see [`worktree-is-source-control-not-runtime`](worktree-is-source-control-not-runtime.md)); never invest thread time standing up pnpm/corepack, copied node_modules, or rewired workspace symlinks inside the worktree just to run a build-gate check there. Run that check against the canonical install instead, and file the worktree harness gap as its own platform BI.
 - **Distinguish "I tested it" from "the operator could test it"** in
   status reports. The first is necessary but not sufficient.
 
