@@ -5,7 +5,7 @@ import { applyBacklogFormAssistUpdates } from "./backlog-form-assist";
 describe("applyBacklogFormAssistUpdates", () => {
   it("applies supported scalar fields", () => {
     const next = applyBacklogFormAssistUpdates(
-      { title: "", type: "portfolio", status: "open", body: "" },
+      { title: "", type: "portfolio", workType: "feature", status: "open", body: "" },
       {
         title: "Investigate provider filtering",
         priority: 2,
@@ -16,6 +16,7 @@ describe("applyBacklogFormAssistUpdates", () => {
     expect(next).toEqual<BacklogItemInput>({
       title: "Investigate provider filtering",
       type: "portfolio",
+      workType: "feature",
       status: "open",
       priority: 2,
       body: "Use local providers for restricted routes.",
@@ -27,6 +28,7 @@ describe("applyBacklogFormAssistUpdates", () => {
       {
         title: "Existing",
         type: "product",
+        workType: "feature",
         status: "open",
         digitalProductId: "prod-1",
       },
@@ -40,6 +42,7 @@ describe("applyBacklogFormAssistUpdates", () => {
     expect(next).toEqual<BacklogItemInput>({
       title: "Existing",
       type: "portfolio",
+      workType: "feature",
       status: "open",
     });
   });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BACKLOG_TRIAGE_OUTCOMES,
   BACKLOG_SOURCE_VALUES,
+  BACKLOG_WORK_TYPE_VALUES,
   BACKLOG_EFFORT_SIZES,
   BACKLOG_STATUS_VALUES,
   EPIC_STATUSES,
@@ -28,6 +29,32 @@ describe("backlog enum parity between backlog.ts and mcp-tools.ts", () => {
 
   it("source matches on create_backlog_item.source", () => {
     expect(toolInputEnum("create_backlog_item", "source")).toEqual([...BACKLOG_SOURCE_VALUES]);
+  });
+
+  it("workType matches on create_backlog_item.workType", () => {
+    expect(toolInputEnum("create_backlog_item", "workType")).toEqual([...BACKLOG_WORK_TYPE_VALUES]);
+  });
+
+  it("workType matches on update_backlog_item.workType", () => {
+    expect(toolInputEnum("update_backlog_item", "workType")).toEqual([...BACKLOG_WORK_TYPE_VALUES]);
+  });
+
+  it("source matches on update_backlog_item.source", () => {
+    expect(toolInputEnum("update_backlog_item", "source")).toEqual([...BACKLOG_SOURCE_VALUES]);
+  });
+
+  it("workType matches on list_backlog_items.workType filter", () => {
+    expect(toolInputEnum("list_backlog_items", "workType")).toEqual([...BACKLOG_WORK_TYPE_VALUES]);
+  });
+
+  it("source matches on list_backlog_items.source filter", () => {
+    expect(toolInputEnum("list_backlog_items", "source")).toEqual([...BACKLOG_SOURCE_VALUES]);
+  });
+
+  it("create_backlog_item declares workType as required", () => {
+    const tool = PLATFORM_TOOLS.find((t) => t.name === "create_backlog_item");
+    const required = (tool?.inputSchema as { required?: string[] } | undefined)?.required ?? [];
+    expect(required).toContain("workType");
   });
 
   it("effortSize matches on size_backlog_item.size", () => {
