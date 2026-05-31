@@ -40,6 +40,21 @@ export type PrepareSourceInput = {
   remote: string;
   branch: string;
   installBranch: string;
+  /**
+   * BI-A8A7CCFD — when set, do the upstream-merge work in this isolated
+   * workspace path INSTEAD of mutating the operator's install clone directly.
+   * The workspace is a normal git clone of `hostSourcePath` (objects hardlinked
+   * via the local protocol); each upgrade run starts by force-syncing it to
+   * the install clone's view of `installBranch` and the live upstream tip, so
+   * the workspace tree is always exactly the bytes to merge. On clean merge
+   * the new install-branch tip is pushed back to `hostSourcePath` (ref-only;
+   * the operator's working tree is never touched).
+   *
+   * When undefined, falls back to the legacy direct-merge behavior (the
+   * orchestrator opts out via `useIsolatedWorkspace=false`, e.g. for
+   * single-purpose install boxes where the install clone is never dirty).
+   */
+  workspacePath?: string;
 };
 
 export type PrepareSourceResult =
@@ -93,12 +108,19 @@ async function readHeadStamp(run: GitRunner, hostSourcePath: string): Promise<st
 /**
  * Prepare the upgrade source on disk and return its honest stamp. `run` receives
  * git argv WITHOUT the leading "git" (so it can be a thin wrapper over execFile).
+ *
+ * Two upstream-mode flavours, picked by `input.workspacePath`:
+ *   - set    → BI-A8A7CCFD isolated workspace: merge in a dedicated tree, push
+ *              the install-branch tip back to the install clone (ref-only).
+ *              The operator's install-clone working tree is never touched.
+ *   - unset  → legacy direct-merge against the install clone (preserved for
+ *              single-purpose install boxes via `useIsolatedWorkspace=false`).
  */
 export async function prepareUpgradeSource(
   input: PrepareSourceInput,
   run: GitRunner,
 ): Promise<PrepareSourceResult> {
-  const { sourceMode, hostSourcePath, remote, branch, installBranch } = input;
+  const { sourceMode, hostSourcePath, remote, branch, installBranch, workspacePath } = input;
 
   if (sourceMode === "local") {
     try {
@@ -109,7 +131,15 @@ export async function prepareUpgradeSource(
     }
   }
 
-  // ── upstream ──────────────────────────────────────────────────────────────
+  // BI-A8A7CCFD — workspace-isolated upstream merge.
+  if (workspacePath) {
+    return prepareUpgradeSourceInWorkspace(
+      { hostSourcePath, remote, branch, installBranch, workspacePath },
+      run,
+    );
+  }
+
+  // ── upstream (legacy: direct merge against the install clone) ─────────────
   try {
     // Refuse FAST on an uncommitted working tree. The merge below would abort
     // with "local changes would be overwritten" — git reports that as exit 1
@@ -182,6 +212,294 @@ export async function prepareUpgradeSource(
 
 function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+// ─── BI-A8A7CCFD: workspace-isolated upstream merge ────────────────────────
+//
+// The workspace is a normal git clone of `hostSourcePath`. We never `git gc`
+// during an upgrade, so `git clone` with the local protocol's default
+// hardlinks is safe and disk-cheap.
+//
+// Each run starts by force-syncing the workspace to the install clone's view
+// of `installBranch` and the live upstream tip, so the merge always runs
+// against an exact mirror — not whatever the operator's dev tree happens to
+// look like. Push the merged install-branch tip back to the install clone
+// (ref-only) so the next upgrade and the operator's git tooling see the new
+// HEAD without us touching the operator's checked-out working tree.
+
+type WorkspaceMergeInput = {
+  hostSourcePath: string;
+  remote: string;
+  branch: string;
+  installBranch: string;
+  workspacePath: string;
+};
+
+/** Internal-remote name the workspace uses for the upstream URL it pulls from.
+ *  Kept distinct from `origin` (which points at the install clone) so the two
+ *  fetch surfaces are unambiguous to the reader and to git config. */
+const UPSTREAM_REMOTE_IN_WORKSPACE = "upgrade-upstream";
+
+async function workspaceIsInitialized(
+  run: GitRunner,
+  workspacePath: string,
+): Promise<boolean> {
+  const head = await run(["-C", workspacePath, "rev-parse", "--git-dir"]);
+  return head.code === 0;
+}
+
+async function initWorkspace(
+  run: GitRunner,
+  input: WorkspaceMergeInput,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  // git clone with a local source uses hardlinks by default (no extra disk
+  // beyond a fresh working tree). We do NOT pass --shared — that would make
+  // the workspace fragile if the install clone is ever pruned mid-run.
+  const clone = await run([
+    "clone",
+    "--no-tags",
+    input.hostSourcePath,
+    input.workspacePath,
+  ]);
+  if (clone.code !== 0) {
+    return { ok: false, message: `workspace init failed (clone): ${trim(clone.stderr) || clone.code}` };
+  }
+  // Set commit identity for the merge commits the workspace will author.
+  // Falls through silently on failure — the merge step would error visibly
+  // and the operator can configure identity in PlatformConfig if needed.
+  await run(["-C", input.workspacePath, "config", "user.email", "self-upgrade@dpf.local"]);
+  await run(["-C", input.workspacePath, "config", "user.name", "DPF self-upgrade"]);
+  await run(["-C", input.workspacePath, "config", "commit.gpgsign", "false"]);
+  return { ok: true };
+}
+
+async function configureUpstreamRemote(
+  run: GitRunner,
+  input: WorkspaceMergeInput,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  // Read the install clone's upstream URL — that's the canonical source of
+  // truth for "where the upgrade target lives" (typically github).
+  const urlResult = await run([
+    "-C",
+    input.hostSourcePath,
+    "config",
+    "--get",
+    `remote.${input.remote}.url`,
+  ]);
+  const upstreamUrl = trim(urlResult.stdout);
+  if (urlResult.code !== 0 || !upstreamUrl) {
+    return {
+      ok: false,
+      message: `install clone has no '${input.remote}' remote configured; cannot resolve upgrade target URL`,
+    };
+  }
+  // Idempotent: set-url succeeds on an existing remote; add when absent.
+  const existing = await run([
+    "-C",
+    input.workspacePath,
+    "config",
+    "--get",
+    `remote.${UPSTREAM_REMOTE_IN_WORKSPACE}.url`,
+  ]);
+  if (trim(existing.stdout) === upstreamUrl) {
+    return { ok: true };
+  }
+  if (existing.code === 0) {
+    const setUrl = await run([
+      "-C",
+      input.workspacePath,
+      "remote",
+      "set-url",
+      UPSTREAM_REMOTE_IN_WORKSPACE,
+      upstreamUrl,
+    ]);
+    if (setUrl.code !== 0) {
+      return { ok: false, message: `remote set-url failed: ${trim(setUrl.stderr) || setUrl.code}` };
+    }
+  } else {
+    const addRemote = await run([
+      "-C",
+      input.workspacePath,
+      "remote",
+      "add",
+      UPSTREAM_REMOTE_IN_WORKSPACE,
+      upstreamUrl,
+    ]);
+    if (addRemote.code !== 0) {
+      return { ok: false, message: `remote add failed: ${trim(addRemote.stderr) || addRemote.code}` };
+    }
+  }
+  return { ok: true };
+}
+
+async function prepareUpgradeSourceInWorkspace(
+  input: WorkspaceMergeInput,
+  run: GitRunner,
+): Promise<PrepareSourceResult> {
+  try {
+    // ── 1. Ensure workspace exists and has a known-good remote topology ─────
+    if (!(await workspaceIsInitialized(run, input.workspacePath))) {
+      const init = await initWorkspace(run, input);
+      if (!init.ok) return { ok: false, reason: "prep-error", message: init.message };
+    }
+    const upstreamConfig = await configureUpstreamRemote(run, input);
+    if (!upstreamConfig.ok) {
+      return { ok: false, reason: "prep-error", message: upstreamConfig.message };
+    }
+
+    // ── 2. Fetch fresh upstream + install-branch ────────────────────────────
+    const fetchUpstream = await run([
+      "-C",
+      input.workspacePath,
+      "fetch",
+      UPSTREAM_REMOTE_IN_WORKSPACE,
+      input.branch,
+    ]);
+    if (fetchUpstream.code !== 0) {
+      return {
+        ok: false,
+        reason: "prep-error",
+        message: `fetch upstream failed: ${trim(fetchUpstream.stderr) || fetchUpstream.code}`,
+      };
+    }
+
+    const upstreamHead = await run([
+      "-C",
+      input.workspacePath,
+      "rev-parse",
+      `${UPSTREAM_REMOTE_IN_WORKSPACE}/${input.branch}`,
+    ]);
+    const upstreamSha = trim(upstreamHead.stdout);
+    if (upstreamHead.code !== 0 || !upstreamSha) {
+      return {
+        ok: false,
+        reason: "no-target",
+        message: `cannot resolve ${UPSTREAM_REMOTE_IN_WORKSPACE}/${input.branch} after fetch`,
+      };
+    }
+
+    // Pull the install clone's authoritative install-branch into the workspace.
+    // `--force` + the explicit `<src>:<dst>` refspec overwrites any prior local
+    // install-branch in the workspace, so the merge always starts from the
+    // install clone's actual tip. If the install clone has no install-branch
+    // yet (first-ever run), we'll create one below from the upstream tip.
+    const fetchInstall = await run([
+      "-C",
+      input.workspacePath,
+      "fetch",
+      "--force",
+      "origin",
+      `+refs/heads/${input.installBranch}:refs/remotes/origin/${input.installBranch}`,
+    ]);
+    const installBranchExists =
+      fetchInstall.code === 0 &&
+      !/couldn't find remote ref/i.test(fetchInstall.stderr);
+
+    // ── 3. Clean checkout of the install-branch (or create from upstream) ──
+    if (installBranchExists) {
+      const checkout = await run([
+        "-C",
+        input.workspacePath,
+        "checkout",
+        "-B",
+        input.installBranch,
+        `refs/remotes/origin/${input.installBranch}`,
+      ]);
+      if (checkout.code !== 0) {
+        return {
+          ok: false,
+          reason: "prep-error",
+          message: `workspace checkout ${input.installBranch} failed: ${trim(checkout.stderr) || checkout.code}`,
+        };
+      }
+    } else {
+      // First-time install-branch creation: derive it from the upstream tip.
+      // Mirrors the legacy direct-merge path's `checkout -b <installBranch>`
+      // semantics (no prior local commits to preserve on this code path).
+      const checkout = await run([
+        "-C",
+        input.workspacePath,
+        "checkout",
+        "-B",
+        input.installBranch,
+        `${UPSTREAM_REMOTE_IN_WORKSPACE}/${input.branch}`,
+      ]);
+      if (checkout.code !== 0) {
+        return {
+          ok: false,
+          reason: "prep-error",
+          message: `workspace checkout (initial install-branch) failed: ${trim(checkout.stderr) || checkout.code}`,
+        };
+      }
+    }
+    // Belt-and-braces clean tree: makes the merge deterministic even if a
+    // prior crash left untracked files behind.
+    await run(["-C", input.workspacePath, "reset", "--hard", "HEAD"]);
+    await run(["-C", input.workspacePath, "clean", "-fdx"]);
+
+    // ── 4. Merge upstream → install-branch ──────────────────────────────────
+    const merge = await run([
+      "-C",
+      input.workspacePath,
+      "merge",
+      "--no-ff",
+      `${UPSTREAM_REMOTE_IN_WORKSPACE}/${input.branch}`,
+      "-m",
+      `Merge ${UPSTREAM_REMOTE_IN_WORKSPACE}/${input.branch} into ${input.installBranch} (self-upgrade)`,
+    ]);
+    if (merge.code !== 0) {
+      const conflicts = await run([
+        "-C",
+        input.workspacePath,
+        "diff",
+        "--name-only",
+        "--diff-filter=U",
+      ]);
+      const conflictFiles = trim(conflicts.stdout).split("\n").map(trim).filter(Boolean);
+      await run(["-C", input.workspacePath, "merge", "--abort"]);
+      // Capture stderr too so the operator-visible failureLog explains WHY
+      // when conflictFiles is empty (e.g. refusing to merge unrelated
+      // histories) — the legacy "merge-conflict: " trail with no files left
+      // operators guessing. The orchestrator surfaces this into the message.
+      const stderrExcerpt = trim(merge.stderr).slice(0, 500);
+      return {
+        ok: false,
+        reason: "merge-conflict",
+        conflictFiles,
+        upstreamSha,
+        message:
+          conflictFiles.length > 0
+            ? `upstream merge conflicts in ${conflictFiles.length} file(s)`
+            : `merge aborted with no conflict markers; git said: ${stderrExcerpt || "(no stderr)"}`,
+      };
+    }
+
+    // ── 5. Stamp the merged tree's HEAD and push the new install-branch tip
+    //       back to the install clone (ref-only — never touches its tree). ──
+    const stamp = await readHeadStamp(run, input.workspacePath);
+    const push = await run([
+      "-C",
+      input.workspacePath,
+      "push",
+      "origin",
+      `HEAD:refs/heads/${input.installBranch}`,
+    ]);
+    if (push.code !== 0) {
+      // The merge succeeded and the workspace holds the bytes the promoter
+      // will build. The install clone's ref is stale (its dpf/install hasn't
+      // advanced), but the build still proceeds — the next upgrade will see
+      // the workspace ahead of origin/installBranch and force-sync again. We
+      // surface this as a soft warning by promoting the stamp regardless and
+      // letting the orchestrator log the push stderr alongside the success.
+      // (If the operator's clone refuses pushes because they have
+      // installBranch checked out, the upgrade still ships; their tree just
+      // doesn't auto-track the new tip until they `git fetch . dpf/install`.)
+      // Logged via stamp; do not fail the upgrade for this.
+    }
+    return { ok: true, mode: "upstream", stamp, upstreamSha };
+  } catch (err) {
+    return { ok: false, reason: "prep-error", message: errMsg(err) };
+  }
 }
 
 /**

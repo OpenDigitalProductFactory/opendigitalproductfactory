@@ -43,6 +43,31 @@ export type SelfUpgradeConfig = {
    * commits and receives the upstream merge. Defaults to `dpf/install`.
    */
   installBranch: string;
+  /**
+   * Run the upstream merge in a dedicated, process-owned workspace tree
+   * INSTEAD of the operator's install clone. The workspace lives under
+   * `${hostSourceMountPath}/.upgrade-workspace/` (so it shares the existing
+   * bind-mount — no docker-compose change needed) and is git-ignored.
+   * Resolves BI-A8A7CCFD / BI-888435E5 / BI-57E77CB4: contributor installs
+   * whose install clone doubles as a dirty dev tree no longer collide with
+   * the upgrade merge. Defaults to true; can be disabled per-install via
+   * PlatformConfig for fallback to the legacy direct-merge behavior.
+   */
+  useIsolatedWorkspace: boolean;
+  /**
+   * Override the in-container path of the upgrade workspace. Defaults to
+   * `${hostSourceMountPath}/.upgrade-workspace`. Only consulted when
+   * `useIsolatedWorkspace` is true.
+   */
+  upgradeWorkspaceMountPath?: string;
+  /**
+   * Override the HOST path of the upgrade workspace. The promoter mounts
+   * this as `/host-source` instead of the install clone, so the image is
+   * built from the merged workspace tree. Defaults to
+   * `${hostInstallPath}/.upgrade-workspace`. Only consulted when
+   * `useIsolatedWorkspace` is true.
+   */
+  upgradeWorkspaceHostPath?: string;
 };
 
 const DEFAULTS: SelfUpgradeConfig = {
@@ -53,6 +78,11 @@ const DEFAULTS: SelfUpgradeConfig = {
   maintenanceWindows: [],
   sourceMode: "upstream",
   installBranch: DEFAULT_INSTALL_BRANCH,
+  // BI-A8A7CCFD — default-on isolation. Operators on installs without a
+  // doubling-as-dev-tree problem see the same outcome (a clean merge into
+  // dpf/install), but on contributor installs (where ~/dpf is dirty/divergent)
+  // the upgrade no longer fails on the operator's WIP.
+  useIsolatedWorkspace: true,
 };
 
 /**
@@ -148,6 +178,10 @@ export function parseSelfUpgradeConfig(raw: unknown): SelfUpgradeConfig {
       typeof cfg.installBranch === "string" && cfg.installBranch.trim().length > 0
         ? cfg.installBranch.trim()
         : DEFAULTS.installBranch,
+    useIsolatedWorkspace:
+      typeof cfg.useIsolatedWorkspace === "boolean"
+        ? cfg.useIsolatedWorkspace
+        : DEFAULTS.useIsolatedWorkspace,
   };
   for (const key of [
     "hostInstallPath",
@@ -159,6 +193,8 @@ export function parseSelfUpgradeConfig(raw: unknown): SelfUpgradeConfig {
     "repositoryBranch",
     "healthUrl",
     "promoterImage",
+    "upgradeWorkspaceMountPath",
+    "upgradeWorkspaceHostPath",
   ] as const) {
     if (typeof cfg[key] === "string" && cfg[key].trim().length > 0) {
       parsed[key] = cfg[key];
