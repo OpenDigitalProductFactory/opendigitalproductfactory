@@ -26,6 +26,7 @@ import { prisma } from "@dpf/db";
 import { upsertWikiPage, appendRevision } from "@dpf/db/wiki-store";
 import { storeWikiPage, type StoreWikiPageInput } from "@/lib/wiki/embeddings";
 import { suggestMission } from "./mission-suggestion";
+import { resolveBusinessProfile } from "./archetype-business-context";
 
 /** Platform fallback our org profile chains to (material.ts:14). */
 export const ORG_PERSPECTIVE_FALLBACK_PROFILE_ID = "dpf-organizational-principles";
@@ -101,21 +102,30 @@ type BusinessContextRow = {
 
 function buildPages(
   bc: BusinessContextRow,
-  archetypeName: string | null,
+  archetypeId: string | null,
   industry: string | null,
   orgName: string | null,
 ): SeedPage[] {
+  const profile = resolveBusinessProfile({ archetypeId, industry: industry ?? bc?.industry ?? null });
+
   const mission =
     (bc?.mission ?? "").trim() ||
     suggestMission({
+      archetypeId,
       industry: industry ?? bc?.industry ?? null,
-      archetypeName,
       description: bc?.description ?? null,
       orgName,
     });
   const who = (bc?.targetMarket ?? "").trim();
   const what = (bc?.description ?? "").trim();
   const orgLabel = (orgName ?? "").trim() || "this organization";
+
+  // Who-we-serve: lead with the captured target market when present, then the
+  // archetype-aware framing so the page reads like it understands the business.
+  const whoLead = who
+    ? `We serve ${who}.`
+    : profile.whoWeServe;
+  const whoAbstract = who ? `We serve ${who}.` : profile.whoWeServe;
 
   const pages: SeedPage[] = [
     {
@@ -143,15 +153,12 @@ function buildPages(
       body: [
         "# Who we serve",
         "",
-        who
-          ? `We serve ${who}.`
-          : `We serve the people and stakeholders ${orgLabel} exists to help.`,
+        whoLead,
         what ? `\nWhat we do: ${what}` : "",
+        `\nHow this business works: ${profile.businessModel}`,
         "\nWhen we decide \"what would we do?\", we weigh the interests of the people we serve first.",
       ].join("\n"),
-      abstract: who
-        ? `We serve ${who}.`
-        : `The stakeholders ${orgLabel} serves.`,
+      abstract: whoAbstract,
     },
     {
       slug: "org-how-we-decide",
@@ -160,11 +167,11 @@ function buildPages(
       body: [
         "# How we decide",
         "",
-        `When ${orgLabel} faces a decision, we start from our mission and the people we serve, prefer durable quality over shortcuts, stay transparent about trade-offs, and keep humans in final authority over consequential calls.`,
+        profile.howWeDecide,
         "",
-        "This is the organization's default stance until more specific guidance is captured.",
+        `This is ${orgLabel}'s starting decision stance, derived from how this kind of business tends to operate. Refine it as the organization's own judgment is captured.`,
       ].join("\n"),
-      abstract: "The organization's default decision stance: mission-first, stakeholder-first, quality over shortcuts, transparent, human-authoritative.",
+      abstract: profile.howWeDecide,
     },
   ];
   return pages;
@@ -186,15 +193,18 @@ export async function seedOrgWwwdCorpus(
       select: { mission: true, description: true, targetMarket: true, industry: true },
     }) as Promise<BusinessContextRow>,
     db.storefrontConfig.findFirst({
-      select: { archetype: { select: { name: true, category: true } } },
-    }) as Promise<{ archetype: { name: string; category: string } | null } | null>,
+      select: { archetypeId: true, archetype: { select: { name: true, category: true } } },
+    }) as Promise<{
+      archetypeId: string | null;
+      archetype: { name: string; category: string } | null;
+    } | null>,
     db.organization.findUnique({
       where: { id: organizationId },
       select: { name: true },
     }) as Promise<{ name: string | null } | null>,
   ]);
 
-  const archetypeName = sf?.archetype?.name ?? null;
+  const archetypeId = sf?.archetypeId ?? null;
   const industry = sf?.archetype?.category ?? bc?.industry ?? null;
   const orgName = org?.name ?? null;
 
@@ -238,7 +248,7 @@ export async function seedOrgWwwdCorpus(
   });
 
   // 3. Org-overlay wiki pages (the working WWWD lever) + materials.
-  const pages = buildPages(bc, archetypeName, industry, orgName);
+  const pages = buildPages(bc, archetypeId, industry, orgName);
   const wikiPageIds: string[] = [];
   let embedded = true;
 
