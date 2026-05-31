@@ -57,4 +57,31 @@ describe("sendEmail", () => {
     delete process.env.SMTP_HOST;
     expect(result.messageId).toBe("test-123");
   });
+
+  it("throws in production when SMTP is unconfigured (no fake success)", async () => {
+    const savedHost = process.env.SMTP_HOST;
+    delete process.env.SMTP_HOST;
+    vi.stubEnv("NODE_ENV", "production");
+
+    await expect(
+      sendEmail({ to: "x@example.com", subject: "S", text: "t", html: "<p>t</p>" }),
+    ).rejects.toThrow(/SMTP is not configured/);
+
+    vi.unstubAllEnvs();
+    if (savedHost === undefined) delete process.env.SMTP_HOST;
+    else process.env.SMTP_HOST = savedHost;
+  });
+
+  it("logs and returns a dev messageId when SMTP is unconfigured outside production", async () => {
+    const savedHost = process.env.SMTP_HOST;
+    delete process.env.SMTP_HOST;
+    vi.stubEnv("NODE_ENV", "test");
+
+    const result = await sendEmail({ to: "x@example.com", subject: "S", text: "t", html: "<p>t</p>" });
+    expect(result.messageId).toMatch(/^dev-/);
+
+    vi.unstubAllEnvs();
+    if (savedHost === undefined) delete process.env.SMTP_HOST;
+    else process.env.SMTP_HOST = savedHost;
+  });
 });
