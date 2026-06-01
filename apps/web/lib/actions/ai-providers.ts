@@ -364,10 +364,10 @@ async function autoConfigureBuildStudio(providerId: string): Promise<void> {
     const config = existing.value as Record<string, unknown>;
     const claudeKey = "claudeProviderId";
     const codexKey = "codexProviderId";
+    const grokKey = "grokProviderId";
 
     if (cliEngine === "claude" && !config[claudeKey]) {
       config[claudeKey] = providerId;
-      // If currently set to agentic/codex with no codex provider, switch to claude
       if (config.provider === "agentic" || (config.provider === "codex" && !config[codexKey])) {
         config.provider = "claude";
       }
@@ -379,6 +379,15 @@ async function autoConfigureBuildStudio(providerId: string): Promise<void> {
       config[codexKey] = providerId;
       if (config.provider === "agentic") {
         config.provider = "codex";
+      }
+      await prisma.platformConfig.update({
+        where: { key: "build-studio-dispatch" },
+        data: { value: config as unknown as Prisma.InputJsonValue },
+      });
+    } else if (cliEngine === "grok" && !config[grokKey]) {
+      config[grokKey] = providerId;
+      if (config.provider === "agentic") {
+        config.provider = "grok";
       }
       await prisma.platformConfig.update({
         where: { key: "build-studio-dispatch" },
