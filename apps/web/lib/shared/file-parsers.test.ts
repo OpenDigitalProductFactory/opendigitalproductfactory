@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { parseCsv, parseFileContent } from "./file-parsers";
 
-vi.mock("read-excel-file/node", () => ({
+vi.mock("read-excel-file/browser", () => ({
   readSheet: vi.fn(async () => [
     ["Name", "Score"],
     ["Alice", 10],

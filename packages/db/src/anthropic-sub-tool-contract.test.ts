@@ -4,6 +4,10 @@ import { describe, expect, it } from "vitest";
 
 type ProviderRegistryEntry = {
   providerId: string;
+  authMethod?: string;
+  supportedAuthMethods?: string[];
+  costPerformanceNotes?: string;
+  userFacing?: { authExplained?: string };
   supportsToolUse?: boolean;
 };
 
@@ -25,6 +29,19 @@ describe("anthropic-sub tool contract", () => {
     const anthropicSub = entries.find((entry) => entry.providerId === "anthropic-sub");
     expect(anthropicSub).toBeDefined();
     expect(anthropicSub?.supportsToolUse).toBe(true);
+  });
+
+  it("presents anthropic-sub as an OAuth subscription provider, not an API-key provider", () => {
+    const entries = JSON.parse(
+      readFileSync(join(DATA_DIR, "providers-registry.json"), "utf8"),
+    ) as ProviderRegistryEntry[];
+
+    const anthropicSub = entries.find((entry) => entry.providerId === "anthropic-sub");
+    expect(anthropicSub).toBeDefined();
+    expect(anthropicSub?.authMethod).toBe("oauth2_authorization_code");
+    expect(anthropicSub?.supportedAuthMethods).toEqual(["oauth2_authorization_code"]);
+    expect(anthropicSub?.costPerformanceNotes).not.toContain("setup-token");
+    expect(anthropicSub?.userFacing?.authExplained).not.toContain("subscription token");
   });
 
   it("marks active anthropic-sub seeded model profiles as platform-tool capable", () => {
