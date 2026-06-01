@@ -34,6 +34,13 @@ The DR-hardening epic (BIs shipped 2026-05-24) put recovery artifacts in **speci
 | Tool config / installer state | `install-state.json` in install dir | If lost: re-run `install-dpf.{ps1,sh}`; it's idempotent |
 | Failed platform upgrade / bad seed apply / migration damage | Governed upgrade recovery point: linked `BackupRun` rows under `$DPF_BACKUPS_HOST_PATH/{postgres,neo4j,qdrant}/<ts>/` plus previous runtime identity under `$DPF_BACKUPS_HOST_PATH/self-upgrade/<runId>/` | Upgrade Center rollback/restore flow; if unavailable, restore the Postgres member first, then Neo4j/Qdrant as needed |
 
+Implementation note (2026-06-01): self-upgrade runs now record the linked
+Postgres/Neo4j/Qdrant backup members in
+`SelfUpgradeRun.completionEvidence.recoveryPoint` after quiescence drains active
+work and before the swap boundary. The dedicated Upgrade Center rollback action
+is still pending, so if the portal is unavailable, use the recorded `BackupRun`
+ids to restore through the backup substrate directly.
+
 **Key principle:** if you can't find your loss in this table, that means there's no automatic recovery for it. Stop and ask for help BEFORE doing anything destructive — the action you take next may be the difference between a 1-hour and 6-hour recovery.
 
 ---

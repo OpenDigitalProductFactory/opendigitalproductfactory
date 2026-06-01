@@ -202,11 +202,24 @@ currently:
 3. Recreates the `portal` container only.
 4. Checks `/api/health`, `/api/health/sha`, and the baked source-content hash.
 
-That current promoter backup is **not a data backup**. It is only a rollback
-hint for the previous runtime identity. Daily platform-managed backups already
-exist separately for Postgres, Neo4j, and Qdrant under `/backups/<target>/...`,
-with `BackupRun` rows and retention. Restore runners exist for all three
-targets, and Postgres also has trial-restore verification.
+Implementation note (2026-06-01): `runSelfUpgrade` now creates a
+`pre-upgrade-recovery` point after quiescence has drained active work and
+before promoter execution. It reuses the existing Postgres, Neo4j, and Qdrant
+backup runners, records the resulting `BackupRun` ids under
+`SelfUpgradeRun.completionEvidence.recoveryPoint`, and fails the upgrade before
+the swap boundary if any data-store backup fails.
+The promoter's own `/backups/self-upgrade/<runId>/previous-sha.txt` remains
+**not a data backup**; it is only a rollback hint for the previous runtime
+identity. Daily platform-managed backups still exist separately for Postgres,
+Neo4j, and Qdrant under `/backups/<target>/...`, with `BackupRun` rows and
+retention. Restore runners exist for all three targets, and Postgres also has
+trial-restore verification.
+
+Remaining gap: the Upgrade Center still needs a first-class rollback/restore
+action that reads the linked `SelfUpgradeRun.completionEvidence.recoveryPoint`
+and walks the operator through the matched restore members. Until then, this
+slice creates the recovery point and durable evidence; restore orchestration is
+still manual through the backup restore substrate.
 
 ### 2.8 What can go wrong today
 

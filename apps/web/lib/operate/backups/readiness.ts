@@ -13,7 +13,11 @@ import {
   QDRANT_BACKUP_JOB_ID,
   TRIAL_RESTORE_TRIGGER,
 } from "./constants";
-import { DEFAULT_BACKUP_RETENTION, type BackupTarget, type ReadinessSummary } from "./types";
+import {
+  DEFAULT_BACKUP_RETENTION,
+  type BackupTarget,
+  type ReadinessSummary,
+} from "./types";
 
 const BACKUPS_ROOT = "/backups";
 
@@ -94,7 +98,7 @@ async function getReadinessForTarget(
           finishedAt: lastRun.finishedAt?.toISOString() ?? null,
           sizeBytes: lastRun.sizeBytes ? Number(lastRun.sizeBytes) : null,
           durationMs: lastRun.durationMs,
-          trigger: lastRun.trigger as "scheduled" | "manual",
+          trigger: lastRun.trigger as NonNullable<ReadinessSummary["lastRun"]>["trigger"],
         }
       : null,
     lastSuccess: lastSuccess
