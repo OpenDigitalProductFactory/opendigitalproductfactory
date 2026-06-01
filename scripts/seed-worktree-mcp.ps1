@@ -180,10 +180,44 @@ foreach ($pair in $pairs) {
     Write-Ok "Wrote $($pair.Dst)"
 }
 
+Write-Step "Classifying worktree verification readiness"
+$pnpmOnPath = $null -ne (Get-Command pnpm -ErrorAction SilentlyContinue)
+$corepackOnPath = $null -ne (Get-Command corepack -ErrorAction SilentlyContinue)
+$nodeModulesPresent = Test-Path -LiteralPath (Join-Path $Target "node_modules")
+$readinessState = "source-only"
+$readinessReason = "dependencies_missing"
+
+if ($nodeModulesPresent -and ($pnpmOnPath -or $corepackOnPath)) {
+    $readinessState = "compile-ready"
+    $readinessReason = "package_manager_and_dependencies_present"
+} elseif (-not $nodeModulesPresent) {
+    $readinessReason = "node_modules_missing"
+} elseif (-not $pnpmOnPath -and -not $corepackOnPath) {
+    $readinessReason = "pnpm_corepack_missing"
+}
+
+$readiness = [ordered]@{
+    schemaVersion = 1
+    state = $readinessState
+    reason = $readinessReason
+    checkedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    checks = [ordered]@{
+        pnpmOnPath = $pnpmOnPath
+        corepackOnPath = $corepackOnPath
+        nodeModulesPresent = $nodeModulesPresent
+    }
+}
+$readinessPath = Join-Path $Target ".dpf-worktree-readiness.json"
+$readiness | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $readinessPath -Encoding ascii
+Write-Ok "Recorded $readinessState readiness in $readinessPath ($readinessReason)"
+
 Write-Step "Ensuring DPF skill pack"
 $skillPackScript = Join-Path $Target "scripts\ensure-dpf-skill-pack.ps1"
 if (Test-Path -LiteralPath $skillPackScript) {
     & $skillPackScript -RepoRoot $Target
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  [WARN] DPF skill pack bootstrap failed; MCP config, Compose isolation, and readiness marker were still written." -ForegroundColor Yellow
+    }
 } else {
     Write-Skip "No DPF skill pack installer found at $skillPackScript"
 }
