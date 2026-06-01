@@ -170,15 +170,30 @@ resolve_codex_bin() {
   return 1
 }
 
+resolve_grok_bin() {
+  if command -v grok >/dev/null 2>&1; then command -v grok; return 0; fi
+  for c in \
+    "$HOME/.grok/bin/grok" \
+    "/opt/homebrew/bin/grok" \
+    "/usr/local/bin/grok" \
+    "$HOME/.local/bin/grok"; do
+    [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
+  done
+  return 1
+}
+
 CLAUDE_PRESENT=0
 CODEX_PRESENT=0
+GROK_PRESENT=0
 HAS_TOKEN=0
 CLAUDE_BIN="$(resolve_claude_bin || true)"
 CODEX_BIN="$(resolve_codex_bin || true)"
+GROK_BIN="$(resolve_grok_bin || true)"
 [ -n "$CLAUDE_BIN" ] && CLAUDE_PRESENT=1
 # Codex wiring is file-based (config.toml), so a present-but-not-on-PATH Codex
 # (or an existing Codex config dir) is still wirable.
 { [ -n "$CODEX_BIN" ] || [ -f "$CODEX_CONFIG_PATH" ]; } && CODEX_PRESENT=1
+[ -n "$GROK_BIN" ] && GROK_PRESENT=1
 if [ -n "${DPF_MCP_BEARER_TOKEN:-}" ]; then
   HAS_TOKEN=1
 fi
@@ -187,6 +202,10 @@ printf '\n-> DPF agent toolchain bootstrap\n'
 info "Repo root        : $REPO_ROOT"
 info "Claude CLI       : $([ $CLAUDE_PRESENT -eq 1 ] && echo present || echo missing)"
 info "Codex CLI        : $([ $CODEX_PRESENT  -eq 1 ] && echo present || echo missing)"
+info "Grok CLI         : $([ $GROK_PRESENT    -eq 1 ] && echo present || echo missing)"
+# Note: Host OS (this script is POSIX/mac/Linux) vs Windows PowerShell sibling only affects
+# local detection paths and config.toml location for direct `grok` CLI usage.
+# Build Studio Grok dispatch (grok-dispatch.ts) is containerized Linux execution and is identical.
 info "DPF MCP token    : $([ $HAS_TOKEN      -eq 1 ] && echo present || echo missing)"
 info "Skill pack ver.  : $EXPECTED_VERSION"
 
@@ -319,6 +338,7 @@ bridge_args=(
 )
 [ $CLAUDE_PRESENT  -eq 1 ] && bridge_args+=(--claude-cli-present)
 [ $CODEX_PRESENT   -eq 1 ] && bridge_args+=(--codex-cli-present)
+[ $GROK_PRESENT    -eq 1 ] && bridge_args+=(--grok-cli-present)
 [ $HAS_TOKEN       -eq 1 ] && bridge_args+=(--has-token)
 [ $RECONCILE_STALE -eq 1 ] && bridge_args+=(--reconcile-stale-entries)
 
@@ -374,6 +394,7 @@ info "Plan preview     : $PLAN_PREVIEW_STATE"
 
 CLAUDE_WIRED=0
 CODEX_WIRED=0
+GROK_WIRED=0
 MEMORY_SEEDED_AT=""
 
 # 1. Claude plugin install.
@@ -464,6 +485,15 @@ PY
     skip "Codex CLI not installed; skipping plugin wire."
   fi
 
+  # Grok: no dedicated plugin (unlike Claude). Wiring is via generic MCP client config
+  # (already handled) + presence detection. Mirror the ps1 and Node bridge behavior.
+  if [ $GROK_PRESENT -eq 1 ]; then
+    GROK_WIRED=1
+    ok "Grok CLI detected (wiring via generic MCP + env token)."
+  else
+    skip "Grok CLI not installed; skipping (will appear when 'grok' is on PATH)."
+  fi
+
   if [ "${PLAN_MCP_CLIENT_WRITES_COUNT:-0}" -gt 0 ]; then
     ok "MCP client config written ($PLAN_MCP_CLIENT_WRITES_COUNT file(s): .mcp.json / .vscode/mcp.json)."
   else
@@ -533,8 +563,8 @@ if [ -z "$MCP_READINESS" ]; then
 fi
 
 if [ -z "$SMOKE_TEST" ]; then
-  if [ $CLAUDE_PRESENT -eq 0 ] && [ $CODEX_PRESENT -eq 0 ]; then
-    SMOKE_TEST='{"result": "skipped", "reason": "claude_not_on_path"}'
+  if [ $CLAUDE_PRESENT -eq 0 ] && [ $CODEX_PRESENT -eq 0 ] && [ $GROK_PRESENT -eq 0 ]; then
+    SMOKE_TEST='{"result": "skipped", "reason": "no_cli_on_path"}'
   else
     SMOKE_TEST='{"result": "skipped", "reason": "no_token"}'
   fi
@@ -551,7 +581,7 @@ MCP_OK="$(printf '%s' "$MCP_READINESS" | python3 -c 'import json,sys; print(json
 MCP_REASON="$(printf '%s' "$MCP_READINESS" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("reason",""))')"
 SMOKE_RESULT="$(printf '%s' "$SMOKE_TEST" | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"])')"
 
-if [ "$CLAUDE_WIRED" -eq 0 ] && [ "$CODEX_WIRED" -eq 0 ]; then
+if [ "$CLAUDE_WIRED" -eq 0 ] && [ "$CODEX_WIRED" -eq 0 ] && [ "$GROK_WIRED" -eq 0 ]; then
   FINAL_STATE="missing_cli"
 elif [ "$MCP_OK" != "True" ]; then
   case "$MCP_REASON" in
@@ -561,7 +591,7 @@ elif [ "$MCP_OK" != "True" ]; then
   esac
 elif [ "$SMOKE_RESULT" = "failed" ]; then
   FINAL_STATE="failed_smoke"
-elif [ "$CLAUDE_WIRED" -eq 0 ] || [ "$CODEX_WIRED" -eq 0 ]; then
+elif [ "$CLAUDE_WIRED" -eq 0 ] || [ "$CODEX_WIRED" -eq 0 ] || [ "$GROK_WIRED" -eq 0 ]; then
   FINAL_STATE="partial"
 else
   FINAL_STATE="ready"
@@ -578,6 +608,7 @@ AGENT_TOOLCHAIN_JSON="$(cat <<JSON
   "superpowersVersion": null,
   "claudeCodeWired": $([ $CLAUDE_WIRED -eq 1 ] && echo true || echo false),
   "codexWired": $([ $CODEX_WIRED -eq 1 ] && echo true || echo false),
+  "grokWired": $([ $GROK_WIRED -eq 1 ] && echo true || echo false),
   "memorySeededAt": $MEMORY_SEEDED_AT_JSON,
   "mcpReadiness": $MCP_READINESS,
   "smokeTest": $SMOKE_TEST,
@@ -594,9 +625,9 @@ fi
 # --- Readiness banner --------------------------------------------------------
 
 case "$FINAL_STATE" in
-  ready)         BANNER_MSG="Claude Code and Codex are ready for DPF work.";                                     BANNER_ACTION="Open readiness" ;;
-  partial)       BANNER_MSG="One contributor client is ready; the other needs setup.";                           BANNER_ACTION="Repair toolchain" ;;
-  missing_cli)   BANNER_MSG="Install the selected agent client to enable contributor sessions.";                 BANNER_ACTION="Open setup guide" ;;
+  ready)         BANNER_MSG="Claude Code, Codex, and Grok are ready for DPF work.";                               BANNER_ACTION="Open readiness" ;;
+  partial)       BANNER_MSG="One or more contributor clients are ready; others need setup.";                     BANNER_ACTION="Repair toolchain" ;;
+  missing_cli)   BANNER_MSG="Install a supported agent client (Claude Code, Codex, or Grok) to enable contributor sessions."; BANNER_ACTION="Open setup guide" ;;
   missing_token) BANNER_MSG="DPF MCP needs a development token before agents can use governed tools.";           BANNER_ACTION="Issue development token" ;;
   needs_refresh) BANNER_MSG="A token exists, but the running client has not picked it up yet.";                  BANNER_ACTION="Refresh client binding" ;;
   failed_smoke)  BANNER_MSG="The agent is installed but did not apply a DPF kernel principle.";                  BANNER_ACTION="View evidence" ;;

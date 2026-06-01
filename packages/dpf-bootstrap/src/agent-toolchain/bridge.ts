@@ -42,8 +42,12 @@ export type AgentToolchainPlan = {
   claudeCliPresent: boolean;
   /** Whether the host has Codex CLI on PATH (caller-supplied detection). */
   codexCliPresent: boolean;
+  /** Whether the host has Grok CLI on PATH (caller-supplied detection). */
+  grokCliPresent: boolean;
   /** Whether a DPF MCP token was discovered (e.g. via DPF_MCP_BEARER_TOKEN). */
   hasToken: boolean;
+  /** Simple presence note for Grok (main wiring is via the generic mcpClientConfig). */
+  grok: { present: boolean } | null;
   /** TOML upsert plan for the contributor's Codex config (null when Codex CLI absent). */
   codex: CodexConfigPlan | null;
   /** Repo-root .mcp.json + .vscode/mcp.json writes (env-backed, secret-free). */
@@ -84,6 +88,8 @@ export type ComputeAgentToolchainPlanOptions = {
   claudeCliPresent: boolean;
   /** Caller-detected presence of `codex` CLI on PATH. */
   codexCliPresent: boolean;
+  /** Caller-detected presence of `grok` CLI on PATH. */
+  grokCliPresent: boolean;
   /** Caller-detected presence of a DPF MCP bearer token. */
   hasToken: boolean;
   /** Endpoint to probe for MCP `tools/list`. */
@@ -182,6 +188,7 @@ export function computeAgentToolchainPlan(
   const previewReadiness = computeReadinessState({
     claudeCodeWired: options.claudeCliPresent,
     codexWired: options.codexCliPresent,
+    grokWired: options.grokCliPresent,
     mcpReadiness: options.hasToken
       ? { ok: true, toolCount: 0, observedAt: new Date().toISOString() }
       : { ok: false, reason: "no_token", httpStatus: null },
@@ -192,9 +199,11 @@ export function computeAgentToolchainPlan(
     repoRoot: options.repoRoot,
     claudeCliPresent: options.claudeCliPresent,
     codexCliPresent: options.codexCliPresent,
+    grokCliPresent: options.grokCliPresent,
     hasToken: options.hasToken,
     codex,
     claude,
+    grok: options.grokCliPresent ? { present: true } : null,
     mcpClientConfig,
     memory,
     mcpProbe,

@@ -13,7 +13,7 @@
  *     --project-slug <slug> \
  *     --mcp-endpoint <url> \
  *     --expected-dpf-platform-version <version> \
- *     [--claude-cli-present] [--codex-cli-present] [--has-token] \
+ *     [--claude-cli-present] [--codex-cli-present] [--grok-cli-present] [--has-token] \
  *     [--reconcile-stale-entries] [--full-tier]
  *
  * The flags map 1:1 onto `ComputeAgentToolchainPlanOptions`. Output is a
@@ -68,7 +68,7 @@ const { values, flags } = parseArgs(process.argv.slice(2));
 
 if (flags.has("help") || flags.has("h")) {
   process.stderr.write(
-    "Usage: tsx compute-plan.ts --repo-root <p> --codex-config <p> --claude-plugins <p> ...\n",
+    "Usage: tsx compute-plan.ts --repo-root <p> --codex-config <p> --claude-plugins <p> --grok-config <p> ...\n",
   );
   process.exit(0);
 }
@@ -84,6 +84,7 @@ const options: ComputeAgentToolchainPlanOptions = {
   expectedDpfPlatformVersion: requireArg(values, "expected-dpf-platform-version"),
   claudeCliPresent: flags.has("claude-cli-present"),
   codexCliPresent: flags.has("codex-cli-present"),
+  grokCliPresent: flags.has("grok-cli-present"),
   hasToken: flags.has("has-token"),
   reconcileStaleEntries: flags.has("reconcile-stale-entries"),
   commandmentTierOnly: !flags.has("full-tier"),

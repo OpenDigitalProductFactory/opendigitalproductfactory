@@ -16,15 +16,15 @@ export type ReadinessCopy = {
 
 const COPY: Record<ReadinessState, ReadinessCopy> = {
   ready: {
-    message: "Claude Code and Codex are ready for DPF work.",
+    message: "Claude Code, Codex, and Grok are ready for DPF work.",
     primaryAction: "Open readiness",
   },
   partial: {
-    message: "One contributor client is ready; the other needs setup.",
+    message: "One or more contributor clients are ready; others need setup.",
     primaryAction: "Repair toolchain",
   },
   missing_cli: {
-    message: "Install the selected agent client to enable contributor sessions.",
+    message: "Install a supported agent client (Claude Code, Codex, or Grok) to enable contributor sessions.",
     primaryAction: "Open setup guide",
   },
   missing_token: {
@@ -55,8 +55,9 @@ export function computeReadinessState(
 ): ReadinessState {
   const claudeWired = state.claudeCodeWired === true;
   const codexWired = state.codexWired === true;
+  const grokWired = state.grokWired === true;
 
-  if (!claudeWired && !codexWired) {
+  if (!claudeWired && !codexWired && !grokWired) {
     return "missing_cli";
   }
 
@@ -74,7 +75,7 @@ export function computeReadinessState(
     return "failed_smoke";
   }
 
-  if (!claudeWired || !codexWired) {
+  if (!claudeWired || !codexWired || !grokWired) {
     return "partial";
   }
 

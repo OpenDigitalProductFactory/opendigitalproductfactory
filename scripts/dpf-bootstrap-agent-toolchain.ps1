@@ -68,6 +68,7 @@ $expectedVersion = (Get-Content -LiteralPath $SkillPackManifestPath -Raw | Conve
 # --- Detect CLIs + token ------------------------------------------------------
 $ClaudePresent = $null -ne (Get-Command claude -ErrorAction SilentlyContinue)
 $CodexPresent  = $null -ne (Get-Command codex  -ErrorAction SilentlyContinue)
+$GrokPresent   = $null -ne (Get-Command grok   -ErrorAction SilentlyContinue)
 $HasToken      = -not [string]::IsNullOrWhiteSpace($env:DPF_MCP_BEARER_TOKEN)
 
 Write-Host ""
@@ -75,6 +76,7 @@ Write-Host "-> DPF agent toolchain bootstrap" -ForegroundColor Yellow
 Write-Info "Repo root        : $RepoRoot"
 Write-Info "Claude CLI       : $(if ($ClaudePresent) { 'present' } else { 'missing' })"
 Write-Info "Codex CLI        : $(if ($CodexPresent)  { 'present' } else { 'missing' })"
+Write-Info "Grok CLI         : $(if ($GrokPresent)   { 'present' } else { 'missing' })"
 Write-Info "DPF MCP token    : $(if ($HasToken)      { 'present' } else { 'missing' })"
 Write-Info "Skill pack ver.  : $expectedVersion"
 
@@ -167,6 +169,7 @@ $nodeArgs = @(
 )
 if ($ClaudePresent)        { $nodeArgs += "--claude-cli-present" }
 if ($CodexPresent)         { $nodeArgs += "--codex-cli-present" }
+if ($GrokPresent)          { $nodeArgs += "--grok-cli-present" }
 if ($HasToken)             { $nodeArgs += "--has-token" }
 if ($ReconcileStaleEntries.IsPresent) { $nodeArgs += "--reconcile-stale-entries" }
 
@@ -182,6 +185,7 @@ Write-Info "Plan preview: $($plan.preview.readinessState)"
 # --- Apply plan ---------------------------------------------------------------
 $claudeWired = $false
 $codexWired  = $false
+$grokWired   = $false
 $memorySeededAt = $null
 
 # 1. Claude Code: run `claude plugin install` if a write is planned.
@@ -239,6 +243,18 @@ if ($plan.codex -and $plan.codex.writes.Count -gt 0) {
     }
 } else {
     Write-Skip "Codex CLI not installed; skipping plugin wire."
+}
+
+# 2c. Grok CLI: no dedicated plugin/TOML like the others — wiring is via the generic MCP client config
+# (already handled above via mcpClientConfig) + the bootstrap banner detection.
+# Host OS differences (Windows vs macOS) only affect local binary detection and the
+# exact filesystem location of the user's grok config.toml for *direct* CLI usage.
+# Build Studio Grok dispatch itself is unaffected (runs inside the Linux sandbox container).
+if ($GrokPresent) {
+    $grokWired = $true
+    Write-Ok "Grok CLI detected (wiring via generic MCP + env token)."
+} else {
+    Write-Skip "Grok CLI not installed; skipping (will appear when `grok` is on PATH)."
 }
 
 # 2b. MCP client config (.mcp.json + .vscode/mcp.json) -- env-backed, no secret.
@@ -348,6 +364,7 @@ $state = [ordered]@{
     superpowersVersion  = $null
     claudeCodeWired     = $claudeWired
     codexWired          = $codexWired
+    grokWired           = $grokWired
     memorySeededAt      = $memorySeededAt
     mcpReadiness        = $mcpReadiness
     smokeTest           = $smokeResult
@@ -357,7 +374,7 @@ $state = [ordered]@{
 # Recompute readinessState from the applied facts + probe outcomes. Mirrors
 # computeReadinessState() in @dpf/bootstrap/readiness-state.ts: order-of-checks
 # is most-fundamental-first so the primary remediation is unambiguous.
-if (-not $claudeWired -and -not $codexWired) {
+if (-not $claudeWired -and -not $codexWired -and -not $grokWired) {
     $state.readinessState = "missing_cli"
 } elseif (-not $mcpReadiness.ok) {
     if ($mcpReadiness.reason -in @("no_token", "scope_insufficient")) {
@@ -369,7 +386,7 @@ if (-not $claudeWired -and -not $codexWired) {
     }
 } elseif ($smokeResult.result -eq "failed") {
     $state.readinessState = "failed_smoke"
-} elseif (-not $claudeWired -or -not $codexWired) {
+} elseif (-not $claudeWired -or -not $codexWired -or -not $grokWired) {
     $state.readinessState = "partial"
 } else {
     $state.readinessState = "ready"
@@ -403,6 +420,7 @@ if ($ShowSubstrate.IsPresent) {
     Write-Host "  Substrate detail (for debugging):" -ForegroundColor DarkGray
     Write-Host "    Claude plugin     : $($state.claudeCodeWired)" -ForegroundColor DarkGray
     Write-Host "    Codex plugin      : $($state.codexWired)" -ForegroundColor DarkGray
+    Write-Host "    Grok plugin       : $($state.grokWired)" -ForegroundColor DarkGray
     Write-Host "    Memory seeded at  : $($state.memorySeededAt)" -ForegroundColor DarkGray
     Write-Host "    DPF platform ver  : $($state.dpfPlatformVersion)" -ForegroundColor DarkGray
     Write-Host "    State file        : $(Get-DpfStatePath)" -ForegroundColor DarkGray
