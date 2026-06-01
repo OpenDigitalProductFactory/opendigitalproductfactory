@@ -117,8 +117,8 @@ function parseArgs(argv: readonly string[]): Args {
       }
       case "--format": {
         const v = next();
-        if (v !== "claude-code" && v !== "codex" && v !== "vscode" && v !== "raw") {
-          fatal(`--format must be claude-code | codex | vscode | raw; got: ${v}`);
+        if (v !== "claude-code" && v !== "codex" && v !== "grok" && v !== "vscode" && v !== "raw") {
+          fatal(`--format must be claude-code | codex | grok | vscode | raw; got: ${v}`);
         }
         format = v;
         break;
@@ -157,7 +157,7 @@ function printHelp(): void {
       "                         template (sandbox_execute, iac_execute, build_promote,",
       "                         ...); admin -> admin template; read -> coding-agent reads.",
       `  --expires-days N|never Token TTL in days, or "never" (default: ${DEFAULT_EXPIRES_DAYS})`,
-      "  --format <fmt>         claude-code | codex | vscode | raw (default: claude-code)",
+      "  --format <fmt>         claude-code | codex | grok | vscode | raw (default: claude-code)",
       "  --base-url <url>       Portal base URL",
       "                         (default: $AUTH_URL / $APP_URL / http://localhost:3000)",
       "  --help, -h             Show this help",
@@ -165,12 +165,14 @@ function printHelp(): void {
       "Output (stdout):",
       "  claude-code  .mcp.json snippet   (mcpServers.dpf, http transport)",
       "  codex        ~/.codex/config.toml snippet using bearer_token_env_var",
+      "  grok         ~/.grok/config.toml snippet (same TOML shape as codex; also works for project .grok/config.toml)",
       "  vscode       .vscode/mcp.json snippet (servers.dpf)",
       "  raw          Plaintext token only",
       "",
       "Examples:",
       "  pnpm --filter web exec tsx apps/web/scripts/issue-mcp-token.ts > .mcp.json",
       "  pnpm --filter web exec tsx apps/web/scripts/issue-mcp-token.ts --format codex >> ~/.codex/config.toml",
+      "  pnpm --filter web exec tsx apps/web/scripts/issue-mcp-token.ts --format grok >> ~/.grok/config.toml",
       "  pnpm --filter web exec tsx apps/web/scripts/issue-mcp-token.ts --format vscode > .vscode/mcp.json",
       "  TOKEN=$(pnpm --filter web exec tsx apps/web/scripts/issue-mcp-token.ts --format raw)",
     ].join("\n"),
@@ -243,7 +245,9 @@ async function main(): Promise<void> {
         ? snippets.vscode
         : args.format === "codex"
           ? snippets.codex
-          : snippets.claudeCode;
+          : args.format === "grok"
+            ? snippets.grok
+            : snippets.claudeCode;
     console.log(snippet);
   }
 

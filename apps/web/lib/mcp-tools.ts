@@ -1140,11 +1140,11 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "record_external_development_evidence",
-    description: "Record Claude/Codex or other external development handoff evidence with optional Build Studio build/task links. Use for branches, commits, changed files, verification results, local integration output, unresolved questions, and skills used.",
+    description: "Record Claude, Codex, Grok or other external development handoff evidence with optional Build Studio build/task links. Use for branches, commits, changed files, verification results, local integration output, unresolved questions, and skills used.",
     inputSchema: {
       type: "object",
       properties: {
-        provider: { type: "string", description: "External development provider, for example codex or claude" },
+        provider: { type: "string", description: "External development provider, for example claude, codex, or grok" },
         externalSessionId: { type: "string", description: "External thread/session/capsule identifier" },
         buildId: { type: "string", description: "Optional FB-* build id" },
         taskRunId: { type: "string", description: "Optional TaskRun id" },
@@ -1185,7 +1185,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
       type: "object",
       properties: {
         environmentKey: { type: "string", enum: ["active-candidate", "local-integration-ci"] },
-        ownerProvider: { type: "string", enum: ["build-studio", "claude", "codex", "coworker"] },
+        ownerProvider: { type: "string", enum: ["build-studio", "claude", "codex", "grok", "coworker"] },
         ownerSessionId: { type: "string" },
         purpose: { type: "string" },
         url: { type: "string" },
@@ -1225,7 +1225,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        provider: { type: "string", enum: ["build-studio", "claude", "codex", "coworker"] },
+        provider: { type: "string", enum: ["build-studio", "claude", "codex", "grok", "coworker"] },
         externalSessionId: { type: "string" },
         routeContext: { type: "string" },
         buildId: { type: "string" },

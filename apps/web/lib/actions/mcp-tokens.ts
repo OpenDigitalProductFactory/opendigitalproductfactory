@@ -130,6 +130,7 @@ export type IssueTokenActionResult =
       setupSnippets: {
         claudeCode: string;
         codex: string;
+        grok: string;
         vscode: string;
         syncCommand: string;
         envPowerShell: string;

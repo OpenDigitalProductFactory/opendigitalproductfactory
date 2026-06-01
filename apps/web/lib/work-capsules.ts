@@ -28,6 +28,7 @@ export const WORK_CAPSULE_EXECUTOR_KINDS = [
   "build-studio",
   "codex-desktop",
   "claude-desktop",
+  "grok-desktop",
   "human",
   "git-webhook",
   "dpf-native",

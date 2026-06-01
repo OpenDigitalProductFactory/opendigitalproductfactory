@@ -100,7 +100,12 @@ function leaseUntil(now = new Date()): Date {
 }
 
 function isExternalLeaseExecutor(executorKind: WorkCapsuleExecutorKind | null | undefined): boolean {
-  return executorKind === "codex-desktop" || executorKind === "claude-desktop" || executorKind === "human";
+  return (
+    executorKind === "codex-desktop" ||
+    executorKind === "claude-desktop" ||
+    executorKind === "grok-desktop" ||
+    executorKind === "human"
+  );
 }
 
 function isUniqueViolation(error: unknown): boolean {
