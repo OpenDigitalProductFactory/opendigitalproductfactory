@@ -1,7 +1,23 @@
-import { runNeo4jBackup } from "@/lib/operate/backups/neo4j-backup-runner";
-import { runPostgresBackup } from "@/lib/operate/backups/postgres-backup-runner";
-import { runQdrantBackup } from "@/lib/operate/backups/qdrant-backup-runner";
 import type { BackupTarget } from "@/lib/operate/backups/types";
+
+const RECOVERY_TRIGGER = "pre-upgrade-recovery" as const;
+
+type BackupRunnerResult = { runId: string; status: "ok" | "failed" };
+type ClusteredBackupRunner = (args: {
+  trigger: typeof RECOVERY_TRIGGER;
+  composeProject?: string;
+  backupsRoot?: string;
+}) => Promise<BackupRunnerResult>;
+type QdrantBackupRunner = (args: {
+  trigger: typeof RECOVERY_TRIGGER;
+  backupsRoot?: string;
+}) => Promise<BackupRunnerResult>;
+
+interface RecoveryPointRunners {
+  postgres: ClusteredBackupRunner;
+  neo4j: ClusteredBackupRunner;
+  qdrant: QdrantBackupRunner;
+}
 
 export type SelfUpgradeRecoveryPointStatus = "ok" | "failed" | "skipped";
 
@@ -27,15 +43,9 @@ interface CreateRecoveryPointArgs {
   dryRun?: boolean;
   composeProject?: string;
   backupsRoot?: string;
-  runners?: {
-    postgres?: typeof runPostgresBackup;
-    neo4j?: typeof runNeo4jBackup;
-    qdrant?: typeof runQdrantBackup;
-  };
+  runners?: Partial<RecoveryPointRunners>;
   now?: () => Date;
 }
-
-const RECOVERY_TRIGGER = "pre-upgrade-recovery" as const;
 
 export async function createSelfUpgradeRecoveryPoint(
   args: CreateRecoveryPointArgs,
@@ -55,11 +65,7 @@ export async function createSelfUpgradeRecoveryPoint(
     };
   }
 
-  const runners = {
-    postgres: args.runners?.postgres ?? runPostgresBackup,
-    neo4j: args.runners?.neo4j ?? runNeo4jBackup,
-    qdrant: args.runners?.qdrant ?? runQdrantBackup,
-  };
+  const runners = await resolveRecoveryPointRunners(args.runners);
 
   const members: SelfUpgradeRecoveryPointMember[] = [];
   members.push(
@@ -99,9 +105,30 @@ export async function createSelfUpgradeRecoveryPoint(
   };
 }
 
+async function resolveRecoveryPointRunners(
+  overrides?: Partial<RecoveryPointRunners>,
+): Promise<RecoveryPointRunners> {
+  const [postgres, neo4j, qdrant] = await Promise.all([
+    overrides?.postgres ??
+      import("@/lib/operate/backups/postgres-backup-runner").then(
+        (module) => module.runPostgresBackup,
+      ),
+    overrides?.neo4j ??
+      import("@/lib/operate/backups/neo4j-backup-runner").then(
+        (module) => module.runNeo4jBackup,
+      ),
+    overrides?.qdrant ??
+      import("@/lib/operate/backups/qdrant-backup-runner").then(
+        (module) => module.runQdrantBackup,
+      ),
+  ]);
+
+  return { postgres, neo4j, qdrant };
+}
+
 async function runMember(
   target: BackupTarget,
-  run: () => Promise<{ runId: string; status: "ok" | "failed" }>,
+  run: () => Promise<BackupRunnerResult>,
 ): Promise<SelfUpgradeRecoveryPointMember> {
   try {
     const result = await run();
