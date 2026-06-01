@@ -15,10 +15,13 @@ const mocks = vi.hoisted(() => ({
   startRun: vi.fn(),
   completeRun: vi.fn(),
   failRun: vi.fn(),
+  recordRunRecoveryPoint: vi.fn(),
   getLatestRun: vi.fn(),
   getLatestSucceededRun: vi.fn(),
   runPromoter: vi.fn(),
   emitUpgradeEvent: vi.fn(),
+  createSelfUpgradeRecoveryPoint: vi.fn(),
+  summarizeRecoveryPointFailure: vi.fn(),
   // BI-QUIESCE-010 — caller API consumed by runSelfUpgrade.
   startQuiescence: vi.fn(),
   signalSwapStarting: vi.fn(),
@@ -79,6 +82,7 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   startRun: mocks.startRun,
   completeRun: mocks.completeRun,
   failRun: mocks.failRun,
+  recordRunRecoveryPoint: mocks.recordRunRecoveryPoint,
   getLatestRun: mocks.getLatestRun,
   getLatestSucceededRun: mocks.getLatestSucceededRun,
 }));
@@ -89,6 +93,11 @@ vi.mock("@/lib/self-upgrade/promoter", () => ({
 
 vi.mock("@/lib/self-upgrade/notifications", () => ({
   emitUpgradeEvent: mocks.emitUpgradeEvent,
+}));
+
+vi.mock("@/lib/self-upgrade/recovery-point", () => ({
+  createSelfUpgradeRecoveryPoint: mocks.createSelfUpgradeRecoveryPoint,
+  summarizeRecoveryPointFailure: mocks.summarizeRecoveryPointFailure,
 }));
 
 vi.mock("@/lib/self-upgrade/quiescence", () => ({
@@ -157,6 +166,27 @@ function setupSourceReady(stamp = "abc1234deadbeef"): void {
     upstreamSha: stamp,
   });
 }
+
+const OK_RECOVERY_POINT = {
+  schemaVersion: 1,
+  status: "ok",
+  trigger: "pre-upgrade-recovery",
+  selfUpgradeRunId: "SUR-AAAABBBB",
+  createdAt: "2026-06-01T00:00:00.000Z",
+  members: [
+    { target: "postgres", runId: "BR-PG", status: "ok" },
+    { target: "neo4j", runId: "BR-N4J", status: "ok" },
+    { target: "qdrant", runId: "BR-QD", status: "ok" },
+  ],
+};
+
+beforeEach(() => {
+  mocks.createSelfUpgradeRecoveryPoint.mockResolvedValue(OK_RECOVERY_POINT);
+  mocks.recordRunRecoveryPoint.mockResolvedValue({});
+  mocks.summarizeRecoveryPointFailure.mockReturnValue(
+    "recovery-point-failed: postgres BR-PG",
+  );
+});
 
 describe("cron metadata", () => {
   it("scheduled function id is ops/self-upgrade-scheduled", () => {
@@ -257,6 +287,51 @@ describe("success path", () => {
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
     expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-AAAABBBB" });
     expect(mocks.completeRun).toHaveBeenCalledWith("SUR-AAAABBBB");
+  });
+
+  it("creates and records a recovery point after quiescence and before swap starts", async () => {
+    const order: string[] = [];
+    mocks.createSelfUpgradeRecoveryPoint.mockImplementation(async () => {
+      order.push("createSelfUpgradeRecoveryPoint");
+      return OK_RECOVERY_POINT;
+    });
+    mocks.recordRunRecoveryPoint.mockImplementation(async () => {
+      order.push("recordRunRecoveryPoint");
+      return {};
+    });
+    mocks.startQuiescence.mockImplementation(async () => {
+      order.push("startQuiescence");
+      return {
+        runId: "QR-2026-05-24-test1234",
+        awaitReady: () =>
+          Promise.resolve({
+            ok: true,
+            outcome: "ready-to-swap",
+            runId: "QR-2026-05-24-test1234",
+            finalSnapshot: null,
+          }),
+      };
+    });
+    mocks.signalSwapStarting.mockImplementation(async () => {
+      order.push("signalSwapStarting");
+    });
+
+    await runSelfUpgrade({ triggeredBy: "ops" });
+
+    expect(mocks.createSelfUpgradeRecoveryPoint).toHaveBeenCalledWith({
+      runId: "SUR-AAAABBBB",
+      dryRun: undefined,
+    });
+    expect(mocks.recordRunRecoveryPoint).toHaveBeenCalledWith(
+      "SUR-AAAABBBB",
+      OK_RECOVERY_POINT,
+    );
+    expect(order).toEqual([
+      "startQuiescence",
+      "createSelfUpgradeRecoveryPoint",
+      "recordRunRecoveryPoint",
+      "signalSwapStarting",
+    ]);
   });
 
   it("prepares the upgrade source with the configured mode/remote/branch/install branch", async () => {
@@ -366,8 +441,73 @@ describe("success path", () => {
 
   it("bypasses quiescence entirely on dryRun", async () => {
     await runSelfUpgrade({ triggeredBy: "ops", dryRun: true });
+    expect(mocks.createSelfUpgradeRecoveryPoint).toHaveBeenCalledWith({
+      runId: "SUR-AAAABBBB",
+      dryRun: true,
+    });
     expect(mocks.startQuiescence).not.toHaveBeenCalled();
     expect(mocks.signalSwapComplete).not.toHaveBeenCalled();
+  });
+});
+
+describe("pre-upgrade recovery point gate", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
+    mocks.isUpgradeWindowOpen.mockReturnValue(true);
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
+    setupSourceReady();
+    setupQuiescenceReady();
+    mocks.getLatestRun.mockResolvedValue(null);
+    mocks.createRun.mockResolvedValue({ runId: "SUR-RECOVERY" });
+    mocks.startRun.mockResolvedValue({});
+    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
+    mocks.failRun.mockResolvedValue({});
+    mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    mocks.createSelfUpgradeRecoveryPoint.mockResolvedValue({
+      ...OK_RECOVERY_POINT,
+      status: "failed",
+      selfUpgradeRunId: "SUR-RECOVERY",
+      members: [
+        { target: "postgres", runId: "BR-PG", status: "failed" },
+        { target: "neo4j", runId: "BR-N4J", status: "ok" },
+        { target: "qdrant", runId: "BR-QD", status: "ok" },
+      ],
+    });
+    mocks.summarizeRecoveryPointFailure.mockReturnValue(
+      "recovery-point-failed: postgres BR-PG",
+    );
+  });
+
+  it("fails after quiescence and before promoter when the recovery point fails", async () => {
+    const result = await runSelfUpgrade({ triggeredBy: "ops" });
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: "failed",
+      runId: "SUR-RECOVERY",
+      quiescenceRunId: "QR-2026-05-24-test1234",
+      reason: "recovery-point-failed",
+      excerpt: "recovery-point-failed: postgres BR-PG",
+    });
+    expect(mocks.recordRunRecoveryPoint).toHaveBeenCalled();
+    expect(mocks.failRun).toHaveBeenCalledWith(
+      "SUR-RECOVERY",
+      "recovery-point-failed: postgres BR-PG",
+    );
+    expect(mocks.startQuiescence).toHaveBeenCalled();
+    expect(mocks.failQuiescenceSwap).toHaveBeenCalledWith(
+      "QR-2026-05-24-test1234",
+      "recovery-point-failed: postgres BR-PG",
+    );
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
+    expect(mocks.emitUpgradeEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "upgrade.failed",
+        runId: "SUR-RECOVERY",
+        payload: { reason: "recovery-point-failed: postgres BR-PG" },
+      }),
+    );
   });
 });
 

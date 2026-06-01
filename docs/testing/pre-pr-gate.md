@@ -63,12 +63,17 @@ From a worktree, the opt-in gate is:
 pnpm run pregate
 ```
 
+During the transitional script phase, this command intentionally fails unless
+the caller provides `DPF_LOCAL_CI_COMMAND`. That is deliberate: an unimplemented
+local-CI runner must not produce green evidence.
+
 The script pushes the current branch, claims a `local-integration-ci` lease,
-waits if the sandbox is already leased, runs the Phase 1 sandbox checkout/build
-stub (`gate passed`), records a local-integration evidence record with the lease
-id and `gatePassed`, releases the lease, and writes the latest passing HEAD to
-Git-local state. Phase 2 replaces the stub with the canonical build and runtime
-verification commands.
+waits if the sandbox is already leased, runs the command supplied in
+`DPF_LOCAL_CI_COMMAND`, records a local-integration evidence record with the
+lease id and `gatePassed`, releases the lease, and writes the latest gate result
+to Git-local state. It refuses to record a passing stub by default; the old
+Phase 1 stub is only available through `DPF_ALLOW_LOCAL_CI_STUB=1` for contract
+tests and must not be used as release evidence.
 
 The opt-in pre-push hook is `.githooks/pre-push-gate`. It refuses a push when
 the latest local-CI gate record is missing, belongs to another branch/SHA, or

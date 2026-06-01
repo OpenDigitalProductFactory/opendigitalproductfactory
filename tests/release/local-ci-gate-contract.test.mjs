@@ -42,6 +42,7 @@ test("gate-worktree.sh parses explicit flags in dry-run mode", () => {
 test("gate-worktree.sh exits non-zero when DPF_MCP_BEARER_TOKEN is missing", () => {
   const env = { ...process.env };
   delete env.DPF_MCP_BEARER_TOKEN;
+  env.DPF_ALLOW_LOCAL_CI_STUB = "1";
   const result = runGate([
     "--branch",
     "feat/local-ci-sandbox",
@@ -56,7 +57,29 @@ test("gate-worktree.sh exits non-zero when DPF_MCP_BEARER_TOKEN is missing", () 
   assert.match(result.stderr, /DPF_MCP_BEARER_TOKEN is required/);
 });
 
-test("gate-worktree.sh calls claim_nonprod_environment_lease before recording evidence", () => {
+test("gate-worktree.sh refuses to record passing stub evidence by default", () => {
+  const env = {
+    ...process.env,
+    DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+  };
+  delete env.DPF_ALLOW_LOCAL_CI_STUB;
+  delete env.DPF_LOCAL_CI_COMMAND;
+
+  const result = runGate([
+    "--branch",
+    "feat/local-ci-sandbox",
+    "--sha",
+    "abc123",
+    "--worktree",
+    "/tmp/dpf-worktree",
+    "--no-push",
+  ], { env });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /refusing to record passing stub evidence/);
+});
+
+test("gate-worktree.sh calls claim_nonprod_environment_lease before recording evidence when stub is explicitly allowed", () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-gate-"));
   const callsFile = join(temp, "calls.ndjson");
   const gitStub = join(temp, "git");
@@ -115,6 +138,7 @@ esac
     env: {
       ...process.env,
       DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      DPF_ALLOW_LOCAL_CI_STUB: "1",
       DPF_GATE_GIT_BIN: gitStub,
       DPF_GATE_CURL_BIN: curlStub,
     },

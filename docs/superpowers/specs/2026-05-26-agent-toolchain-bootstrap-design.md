@@ -108,8 +108,8 @@ The repo already contains most of the substrate this design depends on. The work
 - `scripts/setup.ps1` — Windows lighter-weight setup. Verifies AGENTS.md pointer files (CLAUDE.md, .cursor/rules, .clinerules, .github/copilot-instructions.md, CONVENTIONS.md, .continue/rules). **Gap:** no contributor toolchain convergence call.
 - `scripts/ensure-dpf-skill-pack.ps1` — Validates and installs the Claude plugin via `claude plugin install dpf-platform@dpf-platform-local --scope local`. Acknowledges the Codex repo marketplace but does not enable the Codex plugin in user config.
 - `scripts/ensure-dpf-skill-pack.sh` — POSIX sibling with the same shape: Claude install if `claude` exists; Codex marketplace presence check only.
-- `scripts/seed-worktree-mcp.ps1` / `.sh` — Per-worktree MCP config copier + `COMPOSE_PROJECT_NAME` setter + calls the `ensure-dpf-skill-pack` script family.
-- `scripts/sync-mcp-worktrees.ps1` — Hardlinks `D:\DPF\.mcp.json` into every D-drive worktree, optionally rotates the bearer token, and re-registers user-scope MCP in `~/.claude.json`.
+- `scripts/seed-worktree-mcp.ps1` / `.sh` — Per-worktree MCP config copier + `COMPOSE_PROJECT_NAME` setter + `.dpf-worktree-readiness.json` classifier + calls the `ensure-dpf-skill-pack` script family.
+- `scripts/sync-mcp-worktrees.ps1` / `.sh` — Refreshes MCP config, preserves non-root `COMPOSE_PROJECT_NAME`, stamps `.dpf-worktree-readiness.json`, optionally rotates the bearer token in the PowerShell path, and re-registers user-scope MCP in `~/.claude.json` when Claude is present.
 - `scripts/installer/install-state.schema.json` — `~/.dpf/install-state.json` schema (Contract 2). Currently models docker / compose / autostart / health state; **does not yet model agent-toolchain state.**
 - `scripts/installer/lib/{logging,platform,prompts,compose,preflight,state,doctor,docker,autostart}.sh` — Bash 3.2 helpers for the POSIX installer.
 
@@ -147,7 +147,7 @@ Per the `dpf-verify-substrate-first` skill:
 - **State-schema sweep:** `scripts/installer/install-state.schema.json` has `autostart`, `composeFiles`, `lastHealthCheck` but no `agentToolchain` block.
 - **Live backlog sweep:** DPF MCP confirmed `EP-INSTALL-HARDENING-2026-05-23` is `in-progress`. Read-only DB fallback confirmed `BI-4B17051B` is `in-progress` under that epic.
 - **Open PR sweep:** Current draft spec PR #1212 exists on `doc/agent-toolchain-bootstrap`. No overlapping implementation PR was found for `dpf-bootstrap`, `setup-cowork`, or `codex plugin install`.
-- **Main-branch sweep (`packages/dpf-skill-pack/`, `.claude-plugin/`, `.agents/`, `scripts/seed-*`, `scripts/sync-mcp-worktrees.ps1`):** Last activity was PR #1189 (decision skill packs slice 1, merged). The skill pack itself was formalized through PRs #1137/#1168. No subsequent auto-install hook landed.
+- **Main-branch sweep (`packages/dpf-skill-pack/`, `.claude-plugin/`, `.agents/`, `scripts/seed-*`, `scripts/sync-mcp-worktrees.*`):** Last activity was PR #1189 (decision skill packs slice 1, merged). The skill pack itself was formalized through PRs #1137/#1168. No subsequent auto-install hook landed.
 
 **Verdict:** substrate mostly exists, but it is not convergent. Claude Code is partially wired; Codex plugin enablement is not; kernel memory, smoke proof, and install state are absent. **No new substrate noun is needed.** The "DPF Cowork plugin" name in the BI is just an alternative label for the existing `packages/dpf-skill-pack/` artifact; the work is to converge, verify, and hide the machinery behind a humane readiness experience.
 
