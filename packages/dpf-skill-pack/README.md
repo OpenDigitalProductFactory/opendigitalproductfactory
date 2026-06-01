@@ -78,6 +78,10 @@ The `.claude-plugin/plugin.json` manifest turns this directory into an installab
 
 - `claude.mcp.json` — Claude Code MCP descriptor using `${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}` and `${DPF_MCP_BEARER_TOKEN:-}`.
 - `codex.mcp.json` — Codex MCP descriptor using local `http://127.0.0.1:3000/api/mcp/v1` plus `bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"`.
+- `grok.mcp.json` — Grok MCP descriptor (TOML-compatible) using the same `DPF_MCP_BEARER_TOKEN` env-var pattern. Config location is platform-specific:
+  - macOS/Linux: `~/.grok/config.toml` (or `<project>/.grok/config.toml`)
+  - Windows: `%USERPROFILE%\.grok\config.toml` (or `%APPDATA%\grok\config.toml` — confirm with the Grok CLI on your system)
+  The `.grok-plugin/plugin.json` manifest exposes the pack to Grok.
 
 Repo-level marketplace files live at the repository root:
 
