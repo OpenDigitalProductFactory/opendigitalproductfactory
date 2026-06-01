@@ -44,6 +44,7 @@ target="${target:-$PWD}"
 step() { printf '\n-> %s\n' "$1"; }
 ok()   { printf '  [OK] %s\n' "$1"; }
 skip() { printf '  [SKIP] %s\n' "$1"; }
+warn() { printf '  [WARN] %s\n' "$1" >&2; }
 
 compose_project_name_for() {
     local base slug
@@ -202,7 +203,9 @@ ok "Recorded $readiness_state readiness in $target_abs/.dpf-worktree-readiness.j
 step "Ensuring DPF skill pack"
 skill_pack_script="$target_abs/scripts/ensure-dpf-skill-pack.sh"
 if [ -f "$skill_pack_script" ]; then
-    bash "$skill_pack_script" "$target_abs"
+    if ! bash "$skill_pack_script" "$target_abs"; then
+        warn "DPF skill pack bootstrap failed; MCP config, Compose isolation, and readiness marker were still written."
+    fi
 else
     skip "No DPF skill pack installer found at $skill_pack_script"
 fi

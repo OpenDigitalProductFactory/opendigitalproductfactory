@@ -215,6 +215,9 @@ Write-Step "Ensuring DPF skill pack"
 $skillPackScript = Join-Path $Target "scripts\ensure-dpf-skill-pack.ps1"
 if (Test-Path -LiteralPath $skillPackScript) {
     & $skillPackScript -RepoRoot $Target
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  [WARN] DPF skill pack bootstrap failed; MCP config, Compose isolation, and readiness marker were still written." -ForegroundColor Yellow
+    }
 } else {
     Write-Skip "No DPF skill pack installer found at $skillPackScript"
 }
