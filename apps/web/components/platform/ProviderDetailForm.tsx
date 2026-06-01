@@ -44,6 +44,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   const { provider, credential } = pw;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const isClaudeSubscription = provider.providerId === "anthropic-sub";
 
   // Secrets are write-only — never sent from server. Empty = no change on save.
   const [secretRef, setSecretRef]                   = useState("");
@@ -61,7 +62,9 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   const [clientSecret, setClientSecret]             = useState("");  // write-only
   const [tokenEndpoint, setTokenEndpoint]           = useState(credential?.tokenEndpoint ?? "");
   const [scope, setScope]                           = useState(credential?.scope ?? "");
-  const [selectedAuthMethod, setSelectedAuthMethod] = useState(provider.authMethod);
+  const [selectedAuthMethod, setSelectedAuthMethod] = useState(
+    isClaudeSubscription ? "oauth2_authorization_code" : provider.authMethod,
+  );
 
   const searchParams = useSearchParams();
   const oauthResult = searchParams.get("oauth");
@@ -76,7 +79,10 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   }, [oauthResult, oauthReason]);
 
   const needsEndpoint   = provider.baseUrl === null;
-  const hasDualAuth     = provider.supportedAuthMethods.length > 1;
+  const displayedAuthMethods = isClaudeSubscription
+    ? provider.supportedAuthMethods.filter((method) => method === "oauth2_authorization_code")
+    : provider.supportedAuthMethods;
+  const hasDualAuth     = displayedAuthMethods.length > 1;
   const isCompute       = provider.costModel === "compute";
 
   function toggleFamily(family: string) {
@@ -87,10 +93,11 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
 
   function handleSave() {
     startTransition(async () => {
+      const shouldPersistAuthMethod = hasDualAuth || selectedAuthMethod !== provider.authMethod;
       const saveInput = {
         providerId: provider.providerId,
         enabledFamilies,
-        ...(hasDualAuth && { authMethod: selectedAuthMethod }),
+        ...(shouldPersistAuthMethod && { authMethod: selectedAuthMethod }),
         ...(selectedAuthMethod === "api_key" && secretRef ? { secretRef } : {}),
         ...(selectedAuthMethod === "oauth2_client_credentials" && clientId       ? { clientId }       : {}),
         ...(selectedAuthMethod === "oauth2_client_credentials" && clientSecret   ? { clientSecret }   : {}),
@@ -289,7 +296,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             disabled={!canWrite || isPending}
             style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", color: "var(--dpf-text)", fontSize: 13, padding: "8px 10px", borderRadius: 4 }}
           >
-            {provider.supportedAuthMethods.map((m) => (
+            {displayedAuthMethods.map((m) => (
               <option key={m} value={m}>
                 {m === "api_key" ? "API Key" : m === "oauth2_client_credentials" ? "OAuth2 Client Credentials" : m === "oauth2_authorization_code" ? "OAuth (Sign in)" : "None"}
               </option>
@@ -297,7 +304,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           </select>
         ) : (
           <span style={{ color: "var(--dpf-text)", fontSize: 13 }}>
-            {selectedAuthMethod === "api_key" ? "API Key" : selectedAuthMethod === "oauth2_client_credentials" ? "OAuth2 Client Credentials" : selectedAuthMethod === "oauth2_authorization_code" ? "OAuth (Sign in)" : "None"}
+            {displayedAuthMethods[0] === "api_key" ? "API Key" : displayedAuthMethods[0] === "oauth2_client_credentials" ? "OAuth2 Client Credentials" : displayedAuthMethods[0] === "oauth2_authorization_code" ? "OAuth (Sign in)" : "None"}
           </span>
         )}
       </div>

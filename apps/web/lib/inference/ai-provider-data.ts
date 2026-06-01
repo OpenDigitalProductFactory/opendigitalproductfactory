@@ -411,18 +411,27 @@ export type ServiceGroup = {
 };
 
 const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
-  local: "Local",
-  direct: "Direct",
-  agent: "Agent",
+  local: "Local runtime",
+  direct: "Direct APIs",
+  agent: "Agent runtime",
   router: "Routers & Gateways",
-  "mcp-subscribed": "Subscribed",
-  "mcp-internal": "Internal",
+  "mcp-subscribed": "Subscribed services",
+  "mcp-internal": "Internal services",
 };
 
 const CATEGORY_ORDER: Record<string, number> = {
   local: 0, direct: 1, agent: 2, router: 3,
   "mcp-internal": 0, "mcp-subscribed": 1,
 };
+
+function getServiceGroupDisplayName(endpointType: string, category: string): string {
+  if (category === "direct") {
+    if (endpointType === "responses") return "Subscription responses";
+    if (endpointType === "transcription") return "Speech transcription";
+    if (endpointType === "router") return "Direct routers";
+  }
+  return CATEGORY_DISPLAY_NAMES[category] ?? category;
+}
 
 export function groupByEndpointTypeAndCategory(
   providers: ProviderWithCredential[],
@@ -438,7 +447,7 @@ export function groupByEndpointTypeAndCategory(
       groups.set(key, {
         endpointType: type,
         category: cat,
-        displayName: CATEGORY_DISPLAY_NAMES[cat] ?? cat,
+        displayName: getServiceGroupDisplayName(type, cat),
         providers: [],
       });
     }
