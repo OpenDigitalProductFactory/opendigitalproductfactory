@@ -62,4 +62,24 @@ describe("filterToolsForCoworkerRuntime", () => {
     const out = filterToolsForCoworkerRuntime(tools, { coworkerMode: "act", activeBuildPhase: "ideate" });
     expect(out.map((t) => t.name)).toEqual(["ideate_only"]);
   });
+
+  it("keeps only terminal-build recovery and navigation tools for abandoned builds", () => {
+    const tools = [
+      tool("saveBuildEvidence", { sideEffect: false, buildPhases: ["ideate", "plan", "build", "review", "ship"] }),
+      tool("reviewBuildPlan", { sideEffect: false, buildPhases: ["plan"] }),
+      tool("get_build_progress_visibility", { sideEffect: false, buildPhases: ["ideate", "plan", "build", "review", "ship"] }),
+      tool("screen_select_entity", { sideEffect: true }),
+      tool("screen_navigate", { sideEffect: true }),
+      tool("create_backlog_item", { sideEffect: true }),
+      tool("search_project_files", { sideEffect: false }),
+    ];
+
+    const out = filterToolsForCoworkerRuntime(tools, { coworkerMode: "act", activeBuildPhase: "abandoned" });
+
+    expect(out.map((t) => t.name).sort()).toEqual([
+      "get_build_progress_visibility",
+      "screen_navigate",
+      "screen_select_entity",
+    ]);
+  });
 });
