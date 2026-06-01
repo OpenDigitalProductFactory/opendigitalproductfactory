@@ -2564,7 +2564,9 @@
           "iac_execute",
           "release_gate_create",
           "release_plan_create",
-          "release_plan_read"
+          "release_plan_read",
+          "coworker_screen_read",
+          "coworker_screen_drive"
         ]
       }
     },
