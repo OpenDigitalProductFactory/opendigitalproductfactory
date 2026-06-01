@@ -37,6 +37,7 @@ import { assembleSystemPrompt } from "@/lib/prompt-assembler";
 import type { QuestionPacket } from "@/lib/tak/question-packet";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import type { PortalContextEnvelope, PortalObjectAnchor } from "@/lib/portal-context";
+import { formatCoworkerOperationalCloseout } from "@/lib/tak/coworker-interaction-contract";
 import {
   extractInvokedSkillId,
   getSkillsForAgent,
@@ -1431,9 +1432,22 @@ export async function sendMessage(input: {
       const needsReview = (activeBuild!.taskResults as { tasks?: Array<{ outcome: string; title: string }> })?.tasks
         ?.filter(t => t.outcome !== "DONE") ?? [];
       const reviewItems = needsReview.length > 0
-        ? `\n\n**${needsReview.length} item${needsReview.length > 1 ? "s" : ""} flagged for review:**\n${needsReview.map(t => `- ${t.title}`).join("\n")}\n\nWould you like me to walk through each one, or do you want to check the sandbox preview first?`
-        : "\n\nAll tasks completed cleanly. Would you like me to run a final verification (tests + typecheck), or do you want to check the sandbox preview first?";
-      responseContent = `Build complete — ${storedResults!.completedTasks}/${storedResults!.totalTasks} tasks done.${reviewItems}`;
+        ? `\n\n**${needsReview.length} item${needsReview.length > 1 ? "s" : ""} flagged for review:**\n${needsReview.map(t => `- ${t.title}`).join("\n")}`
+        : "\n\nAll tasks completed cleanly.";
+      const closeout = needsReview.length > 0
+        ? formatCoworkerOperationalCloseout({
+          status: "needs review",
+          evidence: `${storedResults!.completedTasks}/${storedResults!.totalTasks} tasks are complete; ${needsReview.length} item${needsReview.length === 1 ? "" : "s"} are flagged for review.`,
+          nextAction: "review the flagged item output, then run the Build Studio review phase.",
+          owner: "Build Studio review agent",
+        })
+        : formatCoworkerOperationalCloseout({
+          status: "ready for review",
+          evidence: `${storedResults!.completedTasks}/${storedResults!.totalTasks} tasks are complete with no flagged task output.`,
+          nextAction: "run final verification in the Build Studio review phase.",
+          owner: "Build Studio review agent",
+        });
+      responseContent = `Build complete — ${storedResults!.completedTasks}/${storedResults!.totalTasks} tasks done.${reviewItems}\n\n${closeout}`;
       responseProviderId = "orchestrator";
       responseModelId = "multi-specialist";
       // Fall through to message persistence below
