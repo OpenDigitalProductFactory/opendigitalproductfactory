@@ -1,5 +1,5 @@
 // apps/web/lib/integrate/ideate-dispatch.ts
-// Dispatch ideate research to Codex CLI running inside the sandbox container.
+// Dispatch ideate research to external CLI (Claude, Codex, or Grok) running inside the sandbox container.
 //
 // The conversational parts (intent gate, reusability question) stay in the
 // agentic loop. This module handles the compute-heavy research: searching
@@ -7,8 +7,8 @@
 //
 // Flow:
 // 1. Portal collects feature description + user answers from conversation
-// 2. This module dispatches to Codex CLI with a research prompt
-// 3. Codex searches /workspace, reads files, outputs a JSON design doc
+// 2. This module dispatches to the configured external CLI with a research prompt
+// 3. The CLI searches /workspace, reads files, outputs a design doc
 // 4. Portal parses the result and saves it via saveBuildEvidence
 
 import { getDecryptedCredential, getProviderBearerToken } from "@/lib/inference/ai-provider-internals";
@@ -61,6 +61,33 @@ async function ensureCodexAuth(providerId: string): Promise<void> {
   const authB64 = Buffer.from(authJson).toString("base64");
   await execAsync(
     `docker exec ${SANDBOX_CONTAINER} sh -c "mkdir -p /root/.codex && echo '${authB64}' | base64 -d > /root/.codex/auth.json"`,
+    { timeout: 5_000 },
+  );
+}
+
+/**
+ * Grok (xAI) specific auth injection for the sandbox.
+ *
+ * Grok CLI typically authenticates via the XAI_API_KEY environment variable.
+ * This is simpler than Codex's auth.json or Claude's dual-mode setup.
+ */
+async function ensureGrokAuth(providerId: string): Promise<void> {
+  const credential = await getDecryptedCredential(providerId);
+  const apiKey = credential?.secretRef ?? credential?.cachedToken;
+
+  if (!apiKey) {
+    throw new Error(`No xAI API key for provider "${providerId}". Configure via Admin > AI Workforce > External Services.`);
+  }
+
+  const { exec: execCb } = lazyChildProcess();
+  const { promisify } = lazyUtil();
+  const execAsync = promisify(execCb);
+
+  // Write the key to a temp file and export it in the runner script.
+  // This avoids exposing it in process lists.
+  const keyB64 = Buffer.from(apiKey).toString("base64");
+  await execAsync(
+    `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${keyB64}' | base64 -d > /tmp/grok-key-${providerId}.txt && chmod 600 /tmp/grok-key-${providerId}.txt"`,
     { timeout: 5_000 },
   );
 }
@@ -310,7 +337,7 @@ function parseDesignDoc(output: string): Record<string, unknown> | null {
 }
 
 /**
- * Dispatch ideate research to Codex CLI inside the sandbox.
+ * Dispatch ideate research to the selected external CLI (Claude / Codex / Grok) inside the sandbox.
  */
 export async function dispatchIdeateResearch(params: {
   featureTitle: string;
@@ -321,7 +348,7 @@ export async function dispatchIdeateResearch(params: {
   scoutFindings?: { relatedModels: Array<{ name: string; file: string; line: number }>; gaps: Array<{ entity: string; reason: string }>; externalStructure?: Record<string, unknown>; suggestedQuestions: string[] };
   providerId?: string;
   model?: string;
-  dispatchEngine?: "claude" | "codex" | "agentic";
+  dispatchEngine?: "claude" | "codex" | "grok" | "agentic";
   onProgress?: (message: string) => void;
 }): Promise<IdeateResult> {
   const dispatchEngine = params.dispatchEngine ?? "codex";
@@ -347,6 +374,8 @@ export async function dispatchIdeateResearch(params: {
       const authResult = await ensureClaudeAuth(providerId);
       claudeAuthEnv = authResult.authEnvFragment;
       claudeBareFlag = authResult.bareFlag;
+    } else if (dispatchEngine === "grok") {
+      await ensureGrokAuth(providerId);
     } else {
       await ensureCodexAuth(providerId);
     }
@@ -373,12 +402,13 @@ export async function dispatchIdeateResearch(params: {
       { timeout: 5_000 },
     );
 
-    const engineLabel = dispatchEngine === "claude" ? "Claude Code" : "Codex";
+    const engineLabel =
+      dispatchEngine === "claude" ? "Claude Code" : dispatchEngine === "grok" ? "Grok" : "Codex";
     console.log(`[ideate-dispatch] Starting research for "${params.featureTitle}" with ${engineLabel} (${model || "default model"})`);
 
     // Build the CLI command based on the dispatch engine.
-    // Both engines read from /tmp/ideate-prompt.txt which was already written above.
-    // Claude runs as --user node (refuses root). Codex runs as root.
+    // Claude and Grok (main dispatch + ideate) run as --user node after chown/gitconfig prep.
+    // Codex uses its own auth.json injection (root in some paths for legacy reasons).
     // Write a shell script to the sandbox to avoid all quoting issues with
     // nested $() in docker exec sh -c.
     let fullCommand: string;
@@ -391,6 +421,29 @@ export async function dispatchIdeateResearch(params: {
         `cd /workspace`,
         `export ${claudeAuthEnv.replace(/\\\$/g, "$")}`,
         `claude ${claudeBareFlag}-p - --dangerously-skip-permissions --output-format json ${modelFlag} < /tmp/ideate-prompt.txt | tee /tmp/ideate-output.json`,
+      ].join("\n");
+      const scriptB64 = Buffer.from(script).toString("base64");
+      await execAsync(
+        `docker exec ${SANDBOX_CONTAINER} sh -c "echo '${scriptB64}' | base64 -d > /tmp/ideate-run.sh && chmod 755 /tmp/ideate-run.sh"`,
+        { timeout: 5_000 },
+      );
+      fullCommand = `docker exec --user node ${SANDBOX_CONTAINER} /tmp/ideate-run.sh`;
+    } else if (dispatchEngine === "grok") {
+      // Grok (xAI) specific path for Ideate research dispatch (distinct from the full
+      // specialist task dispatch in grok-dispatch.ts used by Build Studio orchestrator).
+      //
+      // Unique aspects (parity maintained with main dispatch):
+      // - Auth: Simple XAI_API_KEY env var (no auth.json or OAuth refresh like Claude/Codex).
+      // - Invocation: `grok` binary with -p + --dangerously-skip-permissions.
+      // - Strengths: Real-time knowledge for research-oriented Ideate flows.
+      // - The primary Build Studio / AI Coworker specialist execution now uses the
+      //   dedicated robust grok-dispatch.ts (runner script, node user, progress, audit).
+      const modelFlag = model ? `--model ${model}` : "";
+      const script = [
+        "#!/bin/sh",
+        `cd /workspace`,
+        `export XAI_API_KEY=$(cat /tmp/grok-key-${providerId}.txt 2>/dev/null || echo '')`,
+        `exec grok ${modelFlag} -p - --always-approve --no-auto-update < /tmp/ideate-prompt.txt 2>/dev/null`,
       ].join("\n");
       const scriptB64 = Buffer.from(script).toString("base64");
       await execAsync(
@@ -433,16 +486,31 @@ export async function dispatchIdeateResearch(params: {
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed || trimmed.startsWith("Compiling")) continue;
-          // Parse Claude CLI progress and forward to UI
-          if (trimmed.startsWith("Reading file:")) {
-            params.onProgress?.(`Reading ${trimmed.replace("Reading file: ", "")}`);
-          } else if (trimmed.startsWith("Writing file:") || trimmed.startsWith("Creating file:")) {
-            params.onProgress?.(`Analyzing ${trimmed.replace(/^(Writing|Creating) file: /, "")}`);
-          } else if (trimmed.startsWith("Running bash command:") || trimmed.startsWith("Running command:")) {
-            params.onProgress?.(`Searching: ${trimmed.replace(/^Running( bash)? command: /, "").slice(0, 80)}`);
-          } else if (trimmed === "Thinking...") {
-            params.onProgress?.("Thinking...");
+
+          if (dispatchEngine === "claude") {
+            // Claude-specific progress patterns
+            if (trimmed.startsWith("Reading file:")) {
+              params.onProgress?.(`Reading ${trimmed.replace("Reading file: ", "")}`);
+            } else if (trimmed.startsWith("Writing file:") || trimmed.startsWith("Creating file:")) {
+              params.onProgress?.(`Analyzing ${trimmed.replace(/^(Writing|Creating) file: /, "")}`);
+            } else if (trimmed.startsWith("Running bash command:") || trimmed.startsWith("Running command:")) {
+              params.onProgress?.(`Searching: ${trimmed.replace(/^Running( bash)? command: /, "").slice(0, 80)}`);
+            } else if (trimmed === "Thinking...") {
+              params.onProgress?.("Thinking...");
+            } else {
+              console.log(`[ideate-dispatch] progress: ${trimmed.slice(0, 120)}`);
+            }
+          } else if (dispatchEngine === "grok") {
+            // Grok-specific progress patterns (Grok CLI often uses different phrasing)
+            if (trimmed.toLowerCase().includes("reading") || trimmed.toLowerCase().includes("analyzing file")) {
+              params.onProgress?.(trimmed);
+            } else if (trimmed.toLowerCase().includes("thinking") || trimmed.toLowerCase().includes("searching")) {
+              params.onProgress?.(trimmed);
+            } else {
+              console.log(`[ideate-dispatch] grok progress: ${trimmed.slice(0, 120)}`);
+            }
           } else {
+            // Codex / default
             console.log(`[ideate-dispatch] progress: ${trimmed.slice(0, 120)}`);
           }
         }
@@ -483,7 +551,7 @@ export async function dispatchIdeateResearch(params: {
     const durationMs = elapsed;
     let rawOutput = spawnStdout.trim();
 
-    // If using --output-format json, extract the result field
+    // If using --output-format json, extract the result field (Claude-specific today)
     if (dispatchEngine === "claude" && rawOutput.startsWith("{")) {
       try {
         const parsed = JSON.parse(rawOutput);

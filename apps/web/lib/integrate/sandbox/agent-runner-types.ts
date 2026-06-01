@@ -6,7 +6,7 @@ import type {
 } from "./provider-types";
 import type { AssignedTask } from "../task-dependency-graph";
 
-export type BuildAgentId = "codex" | "claude" | "dpf-native";
+export type BuildAgentId = "codex" | "claude" | "grok" | "dpf-native";
 
 export type BuildAgentRunnerCapabilities = {
   tier: "single-file-edit" | "multi-file-refactor" | "full-spec-implement";

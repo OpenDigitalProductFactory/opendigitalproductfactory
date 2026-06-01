@@ -5,19 +5,23 @@
 import { prisma } from "@dpf/db";
 
 export type BuildStudioDispatchConfig = {
-  provider: "claude" | "codex" | "agentic";
+  provider: "claude" | "codex" | "grok" | "agentic";
   claudeProviderId: string;
   codexProviderId: string;
+  grokProviderId: string;
   claudeModel: string;
   codexModel: string;
+  grokModel: string;
 };
 
 const DEFAULTS: BuildStudioDispatchConfig = {
   provider: "agentic",   // safe default — no external provider needed
   claudeProviderId: "",
   codexProviderId: "",
+  grokProviderId: "",
   claudeModel: "sonnet",
   codexModel: "",
+  grokModel: "",
 };
 
 /**
@@ -55,24 +59,29 @@ async function findConfiguredProvider(cliEngine: string): Promise<string> {
 async function autoDetectConfig(): Promise<BuildStudioDispatchConfig> {
   const claudeId = await findConfiguredProvider("claude");
   const codexId = await findConfiguredProvider("codex");
+  const grokId = await findConfiguredProvider("grok");
 
   // Pick the first available CLI engine
   let provider: BuildStudioDispatchConfig["provider"] = "agentic";
   if (claudeId) provider = "claude";
   else if (codexId) provider = "codex";
+  else if (grokId) provider = "grok";
 
   // Env var override
   const envProvider = process.env.CLI_DISPATCH_PROVIDER ?? process.env.CODEX_DISPATCH;
   if (envProvider === "claude" && claudeId) provider = "claude";
   else if (envProvider === "codex" && codexId) provider = "codex";
+  else if (envProvider === "grok" && grokId) provider = "grok";
   else if (envProvider === "false" || envProvider === "agentic") provider = "agentic";
 
   return {
     provider,
     claudeProviderId: process.env.CLAUDE_CODE_PROVIDER_ID ?? claudeId,
     codexProviderId: process.env.CODEX_PROVIDER_ID ?? codexId,
+    grokProviderId: process.env.GROK_PROVIDER_ID ?? grokId,
     claudeModel: process.env.CLAUDE_CODE_MODEL ?? DEFAULTS.claudeModel,
     codexModel: process.env.CODEX_MODEL ?? DEFAULTS.codexModel,
+    grokModel: process.env.GROK_MODEL ?? DEFAULTS.grokModel,
   };
 }
 
@@ -86,11 +95,13 @@ export async function getBuildStudioConfig(): Promise<BuildStudioDispatchConfig>
     // Still auto-fill provider IDs if they were left empty
     const claudeId = saved.claudeProviderId || await findConfiguredProvider("claude");
     const codexId = saved.codexProviderId || await findConfiguredProvider("codex");
+    const grokId = saved.grokProviderId || await findConfiguredProvider("grok");
     return {
       ...DEFAULTS,
       ...saved,
       claudeProviderId: claudeId,
       codexProviderId: codexId,
+      grokProviderId: grokId,
     };
   }
 

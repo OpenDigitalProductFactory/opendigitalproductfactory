@@ -87,6 +87,10 @@ function kindToLegacyAdapterType(kind: ExecutionAdapterKind): string {
       return "claude-cli";
     case "codex-cli":
       return "codex-cli";
+    case "grok-cli":
+      // Grok CLI external agent support (BI-GROK-006). For now maps to generic chat
+      // until a dedicated grok-cli handler is registered in the execution adapter registry.
+      return "chat";
     case "http-generic":
     case "http-anthropic":
     case "http-openai":

@@ -37,6 +37,7 @@ export type ExecutionAdapterKind =
   | "http-generic"
   | "claude-code-cli"
   | "codex-cli"
+  | "grok-cli"
   | "codex-mcp-server"
   | "local-runtime";
 

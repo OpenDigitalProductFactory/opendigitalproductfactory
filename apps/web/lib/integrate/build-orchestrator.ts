@@ -752,7 +752,7 @@ async function dispatchSpecialist(params: {
   // ─── CLI dispatch path: Codex or Claude Code running inside the sandbox ──
   const config = await getBuildStudioConfig();
 
-  if (config.provider === "codex" || config.provider === "claude") {
+  if (config.provider === "codex" || config.provider === "claude" || config.provider === "grok") {
     const onProgress = (message: string) => {
       agentEventBus.emit(parentThreadId, {
         type: "orchestrator:task_progress",
@@ -776,8 +776,8 @@ async function dispatchSpecialist(params: {
         buildId,
         buildContext,
         priorResults,
-        providerId: config.provider === "claude" ? config.claudeProviderId : config.codexProviderId,
-        model: config.provider === "claude" ? config.claudeModel : config.codexModel,
+        providerId: config.provider === "claude" ? config.claudeProviderId : config.provider === "grok" ? config.grokProviderId : config.codexProviderId,
+        model: config.provider === "claude" ? config.claudeModel : config.provider === "grok" ? config.grokModel : config.codexModel,
         sessionId,
         onProgress,
       },
@@ -1049,18 +1049,22 @@ export async function runBuildOrchestrator(params: {
     console.warn("[orchestrator] Could not persist execution engine metadata:", err);
   }
 
-  if (preflightConfig.provider === "codex" || preflightConfig.provider === "claude") {
+  if (preflightConfig.provider === "codex" || preflightConfig.provider === "claude" || preflightConfig.provider === "grok") {
     try {
       const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
       const providerId = preflightConfig.provider === "claude"
         ? preflightConfig.claudeProviderId
-        : preflightConfig.codexProviderId;
+        : preflightConfig.provider === "grok"
+          ? preflightConfig.grokProviderId
+          : preflightConfig.codexProviderId;
       const cred = await getDecryptedCredential(providerId);
       const hasAuth = preflightConfig.provider === "claude"
         ? !!(cred?.cachedToken || cred?.secretRef)
-        : !!cred?.cachedToken;
+        : preflightConfig.provider === "grok"
+          ? !!cred?.cachedToken
+          : !!cred?.cachedToken;
       if (!hasAuth) {
-        const label = preflightConfig.provider === "claude" ? "Claude / Anthropic" : "OpenAI / Codex";
+        const label = preflightConfig.provider === "claude" ? "Claude / Anthropic" : preflightConfig.provider === "grok" ? "xAI / Grok" : "OpenAI / Codex";
         const buildRecord = await prisma.featureBuild.findUnique({
           where: { buildId },
           select: { plan: true },

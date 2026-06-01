@@ -134,18 +134,24 @@ export async function dispatchIdeateForApprovedBuild(params: {
     const config = await getBuildStudioConfig();
     const providerId = config.provider === "claude"
       ? config.claudeProviderId
-      : config.codexProviderId;
+      : config.provider === "grok"
+        ? config.grokProviderId
+        : config.codexProviderId;
 
     if (config.provider === "agentic" || !providerId) {
       const outcome: DispatchOutcome = {
         kind: "skipped-no-provider",
-        reason: `No external CLI provider configured (provider=${config.provider}, providerId=${providerId || "(empty)"}). Configure Claude or Codex in Admin > AI Providers to enable auto-dispatch.`,
+        reason: `No external CLI provider configured (provider=${config.provider}, providerId=${providerId || "(empty)"}). Configure Claude, Codex, or Grok in Admin > AI Providers to enable auto-dispatch.`,
       };
       await logActivity(`Skipped auto-dispatch: ${outcome.reason}`);
       return outcome;
     }
 
-    const model = config.provider === "claude" ? config.claudeModel : config.codexModel;
+    const model = config.provider === "claude"
+      ? config.claudeModel
+      : config.provider === "grok"
+        ? config.grokModel
+        : config.codexModel;
 
     // The BI body is the canonical context for backlog-promoted drafts.
     // It typically contains problem statement, acceptance criteria, and

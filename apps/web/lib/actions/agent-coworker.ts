@@ -1625,7 +1625,7 @@ export async function sendMessage(input: {
     }
 
     // ── Ideate research dispatch: if the agentic loop called start_ideate_research,
-    // dispatch the research to Codex CLI and save the result ──
+    // dispatch the research to the configured external CLI (Claude / Codex / Grok) and save the result ──
     if (activeBuildPhase === "ideate" && resolvedBuildId) {
       const buildForResearch = await prisma.featureBuild.findUnique({
         where: { buildId: resolvedBuildId },
@@ -1633,7 +1633,7 @@ export async function sendMessage(input: {
       });
       const execState = buildForResearch?.buildExecState as Record<string, unknown> | null;
       if (execState?.ideateResearchRequested) {
-        console.log(`[coworker] Ideate research requested — dispatching to Codex CLI`);
+        console.log(`[coworker] Ideate research requested — dispatching to ${config.provider === "claude" ? "Claude" : config.provider === "grok" ? "Grok" : "Codex"} CLI`);
         const { agentEventBus } = await import("@/lib/agent-event-bus");
         agentEventBus.emit(input.threadId, { type: "tool:start", tool: "codebase_research", iteration: 0 });
 
@@ -1644,13 +1644,19 @@ export async function sendMessage(input: {
 
           // Build context for the research
           const buildCtx = await getFeatureBuildForContext(resolvedBuildId, user.id!);
-          // Use the active provider — Claude or Codex depending on config
-          const ideateProviderId = config.provider === "claude"
-            ? config.claudeProviderId
-            : config.codexProviderId;
-          const ideateModel = config.provider === "claude"
-            ? config.claudeModel
-            : config.codexModel;
+          // Use the active provider — Claude, Codex, or Grok depending on config
+          const ideateProviderId =
+            config.provider === "claude"
+              ? config.claudeProviderId
+              : config.provider === "grok"
+                ? config.grokProviderId
+                : config.codexProviderId;
+          const ideateModel =
+            config.provider === "claude"
+              ? config.claudeModel
+              : config.provider === "grok"
+                ? config.grokModel
+                : config.codexModel;
 
           const ideateResult = await dispatchIdeateResearch({
             featureTitle: buildForResearch?.title ?? "Untitled Feature",

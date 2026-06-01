@@ -38,8 +38,10 @@ describe("getBuildStudioConfig", () => {
     delete process.env.CODEX_DISPATCH;
     delete process.env.CLAUDE_CODE_PROVIDER_ID;
     delete process.env.CODEX_PROVIDER_ID;
+    delete process.env.GROK_PROVIDER_ID;
     delete process.env.CLAUDE_CODE_MODEL;
     delete process.env.CODEX_MODEL;
+    delete process.env.GROK_MODEL;
     mockProviderFindMany.mockResolvedValue([]);
     mockCredentialFindUnique.mockResolvedValue(null);
   });
@@ -51,8 +53,10 @@ describe("getBuildStudioConfig", () => {
       provider: "agentic",
       claudeProviderId: "",
       codexProviderId: "",
+      grokProviderId: "",
       claudeModel: "sonnet",
       codexModel: "",
+      grokModel: "",
     });
   });
 
