@@ -8,6 +8,7 @@ import {
   formatQuestionPacketPromptBlock,
   type QuestionPacket,
 } from "./question-packet";
+import { withCoworkerInteractionContract } from "./coworker-interaction-contract";
 
 export type PromptInput = {
   hrRole: string;
@@ -175,7 +176,7 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
     dynamicBlocks.push(input.attachmentContext);
   }
 
-  return staticBlocks.join("\n\n")
+  return withCoworkerInteractionContract(staticBlocks.join("\n\n")
     + SYSTEM_PROMPT_DYNAMIC_BOUNDARY
-    + dynamicBlocks.join("\n\n");
+    + dynamicBlocks.join("\n\n"));
 }

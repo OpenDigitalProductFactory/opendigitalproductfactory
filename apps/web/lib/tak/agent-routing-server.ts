@@ -11,6 +11,7 @@ import type { AgentInfo, AgentSkill } from "@/lib/agent-coworker-types";
 import { ensureAgentPrincipalIdentity } from "@/lib/identity/principal-linking";
 import { resolveCoworkerIdentity } from "@/lib/coworker-identity";
 import type { UserContext } from "@/lib/permissions";
+import { withCoworkerInteractionContract } from "./coworker-interaction-contract";
 
 async function loadPromptBackplane(agentId: string, fallbackPrompt: string): Promise<string> {
   const dbPrompt = await loadPrompt("route-persona", agentId, fallbackPrompt);
@@ -18,7 +19,8 @@ async function loadPromptBackplane(agentId: string, fallbackPrompt: string): Pro
   const dbPreamble = await loadPrompt("platform-preamble", "platform-preamble");
   const dbMission = await loadPrompt("platform-mission", "company-mission");
   const preamble = [dbIdentity, dbMission, dbPreamble].filter(Boolean).join("\n\n");
-  return preamble ? preamble + "\n\n" + dbPrompt : dbPrompt;
+  const prompt = preamble ? preamble + "\n\n" + dbPrompt : dbPrompt;
+  return withCoworkerInteractionContract(prompt);
 }
 
 /**
