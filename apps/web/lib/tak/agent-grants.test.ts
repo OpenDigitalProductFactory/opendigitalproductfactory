@@ -506,6 +506,15 @@ describe("agent registry grant lookup", () => {
     expect(isToolAllowedByGrants("find_related_tests", bySlug ?? [])).toBe(true);
   });
 
+  it("lets the build specialist drive Build Studio screen controls", () => {
+    const grants = getAgentToolGrants("build-specialist");
+
+    expect(grants).toEqual(expect.arrayContaining(["coworker_screen_read", "coworker_screen_drive"]));
+    expect(isToolAllowedByGrants("screen_describe", grants ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("screen_select_entity", grants ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("screen_navigate", grants ?? [])).toBe(true);
+  });
+
   it("lets the admin assistant use read-only admin and backlog tools from the registry seed", () => {
     const grants = getAgentToolGrants("admin-assistant");
 
