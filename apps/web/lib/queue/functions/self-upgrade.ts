@@ -12,11 +12,16 @@ import {
   startRun,
   completeRun,
   failRun,
+  recordRunRecoveryPoint,
   getLatestRun,
   getLatestSucceededRun,
 } from "@/lib/self-upgrade/run-store";
 import { runPromoter } from "@/lib/self-upgrade/promoter";
 import { emitUpgradeEvent } from "@/lib/self-upgrade/notifications";
+import {
+  createSelfUpgradeRecoveryPoint,
+  summarizeRecoveryPointFailure,
+} from "@/lib/self-upgrade/recovery-point";
 import {
   startQuiescence,
   signalSwapStarting,
@@ -244,6 +249,31 @@ export async function runSelfUpgrade(
         deferSurface: outcome.outcome === "deferred" ? outcome.deferSurface : null,
       };
     }
+  }
+
+  const recoveryPoint = await createSelfUpgradeRecoveryPoint({
+    runId: run.runId,
+    dryRun: params.dryRun,
+  });
+  await recordRunRecoveryPoint(run.runId, recoveryPoint);
+  if (recoveryPoint.status === "failed") {
+    const reason = summarizeRecoveryPointFailure(recoveryPoint);
+    if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, reason);
+    await failRun(run.runId, reason);
+    await emitUpgradeEvent({
+      type: "upgrade.failed",
+      runId: run.runId,
+      payload: { reason },
+    });
+    return {
+      ok: false,
+      status: "failed",
+      runId: run.runId,
+      quiescenceRunId,
+      reason: "recovery-point-failed",
+      recoveryPoint,
+      excerpt: reason,
+    };
   }
 
   // Signal swap-starting for audit; record the moment we cross the

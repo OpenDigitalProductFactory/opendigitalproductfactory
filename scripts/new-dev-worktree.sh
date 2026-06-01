@@ -133,8 +133,12 @@ cat <<EOF
 
   Source-vs-runtime (read this before you try to 'pnpm dev' here):
     • this worktree is SOURCE-CONTROL isolation, not RUNTIME isolation
+    • readiness is recorded in .dpf-worktree-readiness.json:
+      - compile-ready: cheap local gates may run here
+      - source-only: local gates are unproven; use canonical/local-CI evidence
     • cheap source-local checks are fine in the worktree (targeted unit
-      tests, 'pnpm typecheck' on changed packages)
+      tests, 'pnpm typecheck' on changed packages) only when readiness is
+      compile-ready
     • for anything that exercises the running platform (portal routes, MCP
       tools, DB-bound behavior, Build Studio flows), verify against the
       canonical install at $root (or a leased shared nonprod environment),
