@@ -158,6 +158,47 @@ EOF
 copy_one "$main_abs/.mcp.json"        "$target_abs/.mcp.json"
 copy_one "$main_abs/.vscode/mcp.json" "$target_abs/.vscode/mcp.json"
 
+step "Classifying worktree verification readiness"
+pnpm_on_path=false
+corepack_on_path=false
+node_modules_present=false
+readiness_state="source-only"
+readiness_reason="dependencies_missing"
+
+if command -v pnpm >/dev/null 2>&1; then
+    pnpm_on_path=true
+fi
+if command -v corepack >/dev/null 2>&1; then
+    corepack_on_path=true
+fi
+if [ -d "$target_abs/node_modules" ]; then
+    node_modules_present=true
+fi
+
+if [ "$node_modules_present" = true ] && { [ "$pnpm_on_path" = true ] || [ "$corepack_on_path" = true ]; }; then
+    readiness_state="compile-ready"
+    readiness_reason="package_manager_and_dependencies_present"
+elif [ "$node_modules_present" != true ]; then
+    readiness_reason="node_modules_missing"
+elif [ "$pnpm_on_path" != true ] && [ "$corepack_on_path" != true ]; then
+    readiness_reason="pnpm_corepack_missing"
+fi
+
+cat > "$target_abs/.dpf-worktree-readiness.json" <<EOF
+{
+  "schemaVersion": 1,
+  "state": "$readiness_state",
+  "reason": "$readiness_reason",
+  "checkedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "checks": {
+    "pnpmOnPath": $pnpm_on_path,
+    "corepackOnPath": $corepack_on_path,
+    "nodeModulesPresent": $node_modules_present
+  }
+}
+EOF
+ok "Recorded $readiness_state readiness in $target_abs/.dpf-worktree-readiness.json ($readiness_reason)"
+
 step "Ensuring DPF skill pack"
 skill_pack_script="$target_abs/scripts/ensure-dpf-skill-pack.sh"
 if [ -f "$skill_pack_script" ]; then

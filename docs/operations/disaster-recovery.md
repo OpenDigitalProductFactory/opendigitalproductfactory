@@ -32,6 +32,7 @@ The DR-hardening epic (BIs shipped 2026-05-24) put recovery artifacts in **speci
 | Docker images | Pull-on-demand from registries | `docker compose pull` or `install-dpf.{ps1,sh}` |
 | Docker volumes (any) | NOT recoverable from Docker layer — the daily backup IS the durable copy | See dump-restore rows above |
 | Tool config / installer state | `install-state.json` in install dir | If lost: re-run `install-dpf.{ps1,sh}`; it's idempotent |
+| Failed platform upgrade / bad seed apply / migration damage | Governed upgrade recovery point: linked `BackupRun` rows under `$DPF_BACKUPS_HOST_PATH/{postgres,neo4j,qdrant}/<ts>/` plus previous runtime identity under `$DPF_BACKUPS_HOST_PATH/self-upgrade/<runId>/` | Upgrade Center rollback/restore flow; if unavailable, restore the Postgres member first, then Neo4j/Qdrant as needed |
 
 **Key principle:** if you can't find your loss in this table, that means there's no automatic recovery for it. Stop and ask for help BEFORE doing anything destructive — the action you take next may be the difference between a 1-hour and 6-hour recovery.
 
@@ -148,6 +149,31 @@ Most common: schema drift. The portal expects a Prisma schema version that doesn
    ```
 
 3. If migrations were rolled back unintentionally, restore Postgres from the most recent nightly that has the expected schema version (check `BackupRun.dpfVersion` for the recorded version per backup).
+
+### 3.5a Failed upgrade, seed clobber, or migration damage
+
+This is the "update made things worse" path. Treat it as an upgrade incident,
+not as a fresh install problem.
+
+1. Do not reinstall and do not reset volumes. The recovery point taken before
+   apply is the boundary between recoverable and data-lossy.
+2. In the portal, open `/ops/self-upgrade` and inspect the failed run. If the
+   governed lifecycle is active, use its rollback/restore action; it knows the
+   exact Postgres/Neo4j/Qdrant backup rows created for the run.
+3. If the portal is unavailable, use `/admin/backups` after bringing the
+   database services up. Restore the Postgres backup associated with the failed
+   upgrade first. Restore Neo4j and Qdrant only when graph/vector data is
+   missing or incompatible; both are usually regenerable from Postgres, but
+   restoring the matched recovery-point members is faster.
+4. After recovery, capture the failed `SelfUpgradeRun`, `BackupRun`, and
+   restore records in the incident notes. Do not delete the failed recovery
+   point until the next successful nightly backup and trial restore have passed.
+5. If the incident involved Build Studio or an external worker such as Grok,
+   preserve the worker worktree before cleanup. Record its branch, dirty state,
+   touched paths, and whether it was `compile-ready` or `source-only`. A
+   source-only worktree is useful forensic evidence, but its local test/build
+   claims are not recovery evidence unless the same gates also ran in canonical
+   runtime or the shared local-CI sandbox.
 
 ### 3.6 Lost a Claude Code session transcript (forensic recovery)
 
