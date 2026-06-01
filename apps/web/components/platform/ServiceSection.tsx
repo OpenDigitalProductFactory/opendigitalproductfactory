@@ -23,7 +23,15 @@ export function ServiceSection({ endpointType, displayName, providers, children 
 
   const [expanded, setExpanded] = useState(activeCount > 0);
 
-  const typeLabel = endpointType === "service" ? "MCP" : "LLM";
+  const typeLabel = endpointType === "service"
+    ? "MCP"
+    : endpointType === "responses"
+      ? "Responses"
+      : endpointType === "transcription"
+        ? "Speech"
+        : endpointType === "router"
+          ? "Router"
+          : "LLM";
 
   return (
     <div
@@ -70,8 +78,8 @@ export function ServiceSection({ endpointType, displayName, providers, children 
             fontSize: 9,
             fontWeight: 700,
             letterSpacing: "0.06em",
-            color: endpointType === "service" ? "var(--dpf-accent)" : "var(--dpf-accent)",
-            background: endpointType === "service" ? "color-mix(in srgb, var(--dpf-accent) 9%, transparent)" : "color-mix(in srgb, var(--dpf-accent) 9%, transparent)",
+            color: "var(--dpf-accent)",
+            background: "color-mix(in srgb, var(--dpf-accent) 9%, transparent)",
             padding: "1px 5px",
             borderRadius: 3,
             textTransform: "uppercase",
