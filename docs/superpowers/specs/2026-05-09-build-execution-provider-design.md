@@ -107,12 +107,46 @@ becomes Build-Studio-capable with no port 1455 lock-in, no in-
 sandbox refresh tokens, no mode-4 audit gap. That's the largest
 strategic payoff of doing this abstraction right.
 
+> **Dispatch routing note:** `dpf-native` runs its inference loop
+> portal-side, but all file-system operations MUST route through
+> `provider.exec`, `provider.readFile`, and `provider.writeFile` — i.e.
+> into the sandbox's `/workspace` dedicated checkout, not into the
+> portal's own source tree or the operator's dev worktree. This is
+> required by `worktree-is-source-control-not-runtime` (commandment tier):
+> the operator's topic worktree is source-control isolation only; it must
+> never be the agent's execution substrate. A dpf-native implementation
+> that writes files directly to the portal process's `process.cwd()` would
+> violate this principle even though the inference runs in-process.
+
 The `dpf-native` agent is also the path to closing Contract 9's
 mode-4 compliance gap (line 245–259 of the doctrine spec): air-
 gapped, regulated, and FedRAMP customers can run Build Studio
 without bundled vendor CLIs and without vendor egress.
 
 ## Current implementation as the `local-docker` provider × CLI runners
+
+> **Workspace role note (2026-06-02 reconciliation):** The build sandbox
+> (`dpf-sandbox-1`, `/workspace`) is a **dedicated-checkout** that belongs
+> to the same family as `.upgrade-workspace/` (self-upgrade's process-owned
+> merge target) and `~/.dpf/local-ci-sandbox/` (the convergence sandbox).
+> It is **not** the operator's dev tree or a bind-mount of the portal
+> source. The sandbox holds its own git repository (`/workspace/.git`).
+> `build-branch.ts:startBuildBranch` owns the per-run lifecycle:
+> (1) `git reset --hard HEAD` + `git clean -fd` to scrub any prior-run
+> leakage, (2) checkout of a `build/<buildId>` branch forked from
+> `client/<clientId>`, (3) source-currency check against `origin/main`.
+> This reset discipline is the dedicated-checkout pattern — identical in
+> intent to `upgrade-workspace`'s `reset --hard origin/main` before each
+> upgrade run. Provider implementations for non-`local-docker` substrates
+> MUST preserve this discipline; see `resetWorkspace` in the interface
+> below.
+>
+> Five-role workspace context: `worktree-is-source-control-not-runtime`
+> (commandment tier, AGENTS.md §4) establishes that topic worktrees are
+> source-control isolation only. A Build Studio build agent checks out
+> the `build/<buildId>` branch **inside the sandbox's dedicated checkout**
+> and runs all code-gen there. The operator's dev worktree (if any) is
+> source-control only and is never the agent's execution target.
 
 The existing code in
 `apps/web/lib/integrate/sandbox/sandbox.ts` (444 LOC),
@@ -163,6 +197,16 @@ interface BuildExecutionProvider {
   readFile(handle: SandboxHandle, path: string): Promise<string>;
   writeFile(handle: SandboxHandle, path: string, content: string): Promise<void>;
   copyAppsWebInto(handle: SandboxHandle, source: string): Promise<void>;
+
+  // Per-run workspace reset — REQUIRED before every new build.
+  // Equivalent to `git reset --hard <targetRef> && git clean -fd` inside
+  // the sandbox. Preserves large generated/cached directories (node_modules,
+  // .pnpm-store) that are expensive to rebuild. The local-docker provider
+  // implements this via buildSandboxGitCleanCommand + buildSandboxBranchSwitchPrepCommand
+  // (build-branch.ts:443-463). All providers must implement this method;
+  // skipping it risks state bleed between consecutive builds on the same
+  // substrate. See 'Dedicated checkout' note in 'Current implementation' above.
+  resetWorkspace(handle: SandboxHandle, targetRef: string): Promise<void>;
 
   // Optional preview surface — null when substrate can't host a
   // long-running HTTP server (cloud-run-job, ecs-task, etc.)
@@ -824,6 +868,17 @@ The refactor touches:
 
 ## Schema impact
 
+> **Status update (2026-06-02):** The `Sandbox` Prisma model described
+> below **has landed** independently at `packages/db/prisma/schema.prisma`
+> (with `FeatureBuild` relation). This is positive incremental formalization
+> of build-phase state. However it landed outside the `BuildExecutionProvider`
+> abstraction — sandbox state writes still go through ad-hoc paths in
+> `sandbox-db.ts` and direct Prisma calls in `build-branch.ts`. The
+> outstanding migration work is to route all `Sandbox` table writes through
+> the provider abstraction once the interface extraction (Sequencing step 1)
+> lands. Until then treat the current schema as the correct target shape
+> (already confirmed additive) but the write paths as transitional.
+
 Resolved (was open in prior draft):
 
 - **`Sandbox` model** — does not exist as a Prisma model today;
@@ -1057,6 +1112,18 @@ identified, gaps the design fills.
 
 ## Source documents
 
+- `docs/superpowers/specs/2026-05-31-tiered-dev-loop-isolation-design.md` —
+  Five-role workspace layout (production install / `.upgrade-workspace/` /
+  dev workspace / topic worktrees / convergence sandbox). The build sandbox
+  is a sixth member of the dedicated-checkout family. §2 of that spec
+  defines the `build-sandbox` RuntimeTarget kind and its place in the tier
+  model.
+- `docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md`
+  (commandment tier, AGENTS.md §4) — canonical statement that topic
+  worktrees are source-control isolation only; runtime-bound agent work
+  runs against a dedicated checkout or the convergence sandbox, never
+  the operator's dev worktree. Directly constrains dpf-native's file-IO
+  routing (see dispatch routing note above).
 - `docs/superpowers/specs/2026-05-09-deployment-contracts.md` —
   the doctrine; this spec is contract 6's canonical
   implementation. Contract 9 mode 4 (CLI agents) is the gap

@@ -86,7 +86,7 @@ Current observed state (code-grounded):
 - `apps/web/lib/self-upgrade/activity.ts` defers upgrades when non-edge `ToolExecution` activity occurred inside the last five minutes. This is a useful stopgap, but it is not a graceful drain protocol and it has no per-session client handshake.
 - `apps/web/lib/self-upgrade/notifications.ts` exposes `emitUpgradeEvent`, but it is a no-op until the event bus is wired.
 - `scripts/promote.sh` validates environment, backs up the source directory, builds a Docker image, force-recreates Compose services, checks health, and verifies SHA. It does **not** fetch/checkout the target SHA, run migrations, apply seed deltas, drain clients, or automatically roll back on failure.
-- `SelfUpgradeRun` schema uses `trigger`, `currentSha`, `targetSha`, `deployedSha`, and `failureLog`; `apps/web/lib/actions/promotions.ts` and `SelfUpgradeClient.tsx` use DTO names like `triggeredBy`, `fromVersion`, `toVersion`, and `error`. That schema/API naming drift must be resolved before this lifecycle can rely on the current run history surface.
+- `SelfUpgradeRun` schema fields: `trigger`, `currentSha`, `targetSha`, `deployedSha`, `failureLog` (Text), `completionEvidence` (Json), `reason`, `promoterContainerName`. The DTO drift noted in the original spec (actions using `triggeredBy/fromVersion/toVersion/error`) has been resolved — `run-store.ts` uses the schema field names directly. Three additional signals are now live: (a) `status` includes `'deferred-conflict'`, written by the orchestrator when `prepareUpgradeSource` returns `reason: 'merge-conflict'`; (b) `failureLog` is used as a structured conflict-file carrier, formatted as `'merge-conflict: <file1>, <file2>'` — the Upgrade Center must parse this prefix to display which files conflict; (c) `completionEvidence` carries a `recoveryPoint` JSON object via `recordRunRecoveryPoint` in `run-store.ts`, which the rollback path reads to determine restore feasibility. The schema/DTO vocabulary is now consistent and the 'must be resolved' blocker is closed.
 - Ship-phase `FeatureBuild`s are auto-completed only if their head SHA is an ancestor of the deployed SHA (via `git merge-base --is-ancestor`). Diverged branches never complete.
 
 **Phase 0 implication:** the first implementation slice is not versioning. It is stabilizing the self-upgrade substrate so there is exactly one runnable path, one DTO vocabulary, one status vocabulary, and one operator surface.
@@ -467,6 +467,18 @@ stamp always describes the merged bytes that were actually built.**
    "lost on rebuild" hazard regardless of contribution mode, and gives the
    merge a real `ours` side.
 
+   **Five-role workspace layout (canonical, as of PR #1399).** Before following the canonical-tree decision, the full topology:
+
+| Role | Path | Owner | Notes |
+|---|---|---|---|
+| Production install | `~/.dpf/install/` | Portal runtime | Root clone. Read-only for human edits; self-upgrade owns `dpf/install` branch here. |
+| Upgrade workspace | `~/.dpf/install/.upgrade-workspace/` | Self-upgrade process | Dedicated sub-clone. Merge runs here; never touches operator's working tree. (BI-A8A7CCFD) |
+| Dev workspace | `~/dpf-dev/` | Developer / agent sessions | Active editing. New-dev-worktree.sh bases topics off this. |
+| Topic worktrees | `~/dpf-worktrees/<slug>/` | Per-session agent | Source-control isolation ONLY — not a runtime. Leases the convergence sandbox for runtime gates. |
+| Convergence sandbox | `~/.dpf/local-ci-sandbox/` | Sequential lease (BI-166C59F3) | One shared runtime; every worktree leases sequentially before PR. Designed, not yet built. |
+
+Self-upgrade owns roles 1 and 2. Roles 3–5 govern developer and agent workflows. The `worktree-is-source-control-not-runtime` principle ([kernel doc](../../founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md)) prohibits a topic worktree (role 4) from being used as a runtime for upgrade verification; that role belongs exclusively to the convergence sandbox (role 5). See `docs/dev/collision-free-dev-workflow.md` for the operational companion.
+
    **Canonical tree = the host clone (`DPF_HOST_INSTALL_PATH`)** (resolved
    2026-05-29). Today three trees split the responsibilities with nothing
    syncing them — the promoter builds from the host clone (`/host-source:ro`),
@@ -483,10 +495,7 @@ stamp always describes the merged bytes that were actually built.**
    the host clone (replacing ephemeral `/workspace` mutation), upstream merges
    into it, the promoter builds it. The sandbox `client/<clientId>` branch
    remains the build-staging area; promotion is the bridge into the canonical
-   tree. *Implementation nuance, not part of this decision:* on a contributor
-   machine the host clone is the human's working tree, so that case needs an
-   isolated install branch/clone; managed customer installs (the target
-   population) have no human editing the tree.
+   tree. *Implementation shape (landed: PR #1389 / BI-A8A7CCFD):* the isolation is a dedicated **`.upgrade-workspace/`** sub-clone at `${hostInstallPath}/.upgrade-workspace/`, owned entirely by the upgrade process. `SelfUpgradeConfig.useIsolatedWorkspace` defaults to `true`; managed installs (the target population) use it automatically. Each upgrade run: (i) initialises or re-uses the workspace clone (hardlinked objects, no extra disk); (ii) configures a distinct `upgrade-upstream` remote pointing at the same URL as the install clone's `origin`; (iii) fetches both the upstream branch and the install clone's `dpf/install` ref; (iv) checks out the install branch from the install clone's ref (`reset --hard HEAD` + `clean -fdx`); (v) merges `--no-ff` from `upgrade-upstream/<branch>`; on conflict — aborts the merge, returns `conflictFiles`, and defers (operator resolves in the Upgrade Center; the current build keeps running); (vi) on clean merge — pushes the new `dpf/install` tip back to the install clone **ref-only** (the operator's checked-out working tree is never touched). The promoter then mounts the workspace path as `/host-source:ro` instead of the install clone, so the image is built from the merged bytes and the stamp is the merge-commit SHA. See `apps/web/lib/self-upgrade/prepare-source.ts` (`prepareUpgradeSourceInWorkspace`) and `config.ts` (`upgradeWorkspaceHostPath`/`upgradeWorkspaceMountPath`) for the authoritative implementation.
 2. **Merge, don't replace.** On upgrade: `git fetch` the upstream target, then
    **merge** it into the install branch. Where upstream and local touch
    disjoint files (the common case) the merge is clean and automatic. Build
@@ -518,7 +527,7 @@ resolves a git ref as described here; afterwards the resolved artifact is the
 manifest's signed image and the same "stamp describes the built bytes"
 invariant carries over unchanged.
 
-The contributor-machine nuance noted above is one instance of the broader source-control-isolation-vs-runtime-validation rule (canonical at [`worktree-is-source-control-not-runtime`](../../founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md); design context in the tiered-dev-loop spec §2.1). The upgrade lifecycle commits to that model: thread worktrees do not impersonate the canonical install for upgrade verification.
+The contributor-machine nuance noted above is one instance of the broader source-control-isolation-vs-runtime-validation rule (canonical at [`worktree-is-source-control-not-runtime`](../../founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md); design context in the tiered-dev-loop spec §2.1). The upgrade lifecycle commits to that model: thread worktrees do not impersonate the canonical install for upgrade verification. Runtime-bound checks route through the ONE shared **convergence sandbox** (`~/.dpf/local-ci-sandbox/`, BI-166C59F3), leased sequentially via `claim_nonprod_environment_lease(environmentKey="local-integration-ci")`. At DPF's expected 1k–10k concurrent worktrees, per-worktree runtimes are structurally untenable (disk/RAM/CPU/port exhaustion, state drift); the convergence sandbox is the single correct gate for any runtime evidence a worker worktree needs to produce before promoting changes that the upgrade lifecycle will later reconcile in L4 preflight.
 
 ### 5.0.1 Upgrade impact summary — on demand, install-tailored
 
@@ -966,6 +975,7 @@ After operator approval:
 7. **L3 (seed deltas) applies** — per operator decisions, with `SeedSnapshot` rows recorded for the new version. Status `seeding`.
 8. **L1 (runtime image) swaps container.** Status `swapping`.
 9. Health check on new container (DB connectivity, migration state, route table sanity, version endpoint, MCP tool-list sanity).
+9a. **Active-candidate gate (planned: BI-6701C6BF — not yet built).** Before routing production traffic to the new container, the same merged SHA must be verified on the dev-portal at `:3001` (the active-candidate tier). The production self-upgrade blocks promotion to `:3000` until the active-candidate reports the expected SHA and passes its own health check. Until BI-6701C6BF lands, this gate is absent and the promoter proceeds directly to production; Phase 5 implementers must not wire a permanent production-direct path that bypasses the future gate.
 10. **L4 (sandbox reconciliation) applies** — capsule PAR decisions executed. Status `reconciling`.
 11. **`signalSwapComplete`** — coordinator transitions swapping → completed, flips level back to normal, emits `platform.quiescence-cleared` (wakes suspended Inngest functions + dismisses client banner).
 12. UI receives `system:quiescence` (level=cleared) → bundle-hash mismatch detection triggers soft reload on next response.
