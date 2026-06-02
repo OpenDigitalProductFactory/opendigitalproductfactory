@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Date | 2026-05-23 |
-| Status | Draft for review - repo-grounded revision |
+| Status | **Repo-grounded + Chief Architect reconciled (versioning reality, quiescence extraction, partial Phase 0 substrate)** — see §1.1 below. Not yet binding for Phases 2+. |
 | Primary epic | None linked yet. Live backlog item `BI-5B3FA415` is in `triaging`; live open-epic scan found no existing platform-upgrade epic to extend. |
-| Related backlog | `BI-5B3FA415` Governed platform upgrade lifecycle |
-| Related docs | `docs/superpowers/specs/2026-05-09-deployment-contracts.md`; `docs/superpowers/specs/2026-05-22-build-studio-sandbox-admin-recovery-design.md`; `docs/superpowers/audits/2026-05-21-bs-end-to-end-cycle-blockers.md`; `docs/triage/2026-05-22-overnight-session-summary.md`; `2026-04-20-ship-phase-fork-redesign-design.md` |
+| Related backlog | `BI-5B3FA415` Governed platform upgrade lifecycle; child `BI-40F05BAC` Activity Quiescence Protocol (extracted and CA-reviewed 2026-05-24) |
+| Related docs | `docs/superpowers/specs/2026-05-09-deployment-contracts.md`; `docs/superpowers/specs/2026-05-22-build-studio-sandbox-admin-recovery-design.md`; `docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md` (replaces former §5.5 drain detail); `docs/superpowers/audits/2026-05-21-bs-end-to-end-cycle-blockers.md`; `docs/triage/2026-05-22-overnight-session-summary.md`; `2026-04-20-ship-phase-fork-redesign-design.md`; `apps/web/lib/platform/version.ts` + `image-version.ts` (realized versioning substrate, see §2.1 / §4.1) |
 | Triggering signals | `project_self_upgrade_kills_in_session_ux.md` (bundle-hash recycle during sibling merges); `project_archetype_is_bootstrap.md` (write-once seed problem); `feedback_db_seed_migration_sync.md` (manual patches lost on fresh install); `project_silent_seed_skips_audit.md` (three silent-skip failures, 2026-04-17). These are memory signals; repo-local anchors are listed in References. |
 
 ## 1. Purpose
@@ -24,16 +24,59 @@ This spec defines a **governed upgrade lifecycle** with six concerns separated:
 
 The goal is not zero-touch auto-update. The goal is for the operator to be able to keep their install current **often and reliably** — receiving upstream evolution (including their own hive contributions flowing back) without losing customizations, in-flight work, or system integrity, and with a single concept (versioned releases gated by evidence) covering all sources of divergence.
 
+## 1.1 Chief Architect Reconciliation (2026-06-xx)
+
+**Scope of this review:** Re-grounded the spec against live codebase (self-upgrade/*, platform/version.ts + image-version.ts, prisma schema, absence of SeedSnapshot/SEED_REGISTRY, Sandbox model presence, quiescence extraction, current promoter behavior). Cross-checked against AGENTS.md (esp. §1 principles, §4 worktree rules, §5 verification), deployment-contracts doctrine (Contracts 1/3/6), founder-kernel principles (never-ask-user-to-run-commands, worktree-is-source-control-not-runtime, fix-the-seed-not-the-runtime), and sibling specs (quiescence 2026-05-24 which already carries "Chief architect review applied").
+
+**Key findings & ratified decisions:**
+
+1. **Platform versioning reality diverged from §4.1 / Phase 1 vision (accepted).**
+   - Spec envisioned: `version.json` at root as source-of-truth, updated by release CI, committed + tagged, mirrored to `PlatformConfig["platform.version"]` at boot, `/api/platform/version` etc.
+   - Reality (grounded in `apps/web/lib/platform/version.ts:56` and `image-version.ts`): `version.json` is **explicitly DEV FALLBACK ONLY** ("0.0.0" with note "The real platform version is sourced from git release tags (git describe) and baked into built images at /app/.dpf-platform-version"). Actual mechanism: release tags (already shipping in v5.x range per baked markers) + build-time `DPF_PLATFORM_VERSION` / `.dpf-platform-version`, `.dpf-image-version`, `.dpf-source-content-hash`, `.dpf-image-built-at` files. `loadPlatformVersion()` prefers the baked tag, falls back to version.json only for non-git/dev. `sourceContentHash` exists precisely to detect label-vs-bytes divergence (the BI-C8E90A79 class of failure the spec worried about).
+   - **Chief Architect decision:** Ratify the pragmatic baked-git-describe + image-marker path as canonical. It solves the "chronically stale hand-edited version.json" problem the implementers observed. Update §2.1, §3.2, §4.1, Phase 1, and acceptance criteria to describe the **actual** substrate rather than the original proposal. Release CI obligations for manifests, signing, seed-deltas, migration classification, and channel feed remain fully valid and even more important now that the version identity is honest. `PlatformConfig` mirror is optional convenience, not required. The "single answer to what version am I running" invariant is already approximately satisfied via `loadPlatformVersion()`.
+
+2. **Phase 0 substrate stabilization — partial but real progress.**
+   - One canonical Inngest path (`self-upgrade.ts`) is active; legacy `portal-self-upgrade.ts` stubs acknowledged.
+   - Promoter, prepare-source, version helpers, and activity deferral exist.
+   - **Major extraction win:** Detailed drain protocol moved to its own CA-reviewed spec (`2026-05-24-activity-quiescence-protocol-design.md`, BI-40F05BAC) with per-surface inventory (30 surfaces), coordinator, and client contract. Parent spec §5.5 correctly now delegates to it. This is the right factoring.
+   - Remaining Phase 0 gaps per current code: still SHA-oriented target resolution (no channel manifest), `resolveTargetSha` returns null in some paths, DTO/schema alignment incomplete, no durable per-install branch + merge yet (§5.0 / BI-UPGRADE-000a/000b — critical for "lost on rebuild" and non-technical operators).
+   - Sandbox model (exact proposed shape) landed at schema:4796 independently — good, but L4 preflight must now consume it + FeatureBuild relations.
+
+3. **Customization fingerprint / 3-way merge (core of §6, the 13-mode problem) — zero implementation progress (highest remaining risk).**
+   - Still only `isOverridden` on three models; no `seedContentHash`, `SeedSnapshot`, `SEED_REGISTRY`, no 5-field mixin, no backfill story executed. 13 reconciliation modes remain ad-hoc. This is the exact "skip or clobber / silent freeze" hazard the spec was written to close. Without it, Phases 3–4 deliver little operator value. **Priority recommendation:** Elevate BI-UPGRADE-004/005/009 to earliest possible slice after Phase 0/1 stabilization. The seed-registry.ts + Snapshot table is the fix-the-seed-not-the-runtime invariant guard the kernel principles demand.
+
+4. **L4 worker worktree + contribution reconciliation + architecture capture:** Cross-reference to `2026-05-09-build-execution-provider-design.md` (Grok as dpf-native or peer runner, PAR decisions, and the new "Mandatory Architecture Capture for All Future AI Agents..." section) is correct and consistent with worktree principle. Self-upgrade (and any future upgrade-related AI or Build Studio work) must never treat worker worktrees as canonical runtime and must not propose changes that bypass the provider/runner model or the orchestrator. The architecture capture section in the sibling spec is now explicitly part of the governed lifecycle invariants.
+
+5. **Overall assessment:** The spec's problem statement, four-layer evidence model, bump-type gates, recovery-point discipline, rollback decision tree, and acceptance criteria remain excellent and mostly un-changed by the versioning divergence. The architecture is sound; the main work is now **reconciliation of the doc with the realized substrate + aggressive execution on the seed-fingerprint primitive**. This doc + the quiescence child + the build-execution sibling together form the governed lifecycle backbone.
+
+**Action items for next revision of this spec (before Phase 2 CI work):**
+- Rewrite §2.1, §3.2, §4.1, and Phase 1/2 descriptions to match the baked-tag + image-marker reality (with pointers to the two lib/platform/*.ts files as the implementation anchors).
+- Add explicit "version identity sources" table (git tag, sourceContentHash, image labels, loadPlatformVersion()).
+- Note that release CI must still produce the channel manifest, signed deltas, SBOM, etc., even if it no longer mutates a committed version.json.
+- Confirm with release-engineering whether the current tag + bake scripts already satisfy the "no human ritual" and "every merge → edge candidate" requirements.
+- Ensure any implementation work (especially AI-assisted or Build Studio-generated) that touches self-upgrade, promotion, or L4 reconciliation cites and respects the "Mandatory Architecture Capture" section in the 2026-05-09 build-execution-provider sibling spec.
+
+This reconciliation keeps the doc as the single source of truth while honoring the "never fabricate / ground in code" and "architecture over shortcuts" principles.
+
 ## 2. Current Repo Truth Checked
 
-### 2.1 Platform versioning gap
+> Updated 2026-05-31 after operator concern about seed clobbering, schema
+> migration safety, rollback, and BC/DR. This section documents how the system
+> behaves **today**, before the full governed lifecycle in §§4-7 exists.
 
-- Root `package.json` has **no `version` field** (`"private": true`, no version declared).
-- Sub-package versions (`apps/web`, `packages/db`, `packages/storefront-templates`, etc.) are stuck at `0.1.0` or `0.0.1` — nobody bumps them; no automation drives bumps from merges.
-- The running install has no concept of "platform version" — `PlatformConfig` carries upgrade configuration but no version field.
-- `SelfUpgradeRun` tracks `currentSha`, `targetSha`, `deployedSha` (git SHA-based), not semantic versions. Every commit looks like a candidate upgrade event.
-- The current `/ops/self-upgrade` UI exposes `deployedSha` and `targetSha`, not a platform release train or channel manifest.
-- Consequence: when target resolution is wired, every merge to `main` can look like an upgrade target unless a release/channel layer sits between git history and install behavior.
+### 2.1 Platform versioning gap (partially closed by pragmatic substrate; spec vision diverged)
+
+**Post-CA-reconciliation note (2026-06-xx):** The original §4.1 vision (committed `version.json` as source of truth + `PlatformConfig["platform.version"]` mirror) was not followed. A more robust baked mechanism landed instead (see §1.1 and §4.1 update below). The gaps that remain are real but narrower than originally written.
+
+Current observed state (code-grounded):
+- Root `package.json` has **no `version` field** (unchanged).
+- Sub-package versions remain internal 0.x; platform identity is separate.
+- **Real platform version source (ratified):** `apps/web/lib/platform/version.ts:loadPlatformVersion()` + `image-version.ts`. Prefers baked `/app/.dpf-platform-version` (from `git describe --tags` at build time, e.g. "5.6.0" or "5.6.0-35-g..."), falls back to `version.json` (now explicitly documented as DEV FALLBACK ONLY, currently "0.0.0"). Additional honest markers always present in images: `.dpf-source-content-hash` (sha256 of exactly what was bundled — detects label/bytes drift), `.dpf-image-built-at`, `.dpf-image-version`.
+- `SelfUpgradeRun` and current self-upgrade path (`self-upgrade.ts`, `promoter.ts`) remain SHA / bundle-hash oriented. No semver, no channel manifest, no `minimumFromVersion` enforcement yet.
+- `/ops/self-upgrade` still shows SHAs primarily; `loadPlatformVersion()` is the emerging single source for "what am I running?" (UI, health, MCP surfaces should converge on it).
+- Consequence (updated): The "every merge looks like an upgrade" problem is mitigated for *identity* (tags + content hash give real signal), but the full governed detection / preflight / risk-grading still requires the release CI + channel manifest + bump-type machinery in §§4–5. The pragmatic versioning win means Phase 1 baseline is **partially delivered** in a better form than originally specified; the remaining work is wiring the honest version into the upgrade decision surfaces and the manifest feed.
+
+**Recommendation:** Treat the current baked-tag + content-hash + `loadPlatformVersion()` as the canonical "Contract 1 release artifact identity" implementation. Release CI must produce the additional artifacts (manifest, deltas, signatures) around those tags.
 
 ### 2.2 Self-upgrade machinery (partial foundation exists)
 
@@ -113,6 +156,124 @@ This design follows the repo rule that new feature specs compare real standards 
 
 `docs/superpowers/specs/2026-05-09-deployment-contracts.md` is the controlling DPF doctrine. It says release runtimes consume versioned multi-arch GHCR images and that lifecycle operations include update, backup, restore, and rollback. Therefore this spec must not invent a GitHub-release-only bundle path. GitHub Releases can publish release notes, manifests, checksums, and downloadable metadata; GHCR image digests are the installed-runtime artifact references.
 
+### 2.7 Current install/update behavior, in plain sequence
+
+The current production path is split between **install/startup initialization**
+and **self-upgrade apply**.
+
+**Install/startup initialization (`portal-init`).**
+
+`docker-compose.yml` starts `portal-init` before `portal`. `portal-init` runs
+`docker-entrypoint.sh`, which currently does:
+
+1. `pnpm --filter @dpf/db exec prisma migrate deploy` with retry.
+2. Provider registry sync.
+3. `pnpm --filter @dpf/db exec tsx src/seed.ts`.
+4. Model capability reconciliation.
+5. Credential health check.
+6. Optional hardware detection.
+7. Source-volume bootstrap.
+
+Only after `portal-init` exits successfully does Compose start `portal`.
+Migrations are therefore the first database mutation in the boot path. Seeds
+run after migrations, and seed errors are currently logged as warnings in the
+entrypoint (`|| echo "WARN Seed had warnings (non-fatal)"`).
+
+**Current seed safety varies by seed family.**
+
+| Seed family | Current behavior | Customization risk |
+|---|---|---|
+| `PromptTemplate` from `prompts/*.prompt.md` | Looks up by `category + slug`; updates when `isOverridden=false`; skips when `isOverridden=true`. | Low clobber risk if every runtime edit flips `isOverridden`; stale prompt risk when skipped forever. |
+| Deliberation patterns / roles | Mirrors prompt behavior; `isOverridden=true` is skipped. | Low clobber risk; stale skipped row risk. |
+| `SkillDefinition` from skill files | Updates existing rows unconditionally and reconciles assignments. | High clobber risk for any admin-edited skill content because no `isOverridden` field exists today. Treat as platform-owned until §6 lands. |
+| Platform roles / agents / model providers / provider registry | Upserts and updates canonical fields from seed/registry. | Expected for platform-owned defaults; risky if operators are allowed to edit same fields directly. |
+| Organization / credentials / selected config rows | Many use `update: {}` or narrow updates to preserve local values. | Safer, but safety is per-row implementation, not centrally declared. |
+| Storefront/archetype/reference data | Mixed: some fields are intentionally excluded, others updated. | Requires registry formalization; today it is easy to miss which columns are operator-owned. |
+
+**Current self-upgrade apply.**
+
+The newer self-upgrade path (`apps/web/lib/queue/functions/self-upgrade.ts`)
+prepares source, starts quiescence, then invokes `runPromoter`. The promoter
+currently:
+
+1. Records the previously deployed SHA in
+   `/backups/self-upgrade/<runId>/previous-sha.txt`.
+2. Builds the portal image from the prepared source.
+3. Recreates the `portal` container only.
+4. Checks `/api/health`, `/api/health/sha`, and the baked source-content hash.
+
+Implementation note (2026-06-01): `runSelfUpgrade` now creates a
+`pre-upgrade-recovery` point after quiescence has drained active work and
+before promoter execution. It reuses the existing Postgres, Neo4j, and Qdrant
+backup runners, records the resulting `BackupRun` ids under
+`SelfUpgradeRun.completionEvidence.recoveryPoint`, and fails the upgrade before
+the swap boundary if any data-store backup fails.
+The promoter's own `/backups/self-upgrade/<runId>/previous-sha.txt` remains
+**not a data backup**; it is only a rollback hint for the previous runtime
+identity. Daily platform-managed backups still exist separately for Postgres,
+Neo4j, and Qdrant under `/backups/<target>/...`, with `BackupRun` rows and
+retention. Restore runners exist for all three targets, and Postgres also has
+trial-restore verification.
+
+Implementation note (2026-06-02): `/ops/self-upgrade` now exposes a
+first-class recovery-point restore action for completed non-running runs with a
+complete `SelfUpgradeRun.completionEvidence.recoveryPoint`. The action acquires
+the shared restore lock once, restores Postgres, Neo4j, then Qdrant from the
+matched `BackupRun` rows, writes `self-upgrade-rollback` into
+`BackupRestore.trigger` for each member, and records
+`SelfUpgradeRun.completionEvidence.rollback` with per-member restore results.
+The remaining gap is layer-aware automatic rollback; this action is an operator
+confirmed restore from the pre-upgrade data recovery point.
+
+### 2.8 What can go wrong today
+
+| Failure mode | Today impact | Current mitigation | Gap this spec closes |
+|---|---|---|---|
+| Seed overwrites production-tuned parameters | Any seed path that updates unconditionally can clobber local changes. Historical pattern: runtime tuning lost on next seed. | Some families use `isOverridden`; some upserts preserve local fields. | `SEED_REGISTRY`, `SeedSnapshot`, content hashes, and three-way merge make overwrite policy explicit per model/field. |
+| Seed skips customized rows forever | `isOverridden=true` prevents clobbering but also prevents upstream fixes from reaching that row. | Safe skip. | Preflight shows base/ours/theirs and lets the operator merge. |
+| Seed warning is non-fatal | Portal can start with partial reference-data drift if a seed module catches/logs and continues. | Logs. Some modules fail loudly internally. | Preflight turns seed deltas into evidence; apply records per-delta outcome and blocks on mandatory failures. |
+| Migration fails during boot | `portal-init` fails and `portal` does not start. Existing version may already be stopped/recreated depending on how apply was invoked. | Compose dependency prevents starting an incompatible portal after init failure. | Shadow-DB dry run before apply; layer-aware rollback / restore decision. |
+| Migration partially applies | Prisma migrations are transactional when the database and SQL allow it, but not every operational failure is reversible in practice. | Manual restore from backup. | Migration kind classification, reverse migration only for additive changes, and pre-upgrade recovery point. |
+| New code expects new seed rows that failed to load | Runtime can fail in paths that assume reference rows exist. | Ad hoc guards. | Seed apply becomes part of L3 evidence and smoke-window checks include route/tool sanity. |
+| Portal image swap fails health check | Current script exits failed; prior container may have been replaced. | Run marked failed; previous SHA recorded. | Automatic L1 image rollback when no post-L2 constraint prevents it. |
+| Upgrade happens during in-flight work | Requests/SSE/tool calls can drop or resume poorly. | Activity Quiescence Protocol is partially implemented and called by current self-upgrade. | §5.5 binds apply to quiescence before migrations/swap. |
+| New Build Studio worker runs in a separate worktree | Worker output can be stranded, overwritten, or misclassified as runtime evidence if the worktree is invisible to upgrade preflight. | Worktree-per-session and worktree-is-source-control-not-runtime principles now exist; contributor inventory can observe worktrees. | Layer 4 preflight treats worker worktrees as first-class collisions and forces PAR decisions before apply. |
+| Backup exists but is stale/corrupt | Restore point may be too old or unusable. | Nightly backups + Postgres trial restore. | Pre-upgrade recovery point with integrity checks and links to `BackupRun` evidence. |
+| Catastrophic host/volume loss | Docker volumes are not recoverable by Docker. | Host-bound `/backups`; DR runbook. | Upgrade Center links rollback/restore decisions to the same BC/DR substrate. |
+
+### 2.9 Interim operating rules until the governed lifecycle lands
+
+These rules bind self-upgrade, manual promotion, Build Studio workers, and
+external agents until the full preflight/apply/rollback implementation exists.
+
+1. **Treat seed changes as production data changes.** Seeds are not
+   fresh-install-only today; `portal-init` runs `seed.ts` after migrations.
+   Any change to prompts, skills, provider registry, archetypes, grants, or
+   reference rows must be reviewed as an update-time mutation.
+2. **Never claim seed safety without a declared owner.** Platform-owned fields
+   may be overwritten by seed. Operator-owned fields must either be preserved
+   by explicit code today or routed through the future `SEED_REGISTRY` /
+   `SeedSnapshot` three-way merge path. Silent skip is safer than clobber, but
+   it is still drift and must be visible.
+3. **Do not apply schema-changing updates without a recovery point.** Until
+   migration classification and shadow-DB dry runs are implemented, any update
+   that introduces Prisma migrations needs a verified Postgres backup before
+   apply. Neo4j/Qdrant backup requirements follow whether the release touches
+   graph/vector data.
+4. **Rollback is layer-specific, not magical.** Code/image failures before
+   schema migration can roll back by returning to the previous runtime identity.
+   After L2 migration succeeds, rollback is roll-forward or restore-from-backup
+   unless the migration is additive and a reverse path was verified.
+5. **Worker worktrees are evidence subjects, not runtimes.** Grok, Codex,
+   Claude, and Build Studio workers may use separate worktrees for source
+   isolation. Their `.dpf-worktree-readiness.json` classification determines
+   whether cheap local gates are meaningful. Runtime-bound evidence still comes
+   from the canonical install or shared local-CI sandbox.
+6. **Dirty active worker output blocks apply.** An upgrade may proceed past L4
+   only after dirty worktree output is committed, captured, intentionally
+   abandoned, or reassigned through PAR. A `source-only` worktree is not a
+   failure; pretending it passed local gates is.
+
 ## 3. Problem Statement
 
 ### 3.1 Three distinct kinds of upstream change conflated
@@ -147,18 +308,28 @@ A capsule in flight when upstream changes the files it touches has no defined ha
 
 ## 4. Design — Release Side
 
-### 4.1 Platform version is a first-class concept
+### 4.1 Platform version is a first-class concept (ratified pragmatic implementation)
 
-A single canonical platform version, written to one place and reflected throughout:
+**Chief Architect update (2026-06-xx):** The design as originally written (CI-mutated committed `version.json` + `PlatformConfig` mirror as source) was superseded by a more honest baked mechanism during early implementation. The new mechanism **better satisfies** the "single canonical answer" and "detect label/bytes divergence" requirements. It is hereby ratified as the canonical realization of this section.
 
-- **Source of truth**: `version.json` at repo root, updated only by release CI and committed/tagged as part of the release event.
-- **Runtime mirror**: `PlatformConfig` row keyed as `platform.version`, written at boot from the bundled `version.json`. Use the existing key/value model rather than adding a parallel `platform_version` column.
-- **Manifest exposure**: every release publishes its version to the channel manifest (§4.4).
-- **Image exposure**: installed-runtime images carry OCI labels for `org.opencontainers.image.version`, `org.opencontainers.image.revision`, and `org.opencontainers.image.created`.
-- **UI exposure**: visible in `/ops/self-upgrade` and the platform about/settings surface.
-- **API exposure**: a public `/api/platform/version` endpoint returns `{ version, gitSha, builtAt }`.
+**Ratified mechanism (grounded in `apps/web/lib/platform/{version,image-version}.ts`):**
 
-The answer to "what version am I running?" must be identical regardless of how it's asked.
+- **Build-time identity (the real source):** Release / build scripts run `git describe --tags` (or equivalent) and bake:
+  - `/app/.dpf-platform-version` — the tag value (e.g. "5.6.0" or "5.6.0-35-gbcaa30a8", leading "v" stripped). This is the authoritative platform version for the image.
+  - `/app/.dpf-image-version` — either the git SHA or a content hash of the exact bundled source tree.
+  - `/app/.dpf-source-content-hash` — **always-computed sha256 over the precise bytes that went into the image** (independent of any label). This is the load-bearing anti-drift signal (see BI-C8E90A79 and promoter sha-verify).
+  - `/app/.dpf-image-built-at` — ISO timestamp.
+- **Runtime loader:** `loadPlatformVersion()` (memoized) returns the unified `PlatformVersion` type preferring the baked platform tag, falling back to `version.json` only for pure-dev/non-image cases. It also surfaces `gitSha`, `sourceContentHash`, `imageVersion`, `buildDate`. All call sites (health, UI, MCP, self-upgrade preflight) should converge on this one function.
+- **`version.json` role:** Explicitly reduced to **DEV FALLBACK ONLY**. Current content documents its own deprecation for production identity. Release CI must **not** treat it as the mutable source of truth.
+- **Manifest / channel / release notes:** Still required exactly as written. The channel manifest (§4.4) carries the semver `version` (sourced from the tag that was baked), previousVersion, bumpType, minimumFromVersion, image digests (now with honest sourceContentHash for verification), seedDeltas, migrations, signatures, etc. GitHub Release + GHCR artifacts remain the distribution vehicles per deployment-contracts Contract 1.
+- **Image labels:** OCI labels remain valuable (and should be set from the same bake data).
+- **UI / API / config:** `/api/platform/version` (or equivalent health surface) and the Upgrade Center must surface the `loadPlatformVersion()` tuple. `PlatformConfig` may carry a convenience mirror of the version string for query simplicity, but it is **not** the source of truth.
+
+**Why this is better than the original proposal:** Eliminates the chronic staleness of a committed version.json (observed: it claimed 1.0.0 while real tags were v5.x). The content hash gives an objective "what was actually built" that no label can lie about. The git-describe approach naturally gives us the semver + distance-from-tag that the release train needs.
+
+**Release CI obligations (unchanged in spirit):** On merge to main, determine bump (from Conventional Commits / PR labels / destructive-migration markers / archetype-breaking seed deltas), ensure the tag is created, trigger multi-arch GHCR builds that bake the describe value + content hash + timestamps, produce the signed channel manifest entry, seed-delta manifest, migration manifest (with kinds + reverse pairs), SBOM, etc. The "every merge produces an edge candidate" invariant holds.
+
+The answer to "what version am I running?" is now `loadPlatformVersion().version` (with full provenance tuple for diagnostics). All upgrade preflight, detection, and operator surfaces must use this as the `fromVersion` / current identity.
 
 ### 4.2 SemVer with conventional commits / PR labels
 
@@ -496,7 +667,8 @@ model PreflightRun {
   signedOffAt       DateTime?
 
   selfUpgradeRunId  String?  // links forward to the apply phase
-  backupSnapshotId  String?  // DB dump taken before apply
+  recoveryPoint     Json?    // full pre-upgrade recovery point (§5.2.6)
+  backupSnapshotId  String?  // legacy alias: Postgres backup id only
 }
 ```
 
@@ -580,11 +752,14 @@ Principle-kernel extras: list of org overlays whose `derivedFromKernelVersion` i
 |---|---|
 | `activeCapsules` | WorkCapsule rows in working / dispatched / reviewing |
 | `capsuleScopeCollisions` | capsules whose scope claims touch files changed in this version |
+| `activeWorkerWorktrees` | Build Studio worker worktrees by build id, branch, worker id (`codex`, `claude`, `grok`, `dpf-native` when applicable), base SHA, dirty state, and last heartbeat |
+| `workerWorktreeCollisions` | worker branches/worktrees whose touched files overlap the target release or install-branch merge |
+| `workerVerificationReadiness` | per-worker provisioning state: `compile-ready` when source-local gates can run in the worktree, `source-only` when the worktree only provides Git/MCP/Compose isolation and verification must come from canonical runtime / local-CI sandbox |
 | `inFlightContributions` | FeaturePack rows in `contributing` status |
 | `pendingContributionsNeedingRebase` | local FeaturePack drafts cut from now-historical main |
 | `parDecisions` per capsule | one of `rebase` / `preserve` / `abandon` / `promote-first` (PAR pattern from internal memory signal `feedback_propose_acknowledge_reassign.md`) |
 
-No hard blocks at this layer — all four are surfaced as decisions because PAR says the owner decides reassignment, never the system.
+No hard blocks at this layer by default — all four are surfaced as decisions because PAR says the owner decides reassignment, never the system. The exception is a dirty active worker worktree whose branch has not been captured as a commit or patch artifact: upgrade must defer rather than risk losing uncommitted worker output.
 
 Default suggestions per capsule (operator can override):
 
@@ -592,14 +767,95 @@ Default suggestions per capsule (operator can override):
 - Phase ≥ ship → `promote-first`
 - Capsule idle past staleness threshold → `abandon` candidate (with confirmation)
 
+Build Studio worker-specific rules:
+
+- **Architecture capture (binding on all future work).** Any Build Studio worker (Grok, future specialist models, new agentic loops, or code generated by Build Studio itself) is governed by the full mandatory architecture in [`2026-05-09-build-execution-provider-design.md` — "Mandatory Architecture Capture for All Future AI Agents..."](2026-05-09-build-execution-provider-design.md). It is either routed as a `ModelProvider` behind `dpf-native` or implements the `BuildAgentRunner` contract as a peer. No new direct sandbox execution paths, no bypassing the orchestrator at `build-orchestrator.ts`, and no worktrees invisible to L4 preflight are permitted. This rule applies to any AI agent (including this one) performing build-related tasks.
+- A worker such as Grok is not a special upgrade actor. It is either a model
+  behind `dpf-native` or a `BuildAgentRunner` peer of Codex/Claude per
+  the build-execution-provider spec linked above.
+- Worker worktrees are source-control isolation only. They must not be treated
+  as independent runtimes during preflight. Runtime evidence comes from the
+  canonical install or shared local-CI convergence sandbox.
+- Worker worktrees must be classified before dispatch and before upgrade
+  apply:
+  - `compile-ready` worktrees have a package manager and dependency substrate
+    sufficient for cheap source-local gates such as targeted Vitest or
+    TypeScript checks.
+  - `source-only` worktrees have valid Git/MCP/Compose isolation but cannot run
+    local compile/test gates. They may hold edits, but their verification line
+    must point to canonical runtime / local-CI evidence.
+  - A source-only worktree is not a failure by itself. It becomes a blocker
+    only when the worker or upgrade record claims unrun worktree-local gates as
+    passed, or when no canonical-runtime evidence is available for promoted
+    changes.
+- Each worker worktree must carry enough metadata for preflight to reason about
+  it: build id, worker id, branch, base SHA, touched paths, dirty/clean state,
+  verification provisioning state, and latest heartbeat.
+- Upgrade decisions for worker worktrees use the same PAR vocabulary:
+  `rebase`, `preserve`, `abandon`, or `promote-first`. If the target release
+  touches the same files as a Grok worktree, the default is `preserve` and defer
+  apply until the operator chooses rebase/promote/abandon.
+- A self-upgrade may not merge, delete, or reset a worker branch implicitly.
+  It can only surface the collision and execute the operator-recorded decision.
+
 #### 5.2.5 Cross-cutting evidence
 
 | Field | Purpose |
 |---|---|
-| `backupSnapshotId` | DB dump taken before any apply (mandatory) |
+| `recoveryPointId` | Full pre-upgrade recovery point taken before any apply (mandatory) |
+| `backupSnapshotId` | Backward-compatible alias for the Postgres member of `recoveryPointId`; do not use for new work |
 | `rollbackFeasibility` per layer | L1: always; L2: conditional; L3: always; L4: manual |
 | `estimatedApplyTime` | rough budget for the recycle window |
 | `windowGate` | active session count, BS phase mid-gate count |
+
+#### 5.2.6 Pre-upgrade recovery point
+
+Every non-dry-run upgrade apply must create a **recovery point** before any
+schema migration, seed delta, or image swap touches production state. This is
+not the current promoter's `previous-sha.txt`; that file is useful runtime
+identity evidence, but it cannot restore business data.
+
+Recovery point members:
+
+| Member | Existing substrate | Required for apply? | Notes |
+|---|---|---|---|
+| Postgres | `runPostgresBackup(...)` existing runner, with `BackupTrigger` extended to include `"pre-upgrade"` | Yes | Authoritative business/operator state. Must pass checksum validation before L2 can start. |
+| Neo4j | `runNeo4jBackup(...)` existing runner, with `BackupTrigger` extended to include `"pre-upgrade"` | Yes by default; operator may accept degraded only if graph is declared regenerable for this install | Neo4j backup stops the container briefly; quiescence must already be preventing new graph writes. |
+| Qdrant | `runQdrantBackup(...)` existing runner, with `BackupTrigger` extended to include `"pre-upgrade"` | Yes by default; operator may accept degraded only if embeddings are declared regenerable | Online snapshot. |
+| Runtime/source identity | Previous image digest, previous deployed SHA, prepared-source merge commit, channel manifest hash | Yes | Enables L1 rollback and audit reconstruction. |
+| Restore drill evidence | Latest successful Postgres trial restore for the selected dump, or an explicit "not yet verified" warning | Warn/block by policy | Patch auto-apply may block if no recent verified Postgres backup exists. |
+
+`RecoveryPoint` can be either a new model or a structured JSON field on
+`PreflightRun` in the first slice. It must at minimum record:
+
+```json
+{
+  "id": "rp_<id>",
+  "createdAt": "2026-05-31T15:00:00Z",
+  "members": {
+    "postgresBackupRunId": "c...",
+    "neo4jBackupRunId": "c...",
+    "qdrantBackupRunId": "c...",
+    "previousImageDigest": "sha256:...",
+    "previousDeployedSha": "..."
+  },
+  "integrity": {
+    "postgresChecksumVerified": true,
+    "neo4jChecksumVerified": true,
+    "qdrantChecksumVerified": true,
+    "latestPostgresTrialRestore": "ok"
+  }
+}
+```
+
+Apply blocks if the Postgres member fails. Apply warns and requires an explicit
+operator decision if Neo4j or Qdrant fail, because those are expensive but
+usually regenerable stores. A `major` upgrade cannot proceed degraded.
+
+The Upgrade Center must render the recovery point before the Apply button
+becomes active: backup time, targets covered, integrity status, and retention
+risk. This makes BC/DR part of the upgrade workflow, not a separate document
+the operator is expected to remember under stress.
 
 ### 5.3 Operator surface
 
@@ -648,7 +904,7 @@ After operator approval:
 
 1. Operator approves preflight → `SelfUpgradeRun` row inserted and linked to `PreflightRun.id`.
 2. Pull and verify the signed target images, but do not route traffic to them yet.
-3. Take the mandatory backup snapshot recorded on `PreflightRun.backupSnapshotId`.
+3. Create or verify the mandatory recovery point recorded on `PreflightRun.recoveryPointId` (§5.2.6). This includes Postgres, Neo4j, Qdrant, and previous runtime/source identity.
 4. **Quiescence drain** — caller invokes `startQuiescence({ trigger: "self-upgrade", triggerRefId: SelfUpgradeRun.runId, ... })` and awaits the coordinator's `ready-to-swap` signal. The coordinator (per the quiescence spec) gates the request layer (Proxy 503 + version headers), Inngest functions (cron skip + event-driven suspend), TaskRuns (cooperative cancel via `quiescing` status flip), BuildPhaseRuns (refuse new starts; in-flight phases continue), and surface-specific entry points. Defer / abort / fail outcomes return without proceeding to migrations.
 5. **`signalSwapStarting`** — coordinator records the swap-window opening.
 6. **L2 (migrations) applies** using the target release's migration runner — point of no return. Status `migrating`.
@@ -705,7 +961,7 @@ The key constraint: **L2 (schema migration) is the point of no return.** Past L2
 | Layer | Auto-rollback? | Mechanism |
 |---|---|---|
 | **L1 — Runtime image** | ✅ Always | Keep the previous image digest and Compose state; swap back to the prior digest automatically when no post-L2 constraint prevents it. Current `scripts/promote.sh` must grow this behavior. |
-| **L2 — Schema migration** | ⚠️ Conditional | Additive (paired reverse migration ran in release CI) → automatic. Modifying/destructive → **backup restore only**, requires operator confirmation (data loss = writes since backup). |
+| **L2 — Schema migration** | ⚠️ Conditional | Additive (paired reverse migration ran in release CI) → automatic. Modifying/destructive → **recovery-point restore only**, requires operator confirmation (data loss = writes since recovery point). |
 | **L3 — Seed deltas** | ✅ Always | `SeedSnapshot` from §6 has prior shipped state; reapply previous version's snapshot. Operator customizations untouched. |
 | **L4 — Sandbox reconciliation** | ✅ Always | PAR decisions are advisory; capsule branches still exist; reset is a row update. |
 
@@ -720,9 +976,9 @@ Failed at L1 (runtime image)
 Failed at L2 (migration)
   → SCHEMA PARTIALLY APPLIED — critical state
   → If additive AND reverse migration present → apply reverse, swap back, status = rolled-back
-  → If modifying/destructive → operator must approve DB restore from preflight backup
+  → If modifying/destructive → operator must approve restore from preflight recovery point
     → status = rolled-back-with-backup-restore
-    → data loss = writes since backup (typically <5min)
+    → data loss = writes since recovery point (typically <5min)
   → If operator declines restore → status = halted-for-manual
 
 Failed at L3 (seed deltas)
@@ -740,7 +996,7 @@ Smoke window fails post-apply
   → otherwise must roll forward via patch release; operator alert
 ```
 
-**Roll-forward by default past L2 success.** Problems are fixed via the next patch release, not by reversing. The backup snapshot is for catastrophe (corruption, partial-apply mid-L2), not for routine "the new feature has a bug."
+**Roll-forward by default past L2 success.** Problems are fixed via the next patch release, not by reversing. The recovery point is for catastrophe (corruption, partial-apply mid-L2), not for routine "the new feature has a bug."
 
 ## 6. Customization Fingerprint Primitive
 
@@ -819,13 +1075,13 @@ The full lifecycle is not shippable as a single release. Phased rollout:
 
 0. **Phase 0 — Stabilize current self-upgrade substrate.** Pick one Inngest path (`apps/web/lib/queue/functions/self-upgrade.ts`), retire or redirect `portal-self-upgrade.ts`, implement `resolveTargetSha` against the existing SHA target until manifests land, align `SelfUpgradeRun` schema/DTO names, make `emitUpgradeEvent` real or remove it from claims, and ensure `/ops/self-upgrade` can list runs without schema drift. Ship as a fix release before adding new lifecycle features.
 
-1. **Phase 1 — Versioning baseline.** Establish `version.json`, baseline to `v1.0.0`, write `PlatformConfig["platform.version"]` at boot, add `/api/platform/version`, and expose the same value in `/ops/self-upgrade`. No CI automation yet. Existing self-upgrade keeps working through the Phase 0 SHA path. Ship as patch release.
+1. **Phase 1 — Versioning baseline (partially delivered via ratified pragmatic path).** The baked git-describe + `.dpf-platform-version` / content-hash markers + `loadPlatformVersion()` (see §1.1 and updated §4.1) already provide the single canonical identity and the honest "what was actually built" signal. Remaining Phase 1 work: converge all surfaces (Upgrade Center, health endpoints, MCP tools, SelfUpgradeRun) on `loadPlatformVersion()` as the fromVersion; wire the honest version into preflight evidence (L1); ensure release CI bakes the tag + hashes consistently. Baseline "current" to the real tag lineage (already v5.x range in practice) rather than forcing a v1.0.0 fiction. Ship the convergence + CI bake discipline as patch. Existing SHA path remains the apply substrate until later phases.
 
 2. **Phase 2 — Release CI.** Add the release-impact lint, automatic bump on merge, tag-and-publish, GHCR image publishing, GitHub Releases metadata, cosign signing, SBOM/provenance pointers, and channel manifest (initially `edge` only). Existing self-upgrade still uses SHA-based path; new feed is parallel. Ship as minor release.
 
 3. **Phase 3 — SeedSnapshot + registry.** Add the schema fields, `SeedSnapshot` table, `seed-registry.ts`, update seed apply paths to populate snapshots. Backfill from current shipped content. No preflight surface yet — registry is dormant infrastructure. Ship as minor release (additive migration).
 
-4. **Phase 4 — PreflightRun and operator surface.** Add `PreflightRun` entity, evidence collectors per layer, `/ops/self-upgrade` Upgrade Center, and three-pane diff resolver. Self-upgrade detection switches from SHA target to signed channel manifest. Apply still uses the Phase 0 promoter path. Ship as minor release.
+4. **Phase 4 — PreflightRun, recovery point, and operator surface.** Add `PreflightRun` entity, evidence collectors per layer, the pre-upgrade recovery point composer, `/ops/self-upgrade` Upgrade Center, and three-pane diff resolver. Self-upgrade detection switches from SHA target to signed channel manifest. Apply still uses the Phase 0 promoter path. Ship as minor release.
 
 5. **Phase 5 — Graceful recycle + rollback.** Implement drain protocol, stale-bundle signal, layer-aware apply ordering, automated L1 rollback, smoke-window evaluator, and target-image swap. Reverse-migration release-CI obligation begins. Ship as minor release.
 
@@ -848,6 +1104,8 @@ Proposed breakdown (each a Build Studio brief once spec is approved):
 - `BI-UPGRADE-005` — Customizable-model migrations: add five fields to PromptTemplate, SkillDefinition, etc. per registry (Phase 3)
 - `BI-UPGRADE-006` — Migration kind classifier + reverse-migration CI obligation (Phase 5, but lint can land in Phase 2)
 - `BI-UPGRADE-007` — `PreflightRun` entity + four layer evidence collectors (Phase 4)
+- `BI-UPGRADE-007a` — Pre-upgrade recovery point composer: extend `BackupTrigger` with `"pre-upgrade"`, invoke Postgres/Neo4j/Qdrant backup runners, verify checksums, capture previous image/source identity, and block apply when Postgres protection is missing (Phase 4)
+- `BI-UPGRADE-007b` — Worker worktree inventory + verification-readiness evidence: collect active worker branches/worktrees, dirty state, touched paths, base SHA, heartbeat, and `compile-ready` vs `source-only`; block only on dirty uncaptured output or promoted changes lacking canonical-runtime evidence (Phase 4)
 - `BI-UPGRADE-008` — Shadow-DB dry-run runner for Layer 2 (Phase 4)
 - `BI-UPGRADE-009` — `/ops/self-upgrade` Upgrade Center: overview + evidence tabs + 3-pane diff + run timeline (Phase 4)
 - `BI-UPGRADE-010` — Self-upgrade detection switch from SHA to channel manifest (Phase 4)
@@ -900,12 +1158,16 @@ These do not block spec approval, but should be settled before Phase 2 ships:
 
 **Repo-local anchors**
 
-- [`docs/superpowers/specs/2026-05-09-deployment-contracts.md`](2026-05-09-deployment-contracts.md) — canonical release artifact, lifecycle, backup, restore, and rollback doctrine.
+- [`docs/superpowers/specs/2026-05-09-deployment-contracts.md`](2026-05-09-deployment-contracts.md) — canonical release artifact, lifecycle, backup, restore, and rollback doctrine (Contract 1/3/6 in scope for this spec).
+- [`docs/superpowers/specs/2026-05-09-build-execution-provider-design.md`](2026-05-09-build-execution-provider-design.md) — L4 worker worktree + Build Studio agent substrate (cross-referenced for Grok and PAR decisions).
+- [`docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md`](2026-05-24-activity-quiescence-protocol-design.md) — extracted drain protocol (replaces former §5.5; already carries prior chief-architect review).
 - [`docs/superpowers/audits/2026-05-21-bs-end-to-end-cycle-blockers.md`](../audits/2026-05-21-bs-end-to-end-cycle-blockers.md) — self-upgrade invalidated server actions mid-session.
 - [`docs/triage/2026-05-22-overnight-session-summary.md`](../../triage/2026-05-22-overnight-session-summary.md) — self-upgrade recycling broke MCP/server actions and left stale promotion state.
 - [`docs/superpowers/specs/2026-05-22-build-studio-sandbox-admin-recovery-design.md`](2026-05-22-build-studio-sandbox-admin-recovery-design.md) — adjacent sandbox/admin recovery design.
+- `apps/web/lib/platform/version.ts` + `image-version.ts` — the ratified pragmatic versioning substrate (see §1.1, §2.1, §4.1).
 - [`docs/founder-kernel/wiki/principles/never-ask-user-to-run-commands.md`](../../../docs/founder-kernel/wiki/principles/never-ask-user-to-run-commands.md)
 - [`docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md`](../../../docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md)
+- [`docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md`](../../../docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md) — binding for L4 and §5.0 merge strategy.
 
 **External standards and benchmarks**
 

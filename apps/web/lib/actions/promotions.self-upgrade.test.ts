@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth", () => ({
   auth: vi.fn(),
@@ -49,6 +49,10 @@ vi.mock("@/lib/operating-hours-read", () => ({
   resolveOperatingScheduleForSystem: vi.fn().mockResolvedValue({ schedule: {}, timezone: "UTC" }),
 }));
 
+vi.mock("@/lib/self-upgrade/last-check", () => ({
+  getLastCheckedAt: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock("@/lib/queue/inngest-client", () => ({
   inngest: {
     send: vi.fn().mockResolvedValue(undefined),
@@ -67,13 +71,53 @@ vi.mock("@/lib/platform/version", () => ({
   }),
 }));
 
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+}));
+
+vi.mock("@/lib/self-upgrade/rollback", () => {
+  class SelfUpgradeRollbackError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "SelfUpgradeRollbackError";
+    }
+  }
+  class RestoreIntegrityError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "RestoreIntegrityError";
+    }
+  }
+  class RestoreLockedError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "RestoreLockedError";
+    }
+  }
+  return {
+    SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT: "ROLLBACK",
+    SelfUpgradeRollbackError,
+    RestoreIntegrityError,
+    RestoreLockedError,
+    runSelfUpgradeRollback: vi.fn(),
+  };
+});
+
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import * as SelfUpgrade from "@/lib/self-upgrade";
-import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
+import { isUpgradeWindowOpen, nextUpgradeWindowOpen } from "@/lib/self-upgrade/window";
+import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
 import { inngest } from "@/lib/queue/inngest-client";
-import { getSelfUpgradeStatus, listSelfUpgradeRuns, triggerSelfUpgrade } from "./promotions";
+import { revalidatePath } from "next/cache";
+import { runSelfUpgradeRollback, SelfUpgradeRollbackError } from "@/lib/self-upgrade/rollback";
+import {
+  getSelfUpgradeStatus,
+  listSelfUpgradeRuns,
+  rollbackSelfUpgrade,
+  triggerSelfUpgrade,
+} from "./promotions";
 
 const mockSession = {
   user: {
@@ -102,6 +146,7 @@ const mockRun = {
   deployedSha: "def5678",
   startedAt: new Date("2026-05-20T02:00:00Z"),
   completedAt: new Date("2026-05-20T02:05:00Z"),
+  completionEvidence: null,
   failureLog: null,
   createdAt: new Date("2026-05-20T02:00:00Z"),
   updatedAt: new Date("2026-05-20T02:05:00Z"),
@@ -113,9 +158,15 @@ beforeEach(() => {
   vi.mocked(can).mockReturnValue(true);
   vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
   vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
+  vi.mocked(getLastCheckedAt).mockResolvedValue(null);
+  vi.mocked(nextUpgradeWindowOpen).mockReturnValue(null);
   // Default: treat triggers as in-window so dispatch tests exercise the happy
   // path. Tests that care about the window gate override this explicitly.
   vi.mocked(isUpgradeWindowOpen).mockReturnValue(true);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 // ─── Permission Guard ─────────────────────────────────────────────────────────
@@ -175,6 +226,59 @@ describe("getSelfUpgradeStatus", () => {
     expect(result.platformVersion.publishedAt).toBe("2026-05-24T00:00:00.000Z");
     expect(result.platformVersion.gitSha).toBe("abc1234");
     expect(result.platformVersion.note).toBe("baseline");
+    expect(result.nextScheduledCheckAt).toBeTruthy();
+  });
+
+  it("reports when the next scheduled check can run inside the current window", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-24T17:21:00.000Z"));
+    vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
+    vi.mocked(isUpgradeWindowOpen).mockReturnValue(true);
+    vi.mocked(getLastCheckedAt).mockResolvedValue(new Date("2026-05-23T16:00:00.000Z"));
+    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue("abc1234");
+    vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue("def5678");
+    vi.mocked(SelfUpgrade.isShaFresh).mockReturnValue(false);
+    vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
+
+    const result = await getSelfUpgradeStatus();
+
+    expect(result.nextScheduledCheckAt).toBe("2026-05-24T18:00:00.000Z");
+    vi.useRealTimers();
+  });
+
+  it("delays the scheduled check until the configured interval has elapsed", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-24T17:21:00.000Z"));
+    vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
+    vi.mocked(isUpgradeWindowOpen).mockReturnValue(true);
+    vi.mocked(getLastCheckedAt).mockResolvedValue(new Date("2026-05-24T10:30:00.000Z"));
+    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue("abc1234");
+    vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue("def5678");
+    vi.mocked(SelfUpgrade.isShaFresh).mockReturnValue(false);
+    vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
+
+    const result = await getSelfUpgradeStatus();
+
+    expect(result.nextScheduledCheckAt).toBe("2026-05-25T11:00:00.000Z");
+    vi.useRealTimers();
+  });
+
+  it("reports the first hourly tick after the next maintenance window opens", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-24T16:10:00.000Z"));
+    vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
+    vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
+    vi.mocked(nextUpgradeWindowOpen).mockReturnValue(new Date("2026-05-24T17:30:00.000Z"));
+    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue("abc1234");
+    vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue("def5678");
+    vi.mocked(SelfUpgrade.isShaFresh).mockReturnValue(false);
+    vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
+
+    const result = await getSelfUpgradeStatus();
+
+    expect(result.nextWindowStart).toBe("2026-05-24T17:30:00.000Z");
+    expect(result.nextScheduledCheckAt).toBe("2026-05-24T18:00:00.000Z");
+    vi.useRealTimers();
   });
 
   it("returns isFresh=true when deployed sha matches target", async () => {
@@ -263,6 +367,7 @@ const mockRunRow1 = {
   deployedSha: "def5678",
   startedAt: new Date("2026-05-20T02:00:00Z"),
   completedAt: new Date("2026-05-20T02:05:00Z"),
+  completionEvidence: { recoveryPoint: { status: "ok" } },
   failureLog: null,
   createdAt: new Date("2026-05-20T02:00:00Z"),
 };
@@ -276,6 +381,7 @@ const mockRunRow2 = {
   deployedSha: null,
   startedAt: new Date("2026-05-19T02:00:00Z"),
   completedAt: new Date("2026-05-19T02:01:00Z"),
+  completionEvidence: null,
   failureLog: "promoter exited with code 1",
   createdAt: new Date("2026-05-19T02:00:00Z"),
 };
@@ -387,6 +493,7 @@ describe("listSelfUpgradeRuns – DTO shape", () => {
     expect(run.currentSha).toBe(mockRunRow1.currentSha);
     expect(run.targetSha).toBe(mockRunRow1.targetSha);
     expect(run.deployedSha).toBe(mockRunRow1.deployedSha);
+    expect(run.completionEvidence).toEqual(mockRunRow1.completionEvidence);
     expect(run.startedAt).toEqual(mockRunRow1.startedAt);
     expect(run.completedAt).toEqual(mockRunRow1.completedAt);
     expect(run.failureLog).toBeNull();
@@ -411,6 +518,7 @@ describe("listSelfUpgradeRuns – DTO shape", () => {
     expect(select.currentSha).toBe(true);
     expect(select.targetSha).toBe(true);
     expect(select.deployedSha).toBe(true);
+    expect(select.completionEvidence).toBe(true);
     expect(select.startedAt).toBe(true);
     expect(select.completedAt).toBe(true);
     expect(select.failureLog).toBe(true);
@@ -420,6 +528,71 @@ describe("listSelfUpgradeRuns – DTO shape", () => {
     expect(select).not.toHaveProperty("fromVersion");
     expect(select).not.toHaveProperty("toVersion");
     expect(select).not.toHaveProperty("error");
+  });
+});
+
+// ─── rollbackSelfUpgrade ───────────────────────────────────────────────────────
+
+describe("rollbackSelfUpgrade", () => {
+  beforeEach(() => {
+    vi.mocked(runSelfUpgradeRollback).mockResolvedValue({
+      ok: true,
+      status: "ok",
+      runId: "SUR-AAAA0001",
+      restores: [
+        {
+          target: "postgres",
+          sourceBackupRunId: "BR-PG",
+          restoreId: "RR-PG",
+          status: "ok",
+        },
+      ],
+    });
+  });
+
+  it("rejects callers without restore authority", async () => {
+    vi.mocked(can).mockImplementation((_user, capability) => capability === "view_operations");
+
+    const result = await rollbackSelfUpgrade("SUR-AAAA0001", "ROLLBACK");
+
+    expect(result).toEqual({
+      ok: false,
+      error: "You do not have permission to restore upgrade recovery points.",
+    });
+    expect(runSelfUpgradeRollback).not.toHaveBeenCalled();
+  });
+
+  it("requires the exact rollback confirmation text", async () => {
+    const result = await rollbackSelfUpgrade("SUR-AAAA0001", "restore");
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('Confirmation text must be exactly "ROLLBACK"');
+    expect(runSelfUpgradeRollback).not.toHaveBeenCalled();
+  });
+
+  it("runs the governed rollback and revalidates operations views", async () => {
+    const result = await rollbackSelfUpgrade("SUR-AAAA0001", "ROLLBACK");
+
+    expect(result).toMatchObject({ ok: true, status: "ok" });
+    expect(runSelfUpgradeRollback).toHaveBeenCalledWith({
+      runId: "SUR-AAAA0001",
+      initiatedByUserId: mockSession.user.id,
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/ops/self-upgrade");
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/backups");
+  });
+
+  it("returns governed rollback errors as operator-safe messages", async () => {
+    vi.mocked(runSelfUpgradeRollback).mockRejectedValue(
+      new SelfUpgradeRollbackError("Self-upgrade run has no governed recovery point."),
+    );
+
+    const result = await rollbackSelfUpgrade("SUR-AAAA0001", "ROLLBACK");
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Self-upgrade run has no governed recovery point.",
+    });
   });
 });
 

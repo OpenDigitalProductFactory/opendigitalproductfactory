@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bumpVersion } from "@/lib/feature-build-types";
 import { getBuildPhasePrompt, getBuildContextSection } from "./build-agent-prompts";
-import { SPECIALIST_TOOLS } from "./specialist-prompts";
+import { buildSpecialistPrompt, SPECIALIST_TOOLS } from "./specialist-prompts";
 import type { FeatureBrief } from "@/lib/feature-build-types";
 
 describe("bumpVersion", () => {
@@ -50,6 +50,8 @@ describe("getBuildPhasePrompt", () => {
       'NEVER ask "want me to proceed?", "should I continue?", "ready to build X?"',
     );
     expect(prompt).toContain("Never reward-hack");
+    expect(prompt).toContain("COWORKER INTERACTION CONTRACT");
+    expect(prompt).toContain("Owner:");
   });
   it("returns review prompt for review phase", async () => {
     const prompt = await getBuildPhasePrompt("review");
@@ -68,6 +70,22 @@ describe("getBuildPhasePrompt", () => {
   it("returns empty string for terminal phases", async () => {
     expect(await getBuildPhasePrompt("complete")).toBe("");
     expect(await getBuildPhasePrompt("failed")).toBe("");
+  });
+});
+
+describe("buildSpecialistPrompt", () => {
+  it("applies the coworker interaction contract to specialist handoffs", async () => {
+    const prompt = await buildSpecialistPrompt({
+      role: "qa-engineer",
+      taskDescription: "Run the scoped verification checks.",
+      buildContext: "Build ID: FB-12345678",
+    });
+
+    expect(prompt).toContain("COWORKER INTERACTION CONTRACT");
+    expect(prompt).toContain("Status:");
+    expect(prompt).toContain("Evidence:");
+    expect(prompt).toContain("Next action:");
+    expect(prompt).toContain("Owner:");
   });
 });
 

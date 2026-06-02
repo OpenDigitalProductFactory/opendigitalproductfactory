@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { prisma } from "@dpf/db";
+import { prisma, Prisma } from "@dpf/db";
 
 export type SelfUpgradeRunStatus =
   | "pending"
@@ -46,6 +46,24 @@ export async function failRun(runId: string, error: string) {
     where: { runId },
     data: { status: "failed", completedAt: new Date(), failureLog: error },
   });
+}
+
+export async function recordRunRecoveryPoint(
+  runId: string,
+  recoveryPoint: unknown,
+) {
+  return prisma.selfUpgradeRun.update({
+    where: { runId },
+    data: {
+      completionEvidence: toJson({
+        recoveryPoint,
+      }),
+    },
+  });
+}
+
+function toJson(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
 export async function cancelRun(runId: string) {
