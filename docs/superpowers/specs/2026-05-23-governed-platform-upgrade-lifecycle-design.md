@@ -857,6 +857,61 @@ becomes active: backup time, targets covered, integrity status, and retention
 risk. This makes BC/DR part of the upgrade workflow, not a separate document
 the operator is expected to remember under stress.
 
+#### 5.2.7 Sandbox-assisted recovery rehearsal
+
+Research addendum (2026-06-02): the sandbox should become the place where a
+recovery point is rehearsed before production state is touched. NIST SP 800-34
+frames contingency planning around recovery strategies, alternate processing
+capacity, and testing/training/exercises; the same principle applies here:
+DPF should prove a recovery point on an alternate target, then use that
+evidence to reduce the risk of the production restore.
+
+Current substrate:
+
+| Surface | Current shape | Recovery use | Constraint |
+|---|---|---|---|
+| Build Studio `sandbox` | `sandbox` service on `3035` with isolated `sandbox-postgres` and shared `sandbox_workspace` | Good for source-local development, seed/migration rehearsal, and Postgres restore rehearsal against a non-production DB | Base compose still points `NEO4J_URI` and `QDRANT_INTERNAL_URL` at the shared `neo4j`/`qdrant` services, so it is not yet safe for destructive graph/vector restore drills. |
+| Shared `local-integration-ci` | Lease-governed `local-ci-portal` on `3010`, with configurable Postgres/Neo4j/Qdrant endpoints | Best v1 target for canonical runtime-bound upgrade verification and future full recovery rehearsal | Requires provisioned isolated DB endpoints and a live lease before recording evidence. |
+| `docker-compose.dev-against-live-db.yml` | Opt-in dev portal connected to live databases | Excluded | It can write to live state and must never be used for recovery drills. |
+| Existing Postgres trial restore | `scripts/postgres-trial-restore.sh` restores a dump into a temporary DB and asserts critical row counts | Shipped proof pattern for rehearsal | Postgres-only today; does not prove Neo4j/Qdrant members. |
+
+The v1 recovery rehearsal should be a governed operation, not an operator
+runbook command:
+
+1. Claim `local-integration-ci` with a purpose such as
+   `self-upgrade-recovery-rehearsal`.
+2. Prepare isolated targets: empty Postgres DB, isolated Neo4j container, and
+   isolated Qdrant endpoint. If graph/vector endpoints are not isolated, mark
+   those members `not-run` instead of touching shared services.
+3. Restore the selected recovery point members into those targets:
+   Postgres via `pg_restore`, Neo4j via `neo4j-admin database load` against an
+   offline isolated DBMS, and Qdrant via snapshot recovery against the isolated
+   Qdrant node.
+4. Start the portal against the rehearsal targets and run `/api/health`,
+   migration/schema checks, seed-delta smoke, and a small operator-state smoke
+   set such as users, backlog items, model providers, and Build Studio records.
+5. Persist evidence on the upgrade run, for example
+   `SelfUpgradeRun.completionEvidence.recoveryPointVerification`, including
+   lease id, environment key, member restore outcomes, log paths, smoke
+   results, source/image identity, and expiry time.
+
+Upgrade Center behavior:
+
+- Show recovery-point verification beside the restore button:
+  `verified`, `partially-verified`, `stale`, `not-run`, or `failed`.
+- Block unattended auto-apply for schema-changing upgrades when Postgres
+  verification is stale or failed.
+- Allow an operator-confirmed production restore without full graph/vector
+  rehearsal only when the UI states which members were not rehearsed and why.
+- Never treat sandbox evidence as the durable backup. Backups remain the
+  host-retained `BackupRun` artifacts; the sandbox is the disposable proof
+  target.
+
+Follow-up provision: add a dedicated `recovery-drill` nonproduction environment
+key once the lease substrate supports multiple named runtime purposes. That
+keeps routine Build Studio verification from blocking long restore rehearsals
+and gives BC/DR an explicit capacity lane.
+
 ### 5.3 Operator surface
 
 Extend the existing `/ops/self-upgrade` route into the Upgrade Center. Do not create a parallel `/admin/platform/upgrade` workflow; the current product already routes operational change controls through `/ops`, and the triage docs call out that update banners should link to the real trigger surface. Admin/platform pages may deep-link here.
@@ -1173,6 +1228,11 @@ These do not block spec approval, but should be settled before Phase 2 ships:
 
 - [Semantic Versioning 2.0.0](https://semver.org/)
 - [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
+- [NIST SP 800-34 Rev. 1, Contingency Planning Guide for Federal Information Systems](https://csrc.nist.gov/pubs/sp/800/34/r1/upd1/final) — recovery strategies, alternate processing, and exercising contingency plans.
+- [PostgreSQL `pg_restore`](https://www.postgresql.org/docs/17/app-pgrestore.html) — custom/archive restore behavior used by Postgres recovery and trial restore.
+- [Docker volumes: back up, restore, or migrate data volumes](https://docs.docker.com/engine/storage/volumes/#back-up-restore-or-migrate-data-volumes) — reminder that volume persistence is not a backup by itself; restore testing needs an explicit target.
+- [Neo4j Operations Manual: restore a database dump](https://neo4j.com/docs/operations-manual/current/backup-restore/restore-dump/) — isolated graph restore rehearsal requirements, including offline load constraints for Community edition.
+- [Qdrant snapshots](https://qdrant.tech/documentation/operations/snapshots/) — full-storage and collection snapshot recovery constraints for the vector member.
 - [Sigstore/cosign signing overview](https://docs.sigstore.dev/cosign/signing/overview/)
 - [GitHub Releases API — latest release](https://docs.github.com/en/rest/releases/releases?apiVersion=2022-11-28#get-the-latest-release)
 - [GitLab release and maintenance policy](https://docs.gitlab.com/policy/maintenance/)
