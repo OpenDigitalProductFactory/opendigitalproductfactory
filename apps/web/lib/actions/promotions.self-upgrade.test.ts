@@ -71,6 +71,38 @@ vi.mock("@/lib/platform/version", () => ({
   }),
 }));
 
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+}));
+
+vi.mock("@/lib/self-upgrade/rollback", () => {
+  class SelfUpgradeRollbackError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "SelfUpgradeRollbackError";
+    }
+  }
+  class RestoreIntegrityError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "RestoreIntegrityError";
+    }
+  }
+  class RestoreLockedError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "RestoreLockedError";
+    }
+  }
+  return {
+    SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT: "ROLLBACK",
+    SelfUpgradeRollbackError,
+    RestoreIntegrityError,
+    RestoreLockedError,
+    runSelfUpgradeRollback: vi.fn(),
+  };
+});
+
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
@@ -78,7 +110,14 @@ import * as SelfUpgrade from "@/lib/self-upgrade";
 import { isUpgradeWindowOpen, nextUpgradeWindowOpen } from "@/lib/self-upgrade/window";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
 import { inngest } from "@/lib/queue/inngest-client";
-import { getSelfUpgradeStatus, listSelfUpgradeRuns, triggerSelfUpgrade } from "./promotions";
+import { revalidatePath } from "next/cache";
+import { runSelfUpgradeRollback, SelfUpgradeRollbackError } from "@/lib/self-upgrade/rollback";
+import {
+  getSelfUpgradeStatus,
+  listSelfUpgradeRuns,
+  rollbackSelfUpgrade,
+  triggerSelfUpgrade,
+} from "./promotions";
 
 const mockSession = {
   user: {
@@ -107,6 +146,7 @@ const mockRun = {
   deployedSha: "def5678",
   startedAt: new Date("2026-05-20T02:00:00Z"),
   completedAt: new Date("2026-05-20T02:05:00Z"),
+  completionEvidence: null,
   failureLog: null,
   createdAt: new Date("2026-05-20T02:00:00Z"),
   updatedAt: new Date("2026-05-20T02:05:00Z"),
@@ -327,6 +367,7 @@ const mockRunRow1 = {
   deployedSha: "def5678",
   startedAt: new Date("2026-05-20T02:00:00Z"),
   completedAt: new Date("2026-05-20T02:05:00Z"),
+  completionEvidence: { recoveryPoint: { status: "ok" } },
   failureLog: null,
   createdAt: new Date("2026-05-20T02:00:00Z"),
 };
@@ -340,6 +381,7 @@ const mockRunRow2 = {
   deployedSha: null,
   startedAt: new Date("2026-05-19T02:00:00Z"),
   completedAt: new Date("2026-05-19T02:01:00Z"),
+  completionEvidence: null,
   failureLog: "promoter exited with code 1",
   createdAt: new Date("2026-05-19T02:00:00Z"),
 };
@@ -451,6 +493,7 @@ describe("listSelfUpgradeRuns – DTO shape", () => {
     expect(run.currentSha).toBe(mockRunRow1.currentSha);
     expect(run.targetSha).toBe(mockRunRow1.targetSha);
     expect(run.deployedSha).toBe(mockRunRow1.deployedSha);
+    expect(run.completionEvidence).toEqual(mockRunRow1.completionEvidence);
     expect(run.startedAt).toEqual(mockRunRow1.startedAt);
     expect(run.completedAt).toEqual(mockRunRow1.completedAt);
     expect(run.failureLog).toBeNull();
@@ -475,6 +518,7 @@ describe("listSelfUpgradeRuns – DTO shape", () => {
     expect(select.currentSha).toBe(true);
     expect(select.targetSha).toBe(true);
     expect(select.deployedSha).toBe(true);
+    expect(select.completionEvidence).toBe(true);
     expect(select.startedAt).toBe(true);
     expect(select.completedAt).toBe(true);
     expect(select.failureLog).toBe(true);
@@ -484,6 +528,71 @@ describe("listSelfUpgradeRuns – DTO shape", () => {
     expect(select).not.toHaveProperty("fromVersion");
     expect(select).not.toHaveProperty("toVersion");
     expect(select).not.toHaveProperty("error");
+  });
+});
+
+// ─── rollbackSelfUpgrade ───────────────────────────────────────────────────────
+
+describe("rollbackSelfUpgrade", () => {
+  beforeEach(() => {
+    vi.mocked(runSelfUpgradeRollback).mockResolvedValue({
+      ok: true,
+      status: "ok",
+      runId: "SUR-AAAA0001",
+      restores: [
+        {
+          target: "postgres",
+          sourceBackupRunId: "BR-PG",
+          restoreId: "RR-PG",
+          status: "ok",
+        },
+      ],
+    });
+  });
+
+  it("rejects callers without restore authority", async () => {
+    vi.mocked(can).mockImplementation((_user, capability) => capability === "view_operations");
+
+    const result = await rollbackSelfUpgrade("SUR-AAAA0001", "ROLLBACK");
+
+    expect(result).toEqual({
+      ok: false,
+      error: "You do not have permission to restore upgrade recovery points.",
+    });
+    expect(runSelfUpgradeRollback).not.toHaveBeenCalled();
+  });
+
+  it("requires the exact rollback confirmation text", async () => {
+    const result = await rollbackSelfUpgrade("SUR-AAAA0001", "restore");
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('Confirmation text must be exactly "ROLLBACK"');
+    expect(runSelfUpgradeRollback).not.toHaveBeenCalled();
+  });
+
+  it("runs the governed rollback and revalidates operations views", async () => {
+    const result = await rollbackSelfUpgrade("SUR-AAAA0001", "ROLLBACK");
+
+    expect(result).toMatchObject({ ok: true, status: "ok" });
+    expect(runSelfUpgradeRollback).toHaveBeenCalledWith({
+      runId: "SUR-AAAA0001",
+      initiatedByUserId: mockSession.user.id,
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/ops/self-upgrade");
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/backups");
+  });
+
+  it("returns governed rollback errors as operator-safe messages", async () => {
+    vi.mocked(runSelfUpgradeRollback).mockRejectedValue(
+      new SelfUpgradeRollbackError("Self-upgrade run has no governed recovery point."),
+    );
+
+    const result = await rollbackSelfUpgrade("SUR-AAAA0001", "ROLLBACK");
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Self-upgrade run has no governed recovery point.",
+    });
   });
 });
 
