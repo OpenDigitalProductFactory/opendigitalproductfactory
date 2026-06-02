@@ -8,6 +8,7 @@
 
 import ReactMarkdown from "react-markdown";
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 
 // ─── Wikilink tokenization ──────────────────────────────────────────────────
@@ -65,6 +66,83 @@ function renderWikilinkSpans(text: string): ReactNode[] {
 
 type C = { children?: ReactNode };
 type AnchorC = C & { href?: string };
+type MarkdownSection =
+  | { kind: "intro"; markdown: string }
+  | { kind: "section"; heading: string; markdown: string };
+
+function parseCollapsibleHeading(line: string): string | null {
+  const match = line.match(/^\s{0,3}##\s+(.+?)\s*$/);
+  if (!match) return null;
+  return match[1].replace(/\s+#+$/, "").trim() || null;
+}
+
+function trimMarkdownLines(lines: string[]): string {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && lines[start].trim() === "") start += 1;
+  while (end > start && lines[end - 1].trim() === "") end -= 1;
+  return lines.slice(start, end).join("\n");
+}
+
+function fenceMarker(line: string): "`" | "~" | null {
+  const match = line.match(/^\s*(```+|~~~+)/);
+  if (!match) return null;
+  return match[1][0] as "`" | "~";
+}
+
+export function splitMarkdownSections(body: string): MarkdownSection[] {
+  const sections: MarkdownSection[] = [];
+  const introLines: string[] = [];
+  let currentSection: { heading: string; lines: string[] } | null = null;
+  let activeFence: "`" | "~" | null = null;
+
+  function flushIntro() {
+    const markdown = trimMarkdownLines(introLines);
+    if (markdown) sections.push({ kind: "intro", markdown });
+    introLines.length = 0;
+  }
+
+  function flushSection() {
+    if (!currentSection) return;
+    sections.push({
+      kind: "section",
+      heading: currentSection.heading,
+      markdown: trimMarkdownLines(currentSection.lines),
+    });
+    currentSection = null;
+  }
+
+  for (const line of body.split(/\r?\n/)) {
+    const heading = activeFence ? null : parseCollapsibleHeading(line);
+    if (heading) {
+      if (currentSection) {
+        flushSection();
+      } else {
+        flushIntro();
+      }
+      currentSection = { heading, lines: [] };
+      continue;
+    }
+
+    if (currentSection) {
+      currentSection.lines.push(line);
+    } else {
+      introLines.push(line);
+    }
+
+    const marker = fenceMarker(line);
+    if (!marker) continue;
+    if (!activeFence) {
+      activeFence = marker;
+    } else if (activeFence === marker) {
+      activeFence = null;
+    }
+  }
+
+  flushSection();
+  flushIntro();
+  return sections;
+}
 
 const components = {
   h1: ({ children }: C) => (
@@ -137,5 +215,44 @@ function transformChildren(children: ReactNode): ReactNode {
 type WikiBodyRendererProps = { body: string };
 
 export function WikiBodyRenderer({ body }: WikiBodyRendererProps): ReactNode {
-  return <ReactMarkdown components={components}>{body}</ReactMarkdown>;
+  const sections = splitMarkdownSections(body);
+  const hasCollapsibleSections = sections.some((section) => section.kind === "section");
+
+  if (!hasCollapsibleSections) {
+    return <ReactMarkdown components={components}>{body}</ReactMarkdown>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {sections.map((section, index) => {
+        if (section.kind === "intro") {
+          return (
+            <div key={`intro-${index}`}>
+              <ReactMarkdown components={components}>{section.markdown}</ReactMarkdown>
+            </div>
+          );
+        }
+
+        return (
+          <details
+            key={`${section.heading}-${index}`}
+            className="group rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
+          >
+            <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
+              <ChevronRight
+                aria-hidden="true"
+                className="h-3.5 w-3.5 shrink-0 text-[var(--dpf-muted)] transition-transform group-open:rotate-90"
+              />
+              <span className="min-w-0">{section.heading}</span>
+            </summary>
+            {section.markdown && (
+              <div className="border-t border-[var(--dpf-border)] px-3 pb-1 pt-3">
+                <ReactMarkdown components={components}>{section.markdown}</ReactMarkdown>
+              </div>
+            )}
+          </details>
+        );
+      })}
+    </div>
+  );
 }
