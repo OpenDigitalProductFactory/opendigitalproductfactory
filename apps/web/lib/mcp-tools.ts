@@ -14780,20 +14780,72 @@ export async function executeTool(
         params["args"] && typeof params["args"] === "object" && !Array.isArray(params["args"])
           ? (params["args"] as Record<string, unknown>)
           : {};
-      // The actual CoworkerActionEnvelope row creation (and per-turn N=3 cap
-      // + irreversible typed-phrase floor) lands in BI-0F9C291C. Until then
-      // the tool returns the structured proposal payload so the agent can
-      // see what would be proposed, and the chat handler can stub-write the
-      // envelope when wiring SSE emission.
+      // BI-0F9C291C wiring (part 3): write a CoworkerActionEnvelope row at
+      // proposal time. Status defaults to "proposed" via the schema;
+      // approveEnvelope / denyEnvelope from envelope-actions.ts drive the
+      // row toward terminal. coworkerAgentId + threadId are NOT NULL on
+      // the schema and come from the chat handler's execution context.
+      // chatMessageId stays null until BI-DF6079E9 part 2 plumbs the
+      // proposing AgentMessage id through. Per-turn N=3 destructive cap
+      // and irreversible typed-phrase hard floor remain follow-on chunks.
+      const coworkerAgentId = context?.agentId;
+      if (!coworkerAgentId) {
+        return {
+          success: false,
+          error: "missing_context",
+          message:
+            "screen_propose_action requires the executing coworker's agentId in execution context. Invoke via the chat handler, not directly.",
+        };
+      }
+      const threadId = context?.threadId;
+      if (!threadId) {
+        return {
+          success: false,
+          error: "missing_context",
+          message: "screen_propose_action requires threadId in execution context.",
+        };
+      }
+
+      let envelope;
+      try {
+        envelope = await prisma.coworkerActionEnvelope.create({
+          data: {
+            coworkerAgentId,
+            delegatingUserId: userId,
+            threadId,
+            // chatMessageId left null until BI-DF6079E9 part 2 plumbs
+            // the proposing AgentMessage id through the chat handler.
+            manifestActionId,
+            argsJson: args as import("@dpf/db").Prisma.InputJsonValue,
+            rationale,
+            // status defaults to "proposed" via schema.prisma column default.
+          },
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          error: "envelope_create_failed",
+          message: `Failed to create envelope: ${msg}`,
+        };
+      }
+
       return {
         success: true,
-        message: `Proposal '${manifestActionId}' dispatched.`,
+        entityId: envelope.id,
+        message: `Proposal '${manifestActionId}' recorded as envelope ${envelope.id} (proposed).`,
         data: {
           event: {
             type: "screen:action_proposed",
-            payload: { manifestActionId, rationale, args },
+            payload: {
+              envelopeId: envelope.id,
+              manifestActionId,
+              rationale,
+              args,
+              coworkerAgentId,
+              delegatingUserId: userId,
+            },
           },
-          note: "Envelope creation + per-turn cap enforcement lands in BI-0F9C291C.",
         },
       };
     }
