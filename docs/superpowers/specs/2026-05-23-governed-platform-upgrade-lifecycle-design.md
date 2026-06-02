@@ -339,7 +339,7 @@ The answer to "what version am I running?" is now `loadPlatformVersion().version
 - `feat:` → minor
 - `BREAKING CHANGE:` footer, or any migration declared `destructive`, or any seed-delta declared `archetype-shape-breaking` → major
 
-Release CI runs a lint that requires every merged PR to declare its bump category through the squash commit prefix or a release-impact PR label. Missing release-impact metadata fails for runtime/schema/seed changes; docs-only changes may declare `release: none` and skip artifact publication. Ambiguous categories fail the lint.
+Release CI runs a lint that requires every merged PR to declare its bump category through the squash commit prefix or a release-impact PR label. Missing release-impact metadata fails for runtime/schema/seed changes; docs-only changes may declare `release: none` and skip artifact publication. Ambiguous categories fail the lint. PRs that touch seeded-content paths also require a seed-fit decision from §5.2.4; missing or contradictory seed-fit metadata fails before the release artifact is cut.
 
 **Baseline event:** one-time switch declaring current `main` as `v1.0.0`. Sub-package versions are decoupled from platform version (they remain internal coordination tools); `v1.0.0` is platform-level.
 
@@ -354,7 +354,7 @@ On every merge to `main`, a release CI workflow runs:
 3. Tag `v<version>` and push the tag.
 4. Build and publish versioned multi-arch installed-runtime images to GHCR, matching the deployment-contract doctrine.
 5. Build the **migration manifest** — list pending Prisma migrations between previous tag and this one, with each migration classified (additive / modifying / destructive) by parsing the SQL.
-6. Build the **seed-delta manifest** — diff the shipped seed content (prompts, skills, principles, archetype, IT4IT taxonomy, MCP service definitions) against the previous tag, produce a structured delta document keyed by `seedKey`.
+6. Build the **seed-delta manifest** — diff the shipped seed content (prompts, skills, principles, archetype, IT4IT taxonomy, MCP service definitions) against the previous tag, produce a structured delta document keyed by `seedKey`, and include distribution scope / source-contribution metadata for any hive-originated seed row.
 7. Generate release notes from PRs since previous tag.
 8. Sign GHCR images and release manifests with Sigstore / cosign.
 9. Publish a GitHub Release containing release notes, manifest JSON, checksums, SBOM/provenance pointers, and links to the signed image digests.
@@ -757,6 +757,7 @@ Principle-kernel extras: list of org overlays whose `derivedFromKernelVersion` i
 | `workerVerificationReadiness` | per-worker provisioning state: `compile-ready` when source-local gates can run in the worktree, `source-only` when the worktree only provides Git/MCP/Compose isolation and verification must come from canonical runtime / local-CI sandbox |
 | `inFlightContributions` | FeaturePack rows in `contributing` status |
 | `pendingContributionsNeedingRebase` | local FeaturePack drafts cut from now-historical main |
+| `seedContributionFit` | For any contribution touching seeded content, the contribution review's seed-scope decision: `global-default`, `archetype-scoped`, `vertical-scoped`, `parameterize-first`, `install-local-only`, or `reject-as-seed` |
 | `parDecisions` per capsule | one of `rebase` / `preserve` / `abandon` / `promote-first` (PAR pattern from internal memory signal `feedback_propose_acknowledge_reassign.md`) |
 
 No hard blocks at this layer by default — all four are surfaced as decisions because PAR says the owner decides reassignment, never the system. The exception is a dirty active worker worktree whose branch has not been captured as a commit or patch artifact: upgrade must defer rather than risk losing uncommitted worker output.
@@ -797,6 +798,41 @@ Build Studio worker-specific rules:
   apply until the operator chooses rebase/promote/abandon.
 - A self-upgrade may not merge, delete, or reset a worker branch implicitly.
   It can only surface the collision and execute the operator-recorded decision.
+
+Contribution seed-fit rules:
+
+- This install is the origin of canonical seed detail, so external hive PRs
+  that add or change seeded content are not merged just because they are useful
+  to the contributing install. The contribution review must classify the seed
+  delta's product fit before the PR is mergeable.
+- Use the existing `FeaturePack` review substrate for the first slice:
+  `sourceVertical`, `applicableVerticals`, `reusabilityScope`,
+  `mergeReadiness`, and `reviewReport` carry the seed-fit evidence. Do not add
+  a parallel seed-intake model unless that substrate proves insufficient.
+- `global-default` means the change belongs in canonical seed for every
+  install: platform principles, bug-fix prompts, safety defaults, or reference
+  data whose semantics are not tied to one operator, geography, or market.
+- `archetype-scoped` / `vertical-scoped` means the change may be valuable but
+  must be attached to the relevant archetype category or vertical-market
+  scope. It must not be loaded as a universal default and must be visible in
+  the seed-delta manifest as scoped content.
+- `parameterize-first` means the contribution contains a reusable pattern but
+  its literal values are site-specific. The reviewer should split or revise the
+  PR so the general template enters seed and the local example stays out.
+- `install-local-only` means the work should remain a private FeaturePack,
+  recipe, prompt override, or operator customization. It can be a good idea and
+  still be wrong for canonical seed.
+- `reject-as-seed` means the seed delta is unsafe or inappropriate for
+  distribution as submitted: customer/private data, local credentials,
+  one-off vendor assumptions, non-general policy text, or market claims without
+  enough evidence.
+- "Do not throw the baby out with the bathwater" is binding review posture:
+  reject or scope the unsuitable seed delta while preserving reusable code,
+  patterns, tests, docs, or parameterized templates where they genuinely help
+  the broader hive.
+- Release CI must fail any PR that touches seeded-content paths without a
+  seed-fit decision and release-impact metadata. The merge queue cannot infer
+  userbase applicability from path changes alone.
 
 #### 5.2.5 Cross-cutting evidence
 
@@ -1113,6 +1149,26 @@ Four fingerprint modes (formalizing the three ad-hoc patterns plus one additive)
 - **AUDIT_TRACE** — for append-only or fully-audited tables (capsules, grants, build artifacts), customization is provable via revision walk. Used where upgrade never overwrites (only ADDS new rows).
 
 The seed apply path reads from the registry; the preflight evidence path reads from the registry; the operator surface reads from the registry. One source of truth, no drift possible.
+
+Seed registry entries must also carry contribution-fit metadata once a seed row
+originates from a hive PR rather than the DPF-maintained baseline:
+
+- `distributionScope`: `global-default`, `archetype-scoped`, or
+  `vertical-scoped`.
+- `applicableArchetypeCategories` / `applicableVerticals`: empty only when the
+  scope is `global-default`.
+- `sourceContribution`: PR number, FeaturePack id, source install vertical,
+  reviewer id, and review timestamp.
+- `seedFitDecision`: the final decision from §5.2.4. Rows classified
+  `parameterize-first`, `install-local-only`, or `reject-as-seed` are not
+  eligible for the canonical seed registry until revised or re-scoped.
+
+This makes seed publication a hive curation act, not a mechanical PR merge.
+Release CI can then generate scoped seed-delta manifests, and installed portals
+can apply only the global rows plus rows matching their archetype/vertical or
+explicit operator opt-in. A contribution may therefore still be accepted as
+valuable code, documentation, or a private FeaturePack while its literal seed
+payload is rejected or narrowed.
 
 ### 6.5 Backfill story
 
