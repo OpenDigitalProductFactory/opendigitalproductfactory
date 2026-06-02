@@ -103,7 +103,7 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 **Subagents do not read this file.** They only know what the dispatcher prompt tells them. When dispatching:
 
 - **For TypeScript work:** include "run `pnpm --filter web typecheck` before committing and fix any errors."
-- **For final-task-in-epic work:** include "run `cd apps/web && npx next build` and fix any errors" plus the required UX verification path.
+- **For final-task-in-epic work:** include "run `cd apps/web && npx next build` and fix any errors" plus the required UX verification path. **Instruct the subagent to route that build through the shared local-CI convergence sandbox (`claim_nonprod_environment_lease(environmentKey="local-integration-ci")`) or the canonical local install — not inside the worktree itself.** (See §5 "Where each gate runs" and [kernel principle](docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md).)
 - **For UI work:** include the Theme-Aware Styling rules from §11. Without them, components ignore the platform's branding system.
 
 ## 8. Tool Authorization
@@ -204,6 +204,9 @@ Every release passes the QA test plan at `tests/e2e/platform-qa-plan.md` (15 pha
 - State results and decisions directly. No running commentary on internal deliberation. → [kernel principle](docs/founder-kernel/wiki/principles/state-results-directly.md)
 - Maintain forward momentum: when the current work naturally implies a next step, name the next smallest useful step from the thread direction and company context. Keep it quiet and operational - no sales pitch, no broad re-planning unless asked.
 - End-of-turn summary: one or two sentences — what changed, what's next.
+---
+- **Name the substrate when reporting verification results.** "Tests passed" or "build succeeded" is incomplete without naming where it ran. State the substrate (canonical local install, shared local-CI convergence sandbox lease, or — for source-local-only gates — the worktree). See §6 for what counts as canonical-runtime evidence and §5 for which gates require it.
+---
 
 ## 16. Skill Discovery
 

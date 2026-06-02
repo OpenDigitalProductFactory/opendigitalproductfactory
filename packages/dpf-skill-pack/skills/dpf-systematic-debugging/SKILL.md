@@ -58,6 +58,8 @@ Generic debugging is "form a hypothesis, isolate the variable, test it." In DPF 
 
 Confirm the symptom reproduces and write down the *observed* facts (numbers, timestamps, statuses), separate from any suggested cause.
 
+> **Substrate anchor:** runtime-bound reproduction steps (running a service, executing tests against a live DB, exercising a build flow) must run in the shared local-CI convergence sandbox, not in a worktree. See kernel principle `worktree-is-source-control-not-runtime` and [AGENTS.md §5](../../../../../AGENTS.md#5-worktree-hygiene).
+
 ### Phase 2 — Concurrency + substrate check (before declaring it broken)
 
 Two DPF-specific traps live here:
