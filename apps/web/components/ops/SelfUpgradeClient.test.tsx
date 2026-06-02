@@ -26,6 +26,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/actions/promotions", () => ({
   triggerSelfUpgrade: vi.fn(),
+  rollbackSelfUpgrade: vi.fn(),
 }));
 
 // The global useState mock above keys off `initial === null`, so any child
@@ -65,6 +66,7 @@ function makeRun(status: string, overrides: Record<string, unknown> = {}) {
     deployedSha: "def5678",
     startedAt: new Date("2026-05-20T02:00:00Z"),
     completedAt: new Date("2026-05-20T02:05:00Z"),
+    completionEvidence: null,
     failureLog: null as string | null,
     createdAt: new Date("2026-05-20T02:00:00Z"),
     ...overrides,
@@ -189,6 +191,56 @@ describe("SelfUpgradeClient – succeeded", () => {
     );
     expect(html).toContain("Triggered by:");
     expect(html).toContain("scheduled");
+  });
+
+  it("shows rollback controls when the latest run has a complete recovery point", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("succeeded", {
+          completionEvidence: {
+            recoveryPoint: {
+              schemaVersion: 1,
+              status: "ok",
+              trigger: "pre-upgrade-recovery",
+              members: [
+                { target: "postgres", runId: "BR-PG", status: "ok" },
+                { target: "neo4j", runId: "BR-N4J", status: "ok" },
+                { target: "qdrant", runId: "BR-QD", status: "ok" },
+              ],
+            },
+          },
+        })}
+      />,
+    );
+    expect(html).toContain("Recovery point: ok");
+    expect(html).toContain("postgres:BR-PG");
+    expect(html).toContain("Restore recovery point");
+  });
+
+  it("does not show rollback button after recovery point rollback succeeds", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("succeeded", {
+          completionEvidence: {
+            recoveryPoint: {
+              schemaVersion: 1,
+              status: "ok",
+              trigger: "pre-upgrade-recovery",
+              members: [
+                { target: "postgres", runId: "BR-PG", status: "ok" },
+                { target: "neo4j", runId: "BR-N4J", status: "ok" },
+                { target: "qdrant", runId: "BR-QD", status: "ok" },
+              ],
+            },
+            rollback: { status: "ok" },
+          },
+        })}
+      />,
+    );
+    expect(html).toContain('data-rollback-status="ok"');
+    expect(html).not.toContain("Restore recovery point");
   });
 });
 

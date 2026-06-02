@@ -215,11 +215,15 @@ Neo4j, and Qdrant under `/backups/<target>/...`, with `BackupRun` rows and
 retention. Restore runners exist for all three targets, and Postgres also has
 trial-restore verification.
 
-Remaining gap: the Upgrade Center still needs a first-class rollback/restore
-action that reads the linked `SelfUpgradeRun.completionEvidence.recoveryPoint`
-and walks the operator through the matched restore members. Until then, this
-slice creates the recovery point and durable evidence; restore orchestration is
-still manual through the backup restore substrate.
+Implementation note (2026-06-02): `/ops/self-upgrade` now exposes a
+first-class recovery-point restore action for completed non-running runs with a
+complete `SelfUpgradeRun.completionEvidence.recoveryPoint`. The action acquires
+the shared restore lock once, restores Postgres, Neo4j, then Qdrant from the
+matched `BackupRun` rows, writes `self-upgrade-rollback` into
+`BackupRestore.trigger` for each member, and records
+`SelfUpgradeRun.completionEvidence.rollback` with per-member restore results.
+The remaining gap is layer-aware automatic rollback; this action is an operator
+confirmed restore from the pre-upgrade data recovery point.
 
 ### 2.8 What can go wrong today
 

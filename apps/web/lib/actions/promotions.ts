@@ -590,6 +590,7 @@ export type SelfUpgradeRunDto = {
   currentSha: string | null;    // schema: currentSha (was: fromVersion)
   targetSha: string | null;     // schema: targetSha (was: toVersion)
   deployedSha: string | null;   // schema: deployedSha (was: absent — adding for completeness)
+  completionEvidence?: Prisma.JsonValue | null;
   startedAt: Date | null;
   completedAt: Date | null;
   failureLog: string | null;    // schema: failureLog (was: error)
@@ -616,6 +617,7 @@ export async function listSelfUpgradeRuns(opts?: {
       currentSha: true,
       targetSha: true,
       deployedSha: true,
+      completionEvidence: true,
       startedAt: true,
       completedAt: true,
       failureLog: true,
@@ -734,4 +736,76 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: bool
     },
   });
   return { queued: true } as const;
+}
+
+export async function rollbackSelfUpgrade(
+  runId: string,
+  typedConfirmation: string,
+): Promise<{
+  ok: boolean;
+  status?: "ok" | "failed";
+  error?: string;
+  restores?: Array<{
+    target: string;
+    sourceBackupRunId: string;
+    restoreId: string | null;
+    status: "ok" | "failed";
+    error?: string;
+  }>;
+}> {
+  const session = await auth();
+  const user = session?.user;
+  if (
+    !user ||
+    !can(
+      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
+      "view_operations",
+    ) ||
+    !can(
+      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
+      "manage_provider_connections",
+    )
+  ) {
+    return { ok: false, error: "You do not have permission to restore upgrade recovery points." };
+  }
+
+  const {
+    SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT,
+    SelfUpgradeRollbackError,
+    RestoreIntegrityError,
+    RestoreLockedError,
+    runSelfUpgradeRollback,
+  } = await import("@/lib/self-upgrade/rollback");
+
+  if (typedConfirmation !== SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT) {
+    return {
+      ok: false,
+      error: `Confirmation text must be exactly "${SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT}" to proceed.`,
+    };
+  }
+
+  try {
+    const result = await runSelfUpgradeRollback({
+      runId,
+      initiatedByUserId: user.id ?? null,
+    });
+    revalidatePath("/ops/self-upgrade");
+    revalidatePath("/admin/backups");
+    return {
+      ok: result.ok,
+      status: result.status,
+      restores: result.restores,
+      ...(result.error ? { error: result.error } : {}),
+    };
+  } catch (err) {
+    if (
+      err instanceof SelfUpgradeRollbackError ||
+      err instanceof RestoreIntegrityError ||
+      err instanceof RestoreLockedError
+    ) {
+      return { ok: false, error: err.message };
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message };
+  }
 }

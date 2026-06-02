@@ -34,11 +34,14 @@ The DR-hardening epic (BIs shipped 2026-05-24) put recovery artifacts in **speci
 | Tool config / installer state | `install-state.json` in install dir | If lost: re-run `install-dpf.{ps1,sh}`; it's idempotent |
 | Failed platform upgrade / bad seed apply / migration damage | Governed upgrade recovery point: linked `BackupRun` rows under `$DPF_BACKUPS_HOST_PATH/{postgres,neo4j,qdrant}/<ts>/` plus previous runtime identity under `$DPF_BACKUPS_HOST_PATH/self-upgrade/<runId>/` | Upgrade Center rollback/restore flow; if unavailable, restore the Postgres member first, then Neo4j/Qdrant as needed |
 
-Implementation note (2026-06-01): self-upgrade runs now record the linked
+Implementation note (2026-06-01): self-upgrade runs record the linked
 Postgres/Neo4j/Qdrant backup members in
 `SelfUpgradeRun.completionEvidence.recoveryPoint` after quiescence drains active
-work and before the swap boundary. The dedicated Upgrade Center rollback action
-is still pending, so if the portal is unavailable, use the recorded `BackupRun`
+work and before the swap boundary. `/ops/self-upgrade` can restore that matched
+recovery point for completed non-running runs; the action records
+`completionEvidence.rollback`, writes `self-upgrade-rollback` into
+`BackupRestore.trigger`, and marks the run `rolled-back` or
+`rollback-failed`. If the portal is unavailable, use the recorded `BackupRun`
 ids to restore through the backup substrate directly.
 
 **Key principle:** if you can't find your loss in this table, that means there's no automatic recovery for it. Stop and ask for help BEFORE doing anything destructive — the action you take next may be the difference between a 1-hour and 6-hour recovery.
@@ -164,9 +167,11 @@ not as a fresh install problem.
 
 1. Do not reinstall and do not reset volumes. The recovery point taken before
    apply is the boundary between recoverable and data-lossy.
-2. In the portal, open `/ops/self-upgrade` and inspect the failed run. If the
-   governed lifecycle is active, use its rollback/restore action; it knows the
-   exact Postgres/Neo4j/Qdrant backup rows created for the run.
+2. In the portal, open `/ops/self-upgrade` and inspect the failed run. When the
+   run has a complete `pre-upgrade-recovery` point, type the confirmation text
+   and use the recovery-point restore action; it knows the exact
+   Postgres/Neo4j/Qdrant backup rows created for the run and records rollback
+   evidence on the run.
 3. If the portal is unavailable, use `/admin/backups` after bringing the
    database services up. Restore the Postgres backup associated with the failed
    upgrade first. Restore Neo4j and Qdrant only when graph/vector data is

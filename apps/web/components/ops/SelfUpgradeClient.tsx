@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { triggerSelfUpgrade } from "@/lib/actions/promotions";
+import { rollbackSelfUpgrade, triggerSelfUpgrade } from "@/lib/actions/promotions";
 import { LocalTime } from "@/components/ui/LocalTime";
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
 
@@ -15,8 +15,15 @@ type LatestRun = {
   deployedSha: string | null;
   startedAt: Date | string | null;
   completedAt: Date | string | null;
+  completionEvidence?: unknown;
   failureLog: string | null;
   createdAt: Date | string;
+};
+
+type RecoveryPointSummary = {
+  status: string;
+  members: Array<{ target: string; runId: string | null; status: string }>;
+  rollbackStatus: string | null;
 };
 
 type ImageVersionSource = "git-sha" | "content-hash" | "unknown";
@@ -72,6 +79,30 @@ function formatDuration(start: Date | string, end: Date | string): string {
   return `${minutes}m ${seconds}s`;
 }
 
+function record(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function recoveryPointSummary(run: LatestRun | null): RecoveryPointSummary | null {
+  const evidence = record(run?.completionEvidence);
+  const point = record(evidence?.recoveryPoint);
+  if (!point || !Array.isArray(point.members)) return null;
+  const rollback = record(evidence?.rollback);
+  return {
+    status: String(point.status ?? "unknown"),
+    members: point.members.map((member) => {
+      const m = record(member);
+      return {
+        target: String(m?.target ?? "unknown"),
+        runId: typeof m?.runId === "string" ? m.runId : null,
+        status: String(m?.status ?? "unknown"),
+      };
+    }),
+    rollbackStatus: typeof rollback?.status === "string" ? rollback.status : null,
+  };
+}
+
 const RUN_STATUS_STYLES: Record<string, string> = {
   running: "bg-[var(--dpf-info)]/20 text-[var(--dpf-info)] border-[var(--dpf-info)]/30",
   succeeded: "bg-[var(--dpf-success)]/20 text-[var(--dpf-success)] border-[var(--dpf-success)]/30",
@@ -100,8 +131,20 @@ export default function SelfUpgradeClient({
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [isRollbackPending, startRollbackTransition] = useTransition();
   const [override, setOverride] = useState(false);
   const [triggerResult, setTriggerResult] = useState<{ queued: boolean; reason?: string } | null>(null);
+  const [rollbackConfirmation, setRollbackConfirmation] = useState("");
+  const [rollbackResult, setRollbackResult] = useState<{
+    status: "idle" | "ok" | "error";
+    message: string;
+  }>({ status: "idle", message: "" });
+  const latestRecoveryPoint = recoveryPointSummary(latestRun);
+  const canRollbackLatest =
+    latestRun &&
+    latestRun.status !== "running" &&
+    latestRecoveryPoint?.status === "ok" &&
+    latestRecoveryPoint.rollbackStatus !== "ok";
 
   function handleTrigger() {
     setTriggerResult(null);
@@ -109,6 +152,25 @@ export default function SelfUpgradeClient({
     startTransition(async () => {
       const result = await triggerSelfUpgrade(force ? { force: true } : undefined);
       setTriggerResult(result);
+      router.refresh();
+    });
+  }
+
+  function handleRollback(runId: string) {
+    setRollbackResult({ status: "idle", message: "" });
+    startRollbackTransition(async () => {
+      const result = await rollbackSelfUpgrade(runId, rollbackConfirmation);
+      if (result.ok) {
+        setRollbackResult({
+          status: "ok",
+          message: "Recovery point restored.",
+        });
+      } else {
+        setRollbackResult({
+          status: "error",
+          message: result.error ?? "Recovery point restore failed.",
+        });
+      }
       router.refresh();
     });
   }
@@ -370,6 +432,65 @@ export default function SelfUpgradeClient({
                 {latestRun.failureLog}
               </div>
             </details>
+          )}
+
+          {latestRecoveryPoint && (
+            <div
+              className="mt-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-xs"
+              data-recovery-point-status={latestRecoveryPoint.status}
+            >
+              <div className="font-medium text-[var(--dpf-text)]">
+                Recovery point: {latestRecoveryPoint.status}
+              </div>
+              <div className="mt-1 text-[var(--dpf-muted)]">
+                {latestRecoveryPoint.members
+                  .map((member) => `${member.target}:${member.runId ?? "missing"}`)
+                  .join(" · ")}
+              </div>
+              {latestRecoveryPoint.rollbackStatus && (
+                <div
+                  className="mt-1 text-[var(--dpf-muted)]"
+                  data-rollback-status={latestRecoveryPoint.rollbackStatus}
+                >
+                  Rollback: {latestRecoveryPoint.rollbackStatus}
+                </div>
+              )}
+              {canRollbackLatest && (
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <input
+                    type="text"
+                    value={rollbackConfirmation}
+                    onChange={(event) => setRollbackConfirmation(event.target.value)}
+                    aria-label="Rollback confirmation"
+                    placeholder="Type ROLLBACK"
+                    className="w-full sm:w-44 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-xs text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRollback(latestRun.runId)}
+                    disabled={
+                      isRollbackPending ||
+                      rollbackConfirmation !== "ROLLBACK"
+                    }
+                    aria-busy={isRollbackPending}
+                    className="rounded-md border border-[var(--dpf-destructive)]/40 bg-[var(--dpf-destructive)]/10 px-3 py-1 text-xs font-medium text-[var(--dpf-destructive)] transition-colors hover:bg-[var(--dpf-destructive)]/20 disabled:opacity-50"
+                  >
+                    {isRollbackPending ? "Restoring..." : "Restore recovery point"}
+                  </button>
+                </div>
+              )}
+              {rollbackResult.status !== "idle" && (
+                <div
+                  className={`mt-2 rounded-md border px-2 py-1 ${
+                    rollbackResult.status === "ok"
+                      ? "border-[var(--dpf-success)]/30 bg-[var(--dpf-success)]/10 text-[var(--dpf-success)]"
+                      : "border-[var(--dpf-destructive)]/30 bg-[var(--dpf-destructive)]/10 text-[var(--dpf-destructive)]"
+                  }`}
+                >
+                  {rollbackResult.message}
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
