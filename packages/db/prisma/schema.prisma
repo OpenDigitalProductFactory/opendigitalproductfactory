@@ -2770,6 +2770,7 @@ model Organization {
   wikiLintFindings              WikiLintFinding[]
   documents                     Document[]
   decisionPerspectiveProfiles   DecisionPerspectiveProfile[]
+  researchProposals             ResearchProposal[]
   integrationCoverageProviders  IntegrationCoverageProvider[]  @relation("OrgToCoverageProviders")
   integrationRoleCoverages      IntegrationRoleCoverage[]      @relation("OrgToCoverageCells")
 }
@@ -9819,4 +9820,31 @@ model GearInterface {
   @@index([agentIdForTriple, capabilityName, archetypeContext])
   @@index([shaftSourceType, shaftSourceId])
   @@index([outcomeType, recordedAt])
+}
+
+// EP-CORPUS-BOOTSTRAP BI-8A58C65A: scheduled, approval-gated AI research.
+// A per-org research run that has been PROPOSED (by schedule or gap-detection)
+// and awaits human approval before any web/LLM execution. On approval the
+// execution slice runs runMarketResearch() → enrichOrgCorpus(research→draft).
+// Nothing executes or publishes without human approval + draft review (BI-1378).
+model ResearchProposal {
+  id              String       @id @default(cuid())
+  proposalId      String       @unique @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  topic           String // short topic key, e.g. "competitive-landscape"
+  query           String       @db.Text // the research query/prompt
+  status          String       @default("pending") // pending | approved | declined | executed | failed
+  proposedBy      String       @default("schedule") // schedule | gap-detection | user
+  proposedAt      DateTime     @default(now())
+  decidedByUserId String?
+  decidedAt       DateTime?
+  executedAt      DateTime?
+  resultSummary   String?      @db.Text
+  metadata        Json?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([organizationId, status])
+  @@index([status])
 }
