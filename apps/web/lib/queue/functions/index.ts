@@ -10,6 +10,7 @@ import { agentTaskDispatch } from "./agent-task-dispatch";
 import { taskrunWatchdog } from "./taskrun-watchdog";
 import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
+import { researchExecute } from "./research-execute";
 import { buildReviewVerification } from "./build-review-verification";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
@@ -67,6 +68,7 @@ export const eventFunctions = [
   evalBackground,
   probeBackground,
   brandExtract,
+  researchExecute,
   buildReviewVerification,
   assuranceBomGenerate,
   assuranceScanRun,
