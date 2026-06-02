@@ -48,6 +48,9 @@ Record work done outside Build Studio so the platform can continue from current 
 - Do not mark work merge-ready without the relevant build gate evidence.
 - Do not paste raw terminal noise into the default timeline. Summarize results and keep detailed logs in audit fields.
 - Do not lose unresolved questions. If a question remains, route it to the decision or founder-review flow.
+---
+- Do not record worktree-local command outcomes as runtime verification evidence. Runtime-bound checks must be executed against the canonical local install or the shared convergence sandbox (`claim_nonprod_environment_lease(environmentKey="local-integration-ci")`); see `kernel/principles/worktree-is-source-control-not-runtime` and AGENTS.md §5.
+---
 
 ## Worked example
 

@@ -86,7 +86,7 @@ Current observed state (code-grounded):
 - `apps/web/lib/self-upgrade/activity.ts` defers upgrades when non-edge `ToolExecution` activity occurred inside the last five minutes. This is a useful stopgap, but it is not a graceful drain protocol and it has no per-session client handshake.
 - `apps/web/lib/self-upgrade/notifications.ts` exposes `emitUpgradeEvent`, but it is a no-op until the event bus is wired.
 - `scripts/promote.sh` validates environment, backs up the source directory, builds a Docker image, force-recreates Compose services, checks health, and verifies SHA. It does **not** fetch/checkout the target SHA, run migrations, apply seed deltas, drain clients, or automatically roll back on failure.
-- `SelfUpgradeRun` schema uses `trigger`, `currentSha`, `targetSha`, `deployedSha`, and `failureLog`; `apps/web/lib/actions/promotions.ts` and `SelfUpgradeClient.tsx` use DTO names like `triggeredBy`, `fromVersion`, `toVersion`, and `error`. That schema/API naming drift must be resolved before this lifecycle can rely on the current run history surface.
+- `SelfUpgradeRun` schema fields: `trigger`, `currentSha`, `targetSha`, `deployedSha`, `failureLog` (Text), `completionEvidence` (Json), `reason`, `promoterContainerName`. The DTO drift noted in the original spec (actions using `triggeredBy/fromVersion/toVersion/error`) has been resolved — `run-store.ts` uses the schema field names directly. Three additional signals are now live: (a) `status` includes `'deferred-conflict'`, written by the orchestrator when `prepareUpgradeSource` returns `reason: 'merge-conflict'`; (b) `failureLog` is used as a structured conflict-file carrier, formatted as `'merge-conflict: <file1>, <file2>'` — the Upgrade Center must parse this prefix to display which files conflict; (c) `completionEvidence` carries a `recoveryPoint` JSON object via `recordRunRecoveryPoint` in `run-store.ts`, which the rollback path reads to determine restore feasibility. The schema/DTO vocabulary is now consistent and the 'must be resolved' blocker is closed.
 - Ship-phase `FeatureBuild`s are auto-completed only if their head SHA is an ancestor of the deployed SHA (via `git merge-base --is-ancestor`). Diverged branches never complete.
 
 **Phase 0 implication:** the first implementation slice is not versioning. It is stabilizing the self-upgrade substrate so there is exactly one runnable path, one DTO vocabulary, one status vocabulary, and one operator surface.
@@ -339,7 +339,7 @@ The answer to "what version am I running?" is now `loadPlatformVersion().version
 - `feat:` → minor
 - `BREAKING CHANGE:` footer, or any migration declared `destructive`, or any seed-delta declared `archetype-shape-breaking` → major
 
-Release CI runs a lint that requires every merged PR to declare its bump category through the squash commit prefix or a release-impact PR label. Missing release-impact metadata fails for runtime/schema/seed changes; docs-only changes may declare `release: none` and skip artifact publication. Ambiguous categories fail the lint.
+Release CI runs a lint that requires every merged PR to declare its bump category through the squash commit prefix or a release-impact PR label. Missing release-impact metadata fails for runtime/schema/seed changes; docs-only changes may declare `release: none` and skip artifact publication. Ambiguous categories fail the lint. PRs that touch seeded-content paths also require a seed-fit decision from §5.2.4; missing or contradictory seed-fit metadata fails before the release artifact is cut.
 
 **Baseline event:** one-time switch declaring current `main` as `v1.0.0`. Sub-package versions are decoupled from platform version (they remain internal coordination tools); `v1.0.0` is platform-level.
 
@@ -354,7 +354,7 @@ On every merge to `main`, a release CI workflow runs:
 3. Tag `v<version>` and push the tag.
 4. Build and publish versioned multi-arch installed-runtime images to GHCR, matching the deployment-contract doctrine.
 5. Build the **migration manifest** — list pending Prisma migrations between previous tag and this one, with each migration classified (additive / modifying / destructive) by parsing the SQL.
-6. Build the **seed-delta manifest** — diff the shipped seed content (prompts, skills, principles, archetype, IT4IT taxonomy, MCP service definitions) against the previous tag, produce a structured delta document keyed by `seedKey`.
+6. Build the **seed-delta manifest** — diff the shipped seed content (prompts, skills, principles, archetype, IT4IT taxonomy, MCP service definitions) against the previous tag, produce a structured delta document keyed by `seedKey`, and include distribution scope / source-contribution metadata for any hive-originated seed row.
 7. Generate release notes from PRs since previous tag.
 8. Sign GHCR images and release manifests with Sigstore / cosign.
 9. Publish a GitHub Release containing release notes, manifest JSON, checksums, SBOM/provenance pointers, and links to the signed image digests.
@@ -467,6 +467,18 @@ stamp always describes the merged bytes that were actually built.**
    "lost on rebuild" hazard regardless of contribution mode, and gives the
    merge a real `ours` side.
 
+   **Five-role workspace layout (canonical, as of PR #1399).** Before following the canonical-tree decision, the full topology:
+
+| Role | Path | Owner | Notes |
+|---|---|---|---|
+| Production install | `~/.dpf/install/` | Portal runtime | Root clone. Read-only for human edits; self-upgrade owns `dpf/install` branch here. |
+| Upgrade workspace | `~/.dpf/install/.upgrade-workspace/` | Self-upgrade process | Dedicated sub-clone. Merge runs here; never touches operator's working tree. (BI-A8A7CCFD) |
+| Dev workspace | `~/dpf-dev/` | Developer / agent sessions | Active editing. New-dev-worktree.sh bases topics off this. |
+| Topic worktrees | `~/dpf-worktrees/<slug>/` | Per-session agent | Source-control isolation ONLY — not a runtime. Leases the convergence sandbox for runtime gates. |
+| Convergence sandbox | `~/.dpf/local-ci-sandbox/` | Sequential lease (BI-166C59F3) | One shared runtime; every worktree leases sequentially before PR. Designed, not yet built. |
+
+Self-upgrade owns roles 1 and 2. Roles 3–5 govern developer and agent workflows. The `worktree-is-source-control-not-runtime` principle ([kernel doc](../../founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md)) prohibits a topic worktree (role 4) from being used as a runtime for upgrade verification; that role belongs exclusively to the convergence sandbox (role 5). See `docs/dev/collision-free-dev-workflow.md` for the operational companion.
+
    **Canonical tree = the host clone (`DPF_HOST_INSTALL_PATH`)** (resolved
    2026-05-29). Today three trees split the responsibilities with nothing
    syncing them — the promoter builds from the host clone (`/host-source:ro`),
@@ -483,10 +495,7 @@ stamp always describes the merged bytes that were actually built.**
    the host clone (replacing ephemeral `/workspace` mutation), upstream merges
    into it, the promoter builds it. The sandbox `client/<clientId>` branch
    remains the build-staging area; promotion is the bridge into the canonical
-   tree. *Implementation nuance, not part of this decision:* on a contributor
-   machine the host clone is the human's working tree, so that case needs an
-   isolated install branch/clone; managed customer installs (the target
-   population) have no human editing the tree.
+   tree. *Implementation shape (landed: PR #1389 / BI-A8A7CCFD):* the isolation is a dedicated **`.upgrade-workspace/`** sub-clone at `${hostInstallPath}/.upgrade-workspace/`, owned entirely by the upgrade process. `SelfUpgradeConfig.useIsolatedWorkspace` defaults to `true`; managed installs (the target population) use it automatically. Each upgrade run: (i) initialises or re-uses the workspace clone (hardlinked objects, no extra disk); (ii) configures a distinct `upgrade-upstream` remote pointing at the same URL as the install clone's `origin`; (iii) fetches both the upstream branch and the install clone's `dpf/install` ref; (iv) checks out the install branch from the install clone's ref (`reset --hard HEAD` + `clean -fdx`); (v) merges `--no-ff` from `upgrade-upstream/<branch>`; on conflict — aborts the merge, returns `conflictFiles`, and defers (operator resolves in the Upgrade Center; the current build keeps running); (vi) on clean merge — pushes the new `dpf/install` tip back to the install clone **ref-only** (the operator's checked-out working tree is never touched). The promoter then mounts the workspace path as `/host-source:ro` instead of the install clone, so the image is built from the merged bytes and the stamp is the merge-commit SHA. See `apps/web/lib/self-upgrade/prepare-source.ts` (`prepareUpgradeSourceInWorkspace`) and `config.ts` (`upgradeWorkspaceHostPath`/`upgradeWorkspaceMountPath`) for the authoritative implementation.
 2. **Merge, don't replace.** On upgrade: `git fetch` the upstream target, then
    **merge** it into the install branch. Where upstream and local touch
    disjoint files (the common case) the merge is clean and automatic. Build
@@ -518,7 +527,7 @@ resolves a git ref as described here; afterwards the resolved artifact is the
 manifest's signed image and the same "stamp describes the built bytes"
 invariant carries over unchanged.
 
-The contributor-machine nuance noted above is one instance of the broader source-control-isolation-vs-runtime-validation rule (canonical at [`worktree-is-source-control-not-runtime`](../../founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md); design context in the tiered-dev-loop spec §2.1). The upgrade lifecycle commits to that model: thread worktrees do not impersonate the canonical install for upgrade verification.
+The contributor-machine nuance noted above is one instance of the broader source-control-isolation-vs-runtime-validation rule (canonical at [`worktree-is-source-control-not-runtime`](../../founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md); design context in the tiered-dev-loop spec §2.1). The upgrade lifecycle commits to that model: thread worktrees do not impersonate the canonical install for upgrade verification. Runtime-bound checks route through the ONE shared **convergence sandbox** (`~/.dpf/local-ci-sandbox/`, BI-166C59F3), leased sequentially via `claim_nonprod_environment_lease(environmentKey="local-integration-ci")`. At DPF's expected 1k–10k concurrent worktrees, per-worktree runtimes are structurally untenable (disk/RAM/CPU/port exhaustion, state drift); the convergence sandbox is the single correct gate for any runtime evidence a worker worktree needs to produce before promoting changes that the upgrade lifecycle will later reconcile in L4 preflight.
 
 ### 5.0.1 Upgrade impact summary — on demand, install-tailored
 
@@ -757,6 +766,7 @@ Principle-kernel extras: list of org overlays whose `derivedFromKernelVersion` i
 | `workerVerificationReadiness` | per-worker provisioning state: `compile-ready` when source-local gates can run in the worktree, `source-only` when the worktree only provides Git/MCP/Compose isolation and verification must come from canonical runtime / local-CI sandbox |
 | `inFlightContributions` | FeaturePack rows in `contributing` status |
 | `pendingContributionsNeedingRebase` | local FeaturePack drafts cut from now-historical main |
+| `seedContributionFit` | For any contribution touching seeded content, the contribution review's seed-scope decision: `global-default`, `archetype-scoped`, `vertical-scoped`, `parameterize-first`, `install-local-only`, or `reject-as-seed` |
 | `parDecisions` per capsule | one of `rebase` / `preserve` / `abandon` / `promote-first` (PAR pattern from internal memory signal `feedback_propose_acknowledge_reassign.md`) |
 
 No hard blocks at this layer by default — all four are surfaced as decisions because PAR says the owner decides reassignment, never the system. The exception is a dirty active worker worktree whose branch has not been captured as a commit or patch artifact: upgrade must defer rather than risk losing uncommitted worker output.
@@ -797,6 +807,41 @@ Build Studio worker-specific rules:
   apply until the operator chooses rebase/promote/abandon.
 - A self-upgrade may not merge, delete, or reset a worker branch implicitly.
   It can only surface the collision and execute the operator-recorded decision.
+
+Contribution seed-fit rules:
+
+- This install is the origin of canonical seed detail, so external hive PRs
+  that add or change seeded content are not merged just because they are useful
+  to the contributing install. The contribution review must classify the seed
+  delta's product fit before the PR is mergeable.
+- Use the existing `FeaturePack` review substrate for the first slice:
+  `sourceVertical`, `applicableVerticals`, `reusabilityScope`,
+  `mergeReadiness`, and `reviewReport` carry the seed-fit evidence. Do not add
+  a parallel seed-intake model unless that substrate proves insufficient.
+- `global-default` means the change belongs in canonical seed for every
+  install: platform principles, bug-fix prompts, safety defaults, or reference
+  data whose semantics are not tied to one operator, geography, or market.
+- `archetype-scoped` / `vertical-scoped` means the change may be valuable but
+  must be attached to the relevant archetype category or vertical-market
+  scope. It must not be loaded as a universal default and must be visible in
+  the seed-delta manifest as scoped content.
+- `parameterize-first` means the contribution contains a reusable pattern but
+  its literal values are site-specific. The reviewer should split or revise the
+  PR so the general template enters seed and the local example stays out.
+- `install-local-only` means the work should remain a private FeaturePack,
+  recipe, prompt override, or operator customization. It can be a good idea and
+  still be wrong for canonical seed.
+- `reject-as-seed` means the seed delta is unsafe or inappropriate for
+  distribution as submitted: customer/private data, local credentials,
+  one-off vendor assumptions, non-general policy text, or market claims without
+  enough evidence.
+- "Do not throw the baby out with the bathwater" is binding review posture:
+  reject or scope the unsuitable seed delta while preserving reusable code,
+  patterns, tests, docs, or parameterized templates where they genuinely help
+  the broader hive.
+- Release CI must fail any PR that touches seeded-content paths without a
+  seed-fit decision and release-impact metadata. The merge queue cannot infer
+  userbase applicability from path changes alone.
 
 #### 5.2.5 Cross-cutting evidence
 
@@ -857,6 +902,61 @@ becomes active: backup time, targets covered, integrity status, and retention
 risk. This makes BC/DR part of the upgrade workflow, not a separate document
 the operator is expected to remember under stress.
 
+#### 5.2.7 Sandbox-assisted recovery rehearsal
+
+Research addendum (2026-06-02): the sandbox should become the place where a
+recovery point is rehearsed before production state is touched. NIST SP 800-34
+frames contingency planning around recovery strategies, alternate processing
+capacity, and testing/training/exercises; the same principle applies here:
+DPF should prove a recovery point on an alternate target, then use that
+evidence to reduce the risk of the production restore.
+
+Current substrate:
+
+| Surface | Current shape | Recovery use | Constraint |
+|---|---|---|---|
+| Build Studio `sandbox` | `sandbox` service on `3035` with isolated `sandbox-postgres` and shared `sandbox_workspace` | Good for source-local development, seed/migration rehearsal, and Postgres restore rehearsal against a non-production DB | Base compose still points `NEO4J_URI` and `QDRANT_INTERNAL_URL` at the shared `neo4j`/`qdrant` services, so it is not yet safe for destructive graph/vector restore drills. |
+| Shared `local-integration-ci` | Lease-governed `local-ci-portal` on `3010`, with configurable Postgres/Neo4j/Qdrant endpoints | Best v1 target for canonical runtime-bound upgrade verification and future full recovery rehearsal | Requires provisioned isolated DB endpoints and a live lease before recording evidence. |
+| `docker-compose.dev-against-live-db.yml` | Opt-in dev portal connected to live databases | Excluded | It can write to live state and must never be used for recovery drills. |
+| Existing Postgres trial restore | `scripts/postgres-trial-restore.sh` restores a dump into a temporary DB and asserts critical row counts | Shipped proof pattern for rehearsal | Postgres-only today; does not prove Neo4j/Qdrant members. |
+
+The v1 recovery rehearsal should be a governed operation, not an operator
+runbook command:
+
+1. Claim `local-integration-ci` with a purpose such as
+   `self-upgrade-recovery-rehearsal`.
+2. Prepare isolated targets: empty Postgres DB, isolated Neo4j container, and
+   isolated Qdrant endpoint. If graph/vector endpoints are not isolated, mark
+   those members `not-run` instead of touching shared services.
+3. Restore the selected recovery point members into those targets:
+   Postgres via `pg_restore`, Neo4j via `neo4j-admin database load` against an
+   offline isolated DBMS, and Qdrant via snapshot recovery against the isolated
+   Qdrant node.
+4. Start the portal against the rehearsal targets and run `/api/health`,
+   migration/schema checks, seed-delta smoke, and a small operator-state smoke
+   set such as users, backlog items, model providers, and Build Studio records.
+5. Persist evidence on the upgrade run, for example
+   `SelfUpgradeRun.completionEvidence.recoveryPointVerification`, including
+   lease id, environment key, member restore outcomes, log paths, smoke
+   results, source/image identity, and expiry time.
+
+Upgrade Center behavior:
+
+- Show recovery-point verification beside the restore button:
+  `verified`, `partially-verified`, `stale`, `not-run`, or `failed`.
+- Block unattended auto-apply for schema-changing upgrades when Postgres
+  verification is stale or failed.
+- Allow an operator-confirmed production restore without full graph/vector
+  rehearsal only when the UI states which members were not rehearsed and why.
+- Never treat sandbox evidence as the durable backup. Backups remain the
+  host-retained `BackupRun` artifacts; the sandbox is the disposable proof
+  target.
+
+Follow-up provision: add a dedicated `recovery-drill` nonproduction environment
+key once the lease substrate supports multiple named runtime purposes. That
+keeps routine Build Studio verification from blocking long restore rehearsals
+and gives BC/DR an explicit capacity lane.
+
 ### 5.3 Operator surface
 
 Extend the existing `/ops/self-upgrade` route into the Upgrade Center. Do not create a parallel `/admin/platform/upgrade` workflow; the current product already routes operational change controls through `/ops`, and the triage docs call out that update banners should link to the real trigger surface. Admin/platform pages may deep-link here.
@@ -911,6 +1011,7 @@ After operator approval:
 7. **L3 (seed deltas) applies** — per operator decisions, with `SeedSnapshot` rows recorded for the new version. Status `seeding`.
 8. **L1 (runtime image) swaps container.** Status `swapping`.
 9. Health check on new container (DB connectivity, migration state, route table sanity, version endpoint, MCP tool-list sanity).
+9a. **Active-candidate gate (planned: BI-6701C6BF — not yet built).** Before routing production traffic to the new container, the same merged SHA must be verified on the dev-portal at `:3001` (the active-candidate tier). The production self-upgrade blocks promotion to `:3000` until the active-candidate reports the expected SHA and passes its own health check. Until BI-6701C6BF lands, this gate is absent and the promoter proceeds directly to production; Phase 5 implementers must not wire a permanent production-direct path that bypasses the future gate.
 10. **L4 (sandbox reconciliation) applies** — capsule PAR decisions executed. Status `reconciling`.
 11. **`signalSwapComplete`** — coordinator transitions swapping → completed, flips level back to normal, emits `platform.quiescence-cleared` (wakes suspended Inngest functions + dismisses client banner).
 12. UI receives `system:quiescence` (level=cleared) → bundle-hash mismatch detection triggers soft reload on next response.
@@ -1059,6 +1160,26 @@ Four fingerprint modes (formalizing the three ad-hoc patterns plus one additive)
 
 The seed apply path reads from the registry; the preflight evidence path reads from the registry; the operator surface reads from the registry. One source of truth, no drift possible.
 
+Seed registry entries must also carry contribution-fit metadata once a seed row
+originates from a hive PR rather than the DPF-maintained baseline:
+
+- `distributionScope`: `global-default`, `archetype-scoped`, or
+  `vertical-scoped`.
+- `applicableArchetypeCategories` / `applicableVerticals`: empty only when the
+  scope is `global-default`.
+- `sourceContribution`: PR number, FeaturePack id, source install vertical,
+  reviewer id, and review timestamp.
+- `seedFitDecision`: the final decision from §5.2.4. Rows classified
+  `parameterize-first`, `install-local-only`, or `reject-as-seed` are not
+  eligible for the canonical seed registry until revised or re-scoped.
+
+This makes seed publication a hive curation act, not a mechanical PR merge.
+Release CI can then generate scoped seed-delta manifests, and installed portals
+can apply only the global rows plus rows matching their archetype/vertical or
+explicit operator opt-in. A contribution may therefore still be accepted as
+valuable code, documentation, or a private FeaturePack while its literal seed
+payload is rejected or narrowed.
+
 ### 6.5 Backfill story
 
 Existing installs have no `seedSnapshot` populated. First upgrade under the new system:
@@ -1173,6 +1294,11 @@ These do not block spec approval, but should be settled before Phase 2 ships:
 
 - [Semantic Versioning 2.0.0](https://semver.org/)
 - [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
+- [NIST SP 800-34 Rev. 1, Contingency Planning Guide for Federal Information Systems](https://csrc.nist.gov/pubs/sp/800/34/r1/upd1/final) — recovery strategies, alternate processing, and exercising contingency plans.
+- [PostgreSQL `pg_restore`](https://www.postgresql.org/docs/17/app-pgrestore.html) — custom/archive restore behavior used by Postgres recovery and trial restore.
+- [Docker volumes: back up, restore, or migrate data volumes](https://docs.docker.com/engine/storage/volumes/#back-up-restore-or-migrate-data-volumes) — reminder that volume persistence is not a backup by itself; restore testing needs an explicit target.
+- [Neo4j Operations Manual: restore a database dump](https://neo4j.com/docs/operations-manual/current/backup-restore/restore-dump/) — isolated graph restore rehearsal requirements, including offline load constraints for Community edition.
+- [Qdrant snapshots](https://qdrant.tech/documentation/operations/snapshots/) — full-storage and collection snapshot recovery constraints for the vector member.
 - [Sigstore/cosign signing overview](https://docs.sigstore.dev/cosign/signing/overview/)
 - [GitHub Releases API — latest release](https://docs.github.com/en/rest/releases/releases?apiVersion=2022-11-28#get-the-latest-release)
 - [GitLab release and maintenance policy](https://docs.gitlab.com/policy/maintenance/)
