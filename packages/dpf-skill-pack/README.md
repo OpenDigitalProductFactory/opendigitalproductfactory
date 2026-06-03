@@ -86,6 +86,12 @@ Repo-level marketplace files live at the repository root:
 
 The auto-install hook (BI-98683E68) wires these into portal install + worktree creation so contributors do not need to hand-run client plugin commands. MCP authentication still stays outside git: issue or rotate `DPF_MCP_BEARER_TOKEN` from Admin > Platform Development > MCP. The plugin supplies the client wiring; the portal owns the token.
 
+### Version bumps propagate automatically
+
+When this package's `.claude-plugin/plugin.json` version bumps (e.g. `0.1.0` → `0.2.0`), the `scripts/dpf-bootstrap-agent-toolchain.{ps1,sh}` adapter reads the new version from the manifest at install time and the planning library at `packages/dpf-bootstrap/` plans an upgrade write for contributors whose installed entry is at the older version. No manual `claude plugin install` is required. Contributors pick up the new skills on the next time the installer (or `install-dpf`, `fresh-install`, `setup`, or a fresh `git worktree add`) runs — and a re-run when nothing has drifted is a true no-op.
+
+Upstream-owned plugins (`superpowers@openai-curated`) follow a different rule: their pinned version lives in `packages/dpf-bootstrap/src/agent-toolchain/upstream-versions.ts` and drift is surfaced as an advisory line under the install banner. DPF does not auto-upgrade upstream plugins.
+
 ## See also
 
 - Parent BI: [BI-90793048](../../docs/superpowers/drafts/2026-05-24-dpf-skill-pack-formalization-bi-bundle.md)
