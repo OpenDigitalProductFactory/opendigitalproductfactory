@@ -7063,6 +7063,36 @@ model OutboundPublication {
   @@index([channelId, publishedAt])
 }
 
+// Phase 3: inbound channel message — captures one parsed inbound payload
+// (Postmark inbound webhook today; future: LinkedIn DM, X mentions, etc.).
+// classification populated by the responder agent (qualified-inquiry |
+// support | spam | other). routedEngagementId links a qualified inquiry to
+// the CRM Engagement created on the operator's behalf. metadata holds the
+// per-channel raw payload header keys for forensics — never the full body
+// (the parsed body lives in `body` for audit), and never the message-id
+// when the channel uses one we already capture in externalMessageId.
+model InboundChannelMessage {
+  inboundId            String   @id @default(cuid())
+  organizationId       String
+  domain               String   // "marketing" today
+  channelId            String   // "email-postmark" | ...
+  externalThreadId     String
+  externalMessageId    String?
+  fromAddress          String?
+  fromDisplayName      String?
+  subject              String?
+  body                 String
+  receivedAt           DateTime @default(now())
+  classification       String?  // qualified-inquiry | support | spam | other
+  routedEngagementId   String?
+  draftedReplyId       String?
+  metadata             Json?
+
+  @@index([organizationId, domain, receivedAt])
+  @@index([channelId, externalThreadId])
+  @@index([classification])
+}
+
 model StorefrontSection {
   id           String           @id @default(cuid())
   storefrontId String
