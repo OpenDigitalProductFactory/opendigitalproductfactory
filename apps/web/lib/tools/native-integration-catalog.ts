@@ -11,6 +11,7 @@ export type NativeIntegrationId =
   | "facebook"
   | "facebook-pages"
   | "linkedin-personal-social"
+  | "email-postmark"
   | "mailchimp";
 
 export type NativeIntegrationDescriptor = {
@@ -222,6 +223,26 @@ export const NATIVE_INTEGRATIONS: NativeIntegrationDescriptor[] = [
     tags: ["marketing", "social", "publish", "linkedin"],
     enables: ["Publish marketing draft to LinkedIn feed"],
     relevantAgentIds: ["marketing-specialist"],
+    requiredGrantKeys: ["marketing_write"],
+  },
+  {
+    id: "email-postmark",
+    integrationId: "email-postmark",
+    provider: "postmark",
+    name: "Email (Postmark)",
+    description: "Send approved marketing email drafts through your own Postmark account and accept inbound replies via signed webhook. DPF stores the server token + signing secret encrypted.",
+    href: "/platform/tools/integrations/email-postmark",
+    category: "email-marketing",
+    pricingModel: "paid",
+    model: "native",
+    tags: ["marketing", "email", "publish", "inbound"],
+    enables: [
+      "Send approved marketing email",
+      "Accept inbound reply via webhook",
+      "Draft AI reply for human approval",
+      "Link qualified inquiry to CRM Engagement",
+    ],
+    relevantAgentIds: ["marketing-specialist", "customer-advisor"],
     requiredGrantKeys: ["marketing_write"],
   },
 ];

@@ -36,6 +36,7 @@ export type OnApproved = (proposal: ApprovedProposal) => Promise<void>;
 export type ResearchProposalClient = {
   researchProposal: {
     findFirst: (args: unknown) => Promise<unknown>;
+    findMany: (args: unknown) => Promise<unknown>;
     create: (args: unknown) => Promise<unknown>;
     update: (args: unknown) => Promise<unknown>;
   };
@@ -141,4 +142,27 @@ export async function declineResearch(
     data: { status: "declined", decidedByUserId: input.decidedByUserId ?? null, decidedAt: new Date() },
   });
   return { declined: true };
+}
+
+// ─── List (approval UI) ──────────────────────────────────────────────────────
+
+export type PendingResearchProposal = {
+  proposalId: string;
+  topic: string;
+  query: string;
+  proposedBy: string;
+  proposedAt: Date;
+};
+
+/** Pending proposals for an org, newest first — feeds the approval UI. */
+export async function listPendingResearchProposals(
+  organizationId: string,
+  deps: { db?: ResearchProposalClient } = {},
+): Promise<PendingResearchProposal[]> {
+  const client = db(deps);
+  return (await client.researchProposal.findMany({
+    where: { organizationId, status: "pending" },
+    orderBy: { proposedAt: "desc" },
+    select: { proposalId: true, topic: true, query: true, proposedBy: true, proposedAt: true },
+  })) as PendingResearchProposal[];
 }

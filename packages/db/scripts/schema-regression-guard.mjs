@@ -94,7 +94,15 @@ export function parseSchema(source) {
     // Drop trailing line comment (but keep the content before it).
     // We don't try to be smart about strings — Prisma schema doesn't have
     // `//` inside strings in practice.
-    let line = rawLine.replace(/\/\/.*$/, "");
+    //
+    // CRLF guard: working trees on Windows / autocrlf=true have lines
+    // ending in `\r`. JavaScript regex `.` does NOT match `\r` (it's a
+    // line terminator), so `\/\/.*$` would refuse to match comments on
+    // CRLF lines — the comment text leaked into the normalized line and
+    // set comparison flagged every CRLF line as "missing" from the
+    // base (which is read via `git show` and is always LF-terminated).
+    // Strip the trailing `\r` before stripping comments.
+    let line = rawLine.replace(/\r$/, "").replace(/\/\/.*$/, "");
 
     // Normalize whitespace.
     line = line.trim().replace(/\s+/g, " ");

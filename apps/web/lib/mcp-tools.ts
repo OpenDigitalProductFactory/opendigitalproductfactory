@@ -1443,6 +1443,19 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "send_marketing_email",
+    description: "Send an APPROVED marketing OutboundDraft (channelId=email or email-postmark, assetType=email) through the operator's connected Postmark server. Requires the Email (Postmark) integration to be connected via /platform/tools/integrations/email-postmark. Fails fast if the draft is not status=approved, the Postmark credential is not connected, or the From address is unverified. On success, writes an OutboundPublication row and flips the draft to status=published.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        draftId: { type: "string", description: "OutboundDraft.draftId in status='approved' on an email channel" },
+      },
+      required: ["draftId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
     name: "draft_marketing_asset",
     description: "Turn a saved MarketingAssetTask brief into a channel-shaped, human-reviewable draft. Creates an OutboundDraft with status='pending-review' that appears in the marketing approval queue on /customer/marketing. Phase 1: LinkedIn posts and emails only. No external API call — the draft is internal until a human approves and a publish tool fires.",
     inputSchema: {
@@ -13899,7 +13912,8 @@ export async function executeTool(
       };
     }
 
-    case "publish_to_linkedin": {
+    case "publish_to_linkedin":
+    case "send_marketing_email": {
       const { publishApprovedDraft } = await import("./marketing/publish");
       const result = await publishApprovedDraft({
         draftId: String(params["draftId"] ?? ""),
@@ -14851,6 +14865,31 @@ export async function executeTool(
     }
 
     case "screen_dispatch_action": {
+      // BI-0F9C291C part 4 — end-to-end envelope execution. Closes the
+      // propose → approve → dispatch loop:
+      //   1. Load the envelope row (#1366 schema, #1415 propose-writes).
+      //   2. Verify it's in `approved` status (only approved envelopes
+      //      can dispatch — proposed envelopes must go through the
+      //      /api/agent/envelope/:id/approve route first).
+      //   3. Resolve manifestActionId → underlying MCP tool via
+      //      findManifestForRoute (the server-side mirror of the
+      //      client window registry — ALL_MANIFESTS is empty until
+      //      BI-6C9CC0EC registers Build Studio, so this path returns
+      //      a clear `no_manifest` error in the meantime).
+      //   4. Execute the underlying tool recursively under the
+      //      envelope's delegatingUserId (the human the coworker is
+      //      acting for — not whoever called dispatch, though they
+      //      should normally match).
+      //   5. Mark the envelope executed | failed via
+      //      markEnvelopeExecuted / markEnvelopeFailed from
+      //      envelope-actions.ts. Marking is best-effort; the side
+      //      effect already ran, so a finalisation write failure
+      //      doesn't roll back — it's logged in the response.
+      //
+      // Per-turn N=3 destructive cap and irreversible typed-phrase
+      // hard floor still land as separate follow-on chunks of
+      // BI-0F9C291C.
+
       const envelopeId =
         typeof params["envelopeId"] === "string" ? params["envelopeId"].trim() : "";
       if (!envelopeId) {
@@ -14860,15 +14899,126 @@ export async function executeTool(
           message: "screen_dispatch_action requires an envelopeId.",
         };
       }
+
+      const routeContext = context?.routeContext;
+      if (!routeContext) {
+        return {
+          success: false,
+          error: "missing_context",
+          message:
+            "screen_dispatch_action requires routeContext in execution context. Invoke via the chat handler, not directly.",
+        };
+      }
+
+      let envelope;
+      try {
+        envelope = await prisma.coworkerActionEnvelope.findUnique({ where: { id: envelopeId } });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          error: "envelope_load_failed",
+          message: `Failed to load envelope ${envelopeId}: ${msg}`,
+        };
+      }
+      if (!envelope) {
+        return {
+          success: false,
+          error: "envelope_not_found",
+          message: `Envelope ${envelopeId} not found.`,
+        };
+      }
+      if (envelope.status !== "approved") {
+        return {
+          success: false,
+          error: "envelope_not_approved",
+          message: `Envelope ${envelopeId} is in status '${envelope.status}'; must be 'approved' before dispatch.`,
+        };
+      }
+
+      // Resolve manifest + action server-side. Reuses the same
+      // route-matching the client registry uses (matchesRoute is
+      // exported from screen-manifest-registry).
+      const { findManifestForRoute } = await import("./coworker/manifests/index");
+      const manifest = findManifestForRoute(routeContext);
+      if (!manifest) {
+        return {
+          success: false,
+          error: "no_manifest",
+          message: `No ScreenManifest is registered for routeContext '${routeContext}'. ALL_MANIFESTS may still be empty (first consumer lands in BI-6C9CC0EC).`,
+        };
+      }
+      const domainAction = manifest.domainActions.find(
+        (a) => a.actionId === envelope.manifestActionId,
+      );
+      if (!domainAction) {
+        return {
+          success: false,
+          error: "action_not_in_manifest",
+          message: `Manifest '${manifest.surfaceId}' has no domain action '${envelope.manifestActionId}'.`,
+        };
+      }
+
+      // Recurse: execute the underlying tool under the envelope's
+      // delegating user (not necessarily the caller — see the doc
+      // block above).
+      const toolName = domainAction.tool;
+      const toolArgs =
+        envelope.argsJson && typeof envelope.argsJson === "object" && !Array.isArray(envelope.argsJson)
+          ? (envelope.argsJson as Record<string, unknown>)
+          : {};
+
+      const { markEnvelopeExecuted, markEnvelopeFailed } = await import("./coworker/envelope-actions");
+
+      let toolResult: ToolResult;
+      try {
+        toolResult = await executeTool(toolName, toolArgs, envelope.delegatingUserId, context);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // The underlying tool threw — mark the envelope failed, then
+        // return a structured tool_execution_threw response.
+        await markEnvelopeFailed(envelopeId).catch(() => undefined);
+        return {
+          success: false,
+          error: "tool_execution_threw",
+          message: `Underlying tool '${toolName}' threw: ${msg}`,
+          data: {
+            event: {
+              type: "screen:action_dispatch_failed",
+              payload: { envelopeId, tool: toolName, manifestActionId: envelope.manifestActionId, error: msg },
+            },
+          },
+        };
+      }
+
+      // Finalise the envelope based on the tool's structured success
+      // flag. markEnvelope* uses the state machine (#1390); a write
+      // failure here doesn't change the fact the side effect already
+      // ran — log it on the response so the chat handler can surface.
+      const finalise = toolResult.success
+        ? await markEnvelopeExecuted(envelopeId)
+        : await markEnvelopeFailed(envelopeId);
+
       return {
-        success: true,
-        message: `Envelope ${envelopeId} dispatch requested.`,
+        success: toolResult.success,
+        entityId: envelopeId,
+        message: toolResult.success
+          ? `Envelope ${envelopeId} executed (${toolName}): ${toolResult.message}`
+          : `Envelope ${envelopeId} dispatch reported failure (${toolName}): ${toolResult.message}`,
         data: {
           event: {
-            type: "screen:dispatch_requested",
-            payload: { envelopeId },
+            type: "screen:action_dispatched",
+            payload: {
+              envelopeId,
+              tool: toolName,
+              manifestActionId: envelope.manifestActionId,
+              ok: toolResult.success,
+            },
           },
-          note: "Envelope execution (read row → run underlying tool → mark executed) lands in BI-0F9C291C.",
+          toolResult,
+          // Surface finalisation outcome when it itself was refused —
+          // e.g. envelope already terminal due to a race with cancel.
+          ...(finalise.ok ? {} : { finaliseRefused: finalise.reason }),
         },
       };
     }
