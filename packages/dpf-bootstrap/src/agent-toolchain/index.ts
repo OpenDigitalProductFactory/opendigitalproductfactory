@@ -71,3 +71,16 @@ export {
   runSmokeProbe,
   type ClientSmokeResult,
 } from "./probes";
+
+export {
+  normalizeRepoPath,
+  repoPathsMatch,
+} from "./path-normalize";
+
+export {
+  PINNED_UPSTREAM_VERSIONS,
+  detectSuperpowersDrift,
+  renderUpstreamDriftAdvisory,
+  type UpstreamPluginId,
+  type UpstreamVersionDrift,
+} from "./upstream-versions";

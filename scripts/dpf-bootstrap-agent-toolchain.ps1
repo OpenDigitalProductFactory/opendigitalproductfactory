@@ -391,11 +391,19 @@ $copyTable = @{
 }
 $copy = $copyTable[$state.readinessState]
 
+$upstreamAdvisory = $null
+if ($plan.upstreamDrift -and $plan.upstreamDrift.advisory) {
+    $upstreamAdvisory = [string]$plan.upstreamDrift.advisory
+}
+
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host "  DPF agent toolchain: $($state.readinessState.ToUpper())" -ForegroundColor Cyan
 Write-Host "  $($copy.message)" -ForegroundColor White
 Write-Host "  Next: $($copy.primaryAction)" -ForegroundColor Yellow
+if (-not [string]::IsNullOrWhiteSpace($upstreamAdvisory)) {
+    Write-Host "  $upstreamAdvisory" -ForegroundColor DarkYellow
+}
 Write-Host "================================================================" -ForegroundColor Cyan
 
 if ($ShowSubstrate.IsPresent) {

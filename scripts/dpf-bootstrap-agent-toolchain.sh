@@ -347,7 +347,7 @@ mv "${PLAN_TMP}.json" "$PLAN_TMP"
 # Single python pass: parse plan from tempfile, emit shell-safe variables.
 eval "$(PLAN_FILE="$PLAN_TMP" python3 - <<'PY'
 import json, os, shlex
-with open(os.environ["PLAN_FILE"]) as f:
+with open(os.environ["PLAN_FILE"], encoding="utf-8") as f:
     plan = json.load(f)
 
 def shell_var(name, value):
@@ -365,6 +365,7 @@ shell_var("CODEX_PRESERVED_USER_INTENT", "true" if codex.get("preservedUserInten
 shell_var("MCP_CLIENT_WRITES_COUNT", len(mcp_client.get("writes", [])))
 shell_var("MEMORY_WRITES_COUNT", len(memory.get("writes", [])))
 shell_var("PREVIEW_STATE", plan.get("preview", {}).get("readinessState", "missing_cli"))
+shell_var("UPSTREAM_DRIFT_ADVISORY", (plan.get("upstreamDrift") or {}).get("advisory") or "")
 PY
 )"
 
@@ -418,20 +419,24 @@ if [ "$DRY_RUN" -eq 1 ]; then
 else
   PLAN_FILE="$PLAN_TMP" python3 - <<'PY'
 import json, os
-with open(os.environ["PLAN_FILE"]) as f:
+with open(os.environ["PLAN_FILE"], encoding="utf-8") as f:
     plan = json.load(f)
 
 # Codex writes.
 for w in (plan.get("codex") or {}).get("writes", []):
     os.makedirs(os.path.dirname(w["path"]), exist_ok=True)
-    with open(w["path"], "w") as f:
-        f.write(w["content"])
+    # Binary mode + explicit UTF-8 prevents CRLF translation on Windows,
+    # which would otherwise break Phase 6 content-equality idempotence.
+    with open(w["path"], "wb") as f:
+        f.write(w["content"].encode("utf-8"))
 
 # MCP client config writes (.mcp.json + .vscode/mcp.json — env-backed, no secret).
 for w in (plan.get("mcpClientConfig") or {}).get("writes", []):
     os.makedirs(os.path.dirname(w["path"]), exist_ok=True)
-    with open(w["path"], "w") as f:
-        f.write(w["content"])
+    # Binary mode + explicit UTF-8 prevents CRLF translation on Windows,
+    # which would otherwise break Phase 6 content-equality idempotence.
+    with open(w["path"], "wb") as f:
+        f.write(w["content"].encode("utf-8"))
 
 # Memory writes (excluding preserve-user-edit).
 mem = plan.get("memory") or {}
@@ -439,15 +444,17 @@ for w in mem.get("writes", []):
     if w.get("mode") == "preserve-user-edit":
         continue
     os.makedirs(os.path.dirname(w["path"]), exist_ok=True)
-    with open(w["path"], "w") as f:
-        f.write(w["content"])
+    # Binary mode + explicit UTF-8 prevents CRLF translation on Windows,
+    # which would otherwise break Phase 6 content-equality idempotence.
+    with open(w["path"], "wb") as f:
+        f.write(w["content"].encode("utf-8"))
 
 # Memory index entry.
 idx = mem.get("indexEntry")
 if idx:
     os.makedirs(os.path.dirname(idx["path"]), exist_ok=True)
-    with open(idx["path"], "w") as f:
-        f.write(idx["content"])
+    with open(idx["path"], "wb") as f:
+        f.write(idx["content"].encode("utf-8"))
 PY
 
   if [ "${PLAN_CODEX_WRITES_COUNT:-0}" -gt 0 ]; then
@@ -507,13 +514,13 @@ else
       mv "${PROBE_TMP}.json" "$PROBE_TMP"
       MCP_READINESS="$(PROBE_FILE="$PROBE_TMP" python3 -c '
 import json, os
-with open(os.environ["PROBE_FILE"]) as f:
+with open(os.environ["PROBE_FILE"], encoding="utf-8") as f:
     p = json.load(f)
 print(json.dumps(p["mcpReadiness"]))
 ')"
       SMOKE_TEST="$(PROBE_FILE="$PROBE_TMP" python3 -c '
 import json, os
-with open(os.environ["PROBE_FILE"]) as f:
+with open(os.environ["PROBE_FILE"], encoding="utf-8") as f:
     p = json.load(f)
 print(json.dumps(p["smokeTest"]))
 ')"
@@ -607,6 +614,9 @@ printf '================================================================\n'
 printf '  DPF agent toolchain: %s\n' "$(printf '%s' "$FINAL_STATE" | tr '[:lower:]' '[:upper:]')"
 printf '  %s\n' "$BANNER_MSG"
 printf '  Next: %s\n' "$BANNER_ACTION"
+if [ -n "${PLAN_UPSTREAM_DRIFT_ADVISORY:-}" ]; then
+  printf '  %s\n' "$PLAN_UPSTREAM_DRIFT_ADVISORY"
+fi
 printf '================================================================\n'
 
 if [ "$SHOW_SUBSTRATE" -eq 1 ]; then

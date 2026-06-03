@@ -118,4 +118,100 @@ describe("planKernelMemorySeed", () => {
     );
     expect(neverAsk!.content).toMatch(/Do not edit here\./);
   });
+
+  it("re-run is zero-write when destination content equals planned content (Phase 6)", () => {
+    // Phase 5 observation: re-running the adapter re-applied all 17 memory
+    // writes every time because the planner emitted `update` mode even when
+    // the destination file content was identical to what would be written.
+    // Phase 6 idempotence: when content matches, skip the write entirely.
+
+    // First pass: collect what the planner would write so we can stub a FS
+    // shim that returns that exact content on the second pass.
+    const firstPass = planKernelMemorySeed(
+      FIXTURES_DIR,
+      "/tmp/contributor-memory",
+      "D--DPF",
+      {
+        commandmentTierOnly: true,
+        fs: { existsSync: () => false },
+      },
+    );
+    expect(firstPass.writes.length).toBeGreaterThan(0);
+    const contentByPath = new Map(firstPass.writes.map((w) => [w.path, w.content]));
+    // Plus the index entry, if one was emitted.
+    if (firstPass.indexEntry) {
+      contentByPath.set(firstPass.indexEntry.path, firstPass.indexEntry.content);
+    }
+
+    // Second pass: every dest exists and has the exact content the planner
+    // would write. Expect zero writes and no index re-emit.
+    const secondPass = planKernelMemorySeed(
+      FIXTURES_DIR,
+      "/tmp/contributor-memory",
+      "D--DPF",
+      {
+        commandmentTierOnly: true,
+        fs: {
+          existsSync: (p: string) => contentByPath.has(p),
+          // For dest paths (those in contentByPath) return the stored bytes;
+          // for source-principle paths (under FIXTURES_DIR) delegate to real
+          // node:fs so frontmatter parsing still works.
+          readFileSync: (p: string, e: BufferEncoding) =>
+            contentByPath.has(p)
+              ? (contentByPath.get(p) as string)
+              : (require("node:fs").readFileSync(p, e) as string),
+          statSync: () => ({ mtime: new Date(0) }),
+        },
+      },
+    );
+
+    expect(secondPass.writes).toEqual([]);
+    expect(secondPass.indexEntry).toBeNull();
+    expect(secondPass.rationale).toMatch(/already converged/);
+  });
+
+  it("re-emits a write when destination content drifts from planned", () => {
+    // Same shape as the idempotence test, but one destination has different
+    // content (representing a prior installer version or a different DPF
+    // platform version). The planner should re-emit that one write.
+    const firstPass = planKernelMemorySeed(
+      FIXTURES_DIR,
+      "/tmp/contributor-memory",
+      "D--DPF",
+      {
+        commandmentTierOnly: true,
+        fs: { existsSync: () => false },
+      },
+    );
+    const driftedPath = firstPass.writes[0].path;
+    const contentByPath = new Map(firstPass.writes.map((w) => [w.path, w.content]));
+    contentByPath.set(driftedPath, "<<old-content-from-previous-dpf-platform-version>>");
+    if (firstPass.indexEntry) {
+      contentByPath.set(firstPass.indexEntry.path, firstPass.indexEntry.content);
+    }
+
+    const secondPass = planKernelMemorySeed(
+      FIXTURES_DIR,
+      "/tmp/contributor-memory",
+      "D--DPF",
+      {
+        commandmentTierOnly: true,
+        fs: {
+          existsSync: (p: string) => contentByPath.has(p),
+          // For dest paths (those in contentByPath) return the stored bytes;
+          // for source-principle paths (under FIXTURES_DIR) delegate to real
+          // node:fs so frontmatter parsing still works.
+          readFileSync: (p: string, e: BufferEncoding) =>
+            contentByPath.has(p)
+              ? (contentByPath.get(p) as string)
+              : (require("node:fs").readFileSync(p, e) as string),
+          statSync: () => ({ mtime: new Date(0) }),
+        },
+      },
+    );
+
+    expect(secondPass.writes).toHaveLength(1);
+    expect(secondPass.writes[0].path).toBe(driftedPath);
+    expect(secondPass.writes[0].mode).toBe("update");
+  });
 });

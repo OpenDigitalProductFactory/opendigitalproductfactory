@@ -110,18 +110,36 @@ export function planKernelMemorySeed(
     const content = renderMemoryFile(fm, slug);
 
     let mode: PlanWriteMode = "create";
+    let skipBecauseUnchanged = false;
     if (_exists && _exists(destPath)) {
       const mtime = _stat(destPath).mtime.getTime();
       if (baseline > 0 && mtime > baseline) {
         mode = "preserve-user-edit";
       } else {
         mode = "update";
+        // Phase 6 idempotence: if the destination's current content already
+        // matches what we'd write, skip the write entirely. The first-run
+        // accumulation in Phase 5 was driven by this missing check.
+        try {
+          const existingContent = _readFile(destPath, "utf8");
+          if (existingContent === content) {
+            skipBecauseUnchanged = true;
+          }
+        } catch {
+          // If we can't read the dest, fall through and emit the update write.
+        }
       }
     }
 
     if (mode === "preserve-user-edit") {
       // Don't emit a write — but still index it.
       indexLines.push(`- [kernel: ${fm.title ?? slug}](kernel_${slug}.md) — user-edited, preserved`);
+      continue;
+    }
+
+    if (skipBecauseUnchanged) {
+      // Already converged; index it but emit no write.
+      indexLines.push(`- [kernel: ${fm.title ?? slug}](kernel_${slug}.md) — tier: ${fm.principleTier ?? "unknown"}`);
       continue;
     }
 
@@ -137,6 +155,28 @@ export function planKernelMemorySeed(
     "\n";
   const indexPath = join(contributorMemoryDir, projectSlug, "MEMORY.md");
 
+  // Phase 6: only emit the index when (a) we have writes to surface, OR
+  // (b) the existing index content differs from what we'd write. The Phase 5
+  // adapter rewrote the index on every run; Phase 6 makes that a noop too.
+  let indexEntry: { path: string; content: string } | null = null;
+  if (writes.length > 0) {
+    indexEntry = { path: indexPath, content: indexContent };
+  } else if (_exists && _exists(indexPath)) {
+    try {
+      const existingIndex = _readFile(indexPath, "utf8");
+      if (existingIndex !== indexContent) {
+        indexEntry = { path: indexPath, content: indexContent };
+      }
+    } catch {
+      indexEntry = { path: indexPath, content: indexContent };
+    }
+  } else {
+    // No writes and no existing index — first-run, index alongside the seeds.
+    // But writes.length === 0 means there were no seeds either; still emit
+    // the index for diagnostics (it lists the principles we considered).
+    indexEntry = { path: indexPath, content: indexContent };
+  }
+
   const rationale =
     writes.length === 0
       ? `Kernel memory already converged for ${projectSlug} (${indexLines.length} principles indexed).`
@@ -144,7 +184,7 @@ export function planKernelMemorySeed(
 
   return {
     writes,
-    indexEntry: writes.length > 0 ? { path: indexPath, content: indexContent } : null,
+    indexEntry,
     rationale,
   };
 }
