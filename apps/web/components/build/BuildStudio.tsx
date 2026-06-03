@@ -445,7 +445,11 @@ export function BuildStudio({
       // event by one React render cycle.
       document.dispatchEvent(new CustomEvent("open-agent-panel", {
         detail: {
-          autoMessage: `I just created a new feature called "${title}". Help me define it.`,
+          // BI-253ADC70 (D18): prior wording "Help me define it." read as the
+          // coworker asking the user for help rather than offering it. Flipped
+          // to an offer-of-help framing — Dale's "AI as assistant" mental
+          // model expects the coworker to drive the next question.
+          autoMessage: `I just created a new feature called "${title}". Let's define it together — I'll ask a few questions about how your shop works.`,
           targetBuildId: buildId,
         },
       }));

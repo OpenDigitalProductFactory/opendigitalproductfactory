@@ -26,6 +26,27 @@ export function formatProviderBadge(provider: AgentMessageProvider | undefined):
   return provider.modelId ? `${base} · ${provider.modelId}` : base;
 }
 
+/**
+ * Strip a leading system-prompt setup tag (e.g. "[Setup step: Workspace — …]")
+ * from rendered assistant content.
+ *
+ * BI-253ADC70 (D5/D9): two coworker panels were auto-opening with a literal
+ * setup-instruction prefix visible to the user. The prefix is a system-prompt
+ * directive that should never reach the user-facing transcript. Whatever
+ * upstream message-construction path is concatenating it onto the message
+ * content is the deeper bug; stripping at render time is the visible-surface
+ * fix the BI explicitly scoped.
+ *
+ * The strip only runs on assistant content. User-typed messages pass through
+ * unchanged so this can never lose user intent. Returns the input string
+ * untouched when no prefix is present.
+ */
+export function stripSystemPromptPrefix(content: string): string {
+  // Match `[Setup step: ...]` at the start of the string, then any trailing
+  // whitespace/newlines so the cleaned message reads cleanly.
+  return content.replace(/^\[Setup step:[^\]]*\]\s*/u, "");
+}
+
 type Props = {
   message: AgentMessageRow;
   showAgentLabel: boolean;
@@ -491,7 +512,11 @@ export function AgentMessageBubble({
                 <span>Issue</span>
               </div>
             )}
-            <ReactMarkdown components={MARKDOWN_COMPONENTS}>{message.content}</ReactMarkdown>
+            <ReactMarkdown components={MARKDOWN_COMPONENTS}>
+              {message.role === "assistant"
+                ? stripSystemPromptPrefix(message.content)
+                : message.content}
+            </ReactMarkdown>
             {managedDocumentIds.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
                 {managedDocumentIds.map((documentId) => (
