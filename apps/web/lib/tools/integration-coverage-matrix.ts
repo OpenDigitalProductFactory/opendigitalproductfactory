@@ -362,6 +362,28 @@ export const INTEGRATION_COVERAGE_MATRIX: IntegrationCoverageMatrixRow[] = [
     notes: "Phase 2 of the marketing execution loop. Scope w_member_social only; no company-page write, no ads.",
   },
   {
+    id: "linkedin-ads",
+    productName: "LinkedIn Ads",
+    provider: "LinkedIn",
+    kind: "native",
+    nativeIntegrationId: "linkedin-ads",
+    category: "Paid Advertising",
+    employeeRoles: ["marketer", "owner_operator"],
+    taxonomyNodeIds: [
+      "for_employees/sales_and_marketing/marketing_and_advertising",
+    ],
+    dpfSurfaces: ["/customer/marketing", "/platform/tools/integrations/linkedin-personal-social"],
+    coworkerIds: ["marketing-specialist"],
+    posture: "integration-led",
+    maturity: "write-back",
+    csdmDomain: "application-service",
+    it4itValueStreams: ["strategy-to-portfolio", "request-to-fulfill"],
+    nextBacklogItemId: "BI-5133E808",
+    replacementCriteria:
+      "Conduit-only paid placement. Operator brings their own LinkedIn ad account; DPF enforces hard weekly spend ceilings before any campaign goes live.",
+    notes: "Phase 4 of the marketing execution loop. Reuses Phase 2's LinkedIn OAuth with optional r_ads/rw_ads scopes. Spend ceiling refused before adapter API call.",
+  },
+  {
     id: "email-postmark",
     productName: "Email (Postmark)",
     provider: "Postmark",

@@ -54,13 +54,15 @@ function mockResult(overrides: {
   providerId?: string;
   modelId?: string;
   toolsStripped?: boolean;
+  downgraded?: boolean;
+  downgradeMessage?: string | null;
 }) {
   return {
     content: overrides.content,
     providerId: overrides.providerId ?? "anthropic-sub",
     modelId: overrides.modelId ?? "claude-haiku-4-5-20251001",
-    downgraded: false,
-    downgradeMessage: null,
+    downgraded: overrides.downgraded ?? false,
+    downgradeMessage: overrides.downgradeMessage ?? null,
     toolsStripped: overrides.toolsStripped ?? false,
     inputTokens: overrides.inputTokens ?? 100,
     outputTokens: overrides.outputTokens ?? 50,
@@ -1454,6 +1456,96 @@ describe("runAgenticLoop", () => {
     const thirdCallMessages = mockRoute.mock.calls[2]?.[0] ?? [];
     const lastUserMessage = [...thirdCallMessages].reverse().find((m: any) => m.role === "user");
     expect(lastUserMessage?.content).toContain("Do not pause after a failed read");
+  });
+
+  // ─── Infra-aware fabrication guard (routing-resilience Slice D) ───────────
+  // An infrastructure failover (preferred provider failed, a backup answered)
+  // must NOT be reported to the user as model fabrication ("the underlying work
+  // wasn't recorded"). This is the 2026-06-02 incident. detectFabrication stays
+  // strict for healthy-provider false claims.
+  // Tools that make a completion-claim "fabrication" (need an authoritative,
+  // side-effecting tool available, else the claim is ordinary advice).
+  const authoritativeTools = {
+    tools: [
+      { name: "update_estate_posture", description: "Update estate posture", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: true },
+    ],
+    toolsForProvider: [
+      { type: "function", function: { name: "update_estate_posture", description: "Update estate posture", parameters: {} } },
+    ],
+  };
+
+  it("keeps the backup's answer on a downgraded conversational turn (does NOT show fabrication copy)", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    // Single downgraded response that trips the completion-claim guard.
+    mockRoute.mockResolvedValueOnce(mockResult({
+      content: "I've completed the analysis and configured the estate posture summary for you.",
+      downgraded: true,
+      downgradeMessage: "Switched to Claude after the preferred endpoint was unavailable.",
+    }));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/platform/estate", // NOT a /build route
+      ...authoritativeTools,
+    });
+
+    // The real answer is preserved; the build-recording failure copy is gone.
+    expect(result.content).toContain("completed the analysis");
+    expect(result.content.toLowerCase()).not.toContain("wasn't recorded");
+    expect(result.content.toLowerCase()).not.toContain("was not recorded");
+    expect(result.downgraded).toBe(true);
+  });
+
+  it("uses honest infra copy (not fabrication copy) for a downgraded build-route claim", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    // Two fabricated build claims → retry exhausted → final emission.
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "Built and deployed the feature — implementation completed.",
+        downgraded: true,
+        downgradeMessage: "Switched to Claude after the preferred endpoint was unavailable.",
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Built and deployed the feature — implementation completed.",
+        downgraded: true,
+        downgradeMessage: "Switched to Claude after the preferred endpoint was unavailable.",
+      }));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/build",
+      ...authoritativeTools,
+    });
+
+    // Honest infrastructure attribution, NOT "the underlying work wasn't recorded".
+    expect(result.content.toLowerCase()).not.toContain("wasn't recorded");
+    expect(result.content.toLowerCase()).toMatch(/unavailable|backup/);
+    // Must not leak internals (IDENTITY_BLOCK rule #5).
+    expect(result.content).not.toContain("update_estate_posture");
+  });
+
+  it("STILL fires the fabrication guard on a healthy (non-downgraded) false claim", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    // Healthy provider, repeated fabricated claim → fabrication copy must win.
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "Built and deployed the feature — implementation completed.",
+        downgraded: false,
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Built and deployed the feature — implementation completed.",
+        downgraded: false,
+      }));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/build",
+      ...authoritativeTools,
+    });
+
+    // The original guard is unchanged for healthy providers.
+    expect(result.content).not.toContain("deployed the feature");
+    expect(result.content.toLowerCase()).toContain("wasn't recorded");
   });
 });
 
