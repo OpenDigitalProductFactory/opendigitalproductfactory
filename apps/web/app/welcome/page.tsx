@@ -38,7 +38,13 @@ export default function WelcomePage() {
               Customer Portal
             </div>
             <div style={{ fontSize: 12, color: "var(--dpf-muted)", lineHeight: 1.5 }}>
-              Access your account, orders, services, and support
+              {/* BI-EC26D09D D1: Dale dogfood found that a shop owner who wants
+                  to BUILD something had no obvious door (not a "customer";
+                  "Employee & Admin" sounds like HR plumbing). Picked the
+                  least-disruptive option C from the BI: keep the labels,
+                  clarify WHO each door is for in the subcopy. */}
+              If you’re a <strong style={{ color: "var(--dpf-text)" }}>customer of this business</strong>:
+              access your account, orders, services, and support.
             </div>
           </Link>
 
@@ -59,7 +65,10 @@ export default function WelcomePage() {
               Employee & Admin
             </div>
             <div style={{ fontSize: 12, color: "var(--dpf-muted)", lineHeight: 1.5 }}>
-              Workforce management, operations, and platform administration
+              {/* BI-EC26D09D D1: clarify that this is the door for
+                  builders and operators, not only HR-style admin. */}
+              If you <strong style={{ color: "var(--dpf-text)" }}>run or build for this business</strong>:
+              workforce, operations, platform administration, and Build Studio.
             </div>
           </Link>
         </div>
