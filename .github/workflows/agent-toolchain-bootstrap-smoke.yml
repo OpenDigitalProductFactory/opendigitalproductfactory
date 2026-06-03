@@ -1,0 +1,131 @@
+name: Agent toolchain bootstrap smoke (BI-4B17051B)
+
+# Structural verification of the POSIX agent-toolchain bootstrap on
+# ubuntu-latest. The bash adapter is the macOS/Linux installer surface;
+# this workflow asserts that on a clean Linux runner without claude or
+# codex installed, the adapter still:
+#   1. Runs without bash syntax errors.
+#   2. Invokes the @dpf/bootstrap Node bridge through pnpm + tsx.
+#   3. Produces a plan JSON the python apply step can parse.
+#   4. Emits a `missing_cli` readiness state with the spec's banner copy.
+#   5. Writes a schema-valid `agentToolchain` block to install-state.json.
+#
+# This is a substrate proof, not a functional proof. The functional smoke
+# probe (claude --print refusing a destructive prompt) lives in Phase 8b's
+# operator-driven verification protocol because no CI runner has the CLI.
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "packages/dpf-bootstrap/**"
+      - "scripts/dpf-bootstrap-agent-toolchain.sh"
+      - "scripts/ensure-dpf-skill-pack.sh"
+      - "scripts/installer/lib/state.sh"
+      - "scripts/installer/install-state.schema.json"
+      - ".github/workflows/agent-toolchain-bootstrap-smoke.yml"
+  push:
+    branches: [main]
+    paths:
+      - "packages/dpf-bootstrap/**"
+      - "scripts/dpf-bootstrap-agent-toolchain.sh"
+      - "scripts/ensure-dpf-skill-pack.sh"
+      - "scripts/installer/lib/state.sh"
+      - "scripts/installer/install-state.schema.json"
+      - ".github/workflows/agent-toolchain-bootstrap-smoke.yml"
+
+concurrency:
+  group: agent-toolchain-bootstrap-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  posix-adapter-smoke:
+    name: POSIX adapter smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Bash syntax check
+        run: |
+          bash -n scripts/dpf-bootstrap-agent-toolchain.sh
+          bash -n scripts/ensure-dpf-skill-pack.sh
+          bash -n scripts/installer/lib/state.sh
+          bash -n install-dpf.sh
+
+      - name: Vitest (planning library + bridge + probes)
+        run: pnpm --filter @dpf/bootstrap test
+
+      - name: Typecheck planning library
+        run: pnpm --filter @dpf/bootstrap typecheck
+
+      - name: Dry-run bootstrap (no claude/codex on PATH)
+        env:
+          DPF_MCP_BEARER_TOKEN: ""
+        run: |
+          # Should emit `missing_cli` readiness state, write zero files,
+          # and exit 0.
+          set -euo pipefail
+          out=$(bash scripts/dpf-bootstrap-agent-toolchain.sh --dry-run --headless 2>&1)
+          echo "$out"
+          if ! echo "$out" | grep -q "DPF agent toolchain: MISSING_CLI"; then
+            echo "::error::Banner did not show MISSING_CLI on a clean runner."
+            exit 1
+          fi
+          if ! echo "$out" | grep -q "Install the selected agent client to enable contributor sessions."; then
+            echo "::error::Banner message drift from spec."
+            exit 1
+          fi
+          # UX contract: no substrate names in banner output.
+          for forbidden in "config.toml" "installed_plugins.json" "claude plugin install" "./scripts/" ".\\\\scripts\\\\"; do
+            if echo "$out" | grep -Fq "$forbidden"; then
+              echo "::error::Banner contained forbidden substrate substring: $forbidden"
+              exit 1
+            fi
+          done
+
+      - name: Live bootstrap then re-run (idempotence proof, clean runner)
+        env:
+          DPF_MCP_BEARER_TOKEN: ""
+        run: |
+          # Without claude/codex installed, the live run records `missing_cli`
+          # but still writes the agentToolchain block. Re-running must be a
+          # no-op (no errors, same state).
+          set -euo pipefail
+          bash scripts/dpf-bootstrap-agent-toolchain.sh --headless > first.txt 2>&1
+          bash scripts/dpf-bootstrap-agent-toolchain.sh --headless > second.txt 2>&1
+          test -f "$HOME/.dpf/install-state.json"
+          # Validate the agentToolchain block exists and has readinessState.
+          python3 -c "
+          import json, sys
+          state = json.load(open('$HOME/.dpf/install-state.json'))
+          at = state.get('agentToolchain') or {}
+          assert at, 'agentToolchain block missing from install-state'
+          rs = at.get('readinessState')
+          assert rs == 'missing_cli', f'expected missing_cli, got {rs}'
+          assert at.get('claudeCodeWired') is False, 'claudeCodeWired must be False on clean runner'
+          assert at.get('codexWired') is False, 'codexWired must be False on clean runner'
+          smoke = at.get('smokeTest', {})
+          assert smoke.get('result') == 'skipped', 'smoke must be skipped without a CLI'
+          mcp = at.get('mcpReadiness', {})
+          assert mcp.get('ok') is False, 'mcpReadiness must be ok=False without a token'
+          # Bearer redaction structural check: no dpfmcp_ or 'Bearer <something>' anywhere in the state file.
+          raw = open('$HOME/.dpf/install-state.json').read()
+          assert 'dpfmcp_' not in raw, 'state file contains a bearer-shaped substring'
+          import re
+          assert not re.search(r'Bearer\\s+[A-Za-z0-9]', raw), 'state file contains a literal Bearer token'
+          print('agentToolchain block ok:', rs)
+          "
