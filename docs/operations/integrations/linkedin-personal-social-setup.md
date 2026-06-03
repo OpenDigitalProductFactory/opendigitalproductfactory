@@ -48,3 +48,15 @@ Set `LINKEDIN_MOCK_MODE=1` in your install env to make the adapter return a synt
 ## Rotating the LinkedIn app
 
 If you regenerate the LinkedIn client secret, click **Disconnect** in DPF, paste the new client id / secret, and reconnect. There is no in-place rotation — the OAuth flow restarts. This is intentional: a rotated secret means the prior refresh token is no longer valid anyway.
+
+## Optional: enable LinkedIn Ads (Phase 4)
+
+LinkedIn Ads reuses the same developer app you set up for personal publishing, with two additional scopes:
+
+1. In the LinkedIn developer console, under your app's **Products** tab, request access to **Marketing Developer Platform**. LinkedIn reviews and approves Marketing Developer Platform access — sandbox testing is immediate, production ad placement requires LinkedIn's approval. Allow several days for the review.
+2. After approval, your app gains the `r_ads` and `rw_ads` scopes. Disconnect + reconnect in DPF so the new authorize URL requests the expanded scope set.
+3. Find your **Ad Account URN** at `https://www.linkedin.com/campaignmanager/accounts` — open the account and copy the numeric id from the URL; the URN is `urn:li:sponsoredAccount:<id>`.
+4. Set a **weekly spend ceiling** on `/customer/marketing` BEFORE drafting any ad creative. DPF refuses every ad placement when no ceiling is set — a missing ceiling is a missing decision, not an unlimited budget.
+5. Draft an ad-creative with `metadata.adAccountUrn`, `metadata.audienceUrn`, `metadata.dailyBudgetCents` (and optional `metadata.totalBudgetCents`). The approval queue surfaces the proposed spend + current weekly headroom before the **Place ad** action is enabled.
+
+`ADS_MOCK_MODE=1` in your install env exercises the place + analytics paths without calling LinkedIn for real — useful for verifying the spend gate before bringing a real ad account online.
