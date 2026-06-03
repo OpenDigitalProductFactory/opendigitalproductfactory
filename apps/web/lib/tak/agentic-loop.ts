@@ -336,6 +336,26 @@ function buildFabricationFailureMessage(params: {
   );
 }
 
+/**
+ * Honest, infrastructure-aware copy for when a completion-claim trips the
+ * fabrication guard ON A DOWNGRADED TURN — i.e. the preferred AI provider
+ * failed and a backup produced the answer. The fabrication signal here is most
+ * likely an artifact of the failover (a weaker backup model), NOT the model
+ * faking work, so we must NOT show the build-recording failure copy ("the
+ * underlying work wasn't recorded") — that misreports an infrastructure failure
+ * as model misbehavior. This is the exact 2026-06-02 incident. Respects
+ * IDENTITY_BLOCK rule #5 — no provider/model/tool internals exposed.
+ * See spec docs/specs/routing-resilience-and-failure-observability-spec.md §4.5.
+ */
+function buildDowngradedFabricationMessage(): string {
+  return (
+    "My usual AI provider was unavailable, so I worked through a backup that "
+    + "couldn't fully complete this — nothing was left half-saved on your side. "
+    + "Please try again (the primary connection may have recovered), or break "
+    + "the request into a smaller step."
+  );
+}
+
 function buildLocalToolCallFailureMessage(_result: RoutedInferenceResult): string {
   // User-facing message: respects IDENTITY_BLOCK rule #5 — never expose
   // infrastructure names ("Docker Model Runner"), model IDs, or routing
@@ -1388,6 +1408,31 @@ export async function runAgenticLoop(params: {
       }
 
       if (looksFabricated) {
+        // Routing-resilience Slice D: an infrastructure failover (the preferred
+        // provider failed and a backup answered) is NOT model fabrication. On a
+        // downgraded conversational turn the fabrication signal is a false
+        // positive caused by the failover — keep the backup's answer rather than
+        // replacing it with the build-recording failure copy. This is the exact
+        // 2026-06-02 incident (a good estate answer hidden behind "the
+        // underlying work wasn't recorded"). detectFabrication stays pure; the
+        // infra context (downgraded, build-route) is applied only here.
+        if (result.downgraded && !isBuildRoute) {
+          console.warn(
+            "[agentic-loop] fabrication signal on a downgraded conversational turn — keeping the backup answer (infra failover, not fabrication).",
+          );
+          return {
+            content: trimmed,
+            providerId: result.providerId,
+            modelId: result.modelId,
+            downgraded: result.downgraded,
+            downgradeMessage: result.downgradeMessage,
+            totalInputTokens,
+            totalOutputTokens,
+            executedTools,
+            proposal: null,
+          };
+        }
+
         if (!fabricationRetried) {
           fabricationRetried = true;
           console.warn(
@@ -1409,11 +1454,16 @@ export async function runAgenticLoop(params: {
         }
 
         return {
-          content: buildFabricationFailureMessage({
-            response: trimmed,
-            tools,
-            executedTools,
-          }),
+          // Downgraded build-route claim: the completion claim is load-bearing
+          // ("I shipped it"), so we don't keep it — but we still attribute the
+          // failure to infrastructure, not to the model fabricating work.
+          content: result.downgraded
+            ? buildDowngradedFabricationMessage()
+            : buildFabricationFailureMessage({
+                response: trimmed,
+                tools,
+                executedTools,
+              }),
           providerId: result.providerId,
           modelId: result.modelId,
           downgraded: result.downgraded,
@@ -1762,19 +1812,28 @@ export async function runAgenticLoop(params: {
     new Set(tools.filter((tool) => tool.sideEffect).map((tool) => tool.name)),
     tools.some((tool) => tool.sideEffect || BUILD_TOOL_NAMES.has(tool.name)),
   );
+  const downgraded = lastResult?.downgraded ?? false;
   const exhaustedMessage = buildMaxIterationsExhaustedMessage({
-    downgraded: lastResult?.downgraded ?? false,
+    downgraded,
     executedTools,
   });
   return {
+    // Routing-resilience Slice D: a raw tool-use loop is a genuine model
+    // hallucination and still gets the loop message. But a fabrication signal on
+    // a DOWNGRADED turn yields to the downgrade-aware exhausted message (honest
+    // infra copy) instead of the "underlying work wasn't recorded" build copy —
+    // the exhaustion was driven by the backup provider, not by the model faking
+    // work. Fabrication copy is reserved for healthy-provider false claims.
     content: fallbackIsRawToolUse
       ? buildRuntimeLimitToolLoopMessage(executedTools)
       : fallbackIsFabricated
-      ? buildFabricationFailureMessage({
-          response: fallbackContent,
-          tools,
-          executedTools,
-        })
+      ? (downgraded
+          ? exhaustedMessage
+          : buildFabricationFailureMessage({
+              response: fallbackContent,
+              tools,
+              executedTools,
+            }))
       : (lastResult?.content?.trim() ? lastResult.content : exhaustedMessage),
     providerId: lastResult?.providerId ?? "unknown",
     modelId: lastResult?.modelId ?? "unknown",
