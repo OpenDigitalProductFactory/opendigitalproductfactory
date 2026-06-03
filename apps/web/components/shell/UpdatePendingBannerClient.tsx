@@ -82,8 +82,27 @@ export function UpdatePendingBannerClient({ pendingVersion }: Props) {
   );
 }
 
-function formatPendingVersion(pendingVersion: string): string {
+/**
+ * Render a user-facing label for the pending platform version.
+ *
+ * BI-EC26D09D (D7): Dale saw "Platform update v<64-char-bundle-hash> is
+ * ready." at the top of every page — the raw bundle hash was the literal
+ * first thing he read above the fold after login. The prior implementation
+ * left 40-char SHAs full-length and silently fell through to `v<...>` for
+ * anything longer (e.g. 64-char sha256 bundle hashes), so the banner shipped
+ * the full hex blob.
+ *
+ * Now: semver passes through; any hex string ≥ 8 chars is truncated to its
+ * git-style 8-char short form (`update-2e89dd8a…`) so the banner reads as a
+ * recognisable build identifier rather than a wall of hex. Storage key,
+ * collapse state, and the underlying `pendingVersion` prop are unchanged —
+ * only the visible label shortens.
+ */
+export function formatPendingVersion(pendingVersion: string): string {
   if (/^v\d+\.\d+\.\d+$/i.test(pendingVersion)) return pendingVersion;
-  if (/^[0-9a-f]{40}$/i.test(pendingVersion)) return pendingVersion;
+  const hex = pendingVersion.match(/^([0-9a-f]+)$/i);
+  if (hex && hex[1].length >= 8) {
+    return `update-${hex[1].slice(0, 8)}…`;
+  }
   return `v${pendingVersion}`;
 }
