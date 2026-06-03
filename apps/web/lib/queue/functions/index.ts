@@ -10,6 +10,7 @@ import { agentTaskDispatch } from "./agent-task-dispatch";
 import { taskrunWatchdog } from "./taskrun-watchdog";
 import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
+import { materialFreshnessDecay } from "./material-freshness-decay";
 import { researchExecute } from "./research-execute";
 import { buildReviewVerification } from "./build-review-verification";
 import { assuranceBomGenerate } from "./assurance-bom";
@@ -55,6 +56,7 @@ export const scheduledFunctions = [
   wikiLint,
   skillMetricsAggregator,
   skillCurator,
+  materialFreshnessDecay,
   allBackupsDailyScheduled,
   postgresDailyBackupScheduled,
   selfUpgradeScheduled,
