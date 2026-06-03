@@ -1483,6 +1483,45 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "tick_marketing_scheduler",
+    description: "Phase 5: dispatch all ScheduledOutboundAction rows whose scheduledFor <= now. Fires each via the right Phase 1-4 service (draftMarketingAsset / publishApprovedDraft / pullChannelKpis) and reports fired vs failed counts. Idempotent and safe to call as often as the scheduler cadence requires.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "plan_upcoming_marketing_drafts",
+    description: "Phase 5: walk recent MarketingAssetTask rows for the organization and schedule a draft-marketing-asset action 3 days ahead of each task's due window (idempotent — skips tasks that already have a pending or fired schedule).",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "set_marketing_autopilot_policy",
+    description: "Phase 5: operator-only. Upsert a bounded per-channel autopilot policy. Channel must be in the autopilot allowlist (linkedin-personal-social, linkedin, email-postmark, email); ad channels are hard-refused by design. The runtime enforces channel allowlist + word-count threshold + weekly publish ceiling + low-confidence-marker check on every auto-approval.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        channelId: { type: "string", description: "Channel id; must be on the autopilot allowlist" },
+        enabled: { type: "boolean", description: "Whether the policy is active right now" },
+        autoApproveBelowWords: { type: "number", description: "Auto-approve only drafts shorter than this word count (null = no length gate)" },
+        autoPublishAfterMinutes: { type: "number", description: "Minutes a draft must age before autopilot fires (null = no aging gate)" },
+        weeklyCeiling: { type: "number", description: "Maximum publishes per rolling 7-day window for this channel" },
+      },
+      required: ["channelId", "enabled", "weeklyCeiling"],
+    },
+    requiredCapability: "manage_provider_connections",
+    sideEffect: true,
+  },
+  {
     name: "draft_marketing_asset",
     description: "Turn a saved MarketingAssetTask brief into a channel-shaped, human-reviewable draft. Creates an OutboundDraft with status='pending-review' that appears in the marketing approval queue on /customer/marketing. Phase 1: LinkedIn posts and emails only. No external API call — the draft is internal until a human approves and a publish tool fires.",
     inputSchema: {
@@ -13978,6 +14017,60 @@ export async function executeTool(
       return {
         success: true,
         message: `Pulled ${result.snapshotsWritten} ${params["channelId"]} snapshot${result.snapshotsWritten === 1 ? "" : "s"}; wrote ${result.checkpointsWritten} MarketingKpiCheckpoint row${result.checkpointsWritten === 1 ? "" : "s"}.`,
+        data: result,
+      };
+    }
+
+    case "tick_marketing_scheduler": {
+      const { tickScheduler } = await import("./marketing/scheduler");
+      const result = await tickScheduler({});
+      return {
+        success: true,
+        message: `Scheduler tick: scanned ${result.pendingScanned}, fired ${result.fired}, failed ${result.failed}.`,
+        data: result,
+      };
+    }
+
+    case "plan_upcoming_marketing_drafts": {
+      const { planUpcomingForAssetTasks } = await import("./marketing/scheduler");
+      const { prisma } = await import("@dpf/db");
+      const org = await prisma.organization.findFirst({ select: { id: true } });
+      if (!org) {
+        return { success: false, message: "No organization configured.", error: "no_org" };
+      }
+      const result = await planUpcomingForAssetTasks({ organizationId: org.id });
+      return {
+        success: true,
+        message: `Scheduled ${result.scheduled} drafter run${result.scheduled === 1 ? "" : "s"}; skipped ${result.skipped}.`,
+        data: result,
+      };
+    }
+
+    case "set_marketing_autopilot_policy": {
+      const { setAutopilotPolicy } = await import("./marketing/autopilot");
+      const { prisma } = await import("@dpf/db");
+      const org = await prisma.organization.findFirst({ select: { id: true } });
+      if (!org) {
+        return { success: false, message: "No organization configured.", error: "no_org" };
+      }
+      const result = await setAutopilotPolicy({
+        organizationId: org.id,
+        channelId: String(params["channelId"] ?? ""),
+        enabled: params["enabled"] === true,
+        autoApproveBelowWords:
+          typeof params["autoApproveBelowWords"] === "number" ? (params["autoApproveBelowWords"] as number) : null,
+        autoPublishAfterMinutes:
+          typeof params["autoPublishAfterMinutes"] === "number" ? (params["autoPublishAfterMinutes"] as number) : null,
+        weeklyCeiling: typeof params["weeklyCeiling"] === "number" ? (params["weeklyCeiling"] as number) : 0,
+        userId,
+      });
+      if (!result.ok) {
+        return { success: false, message: result.error, error: "policy_invalid" };
+      }
+      return {
+        success: true,
+        entityId: result.policyId,
+        message: `Autopilot policy ${result.policyId} ${params["enabled"] === true ? "enabled" : "saved disabled"}.`,
         data: result,
       };
     }
