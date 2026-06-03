@@ -320,6 +320,8 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   draft_marketing_asset:         ["marketing_write"],
   publish_to_linkedin:           ["marketing_write"],
   send_marketing_email:          ["marketing_write"],
+  place_linkedin_ad:             ["marketing_write"],
+  refresh_channel_kpis:          ["marketing_write"],
   analyze_seo_opportunity:      ["marketing_read"],
   generate_custom_archetype:    ["marketing_write"],
   assess_archetype_refinement:  ["marketing_read"],

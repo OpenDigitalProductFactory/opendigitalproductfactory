@@ -7093,6 +7093,28 @@ model InboundChannelMessage {
   @@index([classification])
 }
 
+// Phase 4: per-channel weekly spend ceiling. The hard backstop for paid
+// channels (LinkedIn Ads first; Google Ads / Meta Ads layer in later). The
+// spend gate sums OutboundPublication.channelMetadata.spendCents for the
+// rolling 7-day window and refuses placements that would cross weeklyCap
+// Cents — even when the operator clicked Place. Ceiling raising is
+// operator-only (manage_provider_connections capability) so the agent
+// can't escalate its own ceiling.
+model MarketingChannelSpendCeiling {
+  ceilingId        String   @id @default(cuid())
+  organizationId   String
+  channelId        String
+  weeklyCapCents   Int
+  notes            String?
+  lastSetByUserId  String
+  lastSetAt        DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([organizationId, channelId])
+  @@index([channelId])
+}
+
 model StorefrontSection {
   id           String           @id @default(cuid())
   storefrontId String

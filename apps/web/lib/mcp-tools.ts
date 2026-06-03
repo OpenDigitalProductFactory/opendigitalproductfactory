@@ -1456,6 +1456,33 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "place_linkedin_ad",
+    description: "Place a LinkedIn Ads campaign from an APPROVED OutboundDraft (channelId=linkedin-ads, assetType=ad-creative). Requires the LinkedIn integration connected with the ads scope (r_ads, rw_ads). Refuses if the placement would exceed the per-channel weekly spend ceiling — operators must set a ceiling on /customer/marketing before any ad spend. AGENTS MUST NOT CALL THIS WITHOUT EXPLICIT USER CONFIRMATION naming the spend amount, audience, and ad account.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        draftId: { type: "string", description: "OutboundDraft.draftId in status='approved' on the linkedin-ads channel" },
+      },
+      required: ["draftId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "refresh_channel_kpis",
+    description: "Pull recent engagement metrics from a channel adapter (currently linkedin-ads) for OutboundPublication rows still inside their 30-day analytics window, write a per-publication snapshot, and aggregate channel-level impressions/clicks/cost/conversions into a fresh MarketingKpiCheckpoint row so the next strategist review sees real numbers.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        channelId: { type: "string", description: "Channel id, e.g. linkedin-ads" },
+        sinceDaysAgo: { type: "number", description: "Optional override for the analytics window (default 30)" },
+      },
+      required: ["channelId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
     name: "draft_marketing_asset",
     description: "Turn a saved MarketingAssetTask brief into a channel-shaped, human-reviewable draft. Creates an OutboundDraft with status='pending-review' that appears in the marketing approval queue on /customer/marketing. Phase 1: LinkedIn posts and emails only. No external API call — the draft is internal until a human approves and a publish tool fires.",
     inputSchema: {
@@ -13913,7 +13940,8 @@ export async function executeTool(
     }
 
     case "publish_to_linkedin":
-    case "send_marketing_email": {
+    case "send_marketing_email":
+    case "place_linkedin_ad": {
       const { publishApprovedDraft } = await import("./marketing/publish");
       const result = await publishApprovedDraft({
         draftId: String(params["draftId"] ?? ""),
@@ -13930,6 +13958,26 @@ export async function executeTool(
         success: true,
         entityId: result.publicationId,
         message: result.message,
+        data: result,
+      };
+    }
+
+    case "refresh_channel_kpis": {
+      const { pullChannelKpis } = await import("./marketing/kpi-pullback");
+      const result = await pullChannelKpis({
+        channelId: String(params["channelId"] ?? ""),
+        sinceDaysAgo: typeof params["sinceDaysAgo"] === "number" ? (params["sinceDaysAgo"] as number) : undefined,
+      });
+      if (!result.ok && result.snapshotsWritten === 0) {
+        return {
+          success: false,
+          message: `KPI pullback returned no snapshots. Failures: ${result.failures.map((f) => f.error).join("; ")}`,
+          error: "kpi_pullback_failed",
+        };
+      }
+      return {
+        success: true,
+        message: `Pulled ${result.snapshotsWritten} ${params["channelId"]} snapshot${result.snapshotsWritten === 1 ? "" : "s"}; wrote ${result.checkpointsWritten} MarketingKpiCheckpoint row${result.checkpointsWritten === 1 ? "" : "s"}.`,
         data: result,
       };
     }
