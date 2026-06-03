@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AgentMessageBubble, formatProviderBadge } from "./AgentMessageBubble";
+import {
+  AgentMessageBubble,
+  formatProviderBadge,
+  stripSystemPromptPrefix,
+} from "./AgentMessageBubble";
 
 describe("formatProviderBadge", () => {
   it("returns null when no provider is attached", () => {
@@ -219,5 +223,82 @@ describe("AgentMessageBubble", () => {
 
     expect(html).toContain("/workspace/documents/DOC-ABC12345");
     expect(html).toContain("DOC-ABC12345");
+  });
+});
+
+describe("stripSystemPromptPrefix (BI-253ADC70 D5/D9)", () => {
+  it("strips a leading [Setup step: ...] tag", () => {
+    expect(
+      stripSystemPromptPrefix(
+        "[Setup step: Workspace — day-to-day operations and guardrails] Welcome to your workspace.",
+      ),
+    ).toBe("Welcome to your workspace.");
+  });
+
+  it("preserves the message when no setup tag is present", () => {
+    expect(stripSystemPromptPrefix("Welcome to your workspace.")).toBe(
+      "Welcome to your workspace.",
+    );
+  });
+
+  it("only strips at the START of the string (mid-string tags survive)", () => {
+    expect(
+      stripSystemPromptPrefix("Welcome. [Setup step: ...] is operational."),
+    ).toBe("Welcome. [Setup step: ...] is operational.");
+  });
+
+  it("strips trailing whitespace and newlines that follow the tag", () => {
+    expect(
+      stripSystemPromptPrefix(
+        "[Setup step: x]\n\n  Real content starts here.",
+      ),
+    ).toBe("Real content starts here.");
+  });
+
+  it("handles an empty string", () => {
+    expect(stripSystemPromptPrefix("")).toBe("");
+  });
+});
+
+describe("AgentMessageBubble — system-prompt prefix strip (BI-253ADC70 D5/D9)", () => {
+  it("strips the [Setup step: ...] prefix from assistant content before rendering", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageBubble
+        message={{
+          id: "msg-leak",
+          role: "assistant",
+          content:
+            "[Setup step: Workspace — day-to-day operations and guardrails] Welcome to your workspace. This is where you'll manage day-to-day operations.",
+          agentId: "ops-coordinator",
+          routeContext: "/ops",
+          createdAt: "2026-06-03T05:00:00.000Z",
+        }}
+        showAgentLabel={true}
+        agentName="Ops Coordinator"
+      />,
+    );
+
+    expect(html).not.toContain("[Setup step:");
+    expect(html).toContain("Welcome to your workspace");
+  });
+
+  it("does NOT strip [Setup step: ...] from user messages (keeps user intent verbatim)", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageBubble
+        message={{
+          id: "msg-user",
+          role: "user",
+          content: "[Setup step: literal text the user typed] What does this mean?",
+          agentId: null,
+          routeContext: null,
+          createdAt: "2026-06-03T05:00:00.000Z",
+        }}
+        showAgentLabel={false}
+        agentName={null}
+      />,
+    );
+
+    // User-typed content is preserved verbatim so we cannot lose user intent.
+    expect(html).toContain("[Setup step:");
   });
 });
