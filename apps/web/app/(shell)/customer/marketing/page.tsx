@@ -246,6 +246,7 @@ export default async function CustomerMarketingPage() {
         pendingDrafts={snapshot.pendingDrafts}
         approvedDrafts={snapshot.approvedDrafts}
         connectedChannels={snapshot.connectedChannels}
+        inboundMessages={snapshot.inboundMessages}
       />
     </div>
   );

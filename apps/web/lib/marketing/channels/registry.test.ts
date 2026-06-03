@@ -22,4 +22,12 @@ describe("channel adapter registry", () => {
     const adapters = listAdapters();
     expect(adapters.map((a) => a.channelId)).toContain("linkedin-personal-social");
   });
+
+  it("resolves email-postmark by exact channel id (Phase 3)", () => {
+    expect(getAdapter("email-postmark")?.channelId).toBe("email-postmark");
+  });
+
+  it("aliases bare 'email' to the email-postmark adapter (Phase 3)", () => {
+    expect(getAdapter("email")?.channelId).toBe("email-postmark");
+  });
 });
