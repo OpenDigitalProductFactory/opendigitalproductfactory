@@ -1,12 +1,14 @@
-import type { OutboundDraftRow } from "@/lib/marketing";
+import type { InboundMessageRow, OutboundDraftRow } from "@/lib/marketing";
 import { formatMarketingLabel } from "@/lib/marketing";
 import { ApprovalQueueReview } from "./ApprovalQueueReview";
 import { PublishLinkedInButton } from "./PublishLinkedInButton";
+import { PublishEmailButton } from "./PublishEmailButton";
 
 type Props = {
   pendingDrafts: OutboundDraftRow[];
   approvedDrafts: OutboundDraftRow[];
   connectedChannels: string[];
+  inboundMessages: InboundMessageRow[];
 };
 
 function timeAgo(date: Date | string): string {
@@ -28,6 +30,27 @@ function statusLabel(status: OutboundDraftRow["status"]): string {
 
 function isLinkedInChannel(channelId: string): boolean {
   return channelId === "linkedin" || channelId === "linkedin-personal-social";
+}
+
+function isEmailChannel(channelId: string): boolean {
+  return channelId === "email" || channelId === "email-postmark";
+}
+
+function classificationLabel(value: InboundMessageRow["classification"]): string {
+  if (!value) return "Unclassified";
+  if (value === "qualified-inquiry") return "Qualified inquiry";
+  return value[0]!.toUpperCase() + value.slice(1);
+}
+
+function relativeTime(date: Date | string): string {
+  const ms = Date.now() - new Date(date).getTime();
+  const m = Math.round(ms / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.round(h / 24);
+  return `${d}d ago`;
 }
 
 function DraftRow({
@@ -71,10 +94,16 @@ function DraftRow({
   );
 }
 
-export function ApprovalQueuePanel({ pendingDrafts, approvedDrafts, connectedChannels }: Props) {
+export function ApprovalQueuePanel({
+  pendingDrafts,
+  approvedDrafts,
+  connectedChannels,
+  inboundMessages,
+}: Props) {
   const linkedInConnected =
     connectedChannels.includes("linkedin-personal-social") ||
     connectedChannels.includes("linkedin");
+  const emailConnected = connectedChannels.includes("email-postmark");
 
   return (
     <div className="space-y-6">
@@ -159,6 +188,12 @@ export function ApprovalQueuePanel({ pendingDrafts, approvedDrafts, connectedCha
                       channelConnected={linkedInConnected}
                       channelId="linkedin-personal-social"
                     />
+                  ) : isEmailChannel(draft.channelId) ? (
+                    <PublishEmailButton
+                      draftId={draft.draftId}
+                      channelConnected={emailConnected}
+                      channelId="email-postmark"
+                    />
                   ) : (
                     <p className="text-xs text-[var(--dpf-muted)]">
                       Publishing for{" "}
@@ -168,6 +203,64 @@ export function ApprovalQueuePanel({ pendingDrafts, approvedDrafts, connectedCha
                   )
                 }
               />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section
+        data-testid="marketing-inbound-queue"
+        className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5"
+      >
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--dpf-text)]">
+              Inbound replies
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm text-[var(--dpf-muted)]">
+              Recent inbound messages from connected channels. Qualified inquiries get a
+              drafted holding reply queued above for your approval.
+            </p>
+          </div>
+          <p className="text-sm font-medium text-[var(--dpf-accent)]">
+            {inboundMessages.length} {inboundMessages.length === 1 ? "message" : "messages"}
+          </p>
+        </div>
+
+        {inboundMessages.length === 0 ? (
+          <p className="mt-4 rounded-lg bg-[var(--dpf-surface-2)] px-3 py-2 text-sm text-[var(--dpf-muted)]">
+            No inbound replies yet. Configure your Postmark inbound webhook in{" "}
+            <a className="underline" href="/platform/tools/integrations/email-postmark">
+              /platform/tools/integrations/email-postmark
+            </a>{" "}
+            to start the loop.
+          </p>
+        ) : (
+          <ul className="mt-4 space-y-3">
+            {inboundMessages.map((msg) => (
+              <li
+                key={msg.inboundId}
+                data-inbound-id={msg.inboundId}
+                className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4"
+              >
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--dpf-muted)]">
+                  <span className="rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-0.5 text-[var(--dpf-text)]">
+                    {formatMarketingLabel(msg.channelId)}
+                  </span>
+                  <span className="rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-0.5 text-[var(--dpf-text)]">
+                    {classificationLabel(msg.classification)}
+                  </span>
+                  <span>{relativeTime(msg.receivedAt)}</span>
+                  {msg.draftedReplyId ? (
+                    <span className="text-[var(--dpf-accent)]">Reply drafted</span>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-sm font-medium text-[var(--dpf-text)]">
+                  {msg.fromDisplayName ?? msg.fromAddress ?? "Unknown sender"}
+                  {msg.subject ? <span className="text-[var(--dpf-muted)]"> · {msg.subject}</span> : null}
+                </p>
+                <p className="mt-1 line-clamp-3 text-sm text-[var(--dpf-text)]">{msg.body}</p>
+              </li>
             ))}
           </ul>
         )}

@@ -8,6 +8,7 @@ import type { EndpointManifest, EndpointOverride, PolicyRuleEval } from "./types
 import type { RequestContract } from "./request-contract";
 import { EMPTY_CAPABILITIES, EMPTY_PRICING } from "./model-card-types";
 import { routeEndpointV2, getExclusionReasonV2 } from "./pipeline-v2";
+import { markEndpointUnavailable } from "./rate-tracker";
 
 // Mock champion-challenger so selectRecipeWithExploration returns null recipe (no DB in unit tests)
 vi.mock("./champion-challenger", () => ({
@@ -700,5 +701,68 @@ describe("routeEndpointV2 — provider-tier preference", () => {
 
     // Tier is the same for both — cost-per-success rules, cheap wins.
     expect(decision.selectedEndpoint).toBe("ep-cheap-user");
+  });
+});
+
+// ── Runtime circuit breaker (routing-resilience Slice A) ─────────────────────
+
+describe("routeEndpointV2 — runtime circuit breaker", () => {
+  it("excludes a cooled-down endpoint when a live alternative exists", async () => {
+    // cheapModel (openai/gpt-4o-mini) just failed → runtime circuit open.
+    markEndpointUnavailable("openai", "gpt-4o-mini", "rate_limit", 30_000);
+
+    const decision = await routeEndpointV2(
+      [qualityModel, cheapModel],
+      makeContract(),
+      [],
+      [],
+    );
+
+    // The live alternative is selected; the cooled endpoint is excluded with a
+    // runtime_cooldown reason (NOT re-selected, so no repeated 30s wait).
+    expect(decision.selectedEndpoint).toBe("ep-quality");
+    const cheap = decision.candidates.find((c) => c.endpointId === "ep-cheap");
+    expect(cheap?.excluded).toBe(true);
+    expect(cheap?.excludedReason).toContain("runtime_cooldown:rate_limit");
+  });
+
+  it("keeps a cooled-down endpoint when it is the only option (graceful degradation)", async () => {
+    // The sole provider is cooling down. A hard lockout would fail the turn with
+    // "no eligible endpoints"; instead we degrade gracefully and still select it.
+    markEndpointUnavailable("anthropic", "claude-sonnet-4-5", "auth", 600_000);
+
+    const decision = await routeEndpointV2(
+      [qualityModel],
+      makeContract(),
+      [],
+      [],
+    );
+
+    expect(decision.selectedEndpoint).toBe("ep-quality");
+    // It is the selected endpoint, so it is not in the excluded set.
+    const self = decision.candidates.find((c) => c.endpointId === "ep-quality");
+    expect(self?.excluded ?? false).toBe(false);
+  });
+
+  it("does not exclude endpoints once their cooldown has expired", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(2_000_000);
+    markEndpointUnavailable("openai", "gpt-4o-mini", "rate_limit", 30_000);
+    // Advance past the cooldown window.
+    vi.setSystemTime(2_000_000 + 30_001);
+
+    const decision = await routeEndpointV2(
+      [qualityModel, cheapModel],
+      makeContract(),
+      [],
+      [],
+    );
+
+    // cheapModel is eligible again — no runtime_cooldown exclusion present.
+    const cooled = decision.candidates.filter(
+      (c) => c.excludedReason?.includes("runtime_cooldown"),
+    );
+    expect(cooled.length).toBe(0);
+    vi.useRealTimers();
   });
 });

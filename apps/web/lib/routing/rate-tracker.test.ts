@@ -5,6 +5,9 @@ import {
   setModelLimits,
   learnFromRateLimitResponse,
   extractRetryAfterMs,
+  markEndpointUnavailable,
+  clearEndpointUnavailable,
+  getEndpointRuntimeState,
   _resetAllTracking,
 } from "./rate-tracker";
 
@@ -236,6 +239,74 @@ describe("rate-tracker", () => {
       _resetAllTracking();
       const status = checkModelCapacity("p", "m");
       expect(status).toEqual({ available: true, utilizationPercent: 0 });
+    });
+  });
+
+  // ── Runtime circuit breaker (routing-resilience Slice A) ────────────────
+  describe("runtime circuit breaker", () => {
+    it("reports available by default (no cooldown set)", () => {
+      expect(getEndpointRuntimeState("p", "m")).toEqual({ unavailable: false });
+    });
+
+    it("marks an endpoint unavailable with reason + until + digest", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(1_000_000);
+      markEndpointUnavailable("codex", "gpt-5.3", "rate_limit", 30_000, "Codex CLI rate limited");
+      const state = getEndpointRuntimeState("codex", "gpt-5.3");
+      expect(state.unavailable).toBe(true);
+      expect(state.reason).toBe("rate_limit");
+      expect(state.until).toBe(1_030_000);
+      expect(state.lastFailureDigest).toBe("Codex CLI rate limited");
+    });
+
+    it("auto-expires the cooldown once the window elapses", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(1_000_000);
+      markEndpointUnavailable("codex", "gpt-5.3", "rate_limit", 30_000);
+      expect(getEndpointRuntimeState("codex", "gpt-5.3").unavailable).toBe(true);
+
+      vi.setSystemTime(1_000_000 + 30_001);
+      expect(getEndpointRuntimeState("codex", "gpt-5.3").unavailable).toBe(false);
+    });
+
+    it("does not shorten an existing longer cooldown (auth lock survives a later rate-limit blip)", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(1_000_000);
+      markEndpointUnavailable("codex", "gpt-5.3", "auth", 600_000);
+      // A subsequent short rate-limit must not overwrite the long auth lock.
+      markEndpointUnavailable("codex", "gpt-5.3", "rate_limit", 30_000);
+      const state = getEndpointRuntimeState("codex", "gpt-5.3");
+      expect(state.reason).toBe("auth");
+      expect(state.until).toBe(1_600_000);
+    });
+
+    it("extends the cooldown when a longer one arrives", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(1_000_000);
+      markEndpointUnavailable("codex", "gpt-5.3", "rate_limit", 30_000);
+      markEndpointUnavailable("codex", "gpt-5.3", "billing", 600_000);
+      const state = getEndpointRuntimeState("codex", "gpt-5.3");
+      expect(state.reason).toBe("billing");
+      expect(state.until).toBe(1_600_000);
+    });
+
+    it("clears the cooldown on success", () => {
+      markEndpointUnavailable("codex", "gpt-5.3", "rate_limit", 30_000);
+      expect(getEndpointRuntimeState("codex", "gpt-5.3").unavailable).toBe(true);
+      clearEndpointUnavailable("codex", "gpt-5.3");
+      expect(getEndpointRuntimeState("codex", "gpt-5.3").unavailable).toBe(false);
+    });
+
+    it("keeps separate circuit state per endpoint", () => {
+      markEndpointUnavailable("codex", "gpt-5.3", "auth", 600_000);
+      expect(getEndpointRuntimeState("codex", "gpt-5.3").unavailable).toBe(true);
+      expect(getEndpointRuntimeState("anthropic-sub", "claude-opus-4-6").unavailable).toBe(false);
+    });
+
+    it("is cleared by _resetAllTracking", () => {
+      markEndpointUnavailable("codex", "gpt-5.3", "rate_limit", 30_000);
+      _resetAllTracking();
+      expect(getEndpointRuntimeState("codex", "gpt-5.3").unavailable).toBe(false);
     });
   });
 

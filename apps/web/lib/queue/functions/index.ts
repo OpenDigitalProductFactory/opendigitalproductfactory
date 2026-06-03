@@ -12,6 +12,7 @@ import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
 import { materialFreshnessDecay } from "./material-freshness-decay";
 import { researchExecute } from "./research-execute";
+import { researchScheduleScan } from "./research-schedule";
 import { buildReviewVerification } from "./build-review-verification";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
@@ -56,6 +57,7 @@ export const scheduledFunctions = [
   wikiLint,
   skillMetricsAggregator,
   skillCurator,
+  researchScheduleScan,
   materialFreshnessDecay,
   allBackupsDailyScheduled,
   postgresDailyBackupScheduled,

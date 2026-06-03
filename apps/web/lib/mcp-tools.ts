@@ -1443,6 +1443,85 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "send_marketing_email",
+    description: "Send an APPROVED marketing OutboundDraft (channelId=email or email-postmark, assetType=email) through the operator's connected Postmark server. Requires the Email (Postmark) integration to be connected via /platform/tools/integrations/email-postmark. Fails fast if the draft is not status=approved, the Postmark credential is not connected, or the From address is unverified. On success, writes an OutboundPublication row and flips the draft to status=published.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        draftId: { type: "string", description: "OutboundDraft.draftId in status='approved' on an email channel" },
+      },
+      required: ["draftId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "place_linkedin_ad",
+    description: "Place a LinkedIn Ads campaign from an APPROVED OutboundDraft (channelId=linkedin-ads, assetType=ad-creative). Requires the LinkedIn integration connected with the ads scope (r_ads, rw_ads). Refuses if the placement would exceed the per-channel weekly spend ceiling — operators must set a ceiling on /customer/marketing before any ad spend. AGENTS MUST NOT CALL THIS WITHOUT EXPLICIT USER CONFIRMATION naming the spend amount, audience, and ad account.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        draftId: { type: "string", description: "OutboundDraft.draftId in status='approved' on the linkedin-ads channel" },
+      },
+      required: ["draftId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "refresh_channel_kpis",
+    description: "Pull recent engagement metrics from a channel adapter (currently linkedin-ads) for OutboundPublication rows still inside their 30-day analytics window, write a per-publication snapshot, and aggregate channel-level impressions/clicks/cost/conversions into a fresh MarketingKpiCheckpoint row so the next strategist review sees real numbers.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        channelId: { type: "string", description: "Channel id, e.g. linkedin-ads" },
+        sinceDaysAgo: { type: "number", description: "Optional override for the analytics window (default 30)" },
+      },
+      required: ["channelId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "tick_marketing_scheduler",
+    description: "Phase 5: dispatch all ScheduledOutboundAction rows whose scheduledFor <= now. Fires each via the right Phase 1-4 service (draftMarketingAsset / publishApprovedDraft / pullChannelKpis) and reports fired vs failed counts. Idempotent and safe to call as often as the scheduler cadence requires.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "plan_upcoming_marketing_drafts",
+    description: "Phase 5: walk recent MarketingAssetTask rows for the organization and schedule a draft-marketing-asset action 3 days ahead of each task's due window (idempotent — skips tasks that already have a pending or fired schedule).",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "set_marketing_autopilot_policy",
+    description: "Phase 5: operator-only. Upsert a bounded per-channel autopilot policy. Channel must be in the autopilot allowlist (linkedin-personal-social, linkedin, email-postmark, email); ad channels are hard-refused by design. The runtime enforces channel allowlist + word-count threshold + weekly publish ceiling + low-confidence-marker check on every auto-approval.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        channelId: { type: "string", description: "Channel id; must be on the autopilot allowlist" },
+        enabled: { type: "boolean", description: "Whether the policy is active right now" },
+        autoApproveBelowWords: { type: "number", description: "Auto-approve only drafts shorter than this word count (null = no length gate)" },
+        autoPublishAfterMinutes: { type: "number", description: "Minutes a draft must age before autopilot fires (null = no aging gate)" },
+        weeklyCeiling: { type: "number", description: "Maximum publishes per rolling 7-day window for this channel" },
+      },
+      required: ["channelId", "enabled", "weeklyCeiling"],
+    },
+    requiredCapability: "manage_provider_connections",
+    sideEffect: true,
+  },
+  {
     name: "draft_marketing_asset",
     description: "Turn a saved MarketingAssetTask brief into a channel-shaped, human-reviewable draft. Creates an OutboundDraft with status='pending-review' that appears in the marketing approval queue on /customer/marketing. Phase 1: LinkedIn posts and emails only. No external API call — the draft is internal until a human approves and a publish tool fires.",
     inputSchema: {
@@ -13899,7 +13978,9 @@ export async function executeTool(
       };
     }
 
-    case "publish_to_linkedin": {
+    case "publish_to_linkedin":
+    case "send_marketing_email":
+    case "place_linkedin_ad": {
       const { publishApprovedDraft } = await import("./marketing/publish");
       const result = await publishApprovedDraft({
         draftId: String(params["draftId"] ?? ""),
@@ -13916,6 +13997,80 @@ export async function executeTool(
         success: true,
         entityId: result.publicationId,
         message: result.message,
+        data: result,
+      };
+    }
+
+    case "refresh_channel_kpis": {
+      const { pullChannelKpis } = await import("./marketing/kpi-pullback");
+      const result = await pullChannelKpis({
+        channelId: String(params["channelId"] ?? ""),
+        sinceDaysAgo: typeof params["sinceDaysAgo"] === "number" ? (params["sinceDaysAgo"] as number) : undefined,
+      });
+      if (!result.ok && result.snapshotsWritten === 0) {
+        return {
+          success: false,
+          message: `KPI pullback returned no snapshots. Failures: ${result.failures.map((f) => f.error).join("; ")}`,
+          error: "kpi_pullback_failed",
+        };
+      }
+      return {
+        success: true,
+        message: `Pulled ${result.snapshotsWritten} ${params["channelId"]} snapshot${result.snapshotsWritten === 1 ? "" : "s"}; wrote ${result.checkpointsWritten} MarketingKpiCheckpoint row${result.checkpointsWritten === 1 ? "" : "s"}.`,
+        data: result,
+      };
+    }
+
+    case "tick_marketing_scheduler": {
+      const { tickScheduler } = await import("./marketing/scheduler");
+      const result = await tickScheduler({});
+      return {
+        success: true,
+        message: `Scheduler tick: scanned ${result.pendingScanned}, fired ${result.fired}, failed ${result.failed}.`,
+        data: result,
+      };
+    }
+
+    case "plan_upcoming_marketing_drafts": {
+      const { planUpcomingForAssetTasks } = await import("./marketing/scheduler");
+      const { prisma } = await import("@dpf/db");
+      const org = await prisma.organization.findFirst({ select: { id: true } });
+      if (!org) {
+        return { success: false, message: "No organization configured.", error: "no_org" };
+      }
+      const result = await planUpcomingForAssetTasks({ organizationId: org.id });
+      return {
+        success: true,
+        message: `Scheduled ${result.scheduled} drafter run${result.scheduled === 1 ? "" : "s"}; skipped ${result.skipped}.`,
+        data: result,
+      };
+    }
+
+    case "set_marketing_autopilot_policy": {
+      const { setAutopilotPolicy } = await import("./marketing/autopilot");
+      const { prisma } = await import("@dpf/db");
+      const org = await prisma.organization.findFirst({ select: { id: true } });
+      if (!org) {
+        return { success: false, message: "No organization configured.", error: "no_org" };
+      }
+      const result = await setAutopilotPolicy({
+        organizationId: org.id,
+        channelId: String(params["channelId"] ?? ""),
+        enabled: params["enabled"] === true,
+        autoApproveBelowWords:
+          typeof params["autoApproveBelowWords"] === "number" ? (params["autoApproveBelowWords"] as number) : null,
+        autoPublishAfterMinutes:
+          typeof params["autoPublishAfterMinutes"] === "number" ? (params["autoPublishAfterMinutes"] as number) : null,
+        weeklyCeiling: typeof params["weeklyCeiling"] === "number" ? (params["weeklyCeiling"] as number) : 0,
+        userId,
+      });
+      if (!result.ok) {
+        return { success: false, message: result.error, error: "policy_invalid" };
+      }
+      return {
+        success: true,
+        entityId: result.policyId,
+        message: `Autopilot policy ${result.policyId} ${params["enabled"] === true ? "enabled" : "saved disabled"}.`,
         data: result,
       };
     }
@@ -14851,6 +15006,31 @@ export async function executeTool(
     }
 
     case "screen_dispatch_action": {
+      // BI-0F9C291C part 4 — end-to-end envelope execution. Closes the
+      // propose → approve → dispatch loop:
+      //   1. Load the envelope row (#1366 schema, #1415 propose-writes).
+      //   2. Verify it's in `approved` status (only approved envelopes
+      //      can dispatch — proposed envelopes must go through the
+      //      /api/agent/envelope/:id/approve route first).
+      //   3. Resolve manifestActionId → underlying MCP tool via
+      //      findManifestForRoute (the server-side mirror of the
+      //      client window registry — ALL_MANIFESTS is empty until
+      //      BI-6C9CC0EC registers Build Studio, so this path returns
+      //      a clear `no_manifest` error in the meantime).
+      //   4. Execute the underlying tool recursively under the
+      //      envelope's delegatingUserId (the human the coworker is
+      //      acting for — not whoever called dispatch, though they
+      //      should normally match).
+      //   5. Mark the envelope executed | failed via
+      //      markEnvelopeExecuted / markEnvelopeFailed from
+      //      envelope-actions.ts. Marking is best-effort; the side
+      //      effect already ran, so a finalisation write failure
+      //      doesn't roll back — it's logged in the response.
+      //
+      // Per-turn N=3 destructive cap and irreversible typed-phrase
+      // hard floor still land as separate follow-on chunks of
+      // BI-0F9C291C.
+
       const envelopeId =
         typeof params["envelopeId"] === "string" ? params["envelopeId"].trim() : "";
       if (!envelopeId) {
@@ -14860,15 +15040,126 @@ export async function executeTool(
           message: "screen_dispatch_action requires an envelopeId.",
         };
       }
+
+      const routeContext = context?.routeContext;
+      if (!routeContext) {
+        return {
+          success: false,
+          error: "missing_context",
+          message:
+            "screen_dispatch_action requires routeContext in execution context. Invoke via the chat handler, not directly.",
+        };
+      }
+
+      let envelope;
+      try {
+        envelope = await prisma.coworkerActionEnvelope.findUnique({ where: { id: envelopeId } });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          error: "envelope_load_failed",
+          message: `Failed to load envelope ${envelopeId}: ${msg}`,
+        };
+      }
+      if (!envelope) {
+        return {
+          success: false,
+          error: "envelope_not_found",
+          message: `Envelope ${envelopeId} not found.`,
+        };
+      }
+      if (envelope.status !== "approved") {
+        return {
+          success: false,
+          error: "envelope_not_approved",
+          message: `Envelope ${envelopeId} is in status '${envelope.status}'; must be 'approved' before dispatch.`,
+        };
+      }
+
+      // Resolve manifest + action server-side. Reuses the same
+      // route-matching the client registry uses (matchesRoute is
+      // exported from screen-manifest-registry).
+      const { findManifestForRoute } = await import("./coworker/manifests/index");
+      const manifest = findManifestForRoute(routeContext);
+      if (!manifest) {
+        return {
+          success: false,
+          error: "no_manifest",
+          message: `No ScreenManifest is registered for routeContext '${routeContext}'. ALL_MANIFESTS may still be empty (first consumer lands in BI-6C9CC0EC).`,
+        };
+      }
+      const domainAction = manifest.domainActions.find(
+        (a) => a.actionId === envelope.manifestActionId,
+      );
+      if (!domainAction) {
+        return {
+          success: false,
+          error: "action_not_in_manifest",
+          message: `Manifest '${manifest.surfaceId}' has no domain action '${envelope.manifestActionId}'.`,
+        };
+      }
+
+      // Recurse: execute the underlying tool under the envelope's
+      // delegating user (not necessarily the caller — see the doc
+      // block above).
+      const toolName = domainAction.tool;
+      const toolArgs =
+        envelope.argsJson && typeof envelope.argsJson === "object" && !Array.isArray(envelope.argsJson)
+          ? (envelope.argsJson as Record<string, unknown>)
+          : {};
+
+      const { markEnvelopeExecuted, markEnvelopeFailed } = await import("./coworker/envelope-actions");
+
+      let toolResult: ToolResult;
+      try {
+        toolResult = await executeTool(toolName, toolArgs, envelope.delegatingUserId, context);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // The underlying tool threw — mark the envelope failed, then
+        // return a structured tool_execution_threw response.
+        await markEnvelopeFailed(envelopeId).catch(() => undefined);
+        return {
+          success: false,
+          error: "tool_execution_threw",
+          message: `Underlying tool '${toolName}' threw: ${msg}`,
+          data: {
+            event: {
+              type: "screen:action_dispatch_failed",
+              payload: { envelopeId, tool: toolName, manifestActionId: envelope.manifestActionId, error: msg },
+            },
+          },
+        };
+      }
+
+      // Finalise the envelope based on the tool's structured success
+      // flag. markEnvelope* uses the state machine (#1390); a write
+      // failure here doesn't change the fact the side effect already
+      // ran — log it on the response so the chat handler can surface.
+      const finalise = toolResult.success
+        ? await markEnvelopeExecuted(envelopeId)
+        : await markEnvelopeFailed(envelopeId);
+
       return {
-        success: true,
-        message: `Envelope ${envelopeId} dispatch requested.`,
+        success: toolResult.success,
+        entityId: envelopeId,
+        message: toolResult.success
+          ? `Envelope ${envelopeId} executed (${toolName}): ${toolResult.message}`
+          : `Envelope ${envelopeId} dispatch reported failure (${toolName}): ${toolResult.message}`,
         data: {
           event: {
-            type: "screen:dispatch_requested",
-            payload: { envelopeId },
+            type: "screen:action_dispatched",
+            payload: {
+              envelopeId,
+              tool: toolName,
+              manifestActionId: envelope.manifestActionId,
+              ok: toolResult.success,
+            },
           },
-          note: "Envelope execution (read row → run underlying tool → mark executed) lands in BI-0F9C291C.",
+          toolResult,
+          // Surface finalisation outcome when it itself was refused —
+          // e.g. envelope already terminal due to a race with cancel.
+          ...(finalise.ok ? {} : { finaliseRefused: finalise.reason }),
         },
       };
     }

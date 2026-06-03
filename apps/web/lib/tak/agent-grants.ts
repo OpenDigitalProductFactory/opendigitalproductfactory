@@ -319,6 +319,19 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   create_marketing_automation_candidate: ["marketing_write"],
   draft_marketing_asset:         ["marketing_write"],
   publish_to_linkedin:           ["marketing_write"],
+  send_marketing_email:          ["marketing_write"],
+  place_linkedin_ad:             ["marketing_write"],
+  refresh_channel_kpis:          ["marketing_write"],
+  tick_marketing_scheduler:      ["marketing_write"],
+  plan_upcoming_marketing_drafts: ["marketing_write"],
+  // Tool checks `requiredCapability: "manage_provider_connections"` at the
+  // user-capability layer (operator-only). The agent-grant layer just gates
+  // whether the agent may attempt the tool; marketing-specialist needs
+  // marketing_write here for the prompt to even surface the tool name. The
+  // OPERATOR's capability gate is the real "operator-only" enforcement;
+  // marketing-specialist's prompt is also explicit that it must not call
+  // this tool itself.
+  set_marketing_autopilot_policy: ["marketing_write"],
   analyze_seo_opportunity:      ["marketing_read"],
   generate_custom_archetype:    ["marketing_write"],
   assess_archetype_refinement:  ["marketing_read"],
