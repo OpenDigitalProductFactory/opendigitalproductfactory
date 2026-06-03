@@ -106,14 +106,19 @@ export function scorePerspectiveMaterial(material: PerspectiveMaterial): Perspec
   const evidenceFactor = EVIDENCE_FACTORS[material.evidenceGrade];
   const reviewFactor = REVIEW_FACTORS[material.reviewStatus];
   const promotionFactor = PROMOTION_FACTORS[material.promotionState];
+  // Superseded material has been replaced by a fresher source; like contradicted
+  // material it stays queryable for audit but must NOT drive a decision
+  // (BI-06B2EC05 / design §8). Excluded (weight 0), not merely down-weighted.
   const exclusionReason =
     material.freshness === "contradicted"
       ? "contradicted"
-      : material.reviewStatus === "rejected"
-        ? "rejected"
-        : material.promotionState === "revoked"
-          ? "revoked"
-          : null;
+      : material.freshness === "superseded"
+        ? "superseded"
+        : material.reviewStatus === "rejected"
+          ? "rejected"
+          : material.promotionState === "revoked"
+            ? "revoked"
+            : null;
 
   const effectiveWeight = exclusionReason
     ? 0
