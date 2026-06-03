@@ -11,6 +11,7 @@ export type NativeIntegrationId =
   | "facebook"
   | "facebook-pages"
   | "linkedin-personal-social"
+  | "linkedin-ads"
   | "email-postmark"
   | "mailchimp";
 
@@ -222,6 +223,25 @@ export const NATIVE_INTEGRATIONS: NativeIntegrationDescriptor[] = [
     model: "native",
     tags: ["marketing", "social", "publish", "linkedin"],
     enables: ["Publish marketing draft to LinkedIn feed"],
+    relevantAgentIds: ["marketing-specialist"],
+    requiredGrantKeys: ["marketing_write"],
+  },
+  {
+    id: "linkedin-ads",
+    integrationId: "linkedin-ads",
+    provider: "linkedin",
+    name: "LinkedIn Ads",
+    description: "Place paid LinkedIn ads from approved ad-creative drafts with hard per-channel weekly spend ceilings + KPI pullback. Reuses your own LinkedIn developer app with the optional ads scope.",
+    href: "/platform/tools/integrations/linkedin-personal-social",
+    category: "marketing",
+    pricingModel: "paid",
+    model: "native",
+    tags: ["marketing", "ads", "paid", "linkedin"],
+    enables: [
+      "Place LinkedIn campaign from approved ad-creative",
+      "Hard weekly spend ceiling refused at place time",
+      "Engagement pullback into MarketingKpiCheckpoint",
+    ],
     relevantAgentIds: ["marketing-specialist"],
     requiredGrantKeys: ["marketing_write"],
   },
