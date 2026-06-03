@@ -17,7 +17,7 @@ import type {
 } from "./types";
 import type { RequestContract } from "./request-contract";
 import { filterByPolicy } from "./pipeline";
-import { checkModelCapacity } from "./rate-tracker";
+import { checkModelCapacity, getEndpointRuntimeState } from "./rate-tracker";
 import { satisfiesMinimumCapabilities } from "./agent-capability-types";
 import {
   estimateSuccessProbability,
@@ -179,6 +179,48 @@ function filterHardV2(
     }
   }
 
+  // ── Runtime circuit breaker — SOFT exclusion (EP routing-resilience Slice A) ─
+  // Endpoints whose runtime circuit is open (a recent hard failure that has not
+  // yet cooled down) are excluded so the cost-per-success ranker stops
+  // re-selecting a just-failed provider on every agentic-loop iteration. This is
+  // the fix for the compounding 30s-wait incident (spec D1): routeAndCall
+  // re-runs this pipeline each iteration, so once an endpoint is marked
+  // unavailable it is skipped here without incurring another wait.
+  //
+  // SOFT: only drop cooled-down endpoints when at least one non-cooled endpoint
+  // remains eligible. On a single-provider install (the cooled endpoint is the
+  // only option) we keep it rather than fail the turn with "no eligible
+  // endpoints" — graceful degradation over a hard lockout (spec risk R1).
+  const cooled: Array<{ ep: EndpointManifest; reason: string }> = [];
+  const live: EndpointManifest[] = [];
+  for (const ep of eligible) {
+    const runtime = getEndpointRuntimeState(ep.providerId, ep.modelId);
+    if (runtime.unavailable) {
+      cooled.push({ ep, reason: `runtime_cooldown:${runtime.reason ?? "unknown"}` });
+    } else {
+      live.push(ep);
+    }
+  }
+
+  if (cooled.length > 0 && live.length > 0) {
+    for (const { ep, reason } of cooled) {
+      excluded.push({
+        endpointId: ep.id,
+        providerId: ep.providerId,
+        modelId: ep.modelId,
+        endpointName: ep.name,
+        fitnessScore: 0,
+        dimensionScores: {},
+        costPerOutputMToken: ep.costPerOutputMToken,
+        excluded: true,
+        excludedReason: reason,
+      });
+    }
+    return { eligible: live, excluded };
+  }
+
+  // All eligible endpoints are cooled down (or none are) — keep `eligible` as-is
+  // so the turn can still proceed against the least-bad option.
   return { eligible, excluded };
 }
 

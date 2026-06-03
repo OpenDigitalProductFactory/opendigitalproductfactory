@@ -26,6 +26,31 @@ import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 600_000; // 10 minutes — accumulated Build Studio context (>100K chars) takes longer than 3 min to process
 
+/**
+ * Auth/login failure signatures from the Codex CLI. Checked BEFORE rate-limit
+ * classification (routing-resilience spec D2): when an OAuth token has expired
+ * the CLI sometimes emits throttle-looking text, and misclassifying that as
+ * `rate_limit` sends the fallback chain into a 30s wait-and-retry loop against
+ * a provider that cannot succeed until re-authentication. Treating it as `auth`
+ * disables the provider and surfaces the reconnect action instead.
+ */
+const CLI_AUTH_FAILURE_PATTERNS: RegExp[] = [
+  /not logged in/i,
+  /unauthorized/i,
+  /\b401\b/,
+  /re-?authenticat/i,
+  /please log ?in/i,
+  /session (?:has )?expired/i,
+  /token (?:has )?expired/i,
+  /not authenticated/i,
+  /invalid api key/i,
+  /fix external api key/i,
+];
+
+export function looksLikeCliAuthFailure(text: string): boolean {
+  return CLI_AUTH_FAILURE_PATTERNS.some((p) => p.test(text));
+}
+
 // ─── Container file writer ─────────────────────────────────────────────────
 
 /**
@@ -293,7 +318,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
           } else if (code === 0 || stdout.trim()) {
             resolve({ stdout });
           } else {
-            if (stderr.includes("Not logged in") || stderr.includes("unauthorized") || stderr.includes("401")) {
+            if (looksLikeCliAuthFailure(stderr)) {
               reject(new InferenceError(
                 `Codex CLI auth failed: ${stderr.slice(0, 300)}`,
                 "auth",
@@ -349,19 +374,12 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       // (observed payloads: "Invalid API key · Fix external API key",
       // "ERROR: unexpected status 401 Unauthorized: Missing bearer..."). The
       // stderr-keyword check earlier only catches stderr; mirror that logic
-      // on stdout to ensure fallback kicks in instead of the error text
-      // being shipped as assistant content.
-      const CLI_AUTH_ERROR_PATTERNS = [
-        /invalid api key/i,
-        /fix external api key/i,
-        /please log in/i,
-        /401 unauthorized/i,
-        /not authenticated/i,
-      ];
+      // on stdout (shared matcher, spec D2) to ensure fallback kicks in instead
+      // of the error text being shipped as assistant content.
       const looksLikeAuthError =
         toolCalls.length === 0 &&
         text.length < 300 &&
-        CLI_AUTH_ERROR_PATTERNS.some((p) => p.test(text));
+        looksLikeCliAuthFailure(text);
       if (looksLikeAuthError) {
         throw new InferenceError(
           `Codex CLI auth error (from stdout): ${text.slice(0, 200)}`,
