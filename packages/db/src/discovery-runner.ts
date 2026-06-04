@@ -11,6 +11,7 @@ import {
 } from "./discovery-normalize";
 import { persistBootstrapDiscoveryRun } from "./discovery-sync";
 import { promoteInventoryEntities } from "./discovery-promotion";
+import { reconcilePromotedProducts } from "./discovery-reconcile";
 import {
   inferCrossCollectorRelationships,
   inferProductDependencies,
@@ -129,6 +130,21 @@ export async function executeBootstrapDiscovery(
     }
   } catch (err) {
     console.error("[discovery] Promotion pass failed (non-fatal):", err);
+  }
+
+  // Reconcile: demote any previously-promoted infrastructure (host / NIC /
+  // subnet / gateway) that the structural type-gate now rejects, so the
+  // portfolio self-heals from earlier over-promotion instead of accumulating
+  // network noise. Idempotent and conservative (entityType-based).
+  try {
+    const reconcileSummary = await reconcilePromotedProducts(db as never);
+    if (reconcileSummary.demoted > 0) {
+      console.log(
+        `[discovery] Reconciled portfolio: demoted ${reconcileSummary.demoted} infrastructure products, kept ${reconcileSummary.detachedEntities} inventory rows`,
+      );
+    }
+  } catch (err) {
+    console.error("[discovery] Reconcile pass failed (non-fatal):", err);
   }
 
   // Pass 2 & 3: Product-to-infrastructure relationship inference
