@@ -241,7 +241,15 @@ ON THIS PAGE: The user is in the internal customer marketing workspace. Help the
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
     modelRequirements: {
-      defaultMinimumTier: "strong",
+      // Phase 4/5 marketing execution tools (place_linkedin_ad, tick_marketing_scheduler,
+      // set_marketing_autopilot_policy, etc.) require a frontier-class model to reliably
+      // use tools from its own schema — claude-haiku-4 ("strong" tier) was observed
+      // systematically refusing to call tools that are provably in its tool list when
+      // conversational history contains any prior "capability blocked" note. Bumping to
+      // "frontier" routes to Sonnet/Opus and eliminates the hallucination.
+      // Filed as follow-up BI under EP-MARKETING-EXEC: track model behavior and revert
+      // if the strong-tier model improves.
+      defaultMinimumTier: "frontier",
       defaultBudgetClass: "balanced",
     },
   },
