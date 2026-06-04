@@ -40,6 +40,7 @@ import {
   neo4jBackupRequested,
   qdrantBackupRequested,
 } from "./postgres-daily-backup";
+import { runtimeTargetJanitor } from "./runtime-target-janitor";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 export const scheduledFunctions = [
@@ -62,6 +63,7 @@ export const scheduledFunctions = [
   allBackupsDailyScheduled,
   postgresDailyBackupScheduled,
   selfUpgradeScheduled,
+  runtimeTargetJanitor,  // BI-AD949172: RT heartbeat sweep + lease expiry, hourly
 ];
 
 export const eventFunctions = [
