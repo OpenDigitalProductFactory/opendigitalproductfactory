@@ -138,13 +138,21 @@ export async function dispatchBuildForApprovedPlan(params: {
       return { kind: "dispatched-failure", error: msg, durationMs: Date.now() - t0 };
     }
 
-    // Re-fetch to get the buildBranch now that start_build initialized it
+    // Re-fetch to get current phase. start_build initializes the branch but
+    // does NOT advance the phase — that happens in reviewBuildPlan's gate check.
+    // If the gate was previously blocked (e.g. sandbox unavailable), we advance
+    // the phase directly here since start_build has now confirmed sandbox readiness.
     const buildWithBranch = await prisma.featureBuild.findUnique({
       where: { buildId },
-      select: { phase: true },
+      select: { phase: true, buildBranch: true },
     });
-    if (buildWithBranch?.phase !== "build") {
-      await log(`Phase is ${buildWithBranch?.phase} after start_build — not in build, skipping orchestrator`);
+
+    if (buildWithBranch?.phase === "plan" && buildWithBranch.buildBranch) {
+      // start_build set the branch — advance phase to build manually
+      await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
+      await log("Phase advanced to build (start_build confirmed sandbox ready)");
+    } else if (buildWithBranch?.phase !== "build") {
+      await log(`Phase is ${buildWithBranch?.phase} after start_build — cannot advance, skipping orchestrator`);
       return { kind: "skipped-wrong-phase", reason: `phase=${buildWithBranch?.phase} after start_build` };
     }
 
