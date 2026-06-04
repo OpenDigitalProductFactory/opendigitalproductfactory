@@ -192,6 +192,7 @@ export function SetupWizard({
           label: "Platform workspace view",
           status: "not-configured",
           sourceContributionId: null,
+          primaryOperatingQuestion: null,
           primitiveWidgets: [],
           requiredCanonicalData: [],
           requiredSignals: [],

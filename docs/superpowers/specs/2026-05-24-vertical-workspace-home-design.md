@@ -322,6 +322,13 @@ Registered component keys (initial set): `today-schedule`, `unassigned-work`, `t
 
 This covenant gives workers a consistent mental model across verticals — "where is my day, what's broken, what's waiting on me" — without prescribing the cards in between. The substrate BI MUST encode the covenant as a type-level constraint on `WorkspaceHomeContribution` (e.g. `slots: [TodaySlot, ExceptionsSlot, HandoffsSlot, ...rest]`) or as a runtime registration assertion with a failing test.
 
+**Architect amendments (additive, optional).** Folded in from the 2026-05-31 archetype-aware-workspace spec architect pass so the substrate carries them rather than a parallel shape (see [2026-05-31-archetype-aware-workspace-design.md §"Folded into parent spec via amendments"](2026-05-31-archetype-aware-workspace-design.md)):
+
+1. **`primaryOperatingQuestion?: string`** on `WorkspaceHomeContribution` — names "what one question the worker arrives asking" (HVAC: "what's on the board today?"; MSP: "what's red on the estate?"). Surfaces in business-setup activation summaries so admins can see the framing the vertical home commits to. Optional — substrate-only delivery leaves it undefined; the resolver does no derivation.
+2. **`zone?: WorkspaceHomeSlotZone`** on `WorkspaceHomeSlotSpec` (named `WorkspaceHomeSlot` in the substrate code; same concept) — presentation grouping above the slot covenant, enumerated as `"critical-strip" | "primary" | "secondary" | "briefing" | "setup"`. Lets a contribution say *how* a slot reads on the worker home (front-and-center, supporting, or admin-only) without forking the slot covenant or the primitive registry. Optional; downstream renderers may derive a default from existing ordering signals when absent. The substrate stores the value verbatim and does no derivation.
+
+Both fields are additive. Contributions written before the amendments — including any contribution registered against the registry today — remain valid without change.
+
 **Business-archetype setup activation.** Workspace-home activation is part of archetype setup, not a later manual dashboard configuration chore. When setup selects or changes the business archetype / storefront archetype, the setup flow MUST evaluate the workspace-home contribution registry and report one of these outcomes:
 
 1. **Exact home included** — an exact semantic `StorefrontArchetype.archetypeId` contribution exists. Setup confirms the worker home that will be installed, its primitive widgets, and any required setup data.

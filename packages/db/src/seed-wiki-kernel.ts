@@ -385,27 +385,13 @@ async function seedWikiPages(
   slugToId: Map<string, string>;
   orphanLinks: Array<{ from: string; to: string }>;
   /** Per-page metadata needed to build Qdrant payloads in `seedWikiQdrant`. */
-  pages: Array<{
-    id: string;
-    slug: string;
-    title: string;
-    body: string;
-    pageKind: string;
-    status: string;
-  }>;
+  pages: SeedablePage[];
 }> {
   const wikiDir = join(KERNEL_DIR, "wiki");
   const files = walkMarkdownFiles(wikiDir);
   const slugToId = new Map<string, string>();
   const bodies = new Map<string, string>();
-  const pages: Array<{
-    id: string;
-    slug: string;
-    title: string;
-    body: string;
-    pageKind: string;
-    status: string;
-  }> = [];
+  const pages: SeedablePage[] = [];
 
   // Pass 1: upsert pages and append revisions.
   for (const file of files) {
@@ -437,6 +423,12 @@ async function seedWikiPages(
       body,
       pageKind: frontmatter.pageKind,
       status,
+      // Thread principle metadata into the Qdrant payload (BI-30AA6B76).
+      principleTier: principlePayload.principleTier ?? null,
+      principleAppliesTo: principlePayload.principleAppliesTo,
+      principleRingScope: principlePayload.principleRingScope,
+      principleDimensions: principlePayload.principleDimensions,
+      principlePublic: principlePayload.principlePublic ?? undefined,
     });
 
     // Append a revision tagged kernel-merge if the body changed since
@@ -512,6 +504,17 @@ export type SeedablePage = {
   body: string;
   pageKind: string;
   status: string;
+  // Principle payload fields, threaded from `extractPrinciplePayload` so
+  // `buildKernelQdrantPoints` writes the SAME Qdrant payload as the runtime
+  // `storeWikiPage` (apps/web/lib/wiki/embeddings.ts). Without these,
+  // principle-filtered retrieval (principle_decide, wiki_query
+  // tier/appliesTo/ringScope) cannot find sidecar-seeded principle pages —
+  // BI-30AA6B76. Only meaningful when pageKind === "principle".
+  principleTier?: string | null;
+  principleAppliesTo?: string[];
+  principleRingScope?: string[];
+  principleDimensions?: string[];
+  principlePublic?: boolean;
 };
 
 /**
@@ -538,25 +541,33 @@ export function buildKernelQdrantPoints(
       console.warn(`[seed-wiki-kernel] sidecar contains slug "${rec.slug}" with no matching wiki page; skipping`);
       continue;
     }
-    out.push({
-      id: `wiki-page-${page.id}`,
-      vector: rec.vector,
-      payload: {
-        entityType: "wiki-page",
-        entityId: page.id,
-        slug: page.slug,
-        title: page.title,
-        contentPreview: page.body.slice(0, 500),
-        pageKind: page.pageKind,
-        status: page.status,
-        isKernel: true,
-        // Kernel rows have organizationId = null.
-        organizationId: null,
-        kernelVersion,
-        kernelPageId: null,
-        timestamp,
-      },
-    });
+    const payload: Record<string, unknown> = {
+      entityType: "wiki-page",
+      entityId: page.id,
+      slug: page.slug,
+      title: page.title,
+      contentPreview: page.body.slice(0, 500),
+      pageKind: page.pageKind,
+      status: page.status,
+      isKernel: true,
+      // Kernel rows have organizationId = null.
+      organizationId: null,
+      kernelVersion,
+      kernelPageId: null,
+      timestamp,
+    };
+    // Principle-only payload keys — mirror storeWikiPage() so principle
+    // retrieval filters (tier/appliesTo/ringScope) match sidecar-seeded
+    // principle pages. Absence is the marker; never write null/empty for
+    // non-principle pages (BI-30AA6B76).
+    if (page.pageKind === "principle") {
+      if (page.principleTier != null) payload.principleTier = page.principleTier;
+      if (page.principleAppliesTo !== undefined) payload.principleAppliesTo = page.principleAppliesTo;
+      if (page.principleRingScope !== undefined) payload.principleRingScope = page.principleRingScope;
+      if (page.principleDimensions !== undefined) payload.principleDimensions = page.principleDimensions;
+      if (page.principlePublic !== undefined) payload.principlePublic = page.principlePublic;
+    }
+    out.push({ id: `wiki-page-${page.id}`, vector: rec.vector, payload });
   }
   return out;
 }
