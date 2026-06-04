@@ -205,6 +205,15 @@ export {
   type PromotionSummary,
 } from "./discovery-promotion";
 export {
+  reconcilePromotedProducts,
+  isInfrastructureProduct,
+  type ReconcileSummary,
+} from "./discovery-reconcile";
+export {
+  isNonProductEntityType,
+  NON_PRODUCT_ENTITY_TYPES,
+} from "./discovery-promotion-policy";
+export {
   TRIAGE_ACTOR_TYPES,
   TRIAGE_OUTCOMES,
   TRIAGE_QUALITY_ISSUE_TYPES,

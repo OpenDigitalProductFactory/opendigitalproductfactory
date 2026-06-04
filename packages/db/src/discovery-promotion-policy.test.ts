@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   LEGACY_PROMOTABLE_TYPES,
   looksLikeRuntimeArtifact,
+  isNonProductEntityType,
   resolvePromotionDecision,
 } from "./discovery-promotion-policy";
 
@@ -51,13 +52,13 @@ describe("resolvePromotionDecision", () => {
     expect(resolvePromotionDecision(baseEntity, taxonomyNode, null).reason).toBe("no_portfolio_root");
   });
 
-  it("emits classifyAs from policy when provided", () => {
-    const node = { ...taxonomyNode, governance: { promotion: { mode: "auto", classifyAs: "infrastructure_endpoint" } } };
-    // Use an entityType the legacy list would reject, then prove the
-    // policy override wins. Also pass a non-runtime name so the new
-    // name-gate doesn't fire first.
-    const e = { ...baseEntity, entityType: "network_client", name: "Custom Service Endpoint" };
-    expect(resolvePromotionDecision(e, node, portfolio).classifyAs).toBe("infrastructure_endpoint");
+  it("emits classifyAs from policy when provided (on a product-shaped entity)", () => {
+    const node = { ...taxonomyNode, governance: { promotion: { mode: "auto", classifyAs: "managed_service" } } };
+    // A product-shaped type with a non-runtime name promotes, and classifyAs
+    // flows through. (Infra types are blocked by the structural gate even with
+    // an auto policy — see the structural-type-gate describe block below.)
+    const e = { ...baseEntity, entityType: "service", name: "Custom Managed Service" };
+    expect(resolvePromotionDecision(e, node, portfolio).classifyAs).toBe("managed_service");
   });
 
   describe("name-shape gate (BI-79307D22)", () => {
@@ -99,6 +100,61 @@ describe("resolvePromotionDecision", () => {
       expect(decision.decision).toBe("promote");
     });
   });
+
+  describe("structural entityType gate (estate-accuracy)", () => {
+    const autoNode = { ...taxonomyNode, governance: { promotion: { mode: "auto" } } };
+
+    it("rejects a 'host' even when its taxonomy node auto-promotes", () => {
+      // The exact live leak: "foundational/compute/servers" is mode:auto and a
+      // host name like "LAN Host 172.18.0.1" slips past the name-gate.
+      const decision = resolvePromotionDecision(
+        { ...baseEntity, entityType: "host", name: "LAN Host 172.18.0.1" },
+        autoNode,
+        portfolio,
+      );
+      expect(decision.decision).toBe("skip");
+      expect(decision.reason).toBe("type_not_promotable");
+      expect(decision.evidence.source).toBe("structural-type-gate");
+    });
+
+    it("rejects a 'network_interface' even with classifyAs:infrastructure_endpoint", () => {
+      const node = {
+        ...taxonomyNode,
+        governance: { promotion: { mode: "auto", classifyAs: "infrastructure_endpoint" } },
+      };
+      const decision = resolvePromotionDecision(
+        { ...baseEntity, entityType: "network_interface", name: "eth0 (172.18.0.11)" },
+        node,
+        portfolio,
+      );
+      expect(decision.decision).toBe("skip");
+      expect(decision.reason).toBe("type_not_promotable");
+    });
+
+    it.each(["host", "docker_host", "container", "network_interface", "subnet", "gateway", "switch", "access_point", "router", "network_client"])(
+      "hard-blocks infra type %s regardless of auto policy",
+      (entityType) => {
+        const decision = resolvePromotionDecision(
+          { ...baseEntity, entityType, name: "Some Infra Thing" },
+          autoNode,
+          portfolio,
+        );
+        expect(decision.decision).toBe("skip");
+        expect(decision.evidence.source).toBe("structural-type-gate");
+      },
+    );
+
+    it("still promotes product-shaped types (database, service, application) under auto policy", () => {
+      for (const entityType of ["database", "service", "application", "monitoring_service"]) {
+        const decision = resolvePromotionDecision(
+          { ...baseEntity, entityType, name: "Real Product" },
+          autoNode,
+          portfolio,
+        );
+        expect(decision.decision).toBe("promote");
+      }
+    });
+  });
 });
 
 describe("looksLikeRuntimeArtifact", () => {
@@ -115,6 +171,31 @@ describe("looksLikeRuntimeArtifact", () => {
     ["Real Product Name", false],
   ])("classifies %s as runtime=%s", (name, expected) => {
     expect(looksLikeRuntimeArtifact(name)).toBe(expected);
+  });
+});
+
+describe("isNonProductEntityType", () => {
+  it.each([
+    ["host", true],
+    ["docker_host", true],
+    ["container", true],
+    ["network_interface", true],
+    ["subnet", true],
+    ["gateway", true],
+    ["switch", true],
+    ["access_point", true],
+    ["router", true],
+    ["network_client", true],
+    ["HOST", true], // case-insensitive
+    [" host ", true], // trims
+    ["database", false],
+    ["service", false],
+    ["application", false],
+    ["monitoring_service", false],
+    ["runtime", false],
+    ["ai_service", false],
+  ])("classifies %s as non-product=%s", (entityType, expected) => {
+    expect(isNonProductEntityType(entityType)).toBe(expected);
   });
 });
 
