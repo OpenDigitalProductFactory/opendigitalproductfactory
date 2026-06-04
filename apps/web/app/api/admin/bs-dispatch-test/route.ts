@@ -8,16 +8,35 @@ export async function POST(req: Request) {
   const authHeader = req.headers.get("authorization") ?? "";
   const rawToken = authHeader.replace("Bearer ", "").trim();
 
-  // Tokens stored as SHA-256 hash of the raw token
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
   const tokenRow = await prisma.mcpApiToken.findFirst({ where: { tokenHash } });
   if (!tokenRow) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
   const buildId = body?.buildId;
+  const resetPlan = body?.resetPlan === true;
+  const dispatchPhase = body?.phase as "plan" | "build" | undefined;
   if (!buildId) return NextResponse.json({ error: "buildId required" }, { status: 400 });
 
   const userId = tokenRow.userId;
+
+  if (resetPlan) {
+    await prisma.featureBuild.update({
+      where: { buildId },
+      data: {
+        buildPlan: null as unknown as import("@dpf/db").Prisma.InputJsonValue,
+        planReview: null as unknown as import("@dpf/db").Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  if (dispatchPhase === "build") {
+    const { dispatchBuildForApprovedPlan } = await import("@/lib/integrate/build-on-plan-approval");
+    const result = await dispatchBuildForApprovedPlan({ buildId, userId });
+    return NextResponse.json(result);
+  }
+
+  // Default: dispatch plan generation
   const { dispatchPlanForApprovedBuild } = await import("@/lib/integrate/plan-on-approval");
   const result = await dispatchPlanForApprovedBuild({ buildId, userId });
   return NextResponse.json(result);

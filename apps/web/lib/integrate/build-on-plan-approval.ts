@@ -64,8 +64,9 @@ export async function dispatchBuildForApprovedPlan(params: {
       return { kind: "dispatched-failure", error: "Build not found", durationMs: Date.now() - t0 };
     }
 
-    if (build.phase !== "build") {
-      await log(`Skipped — phase is ${build.phase}, expected build`);
+    // Accept both "plan" (will be advanced to build by start_build) and "build"
+    if (build.phase !== "build" && build.phase !== "plan") {
+      await log(`Skipped — phase is ${build.phase}, expected plan or build`);
       return { kind: "skipped-wrong-phase", reason: `phase=${build.phase}` };
     }
 
@@ -113,6 +114,39 @@ export async function dispatchBuildForApprovedPlan(params: {
     // 3. Use the build's existing threadId for event bus routing (real-time UI
     //    updates flow to the correct panel), or generate an ephemeral one.
     const parentThreadId = build.threadId ?? `auto-build-${buildId}-${Date.now()}`;
+
+    // 3b. Call start_build via executeTool to initialize the sandbox branch.
+    //     This handles the sandbox availability check AND creates the build branch
+    //     on the FeatureBuild record, which is required before runBuildOrchestrator.
+    //     If already initialized (idempotent), start_build returns success and we continue.
+    try {
+      const { executeTool } = await import("@/lib/mcp-tools");
+      const startResult = await executeTool(
+        "start_build",
+        { buildId },
+        userId,
+        { featureBuildId: buildId },
+      );
+      if (!startResult.success) {
+        await log(`start_build failed: ${String(startResult.message ?? startResult.error ?? "unknown").slice(0, 200)}`);
+        return { kind: "dispatched-failure", error: `start_build failed: ${startResult.message}`, durationMs: Date.now() - t0 };
+      }
+      await log("start_build succeeded — sandbox ready, build branch initialized");
+    } catch (startErr) {
+      const msg = String(startErr instanceof Error ? startErr.message : startErr).slice(0, 200);
+      await log(`start_build threw: ${msg}`);
+      return { kind: "dispatched-failure", error: msg, durationMs: Date.now() - t0 };
+    }
+
+    // Re-fetch to get the buildBranch now that start_build initialized it
+    const buildWithBranch = await prisma.featureBuild.findUnique({
+      where: { buildId },
+      select: { phase: true },
+    });
+    if (buildWithBranch?.phase !== "build") {
+      await log(`Phase is ${buildWithBranch?.phase} after start_build — not in build, skipping orchestrator`);
+      return { kind: "skipped-wrong-phase", reason: `phase=${buildWithBranch?.phase} after start_build` };
+    }
 
     await log(`Dispatching build orchestrator: ${plan.tasks.length} tasks, parentThread=${parentThreadId}`);
 

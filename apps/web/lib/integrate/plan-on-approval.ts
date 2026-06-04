@@ -98,8 +98,12 @@ CRITICAL RULES:
 - For "create" actions, use the same directory as the nearest related existing file.
 - Each task MUST have: title, testFirst, implement, verify
 - implement MUST reference specific existing files/patterns (e.g. "follow pattern in apps/web/lib/actions/build.ts")
-- Tasks should be 2-5 minutes of work each — atomic, bite-sized
-- Include schema migration tasks if new DB models are needed
+- Tasks should be 2-5 minutes of work each — atomic, bite-sized. ONE specific file operation per task.
+- NEVER combine multiple file edits or a test + implementation in one task
+- A task that says "create file X AND update file Y" is TWO tasks
+- A task that builds a test harness AND implements the feature is TWO tasks
+- Include schema migration tasks if new DB models are needed (separate task each)
+- Limit to 10 tasks maximum. If the feature needs more, scope down.
 - Do NOT add boilerplate commentary — pure JSON only
 ${verifiedPaths && verifiedPaths.length > 0 ? `
 VERIFIED FILES (CONFIRMED TO EXIST — use these exact paths for modify actions):
