@@ -111,24 +111,27 @@ export function planKernelMemorySeed(
 
     let mode: PlanWriteMode = "create";
     let skipBecauseUnchanged = false;
-    if (_exists && _exists(destPath)) {
+    // EAFP: read the destination file directly instead of using an existsSync
+    // guard before readFileSync. The existsSync→readFileSync pattern is a TOCTOU
+    // (time-of-check-time-of-use) race condition that CodeQL flags as a
+    // potential security vulnerability (even in non-server contexts, it's still
+    // correct to prefer atomic-ish reads). If the file is absent, readFileSync
+    // throws and the catch block keeps mode at "create".
+    try {
+      const existingContent = _readFile(destPath, "utf8");
+      // File exists and is readable. Check mtime for user-edit detection.
       const mtime = _stat(destPath).mtime.getTime();
       if (baseline > 0 && mtime > baseline) {
         mode = "preserve-user-edit";
+      } else if (existingContent === content) {
+        // Phase 6 idempotence: content already matches — skip the write.
+        skipBecauseUnchanged = true;
+        mode = "update";
       } else {
         mode = "update";
-        // Phase 6 idempotence: if the destination's current content already
-        // matches what we'd write, skip the write entirely. The first-run
-        // accumulation in Phase 5 was driven by this missing check.
-        try {
-          const existingContent = _readFile(destPath, "utf8");
-          if (existingContent === content) {
-            skipBecauseUnchanged = true;
-          }
-        } catch {
-          // If we can't read the dest, fall through and emit the update write.
-        }
       }
+    } catch {
+      // File absent or unreadable — default "create" mode applies.
     }
 
     if (mode === "preserve-user-edit") {

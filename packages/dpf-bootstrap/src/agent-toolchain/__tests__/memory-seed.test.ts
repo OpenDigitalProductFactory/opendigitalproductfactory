@@ -63,7 +63,22 @@ describe("planKernelMemorySeed", () => {
         commandmentTierOnly: true,
         installTimeBaseline: baseline,
         fs: {
-          existsSync: (p: string) => p.endsWith("kernel_never-ask-user-to-run-commands.md"),
+          // EAFP: the implementation now reads before checking existence.
+          // Provide readFileSync so the simulated-existing dest file doesn't
+          // throw ENOENT (which would reset it to "create" mode).
+          // We identify dest files by the contributorMemoryDir segment in their
+          // path, not by a forward-slash prefix (which node/path.join converts
+          // to backslashes on Windows).
+          readFileSync: (p: string, e: BufferEncoding): string => {
+            if (p.endsWith("kernel_never-ask-user-to-run-commands.md") &&
+                p.includes("contributor-memory")) {
+              // Simulate user-edited content; mtime check is what matters here.
+              return "<<user-edited-content>>";
+            }
+            // Source principle files — delegate to real FS.
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            return (require("node:fs").readFileSync as (p: string, e: BufferEncoding) => string)(p, e);
+          },
           statSync: () => ({ mtime: userEditTime }),
         },
       },
@@ -88,7 +103,18 @@ describe("planKernelMemorySeed", () => {
         commandmentTierOnly: true,
         installTimeBaseline: baseline,
         fs: {
-          existsSync: () => true,
+          // EAFP: provide readFileSync so dest files "exist" for the read.
+          // Return content that differs from what would be written so all three
+          // get mode: "update" (not "skipBecauseUnchanged").
+          // Identify dest files via "contributor-memory" path segment (works on
+          // both Windows and POSIX since node/path.join handles the separator).
+          readFileSync: (p: string, e: BufferEncoding): string => {
+            if (p.includes("contributor-memory")) {
+              return "<<stale-content-from-old-dpf-platform-version>>";
+            }
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            return (require("node:fs").readFileSync as (p: string, e: BufferEncoding) => string)(p, e);
+          },
           statSync: () => ({ mtime: oldEditTime }),
         },
       },
