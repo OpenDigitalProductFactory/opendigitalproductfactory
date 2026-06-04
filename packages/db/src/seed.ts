@@ -21,6 +21,7 @@ import { seedPromptTemplates } from "./seed-prompt-templates.js";
 import { seedSkills } from "./seed-skills.js";
 import { seedWikiKernel } from "./seed-wiki-kernel.js";
 import { seedDecisionPerspective } from "./seed-decision-perspective.js";
+import { seedPlatformVoice } from "./seed-platform-voice.js";
 import {
   SPEACHES_PROVIDER_ID,
   SPEACHES_MODEL_ID,
@@ -2483,6 +2484,9 @@ async function main(): Promise<void> {
     `  decision-perspective: profile=${decisionPerspectiveSeed.profileId} ` +
       `version=${decisionPerspectiveSeed.versionId} materials=${decisionPerspectiveSeed.materialCount}`,
   );
+  // BI-2535D6F4: ship the founder's recorded seed voice on the platform profile.
+  const platformVoice = await seedPlatformVoice(prisma);
+  console.log(`  platform-voice: ${platformVoice.status} (clip-copied=${platformVoice.copiedClip})`);
   await syncCapabilities(prisma);
   await assertActiveProvidersHaveClearance();
   await assertAnthropicSubToolCapability();
