@@ -7093,6 +7093,86 @@ model InboundChannelMessage {
   @@index([classification])
 }
 
+// Phase 4: per-channel weekly spend ceiling. The hard backstop for paid
+// channels (LinkedIn Ads first; Google Ads / Meta Ads layer in later). The
+// spend gate sums OutboundPublication.channelMetadata.spendCents for the
+// rolling 7-day window and refuses placements that would cross weeklyCap
+// Cents — even when the operator clicked Place. Ceiling raising is
+// operator-only (manage_provider_connections capability) so the agent
+// can't escalate its own ceiling.
+model MarketingChannelSpendCeiling {
+  ceilingId        String   @id @default(cuid())
+  organizationId   String
+  channelId        String
+  weeklyCapCents   Int
+  notes            String?
+  lastSetByUserId  String
+  lastSetAt        DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([organizationId, channelId])
+  @@index([channelId])
+}
+
+// Phase 5: scheduled outbound action. One row per planned future
+// execution of a Phase 1-4 service (drafter run, publish, or KPI pull).
+// status transitions: pending → fired | failed | cancelled. paused is
+// reachable from pending. Terminal: fired, failed, cancelled.
+//
+// kind values:
+//   draft-marketing-asset      → calls draftMarketingAsset(assetTaskId)
+//   publish-approved-draft     → calls publishApprovedDraft(draftId)
+//   pull-channel-kpis          → calls pullChannelKpis(channelId)
+//
+// targetId carries the kind-specific reference: MarketingAssetTask.taskId
+// for the drafter, OutboundDraft.draftId for publish, channelId string
+// for pull-channel-kpis.
+model ScheduledOutboundAction {
+  scheduleId         String   @id @default(cuid())
+  organizationId     String
+  kind               String
+  targetId           String
+  scheduledFor       DateTime
+  status             String   @default("pending")
+  firedAt            DateTime?
+  lastError          String?
+  autopilotPolicyId  String?
+  scheduledByUserId  String?
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([status, scheduledFor])
+  @@index([organizationId, kind, status])
+  @@index([targetId])
+}
+
+// Phase 5: per-channel bounded autopilot policy. enabled=false acts as
+// a hard pause without losing the configuration. autopilot is NEVER
+// allowed to fire on ad channels (channelId="linkedin-ads") or on
+// inbound-reply drafts (sourceType="inbound-channel-message") — the
+// runtime enforces those exclusions at the autopilot eligibility check
+// regardless of what the policy row says.
+model OutboundAutopilotPolicy {
+  policyId               String   @id @default(cuid())
+  organizationId         String
+  domain                 String   @default("marketing")
+  channelId              String
+  enabled                Boolean  @default(false)
+  autoApproveBelowWords  Int?
+  autoPublishAfterMinutes Int?
+  weeklyCeiling          Int
+  enabledByUserId        String
+  enabledAt              DateTime @default(now())
+  pausedReason           String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@unique([organizationId, channelId])
+  @@index([channelId, enabled])
+}
+
 model StorefrontSection {
   id           String           @id @default(cuid())
   storefrontId String

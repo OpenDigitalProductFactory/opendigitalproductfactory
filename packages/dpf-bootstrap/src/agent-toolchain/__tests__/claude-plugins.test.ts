@@ -108,4 +108,83 @@ describe("planClaudePluginConfig", () => {
       }),
     ).toThrow(/pluginsFilePath required/);
   });
+
+  it("treats path-format variants of the same worktree as equal (Phase 6 regression)", () => {
+    // Phase 5 functional finding: installed_plugins.json stores projectPath
+    // in Windows-native backslash form; the bridge passes forward-slash form;
+    // strict-equality compare was false → spurious re-install on every run.
+    // After Phase 6's path-normalization, the planner should treat both forms
+    // as referring to the same logical worktree.
+    const fileWithBackslashEntry: InstalledPluginsFile = {
+      version: 2,
+      plugins: {
+        "dpf-platform@dpf-platform-local": [
+          {
+            scope: "local",
+            projectPath: "D:\\DPF\\.claude\\worktrees\\agent-toolchain-phase-1",
+            installPath: "C:\\redacted-cache\\dpf-platform-local\\dpf-platform\\0.1.0",
+            version: "0.1.0",
+            installedAt: "2026-05-27T00:00:00.000Z",
+            lastUpdated: "2026-05-27T00:00:00.000Z",
+          },
+        ],
+      },
+    };
+    // Bridge typically passes forward-slash form from Node's path APIs.
+    const repoFromBridge = "D:/DPF/.claude/worktrees/agent-toolchain-phase-1";
+
+    const plan = planClaudePluginConfig(repoFromBridge, fileWithBackslashEntry, {
+      pathExists: buildPathExists(new Set([repoFromBridge, "D:\\DPF\\.claude\\worktrees\\agent-toolchain-phase-1"])),
+      pluginsFilePath: PLUGINS_FILE,
+    });
+
+    expect(plan.mode).toBe("noop");
+    expect(plan.writes).toEqual([]);
+    expect(plan.rationale).toMatch(/already installed/);
+  });
+
+  it("drops the prior path-variant entry when upgrading version (deduplicates)", () => {
+    // Same logical repo recorded under both backslash and forward-slash forms
+    // (the kind of accumulation Phase 5 produced before Phase 6 normalization).
+    // On a version upgrade, the planner should produce a single canonical entry.
+    const fileWithBothFormats: InstalledPluginsFile = {
+      version: 2,
+      plugins: {
+        "dpf-platform@dpf-platform-local": [
+          {
+            scope: "local",
+            projectPath: "D:\\DPF\\.claude\\worktrees\\agent-toolchain-phase-1",
+            installPath: "C:\\redacted-cache\\dpf-platform-local\\dpf-platform\\0.0.9",
+            version: "0.0.9",
+            installedAt: "2026-05-25T00:00:00.000Z",
+            lastUpdated: "2026-05-25T00:00:00.000Z",
+          },
+          {
+            scope: "local",
+            projectPath: "D:/DPF/.claude/worktrees/agent-toolchain-phase-1",
+            installPath: "C:\\redacted-cache\\dpf-platform-local\\dpf-platform\\0.0.9",
+            version: "0.0.9",
+            installedAt: "2026-05-26T00:00:00.000Z",
+            lastUpdated: "2026-05-26T00:00:00.000Z",
+          },
+        ],
+      },
+    };
+    const repoFromBridge = "D:/DPF/.claude/worktrees/agent-toolchain-phase-1";
+
+    const plan = planClaudePluginConfig(repoFromBridge, fileWithBothFormats, {
+      pathExists: buildPathExists(new Set([repoFromBridge, "D:\\DPF\\.claude\\worktrees\\agent-toolchain-phase-1"])),
+      pluginsFilePath: PLUGINS_FILE,
+      expectedVersion: "0.1.0",
+    });
+
+    expect(plan.mode).toBe("update");
+    expect(plan.writes).toHaveLength(1);
+
+    const next = JSON.parse(plan.writes[0].content) as InstalledPluginsFile;
+    const entries = next.plugins["dpf-platform@dpf-platform-local"];
+    // Both prior entries dropped; one new entry at expected version.
+    expect(entries).toHaveLength(1);
+    expect(entries[0].version).toBe("0.1.0");
+  });
 });

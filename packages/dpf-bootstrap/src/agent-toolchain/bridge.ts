@@ -33,6 +33,11 @@ import {
   readinessCopy,
   type ReadinessCopy,
 } from "./readiness-state";
+import {
+  detectSuperpowersDrift,
+  renderUpstreamDriftAdvisory,
+  type UpstreamVersionDrift,
+} from "./upstream-versions";
 import type { ReadinessState } from "./types";
 
 export type AgentToolchainPlan = {
@@ -56,6 +61,16 @@ export type AgentToolchainPlan = {
   mcpProbe: McpReadinessProbePlan | { skipReason: "no_token" };
   /** Smoke test scenario the adapter should drive (Phase 5 implements the CLI invocation). */
   smokeScenario: SmokeTestScenario;
+  /**
+   * Upstream-plugin version drift advisory (Phase 6). Surfaced as a sub-line
+   * under the readiness banner when status === "different"; absent / null
+   * otherwise. Advisory only — the bootstrap does not auto-upgrade
+   * upstream-owned plugins.
+   */
+  upstreamDrift: {
+    superpowers: UpstreamVersionDrift;
+    advisory: string | null;
+  };
   /**
    * Pre-applied readiness preview the adapter shows to the operator
    * BEFORE running side effects, so the install banner can warn that
@@ -176,6 +191,18 @@ export function computeAgentToolchainPlan(
   const mcpProbe = planMcpReadinessProbe(options.mcpEndpoint, options.hasToken);
   const smokeScenario = renderSmokeTestScenario();
 
+  // Phase 6: detect upstream-plugin version drift. We read the Codex config
+  // text (re-using the same load above when present) and compare against the
+  // DPF-pinned version. Advisory only; no auto-upgrade.
+  const codexTextForDrift = options.codexCliPresent && _exists(options.codexConfigPath)
+    ? _readFile(options.codexConfigPath, "utf8")
+    : "";
+  const superpowersDrift = detectSuperpowersDrift(codexTextForDrift);
+  const upstreamDrift = {
+    superpowers: superpowersDrift,
+    advisory: renderUpstreamDriftAdvisory(superpowersDrift),
+  };
+
   // Pre-apply readiness preview: compute the state the adapter would see if
   // every write applies cleanly but probes haven't run yet. This lets the
   // install banner pre-warn for missing CLIs / tokens.
@@ -199,6 +226,7 @@ export function computeAgentToolchainPlan(
     memory,
     mcpProbe,
     smokeScenario,
+    upstreamDrift,
     preview: {
       readinessState: previewReadiness,
       copy: readinessCopy(previewReadiness),

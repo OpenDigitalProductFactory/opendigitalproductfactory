@@ -14,6 +14,7 @@ import { OllamaHardwareInfo } from "@/components/platform/OllamaHardwareInfo";
 import { OllamaManagement } from "@/components/platform/OllamaManagement";
 import { RecipePanel } from "@/components/platform/RecipePanel";
 import { OAuthConnectionStatus } from "@/components/platform/OAuthConnectionStatus";
+import { OAuthPortMismatchBanner } from "@/components/admin/OAuthPortMismatchBanner";
 import { AiProviderFinancePanel } from "@/components/finance/AiProviderFinancePanel";
 import { getAiProviderFinanceDetail } from "@/lib/finance/ai-provider-finance";
 import { buildProviderCostView } from "@/lib/inference/ai-provider-cost-view";
@@ -142,6 +143,14 @@ export default async function ProviderDetailPage({ params }: Props) {
         <McpServiceDetail provider={pw.provider} />
       ) : (
         <>
+          {/* BI-87D93A71 (Minimum): surface OAuth callback port mismatch
+              BEFORE the user clicks Connect — eliminates the silent
+              :3000 → :1455 origin divergence that the shared OpenAI
+              Codex/ChatGPT OAuth client requires today. */}
+          <OAuthPortMismatchBanner
+            oauthRedirectUri={pw.provider.oauthRedirectUri ?? null}
+            providerLabel={pw.provider.name ?? pw.provider.providerId}
+          />
           {pw.credential && (
             <OAuthConnectionStatus
               credential={pw.credential}
