@@ -68,6 +68,17 @@ export async function runBootstrapCollectors(
   return runLocalDiscoveryCollectors(collectors);
 }
 
+/**
+ * Yield the Node event loop so pending I/O (HTTP accept, timer callbacks) can
+ * run before the next CPU-bound pass. Used between major discovery phases so a
+ * long sweep cannot monopolise the event loop and starve HTTP serving.
+ * setImmediate fires after I/O callbacks but before timers — cooperative yield
+ * within a long synchronous-heavy pipeline (BI-9F106818 Phase 0).
+ */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 export async function executeBootstrapDiscovery(
   db: BootstrapDiscoveryDb,
   options: BootstrapExecutionOptions = {},
@@ -90,8 +101,14 @@ export async function executeBootstrapDiscovery(
 
   const rawCollected = mergeCollectorOutputs([rawStaticOutput, connectionOutput]);
 
+  // Yield before CPU-bound inference/normalization passes so HTTP handling
+  // can proceed between phases (BI-9F106818 Phase 0).
+  await yieldToEventLoop();
+
   // Pass 1: Cross-collector relationship inference (host↔interfaces, target↔container)
   const collected = inferCrossCollectorRelationships(rawCollected);
+
+  await yieldToEventLoop();
 
   const taxonomyNodes = options.taxonomyNodes
     ?? (typeof (db as { taxonomyNode?: { findMany?: unknown } }).taxonomyNode?.findMany === "function"
@@ -122,6 +139,14 @@ export async function executeBootstrapDiscovery(
     trigger: options.trigger ?? "bootstrap",
   });
 
+  // Yield between every major pass (BI-9F106818 Phase 0): these passes are
+  // CPU-bound or fire many small DB/Neo4j awaits without naturally yielding
+  // between iterations, so a long sweep can starve the HTTP event loop.
+  // yieldToEventLoop() (setImmediate) lets pending HTTP accepts and timer
+  // callbacks run before we start the next pass.
+
+  await yieldToEventLoop();
+
   // Auto-promote high-confidence entities to DigitalProduct records
   try {
     const promotionSummary = await promoteInventoryEntities(db as never);
@@ -131,6 +156,8 @@ export async function executeBootstrapDiscovery(
   } catch (err) {
     console.error("[discovery] Promotion pass failed (non-fatal):", err);
   }
+
+  await yieldToEventLoop();
 
   // Reconcile: demote any previously-promoted infrastructure (host / NIC /
   // subnet / gateway) that the structural type-gate now rejects, so the
@@ -147,6 +174,8 @@ export async function executeBootstrapDiscovery(
     console.error("[discovery] Reconcile pass failed (non-fatal):", err);
   }
 
+  await yieldToEventLoop();
+
   // Pass 2 & 3: Product-to-infrastructure relationship inference
   try {
     const inferenceSummary = await inferProductDependencies(db as never);
@@ -159,6 +188,8 @@ export async function executeBootstrapDiscovery(
   } catch (err) {
     console.error("[discovery] Product inference pass failed (non-fatal):", err);
   }
+
+  await yieldToEventLoop();
 
   // Flag gateways that have no discovery connection configured
   try {
