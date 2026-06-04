@@ -44,8 +44,9 @@ function buildPlanGenerationPrompt(params: {
   designDoc: Record<string, unknown>;
   biTitle: string | null;
   biBody: string | null;
+  verifiedPaths?: string[];  // actual paths confirmed to exist in the codebase
 }): string {
-  const { title, designDoc, biTitle, biBody } = params;
+  const { title, designDoc, biTitle, biBody, verifiedPaths } = params;
   const dd = designDoc as {
     problemStatement?: string;
     dataModel?: string;
@@ -93,13 +94,21 @@ Generate a concrete implementation plan. Respond with ONLY valid JSON matching t
 
 CRITICAL RULES:
 - ALL paths MUST be monorepo-relative: "apps/web/...", "packages/db/...", NOT "lib/..." or "src/..."
+- ONLY use paths from the VERIFIED FILES section below for "modify" actions. Do NOT invent paths.
+- For "create" actions, use the same directory as the nearest related existing file.
 - Each task MUST have: title, testFirst, implement, verify
-- implement MUST reference specific existing files/patterns (e.g. "follow pattern in apps/web/lib/actions/build.ts line 123")
-- Tasks should be 2-5 minutes of work each — atomic, bite-sized
-- Include schema migration tasks if new DB models are needed
-- Include test tasks if the change is testable with vitest
+- implement MUST reference specific existing files/patterns (e.g. "follow pattern in apps/web/lib/actions/build.ts")
+- Tasks should be 2-5 minutes of work each — atomic, bite-sized. ONE specific file operation per task.
+- NEVER combine multiple file edits or a test + implementation in one task
+- A task that says "create file X AND update file Y" is TWO tasks
+- A task that builds a test harness AND implements the feature is TWO tasks
+- Include schema migration tasks if new DB models are needed (separate task each)
+- Limit to 10 tasks maximum. If the feature needs more, scope down.
 - Do NOT add boilerplate commentary — pure JSON only
-
+${verifiedPaths && verifiedPaths.length > 0 ? `
+VERIFIED FILES (CONFIRMED TO EXIST — use these exact paths for modify actions):
+${verifiedPaths.map(p => `- ${p}`).join("\n")}
+` : ""}
 Respond with ONLY the JSON object, no markdown fences, no explanation.`;
 }
 
@@ -166,6 +175,38 @@ export async function dispatchPlanForApprovedBuild(params: {
       biBody = bi?.body ?? null;
     }
 
+    // 2b. Search the codebase for files related to the build to give the plan
+    //     LLM verified paths rather than hallucinated ones. This is the single
+    //     most important quality improvement for plan generation.
+    let verifiedPaths: string[] = [];
+    try {
+      const { searchProjectFiles } = await import("@/lib/integrate/codebase-tools");
+      const dd = build.designDoc as Record<string, unknown>;
+      // Extract CamelCase terms from the design doc — likely component/class names
+      const allText = [
+        build.title,
+        String(dd.proposedApproach ?? ""),
+        String(dd.existingCodeAudit ?? dd.existingFunctionalityAudit ?? ""),
+        String(dd.reusePlan ?? ""),
+      ].join(" ");
+      const camelTerms = (allText.match(/\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b/g) ?? [])
+        .filter((t, i, a) => a.indexOf(t) === i) // dedupe
+        .slice(0, 4);
+
+      const pathSet = new Set<string>();
+      for (const term of camelTerms) {
+        const result = await searchProjectFiles(term, { maxResults: 5 });
+        if ("results" in result) {
+          result.results.forEach(r => pathSet.add(r.path));
+        }
+      }
+      verifiedPaths = [...pathSet]
+        .filter(p => (p.startsWith("apps/") || p.startsWith("packages/")) && !p.includes("node_modules"))
+        .slice(0, 20);
+    } catch {
+      // Non-fatal — proceed without path verification
+    }
+
     await log("Dispatching plan generation via portal inference");
 
     // 3. Generate plan via portal-side LLM (no CLI needed for plan generation).
@@ -175,6 +216,7 @@ export async function dispatchPlanForApprovedBuild(params: {
       designDoc: build.designDoc as Record<string, unknown>,
       biTitle,
       biBody,
+      verifiedPaths,
     });
 
     const response = await routeAndCall(
