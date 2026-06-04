@@ -112,6 +112,21 @@ export function BuildStudio({
   // DetailsDrawer accordion (PR #912's DetailsDrawer + this slice).
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerInitialSectionId, setDrawerInitialSectionId] = useState<string | null>(null);
+  // BI-63EAD801: collapse internal IDs / git branch chip by default so
+  // end-users (Dale) don't see FB-*, WC-*, and raw branch names in the header.
+  // Engineering users can expand with one click; state persists to localStorage.
+  const BUILD_DETAILS_KEY = "dpf:build-studio-header-details-expanded";
+  const [headerDetailsExpanded, setHeaderDetailsExpanded] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(BUILD_DETAILS_KEY) === "true";
+  });
+  const toggleHeaderDetails = useCallback(() => {
+    setHeaderDetailsExpanded((prev) => {
+      const next = !prev;
+      try { window.localStorage.setItem(BUILD_DETAILS_KEY, String(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
   // Assurance + code-intel cards collapse so the workflow graph stays the
   // primary surface (spec §1 + §9 #11). Operators can re-expand on demand.
   const [assuranceRowExpanded, setAssuranceRowExpanded] = useState(false);
@@ -577,28 +592,48 @@ export function BuildStudio({
                     </h2>
                     <ClaimBadge agentId={activeBuild.claimedByAgentId ?? null} claimStatus={activeBuild.claimStatus ?? null} claimedAt={activeBuild.claimedAt ?? null} />
                   </div>
+                  {/* BI-63EAD801 (D13): Internal IDs and git branch chip are
+                      hidden from default view — end-users (Dale) have no use
+                      for FB-*, WC-*, or raw branch names. A "Details" toggle
+                      reveals them for engineering workflows. State persists to
+                      localStorage so engineers don't have to re-expand every
+                      session. */}
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--dpf-muted)]">
-                    <span>{activeBuild.buildId}</span>
-                    {activeBuild.originator && (
-                      <>
-                        <span>&middot;</span>
-                        <span className="inline-flex items-center gap-1 rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-0.5 font-medium text-[var(--dpf-text)]">
-                          {activeBuild.originator.itemId}
-                        </span>
-                      </>
-                    )}
-                    {/* "Workflow: <label>" header pill removed per spec — the
-                        workflow rail / mini-rail already conveys the same
-                        information without duplicating it in the header.
-                        See docs/superpowers/specs/2026-05-20-build-studio-layout-redesign-design.md */}
-                    {branchBadge && (
-                      <>
-                        <span>&middot;</span>
-                        <span className="inline-flex max-w-full min-w-0 items-center gap-1 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-1.5 py-0.5 font-mono" title={branchBadge.title}>
-                          <svg className="shrink-0" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.5 2.5 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Z" /></svg>
-                          <span className="truncate">{branchBadge.value}</span>
-                        </span>
-                      </>
+                    <button
+                      type="button"
+                      aria-expanded={headerDetailsExpanded}
+                      aria-controls="build-studio-header-details"
+                      onClick={toggleHeaderDetails}
+                      className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-[var(--dpf-muted)] transition-colors hover:bg-[var(--dpf-surface-2)] hover:text-[var(--dpf-text)]"
+                    >
+                      <span aria-hidden="true">{headerDetailsExpanded ? "▾" : "▸"}</span>
+                      Details
+                    </button>
+                    {headerDetailsExpanded && (
+                      <span
+                        id="build-studio-header-details"
+                        className="flex flex-wrap items-center gap-2"
+                        data-testid="build-studio-header-details"
+                      >
+                        <span data-testid="build-studio-build-id">{activeBuild.buildId}</span>
+                        {activeBuild.originator && (
+                          <>
+                            <span>&middot;</span>
+                            <span className="inline-flex items-center gap-1 rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-0.5 font-medium text-[var(--dpf-text)]">
+                              {activeBuild.originator.itemId}
+                            </span>
+                          </>
+                        )}
+                        {branchBadge && (
+                          <>
+                            <span>&middot;</span>
+                            <span className="inline-flex max-w-full min-w-0 items-center gap-1 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-1.5 py-0.5 font-mono" title={branchBadge.title}>
+                              <svg className="shrink-0" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.5 2.5 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Z" /></svg>
+                              <span className="truncate">{branchBadge.value}</span>
+                            </span>
+                          </>
+                        )}
+                      </span>
                     )}
                   </div>
                 </div>
