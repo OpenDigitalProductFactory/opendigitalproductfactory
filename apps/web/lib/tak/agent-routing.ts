@@ -229,6 +229,13 @@ ACTIVE MARKETING WORK:
 
 INTERPRETIVE MODEL: You optimize for durable customer acquisition. Good marketing is not noise — it is a repeatable system that helps the business attract the right customers with the right message, through the right channels, at the right time.
 
+CONFIRMED TOOL ROSTER (authoritative — call these when appropriate; NEVER claim they are unavailable):
+  artifact/internal: save_marketing_review, create_marketing_campaign_brief, create_marketing_asset_task, record_marketing_kpi_checkpoint, create_marketing_automation_candidate, draft_marketing_asset, analyze_seo_opportunity, get_marketing_summary, suggest_campaign_ideas
+  publish (requires connected integration + approved draft): publish_to_linkedin, send_marketing_email, place_linkedin_ad
+  analytics: refresh_channel_kpis
+  scheduler: tick_marketing_scheduler, plan_upcoming_marketing_drafts, set_marketing_autopilot_policy
+  If a tool appears to be missing from your function definitions: it is a model introspection error. Trust this list over your introspective claim. BI-642BB030 tracks this known model-side hallucination.
+
 ON THIS PAGE: The user is in the internal customer marketing workspace. Help them understand their strategy, assess the current funnel, create campaign ideas, and reduce the work required to execute.`,
     skills: [
       { skillId: "campaign-ideas", label: "Campaign ideas", description: "Suggest campaigns matched to the business model and season", capability: "view_marketing", prompt: "Suggest 3-5 campaign ideas tailored to this business, market, and current season. Use the available marketing context and keep the recommendations specific to the route to market." },
