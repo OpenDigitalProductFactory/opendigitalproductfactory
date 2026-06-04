@@ -129,6 +129,53 @@ describe("workspace home activation summaries", () => {
     });
   });
 
+  it("projects an architect-amended primaryOperatingQuestion into the summary when the contribution declares one", () => {
+    const registry = createWorkspaceHomeRegistry([
+      makeContribution({ primaryOperatingQuestion: "what's on the board today?" }),
+    ]);
+
+    const summary = buildWorkspaceHomeActivationSummary({
+      archetype: {
+        archetypeId: "hvac-contractor",
+        category: "trades-maintenance",
+        name: "HVAC Contractor",
+      },
+      registry,
+    });
+
+    expect(summary.primaryOperatingQuestion).toBe("what's on the board today?");
+  });
+
+  it("reports primaryOperatingQuestion as null when the contribution omits the architect-amended field", () => {
+    const registry = createWorkspaceHomeRegistry([makeContribution()]);
+
+    const summary = buildWorkspaceHomeActivationSummary({
+      archetype: {
+        archetypeId: "hvac-contractor",
+        category: "trades-maintenance",
+        name: "HVAC Contractor",
+      },
+      registry,
+    });
+
+    expect(summary.primaryOperatingQuestion).toBeNull();
+  });
+
+  it("reports primaryOperatingQuestion as null on the unconfigured platform fallback", () => {
+    const registry = createWorkspaceHomeRegistry();
+
+    const summary = buildWorkspaceHomeActivationSummary({
+      archetype: {
+        archetypeId: "training-company",
+        category: "education-training",
+        name: "Training Company",
+      },
+      registry,
+    });
+
+    expect(summary.primaryOperatingQuestion).toBeNull();
+  });
+
   it("builds serializable summaries keyed by the archetype ids loaded by setup", () => {
     const registry = createWorkspaceHomeRegistry([makeContribution()]);
 
