@@ -24,6 +24,7 @@ describe("capability registry", () => {
       "project-work",
       "lifecycle-review-queues",
       "remote-support",
+      "partner-program",
     ]);
   });
 
