@@ -157,9 +157,13 @@ describe("promoteInventoryEntities", () => {
     expect(upsertArgs.create.issueType).toBe("type_not_promotable");
   });
 
-  it("promotes network_client with governance.promotion + writes classifyAs into observationConfig", async () => {
-    // Name avoids the BI-79307D22 runtime-artifact gate (no trailing
-    // -N, no dpf- prefix, no IP, no "(WAN)").
+  it("skips an infra entityType (network_client) even with auto governance.promotion + classifyAs", async () => {
+    // Estate-accuracy structural-type-gate: a network_client is infrastructure,
+    // never a product — even when its taxonomy node
+    // ("foundational/network_management/network_connectivity") is mode:auto with
+    // classifyAs:"infrastructure_endpoint" and the name clears the runtime-
+    // artifact name-gate. This is the live leak that promoted "Access Point" /
+    // "eth0 (172.18.0.11)" rows into the product portfolio.
     mockPrisma.inventoryEntity.findMany.mockResolvedValue([{
       id: "ent_nc2",
       entityKey: "network_client:2",
@@ -177,15 +181,14 @@ describe("promoteInventoryEntities", () => {
       governance: { promotion: { mode: "auto", classifyAs: "infrastructure_endpoint" } },
     });
     mockPrisma.portfolio.findUnique.mockResolvedValue({ id: "port_1" });
-    mockPrisma.digitalProduct.upsert.mockResolvedValue({ id: "dp_ap", productId: "infra-ap-1" });
-    mockPrisma.inventoryEntity.update.mockResolvedValue({});
 
     const result = await promoteInventoryEntities(mockPrisma as never);
 
-    expect(result.promoted).toBe(1);
-    const upsertArgs = mockPrisma.digitalProduct.upsert.mock.calls[0][0];
-    expect(upsertArgs.create.observationConfig).toEqual({ classifyAs: "infrastructure_endpoint" });
-    expect(upsertArgs.update.observationConfig).toEqual({ classifyAs: "infrastructure_endpoint" });
+    expect(result.promoted).toBe(0);
+    expect(result.skipped).toBe(1);
+    expect(mockPrisma.digitalProduct.upsert).not.toHaveBeenCalled();
+    const issueArgs = mockPrisma.portfolioQualityIssue.upsert.mock.calls[0][0];
+    expect(issueArgs.create.issueType).toBe("type_not_promotable");
   });
 
   it("skips low-confidence entity with low_confidence_promotion + writes quality issue", async () => {
