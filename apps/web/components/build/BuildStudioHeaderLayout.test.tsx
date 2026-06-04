@@ -211,6 +211,22 @@ function makeEpicRollup(overrides: Partial<EpicRollupView> = {}): EpicRollupView
 }
 
 describe("BuildStudio active-build header layout", () => {
+  it("intake CTA is labelled 'Start a new build' not just 'New' (BI-950FE085)", () => {
+    // Regression guard: Dale had no idea what "New" created. The CTA must
+    // name the action + artifact so it's discoverable without training.
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+    expect(html).toContain("Start a new build");
+    expect(html).not.toContain(">New<");
+  });
+
   it("renders the empty state instead of crashing when server data arrays are missing", () => {
     const html = renderToStaticMarkup(
       <BuildStudio
