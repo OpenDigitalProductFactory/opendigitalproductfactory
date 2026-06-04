@@ -49,6 +49,42 @@ export function looksLikeRuntimeArtifact(name: string): boolean {
   return NON_PRODUCT_NAME_PATTERNS.some((pattern) => pattern.test(name));
 }
 
+// Entity types that are infrastructure / transport / runtime instances —
+// never products in their own right, regardless of taxonomy promotion policy.
+// A host or network interface is something products RUN ON, not a product;
+// it belongs as an InventoryEntity attributed to a product (e.g. the
+// "dpf-postgres-1 container" inventory row attributed to the "postgres"
+// product), not as a standalone DigitalProduct.
+//
+// This is a STRUCTURAL gate, like the name-gate: it wins over a taxonomy
+// node's governance.promotion.mode = "auto". Without it, an auto-promotion
+// policy on a node such as "foundational/compute/servers" or
+// "foundational/network_management/network_connectivity" promotes every
+// discovered container IP / NIC / subnet into the product portfolio.
+// (Observed live: 38 host/network_interface/subnet/gateway rows bypassed the
+// name-gate — names like "LAN Host 172.18.0.1" / "eth0 (172.18.0.11)" don't
+// match the runtime-artifact patterns — and were auto-promoted, burying the
+// 3 real products. classifyAs:"infrastructure_endpoint" did NOT save them
+// from polluting the portfolio.)
+export const NON_PRODUCT_ENTITY_TYPES: ReadonlySet<string> = new Set([
+  "host",
+  "docker_host",
+  "container",
+  "network_interface",
+  "subnet",
+  "gateway",
+  "switch",
+  "access_point",
+  "router",
+  "vlan",
+  "wlan",
+  "network_client",
+]);
+
+export function isNonProductEntityType(entityType: string): boolean {
+  return NON_PRODUCT_ENTITY_TYPES.has(entityType.trim().toLowerCase());
+}
+
 export const AUTO_PROMOTE_THRESHOLD = 0.9;
 
 export type PromotionSkipReason =
@@ -162,6 +198,24 @@ export function resolvePromotionDecision(
       evidence: {
         source: "name-gate",
         name: entity.name,
+      },
+    };
+  }
+
+  // Gate 5 (structural, estate-accuracy): infrastructure / transport /
+  // runtime-instance entity types are never products, regardless of taxonomy
+  // governance.promotion. Runs BEFORE the auto-policy lookup so an "auto" node
+  // (e.g. foundational/compute/servers) cannot promote a host / NIC / subnet
+  // into the portfolio. Same precedence rationale as the name-gate: structural
+  // shape wins over taxonomy placement, because the alternative is letting an
+  // over-broad taxonomy policy write bad product rows.
+  if (isNonProductEntityType(entity.entityType)) {
+    return {
+      decision: "skip",
+      reason: "type_not_promotable",
+      evidence: {
+        source: "structural-type-gate",
+        entityType: entity.entityType,
       },
     };
   }
