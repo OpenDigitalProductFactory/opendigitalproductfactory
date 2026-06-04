@@ -510,6 +510,9 @@ export function BuildStudio({
                 rows={3}
                 className="w-full px-3 py-2 text-sm bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)] resize-y min-h-[72px] max-h-[200px] leading-snug"
               />
+              {/* BI-950FE085 (D??): the prior "New" label gave Dale no signal
+                  about what he was creating. "Start a new build" is explicit —
+                  it names the action, the artifact, and the intent. */}
               <div className="flex items-center justify-between mt-2 gap-2">
                 <div className="text-[10px] text-[var(--dpf-muted)] leading-tight">
                   Press Cmd/Ctrl+Enter to start.
@@ -521,7 +524,7 @@ export function BuildStudio({
                   className="px-4 py-2 text-sm font-semibold bg-[var(--dpf-accent)] text-white border-none rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none hover:opacity-90 transition-opacity flex items-center gap-1.5"
                 >
                   {creating && <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                  {creating ? "Creating..." : "New"}
+                  {creating ? "Starting…" : "Start a new build"}
                 </button>
               </div>
             </div>
@@ -770,7 +773,7 @@ export function BuildStudio({
                 <div className="text-left bg-[var(--dpf-surface-2)] rounded-lg border border-[var(--dpf-border)] p-4 shadow-dpf-md">
                   <p className="text-xs font-semibold text-[var(--dpf-text)] mb-3 uppercase tracking-wider">How it works</p>
                   <div className="flex flex-col gap-2.5">
-                    <Step n={1} text="Type a feature name in the sidebar and click New" />
+                    <Step n={1} text={'Type a feature name in the sidebar and click “Start a new build”'} />
                     <Step n={2} text="Your AI Coworker will open and guide you through the process" />
                     <Step n={3} text="Review the live preview as it builds" />
                     <Step n={4} text="Approve and deploy when you're happy" />
@@ -1285,7 +1288,7 @@ function FleetRailZone({
           <div className="text-3xl mb-3 opacity-20">&#128161;</div>
           <p className="text-sm text-[var(--dpf-muted)] mb-2">No builds yet</p>
           <p className="text-xs text-[var(--dpf-muted)] opacity-70">
-            Type a feature name above and press <strong className="text-[var(--dpf-text)]">New</strong> to start.
+            Type a feature name above and click "Start a new build" to start.
           </p>
         </div>
       </div>
@@ -1348,7 +1351,7 @@ function FleetRailZone({
         ))}
         {activeEpicRollups.length === 0 && activeEntries.length === 0 && (
           <li className="px-3 py-6 text-center text-[11px] text-[var(--dpf-muted)]">
-            No active builds. Type a feature name above and press <strong className="text-[var(--dpf-text)]">New</strong> to start.
+            No active builds. Type a feature name above and click "Start a new build" to start.
           </li>
         )}
         {completedItemCount > 0 && (
