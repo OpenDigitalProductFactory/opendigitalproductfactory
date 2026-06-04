@@ -560,6 +560,7 @@ describe("BuildStudio header — hide internal IDs by default (BI-63EAD801)", ()
         builds={[makeBuild({ buildId: "FB-DALE01" })]}
         epicRollups={[]}
         portfolios={[]}
+        governedBacklogEnabled
         portalContext={makePortalContextEnvelope()}
         projectBranch="main"
         submissionBranchShortId="aabbccdd"
@@ -582,6 +583,7 @@ describe("BuildStudio header — hide internal IDs by default (BI-63EAD801)", ()
         builds={[makeBuild({ buildId: "FB-DALE02" })]}
         epicRollups={[]}
         portfolios={[]}
+        governedBacklogEnabled
         portalContext={makePortalContextEnvelope()}
         projectBranch="main"
         submissionBranchShortId="aabbccdd"
@@ -603,6 +605,7 @@ describe("BuildStudio header — hide internal IDs by default (BI-63EAD801)", ()
         builds={[makeBuild({ buildId: "FB-DALE03" })]}
         epicRollups={[]}
         portfolios={[]}
+        governedBacklogEnabled
         portalContext={makePortalContextEnvelope()}
         projectBranch="main"
         submissionBranchShortId="aabbccdd"
@@ -621,6 +624,7 @@ describe("BuildStudio header — hide internal IDs by default (BI-63EAD801)", ()
         builds={[makeBuild()]}
         epicRollups={[]}
         portfolios={[]}
+        governedBacklogEnabled
         portalContext={makePortalContextEnvelope()}
         projectBranch="main"
         submissionBranchShortId="aabbccdd"
@@ -639,6 +643,7 @@ describe("BuildStudio header — hide internal IDs by default (BI-63EAD801)", ()
         builds={[makeBuild({ buildId: "FB-RESTORED" })]}
         epicRollups={[]}
         portfolios={[]}
+        governedBacklogEnabled
         portalContext={makePortalContextEnvelope()}
         projectBranch="main"
         submissionBranchShortId="aabbccdd"
