@@ -8179,6 +8179,13 @@ export async function executeTool(
             await prisma.featureBuild.update({ where: { buildId }, data: { phase: "plan" } });
             if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "plan" });
             logBuildActivity(buildId, "phase:advance", "Phase advanced: ideate → plan");
+            // Auto-dispatch plan generation so the build advances without
+            // waiting for the operator to manually prompt the coworker. Mirrors
+            // the ideate auto-dispatch pattern (plan-on-approval.ts).
+            void import("@/lib/integrate/plan-on-approval").then(m =>
+              m.dispatchPlanForApprovedBuild({ buildId, userId })
+                .catch(err => console.error("[plan-on-approval] auto-dispatch failed:", err))
+            );
           } else {
             logBuildActivity(buildId, "phase:gate-blocked", gate.reason ?? "unknown");
             // Surface the blocker to the agent so it can self-correct on the next
@@ -8439,6 +8446,14 @@ export async function executeTool(
                   await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
                   if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
                   logBuildActivity(buildId, "phase:advance", "Phase advanced: plan → build (buildBranch initialized)");
+                  // Auto-dispatch the build orchestrator so specialist code generation
+                  // runs immediately without waiting for an operator to prompt the
+                  // coworker. The orchestrator handles the full build phase including
+                  // task dispatch, progress tracking, and auto-advance to review.
+                  void import("@/lib/integrate/build-on-plan-approval").then(m =>
+                    m.dispatchBuildForApprovedPlan({ buildId, userId })
+                      .catch(err => console.error("[build-on-plan-approval] auto-dispatch failed:", err))
+                  );
                 }
               } catch (branchErr) {
                 logBuildActivity(buildId, "phase:gate-blocked", `startBuildBranch failed: ${(branchErr as Error).message?.slice(0, 200)}`);
