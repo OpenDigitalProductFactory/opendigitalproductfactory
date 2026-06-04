@@ -53,6 +53,13 @@ export type FeatureBuildAnchor = {
   status: string;
   evidenceComplete: boolean;
   href: string;
+  /**
+   * ISO-8601 timestamp of the last update to the FeatureBuild row.
+   * Since phase transitions always bump `updatedAt`, this is used as a
+   * proxy for "when the current phase was entered" in the Option-1 grace
+   * window for the `missing_evidence` attention gate (BI-DFC11F59).
+   */
+  updatedAt: string | null;
 };
 
 export type TaskRunAnchor = {

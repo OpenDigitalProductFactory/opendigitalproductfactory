@@ -364,3 +364,28 @@ export const voiceCleanupLevenshteinRatio = new Histogram({
   buckets: [0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9],
   registers: [metricsRegistry],
 });
+
+// ─── Workspace-home resolver (BI-1CCC6264 follow-on telemetry) ─────────────
+// Spec: docs/superpowers/specs/2026-05-24-vertical-workspace-home-design.md §5.5
+//
+// Emitted on each /workspace render after the resolver runs. Surfaces the
+// silent-fallback case the substrate is honest about but otherwise invisible:
+// installs whose configured archetype has NO matching contribution still get
+// the platform fallback, and without this counter that gap is observable only
+// by per-customer inspection. The counter exposes it as a metric admins can
+// alert on.
+//
+// Labels:
+// - match: "exact" | "category" | "none" — which resolver path won.
+// - has_archetype: "true" | "false" — whether the install has a StorefrontConfig
+//   with an archetype at all. Lets us distinguish:
+//     match="none", has_archetype="true"  → configured-but-uncovered (the gap)
+//     match="none", has_archetype="false" → cold install (legitimate)
+//     match="exact" or "category"         → covered
+
+export const workspaceHomeResolutionsTotal = new Counter({
+  name: "dpf_workspace_home_resolutions_total",
+  help: "Workspace-home resolver outcomes by match kind and whether the install has a configured archetype. match=none + has_archetype=true is the substrate's honest-fallback surface — track to alert when an archetype lacks a vertical contribution.",
+  labelNames: ["match", "has_archetype"] as const,
+  registers: [metricsRegistry],
+});
