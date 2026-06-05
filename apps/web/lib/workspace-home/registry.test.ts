@@ -20,7 +20,7 @@ function makeContribution(
     archetypeCategories: ["trades-maintenance"],
     setupActivation: {
       status: "ready",
-      primitiveWidgets: ["service-queue", "customer-map", "coworker-handoffs"],
+      primitiveWidgets: ["decision-queue", "geo-map", "handoff-queue"],
       requiredCanonicalData: ["customer-account", "service-location", "work-order"],
       requiredSignals: ["scheduled-work", "urgent-exception", "coworker-handoff"],
       missingDataBehavior: "render-empty-state",
@@ -32,23 +32,23 @@ function makeContribution(
     ],
     components: [
       {
-        key: "service-queue",
+        key: "unassigned-work",
         slotId: "today-now",
-        primitiveKey: "service-queue",
+        primitiveKey: "decision-queue",
         title: "Service queue",
         dataRefs: [{ kind: "projection", key: "workspaceHome.workOrders", required: true }],
       },
       {
         key: "customer-map",
         slotId: "today-now",
-        primitiveKey: "customer-map",
+        primitiveKey: "geo-map",
         title: "Customer map",
         dataRefs: [{ kind: "projection", key: "workspaceHome.customerLocations", required: true }],
       },
       {
-        key: "coworker-handoff-list",
+        key: "coworker-handoffs",
         slotId: "coworker-handoffs",
-        primitiveKey: "coworker-handoffs",
+        primitiveKey: "handoff-queue",
         title: "Coworker handoffs",
         dataRefs: [{ kind: "projection", key: "workspaceHome.coworkerHandoffs", required: false }],
       },
@@ -81,7 +81,7 @@ describe("workspace home contribution registry", () => {
     const validation = validateWorkspaceHomeComponent({
       key: "unsupported-widget",
       slotId: "today-now",
-      primitiveKey: "service-queue",
+      primitiveKey: "decision-queue",
       title: "Mystery widget",
       dataRefs: [{ kind: "projection", key: "workspaceHome.workOrders", required: true }],
     });
@@ -95,9 +95,9 @@ describe("workspace home contribution registry", () => {
 
   it("rejects inline component data in favor of typed canonical data references", () => {
     const validation = validateWorkspaceHomeComponent({
-      key: "service-queue",
+      key: "unassigned-work",
       slotId: "today-now",
-      primitiveKey: "service-queue",
+      primitiveKey: "decision-queue",
       title: "Service queue",
       dataRefs: [
         {
