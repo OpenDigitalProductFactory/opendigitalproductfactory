@@ -340,7 +340,16 @@ describe("coworker nudge-rate regression detector", () => {
     }
 
     it("files a nudge-rate PIR when the recent share spikes against a zero baseline", async () => {
-      const fileReport = vi.fn(async () => {});
+      const fileReport = vi.fn(
+        async (_input: {
+          title: string;
+          description: string;
+          severity: string;
+          routeContext: string | null;
+          threadId: string | null;
+          agentId: string | null;
+        }) => {},
+      );
       const result = await detectCoworkerNudgeRateRegressions({
         now,
         // recent: 12 turns, 6 nudged -> 0.5 share; baseline: all clean -> 0.
