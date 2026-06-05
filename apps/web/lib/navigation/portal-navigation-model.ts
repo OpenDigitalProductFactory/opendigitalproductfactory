@@ -37,6 +37,7 @@ export type PortalNavRecord = {
   destinationKind: PortalDestinationKind;
   capabilityKey?: CapabilityKey | null;
   primaryOrder?: number;
+  sectionNavLabel?: string;
   shellNav?: {
     sectionKey: PortalShellSectionKey;
     label?: string;
@@ -101,6 +102,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   {
     key: "customer",
     label: "Customer",
+    sectionNavLabel: "Accounts",
     path: "/customer",
     parentPath: "/customer",
     domain: "business",
@@ -135,6 +137,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   {
     key: "customer-opportunities",
     label: "Opportunities",
+    sectionNavLabel: "Pipeline",
     path: "/customer/opportunities",
     parentPath: "/customer",
     domain: "customer",
@@ -155,6 +158,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   {
     key: "customer-sales-orders",
     label: "Sales Orders",
+    sectionNavLabel: "Orders",
     path: "/customer/sales-orders",
     parentPath: "/customer",
     domain: "customer",
@@ -771,6 +775,13 @@ function toEntry(route: PortalNavRecord): PortalNavEntry {
   };
 }
 
+function toSectionEntry(route: PortalNavRecord): PortalNavEntry {
+  return {
+    ...toEntry(route),
+    label: route.sectionNavLabel ?? route.label,
+  };
+}
+
 export function getRouteNavRecord(path: string): PortalNavRecord | undefined {
   return ROUTES_BY_PATH.get(normalizePath(path));
 }
@@ -798,7 +809,7 @@ export function getSectionNavEntries(path: string): PortalNavEntry[] {
     .map((siblingPath) => getRouteNavRecord(siblingPath))
     .filter((entry): entry is PortalNavRecord => entry !== undefined)
     .filter((entry) => entry.destinationKind !== "legacy-redirect")
-    .map(toEntry);
+    .map(toSectionEntry);
 }
 
 export function getShellNavEntries(): PortalShellNavEntry[] {
