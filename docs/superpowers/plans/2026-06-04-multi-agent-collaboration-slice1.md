@@ -22,8 +22,9 @@ Gate: `pnpm --filter web typecheck` + targeted vitest.
 
 ## Phase 2 — `ConversationParticipant` projection (read-model, no table)
 
-3. **`apps/web/lib/tak/conversation-participants.ts`** (new) — `projectParticipants(rootThreadId)` computing the roster from `AgentThread` (`parentThreadId`/`childCount`), `TaskRun` (`parentTaskRunId`, `status`→`TaskState` via `task-states.ts`), and `AgentMessage.agentId`. Resolve actor identity via `PrincipalAlias` (AGENTS.md §11) — never `Agent.id`. Returns `ConversationParticipant[]` per the spec's type. Roles: route-resolved owner = `owner`; summoned = `peer`; spawned = `sub-agent`.
-4. **Vitest** — fixtures: single-coworker (owner only), owner+one spawned sub-agent, owner+summoned peer+nested sub-agent (tier depth).
+3. **`apps/web/lib/actions/agent-threads.ts`** — `spawnWorkThread()` currently hardcodes `parentTaskRunId: null` on the child `TaskRun` (verified). Populate it with the parent thread's `TaskRun` id so the task graph is complete. Low-risk one-field change; add a regression test asserting the child `TaskRun.parentTaskRunId` is set. (Lineage today rides `AgentThread.parentThreadId`; this makes the `TaskRun` graph match.)
+4. **`apps/web/lib/tak/conversation-participants.ts`** (new) — `projectParticipants(rootThreadId)` computing the roster from **`AgentThread.parentThreadId`** (the load-bearing edge) + `TaskRun.status`→`TaskState` (via `task-states.ts`) + `AgentMessage.agentId`. Resolve actor identity via `PrincipalAlias` (AGENTS.md §11) — never `Agent.id`. Returns `ConversationParticipant[]` per the spec's type. Roles: route-resolved owner = `owner`; summoned = `peer`; spawned = `sub-agent`.
+5. **Vitest** — fixtures: single-coworker (owner only), owner+one spawned sub-agent, owner+summoned peer+nested sub-agent (tier depth).
 
 Gate: typecheck + vitest.
 
@@ -31,7 +32,7 @@ Gate: typecheck + vitest.
 
 5. **`apps/web/lib/mcp-tools.ts`** — add `request_coworker` (coworker-initiated) and `summon_coworker` (user/UI-initiated). Both reuse `spawnWorkThread()` (`agent-threads.ts`) for thread/TaskRun creation and route through `mcp-governed-execute.ts`. `request_coworker` carries the question-packet payload shape (`intentCenter`, `explorationQuestions`, `hardEdges`, `contextRefs`, `successShape`, `expectedArtifact`) per the A2A spec; emit `collaboration:handoff` on success.
 6. **`apps/web/lib/tak/agent-grants.ts`** — add `TOOL_TO_GRANTS` entries for both tools (new grant keys, e.g. `coworker_collaborate`); update the MCP tool `enum`/grant declarations in the same commit (§3).
-7. **Slice-1 authority posture**: `request_coworker` to a target outside the caller's `delegatesTo`/`escalatesTo` runs `executionMode: "proposal"` (PAR acknowledge). *Hard enforcement (denial + DelegationChain hop write) is Slice 2* — Slice 1 makes it visible and proposal-gated, not yet denied.
+7. **Slice-1 authority posture**: declare `request_coworker` with `executionMode: "proposal"` so the **agentic-loop proposal break** (`apps/web/lib/tak/agentic-loop.ts`, `toolDef.executionMode === "proposal"` + `autoApproveWhen`) — *not* the `mcp-governed-execute.ts` capability×grant gate — surfaces a PAR-acknowledge card when the target exceeds the owner's delegation scope. *Hard enforcement (denial + DelegationChain hop write, building on the existing `delegation-authority.ts` chain enforcement) is Slice 2* — Slice 1 makes it visible and proposal-gated, not yet denied.
 8. **Vitest** — tool-definition tests (schema, grant mapping, enum coverage) following existing mcp-tools test patterns.
 
 Gate: typecheck + vitest.

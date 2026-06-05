@@ -40,12 +40,12 @@ What already exists (verified 2026-06-04 against this worktree). The headline: *
 
 | Primitive | Location | State |
 | --- | --- | --- |
-| Thread spawning (coworker→coworker) | `spawn_work_thread` MCP tool; `spawnWorkThread()` in `apps/web/lib/actions/agent-threads.ts`; dispatch in `agent-thread-dispatcher-runtime.ts` | **Built.** Creates child `AgentThread` (`parentThreadId`, `childCount`) + `TaskRun` (`parentTaskRunId`). Depth-1 limit; max 5 children. Polled via `get_thread_result` / `get_child_threads`. |
+| Thread spawning (coworker→coworker) | `spawn_work_thread` MCP tool; `spawnWorkThread()` in `apps/web/lib/actions/agent-threads.ts`; dispatch in `agent-thread-dispatcher-runtime.ts` | **Built.** Creates child `AgentThread` (`parentThreadId`, `childCount`) + a `TaskRun`. Depth-1 limit; max 5 children. Polled via `get_thread_result` / `get_child_threads`. **Caveat (verified):** the child `TaskRun.parentTaskRunId` is currently hardcoded `null` in `spawnWorkThread` — task lineage is carried by `AgentThread.parentThreadId`, **not** `TaskRun.parentTaskRunId`. The participant projection (§A1) must read the thread edge; Slice 1 also populates `parentTaskRunId` so the task graph is complete. |
 | Phase handoff (build) | `PhaseHandoff` model; `save_phase_handoff` MCP; `build-orchestrator.ts` | **Built.** Structured context (`summary`, `decisionsMade`, `openIssues`, `fromAgentId`, `toAgentId`) between build specialists. |
 | Deliberation (multi-agent debate) | `apps/web/lib/deliberation/orchestrator.ts`; `start_deliberation` / `deliberate_on` MCP | **Built.** Parallel peer-review branches; `deliberation:*` events on the bus. |
 | Build specialist dispatch | `build-orchestrator.ts`; `specialist-prompts.ts` | **Built.** Orchestrator → role-scoped specialists; the existing reference multi-agent pattern. |
 | Event bus discriminants for collaboration | `apps/web/lib/tak/agent-event-bus.ts` | **Built.** `queue:escalation`, `orchestrator:task_dispatched|task_complete`, `deliberation:branch_dispatched|branch_completed`, `task:status`, `task:artifact`. |
-| Delegation authority | `Agent.delegatesTo[]`, `Agent.escalatesTo`, `DelegationGrant`, `DelegationChain`; `delegation-authority.ts` | **Partial.** Models + `DelegationChainView`/`DelegationChainPanel` (admin-only) exist; `delegatesTo`/`escalatesTo` are **informational, not enforced** at runtime. |
+| Delegation authority | `Agent.delegatesTo[]`, `Agent.escalatesTo`, `DelegationGrant`, `DelegationChain`/`DelegationLink`; `apps/web/lib/tak/delegation-authority.ts` | **Partial.** `delegation-authority.ts` **does** enforce chain authority propagation, loop detection, and depth (`MAX_DELEGATION_DEPTH = 4`) over `DelegationChain`/`DelegationLink` at runtime. But it does **not** read the `Agent.delegatesTo` / `Agent.escalatesTo` fields — every read of those two fields in `apps/web` is display/projection (`DelegationChainView`/`Panel` admin-only, agent detail page, AgentCard projection). So **those two fields specifically are informational**; Slice 2's `delegatesTo`/`escalatesTo` enforcement is net-new behavior layered onto the existing chain enforcement, not greenfield. |
 | AI Operations Map (single-coworker visibility) | `apps/web/lib/ai-operations-map/*`, `apps/web/components/platform/AiOperationsMap.tsx`, route `/platform/ai/operations-map` | **Built (V1).** Projects `AgentEvent` + `ToolExecution` onto archetype business-flow schematic. Admin/platform surface. |
 | AgentCard projection | designed in A2A spec; `agent-card-service` | **Partial/designed.** Canonical projection of agent capabilities/skills/grants. |
 
@@ -108,7 +108,7 @@ Layer C — Pattern optimization loop (G3, governance)
 ### Layer A — Conversational multi-agent
 
 **A1. Participant model (projection, no new conversation substrate).**
-A conversation already has a root `AgentThread` and may have child `AgentThread`s (`parentThreadId`) and `TaskRun`s (`parentTaskRunId`). Introduce a **read-model** `ConversationParticipant` projected from these edges:
+A conversation already has a root `AgentThread` and may have child `AgentThread`s linked by `parentThreadId`. (Each thread also has a `TaskRun`, but `TaskRun.parentTaskRunId` is currently hardcoded `null` by `spawnWorkThread` — so the **thread edge is the load-bearing lineage today**; Slice 1 additionally populates `parentTaskRunId` to complete the task graph.) Introduce a **read-model** `ConversationParticipant` projected from these edges:
 
 ```ts
 // apps/web/lib/tak/conversation-participants.ts  (view layer, no migration in slice 1)
@@ -126,11 +126,11 @@ type ConversationParticipant = {
 };
 ```
 
-The owner is the route-resolved coworker. Peers/sub-agents are projected from existing child-thread / TaskRun edges. **No new table in slice 1** — this is computed from `AgentThread` + `TaskRun` + `AgentMessage.agentId`, mirroring the Operations Map's projection approach.
+The owner is the route-resolved coworker. Peers/sub-agents are projected from existing child-thread edges. **No new table in slice 1** — this is computed from `AgentThread.parentThreadId` + `TaskRun.status` (→ `TaskState`) + `AgentMessage.agentId`, mirroring the Operations Map's projection approach.
 
-**A2. Governed handoff & summon tools.** Two MCP tools, both reusing the existing `spawn_work_thread` machinery and governance gate (`mcp-governed-execute.ts`), but carrying A2A handoff semantics and emitting a **visible** event:
+**A2. Governed handoff & summon tools.** Two MCP tools, both reusing the existing `spawn_work_thread` machinery, and gated by the **two existing, distinct governance layers** (verified): the capability × agent-grant intersection in `apps/web/lib/mcp-governed-execute.ts`, and — for proposal/PAR-acknowledge gating — the proposal-mode loop break in `apps/web/lib/tak/agentic-loop.ts` (`toolDef.executionMode === "proposal"`, with `autoApproveWhen` pre-authorization). The tools carry A2A handoff semantics and emit a **visible** event:
 
-- `request_coworker` (coworker-initiated): a coworker requests a named peer/tier for a scoped sub-task. Mirrors `spawn_work_thread` but: (a) targets a *resolvable* coworker (by `agentId` or capability), (b) carries a question-packet-shaped payload (reuse the `TaskArtifact.metadata.artifactType="question-packet"` shape from the A2A spec — even before `TaskArtifact` is persisted, the payload shape is stable), (c) is `executionMode: "proposal"` when the target exceeds the owner's delegation scope (PAR acknowledge), and (d) emits `collaboration:handoff` (see A3).
+- `request_coworker` (coworker-initiated): a coworker requests a named peer/tier for a scoped sub-task. Mirrors `spawn_work_thread` but: (a) targets a *resolvable* coworker (by `agentId` or capability), (b) carries a question-packet-shaped payload (reuse the `TaskArtifact.metadata.artifactType="question-packet"` shape from the A2A spec — even before `TaskArtifact` is persisted, the payload shape is stable), (c) is declared `executionMode: "proposal"` so that, when the target exceeds the owner's delegation scope, the **agentic loop** (not the governed-execute gate) breaks to a proposal card for PAR acknowledge, and (d) emits `collaboration:handoff` (see A3).
 - `summon_coworker` (user-initiated, via UI → server action): the user brings a specific coworker into the current conversation as a tier-2/3 participant. Routes through the same governance intersection (user capability × target agent grants).
 
 Both **enforce `Agent.delegatesTo` / `escalatesTo`** at runtime (closing the "model only" gap): a `request_coworker` whose target is not in the caller's `delegatesTo` (and not the caller's `escalatesTo`) is denied with a clear reason, recorded as a `DelegationChain` hop.
@@ -150,9 +150,9 @@ All of this is **projection + presentation** over existing transport (`/api/agen
 
 ### Layer B — Collaboration topology (operator lens)
 
-Compose into the **already-built** AI Operations Map rather than a new page:
+Compose into the **already-built** AI Operations Map (`apps/web/lib/ai-operations-map/*`, `components/platform/AiOperationsMap.tsx`) rather than a new page:
 
-- **Collaboration overlay**: when a conversation or build involves >1 participant, render the handoff edges as `Transfer` objects (the Operations Map visual grammar already defines a `Transfer` for "handoff between coworkers," sourced from `event bus, task handoff, A2A/coworker delegation"). This is wiring the *already-specified* Transfer object to the new `collaboration:*` events.
+- **Collaboration overlay**: when a conversation or build involves >1 participant, render the handoff edges as `Transfer` objects. **Correction (verified):** the `Transfer` visual object is *specified* in the 2026-05-10 visual-control-surface design doc but is **not yet implemented** — the shipped Operations Map types are `OperationsMapStation` / `Line` / `Projection` / `Routing*`, with no `Transfer`/handoff concept. So Layer B **implements** the `Transfer` object per that prior spec (net-new viz substrate on the existing map, not a wiring-only change) and binds it to the new `collaboration:*` events. This is the largest single piece of net-new code in Layers A/B and should be sized accordingly.
 - **Collaboration-graph inspector**: selecting a multi-participant pulse opens who-handed-to-whom with per-hop latency, state, and the governing `DelegationChain` reference. Reuses the Operations Map inspector + the existing (admin) `DelegationChainView` component logic.
 
 ### Layer C — Pattern optimization loop
@@ -171,7 +171,7 @@ Slice 1 and 2 add **no migrations** (pure projection + two governed tools + bus 
 | --- | --- | --- |
 | `collaboration:handoff` / `:summon` / `:return` on `AgentEvent` union | 1 | Code (canonical bus) |
 | `ConversationParticipant` read-model | 1 | Code (view) |
-| `request_coworker` / `summon_coworker` tools + grant mappings | 1 | Code (MCP + `TOOL_TO_GRANTS`) |
+| `request_coworker` / `summon_coworker` tools + grant mappings | 1 | Code (MCP + `TOOL_TO_GRANTS` in `apps/web/lib/tak/agent-grants.ts`) |
 | Runtime enforcement of `delegatesTo`/`escalatesTo` + `DelegationChain` hop write | 2 | Code (reuses existing models) |
 | `CollaborationPattern` aggregation (query first; table only if `EXPLAIN` demands) | 3 | Query → conditional migration |
 
