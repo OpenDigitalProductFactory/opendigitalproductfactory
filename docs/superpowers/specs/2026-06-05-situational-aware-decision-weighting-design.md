@@ -88,3 +88,25 @@ Layer 2 ships behind design review because it mutates the closed dimension regis
 - `wiki_lint` clean on the promoted principle (commandment requires direction + vector + ≥1 source; no new similarity/coherence blocker).
 - `pnpm typecheck` + the decision/wiki vitest suites pass.
 - Functional (post-merge / turnover): after the kernel reseeds, a live `principle_decide` on the §1 scenario recommends the proper fix.
+
+## 7. Corpus-aware golden-decision baseline (regression gate)
+
+The frozen-ledger back-test (§6) proves the *mechanism* with fixed inputs, but is blind to corpus growth. Because the kernel is a living corpus — every new/edited principle and every new dimension shifts the weighted-vector aggregate — we also need a baseline that **re-scores canonical decisions against the real, current corpus** and fails when one silently flips.
+
+`apps/web/lib/decision/golden-decisions.{ts,test.ts}` + `golden-decisions.baseline.json`:
+
+- Loads the real commandment corpus from `docs/founder-kernel/wiki/principles/*.md` via the canonical `parseWikiFrontmatter` (`@dpf/db`) — so the test *is* the corpus, and any principle/dimension change re-scores automatically.
+- Mirrors live retrieval for a **universal-ring** caller: full kernel, no ring filtering, population filter only, commandment tier only (core/contextual contribute 0 until Layer 2 loads their vectors). No `limit` — all commandments consulted.
+- Scores a curated, growable scenario panel through the real `decide()`; **hard-fails** on a flipped winner or a margin below `marginFloor`; **soft-reports** numeric/contributor/corpus-size drift for review.
+- `UPDATE_GOLDEN_BASELINE=1` regenerates the snapshot — so accepting a changed baseline is a deliberate, reviewed act.
+
+**Verified against the full current corpus (20 commandments):**
+
+| Scenario | Winner | Composites | Margin |
+|---|---|---|---|
+| `quick-vs-proper-normal` | ✅ `proper-seed-fix` | 10.12 vs 8.18 | 1.94 |
+| `cheap-sound-vs-rebuild-guard` | ✅ `cheap-sound-additive` | 11.14 vs 10.20 | 0.94 |
+
+Two corrections this surfaced: (1) the *real* post-fix margins (~1.9 / ~0.9) are larger than the PR's truncated-10 prediction (~0.22) because the full corpus is now consulted (RC4 un-truncation); (2) the anti-maximalism guard **holds against the full corpus** — its pre-merge pass was *not* an artifact of truncation. A faithful baseline must replicate real retrieval + use the canonical parser; a naive reimplementation produced a false "guard breaks" by silently dropping the process commandments.
+
+Boundary: this gate covers **aggregation** drift (which principles are in scope → how they combine). It does not cover **retrieval-relevance** drift (Qdrant deciding which *core* principles surface) — that only starts mattering once Layer 2 makes core/contextual principles carry structured vectors, at which point a live/integration arm is added.
