@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.spyOn(console, "log").mockImplementation(() => undefined);
+vi.spyOn(console, "info").mockImplementation(() => undefined);
+
 const { mockPrisma, mockInngest } = vi.hoisted(() => ({
   mockPrisma: {
     backlogItem: {
