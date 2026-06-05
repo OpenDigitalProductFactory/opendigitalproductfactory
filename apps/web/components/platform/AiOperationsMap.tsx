@@ -9,7 +9,6 @@ import {
   ZoomOut,
 } from "lucide-react";
 import type {
-  OperationsMapCollaborationTransfer,
   OperationsMapProjection,
   OperationsMapProjectionSource,
   OperationsMapQuickViewId,
@@ -21,8 +20,6 @@ import type {
   OperationsMapTemplate,
   StationedOperationsMapAgent,
 } from "@/lib/ai-operations-map/types";
-import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
-import type { Intent } from "@/components/ui/report-kit/statusColors";
 import {
   filterOperationsMapProjections,
   getOperationsMapQuickViewFilters,
@@ -35,6 +32,7 @@ import {
   type OperationsMapStoredQuickViewId,
 } from "./ai-operations-map-prefs";
 import { StalledTaskRecoveryActions } from "./StalledTaskRecoveryActions";
+import { A2aInteractionsPanel } from "./A2aInteractionsPanel";
 
 type SelectedItem =
   | { kind: "station"; id: string }
@@ -46,61 +44,8 @@ type Props = {
   agents: StationedOperationsMapAgent[];
   projections: OperationsMapProjection[];
   routingTopology: OperationsMapRoutingTopology;
-  collaborationTransfers: OperationsMapCollaborationTransfer[];
   recentWindowLabel: string;
 };
-
-const TRANSFER_STATE_INTENT: Record<OperationsMapCollaborationTransfer["state"], Intent> = {
-  active: "accent",
-  completed: "success",
-  failed: "danger",
-  blocked: "danger",
-};
-
-/**
- * EP-A2A Slice 2 — restrained operator view of coworker-to-coworker collaboration
- * transfers (handoff/escalation), projected from DelegationChain hops. Composes
- * into the Operations Map page; quiet when there are no transfers.
- */
-function CollaborationTransfersPanel({
-  transfers,
-}: {
-  transfers: OperationsMapCollaborationTransfer[];
-}) {
-  if (transfers.length === 0) return null;
-  return (
-    <details className="group rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]">
-        <div>
-          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Coworker collaboration</h2>
-          <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-            {transfers.length} recent coworker-to-coworker {transfers.length === 1 ? "transfer" : "transfers"} (handoff / escalation)
-          </p>
-        </div>
-        <span aria-hidden className="text-xs text-[var(--dpf-muted)] group-open:hidden">Show</span>
-        <span aria-hidden className="hidden text-xs text-[var(--dpf-muted)] group-open:inline">Hide</span>
-      </summary>
-      <ul className="divide-y divide-[var(--dpf-border)] border-t border-[var(--dpf-border)]">
-        {transfers.map((t) => (
-          <li key={t.id} className="flex flex-wrap items-center gap-2 px-4 py-2 text-xs">
-            <span className="font-medium text-[var(--dpf-text)]">{t.fromLabel}</span>
-            <span aria-hidden className="text-[var(--dpf-muted)]">→</span>
-            <span className="font-medium text-[var(--dpf-text)]">{t.toLabel}</span>
-            <StatusBadge intent={TRANSFER_STATE_INTENT[t.state]} label={t.state} size="sm" variant="soft" />
-            {t.state === "blocked" && t.reason ? (
-              <span className="text-[var(--dpf-muted)]">— {t.reason}</span>
-            ) : null}
-            {t.occurredAt ? (
-              <time className="ml-auto text-[var(--dpf-muted)]" dateTime={t.occurredAt}>
-                {new Date(t.occurredAt).toLocaleString()}
-              </time>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-    </details>
-  );
-}
 
 const SEVERITY_CLASS: Record<OperationsMapProjection["severity"], string> = {
   normal: "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]",
@@ -251,7 +196,7 @@ const PROVIDER_LOGO_MATCHERS: Array<{ match: RegExp; logo: ProviderLogoDefinitio
   { match: /portkey/, logo: { key: "portkey", mark: "P", wordmark: "Portkey" } },
 ];
 
-export function AiOperationsMap({ template, agents, projections, routingTopology, collaborationTransfers, recentWindowLabel }: Props) {
+export function AiOperationsMap({ template, agents, projections, routingTopology, recentWindowLabel }: Props) {
   const [selected, setSelected] = useState<SelectedItem>({ kind: "station", id: template.stations[0]?.id ?? "" });
   const [activeQuickViewId, setActiveQuickViewId] = useState<OperationsMapStoredQuickViewId>(
     DEFAULT_QUICK_VIEW_ID,
@@ -329,9 +274,13 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
         </header>
 
         <RoutingTopologyPanel routingTopology={routingTopology} />
-      </section>
 
-      <CollaborationTransfersPanel transfers={collaborationTransfers} />
+        <A2aInteractionsPanel
+          coworkers={routingTopology.coworkers}
+          a2aEdges={routingTopology.a2aEdges}
+          a2aLegend={routingTopology.a2aLegend}
+        />
+      </section>
 
       <details
         aria-label="Activity projection details"

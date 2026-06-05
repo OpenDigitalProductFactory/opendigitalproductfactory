@@ -18,6 +18,7 @@ vi.mock("@dpf/db", () => ({
     scheduledAgentTask: { findMany: vi.fn() },
     scheduledJob: { findMany: vi.fn() },
     delegationChain: { findMany: vi.fn() },
+    phaseHandoff: { findMany: vi.fn() },
   },
 }));
 
@@ -120,6 +121,7 @@ describe("AI operations map page", () => {
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.phaseHandoff.findMany).mockResolvedValue([] as never);
 
     const { default: OperationsMapPage } = await import("./page");
     const element = await OperationsMapPage();

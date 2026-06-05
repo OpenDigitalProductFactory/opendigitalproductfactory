@@ -8,14 +8,17 @@ import {
   projectToolExecution,
   projectToolExecutionReceipt,
 } from "./project-events";
-import { isSafeKey } from "@/lib/security/safe-property";
 import { projectRoutingTopology } from "./project-routing-topology";
-import { projectCollaborationTransfers } from "./project-collaboration-transfers";
+import {
+  projectA2aInteractions,
+  type A2aDelegationSourceRow,
+  type A2aPhaseHandoffSourceRow,
+  type A2aTaskLineageSourceRow,
+} from "./project-a2a-interactions";
 import type {
   OperationsMapRoutingTopology,
   OperationsMapAgent,
   OperationsMapBacklogEvidence,
-  OperationsMapCollaborationTransfer,
   OperationsMapExternalEvidence,
   OperationsMapProjection,
   OperationsMapTaskRun,
@@ -47,7 +50,6 @@ export type OperationsMapData = {
   agents: StationedOperationsMapAgent[];
   projections: OperationsMapProjection[];
   routingTopology: OperationsMapRoutingTopology;
-  collaborationTransfers: OperationsMapCollaborationTransfer[];
   recentWindowLabel: string;
 };
 
@@ -68,6 +70,9 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
     routeOutcomes,
     scheduledAgentTasks,
     scheduledJobs,
+    delegationChains,
+    phaseHandoffs,
+    a2aTaskRuns,
   ] = await Promise.all([
     prisma.storefrontConfig.findFirst({
       include: {
@@ -342,6 +347,73 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
         lastStatus: true,
       },
     }),
+    // ── A2A interaction sources (BI-65B0D697) ──────────────────────────
+    // Coworker-to-coworker interactions projected migration-free from
+    // existing substrate. DelegationChain + PhaseHandoff carry explicit
+    // from/toAgentId; TaskRun lineage carries initiating/current/parent.
+    // Deliberation fan-out is deferred until branch-persona identity is
+    // captured (TaskNode has no agentId column today) — see Slice 4.
+    prisma.delegationChain.findMany({
+      orderBy: { startedAt: "desc" },
+      take: RECENT_TOOL_LIMIT,
+      select: {
+        id: true,
+        chainId: true,
+        depth: true,
+        fromAgentId: true,
+        toAgentId: true,
+        skillId: true,
+        authorityScope: true,
+        status: true,
+        reason: true,
+        startedAt: true,
+        completedAt: true,
+      },
+    }),
+    prisma.phaseHandoff.findMany({
+      orderBy: { createdAt: "desc" },
+      take: RECENT_TOOL_LIMIT,
+      select: {
+        id: true,
+        buildId: true,
+        fromPhase: true,
+        toPhase: true,
+        fromAgentId: true,
+        toAgentId: true,
+        summary: true,
+        gateResult: true,
+        tokenBudgetUsed: true,
+        createdAt: true,
+      },
+    }),
+    prisma.taskRun.findMany({
+      where: {
+        archivedAt: null,
+        OR: [
+          { parentTaskRunId: { not: null } },
+          {
+            AND: [
+              { initiatingAgentId: { not: null } },
+              { currentAgentId: { not: null } },
+            ],
+          },
+        ],
+      },
+      orderBy: { startedAt: "desc" },
+      take: RECENT_TOOL_LIMIT,
+      select: {
+        id: true,
+        taskRunId: true,
+        initiatingAgentId: true,
+        currentAgentId: true,
+        parentTaskRunId: true,
+        title: true,
+        objective: true,
+        status: true,
+        buildId: true,
+        startedAt: true,
+      },
+    }),
   ]);
 
   const routeDecisionAgentMessageIds = [
@@ -423,33 +495,130 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
     scheduledJobs,
   });
 
-  // EP-A2A Slice 2: coworker-to-coworker collaboration transfers from
-  // DelegationChain hops (handoff/escalation, accepted + blocked).
-  const delegationChains = await prisma.delegationChain.findMany({
-    orderBy: { startedAt: "desc" },
-    take: RECENT_TOOL_LIMIT,
-    select: { id: true, fromAgentId: true, toAgentId: true, status: true, reason: true, startedAt: true },
-  });
-  const agentLabelMap: Record<string, string> = {};
-  for (const agent of stationedAgents) {
-    // isSafeKey: bar prototype-polluting keys on computed-key writes
-    // (CodeQL js/remote-property-injection barrier).
-    if (isSafeKey(agent.agentId)) agentLabelMap[agent.agentId] = agent.name;
-    if (agent.slugId && isSafeKey(agent.slugId)) agentLabelMap[agent.slugId] = agent.name;
+  // ── Compose coworker-to-coworker (A2A) interactions ──────────────────
+  // Project A2A edges from existing substrate and merge them into the
+  // provider routing topology. Coworker nodes contributed by A2A edges are
+  // unioned in so an agent that only ever *received* an interaction still
+  // appears. See project-a2a-interactions.ts + BI-65B0D697.
+  const a2aTaskRunAgentById = new Map<string, string | null>();
+  for (const row of a2aTaskRuns) {
+    a2aTaskRunAgentById.set(row.id, row.currentAgentId);
+    a2aTaskRunAgentById.set(row.taskRunId, row.currentAgentId);
   }
-  const collaborationTransfers = projectCollaborationTransfers({
-    delegationChains,
-    agentLabels: agentLabelMap,
+  const coworkerSourceRows = stationedAgents.map((agent) => ({
+    agentId: agent.agentId,
+    name: agent.name,
+    stationLabel: agent.stationLabel,
+  }));
+  const a2aProjection = projectA2aInteractions({
+    agents: coworkerSourceRows,
+    delegationChains: delegationChains.map((row): A2aDelegationSourceRow => ({
+      id: row.id,
+      chainId: row.chainId,
+      depth: row.depth,
+      fromAgentId: row.fromAgentId,
+      toAgentId: row.toAgentId,
+      skillId: row.skillId,
+      authorityScope: row.authorityScope,
+      status: row.status,
+      reason: row.reason,
+      startedAt: row.startedAt,
+      completedAt: row.completedAt,
+    })),
+    phaseHandoffs: phaseHandoffs.map((row): A2aPhaseHandoffSourceRow => {
+      const gate = resolveGateResult(row.gateResult);
+      return {
+        id: row.id,
+        buildId: row.buildId,
+        fromPhase: row.fromPhase,
+        toPhase: row.toPhase,
+        fromAgentId: row.fromAgentId,
+        toAgentId: row.toAgentId,
+        summary: row.summary,
+        gatePassed: gate.passed,
+        gateLabel: gate.label ?? `${row.fromPhase} → ${row.toPhase} gate`,
+        tokenBudgetUsed: row.tokenBudgetUsed,
+        createdAt: row.createdAt,
+      };
+    }),
+    taskLineage: a2aTaskRuns.map((row): A2aTaskLineageSourceRow => ({
+      id: row.id,
+      taskRunId: row.taskRunId,
+      initiatingAgentId: row.initiatingAgentId,
+      currentAgentId: row.currentAgentId,
+      parentTaskRunId: row.parentTaskRunId,
+      parentAgentId: row.parentTaskRunId
+        ? a2aTaskRunAgentById.get(row.parentTaskRunId) ?? null
+        : null,
+      title: row.title,
+      objective: row.objective,
+      status: row.status,
+      buildId: row.buildId,
+      startedAt: row.startedAt,
+    })),
+    // Deliberation fan-out deferred: TaskNode branch personas carry no
+    // agentId column yet. Wired once the A2A-capture thread records it.
+    deliberations: [],
   });
+
+  const mergedCoworkers = mergeCoworkersById(routingTopology.coworkers, a2aProjection.coworkers);
+  const mergedTimeline = [...routingTopology.timeline, ...a2aProjection.timeline].sort(
+    (left, right) => Date.parse(left.occurredAt) - Date.parse(right.occurredAt),
+  );
 
   return {
     template,
     agents: stationedAgents,
     projections,
-    routingTopology,
-    collaborationTransfers,
+    routingTopology: {
+      ...routingTopology,
+      coworkers: mergedCoworkers,
+      a2aEdges: a2aProjection.a2aEdges,
+      timeline: mergedTimeline,
+    },
     recentWindowLabel: `Last ${RECENT_TOOL_LIMIT} records per evidence source`,
   };
+}
+
+/**
+ * Resolve a PhaseHandoff.gateResult JSON blob into a pass/fail signal + a
+ * short label. Conservative: an explicit boolean wins; otherwise a status
+ * string is pattern-matched; otherwise the gate state is unknown (null).
+ */
+function resolveGateResult(value: unknown): { passed: boolean | null; label: string | null } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { passed: null, label: null };
+  }
+  const record = value as Record<string, unknown>;
+  const explicit = record.passed ?? record.allowed ?? record.advanced;
+  const statusText = [record.result, record.status, record.outcome, record.decision]
+    .find((entry): entry is string => typeof entry === "string");
+
+  let passed: boolean | null = null;
+  if (typeof explicit === "boolean") {
+    passed = explicit;
+  } else if (statusText) {
+    if (/pass|advanc|approv|ok|success/i.test(statusText)) passed = true;
+    else if (/fail|block|reject|deny|error/i.test(statusText)) passed = false;
+  }
+
+  return { passed, label: statusText ?? null };
+}
+
+/**
+ * Union two coworker-node lists by agentId, preserving the provider-topology
+ * entry when an agent appears in both. Keeps a stable label sort.
+ */
+function mergeCoworkersById<T extends { agentId: string; label: string }>(
+  primary: T[],
+  secondary: T[],
+): T[] {
+  const byId = new Map<string, T>();
+  for (const coworker of primary) byId.set(coworker.agentId, coworker);
+  for (const coworker of secondary) {
+    if (!byId.has(coworker.agentId)) byId.set(coworker.agentId, coworker);
+  }
+  return [...byId.values()].sort((left, right) => left.label.localeCompare(right.label));
 }
 
 function getActivationProfileType(value: unknown): string | null {

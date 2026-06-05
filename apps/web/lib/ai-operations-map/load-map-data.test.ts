@@ -50,6 +50,9 @@ vi.mock("@dpf/db", () => ({
     delegationChain: {
       findMany: vi.fn(),
     },
+    phaseHandoff: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -62,6 +65,9 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.agentMessage.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.modelProfile.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
+    // A2A interaction sources default to empty; individual tests override.
+    vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.phaseHandoff.findMany).mockResolvedValue([] as never);
   });
 
   it("selects the map template from StorefrontConfig archetype truth", async () => {
@@ -86,7 +92,6 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
 
     const data = await loadOperationsMapData();
 
@@ -120,7 +125,6 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
 
     const data = await loadOperationsMapData();
 
@@ -143,7 +147,6 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
 
     const data = await loadOperationsMapData();
 
@@ -259,7 +262,6 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([makeRouteOutcomeRow()] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([makeScheduledAgentTaskRow()] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([makeScheduledJobRow()] as never);
-    vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
 
     const data = await loadOperationsMapData();
 
@@ -369,7 +371,6 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
 
     const data = await loadOperationsMapData();
 
@@ -404,7 +405,6 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([makeRouteOutcomeRow()] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
 
     const data = await loadOperationsMapData();
 
@@ -418,6 +418,82 @@ describe("loadOperationsMapData", () => {
           summary: expect.stringContaining("auth"),
         }),
       ]),
+    );
+  });
+
+  it("projects coworker-to-coworker A2A interactions from delegation and phase-handoff substrate", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([
+      makeAgentRow(),
+      { ...makeAgentRow(), id: "agent-db-2", agentId: "brand-analyst", slugId: "brand-analyst", name: "Brand Analyst" },
+    ] as never);
+    vi.mocked(prisma.taskRun.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.toolExecution.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.toolExecutionReceipt.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.backlogItemActivity.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.externalEvidenceRecord.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.routeDecisionLog.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.modelProvider.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.tokenUsage.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([
+      {
+        id: "del-1",
+        chainId: "chain-1",
+        depth: 0,
+        fromAgentId: "support-specialist",
+        toAgentId: "brand-analyst",
+        skillId: "brand-extract",
+        authorityScope: ["brand:read"],
+        status: "completed",
+        reason: "Delegated brand extraction",
+        startedAt: new Date("2026-06-04T10:00:00.000Z"),
+        completedAt: new Date("2026-06-04T10:05:00.000Z"),
+      },
+    ] as never);
+    vi.mocked(prisma.phaseHandoff.findMany).mockResolvedValue([
+      {
+        id: "ph-1",
+        buildId: "FB-1",
+        fromPhase: "plan",
+        toPhase: "build",
+        fromAgentId: "support-specialist",
+        toAgentId: "brand-analyst",
+        summary: "Plan approved.",
+        gateResult: { passed: true, status: "advanced" },
+        tokenBudgetUsed: 4200,
+        createdAt: new Date("2026-06-04T11:00:00.000Z"),
+      },
+    ] as never);
+
+    const data = await loadOperationsMapData();
+
+    expect(data.routingTopology.a2aEdges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          edgeKind: "a2a-delegation",
+          fromCoworkerId: "support-specialist",
+          toCoworkerId: "brand-analyst",
+          state: "completed",
+        }),
+        expect.objectContaining({
+          edgeKind: "a2a-handoff",
+          fromCoworkerId: "support-specialist",
+          toCoworkerId: "brand-analyst",
+          state: "completed",
+          buildId: "FB-1",
+        }),
+      ]),
+    );
+    expect(data.routingTopology.a2aLegend.map((item) => item.edgeKind)).toContain("a2a-delegation");
+    // Brand Analyst appears as a coworker node even though it only received work.
+    expect(data.routingTopology.coworkers.map((c) => c.agentId)).toContain("brand-analyst");
+    expect(prisma.delegationChain.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { startedAt: "desc" }, take: 40 }),
+    );
+    expect(prisma.phaseHandoff.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { createdAt: "desc" }, take: 40 }),
     );
   });
 });
