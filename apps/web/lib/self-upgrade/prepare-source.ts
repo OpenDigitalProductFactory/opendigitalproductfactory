@@ -256,6 +256,10 @@ async function initWorkspace(
   // beyond a fresh working tree). We do NOT pass --shared — that would make
   // the workspace fragile if the install clone is ever pruned mid-run.
   const clone = await run([
+    "-c",
+    "core.autocrlf=false",
+    "-c",
+    "core.eol=lf",
     "clone",
     "--no-tags",
     input.hostSourcePath,
@@ -270,6 +274,8 @@ async function initWorkspace(
   await run(["-C", input.workspacePath, "config", "user.email", "self-upgrade@dpf.local"]);
   await run(["-C", input.workspacePath, "config", "user.name", "DPF self-upgrade"]);
   await run(["-C", input.workspacePath, "config", "commit.gpgsign", "false"]);
+  await run(["-C", input.workspacePath, "config", "core.autocrlf", "false"]);
+  await run(["-C", input.workspacePath, "config", "core.eol", "lf"]);
   return { ok: true };
 }
 
@@ -457,6 +463,8 @@ async function prepareUpgradeSourceInWorkspace(
       ]);
       const conflictFiles = trim(conflicts.stdout).split("\n").map(trim).filter(Boolean);
       await run(["-C", input.workspacePath, "merge", "--abort"]);
+      await run(["-C", input.workspacePath, "reset", "--hard", "HEAD"]);
+      await run(["-C", input.workspacePath, "clean", "-fdx"]);
       // Capture stderr too so the operator-visible failureLog explains WHY
       // when conflictFiles is empty (e.g. refusing to merge unrelated
       // histories) — the legacy "merge-conflict: " trail with no files left
