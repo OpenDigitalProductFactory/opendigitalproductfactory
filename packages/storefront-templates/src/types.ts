@@ -309,6 +309,17 @@ export type PartnerPortalMode = "none" | "available" | "primary";
 export type PartnerGraphMode = "none" | "separate-partner-projection";
 
 /**
+ * An organization's stored decision about an offered (recommended/optional)
+ * capability. This is the *persisted opt-in overlay* that sits on top of the
+ * derived {@link CapabilityApplicability}: the derivation answers "is this
+ * applicable to the business model?"; the choice answers "did this org turn it
+ * on?". Captured at setup when a capability is `recommended`, and editable later
+ * from admin (the "add it later" path). Resolution lives in
+ * `resolveCapabilityActivation` (capability-activation.ts).
+ */
+export type CapabilityActivationChoice = "enabled" | "disabled";
+
+/**
  * The partner/reseller operating model an archetype activates. Derived from the
  * {@link OperatingModelAxes} (platform, primaryConsumer, form, commercialModel)
  * the same way {@link BillingPatternProfile} is derived from `commercialModel`,

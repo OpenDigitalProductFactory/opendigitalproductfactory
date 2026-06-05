@@ -135,6 +135,23 @@ Per AGENTS.md §11 and the enterprise-auth 2026-05-09 convergence addendum (**bi
 - **Authorization** → partner capabilities resolve through the same effective-auth-context evaluator, gated to `partner-account` ownership scope with `strict-partner-scope` isolation. A partner sees only their own partner-account records (deal registrations, margin, downstream sub-customers); never another partner's, never the operator's internal estate, never raw customer PII beyond what the partner agreement permits. Delegated partner-admin (a partner admin manages their own contacts) is a partner-scoped role.
 - **Portal route** → `/partners` (external partner experience), distinct from `/storefront` (internal management) and `/portal` (customer). The `partner-program` capability's `surfaces: ["partners","partner-portal"]` gate the route — visible only when the normalized profile's `partner-program` applicability is `required`/`recommended`, never by comparing raw `archetypeId`.
 
+### 6.3 Setup-time activation & "add it later" (persisted org choice)
+
+**The derivation answers "is a partner channel applicable to this business model?" — it does not answer "did this org opt in, and can they turn it on later?"** Today, capability applicability is purely derived from axes and silently applied: there is no setup-time question, no persisted per-org choice, and no admin toggle (verified 2026-06-04 — `apps/web/lib/storefront/archetype-activation.ts`, `StorefrontConfig`, `BusinessContext` carry no org-level capability-activation state). That is a gap for *every* `recommended`/`optional` capability; partner-program is the first to need it, so it is solved generically here.
+
+**Model: a persisted org-choice overlay on top of the derived applicability.** The derivation says how strongly a capability is offered; the org's stored `CapabilityActivationChoice` (`enabled | disabled`, default unset) says whether this org turned it on. Both the setup wizard and the admin toggle resolve through one function, `resolveCapabilityActivation(applicability, choice?)` (`capability-activation.ts`, landed in this change), so "ask at setup" and "add it later" share a single source of truth:
+
+| Derived applicability | Setup wizard | Default state | Add later (admin)? |
+| --- | --- | --- | --- |
+| `required` (channel-partner archetype) | confirmed (informed) | **on** (core to the model) | yes (re-enable if opted out) |
+| `recommended` (SaaS / MSP / wholesale) | **asked** — "Do you sell through partners/resellers?" | off until opt-in | **yes** |
+| `optional` | not surfaced (keeps wizard clean) | off | **yes** |
+| `not-applicable` / `hidden` | never | off | no |
+
+So: when an archetype whose axes derive `partner-program = recommended` is chosen at setup, the wizard **asks** whether the partner channel applies; the answer is stored; and if the org declines (or the model changes), the partner channel can be **enabled later** from admin. A pure-channel/reseller archetype (`primaryConsumer = channel-partner`, derived `required`) is on by default but still confirmed.
+
+**Staged substrate (needs migration + runtime gates):** a persisted `OrganizationCapabilityActivation` overlay keyed by `(organizationId, capabilityKey) → CapabilityActivationChoice` (generic — not partner-specific), the setup-wizard question for `promptAtSetup` capabilities, and the admin capability toggle for `canEnableLater` capabilities. The resolution logic primitive is landed; the persistence + UI are Phase 1b/3 (build-gated on the canonical install). The archetype must also be changeable post-setup (re-deriving applicability) for the add-later path to be complete — currently it is not.
+
 ## 7. WWMD Verification
 
 `principle_decide` (population `external_coding_agent`, surface `partner-archetype-design`, governing profile `mark-dpf-platform`) scored three partner-identity options:
@@ -163,14 +180,17 @@ Identity slice (staged, gated):
 1. `derivePartnerProgramProfile` produces `primary` for channel-partner axes, `available` for platform/MSP/wholesale axes, and `none` for direct-to-consumer axes — from axis values alone, no per-archetype hand-edits. *(Met — `applicability-rules.test.ts`.)*
 2. The `partner-program` capability is `required` for channel-partner, `recommended` for platform/MSP/wholesale, `not-applicable` otherwise, with `partner-account` ownership and `strict-partner-scope` isolation. *(Met.)*
 3. `NormalizedActivationProfile.partnerProgram` is populated by `readActivationProfile`. *(Met.)*
-4. Package typecheck + vitest green. *(Met — 32/32 tests, tsc clean.)*
-5. (Identity slice) Partner login resolves to a `Principal.kind="partner"` via a `partner-contact` alias; authorization resolves on the Principal; `/partners` is gated by `partner-program` applicability, never by raw archetype id; a partner cannot see another partner's or the operator's internal records. *(Staged.)*
-6. (Identity slice) No parallel partner identity table is introduced; migration applies cleanly; UX verified on the canonical install. *(Staged.)*
+4. `resolveCapabilityActivation` makes `recommended` capabilities ask at setup + opt-in + add-later, `required` on-by-default, `optional` add-later-only, `not-applicable`/`hidden` never. *(Met — `capability-activation.test.ts`.)*
+5. Package typecheck + vitest green. *(Met — 38/38 tests, tsc clean.)*
+6. (Phase 1b) When a `recommended` partner archetype is chosen at setup the wizard asks "Do you sell through partners/resellers?"; the answer persists; a declining org can enable it later from admin; the archetype is changeable post-setup. *(Staged.)*
+7. (Identity slice) Partner login resolves to a `Principal.kind="partner"` via a `partner-contact` alias; authorization resolves on the Principal; `/partners` is gated by `partner-program` applicability, never by raw archetype id; a partner cannot see another partner's or the operator's internal records. *(Staged.)*
+8. (Identity slice) No parallel partner identity table is introduced; migration applies cleanly; UX verified on the canonical install. *(Staged.)*
 
 ## 10. Phases
 
-- **Phase 0 (landed in this change):** archetype-layer partner primitives + derivation + tests.
+- **Phase 0 (landed in this change):** archetype-layer partner primitives + derivation + the `resolveCapabilityActivation` setup/add-later resolution logic + tests.
 - **Phase 1:** wire the target archetypes' `activationProfile.axes` so `software-platform`, `it-managed-services`, and a retail wholesale archetype activate the partner program; assert the §6.1 matrix from the rules; QA on canonical install.
+- **Phase 1b (setup question + add-later):** persisted generic `OrganizationCapabilityActivation` overlay `(organizationId, capabilityKey) → CapabilityActivationChoice`; wire the setup wizard to **ask** about `promptAtSetup` capabilities (partner-program first); admin capability toggle for `canEnableLater`; make the archetype changeable post-setup so applicability re-derives. Migration + UX gates. (§6.3)
 - **Phase 2:** schema-audit the partner-org account (reuse `CustomerAccount` vs thin `PartnerAccount`); add `Principal.kind="partner"` + `partner-contact` alias + sync function in `principal-linking.ts`; migration.
 - **Phase 3:** `UserType="partner"` + Partner credentials provider + session shape; effective-auth-context partner scope; `/partners` portal shell gated by `partner-program`.
 - **Phase 4:** deal registration + tiering records (prepared-not-prescribed); delegated partner-admin role.
