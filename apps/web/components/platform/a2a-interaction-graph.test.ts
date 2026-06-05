@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   A2A_GRAPH_LAYOUT,
   a2aEdgeSourceRecords,
+  a2aEdgeVisibleAtReplayTime,
   a2aStateIntent,
   columnPositions,
   coworkerHref,
@@ -104,6 +105,28 @@ describe("a2a-interaction-graph helpers", () => {
   it("builds coworker detail hrefs", () => {
     expect(coworkerHref("brand-analyst")).toBe("/platform/ai/agent/brand-analyst");
     expect(coworkerHref("a/b")).toBe("/platform/ai/agent/a%2Fb");
+  });
+
+  it("shares the replay playhead with the provider timeline", () => {
+    // span = 100 min → window = max(45min, 20%*100min=20min) = 45min.
+    const range = { start: 0, current: 60 * 60 * 1000, end: 100 * 60 * 1000 };
+    const at = (min: number) => new Date(min * 60 * 1000).toISOString();
+
+    // Playhead at/after "current" → everything recent is visible.
+    expect(a2aEdgeVisibleAtReplayTime(at(10), range.current, range)).toBe(true);
+    expect(a2aEdgeVisibleAtReplayTime(at(90), range.current + 5, range)).toBe(true);
+
+    // Scrubbed back to t=50min: an edge at 48min is within the 45min window and
+    // has already occurred → visible; an edge at 55min hasn't occurred yet → hidden.
+    const t50 = 50 * 60 * 1000;
+    expect(a2aEdgeVisibleAtReplayTime(at(48), t50, range)).toBe(true);
+    expect(a2aEdgeVisibleAtReplayTime(at(55), t50, range)).toBe(false);
+    // An edge at 2min is older than the 45min look-back from t=50 → hidden.
+    expect(a2aEdgeVisibleAtReplayTime(at(2), t50, range)).toBe(false);
+
+    // Undated / unparseable interactions are always visible.
+    expect(a2aEdgeVisibleAtReplayTime(null, t50, range)).toBe(true);
+    expect(a2aEdgeVisibleAtReplayTime("not-a-date", t50, range)).toBe(true);
   });
 
   it("clips long labels and titleizes ids", () => {

@@ -136,4 +136,30 @@ describe("A2aInteractionsPanel", () => {
     expect(inspector.textContent).toContain("brand:read");
     expect(inspector.textContent).toContain("brand-extract");
   });
+
+  it("scrubs in lock-step with the shared replay playhead", () => {
+    const range = { start: 0, current: 60 * 60 * 1000, end: 100 * 60 * 1000 };
+    const at = (min: number) => new Date(min * 60 * 1000).toISOString();
+    const edges = [
+      edge({ id: "early", occurredAt: at(40) }),
+      edge({ id: "late", occurredAt: at(58), toCoworkerId: "reviewer" }),
+    ];
+
+    // Playhead at "current" → both visible, no synced banner.
+    const atNow = render(
+      <A2aInteractionsPanel coworkers={COWORKERS} a2aEdges={edges} a2aLegend={LEGEND} replayTime={range.current} replayRange={range} />,
+    );
+    expect(atNow.container.querySelectorAll("[data-a2a-edge]").length).toBe(2);
+    expect(atNow.container.querySelector("[data-a2a-replay-synced]")).toBeNull();
+    cleanup();
+
+    // Scrubbed back to 50min → only the edge at 40min has occurred; the 58min
+    // edge is in the future and hidden, and the synced banner appears.
+    const scrubbed = render(
+      <A2aInteractionsPanel coworkers={COWORKERS} a2aEdges={edges} a2aLegend={LEGEND} replayTime={50 * 60 * 1000} replayRange={range} />,
+    );
+    const visible = scrubbed.container.querySelectorAll("[data-a2a-edge]");
+    expect(visible.length).toBe(1);
+    expect(scrubbed.container.querySelector("[data-a2a-replay-synced]")).not.toBeNull();
+  });
 });

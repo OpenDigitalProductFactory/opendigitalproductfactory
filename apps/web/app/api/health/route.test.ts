@@ -47,16 +47,10 @@ describe("GET /api/health", () => {
   });
 
   it("returns 503 with eventLoop:lagging when lag exceeds threshold (BI-9F106818)", async () => {
-    // Override the threshold to 1ms so any lag triggers the check.
-    process.env["EVENT_LOOP_LAG_THRESHOLD_MS"] = "1";
+    // Force the event-loop guard branch without relying on host timer
+    // granularity. A 0ms timeout can resolve with either 0ms or 1ms lag.
+    process.env["EVENT_LOOP_LAG_THRESHOLD_MS"] = "-1";
     mockQueryRaw.mockResolvedValue([{ "?column?": 1 }]);
-
-    // Spin the CPU for 5ms synchronously so the setTimeout probe actually
-    // fires late. This is the simplest way to reliably produce real lag in
-    // a test without fake timers (which don't intercept a module's captured
-    // native setTimeout reference).
-    const spin = Date.now();
-    while (Date.now() - spin < 5) { /* busy-wait */ }
 
     const res = await GET();
     const body = await res.json();

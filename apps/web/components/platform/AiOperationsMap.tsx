@@ -1,6 +1,6 @@
 "use client";
 
-import { type SyntheticEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   RotateCcw,
@@ -29,6 +29,10 @@ import {
   clearOperationsMapViewPreference,
   loadOperationsMapViewPreference,
   saveOperationsMapViewPreference,
+  getDefaultOperationsMapDimension,
+  loadOperationsMapDimension,
+  saveOperationsMapDimension,
+  type OperationsMapDimension,
   type OperationsMapStoredQuickViewId,
 } from "./ai-operations-map-prefs";
 import { StalledTaskRecoveryActions } from "./StalledTaskRecoveryActions";
@@ -208,6 +212,8 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
   const [severityFilters, setSeverityFilters] = useState<OperationsMapSeverity[]>(
     DEFAULT_QUICK_VIEW_FILTERS.severities,
   );
+  const [dimension, setDimension] = useState<OperationsMapDimension>(getDefaultOperationsMapDimension());
+  const dimensionHydrated = useRef(false);
   const preferenceHydrated = useRef(false);
   const filteredProjections = useMemo(
     () => filterOperationsMapProjections(projections, { sources: sourceFilters, severities: severityFilters }),
@@ -232,6 +238,27 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
       },
     });
   }, [activeQuickViewId, sourceFilters, severityFilters]);
+
+  useEffect(() => {
+    setDimension(loadOperationsMapDimension());
+    dimensionHydrated.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!dimensionHydrated.current) return;
+    saveOperationsMapDimension(dimension);
+  }, [dimension]);
+
+  const showProvider = dimension === "provider" || dimension === "both";
+  const showA2a = dimension === "a2a" || dimension === "both";
+
+  // Shared replay window: the provider routing panel owns the timeline and
+  // publishes its playhead here so the A2A interaction band scrubs in step.
+  const [sharedReplay, setSharedReplay] = useState<{ time: number; range: RoutingTimelineRange } | null>(null);
+  const handleReplayChange = useCallback(
+    (time: number, range: RoutingTimelineRange) => setSharedReplay({ time, range }),
+    [],
+  );
 
   const selectedStation = selected.kind === "station"
     ? template.stations.find((station) => station.id === selected.id) ?? null
@@ -274,15 +301,25 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
           </p>
         </header>
 
-        <RoutingTopologyPanel routingTopology={routingTopology} />
+        <DimensionToggle dimension={dimension} onChange={setDimension} />
 
-        <A2aInteractionsPanel
-          coworkers={routingTopology.coworkers}
-          a2aEdges={routingTopology.a2aEdges}
-          a2aLegend={routingTopology.a2aLegend}
-        />
+        {showProvider ? (
+          <RoutingTopologyPanel routingTopology={routingTopology} onReplayChange={handleReplayChange} />
+        ) : null}
 
-        <DeliberationLensPanel deliberations={routingTopology.deliberations} />
+        {showA2a ? (
+          <>
+            <A2aInteractionsPanel
+              coworkers={routingTopology.coworkers}
+              a2aEdges={routingTopology.a2aEdges}
+              a2aLegend={routingTopology.a2aLegend}
+              replayTime={showProvider ? sharedReplay?.time ?? null : null}
+              replayRange={showProvider ? sharedReplay?.range ?? null : null}
+            />
+
+            <DeliberationLensPanel deliberations={routingTopology.deliberations} />
+          </>
+        ) : null}
       </section>
 
       <details
@@ -475,7 +512,13 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
   );
 }
 
-function RoutingTopologyPanel({ routingTopology }: { routingTopology: OperationsMapRoutingTopology }) {
+function RoutingTopologyPanel({
+  routingTopology,
+  onReplayChange,
+}: {
+  routingTopology: OperationsMapRoutingTopology;
+  onReplayChange?: (selectedTime: number, range: RoutingTimelineRange) => void;
+}) {
   const mapShellRef = useRef<HTMLDivElement>(null);
   const pinnedMarkerRef = useRef<string | null>(null);
   const [routeFilter, setRouteFilter] = useState<RoutingRouteFilter>("all");
@@ -498,6 +541,14 @@ function RoutingTopologyPanel({ routingTopology }: { routingTopology: Operations
     [baseTimelineRange, timelineWindowAnchor, timelineZoomLevel],
   );
   const selectedTimelinePercent = timelineMarkerPosition(selectedReplayTime, timelineRange);
+
+  // Publish the replay playhead so the A2A interaction band can scrub in
+  // lock-step (shared replay window). Fires only when the playhead or window
+  // actually changes; the parent's handler is stable (useCallback).
+  useEffect(() => {
+    onReplayChange?.(selectedReplayTime, timelineRange);
+  }, [onReplayChange, selectedReplayTime, timelineRange]);
+
   const providersById = useMemo(
     () => new Map(routingTopology.providers.map((provider) => [provider.providerId, provider])),
     [routingTopology.providers],
@@ -2402,6 +2453,53 @@ function routingViewBox(zoomLevel: number): string {
 function svgLabel(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+const DIMENSION_OPTIONS: Array<{ id: OperationsMapDimension; label: string; hint: string }> = [
+  { id: "both", label: "Both", hint: "Provider routing + coworker interactions" },
+  { id: "provider", label: "Provider routes", hint: "Provider routing only" },
+  { id: "a2a", label: "A2A interactions", hint: "Coworker-to-coworker interactions only" },
+];
+
+function DimensionToggle({
+  dimension,
+  onChange,
+}: {
+  dimension: OperationsMapDimension;
+  onChange: (dimension: OperationsMapDimension) => void;
+}) {
+  const active = DIMENSION_OPTIONS.find((option) => option.id === dimension) ?? DIMENSION_OPTIONS[0];
+  return (
+    <div
+      role="group"
+      aria-label="Operations map dimension"
+      className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2"
+    >
+      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
+        Dimension
+      </span>
+      <div className="inline-flex rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-0.5">
+        {DIMENSION_OPTIONS.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            aria-pressed={dimension === option.id}
+            title={option.hint}
+            onClick={() => onChange(option.id)}
+            className={[
+              "min-h-7 rounded-full px-3 py-1 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]",
+              dimension === option.id
+                ? "bg-[var(--dpf-accent-soft)] font-medium text-[var(--dpf-text)]"
+                : "text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",
+            ].join(" ")}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      <span className="text-xs text-[var(--dpf-muted)]">{active.hint}</span>
+    </div>
+  );
 }
 
 function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {

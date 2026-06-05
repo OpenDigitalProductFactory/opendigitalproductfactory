@@ -88,6 +88,47 @@ export function clearA2aFilterPreference(): void {
   }
 }
 
+// ─── Operations Map dimension toggle (Provider routes · A2A · Both) ───────
+// Lets the operator focus the map on provider routing, coworker-to-coworker
+// (A2A) interactions, or both. Defaults to "both" (the full surface).
+
+export const OPERATIONS_MAP_DIMENSION_KEY = "ai-operations-map:dimension";
+
+export type OperationsMapDimension = "provider" | "a2a" | "both";
+
+const OPERATIONS_MAP_DIMENSIONS = new Set<OperationsMapDimension>(["provider", "a2a", "both"]);
+
+export function getDefaultOperationsMapDimension(): OperationsMapDimension {
+  return "both";
+}
+
+export function loadOperationsMapDimension(): OperationsMapDimension {
+  try {
+    const raw = localStorage.getItem(OPERATIONS_MAP_DIMENSION_KEY);
+    return OPERATIONS_MAP_DIMENSIONS.has(raw as OperationsMapDimension)
+      ? (raw as OperationsMapDimension)
+      : getDefaultOperationsMapDimension();
+  } catch {
+    return getDefaultOperationsMapDimension();
+  }
+}
+
+export function saveOperationsMapDimension(dimension: OperationsMapDimension): void {
+  try {
+    localStorage.setItem(OPERATIONS_MAP_DIMENSION_KEY, dimension);
+  } catch {
+    // localStorage can be unavailable or full; the map remains usable without persistence.
+  }
+}
+
+export function clearOperationsMapDimension(): void {
+  try {
+    localStorage.removeItem(OPERATIONS_MAP_DIMENSION_KEY);
+  } catch {
+    // localStorage can be unavailable; resetting in-memory state still keeps the map usable.
+  }
+}
+
 export type OperationsMapStoredQuickViewId = OperationsMapQuickViewId | "custom";
 
 export type OperationsMapViewPreference = {

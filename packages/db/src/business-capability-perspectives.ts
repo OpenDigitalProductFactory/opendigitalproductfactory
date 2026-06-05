@@ -162,6 +162,69 @@ const IT_MANAGED_SERVICES: BusinessCapabilityPerspective = {
   ],
 };
 
+const BEAUTY_PERSONAL_CARE: BusinessCapabilityPerspective = {
+  perspectiveId: "beauty-personal-care",
+  label: "Beauty And Personal Care",
+  source: "DPF beauty/personal-care overlay informed by appointment checkout, service menu, practitioner assignment, retail/POS payments, CRM/marketing automation, and local-presence operating patterns",
+  capabilities: [
+    l1(
+      "beauty-service-operations",
+      "Beauty And Personal Care Operations",
+      100,
+      "Operate appointment-led personal services across service menus, practitioners, client preferences, checkout, retail products, and local demand channels.",
+      ["consume", "operate"],
+    ),
+    l2(
+      "beauty-service-menu-packages",
+      "beauty-service-operations",
+      "Service Menu Packages And Pricing",
+      10,
+      "Define services, treatments, add-ons, packages, memberships, prices, durations, booking rules, and product/service bundles.",
+      ["explore", "consume"],
+    ),
+    l2(
+      "beauty-booking-practitioner-calendar",
+      "beauty-service-operations",
+      "Booking Practitioner Calendar",
+      20,
+      "Coordinate appointment slots, practitioner or stylist assignment, customer-choice booking, buffers, reminders, and schedule exceptions.",
+      ["consume", "operate"],
+    ),
+    l2(
+      "beauty-client-preferences-intake",
+      "beauty-service-operations",
+      "Client Preferences And Intake",
+      30,
+      "Maintain client records, preferences, sensitivities, consent notes, style or treatment history, and CRM/customer profile anchors.",
+      ["consume", "operate"],
+    ),
+    l2(
+      "beauty-checkout-retail-payments",
+      "beauty-service-operations",
+      "Checkout Retail And Payments",
+      40,
+      "Handle appointment checkout, deposits, tips, packages, product retail sales, refunds, and Stripe/Square-like POS or payment reconciliation posture.",
+      ["consume", "operate", "integrate"],
+    ),
+    l2(
+      "beauty-supplies-tools-stock",
+      "beauty-service-operations",
+      "Supplies Tools Stock And Procurement",
+      50,
+      "Track professional products, consumables, tools, equipment, retail stock, restock thresholds, suppliers, and purchasing needs.",
+      ["operate"],
+    ),
+    l2(
+      "beauty-local-marketing-reviews",
+      "beauty-service-operations",
+      "Local Marketing Reviews And Referrals",
+      60,
+      "Manage Google Business Profile/local presence, social proof, reviews, referrals, email campaigns, promotions, and HubSpot/Mailchimp-style growth anchors.",
+      ["explore"],
+    ),
+  ],
+};
+
 function l1(
   key: string,
   name: string,
@@ -213,6 +276,10 @@ export function resolveBusinessCapabilityPerspective(
 
   if (input.archetypeId === "it-managed-services") {
     perspectives.push(IT_MANAGED_SERVICES);
+  }
+
+  if (input.category === "beauty-personal-care") {
+    perspectives.push(BEAUTY_PERSONAL_CARE);
   }
 
   return {
