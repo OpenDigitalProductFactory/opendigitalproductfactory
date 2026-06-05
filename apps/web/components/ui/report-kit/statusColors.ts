@@ -145,6 +145,15 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     published: "success",
     archived: "neutral",
   },
+  // Coworker-to-coworker (A2A) interaction state on the AI Operations Map.
+  // Keeps the A2A panel's state→color semantics in the one shared registry
+  // instead of a private color map. See A2aInteractionsPanel.
+  a2aInteraction: {
+    active: "accent",
+    completed: "success",
+    failed: "danger",
+    blocked: "warning",
+  },
   // Generic severity ramp, reusable by any surface that has none of its own.
   severity: {
     info: "info",
