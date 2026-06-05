@@ -224,6 +224,52 @@ Current substrate:
 
 When `TaskMessage` / `TaskArtifact` persistence is fully adopted for task-native chat, the participant read model and cards should re-point to those artifacts without changing the user-facing UX contract.
 
+## GAID Chain-of-Custody, A2A Traceability & the Collaboration Call-Stack
+
+*(Added 2026-06-05 at Mark's request: review GAID, the need for A2A traceability and a call-stack, and A2A interaction concerns generally.)*
+
+When one coworker hands off to another — and that one calls a third — the platform needs a **call-stack**: a single, end-to-end-correlatable record of who invoked whom, under whose authority, with what result, that survives across processes and (eventually) across organizational boundaries. This is exactly what `GAID` §10 (Chain-of-Custody and Agent Action Receipts) standardizes, and what DPF should converge the collaboration substrate toward. We treat `A2A` as the interaction carrier, `TAK` as the runtime enforcement layer, and `GAID` as the identity + chain-of-custody layer (per `2026-04-23-a2a-aligned-coworker-runtime-design.md`).
+
+### The call-stack DPF already has (and what it lacks)
+
+The collaboration call-stack is **already physically present**, spread across three lineage edges, but it is not yet GAID-shaped:
+
+| Call-stack concern | DPF substrate today | GAID §10 requirement | Gap |
+| --- | --- | --- | --- |
+| Frame linkage (who called whom) | `AgentThread.parentThreadId`; `TaskRun.parentTaskRunId`; `DelegationChain.parentLinkId` + `chainId` + `depth` | `parent_receipt` per delegated action | Lineage exists but is not expressed as receipts with a `parent_receipt` pointer |
+| Acting + delegating identity | `fromAgentId` / `toAgentId` (DPF internal agentIds); actor resolved to `Principal` via `PrincipalAlias` | both delegated and delegating **`GAID`** `MUST` be recorded (§10.3) | No `GAID` binding yet — DPF uses internal agentIds, not stable issuer-backed GAIDs |
+| Authority of the action | `DelegationChain.authorityScope` / `originAuthority`; tool grants; `delegatesTo` enforcement (Slice 2) | `authorization_class` reference in the receipt (§9, §10.2) | Portable class (`delegate`, `execute`, …) not yet mapped onto DPF grants/provenance |
+| End-to-end correlation | none — `chainId` groups one delegation flow but no trace id spans thread + task + tool-execution + provider call | `trace_context` sufficient for distributed correlation, **preserved end to end** (§10.3) | **No propagated trace context** — the single biggest call-stack gap |
+| Consequential-action evidence | `ToolExecution` rows; `collaboration:*` events (ephemeral); `DelegationChain` hops | a **receipt** per consequential action: `receipt_id`, `request_hash`, `result_hash`, `execution_mode`, `target_ref`, `signature` (§10.2) | DPF has audit rows + `ToolExecutionReceipt` (per-execution), but not a collaboration-aware receipt carrying trace + parent linkage |
+| Integrity / non-repudiation | none (rows are mutable) | tamper-evident receipts; `RFC 9421`/`JOSE`/`COSE`/`DSSE` signatures for `GAID-Federated`+ (§10.4) | Deferred — appropriate for the federated/public posture, not single-org V1 |
+
+**Conclusion:** DPF is at `GAID-Private` posture. The chain-of-custody *graph* exists (thread + task + delegation lineage); what is missing for true A2A traceability is (1) a **propagated trace context** spanning a multi-agent flow, (2) **GAID identity binding** on the actors, and (3) a **collaboration receipt** that ties a consequential collaboration action to its `parent_receipt`, `trace_context`, and `authorization_class`. None require leaving single-org; all are projection/record work over the substrate already built in Slices 1–2.
+
+### Design direction (incremental, GAID-Private first)
+
+1. **Trace context — introduce now, cheaply.** Mint a `traceId` (W3C Trace Context `traceparent` / OpenTelemetry GenAI conventions — see `docs/specs/routing-resilience-and-failure-observability-spec.md`, which already adopts OTel GenAI spans) at the root of a conversation, and propagate it through every collaboration spawn into `TaskRun.a2aMetadata.trace` (and onto child spawns, the existing `collaboration:*` events, and `ToolExecution.routeContext`/metadata). A `spanId` per hop + a `parentSpanId` reproduce the call-stack frames. This is the smallest change that turns the existing lineage into a *correlatable* call-stack and is the prerequisite for everything below.
+2. **Authorization class — map, don't invent.** Adopt the GAID §9.2 portable vocabulary and map it onto DPF's grant model: a handoff/summon is the `delegate` class; a side-effecting sub-agent tool call is `execute`; read-only is `observe`/`analyze`. Record the active `authorization_class` in the collaboration provenance (`a2aMetadata.collaboration.authorizationClass`) and, later, in receipts (§9.3: the class is *declarative*, never proof of present authorization — local `TAK` grant/`delegatesTo` enforcement still gates).
+3. **GAID identity binding — project from what exists.** The participant projection already resolves actors to a `Principal` via `PrincipalAlias`; add an optional `gaid` projection (AIDoc §7.2 minimum fields: `gaid`, `subject_type` = coordinator/specialist, `tool_surface`, `model_binding`, `hitl_profile`) sourced from the AgentCard projection service. Until a `GAID` namespace is issued, the internal agentId is the private-posture identifier and `principalResolved=false` already flags identity debt (Slice 1A).
+4. **Collaboration receipt — extend, don't duplicate.** A consequential collaboration action (accepted handoff, summon, denied attempt, sub-agent terminal result) emits a receipt carrying the GAID §10.2 minimum fields. Reuse `ToolExecutionReceipt` where the action is a governed tool call; add a thin collaboration-receipt projection for handoff/return that records `parent_receipt` (the initiating hop), `trace_context`, `authorization_class`, `request_hash` (the question-packet digest), and `result_hash` (the child task outcome digest). Privacy per §10.5: reference the question-packet by digest, never copy raw prompt text into a shareable receipt.
+5. **A2A profile (§11.5) — keep the carrier honest.** The AgentCard projection is the A2A surface; the published `GAID` projection `SHOULD` stay consistent across public and authenticated card variants. Cross-boundary A2A (org-to-org) maps to the `cross-boundary` authorization class and `GAID-Federated`/`-Public` posture — explicitly **out of scope** for the single-org install, but the receipt/trace shape is designed so federation is projection work, not a rewrite.
+
+### A2A Interaction Concerns (threat → control)
+
+General concerns for agent-to-agent interaction, mapped to the control that addresses each (drawing on `docs/architecture/agent-standards-threat-model.md`). "Built" = present in Slices 1–2; "Gap" = needs the trace/receipt/GAID work above.
+
+| Concern | What goes wrong | Control | Status |
+| --- | --- | --- | --- |
+| **Unbounded recursion / fan-out** | A→B→C→… or one agent spawning many, runaway cost | `spawnWorkThread` depth-1 + max-5 children; `delegation-authority.ts` `MAX_DELEGATION_DEPTH=4` | Built (caps), but the two limits are inconsistent — reconcile |
+| **Delegation loops** | A delegates to B which delegates back to A | `delegation-authority.ts` loop detection over `DelegationChain` | Built (chain layer); the new `request_coworker` path must route through it, not just `delegatesTo` |
+| **Over-broad delegation (confused deputy)** | Delegate acts with more authority than the delegator held | `delegatesTo`/`escalatesTo` gate (Slice 2) + `delegation-authority.ts` authority narrowing/intersection | Built (gate); narrowing must be wired into `request_coworker`, not only the legacy chain API |
+| **Identity spoofing** | An agent claims to be another in a handoff | `Principal`/`PrincipalAlias` resolution; future `GAID` binding + signed receipts | Partial — identity resolved, not yet GAID-bound or signed |
+| **Forged / unauthorized delegation** | A hop the named delegator never authorized | Governed tool path (audit + hooks); future tamper-evident receipts (§10.4) | Partial — audited, not yet non-repudiable |
+| **Cross-hop prompt injection** | Malicious content in a handoff packet steers the receiving agent beyond scope | Structured question-packet (`hardEdges`, `pushbackPermission`, `decisionRoute`) treated as data, not commands; receiving agent bounded by its own grants | Partial — packet shape defined; receiving-side "treat handoff as data" guardrail should be explicit |
+| **Silent sub-agent failure / stall** | A delegate stalls and the caller/user never knows | `collaboration:return` on terminal transition + done indicator + `taskrun:stalled` watchdog | Built |
+| **Invisible delegation** | Work happens off-screen with no user/operator visibility | Collapsed disclosure (user) + Operations Map transfer overlay (operator) | Built |
+| **Untraceable multi-agent flow** | No way to reconstruct a full A→B→C flow after the fact | propagated `trace_context` + `parent_receipt` chain | **Gap — the core of this section** |
+| **Cross-boundary exposure** | An org-to-org A2A call leaks data or authority | `cross-boundary` authorization class; `GAID-Federated`+ posture; not enabled single-org | Out of scope (V1) — designed-for, not built |
+
 ## Slices
 
 ### Slice 1A - Harden the Conversational Layer
@@ -261,6 +307,23 @@ Acceptance:
 - Out-of-scope `request_coworker` is denied, records an auditable reason, and does not spawn a child thread.
 - A completed handoff renders as a transfer edge with source, freshness, state, latency, and authority details.
 - The map still works if one source is unavailable and labels stale/partial transfer data rather than collapsing it into a false status.
+
+### Slice 2.5 - GAID Traceability & the Call-Stack
+
+Scope: turn the existing collaboration lineage into a GAID-shaped, end-to-end-correlatable call-stack (see "GAID Chain-of-Custody, A2A Traceability & the Collaboration Call-Stack" above). GAID-Private posture only; no signing, no cross-boundary.
+
+- **Trace context first.** Mint a root `traceId` per conversation; propagate `{ traceId, spanId, parentSpanId }` through every collaboration spawn into `TaskRun.a2aMetadata.trace`, the `collaboration:*` events, and tool-execution metadata. Align with the OTel GenAI conventions already adopted in `docs/specs/routing-resilience-and-failure-observability-spec.md`.
+- **Authorization class.** Map GAID §9.2 portable classes onto the grant model; record `authorizationClass` (`delegate` for handoff/summon, `execute` for side-effecting sub-agent calls) in collaboration provenance.
+- **Collaboration receipt.** Emit a receipt per consequential collaboration action (accepted/denied handoff, summon, child terminal result) carrying §10.2 fields: `parent_receipt`, `trace_context`, `authorization_class`, `request_hash` (question-packet digest), `result_hash`. Reuse `ToolExecutionReceipt` for governed tool calls; project a thin collaboration receipt for handoff/return. Privacy per §10.5 (digest, not raw text).
+- **GAID/AIDoc projection (read-only).** Extend the participant + AgentCard projection with optional `gaid` + AIDoc minimum fields; keep `principalResolved=false` as the identity-debt flag until a namespace is issued.
+- **Reconcile the depth caps.** `spawnWorkThread` depth-1 vs `MAX_DELEGATION_DEPTH=4` are inconsistent; pick one model and document it, and route `request_coworker` through `delegation-authority.ts` loop/narrowing in addition to the `delegatesTo` gate.
+
+Acceptance:
+
+- A multi-agent flow (owner → peer → sub-task) is reconstructable end-to-end from a single `traceId`, with parent/child spans matching the call-stack.
+- Each consequential collaboration action has a receipt with `parent_receipt` + `trace_context` + `authorization_class`; denied handoffs included.
+- No raw prompt text appears in any receipt; question-packets are referenced by digest.
+- Deferred explicitly (documented, not built): receipt signing / non-repudiation (§10.4), cross-boundary A2A, public GAID issuance.
 
 ### Slice 3 - Pattern Optimization
 

@@ -52,7 +52,8 @@
           "policy_read",
           "strategy_read",
           "budget_read",
-          "spec_plan_read"
+          "spec_plan_read",
+          "thread_write"
         ],
         "memory": {
           "type": "persistent",
@@ -107,7 +108,8 @@
           "role_registry_read",
           "investment_proposal_create",
           "gap_analysis_read",
-          "spec_plan_read"
+          "spec_plan_read",
+          "thread_write"
         ],
         "memory": {
           "type": "persistent",
@@ -164,7 +166,8 @@
           "work_capsule_read",
           "roadmap_create",
           "architecture_read",
-          "spec_plan_read"
+          "spec_plan_read",
+          "thread_write"
         ],
         "memory": {
           "type": "persistent",
@@ -229,7 +232,8 @@
           "work_capsule_read",
           "backlog_write",
           "backlog_triage",
-          "spec_plan_read"
+          "spec_plan_read",
+          "thread_write"
         ],
         "memory": {
           "type": "persistent",
@@ -286,7 +290,8 @@
           "iac_execute",
           "deployment_plan_create",
           "resource_reservation_read",
-          "spec_plan_read"
+          "spec_plan_read",
+          "thread_write"
         ],
         "memory": {
           "type": "persistent",
@@ -342,7 +347,8 @@
           "service_offer_read",
           "catalog_publish",
           "subscription_read",
-          "spec_plan_read"
+          "spec_plan_read",
+          "thread_write"
         ],
         "memory": {
           "type": "persistent",
@@ -397,7 +403,8 @@
           "consumer_onboard",
           "order_create",
           "incident_read",
-          "spec_plan_read"
+          "spec_plan_read",
+          "thread_write"
         ],
         "memory": {
           "type": "persistent",
@@ -451,7 +458,8 @@
           "telemetry_read",
           "incident_create",
           "change_event_emit",
-          "spec_plan_read"
+          "spec_plan_read",
+          "thread_write"
         ],
         "memory": {
           "type": "persistent",
@@ -505,7 +513,8 @@
           "constraint_validate",
           "architecture_guardrail_read",
           "evidence_chain_read",
-          "spec_plan_read"
+          "spec_plan_read",
+          "thread_write"
         ],
         "memory": {
           "type": "persistent",
