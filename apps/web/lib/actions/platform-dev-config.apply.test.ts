@@ -295,6 +295,9 @@ describe("applyPlatformUpdate", () => {
     expect(commands).toContain(
       "git -c core.hooksPath=/dev/null merge -X ignore-cr-at-eol dpf-upstream --no-commit --no-ff",
     );
+    // Persisted so future snapshots stop recording spurious executable bits on
+    // the Windows/WSL bind mount (the second phantom-conflict driver).
+    expect(commands).toContain("git config core.fileMode false");
     expect(commands).toContain("git add .gitattributes");
     expect(mockWriteFileSync).toHaveBeenCalledWith(
       "/workspace/.gitattributes",
