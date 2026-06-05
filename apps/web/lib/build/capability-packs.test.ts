@@ -20,4 +20,8 @@ describe("Build Studio capability packs", () => {
     expect(getBuildStudioCapabilityPack("architecture").skillIds).toContain("dpf-architecture-review");
     expect(getBuildStudioCapabilityPack("review-ship").skillIds).toContain("dpf-architecture-review");
   });
+
+  it("offers UX fit review in design planning", () => {
+    expect(getBuildStudioCapabilityPack("design").skillIds).toContain("dpf-ux-fit-review");
+  });
 });

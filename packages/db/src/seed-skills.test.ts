@@ -296,4 +296,24 @@ describe("dpf-platform mirror-field invariant", () => {
       "dpf-use-shared-nonprod-environment",
     ]));
   });
+
+  it("ships a UX fit review skill for UI-impacting feature plans", () => {
+    const pluginSkillsDir = join(__dirname, "..", "..", "..", "packages", "dpf-skill-pack", "skills");
+    const frontmatters = discoverDpfPlatformSkillFiles(pluginSkillsDir)
+      .map((source) => parseFrontmatter(readFileSync(source.filePath, "utf8")).frontmatter);
+
+    const uxFitReview = frontmatters.find((frontmatter) => frontmatter.name === "dpf-ux-fit-review");
+
+    expect(uxFitReview).toBeDefined();
+    expect(uxFitReview?.assignTo).toEqual(expect.arrayContaining(["ea-architect", "build-specialist", "platform-engineer"]));
+    expect(uxFitReview?.composesFrom).toEqual(expect.arrayContaining(["dpf-architecture-review", "dpf-verify-substrate-first"]));
+    expect(uxFitReview?.triggerPattern).toContain("UX fit");
+    expect(uxFitReview?.triggerPattern).toContain("new route");
+    expect(uxFitReview?.triggerPattern).toContain("dashboard");
+    expect(uxFitReview?.enforces).toEqual(expect.arrayContaining([
+      "kernel/principles/no-hardcoded-colors",
+      "kernel/principles/compose-report-kit-for-reporting-ux",
+      "kernel/principles/single-source-of-truth",
+    ]));
+  });
 });
