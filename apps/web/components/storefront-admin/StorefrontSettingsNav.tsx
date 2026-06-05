@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const SETTINGS_TABS = [
   { label: "Portal", href: "/storefront/settings" },
   { label: "Your Business", href: "/storefront/settings/business" },
+  { label: "Capabilities", href: "/storefront/settings/capabilities" },
   { label: "Operating Hours", href: "/storefront/settings/operations" },
 ];
 
