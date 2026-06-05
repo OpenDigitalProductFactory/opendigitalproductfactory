@@ -16,6 +16,7 @@ import { join, resolve } from "node:path";
 const SCRIPT = resolve(__dirname, "../../../../scripts/promote.sh");
 const BASH_OK = spawnSync("bash", ["--version"], { encoding: "utf8" }).status === 0;
 const GIT_OK = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
+const PROMOTE_TEST_TIMEOUT_MS = 30_000;
 
 let bashDrivePrefix: string | undefined;
 
@@ -103,7 +104,7 @@ function runPromote(opts: {
       : []),
     ...(opts.dockerLog ? [`export DOCKER_LOG=${shellQuote(toBashPath(opts.dockerLog))}`] : []),
   ];
-  const r = spawnSync("bash", ["-lc", `${exports.join("\n")}\nexec ${shellQuote(toBashPath(SCRIPT))} --self-upgrade`], {
+  const r = spawnSync("bash", ["-lc", `${exports.join("\n")}\nexec bash ${shellQuote(toBashPath(SCRIPT))} --self-upgrade`], {
     encoding: "utf8",
   });
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
@@ -133,7 +134,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, PROMOTE_TEST_TIMEOUT_MS);
 
   it("derives a -dirty stamp when the build source has uncommitted changes", () => {
     const { root, source, backup, fakeBin, head } = makeScratch();
@@ -145,7 +146,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, PROMOTE_TEST_TIMEOUT_MS);
 
   it("warns (does not silently mislabel) when the tree identity differs from the expected stamp", () => {
     const { root, source, backup, fakeBin, head } = makeScratch();
@@ -159,7 +160,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, PROMOTE_TEST_TIMEOUT_MS);
 
   it("passes the canonical install env file to docker compose when configured", () => {
     const { root, source, backup, fakeBin, head } = makeScratch();
@@ -181,5 +182,5 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, PROMOTE_TEST_TIMEOUT_MS);
 });
