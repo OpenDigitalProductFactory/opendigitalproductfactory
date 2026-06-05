@@ -2,12 +2,14 @@ import {
   PERMISSIONS as GOVERN_PERMISSIONS,
   can as governCan,
   canAccessEmployeeRecord,
+  getAccessibleSectionNavEntries,
   getDeniedCapabilities as governGetDeniedCapabilities,
   getGrantedCapabilities as governGetGrantedCapabilities,
   getShellNavSections,
   getWorkspaceSections,
   getWorkspaceTiles,
   type PlatformRoleId,
+  type SectionNavItem,
   type ShellNavItem,
   type ShellNavSection,
   type UserContext,
@@ -17,6 +19,7 @@ import {
 
 export type {
   PlatformRoleId,
+  SectionNavItem,
   ShellNavItem,
   ShellNavSection,
   UserContext,
@@ -52,6 +55,7 @@ export function can(user: UserContext, capability: CapabilityKey): boolean {
 
 export {
   canAccessEmployeeRecord,
+  getAccessibleSectionNavEntries,
   getShellNavSections,
   getWorkspaceSections,
   getWorkspaceTiles,

@@ -1,7 +1,7 @@
 // apps/web/app/(shell)/customer/layout.tsx
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { can, getAccessibleSectionNavEntries } from "@/lib/permissions";
 import { CustomerTabNav } from "@/components/customer/CustomerTabNav";
 
 export default async function CustomerLayout({
@@ -25,19 +25,10 @@ export default async function CustomerLayout({
     notFound();
   }
 
-  const tabs = [
-    ...(canViewCustomer
-      ? [
-          { label: "Accounts", href: "/customer" },
-          { label: "Engagements", href: "/customer/engagements" },
-          { label: "Pipeline", href: "/customer/opportunities" },
-          { label: "Quotes", href: "/customer/quotes" },
-          { label: "Orders", href: "/customer/sales-orders" },
-          { label: "Funnel", href: "/customer/funnel" },
-        ]
-      : []),
-    ...(canViewMarketing ? [{ label: "Marketing", href: "/customer/marketing" }] : []),
-  ];
+  const tabs = getAccessibleSectionNavEntries(access, "/customer").map((entry) => ({
+    label: entry.label,
+    href: entry.href,
+  }));
 
   return (
     <div>

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   can,
   canAccessEmployeeRecord,
+  getAccessibleSectionNavEntries,
   getShellNavSections,
   getWorkspaceSections,
   getWorkspaceTiles,
@@ -101,6 +102,30 @@ describe("getShellNavSections()", () => {
       "knowledge",
     ]);
     expect(sections.find((section) => section.key === "platform")).toBeUndefined();
+  });
+});
+
+describe("getAccessibleSectionNavEntries()", () => {
+  it("builds customer domain tabs from the canonical navigation model", () => {
+    const tabs = getAccessibleSectionNavEntries(hr000, "/customer");
+
+    expect(tabs.map((tab) => tab.label)).toEqual([
+      "Accounts",
+      "Engagements",
+      "Pipeline",
+      "Quotes",
+      "Orders",
+      "Funnel",
+      "Marketing",
+    ]);
+    expect(tabs.map((tab) => tab.href)).toContain("/customer/marketing");
+  });
+
+  it("keeps marketing reachable for marketing-only users without exposing CRM tabs", () => {
+    const tabs = getAccessibleSectionNavEntries(hr300, "/customer");
+
+    expect(tabs.map((tab) => tab.label)).toEqual(["Marketing"]);
+    expect(tabs[0]?.href).toBe("/customer/marketing");
   });
 });
 
