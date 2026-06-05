@@ -279,7 +279,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       await writeContainerFileViaStdin(scriptB64, runnerScript, "755");
 
       // 5. Spawn the CLI process
-      console.log(`[codex-cli-adapter] Dispatching: model=${modelId}, provider=${providerId}, messages=${messages.length}`);
+      console.log(`[codex-cli-adapter] Dispatching: thread=${request.mcpSession?.threadId ?? "—"}, model=${modelId}, provider=${providerId}, messages=${messages.length}`);
       console.log(`[tool-trace] adapter=codex-cli PROMPT-FILE ${promptFile} slug=${slug} promptChars=${prompt.length}`);
 
       // Preserve prompt to a durable location BEFORE spawning codex so we
@@ -364,7 +364,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       const inferenceMs = Date.now() - startMs;
 
       console.log(
-        `[codex-cli-adapter] Completed: ${text.length} chars, ${inferenceMs}ms`,
+        `[codex-cli-adapter] Completed: thread=${request.mcpSession?.threadId ?? "—"}, ${text.length} chars, ${inferenceMs}ms`,
       );
 
       // Attempt to extract tool calls if the model responded with tool_use blocks

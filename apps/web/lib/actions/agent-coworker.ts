@@ -67,6 +67,7 @@ import {
   isConversationalExpansionRequest,
   isPageExplanationOnlyRequest,
   isPlatformMechanismQuestion,
+  isTrivialSocialMessage,
 } from "@/lib/tak/conversation-intent";
 import {
   buildExternalAccessDisabledInstruction,
@@ -1068,7 +1069,12 @@ export async function sendMessage(input: {
   // important on Build Studio routes where the tool surface is large enough
   // to drown a small local fallback model. See FB-71FB3A53 thread, 2026-05-22.
   const isMechanismQuestion = isPlatformMechanismQuestion(trimmedContent);
-  const isConversationOnly = isExplicitConversationSkill || isPageExplanationOnly || isExpansionFollowup || isMechanismQuestion;
+  // Trivial social turns ("hello", "thanks", "ok cool") carry no task. With the
+  // full tool surface attached they dispatch the heavyweight tool-loaded CLI
+  // agentic loop (8-130s); tool-free they answer in ~2s. See the Portfolio
+  // Analyst latency investigation, 2026-06-04.
+  const isTrivialSocial = isTrivialSocialMessage(trimmedContent);
+  const isConversationOnly = isExplicitConversationSkill || isPageExplanationOnly || isExpansionFollowup || isMechanismQuestion || isTrivialSocial;
 
   const toolsForProvider = (!isConversationOnly && availableTools.length > 0)
     ? toolsToOpenAIFormat(availableTools)
@@ -1080,10 +1086,15 @@ export async function sendMessage(input: {
   // CodeQL js/log-injection: input.routeContext + agent.agentId + tool names
   // are user-influenced. Compose the line, then route it through the registered
   // sanitizeForLog sanitizer so embedded control chars can't forge log entries.
+  // `attached` reflects what the model ACTUALLY receives: on a conversation-only
+  // turn (greeting, page-explanation, mechanism question) tools are stripped, so
+  // `count` (the available surface) overstates it. Logging both removes the
+  // long-standing ambiguity where count=38 implied 38 tools were sent.
   const toolsLogLine =
-    `[tools] route=${JSON.stringify(input.routeContext)} agent=${JSON.stringify(agent.agentId)} ` +
+    `[tools] thread=${JSON.stringify(input.threadId)} route=${JSON.stringify(input.routeContext)} agent=${JSON.stringify(agent.agentId)} ` +
     `${activeBuildPhase ? `buildPhase=${JSON.stringify(activeBuildPhase)} ` : ""}` +
-    `count=${availableTools.length} tools=[${availableTools.map(t => JSON.stringify(t.name)).join(", ")}]`;
+    `count=${availableTools.length} attached=${toolsForProvider !== undefined}${isConversationOnly ? " (conversation-only)" : ""} ` +
+    `tools=[${availableTools.map(t => JSON.stringify(t.name)).join(", ")}]`;
   console.log(sanitizeForLog(toolsLogLine));
   if (activeBuildPhase) {
 
