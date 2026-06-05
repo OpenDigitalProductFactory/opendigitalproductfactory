@@ -21,6 +21,47 @@
  */
 
 import { ISSUE_REPORT_STATUS } from "@/lib/quality/issue-report-status";
+import {
+  buildCoworkerRegressionDiagnosis,
+  type CoworkerRegressionDiagnosis,
+} from "./coworker-regression-diagnosis";
+
+/**
+ * Full per-turn metric row for the exemplar turn, used to enrich a PIR with a
+ * deterministic diagnosis. Looked up by `(threadId, agentMessageId)` through an
+ * injectable dep; when absent the detector passes minimal input so the
+ * diagnosis yields `insufficient-evidence` rather than throwing.
+ */
+export type ExemplarTurnMetric = {
+  dispatches: number | null;
+  nudges: number | null;
+  toolsAttached: boolean | null;
+  executedTools: number | null;
+  totalMs: number | null;
+  taskType: string | null;
+  providerId: string | null;
+  modelId: string | null;
+};
+
+/**
+ * Render a diagnosis as a compact, description-safe block for a PIR. Kept here
+ * (not in the pure module) because it is detector-presentation, not diagnosis
+ * logic. The `Diagnosis:` first line is what the operator UI keys on.
+ */
+function diagnosisBlock(diagnosis: CoworkerRegressionDiagnosis): string {
+  const m = diagnosis.metrics;
+  return [
+    `Diagnosis: ${diagnosis.probableCause}`,
+    diagnosis.summary,
+    ``,
+    `Dispatches: ${m.dispatches ?? "n/a"}`,
+    `Nudges: ${m.nudges ?? "n/a"}`,
+    `Tools attached: ${m.toolsAttached ?? "n/a"}`,
+    `Executed tools: ${m.executedTools ?? "n/a"}`,
+    `Provider: ${m.providerId ?? "n/a"}`,
+    `Model: ${m.modelId ?? "n/a"}`,
+  ].join("\n");
+}
 
 // ── Pure helper contracts ────────────────────────────────────────────────
 
@@ -238,6 +279,16 @@ export type DetectLatencyDeps = {
     agentId: string | null;
     routeContext: string | null;
   }) => Promise<boolean>;
+  /**
+   * Look up the persisted turn metric for the exemplar turn so the PIR can
+   * carry a deterministic diagnosis. Returns null when the turn was never
+   * persisted (e.g. metrics writer disabled / fail-open), in which case the
+   * diagnosis degrades to `insufficient-evidence`.
+   */
+  fetchExemplarTurnMetric: (key: {
+    threadId: string;
+    agentMessageId: string;
+  }) => Promise<ExemplarTurnMetric | null>;
   /** Files a PIR via the single server-side writer. */
   fileReport: (input: {
     title: string;
@@ -283,6 +334,7 @@ export async function detectCoworkerLatencyRegressions(
     factor,
     fetchDispatchRows,
     hasOpenDuplicate,
+    fetchExemplarTurnMetric,
     fileReport,
   } = resolved;
 
@@ -339,6 +391,26 @@ export async function detectCoworkerLatencyRegressions(
     const agentLabel = agentId ?? "unknown-agent";
     const routeLabel = routeContext ?? "unknown-route";
 
+    // Enrich with a deterministic diagnosis from the exemplar's persisted turn
+    // metric. The exemplar's summed adapter duration (`totalMs`) is the
+    // dispatch time; the metric row carries the wall-clock turn duration.
+    const exemplarMetric = await fetchExemplarTurnMetric({
+      threadId: exemplar.threadId,
+      agentMessageId: exemplar.agentMessageId,
+    });
+    const diagnosis = buildCoworkerRegressionDiagnosis({
+      routeContext,
+      taskType: exemplarMetric?.taskType ?? exemplar.taskType,
+      dispatches: exemplarMetric?.dispatches ?? null,
+      nudges: exemplarMetric?.nudges ?? null,
+      toolsAttached: exemplarMetric?.toolsAttached ?? null,
+      executedTools: exemplarMetric?.executedTools ?? null,
+      totalMs: exemplarMetric?.totalMs ?? null,
+      dispatchMs: exemplar.totalMs,
+      providerId: exemplarMetric?.providerId ?? null,
+      modelId: exemplarMetric?.modelId ?? null,
+    });
+
     const description = [
       `Coworker turn latency regression detected.`,
       ``,
@@ -356,6 +428,8 @@ export async function detectCoworkerLatencyRegressions(
       `  agentMessage: ${exemplar.agentMessageId}`,
       `  totalMs: ${exemplar.totalMs}`,
       `  taskType: ${exemplar.taskType ?? "unknown"}`,
+      ``,
+      diagnosisBlock(diagnosis),
     ].join("\n");
 
     await fileReport({
@@ -424,6 +498,15 @@ export type DetectNudgeRateDeps = {
     agentId: string | null;
     routeContext: string | null;
   }) => Promise<boolean>;
+  /**
+   * Look up the persisted turn metric for the exemplar turn so the PIR can
+   * carry a deterministic diagnosis. Returns null when the turn was never
+   * persisted, in which case the diagnosis degrades to `insufficient-evidence`.
+   */
+  fetchExemplarTurnMetric: (key: {
+    threadId: string;
+    agentMessageId: string;
+  }) => Promise<ExemplarTurnMetric | null>;
   /** Files a PIR via the single server-side writer. */
   fileReport: (input: {
     title: string;
@@ -471,6 +554,7 @@ export async function detectCoworkerNudgeRateRegressions(
     minNudgeRate,
     fetchTurnMetrics,
     hasOpenDuplicate,
+    fetchExemplarTurnMetric,
     fileReport,
   } = resolved;
 
@@ -532,6 +616,26 @@ export async function detectCoworkerNudgeRateRegressions(
     const ratioLabel =
       decision.ratio == null ? "n/a (zero baseline)" : `${decision.ratio.toFixed(2)}x`;
 
+    // Enrich with a deterministic diagnosis from the exemplar's persisted turn
+    // metric. The nudge-rate path has no per-turn dispatch duration, so
+    // `dispatchMs` is left null and duration-shape rules cannot fire.
+    const exemplarMetric = await fetchExemplarTurnMetric({
+      threadId: exemplar.threadId,
+      agentMessageId: exemplar.agentMessageId,
+    });
+    const diagnosis = buildCoworkerRegressionDiagnosis({
+      routeContext,
+      taskType: exemplarMetric?.taskType ?? exemplar.taskType,
+      dispatches: exemplarMetric?.dispatches ?? null,
+      nudges: exemplarMetric?.nudges ?? exemplar.nudges,
+      toolsAttached: exemplarMetric?.toolsAttached ?? null,
+      executedTools: exemplarMetric?.executedTools ?? null,
+      totalMs: exemplarMetric?.totalMs ?? null,
+      dispatchMs: null,
+      providerId: exemplarMetric?.providerId ?? null,
+      modelId: exemplarMetric?.modelId ?? null,
+    });
+
     const description = [
       `Coworker nudge-rate regression detected.`,
       ``,
@@ -551,6 +655,8 @@ export async function detectCoworkerNudgeRateRegressions(
       `  agentMessage: ${exemplar.agentMessageId}`,
       `  nudges: ${exemplar.nudges}`,
       `  taskType: ${exemplar.taskType ?? "unknown"}`,
+      ``,
+      diagnosisBlock(diagnosis),
     ].join("\n");
 
     await fileReport({
@@ -653,6 +759,9 @@ async function resolveDeps(
       return existing != null;
     });
 
+  const fetchExemplarTurnMetric =
+    deps?.fetchExemplarTurnMetric ?? defaultFetchExemplarTurnMetric;
+
   const fileReport =
     deps?.fileReport ??
     (async ({ title, description, severity, routeContext, threadId, agentId }) => {
@@ -680,7 +789,49 @@ async function resolveDeps(
     factor,
     fetchDispatchRows,
     hasOpenDuplicate,
+    fetchExemplarTurnMetric,
     fileReport,
+  };
+}
+
+/**
+ * Live binding for the exemplar turn-metric lookup. Imports Prisma lazily so
+ * the detector module stays importable in client-free tests. Returns null when
+ * the exemplar turn has no persisted `CoworkerTurnMetric` row.
+ */
+async function defaultFetchExemplarTurnMetric(key: {
+  threadId: string;
+  agentMessageId: string;
+}): Promise<ExemplarTurnMetric | null> {
+  const { prisma } = await import("@dpf/db");
+  const row = await prisma.coworkerTurnMetric.findUnique({
+    where: {
+      threadId_agentMessageId: {
+        threadId: key.threadId,
+        agentMessageId: key.agentMessageId,
+      },
+    },
+    select: {
+      dispatches: true,
+      nudges: true,
+      toolsAttached: true,
+      executedTools: true,
+      totalMs: true,
+      taskType: true,
+      providerId: true,
+      modelId: true,
+    },
+  });
+  if (!row) return null;
+  return {
+    dispatches: row.dispatches,
+    nudges: row.nudges,
+    toolsAttached: row.toolsAttached,
+    executedTools: row.executedTools,
+    totalMs: row.totalMs,
+    taskType: row.taskType,
+    providerId: row.providerId,
+    modelId: row.modelId,
   };
 }
 
@@ -746,6 +897,9 @@ async function resolveNudgeRateDeps(
       return existing != null;
     });
 
+  const fetchExemplarTurnMetric =
+    deps?.fetchExemplarTurnMetric ?? defaultFetchExemplarTurnMetric;
+
   const fileReport =
     deps?.fileReport ??
     (async ({ title, description, severity, routeContext, threadId, agentId }) => {
@@ -774,6 +928,7 @@ async function resolveNudgeRateDeps(
     minNudgeRate,
     fetchTurnMetrics,
     hasOpenDuplicate,
+    fetchExemplarTurnMetric,
     fileReport,
   };
 }

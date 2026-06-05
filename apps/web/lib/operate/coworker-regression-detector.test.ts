@@ -349,6 +349,7 @@ describe("coworker nudge-rate regression detector", () => {
             ? buildRows(12, 6, "recent")
             : buildRows(20, 0, "base"),
         hasOpenDuplicate: async () => false,
+        fetchExemplarTurnMetric: async () => null,
         fileReport,
       });
 
@@ -362,6 +363,10 @@ describe("coworker nudge-rate regression detector", () => {
       // Exemplar is one of the nudged turns.
       expect(arg.threadId).toMatch(/^recent-t/);
       expect(arg.severity).toBe("high"); // 0.5 share
+      // Diagnosis block is embedded. With no persisted exemplar metric and the
+      // exemplar carrying nudges but no dispatch count, the deterministic rules
+      // cannot confirm a redispatch loop, so it degrades to insufficient-evidence.
+      expect(arg.description).toContain("Diagnosis:");
     });
 
     it("skips filing when an open duplicate PIR already exists", async () => {
