@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   A2A_GRAPH_LAYOUT,
+  a2aEdgeIsGoverned,
   a2aEdgeSourceRecords,
   a2aEdgeVisibleAtReplayTime,
   a2aStateIntent,
@@ -127,6 +128,14 @@ describe("a2a-interaction-graph helpers", () => {
     // Undated / unparseable interactions are always visible.
     expect(a2aEdgeVisibleAtReplayTime(null, t50, range)).toBe(true);
     expect(a2aEdgeVisibleAtReplayTime("not-a-date", t50, range)).toBe(true);
+  });
+
+  it("classifies governed (authority/sensitivity-bearing) interactions", () => {
+    expect(a2aEdgeIsGoverned({ authorityScope: ["brand:read"] })).toBe(true);
+    expect(a2aEdgeIsGoverned({ sensitivity: "confidential" })).toBe(true);
+    expect(a2aEdgeIsGoverned({ authorityScope: [], sensitivity: "" })).toBe(false);
+    expect(a2aEdgeIsGoverned({ authorityScope: [], sensitivity: "  " })).toBe(false);
+    expect(a2aEdgeIsGoverned({})).toBe(false);
   });
 
   it("clips long labels and titleizes ids", () => {
