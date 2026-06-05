@@ -66,6 +66,38 @@ export type AgentEvent =
   | { type: "deliberation:branch_completed"; deliberationRunId: string; branchNodeId: string; role: string; success: boolean }
   | { type: "deliberation:degraded_diversity"; deliberationRunId: string; from: string; to: string; reason: string }
   | { type: "deliberation:completed"; deliberationRunId: string; consensusState: string }
+  // EP-A2A multi-agent collaboration (2026-06-04 spec) — surfaced in the
+  // coworker panel so the user SEES when one coworker hands off to, summons,
+  // or returns control from another. Correlated across parent/child threads by
+  // parentThreadId. `enteredVia` distinguishes the collaboration trigger.
+  | {
+      type: "collaboration:handoff";
+      parentThreadId: string;
+      childThreadId: string;
+      fromAgentId: string;
+      toAgentId: string;
+      taskRunId: string | null;
+      tier: 2 | 3;
+      enteredVia: "handoff" | "escalation" | "spawn";
+      questionPacketSummary?: string;
+    }
+  | {
+      type: "collaboration:summon";
+      parentThreadId: string;
+      childThreadId: string | null;
+      summonedAgentId: string;
+      tier: 2 | 3;
+      byUserId?: string;
+    }
+  | {
+      type: "collaboration:return";
+      parentThreadId: string;
+      childThreadId: string;
+      fromAgentId: string;
+      toAgentId: string;
+      taskRunId: string | null;
+      outcome: "completed" | "failed" | "canceled";
+    }
   // BI-4ab6be39 stall detection — emitted by ops/taskrun-watchdog when a
   // working TaskRun is transitioned to "stalled". Operator UIs subscribe to
   // refresh without polling.
