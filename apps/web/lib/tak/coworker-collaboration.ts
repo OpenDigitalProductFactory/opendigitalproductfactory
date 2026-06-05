@@ -1,0 +1,259 @@
+/**
+ * EP-A2A — Coworker collaboration core (2026-06-04 spec, Slice 1).
+ *
+ * Shared logic behind the governed `request_coworker` (coworker-initiated
+ * handoff) and `summon_coworker` (user/UI-initiated) surfaces. Reuses the
+ * existing `spawnWorkThread` machinery and emits a VISIBLE `collaboration:*`
+ * event on the parent thread's channel so the user's coworker panel renders the
+ * handoff/summon inline (closing G1/G2). Depth/fan-out caps are inherited from
+ * `spawnWorkThread` (depth-1, max-5 children) — so tier-2 is supported now;
+ * tier-3 awaits depth-2 spawn support (tracked for Slice 2+).
+ *
+ * Authority note: Slice 1 makes collaboration VISIBLE and (for the coworker
+ * path) proposal-eligible. Hard delegatesTo/escalatesTo denial + DelegationChain
+ * hop writes are Slice 2, layered on the existing `delegation-authority.ts`.
+ */
+import { randomUUID } from "crypto";
+import { prisma } from "@dpf/db";
+import { agentEventBus } from "@/lib/agent-event-bus";
+import { resolveAgent } from "@/lib/tak/agent-resolution";
+import { spawnWorkThread } from "@/lib/actions/agent-coworker";
+import { isHandoffPermitted } from "@/lib/tak/collaboration-authority";
+import type { CollaborationProvenance } from "@/lib/tak/conversation-participants-core";
+
+/** Raised when a coworker-initiated handoff is denied by delegation authority. */
+export class HandoffDeniedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "HandoffDeniedError";
+  }
+}
+
+/**
+ * Record a delegation hop for chain-of-custody (Slice 2). Best-effort: a hop
+ * write failure must not change the spawn/deny decision already made.
+ */
+async function recordDelegationHop(p: {
+  fromAgentId: string;
+  toAgentId: string;
+  status: "active" | "blocked";
+  reason: string;
+  originUserId: string;
+}): Promise<void> {
+  try {
+    await prisma.delegationChain.create({
+      data: {
+        chainId: randomUUID(),
+        depth: 0,
+        fromAgentId: p.fromAgentId,
+        toAgentId: p.toAgentId,
+        status: p.status,
+        reason: p.reason,
+        authorityScope: [],
+        originUserId: p.originUserId,
+        originAuthority: [],
+      },
+    });
+  } catch {
+    // non-fatal — audit row only.
+  }
+}
+
+/**
+ * Enforce delegatesTo/escalatesTo for a coworker-initiated handoff. Throws
+ * HandoffDeniedError (after recording a blocked hop) when the caller agent is
+ * not permitted to reach the target. No-op when there is no caller agent
+ * (user-initiated summon authority is gated separately).
+ */
+async function enforceHandoffAuthority(
+  callerAgentId: string | null | undefined,
+  target: { agentId: string; slugId: string | null },
+  userId: string,
+): Promise<void> {
+  if (!callerAgentId) return;
+  const caller = await prisma.agent.findFirst({
+    where: { OR: [{ agentId: callerAgentId }, { slugId: callerAgentId }] },
+    select: { agentId: true, delegatesTo: true, escalatesTo: true },
+  });
+  if (!caller) return; // unknown caller — nothing to enforce against
+  const targetIds = [target.agentId, target.slugId].filter((v): v is string => Boolean(v));
+  const permitted = isHandoffPermitted({
+    delegatesTo: caller.delegatesTo ?? [],
+    escalatesTo: caller.escalatesTo ?? null,
+    targetIds,
+  });
+  if (!permitted) {
+    await recordDelegationHop({
+      fromAgentId: caller.agentId,
+      toAgentId: target.agentId,
+      status: "blocked",
+      reason: `${caller.agentId} is not permitted to delegate or escalate to ${target.agentId}`,
+      originUserId: userId,
+    });
+    throw new HandoffDeniedError(
+      `${caller.agentId} is not permitted to hand off to ${target.agentId}.`,
+    );
+  }
+}
+
+/**
+ * Persist collaboration provenance on the child TaskRun so cards + accurate
+ * enteredVia survive refresh (spec A1). Best-effort: a provenance write failure
+ * must not fail the spawn that already succeeded.
+ */
+async function persistProvenance(taskRunId: string, provenance: CollaborationProvenance): Promise<void> {
+  try {
+    await prisma.taskRun.update({
+      where: { taskRunId },
+      data: { a2aMetadata: { collaboration: provenance } },
+    });
+  } catch {
+    // non-fatal: the live SSE card + roster still render; reload reconstruction
+    // is the only thing degraded.
+  }
+}
+
+export type CollaborationResult = {
+  childThreadId: string;
+  taskRunId: string;
+  targetAgentId: string;
+  targetLabel: string;
+};
+
+export type RequestCoworkerInput = {
+  parentThreadId: string;
+  /** Target coworker by canonical agentId (AGT-*) or slug alias. */
+  targetAgent: string;
+  objective: string;
+  tier?: 2 | 3;
+  enteredVia?: "handoff" | "escalation" | "spawn";
+  /** The requesting coworker's agentId, for handoff attribution. */
+  callerAgentId?: string | null;
+  questionPacketSummary?: string;
+  routeContext?: string;
+};
+
+export type SummonCoworkerInput = {
+  parentThreadId: string;
+  targetAgent: string;
+  objective: string;
+  tier?: 2 | 3;
+  byUserId?: string;
+  routeContext?: string;
+};
+
+async function resolveTargetOrThrow(targetAgent: string) {
+  const target = await resolveAgent(targetAgent);
+  if (!target) throw new Error(`UNKNOWN_AGENT: ${targetAgent}`);
+  return target;
+}
+
+/**
+ * Coworker A asks coworker B to take a scoped sub-task. Spawns a targeted child
+ * thread and emits `collaboration:handoff` so the user sees the handoff inline.
+ */
+export async function requestCoworker(
+  input: RequestCoworkerInput,
+  userId: string,
+): Promise<CollaborationResult> {
+  const objective = input.objective?.trim();
+  if (!objective) throw new Error("OBJECTIVE_REQUIRED");
+  const target = await resolveTargetOrThrow(input.targetAgent);
+
+  // Slice 2: enforce the caller's declared delegatesTo / escalatesTo before any
+  // child thread is spawned. Throws HandoffDeniedError (and records a blocked
+  // DelegationChain hop) when the target is out of scope.
+  await enforceHandoffAuthority(input.callerAgentId, target, userId);
+
+  const { child, taskRunId } = await spawnWorkThread(
+    {
+      parentThreadId: input.parentThreadId,
+      objective,
+      routeContext: input.routeContext,
+      agentId: target.agentId,
+    },
+    userId,
+  );
+
+  // Record the accepted hop for chain-of-custody.
+  if (input.callerAgentId) {
+    await recordDelegationHop({
+      fromAgentId: input.callerAgentId,
+      toAgentId: target.agentId,
+      status: "active",
+      reason: "coworker handoff",
+      originUserId: userId,
+    });
+  }
+
+  const tier = input.tier ?? 2;
+  const enteredVia = input.enteredVia ?? "handoff";
+  await persistProvenance(taskRunId, {
+    kind: "handoff",
+    fromAgentId: input.callerAgentId ?? null,
+    toAgentId: target.agentId,
+    enteredVia,
+    tier,
+    summary: input.questionPacketSummary,
+  });
+
+  agentEventBus.emit(input.parentThreadId, {
+    type: "collaboration:handoff",
+    parentThreadId: input.parentThreadId,
+    childThreadId: child.id,
+    fromAgentId: input.callerAgentId ?? "",
+    toAgentId: target.agentId,
+    taskRunId,
+    tier,
+    enteredVia,
+    questionPacketSummary: input.questionPacketSummary,
+  });
+
+  return { childThreadId: child.id, taskRunId, targetAgentId: target.agentId, targetLabel: target.name };
+}
+
+/**
+ * The user (or a coworker on the user's behalf) brings a specific coworker into
+ * the conversation as a tier-2 participant. Spawns a targeted child thread and
+ * emits `collaboration:summon`.
+ */
+export async function summonCoworker(
+  input: SummonCoworkerInput,
+  userId: string,
+): Promise<CollaborationResult> {
+  const objective = input.objective?.trim();
+  if (!objective) throw new Error("OBJECTIVE_REQUIRED");
+  const target = await resolveTargetOrThrow(input.targetAgent);
+
+  const { child, taskRunId } = await spawnWorkThread(
+    {
+      parentThreadId: input.parentThreadId,
+      objective,
+      routeContext: input.routeContext,
+      agentId: target.agentId,
+    },
+    userId,
+  );
+
+  const tier = input.tier ?? 2;
+  const byUserId = input.byUserId ?? userId;
+  await persistProvenance(taskRunId, {
+    kind: "summon",
+    fromAgentId: null,
+    toAgentId: target.agentId,
+    enteredVia: "summon",
+    tier,
+    byUserId,
+  });
+
+  agentEventBus.emit(input.parentThreadId, {
+    type: "collaboration:summon",
+    parentThreadId: input.parentThreadId,
+    childThreadId: child.id,
+    summonedAgentId: target.agentId,
+    tier,
+    byUserId,
+  });
+
+  return { childThreadId: child.id, taskRunId, targetAgentId: target.agentId, targetLabel: target.name };
+}

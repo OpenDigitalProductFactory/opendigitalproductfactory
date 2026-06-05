@@ -13,6 +13,7 @@ const { mockDispatchAgentThread, mockPrisma } = vi.hoisted(() => ({
     taskRun: {
       create: vi.fn(),
       update: vi.fn(),
+      findFirst: vi.fn(),
     },
     agentMessage: {
       create: vi.fn(),
@@ -67,6 +68,9 @@ describe("spawnWorkThread guards", () => {
     mockDispatchAgentThread.mockResolvedValue(undefined);
     mockPrisma.agentThread.updateMany.mockResolvedValue({ count: 1 });
     mockPrisma.taskRun.update.mockResolvedValue({ taskRunId: "ctaskrun123", status: "failed" });
+    // EP-A2A: spawnWorkThread now looks up the parent thread's TaskRun to
+    // populate parentTaskRunId; root chat threads have none.
+    mockPrisma.taskRun.findFirst.mockResolvedValue(null);
   });
 
   async function expectSpawnError(parent: {

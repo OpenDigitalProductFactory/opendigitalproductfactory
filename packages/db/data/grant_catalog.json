@@ -480,12 +480,14 @@
     },
     {
       "key": "thread_write",
-      "description": "Spawn or cancel specialist subtask child threads.",
+      "description": "Spawn or cancel specialist subtask child threads, and hand off / summon a named coworker.",
       "category": "platform",
       "sensitivity": "internal",
       "honored_by_tools": [
         "spawn_work_thread",
-        "cancel_thread"
+        "cancel_thread",
+        "request_coworker",
+        "summon_coworker"
       ],
       "implies": []
     },

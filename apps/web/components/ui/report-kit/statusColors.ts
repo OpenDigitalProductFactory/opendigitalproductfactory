@@ -154,6 +154,14 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     failed: "danger",
     blocked: "warning",
   },
+  // Deliberation consensus outcome on the AI Operations Map deliberation lens.
+  deliberationConsensus: {
+    consensus: "success",
+    "partial-consensus": "warning",
+    "no-consensus": "danger",
+    "insufficient-evidence": "warning",
+    pending: "accent",
+  },
   // Generic severity ramp, reusable by any surface that has none of its own.
   severity: {
     info: "info",
