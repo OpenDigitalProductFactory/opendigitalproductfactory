@@ -16,9 +16,9 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { parseWikiFrontmatter, type WikiPageFrontmatter } from "@dpf/db";
 import {
   GOLDEN_SCENARIOS,
+  parsePrinciplePage,
   scoreScenario,
   selectKernelCommandments,
   type ParsedPrinciplePage,
@@ -37,16 +37,10 @@ function loadCorpus(): ParsedPrinciplePage[] {
   const pages: ParsedPrinciplePage[] = [];
   for (const file of files) {
     const raw = readFileSync(`${PRINCIPLES_DIR}/${file}`, "utf8");
-    const { frontmatter } = parseWikiFrontmatter<WikiPageFrontmatter>(raw);
-    if (frontmatter.pageKind !== "principle") continue;
-    if (frontmatter.status && frontmatter.status !== "published") continue;
-    pages.push({
-      slug: file.replace(/\.md$/, ""),
-      principleTier: frontmatter.principleTier,
-      principleAppliesTo: frontmatter.principleAppliesTo,
-      principleDimensionVector: frontmatter.principleDimensionVector,
-      principleWeight: frontmatter.principleWeight,
-    });
+    const page = parsePrinciplePage(raw, file.replace(/\.md$/, ""));
+    if (page.pageKind !== "principle") continue;
+    if (page.status && page.status !== "published") continue;
+    pages.push(page);
   }
   return pages;
 }
