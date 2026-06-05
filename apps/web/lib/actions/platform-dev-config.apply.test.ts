@@ -237,6 +237,74 @@ describe("applyPlatformUpdate", () => {
     expect(mockExec.mock.calls[1]?.[0]).toBe("git diff --name-only --diff-filter=U");
   });
 
+  it("short-circuits a redundant same-version apply with zero conflicts (BI-4112378F)", async () => {
+    // The install is already on the pending version: the .dpf-version sentinel
+    // matches pendingVersion. Re-running the merge would only re-derive the
+    // phantom CRLF↔LF conflicts, so the apply must be a clean no-op — no merge
+    // is attempted, the pending flag clears, and zero files are reported.
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      updatePending: true,
+      pendingVersion: "v9c92036a",
+    });
+    mockPrisma.platformDevConfig.update.mockResolvedValue({});
+    // No merge in progress; the version sentinel exists and matches.
+    mockExistsSync.mockImplementation((path: string) => path.endsWith(".dpf-version"));
+    mockReadFileSync.mockImplementation((path: string) =>
+      path.endsWith(".dpf-version") ? "v9c92036a\n" : "",
+    );
+
+    const result = await applyPlatformUpdate();
+
+    expect(result.kind).toBe("clean-merge");
+    if (result.kind === "clean-merge") {
+      expect(result.version).toBe("v9c92036a");
+      expect(result.filesUpdated).toBe(0);
+    }
+    const commands = mockExec.mock.calls.map(([cmd]) => String(cmd));
+    // The defining assertion: zero conflicts because no merge was ever run.
+    expect(commands.some((cmd) => cmd.includes("merge"))).toBe(false);
+    expect(commands).not.toContain("rm -rf apps/web packages");
+    expect(mockPrisma.platformDevConfig.update).toHaveBeenCalledWith({
+      where: { id: "singleton" },
+      data: { updatePending: false, pendingVersion: null },
+    });
+  });
+
+  it("merges with CR-at-EOL tolerance and declares the LF normalisation policy (BI-4112378F)", async () => {
+    // A genuine cross-version apply must still neutralise the snapshot-vs-source
+    // CRLF↔LF mismatch: the merge runs hookless with -X ignore-cr-at-eol, and
+    // the durable `.gitattributes` policy is staged on the upstream refresh.
+    mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
+      updatePending: true,
+      pendingVersion: "v1.2.3",
+    });
+    mockPrisma.platformDevConfig.update.mockResolvedValue({});
+    mockExistsSync.mockReturnValue(false); // no merge in progress, no sentinel
+
+    mockExec.mockImplementation((cmd: string, _opts: unknown, cb?: (err: Error | null, value: { stdout: string; stderr: string }) => void) => {
+      if (!cb) return;
+      if (cmd.includes("--diff-filter=U")) cb(null, { stdout: "", stderr: "" });
+      else if (cmd === "git diff --cached --stat") cb(null, { stdout: " 7 files changed, 21 insertions(+)", stderr: "" });
+      else cb(null, { stdout: "", stderr: "" });
+    });
+
+    const result = await applyPlatformUpdate();
+
+    expect(result.kind).toBe("clean-merge");
+    const commands = mockExec.mock.calls.map(([cmd]) => String(cmd));
+    expect(commands).toContain(
+      "git -c core.hooksPath=/dev/null merge -X ignore-cr-at-eol dpf-upstream --no-commit --no-ff",
+    );
+    expect(commands).toContain("git add .gitattributes");
+    expect(mockWriteFileSync).toHaveBeenCalledWith(
+      "/workspace/.gitattributes",
+      "* text=auto eol=lf\n",
+      "utf-8",
+    );
+    // The plain (conflict-prone) merge invocation must no longer be issued.
+    expect(commands).not.toContain("git merge dpf-upstream --no-commit --no-ff");
+  });
+
   it("returns clean-merge after a successful no-conflict merge and clears the pending flag", async () => {
     mockPrisma.platformDevConfig.findUnique.mockResolvedValue({
       updatePending: true,

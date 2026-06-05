@@ -2,16 +2,18 @@
 
 // apps/web/components/admin/PlatformUpdateApplyPanel.tsx
 //
-// 2026-05-23 BI-9B77E247: The UpdatePendingBanner directs operators to
-// /admin/platform-development to apply the queued platform update, but
-// before this panel existed the destination route had no Apply control —
-// the merge logic was only reachable from a coworker turn via the
-// apply_platform_update MCP tool. When the System Admin coworker fell
-// back to the local model (provider-routing degraded state, BI-FF180422)
-// it could not reliably invoke that tool, leaving operators with no path
-// to apply queued updates.
+// 2026-05-23 BI-9B77E247: gives operators an in-portal Apply control for a
+// queued platform source-merge — the merge logic was previously only
+// reachable from a coworker turn via the apply_platform_update MCP tool,
+// which the System Admin coworker could not reliably invoke when routing
+// fell back to the local model (BI-FF180422).
 //
-// This panel renders an Apply control directly on the destination route.
+// 2026-06-05 BI-D43EB266: this panel is the source-merge SUB-STEP of the
+// single operator update surface at Ops -> Self-Upgrade. It is rendered on
+// /ops/self-upgrade beneath the image/SHA deploy controls and surfaces only
+// when the install customises source (updatePending). It no longer lives on
+// /admin/platform-development; the update banner deep-links to Ops.
+//
 // It invokes the shared applyPlatformUpdate server action (single source
 // of truth shared with the MCP tool case), and surfaces the structured
 // result inline — clean merge summary on success, or a per-file conflict
