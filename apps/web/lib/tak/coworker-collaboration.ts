@@ -13,11 +13,88 @@
  * path) proposal-eligible. Hard delegatesTo/escalatesTo denial + DelegationChain
  * hop writes are Slice 2, layered on the existing `delegation-authority.ts`.
  */
+import { randomUUID } from "crypto";
 import { prisma } from "@dpf/db";
 import { agentEventBus } from "@/lib/agent-event-bus";
 import { resolveAgent } from "@/lib/tak/agent-resolution";
 import { spawnWorkThread } from "@/lib/actions/agent-coworker";
+import { isHandoffPermitted } from "@/lib/tak/collaboration-authority";
 import type { CollaborationProvenance } from "@/lib/tak/conversation-participants-core";
+
+/** Raised when a coworker-initiated handoff is denied by delegation authority. */
+export class HandoffDeniedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "HandoffDeniedError";
+  }
+}
+
+/**
+ * Record a delegation hop for chain-of-custody (Slice 2). Best-effort: a hop
+ * write failure must not change the spawn/deny decision already made.
+ */
+async function recordDelegationHop(p: {
+  fromAgentId: string;
+  toAgentId: string;
+  status: "active" | "blocked";
+  reason: string;
+  originUserId: string;
+}): Promise<void> {
+  try {
+    await prisma.delegationChain.create({
+      data: {
+        chainId: randomUUID(),
+        depth: 0,
+        fromAgentId: p.fromAgentId,
+        toAgentId: p.toAgentId,
+        status: p.status,
+        reason: p.reason,
+        authorityScope: [],
+        originUserId: p.originUserId,
+        originAuthority: [],
+      },
+    });
+  } catch {
+    // non-fatal — audit row only.
+  }
+}
+
+/**
+ * Enforce delegatesTo/escalatesTo for a coworker-initiated handoff. Throws
+ * HandoffDeniedError (after recording a blocked hop) when the caller agent is
+ * not permitted to reach the target. No-op when there is no caller agent
+ * (user-initiated summon authority is gated separately).
+ */
+async function enforceHandoffAuthority(
+  callerAgentId: string | null | undefined,
+  target: { agentId: string; slugId: string | null },
+  userId: string,
+): Promise<void> {
+  if (!callerAgentId) return;
+  const caller = await prisma.agent.findFirst({
+    where: { OR: [{ agentId: callerAgentId }, { slugId: callerAgentId }] },
+    select: { agentId: true, delegatesTo: true, escalatesTo: true },
+  });
+  if (!caller) return; // unknown caller — nothing to enforce against
+  const targetIds = [target.agentId, target.slugId].filter((v): v is string => Boolean(v));
+  const permitted = isHandoffPermitted({
+    delegatesTo: caller.delegatesTo ?? [],
+    escalatesTo: caller.escalatesTo ?? null,
+    targetIds,
+  });
+  if (!permitted) {
+    await recordDelegationHop({
+      fromAgentId: caller.agentId,
+      toAgentId: target.agentId,
+      status: "blocked",
+      reason: `${caller.agentId} is not permitted to delegate or escalate to ${target.agentId}`,
+      originUserId: userId,
+    });
+    throw new HandoffDeniedError(
+      `${caller.agentId} is not permitted to hand off to ${target.agentId}.`,
+    );
+  }
+}
 
 /**
  * Persist collaboration provenance on the child TaskRun so cards + accurate
@@ -83,6 +160,11 @@ export async function requestCoworker(
   if (!objective) throw new Error("OBJECTIVE_REQUIRED");
   const target = await resolveTargetOrThrow(input.targetAgent);
 
+  // Slice 2: enforce the caller's declared delegatesTo / escalatesTo before any
+  // child thread is spawned. Throws HandoffDeniedError (and records a blocked
+  // DelegationChain hop) when the target is out of scope.
+  await enforceHandoffAuthority(input.callerAgentId, target, userId);
+
   const { child, taskRunId } = await spawnWorkThread(
     {
       parentThreadId: input.parentThreadId,
@@ -92,6 +174,17 @@ export async function requestCoworker(
     },
     userId,
   );
+
+  // Record the accepted hop for chain-of-custody.
+  if (input.callerAgentId) {
+    await recordDelegationHop({
+      fromAgentId: input.callerAgentId,
+      toAgentId: target.agentId,
+      status: "active",
+      reason: "coworker handoff",
+      originUserId: userId,
+    });
+  }
 
   const tier = input.tier ?? 2;
   const enteredVia = input.enteredVia ?? "handoff";
