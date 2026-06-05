@@ -57,26 +57,49 @@ real future bundle would too.
 
 ### Part B — merge bug (BI-4112378F), `platform-dev-config.ts`
 
-1. **Same-version short-circuit.** Before any merge work (and only when no
-   merge is mid-flight), read the `.dpf-version` sentinel via a new
-   `readInstalledVersion`. If it equals `pendingVersion`, clear the pending
-   flag and return a clean no-op (`filesUpdated: 0`) — **zero conflicts**,
-   no `git merge` invoked. This is the acceptance test.
-2. **EOL-tolerant merge.** The work-branch merge now runs hookless with
-   `-X ignore-cr-at-eol`, matching the verified root cause (the diff collapses
-   when CR-at-EOL is ignored). Prevents phantom conflicts on genuine
-   cross-version applies too.
-3. **Durable normalization policy.** `ensureLineEndingPolicy` writes/stages
-   `.gitattributes` (`* text=auto eol=lf`) on the `dpf-upstream` refresh, so it
-   lands on both managed branches once merged and future snapshots converge on
-   LF (BI fix direction #1).
+**Functional root-cause verification (live `dpf-portal-1`, non-destructive
+`git merge-tree`):** the BI hypothesised CRLF↔LF only. Driving the actual merge
+proved there are **two** phantom drivers:
 
-> No-remote note (BI fix direction #2): `dpf-upstream` is a local branch with
-> no remote. The action already tolerates a missing `origin/main`
-> (`assertBranchRepairCanUseCurrentHead` returns early). Giving `dpf-upstream`
-> a real upstream base is a larger change deferred as follow-up; the
-> short-circuit + EOL tolerance fully resolve the phantom-conflict acceptance
-> criterion without it.
+| merge variant | conflicts |
+|---|---|
+| plain (current live code) | **802** |
+| `-X ignore-cr-at-eol` | 403 |
+| `+ core.fileMode=false` / `+ renormalize` (merge-time) | still 403 |
+
+The residual 403 are **file-mode** differences: `my-changes` records **4090
+files as 100755 (executable)** vs 7 on `dpf-upstream`, because the workspace had
+`core.fileMode=true` on a Windows/WSL bind mount and the snapshot path's
+`git add` recorded a spurious exec bit on ~every file. Modes are baked into the
+committed trees, so **no merge-time `-X` flag can ignore them** — the trees
+themselves must stop diverging.
+
+1. **Same-version short-circuit (the guaranteed fix).** Before any merge work
+   (and only when no merge is mid-flight), read the `.dpf-version` sentinel via
+   `readInstalledVersion`. If it equals `pendingVersion`, clear the pending flag
+   and return a clean no-op (`filesUpdated: 0`) — **zero conflicts**, no
+   `git merge` invoked. This is the acceptance criterion, and it matches the
+   live install's exact state (`updatePending=true`, `pendingVersion ==`
+   installed `9c92036a…`).
+2. **`core.fileMode=false`, persisted.** Set in `.git/config`, so **both**
+   population paths stop recording the spurious executable bit going forward —
+   the durable fix for the dominant (mode) driver.
+3. **EOL-tolerant merge.** The work-branch merge runs hookless with
+   `-X ignore-cr-at-eol`, neutralising the CRLF↔LF driver.
+4. **Durable EOL policy.** `ensureLineEndingPolicy` stages `.gitattributes`
+   (`* text=auto eol=lf`) on the `dpf-upstream` refresh (BI fix direction #1).
+
+> **Scope honesty.** (1)+(2) make a **same-version** apply produce **0
+> conflicts** (the acceptance test) and stop new mode/EOL churn. They do **not**
+> retroactively normalise the 4090 already-committed exec bits on `my-changes`,
+> so a *genuine cross-version* upgrade still surfaces phantom mode conflicts on
+> those files until a one-time normalisation runs. That one-time normalisation
+> + fixing the upstream image-sync snapshot path is filed as **BI-DAEAEC9C**
+> (with the merge-tree evidence above).
+
+> No-remote note (BI fix direction #2): `dpf-upstream` is a local branch with no
+> remote. The action already tolerates a missing `origin/main`. Giving it a real
+> upstream base is deferred to the same follow-up.
 
 ### Part A — IA reconciliation (BI-D43EB266)
 
