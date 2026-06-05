@@ -29,7 +29,7 @@ Before claiming a feature works, exercise it through the portal build that opera
 
 ## Applies To
 
-In-platform coworkers and external coding agents. The build gate per AGENTS.md §5 is the platform's defined threshold for "done" — `cd apps/web && npx next build` plus the seed run plus a real DB query against the result. Agents must clear that gate themselves whenever the sandbox supports it; when it doesn't, they must name exactly what's missing rather than claim verification they did not perform.
+In-platform coworkers and external coding agents. The build gate per AGENTS.md §5 is the platform's defined threshold for "done" — `pnpm --filter web build` plus the seed run plus a real DB query against the result. Agents must clear that gate themselves whenever the sandbox supports it; when it doesn't, they must name exactly what's missing rather than claim verification they did not perform.
 
 ## Why
 
@@ -44,7 +44,7 @@ Before claiming a feature is complete:
 1. **Stand up the dependencies.** Postgres + Qdrant + embedding endpoint as the deployment uses them, or the closest in-sandbox equivalents.
 2. **Run the migrations.** `pnpm --filter @dpf/db exec prisma migrate deploy` against a fresh DB and again against one with prior data; both must apply cleanly.
 3. **Run the seed.** Confirm row counts match the source-of-truth markdown.
-4. **Build the portal.** `cd apps/web && npx next build`. Inspect the route manifest for the routes the feature ships.
+4. **Build the portal.** `pnpm --filter web build`. Inspect the route manifest for the routes the feature ships.
 5. **Start the production server.** `node .next/standalone/apps/web/server.js`, mint a session if needed, curl the affected routes, grep the rendered HTML for the content under test.
 6. **Report what you saw.** Status code, byte count, presence of the expected slugs / titles in the response.
 
