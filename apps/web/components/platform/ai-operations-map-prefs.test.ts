@@ -2,16 +2,20 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { getOperationsMapQuickViewFilters } from "@/lib/ai-operations-map/project-events";
 import {
   clearA2aFilterPreference,
+  clearOperationsMapDimension,
   clearOperationsMapViewPreference,
   deleteOperationsMapSavedView,
   getDefaultA2aFilterPreference,
   loadA2aFilterPreference,
+  loadOperationsMapDimension,
   loadOperationsMapViewPreference,
   loadOperationsMapSavedViews,
   OPERATIONS_MAP_A2A_PREFERENCE_KEY,
+  OPERATIONS_MAP_DIMENSION_KEY,
   OPERATIONS_MAP_SAVED_VIEWS_KEY,
   OPERATIONS_MAP_VIEW_PREFERENCE_KEY,
   saveA2aFilterPreference,
+  saveOperationsMapDimension,
   saveOperationsMapViewPreference,
   upsertOperationsMapSavedView,
 } from "./ai-operations-map-prefs";
@@ -232,5 +236,22 @@ describe("AI operations map preferences", () => {
     saveA2aFilterPreference(getDefaultA2aFilterPreference());
     clearA2aFilterPreference();
     expect(store.has(OPERATIONS_MAP_A2A_PREFERENCE_KEY)).toBe(false);
+  });
+
+  it("defaults the dimension to both and round-trips a stored choice", () => {
+    expect(loadOperationsMapDimension()).toBe("both");
+    saveOperationsMapDimension("a2a");
+    expect(store.has(OPERATIONS_MAP_DIMENSION_KEY)).toBe(true);
+    expect(loadOperationsMapDimension()).toBe("a2a");
+    saveOperationsMapDimension("provider");
+    expect(loadOperationsMapDimension()).toBe("provider");
+  });
+
+  it("falls back to both for an unknown stored dimension and clears cleanly", () => {
+    store.set(OPERATIONS_MAP_DIMENSION_KEY, "bogus");
+    expect(loadOperationsMapDimension()).toBe("both");
+    saveOperationsMapDimension("a2a");
+    clearOperationsMapDimension();
+    expect(store.has(OPERATIONS_MAP_DIMENSION_KEY)).toBe(false);
   });
 });
