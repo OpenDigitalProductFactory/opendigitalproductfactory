@@ -225,6 +225,77 @@ const BEAUTY_PERSONAL_CARE: BusinessCapabilityPerspective = {
   ],
 };
 
+const TRADES_MAINTENANCE: BusinessCapabilityPerspective = {
+  perspectiveId: "trades-maintenance",
+  label: "Trades And Maintenance",
+  source: "DPF trades/maintenance overlay informed by field-service dispatch, work-order lifecycle, customer ETA communications, truck stock, subcontractor/safety, and trades finance operating patterns",
+  capabilities: [
+    l1(
+      "trades-field-service-operations",
+      "Trades And Maintenance Operations",
+      100,
+      "Operate field-service work across inquiry intake, dispatch, technician readiness, work orders, customer updates, vehicle stock, subcontractors, and contract billing.",
+      ["consume", "operate"],
+    ),
+    l2(
+      "trades-job-intake-triage",
+      "trades-field-service-operations",
+      "Job Intake And Triage",
+      10,
+      "Capture job descriptions, urgency, property type, photos, notes, quote requests, emergency call-outs, and customer contact preferences.",
+      ["consume"],
+    ),
+    l2(
+      "trades-dispatch-technician-readiness",
+      "trades-field-service-operations",
+      "Dispatch And Technician Readiness",
+      20,
+      "Assign technicians or crews, schedule visits, check skills, tools, and parts readiness, and keep dispatcher queues current.",
+      ["operate"],
+    ),
+    l2(
+      "trades-work-order-lifecycle",
+      "trades-field-service-operations",
+      "Work Order Lifecycle",
+      30,
+      "Track planned maintenance, reactive repair, inspections, site notes, completion evidence, follow-up tasks, and status handoffs.",
+      ["operate"],
+    ),
+    l2(
+      "trades-customer-updates-eta",
+      "trades-field-service-operations",
+      "Customer Updates ETA And Exceptions",
+      40,
+      "Send appointment confirmations, on-my-way ETA updates, running-late notices, access instructions, and completion follow-ups across communication channels.",
+      ["integrate", "operate"],
+    ),
+    l2(
+      "trades-truck-stock-parts",
+      "trades-field-service-operations",
+      "Truck Stock Parts And Materials",
+      50,
+      "Track truck stock, parts usage, materials, tools, restock needs, purchasing, and job-to-inventory evidence.",
+      ["operate"],
+    ),
+    l2(
+      "trades-quotes-contracts-billing",
+      "trades-field-service-operations",
+      "Quotes Contracts And Billing Readiness",
+      60,
+      "Prepare quotes, maintenance contracts, labour and materials billing, purchase orders, deposits, VAT/tax posture, and collections evidence.",
+      ["consume", "operate", "integrate"],
+    ),
+    l2(
+      "trades-safety-compliance-subcontractors",
+      "trades-field-service-operations",
+      "Safety Compliance And Subcontractors",
+      70,
+      "Manage site safety, PPE, certificates, insurance, subcontractors, waste disposal, and regulated trade obligations.",
+      ["operate"],
+    ),
+  ],
+};
+
 function l1(
   key: string,
   name: string,
@@ -280,6 +351,10 @@ export function resolveBusinessCapabilityPerspective(
 
   if (input.category === "beauty-personal-care") {
     perspectives.push(BEAUTY_PERSONAL_CARE);
+  }
+
+  if (input.category === "trades-maintenance") {
+    perspectives.push(TRADES_MAINTENANCE);
   }
 
   return {

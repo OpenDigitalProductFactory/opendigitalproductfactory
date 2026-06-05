@@ -15,6 +15,7 @@ import {
   A2A_EDGE_KINDS,
   A2A_GRAPH_LAYOUT,
   A2A_STATES,
+  a2aEdgeIsGoverned,
   a2aEdgeSourceRecords,
   a2aEdgeVisibleAtReplayTime,
   a2aStateIntent,
@@ -37,7 +38,14 @@ import {
   loadA2aFilterPreference,
   saveA2aFilterPreference,
   type A2aActorRole,
+  type A2aAuthorityFilter,
 } from "./ai-operations-map-prefs";
+
+const AUTHORITY_OPTIONS: Array<{ id: A2aAuthorityFilter; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "governed", label: "Governed" },
+  { id: "ungoverned", label: "Ungoverned" },
+];
 
 type Props = {
   coworkers: OperationsMapRoutingCoworker[];
@@ -54,6 +62,7 @@ export function A2aInteractionsPanel({ coworkers, a2aEdges, a2aLegend, replayTim
   const [stateFilters, setStateFilters] = useState<OperationsMapA2aInteractionState[]>(defaults.states);
   const [actorId, setActorId] = useState<string>(defaults.actorId);
   const [actorRole, setActorRole] = useState<A2aActorRole>(defaults.actorRole);
+  const [authority, setAuthority] = useState<A2aAuthorityFilter>(defaults.authority);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const hydrated = useRef(false);
 
@@ -65,13 +74,14 @@ export function A2aInteractionsPanel({ coworkers, a2aEdges, a2aLegend, replayTim
     setStateFilters(pref.states);
     setActorId(pref.actorId);
     setActorRole(pref.actorRole);
+    setAuthority(pref.authority);
     hydrated.current = true;
   }, []);
 
   useEffect(() => {
     if (!hydrated.current) return;
-    saveA2aFilterPreference({ types: typeFilters, states: stateFilters, actorId, actorRole });
-  }, [typeFilters, stateFilters, actorId, actorRole]);
+    saveA2aFilterPreference({ types: typeFilters, states: stateFilters, actorId, actorRole, authority });
+  }, [typeFilters, stateFilters, actorId, actorRole, authority]);
 
   const labelByAgentId = useMemo(
     () => new Map(coworkers.map((coworker) => [coworker.agentId, coworker.label])),
@@ -110,9 +120,14 @@ export function A2aInteractionsPanel({ coworkers, a2aEdges, a2aLegend, replayTim
         if (replayTime != null && replayRange != null && !a2aEdgeVisibleAtReplayTime(edge.occurredAt, replayTime, replayRange)) {
           return false;
         }
+        if (authority !== "all") {
+          const governed = a2aEdgeIsGoverned(edge);
+          if (authority === "governed" && !governed) return false;
+          if (authority === "ungoverned" && governed) return false;
+        }
         return true;
       }),
-    [a2aEdges, typeFilters, stateFilters, actorId, actorRole, replayTime, replayRange],
+    [a2aEdges, typeFilters, stateFilters, actorId, actorRole, authority, replayTime, replayRange],
   );
 
   const selectedEdge = filteredEdges.find((edge) => edge.id === selectedEdgeId) ?? null;
@@ -133,6 +148,7 @@ export function A2aInteractionsPanel({ coworkers, a2aEdges, a2aLegend, replayTim
     setStateFilters(reset.states);
     setActorId(reset.actorId);
     setActorRole(reset.actorRole);
+    setAuthority(reset.authority);
     setSelectedEdgeId(null);
     clearA2aFilterPreference();
   };
@@ -183,6 +199,16 @@ export function A2aInteractionsPanel({ coworkers, a2aEdges, a2aLegend, replayTim
             <ChipGroup label="State">
               {A2A_STATES.map((state) => (
                 <Chip key={state} active={stateFilters.includes(state)} label={STATE_LABEL[state]} onClick={() => toggleState(state)} />
+              ))}
+            </ChipGroup>
+            <ChipGroup label="Authority">
+              {AUTHORITY_OPTIONS.map((option) => (
+                <Chip
+                  key={option.id}
+                  active={authority === option.id}
+                  label={option.label}
+                  onClick={() => setAuthority(option.id)}
+                />
               ))}
             </ChipGroup>
             <div>
