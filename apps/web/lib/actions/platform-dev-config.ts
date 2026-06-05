@@ -779,12 +779,13 @@ function readInstalledVersion(
   workspace: string,
   resolvePath: (...parts: string[]) => string,
 ): string | null {
-  const { existsSync, readFileSync } = lazyFs();
+  const { readFileSync } = lazyFs();
   const sentinel = resolvePath(workspace, VERSION_SENTINEL_FILE);
-  if (!existsSync(sentinel)) return null;
+  // Read directly and treat any failure (absent / unreadable) as "no sentinel".
+  // Reading-then-catching rather than exists-then-read avoids a check-to-use
+  // TOCTOU race (CodeQL js/file-system-race).
   try {
-    const raw = readFileSync(sentinel, "utf-8");
-    const trimmed = raw.trim();
+    const trimmed = readFileSync(sentinel, "utf-8").trim();
     return trimmed.length > 0 ? trimmed : null;
   } catch {
     return null;
@@ -804,9 +805,17 @@ async function ensureLineEndingPolicy(
   workspace: string,
   resolvePath: (...parts: string[]) => string,
 ): Promise<void> {
-  const { existsSync, readFileSync, writeFileSync } = lazyFs();
+  const { readFileSync, writeFileSync } = lazyFs();
   const target = resolvePath(workspace, GIT_ATTRIBUTES_FILE);
-  const current = existsSync(target) ? readFileSync(target, "utf-8") : "";
+  // Read-or-default rather than exists-then-read — avoids a check-to-use
+  // TOCTOU race (CodeQL js/file-system-race). A missing/unreadable file just
+  // means the policy isn't present yet, so we write it.
+  let current = "";
+  try {
+    current = readFileSync(target, "utf-8");
+  } catch {
+    current = "";
+  }
   if (current === GIT_ATTRIBUTES_POLICY) return;
   writeFileSync(target, GIT_ATTRIBUTES_POLICY, "utf-8");
   await execUpdate(`git add ${GIT_ATTRIBUTES_FILE}`, gitOpts);
