@@ -62,6 +62,45 @@ describe("business capability perspectives", () => {
     expect(customSalon.capabilities.some((capability) => capability.key === "beauty-checkout-retail-payments")).toBe(true);
   });
 
+  it("adds a trades and maintenance category overlay for field-service work", () => {
+    const trades = resolveBusinessCapabilityPerspective({
+      archetypeId: "facilities-maintenance",
+      category: "trades-maintenance",
+    });
+
+    expect(trades.sourcePerspectiveIds).toEqual(["common-small-business", "trades-maintenance"]);
+    expect(trades.sources.map((source) => source.label)).toEqual(["Common Small Business", "Trades And Maintenance"]);
+    expect(trades.sources.map((source) => source.source)).toContain(
+      "DPF trades/maintenance overlay informed by field-service dispatch, work-order lifecycle, customer ETA communications, truck stock, subcontractor/safety, and trades finance operating patterns",
+    );
+    const keys = trades.capabilities.map((capability) => capability.key);
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        "trades-field-service-operations",
+        "trades-job-intake-triage",
+        "trades-dispatch-technician-readiness",
+        "trades-work-order-lifecycle",
+        "trades-customer-updates-eta",
+        "trades-truck-stock-parts",
+        "trades-quotes-contracts-billing",
+        "trades-safety-compliance-subcontractors",
+      ]),
+    );
+  });
+
+  it("applies trades category overlays even when the field-service leaf is custom", () => {
+    const customTrades = resolveBusinessCapabilityPerspective({
+      archetypeId: "hvac-contractor",
+      category: "trades-maintenance",
+    });
+
+    expect(customTrades.sourcePerspectiveIds).toEqual(["common-small-business", "trades-maintenance"]);
+    const keys = customTrades.capabilities.map((capability) => capability.key);
+    expect(keys).toContain("trades-truck-stock-parts");
+    expect(keys).not.toContain("beauty-service-operations");
+    expect(keys).not.toContain("msp-managed-customer-estate");
+  });
+
   it("projects capabilities with deterministic seed IDs and parent links", async () => {
     const upsert = vi.fn(async (args) => ({
       id: `db-${args.where.capabilityId}`,
