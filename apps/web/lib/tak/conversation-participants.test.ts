@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildParticipants,
+  readCollaborationProvenance,
   type AgentIdentity,
   type ParticipantProjectionInput,
 } from "./conversation-participants-core";
@@ -155,6 +156,52 @@ describe("buildParticipants", () => {
     expect(sub.state).toBe("working");
   });
 
+  it("uses persisted provenance for summon role/enteredVia/tier", () => {
+    const input: ParticipantProjectionInput = {
+      rootThreadId: ROOT,
+      threads: [
+        { id: ROOT, parentThreadId: null },
+        { id: CHILD, parentThreadId: ROOT },
+      ],
+      taskRuns: [],
+      actingAgentByThread: { [ROOT]: "AGT-OWNER", [CHILD]: "AGT-PEER" },
+      identities: {
+        "AGT-OWNER": identity("AGT-OWNER", "Owner", "PR-OWNER"),
+        "AGT-PEER": identity("AGT-PEER", "Peer", "PR-PEER"),
+      },
+      ownerAgentId: "AGT-OWNER",
+      provenanceByThread: {
+        [CHILD]: { kind: "summon", fromAgentId: null, toAgentId: "AGT-PEER", enteredVia: "summon", tier: 2 },
+      },
+    };
+    const peer = buildParticipants(input).find((p) => p.threadId === CHILD)!;
+    expect(peer.role).toBe("peer");
+    expect(peer.enteredVia).toBe("summon");
+  });
+
+  it("treats a handoff provenance child as a sub-agent", () => {
+    const input: ParticipantProjectionInput = {
+      rootThreadId: ROOT,
+      threads: [
+        { id: ROOT, parentThreadId: null },
+        { id: CHILD, parentThreadId: ROOT },
+      ],
+      taskRuns: [],
+      actingAgentByThread: { [ROOT]: "AGT-OWNER", [CHILD]: "AGT-PEER" },
+      identities: {
+        "AGT-OWNER": identity("AGT-OWNER", "Owner", "PR-OWNER"),
+        "AGT-PEER": identity("AGT-PEER", "Peer", "PR-PEER"),
+      },
+      ownerAgentId: "AGT-OWNER",
+      provenanceByThread: {
+        [CHILD]: { kind: "handoff", fromAgentId: "AGT-OWNER", toAgentId: "AGT-PEER", enteredVia: "handoff", tier: 2 },
+      },
+    };
+    const sub = buildParticipants(input).find((p) => p.threadId === CHILD)!;
+    expect(sub.role).toBe("sub-agent");
+    expect(sub.enteredVia).toBe("handoff");
+  });
+
   it("omits threads with no resolvable acting agent", () => {
     const input: ParticipantProjectionInput = {
       rootThreadId: ROOT,
@@ -170,5 +217,28 @@ describe("buildParticipants", () => {
     const result = buildParticipants(input);
     expect(result).toHaveLength(1);
     expect(result[0].threadId).toBe(ROOT);
+  });
+});
+
+describe("readCollaborationProvenance", () => {
+  it("parses a valid summon blob", () => {
+    const prov = readCollaborationProvenance({
+      collaboration: { kind: "summon", toAgentId: "AGT-X", enteredVia: "summon", tier: 2, byUserId: "u1" },
+    });
+    expect(prov).toMatchObject({ kind: "summon", toAgentId: "AGT-X", enteredVia: "summon", tier: 2 });
+  });
+
+  it("parses a handoff blob with a summary and fromAgentId", () => {
+    const prov = readCollaborationProvenance({
+      collaboration: { kind: "handoff", fromAgentId: "AGT-O", toAgentId: "AGT-X", enteredVia: "handoff", tier: 3, summary: "review schema" },
+    });
+    expect(prov).toMatchObject({ kind: "handoff", fromAgentId: "AGT-O", tier: 3, summary: "review schema" });
+  });
+
+  it("returns null for missing/garbage metadata", () => {
+    expect(readCollaborationProvenance(null)).toBeNull();
+    expect(readCollaborationProvenance({})).toBeNull();
+    expect(readCollaborationProvenance({ collaboration: { kind: "summon" } })).toBeNull(); // no toAgentId
+    expect(readCollaborationProvenance("nope")).toBeNull();
   });
 });

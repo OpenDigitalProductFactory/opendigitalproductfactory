@@ -9,7 +9,7 @@
  */
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
-import { summonCoworker } from "@/lib/tak/coworker-collaboration";
+import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { projectParticipants, type ConversationParticipant } from "@/lib/tak/conversation-participants";
 
 export type SummonableCoworker = {
@@ -20,11 +20,21 @@ export type SummonableCoworker = {
   description: string | null;
 };
 
-async function requireUserId(): Promise<string> {
+type SummonUser = { userId: string; platformRole: string | null; isSuperuser: boolean };
+
+async function requireUser(): Promise<SummonUser> {
   const session = await auth();
-  const userId = session?.user?.id;
-  if (!userId) throw new Error("Unauthorized");
-  return userId;
+  const user = session?.user;
+  if (!user?.id) throw new Error("Unauthorized");
+  return {
+    userId: user.id,
+    platformRole: user.platformRole ?? null,
+    isSuperuser: user.isSuperuser === true,
+  };
+}
+
+async function requireUserId(): Promise<string> {
+  return (await requireUser()).userId;
 }
 
 /**
@@ -71,32 +81,50 @@ export async function summonCoworkerAction(input: {
   tier?: 2 | 3;
   routeContext?: string;
 }): Promise<SummonCoworkerActionResult> {
-  const userId = await requireUserId();
+  const user = await requireUser();
   const parentThreadId = input.parentThreadId?.trim();
   const targetAgent = input.targetAgent?.trim();
   const objective = input.objective?.trim();
   if (!parentThreadId || !targetAgent || !objective) {
     return { ok: false, error: "parentThreadId, targetAgent, and objective are required." };
   }
-  try {
-    const result = await summonCoworker(
-      {
-        parentThreadId,
-        targetAgent,
-        objective,
-        tier: input.tier ?? 2,
-        byUserId: userId,
-        routeContext: input.routeContext,
-      },
-      userId,
-    );
-    return {
-      ok: true,
-      childThreadId: result.childThreadId,
-      targetAgentId: result.targetAgentId,
-      targetLabel: result.targetLabel,
-    };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Summon failed." };
+  // User gate: a summon is a side-effecting spawn — require a real platform
+  // identity, not an anonymous/role-less session. (Per-target delegatesTo /
+  // escalatesTo enforcement is Slice 2.)
+  if (!user.isSuperuser && !user.platformRole) {
+    return { ok: false, error: "Your account is not permitted to summon coworkers." };
   }
+
+  // Route through the SAME governed execution path as the MCP tool (audit +
+  // pre-tool hooks + capability checks) rather than calling the collaboration
+  // core directly. No context.agentId is passed: a user-initiated summon is
+  // gated by the user above, not by a route coworker's tool grant (route owners
+  // do not hold thread_write), so owner-grant gating would wrongly deny it.
+  const result = await governedExecuteTool({
+    toolName: "summon_coworker",
+    rawParams: { targetAgent, objective, tier: input.tier ?? 2 },
+    userId: user.userId,
+    userContext: { userId: user.userId, platformRole: user.platformRole, isSuperuser: user.isSuperuser },
+    context: { threadId: parentThreadId, routeContext: input.routeContext },
+    source: "internal-mcp-session",
+  });
+
+  if (result.governance?.rejected) {
+    return { ok: false, error: "This summon was blocked by platform policy." };
+  }
+  if (!result.success) {
+    return { ok: false, error: typeof result.message === "string" ? result.message : "Summon failed." };
+  }
+
+  const data = (result.data ?? {}) as {
+    childThreadId?: string;
+    targetAgentId?: string;
+    targetLabel?: string;
+  };
+  return {
+    ok: true,
+    childThreadId: data.childThreadId ?? (typeof result.entityId === "string" ? result.entityId : ""),
+    targetAgentId: data.targetAgentId ?? targetAgent,
+    targetLabel: data.targetLabel ?? targetAgent,
+  };
 }

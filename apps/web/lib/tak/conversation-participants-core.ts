@@ -12,6 +12,47 @@ import { TASK_STATES, type TaskState } from "@/lib/tak/task-states";
 /** How a participant entered the conversation. */
 export type ParticipantEnteredVia = "route" | "summon" | "handoff" | "escalation" | "spawn";
 
+/**
+ * Collaboration provenance persisted on the child `TaskRun.a2aMetadata`
+ * (`{ collaboration: CollaborationProvenance }`) so handoff/summon cards and
+ * accurate `enteredVia` survive a page refresh — the projection and card
+ * reconstruction both read this. No new table (spec A1 / Data Model Posture).
+ */
+export type CollaborationProvenance = {
+  kind: "handoff" | "summon";
+  fromAgentId: string | null;
+  toAgentId: string;
+  enteredVia: ParticipantEnteredVia;
+  tier: 2 | 3;
+  summary?: string;
+  byUserId?: string;
+};
+
+/** Narrow an unknown a2aMetadata JSON blob to its embedded provenance, if present. */
+export function readCollaborationProvenance(a2aMetadata: unknown): CollaborationProvenance | null {
+  if (!a2aMetadata || typeof a2aMetadata !== "object") return null;
+  const collab = (a2aMetadata as Record<string, unknown>)["collaboration"];
+  if (!collab || typeof collab !== "object") return null;
+  const c = collab as Record<string, unknown>;
+  if (typeof c["toAgentId"] !== "string") return null;
+  const kind = c["kind"] === "summon" ? "summon" : "handoff";
+  const enteredVia = ((): ParticipantEnteredVia => {
+    const v = c["enteredVia"];
+    return v === "summon" || v === "handoff" || v === "escalation" || v === "spawn" || v === "route"
+      ? v
+      : kind;
+  })();
+  return {
+    kind,
+    fromAgentId: typeof c["fromAgentId"] === "string" ? (c["fromAgentId"] as string) : null,
+    toAgentId: c["toAgentId"] as string,
+    enteredVia,
+    tier: c["tier"] === 3 ? 3 : 2,
+    summary: typeof c["summary"] === "string" ? (c["summary"] as string) : undefined,
+    byUserId: typeof c["byUserId"] === "string" ? (c["byUserId"] as string) : undefined,
+  };
+}
+
 /** A coworker participating in a conversation, projected from thread/task edges. */
 export type ConversationParticipant = {
   /** Canonical identity (AGENTS.md §11). Falls back to agentId when no alias row exists. */
@@ -69,6 +110,8 @@ export type ParticipantProjectionInput = {
   identities: Record<string, AgentIdentity>;
   /** Route-resolved owner agentId for the root conversation, if known. */
   ownerAgentId?: string | null;
+  /** Persisted collaboration provenance per child threadId (from a2aMetadata). */
+  provenanceByThread?: Record<string, CollaborationProvenance | null>;
 };
 
 function toTaskState(status: string): TaskState {
@@ -96,6 +139,7 @@ function latestTaskRunForThread(
  */
 export function buildParticipants(input: ParticipantProjectionInput): ConversationParticipant[] {
   const { rootThreadId, threads, taskRuns, actingAgentByThread, identities, ownerAgentId } = input;
+  const provenanceByThread = input.provenanceByThread ?? {};
 
   const participants: ConversationParticipant[] = [];
 
@@ -114,15 +158,18 @@ export function buildParticipants(input: ParticipantProjectionInput): Conversati
     const tr = latestTaskRunForThread(thread.id, taskRuns);
     const state: TaskState = tr ? toTaskState(tr.status) : isOwner ? "working" : "submitted";
 
+    // Persisted provenance makes role/enteredVia/tier accurate across refresh.
+    // A summoned coworker is a "peer"; a requested handoff is a "sub-agent".
+    const prov = provenanceByThread[thread.id] ?? null;
     participants.push({
       principalId: identity.principalId ?? identity.agentId,
       principalResolved: identity.principalId != null,
       agentId,
       label: identity.label,
-      role: isOwner ? "owner" : "sub-agent",
-      tier: isOwner ? 1 : 2,
+      role: isOwner ? "owner" : prov?.kind === "summon" ? "peer" : "sub-agent",
+      tier: isOwner ? 1 : prov?.tier ?? 2,
       state,
-      enteredVia: isOwner ? "route" : "spawn",
+      enteredVia: isOwner ? "route" : prov?.enteredVia ?? "spawn",
       threadId: thread.id,
       parentThreadId: thread.parentThreadId,
       taskRunId: tr?.taskRunId ?? null,

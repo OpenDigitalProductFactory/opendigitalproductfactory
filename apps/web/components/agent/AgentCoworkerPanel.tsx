@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname } from "next/navigation";
 import type { AgentMessageRow, AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
@@ -194,6 +194,30 @@ export function AgentCoworkerPanel({
     const t = setInterval(() => refreshParticipantsRef.current(), 4000);
     return () => clearInterval(t);
   }, [participants]);
+
+  // Cards shown in the disclosure = live SSE cards merged with cards
+  // reconstructed from persisted provenance (participant enteredVia), so
+  // handoff/summon cards survive a page refresh. Live cards win by id (they
+  // carry the question-packet summary the reconstruction lacks).
+  const collaborationCardsToShow = useMemo<CollaborationCard[]>(() => {
+    const ownerLabel = participants.find((p) => p.role === "owner")?.label ?? "Coworker";
+    const byId = new Map<string, CollaborationCard>();
+    for (const p of participants) {
+      if (p.role === "owner") continue;
+      if (p.enteredVia !== "summon" && p.enteredVia !== "handoff") continue;
+      const kind = p.enteredVia === "summon" ? "summon" : "handoff";
+      byId.set(`collab-${kind}-${p.threadId}`, {
+        id: `collab-${kind}-${p.threadId}`,
+        kind,
+        fromLabel: kind === "summon" ? "You" : ownerLabel,
+        toLabel: p.label,
+        tier: p.tier === 3 ? 3 : 2,
+        childThreadId: p.threadId,
+      });
+    }
+    for (const c of collaborationCards) byId.set(c.id, c); // live overrides reconstructed
+    return [...byId.values()];
+  }, [participants, collaborationCards]);
   const voiceSynth = useVoiceSynth();
   // Keep a ref so the SSE done handler always sees the latest voiceSynth state
   // without needing to re-subscribe the EventSource on every render.
@@ -835,7 +859,7 @@ export function AgentCoworkerPanel({
       )}
 
       {/* EP-A2A: collapsed/summarized sub-agent activity disclosure (quiet for 1-1) + summon affordance */}
-      <CollaborationActivityPanel participants={participants} cards={collaborationCards} />
+      <CollaborationActivityPanel participants={participants} cards={collaborationCardsToShow} />
       {threadId ? (
         <CoworkerSummonPicker
           parentThreadId={threadId}

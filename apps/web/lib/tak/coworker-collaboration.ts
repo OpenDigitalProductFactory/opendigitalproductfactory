@@ -13,9 +13,28 @@
  * path) proposal-eligible. Hard delegatesTo/escalatesTo denial + DelegationChain
  * hop writes are Slice 2, layered on the existing `delegation-authority.ts`.
  */
+import { prisma } from "@dpf/db";
 import { agentEventBus } from "@/lib/agent-event-bus";
 import { resolveAgent } from "@/lib/tak/agent-resolution";
 import { spawnWorkThread } from "@/lib/actions/agent-coworker";
+import type { CollaborationProvenance } from "@/lib/tak/conversation-participants-core";
+
+/**
+ * Persist collaboration provenance on the child TaskRun so cards + accurate
+ * enteredVia survive refresh (spec A1). Best-effort: a provenance write failure
+ * must not fail the spawn that already succeeded.
+ */
+async function persistProvenance(taskRunId: string, provenance: CollaborationProvenance): Promise<void> {
+  try {
+    await prisma.taskRun.update({
+      where: { taskRunId },
+      data: { a2aMetadata: { collaboration: provenance } },
+    });
+  } catch {
+    // non-fatal: the live SSE card + roster still render; reload reconstruction
+    // is the only thing degraded.
+  }
+}
 
 export type CollaborationResult = {
   childThreadId: string;
@@ -74,6 +93,17 @@ export async function requestCoworker(
     userId,
   );
 
+  const tier = input.tier ?? 2;
+  const enteredVia = input.enteredVia ?? "handoff";
+  await persistProvenance(taskRunId, {
+    kind: "handoff",
+    fromAgentId: input.callerAgentId ?? null,
+    toAgentId: target.agentId,
+    enteredVia,
+    tier,
+    summary: input.questionPacketSummary,
+  });
+
   agentEventBus.emit(input.parentThreadId, {
     type: "collaboration:handoff",
     parentThreadId: input.parentThreadId,
@@ -81,8 +111,8 @@ export async function requestCoworker(
     fromAgentId: input.callerAgentId ?? "",
     toAgentId: target.agentId,
     taskRunId,
-    tier: input.tier ?? 2,
-    enteredVia: input.enteredVia ?? "handoff",
+    tier,
+    enteredVia,
     questionPacketSummary: input.questionPacketSummary,
   });
 
@@ -112,13 +142,24 @@ export async function summonCoworker(
     userId,
   );
 
+  const tier = input.tier ?? 2;
+  const byUserId = input.byUserId ?? userId;
+  await persistProvenance(taskRunId, {
+    kind: "summon",
+    fromAgentId: null,
+    toAgentId: target.agentId,
+    enteredVia: "summon",
+    tier,
+    byUserId,
+  });
+
   agentEventBus.emit(input.parentThreadId, {
     type: "collaboration:summon",
     parentThreadId: input.parentThreadId,
     childThreadId: child.id,
     summonedAgentId: target.agentId,
-    tier: input.tier ?? 2,
-    byUserId: input.byUserId ?? userId,
+    tier,
+    byUserId,
   });
 
   return { childThreadId: child.id, taskRunId, targetAgentId: target.agentId, targetLabel: target.name };

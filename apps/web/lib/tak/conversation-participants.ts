@@ -18,7 +18,9 @@
 import { prisma } from "@dpf/db";
 import {
   buildParticipants,
+  readCollaborationProvenance,
   type AgentIdentity,
+  type CollaborationProvenance,
   type ConversationParticipant,
 } from "./conversation-participants-core";
 
@@ -47,8 +49,18 @@ export async function projectParticipants(
       currentAgentId: true,
       initiatingAgentId: true,
       startedAt: true,
+      a2aMetadata: true,
     },
   });
+
+  // Persisted collaboration provenance per child thread (latest TaskRun wins).
+  const provenanceByThread: Record<string, CollaborationProvenance | null> = {};
+  for (const t of threads) {
+    const tr = taskRuns
+      .filter((r) => r.threadId === t.id)
+      .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0];
+    provenanceByThread[t.id] = tr ? readCollaborationProvenance(tr.a2aMetadata) : null;
+  }
 
   // Acting agent per thread: prefer the TaskRun's current/initiating agent;
   // else the most recent assistant message's agentId on that thread.
@@ -110,5 +122,6 @@ export async function projectParticipants(
     actingAgentByThread,
     identities,
     ownerAgentId: opts.ownerAgentId ?? null,
+    provenanceByThread,
   });
 }
