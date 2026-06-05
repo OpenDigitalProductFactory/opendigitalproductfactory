@@ -198,16 +198,23 @@ Phase 1 lands the rename. Phases 2–7 implement against the spec-canonical name
 
 **Rollback.** As in prior phases. The registry retains primitives from Phases 3-5; this phase is additive.
 
-## Phase 7 — `WorkspaceHomeComponentRegistry` + `VerticalWorkspaceHome` render integration
+## Phase 7 — Register populated primitive registry; consume `VerticalWorkspaceHome` from BI-683C0B9A
 
-**Goal.** Wire the populated `WorkspaceHomePrimitiveRegistry` into the rendering pipeline so a `WorkspaceHomeContribution` declared with primitive keys lands at the correct renderer. This is the "fail-closed on unknown keys" pattern from parent §5.5 + primitive-registry §5.
+> **Amended 2026-06-04 by WWMD design pass** (`docs/superpowers/decisions/2026-06-04-wwmd-design-pass-workspace-home-open-questions.md` Q9). Kernel verdict: `separate-bi` (composite 5.50, margin 0.41, high confidence) over the originally-proposed `first-PR-wins coordination with PR #1442`.
+>
+> `VerticalWorkspaceHome` now ships as its own BI: [BI-683C0B9A](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues?q=BI-683C0B9A). Phase 7 of this plan consumes that component instead of defining it inline.
+
+**Goal.** Wire the populated `WorkspaceHomePrimitiveRegistry` (from Phases 2-6) into BI-683C0B9A's `VerticalWorkspaceHome` component so a `WorkspaceHomeContribution` declared with primitive keys lands at the correct renderer.
 
 **Files.**
-- `apps/web/components/workspace-home/UnknownPrimitiveComponent.tsx` — new. The admin-visible "Slot misconfigured" placeholder for unknown component keys. Empty placeholder for non-admins per parent spec.
-- `apps/web/components/workspace-home/VerticalWorkspaceHome.tsx` — new (if not already landed by the HVAC implementation under PR #1442 sequencing). Reads the contribution's `slots`, sorts by priority + architect-amendment `zone`, renders each slot through `defaultWorkspaceHomePrimitiveRegistry`. Uses the fail-closed pattern: `registry[slot.primitiveKey] ?? UnknownPrimitiveComponent`.
-- `apps/web/app/(shell)/workspace/page.tsx` — modify (or rely on the HVAC plan's Phase 2 to land this). The `if (resolution.mode === "vertical")` branch must dispatch to `VerticalWorkspaceHome` and pass the registered registry.
-- `apps/web/components/workspace-home/VerticalWorkspaceHome.test.tsx` — new. Renders a synthetic 6-slot fixture using the full registry from Phases 3-6. Asserts every slot renders via the correct primitive renderer (not the `UnknownPrimitiveComponent`); asserts unknown primitive key correctly falls back; asserts banned-copy assertion over the full HTML.
-- Coordinate with PR #1442 (HVAC plan Phase 2) so the substrate-side `VerticalWorkspaceHome` is implemented once, not twice. The plan defers to whichever PR lands first; the second PR consumes the existing component.
+- `apps/web/components/workspace-home/UnknownPrimitiveComponent.tsx` — new (still owned by this plan). The admin-visible "Slot misconfigured" placeholder for unknown component keys. Empty placeholder for non-admins per parent spec.
+- BI-683C0B9A ships `apps/web/components/workspace-home/VerticalWorkspaceHome.tsx` independently. This plan's Phase 7 just provides the populated registry as a prop.
+- `apps/web/app/(shell)/workspace/page.tsx` — modify. The `if (resolution.mode === "vertical")` branch passes `registry={defaultWorkspaceHomePrimitiveRegistry}` to `<VerticalWorkspaceHome>`. The `activationPlan` + `signalStreams` props come from BI-B14D6CF6's orchestrator.
+- `apps/web/components/workspace-home/VerticalWorkspaceHome.test.tsx` — primary ownership stays with BI-683C0B9A. This plan adds an integration test asserting that the populated registry from Phases 3-6 correctly renders each of the 11 primitives through the BI-683C0B9A component (and falls back to `UnknownPrimitiveComponent` on unknown keys).
+
+**Dependencies.**
+- [BI-683C0B9A](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues?q=BI-683C0B9A) — `VerticalWorkspaceHome` React component. **Phase 7 blocks on BI-683C0B9A shipping.**
+- [BI-B14D6CF6](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues?q=BI-B14D6CF6) — orchestrator activation plan + signal streams. Phase 7's `page.tsx` wiring consumes the orchestrator's output via the page-level load.
 
 **Verification.**
 - Full vitest green.
