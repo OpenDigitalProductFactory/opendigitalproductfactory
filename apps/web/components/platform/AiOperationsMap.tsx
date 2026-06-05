@@ -1,6 +1,6 @@
 "use client";
 
-import { type SyntheticEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   RotateCcw,
@@ -252,6 +252,14 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
   const showProvider = dimension === "provider" || dimension === "both";
   const showA2a = dimension === "a2a" || dimension === "both";
 
+  // Shared replay window: the provider routing panel owns the timeline and
+  // publishes its playhead here so the A2A interaction band scrubs in step.
+  const [sharedReplay, setSharedReplay] = useState<{ time: number; range: RoutingTimelineRange } | null>(null);
+  const handleReplayChange = useCallback(
+    (time: number, range: RoutingTimelineRange) => setSharedReplay({ time, range }),
+    [],
+  );
+
   const selectedStation = selected.kind === "station"
     ? template.stations.find((station) => station.id === selected.id) ?? null
     : null;
@@ -295,7 +303,9 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
 
         <DimensionToggle dimension={dimension} onChange={setDimension} />
 
-        {showProvider ? <RoutingTopologyPanel routingTopology={routingTopology} /> : null}
+        {showProvider ? (
+          <RoutingTopologyPanel routingTopology={routingTopology} onReplayChange={handleReplayChange} />
+        ) : null}
 
         {showA2a ? (
           <>
@@ -303,6 +313,8 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
               coworkers={routingTopology.coworkers}
               a2aEdges={routingTopology.a2aEdges}
               a2aLegend={routingTopology.a2aLegend}
+              replayTime={showProvider ? sharedReplay?.time ?? null : null}
+              replayRange={showProvider ? sharedReplay?.range ?? null : null}
             />
 
             <DeliberationLensPanel deliberations={routingTopology.deliberations} />
@@ -500,7 +512,13 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
   );
 }
 
-function RoutingTopologyPanel({ routingTopology }: { routingTopology: OperationsMapRoutingTopology }) {
+function RoutingTopologyPanel({
+  routingTopology,
+  onReplayChange,
+}: {
+  routingTopology: OperationsMapRoutingTopology;
+  onReplayChange?: (selectedTime: number, range: RoutingTimelineRange) => void;
+}) {
   const mapShellRef = useRef<HTMLDivElement>(null);
   const pinnedMarkerRef = useRef<string | null>(null);
   const [routeFilter, setRouteFilter] = useState<RoutingRouteFilter>("all");
@@ -523,6 +541,14 @@ function RoutingTopologyPanel({ routingTopology }: { routingTopology: Operations
     [baseTimelineRange, timelineWindowAnchor, timelineZoomLevel],
   );
   const selectedTimelinePercent = timelineMarkerPosition(selectedReplayTime, timelineRange);
+
+  // Publish the replay playhead so the A2A interaction band can scrub in
+  // lock-step (shared replay window). Fires only when the playhead or window
+  // actually changes; the parent's handler is stable (useCallback).
+  useEffect(() => {
+    onReplayChange?.(selectedReplayTime, timelineRange);
+  }, [onReplayChange, selectedReplayTime, timelineRange]);
+
   const providersById = useMemo(
     () => new Map(routingTopology.providers.map((provider) => [provider.providerId, provider])),
     [routingTopology.providers],

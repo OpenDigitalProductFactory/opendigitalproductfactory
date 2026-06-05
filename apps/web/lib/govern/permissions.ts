@@ -4,6 +4,7 @@ import type { EffectiveAuthContext } from "@/lib/identity/effective-auth-context
 import { canAccessEmployeeScope } from "./manager-scope";
 import {
   getShellNavEntries,
+  getSectionNavEntries,
   type PortalShellSectionKey,
 } from "../navigation/portal-navigation-model";
 
@@ -124,6 +125,13 @@ export type ShellNavItem = {
   href: string;
   description: string;
   sectionKey: PortalShellSectionKey;
+  capabilityKey: CapabilityKey | null;
+};
+
+export type SectionNavItem = {
+  key: string;
+  label: string;
+  href: string;
   capabilityKey: CapabilityKey | null;
 };
 
@@ -249,6 +257,20 @@ export function getShellNavSections(user: UserContext): ShellNavSection[] {
     ...section,
     items: SHELL_ITEMS.filter((item) => item.sectionKey === section.key && isAllowed(user, item.capabilityKey)),
   })).filter((section) => section.items.length > 0);
+}
+
+export function getAccessibleSectionNavEntries(
+  user: UserContext,
+  path: string,
+): SectionNavItem[] {
+  return getSectionNavEntries(path)
+    .filter((entry) => isAllowed(user, entry.capabilityKey))
+    .map((entry) => ({
+      key: entry.key,
+      label: entry.label,
+      href: entry.path,
+      capabilityKey: entry.capabilityKey,
+    }));
 }
 
 export function getWorkspaceSections(user: UserContext): WorkspaceSection[] {

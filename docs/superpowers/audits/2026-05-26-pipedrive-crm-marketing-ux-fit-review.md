@@ -3,7 +3,7 @@
 | Field | Value |
 | ----- | ----- |
 | Date | 2026-05-26 |
-| Status | Fit review for circulation; source plan amended |
+| Status | Fit review for circulation; source plan amended; generalized by `dpf-ux-fit-review` |
 | Reviewed source | `docs/superpowers/plans/2026-05-26-pipedrive-crm-marketing-slice-1.md` in concurrent branch `doc/pipedrive-crm-marketing` |
 | Related design | `docs/superpowers/specs/2026-05-26-pipedrive-inspired-crm-marketing-operations-design.md` |
 | UX governance anchor | `docs/superpowers/specs/2026-04-25-customer-marketing-coworker-led-ux-correction.md` |
@@ -81,4 +81,4 @@ Expected behavior:
 - Require route-family ownership, persona, navigation layer, component convergence, empty-state behavior, source truth, AI action boundary, and verification evidence.
 - Store the output as a design artifact or plan section so review does not depend on chat memory.
 
-This should become a first-class follow-up after the current UX packet is reviewed. Until then, use the template in this audit manually for every incoming UI plan.
+This is now implemented as `packages/dpf-skill-pack/skills/dpf-ux-fit-review/SKILL.md`. Use the skill before incoming UI plans add routes, tabs, dashboard bands, metric tiles, status badges, empty states, or coworker launchers.

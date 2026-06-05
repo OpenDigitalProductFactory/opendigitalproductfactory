@@ -195,7 +195,8 @@ describe("AiOperationsMap", () => {
     // Conditional rendering of the provider band vs the A2A panels.
     expect(source).toContain("showProvider");
     expect(source).toContain("showA2a");
-    expect(source).toContain("showProvider ? <RoutingTopologyPanel");
+    expect(source).toContain("showProvider ? (");
+    expect(source).toContain("<RoutingTopologyPanel");
     expect(source).toContain("showA2a ? (");
     expect(source).toContain("<A2aInteractionsPanel");
     expect(source).toContain("<DeliberationLensPanel");
@@ -203,5 +204,19 @@ describe("AiOperationsMap", () => {
     expect(source).toContain("loadOperationsMapDimension");
     expect(source).toContain("saveOperationsMapDimension");
     expect(source).toContain("dimensionHydrated");
+  });
+
+  it("shares the replay playhead between the provider timeline and the A2A band", () => {
+    const source = readFileSync(new URL("./AiOperationsMap.tsx", import.meta.url), "utf8");
+
+    // Provider panel publishes the playhead up via a stable callback.
+    expect(source).toContain("onReplayChange");
+    expect(source).toContain("onReplayChange?.(selectedReplayTime, timelineRange)");
+    expect(source).toContain("handleReplayChange");
+    expect(source).toContain("useCallback");
+    expect(source).toContain("setSharedReplay");
+    // A2A band receives the shared replay window.
+    expect(source).toContain("replayTime={showProvider ? sharedReplay?.time ?? null : null}");
+    expect(source).toContain("replayRange={showProvider ? sharedReplay?.range ?? null : null}");
   });
 });

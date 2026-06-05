@@ -542,8 +542,9 @@ export async function recordIngestEvent(
  *   fallback per EP-WIKI-001 §3.3).
  * - `appliesTo` performs Prisma `has` array containment against the
  *   `principleAppliesTo` column.
- * - Default `limit` is 50 — generous enough for every commandment (cap 10)
- *   and a comfortable core slice; callers tighten as needed.
+ * - Default `limit` is 50 — generous enough for every commandment (commandments
+ *   are uncapped as of 2026-05-22; 19+ exist) and a comfortable core slice;
+ *   callers tighten as needed but should not drop below the commandment count.
  * - Orders by `lastReviewedAt` desc then `title` asc so repeated calls
  *   return rows in the same order.
  *

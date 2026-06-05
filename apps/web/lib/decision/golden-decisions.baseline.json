@@ -1,0 +1,68 @@
+{
+  "quick-vs-proper-normal": {
+    "id": "quick-vs-proper-normal",
+    "winner": "proper-seed-fix",
+    "margin": 1.935404,
+    "confidence": "high",
+    "principlesConsidered": 20,
+    "composites": {
+      "proper-seed-fix": 10.116921,
+      "quick-runtime-patch": 8.181517
+    },
+    "topContributors": [
+      {
+        "principle": "no-hardcoded-colors",
+        "contribution": 0.842857
+      },
+      {
+        "principle": "research-and-use-standards",
+        "contribution": 0.840909
+      },
+      {
+        "principle": "single-source-of-truth",
+        "contribution": 0.827273
+      },
+      {
+        "principle": "no-assumptions",
+        "contribution": 0.777778
+      },
+      {
+        "principle": "architecture-over-shortcuts",
+        "contribution": 0.707143
+      }
+    ]
+  },
+  "cheap-sound-vs-rebuild-guard": {
+    "id": "cheap-sound-vs-rebuild-guard",
+    "winner": "cheap-sound-additive",
+    "margin": 0.941183,
+    "confidence": "high",
+    "principlesConsidered": 20,
+    "composites": {
+      "cheap-sound-additive": 11.137084,
+      "expensive-rebuild": 10.195901
+    },
+    "topContributors": [
+      {
+        "principle": "ship-real-functionality",
+        "contribution": 0.81
+      },
+      {
+        "principle": "worktree-is-source-control-not-runtime",
+        "contribution": 0.783333
+      },
+      {
+        "principle": "research-and-use-standards",
+        "contribution": 0.761364
+      },
+      {
+        "principle": "no-hardcoded-colors",
+        "contribution": 0.754762
+      },
+      {
+        "principle": "single-source-of-truth",
+        "contribution": 0.686364
+      }
+    ]
+  }
+}

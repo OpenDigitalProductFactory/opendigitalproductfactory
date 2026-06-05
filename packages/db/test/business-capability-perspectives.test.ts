@@ -24,9 +24,42 @@ describe("business capability perspectives", () => {
     ]);
     expect(msp.capabilities.some((capability) => capability.key === "msp-managed-customer-estate")).toBe(true);
     expect(msp.capabilities.some((capability) => capability.key === "finance")).toBe(true);
-    expect(salon.sourcePerspectiveIds).toEqual(["common-small-business"]);
-    expect(salon.sources.map((source) => source.label)).toEqual(["Common Small Business"]);
+    expect(salon.sourcePerspectiveIds).toEqual(["common-small-business", "beauty-personal-care"]);
     expect(salon.capabilities.some((capability) => capability.key === "msp-managed-customer-estate")).toBe(false);
+  });
+
+  it("adds a beauty and personal care category overlay for salon day-to-day work", () => {
+    const salon = resolveBusinessCapabilityPerspective({
+      archetypeId: "hair-salon",
+      category: "beauty-personal-care",
+    });
+
+    expect(salon.sourcePerspectiveIds).toEqual(["common-small-business", "beauty-personal-care"]);
+    expect(salon.sources.map((source) => source.label)).toEqual(["Common Small Business", "Beauty And Personal Care"]);
+    expect(salon.sources.map((source) => source.source)).toContain(
+      "DPF beauty/personal-care overlay informed by appointment checkout, service menu, practitioner assignment, retail/POS payments, CRM/marketing automation, and local-presence operating patterns",
+    );
+    expect(salon.capabilities.map((capability) => capability.key)).toEqual(
+      expect.arrayContaining([
+        "beauty-service-operations",
+        "beauty-service-menu-packages",
+        "beauty-booking-practitioner-calendar",
+        "beauty-client-preferences-intake",
+        "beauty-checkout-retail-payments",
+        "beauty-supplies-tools-stock",
+        "beauty-local-marketing-reviews",
+      ]),
+    );
+  });
+
+  it("applies category overlays even when the leaf archetype is custom", () => {
+    const customSalon = resolveBusinessCapabilityPerspective({
+      archetypeId: "custom-salon",
+      category: "beauty-personal-care",
+    });
+
+    expect(customSalon.sourcePerspectiveIds).toEqual(["common-small-business", "beauty-personal-care"]);
+    expect(customSalon.capabilities.some((capability) => capability.key === "beauty-checkout-retail-payments")).toBe(true);
   });
 
   it("projects capabilities with deterministic seed IDs and parent links", async () => {
