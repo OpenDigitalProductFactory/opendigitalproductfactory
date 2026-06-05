@@ -4,6 +4,7 @@ import {
   buildTaskGraph,
   getPhaseNodeStatus,
   getTaskNodeStatus,
+  graphSignature,
   normalizeBuildSnapshot,
   type GraphOutput,
   type NormalizedBuildProcessSnapshot,
@@ -63,6 +64,43 @@ function makeRow(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
     ...overrides,
   };
 }
+
+describe("graphSignature (BI-87CEAFEE — xyflow re-seed loop guard)", () => {
+  it("is identity-independent: two graphs built from equal builds share a signature", () => {
+    // Simulates ProcessGraph re-rendering with a NEW `build` object of
+    // identical content (the intake / SSE churn that tripped React #185).
+    const a = buildPhaseGraph(makeRow({ phase: "build" }));
+    const b = buildPhaseGraph(makeRow({ phase: "build" }));
+    expect(a.nodes).not.toBe(b.nodes); // distinct object identities
+    expect(graphSignature(a.nodes, a.edges)).toBe(
+      graphSignature(b.nodes, b.edges),
+    );
+  });
+
+  it("survives a deep clone (fresh node/edge identities, same content)", () => {
+    const g = buildPhaseGraph(makeRow({ phase: "plan" }));
+    const cloned = JSON.parse(JSON.stringify(g)) as GraphOutput;
+    expect(cloned.nodes[0]).not.toBe(g.nodes[0]);
+    expect(graphSignature(cloned.nodes, cloned.edges)).toBe(
+      graphSignature(g.nodes, g.edges),
+    );
+  });
+
+  it("changes when phase status changes (genuine content change re-seeds)", () => {
+    const planning = buildPhaseGraph(makeRow({ phase: "plan" }));
+    const building = buildPhaseGraph(makeRow({ phase: "build" }));
+    expect(graphSignature(planning.nodes, planning.edges)).not.toBe(
+      graphSignature(building.nodes, building.edges),
+    );
+  });
+
+  it("is stable across repeated calls on the same graph", () => {
+    const g = buildPhaseGraph(makeRow({ phase: "ideate" }));
+    const first = graphSignature(g.nodes, g.edges);
+    const second = graphSignature(g.nodes, g.edges);
+    expect(first).toBe(second);
+  });
+});
 
 describe("getPhaseNodeStatus", () => {
   it("returns done for phases before the current phase", () => {
