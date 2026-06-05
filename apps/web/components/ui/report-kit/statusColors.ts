@@ -85,6 +85,23 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     inbound: "success",
     outbound: "warning",
   },
+  aiFinance: {
+    tracked: "success",
+    needs_setup: "warning",
+    untracked: "danger",
+    active: "success",
+    draft: "warning",
+    seeded: "warning",
+    attention_needed: "danger",
+  },
+  aiFinanceWork: {
+    none: "success",
+    plan_details_needed: "warning",
+    commitment_details_needed: "warning",
+    missing_usage_source: "danger",
+    underused_commitment: "warning",
+    critical_low_allowance: "danger",
+  },
   // Compliance control implementation status (was raw Tailwind palette classes).
   controlStatus: {
     planned: "info",
@@ -161,6 +178,23 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     "no-consensus": "danger",
     "insufficient-evidence": "warning",
     pending: "accent",
+  },
+  // Platform issue-report severity (Admin > Issue Reports). Mirrors the
+  // operator-facing severity semantics where an unbreached high is already
+  // danger-tier, distinct from the generic `severity` ramp below.
+  issueSeverity: {
+    info: "info",
+    low: "neutral",
+    medium: "warning",
+    high: "danger",
+    critical: "danger",
+  },
+  // Platform issue-report lifecycle bucket (needs_action/triaged/resolved/...).
+  issueStatus: {
+    needs_action: "danger",
+    triaged: "warning",
+    resolved: "success",
+    suppressed: "neutral",
   },
   // Generic severity ramp, reusable by any surface that has none of its own.
   severity: {

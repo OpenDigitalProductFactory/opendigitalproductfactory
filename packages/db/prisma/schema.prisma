@@ -7697,9 +7697,12 @@ model AiProviderFinanceProfile {
 model SupplierContract {
   id                     String    @id @default(cuid())
   contractId             String    @unique
-  profileId              String
+  profileId              String?
   supplierId             String
   accountableEmployeeId  String?
+  commitmentKind         String    @default("ai_provider")
+  commitmentSource       String    @default("ai_provider_registry")
+  externalReference      String?   @unique
   status                 String    @default("draft")
   contractType           String    @default("subscription")
   billingCadence         String    @default("monthly")
@@ -7718,7 +7721,7 @@ model SupplierContract {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  profile             AiProviderFinanceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profile             AiProviderFinanceProfile? @relation(fields: [profileId], references: [id], onDelete: Cascade)
   supplier            Supplier                 @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   accountableEmployee EmployeeProfile?         @relation("AiContractOwner", fields: [accountableEmployeeId], references: [id], onDelete: SetNull)
   allowances          ContractAllowance[]
@@ -7728,6 +7731,7 @@ model SupplierContract {
   @@index([profileId])
   @@index([supplierId])
   @@index([status])
+  @@index([commitmentKind, status])
   @@index([accountableEmployeeId])
 }
 
@@ -10014,4 +10018,25 @@ model ResearchProposal {
 
   @@index([organizationId, status])
   @@index([status])
+}
+
+model CoworkerTurnMetric {
+  id              String   @id @default(cuid())
+  threadId        String
+  agentMessageId  String
+  agentId         String?
+  routeContext    String?
+  taskType        String?
+  providerId      String?
+  modelId         String?
+  dispatches      Int      @default(0)
+  nudges          Int      @default(0)
+  toolsAttached   Boolean  @default(false)
+  executedTools   Int      @default(0)
+  totalMs         Int?
+  createdAt       DateTime @default(now())
+
+  @@unique([threadId, agentMessageId])
+  @@index([agentId, routeContext, createdAt])
+  @@index([threadId, createdAt])
 }

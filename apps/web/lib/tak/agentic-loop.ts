@@ -8,6 +8,7 @@ import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
 import { PLATFORM_TOOLS, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { sanitizeForLog } from "@/lib/security/safe-log";
+import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { prisma } from "@dpf/db";
 import { agentEventBus } from "./agent-event-bus";
@@ -1006,6 +1007,22 @@ export async function runAgenticLoop(params: {
         `totalMs=${Date.now() - startTime}`,
       ),
     );
+    // BI-47443B67: persist the same rollup durably so the regression detector
+    // can compute nudge-rate windows. Fire-and-forget — the writer never throws.
+    void recordCoworkerTurnMetric({
+      threadId,
+      agentMessageId: agentMessageId ?? null,
+      agentId,
+      routeContext,
+      taskType: taskType ?? null,
+      providerId: provider,
+      modelId: model,
+      dispatches: inferenceCallCount,
+      nudges: continuationNudges,
+      toolsAttached: toolsAttachedForTurn,
+      executedTools: executedTools.length,
+      totalMs: Date.now() - startTime,
+    });
   };
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
