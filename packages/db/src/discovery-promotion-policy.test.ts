@@ -3,6 +3,7 @@ import {
   LEGACY_PROMOTABLE_TYPES,
   looksLikeRuntimeArtifact,
   isNonProductEntityType,
+  classifyEstateProvenance,
   resolvePromotionDecision,
 } from "./discovery-promotion-policy";
 
@@ -171,6 +172,66 @@ describe("looksLikeRuntimeArtifact", () => {
     ["Real Product Name", false],
   ])("classifies %s as runtime=%s", (name, expected) => {
     expect(looksLikeRuntimeArtifact(name)).toBe(expected);
+  });
+});
+
+describe("classifyEstateProvenance", () => {
+  it("classifies UniFi-discovered devices as real_estate", () => {
+    expect(classifyEstateProvenance({ discoveredVia: "unifi_clients_api", addressHint: "192.168.0.42" })).toBe("real_estate");
+    expect(classifyEstateProvenance({ discoveredVia: "unifi_api" })).toBe("real_estate");
+  });
+  it("classifies real-LAN IPs as real_estate", () => {
+    expect(classifyEstateProvenance({ addressHint: "192.168.0.59" })).toBe("real_estate");
+    expect(classifyEstateProvenance({ addressHint: "Doorbell Camera 192.168.0.7" })).toBe("real_estate");
+  });
+  it("classifies Docker-bridge IPs and platform sources as platform_internal", () => {
+    expect(classifyEstateProvenance({ discoveredVia: "arp_table", addressHint: "172.18.0.5" })).toBe("platform_internal");
+    expect(classifyEstateProvenance({ discoveredVia: "local_os" })).toBe("platform_internal");
+    expect(classifyEstateProvenance({ discoveredVia: "windows_exporter", addressHint: "172.20.0.1" })).toBe("platform_internal");
+  });
+  it("defaults unknown provenance to platform_internal (conservative)", () => {
+    expect(classifyEstateProvenance({})).toBe("platform_internal");
+    expect(classifyEstateProvenance({ discoveredVia: "mystery", addressHint: "8.8.8.8" })).toBe("platform_internal");
+  });
+  it("platform source wins over a real-LAN IP", () => {
+    expect(classifyEstateProvenance({ discoveredVia: "docker", addressHint: "192.168.0.1" })).toBe("platform_internal");
+  });
+});
+
+describe("resolvePromotionDecision — estate provenance", () => {
+  const node = { id: "tn_1", nodeId: "foundational/building_management/security_and_surveillance", governance: null };
+  const portfolio = { id: "p_1", slug: "foundational" };
+  const realDevice = {
+    entityType: "host", // would normally be blocked by the structural gate
+    name: "Reolink NVR",
+    attributionStatus: "attributed" as const,
+    attributionConfidence: 0.95,
+    digitalProductId: null,
+    taxonomyNodeId: "tn_1",
+  };
+
+  it("PROMOTES a real-estate host device (camera/NVR) despite host entityType", () => {
+    const d = resolvePromotionDecision({ ...realDevice, provenance: "real_estate" }, node, portfolio);
+    expect(d.decision).toBe("promote");
+    expect(d.evidence.source).toBe("real-estate-provenance");
+  });
+
+  it("still SKIPS a platform-internal host (Docker) via the structural gate", () => {
+    const d = resolvePromotionDecision({ ...realDevice, name: "LAN Host 172.18.0.5", provenance: "platform_internal" }, node, portfolio);
+    expect(d.decision).toBe("skip");
+    expect(d.reason).toBe("type_not_promotable");
+  });
+
+  it("treats omitted provenance as platform_internal (back-compat: host still skips)", () => {
+    const d = resolvePromotionDecision(realDevice, node, portfolio);
+    expect(d.decision).toBe("skip");
+    expect(d.reason).toBe("type_not_promotable");
+  });
+
+  it("real-estate provenance does not override the runtime-name gate", () => {
+    const d = resolvePromotionDecision({ ...realDevice, name: "dpf-redis-1", provenance: "real_estate" }, node, portfolio);
+    expect(d.decision).toBe("skip");
+    expect(d.reason).toBe("name_not_promotable");
   });
 });
 

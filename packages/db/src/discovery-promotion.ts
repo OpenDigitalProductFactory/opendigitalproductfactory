@@ -13,6 +13,7 @@
 
 import {
   resolvePromotionDecision,
+  classifyEstateProvenance,
   type PromotionTaxonomyNodeInput,
 } from "./discovery-promotion-policy";
 import {
@@ -155,6 +156,20 @@ export async function promoteInventoryEntities(db: PromotionDb): Promise<Promoti
         ? { id: portfolioRow.id, slug: rootSlug }
         : null;
 
+      // Classify estate provenance from discovery evidence so the resolver can
+      // promote real-estate devices (UniFi/arp, 192.168) even when their
+      // entityType is host/network, while keeping the platform's own Docker
+      // self-scan (172.18) as a black box.
+      const props = (entity.properties ?? {}) as Record<string, unknown>;
+      const provenance = classifyEstateProvenance({
+        discoveredVia: typeof props.discoveredVia === "string" ? props.discoveredVia : null,
+        addressHint:
+          (typeof props.address === "string" && props.address) ||
+          (typeof props.ip === "string" && props.ip) ||
+          entity.name ||
+          null,
+      });
+
       // Delegate the promote/skip decision to the pure policy resolver.
       const decision = resolvePromotionDecision(
         {
@@ -166,6 +181,7 @@ export async function promoteInventoryEntities(db: PromotionDb): Promise<Promoti
           attributionConfidence: entity.attributionConfidence ?? 0,
           digitalProductId: entity.digitalProductId,
           taxonomyNodeId: entity.taxonomyNodeId,
+          provenance,
         },
         taxonomyNode,
         portfolio,
