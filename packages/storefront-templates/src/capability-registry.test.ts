@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   CAPABILITY_KEYS,
   CAPABILITY_REGISTRY,
+  getCapabilitySetupPrompt,
   isCapabilityKey,
 } from "./capability-registry";
 
@@ -42,5 +43,16 @@ describe("capability registry", () => {
   it("validates runtime strings against the registry instead of ad hoc unions", () => {
     expect(isCapabilityKey("customer-estate")).toBe(true);
     expect(isCapabilityKey("teamlogic-only-customer-estate")).toBe(false);
+  });
+
+  it("exposes a setup-wizard opt-in prompt for the partner program", () => {
+    const prompt = getCapabilitySetupPrompt("partner-program");
+    expect(prompt?.question).toBe("Do you sell through partners or resellers?");
+    expect(prompt?.helpText).toContain("add this later");
+  });
+
+  it("returns null for capabilities without a setup prompt and for unknown keys", () => {
+    expect(getCapabilitySetupPrompt("customer-estate")).toBeNull();
+    expect(getCapabilitySetupPrompt("not-a-real-capability")).toBeNull();
   });
 });
