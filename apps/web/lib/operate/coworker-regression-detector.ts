@@ -134,15 +134,85 @@ export function shouldFileLatencyRegression(input: {
   return { file, ratio };
 }
 
+// ── Nudge-rate pure helpers ──────────────────────────────────────────────
+
+/**
+ * One persisted `CoworkerTurnMetric` row, shaped for the nudge-rate detector.
+ * Only the fields the nudge-rate path reads are modeled here.
+ */
+export type CoworkerTurnMetricRow = {
+  threadId: string;
+  agentMessageId: string;
+  agentId: string | null;
+  routeContext: string | null;
+  taskType: string | null;
+  nudges: number;
+  createdAt: Date;
+};
+
+/**
+ * Share of turns in a window that incurred at least one continuation nudge.
+ * Returns null for an empty window so callers can distinguish "no data" from
+ * "no nudges".
+ */
+export function computeNudgeShare(rows: CoworkerTurnMetricRow[]): number | null {
+  if (rows.length === 0) return null;
+  const nudged = rows.reduce((n, r) => (r.nudges > 0 ? n + 1 : n), 0);
+  return nudged / rows.length;
+}
+
+/**
+ * Anti-flap gate for nudge-rate regressions. Files only when the recent window
+ * has enough samples AND either:
+ *  - the baseline nudge share is > 0 and the recent share is at least
+ *    `factor`x the baseline share; or
+ *  - the baseline share is 0 (or absent) and the recent share is at least
+ *    `minNudgeRate` (so one isolated nudge on a small sample does not alert).
+ *
+ * `ratio` is reported only when the baseline share is positive; it is null in
+ * the zero-baseline case where a multiplicative ratio is undefined.
+ */
+export function shouldFileNudgeRateRegression(input: {
+  recentShare: number | null;
+  baselineShare: number | null;
+  recentSampleCount: number;
+  minSamples: number;
+  factor: number;
+  minNudgeRate: number;
+}): { file: boolean; ratio: number | null } {
+  const {
+    recentShare,
+    baselineShare,
+    recentSampleCount,
+    minSamples,
+    factor,
+    minNudgeRate,
+  } = input;
+
+  if (recentShare == null || recentSampleCount < minSamples) {
+    return { file: false, ratio: null };
+  }
+
+  if (baselineShare != null && baselineShare > 0) {
+    const ratio = recentShare / baselineShare;
+    return { file: ratio >= factor, ratio };
+  }
+
+  // Zero (or absent) baseline: alert on an absolute floor only.
+  return { file: recentShare >= minNudgeRate, ratio: null };
+}
+
 // ── Orchestration ────────────────────────────────────────────────────────
 
 const DEFAULT_RECENT_WINDOW_MS = 60 * 60 * 1000;
 const DEFAULT_BASELINE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_MIN_SAMPLES = 10;
 const DEFAULT_FACTOR = 3;
+const DEFAULT_MIN_NUDGE_RATE = 0.2;
 
 const DETECTOR_SOURCE = "coworker-regression-detector";
 const LATENCY_TRIGGER_KIND = "latency-regression";
+const NUDGE_RATE_TRIGGER_KIND = "nudge-rate-regression";
 
 /** Null/empty attribution collapses to this key only — never persisted. */
 function bucketKeyPart(value: string | null): string {
@@ -317,6 +387,186 @@ function bucketByAgentRoute(
   return buckets;
 }
 
+function bucketMetricsByAgentRoute(
+  rows: CoworkerTurnMetricRow[],
+): Map<string, CoworkerTurnMetricRow[]> {
+  const buckets = new Map<string, CoworkerTurnMetricRow[]>();
+  for (const row of rows) {
+    const key = `${bucketKeyPart(row.agentId)}::${bucketKeyPart(
+      row.routeContext,
+    )}`;
+    const list = buckets.get(key);
+    if (list) list.push(row);
+    else buckets.set(key, [row]);
+  }
+  return buckets;
+}
+
+// ── Nudge-rate orchestration ─────────────────────────────────────────────
+
+export type DetectNudgeRateDeps = {
+  now?: () => Date;
+  recentWindowMs?: number;
+  baselineWindowMs?: number;
+  minSamples?: number;
+  factor?: number;
+  minNudgeRate?: number;
+  /** Fetch persisted turn metrics with `createdAt` in [from, to). */
+  fetchTurnMetrics: (
+    from: Date,
+    to: Date,
+  ) => Promise<CoworkerTurnMetricRow[]>;
+  /**
+   * Returns true if an OPEN PIR already exists for this
+   * source/trigger/agent/route tuple.
+   */
+  hasOpenDuplicate: (input: {
+    agentId: string | null;
+    routeContext: string | null;
+  }) => Promise<boolean>;
+  /** Files a PIR via the single server-side writer. */
+  fileReport: (input: {
+    title: string;
+    description: string;
+    severity: string;
+    routeContext: string | null;
+    threadId: string | null;
+    agentId: string | null;
+  }) => Promise<void>;
+};
+
+export type DetectNudgeRateResult = {
+  bucketsEvaluated: number;
+  filed: number;
+  skippedDuplicates: number;
+};
+
+/**
+ * Map nudge share to a severity. Conservative: a marginal nudge uptick should
+ * not page; a turn that nudges on the majority of attempts should.
+ */
+function nudgeSeverityFor(recentShare: number): string {
+  if (recentShare >= 0.75) return "critical";
+  if (recentShare >= 0.5) return "high";
+  return "medium";
+}
+
+/**
+ * Detect coworker nudge-rate regressions over persisted `CoworkerTurnMetric`
+ * rows and file deduplicated PIRs.
+ *
+ * Deps are injected so the orchestration is testable without a live database;
+ * the Inngest entry point binds them to Prisma + `createPlatformIssueReport`.
+ */
+export async function detectCoworkerNudgeRateRegressions(
+  deps?: Partial<DetectNudgeRateDeps>,
+): Promise<DetectNudgeRateResult> {
+  const resolved = await resolveNudgeRateDeps(deps);
+  const {
+    now,
+    recentWindowMs,
+    baselineWindowMs,
+    minSamples,
+    factor,
+    minNudgeRate,
+    fetchTurnMetrics,
+    hasOpenDuplicate,
+    fileReport,
+  } = resolved;
+
+  const nowDate = now();
+  const recentFrom = new Date(nowDate.getTime() - recentWindowMs);
+  const baselineFrom = new Date(nowDate.getTime() - baselineWindowMs);
+
+  const [recentRows, baselineRows] = await Promise.all([
+    fetchTurnMetrics(recentFrom, nowDate),
+    // Baseline window ends where the recent window begins so they do not overlap.
+    fetchTurnMetrics(baselineFrom, recentFrom),
+  ]);
+
+  const recentBuckets = bucketMetricsByAgentRoute(recentRows);
+  const baselineBuckets = bucketMetricsByAgentRoute(baselineRows);
+
+  let filed = 0;
+  let skippedDuplicates = 0;
+  let bucketsEvaluated = 0;
+
+  for (const [key, recent] of recentBuckets) {
+    bucketsEvaluated++;
+    const baseline = baselineBuckets.get(key) ?? [];
+
+    const recentShare = computeNudgeShare(recent);
+    const baselineShare = computeNudgeShare(baseline);
+
+    const decision = shouldFileNudgeRateRegression({
+      recentShare,
+      baselineShare,
+      recentSampleCount: recent.length,
+      minSamples,
+      factor,
+      minNudgeRate,
+    });
+
+    if (!decision.file || recentShare == null) continue;
+
+    const agentId = recent[0].agentId;
+    const routeContext = recent[0].routeContext;
+    // Worst exemplar: the most-nudged turn in the recent bucket.
+    const exemplar = recent.reduce((worst, r) =>
+      r.nudges > worst.nudges ? r : worst,
+    );
+
+    if (await hasOpenDuplicate({ agentId, routeContext })) {
+      skippedDuplicates++;
+      continue;
+    }
+
+    const severity = nudgeSeverityFor(recentShare);
+    const agentLabel = agentId ?? "unknown-agent";
+    const routeLabel = routeContext ?? "unknown-route";
+    const recentPct = (recentShare * 100).toFixed(1);
+    const baselineLabel =
+      baselineShare == null
+        ? "n/a"
+        : `${(baselineShare * 100).toFixed(1)}% (n=${baseline.length})`;
+    const ratioLabel =
+      decision.ratio == null ? "n/a (zero baseline)" : `${decision.ratio.toFixed(2)}x`;
+
+    const description = [
+      `Coworker nudge-rate regression detected.`,
+      ``,
+      `Agent: ${agentLabel}`,
+      `Route: ${routeLabel}`,
+      `Recent nudge rate: ${recentPct}% (n=${recent.length})`,
+      `Baseline nudge rate: ${baselineLabel}`,
+      `Ratio: ${ratioLabel} (factor threshold ${factor}x, zero-baseline floor ${(
+        minNudgeRate * 100
+      ).toFixed(0)}%)`,
+      `Window: last ${Math.round(recentWindowMs / 60000)}m vs prior ${Math.round(
+        baselineWindowMs / (24 * 60 * 60 * 1000),
+      )}d`,
+      ``,
+      `Worst exemplar turn:`,
+      `  thread: ${exemplar.threadId}`,
+      `  agentMessage: ${exemplar.agentMessageId}`,
+      `  nudges: ${exemplar.nudges}`,
+      `  taskType: ${exemplar.taskType ?? "unknown"}`,
+    ].join("\n");
+
+    await fileReport({
+      title: `Coworker nudge-rate regression: ${agentLabel} on ${routeLabel}`,
+      description,
+      severity,
+      routeContext,
+      threadId: exemplar.threadId,
+      agentId,
+    });
+    filed++;
+  }
+
+  return { bucketsEvaluated, filed, skippedDuplicates };
+}
+
 /**
  * Bind detector deps to live substrate (Prisma + the single PIR writer) for
  * any caller that does not inject its own. Prisma and the route/task join are
@@ -429,6 +679,100 @@ async function resolveDeps(
     minSamples,
     factor,
     fetchDispatchRows,
+    hasOpenDuplicate,
+    fileReport,
+  };
+}
+
+/**
+ * Bind nudge-rate detector deps to live substrate (Prisma + the single PIR
+ * writer). Prisma is imported lazily so the pure helpers stay importable in
+ * tests without pulling the database client into the module graph.
+ */
+async function resolveNudgeRateDeps(
+  deps?: Partial<DetectNudgeRateDeps>,
+): Promise<Required<DetectNudgeRateDeps>> {
+  const now = deps?.now ?? (() => new Date());
+  const recentWindowMs = deps?.recentWindowMs ?? DEFAULT_RECENT_WINDOW_MS;
+  const baselineWindowMs = deps?.baselineWindowMs ?? DEFAULT_BASELINE_WINDOW_MS;
+  const minSamples = deps?.minSamples ?? DEFAULT_MIN_SAMPLES;
+  const factor = deps?.factor ?? DEFAULT_FACTOR;
+  const minNudgeRate = deps?.minNudgeRate ?? DEFAULT_MIN_NUDGE_RATE;
+
+  const fetchTurnMetrics =
+    deps?.fetchTurnMetrics ??
+    (async (from: Date, to: Date) => {
+      const { prisma } = await import("@dpf/db");
+      const rows = await prisma.coworkerTurnMetric.findMany({
+        where: { createdAt: { gte: from, lt: to } },
+        select: {
+          threadId: true,
+          agentMessageId: true,
+          agentId: true,
+          routeContext: true,
+          taskType: true,
+          nudges: true,
+          createdAt: true,
+        },
+      });
+      return rows.map(
+        (r) =>
+          ({
+            threadId: r.threadId,
+            agentMessageId: r.agentMessageId,
+            agentId: r.agentId,
+            routeContext: r.routeContext,
+            taskType: r.taskType,
+            nudges: r.nudges,
+            createdAt: r.createdAt,
+          }) satisfies CoworkerTurnMetricRow,
+      );
+    });
+
+  const hasOpenDuplicate =
+    deps?.hasOpenDuplicate ??
+    (async ({ agentId, routeContext }) => {
+      const { prisma } = await import("@dpf/db");
+      const existing = await prisma.platformIssueReport.findFirst({
+        where: {
+          status: ISSUE_REPORT_STATUS.OPEN,
+          source: DETECTOR_SOURCE,
+          triggerKind: NUDGE_RATE_TRIGGER_KIND,
+          agentId: agentId ?? null,
+          routeContext: routeContext ?? null,
+        },
+        select: { id: true },
+      });
+      return existing != null;
+    });
+
+  const fileReport =
+    deps?.fileReport ??
+    (async ({ title, description, severity, routeContext, threadId, agentId }) => {
+      const { createPlatformIssueReport } = await import(
+        "@/lib/quality/platform-issue-reports"
+      );
+      await createPlatformIssueReport({
+        type: "regression",
+        source: DETECTOR_SOURCE,
+        triggerKind: NUDGE_RATE_TRIGGER_KIND,
+        title,
+        description,
+        severity,
+        routeContext,
+        threadId,
+        agentId,
+      });
+    });
+
+  return {
+    now,
+    recentWindowMs,
+    baselineWindowMs,
+    minSamples,
+    factor,
+    minNudgeRate,
+    fetchTurnMetrics,
     hasOpenDuplicate,
     fileReport,
   };
