@@ -48,6 +48,7 @@ DPF therefore treats `dpf-platform` as the project-default plugin, not merely a 
 | [`dpf-use-shared-nonprod-environment`](skills/dpf-use-shared-nonprod-environment/SKILL.md) | dpf-worktree-per-session | `["build-specialist", "platform-engineer", "ops-coordinator"]` | Claim and release governed shared localhost environments instead of unmanaged servers |
 | [`dpf-local-merge-ci-before-push`](skills/dpf-local-merge-ci-before-push/SKILL.md) | dpf-pr-with-dco | `["build-specialist", "platform-engineer"]` | Run merged-code local integration gates and record results before push or PR |
 | [`dpf-architecture-review`](skills/dpf-architecture-review/SKILL.md) | dpf-retrieve-decision-context, dpf-decision-via-kernel | `["ea-architect", "build-specialist", "platform-engineer"]` | Chief-architect lens: review a spec/design/plan for architectural alignment against DPF standards, propose concrete edits, feed new standards back to the reference docs. Advisory `architect` reviewer at the Build Studio Ideate + Plan gates |
+| [`dpf-ux-fit-review`](skills/dpf-ux-fit-review/SKILL.md) | dpf-architecture-review, dpf-verify-substrate-first | `["ea-architect", "build-specialist", "platform-engineer"]` | UX/IA fit gate for UI-impacting feature plans: route family, persona, nav layer, component convergence, empty/failure states, coworker boundaries, and merge evidence |
 
 ### Upstream superpowers capabilities NOT re-authored (do not re-propose)
 

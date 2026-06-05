@@ -7,7 +7,7 @@
   {
     "id": "design",
     "label": "Design",
-    "skillIds": ["dpf-retrieve-decision-context", "dpf-compare-options", "dpf-capture-kernel-gap"]
+    "skillIds": ["dpf-retrieve-decision-context", "dpf-compare-options", "dpf-ux-fit-review", "dpf-capture-kernel-gap"]
   },
   {
     "id": "implementation",
