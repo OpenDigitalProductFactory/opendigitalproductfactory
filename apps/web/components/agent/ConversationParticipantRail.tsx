@@ -9,30 +9,8 @@
 // Quiet by default: renders nothing for a 1-1 conversation (owner only).
 
 import type { ConversationParticipant } from "@/lib/tak/conversation-participants-core";
-import type { TaskState } from "@/lib/tak/task-states";
 import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
-import type { Intent } from "@/components/ui/report-kit/statusColors";
-
-function stateIntent(state: TaskState): Intent {
-  switch (state) {
-    case "completed":
-    case "archived":
-      return "success";
-    case "failed":
-    case "rejected":
-    case "stalled":
-    case "paused-for-upgrade-forced":
-      return "danger";
-    case "input-required":
-    case "auth-required":
-      return "warning";
-    case "working":
-    case "submitted":
-      return "accent";
-    default:
-      return "neutral";
-  }
-}
+import { taskStateIntent } from "@/lib/tak/task-state-intent";
 
 const ROLE_LABEL: Record<ConversationParticipant["role"], string> = {
   owner: "Owner",
@@ -40,23 +18,17 @@ const ROLE_LABEL: Record<ConversationParticipant["role"], string> = {
   "sub-agent": "Sub-agent",
 };
 
+// Roster body of the collaboration disclosure (CollaborationActivityPanel).
+// Visibility is decided by the parent disclosure, not here.
 export function ConversationParticipantRail({
   participants,
 }: {
   participants: ConversationParticipant[];
 }) {
-  // Quiet for 1-1 (owner only or empty).
-  if (participants.length < 2) return null;
+  if (participants.length === 0) return null;
 
   return (
-    <div
-      role="list"
-      aria-label="Conversation participants"
-      className="flex flex-wrap items-center gap-2 border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2"
-    >
-      <span className="text-[10px] uppercase tracking-wide text-[var(--dpf-muted)]">
-        Participants
-      </span>
+    <div role="list" aria-label="Conversation participants" className="flex flex-wrap items-center gap-2">
       {participants.map((p) => (
         <div
           key={`${p.threadId}:${p.agentId}`}
@@ -72,7 +44,7 @@ export function ConversationParticipantRail({
             T{p.tier}
           </span>
           <span className="max-w-[10rem] truncate text-xs text-[var(--dpf-text)]">{p.label}</span>
-          <StatusBadge intent={stateIntent(p.state)} label={p.state} size="sm" variant="soft" />
+          <StatusBadge intent={taskStateIntent(p.state)} label={p.state} size="sm" variant="soft" />
         </div>
       ))}
     </div>

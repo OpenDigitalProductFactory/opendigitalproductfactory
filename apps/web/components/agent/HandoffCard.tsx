@@ -1,9 +1,11 @@
 // apps/web/components/agent/HandoffCard.tsx
 //
-// EP-A2A (2026-06-04 spec, Slice 1) — inline card rendered in the message
-// stream when one coworker hands off to, or the user summons, another coworker
-// (closes G1). Driven by collaboration:handoff / collaboration:summon events.
-// Theme tokens only (AGENTS.md §12); icon + text carry meaning, not color.
+// EP-A2A (Slice 1A) — card rendered inside the collaboration disclosure when
+// one coworker hands off to, summons, or returns from another coworker (G1).
+// Driven by collaboration:handoff / :summon / :return events. Theme tokens only
+// (AGENTS.md §12); lucide icon + text carry meaning, not color.
+
+import { Handshake, UserPlus, Undo2 } from "lucide-react";
 
 export type CollaborationCard = {
   id: string;
@@ -22,16 +24,23 @@ const KIND_VERB: Record<CollaborationCard["kind"], string> = {
   return: "returned from",
 };
 
+const KIND_ICON = {
+  handoff: Handshake,
+  summon: UserPlus,
+  return: Undo2,
+} as const;
+
 export function HandoffCard({ card }: { card: CollaborationCard }) {
   const isReturn = card.kind === "return";
+  const Icon = KIND_ICON[card.kind];
   return (
     <div
       role="note"
       aria-label={`${card.fromLabel} ${KIND_VERB[card.kind]} ${card.toLabel}${card.summary ? `: ${card.summary}` : ""}`}
-      className="my-2 flex flex-col gap-1 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2"
+      className="my-1 flex flex-col gap-1 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2"
     >
       <div className="flex items-center gap-2 text-xs text-[var(--dpf-text)]">
-        <span aria-hidden>{isReturn ? "↩️" : "🤝"}</span>
+        <Icon aria-hidden size={14} className="shrink-0 text-[var(--dpf-muted)]" />
         <span className="font-medium">{card.fromLabel}</span>
         <span className="text-[var(--dpf-muted)]">{KIND_VERB[card.kind]}</span>
         <span className="font-medium">{card.toLabel}</span>

@@ -2,212 +2,308 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft for review |
+| Status | Reviewed and corrected for implementation alignment |
 | Created | 2026-06-04 |
-| Author | Claude (Opus 4.8) + Mark Bodman |
+| Last reviewed | 2026-06-05 by Codex |
+| Author | Claude (Opus 4.8) + Mark Bodman; review pass by Codex |
 | Primary audience | Platform architecture, AI workforce UX, governance, standards |
-| Epic | `EP-A2A` — agent-to-agent coworker team orchestration |
-| Related standards | `A2A` 1.0.0, `TAK`, `GAID` |
-| Related repo areas | `apps/web/components/agent/*`, `apps/web/lib/tak/*`, `apps/web/lib/actions/agent-threads.ts`, `apps/web/lib/ai-operations-map/*`, `apps/web/app/api/agent/stream/route.ts`, `packages/db/prisma/schema.prisma` |
+| Epic | `EP-A2A` - agent-to-agent coworker team orchestration |
+| Live backlog context | MCP `list_epics` verified `EP-A2A` open with 2 items; MCP semantic search found `BI-65B0D697` (`AI Operations Map - coworker-to-coworker (A2A) interaction visibility re-architecture`) as directly related. `search_specs_and_plans` returned no indexed matches for the main terms during this pass, so repo-file verification below is the stronger source. |
+| Related standards | `A2A` 1.0.0, `TAK`, `GAID`, PAR, orchestrator-worker |
+| Related repo areas | `apps/web/components/agent/*`, `apps/web/lib/tak/*`, `apps/web/lib/actions/agent-threads.ts`, `apps/web/lib/actions/coworker-summon.ts`, `apps/web/lib/mcp-tools.ts`, `apps/web/lib/ai-operations-map/*`, `apps/web/app/api/agent/stream/route.ts`, `packages/db/prisma/schema.prisma` |
 | Related prior artifacts | `2026-04-23-a2a-aligned-coworker-runtime-design.md`, `2026-05-10-ai-coworker-visual-control-surface-design.md`, `2026-04-21-deliberation-pattern-framework-design.md`, `2026-04-29-orchestration-primitives-design.md`, `2026-05-31-pseudo-user-contract-design.md`, `2026-04-03-value-stream-team-architecture-design.md` |
 
 ## Purpose
 
-Today the human↔coworker relationship in the portal is **1-to-1**: a user talks to exactly one route-resolved coworker, and that coworker's entire turn — including any work it hands off to or requests from another coworker — is collapsed into a single opaque "thinking" state. When a coworker spawns a child thread (`spawn_work_thread`), escalates (`Agent.escalatesTo`), or delegates (`DelegationGrant`), **the user sees none of it**. There is no way for the user to summon a second coworker into the conversation, and no way to observe, name, or optimize the collaboration patterns that emerge across coworkers over time.
+DPF is moving from a mostly 1-to-1 human-to-coworker portal interaction toward governed multi-agent collaboration that the user can see, trust, and optimize. Mark's 2026-06-04 framing was that coworker handoffs, summons, and second/third-tier interactions are currently too hidden for the portal's ambitions.
 
-This design extends DPF from 1-1 interaction to **multi-agent collaboration with first-class visibility**, by surfacing the multi-agent machinery that *already exists in the backend* up into:
+This spec defines the product and architecture contract for that shift. It is reuse-first: DPF already has thread spawning, task runs, event streaming, delegation-chain substrate, AgentCard-style capability projection, and an AI Operations Map. The work is to project those primitives into excellent user-facing UX and an operator-visible topology without creating parallel event, identity, or evidence systems.
 
-1. the **user-facing conversation** (inline handoff, summon, and participant roster), and
-2. an **operator/optimization lens** (collaboration patterns as observable, improvable units) that composes with the already-built AI Operations Map.
+The review pass found that this worktree has already landed a substantial Slice 1 implementation. This document therefore separates:
 
-The design is **reuse-first**: nearly every primitive it needs is already in the schema or runtime. The gap is almost entirely projection and user-facing surface, not new substrate.
+- **Current worktree truth** - what exists in `D:\DPF\.claude\worktrees\sleepy-khorana-197ea7` now.
+- **Slice 1A hardening/refactor** - the architectural and UI cleanup required before calling the conversational layer done.
+- **Future slices** - Operations Map transfer topology and pattern optimization.
 
 ## Problem Statement
 
-Mark's framing (2026-06-04): *"Today there is a very 1-1 interaction between human users and the ai-coworker. If the ai coworker hands off to another, or calls others, we have no visibility. The interface in the portal is capable of doing more, but we haven't extended into this. The ability for ai coworkers to be exposed in the portal UX or to be called as a second or third tier interaction needs to be supported."*
+Mark's framing (2026-06-04): "Today there is a very 1-1 interaction between human users and the ai-coworker. If the ai coworker hands off to another, or calls others, we have no visibility. The interface in the portal is capable of doing more, but we haven't extended into this. The ability for ai coworkers to be exposed in the portal UX or to be called as a second or third tier interaction needs to be supported."
 
-Decomposed into three concrete capability gaps:
+The problem decomposes into three product gaps:
 
-- **G1 — Handoff/collaboration is invisible to the user.** `AgentCoworkerPanel.tsx` has no handoff, delegation, summon, or participant concept (verified: grep for `handoff|delegat|spawn_work|childThread|parentThread|summon|participant` returns zero matches in the panel). When a coworker calls another via `spawn_work_thread`, the child thread runs out-of-band; the user sees a single "[Agent] is thinking" with no indication that a second coworker is now involved.
-- **G2 — Coworkers cannot be invoked as 2nd/3rd-tier participants from the UX.** Coworker resolution is purely route-based (`ROUTE_AGENT_MAP`). There is no coworker directory/picker in the chat, no `@mention`, no "bring in the Enterprise Architect" affordance. The user cannot escalate to or summon a specific coworker; nor can a coworker visibly request a named peer.
-- **G3 — Collaboration patterns are not observable or optimizable.** The AI Operations Map (built, `/platform/ai/operations-map`) projects single-coworker activity onto a business-flow schematic, and `DelegationChainView` exists but is **admin-only and static**. Neither answers "which handoff patterns recur, where do they stall, and which should we optimize/codify into procedural code." The Process Observer (`2026-03-15-process-observer-design.md`) detects friction signals but does not model multi-agent collaboration as a first-class pattern.
+- **G1 - Handoff/collaboration visibility.** A user must see when the primary coworker brings another coworker into the work, why that peer was invoked, what state the peer is in, and when control returns.
+- **G2 - User-directed coworker summon.** A user must be able to bring in a named coworker as a tier-2 participant through a governed UX, without knowing internal tool names.
+- **G3 - Collaboration optimization.** Operators must be able to see recurring collaboration patterns, stalls, latency, and successful handoff paths so repeated ad-hoc behavior can be improved or codified into procedural orchestration.
 
 ## Current Repo & Runtime Truth
 
-What already exists (verified 2026-06-04 against this worktree). The headline: **the collaboration substrate is largely built; the user-facing and pattern-optimization surfaces are not.**
+Verified against this worktree on 2026-06-05. The important correction: the first conversational projection has moved from "not built" to "partly built, needs hardening."
 
-### Built — backend collaboration primitives
+### Built before this spec
 
-| Primitive | Location | State |
+| Primitive | Location | Verified state |
 | --- | --- | --- |
-| Thread spawning (coworker→coworker) | `spawn_work_thread` MCP tool; `spawnWorkThread()` in `apps/web/lib/actions/agent-threads.ts`; dispatch in `agent-thread-dispatcher-runtime.ts` | **Built.** Creates child `AgentThread` (`parentThreadId`, `childCount`) + a `TaskRun`. Depth-1 limit; max 5 children. Polled via `get_thread_result` / `get_child_threads`. **Caveat (verified):** the child `TaskRun.parentTaskRunId` is currently hardcoded `null` in `spawnWorkThread` — task lineage is carried by `AgentThread.parentThreadId`, **not** `TaskRun.parentTaskRunId`. The participant projection (§A1) must read the thread edge; Slice 1 also populates `parentTaskRunId` so the task graph is complete. |
-| Phase handoff (build) | `PhaseHandoff` model; `save_phase_handoff` MCP; `build-orchestrator.ts` | **Built.** Structured context (`summary`, `decisionsMade`, `openIssues`, `fromAgentId`, `toAgentId`) between build specialists. |
-| Deliberation (multi-agent debate) | `apps/web/lib/deliberation/orchestrator.ts`; `start_deliberation` / `deliberate_on` MCP | **Built.** Parallel peer-review branches; `deliberation:*` events on the bus. |
-| Build specialist dispatch | `build-orchestrator.ts`; `specialist-prompts.ts` | **Built.** Orchestrator → role-scoped specialists; the existing reference multi-agent pattern. |
-| Event bus discriminants for collaboration | `apps/web/lib/tak/agent-event-bus.ts` | **Built.** `queue:escalation`, `orchestrator:task_dispatched|task_complete`, `deliberation:branch_dispatched|branch_completed`, `task:status`, `task:artifact`. |
-| Delegation authority | `Agent.delegatesTo[]`, `Agent.escalatesTo`, `DelegationGrant`, `DelegationChain`/`DelegationLink`; `apps/web/lib/tak/delegation-authority.ts` | **Partial.** `delegation-authority.ts` **does** enforce chain authority propagation, loop detection, and depth (`MAX_DELEGATION_DEPTH = 4`) over `DelegationChain`/`DelegationLink` at runtime. But it does **not** read the `Agent.delegatesTo` / `Agent.escalatesTo` fields — every read of those two fields in `apps/web` is display/projection (`DelegationChainView`/`Panel` admin-only, agent detail page, AgentCard projection). So **those two fields specifically are informational**; Slice 2's `delegatesTo`/`escalatesTo` enforcement is net-new behavior layered onto the existing chain enforcement, not greenfield. |
-| AI Operations Map (single-coworker visibility) | `apps/web/lib/ai-operations-map/*`, `apps/web/components/platform/AiOperationsMap.tsx`, route `/platform/ai/operations-map` | **Built (V1).** Projects `AgentEvent` + `ToolExecution` onto archetype business-flow schematic. Admin/platform surface. |
-| AgentCard projection | designed in A2A spec; `agent-card-service` | **Partial/designed.** Canonical projection of agent capabilities/skills/grants. |
+| Child thread spawning | `apps/web/lib/actions/agent-threads.ts`, wrapper in `apps/web/lib/actions/agent-coworker.ts`, MCP `spawn_work_thread` in `apps/web/lib/mcp-tools.ts` | Built. Depth-1 only, max 5 children, owner/cancel checks, dispatch compensation. |
+| Task lineage | `TaskRun.parentTaskRunId` in `packages/db/prisma/schema.prisma`; `spawnWorkThread()` in `apps/web/lib/actions/agent-threads.ts` | Improved in this worktree. Child `TaskRun.parentTaskRunId` is now populated when the parent thread has a task run. Root chat threads often have no parent task run, so `AgentThread.parentThreadId` remains the always-present lineage edge. |
+| Phase handoff | `PhaseHandoff`, `save_phase_handoff`, `apps/web/lib/integrate/build-orchestrator.ts` | Built for Build Studio phase transfer, not directly the user-facing coworker collaboration surface. |
+| Deliberation | `apps/web/lib/deliberation/orchestrator.ts`, `start_deliberation`, `deliberate_on`, `deliberation:*` events | Built as multi-branch review/debate substrate. |
+| Canonical agent event bus | `apps/web/lib/tak/agent-event-bus.ts` | Built. The union now includes `collaboration:handoff`, `collaboration:summon`, and `collaboration:return` in this worktree. |
+| Delegation-chain substrate | `DelegationChain` model and `apps/web/lib/tak/delegation-authority.ts` | Built for authority propagation, loop detection, and depth limiting over chain links. |
+| Informational agent delegation fields | `Agent.delegatesTo[]`, `Agent.escalatesTo` in `packages/db/prisma/schema.prisma`; display reads in admin/platform pages | Present, but not yet enforced by `request_coworker` / `summon_coworker`. |
+| AI Operations Map V1 | `apps/web/lib/ai-operations-map/*`, `apps/web/components/platform/AiOperationsMap.tsx`, route `/platform/ai/operations-map` | Built for task/tool/evidence projection. It does not yet have transfer/handoff topology. |
+| AgentCard-style projection | `apps/web/lib/tak/agent-card-service.ts` and related A2A spec | Partly built/designed; usable for capability and skill discovery direction. |
 
-### Designed but not built (relevant)
+### Built in this worktree by the EP-A2A slice
 
-- **A2A-aligned task-native runtime** (`2026-04-23-a2a-aligned-coworker-runtime-design.md`, BI-9DB7C332, in-progress): `TaskMessage`, `TaskArtifact`, canonical `TaskRun` envelope, question-packet handoff artifact. **Not yet implemented.** This design depends on its *task identity* concepts but does not block on the full cutover (see §Dependency Posture).
-
-### Not built — the user-facing & pattern gap (this spec)
-
-- `AgentCoworkerPanel.tsx`: no participant roster, no handoff card, no summon control. A child-thread spawn is invisible; the panel shows a single agent label that can change mid-turn but with no handoff semantics.
-- No coworker directory/picker/`@mention` in any conversational surface.
-- No "collaboration pattern" model: handoffs are individual `parentThreadId` edges, never aggregated into recurring patterns with health/latency/stall metrics.
-
-## Research & Benchmarking (AGENTS.md §10)
-
-Comparing **data/interaction models**, not feature lists.
-
-### Open-source leaders
-
-- **OpenAI Agents SDK — handoffs as first-class.** A handoff is a typed transfer where the receiving agent takes over the conversation; tracing emits a dedicated `HandoffSpan` distinct from tool/generation spans. **Adopted:** model coworker→coworker transfer as a first-class, *visible* event (a `HandoffSpan`-equivalent projected from `queue:escalation` + `orchestrator:task_dispatched`), not a hidden tool call. **Rejected:** OpenAI's full transfer-of-control default — DPF keeps the human's primary coworker as the conversation owner and renders peers as *participants*, preserving the governance owner (PAR principle, see below).
-- **AutoGen (Microsoft) — GroupChat + roles.** A `GroupChatManager` selects the next speaker among a roster; turns are explicit and attributed. **Adopted:** an explicit, attributed **participant roster** with a turn/speaker model in the user-facing thread. **Rejected:** free-form round-robin auto-speaker selection as the *primary* UX; DPF gates peer entry through governed summon/handoff, not implicit speaker election.
-- **CrewAI — delegation tool + process types.** Agents delegate via an explicit `Delegate work to coworker` tool; `sequential` vs `hierarchical` process types make the topology explicit. **Adopted:** a **governed `request_coworker` / handoff tool** that mirrors DPF's existing `spawn_work_thread` but carries A2A task semantics and emits a visible handoff. **Rejected:** CrewAI's unbounded peer-to-peer delegation graph; DPF retains the depth/fan-out caps already in `spawnWorkThread` and routes through the conversation owner.
-
-### Commercial / standards
-
-- **A2A 1.0.0 (Linux Foundation).** `Task` + `TaskStatusUpdateEvent` + `TaskArtifactUpdateEvent` + `AgentCard`; lifecycle includes `input-required`, `auth-required`. **Adopted:** the existing DPF A2A-alignment direction — collaboration units are tasks with status/artifact events; participant capabilities come from `AgentCard`. This design is the *user-facing projection* of that task model. **Rejected:** exposing raw A2A wire envelopes to end users; the conversation is a projection over tasks (consistent with the A2A-aligned runtime spec's "chat is a client over tasks").
-- **LangGraph Studio — graph/thread observability.** Renders multi-node execution as a live graph with per-node state. **Adopted:** a **collaboration graph** view (who handed to whom, current state per participant) for the operator lens, anchored to the already-built Operations Map rather than a parallel surface. **Rejected:** a developer-grade node graph as the *end-user* surface; end users get a conversational participant view, operators get the graph.
-
-### Patterns adopted / rejected / gaps filled
-
-- **Adopt:** handoffs and summons are first-class, attributed, visible events; participant roster with governed entry; collaboration patterns are aggregatable and measurable.
-- **Reject:** hidden delegation; transfer-of-control that loses the governance owner; a parallel event grammar or evidence model (the Operations Map spec's "project, don't republish" rule binds here too).
-- **Gap DPF fills:** none of the surveyed tools tie multi-agent collaboration to a **governed authority chain** (`DelegationGrant`/`DelegationChain`/PAR), an **archetype business-flow map**, or a **pattern-optimization loop** that promotes stabilized collaboration into procedural code (the DPF autonomous-runtime thesis). That intersection is the differentiator and the reason this is built on DPF's substrate, not a generic orchestrator.
-
-## Governing principles
-
-- **Propose, Acknowledge, Reassign (PAR)** ([kernel principle](../founder-kernel/wiki/principles/propose-acknowledge-reassign.md)): a coworker entering a conversation is a *proposal*; the owner (or policy) must *acknowledge* before the peer mutates anything; control *reassigns* back explicitly. The participant model encodes PAR as state, not chat.
-- **Orchestrator-worker** ([kernel principle](../founder-kernel/wiki/principles/orchestrator-worker-pattern.md)): peers don't freely route to each other; the conversation owner (or a designated orchestrator coworker) mediates entry. This preserves a single governance/authority owner per conversation.
-- **Project, don't republish** (from the Operations Map spec): consume canonical `AgentEvent` / `TaskRun` / `DelegationChain` primitives; do not invent a parallel event union, state machine, or evidence ledger.
-- **Make silent failures observable**, **architecture over shortcuts**, **research-and-use-standards** (A2A handoff/task semantics).
-
-## Design
-
-### Three layers (mapping to G1/G2/G3)
-
-```
-Layer A — Conversational multi-agent (G1, G2)
-  Participant roster + inline handoff/summon cards in AgentCoworkerPanel,
-  driven by governed handoff/summon tools and projected handoff events.
-
-Layer B — Collaboration topology (G3, operator)
-  A collaboration-graph view + pattern aggregation, composed into the
-  already-built AI Operations Map as a new lens.
-
-Layer C — Pattern optimization loop (G3, governance)
-  CollaborationPattern aggregation → Process Observer findings →
-  candidates for codification into procedural orchestration.
-```
-
-### Layer A — Conversational multi-agent
-
-**A1. Participant model (projection, no new conversation substrate).**
-A conversation already has a root `AgentThread` and may have child `AgentThread`s linked by `parentThreadId`. (Each thread also has a `TaskRun`, but `TaskRun.parentTaskRunId` is currently hardcoded `null` by `spawnWorkThread` — so the **thread edge is the load-bearing lineage today**; Slice 1 additionally populates `parentTaskRunId` to complete the task graph.) Introduce a **read-model** `ConversationParticipant` projected from these edges:
-
-```ts
-// apps/web/lib/tak/conversation-participants.ts  (view layer, no migration in slice 1)
-type ConversationParticipant = {
-  principalId: string;          // PrincipalAlias resolution (AGENTS.md §11) — never Agent.id
-  agentId: string;
-  label: string;
-  role: "owner" | "peer" | "sub-agent";   // owner = route-resolved primary; peer = summoned; sub-agent = spawned worker
-  tier: 1 | 2 | 3;              // interaction tier per Mark's framing
-  state: TaskState;             // reuse apps/web/lib/tak/task-states.ts vocabulary exactly
-  enteredVia: "route" | "summon" | "handoff" | "escalation" | "spawn";
-  parentParticipantId?: string; // who brought them in (handoff/escalation lineage)
-  taskRunId?: string;
-  threadId: string;
-};
-```
-
-The owner is the route-resolved coworker. Peers/sub-agents are projected from existing child-thread edges. **No new table in slice 1** — this is computed from `AgentThread.parentThreadId` + `TaskRun.status` (→ `TaskState`) + `AgentMessage.agentId`, mirroring the Operations Map's projection approach.
-
-**A2. Governed handoff & summon tools.** Two MCP tools, both reusing the existing `spawn_work_thread` machinery, and gated by the **two existing, distinct governance layers** (verified): the capability × agent-grant intersection in `apps/web/lib/mcp-governed-execute.ts`, and — for proposal/PAR-acknowledge gating — the proposal-mode loop break in `apps/web/lib/tak/agentic-loop.ts` (`toolDef.executionMode === "proposal"`, with `autoApproveWhen` pre-authorization). The tools carry A2A handoff semantics and emit a **visible** event:
-
-- `request_coworker` (coworker-initiated): a coworker requests a named peer/tier for a scoped sub-task. Mirrors `spawn_work_thread` but: (a) targets a *resolvable* coworker (by `agentId` or capability), (b) carries a question-packet-shaped payload (reuse the `TaskArtifact.metadata.artifactType="question-packet"` shape from the A2A spec — even before `TaskArtifact` is persisted, the payload shape is stable), (c) is declared `executionMode: "proposal"` so that, when the target exceeds the owner's delegation scope, the **agentic loop** (not the governed-execute gate) breaks to a proposal card for PAR acknowledge, and (d) emits `collaboration:handoff` (see A3).
-- `summon_coworker` (user-initiated, via UI → server action): the user brings a specific coworker into the current conversation as a tier-2/3 participant. Routes through the same governance intersection (user capability × target agent grants).
-
-Both **enforce `Agent.delegatesTo` / `escalatesTo`** at runtime (closing the "model only" gap): a `request_coworker` whose target is not in the caller's `delegatesTo` (and not the caller's `escalatesTo`) is denied with a clear reason, recorded as a `DelegationChain` hop.
-
-**A3. Visible handoff events.** Per "project, don't republish," handoffs are projected from existing discriminants where possible. Where a genuinely new discriminant is needed it lands on the **canonical bus** (`agent-event-bus.ts`), not a panel-local channel:
-
-- Add `collaboration:handoff` and `collaboration:summon` to `AgentEvent` (the canonical union), correlated by `threadId` + `parentParticipantId`. (The Operations Map spec explicitly permits new discriminants *on the canonical bus* with a companion substrate-spec note — this is that note.)
-- `collaboration:return` marks reassignment of control back to the owner (PAR reassign), projected from child `TaskRun` reaching a terminal `TaskState`.
-
-**A4. UI — `AgentCoworkerPanel` extension.**
-- **Participant rail**: a compact roster (owner + active peers/sub-agents) with per-participant `state` chip (reuse report-kit `StatusBadge` + `statusColors`, AGENTS.md §12). Tier is shown as a depth indicator.
-- **Inline handoff card** in the message stream: "🤝 *Build Specialist* asked *Enterprise Architect* to review the schema" with the question-packet summary, expandable to the sub-task's messages/artifacts. Renders from `collaboration:handoff`.
-- **Summon control**: a coworker picker (the missing G2 affordance) backed by the AgentCard projection / agent registry, gated by the user's capabilities. Supports `@mention`-style invocation in the input.
-- **Reduced-motion + a11y first-class** (mirror the Operations Map V1 acceptance bar). Color never the sole channel; every participant state carries label + icon.
-
-All of this is **projection + presentation** over existing transport (`/api/agent/stream` SSE). No parallel WebSocket.
-
-### Layer B — Collaboration topology (operator lens)
-
-Compose into the **already-built** AI Operations Map (`apps/web/lib/ai-operations-map/*`, `components/platform/AiOperationsMap.tsx`) rather than a new page:
-
-- **Collaboration overlay**: when a conversation or build involves >1 participant, render the handoff edges as `Transfer` objects. **Correction (verified):** the `Transfer` visual object is *specified* in the 2026-05-10 visual-control-surface design doc but is **not yet implemented** — the shipped Operations Map types are `OperationsMapStation` / `Line` / `Projection` / `Routing*`, with no `Transfer`/handoff concept. So Layer B **implements** the `Transfer` object per that prior spec (net-new viz substrate on the existing map, not a wiring-only change) and binds it to the new `collaboration:*` events. This is the largest single piece of net-new code in Layers A/B and should be sized accordingly.
-- **Collaboration-graph inspector**: selecting a multi-participant pulse opens who-handed-to-whom with per-hop latency, state, and the governing `DelegationChain` reference. Reuses the Operations Map inspector + the existing (admin) `DelegationChainView` component logic.
-
-### Layer C — Pattern optimization loop
-
-The "patterns we want to optimize over time" requirement. **This is the one place that justifies new persistence** — and only after Layers A/B prove the model (the Operations Map spec's "only add persistence after the read-only view proves the model" discipline).
-
-- **`CollaborationPattern`** (deferred to slice 3): an aggregation over completed multi-agent collaborations keyed by `(initiatingRole, targetRole, routeContext/valueStream, handoffKind)`, with rollups: occurrence count, success rate, median hop latency, stall/`input-required` rate, rework rate. Derivable initially as a *query* over `DelegationChain` + `TaskRun` + `collaboration:*` events; persisted only if the query plan demands it.
-- **Process Observer integration**: feed recurring high-friction patterns (stalls, repeated escalations, low success rate) to the existing Process Observer (`2026-03-15-process-observer-design.md`) so they become triaged backlog items — closing the loop to "optimize over time."
-- **Codification candidates**: patterns with high occurrence + high success are surfaced as candidates to promote from ad-hoc agentic handoff into procedural orchestration (`orchestration-primitives` / autonomous-runtime thesis: "move stabilized agent behavior into procedural code").
-
-## Data Model Changes
-
-Slice 1 and 2 add **no migrations** (pure projection + two governed tools + bus discriminants + UI). Persistence is introduced only in slice 3 and only if proven necessary:
-
-| Change | Slice | Type |
+| Surface | Location | Verified state |
 | --- | --- | --- |
-| `collaboration:handoff` / `:summon` / `:return` on `AgentEvent` union | 1 | Code (canonical bus) |
-| `ConversationParticipant` read-model | 1 | Code (view) |
-| `request_coworker` / `summon_coworker` tools + grant mappings | 1 | Code (MCP + `TOOL_TO_GRANTS` in `apps/web/lib/tak/agent-grants.ts`) |
-| Runtime enforcement of `delegatesTo`/`escalatesTo` + `DelegationChain` hop write | 2 | Code (reuses existing models) |
-| `CollaborationPattern` aggregation (query first; table only if `EXPLAIN` demands) | 3 | Query → conditional migration |
+| Participant projection | `apps/web/lib/tak/conversation-participants-core.ts`, `apps/web/lib/tak/conversation-participants.ts` | Built as a pure core plus DB wrapper. Projects owner + depth-1 children from `AgentThread.parentThreadId`, `TaskRun`, latest assistant message, and `PrincipalAlias(aliasType="agent")`. Fails open to `agentId` when legacy agents lack a principal alias. |
+| Targeted coworker collaboration core | `apps/web/lib/tak/coworker-collaboration.ts` | Built for `requestCoworker()` and `summonCoworker()`. Reuses child thread spawning and emits `collaboration:*` events. Current comments correctly state hard `delegatesTo` / `escalatesTo` enforcement is still Slice 2. |
+| MCP tools | `apps/web/lib/mcp-tools.ts` | `request_coworker` and `summon_coworker` exist and dispatch to the collaboration core. They have `TOOL_TO_GRANTS` entries in `apps/web/lib/tak/agent-grants.ts` requiring `thread_write`. |
+| User-facing summon action | `apps/web/lib/actions/coworker-summon.ts` | Built. Lists active coworkers and summons one into the current thread. Current state returns the full active registry and calls the collaboration core directly after auth. Governance scoping still needs tightening. |
+| Coworker panel projection | `apps/web/components/agent/AgentCoworkerPanel.tsx` | Built. Imports `ConversationParticipantRail`, `HandoffCard`, and `CoworkerSummonPicker`; handles `collaboration:handoff|summon|return` SSE events; refreshes participants. |
+| Participant rail | `apps/web/components/agent/ConversationParticipantRail.tsx` | Built and quiet for 1-1 conversations. Reuses report-kit `StatusBadge`, but currently carries a local task-state-to-intent map that should move into report-kit/status intent registry. |
+| Inline collaboration card | `apps/web/components/agent/HandoffCard.tsx` | Built. Renders handoff/summon/return cards. Current glyphs are emoji; UI hardening should replace them with `lucide-react` icons per the frontend design standard. |
+| Summon picker | `apps/web/components/agent/CoworkerSummonPicker.tsx` | Built as a compact picker plus objective textarea. `@mention` input behavior is not built. |
+| Unit coverage | `apps/web/lib/tak/conversation-participants.test.ts`, `apps/web/lib/actions/agent-threads.test.ts` | Participant projection has focused tests. The collaboration core, summon action, and visual components need targeted tests. |
 
-New `AgentEvent` discriminants and any new tool `enum:` values follow the strongly-typed-string-enum rule (AGENTS.md §3): the canonical `as const` and the MCP tool definition update in the same commit.
+### Not built yet
 
-## Dependency Posture vs the A2A-aligned runtime
+- Hard runtime enforcement of `Agent.delegatesTo` / `Agent.escalatesTo` inside the collaboration tools.
+- `DelegationChain` hop writes for request/summon attempts, including denied attempts.
+- Persistent collaboration provenance that survives refresh. Current live cards come from SSE/client state; participant projection sees existing child threads as `enteredVia: "spawn"` because no persisted `handoff` / `summon` metadata is attached to the child task/thread.
+- `@mention` summon in the message composer.
+- Archetype/value-stream scoped coworker picker with an explicit "all coworkers" escape hatch.
+- Operations Map transfer edges, transfer inspector, and collaboration graph overlay.
+- `CollaborationPattern` aggregation or Process Observer feed.
 
-This design **depends on the A2A task *concepts*** (task identity, status/artifact events, question-packet handoff) but **does not block** on the full A2A-aligned runtime cutover (`TaskMessage`/`TaskArtifact` persistence). It uses the existing `TaskRun` + `AgentThread` edges as the participant/handoff substrate now, and the question-packet *shape* as the handoff payload. When the A2A runtime lands `TaskMessage`/`TaskArtifact`, the participant read-model and handoff cards re-point to those as the source of truth — projection insulates the UI from the substrate cutover. This is the explicit "exposing real surfaces later is projection work, not another rewrite" promise of the A2A spec, realized.
+## Research & Benchmarking
+
+AGENTS.md requires feature specs to benchmark real data and interaction models. Sources were rechecked during this review pass.
+
+### External standards and products
+
+- **A2A protocol** - The canonical model uses agent discovery (`AgentCard`), task status, task artifacts, polling, and SSE task update events. Adopt: keep DPF collaboration as task-backed projection with status/artifact semantics. Reject: showing raw A2A wire envelopes in the end-user chat. Sources: [A2A specification](https://a2aproject.github.io/A2A/latest/specification/), [A2A core protocol notes](https://agent2agent.info/specification/core/).
+- **OpenAI Agents SDK** - Handoffs and tracing are first-class; tracing includes handoffs, tool calls, generations, guardrails, and custom events. Adopt: a visible collaboration event is not just text; it is a traceable runtime fact. Reject: default transfer-of-control as the user model; DPF keeps an owner participant under PAR. Sources: [OpenAI Agents SDK guide](https://platform.openai.com/docs/guides/agents-sdk/), [Agents SDK tracing](https://openai.github.io/openai-agents-js/guides/tracing).
+- **AutoGen group chat** - Group chat makes speaker selection explicit, including manual, random, round-robin, callable, and model-selected modes. Adopt: explicit participant roster and attributed turns. Reject: hidden or free-form auto-speaker selection as the portal default. Sources: [AutoGen groupchat reference](https://autogenhub.github.io/autogen/docs/reference/agentchat/groupchat/), [AutoGen selector group chat](https://microsoft.github.io/autogen/0.4.5/user-guide/agentchat-user-guide/selector-group-chat.html).
+- **CrewAI collaboration and hierarchical process** - Delegation is an explicit process/tool concept, and hierarchical mode uses a manager agent to plan, delegate, and validate. Adopt: governed named-peer request/summon tools. Reject: unbounded peer-to-peer delegation; DPF preserves depth/fan-out caps and an owner/orchestrator. Sources: [CrewAI collaboration](https://docs.crewai.com/en/concepts/collaboration), [CrewAI processes](https://docs.crewai.com/en/concepts/processes).
+- **LangGraph/LangSmith Studio** - Studio observability centers on inspecting threads/traces for execution understanding. Adopt: an operator topology/inspector for multi-agent handoffs. Reject: exposing a developer-grade node graph as the default employee conversation surface. Source: [LangGraph Studio observability](https://docs.langchain.com/langgraph-platform/observability-studio).
+
+### DPF-specific design intelligence
+
+The MCP `search_design_intelligence` calls for the narrow terms "operations dashboard collaboration visibility status handoff participant roster evidence timeline", "network graph flow map transfer edges operations topology", "dashboard status timeline inspector progressive disclosure", "graph flow network process map", and similar broader terms returned no curated hits in this run. The binding UI guidance therefore comes from the local canonical standards:
+
+- `AGENTS.md` Section 12: theme-aware tokens and report-kit composition.
+- `docs/platform-usability-standards.md`: WCAG 2.2 AA, tokenized color roles, focus and form requirements.
+- `apps/web/components/ui/report-kit/README.md`: `StatusBadge`, `DataTable`, `FilterBar`, `StatCard`, `Chart`, `statusColors`, and `LocalTime` conventions.
+
+### Patterns adopted and rejected
+
+- **Adopt:** visible, attributed handoff/summon events; roster-first conversation UX; task-backed state; inspector-backed operator topology; structured handoff payloads.
+- **Reject:** chat-only delegation, hidden tool calls, transfer-of-control that loses the owner, parallel event unions, local status color maps, and persistence before the read model proves the query shape.
+- **DPF differentiator:** DPF ties multi-agent collaboration to governed authority (`Principal`, `PrincipalAlias`, `DelegationChain`, PAR), business-flow visibility (Operations Map), and a refactor loop that promotes repeated agentic behavior into procedural orchestration.
+
+## Governing Principles
+
+- **Propose, Acknowledge, Reassign (PAR)** ([kernel principle](../../founder-kernel/wiki/principles/propose-acknowledge-reassign.md)): a coworker entering a conversation is a proposal or governed action; mutation authority is acknowledged, and control returns explicitly.
+- **Orchestrator-worker** ([kernel principle](../../founder-kernel/wiki/principles/orchestrator-worker-pattern.md)): specialists do not freely route to each other; the owner or orchestrator mediates entry.
+- **Single source of truth** ([kernel principle](../../founder-kernel/wiki/principles/single-source-of-truth.md)): collaboration visibility must project canonical `AgentThread`, `TaskRun`, `AgentEvent`, `ToolExecution`, `PrincipalAlias`, and `DelegationChain` facts rather than duplicate them.
+- **Principal convergence** ([kernel principle](../../founder-kernel/wiki/principles/principal-convergence.md)): new actor references resolve through `Principal` / `PrincipalAlias`, not a parallel identity table.
+- **Architecture over shortcuts** ([kernel principle](../../founder-kernel/wiki/principles/architecture-over-shortcuts.md)): spend the refactor budget now on the governance and UI seams instead of letting a chat-only prototype become the architecture.
+- **Structured handoffs, not conversation history** ([kernel principle](../../founder-kernel/wiki/principles/structured-handoffs-not-conversation-history.md)): a handoff carries an explicit summary, evidence, open questions, and constraints; it does not rely on the receiving coworker reading raw chat history.
+
+## Architecture
+
+### Layer A - Conversational Multi-Agent UX
+
+Layer A is partly built and should be finished through a Slice 1A hardening/refactor pass.
+
+#### A1. Participant projection
+
+The projection is the right shape: `ConversationParticipant` is a read model over `AgentThread.parentThreadId`, `TaskRun`, `AgentMessage.agentId`, and `PrincipalAlias`. It should remain a projection, not a new table.
+
+Required hardening:
+
+- Persist `enteredVia`, `tier`, `fromAgentId`, `toAgentId`, and handoff summary on existing substrate so refreshes and history views do not lose meaning. Preferred zero-migration target: `TaskRun.a2aMetadata` for the child task, plus persisted `ToolExecution` when invoked through MCP. Do not add a `ConversationParticipant` table.
+- Keep `AgentThread.parentThreadId` as the canonical lineage edge for chat-root conversations. Treat `TaskRun.parentTaskRunId` as a useful companion when a parent task run exists.
+- Preserve `PrincipalAlias(aliasType="agent", aliasValue=agentId)` resolution. Continue fail-open display for legacy agents, but mark `principalResolved=false` so operator/audit views can surface identity debt.
+
+#### A2. Governed handoff and summon
+
+`request_coworker` and `summon_coworker` exist. The remaining architectural requirement is governance parity:
+
+- `request_coworker` must be proposal-aware when the target exceeds the caller's delegated scope. Current MCP definitions do not declare `executionMode: "proposal"` for these tools; the hardening pass must add the correct PAR behavior or explicitly document why the existing `thread_write` grant is sufficient for a limited MVP.
+- `summonCoworkerAction()` must not bypass governed policy by calling the collaboration core after only `auth()`. It should either call the same MCP/governed execution path or enforce the same user capability and target-agent grant intersection before spawning.
+- `Agent.delegatesTo` / `Agent.escalatesTo` must become enforcement inputs, not display-only metadata. Denied attempts write an auditable reason and do not spawn a child thread.
+- Every accepted or denied request/summon writes or extends a `DelegationChain` hop once Slice 2 starts; until then, the UX must not imply that chain-of-custody is already complete.
+
+#### A3. Visible handoff events
+
+`collaboration:handoff`, `collaboration:summon`, and `collaboration:return` are already on the canonical `AgentEvent` union. Keep them there.
+
+Required hardening:
+
+- Emit `collaboration:return` from child task terminal transitions; the union exists but the return signal is not yet wired.
+- Make every visible card traceable to a runtime fact. For live-only events, use the event plus child `TaskRun`. For reload/history, reconstruct from `TaskRun.a2aMetadata` and persisted `ToolExecution` rows where available.
+- Do not create a panel-local event grammar. Unknown future `AgentEvent` discriminants remain tolerated by default projection logic.
+
+#### A4. UI contract
+
+**Primary UX model (Mark, 2026-06-05): collapsed, summarized, done-indicated progressive disclosure.** The human is *not necessarily a direct participant* in coworker-to-coworker activity, so sub-agent collaboration must default to a **single collapsed, summarized row** — not an always-expanded rail plus a stream of inline cards. The canonical shape is the familiar "sub-agent activity" disclosure:
+
+- **Collapsed (default):** one compact row summarizing the collaboration — who was brought in, how many coworkers, and the aggregate state — with a **done indicator** (an in-progress affordance while any sub-agent is working; a completion check when all sub-agents reach a terminal state). Example collapsed text: *"Sub-agent activity — Enterprise Architect · working"* → on completion *"Sub-agent activity — Enterprise Architect · done."*
+- **Expanded (on click):** the participant roster (the existing rail content) plus the per-event handoff/summon/return cards. Expansion is the user opting in to detail; it is never required to understand that collaboration happened or finished.
+- **Quiet for 1-1:** nothing renders when the owner is the only participant. The disclosure appears only when a peer/sub-agent is present or a recent collaboration event fired.
+- **Done signal is a runtime fact, not a guess.** The aggregate "done" state is computed from participant `TaskState` (terminal vs in-flight) and confirmed by `collaboration:return` (A3). While in-flight, the row shows a reduced-motion-safe progress affordance; on completion it shows a check plus a one-line outcome summary.
+
+The previous always-visible rail (`ConversationParticipantRail`) becomes the **expanded-detail body** of this disclosure rather than a top-level element. Implement the disclosure as a focused `CollaborationActivityPanel` (collapsible) that composes the existing rail + cards; do not leave the rail and a loose card stream as independent top-level panel elements.
+
+Remaining refinements:
+
+- Use report-kit status semantics end to end. Move the local `TaskState -> Intent` map from `ConversationParticipantRail.tsx` into the central `statusColors.ts` registry or a shared task-state badge wrapper.
+- Replace emoji glyphs in the collaboration UI with `lucide-react` icons such as `Handshake`, `UserPlus`, `Undo2`, `Users`, `ChevronRight`/`ChevronDown` (disclosure), `Loader2` (in-flight), and `CheckCircle2` (done).
+- Keep the disclosure compact and stable: fixed collapsed height, truncation, and tooltips so participant labels cannot resize the coworker panel or overlap the message stream.
+- Add `@mention` invocation as a separate refinement after the governed picker is correct. Do not ship `@mention` before governance and scoping are solved.
+- Scope the picker to route/value-stream/archetype-relevant coworkers by default, with an explicit "all coworkers" mode for advanced cases.
+- Apply the portal UI rules: CSS variables only, no local raw color maps, WCAG 2.2 AA contrast, color never as the sole channel, reduced-motion compatible activity indicators, and visible focus states.
+
+### Layer B - Collaboration Topology in the AI Operations Map
+
+Layer B is not built in this worktree. The Operations Map currently projects task runs, tool executions, receipts, backlog evidence, and external evidence; its types do not include a transfer/handoff overlay.
+
+Implement this as an extension of the existing map, not a new page:
+
+- Add an `OperationsMapTransfer` (or equivalent) projection alongside `OperationsMapProjection`, with `fromAgentId`, `toAgentId`, `parentThreadId`, `childThreadId`, `taskRunId`, `enteredVia`, `startedAt`, `completedAt`, `latencyMs`, `state`, and `delegationChainId?`.
+- Project transfer edges from `TaskRun.a2aMetadata`, `AgentThread.parentThreadId`, `collaboration:*` live events, and `DelegationChain` once Slice 2 writes hops.
+- Render transfers as a restrained overlay on `AiOperationsMap`, not as a dense graph by default. Selecting a transfer opens the existing inspector pattern with source, freshness, state, latency, and authority details.
+- Add a quick-view filter such as "Collaboration" only after transfer data exists; avoid a dead nav/control that shows no rows.
+
+### Layer C - Pattern Optimization Loop
+
+Layer C turns observed collaboration into optimization candidates.
+
+Use query-first aggregation:
+
+- Start with `TaskRun.repeatedPatternKey`, `TaskRun.a2aMetadata`, `DelegationChain`, and transfer projections. Do not add a `CollaborationPattern` table in the first implementation.
+- Key patterns by stable roles/capabilities, not raw display names: `(initiatingRoleOrCapability, targetRoleOrCapability, routeContext/valueStream, enteredVia)`.
+- Compute occurrence count, success rate, median hop latency, stall/input-required rate, denied-attempt rate, and rework rate.
+- Feed high-friction patterns into the existing Process Observer path as backlog candidates.
+- Feed high-success repeated patterns into the procedural-codification queue: repeated agentic handoff that stabilizes should become deterministic orchestration where appropriate.
+
+Only introduce a persisted `CollaborationPattern` model if an `EXPLAIN` pass against realistic volumes shows the query-first approach is too expensive or if the Process Observer needs durable review workflow fields that existing rows cannot hold.
+
+## Data Model Posture
+
+No new migration is required for Slice 1A if the design uses existing `TaskRun.a2aMetadata` and `ToolExecution` audit rows.
+
+| Change | Status | Type |
+| --- | --- | --- |
+| `collaboration:handoff` / `collaboration:summon` / `collaboration:return` on `AgentEvent` | Present in worktree | Code |
+| `ConversationParticipant` read model | Present in worktree | Code |
+| `request_coworker` / `summon_coworker` tools + `TOOL_TO_GRANTS` entries | Present in worktree | Code |
+| `TaskRun.parentTaskRunId` populated during child thread spawn when parent task exists | Present in worktree | Code |
+| Persist collaboration provenance in `TaskRun.a2aMetadata` | Required Slice 1A | Code, no migration |
+| Governed UI summon path | Required Slice 1A | Code, no migration |
+| `delegatesTo` / `escalatesTo` enforcement + `DelegationChain` hop writes | Required Slice 2 | Code using existing models |
+| Operations Map transfer projection | Required Slice 2 | Code, no migration unless proven by load |
+| Collaboration pattern aggregation | Required Slice 3 | Query first; conditional migration only after evidence |
+
+Any future string-enum value follows AGENTS.md Section 3: update the canonical `as const` registry and MCP schemas in the same commit before data uses the value.
+
+## Dependency Posture vs A2A-Aligned Runtime
+
+This design depends on A2A task concepts: task identity, status/artifact updates, structured handoff payloads, and AgentCard-based discovery. It does not block on the full A2A runtime cutover.
+
+Current substrate:
+
+- `AgentThread.parentThreadId` is the load-bearing edge for conversation lineage.
+- `TaskRun.parentTaskRunId` is now populated when possible.
+- `TaskRun.a2aMetadata` is the preferred short-term home for collaboration provenance.
+- `AgentEvent` over SSE carries live visibility.
+- `ToolExecution` carries governed execution evidence when a collaboration tool is invoked through MCP.
+
+When `TaskMessage` / `TaskArtifact` persistence is fully adopted for task-native chat, the participant read model and cards should re-point to those artifacts without changing the user-facing UX contract.
 
 ## Slices
 
-**Slice 1 — Conversational multi-agent (G1 + G2), read + governed-write, no migration.**
-- `collaboration:*` discriminants on the canonical bus; `ConversationParticipant` projection; `request_coworker` + `summon_coworker` tools (governed); `AgentCoworkerPanel` participant rail + inline handoff card + summon picker.
-- Acceptance: a coworker can request a named peer and the user *sees* the handoff inline with the question-packet summary; the user can summon a specific coworker as a tier-2 participant; every handoff resolves to a real bus event + `TaskRun` (trace integrity); a11y + reduced-motion parity with Operations Map V1; build gate green (vitest + typecheck + `next build`); UX verified on the canonical local install.
+### Slice 1A - Harden the Conversational Layer
 
-**Slice 2 — Authority enforcement + topology overlay (G3 operator).**
-- Enforce `delegatesTo`/`escalatesTo`; write `DelegationChain` hops; wire the Operations Map `Transfer` object + collaboration-graph inspector to `collaboration:*`.
-- Acceptance: out-of-scope `request_coworker` is denied with a recorded reason; multi-participant work renders as Transfer edges on the Operations Map with per-hop latency/state.
+Scope: finish the implementation already present in this worktree.
 
-**Slice 3 — Pattern optimization loop (G3 governance).**
-- `CollaborationPattern` aggregation (query-first); Process Observer feed; codification-candidate surfacing.
-- Acceptance: recurring high-friction handoff patterns appear as triaged backlog items; high-success patterns are flagged as procedural-codification candidates.
+- **Collapsed/summarized disclosure (Mark, 2026-06-05):** introduce a `CollaborationActivityPanel` that is collapsed and summarized by default with a done indicator, composing the existing rail (as expanded detail) and the handoff/summon/return cards. Replace the always-visible rail + loose card stream with this disclosure.
+- Add the return event path for child task terminal states so the done indicator is a confirmed runtime fact; while the return event is being wired, drive the indicator from participant `TaskState` (poll while in-flight).
+- Persist collaboration provenance in `TaskRun.a2aMetadata` so cards and participant `enteredVia` survive refresh.
+- Route UI summon through governed policy; make `request_coworker` proposal-aware or explicitly bounded.
+- Replace local status intent mapping with report-kit central status semantics.
+- Replace emoji glyphs with lucide icons and verify compact responsive behavior.
+- Add focused tests for `coworker-collaboration.ts`, `coworker-summon.ts`, the collaboration disclosure summary/done logic, and the panel's collaboration event handling.
+
+Acceptance:
+
+- By default the panel shows a single collapsed, summarized collaboration row with a clear in-progress/done indicator; expanding reveals the roster and cards. Nothing renders for a 1-1 conversation.
+- The done indicator flips to "done" when all sub-agents reach a terminal `TaskState`, confirmed by `collaboration:return` where available.
+- A coworker can request a named peer, and the user sees the persisted summary after refresh.
+- A user can summon a coworker through a governed picker; out-of-scope summon attempts are denied with a clear user-safe reason and no child thread.
+- Participant state uses central report-kit semantics and no local status color map.
+- Component tests cover no-overlap/no-overflow core states; UX verification runs against the canonical local install or shared local-CI convergence sandbox.
+
+### Slice 2 - Authority and Operations Map Topology
+
+Scope: enforce authority and expose topology to operators.
+
+- Enforce `Agent.delegatesTo` / `Agent.escalatesTo` for request/summon.
+- Write `DelegationChain` hops for accepted and denied collaboration attempts.
+- Add `OperationsMapTransfer` projection and inspector.
+- Render transfer edges on the existing AI Operations Map.
+
+Acceptance:
+
+- Out-of-scope `request_coworker` is denied, records an auditable reason, and does not spawn a child thread.
+- A completed handoff renders as a transfer edge with source, freshness, state, latency, and authority details.
+- The map still works if one source is unavailable and labels stale/partial transfer data rather than collapsing it into a false status.
+
+### Slice 3 - Pattern Optimization
+
+Scope: aggregate patterns and feed improvement loops.
+
+- Query recurring handoff/summon patterns from task metadata, transfer projections, and delegation chains.
+- Feed high-friction patterns to Process Observer/backlog triage.
+- Surface high-success repeated patterns as procedural-codification candidates.
+- Add persistence only if query-first evidence proves it necessary.
+
+Acceptance:
+
+- Operators can see the top recurring collaboration patterns, stall/input-required rates, and median hop latency.
+- High-friction patterns can become backlog items with concrete evidence.
+- High-success patterns can be promoted to an orchestration-primitives/proceduralization review.
+
+## Refactoring Budget
+
+Reserve at least 20 percent of the implementation effort for refactoring and UI hardening, not just feature wiring:
+
+- Extract collaboration state/event handling out of `AgentCoworkerPanel.tsx` into a focused hook or child component so the panel does not become the collaboration runtime.
+- Centralize task-state badge intent mapping in report-kit or a shared `TaskStateBadge`.
+- Normalize collaboration provenance writes in one helper used by both MCP and UI summon paths.
+- Keep Operations Map transfer projection pure/testable, mirroring the current `project-events.ts` split from DB loading.
+- Add regression tests before broadening behavior; avoid "works in live chat" as the only evidence.
 
 ## Risks
 
-1. **Owner/governance dilution.** Surfacing peers must not silently transfer authority. Mitigation: PAR + orchestrator-worker — peers are participants, the owner remains the governance principal; peer mutation requires acknowledge.
-2. **Chat-as-runtime regression.** If handoffs leak through free-text instead of governed tools + bus events, visibility is fake. Mitigation: handoffs are *only* created by `request_coworker`/`summon_coworker`; trace-integrity test asserts every handoff card has a backing event + `TaskRun`.
-3. **Parallel-surface drift.** Re-implementing collaboration viz outside the Operations Map. Mitigation: Layer B composes into the existing map's grammar/inspector; no new viz substrate.
-4. **Premature persistence.** Mitigation: slices 1-2 are migration-free; `CollaborationPattern` is query-first.
+1. **Governance bypass.** The current UI summon action can become a side door if it bypasses the governed execution path. Mitigation: Slice 1A makes policy parity explicit before broad UX rollout.
+2. **Visible but non-persistent handoffs.** Live cards that disappear on refresh create false confidence. Mitigation: persist provenance on existing task metadata and reconstruct cards/read models from it.
+3. **Owner dilution.** Multi-agent UX can imply authority moved to the peer. Mitigation: PAR states owner, peer, return, and mutation authority explicitly.
+4. **Parallel visualization surface.** A new graph page would duplicate the Operations Map. Mitigation: transfer overlay composes into the existing map and inspector.
+5. **Premature table design.** A `CollaborationPattern` table before query evidence would violate schema stewardship. Mitigation: query-first with `TaskRun.repeatedPatternKey` and metadata.
+6. **UI clutter.** A participant rail can become noisy in normal 1-1 work. Mitigation: quiet by default; show only when multiple participants or a recent collaboration event exists.
 
 ## Open Questions
 
-1. Should the conversation *owner* be allowed to delegate ownership to a summoned orchestrator coworker (tier-2 becomes mediator), or is ownership fixed to the route-resolved coworker for the conversation's life?
-2. For `summon_coworker`, is the picker scoped to the current archetype/value-stream's coworkers by default, with an "all" override — or always the full registry?
-3. Does `CollaborationPattern` key on `Agent` role or on `PrincipalAlias`/`AgentCard` capability (the latter survives agent re-org)?
+1. Should ownership ever transfer to a summoned orchestrator coworker, or is the route-resolved owner fixed for the conversation lifetime?
+2. Should the coworker picker default scope be route, value stream, archetype, or a weighted blend of those?
+3. Should `request_coworker` be a proposal-mode tool in all cases, or only when delegation scope is exceeded?
+4. Should persisted collaboration provenance live only in `TaskRun.a2aMetadata`, or also produce a compact `AgentMessage` system card for transcript history?
+5. Should pattern keys prefer AgentCard capability over role/agent id to survive future agent reorgs?
 
 ## Recommendation
 
-Proceed with Slice 1 as the first build: it directly closes the visible-handoff (G1) and coworker-summon (G2) gaps Mark named, adds **no migration**, reuses `spawn_work_thread` + the canonical event bus + the SSE transport + report-kit, and lands the projection seam that the A2A-aligned runtime and Operations Map can both attach to. Slices 2-3 layer enforcement and the optimization loop onto that seam.
+Do not start with the Operations Map overlay. First finish **Slice 1A**: harden the conversational layer already present in this worktree so it is governed, persistent across refresh, visually polished, and tested. Then implement Slice 2 as the operator topology layer. This keeps the user-visible value close while paying the architecture/refactor bill before the prototype hardens into debt.

@@ -12,11 +12,12 @@ import { AgentSkillAttributionChip } from "./AgentSkillAttributionChip";
 import { AgentMessageBubble } from "./AgentMessageBubble";
 import { AgentMessageInput } from "./AgentMessageInput";
 import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
-import { ConversationParticipantRail } from "./ConversationParticipantRail";
-import { HandoffCard, type CollaborationCard } from "./HandoffCard";
+import { CollaborationActivityPanel } from "./CollaborationActivityPanel";
+import type { CollaborationCard } from "./HandoffCard";
 import { CoworkerSummonPicker } from "./CoworkerSummonPicker";
 import { getConversationParticipants } from "@/lib/actions/coworker-summon";
 import type { ConversationParticipant } from "@/lib/tak/conversation-participants-core";
+import { isTaskInFlight } from "@/lib/tak/task-state-intent";
 import { CoworkerHealthStatus } from "@/components/monitoring/CoworkerHealthStatus";
 import { SetupActionButtons } from "@/components/setup/SetupActionButtons";
 import { resolveCoworkerRuntimeMode } from "./coworker-runtime-mode";
@@ -183,6 +184,16 @@ export function AgentCoworkerPanel({
   useEffect(() => {
     refreshParticipants();
   }, [refreshParticipants]);
+
+  // While any sub-agent is in-flight, poll the roster so the done indicator
+  // flips to "done" when child tasks reach a terminal state. (Slice 2 wires
+  // collaboration:return from child terminal transitions to make this push.)
+  useEffect(() => {
+    const anyInFlight = participants.some((p) => p.role !== "owner" && isTaskInFlight(p.state));
+    if (!anyInFlight) return;
+    const t = setInterval(() => refreshParticipantsRef.current(), 4000);
+    return () => clearInterval(t);
+  }, [participants]);
   const voiceSynth = useVoiceSynth();
   // Keep a ref so the SSE done handler always sees the latest voiceSynth state
   // without needing to re-subscribe the EventSource on every render.
@@ -823,8 +834,8 @@ export function AgentCoworkerPanel({
         />
       )}
 
-      {/* EP-A2A: multi-agent participant rail (quiet for 1-1) + summon affordance */}
-      <ConversationParticipantRail participants={participants} />
+      {/* EP-A2A: collapsed/summarized sub-agent activity disclosure (quiet for 1-1) + summon affordance */}
+      <CollaborationActivityPanel participants={participants} cards={collaborationCards} />
       {threadId ? (
         <CoworkerSummonPicker
           parentThreadId={threadId}
@@ -873,10 +884,6 @@ export function AgentCoworkerPanel({
             />
           );
         })}
-        {/* EP-A2A: inline handoff/summon/return cards (the visible multi-agent moments) */}
-        {collaborationCards.map((card) => (
-          <HandoffCard key={card.id} card={card} />
-        ))}
         {/* Setup action buttons — shown when setup overlay is active */}
         <SetupActionButtonsWrapper isPending={isBusy} />
         {(isBusy || isClearing || buildTasks.size > 0) && (
