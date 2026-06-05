@@ -16,7 +16,11 @@
 // they simply stop being mislabeled as products (their digitalProductId is
 // nulled, so they remain attributed to their taxonomy node as inventory).
 
-import { isNonProductEntityType } from "./discovery-promotion-policy";
+import {
+  isNonProductEntityType,
+  classifyEstateProvenance,
+  type EstateProvenance,
+} from "./discovery-promotion-policy";
 
 export type ReconcileSummary = {
   /** DigitalProducts removed because they were infrastructure, not products. */
@@ -38,7 +42,7 @@ type ReconcileDb = {
       id: string;
       productId: string;
       name: string;
-      inventoryEntities: Array<{ id: string; entityType: string }>;
+      inventoryEntities: Array<{ id: string; entityType: string; name?: string | null; properties?: unknown }>;
     }>>;
     delete(args: { where: { id: string } }): Promise<unknown>;
   };
@@ -51,15 +55,23 @@ type ReconcileDb = {
 };
 
 /**
- * Decide whether a product is infrastructure that was wrongly promoted.
- * Pure — exported for unit testing.
+ * Decide whether a product is PLATFORM-INTERNAL infrastructure that was wrongly
+ * promoted (and should be demoted). Pure — exported for unit testing.
+ *
+ * A product is demoted only when every linked entity is BOTH an infra entityType
+ * AND platform-internal provenance (the platform's own Docker/local runtime).
+ * Real-estate devices (a camera/NVR/gateway on the operator's LAN) are kept —
+ * they are legitimate Foundational Digital Products even though their entityType
+ * is host/network.
  */
 export function isInfrastructureProduct(
-  linkedEntityTypes: readonly string[],
+  linkedEntities: ReadonlyArray<{ entityType: string; provenance: EstateProvenance }>,
 ): boolean {
   return (
-    linkedEntityTypes.length > 0 &&
-    linkedEntityTypes.every((t) => isNonProductEntityType(t))
+    linkedEntities.length > 0 &&
+    linkedEntities.every(
+      (e) => isNonProductEntityType(e.entityType) && e.provenance === "platform_internal",
+    )
   );
 }
 
@@ -82,13 +94,26 @@ export async function reconcilePromotedProducts(
       id: true,
       productId: true,
       name: true,
-      inventoryEntities: { select: { id: true, entityType: true } },
+      inventoryEntities: { select: { id: true, entityType: true, name: true, properties: true } },
     },
   });
 
   for (const product of products) {
-    const types = product.inventoryEntities.map((e) => e.entityType);
-    if (!isInfrastructureProduct(types)) {
+    const linked = product.inventoryEntities.map((e) => {
+      const props = (e.properties ?? {}) as Record<string, unknown>;
+      return {
+        entityType: e.entityType,
+        provenance: classifyEstateProvenance({
+          discoveredVia: typeof props.discoveredVia === "string" ? props.discoveredVia : null,
+          addressHint:
+            (typeof props.address === "string" && props.address) ||
+            (typeof props.ip === "string" && props.ip) ||
+            e.name ||
+            null,
+        }),
+      };
+    });
+    if (!isInfrastructureProduct(linked)) {
       summary.kept++;
       continue;
     }
