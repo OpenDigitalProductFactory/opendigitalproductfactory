@@ -290,6 +290,24 @@ With the roster delivered:
 - **Runtime archetype change**: same substrate behavior; resolver re-runs per page load. No substrate change required.
 - **Per-archetype override deferral**: an archetype can opt into category-fallback for years; when evidence justifies the override, file (or pick up an already-filed) per-archetype BI, ship a contribution at the archetype level, and the resolver picks it on the next page load.
 
+### 9.1 Cross-cutting orchestrator — BI-B14D6CF6
+
+Resolver routing + activation-summary projection are automatic, but per the operator direction 2026-06-04:
+
+> "These differences are installed / established when the archetypes are chosen. The portal configuration needs to follow the needs of these business archetypes with little effort." — Mark Bodman
+
+…**install-time + runtime alignment of canonical data, signals, setup tasks, and empty-state behavior** with each contribution's `setupActivation` declarations is NOT yet implemented. The parent spec §5.5 promises that setup will "create setup tasks, seed safe demo records in test installs, or show honest empty states" from those declarations; no BI on main owns delivering that promise universally.
+
+**[BI-B14D6CF6](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues?q=BI-B14D6CF6)** — *Archetype-driven workspace-home setup activation orchestrator* — is filed as the cross-cutting BI that closes this gap. It extends the existing `StorefrontArchetype.activationProfile` activation pipeline to honor `WorkspaceHomeContribution.setupActivation` for every contribution. One orchestrator. Consumed by every BI in this roster.
+
+Universal, not per-archetype: every category-level + exact-archetype contribution gets archetype-driven setup-task generation, signal binding, empty-state coordination, and (on test installs only, gated by `DPF_SEED_DEMO_DATA=true`) declaration-derived demo-data seeding through the same code path. No per-BI orchestration code.
+
+Continuous tracking, not one-shot: activation runs at archetype selection, at archetype change, AND on a reconciliation cadence so the install's state stays aligned with the contribution's declarations over time. Drift surfaces as setup tasks the admin can act on.
+
+**Sequencing implication**: BI-B14D6CF6 is a hard dependency for "little-effort" archetype-driven install configuration. Every category-level BI in §7 implicitly consumes it. Once BI-B14D6CF6 ships, each consolidating BI's implementation simplifies — the orchestrator owns the setup-activation mechanics; the per-category BI ships the contribution literal + per-category vocabulary + slot composition only.
+
+**Dale HVAC plan (PR #1442) Phase 9 simplifies**: the orchestrator owns auto-seed; the plan's per-BI fixture file disappears. The same simplification applies to every other consolidating BI.
+
 ## 10. Standing rules audit
 
 - **Mirror, don't migrate.** Pure roster doc. No code, no schema, no migration.
