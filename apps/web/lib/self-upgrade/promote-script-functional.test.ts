@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, chmodSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, chmodSync, mkdirSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -16,6 +16,29 @@ import { join, resolve } from "node:path";
 const SCRIPT = resolve(__dirname, "../../../../scripts/promote.sh");
 const BASH_OK = spawnSync("bash", ["--version"], { encoding: "utf8" }).status === 0;
 const GIT_OK = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
+const PROMOTE_TEST_TIMEOUT_MS = 30_000;
+
+let bashDrivePrefix: string | undefined;
+
+function toBashPath(value: string): string {
+  if (process.platform !== "win32") return value;
+  const normalized = value.replace(/\\/g, "/");
+  const drivePath = /^([A-Za-z]):\/(.*)$/.exec(normalized);
+  if (!drivePath) return normalized;
+
+  const drive = drivePath[1].toLowerCase();
+  const rest = drivePath[2];
+  if (bashDrivePrefix === undefined) {
+    const cwdDrive = /^([A-Za-z]):/.exec(process.cwd())?.[1]?.toLowerCase();
+    const pwd = spawnSync("bash", ["-lc", "pwd"], { encoding: "utf8" }).stdout.trim();
+    bashDrivePrefix = cwdDrive && pwd.startsWith(`/mnt/${cwdDrive}/`) ? "/mnt" : "";
+  }
+  return `${bashDrivePrefix}/${drive}/${rest}`;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
 
 function gitInit(dir: string): string {
   const env = {
@@ -28,6 +51,8 @@ function gitInit(dir: string): string {
     GIT_CONFIG_SYSTEM: "/dev/null",
   };
   execFileSync("git", ["init", "-b", "main", dir], { env });
+  execFileSync("git", ["-C", dir, "config", "core.autocrlf", "false"], { env });
+  execFileSync("git", ["-C", dir, "config", "core.eol", "lf"], { env });
   writeFileSync(join(dir, "Dockerfile"), "FROM scratch\n");
   writeFileSync(join(dir, "docker-compose.yml"), "services: {}\n");
   writeFileSync(join(dir, "docker-compose.macos.yml"), "services: {}\n");
@@ -39,7 +64,7 @@ function gitInit(dir: string): string {
 /** Fake `docker` and `curl` on PATH. */
 function makeFakeBin(root: string): string {
   const bin = join(root, "bin");
-  execFileSync("mkdir", ["-p", bin]);
+  mkdirSync(bin, { recursive: true });
   // docker: `build`/`up` are no-ops; any `cat /app/.dpf-source-content-hash`
   // (the content-verify guard — step 3 `docker run` and step 7
   // `docker compose exec`) returns a single stable hash so built==running.
@@ -67,21 +92,20 @@ function runPromote(opts: {
   composeEnvFile?: string;
   dockerLog?: string;
 }): { status: number | null; stdout: string; stderr: string } {
-  const r = spawnSync("bash", [SCRIPT, "--self-upgrade"], {
+  const exports = [
+    `export PATH=${shellQuote(toBashPath(opts.fakeBin))}:"$PATH"`,
+    `export PROMOTE_SOURCE=${shellQuote(toBashPath(opts.source))}`,
+    `export PROMOTE_TARGET_SHA=${shellQuote(opts.targetSha)}`,
+    `export PROMOTE_BACKUP_PATH=${shellQuote(toBashPath(opts.backup))}`,
+    "export PROMOTE_HEALTH_URL='http://127.0.0.1:9/api/health'",
+    "export PROMOTE_COMPOSE_PROJECT='dpf-functest'",
+    ...(opts.composeEnvFile
+      ? [`export PROMOTE_COMPOSE_ENV_FILE=${shellQuote(toBashPath(opts.composeEnvFile))}`]
+      : []),
+    ...(opts.dockerLog ? [`export DOCKER_LOG=${shellQuote(toBashPath(opts.dockerLog))}`] : []),
+  ];
+  const r = spawnSync("bash", ["-lc", `${exports.join("\n")}\nexec bash ${shellQuote(toBashPath(SCRIPT))} --self-upgrade`], {
     encoding: "utf8",
-    env: {
-      ...process.env,
-      PATH: `${opts.fakeBin}:${process.env.PATH}`,
-      PROMOTE_SOURCE: opts.source,
-      PROMOTE_TARGET_SHA: opts.targetSha,
-      // Backup path is OUTSIDE the source tree (as in production: /backups/...),
-      // so it never dirties the build source.
-      PROMOTE_BACKUP_PATH: opts.backup,
-      PROMOTE_HEALTH_URL: "http://127.0.0.1:9/api/health",
-      PROMOTE_COMPOSE_PROJECT: "dpf-functest",
-      ...(opts.composeEnvFile ? { PROMOTE_COMPOSE_ENV_FILE: opts.composeEnvFile } : {}),
-      ...(opts.dockerLog ? { DOCKER_LOG: opts.dockerLog } : {}),
-    },
   });
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
 }
@@ -90,7 +114,7 @@ function runPromote(opts: {
 function makeScratch(): { root: string; source: string; backup: string; fakeBin: string; head: string } {
   const root = mkdtempSync(join(tmpdir(), "dpf-promote-"));
   const source = join(root, "src");
-  execFileSync("mkdir", ["-p", source]);
+  mkdirSync(source, { recursive: true });
   const head = gitInit(source);
   const fakeBin = makeFakeBin(root);
   return { root, source, backup: join(root, "backup"), fakeBin, head };
@@ -110,7 +134,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, PROMOTE_TEST_TIMEOUT_MS);
 
   it("derives a -dirty stamp when the build source has uncommitted changes", () => {
     const { root, source, backup, fakeBin, head } = makeScratch();
@@ -122,7 +146,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, PROMOTE_TEST_TIMEOUT_MS);
 
   it("warns (does not silently mislabel) when the tree identity differs from the expected stamp", () => {
     const { root, source, backup, fakeBin, head } = makeScratch();
@@ -136,7 +160,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, PROMOTE_TEST_TIMEOUT_MS);
 
   it("passes the canonical install env file to docker compose when configured", () => {
     const { root, source, backup, fakeBin, head } = makeScratch();
@@ -149,12 +173,14 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
 
       expect(r.status).toBe(0);
       const log = readFileSync(dockerLog, "utf8");
-      expect(log).toContain(`compose --env-file ${envFile} --project-directory ${source}`);
+      expect(log).toContain(
+        `compose --env-file ${toBashPath(envFile)} --project-directory ${toBashPath(source)}`,
+      );
       expect(log).toContain("build portal");
       expect(log).toContain("up -d --no-deps --force-recreate portal");
       expect(log).toContain("exec -T portal cat /app/.dpf-source-content-hash");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, PROMOTE_TEST_TIMEOUT_MS);
 });
