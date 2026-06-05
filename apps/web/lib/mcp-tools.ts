@@ -12302,6 +12302,13 @@ export async function executeTool(
       const organizationId: string | null = org?.id ?? null;
 
       // 1. Commandments from Postgres (full dimension vector). Always applied.
+      // limit 50 (not 10): commandments are uncapped doctrine as of 2026-05-22
+      // and the comment above claims they are "Always applied" — but there are
+      // now 19+ commandment principles, so a limit of 10 silently truncated ~9
+      // of them from every decision (ordered by lastReviewedAt/title), letting
+      // process commandments crowd out doctrine like architecture-over-shortcuts.
+      // 50 matches listPrinciplesByTier's own default and leaves headroom.
+      // See docs/superpowers/specs/2026-06-05-situational-aware-decision-weighting-design.md §1 RC4.
       let commandments: Array<Record<string, unknown>> = [];
       try {
         commandments = (await listPrinciplesByTier(prisma, {
@@ -12309,7 +12316,7 @@ export async function executeTool(
           organizationId,
           appliesTo: callingPopulation,
           ringScope,
-          limit: 10,
+          limit: 50,
         })) as Array<Record<string, unknown>>;
       } catch (err) {
         console.warn("[principle_decide] commandment Postgres lookup failed:", err);
