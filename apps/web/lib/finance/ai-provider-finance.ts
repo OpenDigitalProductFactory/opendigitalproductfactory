@@ -29,6 +29,43 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+type FinanceCommitmentKind = "ai_provider" | "domain" | "saas_subscription" | "one_time";
+
+type EnsureFinanceCommitmentInput = {
+  commitmentKind: FinanceCommitmentKind;
+  externalReference: string;
+  title: string;
+  supplierName: string;
+  commitmentSource?: string;
+  contractType?: string;
+  billingCadence?: string;
+  currency?: string;
+  monthlyCommittedAmount?: number;
+  budgetAmount?: number;
+  renewalDate?: string | Date;
+  startDate?: string | Date;
+  endDate?: string | Date;
+  billingUrl?: string;
+  usageUrl?: string;
+  accountableEmployeeId?: string;
+  profileId?: string | null;
+  missingFields?: string[];
+  routeTarget?: string;
+};
+
+function dateOrNull(value: string | Date | undefined): Date | null {
+  if (!value) return null;
+  return value instanceof Date ? value : new Date(value);
+}
+
+function humanizeWorkItemType(value: string): string {
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 async function ensureSupplier(input: SeedAiProviderFinanceBridgeInput) {
   const supplierName = input.supplierName ?? input.providerName;
   const existing = await prisma.supplier.findFirst({
@@ -71,6 +108,22 @@ async function createFinanceWorkItem(input: CreateFinanceWorkItemInput) {
   });
 }
 
+async function ensureFinanceWorkItem(input: CreateFinanceWorkItemInput) {
+  const existing = await prisma.financeWorkItem.findFirst({
+    where: {
+      profileId: input.profileId ?? undefined,
+      contractId: input.contractId ?? undefined,
+      supplierId: input.supplierId ?? undefined,
+      type: input.type,
+      status: { in: ["open", "in_progress"] },
+    },
+    select: { id: true, workItemId: true },
+  });
+
+  if (existing) return existing;
+  return createFinanceWorkItem(input);
+}
+
 export async function seedAiProviderFinanceBridge(input: SeedAiProviderFinanceBridgeInput) {
   const supplier = await ensureSupplier(input);
 
@@ -111,6 +164,9 @@ export async function seedAiProviderFinanceBridge(input: SeedAiProviderFinanceBr
       profileId: profile.id,
       supplierId: supplier.id,
       accountableEmployeeId: input.accountableEmployeeId ?? null,
+      commitmentKind: "ai_provider",
+      commitmentSource: "ai_provider_registry",
+      externalReference: `ai-provider:${input.providerId}`,
       status: "draft",
       contractType: "subscription",
       billingCadence: "monthly",
@@ -126,13 +182,15 @@ export async function seedAiProviderFinanceBridge(input: SeedAiProviderFinanceBr
     select: { id: true, contractId: true },
   });
 
-  const missingPlanDetails =
-    input.monthlyCommittedAmount === undefined ||
-    input.includedQuantity === undefined ||
-    !input.usageUnit;
+  const missingFields = [
+    input.monthlyCommittedAmount === undefined ? "monthlyCommittedAmount" : null,
+    input.includedQuantity === undefined ? "includedQuantity" : null,
+    !input.usageUnit ? "usageUnit" : null,
+  ].filter((field): field is string => Boolean(field));
+  const missingPlanDetails = missingFields.length > 0;
 
   const workItem = missingPlanDetails
-    ? await createFinanceWorkItem({
+    ? await ensureFinanceWorkItem({
         profileId: profile.id,
         contractId: contract.id,
         supplierId: supplier.id,
@@ -142,6 +200,15 @@ export async function seedAiProviderFinanceBridge(input: SeedAiProviderFinanceBr
         title: `Complete AI plan details for ${input.providerName}`,
         description: "Capture commitment, included allowance, and billing source details for finance ownership.",
         severity: "medium",
+        metadata: {
+          askKind: "human_finance_gap",
+          source: "ai_provider_finance_reconciliation",
+          providerId: input.providerId,
+          providerName: input.providerName,
+          missingFields,
+          routeTarget: "/finance/spend/ai",
+          suggestedQuestion: `What plan, monthly cost, included allowance, and billing source should Finance track for ${input.providerName}?`,
+        },
       })
     : null;
 
@@ -150,6 +217,158 @@ export async function seedAiProviderFinanceBridge(input: SeedAiProviderFinanceBr
     profileId: profile.id,
     contractId: contract.id,
     workItemId: workItem?.id ?? null,
+  };
+}
+
+export async function ensureFinanceCommitment(input: EnsureFinanceCommitmentInput) {
+  const supplier = await prisma.supplier.findFirst({
+    where: { name: input.supplierName },
+    select: { id: true, supplierId: true },
+  }) ?? await prisma.supplier.create({
+    data: {
+      supplierId: `SUP-${nanoid(8)}`,
+      name: input.supplierName,
+      paymentTerms: "Net 30",
+      defaultCurrency: input.currency ?? "USD",
+      notes: `Finance commitment supplier for ${input.title}.`,
+      status: "active",
+    },
+    select: { id: true, supplierId: true },
+  });
+
+  const missingFields = input.missingFields ?? [
+    input.monthlyCommittedAmount === undefined ? "monthlyCommittedAmount" : null,
+    input.renewalDate === undefined && input.contractType !== "one_time" ? "renewalDate" : null,
+  ].filter((field): field is string => Boolean(field));
+
+  const contract = await prisma.supplierContract.upsert({
+    where: { externalReference: input.externalReference },
+    create: {
+      contractId: `FNC-${nanoid(8)}`,
+      profileId: input.profileId ?? null,
+      supplierId: supplier.id,
+      accountableEmployeeId: input.accountableEmployeeId ?? null,
+      commitmentKind: input.commitmentKind,
+      commitmentSource: input.commitmentSource ?? "manual_finance_intake",
+      externalReference: input.externalReference,
+      status: "draft",
+      contractType: input.contractType ?? "subscription",
+      billingCadence: input.billingCadence ?? "monthly",
+      currency: input.currency ?? "USD",
+      monthlyCommittedAmount: decimal(input.monthlyCommittedAmount),
+      budgetAmount: decimal(input.budgetAmount),
+      budgetWindow: input.billingCadence ?? "monthly",
+      billingUrl: input.billingUrl ?? null,
+      usageUrl: input.usageUrl ?? null,
+      renewalDate: dateOrNull(input.renewalDate),
+      startDate: dateOrNull(input.startDate),
+      endDate: dateOrNull(input.endDate),
+      allowsOverage: false,
+      notes: input.title,
+    },
+    update: {
+      profileId: input.profileId ?? undefined,
+      supplierId: supplier.id,
+      accountableEmployeeId: input.accountableEmployeeId ?? null,
+      commitmentKind: input.commitmentKind,
+      commitmentSource: input.commitmentSource ?? "manual_finance_intake",
+      contractType: input.contractType ?? "subscription",
+      billingCadence: input.billingCadence ?? "monthly",
+      currency: input.currency ?? "USD",
+      monthlyCommittedAmount: decimal(input.monthlyCommittedAmount),
+      budgetAmount: decimal(input.budgetAmount),
+      budgetWindow: input.billingCadence ?? "monthly",
+      billingUrl: input.billingUrl ?? null,
+      usageUrl: input.usageUrl ?? null,
+      renewalDate: dateOrNull(input.renewalDate),
+      startDate: dateOrNull(input.startDate),
+      endDate: dateOrNull(input.endDate),
+      notes: input.title,
+    },
+    select: { id: true, contractId: true },
+  });
+
+  const workItem = missingFields.length > 0
+    ? await ensureFinanceWorkItem({
+        contractId: contract.id,
+        supplierId: supplier.id,
+        ownerEmployeeId: input.accountableEmployeeId,
+        type: "commitment_details_needed",
+        status: "open",
+        severity: "medium",
+        title: `Complete financial details for ${input.title}`,
+        description: `Capture ${missingFields.map(humanizeWorkItemType).join(", ")} so Finance can account for this commitment.`,
+        metadata: {
+          askKind: "human_finance_gap",
+          source: input.commitmentSource ?? "manual_finance_intake",
+          commitmentKind: input.commitmentKind,
+          externalReference: input.externalReference,
+          missingFields,
+          routeTarget: input.routeTarget ?? "/finance/spend",
+          suggestedQuestion: `What cost, renewal, billing owner, and payment evidence should Finance track for ${input.title}?`,
+        },
+      })
+    : null;
+
+  return {
+    supplierId: supplier.id,
+    contractId: contract.id,
+    workItemId: workItem?.id ?? null,
+  };
+}
+
+export async function reconcileAiProviderFinanceGaps() {
+  const providers = await prisma.modelProvider.findMany({
+    where: {
+      status: "active",
+      OR: [
+        { cliEngine: { not: null } },
+        { costModel: "subscription" },
+        { costBand: { not: "free" } },
+        { inputPricePerMToken: { not: null } },
+        { outputPricePerMToken: { not: null } },
+      ],
+    },
+    select: {
+      providerId: true,
+      name: true,
+      cliEngine: true,
+      costModel: true,
+      billingLabel: true,
+      consoleUrl: true,
+      docsUrl: true,
+      inputPricePerMToken: true,
+      outputPricePerMToken: true,
+      financeProfile: { select: { id: true } },
+    },
+    orderBy: { providerId: "asc" },
+  });
+
+  let seededProfiles = 0;
+  let queuedHumanAsks = 0;
+
+  for (const provider of providers) {
+    const result = await seedAiProviderFinanceBridge({
+      providerId: provider.providerId,
+      providerName: provider.name,
+      billingUrl: provider.consoleUrl ?? undefined,
+      usageUrl: provider.consoleUrl ?? provider.docsUrl ?? undefined,
+      reconciliationStrategy: provider.costModel === "subscription" || provider.cliEngine
+        ? "provider_portal"
+        : "internal_observed",
+      valuationMethod: provider.costModel === "subscription" || provider.cliEngine
+        ? "commitment_first"
+        : "metered",
+    });
+
+    if (!provider.financeProfile) seededProfiles++;
+    if (result.workItemId) queuedHumanAsks++;
+  }
+
+  return {
+    inspectedProviders: providers.length,
+    seededProfiles,
+    queuedHumanAsks,
   };
 }
 
@@ -262,8 +481,17 @@ export async function getAiSpendOverview() {
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 
-  const [profiles, contracts, workItems, snapshots, actualSpendAgg] = await Promise.all([
+  const [profiles, activeProviderCount, untrackedProviderCount, contracts, workItems, snapshots, actualSpendAgg] = await Promise.all([
     prisma.aiProviderFinanceProfile.count(),
+    prisma.modelProvider.count({
+      where: { status: "active" },
+    }),
+    prisma.modelProvider.count({
+      where: {
+        status: "active",
+        financeProfile: { is: null },
+      },
+    }),
     prisma.supplierContract.findMany({
       where: { status: { in: ["draft", "active"] } },
       select: {
@@ -304,9 +532,12 @@ export async function getAiSpendOverview() {
 
   return {
     supplierCount: profiles,
+    activeProviderCount,
+    untrackedProviderCount,
     committedSpend,
     contractsNeedingSetup,
     openWorkItems: workItems,
+    dataQualityIssueCount: untrackedProviderCount + contractsNeedingSetup + workItems,
     projectedUnusedCommitment,
     // EP-COST additions: actual spend from inference telemetry
     actualMeteredSpendUsd,
@@ -430,6 +661,8 @@ export async function getAiSupplierFinanceDetail(supplierId: string) {
 }
 
 export async function maybeRunAiProviderFinanceDailyEvaluation(now = new Date()) {
+  await reconcileAiProviderFinanceGaps();
+
   const contracts = await prisma.supplierContract.findMany({
     where: { status: "active" },
     include: {
@@ -458,7 +691,7 @@ export async function maybeRunAiProviderFinanceDailyEvaluation(now = new Date())
   return Promise.all(contracts.map(async (contract) => {
     const allowance = contract.allowances[0];
     if (!allowance) {
-      return createFinanceWorkItem({
+      return ensureFinanceWorkItem({
         contractId: contract.id,
         supplierId: contract.supplierId,
         ownerEmployeeId: contract.accountableEmployeeId ?? undefined,
@@ -482,7 +715,7 @@ export async function maybeRunAiProviderFinanceDailyEvaluation(now = new Date())
     });
 
     if (utilization.flags.includes("underused_commitment")) {
-      await createFinanceWorkItem({
+      await ensureFinanceWorkItem({
         contractId: contract.id,
         supplierId: contract.supplierId,
         ownerEmployeeId: contract.accountableEmployeeId ?? undefined,
@@ -495,7 +728,7 @@ export async function maybeRunAiProviderFinanceDailyEvaluation(now = new Date())
     }
 
     if (utilization.flags.includes("critical_low_allowance")) {
-      await createFinanceWorkItem({
+      await ensureFinanceWorkItem({
         contractId: contract.id,
         supplierId: contract.supplierId,
         ownerEmployeeId: contract.accountableEmployeeId ?? undefined,

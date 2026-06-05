@@ -2,8 +2,11 @@ import { FinanceSummaryCard } from "@/components/finance/FinanceSummaryCard";
 
 type Props = {
   supplierCount: number;
+  activeProviderCount: number;
+  untrackedProviderCount: number;
   committedSpend: number;
   contractsNeedingSetup: number;
+  openWorkItems: number;
   projectedUnusedCommitment: number;
   currencySymbol: string;
 };
@@ -14,22 +17,34 @@ function formatMoney(value: number) {
 
 export function AiSpendSummaryCard({
   supplierCount,
+  activeProviderCount,
+  untrackedProviderCount,
   committedSpend,
   contractsNeedingSetup,
+  openWorkItems,
   projectedUnusedCommitment,
   currencySymbol,
 }: Props) {
+  const hasTraceabilityGaps = untrackedProviderCount > 0 || contractsNeedingSetup > 0 || openWorkItems > 0;
+
   return (
     <FinanceSummaryCard
       title="AI Spend"
-      description="Track AI supplier commitments, utilization pressure, and contracts that still need finance setup."
+      description={
+        hasTraceabilityGaps
+          ? "AI provider costs need finance completion before the summary can be trusted."
+          : "Track AI supplier commitments, utilization pressure, and finance-owned provider costs."
+      }
       href="/finance/spend/ai"
-      accentColor="var(--dpf-info)"
+      accentColor={hasTraceabilityGaps ? "var(--dpf-error)" : "var(--dpf-info)"}
       metrics={[
-        { label: "AI suppliers", value: `${supplierCount}` },
+        { label: "AI profiles", value: `${supplierCount}/${activeProviderCount}` },
         { label: "Committed spend", value: `${currencySymbol}${formatMoney(committedSpend)}` },
-        { label: "Needs setup", value: `${contractsNeedingSetup}` },
-        { label: "Unused at risk", value: `${currencySymbol}${formatMoney(projectedUnusedCommitment)}` },
+        { label: "Unpriced providers", value: `${untrackedProviderCount}` },
+        { label: "Human asks", value: `${openWorkItems + contractsNeedingSetup}` },
+        ...(projectedUnusedCommitment > 0
+          ? [{ label: "Unused at risk", value: `${currencySymbol}${formatMoney(projectedUnusedCommitment)}` }]
+          : []),
       ]}
     />
   );

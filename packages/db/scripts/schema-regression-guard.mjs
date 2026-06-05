@@ -119,6 +119,27 @@ export function parseSchema(source) {
 //
 // Compare two parsed schemas. Returns an array of human-readable regression
 // strings. An empty array means no regressions.
+function parseModelFieldLine(line) {
+  if (line.startsWith("@")) return null;
+  const match = /^(\w+)\s+([^\s]+)(.*)$/.exec(line);
+  if (!match) return null;
+  return {
+    name: match[1],
+    type: match[2],
+    suffix: match[3].trim(),
+  };
+}
+
+function isOptionalityWidening(baseLine, headLine) {
+  const base = parseModelFieldLine(baseLine);
+  const head = parseModelFieldLine(headLine);
+  if (!base || !head) return false;
+  if (base.name !== head.name) return false;
+  if (base.type.endsWith("?")) return false;
+  if (head.type !== `${base.type}?`) return false;
+  return base.suffix === head.suffix;
+}
+
 export function diffSchemas(base, head) {
   const regressions = [];
 
@@ -131,6 +152,10 @@ export function diffSchemas(base, head) {
     const headLines = head.models.get(name);
     for (const line of baseLines) {
       if (!headLines.has(line)) {
+        const equivalentWidening = [...headLines].some((headLine) =>
+          isOptionalityWidening(line, headLine),
+        );
+        if (equivalentWidening) continue;
         regressions.push(`model ${name}: removed \`${line}\``);
       }
     }

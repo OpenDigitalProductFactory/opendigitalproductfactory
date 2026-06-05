@@ -6,10 +6,13 @@ const mocks = vi.hoisted(() => ({
   aiProfileUpsert: vi.fn(),
   contractFindFirst: vi.fn(),
   contractCreate: vi.fn(),
+  contractUpsert: vi.fn(),
   contractUpdate: vi.fn(),
   allowanceDeleteMany: vi.fn(),
   allowanceCreateMany: vi.fn(),
+  modelProviderFindMany: vi.fn(),
   workItemCreate: vi.fn(),
+  workItemFindFirst: vi.fn(),
   workItemUpdateMany: vi.fn(),
   billFindFirst: vi.fn(),
   billCreate: vi.fn(),
@@ -36,7 +39,11 @@ vi.mock("@dpf/db", () => ({
     supplierContract: {
       findFirst: mocks.contractFindFirst,
       create: mocks.contractCreate,
+      upsert: mocks.contractUpsert,
       update: mocks.contractUpdate,
+    },
+    modelProvider: {
+      findMany: mocks.modelProviderFindMany,
     },
     contractAllowance: {
       deleteMany: mocks.allowanceDeleteMany,
@@ -44,6 +51,7 @@ vi.mock("@dpf/db", () => ({
     },
     financeWorkItem: {
       create: mocks.workItemCreate,
+      findFirst: mocks.workItemFindFirst,
       updateMany: mocks.workItemUpdateMany,
     },
     bill: {
@@ -58,8 +66,10 @@ vi.mock("@dpf/db", () => ({
 
 import {
   activateAiProviderContract,
+  ensureFinanceCommitment,
   evaluateAiProviderUtilization,
   generateDraftBillForAiContract,
+  reconcileAiProviderFinanceGaps,
   seedAiProviderFinanceBridge,
 } from "./ai-provider-finance";
 
@@ -71,6 +81,7 @@ describe("seedAiProviderFinanceBridge", () => {
     mocks.aiProfileUpsert.mockResolvedValue({ id: "profile-1", supplierId: "supplier-row-1" });
     mocks.contractFindFirst.mockResolvedValue(null);
     mocks.contractCreate.mockResolvedValue({ id: "contract-1", contractId: "AIC-1" });
+    mocks.workItemFindFirst.mockResolvedValue(null);
     mocks.workItemCreate.mockResolvedValue({ id: "work-1", workItemId: "FWI-1" });
   });
 
@@ -105,6 +116,156 @@ describe("seedAiProviderFinanceBridge", () => {
         workItemId: "work-1",
       }),
     );
+  });
+
+  it("does not create duplicate plan-details asks for the same contract gap", async () => {
+    mocks.workItemFindFirst.mockResolvedValue({ id: "existing-work", workItemId: "FWI-EXISTING" });
+
+    const result = await seedAiProviderFinanceBridge({
+      providerId: "chatgpt",
+      providerName: "ChatGPT Subscription",
+    });
+
+    expect(mocks.workItemFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          contractId: "contract-1",
+          type: "plan_details_needed",
+          status: { in: ["open", "in_progress"] },
+        }),
+      }),
+    );
+    expect(mocks.workItemCreate).not.toHaveBeenCalled();
+    expect(result.workItemId).toBe("existing-work");
+  });
+});
+
+describe("ensureFinanceCommitment", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.supplierFindFirst.mockResolvedValue(null);
+    mocks.supplierCreate.mockResolvedValue({ id: "supplier-domain", supplierId: "SUP-DOMAIN" });
+    mocks.contractUpsert.mockResolvedValue({ id: "contract-domain", contractId: "FNC-DOMAIN" });
+    mocks.workItemFindFirst.mockResolvedValue(null);
+    mocks.workItemCreate.mockResolvedValue({ id: "work-domain", workItemId: "FWI-DOMAIN" });
+  });
+
+  it("creates a general subscription commitment without requiring an AI provider profile", async () => {
+    const result = await ensureFinanceCommitment({
+      commitmentKind: "domain",
+      externalReference: "domain:opendigitalproductfactory.com",
+      title: "opendigitalproductfactory.com",
+      supplierName: "Domain registrar",
+      contractType: "subscription",
+      billingCadence: "annual",
+      currency: "USD",
+      commitmentSource: "detected_portal_domain",
+    });
+
+    expect(mocks.contractUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { externalReference: "domain:opendigitalproductfactory.com" },
+        create: expect.objectContaining({
+          profileId: null,
+          commitmentKind: "domain",
+          externalReference: "domain:opendigitalproductfactory.com",
+          commitmentSource: "detected_portal_domain",
+        }),
+      }),
+    );
+    expect(mocks.workItemCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: "commitment_details_needed",
+          metadata: expect.objectContaining({
+            missingFields: expect.arrayContaining(["monthlyCommittedAmount", "renewalDate"]),
+            routeTarget: "/finance/spend",
+          }),
+        }),
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        supplierId: "supplier-domain",
+        contractId: "contract-domain",
+        workItemId: "work-domain",
+      }),
+    );
+  });
+});
+
+describe("reconcileAiProviderFinanceGaps", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.modelProviderFindMany.mockResolvedValue([
+      {
+        providerId: "anthropic-sub",
+        name: "Claude/Anthropic OAuth Subscription",
+        status: "active",
+        cliEngine: "claude",
+        costModel: "subscription",
+        billingLabel: "Max subscription (included)",
+        consoleUrl: "https://console.anthropic.com/settings/billing",
+        docsUrl: "https://support.anthropic.com/",
+        inputPricePerMToken: null,
+        outputPricePerMToken: null,
+        financeProfile: null,
+      },
+      {
+        providerId: "codex",
+        name: "OpenAI Codex",
+        status: "active",
+        cliEngine: "codex",
+        costModel: "subscription",
+        billingLabel: "ChatGPT subscription",
+        consoleUrl: "https://chatgpt.com/#settings/Subscription",
+        docsUrl: "https://help.openai.com/",
+        inputPricePerMToken: null,
+        outputPricePerMToken: null,
+        financeProfile: null,
+      },
+    ]);
+    mocks.supplierFindFirst.mockResolvedValue(null);
+    mocks.supplierCreate
+      .mockResolvedValueOnce({ id: "supplier-anthropic", supplierId: "SUP-ANT" })
+      .mockResolvedValueOnce({ id: "supplier-openai", supplierId: "SUP-OAI" });
+    mocks.aiProfileUpsert
+      .mockResolvedValueOnce({ id: "profile-anthropic", supplierId: "supplier-anthropic" })
+      .mockResolvedValueOnce({ id: "profile-openai", supplierId: "supplier-openai" });
+    mocks.contractFindFirst.mockResolvedValue(null);
+    mocks.contractCreate
+      .mockResolvedValueOnce({ id: "contract-anthropic", contractId: "AIC-ANT" })
+      .mockResolvedValueOnce({ id: "contract-openai", contractId: "AIC-OAI" });
+    mocks.workItemFindFirst.mockResolvedValue(null);
+    mocks.workItemCreate
+      .mockResolvedValueOnce({ id: "work-anthropic", workItemId: "FWI-ANT" })
+      .mockResolvedValueOnce({ id: "work-openai", workItemId: "FWI-OAI" });
+  });
+
+  it("queues human asks for active Claude and Codex subscription providers that lack finance details", async () => {
+    const result = await reconcileAiProviderFinanceGaps();
+
+    expect(mocks.modelProviderFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: "active",
+        }),
+      }),
+    );
+    expect(mocks.aiProfileUpsert).toHaveBeenCalledTimes(2);
+    expect(mocks.workItemCreate).toHaveBeenCalledTimes(2);
+    expect(mocks.workItemCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          title: "Complete AI plan details for Claude/Anthropic OAuth Subscription",
+          metadata: expect.objectContaining({
+            askKind: "human_finance_gap",
+            missingFields: expect.arrayContaining(["monthlyCommittedAmount", "includedQuantity", "usageUnit"]),
+          }),
+        }),
+      }),
+    );
+    expect(result).toEqual({ inspectedProviders: 2, seededProfiles: 2, queuedHumanAsks: 2 });
   });
 });
 

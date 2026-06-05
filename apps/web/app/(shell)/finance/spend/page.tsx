@@ -87,8 +87,11 @@ export default async function FinanceSpendPage() {
         />
         <AiSpendSummaryCard
           supplierCount={aiOverview.supplierCount}
+          activeProviderCount={aiOverview.activeProviderCount}
+          untrackedProviderCount={aiOverview.untrackedProviderCount}
           committedSpend={aiOverview.committedSpend}
           contractsNeedingSetup={aiOverview.contractsNeedingSetup}
+          openWorkItems={aiOverview.openWorkItems}
           projectedUnusedCommitment={aiOverview.projectedUnusedCommitment}
           currencySymbol={sym}
         />

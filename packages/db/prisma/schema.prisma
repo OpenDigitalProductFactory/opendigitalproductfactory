@@ -7667,9 +7667,12 @@ model AiProviderFinanceProfile {
 model SupplierContract {
   id                     String    @id @default(cuid())
   contractId             String    @unique
-  profileId              String
+  profileId              String?
   supplierId             String
   accountableEmployeeId  String?
+  commitmentKind         String    @default("ai_provider")
+  commitmentSource       String    @default("ai_provider_registry")
+  externalReference      String?   @unique
   status                 String    @default("draft")
   contractType           String    @default("subscription")
   billingCadence         String    @default("monthly")
@@ -7688,7 +7691,7 @@ model SupplierContract {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  profile             AiProviderFinanceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profile             AiProviderFinanceProfile? @relation(fields: [profileId], references: [id], onDelete: Cascade)
   supplier            Supplier                 @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   accountableEmployee EmployeeProfile?         @relation("AiContractOwner", fields: [accountableEmployeeId], references: [id], onDelete: SetNull)
   allowances          ContractAllowance[]
@@ -7698,6 +7701,7 @@ model SupplierContract {
   @@index([profileId])
   @@index([supplierId])
   @@index([status])
+  @@index([commitmentKind, status])
   @@index([accountableEmployeeId])
 }
 
