@@ -4,7 +4,9 @@
 //
 // What this proves:
 //   - Adding a field/attribute/model/enum-value: no regression
+//   - Widening a required field/relation to optional: no regression
 //   - Removing a field/attribute/model/enum-value: regression
+//   - Changing a field type to a different type: regression
 //   - Reordering attributes within a model (the PR #1366 false-positive
 //     case): no regression
 //   - Whitespace / column-alignment changes (the other formatter quirk):
@@ -93,12 +95,43 @@ describe("schema-regression-guard", () => {
     expect(regressions(BASE, added)).toEqual([]);
   });
 
+  it("passes when a required field is widened to optional", () => {
+    const before = BASE.replace(/ownerId   String\?/, "ownerId   String");
+    expect(regressions(before, BASE)).toEqual([]);
+  });
+
+  it("passes when a required relation field is widened to optional", () => {
+    const before = `
+model SupplierContract {
+  id        String @id @default(cuid())
+  profileId String
+  profile   AiProviderFinanceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+model AiProviderFinanceProfile {
+  id        String @id @default(cuid())
+  contracts SupplierContract[]
+}
+`;
+    const after = before
+      .replace("profileId String", "profileId String?")
+      .replace("profile   AiProviderFinanceProfile @relation", "profile   AiProviderFinanceProfile? @relation");
+    expect(regressions(before, after)).toEqual([]);
+  });
+
   it("flags a removed field", () => {
     const dropped = BASE.replace(/  ownerId   String\?\n/, "");
     const found = regressions(BASE, dropped);
     expect(found).toHaveLength(1);
     expect(found[0]).toMatch(/model Widget: removed/);
     expect(found[0]).toMatch(/ownerId/);
+  });
+
+  it("flags a changed field type", () => {
+    const changed = BASE.replace(/name      String/, "name      Int");
+    const found = regressions(BASE, changed);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatch(/model Widget: removed `name String`/);
   });
 
   it("flags a removed attribute", () => {

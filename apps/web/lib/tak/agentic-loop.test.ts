@@ -26,6 +26,9 @@ vi.mock("@dpf/db", () => ({
     platformIssueReport: {
       create: vi.fn(),
     },
+    coworkerTurnMetric: {
+      upsert: vi.fn(),
+    },
   },
 }));
 vi.mock("@/lib/routed-inference", () => ({
