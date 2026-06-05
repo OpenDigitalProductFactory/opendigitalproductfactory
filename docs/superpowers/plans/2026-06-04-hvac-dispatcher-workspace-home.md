@@ -76,15 +76,20 @@ If 2 or 3 is not ready: stop. File the missing dependency as a blocker on BI-CE6
 
 ## Phase 2 — Wire `/workspace` to render vertical mode for `match=exact`
 
-**Goal.** Teach `apps/web/app/(shell)/workspace/page.tsx` to dispatch on `workspaceHomeResolution.mode === "vertical"` to a `<VerticalWorkspaceHome contribution={...} data={...} />` component instead of `<PlatformWorkspaceHome />`. With the HVAC contribution registered in Phase 1, an install configured with `archetype = hvac-contractor` will now render the vertical home.
+> **Amended 2026-06-04 by WWMD design pass** (`docs/superpowers/decisions/2026-06-04-wwmd-design-pass-workspace-home-open-questions.md` Q1 + Q9). Two design defaults inverted by the kernel: shell-chrome switch lives in a separate BI ([BI-8D9CA348](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues?q=BI-8D9CA348)), and `VerticalWorkspaceHome` ships as its own BI ([BI-683C0B9A](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues?q=BI-683C0B9A)). Phase 2 now consumes both rather than defining them inline.
+
+**Goal.** Teach `apps/web/app/(shell)/workspace/page.tsx` to dispatch on `workspaceHomeResolution.mode === "vertical"` to the `<VerticalWorkspaceHome>` component (owned by BI-683C0B9A) instead of `<PlatformWorkspaceHome />`. With the HVAC contribution registered in Phase 1, an install configured with `archetype = hvac-contractor` will now render the vertical home.
 
 **Files.**
-- `apps/web/components/workspace-home/VerticalWorkspaceHome.tsx` — new. Reads the contribution's `slots`, sorts by priority + zone, renders each slot through the primitive registry (`apps/web/components/workspace-home/primitives/*`) using the `WorkspaceHomeComponentRegistry` fail-closed pattern (`registry[slot.component] ?? UnknownSlotComponent`). Renders a thin worker-mode chrome (no platform-operator INTERNAL COCKPIT chip — see "Worker-mode shell-chrome switch" note below).
-- `apps/web/components/workspace-home/UnknownSlotComponent.tsx` — new. Renders the substrate's admin-visible "Slot misconfigured" placeholder for unknown component keys; empty placeholder for non-admins per substrate spec §5.5.
 - `apps/web/app/(shell)/workspace/page.tsx` — modify. Switch:
   ```tsx
   if (workspaceHomeResolution.mode === "vertical") {
-    return <VerticalWorkspaceHome contribution={workspaceHomeResolution.contribution} platformData={platformHomeData} />;
+    return <VerticalWorkspaceHome
+      contribution={workspaceHomeResolution.contribution}
+      plan={activationPlan}
+      streams={signalStreams}
+      registry={defaultWorkspaceHomePrimitiveRegistry}
+    />;
   }
   return (
     <>
@@ -93,9 +98,12 @@ If 2 or 3 is not ready: stop. File the missing dependency as a blocker on BI-CE6
     </>
   );
   ```
-  Pass `platformData` through to the vertical component so any enrichment slot that needs platform-level data (e.g., calendar events, activity feed) can read it from the same loader.
+  The `<VerticalWorkspaceHome>` import resolves to BI-683C0B9A's substrate component. The `activationPlan` + `signalStreams` come from BI-B14D6CF6's orchestrator (called as part of the page-level load).
 
-**Worker-mode shell-chrome switch.** The BI body line "the worker home header does not present the surface as an Internal cockpit" applies here. The substrate exposes `WorkspaceHomeResolution.mode` as the contract handle; this phase teaches the `(shell)` layout to read the resolution mode (passed via React context or a server-only helper that re-evaluates the resolver) and conditionally swap the `INTERNAL COCKPIT` chip for vertical chrome (or hide it entirely). If swapping the shell chrome is too invasive for this phase, defer to a separate BI and ship Phase 2 with the existing chrome, recording the gap as evidence on BI-CE6AF925 — but the gap must be closed before Phase 11 sign-off.
+**Dependencies.**
+- [BI-683C0B9A](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues?q=BI-683C0B9A) — `VerticalWorkspaceHome` React component. Substrate-level renderer with fail-closed `UnknownPrimitiveComponent` per parent spec §5.5. **Phase 2 of this plan blocks on BI-683C0B9A shipping.**
+- [BI-8D9CA348](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues?q=BI-8D9CA348) — Worker-mode shell-chrome switch. The `(shell)/layout.tsx` reads `WorkspaceHomeResolution.mode` and swaps chrome (hides `INTERNAL COCKPIT` chip, swaps nav-group filter, defines role-authorized operator switching) when `mode === "vertical"`. **Phase 11 sign-off on this plan blocks on BI-8D9CA348 shipping.**
+- [BI-B14D6CF6](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues?q=BI-B14D6CF6) — Setup activation orchestrator. Phase 7 of the orchestrator plan integrates into `/api/storefront/admin/setup`; this HVAC plan's Phase 2 reads `activationPlan` + `signalStreams` from that orchestration. **Phases 3-5 + 8 of this HVAC plan consume the orchestrator's output.**
 
 **Verification.**
 - New test `apps/web/app/(shell)/workspace/page.test.tsx` — extend the existing test file. Assert: when `resolveWorkspaceHomeContribution` returns `mode: "vertical", contribution: hvacContribution`, the rendered JSX contains `<VerticalWorkspaceHome>` and NOT `<PlatformWorkspaceHome>`. When mode is `unconfigured`, the existing behavior holds. Run with vitest in jsdom mode if not already configured.
@@ -193,20 +201,17 @@ If 2 or 3 is not ready: stop. File the missing dependency as a blocker on BI-CE6
 
 **Rollback.** As Phase 6.
 
-## Phase 9 — HVAC fixture seed
+## Phase 9 — *(deleted — delegated to BI-B14D6CF6 orchestrator)*
 
-**Goal.** Add the exact fixture from Dale's spec §Verification so subsequent UX verification has data to drive: 4 trucks, 4 technicians, 7 service calls (≥1 unassigned, 1 parts-blocked, 1 unconfirmed, 1 emergency, 1 late), 1 failed customer notification, 1 Governor `require-hitl` handoff awaiting Dale's ack.
-
-**Files.**
-- `apps/web/lib/storefront/seed-hvac-dispatcher-fixture.ts` — new. Server-only function that creates the fixture under the install's HVAC archetype configuration. Idempotent — safe to call repeatedly without duplicating rows. Gated to **non-production environments only** (rejects when `NODE_ENV === "production"` unless an explicit `DPF_ALLOW_HVAC_FIXTURE=true` env override is set, to support test installs that genuinely need the fixture in a prod-shaped environment).
-- `apps/web/app/api/dev/seed-hvac-fixture/route.ts` — new dev-only POST route that invokes the seed function. Gated to platform-admin role.
-- Reference the fixture from a setup-task or a seed runner so a fresh install can opt in. Do NOT auto-seed on every install — the fixture is for the Dale dogfood and ad-hoc QA, not the default install state.
-
-**Verification.**
-- Unit test on the seed function: calling twice produces the same row count, not double. Calling with `NODE_ENV=production` and no override throws.
-- After running the seed, `psql` (via `docker exec`) shows: 4 `WorkSchedule` rows with `workerType="technician"`, 4 `Agent` rows for trucks (or whatever the canonical truck representation is), 7 `WorkItem` rows with `sourceType="field-service-job"` and the required state mix, 1 `CommunicationDeliveryAttempt` with `status="failed"`, 1 `CoworkerActionEnvelope` (or whatever the Governor `require-hitl` projects through) ready for ack.
-
-**Rollback.** Delete the seed module + route. Existing data unaffected (the seed is additive and gated).
+> **Amended 2026-06-04 by WWMD design pass** (`docs/superpowers/decisions/2026-06-04-wwmd-design-pass-workspace-home-open-questions.md` Q2). Kernel verdict: `delegate-to-orchestrator` (composite 6.17, margin 2.78, high confidence) over the originally-proposed `admin-button` standalone seed.
+>
+> Auto-seeding the HVAC fixture (4 trucks, 4 technicians, 7 service calls with the state mix from Dale's spec §Verification, 1 failed customer notification, 1 Governor `require-hitl` PAR) is now owned by [BI-B14D6CF6](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues?q=BI-B14D6CF6) (the universal archetype-driven activation orchestrator), gated by the `DPF_SEED_DEMO_DATA=true` env flag. The orchestrator derives seed shape from the contribution's `setupActivation.requiredCanonicalData` declarations — no per-archetype seed code, no per-BI fixture file.
+>
+> This is the architectural win the operator named on 2026-06-04: HVAC is one of many archetypes; the same code path serves all of them. The HVAC contribution's declared `requiredCanonicalData` (`work-item`, `calendar-event`, `customer-account`, `customer-configuration-item`, `communication-delivery-attempt`, `work-schedule`) drives the orchestrator's seed factories. Dental, restaurant, gym, salon, etc. each declare their own requirements; same code path seeds each archetype's representative rows.
+>
+> **No file changes from this phase.** The originally-planned `apps/web/lib/storefront/seed-hvac-dispatcher-fixture.ts` and `apps/web/app/api/dev/seed-hvac-fixture/route.ts` are NOT created.
+>
+> **Phase renumbering note:** subsequent phases keep their numbers (Phase 10 banned-copy + audience-boundary assertions, Phase 11 sign-off ADR + PR) — the deletion is in place, not collapsed, so cross-references in this plan still resolve.
 
 ## Phase 10 — Banned-copy + audience-boundary assertions
 
