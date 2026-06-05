@@ -283,8 +283,8 @@ One **substrate BI** (the abstraction + identity bridge + audit wiring + grant e
 ## 11. Open questions
 
 1. **Q1 — EP-CTRL convergence.** Should `BrowserSessionBinding` be a specialization of the Automated Control Utility's `ControlSession`, or a sibling? Recommendation: specialize *if* EP-CTRL lands first; otherwise define thin and converge later as tracked debt. (Needs an architect call once EP-CTRL implementation status is known.)
-2. **Q2 — M2 transport + profile provisioning (resolved in principle by Verdict 3; implementation open).** Verdict 3 settles the *policy*: autonomous runs use a dedicated service-account Chromium profile; operator-live driving is attended-only. Open implementation questions: (a) how does an *in-portal* coworker reach the operator's live profile for attended runs — the operator's own Claude-in-Chrome extension, or a portal-hosted bridge? (b) how is a service-account profile *provisioned and authenticated* the first time (operator logs the service account into each site once, persisting `storageState`), and how is it re-authenticated when a site's session expires? (c) where do the service-account `user-data-dir`s live (per-install Docker volume, like `browser_evidence`)? Recommendation for v1: headless `browser-use` on service-account profiles for autonomous; defer attended operator-live driving to a fast-follow.
-3. **Q3 — Credential kind on `IntegrationCredential`.** Confirm `storageState`/cookie-jar fits the existing `IntegrationCredential` encryption + `credentialOwnerMode` model without schema strain, or whether a `kind` discriminator suffices.
+2. **Q2 — M2 transport (parts b/c resolved by Appendix A; part a open).** Verdict 3 settled the policy and **Appendix A** now settles provisioning (b) and storage location (c). The remaining open part: **(a)** how does an *in-portal* coworker reach the operator's live profile for *attended* runs — the operator's own Claude-in-Chrome extension, or a portal-hosted bridge? Recommendation for v1: headless `browser-use` on service-account profiles for autonomous (fully specced); defer attended operator-live driving to a fast-follow.
+3. **Q3 — Credential kind on `IntegrationCredential` (resolved by Appendix A).** Confirmed: `storageState` fits `IntegrationCredential.fieldsEnc` (encrypted JSON blob via `credential-crypto.ts`, keyed by `CREDENTIAL_ENCRYPTION_KEY`) with `provider = "browser-session"` as the discriminator; `tokenCacheEnc` / `lastTestedAt` / `lastErrorAt` carry session-freshness signals. No schema strain; no new credential table. See Appendix A §A.3.
 4. **Q4 — WWMD selector latency.** A per-task `principle_decide` adds a round-trip before each browser task. Acceptable for bounded high-value workflows; confirm it is cached/short-circuited for repeat tasks on the same target (e.g. a recorded M1 script skips selection).
 5. **Q5 — Default grant assignment.** Which seeded personas get `browser_read` vs `browser_drive` by default (marketing, procurement), and which require explicit operator grant? Per `bundled-services-active-by-default` vs the high blast radius of `browser_drive`.
 
@@ -295,6 +295,7 @@ One **substrate BI** (the abstraction + identity bridge + audit wiring + grant e
 - **WWMD Verdict 1** (substrate shape): `multi-means-wwmd-per-task`, composite 6.357, margin 2.542, high confidence, no commandment conflict. `governingProfile: mark-dpf-platform`.
 - **WWMD Verdict 2** (reuse vs parallel): `reuse-existing-substrate`, composite 6.701, margin 3.174, high confidence, no commandment conflict.
 - **WWMD Verdict 3** (autonomous profile binding): `dedicated-service-profile-default`, composite 6.403, margin 3.408, high confidence, no commandment conflict. Autonomous runs bind a scoped service-account profile; operator-live profiles are attended-only. (Added 2026-06-05 after the operator raised the cross-tab / cross-browser session-reach question.)
+- **WWMD Verdict 4** (service-account first-auth / re-auth): `hybrid-storagestate-default-credentials-where-needed`, composite 6.250, margin 0.581, high confidence, no commandment conflict. Prefer attended `storageState` capture; store full credentials only for accounts that need unattended re-auth. (`attended-storagestate-only` was a close runner-up at 5.669 — it edges ahead on `data_privacy`/`blast_radius` and is the conservative fallback for high-sensitivity accounts.) Detailed in Appendix A.
 - **Epic**: EP-BROWSER-DRIVE (created 2026-06-05, this spec linked as `specPath`).
 - **Filed BIs**: BI-2AED4F15 (substrate), BI-09781F5F (P1 Substack/M2), BI-95F22C95 (P2 supplier/M2→M1), BI-91D64AD4 (P3 dashboard read), BI-2F287A19 (P4 cross-channel/M3) — all linked to EP-BROWSER-DRIVE, `proposedOutcome: build`, awaiting Scrum Master triage (linking is organizational only; not yet triaged or promoted).
 
@@ -302,4 +303,63 @@ One **substrate BI** (the abstraction + identity bridge + audit wiring + grant e
 
 ## 13. Recommendation
 
-Build browser-driving as **one `BrowserDriver` substrate with three separately-graspable means** (deterministic / plugin / delegated), selected **per-task by a scoped WWMD call**, each session bound to a specific **`(engine, profile)`** — autonomous runs to a scoped **service-account profile** (`Principal kind=service`), operator-live profiles **attended-only** (Verdict 3) — driven through a privileged out-of-page channel (extension or CDP), never the sandboxed portal page, and **reusing the existing grant / authority / delegation / envelope / `ToolExecution` / `GearInterface` substrate** — adding only a new grant key, the `TOOL_TO_GRANTS` wiring, an `IntegrationCredential` browser-session kind, and a thin `BrowserSessionBinding` record. Prove it with the Substack-publish install first (M2-Chrome), then graduate the recurring high-error-cost supplier workflow toward a deterministic M1 script. This gives Coworkers real reach into the auth-walled web with the same kernel-gated, audited, WWMD-scored discipline as every other capability — and no parallel machinery.
+Build browser-driving as **one `BrowserDriver` substrate with three separately-graspable means** (deterministic / plugin / delegated), selected **per-task by a scoped WWMD call**, each session bound to a specific **`(engine, profile)`** — autonomous runs to a scoped **service-account profile** (`Principal kind=service`), operator-live profiles **attended-only** (Verdict 3) — driven through a privileged out-of-page channel (extension or CDP), never the sandboxed portal page, and **reusing the existing grant / authority / delegation / envelope / `ToolExecution` / `GearInterface` substrate** — adding only a new grant key, the `TOOL_TO_GRANTS` wiring, an `IntegrationCredential` browser-session kind, and a thin `BrowserSessionBinding` record. Service-account profiles are provisioned by **hybrid `storageState`-first capture** (Verdict 4, Appendix A), persisted on a per-install `browser_profiles` volume. Prove it with the Substack-publish install first (M2-Chrome), then graduate the recurring high-error-cost supplier workflow toward a deterministic M1 script. This gives Coworkers real reach into the auth-walled web with the same kernel-gated, audited, WWMD-scored discipline as every other capability — and no parallel machinery.
+
+---
+
+## 14. Appendix A — Service-account profile provisioning (Q2b/c + Q3 resolution)
+
+Resolves how an autonomous service-account profile (Verdict 3) is first authenticated and re-authenticated. Decision: **Verdict 4 — `hybrid-storagestate-default-credentials-where-needed`** (margin 0.581; `attended-storagestate-only` close behind at 5.669 and the conservative fallback for high-sensitivity accounts). All facts below are grounded against the live tree (`docker-compose.yml`, `schema.prisma`, `credential-crypto.ts`).
+
+### A.1 Per-site provisioning modes
+
+Each `(service-account, target-site)` pair records one **provisioning mode** on the credential. Default to the least-secret-storage mode that meets the account's autonomy need:
+
+| Mode | First-auth | Re-auth on expiry | When to use | Secret stored |
+|------|-----------|-------------------|-------------|---------------|
+| **`storageState` (default)** | Operator does a **one-time attended login** in an M2 session; the driver captures Playwright `storageState` (cookies + localStorage) at session end. | Operator is **notified** (agent-as-conduit) to repeat the one-time login when freshness signals go stale. | Most accounts; anything MFA/CAPTCHA-guarded; high-sensitivity. | Session blob only — **never the password**. |
+| **`credentialed` (opt-in)** | Operator stores username/password (+ optional TOTP seed) once. | Driver logs in **programmatically** each time the session expires — fully unattended. | Accounts that *must* run unattended through expiry and permit programmatic login. | Full credentials + TOTP seed. |
+
+The mode is a per-credential field, not a global switch — the hybrid is realized as a column, so a marketing Substack account can be `storageState` while a supplier API-less portal that expires nightly is `credentialed`, in the same install.
+
+### A.2 Provisioning flow (the attended bootstrap)
+
+1. Operator opens a **Service Account Browser Setup** admin surface, picks the target site and the service `Principal`.
+2. The platform launches an **attended M2 session** on the service account's dedicated Chromium `user-data-dir` (not the operator's profile). The operator logs in (handling MFA/CAPTCHA themselves — the one thing automation cannot reliably do).
+3. On confirmation, the driver exports `storageState` → encrypted into `IntegrationCredential.fieldsEnc`, and the populated `user-data-dir` persists on the `browser_profiles` volume (§A.4).
+4. The credential's `status` flips to `configured`; `lastTestedAt` is stamped. A `targetDomains[]` allowlist is recorded so the profile can only be driven against the site it was provisioned for.
+
+This is the **only** step that asks the operator to act — and it is exactly the irreducible "a human must log in once" step, consistent with `never-ask-user-to-run-commands` (the agent does everything *around* the unavoidable human auth, never shell/SQL busywork).
+
+### A.3 Storage (Q3 resolved)
+
+No new credential table (Verdict 2 holds):
+
+- **`IntegrationCredential`** with `provider = "browser-session"`. `fieldsEnc` holds the encrypted `storageState` JSON (or, in `credentialed` mode, the encrypted username/password/TOTP-seed), via the existing `credential-crypto.ts` `encryptJson` path keyed by `CREDENTIAL_ENCRYPTION_KEY` (the same key the `adp` service already consumes).
+- **Freshness signals** reuse existing columns: `tokenCacheEnc` for a cached probe result, `lastTestedAt` / `lastErrorAt` / `lastErrorMsg` for the staleness/health surface, `certExpiresAt` (or a `fieldsEnc` field) for a known session-cookie expiry where the site exposes one.
+- `BrowserSessionBinding.credentialId` FKs to this row; `BrowserSessionBinding.profileRef` names the `user-data-dir`.
+
+### A.4 Where profiles live (Q2c resolved)
+
+A new per-install named Docker volume **`browser_profiles`**, mounted into `browser-use` exactly as the proven `browser_evidence` volume is:
+
+```yaml
+# docker-compose.yml — browser-use service (sibling of browser_evidence)
+volumes:
+  - browser_evidence:/evidence
+  - browser_profiles:/profiles      # service-account user-data-dirs, one subdir per (account, site)
+```
+
+Each `user-data-dir` is `/profiles/<serviceAccountId>/<siteKey>/`. The volume is **never** mounted into the portal (unlike `browser_evidence`, which the portal mounts read-only to serve screenshots) — profile cookie jars are driver-only. Note `browser-use`'s existing `SESSION_TIMEOUT_SECONDS: 600`: a *driving session* is ephemeral (10 min), but the *persisted profile* on the volume outlives it — that separation is what makes "log in once, drive many times" work.
+
+### A.5 Expiry detection + re-auth loop
+
+- Before an autonomous run, the driver opens the profile and probes a known authenticated endpoint. **Redirect-to-auth ⇒ session expired** (this is the exact failure the motivating thread hit when no session was present).
+- `storageState` mode → emit a **re-provision notification** through the agent event bus (agent-as-conduit), pause the dependent workflow as `blocked-on-reauth`, and resume when the operator re-bootstraps. Never silently fail a downstream destructive action on a dead session.
+- `credentialed` mode → the driver runs the programmatic login, refreshes `storageState`, stamps `lastTestedAt`. If login fails (CAPTCHA/novel MFA), it **falls back to the `storageState` notification path** rather than looping — degrade to attended, never brute-force.
+
+### A.6 Security notes specific to provisioning
+
+- A `browser-session` credential is **scoped to `targetDomains[]`** and bounded by the governing `DelegationGrant` (`maxUses`/`expiresAt`); a stolen `storageState` blob cannot widen scope (monotonic-narrowing rule, §4.2).
+- `credentialed` mode is **opt-in per account** precisely because it stores the password — the higher-blast-radius choice the operator must consciously elect, surfaced as such in the setup UI (this is why Verdict 4 beat `stored-credentials-only`, which would have made it the default).
+- Profiles never co-mingle: one `user-data-dir` per `(service account, site)` means a compromise of one site's cookie jar does not expose another.
