@@ -1,0 +1,236 @@
+[
+  {
+    "ruleKey": "estate:reolink-camera",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "reolink" }] },
+    "resolvedIdentity": { "kind": "device", "name": "Reolink IP camera / NVR", "vendor": "Reolink", "deviceClass": "ip_camera" },
+    "taxonomyNodeId": "foundational/building_management/security_and_surveillance",
+    "identityConfidence": 0.96,
+    "taxonomyConfidence": 0.96,
+    "positiveFixtures": [
+      { "name": "reolink-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "reolink", "vendorRole": "device", "resolvableByOui": true } }
+    ],
+    "negativeFixtures": [
+      { "name": "unrelated-vendor", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "acme corp" } }
+    ]
+  },
+  {
+    "ruleKey": "estate:hui-zhou-gaoshengda-camera",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "gaoshengda" }] },
+    "resolvedIdentity": { "kind": "device", "name": "Hui-Zhou Gaoshengda IP camera", "vendor": "Hui Zhou Gaoshengda Technology", "deviceClass": "ip_camera" },
+    "taxonomyNodeId": "foundational/building_management/security_and_surveillance",
+    "identityConfidence": 0.95,
+    "taxonomyConfidence": 0.96,
+    "positiveFixtures": [
+      { "name": "gaoshengda-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "hui zhou gaoshengda technology", "vendorRole": "device" } }
+    ],
+    "negativeFixtures": [
+      { "name": "reolink-not-gaoshengda", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "reolink" } }
+    ]
+  },
+  {
+    "ruleKey": "estate:nest-thermostat",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "nest" }] },
+    "resolvedIdentity": { "kind": "device", "name": "Nest thermostat", "vendor": "Nest Labs", "deviceClass": "thermostat" },
+    "taxonomyNodeId": "foundational/building_management/climate_control",
+    "identityConfidence": 0.94,
+    "taxonomyConfidence": 0.96,
+    "positiveFixtures": [
+      { "name": "nest-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "nest labs inc.", "vendorRole": "device" } }
+    ],
+    "negativeFixtures": [
+      { "name": "honeywell-not-nest", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "honeywell" } }
+    ]
+  },
+  {
+    "ruleKey": "estate:chamberlain-garage",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "chamberlain" }] },
+    "resolvedIdentity": { "kind": "device", "name": "Chamberlain garage / gate controller", "vendor": "Chamberlain", "deviceClass": "garage_door_opener" },
+    "taxonomyNodeId": "foundational/building_management/access_control",
+    "identityConfidence": 0.96,
+    "taxonomyConfidence": 0.96,
+    "positiveFixtures": [
+      { "name": "chamberlain-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "chamberlain group", "vendorRole": "device" } }
+    ],
+    "negativeFixtures": [
+      { "name": "unrelated", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "acme corp" } }
+    ]
+  },
+  {
+    "ruleKey": "estate:tp-link-kasa",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "tp-link" }] },
+    "resolvedIdentity": { "kind": "device", "name": "TP-Link Kasa smart plug / outlet", "vendor": "TP-Link", "deviceClass": "smart_plug" },
+    "taxonomyNodeId": "foundational/building_management/lighting_and_energy_management",
+    "identityConfidence": 0.91,
+    "taxonomyConfidence": 0.95,
+    "positiveFixtures": [
+      { "name": "tp-link-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "tp-link technologies co.,ltd.", "vendorRole": "device" } }
+    ],
+    "negativeFixtures": [
+      { "name": "netgear-not-tplink", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "netgear" } }
+    ]
+  },
+  {
+    "ruleKey": "estate:lg-appliance",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "lg electronics" }] },
+    "resolvedIdentity": { "kind": "device", "name": "LG connected appliance", "vendor": "LG Electronics", "deviceClass": "smart_appliance" },
+    "taxonomyNodeId": "foundational/building_management/connected_appliances",
+    "identityConfidence": 0.9,
+    "taxonomyConfidence": 0.95,
+    "positiveFixtures": [
+      { "name": "lg-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "lg electronics", "vendorRole": "device" } }
+    ],
+    "negativeFixtures": [
+      { "name": "samsung-not-lg", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "samsung electronics" } }
+    ]
+  },
+  {
+    "ruleKey": "estate:whirlpool-appliance",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "whirlpool" }] },
+    "resolvedIdentity": { "kind": "device", "name": "Whirlpool connected appliance", "vendor": "Whirlpool", "deviceClass": "smart_appliance" },
+    "taxonomyNodeId": "foundational/building_management/connected_appliances",
+    "identityConfidence": 0.96,
+    "taxonomyConfidence": 0.95,
+    "positiveFixtures": [
+      { "name": "whirlpool-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "whirlpool corporation", "vendorRole": "device" } }
+    ],
+    "negativeFixtures": [
+      { "name": "lg-not-whirlpool", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "lg electronics" } }
+    ]
+  },
+  {
+    "ruleKey": "estate:amazon-voice",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "amazon" }] },
+    "resolvedIdentity": { "kind": "device", "name": "Amazon Echo voice assistant", "vendor": "Amazon", "deviceClass": "voice_assistant" },
+    "taxonomyNodeId": "foundational/network_management/voice",
+    "identityConfidence": 0.9,
+    "taxonomyConfidence": 0.95,
+    "positiveFixtures": [
+      { "name": "amazon-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "amazon technologies inc.", "vendorRole": "device" } }
+    ],
+    "negativeFixtures": [
+      { "name": "google-not-amazon", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "google" } }
+    ]
+  },
+  {
+    "ruleKey": "estate:ubiquiti-network",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "ubiquiti" }] },
+    "resolvedIdentity": { "kind": "device", "name": "Ubiquiti network device", "vendor": "Ubiquiti", "deviceClass": "access_point" },
+    "taxonomyNodeId": "foundational/network_management/network_connectivity",
+    "identityConfidence": 0.95,
+    "taxonomyConfidence": 0.96,
+    "positiveFixtures": [
+      { "name": "ubiquiti-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "ubiquiti inc", "vendorRole": "device" } }
+    ],
+    "negativeFixtures": [
+      { "name": "cisco-not-ubiquiti", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "cisco systems" } }
+    ]
+  },
+  {
+    "ruleKey": "estate:apple-client",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "apple" }] },
+    "resolvedIdentity": { "kind": "device", "name": "Apple client endpoint", "vendor": "Apple", "deviceClass": "client_endpoint" },
+    "taxonomyNodeId": "foundational/compute/client_and_end_user_compute",
+    "identityConfidence": 0.9,
+    "taxonomyConfidence": 0.94,
+    "positiveFixtures": [
+      { "name": "apple-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "apple, inc.", "vendorRole": "device" } }
+    ],
+    "negativeFixtures": [
+      { "name": "dell-not-apple", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "dell inc." } }
+    ]
+  },
+  {
+    "ruleKey": "estate:msi-client",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "micro-star" }] },
+    "resolvedIdentity": { "kind": "device", "name": "MSI client / workstation", "vendor": "Micro-Star International (MSI)", "deviceClass": "client_endpoint" },
+    "taxonomyNodeId": "foundational/compute/client_and_end_user_compute",
+    "identityConfidence": 0.94,
+    "taxonomyConfidence": 0.94,
+    "positiveFixtures": [
+      { "name": "msi-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "micro-star int'l co., ltd.", "vendorRole": "device" } }
+    ],
+    "negativeFixtures": [
+      { "name": "asus-not-msi", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "asustek computer" } }
+    ]
+  },
+  {
+    "ruleKey": "estate:intel-client",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "intel" }] },
+    "resolvedIdentity": { "kind": "device", "name": "Intel-NIC client endpoint", "vendor": "Intel", "deviceClass": "client_endpoint" },
+    "taxonomyNodeId": "foundational/compute/client_and_end_user_compute",
+    "identityConfidence": 0.9,
+    "taxonomyConfidence": 0.94,
+    "positiveFixtures": [
+      { "name": "intel-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "intel corporate", "vendorRole": "device" } }
+    ],
+    "negativeFixtures": [
+      { "name": "realtek-not-intel", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "realtek semiconductor" } }
+    ]
+  },
+  {
+    "ruleKey": "estate:samsung-client",
+    "status": "active",
+    "scope": "global",
+    "source": "seed",
+    "requiredEvidenceFamilies": ["mac_oui"],
+    "matchExpression": { "all": [{ "type": "contains", "path": "vendor", "value": "samsung" }] },
+    "resolvedIdentity": { "kind": "device", "name": "Samsung client endpoint", "vendor": "Samsung", "deviceClass": "client_endpoint" },
+    "taxonomyNodeId": "foundational/compute/client_and_end_user_compute",
+    "identityConfidence": 0.9,
+    "taxonomyConfidence": 0.94,
+    "positiveFixtures": [
+      { "name": "samsung-oui", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "samsung electronics co.,ltd", "vendorRole": "device" } }
+    ],
+    "negativeFixtures": [
+      { "name": "apple-not-samsung", "evidenceFamilies": ["mac_oui"], "normalizedEvidence": { "vendor": "apple, inc." } }
+    ]
+  }
+]
