@@ -122,6 +122,35 @@ export type GraphOutput = {
   edges: ProcessEdge[];
 };
 
+/**
+ * Stable content signature of a computed process graph.
+ *
+ * `ProcessGraph` mirrors derived nodes/edges into xyflow's
+ * `useNodesState`/`useEdgesState`. Re-seeding that state on every new array
+ * *identity* races xyflow's internal measurement (`onNodesChange`) updates and
+ * can drive a React max-update-depth (#185) render loop that wedges Build
+ * Studio intake (BI-87CEAFEE). Callers re-seed only when this signature
+ * changes, so identity churn from upstream re-renders (e.g. rapid `build`-prop
+ * updates during new-build intake / SSE refetch) no longer clobbers measured
+ * node state. Genuine content changes (status, position, label, edges) still
+ * change the signature and re-seed the canvas.
+ */
+export function graphSignature(
+  nodes: readonly ProcessNode[],
+  edges: readonly ProcessEdge[],
+): string {
+  const nodePart = nodes
+    .map(
+      (n) =>
+        `${n.id}|${n.type}|${n.position.x},${n.position.y}|${n.data.status}|${n.data.label}`,
+    )
+    .join(";");
+  const edgePart = edges
+    .map((e) => `${e.id}|${e.source}>${e.target}|${e.animated ? 1 : 0}`)
+    .join(";");
+  return `N[${nodePart}]E[${edgePart}]`;
+}
+
 /** A single task result after normalization from the runtime shape */
 export type NormalizedStoredTaskResult = {
   title: string;

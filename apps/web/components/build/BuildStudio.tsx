@@ -105,6 +105,7 @@ export function BuildStudio({
     () => initialActiveBuild ?? resolveInitialActiveBuild(buildRows, initialBuildId),
   );
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
   // Tab selector removed per spec §1 + §9 #11 — the workflow graph is the
   // always-visible primary surface of the active-build pane. Progress /
@@ -386,6 +387,7 @@ export function BuildStudio({
   async function handleCreate() {
     if (!newTitle.trim()) return;
     const title = newTitle.trim();
+    setCreateError(null);
     setCreating(true);
     try {
       const { buildId } = await createFeatureBuild({ title });
@@ -468,6 +470,15 @@ export function BuildStudio({
           targetBuildId: buildId,
         },
       }));
+    } catch (err) {
+      // Never leave the button silently stuck at "Starting…" — surface the
+      // failure so intake is recoverable instead of looking wedged
+      // (BI-87CEAFEE: a render-loop crash previously hung this path with no
+      // user-visible signal).
+      console.error("[build-studio] create build failed", err);
+      setCreateError(
+        err instanceof Error ? err.message : "Failed to start the build. Please try again.",
+      );
     } finally {
       setCreating(false);
     }
@@ -542,6 +553,14 @@ export function BuildStudio({
                   {creating ? "Starting…" : "Start a new build"}
                 </button>
               </div>
+              {createError && (
+                <div
+                  role="alert"
+                  className="mt-2 text-[11px] text-[var(--dpf-danger)] leading-snug"
+                >
+                  {createError}
+                </div>
+              )}
             </div>
           )}
 
