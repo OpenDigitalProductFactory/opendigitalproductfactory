@@ -124,6 +124,11 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   get_thread_result:         ["thread_read"],
   get_child_threads:         ["thread_read"],
 
+  // Multi-agent collaboration (EP-A2A) — targeted handoff / summon spawn a
+  // child work thread, so they require the same thread_write grant as spawn.
+  request_coworker:          ["thread_write"],
+  summon_coworker:           ["thread_write"],
+
   // Registry / Products
   create_digital_product: ["registry_read", "backlog_write"],
   update_lifecycle: ["backlog_write"],
