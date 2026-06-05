@@ -4222,6 +4222,41 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: null,
     sideEffect: false,
   },
+  // ─── Multi-Agent Collaboration Tools (EP-A2A, 2026-06-04 spec) ─────────────
+  {
+    name: "request_coworker",
+    description:
+      "Hand off a scoped sub-task to a NAMED peer coworker. Unlike spawn_work_thread (anonymous child), this targets a specific coworker by agentId or slug and emits a VISIBLE handoff the user sees inline. Use when you need another coworker's distinct capability (e.g. ask the Enterprise Architect to review a schema).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        targetAgent: { type: "string", description: "Target coworker — canonical agentId (AGT-*) or slug alias (e.g. 'ea-architect')." },
+        objective: { type: "string", description: "The scoped sub-task for the peer coworker." },
+        questionPacketSummary: { type: "string", description: "Optional one-line summary of the intent/question shown on the handoff card." },
+        tier: { type: "number", enum: [2, 3], description: "Interaction tier (default 2). Tier 3 requires depth-2 spawn support." },
+        enteredVia: { type: "string", enum: ["handoff", "escalation", "spawn"], description: "How the peer is entering (default 'handoff')." },
+      },
+      required: ["targetAgent", "objective"],
+    },
+    requiredCapability: null,
+    sideEffect: true,
+  },
+  {
+    name: "summon_coworker",
+    description:
+      "Bring a NAMED coworker into the current conversation as a second/third-tier participant to address a request, emitting a VISIBLE summon. Typically invoked on the user's behalf.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        targetAgent: { type: "string", description: "Target coworker — canonical agentId (AGT-*) or slug alias." },
+        objective: { type: "string", description: "What the summoned coworker should address." },
+        tier: { type: "number", enum: [2, 3], description: "Interaction tier (default 2)." },
+      },
+      required: ["targetAgent", "objective"],
+    },
+    requiredCapability: null,
+    sideEffect: true,
+  },
   // ─── Deliberation Pattern Framework Tools (spec §6.8) ──────────────────────
   {
     name: "start_deliberation",
@@ -5133,6 +5168,74 @@ export async function executeTool(
         message: `Found ${threads.length} child thread${threads.length === 1 ? "" : "s"}.`,
         data: { threads },
       };
+    }
+    case "request_coworker": {
+      if (!context?.threadId) {
+        return { success: false, error: "missing_threadId", message: "request_coworker requires caller thread context." };
+      }
+      const targetAgent = String(params["targetAgent"] ?? "").trim();
+      const objective = String(params["objective"] ?? "").trim();
+      if (!targetAgent || !objective) {
+        return { success: false, error: "invalid_params", message: "request_coworker requires targetAgent and objective." };
+      }
+      const tierParam = Number(params["tier"]);
+      const enteredViaParam = typeof params["enteredVia"] === "string" ? params["enteredVia"] : undefined;
+      const { requestCoworker } = await import("@/lib/tak/coworker-collaboration");
+      try {
+        const result = await requestCoworker(
+          {
+            parentThreadId: context.threadId,
+            targetAgent,
+            objective,
+            tier: tierParam === 3 ? 3 : 2,
+            enteredVia: enteredViaParam === "escalation" || enteredViaParam === "spawn" ? enteredViaParam : "handoff",
+            callerAgentId: context.agentId ?? null,
+            questionPacketSummary: typeof params["questionPacketSummary"] === "string" ? params["questionPacketSummary"] : undefined,
+            routeContext: context.routeContext,
+          },
+          userId,
+        );
+        return {
+          success: true,
+          entityId: result.childThreadId,
+          message: `Handed off to ${result.targetLabel}.`,
+          data: result,
+        };
+      } catch (err) {
+        return { success: false, error: "handoff_failed", message: err instanceof Error ? err.message : "request_coworker failed." };
+      }
+    }
+    case "summon_coworker": {
+      if (!context?.threadId) {
+        return { success: false, error: "missing_threadId", message: "summon_coworker requires caller thread context." };
+      }
+      const targetAgent = String(params["targetAgent"] ?? "").trim();
+      const objective = String(params["objective"] ?? "").trim();
+      if (!targetAgent || !objective) {
+        return { success: false, error: "invalid_params", message: "summon_coworker requires targetAgent and objective." };
+      }
+      const tierParam = Number(params["tier"]);
+      const { summonCoworker } = await import("@/lib/tak/coworker-collaboration");
+      try {
+        const result = await summonCoworker(
+          {
+            parentThreadId: context.threadId,
+            targetAgent,
+            objective,
+            tier: tierParam === 3 ? 3 : 2,
+            routeContext: context.routeContext,
+          },
+          userId,
+        );
+        return {
+          success: true,
+          entityId: result.childThreadId,
+          message: `Summoned ${result.targetLabel}.`,
+          data: result,
+        };
+      } catch (err) {
+        return { success: false, error: "summon_failed", message: err instanceof Error ? err.message : "summon_coworker failed." };
+      }
     }
     case "create_backlog_item": {
       const itemId = typeof params["itemId"] === "string" && params["itemId"].trim()
