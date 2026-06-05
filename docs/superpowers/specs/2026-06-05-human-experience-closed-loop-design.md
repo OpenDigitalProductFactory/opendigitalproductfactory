@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft research — ready for founder/architect review |
+| Status | Research complete; design decisions resolved (founder + WWMD kernel 2026-06-05); awaiting founder go for Slice 1 implementation planning |
 | Date | 2026-06-05 |
 | Owner | Mark Bodman |
 | Author | Claude (Opus 4.8) |
@@ -188,13 +188,22 @@ Each slice is independently shippable and verifiable. **Do not build ahead** —
 - **Slice 5 — Loop closure + proposal pipeline.** Findings → `AgentActionProposal` → `BacklogItem` (`automated-detection`); next-cycle re-measure + auto-resolve with before/after. Verify: full round-trip — induce friction → coworker proposes BI → (mock) fix → re-measure shows resolution.
 - **Slice 6 (optional) — rrweb replay.** Flagged, masked, TTL'd `UxReplayChunk` + human replay viewer in `/platform/audit` or `/ops/improvements`. Verify: replay reconstructs a masked session for human diagnosis only.
 
-## Open Questions for Founder / Architect
+## Resolved Decisions (2026-06-05)
 
-1. **rrweb session replay — in or out for v1?** It is the highest-value diagnostic and the highest privacy-surface. Recommendation: ship Slices 1–5 first (events + signals + coworker close the loop without replay), add replay as Slice 6 once masking is proven. *Decision needed.*
-2. **Capture scope — internal portal users only, or also external `/portal` customer surface?** The IA audit lives in the internal shell. Recommendation: internal portal first (where the optimization target is the DPF product itself), extend to customer storefronts later as a *sellable* capability. *Decision needed.*
-3. **Analysis cadence.** Recommendation: daily `hx-analyze` for signals, weekly coworker synthesis pass — matching the "2–4 weeks to statistically significant patterns" research finding while keeping signal latency low. *Decision needed.*
-4. **Epic shape.** Propose new `EP-HX-LOOP` rather than folding into `EP-REDUCTION-GEAR-ARCH` (that epic is agent-side observability; this is human-side and large enough to stand alone, while reusing Gear primitives for the join). *Confirm.*
+Decided by founder ratification + WWMD principle kernel (`principle_decide`, population `in_platform_coworker`, full-kernel scope). No commandment conflicts on any; all kernel margins were thin (low confidence), so each was confirmed against the founder rather than auto-committed.
 
-## Proposed Next Step
+1. **rrweb session replay — OUT of v1.** *Founder decision.* Ship Slices 1–5 first (events + signals + coworker close the loop without replay); add masked replay as Slice 6 once masking is proven. Slice 6 (`BI-963CA935`) deferred.
+2. **Capture scope — internal portal only for v1.** *WWMD: `internal-only` (composite 1.181, margin 0.039).* Strongest principle pull: Prefer Self-Hosted Infrastructure, Tool Evaluation Before Adoption. Dogfood the DPF product surface where the IA audit found friction; extend to customer storefronts later as a sellable capability.
+3. **Cadence — daily friction signals + weekly coworker synthesis.** *WWMD: `daily-signals-weekly-synthesis` (composite 1.163, margin 0.098).* Strongest pull: Every Release Passes the QA Test Plan, Orchestrator-Worker Pattern. Matches the ~2–4 week window to statistically significant behavioral patterns while keeping post-deploy regression latency to one day.
+4. **Epic shape — new `EP-HX-LOOP`.** Filed; human-side experience is large enough to stand alone and reuses Reduction Gear primitives only for the client↔server join.
 
-On approval of this research direction, file the epic `EP-HX-LOOP` and the Slice 0→1 backlog items (substrate-verified), then hand Slice 1 to `dpf-writing-plans` for a phased implementation plan. Per standing process, an approved spec is committed to main and fed to planning in the same step.
+## Decision Pending Founder Go
+
+**Next step — implementation planning.** *WWMD: `hold-for-review` (composite 1.226, margin 0.028 over `plan-slice-1` 1.197).* The thin margin over "plan Slice 1" is the kernel signalling a genuine Human-in-the-Loop phase boundary (commandment tier): the transition from research into implementation planning is the founder's gate. On founder go, hand Slice 1 (`BI-F323122B`) to `dpf-writing-plans` for a phased, substrate-grounded plan; per standing process the ratified spec is fed to planning in the same step. `plan-all-slices` was rejected (over-specifies later slices that depend on Slice 1–3 learnings); `hold-for-review` preserves founder control at the phase boundary.
+
+## Status Summary
+
+- Research + architecture: **complete** (this spec, committed).
+- Backlog: epic `EP-HX-LOOP` + Slices 1–6 filed (`BI-F323122B`, `BI-122C437F`, `BI-B4EC0C40`, `BI-4A1B34E1`, `BI-96812FC2`, `BI-963CA935`), in `triaging` pending ratification.
+- Design decisions: **resolved** (above).
+- Awaiting: **founder go** to begin Slice 1 implementation planning.
