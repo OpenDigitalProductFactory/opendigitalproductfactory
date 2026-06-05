@@ -1,209 +1,601 @@
-# Human Experience Closed-Loop — Clickstream Capture, Analysis & Optimization Design
+# Human Experience Closed-Loop - Clickstream Capture, Analysis, and Optimization Design
 
 | Field | Value |
 | --- | --- |
-| Status | Research complete; design decisions resolved (founder + WWMD kernel 2026-06-05); awaiting founder go for Slice 1 implementation planning |
+| Status | Chief-architect review applied 2026-06-05; live epic and slice BIs exist; awaiting founder go for Slice 1 planning |
 | Date | 2026-06-05 |
 | Owner | Mark Bodman |
-| Author | Claude (Opus 4.8) |
-| Scope | Architecture and approach for silently capturing human user interactions in the portal, analyzing them for friction/poor outcomes, and proposing improvements on a periodic basis through a dedicated AI coworker — a closed analyze→improve loop |
-| Out of scope (this pass) | Writing feature code, schema migrations, seeding the coworker. This is the **research-first** deliverable; implementation follows as filed backlog items + plans |
-| Primary epic alignment | Proposed new epic `EP-HX-LOOP` (Human Experience Closed-Loop); reuses `EP-REDUCTION-GEAR-ARCH` observability primitives and the continuous-improvement flywheel |
-| Related substrate | `GearInterface`, `AdapterRunTelemetry`, `ToolExecution`, `DecisionInteraction` (server/agent side); `ImprovementSignal` flywheel; `BacklogItem` + `AgentActionProposal` pipeline; `portal-navigation-model.ts` |
-| Anchor specs/docs | `docs/superpowers/specs/2026-04-05-continuous-improvement-flywheel-design.md`, `docs/superpowers/specs/2026-06-05-portal-navigation-archetype-ia-design.md`, `docs/architecture/ai-coworker-development-principles.md`, `docs/platform-usability-standards.md` |
+| Original author | Claude (Opus 4.8) |
+| Architect review | Codex, 2026-06-05 |
+| Scope | Architecture for first-party capture of internal-portal human interactions, deterministic friction analysis, AI-assisted UX finding synthesis, and governed improvement proposal flow |
+| Out of scope | Feature code, schema migration, seeding the coworker, customer storefront capture, rrweb replay in v1, replacing the existing UX auditor / Build Studio verification substrate |
+| Primary epic alignment | Live epic `EP-HX-LOOP` - Human Experience Closed-Loop |
+| Related backlog | `BI-F323122B`, `BI-122C437F`, `BI-B4EC0C40`, `BI-4A1B34E1`, `BI-96812FC2`, `BI-963CA935` |
+| Current linkage gap | MCP live backlog shows `EP-HX-LOOP` and all six BIs in `triaging`, but the canonical specs/plans search still returned zero matches for this spec and the epic reported `hasSpec: false`. Ratification must link this spec path before planning begins. |
+| Anchor docs | `docs/superpowers/specs/2026-04-05-continuous-improvement-flywheel-design.md`, `docs/superpowers/specs/2026-06-05-portal-navigation-archetype-ia-design.md`, `docs/superpowers/specs/2026-05-16-ux-auditor-coworker-design.md`, `docs/architecture/ai-coworker-development-principles.md`, `docs/platform-usability-standards.md`, `apps/web/components/ui/report-kit/README.md` |
+
+## Architect Review Update
+
+The original direction is right: DPF should continuously learn from real human use, not only from agent logs, manual audits, and Build Studio verification. The spec needed several corrections so it does not create parallel truth or overstate current runtime state.
+
+Applied corrections:
+
+- **Live backlog state is now explicit.** `EP-HX-LOOP` exists with six slice BIs, all currently `triaging`; it is no longer a merely proposed epic. The missing piece is spec linkage/indexing, not epic creation.
+- **Current truth and target architecture are separated.** DPF already has strong server/agent observability; it does not yet have client-side human interaction capture or the proposed `InteractionEvent`, `UxSession`, `UxFrictionSignal`, or `UxReplayChunk` models.
+- **The design-knowledge dependency is corrected.** The current skill is `skills/design/ui-ux-design-intelligence.skill.md` with 67 styles, 96 palettes, 57 font pairings, 25 chart types, and 99 UX guidelines. The prior referenced skill name is not present in this worktree.
+- **The UX dashboard contract is now binding.** Any HX reporting or review surface must use DPF theme tokens, `report-kit` primitives, `LocalTime`, and the central status-intent registry. Do not hand-roll badges, KPI cards, filters, tables, charts, timestamps, or local color maps.
+- **The loop is positioned as an evidence producer, not a competing router.** HX findings emit `ImprovementSignal` rows and, when warranted, governed `AgentActionProposal` / `BacklogItem` records. Prioritization stays in the Continuous Improvement Flywheel and the normal backlog.
+- **rrweb remains out of v1.** Replay is useful for human diagnosis, but it carries the highest privacy risk. Slices 1-5 close the loop without replay; Slice 6 stays deferred until masking, retention, and operator controls are proven.
 
 ## Executive Verdict
 
-DPF already has *deep* observability of what **agents and the system** do — `GearInterface` records every capability transmission across ring boundaries, `AdapterRunTelemetry` meters every inference, `ToolExecution` audits every tool call, and `DecisionInteraction` captures governance-gate choices. What DPF has **no substrate for** is what the **human** does in the browser: which routes they visit, where they hesitate, what they click that does nothing, where they rage-click, where they abandon a flow. The portal navigation audit (`2026-06-05-portal-navigation-archetype-ia-design.md`) reached its conclusions by *manually* driving the UI and counting links in the DOM — there is no instrumented evidence stream behind it. That manual method does not scale and cannot run continuously.
+DPF can already see what **agents and the system** do. `GearInterface` records ring-boundary transmissions, `AdapterRunTelemetry` records inference cost and latency, `ToolExecution` audits platform tool calls, `DecisionInteraction` records governance choices, Build Studio carries `uxTestResults` and `uxVerificationStatus`, and the continuous-improvement flywheel can dedupe recurring evidence through `ImprovementSignal`.
 
-The recommended direction is a **four-stage closed loop**, each stage built on an existing DPF primitive rather than a bolt-on analytics SaaS:
+DPF still cannot see what the **human** does in the browser: which routes they enter, where a primary action is hard to find, which buttons receive dead clicks, where a user rage-clicks, where a form is abandoned, or whether a shipped UX fix measurably reduced friction. The portal navigation audit had to discover problems by manually driving the UI. That will not scale.
 
-1. **Capture** — a lightweight, privacy-first, autocapture-plus-typed-events client SDK that emits a normalized `InteractionEvent` stream, with optional `rrweb`-based session snapshots gated behind heavy masking. Silent by default, zero per-page instrumentation cost.
-2. **Store** — an append-only event store (`InteractionEvent`) plus derived per-session rollups (`UxSession`) and pre-computed friction signals (`UxFrictionSignal`), sized for single-org scale (one install = one Org).
-3. **Analyze** — a periodic background job (Inngest, same pattern as `material-freshness-decay` / `skill-metrics-aggregator`) that computes friction metrics deterministically, then hands structured aggregates (not raw replays) to a dedicated **UX Analyst coworker** that reasons over them and writes findings.
-4. **Optimize (loop closure)** — findings become `ImprovementSignal` rows (dedupe + recurrence), the strongest of which the coworker promotes into `BacklogItem`s via `AgentActionProposal` (`source: automated-detection`). Build Studio then implements; the *next* analysis cycle measures whether the metric moved. Always analyzing, always improving.
+The recommended architecture is a first-party, self-hosted, privacy-first HX loop:
 
-The architectural bet: **build capture and analysis on DPF's own observability and flywheel substrate, not on an embedded third-party product-analytics tool.** This keeps data single-org and self-hosted (no third-party data egress — consistent with `dpf-as-integration-conduit` and single-org-per-install), makes the human-experience stream a first-class peer of the agent-experience stream already in `GearInterface`, and lets the same governance/proposal machinery that handles agent-detected work handle UX-detected work.
+1. **Capture** - a small portal-shell SDK captures page views, route transitions, semantic clicks, frustration signals, client errors, and typed flow anchors. It masks before network transmission and never captures free text or keystrokes.
+2. **Store** - append-only `InteractionEvent` rows, derived `UxSession` rollups, and deterministic `UxFrictionSignal` rows create queryable evidence without depending on a third-party analytics product.
+3. **Analyze** - Inngest jobs compute funnels, dead/rage/error clicks, abandonment, slow interactions, route dwell, and server-side joins before any LLM sees the data.
+4. **Optimize** - the UX Analyst coworker reasons over structured analysis briefs, emits evidence-cited findings, writes `ImprovementSignal` rows, and proposes backlog work through governed proposal flow. The next cycle re-measures the same signal.
 
-## Problem Statement & Substrate Evidence
+The architectural bet is **DPF as its own private experience-analytics engine**, not an embedded SaaS analytics product. The result should feel less like "tracking users" and more like a governed quality system for the human-facing product surface.
 
-### What already exists (do not rebuild)
+## Current Repo Truth
 
-| Concern | Existing substrate | File / model |
+These are verified current substrates this spec builds on. They are not to be rebuilt or silently redefined.
+
+| Concern | Current substrate | Verified path / model | Architectural rule |
+| --- | --- | --- | --- |
+| Ring-boundary observability | `GearInterface` | `packages/db/prisma/schema.prisma` model `GearInterface`; `apps/web/lib/gear-interface/otel-exporter.ts` | Mirror or project from source events; do not mutate source write models to satisfy HX. |
+| Inference cost and latency | `AdapterRunTelemetry` | `schema.prisma` model `AdapterRunTelemetry`; `apps/web/lib/routing/adapter-telemetry-writer.ts` | Join HX to inference through explicit correlation IDs, not fuzzy after-the-fact matching. |
+| Tool invocation audit | `ToolExecution` / `ToolExecutionReceipt` | `schema.prisma` models `ToolExecution`, `ToolExecutionReceipt` | Autonomous HX proposals remain auditable. |
+| Governance choices | `DecisionInteraction` | `schema.prisma` model `DecisionInteraction` | Founder/operator gates are already captured elsewhere; do not create a second decision log. |
+| Improvement evidence | `ImprovementSignal` + `createOrTouchImprovementSignal()` | `apps/web/lib/improvement-flywheel/signals.ts` | HX recurring friction becomes deduped evidence; prioritization stays in the flywheel. |
+| Backlog/proposal flow | `AgentActionProposal`, `BacklogItem` | `apps/web/lib/actions/proposals.ts`, `apps/web/lib/explore/backlog.ts`, `apps/web/lib/mcp-tools.ts` | `BacklogItem.source` is intake origin; HX-created BIs use `source: automated-detection` and a closed `workType`. |
+| Live backlog truth | MCP `list_epics`, `list_backlog_items` | `EP-HX-LOOP` plus six BIs, all `triaging` | The next step is spec linkage and Slice 1 planning, not new-epic creation. |
+| Route inventory | `PORTAL_NAV_ROUTES` | `apps/web/lib/navigation/portal-navigation-model.ts` | Captured route/destination keys should resolve through the canonical nav model. |
+| Periodic jobs | Inngest scheduled/event functions | `apps/web/lib/queue/functions/*` | HX sessionization and analysis should follow existing Inngest patterns and quiescence discipline. |
+| UI/data-display standards | Theme tokens and report-kit | `docs/platform-usability-standards.md`, `apps/web/components/ui/report-kit/README.md` | HX review surfaces use report-kit and tokens only. |
+| UX design reference | `ui-ux-design-intelligence` skill | `skills/design/ui-ux-design-intelligence.skill.md` | Use the current skill name; do not use obsolete skill names unless they are reintroduced. |
+
+Missing today:
+
+- No client-side portal instrumentation stream.
+- No `InteractionEvent`, `UxSession`, `UxFrictionSignal`, `UxAnalysisRun`, or `UxReplayChunk` models.
+- No same-origin HX collector route.
+- No correlation ID passed from browser interactions into server/tool/inference records.
+- No UX Analyst coworker over observed human behavior.
+- No HX dashboard or governed operator control for capture, retention, and sampling.
+
+## Research and Benchmarking
+
+### DPF-Specific Research
+
+MCP `search_design_intelligence` returned no curated hits for HX analytics / friction-loop queries in the `ux` or `reasoning` domains during this review. Binding local guidance therefore comes from:
+
+- `docs/platform-usability-standards.md` for WCAG 2.2 AA, theme tokens, focus states, and prohibited hardcoded colors.
+- `apps/web/components/ui/report-kit/README.md` for status badges, stat cards, filters, tables, exports, charts, status intent mapping, and `LocalTime` usage.
+- `docs/superpowers/specs/2026-05-16-ux-auditor-coworker-design.md` for existing UX auditor, regression-test, `uxTestResults`, and `uxVerificationStatus` seams.
+- `docs/superpowers/specs/2026-06-05-portal-navigation-archetype-ia-design.md` for the first proven friction class this HX loop should measure after it lands.
+
+### External Patterns
+
+| Source | Pattern to adopt | Pattern to reject |
 | --- | --- | --- |
-| Agent capability transmission observability | `GearInterface` (Reduction Gear Phase 0) | `packages/db/prisma/schema.prisma:9859` |
-| Inference cost/latency/token metering | `AdapterRunTelemetry` | `schema.prisma:2464`; writer `apps/web/lib/routing/adapter-telemetry-writer.ts` |
-| Per-tool invocation audit | `ToolExecution` | `schema.prisma:3856` |
-| Governance-gate human decision capture | `DecisionInteraction` | `schema.prisma:9269` |
-| OTel projection | gear OTel exporter | `apps/web/lib/gear-interface/otel-exporter.ts` |
-| Dashboard metric aggregation | workspace-home telemetry | `apps/web/lib/workspace-home/telemetry.ts` |
-| Continuous-learning signal intake | `ImprovementSignal` + `createOrTouchImprovementSignal()` | `apps/web/lib/improvement-flywheel/signals.ts` |
-| Periodic background jobs | Inngest functions | `apps/web/lib/queue/functions/*` (e.g. `material-freshness-decay.ts`, `skill-metrics-aggregator.ts`) |
-| Feature proposal pipeline | `BacklogItem` ← `AgentActionProposal` | `apps/web/lib/actions/proposals.ts`, `backlog.ts` |
-| Coworker definition/registration | agent registry + prompts + skills | `packages/db/data/agent_registry.json`, `prompts/specialist/*.prompt.md`, `packages/dpf-skill-pack/skills/*/SKILL.md` |
-| Route/destination inventory (analysis ground truth) | portal navigation model | `apps/web/lib/navigation/portal-navigation-model.ts` |
+| PostHog autocapture | Hybrid autocapture plus explicit product events. Autocapture gives coverage; typed flow events provide funnel anchors. | Autocapture-only analysis that produces noisy, low-semantic events. |
+| rrweb | DOM replay can be useful after mask-all privacy proof. Use only for sampled/flagged human diagnosis. | Replay in v1, replay to LLMs, or raw DOM/text capture without proven masking. |
+| Datadog RUM frustration signals | Deterministic `rage_click`, `dead_click`, and `error_click` signals, searchable and dashboarded by route/action. | Treating frustration signals as proof of root cause without server-side correlation. |
+| FullStory/Amplitude/Heap category patterns | Frustration and funnel-dropoff taxonomy. | Importing a product-analytics vendor as the substrate. |
+| WCAG 2.2 | Accessibility remains a baseline: contrast, target size, keyboard/focus, and accessible authentication issues are UX evidence. | Treating analytics as a substitute for accessibility verification. |
+| UX research AI pipeline guidance | Break analysis into artifacts: event rollups -> coded signals -> aggregate brief -> AI synthesis -> cited finding. | Giving an LLM raw event firehose, raw replay, or unstructured transcripts and asking for generic insight. |
 
-### What is missing (the gap this design fills)
+### Capture Model Decision
 
-No client-side browser instrumentation exists. Specifically absent: page-view / route-transition tracking, navigation-flow reconstruction, form interaction (field focus, validation errors, abandonment), click/dead-click/rage-click capture, search-query capture, client-side error capture as the *user* experiences it, and any per-session correlation of the above. Confirmed by substrate sweep and by `search_specs_and_plans` returning **zero** hits for clickstream / session-replay / friction across `docs/superpowers/specs` and `docs/superpowers/plans`, and no matching epic in the live backlog.
+Use **hybrid autocapture plus typed events**.
 
-### Why this matters now
+Autocapture covers:
 
-The portal IA audit demonstrated real friction (17-link rail, 118 cross-domain links on `/workspace`, ambiguous "Portal" label) but had to be discovered by hand. A standing capture+analysis loop would have surfaced those same problems from real usage data — and would keep surfacing the *next* set automatically. This is the recursive-self-improvement principle applied to the human surface: every UX improvement the loop finds is also a sellable platform capability (a self-hosted, privacy-first, AI-driven UX optimization engine).
+- page view
+- route transition
+- semantic click
+- dead click
+- rage click
+- client JS error
+- visible API error
+- scroll-depth milestone
 
-## Design Research
+Typed events cover known product funnels:
 
-Per `design-research-required`: comparison of open-source and commercial approaches before committing to an architecture. Each row notes the **takeaway DPF should adopt or reject.**
+- `flow.build.ideate_submitted`
+- `flow.onboarding.archetype_selected`
+- `flow.business_setup.completed`
+- `flow.portal_settings.saved`
+- `flow.backlog_item.created`
 
-### Open-source / self-hostable
-
-| Solution | Approach | Takeaway for DPF |
-| --- | --- | --- |
-| **PostHog** (self-hosted) | Autocapture (clicks/pageviews/forms with no per-event code) + custom events + `rrweb` session replay + funnels; ClickHouse-backed | **Adopt the hybrid model**: autocapture for coverage, typed events for signal. PostHog itself warns autocapture-only produces "lack of signal" on high-traffic apps — so DPF must tune autocapture and layer a small set of typed domain events. Do **not** embed PostHog the product (data-egress + operational weight); borrow the model. |
-| **rrweb** | DOM full-snapshot + incremental mutation deltas; 5-min session ≈ 100–500KB; powers FullStory/Hotjar/Clarity/OpenReplay/Sentry under the hood | **Adopt as the session-snapshot engine** behind a flag, with `.rr-block`/`.rr-mask`/`.rr-ignore` masking defaults set to *mask-all* and opt-in unmasking. Replay is for human diagnosis of a flagged session, not for the LLM. |
-| **OpenReplay** (self-hosted) | rrweb-based replay + performance + privacy-by-default (data never leaves your infra) | Validates the **self-hosted, no-egress** posture as a legitimate first-class option, which aligns with single-org-per-install. |
-| **Matomo / Umami / Plausible** | Privacy-first web analytics, aggregate pageviews/funnels, no PII | Confirms aggregate metrics can be computed without identity-level tracking; good fallback posture if PII masking must be absolute. Too shallow alone (no friction signals, no replay). |
-
-### Commercial (reference for *capabilities*, not adoption)
-
-| Solution | Distinctive capability | Takeaway for DPF |
-| --- | --- | --- |
-| **FullStory** | Auto-detected frustration signals: rage clicks, dead clicks, error clicks, thrashing/excessive scroll; friction scoring | **Adopt the frustration-signal taxonomy** as DPF's deterministic `UxFrictionSignal` kinds. These are computed by rule, cheaply, before any LLM is involved. |
-| **Amplitude / Mixpanel / Heap** | Funnel + retention + cohort analysis; Heap pioneered autocapture | Funnel drop-off detection is a deterministic precursor to LLM analysis — compute funnels per key flow, feed drop-offs to the coworker. |
-| **Datadog RUM** | Frustration signals tied to real-user-monitoring + back-end traces | **Adopt the join**: correlate a client friction signal to the server-side `GearInterface`/`AdapterRunTelemetry`/`ToolExecution` it triggered. A rage-click on a slow button is a UX *and* a latency problem; the loop should see both sides. |
-| **Pendo / Contentsquare** | In-product guidance + LLM-assisted insight narration | Validates **LLM-as-narrator-of-aggregates**, not LLM-over-raw-logs. Matches the UX-research-AI finding below. |
-
-### Method research: how to use an LLM for this without it confabulating
-
-The UX-research-AI literature is explicit: *"giving an LLM a pile of transcripts and asking it to do analysis and synthesis is unlikely to produce good results."* The reliable pattern is a **staged pipeline where each step produces a concrete artifact feeding the next.** This directly informs the coworker design (§Analyze): the LLM never sees raw event firehose or raw replays. It receives **deterministically pre-computed aggregates** (funnel drop-offs, ranked friction signals, session rollups, the route inventory as ground truth) and is asked narrow, grounded questions. This also satisfies the DPF `mechanism-question-grounding-gap` lesson — give the model a real read-only grounding subset, never zero and never the raw firehose.
-
-### Capture-model decision
-
-**Hybrid autocapture + typed events**, mirroring PostHog's recommended default and the explicit warning against autocapture-only. Autocapture gives zero-instrumentation coverage of clicks/pageviews/route-transitions/form-submits; a curated set of **typed domain events** (e.g. `flow.build.ideate_submitted`, `flow.onboarding.archetype_selected`) gives the high-signal funnel anchors the analyzer needs. Typed events are declared centrally (one registry module) so the funnel definitions and the event names cannot drift.
-
-### Sources
-
-- [PostHog — autocapture vs instrumentation](https://posthog.com/docs/product-analytics/autocapture) · [Is autocapture still bad?](https://posthog.com/blog/is-autocapture-still-bad)
-- [rrweb (GitHub)](https://github.com/rrweb-io/rrweb) · [rrweb privacy guide](https://github.com/rrweb-io/rrweb/blob/master/guide.md)
-- [FullStory — rage clicks / frustration signals](https://www.fullstory.com/blog/rage-clicks/) · [Amplitude — rage clicks](https://amplitude.com/explore/analytics/rage-clicks)
-- [Datadog — frustration signals with RUM](https://www.datadoghq.com/blog/analyze-user-experience-frustration-signals-with-rum/)
-- [AI analysis & synthesis for UX research: a staged pipeline](https://greatquestion.co/ux-research/ai-analysis-synthesis)
-- [Contentsquare — LLM capabilities for experience analytics](https://contentsquare.com/blog/how-to-track-optimize-ai-traffic/)
+Typed events are declared in one registry module and referenced by the analyzer. Funnel definitions must import from that registry; string literals in multiple places are not allowed.
 
 ## Recommended Architecture
 
+```text
+BROWSER - internal portal shell
+  HX Capture SDK
+    - pageview / route / click / dead-click / rage-click / error
+    - typed flow anchors from a central registry
+    - masks before network, no free text, no keystrokes
+    - batches with sendBeacon/fetch keepalive
+    - emits hxCorrelationId for action-causing interactions
+        |
+        v
+POST /api/hx/collect
+  - same-origin, authenticated, origin-checked
+  - validates event schema and payload limits
+  - enriches route through portal-navigation-model
+  - writes append-only InteractionEvent
+        |
+        v
+Inngest hx-sessionize
+  - stitches events into UxSession
+  - computes rule-based UxFrictionSignal
+        |
+        v
+Inngest hx-analyze-daily / hx-synthesize-weekly
+  - computes funnels, dropoffs, dwell, repeat friction
+  - joins server-side telemetry by hxCorrelationId
+  - writes UxAnalysisRun / analysis brief
+        |
+        v
+UX Analyst coworker
+  - reads aggregate brief, not raw events
+  - consults ui-ux-design-intelligence and UX auditor outputs
+  - emits evidence-cited findings
+        |
+        v
+ImprovementSignal -> AgentActionProposal -> BacklogItem
+        |
+        v
+Build Studio / manual fix -> next HX cycle re-measures signal
 ```
-┌──────────────────────── BROWSER (portal client) ────────────────────────┐
-│  HX Capture SDK (silent)                                                 │
-│   • autocapture: pageview, route-transition, click, dead/rage-click,     │
-│     form focus/blur/submit/validation-error, scroll-depth, JS error      │
-│   • typed events: flow.* funnel anchors (central registry)               │
-│   • rrweb snapshot (flagged, mask-all default) — opt-in, sampled         │
-│   • PII masking + sampling + consent gate applied BEFORE network         │
-│   • batched, sendBeacon, non-blocking                                    │
-└───────────────────────────────┬──────────────────────────────────────────┘
-                                 │  POST /api/hx/collect (batched)
-                                 ▼
-┌──────────────────────── SERVER (Next.js app) ───────────────────────────┐
-│  Collector route → validate → enrich (route from portal-navigation-model)│
-│   → write append-only InteractionEvent  (+ optional UxReplayChunk)        │
-└───────────────────────────────┬──────────────────────────────────────────┘
-                                 │
-        ┌────────────────────────┴───────────────────────────┐
-        ▼                                                     ▼
-┌─────────────────────────┐                    ┌──────────────────────────────┐
-│ Inngest: hx-sessionize  │                    │ Inngest: hx-analyze (periodic) │
-│  (debounced/streaming)  │                    │  1. deterministic metrics:     │
-│  • stitch events→UxSession                    │     funnels, friction signals, │
-│  • compute UxFrictionSignal (rage/dead/       │     drop-offs, route dwell     │
-│    error/thrash/abandon) by RULE              │  2. join to GearInterface /    │
-└─────────────────────────┘                    │     AdapterRunTelemetry        │
-                                                │  3. UX Analyst coworker reasons│
-                                                │     over AGGREGATES (not raw)  │
-                                                │  4. emit ImprovementSignal     │
-                                                │  5. promote top-ranked →       │
-                                                │     AgentActionProposal →      │
-                                                │     BacklogItem (automated-    │
-                                                │     detection)                 │
-                                                └───────────────┬────────────────┘
-                                                                ▼
-                                                    Build Studio implements →
-                                                    next cycle re-measures the
-                                                    metric → loop closes
+
+## Architecture Rules
+
+1. **No third-party egress.** HX data stays in the local DPF install unless a future, governed export feature explicitly says otherwise.
+2. **Mask before network.** The browser SDK is the first privacy boundary. The collector rejects payloads that look like raw text, email, phone, address, or input values.
+3. **No raw replay in v1.** Slices 1-5 use structured events and aggregates only.
+4. **Correlation is explicit.** Browser actions that trigger server work carry an `hxCorrelationId`; server-side writers attach it where relevant. Do not infer joins by timestamp alone.
+5. **Deterministic before AI.** LLMs receive analysis briefs with counts, routes, signal IDs, and evidence pointers. They never receive the raw firehose.
+6. **One improvement spine.** HX emits into `ImprovementSignal` and governed proposal/backlog flow. It does not create a second work queue.
+7. **UI surfaces compose existing primitives.** Any HX list, dashboard, badge, KPI, filter, export, chart, or timestamp uses report-kit / `LocalTime` and DPF tokens.
+8. **Accessibility remains a gate.** HX signals can identify friction, but Build Studio UX verification and WCAG checks remain mandatory for shipped UI work.
+
+## Stage 1 - Capture
+
+Create a first-party client SDK loaded by the internal portal shell.
+
+### V1 Event Set
+
+Slice 1 should prove the smallest safe capture set first:
+
+| Event | Payload rule |
+| --- | --- |
+| `pageview` | route, nav key, timestamp, viewport class, referrer route key if internal |
+| `route_transition` | from route key, to route key, duration bucket |
+| `click` | route key, element descriptor, semantic role, `data-hx-id` if present |
+| `dead_click` | click target produced no route, focus, request, modal, or visible state change within threshold |
+| `rage_click` | repeated clicks on same semantic target within a short interval |
+| `client_error` | error class and route, with message redacted/truncated |
+| `visible_api_error` | route, action key, response class, visible error category |
+| `flow.*` | registry-defined funnel anchor with enumerated payload only |
+
+Form interaction metadata is allowed only after the Slice 1 plan proves masking tests. If included, it is metadata-only: field role, field key, validation error kind, focus/blur/submit/abandon. Field values, partial values, placeholder-derived text, and keystrokes are prohibited.
+
+### Element Identity
+
+Element identity resolves in this order:
+
+1. `data-hx-id` on intentionally instrumented controls.
+2. Accessible name / ARIA label, normalized and truncated.
+3. Semantic role plus nearest route/nav key.
+4. Last resort: stable component descriptor, never a raw CSS selector as primary identity.
+
+Do not use CSS selectors as canonical identity. They are brittle and may leak structure without meaning.
+
+### Capture Controls
+
+Use a `PlatformConfig` key such as `humanExperienceCapture` for v1 single-install control:
+
+```json
+{
+  "enabled": false,
+  "scope": "internal-portal",
+  "eventSamplingRate": 1.0,
+  "replaySamplingRate": 0,
+  "rawEventRetentionDays": 30,
+  "sessionRetentionDays": 90,
+  "signalRetentionDays": 365
+}
 ```
 
-### Stage 1 — Capture (client)
+The exact key name can be finalized in Slice 1, but the control must exist before collection is enabled. Capture must be visible to administrators and documented in the product surface.
 
-A small first-party SDK (no third-party script) loaded by the portal shell. Design constraints:
+## Stage 2 - Store
 
-- **Silent & non-blocking**: `requestIdleCallback` batching, `navigator.sendBeacon` on flush/unload, never blocks interaction. Sampling rate configurable per Org (default: 100% events, low-% rrweb snapshots).
-- **Privacy-first by construction**: masking applied *before* anything leaves the page. rrweb defaults to mask-all text + block inputs; typed events carry no free-text values, only enumerated identifiers + the route + element semantic role. PII never serialized. (Single-org install means data stays in the customer's own DB, but mask-by-default is still the rule — see §Privacy & Governance.)
-- **Autocapture taxonomy**: pageview, route-transition (Next.js router), click (with stable element descriptor: role + nearest `data-hx` / aria-label + route), dead-click, rage-click (≥3 clicks same target <1s — the FullStory rule), form field focus/blur/submit/validation-error, scroll-depth milestones, client JS error, API-error-as-seen-by-user.
-- **Typed events**: a central `hx-events.ts` registry declaring funnel anchors so analyzer funnel definitions reference the same constants the client emits — no drift.
-- **Stable element identity** leans on the existing `portal-navigation-model.ts` so a captured click resolves to a known destination/section, giving the analyzer ground-truth route semantics instead of opaque CSS selectors.
+Proposed models:
 
-### Stage 2 — Store
+### `InteractionEvent`
 
-Proposed new models (subject to substrate re-verification at build time — file BIs before adding):
+Append-only, raw-but-masked event store.
 
-- **`InteractionEvent`** — append-only raw event: `orgId`, `sessionId`, `anonUserRef` (pseudonymous, see governance), `eventType`, `route`, `destinationKey` (FK-ish to nav model), `elementDescriptor`, `occurredAt`, `viewport`, `payload` (enumerated/masked JSON), optional `gearInterfaceId`/`toolExecutionId` join keys. Indexed on `(orgId, sessionId, occurredAt)` and `(orgId, eventType, occurredAt)`.
-- **`UxSession`** — derived per-session rollup: route path sequence, duration, event counts by type, entry/exit route, outcome classification (completed-flow / abandoned / errored), friction-signal count.
-- **`UxFrictionSignal`** — deterministic, pre-LLM: `kind` (rage_click | dead_click | error_click | thrash | scroll_thrash | form_abandon | funnel_dropoff | slow_interaction), `route`, `destinationKey`, `severity`, `occurrences`, `affectedSessions`, optional joined `gearInterfaceId`. This is the analyzer's primary input and the metric the loop re-measures.
-- **`UxReplayChunk`** (optional, flagged) — masked rrweb chunks for a sampled/flagged subset, for *human* diagnosis only, with retention TTL.
+Fields:
 
-Sizing: single-org install (one Org per install per `single-org-per-install`) bounds volume dramatically vs. multi-tenant SaaS — Postgres + good indexes is sufficient at this scale; no ClickHouse dependency needed initially. Re-evaluate only if event volume crosses a documented threshold.
+- `eventId`
+- `organizationId`
+- `sessionId`
+- `anonymousActorRef`
+- `hxCorrelationId`
+- `eventType`
+- `route`
+- `routeKey`
+- `destinationKey`
+- `elementDescriptor`
+- `occurredAt`
+- `viewport`
+- `payload`
+- `privacyClass`
+- `retentionUntil`
 
-### Stage 3 — Analyze (deterministic metrics + UX Analyst coworker)
+Indexes:
 
-Two-part, matching the staged-pipeline research finding:
+- `(organizationId, sessionId, occurredAt)`
+- `(organizationId, eventType, occurredAt)`
+- `(organizationId, routeKey, occurredAt)`
+- `(hxCorrelationId)`
 
-1. **Deterministic pre-computation** (`hx-analyze` Inngest job, periodic — pattern of `skill-metrics-aggregator.ts`): compute funnels for each declared `flow.*`, rank `UxFrictionSignal`s by severity×reach, compute route dwell/bounce, and **join friction to the server side** (`GearInterface` / `AdapterRunTelemetry` / `ToolExecution`) so a slow-button rage-click carries its latency/cost cause. Output: a compact structured **analysis brief** artifact.
-2. **UX Analyst coworker** reasons over that brief — never the raw firehose, never raw replays. It receives: ranked friction signals, funnel drop-offs, the route inventory (ground truth), and the joined server-side cause. It is asked grounded questions: *what is the most likely cause of this drop-off; what change would reduce it; what is the confidence; what evidence supports it.* Output: structured findings with cited evidence (signal IDs, session counts), not prose speculation.
+### `UxSession`
 
-New coworker follows the established pattern: registry entry in `packages/db/data/agent_registry.json` (specialist tier, value-stream aligned to Operate/Improve), prompt at `prompts/specialist/ux-analyst.prompt.md`, skill at `packages/dpf-skill-pack/skills/ux-analysis/SKILL.md` (`triggerPattern` + `enforces` kernel principles + `composesFrom: ui-ux-pro-max`). It composes the existing **`ui-ux-pro-max`** skill (67 styles, 96 palettes, 99 UX guidelines, accessibility rules) as its design-knowledge base when proposing concrete fixes — so recommendations cite UX best practice, not invention.
+Derived session rollup.
 
-### Stage 4 — Optimize (loop closure)
+Fields:
 
-- Each finding → `createOrTouchImprovementSignal()` (`apps/web/lib/improvement-flywheel/signals.ts`) with `sourceType: "ux_friction"`, stable `sourceId` (e.g. `route+kind`). Dedupe + `recurrenceCount` means a recurring friction gets *louder*, not duplicated — recurrence becomes a priority signal.
-- Findings above a confidence/severity threshold → `AgentActionProposal` (`actionType: create_backlog_item`) → on approval → `BacklogItem` with `source: automated-detection`, `workType: feature|bug`, body citing the evidence bundle. Governance approves on **evidence quality** (`governance-approves-evidence-not-provenance`), not on the fact that an agent proposed it.
-- **Loop closes** when Build Studio ships the change and the *next* `hx-analyze` cycle re-measures the same `UxFrictionSignal` — if severity×reach dropped, the finding is auto-resolved with before/after evidence; if not, recurrence climbs and it re-surfaces. This is the "always analyzing, always improving" mechanic made concrete and measurable.
+- `sessionId`
+- `organizationId`
+- `anonymousActorRef`
+- `startedAt`
+- `endedAt`
+- `entryRouteKey`
+- `exitRouteKey`
+- `routeSequence`
+- `eventCounts`
+- `completedFlows`
+- `abandonedFlows`
+- `frictionSignalCount`
+- `outcome`
 
-## Privacy, Consent & Governance
+### `UxFrictionSignal`
 
-- **Mask-by-default**: rrweb mask-all + input-block; typed events carry enumerated identifiers only; no free-text, no keystroke content. Unmasking is explicit opt-in per element via `data-hx-allow`.
-- **Pseudonymous, not anonymous** (`obfuscated-not-anonymous`): sessions tie to a stable pseudonymous `anonUserRef` so cohorts and repeat-friction are distinguishable, without storing raw identity in the event stream. Mapping to a real user (if ever needed for support) is a separate, access-controlled join.
-- **Single-org, no egress**: data lives in the customer's own install DB. No third-party analytics vendor receives the stream — consistent with `single-org-per-install` and `dpf-as-integration-conduit`. This is a *selling point*, not just a constraint.
-- **Consent & retention**: a config gate (Org-level) controls capture on/off and rrweb sampling; raw `InteractionEvent` and `UxReplayChunk` carry retention TTLs; derived `UxFrictionSignal`/`UxSession` aggregates can persist longer as they are non-identifying.
-- **Auditability**: the coworker's proposals flow through the same `AgentActionProposal` audit trail as every other agent action; nothing auto-merges.
+Deterministic pre-LLM signal.
 
-## Phased Implementation (slices to file as backlog items)
+Kinds:
 
-Each slice is independently shippable and verifiable. **Do not build ahead** — file the BI, plan it, build it, functionally verify it on the live install before the next slice.
+- `rage_click`
+- `dead_click`
+- `error_click`
+- `form_abandon`
+- `funnel_dropoff`
+- `slow_interaction`
+- `route_thrashing`
+- `scroll_thrashing`
+- `accessibility_blocker_observed`
 
-- **Slice 0 — Spec ratification** (this document). Founder/architect review → commit → feed to planning.
-- **Slice 1 — Capture SDK + collector + `InteractionEvent`.** Autocapture core (pageview, route, click, rage/dead-click, form, error) + typed-event registry + `/api/hx/collect` + masking + sampling. Verify: drive the portal, confirm events land masked and correctly routed.
-- **Slice 2 — Sessionization + friction signals.** `hx-sessionize` job → `UxSession` + rule-based `UxFrictionSignal`. Verify: induce a rage-click / dead-click / form-abandon, confirm the correct signal rows appear.
-- **Slice 3 — Deterministic analysis brief + server-side join.** Funnels, drop-offs, dwell, join to `GearInterface`/`AdapterRunTelemetry`. Verify: brief artifact matches hand-computed numbers on seeded data.
-- **Slice 4 — UX Analyst coworker.** Registry + prompt + skill (composes `ui-ux-pro-max`), reasoning over the brief, emitting `ImprovementSignal`. Verify: coworker produces grounded, evidence-cited findings on a seeded friction scenario; no confabulation.
-- **Slice 5 — Loop closure + proposal pipeline.** Findings → `AgentActionProposal` → `BacklogItem` (`automated-detection`); next-cycle re-measure + auto-resolve with before/after. Verify: full round-trip — induce friction → coworker proposes BI → (mock) fix → re-measure shows resolution.
-- **Slice 6 (optional) — rrweb replay.** Flagged, masked, TTL'd `UxReplayChunk` + human replay viewer in `/platform/audit` or `/ops/improvements`. Verify: replay reconstructs a masked session for human diagnosis only.
+Fields:
 
-## Resolved Decisions (2026-06-05)
+- `signalId`
+- `kind`
+- `routeKey`
+- `destinationKey`
+- `elementDescriptor`
+- `severity`
+- `occurrences`
+- `affectedSessions`
+- `firstSeenAt`
+- `lastSeenAt`
+- `joinedServerRefs`
+- `evidence`
+- `status`
 
-Decided by founder ratification + WWMD principle kernel (`principle_decide`, population `in_platform_coworker`, full-kernel scope). No commandment conflicts on any; all kernel margins were thin (low confidence), so each was confirmed against the founder rather than auto-committed.
+### `UxAnalysisRun`
 
-1. **rrweb session replay — OUT of v1.** *Founder decision.* Ship Slices 1–5 first (events + signals + coworker close the loop without replay); add masked replay as Slice 6 once masking is proven. Slice 6 (`BI-963CA935`) deferred.
-2. **Capture scope — internal portal only for v1.** *WWMD: `internal-only` (composite 1.181, margin 0.039).* Strongest principle pull: Prefer Self-Hosted Infrastructure, Tool Evaluation Before Adoption. Dogfood the DPF product surface where the IA audit found friction; extend to customer storefronts later as a sellable capability.
-3. **Cadence — daily friction signals + weekly coworker synthesis.** *WWMD: `daily-signals-weekly-synthesis` (composite 1.163, margin 0.098).* Strongest pull: Every Release Passes the QA Test Plan, Orchestrator-Worker Pattern. Matches the ~2–4 week window to statistically significant behavioral patterns while keeping post-deploy regression latency to one day.
-4. **Epic shape — new `EP-HX-LOOP`.** Filed; human-side experience is large enough to stand alone and reuses Reduction Gear primitives only for the client↔server join.
+Stores each deterministic analysis cycle and the compact brief the coworker receives.
 
-## Decision Pending Founder Go
+Fields:
 
-**Next step — implementation planning.** *WWMD: `hold-for-review` (composite 1.226, margin 0.028 over `plan-slice-1` 1.197).* The thin margin over "plan Slice 1" is the kernel signalling a genuine Human-in-the-Loop phase boundary (commandment tier): the transition from research into implementation planning is the founder's gate. On founder go, hand Slice 1 (`BI-F323122B`) to `dpf-writing-plans` for a phased, substrate-grounded plan; per standing process the ratified spec is fed to planning in the same step. `plan-all-slices` was rejected (over-specifies later slices that depend on Slice 1–3 learnings); `hold-for-review` preserves founder control at the phase boundary.
+- `runId`
+- `startedAt`
+- `completedAt`
+- `scope`
+- `eventsAnalyzed`
+- `sessionsAnalyzed`
+- `signalsAnalyzed`
+- `brief`
+- `modelInputDigest`
+- `coworkerFindingRefs`
 
-## Status Summary
+### `UxReplayChunk`
 
-- Research + architecture: **complete** (this spec, committed).
-- Backlog: epic `EP-HX-LOOP` + Slices 1–6 filed (`BI-F323122B`, `BI-122C437F`, `BI-B4EC0C40`, `BI-4A1B34E1`, `BI-96812FC2`, `BI-963CA935`), in `triaging` pending ratification.
-- Design decisions: **resolved** (above).
-- Awaiting: **founder go** to begin Slice 1 implementation planning.
+Deferred to Slice 6. If implemented later, it must be mask-all by default, sampled, TTL-limited, and for human diagnosis only. It is not part of v1 acceptance.
+
+## Stage 3 - Analyze
+
+Use two deterministic jobs and one synthesis job:
+
+| Job | Cadence | Responsibility |
+| --- | --- | --- |
+| `hx-sessionize` | Event-driven or short debounce | Stitch events into sessions and update derived counts. |
+| `hx-analyze-daily` | Daily | Compute friction signals, funnel dropoffs, route dwell, and server-side joins. |
+| `hx-synthesize-weekly` | Weekly | Ask UX Analyst coworker to synthesize top evidence bundles into findings. |
+
+Daily deterministic signals give quick regression detection. Weekly coworker synthesis reduces proposal spam and allows patterns to mature.
+
+The analysis brief must include:
+
+- top signals by `severity x affectedSessions x recurrence`
+- funnel completion and dropoff counts
+- route/key inventory from `portal-navigation-model.ts`
+- joined `ToolExecution`, `AdapterRunTelemetry`, and `GearInterface` refs when correlation exists
+- before/after metric if the signal was previously acted on
+- excluded data count and privacy rejection count
+
+The analysis brief must not include:
+
+- raw free text
+- raw DOM
+- full session replay
+- unmasked form values
+- user identity
+
+## Stage 4 - Optimize
+
+The UX Analyst coworker converts briefs into governed findings.
+
+### Coworker Contract
+
+Create a specialist coworker only after Slice 1-3 evidence exists.
+
+Proposed assets:
+
+- `prompts/specialist/ux-analyst.prompt.md`
+- `packages/dpf-skill-pack/skills/ux-analysis/SKILL.md`
+- registry entry in `packages/db/data/agent_registry.json`
+
+The coworker should:
+
+- consume `UxAnalysisRun.brief`
+- cite `UxFrictionSignal.signalId`, route key, affected-session count, and before/after metric
+- consult `skills/design/ui-ux-design-intelligence.skill.md`
+- reference AGT-903 / AGT-906 / AGT-907 outputs when a finding overlaps accessibility, heuristic UX, or regression-test scope
+- produce structured findings, not generic prose
+
+The coworker must not:
+
+- read raw events by default
+- read replay chunks
+- propose work without evidence counts
+- bypass `ImprovementSignal`
+- auto-create backlog items without governed proposal flow unless a future policy explicitly grants that authority
+
+### Loop Closure
+
+1. Finding calls `createOrTouchImprovementSignal()` with `sourceType: "ux_friction"` and stable `sourceId` such as `routeKey:kind:elementKey`.
+2. Recurrence increments the existing signal instead of creating duplicates.
+3. Findings above threshold create `AgentActionProposal(actionType: "create_backlog_item")`.
+4. On approval, `BacklogItem` uses `source: automated-detection`, `workType: bug | feature | refactor`, and starts in the current backlog intake state (`triaging` in live MCP results).
+5. Build Studio or manual implementation ships a fix.
+6. The next HX analysis run compares the same signal before/after.
+7. If severity and reach drop below threshold, the finding resolves with evidence; if not, recurrence climbs and it resurfaces.
+
+## Operator UX
+
+The first operator surface should be quiet, operational, and evidence-first.
+
+Recommended placement:
+
+- `/ops/improvements` for findings, proposed work, and before/after outcomes.
+- `/platform/audit/metrics` or a Platform Audit subview for capture health, privacy rejection counts, retention status, and collector diagnostics.
+- `/platform/audit` only for any future replay viewer.
+
+UI requirements:
+
+- Use `StatCard` for top-line event/session/signal counts.
+- Use `StatusBadge` and central `statusColors` for signal status and severity.
+- Use `FilterBar` for route, signal kind, severity, and status filters.
+- Use `DataTable` for findings/signals.
+- Use `Chart` by subpath only for meaningful time-series views.
+- Use `ExportButton` only for masked aggregates; raw events are not exported in v1.
+- Use `LocalTime` for timestamps.
+- Use only `var(--dpf-*)` tokens.
+- Provide empty states that explain whether capture is off, no traffic exists, or no friction was detected.
+
+The surface should show confidence honestly:
+
+- sample size
+- analysis window
+- capture status
+- privacy rejection count
+- correlation coverage
+- whether the finding is new, recurring, resolved, or inconclusive
+
+## Privacy, Consent, and Governance
+
+This capability is powerful enough to damage trust if it feels hidden. Privacy is not a later UI affordance; it is part of the architecture.
+
+Rules:
+
+- Capture is disabled until an operator enables it through a governed config surface.
+- Internal-portal capture is v1 scope. Customer storefront and external `/portal` capture require a separate consent/legal review.
+- The browser SDK strips or blocks sensitive values before network transmission.
+- Inputs, textareas, contenteditable nodes, password fields, tokens, emails, phone numbers, addresses, and payment-like values are deny-listed.
+- `data-hx-allow` may only allow semantic metadata. It must not allow raw text capture.
+- The collector validates payload size, allowed event types, route keys, and privacy class.
+- Same-origin and session authentication are required. No CORS collection endpoint.
+- Raw events have short TTL. Aggregates and signals may persist longer because they are non-identifying evidence.
+- Pseudonymous `anonymousActorRef` is not anonymous. Any identity join for support must be access-controlled and audited.
+- Replay is off in v1. If Slice 6 lands later, replay chunks must be masked, sampled, TTL-limited, and never sent to the LLM.
+
+## Phased Implementation
+
+Each slice is independently shippable and verifiable. Do not build ahead; file/plan/build/verify one slice at a time.
+
+### Slice 0 - Ratification and Linkage
+
+Backlog already exists. Before implementation planning:
+
+- Link this spec path to `EP-HX-LOOP`.
+- Record the founder/architect decision that Slices 1-5 are v1 and Slice 6 is deferred.
+- Confirm the six BIs remain the right slice shape.
+- Feed `BI-F323122B` into planning only after linkage is visible through MCP search/spec surfaces.
+
+### Slice 1 - Capture SDK, Collector, and `InteractionEvent`
+
+Backlog item: `BI-F323122B`.
+
+Required plan correction: split the work internally into a safe minimum proof before full event breadth.
+
+- 1A: pageview, route transition, click, dead/rage click, client/visible API error, typed-event registry, collector route, payload validation, `InteractionEvent`.
+- 1B: form metadata only after masking tests pass. No form values.
+
+Verification:
+
+- Drive the canonical local install internal portal.
+- Confirm masked events land with route keys and no sensitive payload.
+- Confirm collector rejects raw-looking text and oversized payloads.
+- Confirm SDK does not block interaction or create layout shift.
+
+### Slice 2 - Sessionization and Friction Signals
+
+Backlog item: `BI-122C437F`.
+
+- Add `UxSession`.
+- Add deterministic `UxFrictionSignal`.
+- Implement `hx-sessionize`.
+- Implement rule tests for each signal kind.
+
+Verification:
+
+- Induce known dead click, rage click, route thrash, and form-abandon metadata in a controlled route.
+- Confirm signals match expected rows and evidence.
+
+### Slice 3 - Analysis Brief and Server-Side Join
+
+Backlog item: `BI-B4EC0C40`.
+
+- Add `UxAnalysisRun`.
+- Add `hx-analyze-daily`.
+- Propagate and join by `hxCorrelationId`.
+- Compute funnel/dropoff/dwell aggregates.
+
+Verification:
+
+- Seed a deterministic event fixture.
+- Hand-compute counts and compare to the generated brief.
+- Confirm joined server refs appear only when explicit correlation exists.
+
+### Slice 4 - UX Analyst Coworker
+
+Backlog item: `BI-4A1B34E1`.
+
+- Add coworker registry, prompt, and skill.
+- Use `ui-ux-design-intelligence`.
+- Produce evidence-cited findings over analysis briefs.
+- Emit `ImprovementSignal` only; do not create a parallel queue.
+
+Verification:
+
+- Run on a seeded friction scenario.
+- Confirm finding cites signal IDs, affected-session counts, route keys, and proposed fix rationale.
+- Confirm no raw event payload reaches the model.
+
+### Slice 5 - Loop Closure and Proposal Pipeline
+
+Backlog item: `BI-96812FC2`.
+
+- Threshold findings into `AgentActionProposal`.
+- On approval, create `BacklogItem(source: automated-detection)`.
+- Re-measure after a mock or real fix.
+- Resolve or resurface the signal based on metric movement.
+
+Verification:
+
+- Full round trip: induce friction -> synthesize finding -> approve BI proposal -> apply mock fix -> re-measure resolution.
+
+### Slice 6 - Masked Replay (Deferred)
+
+Backlog item: `BI-963CA935`.
+
+Deferred. Only start after Slices 1-5 prove value and privacy controls.
+
+Requirements if later reactivated:
+
+- rrweb mask-all defaults.
+- sampled/flagged sessions only.
+- short TTL.
+- human diagnosis only.
+- no LLM replay access.
+- report-kit viewer if surfaced.
+
+## Resolved Decisions
+
+1. **Replay is out of v1.** Slices 1-5 are sufficient to close the loop.
+2. **Internal portal only for v1.** External customer surfaces need separate consent and legal review.
+3. **Cadence is daily deterministic signals plus weekly coworker synthesis.** This balances regression latency with noise control.
+4. **Epic shape is standalone.** `EP-HX-LOOP` exists and is the right home; it reuses Reduction Gear and flywheel primitives without being swallowed by either.
+5. **Report-kit is binding for HX UI.** HX dashboards/reviews must not become a new design-system fork.
+6. **`ui-ux-design-intelligence` is the design skill dependency.** Any future rename must update the spec and seeded skill references in the same change.
+
+## Open Decisions
+
+1. **Default capture state after install.** Recommendation: disabled until explicitly enabled in Platform config, even for internal portal, because trust matters more than early data volume.
+2. **First analysis surface.** Recommendation: `/ops/improvements` for findings/proposals; Platform Audit for collector/privacy health.
+3. **Exact raw-event retention default.** Recommendation: 30 days raw events, 90 days sessions, 365 days signals, but confirm against deployment/customer requirements in Slice 1 planning.
+4. **Correlation ID storage targets.** Recommendation: add optional correlation refs to HX models first; only add optional fields to existing server-side writers when a concrete join is needed and tested.
+
+## Acceptance Criteria
+
+- Live MCP search can find this spec path for `EP-HX-LOOP`.
+- `BI-F323122B` plan names current repo truth and does not claim HX models already exist.
+- Collector is same-origin, authenticated, origin-checked, schema-validated, and payload-limited.
+- Browser SDK masks before network and has tests proving sensitive inputs are not serialized.
+- `InteractionEvent` rows contain route/nav keys from `portal-navigation-model.ts`.
+- `UxFrictionSignal` rows are deterministic and unit-tested.
+- `UxAnalysisRun.brief` contains aggregate evidence only.
+- UX Analyst coworker cannot access raw events or replay by default.
+- Findings emit `ImprovementSignal` before any backlog proposal.
+- Backlog proposals use `source: automated-detection` and valid closed `workType`.
+- HX operator UI uses report-kit, `LocalTime`, DPF tokens, and central status intents.
+- Canonical-runtime UX verification exercises the HX control surface and at least one captured portal flow.
+
+## Risks and Mitigations
+
+| Risk | Mitigation |
+| --- | --- |
+| Privacy/trust regression | Disabled-by-default config, visible admin controls, masking before network, payload rejection tests, short TTL. |
+| Event noise | Hybrid typed events, deterministic aggregation, weekly synthesis threshold, recurrence dedupe. |
+| LLM confabulation | Analysis briefs only, evidence IDs required, no raw firehose, no finding without counts. |
+| False root cause | Explicit server correlation IDs; findings state confidence and correlation coverage. |
+| Performance overhead | Idle batching, sendBeacon/keepalive, payload caps, no synchronous blocking, SDK perf test. |
+| Parallel work queue | Always emit through `ImprovementSignal` and governed proposal/backlog flow. |
+| UI design fork | Report-kit and token requirements are acceptance criteria. |
+| Replay scope creep | Replay is deferred and human-only; no LLM replay access. |
+
+## Next Step
+
+Founder go should trigger Slice 1 planning for `BI-F323122B`, not implementation directly. The plan must start with a failing test/migration shape for `InteractionEvent`, a masking contract test, and a canonical-runtime verification path that proves the collector works on the internal portal without capturing sensitive values.
+
+## Sources
+
+- [PostHog autocapture docs](https://posthog.com/docs/product-analytics/autocapture)
+- [PostHog - Is autocapture still bad?](https://posthog.com/blog/is-autocapture-still-bad)
+- [rrweb guide](https://rrweb.com/docs/guide)
+- [Datadog RUM frustration signals](https://docs.datadoghq.com/real_user_monitoring/application_monitoring/browser/frustration_signals/)
+- [W3C WCAG 2.2](https://www.w3.org/TR/WCAG22/)
+- [Great Question - AI for UXR Analysis and Synthesis](https://greatquestion.co/ux-research/ai-analysis-synthesis)
