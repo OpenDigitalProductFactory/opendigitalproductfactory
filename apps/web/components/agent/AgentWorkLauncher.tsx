@@ -11,16 +11,33 @@ export type AgentWorkLauncherTopic = {
   expectedNextStep: string;
 };
 
+export type AgentWorkLaunchContext = {
+  routeContext?: string;
+};
+
 type Props = {
   agentName: string;
   primaryActionLabel: string;
   topics: AgentWorkLauncherTopic[];
+  routeContext?: string;
 };
 
-export function dispatchAgentPrompt(prompt: string) {
+function cleanRouteContext(routeContext: string | undefined): string | undefined {
+  const trimmed = routeContext?.trim();
+  return trimmed || undefined;
+}
+
+export function dispatchAgentPrompt(
+  prompt: string,
+  context: AgentWorkLaunchContext = {},
+) {
+  const routeContext = cleanRouteContext(context.routeContext);
   document.dispatchEvent(
     new CustomEvent("open-agent-panel", {
-      detail: { autoMessage: prompt },
+      detail: {
+        autoMessage: prompt,
+        ...(routeContext ? { routeContext } : {}),
+      },
     }),
   );
 }
@@ -29,6 +46,7 @@ export function AgentWorkLauncher({
   agentName,
   primaryActionLabel,
   topics,
+  routeContext,
 }: Props) {
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const selectedTopic = topics.find((topic) => topic.id === selectedTopicId) ?? null;
@@ -109,7 +127,7 @@ export function AgentWorkLauncher({
               <button
                 type="button"
                 data-confirm-agent-work="true"
-                onClick={() => dispatchAgentPrompt(selectedTopic.prompt)}
+                onClick={() => dispatchAgentPrompt(selectedTopic.prompt, { routeContext })}
                 className="rounded-full bg-[var(--dpf-accent)] px-3 py-2 text-sm font-medium text-white"
               >
                 Start with {agentName}
