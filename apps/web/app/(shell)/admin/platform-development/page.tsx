@@ -5,7 +5,6 @@ import { ForkSetupPanel } from "@/components/admin/ForkSetupPanel";
 import LegacyTokenOverrideBanner from "@/components/admin/LegacyTokenOverrideBanner";
 import { McpTokenManager } from "@/components/admin/McpTokenManager";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
-import { PlatformUpdateApplyPanel } from "@/components/admin/PlatformUpdateApplyPanel";
 import TokenExpiryBanner from "@/components/admin/TokenExpiryBanner";
 import {
   getGitHubConnectedState,
@@ -51,10 +50,10 @@ export default async function AdminPlatformDevelopmentPage() {
       <AdminTabNav />
       <TokenExpiryBanner />
       <LegacyTokenOverrideBanner />
-      <PlatformUpdateApplyPanel
-        updatePending={config?.updatePending ?? false}
-        pendingVersion={config?.pendingVersion ?? null}
-      />
+      {/* BI-D43EB266: the source-merge "Apply update" control moved to the
+          single operator update surface at Ops -> Self-Upgrade. This page keeps
+          contribution policy + identity config; the update banner now deep-links
+          to /ops/self-upgrade. */}
       <ForkSetupPanel
         enabled={isContributionModelEnabled()}
         contributionModel={config?.contributionModel ?? null}

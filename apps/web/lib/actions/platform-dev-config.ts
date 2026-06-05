@@ -736,6 +736,20 @@ const UPDATE_WORK_BRANCH = "my-changes";
 const HOOKLESS_GIT = "git -c core.hooksPath=/dev/null";
 const PLATFORM_UPDATE_SOURCE_PATHS = ["apps/web", "packages"] as const;
 const STALE_GIT_INDEX_LOCK_MS = 30_000;
+const VERSION_SENTINEL_FILE = ".dpf-version";
+
+// BI-4112378F: the image-sync snapshot path that builds `my-changes` and the
+// source-copy path that builds `dpf-upstream` normalise line endings
+// differently, so two trees that are byte-identical modulo CRLF↔LF diverge
+// wholesale (verified: 4,186 files, ~99.96% of which collapse when CR-at-EOL
+// is ignored). `-X ignore-cr-at-eol` makes the merge compare content the way
+// the clean-check guards already do (see gitDiffHasRealChanges), neutralising
+// the phantom conflicts at merge time. The `.gitattributes` policy below
+// declares the durable normalisation contract so future commits on both
+// branches converge on LF.
+const MERGE_EOL_TOLERANT_OPTS = "-X ignore-cr-at-eol";
+const GIT_ATTRIBUTES_FILE = ".gitattributes";
+const GIT_ATTRIBUTES_POLICY = "* text=auto eol=lf\n";
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
@@ -750,6 +764,52 @@ async function ensureWorkspaceSafeDirectory(
     `git config --global --add safe.directory ${shellQuote(workspace)} >/dev/null 2>&1 || true`,
     gitOpts,
   );
+}
+
+/**
+ * Read the installed-version sentinel (`.dpf-version`) written by the last
+ * successful apply. Returns the trimmed contents, or null when the sentinel
+ * is absent / unreadable (e.g. a freshly bootstrapped workspace).
+ *
+ * Used to short-circuit a redundant same-version apply: if the install is
+ * already on `pendingVersion`, re-running the merge would only surface the
+ * BI-4112378F phantom EOL conflicts, so we treat it as a no-op instead.
+ */
+function readInstalledVersion(
+  workspace: string,
+  resolvePath: (...parts: string[]) => string,
+): string | null {
+  const { existsSync, readFileSync } = lazyFs();
+  const sentinel = resolvePath(workspace, VERSION_SENTINEL_FILE);
+  if (!existsSync(sentinel)) return null;
+  try {
+    const raw = readFileSync(sentinel, "utf-8");
+    const trimmed = raw.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ensure the durable line-ending normalisation policy (`.gitattributes`
+ * `* text=auto eol=lf`) is present in the workspace and staged. Idempotent —
+ * skips the write/add when the policy already matches. Declaring this on the
+ * `dpf-upstream` refresh lands it on both managed branches once merged, so the
+ * snapshot and source-copy population paths converge on LF going forward.
+ */
+async function ensureLineEndingPolicy(
+  execUpdate: ExecUpdate,
+  gitOpts: ExecUpdateOptions,
+  workspace: string,
+  resolvePath: (...parts: string[]) => string,
+): Promise<void> {
+  const { existsSync, readFileSync, writeFileSync } = lazyFs();
+  const target = resolvePath(workspace, GIT_ATTRIBUTES_FILE);
+  const current = existsSync(target) ? readFileSync(target, "utf-8") : "";
+  if (current === GIT_ATTRIBUTES_POLICY) return;
+  writeFileSync(target, GIT_ATTRIBUTES_POLICY, "utf-8");
+  await execUpdate(`git add ${GIT_ATTRIBUTES_FILE}`, gitOpts);
 }
 
 function recoverStaleGitIndexLock(
@@ -1033,7 +1093,33 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
     await ensureWorkspaceSafeDirectory(execUpdate, gitOpts, workspace);
     recoverStaleGitIndexLock(workspace, resolvePath);
 
-    if (existsSync(resolvePath(workspace, ".git", "MERGE_HEAD"))) {
+    const mergeInProgress = existsSync(resolvePath(workspace, ".git", "MERGE_HEAD"));
+
+    // BI-4112378F: short-circuit a redundant same-version apply. When the
+    // install is already on `pendingVersion` (no merge mid-flight), there is
+    // nothing to merge — proceeding would only re-derive the phantom EOL
+    // conflicts between the snapshot-built and source-copied trees. Treat it
+    // as a clean no-op: clear the pending flag and report zero files changed.
+    if (!mergeInProgress) {
+      const installedVersion = readInstalledVersion(workspace, resolvePath);
+      if (installedVersion !== null && installedVersion === pendingVersion) {
+        await prisma.platformDevConfig.update({
+          where: { id: "singleton" },
+          data: { updatePending: false, pendingVersion: null },
+        });
+        revalidatePath("/admin/platform-development");
+        revalidatePath("/ops/self-upgrade");
+        revalidatePath("/", "layout"); // banner lives in shell layout
+        return {
+          kind: "clean-merge",
+          message: `Already on v${pendingVersion}. No changes to merge.`,
+          version: pendingVersion,
+          filesUpdated: 0,
+        };
+      }
+    }
+
+    if (mergeInProgress) {
       const conflicts = await collectPlatformUpdateConflicts(
         execUpdate,
         gitOpts,
@@ -1063,6 +1149,7 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
 
     // Step 1-3: Refresh dpf-upstream branch with new source
     await checkoutManagedUpdateBranch(execUpdate, gitOpts, UPDATE_UPSTREAM_BRANCH);
+    await ensureLineEndingPolicy(execUpdate, gitOpts, workspace, resolvePath);
     await execUpdate("rm -rf apps/web packages", gitOpts);
     await execUpdate("cp -r /app/apps/web-src/. apps/web/", gitOpts);
     await execUpdate("cp -r /app/packages-src/. packages/", gitOpts);
@@ -1080,10 +1167,16 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
       );
     }
 
-    // Step 4: Merge into my-changes
+    // Step 4: Merge into my-changes. `-X ignore-cr-at-eol` (BI-4112378F)
+    // prevents the snapshot-vs-source CRLF↔LF mismatch from manufacturing
+    // conflicts on otherwise-identical files. HOOKLESS_GIT keeps host
+    // checkout/commit hooks (git-lfs, pre-commit) out of the merge.
     await checkoutManagedUpdateBranch(execUpdate, gitOpts, UPDATE_WORK_BRANCH);
     try {
-      await execUpdate(`git merge ${UPDATE_UPSTREAM_BRANCH} --no-commit --no-ff`, gitOpts);
+      await execUpdate(
+        `${HOOKLESS_GIT} merge ${MERGE_EOL_TOLERANT_OPTS} ${UPDATE_UPSTREAM_BRANCH} --no-commit --no-ff`,
+        gitOpts,
+      );
     } catch {
       // Merge conflicts surface as a non-zero exit — expected, handled below
     }

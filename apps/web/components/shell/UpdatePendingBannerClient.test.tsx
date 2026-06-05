@@ -17,9 +17,11 @@ describe("UpdatePendingBannerClient", () => {
     render(<UpdatePendingBannerClient pendingVersion="v1.2.3" />);
 
     expect(screen.getByRole("status")).toHaveAttribute("data-overlay-banner", "true");
-    expect(screen.getByRole("link", { name: /review in admin/i })).toHaveAttribute(
+    // BI-D43EB266: the banner deep-links to the single operator update surface
+    // (Ops -> Self-Upgrade), not the Admin source-merge destination.
+    expect(screen.getByRole("link", { name: /review in self-upgrade/i })).toHaveAttribute(
       "href",
-      "/admin/platform-development",
+      "/ops/self-upgrade",
     );
     expect(screen.getByRole("button", { name: /collapse platform update banner/i })).toBeInTheDocument();
   });
