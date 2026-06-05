@@ -16,7 +16,9 @@ import {
   A2A_GRAPH_LAYOUT,
   A2A_STATES,
   a2aEdgeSourceRecords,
+  a2aEdgeVisibleAtReplayTime,
   a2aStateIntent,
+  type A2aReplayRange,
   columnPositions,
   coworkerHref,
   EDGE_KIND_LABEL,
@@ -41,9 +43,12 @@ type Props = {
   coworkers: OperationsMapRoutingCoworker[];
   a2aEdges: OperationsMapA2aEdge[];
   a2aLegend: OperationsMapA2aLegendItem[];
+  /** Shared replay playhead from the provider routing timeline (null = no sync). */
+  replayTime?: number | null;
+  replayRange?: A2aReplayRange | null;
 };
 
-export function A2aInteractionsPanel({ coworkers, a2aEdges, a2aLegend }: Props) {
+export function A2aInteractionsPanel({ coworkers, a2aEdges, a2aLegend, replayTime, replayRange }: Props) {
   const defaults = getDefaultA2aFilterPreference();
   const [typeFilters, setTypeFilters] = useState<OperationsMapA2aEdgeKind[]>(defaults.types);
   const [stateFilters, setStateFilters] = useState<OperationsMapA2aInteractionState[]>(defaults.states);
@@ -86,6 +91,10 @@ export function A2aInteractionsPanel({ coworkers, a2aEdges, a2aLegend }: Props) 
     return orderedUnique([...ids], labelFor);
   }, [a2aEdges, labelFor]);
 
+  // Active only while the provider routing timeline has been scrubbed back from
+  // "now"; at the default playhead position every recent interaction stays visible.
+  const replaySynced = replayTime != null && replayRange != null && replayTime < replayRange.current;
+
   const filteredEdges = useMemo(
     () =>
       a2aEdges.filter((edge) => {
@@ -98,9 +107,12 @@ export function A2aInteractionsPanel({ coworkers, a2aEdges, a2aLegend }: Props) 
           if (actorRole === "to" && !matchesTo) return false;
           if (actorRole === "either" && !matchesFrom && !matchesTo) return false;
         }
+        if (replayTime != null && replayRange != null && !a2aEdgeVisibleAtReplayTime(edge.occurredAt, replayTime, replayRange)) {
+          return false;
+        }
         return true;
       }),
-    [a2aEdges, typeFilters, stateFilters, actorId, actorRole],
+    [a2aEdges, typeFilters, stateFilters, actorId, actorRole, replayTime, replayRange],
   );
 
   const selectedEdge = filteredEdges.find((edge) => edge.id === selectedEdgeId) ?? null;
@@ -138,6 +150,14 @@ export function A2aInteractionsPanel({ coworkers, a2aEdges, a2aLegend }: Props) 
             coworker, under what authority, and how it resolved. Filter by interaction type, state, and coworker for
             audit and troubleshooting.
           </p>
+          {replaySynced ? (
+            <p
+              data-a2a-replay-synced
+              className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-[var(--dpf-accent-soft)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--dpf-text)]"
+            >
+              Synced to the routing replay timeline — showing interactions up to the selected time.
+            </p>
+          ) : null}
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard label="Interactions" value={filteredEdges.length} intent="accent" />
