@@ -12,6 +12,7 @@ export default async function OperationsMapPage() {
       agents={data.agents}
       projections={data.projections}
       routingTopology={data.routingTopology}
+      collaborationTransfers={data.collaborationTransfers}
       recentWindowLabel={data.recentWindowLabel}
     />
   );

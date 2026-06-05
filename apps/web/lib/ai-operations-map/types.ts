@@ -48,6 +48,26 @@ export type StationedOperationsMapAgent = OperationsMapAgent & {
   stationLabel: string;
 };
 
+// EP-A2A Slice 2 — coworker-to-coworker collaboration transfer (handoff/
+// escalation), projected from DelegationChain hops. The operator-facing view of
+// "which coworker handed off to which, and what happened."
+export type OperationsMapCollaborationTransferState =
+  | "active"
+  | "completed"
+  | "failed"
+  | "blocked";
+
+export type OperationsMapCollaborationTransfer = {
+  id: string;
+  fromAgentId: string;
+  fromLabel: string;
+  toAgentId: string;
+  toLabel: string;
+  state: OperationsMapCollaborationTransferState;
+  occurredAt: string | null; // ISO
+  reason: string | null;
+};
+
 export type OperationsMapToolExecution = {
   id: string;
   threadId: string;

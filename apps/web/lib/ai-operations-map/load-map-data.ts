@@ -9,10 +9,12 @@ import {
   projectToolExecutionReceipt,
 } from "./project-events";
 import { projectRoutingTopology } from "./project-routing-topology";
+import { projectCollaborationTransfers } from "./project-collaboration-transfers";
 import type {
   OperationsMapRoutingTopology,
   OperationsMapAgent,
   OperationsMapBacklogEvidence,
+  OperationsMapCollaborationTransfer,
   OperationsMapExternalEvidence,
   OperationsMapProjection,
   OperationsMapTaskRun,
@@ -44,6 +46,7 @@ export type OperationsMapData = {
   agents: StationedOperationsMapAgent[];
   projections: OperationsMapProjection[];
   routingTopology: OperationsMapRoutingTopology;
+  collaborationTransfers: OperationsMapCollaborationTransfer[];
   recentWindowLabel: string;
 };
 
@@ -419,11 +422,29 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
     scheduledJobs,
   });
 
+  // EP-A2A Slice 2: coworker-to-coworker collaboration transfers from
+  // DelegationChain hops (handoff/escalation, accepted + blocked).
+  const delegationChains = await prisma.delegationChain.findMany({
+    orderBy: { startedAt: "desc" },
+    take: RECENT_TOOL_LIMIT,
+    select: { id: true, fromAgentId: true, toAgentId: true, status: true, reason: true, startedAt: true },
+  });
+  const agentLabelMap: Record<string, string> = {};
+  for (const agent of stationedAgents) {
+    agentLabelMap[agent.agentId] = agent.name;
+    if (agent.slugId) agentLabelMap[agent.slugId] = agent.name;
+  }
+  const collaborationTransfers = projectCollaborationTransfers({
+    delegationChains,
+    agentLabels: agentLabelMap,
+  });
+
   return {
     template,
     agents: stationedAgents,
     projections,
     routingTopology,
+    collaborationTransfers,
     recentWindowLabel: `Last ${RECENT_TOOL_LIMIT} records per evidence source`,
   };
 }
