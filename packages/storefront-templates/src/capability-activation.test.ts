@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveCapabilityActivation } from "./capability-activation";
+import {
+  resolveCapabilityActivation,
+  resolveOrgCapabilityActivations,
+} from "./capability-activation";
 
 describe("resolveCapabilityActivation", () => {
   it("treats not-applicable / hidden capabilities as never active and never offered", () => {
@@ -68,5 +71,36 @@ describe("resolveCapabilityActivation", () => {
 
     // Pure channel/reseller archetype derives partner-program = required → on by default.
     expect(resolveCapabilityActivation("required").active).toBe(true);
+  });
+});
+
+describe("resolveOrgCapabilityActivations", () => {
+  const derived = [
+    { capabilityKey: "partner-program", applicability: "recommended" as const },
+    { capabilityKey: "customer-accounts", applicability: "required" as const },
+    { capabilityKey: "point-of-sale", applicability: "optional" as const },
+    { capabilityKey: "appointment-checkout", applicability: "not-applicable" as const },
+  ];
+
+  it("folds org choices over derived applicabilities into effective activations", () => {
+    const effective = resolveOrgCapabilityActivations(derived, {
+      "partner-program": "enabled",
+    });
+    const byKey = Object.fromEntries(effective.map((e) => [e.capabilityKey, e]));
+
+    // Org opted into the recommended partner program → active.
+    expect(byKey["partner-program"]).toMatchObject({ active: true, source: "org-choice" });
+    // Required stays on with no choice needed.
+    expect(byKey["customer-accounts"]).toMatchObject({ active: true, source: "required" });
+    // Optional with no choice → off but add-later.
+    expect(byKey["point-of-sale"]).toMatchObject({ active: false, canEnableLater: true });
+    // Not-applicable → never.
+    expect(byKey["appointment-checkout"]).toMatchObject({ active: false, canEnableLater: false });
+  });
+
+  it("defaults recommended capabilities off when the org has made no choice yet", () => {
+    const effective = resolveOrgCapabilityActivations(derived);
+    const partner = effective.find((e) => e.capabilityKey === "partner-program");
+    expect(partner).toMatchObject({ active: false, promptAtSetup: true, source: "default-off" });
   });
 });
