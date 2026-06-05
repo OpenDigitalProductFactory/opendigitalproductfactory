@@ -155,6 +155,35 @@ export function a2aEdgeSourceRecords(edge: OperationsMapA2aEdge): A2aSourceRecor
   return records;
 }
 
+// ─── Shared replay window ─────────────────────────────────────────────
+// Lets the A2A interaction band scrub in lock-step with the provider routing
+// replay timeline. Mirrors AiOperationsMap's routeVisibleAtReplayTime so both
+// dimensions share one playhead: at/after "current" everything recent shows;
+// scrubbing back reveals only interactions that had occurred by the playhead.
+
+export type A2aReplayRange = { start: number; current: number; end: number };
+
+/** Look-back window around the playhead — max(45min, 20% of the visible span). */
+export function a2aReplayWindow(range: A2aReplayRange): number {
+  return Math.max(1000 * 60 * 45, (range.end - range.start) * 0.2);
+}
+
+export function a2aEdgeVisibleAtReplayTime(
+  occurredAt: string | null,
+  selectedTime: number,
+  range: A2aReplayRange,
+): boolean {
+  if (!occurredAt) return true; // undated interactions are always visible
+  const ts = Date.parse(occurredAt);
+  if (!Number.isFinite(ts)) return true;
+  // Playhead at or ahead of "now" → show all recent interactions (default).
+  if (selectedTime >= range.current) return true;
+  // Scrubbed back in time → only interactions that had occurred by the
+  // playhead, and only within the look-back window.
+  if (selectedTime < ts) return false;
+  return selectedTime - ts <= a2aReplayWindow(range);
+}
+
 export function svgClip(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, Math.max(0, maxLength - 1))}…`;

@@ -5363,6 +5363,36 @@ model PlatformDevConfig {
   forkVerifiedAt         DateTime?
   backlogTeeUpDailyCap   Int       @default(3)
   governedBacklogEnabled Boolean   @default(false)
+  // Hive Contributions consent (spec §6.1). Device-fingerprint contribution is
+  // opt-in, DEFAULTED ON because outbound fingerprints are PII-free
+  // (redactFingerprintEvidence, fail-closed). The master pause halts ALL
+  // contribution types immediately.
+  deviceFingerprintOptIn   Boolean @default(true)
+  hiveContributionsPaused  Boolean @default(false)
+}
+
+// One ledger for everything that flows to the hive — what was shared, when,
+// its type, and its curation status (spec §6.1: "one contribution ledger").
+model HiveContributionLedger {
+  id               String   @id @default(cuid())
+  // "device_fingerprint" | "source" | "improvement" (extensible).
+  contributionType String
+  // The stable obfuscated contributor pseudonym used across all types.
+  contributor      String
+  // For device-fingerprint contributions: the rule key shared.
+  ruleKey          String?
+  summary          String
+  // Hash of the contributed payload for dedup/audit without storing PII.
+  payloadHash      String?
+  // submitted | curating | accepted | rejected | withdrawn
+  status           String   @default("submitted")
+  redactionStatus  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([contributionType])
+  @@index([status])
+  @@index([contributor])
 }
 
 model EaNotation {
