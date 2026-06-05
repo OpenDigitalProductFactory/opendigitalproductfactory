@@ -29,6 +29,45 @@ const MECHANISM_QUESTION_OPENER_PATTERN =
 const PLATFORM_MECHANISM_VERB_PATTERN =
   /\b(?:deploy|deploying|promot|rebas|merg|ship|releas|install|migrat|sandbox|bundle|pipeline|workflow|trigger|cascade|gate|push|pull\s+request|\bpr\b|build\s+studio|coworker|tool|grant|scope|token|fallback|provider|model|route|infer|orchestrat)/i;
 
+// Trivial social messages — greetings, acknowledgements, thanks, farewells —
+// that carry no task. These must never load the tool surface. Attaching the
+// full MCP toolset turns a ~2s greeting into a 10-130s agentic dispatch: the
+// Claude/Codex CLI loads every tool schema on a fresh process, the model then
+// hedges ("I don't have access to that tool") or explores, and the
+// continuation-nudge loop re-dispatches the whole heavyweight call. Stripping
+// tools sends these through the fast tool-free path. Measured 2026-06-04 on
+// /portfolio: "hello" with 38 tools = 8.4s (best case) vs ~2s tool-free, and a
+// substantive turn chained three CLI dispatches (16.4s + 23.2s + 5.8s) via the
+// nudge loop. See the Portfolio Analyst latency investigation.
+//
+// Conservative by construction: the WHOLE message (minus punctuation) must
+// consist solely of short social filler tokens. Any task verb, question word,
+// or domain noun leaves at least one non-matching token, so a real request —
+// even a terse one like "yes, do the truck list" — keeps its tools.
+const SOCIAL_TOKEN_PATTERN =
+  /^(?:hi|hello|hey|heya|hiya|yo|howdy|howzit|sup|hallo|greetings|gm|morning|afternoon|evening|good|there|thanks|thank|thankyou|thx|ty|tysm|cheers|appreciate|appreciated|ok|okay|k|kk|cool|nice|great|awesome|amazing|perfect|excellent|brilliant|sweet|wonderful|fantastic|got|sounds|np|yw|welcome|bye|goodbye|farewell|see|later|cya|ciao|night|you|u|it|that|this|much|very|so|really|the|a|and|please|pls|mate|friend|buddy|team|everyone)$/i;
+
+/**
+ * Detects trivial social messages (greetings, thanks, acknowledgements,
+ * farewells) that carry no actionable request. The full trimmed message must
+ * be short and consist only of social filler tokens. Used to strip the tool
+ * surface so a "hello" answers in ~2s instead of dispatching the heavyweight
+ * tool-loaded CLI agentic loop.
+ */
+export function isTrivialSocialMessage(content: string): boolean {
+  const text = content.trim();
+  if (!text) return false;
+  // A genuine greeting is short; longer text is almost always a real message.
+  if (text.length > 40) return false;
+  const tokens = text
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length === 0 || tokens.length > 5) return false;
+  return tokens.every((t) => SOCIAL_TOKEN_PATTERN.test(t));
+}
+
 export function isPageExplanationOnlyRequest(content: string): boolean {
   const text = content.trim();
   if (!text) return false;
@@ -73,6 +112,49 @@ export function isConversationalExpansionRequest(content: string): boolean {
  * (those are requests in question form). Excludes utterances that contain
  * a backlog object reference like BI-XXX (those tend to be lookups/actions).
  */
+/**
+ * Detects when an assistant response is REDUNDANTLY re-asking a question the
+ * model already asked — the "asks the same scope question five times" loop the
+ * proceed-nudge is meant to break. Critically distinct from a substantive
+ * answer that merely ENDS with an engagement question ("…What would you like
+ * to focus on?"), which is normal and encouraged (actionable coworker
+ * responses end with user choices).
+ *
+ * The earlier inline heuristic — `response.includes("?")` plus >60% word
+ * overlap with ANY prior assistant message — misfired badly: a good 1500-char
+ * answer ending in one engagement question shares generic vocabulary with the
+ * greeting, tripped the guard, and triggered a 16-23s re-dispatch that ALSO
+ * degraded the answer (the model went meta about its toolkit). Measured on
+ * /portfolio, 2026-06-04: this false-positive nudge was the main reason a
+ * trivial turn ballooned past a minute.
+ *
+ * Tightened gates: the response must be SHORT (a real re-ask is brief, not a
+ * full answer), and it is only compared against prior assistant messages that
+ * were THEMSELVES questions. A long answer can never be a re-ask.
+ */
+export function isRedundantReaskQuestion(
+  response: string,
+  priorAssistantMessages: string[],
+): boolean {
+  const trimmed = response.trim();
+  // A genuine re-ask is short and question-dominated. A substantive answer
+  // (which may end with an engagement question) is long — exclude it outright.
+  if (trimmed.length <= 20 || trimmed.length > 350) return false;
+  if (!trimmed.includes("?")) return false;
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
+  const responseWords = new Set(normalize(trimmed).split(/\s+/).filter(Boolean));
+  return priorAssistantMessages.some((prev) => {
+    // Only a prior QUESTION can be re-asked. Comparing against statements
+    // produces spurious matches on shared vocabulary.
+    if (!prev.includes("?")) return false;
+    const prevNorm = normalize(prev);
+    if (prevNorm.length < 20) return false;
+    const prevWords = prevNorm.split(/\s+/).filter(Boolean);
+    const overlap = prevWords.filter((w) => responseWords.has(w)).length;
+    return overlap / Math.max(prevWords.length, 1) > 0.6;
+  });
+}
+
 export function isPlatformMechanismQuestion(content: string): boolean {
   const text = content.trim();
   if (!text) return false;

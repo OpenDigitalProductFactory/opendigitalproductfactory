@@ -528,7 +528,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
 
       // 6. Spawn the CLI process
       console.log(
-        `[cli-adapter] Dispatching to Claude CLI: model=${cliModel}, provider=${providerId}, ` +
+        `[cli-adapter] Dispatching to Claude CLI: thread=${mcpSession?.threadId ?? "—"}, model=${cliModel}, provider=${providerId}, ` +
         `messages=${messages.length}, mode=${mcpJwt ? "native-mcp" : "legacy-text-tools"}` +
         (mcpJwt ? `, scopes=${scopesForJwt.length}, capability=${capabilityForJwt}` : ""),
       );
@@ -606,7 +606,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
       const inferenceMs = Date.now() - startMs;
 
       console.log(
-        `[cli-adapter] Completed: ${parsed.text.length} chars, ` +
+        `[cli-adapter] Completed: thread=${mcpSession?.threadId ?? "—"}, ${parsed.text.length} chars, ` +
         `${parsed.toolCalls.length} tool calls, ${inferenceMs}ms`,
       );
 

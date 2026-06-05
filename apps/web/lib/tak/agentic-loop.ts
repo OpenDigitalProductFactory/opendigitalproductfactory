@@ -4,6 +4,7 @@
 
 import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference";
 import { detectRepeatedToolCall, recordRepeatedToolIssue } from "@/lib/tak/runtime-issues";
+import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
 import { PLATFORM_TOOLS, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { sanitizeForLog } from "@/lib/security/safe-log";
@@ -986,6 +987,27 @@ export async function runAgenticLoop(params: {
   let inferenceCallCount = 0;
   let sandboxUnavailableCount = 0; // Circuit breaker: stop trying sandbox tools if unavailable
   let previousResponseId: string | undefined; // Responses API conversation chaining
+
+  // Per-turn observability: one structured summary line per user turn, carrying
+  // the correlation key (threadId) and the figures that make a slow turn
+  // self-evident — number of inference dispatches, nudges, whether tools were
+  // attached, and total wall-clock. Before this, diagnosing a 135s "hello"
+  // meant hand-stitching timestamps across un-correlated [cli-adapter] /
+  // [agentic-loop] lines while a concurrent coworker's logs interleaved. See
+  // the Portfolio Analyst latency investigation, 2026-06-04.
+  const toolsAttachedForTurn = Boolean(toolsForProvider && toolsForProvider.length > 0);
+  const logTurnSummary = (provider: string, model: string): void => {
+    console.log(
+      sanitizeForLog(
+        `[turn] thread=${JSON.stringify(threadId)} agent=${JSON.stringify(agentId)} ` +
+        `route=${JSON.stringify(routeContext)} provider=${provider} model=${model} ` +
+        `dispatches=${inferenceCallCount} nudges=${continuationNudges} ` +
+        `toolsAttached=${toolsAttachedForTurn} executedTools=${executedTools.length} ` +
+        `totalMs=${Date.now() - startTime}`,
+      ),
+    );
+  };
+
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
     // EP-ASYNC-COWORKER-001: Check cancellation flag at each iteration boundary
     if (agentEventBus.isCancelled(threadId)) {
@@ -1179,6 +1201,7 @@ export async function runAgenticLoop(params: {
       const isToolUsingEndpointFailure =
         Boolean(routeOptions.tools && routeOptions.tools.length > 0) &&
         (/All endpoints failed/i.test(msg) || /tools exceeds threshold/i.test(msg));
+      logTurnSummary("unknown", "unknown");
       return {
         content: isTooLarge
           ? "Your conversation is too long for this AI provider. Please start a new thread to continue."
@@ -1232,7 +1255,7 @@ export async function runAgenticLoop(params: {
 
       // Diagnostic: log raw response so we can trace stalls
       console.log(
-        `[agentic-loop] iter=${iteration} provider=${result.providerId} model=${result.modelId} ` +
+        `[agentic-loop] thread=${JSON.stringify(threadId)} iter=${iteration} provider=${result.providerId} model=${result.modelId} ` +
         `toolCalls=0 contentLen=${trimmed.length} nudges=${continuationNudges} ` +
         `executedTools=${executedTools.length} content=${JSON.stringify(trimmed.slice(0, 200))}`,
       );
@@ -1371,25 +1394,16 @@ export async function runAgenticLoop(params: {
         continue;
       }
 
-      // Repetition detector: if the model's response is asking a question that's
-      // very similar to a previous assistant message, the user already answered it.
-      // Inject a nudge telling the model to proceed with the answer already given.
-      // This prevents the "ask the same scope question 5 times" loop.
-      if (trimmed.length > 20 && trimmed.includes("?")) {
+      // Repetition detector: if the model is REDUNDANTLY re-asking a question
+      // it already asked, nudge it to proceed with the answer already given.
+      // This prevents the "ask the same scope question 5 times" loop WITHOUT
+      // misfiring on a substantive answer that merely ends with an engagement
+      // question — see isRedundantReaskQuestion for the false-positive history.
+      {
         const previousAssistantMessages = messages
           .filter(m => m.role === "assistant")
           .map(m => typeof m.content === "string" ? m.content : "");
-        const trimmedLower = trimmed.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
-        const isRepeatQuestion = previousAssistantMessages.some(prev => {
-          const prevLower = prev.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
-          if (prevLower.length < 20) return false;
-          // Check word overlap — if >60% of words match, it's a repeated question
-          const trimmedWords = new Set(trimmedLower.split(/\s+/));
-          const prevWords = prevLower.split(/\s+/);
-          const overlap = prevWords.filter(w => trimmedWords.has(w)).length;
-          return overlap / Math.max(prevWords.length, 1) > 0.6;
-        });
-        if (isRepeatQuestion) {
+        if (isRedundantReaskQuestion(trimmed, previousAssistantMessages)) {
           console.log(`[agentic-loop] Repeated question detected, injecting proceed nudge: ${trimmed.slice(0, 100)}`);
           continuationNudges++;
           messages = [
@@ -1630,6 +1644,7 @@ export async function runAgenticLoop(params: {
         console.log(`[agentic-loop] recovering pre-nudge content (${bestPreNudgeContent.length} chars)`);
       }
 
+      logTurnSummary(result.providerId, result.modelId);
       return {
         content: finalContent,
         providerId: result.providerId,
@@ -1670,6 +1685,7 @@ export async function runAgenticLoop(params: {
           }
         }
         if (!preAuthorized) {
+          logTurnSummary(result.providerId, result.modelId);
           return {
             content: result.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
             providerId: result.providerId,
