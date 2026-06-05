@@ -61,10 +61,10 @@ export function UpdatePendingBannerClient({ pendingVersion }: Props) {
           <span className="font-medium">Platform update {versionLabel} is ready.</span>{" "}
           <span className="text-[var(--dpf-muted)]">Your customisations are preserved.</span>{" "}
           <Link
-            href="/admin/platform-development"
+            href="/ops/self-upgrade"
             className="font-medium text-[var(--dpf-accent)] underline underline-offset-2"
           >
-            Review in Admin - Platform Development
+            Review in Self-Upgrade
           </Link>
         </div>
         <button
