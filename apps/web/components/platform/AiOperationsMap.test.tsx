@@ -182,4 +182,26 @@ describe("AiOperationsMap", () => {
     expect(source).toContain("Reset time scale");
     expect(source).toContain("zoomLabel");
   });
+
+  it("offers a Provider/A2A/Both dimension toggle that focuses the map and persists", () => {
+    const source = readFileSync(new URL("./AiOperationsMap.tsx", import.meta.url), "utf8");
+
+    // Toggle control + options.
+    expect(source).toContain("DimensionToggle");
+    expect(source).toContain("DIMENSION_OPTIONS");
+    expect(source).toContain("aria-label=\"Operations map dimension\"");
+    expect(source).toContain("Provider routes");
+    expect(source).toContain("A2A interactions");
+    // Conditional rendering of the provider band vs the A2A panels.
+    expect(source).toContain("showProvider");
+    expect(source).toContain("showA2a");
+    expect(source).toContain("showProvider ? <RoutingTopologyPanel");
+    expect(source).toContain("showA2a ? (");
+    expect(source).toContain("<A2aInteractionsPanel");
+    expect(source).toContain("<DeliberationLensPanel");
+    // Persistence wiring.
+    expect(source).toContain("loadOperationsMapDimension");
+    expect(source).toContain("saveOperationsMapDimension");
+    expect(source).toContain("dimensionHydrated");
+  });
 });
