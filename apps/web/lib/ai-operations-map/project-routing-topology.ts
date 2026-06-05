@@ -447,6 +447,10 @@ export function projectRoutingTopology(input: RoutingTopologyInput): OperationsM
     // merged in `load-map-data.ts`. Default to empty here so the topology
     // shape is stable when only provider routing is projected.
     a2aEdges: [],
+    // Deliberation summaries are contributed by `projectDeliberations` and
+    // merged in `load-map-data.ts`; default empty when only provider routing
+    // is projected.
+    deliberations: [],
     markers,
     timeline: timeline.sort((left, right) => Date.parse(left.occurredAt) - Date.parse(right.occurredAt)),
     legend: ROUTING_TOPOLOGY_LEGEND,

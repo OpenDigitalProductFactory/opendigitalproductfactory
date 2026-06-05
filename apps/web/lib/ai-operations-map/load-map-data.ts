@@ -15,6 +15,10 @@ import {
   type A2aPhaseHandoffSourceRow,
   type A2aTaskLineageSourceRow,
 } from "./project-a2a-interactions";
+import {
+  projectDeliberations,
+  type DeliberationSourceRow,
+} from "./project-deliberations";
 import type {
   OperationsMapRoutingTopology,
   OperationsMapAgent,
@@ -73,6 +77,7 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
     delegationChains,
     phaseHandoffs,
     a2aTaskRuns,
+    deliberationRuns,
   ] = await Promise.all([
     prisma.storefrontConfig.findFirst({
       include: {
@@ -414,6 +419,25 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
         startedAt: true,
       },
     }),
+    // Deliberation lens (Option B): coordinator-internal fan. Branches are not
+    // distinct coworkers, so we render a coordinator-side summary (role + model/
+    // provider from each branch's routeDecision) rather than A2A edges. The
+    // coordinator is the parent TaskRun's current/initiating agent.
+    prisma.deliberationRun.findMany({
+      orderBy: { startedAt: "desc" },
+      take: RECENT_TOOL_LIMIT,
+      select: {
+        id: true,
+        diversityMode: true,
+        consensusState: true,
+        startedAt: true,
+        taskRun: { select: { currentAgentId: true, initiatingAgentId: true } },
+        pattern: { select: { name: true } },
+        branchNodes: {
+          select: { id: true, workerRole: true, status: true, routeDecision: true },
+        },
+      },
+    }),
   ]);
 
   const routeDecisionAgentMessageIds = [
@@ -566,6 +590,30 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
     (left, right) => Date.parse(left.occurredAt) - Date.parse(right.occurredAt),
   );
 
+  // Deliberation lens (Option B). Coordinator = parent TaskRun's current/
+  // initiating agent; per-branch model/provider recovered from routeDecision.
+  const deliberations = projectDeliberations({
+    agents: coworkerSourceRows,
+    deliberations: deliberationRuns.map((run): DeliberationSourceRow => ({
+      id: run.id,
+      coordinatorAgentId: run.taskRun?.currentAgentId ?? run.taskRun?.initiatingAgentId ?? null,
+      pattern: run.pattern?.name ?? null,
+      diversityMode: run.diversityMode,
+      consensusState: run.consensusState,
+      startedAt: run.startedAt,
+      branches: run.branchNodes.map((node) => {
+        const { modelId, providerId } = extractBranchModelProvider(node.routeDecision);
+        return {
+          nodeId: node.id,
+          role: node.workerRole,
+          modelId,
+          providerId,
+          status: node.status,
+        };
+      }),
+    })),
+  });
+
   return {
     template,
     agents: stationedAgents,
@@ -574,10 +622,40 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
       ...routingTopology,
       coworkers: mergedCoworkers,
       a2aEdges: a2aProjection.a2aEdges,
+      deliberations,
       timeline: mergedTimeline,
     },
     recentWindowLabel: `Last ${RECENT_TOOL_LIMIT} records per evidence source`,
   };
+}
+
+/**
+ * Recover a deliberation branch's model/provider from its persisted
+ * `TaskNode.routeDecision` JSON. Provider falls back to the endpoint-id prefix
+ * ("provider:model") when not stored explicitly — consistent with the routing
+ * topology projector's provider resolution. Returns nulls for non-diverse runs
+ * (single-model-multi-persona branches share one model and may carry neither).
+ */
+function extractBranchModelProvider(value: unknown): { modelId: string | null; providerId: string | null } {
+  const parsed = typeof value === "string" ? safeJsonObject(value) : value;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { modelId: null, providerId: null };
+  }
+  const record = parsed as Record<string, unknown>;
+  const modelId = typeof record.selectedModelId === "string" ? record.selectedModelId : null;
+  let providerId = typeof record.providerId === "string" ? record.providerId : null;
+  if (!providerId && typeof record.selectedEndpoint === "string" && record.selectedEndpoint.includes(":")) {
+    providerId = record.selectedEndpoint.split(":")[0] || null;
+  }
+  return { modelId, providerId };
+}
+
+function safeJsonObject(value: string): unknown {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 /**
