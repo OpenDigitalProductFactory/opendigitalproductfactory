@@ -883,6 +883,16 @@ async function ensureManagedUpdateBranches(
   await execUpdate("git rev-parse --is-inside-work-tree", gitOpts);
   await execUpdate('git config user.email "build-studio@dpf.local"', gitOpts);
   await execUpdate('git config user.name "DPF Build Studio"', gitOpts);
+  // BI-4112378F: the managed workspace lives on a Windows/WSL bind mount where
+  // the filesystem reports every file as executable. With the default
+  // core.fileMode=true, the image-sync snapshot path's `git add` records a
+  // spurious 100755 bit on ~every source file, while the source-copy path that
+  // builds dpf-upstream records 100644 — so the two trees disagree on mode for
+  // thousands of otherwise-identical files and the merge conflicts on each.
+  // Persisting core.fileMode=false in .git/config stops BOTH population paths
+  // from recording the executable bit going forward. (A merge-time -X flag
+  // cannot fix this: the mode is baked into the committed trees.)
+  await execUpdate("git config core.fileMode false", gitOpts);
 
   const missingBranches: string[] = [];
   for (const branch of [UPDATE_UPSTREAM_BRANCH, UPDATE_WORK_BRANCH]) {
