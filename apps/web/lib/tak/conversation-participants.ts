@@ -99,7 +99,7 @@ export async function projectParticipants(
     ),
   );
 
-  const identities: Record<string, AgentIdentity> = {};
+  let identities: Record<string, AgentIdentity> = {};
   if (agentIds.length > 0) {
     const [agents, aliases] = await Promise.all([
       prisma.agent.findMany({
@@ -113,14 +113,22 @@ export async function projectParticipants(
     ]);
     const labelByAgent = new Map(agents.map((a) => [a.agentId, a.name]));
     const principalByAgent = new Map(aliases.map((a) => [a.aliasValue, a.principal.principalId]));
-    for (const agentId of agentIds) {
-      if (!isSafeKey(agentId)) continue;
-      identities[agentId] = {
+    // Build via Object.fromEntries rather than a computed-key write
+    // (identities[agentId] = ...) so DB-derived agent ids cannot reach a
+    // prototype-polluting bracket-write sink (CWE-1321 /
+    // CodeQL js/remote-property-injection). The project isSafeKey barrier is
+    // modeled as return-value taint clearing, which does not sanitise a
+    // boolean-guard usage, so the structural fix is used here.
+    identities = Object.fromEntries(
+      agentIds.map((agentId): [string, AgentIdentity] => [
         agentId,
-        label: labelByAgent.get(agentId) ?? agentId,
-        principalId: principalByAgent.get(agentId) ?? null,
-      };
-    }
+        {
+          agentId,
+          label: labelByAgent.get(agentId) ?? agentId,
+          principalId: principalByAgent.get(agentId) ?? null,
+        },
+      ]),
+    );
   }
 
   return buildParticipants({
