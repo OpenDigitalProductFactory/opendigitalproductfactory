@@ -32,6 +32,26 @@ The DR-hardening epic (BIs shipped 2026-05-24) put recovery artifacts in **speci
 | Docker images | Pull-on-demand from registries | `docker compose pull` or `install-dpf.{ps1,sh}` |
 | Docker volumes (any) | NOT recoverable from Docker layer — the daily backup IS the durable copy | See dump-restore rows above |
 | Tool config / installer state | `install-state.json` in install dir | If lost: re-run `install-dpf.{ps1,sh}`; it's idempotent |
+| Failed platform upgrade / bad seed apply / migration damage | Governed upgrade recovery point: linked `BackupRun` rows under `$DPF_BACKUPS_HOST_PATH/{postgres,neo4j,qdrant}/<ts>/` plus previous runtime identity under `$DPF_BACKUPS_HOST_PATH/self-upgrade/<runId>/` | Upgrade Center rollback/restore flow; if unavailable, restore the Postgres member first, then Neo4j/Qdrant as needed |
+
+Implementation note (2026-06-01): self-upgrade runs record the linked
+Postgres/Neo4j/Qdrant backup members in
+`SelfUpgradeRun.completionEvidence.recoveryPoint` after quiescence drains active
+work and before the swap boundary. `/ops/self-upgrade` can restore that matched
+recovery point for completed non-running runs; the action records
+`completionEvidence.rollback`, writes `self-upgrade-rollback` into
+`BackupRestore.trigger`, and marks the run `rolled-back` or
+`rollback-failed`. If the portal is unavailable, use the recorded `BackupRun`
+ids to restore through the backup substrate directly.
+
+Research note (2026-06-02): the sandbox server is a recovery rehearsal target,
+not a backup of record. Use it to prove that a recovery point can restore and
+boot before production state is touched. Today only the Postgres trial-restore
+path is shipped end-to-end. The default Build Studio sandbox has isolated
+Postgres, but its base compose configuration still points Neo4j and Qdrant at
+the shared services; full graph/vector rehearsal requires isolated Neo4j and
+Qdrant endpoints first. Never use the dev-against-live-DB compose overlay for
+recovery rehearsal because it can write to live data.
 
 **Key principle:** if you can't find your loss in this table, that means there's no automatic recovery for it. Stop and ask for help BEFORE doing anything destructive — the action you take next may be the difference between a 1-hour and 6-hour recovery.
 
@@ -149,6 +169,68 @@ Most common: schema drift. The portal expects a Prisma schema version that doesn
 
 3. If migrations were rolled back unintentionally, restore Postgres from the most recent nightly that has the expected schema version (check `BackupRun.dpfVersion` for the recorded version per backup).
 
+### 3.5a Failed upgrade, seed clobber, or migration damage
+
+This is the "update made things worse" path. Treat it as an upgrade incident,
+not as a fresh install problem.
+
+1. Do not reinstall and do not reset volumes. The recovery point taken before
+   apply is the boundary between recoverable and data-lossy.
+2. In the portal, open `/ops/self-upgrade` and inspect the failed run. When the
+   run has a complete `pre-upgrade-recovery` point, type the confirmation text
+   and use the recovery-point restore action; it knows the exact
+   Postgres/Neo4j/Qdrant backup rows created for the run and records rollback
+   evidence on the run.
+3. If production is impaired but stable enough to wait, prefer a sandbox-assisted
+   rehearsal before touching production: restore the recovery-point members into
+   an isolated nonproduction target, boot the portal against that target, and
+   capture health/smoke evidence on the `SelfUpgradeRun`. Until the full
+   rehearsal tool lands, treat Postgres trial-restore as the only shipped
+   restore proof and mark Neo4j/Qdrant rehearsal `not-run` unless isolated
+   endpoints are provisioned.
+4. If the portal is unavailable, use `/admin/backups` after bringing the
+   database services up. Restore the Postgres backup associated with the failed
+   upgrade first. Restore Neo4j and Qdrant only when graph/vector data is
+   missing or incompatible; both are usually regenerable from Postgres, but
+   restoring the matched recovery-point members is faster.
+5. After recovery, capture the failed `SelfUpgradeRun`, `BackupRun`, and
+   restore records in the incident notes. Do not delete the failed recovery
+   point until the next successful nightly backup and trial restore have passed.
+6. If the incident involved Build Studio or an external worker such as Grok,
+   preserve the worker worktree before cleanup. Record its branch, dirty state,
+   touched paths, and whether it was `compile-ready` or `source-only`. A
+   source-only worktree is useful forensic evidence, but its local test/build
+   claims are not recovery evidence unless the same gates also ran in canonical
+   runtime or the shared local-CI sandbox.
+
+### 3.5b Sandbox-assisted recovery rehearsal
+
+Use this when a restore is high-risk but not yet an emergency volume-loss
+situation. The goal is to turn a restore from an act of faith into evidence:
+the same recovery point that would be applied to production is first applied to
+an isolated target and smoke-tested.
+
+Safe targets:
+
+- `local-integration-ci`, when leased through the nonproduction environment
+  lease system and backed by isolated Postgres, Neo4j, and Qdrant endpoints.
+- A future dedicated `recovery-drill` environment key for longer BC/DR drills.
+- The Build Studio `sandbox` only for source, seed, migration, and Postgres
+  rehearsal until its graph/vector endpoints are isolated.
+
+Unsafe targets:
+
+- `docker-compose.dev-against-live-db.yml`, because it intentionally writes to
+  live databases.
+- Any sandbox whose Neo4j/Qdrant URLs resolve to the production containers.
+- Docker named volumes by themselves. Volumes persist container data, but the
+  durable recovery artifact is the host-retained backup plus restore evidence.
+
+The rehearsal should record lease id, backup run ids, restore log paths,
+health/smoke results, image/source identity, and expiry/cleanup status. If a
+member is skipped because isolation is missing, record `not-run` rather than
+implying that the whole recovery point was proven.
+
 ### 3.6 Lost a Claude Code session transcript (forensic recovery)
 
 When investigating "what did the agent do?" after an incident:
@@ -222,6 +304,7 @@ Cross-references for engineers reading this:
 | Backups OUTSIDE install root | [`runtime-kernel-commandments.md`](runtime-kernel-commandments.md) + spec `2026-05-17-postgres-daily-backup-design.md` §5.3 | Shipped (BI-8004BCD8) |
 | Runtime gate that blocks destructive commands | [`runtime-kernel-commandments.md`](runtime-kernel-commandments.md) | Shipped (BI-43F95F77) |
 | Nightly trial-restore verification | spec `2026-05-17-postgres-daily-backup-design.md` §4.7 | Shipped (BI-31C9FBDF) |
+| Sandbox-assisted recovery rehearsal | spec `2026-05-23-governed-platform-upgrade-lifecycle-design.md` §5.2.7 | Designed 2026-06-02; Postgres proof pattern shipped, full graph/vector rehearsal pending isolated endpoints |
 | Worktree janitor (lib + tests) | spec `2026-05-16-worktree-hygiene-design.md` | Phase 1 shipped (BI-E5002629); Phase 2-5 pending |
 | Claude Code transcript snapshots | [`session-transcript-recovery.md`](session-transcript-recovery.md) | Shipped (BI-C8655C8C) |
 | Pre-destructive snapshots | [`runtime-kernel-commandments.md`](runtime-kernel-commandments.md) §"Pre-destructive snapshots" | Shipped (BI-611C25F3) |

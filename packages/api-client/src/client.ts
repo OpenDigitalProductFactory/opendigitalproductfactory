@@ -7,9 +7,13 @@ export class DpfClient {
   async request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const token = await this.config.getToken();
     const headers: Record<string, string> = {
-      "Content-Type": "application/json",
       ...((options.headers as Record<string, string>) || {}),
     };
+    // FormData bodies must keep the runtime-generated multipart boundary;
+    // forcing application/json here breaks camera/PDF uploads in dynamic forms.
+    if (!(options.body instanceof FormData)) {
+      headers["Content-Type"] = "application/json";
+    }
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
     const response = await fetch(`${this.config.baseUrl}${path}`, {

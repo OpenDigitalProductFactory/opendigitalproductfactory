@@ -4,10 +4,12 @@ const {
   mockListActiveNonprodEnvironmentLeases,
   mockClaimNonprodEnvironmentLease,
   mockReleaseNonprodEnvironmentLease,
+  mockRecordLocalIntegrationResult,
 } = vi.hoisted(() => ({
   mockListActiveNonprodEnvironmentLeases: vi.fn(),
   mockClaimNonprodEnvironmentLease: vi.fn(),
   mockReleaseNonprodEnvironmentLease: vi.fn(),
+  mockRecordLocalIntegrationResult: vi.fn(),
 }));
 
 vi.mock("@/lib/kernel/load-enforceable-principles", () => ({
@@ -18,6 +20,10 @@ vi.mock("@/lib/nonprod/environment-lease", () => ({
   listActiveNonprodEnvironmentLeases: mockListActiveNonprodEnvironmentLeases,
   claimNonprodEnvironmentLease: mockClaimNonprodEnvironmentLease,
   releaseNonprodEnvironmentLease: mockReleaseNonprodEnvironmentLease,
+}));
+
+vi.mock("@/lib/nonprod/local-integration", () => ({
+  recordLocalIntegrationResult: mockRecordLocalIntegrationResult,
 }));
 
 import { executeTool } from "./mcp-tools";
@@ -107,5 +113,38 @@ describe("nonproduction environment MCP tools", () => {
     expect(result.success).toBe(true);
     expect(result.entityId).toBe("NPEL-1");
     expect(mockReleaseNonprodEnvironmentLease).toHaveBeenCalledWith({ leaseId: "NPEL-1" });
+  });
+
+  it("records a local integration result", async () => {
+    mockRecordLocalIntegrationResult.mockResolvedValue({ id: "external-1" });
+
+    const result = await executeTool("record_local_integration_result", {
+      provider: "codex",
+      externalSessionId: "codex-session-1",
+      routeContext: "/build",
+      buildId: "FB-1",
+      taskRunId: "TR-1",
+      candidateBranch: "feat/build-studio-decision-skills-slice-1",
+      mode: "single-branch",
+      status: "passed",
+      summary: "Merged-code gate passed.",
+      evidence: { commands: ["pnpm --filter web typecheck"] },
+    }, "user-1", { routeContext: "/build" });
+
+    expect(result.success).toBe(true);
+    expect(result.entityId).toBe("external-1");
+    expect(mockRecordLocalIntegrationResult).toHaveBeenCalledWith({
+      actorUserId: "user-1",
+      provider: "codex",
+      externalSessionId: "codex-session-1",
+      routeContext: "/build",
+      buildId: "FB-1",
+      taskRunId: "TR-1",
+      candidateBranch: "feat/build-studio-decision-skills-slice-1",
+      mode: "single-branch",
+      status: "passed",
+      summary: "Merged-code gate passed.",
+      evidence: { commands: ["pnpm --filter web typecheck"] },
+    });
   });
 });

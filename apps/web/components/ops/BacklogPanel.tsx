@@ -3,13 +3,16 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { createBacklogItem, updateBacklogItem } from "@/lib/actions/backlog";
 import { registerActiveFormAssist } from "@/lib/agent-form-assist";
 import { AGENT_NAME_MAP } from "@/lib/agent-routing";
 import {
   validateBacklogInput,
+  BACKLOG_WORK_TYPE_VALUES,
   type BacklogItemInput,
   type BacklogItemWithRelations,
+  type BacklogWorkType,
   type DigitalProductSelect,
   type TaxonomyNodeSelect,
   type EpicForSelect,
@@ -28,7 +31,9 @@ type Props = {
 };
 
 function emptyForm(type: "portfolio" | "product" = "portfolio", epicId?: string): BacklogItemInput {
-  return { title: "", type, status: "open", body: "", ...(epicId ? { epicId } : {}) };
+  // workType defaults to "feature" — the most common case for hand-filed BIs.
+  // The operator can change it via the form select before saving.
+  return { title: "", type, workType: "feature", status: "open", body: "", ...(epicId ? { epicId } : {}) };
 }
 
 export function BacklogPanel({
@@ -48,9 +53,11 @@ export function BacklogPanel({
 
   useEffect(() => {
     if (item) {
+      const itemWorkType = item.workType as BacklogWorkType | null;
       const next: BacklogItemInput = {
         title:  item.title,
         type:   item.type as "product" | "portfolio",
+        workType: itemWorkType ?? "feature",
         status: item.status as BacklogItemInput["status"],
         body:   item.body ?? "",
       };
@@ -176,6 +183,23 @@ export function BacklogPanel({
             </div>
           </div>
 
+          {/* Work type */}
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Work Type *</span>
+            <select
+              value={form.workType}
+              onChange={(e) => set("workType", e.target.value as BacklogWorkType)}
+              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] focus:outline-none focus:border-[var(--dpf-accent)]"
+              required
+            >
+              {BACKLOG_WORK_TYPE_VALUES.map((wt) => (
+                <option key={wt} value={wt} className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
+                  {wt}
+                </option>
+              ))}
+            </select>
+          </label>
+
           {/* Status */}
           <label className="flex flex-col gap-1">
             <span className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Status</span>
@@ -273,12 +297,12 @@ export function BacklogPanel({
         {item && (
           <div className="px-5 py-3 border-t border-[var(--dpf-border)] space-y-1">
             <p className="text-[10px] text-[var(--dpf-muted)]">
-              Created: {new Date(item.createdAt).toLocaleString()}
+              Created: <LocalTime value={item.createdAt} />
               {item.submittedBy ? ` by ${item.submittedBy.email}` : ""}
               {item.agentId ? ` (${AGENT_NAME_MAP[item.agentId] ?? item.agentId})` : ""}
             </p>
             <p className="text-[10px] text-[var(--dpf-muted)]">
-              Completed: {item.completedAt ? new Date(item.completedAt).toLocaleString() : "—"}
+              Completed: <LocalTime value={item.completedAt} />
             </p>
           </div>
         )}

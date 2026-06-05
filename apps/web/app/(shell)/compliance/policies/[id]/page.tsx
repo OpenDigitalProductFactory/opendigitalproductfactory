@@ -4,16 +4,10 @@ import { notFound } from "next/navigation";
 import { transitionPolicyStatus } from "@/lib/actions/policy";
 import { EditPolicyForm } from "@/components/compliance/EditPolicyForm";
 import { LinkPolicyObligationForm } from "@/components/compliance/LinkPolicyObligationForm";
+import { LocalTime } from "@/components/ui/LocalTime";
+import { StatusBadge } from "@/components/ui/report-kit";
 
 type Props = { params: Promise<{ id: string }> };
-
-const STATUS_COLORS: Record<string, string> = {
-  draft: "bg-gray-900/30 text-gray-400",
-  "in-review": "bg-yellow-900/30 text-yellow-400",
-  approved: "bg-blue-900/30 text-blue-400",
-  published: "bg-green-900/30 text-green-400",
-  retired: "bg-gray-900/30 text-gray-400",
-};
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   "draft":     ["in-review"],
@@ -34,9 +28,9 @@ const TRANSITION_LABELS: Record<string, string> = {
 const TRANSITION_STYLES: Record<string, string> = {
   "in-review": "bg-[var(--dpf-accent)] text-white hover:opacity-90",
   approved: "bg-[var(--dpf-accent)] text-white hover:opacity-90",
-  published: "bg-green-700 text-white hover:bg-green-600",
-  retired: "bg-red-700 text-white hover:bg-red-600",
-  draft: "bg-gray-700 text-gray-200 hover:bg-gray-600",
+  published: "bg-[var(--dpf-success)] text-white hover:opacity-90",
+  retired: "bg-[var(--dpf-error)] text-white hover:opacity-90",
+  draft: "bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] hover:opacity-90",
 };
 
 export default async function PolicyDetailPage({ params }: Props) {
@@ -89,9 +83,7 @@ export default async function PolicyDetailPage({ params }: Props) {
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
           <h1 className="text-xl font-bold text-[var(--dpf-text)]">{policy.title}</h1>
-          <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${STATUS_COLORS[policy.lifecycleStatus] ?? "bg-gray-900/30 text-gray-400"}`}>
-            {policy.lifecycleStatus}
-          </span>
+          <StatusBadge domain="compliancePolicy" status={policy.lifecycleStatus} variant="soft" uppercase={false} />
           <EditPolicyForm id={policy.id} policy={policy} />
         </div>
         {policy.description && <p className="text-sm text-[var(--dpf-muted)]">{policy.description}</p>}
@@ -216,7 +208,7 @@ export default async function PolicyDetailPage({ params }: Props) {
           {policy.acknowledgments.map((a) => (
             <div key={a.id} className="flex justify-between text-sm">
               <span className="text-[var(--dpf-text)]">{a.employeeProfile.displayName}</span>
-              <span className="text-[var(--dpf-muted)]">v{a.policyVersion} — {new Date(a.acknowledgedAt).toLocaleDateString()}</span>
+              <span className="text-[var(--dpf-muted)]">v{a.policyVersion} — <LocalTime value={a.acknowledgedAt} mode="date" /></span>
             </div>
           ))}
         </div>

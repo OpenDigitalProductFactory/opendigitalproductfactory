@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
+import { applyBusinessCapabilityPerspective } from "@dpf/db/business-capability-perspectives";
 import { nanoid } from "nanoid";
 import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
 import { generateDesignSystem } from "@/lib/design-intelligence";
@@ -8,6 +9,7 @@ import {
   deriveRevenueModelFromActivationProfile,
   readActivationProfile,
 } from "@/lib/storefront/archetype-activation";
+import { setCapabilityChoice } from "@/lib/storefront/capability-activation";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -16,13 +18,14 @@ export async function POST(req: NextRequest) {
   }
 
   const {
-    archetypeId, tagline, heroImageUrl, orgName, orgSlug,
+    archetypeId, tagline, heroImageUrl, orgName, orgSlug, capabilityChoices,
   } = (await req.json()) as {
     archetypeId: string;
     tagline?: string;
     heroImageUrl?: string;
     orgName?: string;
     orgSlug: string;
+    capabilityChoices?: Array<{ capabilityKey: string; choice: "enabled" | "disabled" }>;
   };
 
   if (!orgSlug) {
@@ -135,6 +138,31 @@ export async function POST(req: NextRequest) {
       ctaType: archetype.ctaType,
       revenueModel,
     },
+  });
+
+  // EP-PARTNER-CHANNEL Phase 1b: persist the operator's answers to the setup
+  // capability questions (e.g. "Do you sell through partners or resellers?").
+  // setCapabilityChoice validates the key; a bad/unknown key is skipped rather
+  // than failing the whole setup.
+  if (Array.isArray(capabilityChoices)) {
+    for (const entry of capabilityChoices) {
+      if (entry?.choice !== "enabled" && entry?.choice !== "disabled") continue;
+      try {
+        await setCapabilityChoice({
+          organizationId: org.id,
+          capabilityKey: entry.capabilityKey,
+          choice: entry.choice,
+          decidedVia: "setup-wizard",
+        });
+      } catch {
+        // Unknown capability key — skip without failing setup.
+      }
+    }
+  }
+
+  await applyBusinessCapabilityPerspective(prisma, {
+    archetypeId,
+    category: archetype.category,
   });
 
   // Seed default provider, availability, and booking config from template scheduling defaults

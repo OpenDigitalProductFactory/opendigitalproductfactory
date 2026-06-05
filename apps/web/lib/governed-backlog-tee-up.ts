@@ -1,6 +1,10 @@
 import * as crypto from "crypto";
 import { generateBuildId, mergeHappyPathStateIntoPlan } from "@/lib/feature-build-types";
 import {
+  deriveBuildProcessType,
+  deriveBuildProcessSize,
+} from "@/lib/explore/build-process-matrix";
+import {
   attachBuildStudioWorkCapsule,
   type BuildStudioCapsuleDb,
 } from "@/lib/work-capsules/build-studio-attachment";
@@ -41,6 +45,7 @@ type GovernedBacklogTeeUpTx = {
   };
   featureBuild: {
     create(args: any): Promise<any>;
+    update(args: any): Promise<any>;
   };
   buildActivity: {
     create(args: any): Promise<any>;
@@ -56,6 +61,11 @@ type GovernedBacklogTeeUpTx = {
   };
   workCapsuleActivity: {
     create(args: any): Promise<any>;
+  };
+  platformIssueReport: {
+    findUnique(args: any): Promise<any>;
+    findFirst(args: any): Promise<any>;
+    updateMany(args: any): Promise<any>;
   };
 };
 
@@ -88,6 +98,12 @@ type PromoteBacklogItemToBuildDraftResult =
     build: { id: string; buildId: string };
     backlogItemId: string;
     capsuleId: string;
+    /** BI-52022707 axis D. True when the promotion auto-approved the draft
+     *  (governed mode + non-empty BI body). The caller is expected to fire
+     *  `dispatchIdeateForApprovedBuild` outside the transaction on this
+     *  build to complete the autopilot path. False on non-governed installs
+     *  or empty-body BIs — those preserve the manual approve-start gate. */
+    autoApprovedDispatchEligible: boolean;
   }
   | {
     kind: "error";
@@ -181,7 +197,12 @@ export async function promoteBacklogItemToBuildDraft(
   }
 
   const constrainedGoal = item.title.trim().slice(0, 280);
-  const plan = mergeHappyPathStateIntoPlan(null, {
+  // Right-sizing matrix: persist the BI's effortSize onto the build's plan
+  // so the prompt selector + phase gate can pick the matching lifecycle
+  // policy. Default "medium" preserves today's behavior for BIs without an
+  // explicit effortSize. See build-process-matrix.ts.
+  const processSize = deriveBuildProcessSize({ effortSize: item.effortSize ?? null });
+  const planBase = mergeHappyPathStateIntoPlan(null, {
     intake: {
       status: "ready",
       backlogItemId: item.itemId,
@@ -195,12 +216,74 @@ export async function promoteBacklogItemToBuildDraft(
       constrainedGoal,
     },
   });
+  const plan = { ...planBase, processSize };
+
+  // Work-kind derivation + fix-context carry-through.
+  // deriveBuildProcessType is the single source of truth for "given this BI,
+  // what build-process type does it become?" — see build-process-matrix.ts.
+  // After BI-FD37173A (this PR) it reads the clean `BacklogItem.workType`
+  // closed enum: workType="bug" -> "fix", "doc" -> "doc", "chore" -> "chore",
+  // everything else (feature | tool | skill | refactor) -> "feature".
+  // Pre-2026-05-30 BIs whose source was "bug" were backfilled to
+  // workType="bug" in 20260530170000_backlog_item_work_type, so this is
+  // byte-identical for every existing row.
+  //
+  // For fixes we pull the originating PlatformIssueReport (linked from the
+  // triage-created BI body as "Source report: PIR-XXXXX") so the build starts
+  // from the real diagnosis (severity, route, error stack) instead of a blank
+  // brief. reproSteps/rootCause/fixApproach are left for ideate to fill.
+  const kind = deriveBuildProcessType({ workType: item.workType ?? null, body: item.body });
+  let fixBrief: Record<string, unknown> | null = null;
+  let originatingReportId: string | null = null;
+  if (kind === "fix") {
+    let report: {
+      id: string;
+      reportId: string;
+      severity: string | null;
+      routeContext: string | null;
+      errorStack: string | null;
+      description: string | null;
+    } | null = null;
+    try {
+      const publicIdMatch = (item.body ?? "").match(/PIR-[A-Z0-9]+/);
+      if (publicIdMatch) {
+        report = await tx.platformIssueReport.findUnique({
+          where: { reportId: publicIdMatch[0] },
+          select: { id: true, reportId: true, severity: true, routeContext: true, errorStack: true, description: true },
+        });
+      }
+    } catch {
+      // Non-fatal — proceed with a body-only fix context.
+    }
+    originatingReportId = report?.id ?? null;
+    const fixContext: Record<string, unknown> = {
+      ...(report?.severity ? { severity: report.severity } : {}),
+      ...(report?.id ? { originatingIssueReportId: report.id } : {}),
+      ...(report?.reportId ? { originatingIssueReportPublicId: report.reportId } : {}),
+      ...(report?.routeContext ? { routeContext: report.routeContext } : {}),
+      ...(report?.errorStack ? { errorStackExcerpt: report.errorStack.slice(0, 2000) } : {}),
+      // Seed "actual" from the report/BI body; ideate refines repro/expected/root cause/fix approach.
+      ...((report?.description ?? item.body) ? { actual: (report?.description ?? item.body).slice(0, 2000) } : {}),
+    };
+    fixBrief = {
+      title: item.title,
+      description: item.body ?? item.title,
+      portfolioContext: "",
+      targetRoles: [],
+      inputs: [],
+      dataNeeds: "",
+      acceptanceCriteria: [],
+      fixContext,
+    };
+  }
 
   const created = await tx.featureBuild.create({
     data: {
       buildId: generateBuildId(),
       title: item.title,
+      kind,
       ...(item.body ? { description: item.body } : {}),
+      ...(fixBrief ? { brief: fixBrief } : {}),
       createdById: userId,
       digitalProductId: item.digitalProductId ?? null,
       originatingBacklogItemId: item.id,
@@ -208,6 +291,20 @@ export async function promoteBacklogItemToBuildDraft(
       plan,
     },
   });
+
+  // Back-link the originating issue report to this build, in-transaction so a
+  // rollback cannot orphan the link. updateMany avoids a throw if the report
+  // was already linked/removed.
+  if (originatingReportId) {
+    try {
+      await tx.platformIssueReport.updateMany({
+        where: { id: originatingReportId, featureBuildId: null },
+        data: { featureBuildId: created.id },
+      });
+    } catch {
+      // Non-fatal — the build is the source of truth; the link is a convenience.
+    }
+  }
 
   await tx.backlogItem.update({
     where: { itemId },
@@ -248,11 +345,50 @@ export async function promoteBacklogItemToBuildDraft(
     });
   }
 
+  // Auto-Approve-Start for backlog-promoted drafts when conditions allow.
+  //
+  // BI-52022707 axis D — the Dale-autopilot pipeline gap. After promotion, the
+  // draft sits at `draftApprovedAt = null` until an operator clicks the
+  // "Record Approve Start" button in /build. That button is the only path
+  // that fires `dispatchIdeateForApprovedBuild`, so without the click the
+  // build is invisible — no Ideate research, no designDoc, no progress.
+  //
+  // Dale's autopilot promise is: the BI title+body IS the human signal.
+  // Under governed-backlog mode, the operator has already confirmed they
+  // want the build by triaging the BI to outcome=build and promoting it.
+  // Requiring a separate "approve start" click for backlog-promoted drafts
+  // duplicates that confirmation. Auto-fire the approval inside the
+  // promotion transaction when:
+  //   - governedBacklogEnabled is true (opt-in flag — preserves the manual
+  //     gate for non-governed installs that may want operator review)
+  //   - the BI body is non-empty (gives Ideate a real research seed)
+  //
+  // The async dispatchIdeateForApprovedBuild fire-and-forget runs OUTSIDE
+  // the transaction (the dynamic import + DB writes don't compose with the
+  // outer prisma.$transaction safely). Wired through the same approveBuildStart
+  // path so the BuildActivity audit trail stays consistent.
+  if (governedBacklogEnabled && (item.body ?? "").trim().length > 0) {
+    const approvedAt = new Date();
+    await tx.featureBuild.update({
+      where: { id: created.id },
+      data: { draftApprovedAt: approvedAt },
+    });
+    await tx.buildActivity.create({
+      data: {
+        buildId: created.buildId,
+        tool: "approve_start",
+        summary: `Auto-approved by governed backlog flow at ${approvedAt.toISOString()} (BI body present — operator confirmation captured at triage+promote).`,
+      },
+    });
+  }
+
   return {
     kind: "success",
     build: created,
     backlogItemId: itemId,
     capsuleId: capsule.capsuleId,
+    autoApprovedDispatchEligible:
+      governedBacklogEnabled && (item.body ?? "").trim().length > 0,
   };
 }
 

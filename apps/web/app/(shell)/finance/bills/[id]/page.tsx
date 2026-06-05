@@ -5,6 +5,7 @@ import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { SubmitBillButton } from "@/components/finance/SubmitBillButton";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -70,8 +71,8 @@ export default async function BillDetailPage({ params }: Props) {
       {/* Metadata row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
-          { label: "Issue Date", value: new Date(bill.issueDate).toLocaleDateString("en-GB") },
-          { label: "Due Date", value: new Date(bill.dueDate).toLocaleDateString("en-GB") },
+          { label: "Issue Date", value: <LocalTime value={bill.issueDate} utc /> },
+          { label: "Due Date", value: <LocalTime value={bill.dueDate} utc /> },
           { label: "Currency", value: bill.currency },
           { label: "Invoice Ref", value: bill.invoiceRef ?? "—" },
         ].map(({ label, value }) => (
@@ -175,7 +176,7 @@ export default async function BillDetailPage({ params }: Props) {
                     </span>
                     {approval.respondedAt && (
                       <p className="text-[9px] text-[var(--dpf-muted)]">
-                        {new Date(approval.respondedAt).toLocaleDateString("en-GB")}
+                        <LocalTime value={approval.respondedAt} mode="date" />
                       </p>
                     )}
                   </div>

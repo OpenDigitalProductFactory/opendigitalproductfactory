@@ -6,6 +6,10 @@ import {
   resolveArchetypeSummaryState,
   type ArchetypeSummary,
 } from "./business-context-form-state";
+import { EmailInput } from "@/components/ui/EmailInput";
+import { PhoneInput } from "@/components/ui/PhoneInput";
+import { BusinessDocumentUpload } from "@/components/admin/BusinessDocumentUpload";
+import { MarketContextFields } from "@/components/admin/MarketContextFields";
 
 const COMPANY_SIZE_OPTIONS = [
   { value: "solo", label: "Solo", description: "Just me" },
@@ -23,6 +27,7 @@ const GEOGRAPHIC_SCOPE_OPTIONS = [
 
 type BusinessContextData = {
   description: string;
+  mission: string;
   targetMarket: string;
   companySize: string | null;
   geographicScope: string | null;
@@ -39,6 +44,8 @@ type BusinessContextFormProps = {
   isEdit?: boolean;
   /** Fields that were auto-populated from URL import during setup. */
   autoFilledFields?: string[];
+  /** Archetype-aware starter mission the operator can apply with one click. */
+  missionSuggestion?: string;
 };
 
 function AutoFillHint({ field, editedFields }: { field: string; editedFields: Set<string> }) {
@@ -51,7 +58,7 @@ function AutoFillHint({ field, editedFields }: { field: string; editedFields: Se
   );
 }
 
-export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFilledFields }: BusinessContextFormProps) {
+export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFilledFields, missionSuggestion }: BusinessContextFormProps) {
   const archetypeState = resolveArchetypeSummaryState(archetypeSummary);
   const [data, setData] = useState<BusinessContextData>(initial);
   const [submitting, setSubmitting] = useState(false);
@@ -179,6 +186,44 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
           {autoFilledFields?.includes("description") && <AutoFillHint field="description" editedFields={editedFields} />}
         </label>
 
+        {/* Mission */}
+        <label style={labelStyle}>
+          <div style={{ ...fieldLabelStyle, display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+            <span>Why does your business exist?</span>
+            {missionSuggestion && data.mission.trim() === "" && (
+              <button
+                type="button"
+                onClick={() => update("mission", missionSuggestion)}
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "var(--dpf-accent)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: 0,
+                }}
+              >
+                Suggest a starter
+              </button>
+            )}
+          </div>
+          <textarea
+            value={data.mission}
+            onChange={(e) => update("mission", e.target.value)}
+            placeholder={missionSuggestion ?? "Your mission in a sentence — the difference you set out to make"}
+            rows={2}
+            style={{ ...inputStyle, resize: "none" }}
+          />
+          <div style={hintStyle}>
+            Your company mission. Every AI coworker keeps this in mind, and it seeds what your
+            organization &quot;would do&quot; when a decision comes up.
+          </div>
+        </label>
+
+        {/* Business document upload (optional) */}
+        <BusinessDocumentUpload />
+
         {/* Target market */}
         <label style={labelStyle}>
           <div style={fieldLabelStyle}>Who do you serve?</div>
@@ -193,6 +238,9 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
             Your stakeholders — the people who interact with your business. These aren't always "customers."
           </div>
         </label>
+
+        {/* Market & competitive context (optional) */}
+        <MarketContextFields />
 
         {/* Company size */}
         <div style={labelStyle}>
@@ -253,10 +301,9 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <label style={labelStyle}>
             <div style={fieldLabelStyle}>Contact email</div>
-            <input
-              type="email"
+            <EmailInput
               value={data.contactEmail}
-              onChange={(e) => update("contactEmail", e.target.value)}
+              onValueChange={(v) => update("contactEmail", v)}
               placeholder="info@example.com"
               style={inputStyle}
             />
@@ -264,11 +311,10 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
           </label>
           <label style={labelStyle}>
             <div style={fieldLabelStyle}>Contact phone</div>
-            <input
-              type="tel"
+            <PhoneInput
               value={data.contactPhone}
-              onChange={(e) => update("contactPhone", e.target.value)}
-              placeholder="+1 555 000 0000"
+              onValueChange={(v) => update("contactPhone", v)}
+              placeholder="(415) 555-1234"
               style={inputStyle}
             />
             {autoFilledFields?.includes("contactPhone") && <AutoFillHint field="contactPhone" editedFields={editedFields} />}

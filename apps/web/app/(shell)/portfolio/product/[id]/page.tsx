@@ -4,6 +4,7 @@
 
 import { prisma } from "@dpf/db";
 import { notFound } from "next/navigation";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -102,11 +103,11 @@ export default async function ProductOverviewPage({ params }: Props) {
           </div>
           <div>
             <dt className="text-[var(--dpf-muted)]">Created</dt>
-            <dd className="text-[var(--dpf-text)] mt-0.5">{product.createdAt.toLocaleDateString()}</dd>
+            <dd className="text-[var(--dpf-text)] mt-0.5"><LocalTime value={product.createdAt} mode="date" /></dd>
           </div>
           <div>
             <dt className="text-[var(--dpf-muted)]">Last Updated</dt>
-            <dd className="text-[var(--dpf-text)] mt-0.5">{product.updatedAt.toLocaleDateString()}</dd>
+            <dd className="text-[var(--dpf-text)] mt-0.5"><LocalTime value={product.updatedAt} mode="date" /></dd>
           </div>
         </dl>
       </div>

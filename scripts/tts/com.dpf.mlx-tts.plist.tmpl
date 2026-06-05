@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DPF MLX TTS sidecar LaunchAgent template.
+  Rendered by scripts/tts/setup-mlx-tts-macos.sh with the following
+  @@PLACEHOLDERS@@ substituted at setup time:
+
+    @@DPF_TTS_LAUNCH_SCRIPT@@  absolute path to the generated launch script
+                               (typically ~/.dpf/tts/run-mlx-tts.sh)
+    @@DPF_TTS_LOG_DIR@@        absolute path to the log directory
+                               (typically ~/.dpf/tts/logs)
+
+  KeepAlive=true makes launchd restart the sidecar on crash — the host
+  analogue of compose `restart: unless-stopped`. The Label MUST stay
+  reverse-DNS-prefixed for launchctl semantics.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.dpf-mlx-tts</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>@@DPF_TTS_LAUNCH_SCRIPT@@</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>@@DPF_TTS_LOG_DIR@@/mlx-tts.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>@@DPF_TTS_LOG_DIR@@/mlx-tts.err.log</string>
+</dict>
+</plist>

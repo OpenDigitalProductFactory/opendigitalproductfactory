@@ -2,8 +2,21 @@
 
 import { useCallback, useRef, useState } from "react"
 
+// Minimal valid silent WAV (44-byte header, zero samples). Used to unlock the
+// AudioContext within the user-gesture call stack so scheduled playback is not
+// blocked by the browser autoplay policy.
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA="
+
+export interface VoiceSynthSettings {
+  speed?: number
+  exaggeration?: number
+  cfgWeight?: number
+  temperature?: number
+}
+
 export interface VoiceSynthHook {
-  synthesize: (text: string, voiceProfileId?: string) => Promise<void>
+  synthesize: (text: string, voiceProfileId?: string, settings?: VoiceSynthSettings) => Promise<void>
   isPlaying: boolean
   isSynthesizing: boolean
   /** false when synthesis cannot run until service/configuration changes */
@@ -28,12 +41,39 @@ function getUnavailableReason(code: string | undefined): string | null {
 }
 
 /**
- * Calls /api/voice/synthesize and manages HTMLAudioElement playback state.
+ * Parse one complete WAV ArrayBuffer from the beginning of a Uint8Array buffer
+ * that uses the sidecar's length-prefix framing:
+ *   [4-byte big-endian uint32 length][WAV bytes]
  *
- * - `available` starts true; flips false permanently for this mount if
- *   the endpoint reports an unavailable service or missing voice profile asset.
- * - Blob URLs are revoked as soon as playback ends.
- * - SSR-safe: audio is only created in the browser.
+ * Returns { wav, rest } when a complete chunk is available, null otherwise.
+ */
+function parseNextChunk(buf: Uint8Array<ArrayBuffer>): { wav: ArrayBuffer; rest: Uint8Array<ArrayBuffer> } | null {
+  if (buf.length < 4) return null
+  const length = (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3]
+  if (buf.length < 4 + length) return null
+  // Slice into a fresh ArrayBuffer (not a view of a SharedArrayBuffer)
+  // so decodeAudioData accepts it without a TypeScript error.
+  const wavBuf = new ArrayBuffer(length)
+  new Uint8Array(wavBuf).set(buf.slice(4, 4 + length))
+  const restBuf = new ArrayBuffer(buf.length - 4 - length)
+  new Uint8Array(restBuf).set(buf.slice(4 + length))
+  return { wav: wavBuf, rest: new Uint8Array(restBuf) }
+}
+
+/**
+ * Streaming voice synthesis using the Web Audio API.
+ *
+ * Architecture:
+ * - Calls /api/voice/synthesize/stream which proxies to the sidecar's
+ *   /v1/audio/speech/stream endpoint.
+ * - The response body is a chunked stream of length-prefixed WAV clips, one
+ *   per sentence.
+ * - Each WAV is decoded via AudioContext.decodeAudioData and scheduled as an
+ *   AudioBufferSourceNode immediately after the previous chunk, giving
+ *   gapless playback with low time-to-first-audio (~1-2s for the first sentence).
+ *
+ * Autoplay unlock: AudioContext.resume() is called synchronously within the
+ * user-gesture call stack before any await, satisfying Safari/Chrome policy.
  */
 export function useVoiceSynth(): VoiceSynthHook {
   const [isSynthesizing, setIsSynthesizing] = useState(false)
@@ -42,37 +82,70 @@ export function useVoiceSynth(): VoiceSynthHook {
   const [unavailableReason, setUnavailableReason] = useState<string | null>(null)
   const [lastErrorCode, setLastErrorCode] = useState<string | null>(null)
 
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  const blobUrlRef = useRef<string | null>(null)
+  // AudioContext is shared across calls; created lazily inside a gesture.
+  const ctxRef = useRef<AudioContext | null>(null)
+  // Track all scheduled source nodes so stop() can cancel them.
+  const sourcesRef = useRef<AudioBufferSourceNode[]>([])
+  // Next scheduled start time in AudioContext seconds.
+  const nextStartRef = useRef<number>(0)
+  // AbortController for the current fetch stream.
+  const abortRef = useRef<AbortController | null>(null)
 
   const stop = useCallback(() => {
-    const el = audioRef.current
-    if (el) {
-      el.pause()
-      el.src = ""
-      audioRef.current = null
+    // Cancel the in-flight fetch.
+    abortRef.current?.abort()
+    abortRef.current = null
+    // Stop all scheduled audio nodes.
+    for (const src of sourcesRef.current) {
+      try { src.stop() } catch { /* already stopped */ }
     }
-    if (blobUrlRef.current) {
-      URL.revokeObjectURL(blobUrlRef.current)
-      blobUrlRef.current = null
-    }
+    sourcesRef.current = []
+    nextStartRef.current = 0
     setIsPlaying(false)
+    setIsSynthesizing(false)
   }, [])
 
   const synthesize = useCallback(
-    async (text: string, voiceProfileId?: string): Promise<void> => {
-      // SSR guard
-      if (typeof window === "undefined" || typeof Audio === "undefined") return
+    async (text: string, voiceProfileId?: string, settings?: VoiceSynthSettings): Promise<void> => {
+      if (typeof window === "undefined" || typeof AudioContext === "undefined") return
 
-      // Stop any in-flight playback before starting a new request
+      // Cancel any in-flight synthesis before starting a new one.
       stop()
 
+      // ── Autoplay unlock (must happen synchronously within the gesture) ─────
+      // Resume/create AudioContext here, before any await, so the browser
+      // autoplay policy treats subsequent scheduled playback as user-activated.
+      if (!ctxRef.current) {
+        ctxRef.current = new AudioContext()
+      }
+      const ctx = ctxRef.current
+      if (ctx.state === "suspended") {
+        void ctx.resume()
+      }
+      // Play a silent buffer to warm the context (Safari requires this).
+      const silentBuf = ctx.createBuffer(1, 1, ctx.sampleRate)
+      const silentSrc = ctx.createBufferSource()
+      silentSrc.buffer = silentBuf
+      silentSrc.connect(ctx.destination)
+      silentSrc.start()
+      // ── end autoplay unlock ────────────────────────────────────────────────
+
+      const abort = new AbortController()
+      abortRef.current = abort
+      nextStartRef.current = ctx.currentTime
+
       setIsSynthesizing(true)
+
       try {
-        const res = await fetch("/api/voice/synthesize", {
+        const res = await fetch("/api/voice/synthesize/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, ...(voiceProfileId ? { voiceProfileId } : {}) }),
+          signal: abort.signal,
+          body: JSON.stringify({
+            text,
+            ...(voiceProfileId ? { voiceProfileId } : {}),
+            ...(settings ? { settings } : {}),
+          }),
         })
 
         if (!res.ok) {
@@ -84,8 +157,7 @@ export function useVoiceSynth(): VoiceSynthHook {
             setAvailable(false)
             setUnavailableReason(reason)
           }
-          // Graceful: don't throw, just log
-          console.warn("[useVoiceSynth] synthesis failed", res.status, json)
+          console.warn("[useVoiceSynth] stream synthesis failed", res.status, json)
           return
         }
 
@@ -93,39 +165,81 @@ export function useVoiceSynth(): VoiceSynthHook {
         setUnavailableReason(null)
         setLastErrorCode(null)
 
-        const blob = await res.blob()
-        const url = URL.createObjectURL(blob)
-        blobUrlRef.current = url
-
-        const audio = new Audio(url)
-        audioRef.current = audio
-
-        audio.onended = () => {
-          setIsPlaying(false)
-          if (blobUrlRef.current === url) {
-            URL.revokeObjectURL(url)
-            blobUrlRef.current = null
-          }
-          audioRef.current = null
-        }
-        audio.onerror = () => {
-          setIsPlaying(false)
-          if (blobUrlRef.current === url) {
-            URL.revokeObjectURL(url)
-            blobUrlRef.current = null
-          }
-          audioRef.current = null
+        if (!res.body) {
+          console.warn("[useVoiceSynth] no response body")
+          return
         }
 
-        setIsPlaying(true)
-        await audio.play().catch((e) => {
-          // Autoplay policy may block this; treat as non-fatal
-          console.warn("[useVoiceSynth] play() blocked:", e)
-          setIsPlaying(false)
-        })
+        const reader = res.body.getReader()
+        let accum: Uint8Array<ArrayBuffer> = new Uint8Array(new ArrayBuffer(0))
+        let firstChunk = true
+
+        const readLoop = async (): Promise<void> => {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (value) {
+              // Append incoming bytes to accumulator.
+              const nextBuf = new ArrayBuffer(accum.length + value.length)
+              const next = new Uint8Array(nextBuf)
+              next.set(accum, 0)
+              next.set(new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)), accum.length)
+              accum = next as Uint8Array<ArrayBuffer>
+            }
+
+            // Parse and schedule all complete chunks.
+            let parsed = parseNextChunk(accum)
+            while (parsed) {
+              accum = parsed.rest
+              const { wav } = parsed
+
+              // Decode WAV → AudioBuffer.
+              let audioBuf: AudioBuffer
+              try {
+                audioBuf = await ctx.decodeAudioData(wav)
+              } catch (e) {
+                console.warn("[useVoiceSynth] decodeAudioData failed:", e)
+                parsed = parseNextChunk(accum)
+                continue
+              }
+
+              if (abort.signal.aborted) return
+
+              // Schedule this chunk to play immediately after the previous.
+              const startAt = Math.max(ctx.currentTime, nextStartRef.current)
+              const src = ctx.createBufferSource()
+              src.buffer = audioBuf
+              src.connect(ctx.destination)
+              src.start(startAt)
+              nextStartRef.current = startAt + audioBuf.duration
+              sourcesRef.current.push(src)
+
+              if (firstChunk) {
+                firstChunk = false
+                setIsSynthesizing(false)
+                setIsPlaying(true)
+              }
+
+              // When the last scheduled source ends, mark playback complete.
+              src.onended = () => {
+                sourcesRef.current = sourcesRef.current.filter((s) => s !== src)
+                if (sourcesRef.current.length === 0) {
+                  setIsPlaying(false)
+                }
+              }
+
+              parsed = parseNextChunk(accum)
+            }
+
+            if (done) break
+          }
+        }
+
+        await readLoop()
       } catch (err) {
-        console.warn("[useVoiceSynth] fetch error:", err)
+        if ((err as Error)?.name === "AbortError") return // user called stop()
+        console.warn("[useVoiceSynth] stream error:", err)
       } finally {
+        if (abortRef.current === abort) abortRef.current = null
         setIsSynthesizing(false)
       }
     },

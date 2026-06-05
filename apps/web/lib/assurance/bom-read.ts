@@ -9,6 +9,8 @@ import {
   noApprovedScannerReadiness,
   type AssuranceScannerReadiness,
 } from "./scanner-catalog";
+import type { TrustAssessment } from "@/lib/trust-vector";
+import { buildAssuranceSummaryTrust } from "@/lib/trust-vector/adapters/assurance";
 
 export interface BomSummary {
   state: "missing" | "current" | "stale";
@@ -19,12 +21,14 @@ export interface BomSummary {
     componentCount: number;
     sourceKind: string;
   };
+  latestAssuranceRunCompletedAt?: Date | null;
   counts: {
     components: number;
     models: number;
   };
   findings: AssuranceFindingSummary;
   scanner: AssuranceScannerReadiness;
+  trust?: TrustAssessment;
 }
 
 export interface ProductSupplyChainComponentRow {
@@ -71,6 +75,9 @@ type BomReadDb = {
   bomDocument: {
     findFirst(args: unknown): Promise<null | BomSummaryRow>;
   };
+  assuranceRun?: {
+    findFirst(args: unknown): Promise<null | { completedAt: Date | null }>;
+  };
   assuranceFinding?: {
     findMany(args: unknown): Promise<Array<{
       policySeverity: string;
@@ -91,6 +98,10 @@ type BomReadDb = {
   };
 };
 
+type BomReadOptions = {
+  now?: Date;
+};
+
 type ProductBomReadDb = {
   bomDocument: {
     findFirst(args: unknown): Promise<null | ProductBomRows>;
@@ -99,13 +110,20 @@ type ProductBomReadDb = {
   toolEvaluation?: BomReadDb["toolEvaluation"];
 };
 
-export function missingBomSummary(): BomSummary {
-  return {
+export function missingBomSummary(options: BomReadOptions & {
+  latestAssuranceRunCompletedAt?: Date | null;
+} = {}): BomSummary {
+  const summary: BomSummary = {
     state: "missing",
     document: null,
+    latestAssuranceRunCompletedAt: options.latestAssuranceRunCompletedAt ?? null,
     counts: { components: 0, models: 0 },
     findings: emptyFindingSummary(),
     scanner: noApprovedScannerReadiness(),
+  };
+  return {
+    ...summary,
+    trust: buildAssuranceSummaryTrust(summary, { asOf: options.now }),
   };
 }
 
@@ -113,12 +131,21 @@ function summarizeBomDocument(
   document: BomSummaryRow | null,
   findings: AssuranceFindingSummary,
   scanner: AssuranceScannerReadiness,
+  latestAssuranceRunCompletedAt: Date | null,
+  options: BomReadOptions = {},
 ): BomSummary {
   if (!document) {
-    return {
-      ...missingBomSummary(),
+    const summary: BomSummary = {
+      state: "missing",
+      document: null,
+      latestAssuranceRunCompletedAt,
+      counts: { components: 0, models: 0 },
       findings,
       scanner,
+    };
+    return {
+      ...summary,
+      trust: buildAssuranceSummaryTrust(summary, { asOf: options.now }),
     };
   }
 
@@ -126,7 +153,7 @@ function summarizeBomDocument(
     entry.component?.componentType === "model"
   )).length;
 
-  return {
+  const summary: BomSummary = {
     state: document.status && document.status !== "current" ? "stale" : "current",
     document: {
       documentId: document.documentId,
@@ -135,12 +162,18 @@ function summarizeBomDocument(
       componentCount: document.componentCount,
       sourceKind: document.sourceKind,
     },
+    latestAssuranceRunCompletedAt,
     counts: {
       components: document.componentCount,
       models: modelCount,
     },
     findings,
     scanner,
+  };
+
+  return {
+    ...summary,
+    trust: buildAssuranceSummaryTrust(summary, { asOf: options.now }),
   };
 }
 
@@ -167,8 +200,9 @@ function latestBomSummarySelect() {
 export async function getLatestBomSummaryForBuild(
   db: BomReadDb,
   buildId: string,
+  options: BomReadOptions = {},
 ): Promise<BomSummary> {
-  const [document, findings, scanner] = await Promise.all([
+  const [document, findings, scanner, latestRun] = await Promise.all([
     db.bomDocument.findFirst({
       where: { buildId },
       orderBy: { generatedAt: "desc" },
@@ -176,16 +210,18 @@ export async function getLatestBomSummaryForBuild(
     }),
     getActiveFindingSummaryForBuild(db, buildId),
     getAssuranceScannerReadiness(db),
+    getLatestAssuranceRun(db, { buildId }),
   ]);
 
-  return summarizeBomDocument(document, findings, scanner);
+  return summarizeBomDocument(document, findings, scanner, latestRun?.completedAt ?? null, options);
 }
 
 export async function getLatestBomSummaryForProduct(
   db: BomReadDb,
   digitalProductId: string,
+  options: BomReadOptions = {},
 ): Promise<BomSummary> {
-  const [document, findings, scanner] = await Promise.all([
+  const [document, findings, scanner, latestRun] = await Promise.all([
     db.bomDocument.findFirst({
       where: { digitalProductId },
       orderBy: { generatedAt: "desc" },
@@ -193,9 +229,10 @@ export async function getLatestBomSummaryForProduct(
     }),
     getActiveFindingSummaryForProduct(db, digitalProductId),
     getAssuranceScannerReadiness(db),
+    getLatestAssuranceRun(db, { digitalProductId }),
   ]);
 
-  return summarizeBomDocument(document, findings, scanner);
+  return summarizeBomDocument(document, findings, scanner, latestRun?.completedAt ?? null, options);
 }
 
 export async function getLatestBomComponentsForProduct(
@@ -247,4 +284,20 @@ export async function getLatestBomComponentsForProduct(
     findingSummary,
     scanner,
   };
+}
+
+function getLatestAssuranceRun(
+  db: BomReadDb,
+  where: { buildId?: string; digitalProductId?: string },
+): Promise<null | { completedAt: Date | null }> {
+  if (!db.assuranceRun) return Promise.resolve(null);
+
+  return db.assuranceRun.findFirst({
+    where: {
+      ...where,
+      status: "completed",
+    },
+    orderBy: { completedAt: "desc" },
+    select: { completedAt: true },
+  });
 }

@@ -119,10 +119,10 @@ describe("getToolMarketplaceReadiness", () => {
     const result = await getToolMarketplaceReadiness({ agentId: "coo" });
 
     expect(result.summary).toMatchObject({
-      total: 15,
+      total: 18,
       ready: 3,
       available: 1,
-      needsSetup: 8,
+      needsSetup: 11,
       needsGrant: 3,
       blocked: 0,
     });

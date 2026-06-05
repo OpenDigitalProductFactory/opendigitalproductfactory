@@ -24,6 +24,10 @@ const { mockPrisma, mockInngest } = vi.hoisted(() => ({
     },
     featureBuild: {
       create: vi.fn(),
+      update: vi.fn(),
+    },
+    buildActivity: {
+      create: vi.fn(),
     },
     workCapsule: {
       create: vi.fn(),
@@ -71,6 +75,9 @@ describe("backlog MCP tool execution", () => {
     mockPrisma.workCapsuleActivity.create.mockResolvedValue({});
     mockPrisma.epic.findMany.mockResolvedValue([]);
     mockPrisma.employeeProfile.findFirst.mockResolvedValue(null);
+    mockPrisma.backlogItemActivity.create.mockResolvedValue({});
+    mockPrisma.featureBuild.update.mockResolvedValue({});
+    mockPrisma.buildActivity.create.mockResolvedValue({});
 
     mockPrisma.$transaction.mockImplementation(async (callback: (tx: typeof mockPrisma) => Promise<unknown>) => {
       return callback(mockPrisma);
@@ -94,7 +101,7 @@ describe("backlog MCP tool execution", () => {
         title: "WWMD Decision Perspective Kernel",
         description: "Governed autonomy gate for ambiguous decisions.",
         status: "open",
-        source: "feature-gap",
+        source: "user-request",
       },
       "user-1",
       { agentId: "AGT-1" },
@@ -169,7 +176,7 @@ describe("backlog MCP tool execution", () => {
         status: "in-progress",
         priority: 2,
         owner: "owner@dpf.local",
-        source: "tool-gap",
+        source: "automated-detection",
       },
       "user-1",
     );

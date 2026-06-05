@@ -2,18 +2,26 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getSelfUpgradeConfig: vi.fn(),
-  isInMaintenanceWindow: vi.fn(),
-  resolveTargetSha: vi.fn(),
-  isShaFresh: vi.fn(),
+  isUpgradeWindowOpen: vi.fn(),
+  resolveOperatingScheduleForSystem: vi.fn().mockResolvedValue({ schedule: {}, timezone: "UTC" }),
+  getLastCheckedAt: vi.fn().mockResolvedValue(null),
+  recordCheckedAt: vi.fn().mockResolvedValue(undefined),
+  isCheckIntervalElapsed: vi.fn().mockReturnValue(true),
+  defaultGitRunner: vi.fn(),
+  prepareUpgradeSource: vi.fn(),
   getDeployedSha: vi.fn(),
   isFeatureBuildDeployed: vi.fn(),
   createRun: vi.fn(),
   startRun: vi.fn(),
   completeRun: vi.fn(),
   failRun: vi.fn(),
+  recordRunRecoveryPoint: vi.fn(),
   getLatestRun: vi.fn(),
+  getLatestSucceededRun: vi.fn(),
   runPromoter: vi.fn(),
   emitUpgradeEvent: vi.fn(),
+  createSelfUpgradeRecoveryPoint: vi.fn(),
+  summarizeRecoveryPointFailure: vi.fn(),
   // BI-QUIESCE-010 — caller API consumed by runSelfUpgrade.
   startQuiescence: vi.fn(),
   signalSwapStarting: vi.fn(),
@@ -23,12 +31,45 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/self-upgrade/config", () => ({
   getSelfUpgradeConfig: mocks.getSelfUpgradeConfig,
-  isInMaintenanceWindow: mocks.isInMaintenanceWindow,
 }));
 
+vi.mock("@/lib/self-upgrade/window", () => ({
+  isUpgradeWindowOpen: mocks.isUpgradeWindowOpen,
+}));
+
+vi.mock("@/lib/operating-hours-read", () => ({
+  resolveOperatingScheduleForSystem: mocks.resolveOperatingScheduleForSystem,
+}));
+
+vi.mock("@/lib/self-upgrade/last-check", () => ({
+  getLastCheckedAt: mocks.getLastCheckedAt,
+  recordCheckedAt: mocks.recordCheckedAt,
+  isCheckIntervalElapsed: mocks.isCheckIntervalElapsed,
+}));
+
+// Real (pure) argv builders so the orchestrator constructs proper git commands;
+// the mocked defaultGitRunner branches on them.
 vi.mock("@/lib/self-upgrade/version", () => ({
-  resolveTargetSha: mocks.resolveTargetSha,
-  isShaFresh: mocks.isShaFresh,
+  buildFetchCommand: (i: { hostSourcePath: string; remote: string; branch: string }) => [
+    "git",
+    "-C",
+    i.hostSourcePath,
+    "fetch",
+    i.remote,
+    i.branch,
+  ],
+  buildRemoteHeadCommand: (i: { hostSourcePath: string; remote: string; branch: string }) => [
+    "git",
+    "-C",
+    i.hostSourcePath,
+    "rev-parse",
+    `${i.remote}/${i.branch}`,
+  ],
+}));
+
+vi.mock("@/lib/self-upgrade/prepare-source", () => ({
+  prepareUpgradeSource: mocks.prepareUpgradeSource,
+  defaultGitRunner: mocks.defaultGitRunner,
 }));
 
 vi.mock("@/lib/self-upgrade/completion", () => ({
@@ -41,7 +82,9 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   startRun: mocks.startRun,
   completeRun: mocks.completeRun,
   failRun: mocks.failRun,
+  recordRunRecoveryPoint: mocks.recordRunRecoveryPoint,
   getLatestRun: mocks.getLatestRun,
+  getLatestSucceededRun: mocks.getLatestSucceededRun,
 }));
 
 vi.mock("@/lib/self-upgrade/promoter", () => ({
@@ -50,6 +93,11 @@ vi.mock("@/lib/self-upgrade/promoter", () => ({
 
 vi.mock("@/lib/self-upgrade/notifications", () => ({
   emitUpgradeEvent: mocks.emitUpgradeEvent,
+}));
+
+vi.mock("@/lib/self-upgrade/recovery-point", () => ({
+  createSelfUpgradeRecoveryPoint: mocks.createSelfUpgradeRecoveryPoint,
+  summarizeRecoveryPointFailure: mocks.summarizeRecoveryPointFailure,
 }));
 
 vi.mock("@/lib/self-upgrade/quiescence", () => ({
@@ -98,6 +146,47 @@ function setupQuiescenceReady(quiescenceRunId = "QR-2026-05-24-test1234"): void 
   mocks.signalSwapComplete.mockResolvedValue(undefined);
   mocks.failQuiescenceSwap.mockResolvedValue(undefined);
 }
+
+/**
+ * Set up the source-prep happy path: upstream resolves to `stamp` via the
+ * mocked git runner (rev-parse), no prior succeeded run (lineage gate open),
+ * and prepareUpgradeSource returns a clean merge with `stamp` as the identity.
+ */
+function setupSourceReady(stamp = "abc1234deadbeef"): void {
+  mocks.defaultGitRunner.mockImplementation(async (args: string[]) =>
+    args.includes("rev-parse")
+      ? { stdout: `${stamp}\n`, stderr: "", code: 0 }
+      : { stdout: "", stderr: "", code: 0 },
+  );
+  mocks.getLatestSucceededRun.mockResolvedValue(null);
+  mocks.prepareUpgradeSource.mockResolvedValue({
+    ok: true,
+    mode: "upstream",
+    stamp,
+    upstreamSha: stamp,
+  });
+}
+
+const OK_RECOVERY_POINT = {
+  schemaVersion: 1,
+  status: "ok",
+  trigger: "pre-upgrade-recovery",
+  selfUpgradeRunId: "SUR-AAAABBBB",
+  createdAt: "2026-06-01T00:00:00.000Z",
+  members: [
+    { target: "postgres", runId: "BR-PG", status: "ok" },
+    { target: "neo4j", runId: "BR-N4J", status: "ok" },
+    { target: "qdrant", runId: "BR-QD", status: "ok" },
+  ],
+};
+
+beforeEach(() => {
+  mocks.createSelfUpgradeRecoveryPoint.mockResolvedValue(OK_RECOVERY_POINT);
+  mocks.recordRunRecoveryPoint.mockResolvedValue({});
+  mocks.summarizeRecoveryPointFailure.mockReturnValue(
+    "recovery-point-failed: postgres BR-PG",
+  );
+});
 
 describe("cron metadata", () => {
   it("scheduled function id is ops/self-upgrade-scheduled", () => {
@@ -167,20 +256,23 @@ const ENABLED_CONFIG = {
   checkIntervalHours: 24,
   healthTarget: 100,
   maintenanceWindows: [],
+  hostInstallPath: "/Users/me/dpf",
   hostSourceMountPath: "/host-dpf",
+  promoterImage: "dpf-promoter",
   repositoryRemote: "origin",
   repositoryBranch: "main",
   healthUrl: "http://localhost:3000/api/health",
+  sourceMode: "upstream" as const,
+  installBranch: "dpf/install",
 };
 
 describe("success path", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
-    mocks.isInMaintenanceWindow.mockReturnValue(true);
-    mocks.resolveTargetSha.mockResolvedValue("abc1234deadbeef");
-    mocks.getDeployedSha.mockReturnValue("oldsha1");
-    mocks.isShaFresh.mockReturnValue(false);
+    mocks.isUpgradeWindowOpen.mockReturnValue(true);
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
+    setupSourceReady();
     setupQuiescenceReady();
     mocks.getLatestRun.mockResolvedValue(null);
     mocks.createRun.mockResolvedValue({ runId: "SUR-AAAABBBB" });
@@ -197,19 +289,83 @@ describe("success path", () => {
     expect(mocks.completeRun).toHaveBeenCalledWith("SUR-AAAABBBB");
   });
 
-  it("resolves the target SHA using the configured source checkout", async () => {
+  it("creates and records a recovery point after quiescence and before swap starts", async () => {
+    const order: string[] = [];
+    mocks.createSelfUpgradeRecoveryPoint.mockImplementation(async () => {
+      order.push("createSelfUpgradeRecoveryPoint");
+      return OK_RECOVERY_POINT;
+    });
+    mocks.recordRunRecoveryPoint.mockImplementation(async () => {
+      order.push("recordRunRecoveryPoint");
+      return {};
+    });
+    mocks.startQuiescence.mockImplementation(async () => {
+      order.push("startQuiescence");
+      return {
+        runId: "QR-2026-05-24-test1234",
+        awaitReady: () =>
+          Promise.resolve({
+            ok: true,
+            outcome: "ready-to-swap",
+            runId: "QR-2026-05-24-test1234",
+            finalSnapshot: null,
+          }),
+      };
+    });
+    mocks.signalSwapStarting.mockImplementation(async () => {
+      order.push("signalSwapStarting");
+    });
+
     await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(mocks.resolveTargetSha).toHaveBeenCalledWith("stable", ENABLED_CONFIG);
+
+    expect(mocks.createSelfUpgradeRecoveryPoint).toHaveBeenCalledWith({
+      runId: "SUR-AAAABBBB",
+      dryRun: undefined,
+    });
+    expect(mocks.recordRunRecoveryPoint).toHaveBeenCalledWith(
+      "SUR-AAAABBBB",
+      OK_RECOVERY_POINT,
+    );
+    expect(order).toEqual([
+      "startQuiescence",
+      "createSelfUpgradeRecoveryPoint",
+      "recordRunRecoveryPoint",
+      "signalSwapStarting",
+    ]);
   });
 
-  it("runs the promoter with configured source, backup, and health paths", async () => {
+  it("prepares the upgrade source with the configured mode/remote/branch/install branch", async () => {
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(mocks.prepareUpgradeSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceMode: "upstream",
+        remote: "origin",
+        branch: "main",
+        installBranch: "dpf/install",
+      }),
+      expect.any(Function),
+    );
+  });
+
+  it("skips with up-to-date when the running build already contains the upstream SHA", async () => {
+    mocks.getLatestSucceededRun.mockResolvedValue({ targetSha: "abc1234deadbeef" });
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled" });
+    expect(result).toMatchObject({ skipped: true, reason: "up-to-date" });
+    expect(mocks.prepareUpgradeSource).not.toHaveBeenCalled();
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
+  });
+
+  it("runs the promoter with the host install path, backup, image, and health paths", async () => {
     await runSelfUpgrade({ triggeredBy: "ops" });
     expect(mocks.runPromoter).toHaveBeenCalledWith(
       expect.objectContaining({
-        sourcePath: "/host-dpf",
+        // The promoter is launched as a sibling container against the HOST
+        // install path (daemon-resolved), not an in-portal source path.
+        hostInstallPath: "/Users/me/dpf",
         targetSha: "abc1234deadbeef",
         backupPath: "/backups/self-upgrade/SUR-AAAABBBB",
         healthUrl: "http://localhost:3000/api/health",
+        promoterImage: "dpf-promoter",
       }),
     );
   });
@@ -285,8 +441,113 @@ describe("success path", () => {
 
   it("bypasses quiescence entirely on dryRun", async () => {
     await runSelfUpgrade({ triggeredBy: "ops", dryRun: true });
+    expect(mocks.createSelfUpgradeRecoveryPoint).toHaveBeenCalledWith({
+      runId: "SUR-AAAABBBB",
+      dryRun: true,
+    });
     expect(mocks.startQuiescence).not.toHaveBeenCalled();
     expect(mocks.signalSwapComplete).not.toHaveBeenCalled();
+  });
+});
+
+describe("pre-upgrade recovery point gate", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
+    mocks.isUpgradeWindowOpen.mockReturnValue(true);
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
+    setupSourceReady();
+    setupQuiescenceReady();
+    mocks.getLatestRun.mockResolvedValue(null);
+    mocks.createRun.mockResolvedValue({ runId: "SUR-RECOVERY" });
+    mocks.startRun.mockResolvedValue({});
+    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
+    mocks.failRun.mockResolvedValue({});
+    mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    mocks.createSelfUpgradeRecoveryPoint.mockResolvedValue({
+      ...OK_RECOVERY_POINT,
+      status: "failed",
+      selfUpgradeRunId: "SUR-RECOVERY",
+      members: [
+        { target: "postgres", runId: "BR-PG", status: "failed" },
+        { target: "neo4j", runId: "BR-N4J", status: "ok" },
+        { target: "qdrant", runId: "BR-QD", status: "ok" },
+      ],
+    });
+    mocks.summarizeRecoveryPointFailure.mockReturnValue(
+      "recovery-point-failed: postgres BR-PG",
+    );
+  });
+
+  it("fails after quiescence and before promoter when the recovery point fails", async () => {
+    const result = await runSelfUpgrade({ triggeredBy: "ops" });
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: "failed",
+      runId: "SUR-RECOVERY",
+      quiescenceRunId: "QR-2026-05-24-test1234",
+      reason: "recovery-point-failed",
+      excerpt: "recovery-point-failed: postgres BR-PG",
+    });
+    expect(mocks.recordRunRecoveryPoint).toHaveBeenCalled();
+    expect(mocks.failRun).toHaveBeenCalledWith(
+      "SUR-RECOVERY",
+      "recovery-point-failed: postgres BR-PG",
+    );
+    expect(mocks.startQuiescence).toHaveBeenCalled();
+    expect(mocks.failQuiescenceSwap).toHaveBeenCalledWith(
+      "QR-2026-05-24-test1234",
+      "recovery-point-failed: postgres BR-PG",
+    );
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
+    expect(mocks.emitUpgradeEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "upgrade.failed",
+        runId: "SUR-RECOVERY",
+        payload: { reason: "recovery-point-failed: postgres BR-PG" },
+      }),
+    );
+  });
+});
+
+describe("maintenance window gate + emergency override", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
+    setupSourceReady();
+    setupQuiescenceReady();
+    mocks.getLatestRun.mockResolvedValue(null);
+    mocks.createRun.mockResolvedValue({ runId: "SUR-FORCE001" });
+    mocks.startRun.mockResolvedValue({});
+    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
+    mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "promoted", stderr: "" });
+    mocks.completeRun.mockResolvedValue({});
+  });
+
+  it("SCHEDULED run skips with outside-window when the store is open", async () => {
+    mocks.isUpgradeWindowOpen.mockReturnValue(false);
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
+    expect(result).toMatchObject({ skipped: true, reason: "outside-window" });
+    expect(mocks.createRun).not.toHaveBeenCalled();
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
+  });
+
+  it("MANUAL run is NOT window-gated — runs even when the store is open", async () => {
+    mocks.isUpgradeWindowOpen.mockReturnValue(false);
+    const result = await runSelfUpgrade({ triggeredBy: "manual:ops" }); // scheduled unset
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+    expect(mocks.runPromoter).toHaveBeenCalled();
+    // a manual trigger doesn't even consult the window gate
+    expect(mocks.isUpgradeWindowOpen).not.toHaveBeenCalled();
+  });
+
+  it("force=true bypasses the window gate on the scheduled path too", async () => {
+    mocks.isUpgradeWindowOpen.mockReturnValue(false);
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true, force: true });
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+    expect(mocks.runPromoter).toHaveBeenCalled();
   });
 });
 
@@ -294,10 +555,9 @@ describe("failure path", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
-    mocks.isInMaintenanceWindow.mockReturnValue(true);
-    mocks.resolveTargetSha.mockResolvedValue("abc1234deadbeef");
-    mocks.getDeployedSha.mockReturnValue("oldsha1");
-    mocks.isShaFresh.mockReturnValue(false);
+    mocks.isUpgradeWindowOpen.mockReturnValue(true);
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
+    setupSourceReady();
     setupQuiescenceReady();
     mocks.getLatestRun.mockResolvedValue(null);
     mocks.createRun.mockResolvedValue({ runId: "SUR-FAILTEST" });
@@ -360,14 +620,92 @@ describe("failure path", () => {
   });
 });
 
+describe("checkIntervalHours throttle (scheduled only)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
+    mocks.isUpgradeWindowOpen.mockReturnValue(true);
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
+    setupSourceReady();
+    setupQuiescenceReady();
+    mocks.getLatestRun.mockResolvedValue(null);
+    mocks.createRun.mockResolvedValue({ runId: "SUR-INTERVAL" });
+    mocks.startRun.mockResolvedValue({});
+    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
+    mocks.runPromoter.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    mocks.completeRun.mockResolvedValue({});
+  });
+
+  it("skips a scheduled run when the check interval has not elapsed", async () => {
+    mocks.isCheckIntervalElapsed.mockReturnValue(false);
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
+    expect(result).toMatchObject({ skipped: true, reason: "interval-not-elapsed" });
+    expect(mocks.recordCheckedAt).not.toHaveBeenCalled();
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
+  });
+
+  it("proceeds (and resets the clock) when the interval has elapsed", async () => {
+    mocks.isCheckIntervalElapsed.mockReturnValue(true);
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true });
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+    expect(mocks.recordCheckedAt).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT throttle a manual run even when the interval has not elapsed", async () => {
+    mocks.isCheckIntervalElapsed.mockReturnValue(false);
+    const result = await runSelfUpgrade({ triggeredBy: "manual:ops" }); // scheduled unset
+    expect(result).toMatchObject({ ok: true, status: "succeeded" });
+    expect(mocks.recordCheckedAt).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("merge-conflict defer (source prep, §5.0)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
+    mocks.isUpgradeWindowOpen.mockReturnValue(true);
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
+    setupSourceReady();
+    mocks.getLatestRun.mockResolvedValue(null);
+    mocks.createRun.mockResolvedValue({ runId: "SUR-CONFLICT" });
+    mocks.failRun.mockResolvedValue({});
+    mocks.emitUpgradeEvent.mockResolvedValue(undefined);
+  });
+
+  it("defers without draining or promoting when the upstream merge conflicts", async () => {
+    mocks.prepareUpgradeSource.mockResolvedValue({
+      ok: false,
+      reason: "merge-conflict",
+      conflictFiles: ["apps/web/a.ts", "apps/web/b.ts"],
+      upstreamSha: "abc1234deadbeef",
+      message: "upstream merge conflicts in 2 file(s)",
+    });
+
+    const result = await runSelfUpgrade({ triggeredBy: "scheduled" });
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: "deferred-conflict",
+      reason: "merge-conflict",
+      conflictFiles: ["apps/web/a.ts", "apps/web/b.ts"],
+    });
+    // The running build is untouched: no drain, no swap.
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+    expect(mocks.runPromoter).not.toHaveBeenCalled();
+    expect(mocks.failRun).toHaveBeenCalledWith(
+      "SUR-CONFLICT",
+      "merge-conflict: apps/web/a.ts, apps/web/b.ts",
+    );
+  });
+});
+
 describe("quiescence-defer path (BI-QUIESCE-010)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
-    mocks.isInMaintenanceWindow.mockReturnValue(true);
-    mocks.resolveTargetSha.mockResolvedValue("abc1234deadbeef");
-    mocks.getDeployedSha.mockReturnValue("oldsha1");
-    mocks.isShaFresh.mockReturnValue(false);
+    mocks.isUpgradeWindowOpen.mockReturnValue(true);
+    mocks.getDeployedSha.mockResolvedValue("oldsha1");
+    setupSourceReady();
     mocks.getLatestRun.mockResolvedValue(null);
     mocks.createRun.mockResolvedValue({ runId: "SUR-DEFER" });
     mocks.startRun.mockResolvedValue({});

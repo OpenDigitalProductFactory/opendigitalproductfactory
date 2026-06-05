@@ -3,7 +3,15 @@
 // Uses OpenAI-compatible /v1/embeddings endpoint.
 
 const EMBEDDING_MODEL = "ai/nomic-embed-text-v1.5";
-const MAX_INPUT_LENGTH = 8192;
+// The embedding backend (Docker Model Runner / llama.cpp, nomic-embed-text)
+// runs with an n_ubatch of 512 tokens; inputs over ~2000 chars (~512 tokens)
+// are rejected with HTTP 500. Cap input length to stay under that batch limit
+// so substantial text embeds (truncated to its most representative head)
+// instead of silently failing (return null) — which is what left memory,
+// knowledge, documents AND the WWMD wiki kernel un-embedded. Override with
+// EMBED_MAX_INPUT_CHARS for a backend configured with a larger batch.
+// (BI-30AA6B76. Chunk+mean-pool for full-body fidelity is future work.)
+const MAX_INPUT_LENGTH = Number(process.env["EMBED_MAX_INPUT_CHARS"]) || 1700;
 
 function getLlmBaseUrl(): string {
   return (

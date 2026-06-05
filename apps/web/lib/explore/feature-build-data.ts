@@ -364,6 +364,7 @@ export async function getFeatureBuildForContext(
       buildId: true,
       title: true,
       phase: true,
+      kind: true,
       brief: true,
       designDoc: true,
       designReview: true,
@@ -586,9 +587,18 @@ export async function getFeatureBuildForContext(
     }
   }
 
+  // Right-sizing matrix: read the build's processSize from plan.processSize
+  // (written at promote time by governed-backlog-tee-up). Default "medium"
+  // preserves today's policy cell for builds promoted before this field
+  // existed. See docs/superpowers/specs/2026-05-30-build-studio-right-sizing-design.md
+  const planObj = (r.plan as Record<string, unknown> | null) ?? null;
+  const processSize = (planObj?.["processSize"] as string | undefined) ?? "medium";
+
   return {
     buildId: r.buildId,
     phase: r.phase as BuildPhase,
+    kind: r.kind as import("@/lib/feature-build-types").FeatureBuildKind,
+    size: processSize as import("@/lib/feature-build-types").BuildProcessSize,
     title: r.title,
     brief: r.brief as FeatureBrief | null,
     designDoc: r.designDoc as BuildDesignDoc | null,

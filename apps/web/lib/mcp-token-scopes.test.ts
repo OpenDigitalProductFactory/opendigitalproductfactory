@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   CODING_AGENT_MCP_TOKEN_SCOPES,
+  CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS,
   MCP_TOKEN_REVOKED_ARCHIVE_DAYS,
   MCP_TOKEN_TEMPLATES,
   WRITE_MCP_TOKEN_SCOPES,
@@ -9,6 +10,7 @@ import {
   getMcpTokenTemplate,
   isMcpTokenArchived,
   resolveTemplateGrants,
+  templateScopesForTier,
 } from "./mcp-token-scopes";
 
 describe("defaultMcpTokenScopes", () => {
@@ -114,6 +116,14 @@ describe("MCP_TOKEN_TEMPLATES", () => {
   it("returns undefined for unknown template ids", () => {
     expect(getMcpTokenTemplate("does_not_exist")).toBeUndefined();
   });
+
+  it("keeps the development template as a superset of contributor MCP readiness", () => {
+    const development = getMcpTokenTemplate("development");
+    expect(development).toBeDefined();
+    for (const grant of CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS) {
+      expect(development!.grants).toContain(grant);
+    }
+  });
 });
 
 describe("resolveTemplateGrants", () => {
@@ -126,6 +136,78 @@ describe("resolveTemplateGrants", () => {
   it("returns empty when no grants overlap (do-not-issue signal)", () => {
     const finance = getMcpTokenTemplate("employee_finance")!;
     expect(resolveTemplateGrants(finance, ["unrelated_grant"])).toEqual([]);
+  });
+});
+
+describe("templateScopesForTier", () => {
+  // A realistic install catalog: every grant the admin + development templates
+  // reference, plus the legacy coarse write set.
+  const FULL = Array.from(
+    new Set<string>([
+      ...getMcpTokenTemplate("admin")!.grants,
+      ...getMcpTokenTemplate("development")!.grants,
+      ...WRITE_MCP_TOKEN_SCOPES,
+    ]),
+  );
+
+  it("issues the development bundle for write tokens (parity with the Admin UI)", () => {
+    const scopes = templateScopesForTier("write", FULL);
+    // The narrow legacy write set lacked the build-studio + ship grants; the
+    // development template restores them.
+    for (const g of [
+      "sandbox_execute",
+      "iac_execute",
+      "build_promote",
+      "build_plan_write",
+      "registry_read",
+      "decision_record_create",
+    ]) {
+      expect(scopes).toContain(g);
+    }
+    // Still a superset of the old coarse write set.
+    for (const g of WRITE_MCP_TOKEN_SCOPES) expect(scopes).toContain(g);
+    // ...but no admin escalation on a write token.
+    expect(scopes).not.toContain("admin_write");
+  });
+
+  it("grants every contributor-readiness scope on a default write token", () => {
+    const scopes = templateScopesForTier("write", FULL);
+    for (const g of CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS) {
+      expect(scopes).toContain(g);
+    }
+  });
+
+  it("issues the admin bundle (incl admin_write) for admin tokens", () => {
+    expect(templateScopesForTier("admin", FULL)).toContain("admin_write");
+  });
+
+  it("keeps read tokens on the conservative coding-agent read set", () => {
+    expect(templateScopesForTier("read", FULL).sort()).toEqual(
+      [...CODING_AGENT_MCP_TOKEN_SCOPES].sort(),
+    );
+  });
+
+  it("filters to what the install exposes (no scope the platform can't honour)", () => {
+    expect(templateScopesForTier("write", ["backlog_write", "file_read"]).sort()).toEqual([
+      "backlog_write",
+      "file_read",
+    ]);
+  });
+
+  it("degrades to exactly the coarse write grants when only those are exposed", () => {
+    // An install that registers only the legacy coarse write grants still gets
+    // a usable, non-empty token (the development template resolves down to that
+    // overlap rather than over-requesting).
+    const onlyCoarse = [...WRITE_MCP_TOKEN_SCOPES];
+    const scopes = templateScopesForTier("write", onlyCoarse);
+    expect(scopes.length).toBeGreaterThan(0);
+    expect(scopes.sort()).toEqual([...WRITE_MCP_TOKEN_SCOPES].sort());
+  });
+
+  it("returns no scopes only when the install exposes nothing the template needs", () => {
+    // Pathological/misconfigured catalog — the safety net returns [] rather
+    // than throwing; callers treat empty as do-not-issue.
+    expect(templateScopesForTier("write", ["unrelated_grant"])).toEqual([]);
   });
 });
 

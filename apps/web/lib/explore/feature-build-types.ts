@@ -16,6 +16,56 @@ import type { DecisionInteractionGateView } from "@/lib/decision-perspective/typ
 export const UX_VERIFICATION_STATUSES = ["running", "complete", "failed", "skipped"] as const;
 export type UxVerificationStatus = typeof UX_VERIFICATION_STATUSES[number];
 
+/**
+ * Canonical values for FeatureBuild.kind — the work-kind discriminator that
+ * lets the Build Studio pipeline run a build as a new-capability *feature*,
+ * a targeted defect *fix*, an intent-driven *chore*, or a *doc* gap.
+ * `feature-build-types.ts` is the canonical home (kind is a FeatureBuild
+ * concern; BacklogItem.source stays owned by backlog.ts).
+ *
+ * The DB column is plain TEXT defaulting to "feature"; this array is the
+ * authority for valid values. Adding a value requires:
+ *   1. Adding it here.
+ *   2. Wiring at least one cell per size in DEFAULT_LIFECYCLE_MATRIX (see
+ *      build-process-matrix.ts §4.3) and any matching prompt variant in
+ *      build-agent-prompts.ts (or deliberately falling through to "feature").
+ *   3. Updating any MCP tool schema that mirrors the enum, in the same commit,
+ *      before any DB row writes the new value.
+ *
+ * Right-sizing matrix: docs/superpowers/specs/2026-05-30-build-studio-right-sizing-design.md
+ */
+export const FEATURE_BUILD_KIND_VALUES = ["feature", "fix", "chore", "doc"] as const;
+export type FeatureBuildKind = typeof FEATURE_BUILD_KIND_VALUES[number];
+
+/**
+ * Process sizes that drive the right-sizing matrix. Mirrors
+ * BACKLOG_EFFORT_SIZES; re-exported here so build-side consumers
+ * (build-agent-prompts, build-pipeline) can import everything they need
+ * from one canonical types module. Single source of truth still lives
+ * in backlog.ts (BACKLOG_EFFORT_SIZES); build-process-matrix.ts re-uses
+ * that array under a build-flavored alias.
+ */
+export type BuildProcessSize = "small" | "medium" | "large" | "xlarge";
+
+/**
+ * Structured defect context for a `kind: "fix"` build. Carried additively on
+ * `FeatureBrief` (not a discriminated union) so every structural reader of the
+ * brief keeps compiling. Populated at promote time from the originating
+ * `PlatformIssueReport`; `rootCause`/`fixApproach` are filled during ideate.
+ */
+export type FixContext = {
+  severity?: string;
+  originatingIssueReportId?: string;
+  originatingIssueReportPublicId?: string;
+  routeContext?: string;
+  errorStackExcerpt?: string;
+  reproSteps?: string;
+  expected?: string;
+  actual?: string;
+  rootCause?: string;
+  fixApproach?: string;
+};
+
 export type FeatureBrief = {
   title: string;
   description: string;
@@ -24,7 +74,34 @@ export type FeatureBrief = {
   inputs: string[];
   dataNeeds: string;
   acceptanceCriteria: string[];
+  /** Present iff the owning build's kind === "fix". */
+  fixContext?: FixContext;
 };
+
+/**
+ * Derive the UX-verification assertion(s) for a fix build from its diagnosis.
+ * A fix's UX check is "the reported defect no longer reproduces on the affected
+ * route" — NOT the feature `acceptanceCriteria` (which on a fix build can be
+ * polluted with fixContext prose, producing nonsense browser-use navigations
+ * like `https://fixContext.reproSteps`). Returns [] when there's nothing
+ * actionable to verify in a browser. (BI-AC5CFDB0)
+ */
+export function deriveFixUxTestCases(fixContext: FixContext | null | undefined): string[] {
+  if (!fixContext) return [];
+  const route = fixContext.routeContext?.trim();
+  const expected = fixContext.expected?.trim();
+  const actual = fixContext.actual?.trim();
+  // Nothing browser-verifiable (e.g. a pure server/tool fix with no route) →
+  // let the caller skip UX rather than invent a navigation target.
+  if (!route && !expected) return [];
+  const where = route ? `Navigate to ${route} and ` : "";
+  const wasClause = actual ? ` (previously: ${actual})` : "";
+  const expectClause = expected ? ` Expected: ${expected}.` : "";
+  return [
+    `${where}verify the previously-reported defect no longer occurs${wasClause}.` +
+      `${expectClause} The page must load without a runtime error overlay or blank-screen crash.`,
+  ];
+}
 
 export type TaxonomyAttributionView = {
   method: "rule" | "heuristic" | "ai_proposed" | "manual" | "invalid_portfolio";
@@ -113,6 +190,24 @@ export type ReviewResult = {
    *  `latest` is the most recent set the operator can pick from; prior
    *  rounds (after a regenerate) move into `priorRounds` for audit. */
   decompositionCandidates?: DecompositionCandidatesSnapshot;
+  /** Advisory architectural-alignment findings from the chief-architect
+   *  reviewer (the Enterprise Architect persona, AGT-WS-EA). Populated by
+   *  reviewDesignDoc / reviewBuildPlan when the architecture reviewer runs.
+   *  ADVISORY ONLY — these findings never gate pass/fail. They join the
+   *  deliberation trail as the `architect` branch and are surfaced to the
+   *  build coworker so it can fold actionable concerns back into the spec. */
+  architectureAdvisory?: ArchitectureAdvisory;
+};
+
+/** Compact, advisory-only record of an architectural-alignment review.
+ *  Stored nested on ReviewResult.architectureAdvisory rather than in its own
+ *  column — no migration, and every `data: { review }` tool response carries
+ *  it for free. Issues reuse the ReviewResult issue shape so the UI can render
+ *  them with the same severity styling; severity here is advisory weight, not
+ *  a gate signal. */
+export type ArchitectureAdvisory = {
+  summary: string;
+  issues: ReviewResult["issues"];
 };
 
 /** Persisted shape of the candidate-set generated by propose_build_decomposition.
@@ -350,6 +445,9 @@ export type FeatureBuildRow = {
   buildId: string;
   title: string;
   description: string | null;
+  // Optional for back-compat: rows loaded from selects that predate the kind
+  // column read as undefined and are treated as "feature".
+  kind?: FeatureBuildKind | null;
   portfolioId: string | null;
   parentEpicId?: string | null;
   originatingBacklogItemId: string | null;
@@ -533,6 +631,26 @@ export function describePlanReviewFailure(planReview: ReviewResult): string {
   return `${base} (${round}: ${trajectory})${oscillation}`;
 }
 
+/** Build the operator-facing reason string for a failed designReview, including
+ *  iteration trajectory when present. Mirror of describePlanReviewFailure for
+ *  the design path (BI-CE49D82E). Same convergence/oscillation language so the
+ *  operator's mental model is consistent across phase gates. */
+export function describeDesignReviewFailure(designReview: ReviewResult): string {
+  const base = "Design review failed. Revise the design document and re-run reviewDesignDoc before advancing.";
+  const iter = designReview.iteration;
+  if (!iter) return base;
+  const round = `Round ${iter.round}`;
+  if (!iter.prior) {
+    return `${base} (${round})`;
+  }
+  const trajectory =
+    `${iter.prior.addressed} addressed, ${iter.prior.persisted} persist, ${iter.prior.newlySurfaced} new`;
+  const oscillation = iter.oscillating
+    ? " — issue count is not decreasing across rounds. Consider splitting this feature into smaller scopes before continuing to iterate."
+    : "";
+  return `${base} (${round}: ${trajectory})${oscillation}`;
+}
+
 // ─── Phase Transitions ──────────────────────────────────────────────────────
 
 const ALLOWED_TRANSITIONS: Record<BuildPhase, BuildPhase[]> = {
@@ -679,113 +797,34 @@ export function mergeHappyPathStateIntoPlan(
   };
 }
 
-function missingHappyPathAnchors(state: HappyPathState): string[] {
-  const missing: string[] = [];
-  if (!state.intake.taxonomyNodeId) missing.push("taxonomy");
-  if (!state.intake.backlogItemId) missing.push("backlog item");
-  if (!state.intake.epicId) missing.push("epic");
-  if (!state.intake.constrainedGoal) missing.push("constrained goal");
-  return missing;
+// missingHappyPathAnchors moved to build-process-matrix.ts where the
+// happyPathIntake-ready requirement is implemented. The matrix is the only
+// caller now that checkPhaseGate delegates to it.
+
+/**
+ * A fix build's diagnosis is "complete enough" to plan against when it has
+ * reproduction steps, a root cause, and a fix approach. This is the fix-flow
+ * analogue of requiring a design document before planning a feature.
+ */
+export function isFixContextComplete(fc: FixContext | null | undefined): boolean {
+  if (!fc) return false;
+  return Boolean(fc.reproSteps?.trim() && fc.rootCause?.trim() && fc.fixApproach?.trim());
 }
 
-export function checkPhaseGate(
-  from: BuildPhase,
-  to: BuildPhase,
-  evidence: Record<string, unknown>,
-): PhaseGateResult {
-  if (to === "failed") return { allowed: true };
-  if (from === "review" && to === "build") return { allowed: true };
-
-  if (from === "ideate" && to === "plan") {
-    if (!evidence.designDoc) return { allowed: false, reason: "A design document is required before planning." };
-    if (!evidence.designReview) return { allowed: false, reason: "Design review is required before planning." };
-    // Review must pass — a failed review blocks advancement until revision + re-review
-    const designReview = evidence.designReview as { decision?: string };
-    if (designReview.decision === "fail") {
-      return { allowed: false, reason: "Design review failed. Revise the design document and re-run reviewDesignDoc before advancing." };
-    }
-    const happyPathState = normalizeHappyPathState(evidence.happyPathState);
-    if (!isHappyPathIntakeReady(happyPathState)) {
-      const missing = missingHappyPathAnchors(happyPathState).join(", ");
-      return { allowed: false, reason: `Intake is incomplete. Link taxonomy, backlog item, epic, and a constrained goal before planning. Missing: ${missing}.` };
-    }
-    return { allowed: true };
-  }
-
-  if (from === "plan" && to === "build") {
-    if (!evidence.buildPlan) return { allowed: false, reason: "An implementation plan is required before building." };
-    if (!evidence.planReview) return { allowed: false, reason: "Plan review is required before building." };
-    // Review must pass — a failed review blocks advancement until revision + re-review
-    const planReview = evidence.planReview as ReviewResult & { decision?: string };
-    if (planReview.decision === "fail") {
-      // BI-4396EFEC (D38): when iteration metadata is present, surface the
-      // trajectory in the operator-facing reason so a stuck Plan loop is
-      // visible without reading DB tables. Three rounds with the same issue
-      // count is the "consider splitting scope" signal.
-      return { allowed: false, reason: describePlanReviewFailure(planReview) };
-    }
-    const happyPathState = normalizeHappyPathState(evidence.happyPathState);
-    if (!isHappyPathIntakeReady(happyPathState)) {
-      const missing = missingHappyPathAnchors(happyPathState).join(", ");
-      return { allowed: false, reason: `Intake is incomplete. Link taxonomy, backlog item, epic, and a constrained goal before building. Missing: ${missing}.` };
-    }
-    return { allowed: true };
-  }
-
-  if (from === "build" && to === "review") {
-    const verification = evidence.verificationOut as { testsFailed?: number; typecheckPassed?: boolean } | null;
-    if (!verification) return { allowed: false, reason: "A verification run (tests + typecheck) is required before review." };
-    if (!verification.typecheckPassed) return { allowed: false, reason: "Typecheck must pass before review." };
-    // Unit test failures are informational — the sandbox runs the full platform test
-    // suite, so pre-existing failures in unrelated modules must not block feature builds.
-    return { allowed: true };
-  }
-
-  if (from === "review" && to === "ship") {
-    if (!evidence.designDoc) return { allowed: false, reason: "Design document is missing." };
-    if (!evidence.buildPlan) return { allowed: false, reason: "Implementation plan is missing." };
-    if (!evidence.verificationOut) return { allowed: false, reason: "Verification output is missing." };
-    if (!evidence.acceptanceMet) return { allowed: false, reason: "Acceptance criteria not evaluated." };
-    // The AI may save acceptanceMet as a string description or an array of {criterion, met, evidence}.
-    // Both indicate the AI evaluated criteria. Only block if it's a proper array with unmet items.
-    if (Array.isArray(evidence.acceptanceMet)) {
-      const criteria = evidence.acceptanceMet as Array<{ met?: boolean }>;
-      if (criteria.some((c) => !c.met)) return { allowed: false, reason: "Not all acceptance criteria are met." };
-    }
-    // UX verification gate — three signals in combination:
-    //   status "running"             -> in-flight, block until it settles
-    //   status null + acceptance > 0 -> never ran, block (something's wrong)
-    //   status "skipped"             -> zero acceptance criteria, allow
-    //   status "failed"              -> blocked (unless override)
-    //   failed steps in uxTestResults -> blocked (defense in depth even if
-    //                                    the column got out of sync)
-    const status = evidence.uxVerificationStatus as
-      | "running" | "complete" | "failed" | "skipped" | null | undefined;
-    const hasAcceptance = Array.isArray(evidence.acceptanceCriteria)
-      && (evidence.acceptanceCriteria as unknown[]).length > 0;
-
-    if (status === "running") {
-      return { allowed: false, reason: "UX verification is still running. Retry in a moment." };
-    }
-    if ((status === null || status === undefined) && hasAcceptance) {
-      return { allowed: false, reason: "UX verification has not run yet." };
-    }
-    if (evidence.uxTestResults) {
-      const uxResults = evidence.uxTestResults as Array<{ passed?: boolean; step?: string }>;
-      const failed = uxResults.filter((s) => !s.passed);
-      if (failed.length > 0) {
-        const stepNames = failed.map((s) => s.step).filter(Boolean).slice(0, 3).join("; ");
-        return {
-          allowed: false,
-          reason: `UX verification failed: ${stepNames || `${failed.length} step(s)`}. Fix issues before shipping.`,
-        };
-      }
-    }
-    return { allowed: true };
-  }
-
-  return { allowed: true };
-}
+/**
+ * Phase gate — re-exported from build-process-matrix.ts.
+ *
+ * The implementation moved to build-process-matrix.ts so the right-sizing
+ * matrix module owns the gate logic and the LifecyclePolicy table together.
+ * This re-export preserves every existing import site that reaches
+ * checkPhaseGate via @/lib/feature-build-types.
+ *
+ * Back-compat invariant: when `evidence.kind` is absent (or "feature") and
+ * `evidence.processSize` is absent (or "medium"), the resolved policy is
+ * the default feature-standard cell — byte-identical to the pre-matrix
+ * behavior. See docs/superpowers/specs/2026-05-30-build-studio-right-sizing-design.md.
+ */
+export { checkPhaseGate } from "./build-process-matrix";
 
 // ─── Validation ──────────────────────────────────────────────────────────────
 

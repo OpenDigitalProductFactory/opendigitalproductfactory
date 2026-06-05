@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { LocalTime } from "@/components/ui/LocalTime";
+
 type McpServerSummary = {
   id: string;
   serverId: string;
@@ -61,7 +63,7 @@ export function ServiceCard({ server }: { server: McpServerSummary }) {
       <div className="flex items-center justify-between mt-auto pt-1 text-xs text-muted-foreground">
         <span>{server._count.tools} tool{server._count.tools !== 1 ? "s" : ""}</span>
         {server.lastHealthCheck && (
-          <span>Checked {new Date(server.lastHealthCheck).toLocaleDateString()}</span>
+          <span>Checked <LocalTime value={server.lastHealthCheck} mode="date" /></span>
         )}
       </div>
     </Link>

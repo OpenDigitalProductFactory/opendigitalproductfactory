@@ -52,4 +52,15 @@ describe("mergeManifest", () => {
     expect(result.externalDependencies).toHaveLength(1);
     expect(result.statistics.totalFiles).toBe(10);
   });
+
+  it("injects canonical reusable primitives from the registry", () => {
+    const result = mergeManifest(
+      { platform: {}, modules: [], capabilityMap: {}, boundaries: {} },
+      {
+        externalDependencies: [],
+        statistics: { totalFiles: 0, totalLines: 0, moduleCount: 0, externalDependencyCount: 0, dataModelCount: 0 },
+      },
+    );
+    expect(result.canonicalPrimitives.map((p) => p.name)).toContain("report-kit");
+  });
 });

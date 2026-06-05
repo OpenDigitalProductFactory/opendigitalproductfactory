@@ -41,11 +41,13 @@ const RUNNER_TIMEOUT_MS = 10 * 60 * 1000;
 export interface Neo4jRestoreArgs {
   sourceBackupRunId: string;
   initiatedByUserId?: string | null;
+  trigger?: string | null;
   backupsRoot?: string;
   scriptPath?: string;
   prismaClient?: PrismaLike;
   now?: () => Date;
   takeSafetyBackup?: () => Promise<{ runId: string; status: "ok" | "failed" }>;
+  acquireLock?: boolean;
 }
 
 type PrismaLike = typeof import("@dpf/db").prisma;
@@ -116,7 +118,9 @@ export async function runNeo4jRestore(
   const scriptPath = args.scriptPath ?? RESTORE_SCRIPT_PATH;
   const prisma = args.prismaClient ?? (await import("@dpf/db")).prisma;
 
-  const release = acquireRestoreLock(args.sourceBackupRunId);
+  const release = args.acquireLock === false
+    ? () => {}
+    : acquireRestoreLock(args.sourceBackupRunId);
   const startedAt = now();
   restoreTraceLog(`acquired lock for source=${args.sourceBackupRunId}`);
 
@@ -187,6 +191,7 @@ export async function runNeo4jRestore(
         startedAt,
         finishedAt,
         status: outcome.ok ? "ok" : "failed",
+        trigger: args.trigger ?? null,
         sourceBackupRunId: source.id,
         preRestoreBackupRunId: safety.runId,
         initiatedByUserId: args.initiatedByUserId ?? null,

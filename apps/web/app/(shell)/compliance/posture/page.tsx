@@ -1,5 +1,9 @@
 // apps/web/app/(shell)/compliance/posture/page.tsx
 import { getCompliancePosture, getPostureTrend, takeComplianceSnapshot } from "@/lib/actions/reporting";
+import { StatCard, StatusBadge, intentStyle } from "@/components/ui/report-kit";
+import { Chart } from "@/components/ui/report-kit/Chart";
+import { PostureTrendTable, type PostureSnapshotRow } from "./PostureTrendTable";
+import { scoreIntent } from "./posture-score";
 
 export default async function PosturePage() {
   const [posture, trend] = await Promise.all([
@@ -7,7 +11,29 @@ export default async function PosturePage() {
     getPostureTrend(12),
   ]);
 
-  const scoreColor = posture.overallScore >= 80 ? "#4ade80" : posture.overallScore >= 60 ? "#fbbf24" : "#ef4444";
+  const obligationPct = posture.totalObligations > 0
+    ? Math.round((posture.coveredObligations / posture.totalObligations) * 100)
+    : 100;
+  const controlPct = posture.totalControls > 0
+    ? Math.round((posture.implementedControls / posture.totalControls) * 100)
+    : 100;
+
+  // Serialize snapshots for the client table + chart (chronological for the trend line).
+  const rows: PostureSnapshotRow[] = trend.map((s) => ({
+    snapshotId: s.snapshotId,
+    takenAtISO: new Date(s.takenAt).toISOString(),
+    overallScore: s.overallScore,
+    coveredObligations: s.coveredObligations,
+    totalObligations: s.totalObligations,
+    implementedControls: s.implementedControls,
+    totalControls: s.totalControls,
+    openIncidents: s.openIncidents,
+    overdueActions: s.overdueActions,
+    triggeredBy: s.triggeredBy,
+  }));
+  const chartData = [...rows]
+    .sort((a, b) => a.takenAtISO.localeCompare(b.takenAtISO))
+    .map((s) => ({ date: s.takenAtISO.slice(0, 10), score: s.overallScore }));
 
   return (
     <div>
@@ -24,17 +50,27 @@ export default async function PosturePage() {
         </form>
       </div>
 
-      {/* Overall Score */}
+      {/* Overall Score + key metrics */}
       <div className="flex items-center gap-6 mb-8">
         <div className="text-center">
-          <p className="text-5xl font-bold" style={{ color: scoreColor }}>{posture.overallScore}</p>
+          <p className="text-5xl font-bold" style={{ color: intentStyle(scoreIntent(posture.overallScore)).fg }}>
+            {posture.overallScore}
+          </p>
           <p className="text-xs text-[var(--dpf-muted)] mt-1">Overall Score</p>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 flex-1">
-          <MetricCard label="Obligation Coverage" value={`${posture.totalObligations > 0 ? Math.round((posture.coveredObligations / posture.totalObligations) * 100) : 100}%`} sub={`${posture.coveredObligations}/${posture.totalObligations}`} />
-          <MetricCard label="Control Implementation" value={`${posture.totalControls > 0 ? Math.round((posture.implementedControls / posture.totalControls) * 100) : 100}%`} sub={`${posture.implementedControls}/${posture.totalControls}`} />
-          <MetricCard label="Open Incidents" value={posture.openIncidents} sub={posture.openIncidents === 0 ? "Clear" : "Active"} />
-          <MetricCard label="Overdue Actions" value={posture.overdueActions} sub={posture.overdueActions === 0 ? "On track" : "Needs attention"} />
+          <StatCard label="Obligation Coverage" value={`${obligationPct}%`}
+            hint={`${posture.coveredObligations}/${posture.totalObligations}`}
+            intent={scoreIntent(obligationPct)} />
+          <StatCard label="Control Implementation" value={`${controlPct}%`}
+            hint={`${posture.implementedControls}/${posture.totalControls}`}
+            intent={scoreIntent(controlPct)} />
+          <StatCard label="Open Incidents" value={posture.openIncidents}
+            hint={posture.openIncidents === 0 ? "Clear" : "Active"}
+            intent={posture.openIncidents === 0 ? "success" : "danger"} />
+          <StatCard label="Overdue Actions" value={posture.overdueActions}
+            hint={posture.overdueActions === 0 ? "On track" : "Needs attention"}
+            intent={posture.overdueActions === 0 ? "success" : "warning"} />
         </div>
       </div>
 
@@ -49,11 +85,11 @@ export default async function PosturePage() {
               <div key={r.id} className="p-3 rounded-lg border border-[var(--dpf-border)] flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-[var(--dpf-text)]">{r.shortName}</span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{r.jurisdiction}</span>
+                  <StatusBadge intent="neutral" label={r.jurisdiction} variant="soft" uppercase={false} />
                 </div>
                 <div className="flex items-center gap-4 text-xs text-[var(--dpf-muted)]">
                   <span>{r.coveredObligations}/{r.totalObligations} covered</span>
-                  <span className={`font-semibold ${r.obligationCoverage >= 80 ? "text-green-400" : r.obligationCoverage >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                  <span className="font-semibold" style={{ color: intentStyle(scoreIntent(r.obligationCoverage)).fg }}>
                     {r.obligationCoverage}%
                   </span>
                 </div>
@@ -69,50 +105,22 @@ export default async function PosturePage() {
         {trend.length === 0 ? (
           <p className="text-sm text-[var(--dpf-muted)]">No snapshots yet. Take a snapshot to start tracking trends.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-left text-[var(--dpf-muted)] border-b border-[var(--dpf-border)]">
-                  <th className="py-2 pr-4">Date</th>
-                  <th className="py-2 pr-4">Score</th>
-                  <th className="py-2 pr-4">Obligations</th>
-                  <th className="py-2 pr-4">Controls</th>
-                  <th className="py-2 pr-4">Incidents</th>
-                  <th className="py-2 pr-4">Overdue</th>
-                  <th className="py-2">Trigger</th>
-                </tr>
-              </thead>
-              <tbody>
-                {trend.map((s) => (
-                  <tr key={s.snapshotId} className="border-b border-[var(--dpf-border)]">
-                    <td className="py-2 pr-4 text-[var(--dpf-text)]">{new Date(s.takenAt).toLocaleDateString()}</td>
-                    <td className="py-2 pr-4">
-                      <span className={`font-semibold ${s.overallScore >= 80 ? "text-green-400" : s.overallScore >= 60 ? "text-yellow-400" : "text-red-400"}`}>
-                        {s.overallScore}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-4 text-[var(--dpf-muted)]">{s.coveredObligations}/{s.totalObligations}</td>
-                    <td className="py-2 pr-4 text-[var(--dpf-muted)]">{s.implementedControls}/{s.totalControls}</td>
-                    <td className="py-2 pr-4 text-[var(--dpf-muted)]">{s.openIncidents}</td>
-                    <td className="py-2 pr-4 text-[var(--dpf-muted)]">{s.overdueActions}</td>
-                    <td className="py-2 text-[var(--dpf-muted)]">{s.triggeredBy}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-4">
+            {chartData.length > 1 && (
+              <div className="rounded-lg border border-[var(--dpf-border)] p-3">
+                <Chart
+                  type="area"
+                  data={chartData}
+                  xKey="date"
+                  series={[{ key: "score", label: "Overall Score", intent: "accent" }]}
+                  height={220}
+                />
+              </div>
+            )}
+            <PostureTrendTable rows={rows} />
           </div>
         )}
       </section>
-    </div>
-  );
-}
-
-function MetricCard({ label, value, sub }: { label: string; value: number | string; sub: string }) {
-  return (
-    <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
-      <p className="text-xs text-[var(--dpf-muted)]">{label}</p>
-      <p className="text-lg font-bold text-[var(--dpf-text)]">{value}</p>
-      <p className="text-[9px] text-[var(--dpf-muted)]">{sub}</p>
     </div>
   );
 }

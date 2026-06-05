@@ -3,6 +3,9 @@ import {
   buildDesignReviewPrompt,
   buildPlanReviewPrompt,
   buildCodeReviewPrompt,
+  buildArchitectureReviewPrompt,
+  architectureAdvisoryFromReview,
+  ARCHITECTURE_REVIEW_REFERENCES,
   parseReviewResponse,
   extractClaimsFromReview,
   buildReviewBranchArtifacts,
@@ -26,6 +29,61 @@ describe("buildDesignReviewPrompt", () => {
     expect(prompt).toContain("Reuse OpsClient pattern");
     expect(prompt).toContain("Filter hides done items");
     expect(prompt).toContain("JSON FORMAT");
+  });
+
+  // BI-CE49D82E — Delta-aware design review prompt, mirror of the plan path
+  // added in BI-4396EFEC (D38). Live repro that drove this fix: FB-5E20E793
+  // (Voice Slice 1.6) looped on the same "missing accessibility section"
+  // complaint round after round because the reviewer re-evaluated from
+  // scratch each call. Injecting the prior issues breaks the loop.
+  describe("delta-aware prior context (BI-CE49D82E)", () => {
+    const minimalDoc = {
+      problemStatement: "Users need filtering",
+      existingCodeAudit: "No existing filter",
+      reusePlan: "Reuse OpsClient pattern",
+      proposedApproach: "Add checkbox filter",
+      acceptanceCriteria: ["Filter hides done items"],
+    };
+
+    it("omits prior-context block on round 1 (no prior issues)", () => {
+      const prompt = buildDesignReviewPrompt(minimalDoc, "");
+      expect(prompt).not.toContain("PRIOR REVIEW CONTEXT");
+      expect(prompt).not.toContain("Delta-aware review protocol");
+    });
+
+    it("omits prior-context block when prior arg is null", () => {
+      const prompt = buildDesignReviewPrompt(minimalDoc, "", null);
+      expect(prompt).not.toContain("PRIOR REVIEW CONTEXT");
+    });
+
+    it("omits prior-context block when prior issues array is empty", () => {
+      const prompt = buildDesignReviewPrompt(minimalDoc, "", { round: 1, issues: [] });
+      expect(prompt).not.toContain("PRIOR REVIEW CONTEXT");
+    });
+
+    it("includes prior issues verbatim on round 2+ so the reviewer can judge resolution", () => {
+      const prompt = buildDesignReviewPrompt(minimalDoc, "", {
+        round: 1,
+        issues: [
+          { severity: "critical", description: "Missing explicit Accessibility section" },
+          { severity: "important", description: "No alternatives considered" },
+        ],
+      });
+      expect(prompt).toContain("PRIOR REVIEW CONTEXT (this is review round 2)");
+      expect(prompt).toContain("Missing explicit Accessibility section");
+      expect(prompt).toContain("No alternatives considered");
+      expect(prompt).toContain("[critical]");
+      expect(prompt).toContain("[important]");
+    });
+
+    it("instructs the reviewer to honor addressed issues and avoid re-litigation", () => {
+      const prompt = buildDesignReviewPrompt(minimalDoc, "", {
+        round: 2,
+        issues: [{ severity: "critical", description: "Some prior issue" }],
+      });
+      expect(prompt).toContain("Delta-aware review protocol");
+      expect(prompt).toContain("convergence, not re-litigation");
+    });
   });
 });
 
@@ -414,5 +472,77 @@ describe("mapCompactSummaryToBuildEntry", () => {
     expect(entry.evidenceQuality).toBe("mixed");
     expect(entry.diversityLabel).toBe("peer-review");
     expect(entry.unresolvedRisks).toEqual([]);
+  });
+});
+
+describe("buildArchitectureReviewPrompt", () => {
+  it("frames the design review as advisory and includes the DPF reference standards", () => {
+    const prompt = buildArchitectureReviewPrompt(
+      {
+        kind: "design",
+        doc: {
+          problemStatement: "Need to store architecture findings",
+          reusePlan: "Considered reusing the ReviewResult JSON column",
+          proposedApproach: "Add a new ArchitectureReview table",
+          acceptanceCriteria: ["Findings persist"],
+        },
+      },
+      "Test project",
+    );
+    expect(prompt).toContain("ADVISORY");
+    expect(prompt).toContain("Enterprise Architect");
+    expect(prompt).toContain("AGENTS.md");
+    expect(prompt).toContain("docs/founder-kernel/wiki/principles/");
+    expect(prompt).toContain("ArchitectureReview table");
+    // The chief-architect lens must invite reference-doc feedback.
+    expect(prompt).toContain("[reference-doc]");
+    expect(prompt).toContain("JSON FORMAT");
+  });
+
+  it("reviews the implementation plan's file structure for canonical placement", () => {
+    const prompt = buildArchitectureReviewPrompt(
+      {
+        kind: "plan",
+        plan: {
+          fileStructure: [{ path: "apps/web/lib/new-thing.ts", action: "create", purpose: "logic" }],
+          tasks: [{ title: "Add logic", testFirst: "t", implement: "write", verify: "tsc" }],
+        },
+      },
+      "",
+    );
+    expect(prompt).toContain("implementation plan");
+    expect(prompt).toContain("apps/web/lib/new-thing.ts");
+    expect(prompt).toContain("canonical home");
+  });
+
+  it("exposes the reference standards as a non-empty, repo-relative list", () => {
+    expect(ARCHITECTURE_REVIEW_REFERENCES.length).toBeGreaterThan(0);
+    expect(ARCHITECTURE_REVIEW_REFERENCES.map((r) => r.path)).toContain("AGENTS.md");
+  });
+});
+
+describe("architectureAdvisoryFromReview", () => {
+  it("returns the compact advisory for a parsed review", () => {
+    const arch: ReviewResult = {
+      decision: "fail",
+      issues: [{ severity: "important", description: "Duplicates a canonical model", suggestion: "Extend it" }],
+      summary: "Aligned with concerns",
+    };
+    expect(architectureAdvisoryFromReview(arch)).toEqual({
+      summary: "Aligned with concerns",
+      issues: arch.issues,
+    });
+  });
+
+  it("treats an absent or parse-error reviewer as no advisory (never fabricates 'no concerns')", () => {
+    expect(architectureAdvisoryFromReview(null)).toBeNull();
+    expect(
+      architectureAdvisoryFromReview({
+        decision: "fail",
+        issues: [],
+        summary: "unparseable",
+        parseError: true,
+      }),
+    ).toBeNull();
   });
 });

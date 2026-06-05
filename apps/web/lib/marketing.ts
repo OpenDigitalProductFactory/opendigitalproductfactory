@@ -268,7 +268,37 @@ export type MarketingWorkspaceSnapshot = {
       createdAt: Date;
     }>;
   };
+  pendingDrafts: OutboundDraftRow[];
+  approvedDrafts: OutboundDraftRow[];
+  connectedChannels: string[]; // IntegrationCredential.integrationId values with status="connected"
+  inboundMessages: InboundMessageRow[];
   staleAreas: string[];
+};
+
+export type InboundMessageRow = {
+  inboundId: string;
+  channelId: string;
+  fromAddress: string | null;
+  fromDisplayName: string | null;
+  subject: string | null;
+  body: string;
+  receivedAt: Date;
+  classification: "qualified-inquiry" | "support" | "spam" | "other" | null;
+  draftedReplyId: string | null;
+};
+
+export type OutboundDraftRow = {
+  draftId: string;
+  sourceType: "marketing-asset-task" | "marketing-campaign-brief" | "inbound-channel-message" | "manual";
+  sourceId: string | null;
+  assetTaskTitle: string | null;
+  channelId: string;
+  assetType: string;
+  status: "draft" | "pending-review" | "approved" | "rejected" | "needs-changes" | "stale" | "published";
+  body: string;
+  bodyFormat: "markdown" | "html" | "plain";
+  createdByAgentId: string | null;
+  createdAt: Date;
 };
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -1129,6 +1159,10 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
     assetTasks,
     kpiCheckpoints,
     automationCandidates,
+    pendingDraftsRaw,
+    approvedDraftsRaw,
+    connectedIntegrations,
+    inboundRaw,
   ] = await Promise.all([
     prisma.marketingCampaignBrief.findMany({
       where: { strategyId: strategy.strategyId },
@@ -1150,7 +1184,67 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
       orderBy: { createdAt: "desc" },
       take: 5,
     }),
+    prisma.outboundDraft.findMany({
+      where: {
+        organizationId: organization.id,
+        domain: "marketing",
+        status: { in: ["pending-review", "needs-changes"] },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    }),
+    prisma.outboundDraft.findMany({
+      where: {
+        organizationId: organization.id,
+        domain: "marketing",
+        status: "approved",
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 10,
+    }),
+    prisma.integrationCredential.findMany({
+      where: { status: "connected" },
+      select: { integrationId: true },
+    }),
+    prisma.inboundChannelMessage.findMany({
+      where: { organizationId: organization.id, domain: "marketing" },
+      orderBy: { receivedAt: "desc" },
+      take: 20,
+    }),
   ]);
+
+  // Map asset task ids to titles for the queue panel
+  const taskIdToTitle = new Map(assetTasks.map((t) => [t.taskId, t.title]));
+  const toRow = (draft: typeof pendingDraftsRaw[number]): OutboundDraftRow => ({
+    draftId: draft.draftId,
+    sourceType: draft.sourceType as OutboundDraftRow["sourceType"],
+    sourceId: draft.sourceId,
+    assetTaskTitle:
+      draft.sourceType === "marketing-asset-task" && draft.sourceId
+        ? taskIdToTitle.get(draft.sourceId) ?? null
+        : null,
+    channelId: draft.channelId,
+    assetType: draft.assetType,
+    status: draft.status as OutboundDraftRow["status"],
+    body: draft.body,
+    bodyFormat: draft.bodyFormat as OutboundDraftRow["bodyFormat"],
+    createdByAgentId: draft.createdByAgentId,
+    createdAt: draft.createdAt,
+  });
+  const pendingDrafts: OutboundDraftRow[] = pendingDraftsRaw.map(toRow);
+  const approvedDrafts: OutboundDraftRow[] = approvedDraftsRaw.map(toRow);
+  const connectedChannels = connectedIntegrations.map((i) => i.integrationId);
+  const inboundMessages: InboundMessageRow[] = inboundRaw.map((m) => ({
+    inboundId: m.inboundId,
+    channelId: m.channelId,
+    fromAddress: m.fromAddress,
+    fromDisplayName: m.fromDisplayName,
+    subject: m.subject,
+    body: m.body,
+    receivedAt: m.receivedAt,
+    classification: m.classification as InboundMessageRow["classification"],
+    draftedReplyId: m.draftedReplyId,
+  }));
 
   const normalizedSnapshot: MarketingWorkspaceSnapshot = {
     organization: {
@@ -1248,6 +1342,10 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
         createdAt: candidate.createdAt,
       })),
     },
+    pendingDrafts,
+    approvedDrafts,
+    connectedChannels,
+    inboundMessages,
     staleAreas: [],
   };
 

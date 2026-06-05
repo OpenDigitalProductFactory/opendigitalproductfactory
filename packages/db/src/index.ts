@@ -205,6 +205,15 @@ export {
   type PromotionSummary,
 } from "./discovery-promotion";
 export {
+  reconcilePromotedProducts,
+  isInfrastructureProduct,
+  type ReconcileSummary,
+} from "./discovery-reconcile";
+export {
+  isNonProductEntityType,
+  NON_PRODUCT_ENTITY_TYPES,
+} from "./discovery-promotion-policy";
+export {
   TRIAGE_ACTOR_TYPES,
   TRIAGE_OUTCOMES,
   TRIAGE_QUALITY_ISSUE_TYPES,
@@ -242,9 +251,24 @@ export * from "./discovery-fingerprint-types";
 export * from "./discovery-fingerprint-redaction";
 export * from "./discovery-fingerprint-policy";
 export * from "./discovery-fingerprint-rules";
+export * from "./discovery-mac-classification";
+export * from "./discovery-fingerprint-observation";
+export * from "./device-placement";
+export * from "./device-investigation";
+export * from "./device-fingerprint-contribution";
 // `./discovery-fingerprint-catalog` is intentionally NOT re-exported. Its
 // `validateFingerprintCatalog` helper uses dynamic `path.resolve(process.cwd(), ...)`
 // to locate catalog JSON at runtime, which Turbopack flags as an overly broad
 // NFT pattern. The helper is test-only — import it directly from
 // `./discovery-fingerprint-catalog` in tests, not via the barrel.
 export * from "./discovery-fingerprint-store";
+
+// Contributor-inventory-sync ScheduledJob constants — shared between the
+// seed helper and the apps/web Inngest runner so the heartbeat row's name +
+// schedule strings cannot drift between create (seed) and create-on-miss
+// (runner upsert).
+export {
+  CONTRIBUTOR_INVENTORY_JOB_ID,
+  CONTRIBUTOR_INVENTORY_JOB_NAME,
+  CONTRIBUTOR_INVENTORY_SCHEDULE,
+} from "./seed-contributor-inventory";

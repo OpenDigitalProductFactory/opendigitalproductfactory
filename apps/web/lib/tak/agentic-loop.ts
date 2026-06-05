@@ -4,8 +4,10 @@
 
 import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference";
 import { detectRepeatedToolCall, recordRepeatedToolIssue } from "@/lib/tak/runtime-issues";
+import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
 import { PLATFORM_TOOLS, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
+import { sanitizeForLog } from "@/lib/security/safe-log";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { prisma } from "@dpf/db";
 import { agentEventBus } from "./agent-event-bus";
@@ -252,8 +254,22 @@ export function detectFabrication(
   hasProposal: boolean,
   executedToolNames?: string[],
   authoritativeToolNames?: Set<string>,
+  hasAuthoritativeToolAvailable: boolean = true,
 ): boolean {
   if (hasProposal) return false;
+
+  // If the agent has no authoritative (action/build) tool available to call,
+  // a completion-claim or narration in its reply is ordinary conversational
+  // advice — there is no tool-backed work it could have recorded, so there is
+  // nothing to fabricate. This is the normal case for advise-mode coworkers:
+  // e.g. the setup tour, where the route persona is asked to "guide me through
+  // this step" and naturally says things like "once your hours are configured".
+  // Flagging that as fabrication kills a perfectly good reply and replaces it
+  // with the build-oriented failure copy. Note: authoritative ≠ side-effecting
+  // — internal build tools (saveBuildEvidence, reviewBuildPlan, …) are
+  // sideEffect:false yet still authoritative, so the caller computes this flag
+  // against both the side-effecting set and BUILD_TOOL_NAMES.
+  if (!hasAuthoritativeToolAvailable) return false;
 
   // If no tools were called at all, any completion claim is fabrication
   if (executedToolCount === 0) return COMPLETION_CLAIM_PATTERN.test(response);
@@ -318,6 +334,26 @@ function buildFabricationFailureMessage(params: {
   return (
     "I couldn't complete that — the underlying work wasn't recorded. "
     + "Try rephrasing the request, or open the build details to see what's saved so far."
+  );
+}
+
+/**
+ * Honest, infrastructure-aware copy for when a completion-claim trips the
+ * fabrication guard ON A DOWNGRADED TURN — i.e. the preferred AI provider
+ * failed and a backup produced the answer. The fabrication signal here is most
+ * likely an artifact of the failover (a weaker backup model), NOT the model
+ * faking work, so we must NOT show the build-recording failure copy ("the
+ * underlying work wasn't recorded") — that misreports an infrastructure failure
+ * as model misbehavior. This is the exact 2026-06-02 incident. Respects
+ * IDENTITY_BLOCK rule #5 — no provider/model/tool internals exposed.
+ * See spec docs/specs/routing-resilience-and-failure-observability-spec.md §4.5.
+ */
+function buildDowngradedFabricationMessage(): string {
+  return (
+    "My usual AI provider was unavailable, so I worked through a backup that "
+    + "couldn't fully complete this — nothing was left half-saved on your side. "
+    + "Please try again (the primary connection may have recovered), or break "
+    + "the request into a smaller step."
   );
 }
 
@@ -410,6 +446,17 @@ export function shouldNudge(params: {
   responseLength: number;
   responseText?: string;
   hasAuthoritativeToolExecution?: boolean;
+  /**
+   * True when this turn is part of the setup tour. SetupOverlay sends an
+   * auto-message prefixed "[Setup step: …]" whose route persona explicitly
+   * instructs a brief text-only reply ("no tool calls"). On such turns a
+   * nudge to "call a tool now" contradicts the route's own instruction, so we
+   * skip the iteration-0 nudge. Narrowed to this signal (rather than any
+   * no-authoritative-tool route) so routes like /finance still nudge — and the
+   * local-model diagnostic still fires — when a tool ought to have been used.
+   * Companion to detectFabrication's advise-mode guard (c70a7db6).
+   */
+  isSetupTourTurn?: boolean;
   allowFirstTurnTextOnlyReply?: boolean;
 }): boolean {
   // One nudge maximum. Extra nudges multiply cost — if the model doesn't respond
@@ -421,6 +468,20 @@ export function shouldNudge(params: {
   if (params.continuationNudges >= maxNudges) return false;
   if (params.iteration >= params.maxIterations - 1) return false;
   if (!params.hasTools) return false;
+
+  // Setup-tour turns (SetupOverlay's "[Setup step: …]" auto-message) ask the
+  // coworker for a brief text-only welcome with no tool calls. Nudging there
+  // injects a contradiction the coworker reconciles out loud. Skip the
+  // iteration-0 nudge on those turns only — NOT on every no-authoritative-tool
+  // route, so routes like /finance still nudge a weak local model (and surface
+  // the local-model diagnostic) when it should have queried a tool.
+  if (
+    params.executedToolCount === 0
+    && params.iteration === 0
+    && params.isSetupTourTurn === true
+  ) {
+    return false;
+  }
 
   // First iteration with no tools called — nudge UNLESS the response is a
   // clarifying question or a substantive conversational reply. Short questions
@@ -508,6 +569,17 @@ function latestUserText(messages: ChatMessage[]): string {
     return message.content;
   }
   return "";
+}
+
+/**
+ * True when the latest user turn is a setup-tour auto-message. SetupOverlay
+ * (components/setup/SetupOverlay.tsx) prefixes every step trigger with
+ * "[Setup step: …]", and those route personas are instructed to reply with a
+ * brief text-only welcome and no tool calls — so the iteration-0 nudge should
+ * be suppressed for them specifically (see shouldNudge).
+ */
+export function isSetupTourTurn(messages: ChatMessage[]): boolean {
+  return /^\s*\[setup step:/i.test(latestUserText(messages));
 }
 
 function shouldAllowProviderStatusTextReply(params: {
@@ -786,6 +858,26 @@ export async function runAgenticLoop(params: {
    */
   buildPhase?: string | null;
   /**
+   * Distinguish autonomous phase execution from interactive chat.
+   *
+   * - `"autonomous"` (default): orchestrator / pipeline / scheduled runs.
+   *   Operator Contract guards (clauses 2.4 unsaved-evidence,
+   *   2.6a tool-refused-despite-availability, 2.6b zero-tool-call) fire
+   *   on zero-tool-call iterations because those are real contract
+   *   violations in autonomous phase execution.
+   * - `"chat"`: a real user typed a message and is waiting for a reply.
+   *   Conversational answers ("yes do the truck list first") legitimately
+   *   produce zero tool calls and may mention plan-phase keywords without
+   *   intent to save evidence. The contract guards no-op in this mode so
+   *   the chat path does not generate phantom PlatformIssueReport rows.
+   *
+   * Default `"autonomous"` preserves prior behavior for the
+   * build-orchestrator / build-pipeline / autonomous-work-run direct
+   * callers. Chat callers (agent-coworker -> executeAutonomousAgenticLoop)
+   * must opt in to `"chat"` explicitly.
+   */
+  interactionMode?: "chat" | "autonomous";
+  /**
    * Optional active FeatureBuild.id for attribution on guard-written
    * PlatformIssueReport rows. Caller should look this up alongside buildPhase.
    */
@@ -838,6 +930,7 @@ export async function runAgenticLoop(params: {
     activeSkillId,
     agentMessageId,
   } = params;
+  const interactionMode: "chat" | "autonomous" = params.interactionMode ?? "autonomous";
 
   const userContext = await resolveUserContext(userId);
 
@@ -894,6 +987,27 @@ export async function runAgenticLoop(params: {
   let inferenceCallCount = 0;
   let sandboxUnavailableCount = 0; // Circuit breaker: stop trying sandbox tools if unavailable
   let previousResponseId: string | undefined; // Responses API conversation chaining
+
+  // Per-turn observability: one structured summary line per user turn, carrying
+  // the correlation key (threadId) and the figures that make a slow turn
+  // self-evident — number of inference dispatches, nudges, whether tools were
+  // attached, and total wall-clock. Before this, diagnosing a 135s "hello"
+  // meant hand-stitching timestamps across un-correlated [cli-adapter] /
+  // [agentic-loop] lines while a concurrent coworker's logs interleaved. See
+  // the Portfolio Analyst latency investigation, 2026-06-04.
+  const toolsAttachedForTurn = Boolean(toolsForProvider && toolsForProvider.length > 0);
+  const logTurnSummary = (provider: string, model: string): void => {
+    console.log(
+      sanitizeForLog(
+        `[turn] thread=${JSON.stringify(threadId)} agent=${JSON.stringify(agentId)} ` +
+        `route=${JSON.stringify(routeContext)} provider=${provider} model=${model} ` +
+        `dispatches=${inferenceCallCount} nudges=${continuationNudges} ` +
+        `toolsAttached=${toolsAttachedForTurn} executedTools=${executedTools.length} ` +
+        `totalMs=${Date.now() - startTime}`,
+      ),
+    );
+  };
+
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
     // EP-ASYNC-COWORKER-001: Check cancellation flag at each iteration boundary
     if (agentEventBus.isCancelled(threadId)) {
@@ -1087,6 +1201,7 @@ export async function runAgenticLoop(params: {
       const isToolUsingEndpointFailure =
         Boolean(routeOptions.tools && routeOptions.tools.length > 0) &&
         (/All endpoints failed/i.test(msg) || /tools exceeds threshold/i.test(msg));
+      logTurnSummary("unknown", "unknown");
       return {
         content: isTooLarge
           ? "Your conversation is too long for this AI provider. Please start a new thread to continue."
@@ -1140,7 +1255,7 @@ export async function runAgenticLoop(params: {
 
       // Diagnostic: log raw response so we can trace stalls
       console.log(
-        `[agentic-loop] iter=${iteration} provider=${result.providerId} model=${result.modelId} ` +
+        `[agentic-loop] thread=${JSON.stringify(threadId)} iter=${iteration} provider=${result.providerId} model=${result.modelId} ` +
         `toolCalls=0 contentLen=${trimmed.length} nudges=${continuationNudges} ` +
         `executedTools=${executedTools.length} content=${JSON.stringify(trimmed.slice(0, 200))}`,
       );
@@ -1149,6 +1264,16 @@ export async function runAgenticLoop(params: {
       // Detect contract violations the LLM cannot self-report. Each guard
       // writes a PlatformIssueReport tagged to the active build (when known).
       // Spec: docs/superpowers/specs/2026-04-30-build-specialist-operator-contract.md §2.6
+      //
+      // Skip guards in chat mode. A user asking a build coworker "yes do the
+      // truck list first" legitimately produces a conversational reply with
+      // zero tool calls — that's not a contract violation, the agent is
+      // answering a question. Without this gate the guard regexes
+      // false-positive on any plan-phase chat reply mentioning "tasks" or
+      // "build plan", producing phantom PlatformIssueReport rows that
+      // misdirect troubleshooting. See Phase J of
+      // docs/dogfood/2026-05-23-dale-hvac-build-studio.md (D42, D43).
+      const runContractGuards = interactionMode === "autonomous";
       const writeContractIssue = (
         category: "tool-refused-despite-availability" | "zero-tool-call" | "unsaved-evidence",
         title: string,
@@ -1174,7 +1299,7 @@ export async function runAgenticLoop(params: {
       };
 
       // 2.6a: tool-refused-despite-availability
-      const refusedToolName = detectToolRefusedDespiteAvailability(trimmed, tools);
+      const refusedToolName = runContractGuards ? detectToolRefusedDespiteAvailability(trimmed, tools) : null;
       if (refusedToolName) {
         console.warn(`[agentic-loop] contract-violation tool-refused-despite-availability: ${refusedToolName}`);
         writeContractIssue(
@@ -1185,7 +1310,7 @@ export async function runAgenticLoop(params: {
       }
 
       // 2.6b: zero-tool-call on phase-required turn
-      if (executedTools.length === 0 && phaseRequiresToolCall(params.buildPhase)) {
+      if (runContractGuards && executedTools.length === 0 && phaseRequiresToolCall(params.buildPhase)) {
         console.warn(`[agentic-loop] contract-violation zero-tool-call phase=${params.buildPhase}`);
         writeContractIssue(
           "zero-tool-call",
@@ -1195,7 +1320,9 @@ export async function runAgenticLoop(params: {
       }
 
       // 2.4: save-before-final-response — evidence in text but not persisted
-      const unsavedField = detectUnsavedEvidence(trimmed, executedTools, params.buildPhase);
+      const unsavedField = runContractGuards
+        ? detectUnsavedEvidence(trimmed, executedTools, params.buildPhase)
+        : null;
       if (unsavedField) {
         console.warn(`[agentic-loop] contract-violation unsaved-evidence: ${unsavedField} described but not saved`);
         writeContractIssue(
@@ -1224,12 +1351,16 @@ export async function runAgenticLoop(params: {
         };
       }
 
+      const hasAuthoritativeToolAvailable = tools.some(
+        (tool) => tool.sideEffect || BUILD_TOOL_NAMES.has(tool.name),
+      );
       const looksFabricated = detectFabrication(
         trimmed,
         executedTools.length,
         false,
         executedTools.map((t) => t.name),
         new Set(tools.filter((tool) => tool.sideEffect).map((tool) => tool.name)),
+        hasAuthoritativeToolAvailable,
       );
 
       const isBuildRoute = BUILD_ROUTE_PATTERN.test(routeContext);
@@ -1263,25 +1394,16 @@ export async function runAgenticLoop(params: {
         continue;
       }
 
-      // Repetition detector: if the model's response is asking a question that's
-      // very similar to a previous assistant message, the user already answered it.
-      // Inject a nudge telling the model to proceed with the answer already given.
-      // This prevents the "ask the same scope question 5 times" loop.
-      if (trimmed.length > 20 && trimmed.includes("?")) {
+      // Repetition detector: if the model is REDUNDANTLY re-asking a question
+      // it already asked, nudge it to proceed with the answer already given.
+      // This prevents the "ask the same scope question 5 times" loop WITHOUT
+      // misfiring on a substantive answer that merely ends with an engagement
+      // question — see isRedundantReaskQuestion for the false-positive history.
+      {
         const previousAssistantMessages = messages
           .filter(m => m.role === "assistant")
           .map(m => typeof m.content === "string" ? m.content : "");
-        const trimmedLower = trimmed.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
-        const isRepeatQuestion = previousAssistantMessages.some(prev => {
-          const prevLower = prev.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
-          if (prevLower.length < 20) return false;
-          // Check word overlap — if >60% of words match, it's a repeated question
-          const trimmedWords = new Set(trimmedLower.split(/\s+/));
-          const prevWords = prevLower.split(/\s+/);
-          const overlap = prevWords.filter(w => trimmedWords.has(w)).length;
-          return overlap / Math.max(prevWords.length, 1) > 0.6;
-        });
-        if (isRepeatQuestion) {
+        if (isRedundantReaskQuestion(trimmed, previousAssistantMessages)) {
           console.log(`[agentic-loop] Repeated question detected, injecting proceed nudge: ${trimmed.slice(0, 100)}`);
           continuationNudges++;
           messages = [
@@ -1300,6 +1422,31 @@ export async function runAgenticLoop(params: {
       }
 
       if (looksFabricated) {
+        // Routing-resilience Slice D: an infrastructure failover (the preferred
+        // provider failed and a backup answered) is NOT model fabrication. On a
+        // downgraded conversational turn the fabrication signal is a false
+        // positive caused by the failover — keep the backup's answer rather than
+        // replacing it with the build-recording failure copy. This is the exact
+        // 2026-06-02 incident (a good estate answer hidden behind "the
+        // underlying work wasn't recorded"). detectFabrication stays pure; the
+        // infra context (downgraded, build-route) is applied only here.
+        if (result.downgraded && !isBuildRoute) {
+          console.warn(
+            "[agentic-loop] fabrication signal on a downgraded conversational turn — keeping the backup answer (infra failover, not fabrication).",
+          );
+          return {
+            content: trimmed,
+            providerId: result.providerId,
+            modelId: result.modelId,
+            downgraded: result.downgraded,
+            downgradeMessage: result.downgradeMessage,
+            totalInputTokens,
+            totalOutputTokens,
+            executedTools,
+            proposal: null,
+          };
+        }
+
         if (!fabricationRetried) {
           fabricationRetried = true;
           console.warn(
@@ -1321,11 +1468,16 @@ export async function runAgenticLoop(params: {
         }
 
         return {
-          content: buildFabricationFailureMessage({
-            response: trimmed,
-            tools,
-            executedTools,
-          }),
+          // Downgraded build-route claim: the completion claim is load-bearing
+          // ("I shipped it"), so we don't keep it — but we still attribute the
+          // failure to infrastructure, not to the model fabricating work.
+          content: result.downgraded
+            ? buildDowngradedFabricationMessage()
+            : buildFabricationFailureMessage({
+                response: trimmed,
+                tools,
+                executedTools,
+              }),
           providerId: result.providerId,
           modelId: result.modelId,
           downgraded: result.downgraded,
@@ -1355,6 +1507,7 @@ export async function runAgenticLoop(params: {
             (tool) => tool.name === executedTool.name && tool.sideEffect,
           ),
         ),
+        isSetupTourTurn: isSetupTourTurn(messages),
         allowFirstTurnTextOnlyReply: shouldAllowProviderStatusTextReply({
           routeContext,
           taskType,
@@ -1431,7 +1584,14 @@ export async function runAgenticLoop(params: {
         const nudgeContent = mentionedTool
           ? `Stop narrating — call ${mentionedTool} now. Do not respond with text.`
           : `You have tools available — call one directly instead of describing what you want to do. Available: ${toolListStr}. Call the most relevant one now.`;
-        console.log(`[agentic-loop] nudging (tools used=${executedTools.length}, short response, mentioned=${mentionedTool ?? "none"})`);
+        // Tool names are user-influenced; route through the registered
+        // sanitizeForLog sanitizer (strips control chars) so a CR/LF can't
+        // forge a log entry, and use %s substitution (CodeQL js/log-injection).
+        console.log(
+          "[agentic-loop] nudging (tools used=%d, short response, mentioned=%s)",
+          executedTools.length,
+          sanitizeForLog(mentionedTool ?? "none"),
+        );
         messages = [
           ...messages,
           ...(trimmed.length > 0
@@ -1484,6 +1644,7 @@ export async function runAgenticLoop(params: {
         console.log(`[agentic-loop] recovering pre-nudge content (${bestPreNudgeContent.length} chars)`);
       }
 
+      logTurnSummary(result.providerId, result.modelId);
       return {
         content: finalContent,
         providerId: result.providerId,
@@ -1524,6 +1685,7 @@ export async function runAgenticLoop(params: {
           }
         }
         if (!preAuthorized) {
+          logTurnSummary(result.providerId, result.modelId);
           return {
             content: result.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
             providerId: result.providerId,
@@ -1664,20 +1826,30 @@ export async function runAgenticLoop(params: {
     false,
     executedTools.map((tool) => tool.name),
     new Set(tools.filter((tool) => tool.sideEffect).map((tool) => tool.name)),
+    tools.some((tool) => tool.sideEffect || BUILD_TOOL_NAMES.has(tool.name)),
   );
+  const downgraded = lastResult?.downgraded ?? false;
   const exhaustedMessage = buildMaxIterationsExhaustedMessage({
-    downgraded: lastResult?.downgraded ?? false,
+    downgraded,
     executedTools,
   });
   return {
+    // Routing-resilience Slice D: a raw tool-use loop is a genuine model
+    // hallucination and still gets the loop message. But a fabrication signal on
+    // a DOWNGRADED turn yields to the downgrade-aware exhausted message (honest
+    // infra copy) instead of the "underlying work wasn't recorded" build copy —
+    // the exhaustion was driven by the backup provider, not by the model faking
+    // work. Fabrication copy is reserved for healthy-provider false claims.
     content: fallbackIsRawToolUse
       ? buildRuntimeLimitToolLoopMessage(executedTools)
       : fallbackIsFabricated
-      ? buildFabricationFailureMessage({
-          response: fallbackContent,
-          tools,
-          executedTools,
-        })
+      ? (downgraded
+          ? exhaustedMessage
+          : buildFabricationFailureMessage({
+              response: fallbackContent,
+              tools,
+              executedTools,
+            }))
       : (lastResult?.content?.trim() ? lastResult.content : exhaustedMessage),
     providerId: lastResult?.providerId ?? "unknown",
     modelId: lastResult?.modelId ?? "unknown",

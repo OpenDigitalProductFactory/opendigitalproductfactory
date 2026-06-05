@@ -4,6 +4,7 @@ import { SetupWizard } from "@/components/storefront-admin/SetupWizard";
 import { getSetupContext } from "@/lib/actions/setup-progress";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { resolveVocabularyKey } from "@/lib/storefront/resolve-vocabulary";
+import { buildWorkspaceHomeActivationSummaries } from "@/lib/workspace-home";
 
 export default async function StorefrontSetupPage() {
   const existing = await prisma.storefrontConfig.findFirst({ select: { id: true } });
@@ -34,10 +35,15 @@ export default async function StorefrontSetupPage() {
   const vocab = getVocabulary(
     resolveVocabularyKey({ archetypeCategory: null, industry: bc?.industry }),
   );
+  const workspaceHomeActivationSummaries = buildWorkspaceHomeActivationSummaries(archetypes);
+  const archetypesWithWorkspaceHomeActivation = archetypes.map((archetype) => ({
+    ...archetype,
+    workspaceHomeActivation: workspaceHomeActivationSummaries[archetype.archetypeId],
+  }));
 
   return (
     <SetupWizard
-      archetypes={archetypes}
+      archetypes={archetypesWithWorkspaceHomeActivation}
       orgNameFromDb={org?.name ?? null}
       suggestedArchetypeId={setupContext?.suggestedArchetypeId ?? null}
       suggestedArchetypeName={setupContext?.suggestedArchetypeName ?? null}

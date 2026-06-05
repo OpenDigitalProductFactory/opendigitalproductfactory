@@ -49,7 +49,11 @@ export function buildIssueBacklogItem(
     status: "open",
     type: digitalProductId ? "product" : "portfolio",
     priority: severityToPriority((report.severity || "medium") as Severity),
-    source: "issue_report",
+    // PIR rows are runtime evidence collected by the platform; intake origin is
+    // automated detection. workType is the bug discriminator that
+    // governed-backlog-tee-up reads to derive FeatureBuild.kind="fix".
+    source: "automated-detection",
+    workType: "bug",
     digitalProductId,
     taxonomyNodeId,
   };
@@ -251,7 +255,8 @@ export async function checkForSpike(deps: {
     status: "open",
     type: "product",
     priority: 1,
-    source: "issue_report",
+    source: "automated-detection",
+    workType: "bug",
     digitalProductId: null,
     taxonomyNodeId: null,
   });

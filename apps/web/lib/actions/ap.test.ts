@@ -22,6 +22,10 @@ vi.mock("@/lib/email", () => ({
   }),
 }));
 
+vi.mock("@/lib/org-identity", () => ({
+  getOrgIdentity: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     supplier: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },

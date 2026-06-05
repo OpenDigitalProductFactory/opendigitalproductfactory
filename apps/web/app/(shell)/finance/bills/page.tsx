@@ -4,6 +4,7 @@ import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -148,7 +149,7 @@ export default async function BillsPage({ searchParams }: Props) {
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-[var(--dpf-muted)]">
-                      {new Date(bill.dueDate).toLocaleDateString("en-GB")}
+                      <LocalTime value={bill.dueDate} utc />
                     </td>
                     <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">
                       {sym}{formatMoney(bill.totalAmount)}

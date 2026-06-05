@@ -2,8 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   buildRemoteHeadCommand,
+  buildFetchCommand,
+  buildHeadShaCommand,
+  buildDirtyCheckCommand,
+  buildMergeCommand,
+  deriveDeployedStamp,
   compareUpgradeVersions,
   getUpgradeVersionState,
+  isShaFresh,
   resolveTargetSha,
 } from "./version";
 
@@ -39,6 +45,52 @@ describe("buildRemoteHeadCommand", () => {
   });
 });
 
+describe("source-preparation command builders", () => {
+  const at = { hostSourcePath: "/host-source", remote: "origin", branch: "main" };
+
+  it("buildFetchCommand freshens the configured remote branch", () => {
+    expect(buildFetchCommand(at)).toEqual(["git", "-C", "/host-source", "fetch", "origin", "main"]);
+  });
+
+  it("buildHeadShaCommand resolves the tree's own HEAD (the true built identity)", () => {
+    expect(buildHeadShaCommand("/host-source")).toEqual(["git", "-C", "/host-source", "rev-parse", "HEAD"]);
+  });
+
+  it("buildDirtyCheckCommand asks for porcelain status", () => {
+    expect(buildDirtyCheckCommand("/host-source")).toEqual(["git", "-C", "/host-source", "status", "--porcelain"]);
+  });
+
+  it("buildMergeCommand forces a real merge commit (--no-ff) of the upstream target", () => {
+    expect(buildMergeCommand(at)).toEqual([
+      "git",
+      "-C",
+      "/host-source",
+      "merge",
+      "--no-edit",
+      "--no-ff",
+      "origin/main",
+    ]);
+  });
+});
+
+describe("deriveDeployedStamp", () => {
+  const sha = "cccccccccccccccccccccccccccccccccccccccc";
+
+  it("returns the bare HEAD sha for a clean tree (comparable to a release)", () => {
+    const stamp = deriveDeployedStamp(`${sha}\n`, false);
+    expect(stamp).toBe(sha);
+    expect(compareUpgradeVersions(stamp, sha)).toMatchObject({ comparable: true, upToDate: true });
+  });
+
+  it("appends -dirty for an uncommitted tree so it reads as not-a-tracked-release", () => {
+    const stamp = deriveDeployedStamp(sha, true);
+    expect(stamp).toBe(`${sha}-dirty`);
+    // A -dirty token is not a 40-hex SHA, so the comparator refuses to grade it.
+    expect(compareUpgradeVersions(stamp, sha)).toMatchObject({ comparable: false });
+    expect(isShaFresh(stamp, sha)).toBe(false);
+  });
+});
+
 describe("getUpgradeVersionState", () => {
   it("reads current image version and target remote SHA through injected dependencies", async () => {
     const state = await getUpgradeVersionState(
@@ -55,6 +107,39 @@ describe("getUpgradeVersionState", () => {
 
     expect(state.upToDate).toBe(false);
     expect(state.targetSha).toBe("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+  });
+});
+
+describe("isShaFresh", () => {
+  const SHA_A = "a285216a779f794faa6bdaca95d1d60239bbc264";
+  const SHA_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+  it("returns true when both sides are the same 40-char git SHA", () => {
+    expect(isShaFresh(SHA_A, SHA_A)).toBe(true);
+  });
+
+  it("returns true with case-insensitive comparison", () => {
+    expect(isShaFresh(SHA_A.toUpperCase(), SHA_A)).toBe(true);
+  });
+
+  it("returns false for two different git SHAs", () => {
+    expect(isShaFresh(SHA_A, SHA_B)).toBe(false);
+  });
+
+  it("returns false when deployedSha is null", () => {
+    expect(isShaFresh(null, SHA_A)).toBe(false);
+  });
+
+  it("returns false when deployedSha is a 64-char content hash even if prefix matches", () => {
+    // A 64-char content hash that happens to start with the same chars as a
+    // 40-char git SHA should NOT be reported as fresh — the previous prefix-
+    // based implementation would have incorrectly returned true here.
+    const contentHash = SHA_A + "0".repeat(24);
+    expect(isShaFresh(contentHash, SHA_A)).toBe(false);
+  });
+
+  it("returns false when target is not a git SHA", () => {
+    expect(isShaFresh(SHA_A, "not-a-sha")).toBe(false);
   });
 });
 

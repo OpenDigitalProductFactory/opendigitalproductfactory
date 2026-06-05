@@ -32,6 +32,8 @@ import {
   type OperationsMapStoredQuickViewId,
 } from "./ai-operations-map-prefs";
 import { StalledTaskRecoveryActions } from "./StalledTaskRecoveryActions";
+import { A2aInteractionsPanel } from "./A2aInteractionsPanel";
+import { DeliberationLensPanel } from "./DeliberationLensPanel";
 
 type SelectedItem =
   | { kind: "station"; id: string }
@@ -273,6 +275,14 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
         </header>
 
         <RoutingTopologyPanel routingTopology={routingTopology} />
+
+        <A2aInteractionsPanel
+          coworkers={routingTopology.coworkers}
+          a2aEdges={routingTopology.a2aEdges}
+          a2aLegend={routingTopology.a2aLegend}
+        />
+
+        <DeliberationLensPanel deliberations={routingTopology.deliberations} />
       </section>
 
       <details

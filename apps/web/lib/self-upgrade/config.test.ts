@@ -4,6 +4,7 @@ import {
   parseSelfUpgradeConfig,
   getSelfUpgradeConfig,
   isInMaintenanceWindow,
+  nextMaintenanceWindowStart,
 } from "./config";
 
 vi.mock("@dpf/db", () => ({
@@ -25,6 +26,9 @@ describe("parseSelfUpgradeConfig", () => {
       checkIntervalHours: 24,
       healthTarget: 100,
       maintenanceWindows: [],
+      sourceMode: "upstream",
+      installBranch: "dpf/install",
+      useIsolatedWorkspace: true,
     });
   });
 
@@ -35,6 +39,9 @@ describe("parseSelfUpgradeConfig", () => {
       checkIntervalHours: 24,
       healthTarget: 100,
       maintenanceWindows: [],
+      sourceMode: "upstream",
+      installBranch: "dpf/install",
+      useIsolatedWorkspace: true,
     });
   });
 
@@ -45,6 +52,9 @@ describe("parseSelfUpgradeConfig", () => {
       checkIntervalHours: 24,
       healthTarget: 100,
       maintenanceWindows: [],
+      sourceMode: "upstream",
+      installBranch: "dpf/install",
+      useIsolatedWorkspace: true,
     });
     expect(parseSelfUpgradeConfig(42)).toEqual({
       enabled: false,
@@ -52,6 +62,9 @@ describe("parseSelfUpgradeConfig", () => {
       checkIntervalHours: 24,
       healthTarget: 100,
       maintenanceWindows: [],
+      sourceMode: "upstream",
+      installBranch: "dpf/install",
+      useIsolatedWorkspace: true,
     });
   });
 
@@ -102,6 +115,32 @@ describe("parseSelfUpgradeConfig", () => {
     expect(cfg.enabled).toBe(false);
     expect(cfg.channel).toBe("stable");
     expect(cfg.checkIntervalHours).toBe(24);
+  });
+
+  // BI-A8A7CCFD — isolated upgrade workspace config surface
+  it("defaults useIsolatedWorkspace to true (default-on isolation)", () => {
+    expect(parseSelfUpgradeConfig({}).useIsolatedWorkspace).toBe(true);
+    expect(parseSelfUpgradeConfig(null).useIsolatedWorkspace).toBe(true);
+  });
+
+  it("honors an explicit useIsolatedWorkspace=false opt-out", () => {
+    const cfg = parseSelfUpgradeConfig({ useIsolatedWorkspace: false });
+    expect(cfg.useIsolatedWorkspace).toBe(false);
+  });
+
+  it("ignores non-boolean useIsolatedWorkspace values and falls back to the safe default", () => {
+    // Defensive: a malformed value MUST NOT silently flip behavior either way.
+    expect(parseSelfUpgradeConfig({ useIsolatedWorkspace: "yes" }).useIsolatedWorkspace).toBe(true);
+    expect(parseSelfUpgradeConfig({ useIsolatedWorkspace: 1 }).useIsolatedWorkspace).toBe(true);
+  });
+
+  it("accepts explicit workspace path overrides for in-container and host", () => {
+    const cfg = parseSelfUpgradeConfig({
+      upgradeWorkspaceMountPath: "/host-dpf/.custom-workspace",
+      upgradeWorkspaceHostPath: "/Users/op/dpf/.custom-workspace",
+    });
+    expect(cfg.upgradeWorkspaceMountPath).toBe("/host-dpf/.custom-workspace");
+    expect(cfg.upgradeWorkspaceHostPath).toBe("/Users/op/dpf/.custom-workspace");
   });
 
   it("falls back to default channel when channel is empty string (malformed)", () => {
@@ -321,6 +360,9 @@ describe("getSelfUpgradeConfig", () => {
       checkIntervalHours: 24,
       healthTarget: 100,
       maintenanceWindows: [],
+      sourceMode: "upstream",
+      installBranch: "dpf/install",
+      useIsolatedWorkspace: true,
     });
   });
 
@@ -384,5 +426,50 @@ describe("getSelfUpgradeConfig", () => {
     });
     const cfg = await getSelfUpgradeConfig();
     expect(cfg.enabled).toBe(false);
+  });
+});
+
+describe("nextMaintenanceWindowStart", () => {
+  const base = {
+    enabled: true,
+    channel: "stable",
+    checkIntervalHours: 24,
+    healthTarget: 100,
+    sourceMode: "upstream" as const,
+    installBranch: "dpf/install",
+    useIsolatedWorkspace: true,
+  };
+
+  it("returns null when no windows are configured", () => {
+    expect(
+      nextMaintenanceWindowStart({ ...base, maintenanceWindows: [] }),
+    ).toBeNull();
+  });
+
+  it("returns `now` when a window is currently active", () => {
+    // 03:00 local, inside a 02:00-04:00 window on the same weekday.
+    const now = new Date(2026, 4, 25, 3, 0, 0, 0);
+    const config = {
+      ...base,
+      maintenanceWindows: [
+        { dayOfWeek: [now.getDay()], startTime: "02:00", endTime: "04:00" },
+      ],
+    };
+    expect(nextMaintenanceWindowStart(config, now)).toBe(now);
+  });
+
+  it("returns the next start time later today when before the window", () => {
+    // 01:00 local, window opens at 02:00 the same day.
+    const now = new Date(2026, 4, 25, 1, 0, 0, 0);
+    const config = {
+      ...base,
+      maintenanceWindows: [
+        { dayOfWeek: [now.getDay()], startTime: "02:00", endTime: "04:00" },
+      ],
+    };
+    const expected = new Date(2026, 4, 25, 2, 0, 0, 0);
+    expect(nextMaintenanceWindowStart(config, now)?.getTime()).toBe(
+      expected.getTime(),
+    );
   });
 });

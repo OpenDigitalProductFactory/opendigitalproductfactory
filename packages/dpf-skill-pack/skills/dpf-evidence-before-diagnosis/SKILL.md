@@ -1,6 +1,6 @@
 ---
 name: dpf-evidence-before-diagnosis
-description: "Use when working in the DPF codebase and tempted to claim a cause for an observed symptom. Before naming the cause, query the live DB / status fields / log streams / runtime state for evidence — don't read a log line and assume its suggested cause without verification. Composes with superpowers:systematic-debugging as the predecessor evidence-gathering step. Encodes the evidence-before-diagnosis kernel principle plus the structural-verification-is-not-functional commandment."
+description: "Use when working in the DPF codebase and tempted to claim a cause for an observed symptom. Before naming the cause, query the live DB / status fields / log streams / runtime state for evidence — don't read a log line and assume its suggested cause without verification. Composes with dpf-systematic-debugging as the predecessor evidence-gathering step. Encodes the evidence-before-diagnosis kernel principle plus the structural-verification-is-not-functional commandment."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
@@ -16,7 +16,7 @@ triggerPattern: "what's wrong|why is .* failing|why does .* not work|the cause i
 userInvocable: true
 agentInvocable: true
 allowedTools: ["Bash", "Grep", "mcp__dpf__get_backlog_item", "mcp__dpf__get_build_progress_visibility", "mcp__dpf__get_build_sandbox_state", "mcp__dpf__list_build_activity_since", "mcp__dpf__get_build_dispatch_history", "mcp__dpf__diagnose_sandbox"]
-composesFrom: ["systematic-debugging"]
+composesFrom: ["dpf-systematic-debugging"]
 contextRequirements: []
 riskBand: low
 
@@ -32,7 +32,7 @@ enforces:
 
 A log line says "X failed because Y." The agent reads it and reports "Y is the problem." **Stop.** Before naming Y as the cause, query the live state — DB row, status field, runtime ledger, tool return value — that would either confirm or refute the log's suggested cause. Logs are written by code that itself can be wrong; their suggested causes are hypotheses, not findings.
 
-This skill is the DPF-specific operationalization of the `evidence-before-diagnosis` and `structural-verification-is-not-functional` commandments. It composes with `superpowers:systematic-debugging` as the evidence-gathering step that comes before hypothesis testing.
+This skill is the DPF-specific operationalization of the `evidence-before-diagnosis` and `structural-verification-is-not-functional` commandments. It composes with `dpf-systematic-debugging` as the evidence-gathering step that comes before hypothesis testing.
 
 ## When to use
 
@@ -44,7 +44,7 @@ This skill is the DPF-specific operationalization of the `evidence-before-diagno
 
 ## When NOT to use
 
-- The "cause" is purely hypothetical (brainstorming candidate root causes) — that's `superpowers:systematic-debugging` territory.
+- The "cause" is purely hypothetical (brainstorming candidate root causes) — that's `dpf-systematic-debugging` territory.
 - Pure code review (no runtime state to verify against) — read for code-correctness directly.
 - Operator has explicitly authorized speculative reasoning (rare).
 
@@ -80,9 +80,18 @@ This skill is the DPF-specific operationalization of the `evidence-before-diagno
    - Structural: code is in the bundle, types pass, route returns 4xx on malformed input. **None of this proves the feature works.**
    - Functional: you drove the happy path on the live install and observed the expected behavior. **This is the evidence the commandment requires.**
 
-6. **Write the diagnosis as a structured report**, not screenshots (per `feedback_dynamic_analysis_is_evidence`). Structure: drove X, observed Y, signed off Z.
+6. **Distinguish product defects from worktree-harness artifacts.** Before naming the cause of any runtime symptom observed inside a thread worktree, ask: did this symptom reproduce against the canonical local install (root clone, port 3000, shared dev DB)? Worktree-only symptoms have a known taxonomy of harness causes that are NOT product defects:
+   - `pnpm: command not found` or corepack missing on the worktree PATH
+   - Workspace package resolution pointing outside the worktree root
+   - Prisma client absent because `prisma generate` only ran in the root clone
+   - Next/Turbopack refusing a `node_modules` symlink that escapes the workspace
+   - Docker/compose collisions when `COMPOSE_PROJECT_NAME` isn't isolated
 
-7. **Surface to operator** for ratification before mutating anything. Diagnoses can be wrong even when they're well-grounded.
+   If the symptom only appears in the worktree, the diagnosis is "worktree harness limitation" — file a platform process BI if it's worth closing, and verify the product behavior against the canonical install. Do NOT report the symptom as a product failure unless you reproduced it on the canonical install. See [`worktree-is-source-control-not-runtime`](../../../../docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md).
+
+7. **Write the diagnosis as a structured report**, not screenshots (per `feedback_dynamic_analysis_is_evidence`). Structure: drove X, observed Y, signed off Z.
+
+8. **Surface to operator** for ratification before mutating anything. Diagnoses can be wrong even when they're well-grounded.
 
 ## Output template
 
@@ -113,6 +122,7 @@ feature works. Recommend a functional verification pass before claiming complete
 - **Never trust an agent / coworker's "I succeeded" report at face value.** Per `project_proposal_trap_silent_failure` and `project_hive_contribution_gaps`, success messages have been wrong frequently enough that verification IS the default, not the exception.
 - **Never delete evidence before reporting.** Logs, tool returns, DB rows — preserve them in the report so the operator can audit.
 - **Never paraphrase the symptom.** Quote it. Paraphrase introduces interpretation that may itself be wrong.
+- Never diagnose a worktree-only symptom as a product defect without reproducing it on the canonical local install. Harness friction (pnpm PATH, workspace links, generated Prisma client, symlinked node_modules) is a known taxonomy of NOT-the-product causes.
 
 ## Worked example (this session, 2026-05-24)
 
@@ -133,7 +143,7 @@ Had this skill been skipped, the diagnosis "my change broke these tests" would h
 - Kernel commandment: [`structural-verification-is-not-functional`](../../../../docs/founder-kernel/wiki/principles/structural-verification-is-not-functional.md)
 - Kernel principle: [`evidence-before-diagnosis`](../../../../docs/founder-kernel/wiki/principles/evidence-before-diagnosis.md)
 - Kernel principle: [`check-tool-signals-first`](../../../../docs/founder-kernel/wiki/principles/check-tool-signals-first.md)
-- Composes with: `superpowers:systematic-debugging` (4-phase root cause process)
+- Composes with: `dpf-systematic-debugging` (4-phase root cause process)
 - Memory: `feedback_dynamic_analysis_is_evidence` (dynamic-analysis output discipline)
 - Memory: `project_proposal_trap_silent_failure` (success-message mistrust)
 - Tool-trace logging: `project_tool_trace_logging` (`[tool-trace]` log entries to read first)

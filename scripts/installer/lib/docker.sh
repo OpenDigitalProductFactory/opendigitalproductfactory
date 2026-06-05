@@ -72,14 +72,39 @@ dpf_docker_endpoint() {
   # cloud-deployment spec (Phase 5 docker.ts discovery alignment).
   docker context inspect 2>/dev/null \
     | grep -m1 '"Host"' \
-    | sed -E 's/.*"Host"\s*:\s*"([^"]+)".*/\1/' \
+    | sed -E 's/.*"Host"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' \
     || echo ""
+}
+
+# Resolve the name of the active Docker context (e.g. "desktop-linux"
+# on macOS Docker Desktop, "default" on native Linux Docker Engine).
+# Returns empty string if docker is unavailable. Recorded in
+# install-state.json so lifecycle scripts don't re-detect the context.
+dpf_docker_context() {
+  if ! command -v docker >/dev/null 2>&1; then
+    return 0
+  fi
+  docker context show 2>/dev/null || echo ""
 }
 
 # Apple Silicon Docker Desktop .dmg download URL. Hardcoded to the
 # canonical Docker Desktop endpoint; can be overridden via env var
 # for mirror / corporate-proxy setups.
 DPF_DOCKER_DESKTOP_DMG_URL="${DPF_DOCKER_DESKTOP_DMG_URL:-https://desktop.docker.com/mac/main/arm64/Docker.dmg}"
+
+# Docker Desktop ships its CLI inside the .app bundle. On first launch it
+# writes /usr/local/bin symlinks, but those don't exist until the daemon
+# has started at least once. Prepend the bundled bin dir to PATH so
+# `docker info` polls work during first-run installation.
+_dpf_docker_prepend_bundled_path() {
+  local bundled="/Applications/Docker.app/Contents/Resources/bin"
+  if [ -x "$bundled/docker" ]; then
+    case ":$PATH:" in
+      *":$bundled:"*) ;;  # already present
+      *) export PATH="$bundled:$PATH" ;;
+    esac
+  fi
+}
 
 # macOS-only: install Docker Desktop by downloading the .dmg directly
 # from Docker's official endpoint, mounting it via hdiutil, copying
@@ -139,8 +164,18 @@ dpf_docker_install_darwin() {
   _dpf_dmg_cleanup
   trap - EXIT
 
+  # sudo cp -R bypasses Launch Services, so `open -a Docker` would fail.
+  # Register the app explicitly before launching.
+  /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister \
+    -f /Applications/Docker.app 2>/dev/null || true
+
+  # Docker Desktop writes /usr/local/bin symlinks only after its first
+  # successful launch. Prepend the bundled CLI so the daemon poll below
+  # can call `docker info` before those symlinks exist.
+  _dpf_docker_prepend_bundled_path
+
   info "Launching Docker.app and waiting for daemon..."
-  open -a Docker
+  open /Applications/Docker.app
 
   # Wait-for-daemon loop. Docker Desktop typically takes 30-120s to
   # boot on a fresh install (first-run prompts not shown when --headless,
@@ -233,6 +268,14 @@ dpf_docker_install_linux() {
 dpf_docker_ensure_installed() {
   dpf_platform
 
+  # Ensure the bundled CLI is reachable before any version check or
+  # daemon poll — Docker Desktop writes /usr/local/bin symlinks only
+  # after its first successful launch, so on a fresh install the CLI
+  # is only in the .app bundle.
+  if [ "$DPF_PLATFORM" = "darwin" ]; then
+    _dpf_docker_prepend_bundled_path
+  fi
+
   local version
   version="$(dpf_docker_version)"
 
@@ -249,7 +292,7 @@ dpf_docker_ensure_installed() {
       if [ -d "/Applications/Docker.app" ]; then
         info "Docker.app found in /Applications but the daemon isn't running."
         info "  Launching Docker.app and waiting..."
-        open -a Docker
+        open /Applications/Docker.app
         local wait_seconds="${DPF_DOCKER_DESKTOP_START_TIMEOUT:-300}"
         local elapsed=0
         while [ "$elapsed" -lt "$wait_seconds" ]; do

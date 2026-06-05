@@ -10,6 +10,9 @@ import { agentTaskDispatch } from "./agent-task-dispatch";
 import { taskrunWatchdog } from "./taskrun-watchdog";
 import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
+import { materialFreshnessDecay } from "./material-freshness-decay";
+import { researchExecute } from "./research-execute";
+import { researchScheduleScan } from "./research-schedule";
 import { buildReviewVerification } from "./build-review-verification";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
@@ -19,6 +22,10 @@ import {
   governedBacklogTeeUpScheduled,
 } from "./governed-backlog-tee-up";
 import { tokenExpiryMonitor } from "./token-expiry-monitor";
+import {
+  contributorInventorySyncCron,
+  contributorInventorySyncOnDemand,
+} from "./contributor-inventory-sync";
 import { selfUpgradeScheduled, selfUpgradeManual } from "./self-upgrade";
 import { quiescenceRun } from "./quiescence-run";
 import { wikiLint } from "./wiki-lint";
@@ -33,6 +40,7 @@ import {
   neo4jBackupRequested,
   qdrantBackupRequested,
 } from "./postgres-daily-backup";
+import { runtimeTargetJanitor } from "./runtime-target-janitor";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 export const scheduledFunctions = [
@@ -46,12 +54,16 @@ export const scheduledFunctions = [
   taskrunWatchdog,
   governedBacklogTeeUpScheduled,
   tokenExpiryMonitor,
+  contributorInventorySyncCron,
   wikiLint,
   skillMetricsAggregator,
   skillCurator,
+  researchScheduleScan,
+  materialFreshnessDecay,
   allBackupsDailyScheduled,
   postgresDailyBackupScheduled,
   selfUpgradeScheduled,
+  runtimeTargetJanitor,  // BI-AD949172: RT heartbeat sweep + lease expiry, hourly
 ];
 
 export const eventFunctions = [
@@ -62,11 +74,13 @@ export const eventFunctions = [
   evalBackground,
   probeBackground,
   brandExtract,
+  researchExecute,
   buildReviewVerification,
   assuranceBomGenerate,
   assuranceScanRun,
   deliberationRun,
   governedBacklogTeeUpRequested,
+  contributorInventorySyncOnDemand,
   gitPromotionSandboxVerification,
   postgresBackupRequested,
   postgresTrialRestoreRequested,

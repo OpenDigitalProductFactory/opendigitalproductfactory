@@ -10,6 +10,9 @@ export type NativeIntegrationId =
   | "google-business-profile"
   | "facebook"
   | "facebook-pages"
+  | "linkedin-personal-social"
+  | "linkedin-ads"
+  | "email-postmark"
   | "mailchimp";
 
 export type NativeIntegrationDescriptor = {
@@ -207,6 +210,60 @@ export const NATIVE_INTEGRATIONS: NativeIntegrationDescriptor[] = [
     enables: ["Audience context", "Campaign context", "Outreach context"],
     relevantAgentIds: ["customer-advisor", "coo"],
     requiredGrantKeys: ["marketing_read"],
+  },
+  {
+    id: "linkedin-personal-social",
+    integrationId: "linkedin-personal-social",
+    provider: "linkedin",
+    name: "LinkedIn (personal publishing)",
+    description: "Publish approved marketing drafts to your own LinkedIn feed. You bring your own LinkedIn developer app; DPF stores the refresh token encrypted in this install.",
+    href: "/platform/tools/integrations/linkedin-personal-social",
+    category: "marketing",
+    pricingModel: "paid",
+    model: "native",
+    tags: ["marketing", "social", "publish", "linkedin"],
+    enables: ["Publish marketing draft to LinkedIn feed"],
+    relevantAgentIds: ["marketing-specialist"],
+    requiredGrantKeys: ["marketing_write"],
+  },
+  {
+    id: "linkedin-ads",
+    integrationId: "linkedin-ads",
+    provider: "linkedin",
+    name: "LinkedIn Ads",
+    description: "Place paid LinkedIn ads from approved ad-creative drafts with hard per-channel weekly spend ceilings + KPI pullback. Reuses your own LinkedIn developer app with the optional ads scope.",
+    href: "/platform/tools/integrations/linkedin-personal-social",
+    category: "marketing",
+    pricingModel: "paid",
+    model: "native",
+    tags: ["marketing", "ads", "paid", "linkedin"],
+    enables: [
+      "Place LinkedIn campaign from approved ad-creative",
+      "Hard weekly spend ceiling refused at place time",
+      "Engagement pullback into MarketingKpiCheckpoint",
+    ],
+    relevantAgentIds: ["marketing-specialist"],
+    requiredGrantKeys: ["marketing_write"],
+  },
+  {
+    id: "email-postmark",
+    integrationId: "email-postmark",
+    provider: "postmark",
+    name: "Email (Postmark)",
+    description: "Send approved marketing email drafts through your own Postmark account and accept inbound replies via signed webhook. DPF stores the server token + signing secret encrypted.",
+    href: "/platform/tools/integrations/email-postmark",
+    category: "email-marketing",
+    pricingModel: "paid",
+    model: "native",
+    tags: ["marketing", "email", "publish", "inbound"],
+    enables: [
+      "Send approved marketing email",
+      "Accept inbound reply via webhook",
+      "Draft AI reply for human approval",
+      "Link qualified inquiry to CRM Engagement",
+    ],
+    relevantAgentIds: ["marketing-specialist", "customer-advisor"],
+    requiredGrantKeys: ["marketing_write"],
   },
 ];
 

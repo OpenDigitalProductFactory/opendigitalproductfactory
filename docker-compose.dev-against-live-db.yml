@@ -13,6 +13,7 @@
 #   under the dev-mode portal, swap the DB hosts.
 #
 # Usage (from the worktree root)
+#   $env:DPF_DEV_WORKTREE = (Get-Location).Path.Replace('\', '/')
 #   docker compose -p dpf \
 #     -f /d/DPF/docker-compose.yml \
 #     -f docker-compose.dev-against-live-db.yml \
@@ -29,6 +30,18 @@
 #   could corrupt production-style data. Use knowingly. Same risk profile as
 #   any local-dev-against-shared-DB workflow — keep the prod portal on :3000
 #   as the stable reference and treat :3001 as the verification surface.
+#
+# Inngest env
+#   The base dev-portal service ships with zero Inngest env vars, so
+#   `GET /api/inngest` 500s with "no signing key found" the moment any
+#   feature that registers Inngest functions is exercised (e.g. the cron
+#   that drives contributor inventory sync). We forward the same Inngest
+#   cluster the live portal uses — INNGEST_EVENT_KEY, INNGEST_BASE_URL
+#   (the shared inngest:8288 container), and INNGEST_SIGNING_KEY — plus a
+#   dev-portal-specific INNGEST_SERVE_ORIGIN so sync registrations announce
+#   `http://dev-portal:3000` (Docker-DNS + internal port) instead of the
+#   live portal's hostname. INNGEST_DEV stays `0`: the Inngest container
+#   itself is the dev-mode signal; the apps just need creds to talk to it.
 
 services:
   dev-portal:
@@ -36,7 +49,7 @@ services:
       # Override the base `.:/workspace` mount to bind-mount THIS worktree's
       # source into the container, so edits made in the worktree hot-reload
       # in dev-portal. Forward slashes for cross-platform path resolution.
-      - D:/DPF/.claude/worktrees/elated-antonelli-540ea2:/workspace
+      - ${DPF_DEV_WORKTREE:?DPF_DEV_WORKTREE must be set to the absolute worktree path with forward slashes}:/workspace
       - dev_node_modules:/workspace/node_modules
     environment:
       # Swap from dev-postgres / dev-neo4j / dev-qdrant to the live stack.
@@ -49,11 +62,23 @@ services:
       QDRANT_INTERNAL_URL: http://qdrant:6333
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set — already required by the live portal}
       AUTH_TRUST_HOST: "true"
+      AUTH_URL: http://localhost:3001
+      APP_URL: http://localhost:3001
+      NEXT_PUBLIC_APP_URL: http://localhost:3001
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY must be set — already required by the live portal}
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
       DPF_ENVIRONMENT: dev
       INSTANCE_TYPE: dev
       PROJECT_ROOT: /workspace
+      # Inngest — same cluster as the live portal (shared inngest:8288), with a
+      # dev-portal-specific serve origin so step-execution callbacks resolve
+      # via Docker DNS (`dev-portal:3000` — internal port, not the :3001 host
+      # mapping). Without these, /api/inngest 500s on every register attempt.
+      INNGEST_BASE_URL: http://inngest:8288
+      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY:-deadbeefcafebabe}
+      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:-abcdef0123456789}
+      INNGEST_DEV: ${INNGEST_DEV:-0}
+      INNGEST_SERVE_ORIGIN: http://dev-portal:3000
     # Compose merges depends_on by default, so a plain block here would APPEND
     # to the base file's `dev-init` dep instead of replacing it. We don't want
     # dev-init (it's the sanitized-clone of prod→dev DB, irrelevant when we
@@ -66,3 +91,15 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+
+  # Swap Prometheus to the contributor overlay so the Health tab gains a
+  # "Contributor Preview" tile while dev-portal is running. Customer installs
+  # never load this file, so they keep the substrate-default scrape set and
+  # never fire a false ContainerDown alert for the absent dev-portal target.
+  # See monitoring/prometheus/prometheus.dev.yml for the contributor scrape
+  # superset (it adds the `dev-portal` job on top of substrate parity).
+  prometheus:
+    volumes: !reset
+      - ./monitoring/prometheus/prometheus.dev.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus

@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32000,
+    "message": "insufficient_token_scope",
+    "data": {
+      "requiredScope": "write",
+      "providedScope": "read"
+    }
+  }
+}

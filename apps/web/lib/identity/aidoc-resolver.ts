@@ -1,6 +1,6 @@
 import { prisma } from "@dpf/db";
 
-import { getToolGrantMapping } from "@/lib/tak/agent-grants";
+import { expandGrants, getToolGrantMapping } from "@/lib/tak/agent-grants";
 import { computeMetadataHash } from "@/lib/routing/metadata-hash";
 
 import {
@@ -90,7 +90,13 @@ function parseIssuerFromGaid(gaid: string): string {
 }
 
 function deriveToolSurface(grantKeys: string[]): string[] {
-  const grantSet = new Set(grantKeys);
+  // Expand the held grants through GRANT_IMPLICATIONS before matching, so the
+  // projected tool surface reflects the same effective permissions as the
+  // authoritative check (isToolAllowedByGrants). Without this, every tool that
+  // was refactored to require a finer implied grant (e.g. record_execution_evidence
+  // on `build_evidence`, satisfied via backlog_write → build_evidence) would be
+  // silently dropped from the AIDoc. BI-B2F7ABF5.
+  const grantSet = new Set(expandGrants(grantKeys));
   const toolMap = getToolGrantMapping();
 
   return Object.entries(toolMap)

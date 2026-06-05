@@ -8,6 +8,14 @@ import { normalizeTaskResults } from "@/lib/build/task-results";
 import type { BuildProgressVisibility } from "@/lib/build/progress-visibility";
 import { BuildStudioWorkflowActionCard } from "./BuildStudioWorkflowActionCard";
 import { deriveWorkflowStageGuidance } from "./build-studio-workflow-actions";
+import {
+  EnvironmentStatusSummary,
+  type EnvironmentStatusSummaryProps,
+} from "./EnvironmentStatusSummary";
+import {
+  UnifiedEvidenceTimeline,
+  type UnifiedEvidenceTimelineEvent,
+} from "./UnifiedEvidenceTimeline";
 
 type Props = {
   build: FeatureBuildRow;
@@ -69,8 +77,8 @@ function getArtifactLines(phase: BuildPhase, build: FeatureBuildRow): string[] {
     }
   }
 
-  if (build.sandboxPort != null && (phase === "build" || phase === "review" || phase === "ship")) {
-    lines.push(`Sandbox preview: port ${build.sandboxPort}`);
+  if (build.sandboxPort != null && isRuntimePhase(phase)) {
+    lines.push("Shared preview available");
   }
 
   if (phase === "review" && build.uxTestResults?.length) {
@@ -89,6 +97,109 @@ function getArtifactLines(phase: BuildPhase, build: FeatureBuildRow): string[] {
   return lines;
 }
 
+function isRuntimePhase(phase: BuildPhase): boolean {
+  return phase === "build" || phase === "review" || phase === "ship";
+}
+
+function getEnvironmentReadiness(phase: BuildPhase, build: FeatureBuildRow): EnvironmentStatusSummaryProps | null {
+  if (!isRuntimePhase(phase)) return null;
+
+  return {
+    activeCandidate: build.sandboxPort != null
+      ? { status: "available", url: `http://localhost:${build.sandboxPort}` }
+      : { status: "pending", summary: "Shared preview assignment is not recorded yet." },
+    localIntegration: getLocalIntegrationStatus(build),
+  };
+}
+
+function getLocalIntegrationStatus(build: FeatureBuildRow): EnvironmentStatusSummaryProps["localIntegration"] {
+  if (!build.verificationOut) {
+    return { status: "pending", summary: "Merged-code verification has not been recorded yet." };
+  }
+
+  if (build.verificationOut.typecheckPassed && build.verificationOut.testsFailed === 0) {
+    return { status: "passed", summary: "Merged-code gate passed." };
+  }
+
+  return { status: "failed", summary: "Merged-code verification needs attention before release." };
+}
+
+function getEvidenceEvents(phase: BuildPhase, build: FeatureBuildRow): UnifiedEvidenceTimelineEvent[] {
+  if (!isRuntimePhase(phase)) return [];
+
+  const events: UnifiedEvidenceTimelineEvent[] = [];
+  const taskCount = build.taskResults ? normalizeTaskResults(build.taskResults).tasks.length : 0;
+
+  if (taskCount > 0) {
+    events.push({
+      id: "implementation-tasks",
+      source: sourceForCodingProvider(build.codingProvider),
+      label: labelForCodingProvider(build.codingProvider),
+      summary: `${taskCount} implementation task${taskCount === 1 ? "" : "s"} recorded for review.`,
+      status: "recorded",
+    });
+  }
+
+  if (build.diffSummary) {
+    events.push({
+      id: "diff-summary",
+      source: "build-studio",
+      label: "Build Studio",
+      summary: "Implementation changes were summarized for review.",
+      status: "recorded",
+    });
+  }
+
+  if (build.verificationOut) {
+    events.push({
+      id: "local-integration",
+      source: "local-integration",
+      label: "Local integration",
+      summary: getVerificationSummary(build.verificationOut),
+      status: build.verificationOut.typecheckPassed && build.verificationOut.testsFailed === 0 ? "passed" : "failed",
+      timestamp: build.verificationOut.timestamp,
+    });
+  }
+
+  if (build.uxTestResults?.length) {
+    const passed = build.uxTestResults.filter((result) => result.passed).length;
+    events.push({
+      id: "ux-review",
+      source: "review",
+      label: "UX review",
+      summary: `${passed}/${build.uxTestResults.length} UX checks passed.`,
+      status: passed === build.uxTestResults.length ? "passed" : "failed",
+    });
+  }
+
+  return events;
+}
+
+function getVerificationSummary(verification: NonNullable<FeatureBuildRow["verificationOut"]>): string {
+  if (verification.typecheckPassed && verification.testsFailed === 0) {
+    return "Merged-code gate passed.";
+  }
+
+  if (!verification.typecheckPassed) {
+    return "Typecheck needs attention before release.";
+  }
+
+  return `${verification.testsFailed} test warning${verification.testsFailed === 1 ? "" : "s"} need review.`;
+}
+
+function sourceForCodingProvider(provider: string | null): UnifiedEvidenceTimelineEvent["source"] {
+  return provider?.toLowerCase().includes("codex") ? "codex" : "external";
+}
+
+function labelForCodingProvider(provider: string | null): string {
+  if (!provider) return "Implementation";
+  return provider
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
 export function WorkflowStageInspector({
   build,
   phase,
@@ -102,6 +213,8 @@ export function WorkflowStageInspector({
   const statusCfg = STATUS_CONFIG[status];
   const stageLabel = PHASE_LABELS[phase] ?? phase;
   const artifacts = getArtifactLines(phase, build);
+  const environmentReadiness = getEnvironmentReadiness(phase, build);
+  const evidenceEvents = getEvidenceEvents(phase, build);
   const stageGuidance = deriveWorkflowStageGuidance({
     build,
     phase,
@@ -210,7 +323,7 @@ export function WorkflowStageInspector({
                 color: statusCfg.colorVar,
                 border: `1px solid color-mix(in srgb, ${statusCfg.colorVar} 30%, transparent)`,
                 textTransform: "uppercase",
-                letterSpacing: "0.04em",
+                letterSpacing: 0,
               }}
             >
               {statusCfg.label}
@@ -249,6 +362,21 @@ export function WorkflowStageInspector({
               compact
             />
           </div>
+
+          {environmentReadiness && (
+            <div style={{ marginBottom: 16 }}>
+              <EnvironmentStatusSummary
+                activeCandidate={environmentReadiness.activeCandidate}
+                localIntegration={environmentReadiness.localIntegration}
+              />
+            </div>
+          )}
+
+          {evidenceEvents.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <UnifiedEvidenceTimeline events={evidenceEvents} />
+            </div>
+          )}
 
           {artifacts.length > 0 && (
             <div style={{ marginBottom: 16 }}>
@@ -289,7 +417,7 @@ const sectionLabelStyle: React.CSSProperties = {
   fontSize: 9,
   fontWeight: 700,
   textTransform: "uppercase",
-  letterSpacing: "0.06em",
+  letterSpacing: 0,
   color: "var(--dpf-muted)",
   marginBottom: 6,
 };

@@ -1,6 +1,7 @@
 import { prisma } from "@dpf/db";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { AdminUserAccessPanel } from "@/components/admin/AdminUserAccessPanel";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 export default async function AdminPage() {
   const [users, roles] = await Promise.all([
@@ -70,7 +71,7 @@ export default async function AdminPage() {
                   </span>
                 </div>
               </div>
-              <p className="text-[9px] text-[var(--dpf-muted)]">Joined {new Date(u.createdAt).toLocaleDateString()}</p>
+              <p className="text-[9px] text-[var(--dpf-muted)]">Joined <LocalTime value={u.createdAt} mode="date" /></p>
               {u.groups.length === 0 ? (
                 <p className="text-[9px] text-[var(--dpf-muted)] mt-2">No roles assigned</p>
               ) : (

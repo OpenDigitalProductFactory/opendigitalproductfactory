@@ -21,8 +21,10 @@ import {
   extractFormAssistResult,
   type AgentFormAssistContext,
 } from "@/lib/agent-form-assist";
-// mcp-tools is imported dynamically at call sites to avoid NFT whole-project tracing
-import type { BuildPhaseTag, ToolDefinition } from "@/lib/mcp-tools";
+// mcp-tools is imported dynamically at call sites to avoid NFT whole-project tracing;
+// type-only imports are erased at build time and safe.
+import type { ToolDefinition } from "@/lib/mcp-tools";
+import { sanitizeForLog } from "@/lib/security/safe-log";
 import { getActionsForRoute } from "@/lib/agent-action-registry";
 import { getBuildContextSection } from "@/lib/build-agent-prompts";
 import { getFeatureBuildForContext } from "@/lib/feature-build-data";
@@ -35,6 +37,7 @@ import { assembleSystemPrompt } from "@/lib/prompt-assembler";
 import type { QuestionPacket } from "@/lib/tak/question-packet";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import type { PortalContextEnvelope, PortalObjectAnchor } from "@/lib/portal-context";
+import { formatCoworkerOperationalCloseout } from "@/lib/tak/coworker-interaction-contract";
 import {
   extractInvokedSkillId,
   getSkillsForAgent,
@@ -42,6 +45,14 @@ import {
 } from "@/lib/skills/runtime";
 import { recordSkillUsageEvents } from "@/lib/skills/usage-events";
 import { recallWikiContext } from "@/lib/wiki/recall";
+import { recordCoverageGap } from "@/lib/wiki/coverage-gap";
+import {
+  classifyPerspective,
+  extractPageTopic,
+  buildPerspectiveQuery,
+  buildPerspectiveHint,
+  PERSPECTIVE_PAGE_KINDS,
+} from "@/lib/wiki/perspective-intent";
 import { getGrantedCapabilities, getDeniedCapabilities } from "@/lib/permissions";
 import { classifyTask } from "@/lib/task-classifier";
 import { getTaskType } from "@/lib/task-types";
@@ -56,6 +67,7 @@ import {
   isConversationalExpansionRequest,
   isPageExplanationOnlyRequest,
   isPlatformMechanismQuestion,
+  isTrivialSocialMessage,
 } from "@/lib/tak/conversation-intent";
 import {
   buildExternalAccessDisabledInstruction,
@@ -66,19 +78,8 @@ import {
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
-function filterToolsForCoworkerRuntime(
-  tools: ToolDefinition[],
-  input: { coworkerMode?: "advise" | "act"; activeBuildPhase: string | null },
-): ToolDefinition[] {
-  return tools.filter((tool) => {
-    if (input.coworkerMode === "advise" && tool.sideEffect) return false;
-    if (input.activeBuildPhase) {
-      if (!tool.buildPhases) return false;
-      return tool.buildPhases.includes(input.activeBuildPhase as BuildPhaseTag);
-    }
-    return true;
-  });
-}
+import { filterToolsForCoworkerRuntime } from "./coworker-tool-filter";
+export { filterToolsForCoworkerRuntime };
 
 async function requireAuthUser() {
   const session = await auth();
@@ -746,11 +747,43 @@ export async function sendMessage(input: {
     const wikiOrg = await prisma.organization
       .findFirst({ select: { id: true } })
       .catch(() => null);
-    const wikiContext = await recallWikiContext({
-      query: input.content,
+
+    // BI-F5179C9E: perspective routing. "what would Mark think/do" (WWMD) and
+    // "what would we / should we" (WWWD) carry an intent the generic recall
+    // misses. Detect it, resolve deictic pronouns ("this") against the page the
+    // employee is viewing, bias retrieval toward the right corpus, and inject a
+    // framing hint so the coworker attributes correctly instead of dead-ending
+    // on "'this' isn't specific".
+    const perspective = classifyPerspective(input.content);
+    const pageTopic = extractPageTopic(selectedPageData, input.routeContext);
+    const wikiQuery = perspective.needsPageContext
+      ? buildPerspectiveQuery(input.content, pageTopic)
+      : input.content;
+    let wikiContext = await recallWikiContext({
+      query: wikiQuery,
       organizationId: wikiOrg?.id ?? null,
       limit: 4,
+      preferredPageKinds: perspective.perspective
+        ? PERSPECTIVE_PAGE_KINDS[perspective.perspective]
+        : undefined,
     });
+    // BI-741B6329: capture the WWWD coverage gap BEFORE the hint is folded into
+    // wikiContext below (which makes it non-null). Empty recall on a WWWD query
+    // means the org has no recorded stance on this topic yet.
+    const wwwdRecallEmpty = perspective.perspective === "wwwd" && !wikiContext;
+    if (perspective.perspective) {
+      const hint = buildPerspectiveHint(perspective.perspective, pageTopic);
+      wikiContext = wikiContext ? `${hint}\n\n${wikiContext}` : hint;
+    }
+    // Continuous enrichment (EP-CORPUS-BOOTSTRAP): record the unanswered WWWD
+    // question as a deduplicated draft "open question" so the gap surfaces for
+    // review/enrichment. Fire-and-forget + fail-open — never block or break the
+    // response path. (Autonomous research to fill it is gated on open-Q#4.)
+    if (wwwdRecallEmpty && wikiOrg?.id) {
+      void recordCoverageGap({ organizationId: wikiOrg.id, query: input.content }).catch(
+        (e) => console.warn("[coverage-gap] record failed (fail-open):", e),
+      );
+    }
 
     // Governed Hermes learning Slice 1: eligible skills go into the prompt
     // alongside domain context, and we emit SkillUsageEvent telemetry for
@@ -1036,7 +1069,12 @@ export async function sendMessage(input: {
   // important on Build Studio routes where the tool surface is large enough
   // to drown a small local fallback model. See FB-71FB3A53 thread, 2026-05-22.
   const isMechanismQuestion = isPlatformMechanismQuestion(trimmedContent);
-  const isConversationOnly = isExplicitConversationSkill || isPageExplanationOnly || isExpansionFollowup || isMechanismQuestion;
+  // Trivial social turns ("hello", "thanks", "ok cool") carry no task. With the
+  // full tool surface attached they dispatch the heavyweight tool-loaded CLI
+  // agentic loop (8-130s); tool-free they answer in ~2s. See the Portfolio
+  // Analyst latency investigation, 2026-06-04.
+  const isTrivialSocial = isTrivialSocialMessage(trimmedContent);
+  const isConversationOnly = isExplicitConversationSkill || isPageExplanationOnly || isExpansionFollowup || isMechanismQuestion || isTrivialSocial;
 
   const toolsForProvider = (!isConversationOnly && availableTools.length > 0)
     ? toolsToOpenAIFormat(availableTools)
@@ -1045,13 +1083,19 @@ export async function sendMessage(input: {
   // Log tools available so we can diagnose why a model claims it can't see a
   // tool that should be in scope. Logged for every coworker call, not just
   // build-phase ones — chat coworkers on /workspace etc. were silent before.
-  // CodeQL js/log-injection: input.routeContext + agent.agentId + tool
-  // names are user-influenced. JSON.stringify on each interpolation.
-  console.log(
-    `[tools] route=${JSON.stringify(input.routeContext)} agent=${JSON.stringify(agent.agentId)} ` +
+  // CodeQL js/log-injection: input.routeContext + agent.agentId + tool names
+  // are user-influenced. Compose the line, then route it through the registered
+  // sanitizeForLog sanitizer so embedded control chars can't forge log entries.
+  // `attached` reflects what the model ACTUALLY receives: on a conversation-only
+  // turn (greeting, page-explanation, mechanism question) tools are stripped, so
+  // `count` (the available surface) overstates it. Logging both removes the
+  // long-standing ambiguity where count=38 implied 38 tools were sent.
+  const toolsLogLine =
+    `[tools] thread=${JSON.stringify(input.threadId)} route=${JSON.stringify(input.routeContext)} agent=${JSON.stringify(agent.agentId)} ` +
     `${activeBuildPhase ? `buildPhase=${JSON.stringify(activeBuildPhase)} ` : ""}` +
-    `count=${availableTools.length} tools=[${availableTools.map(t => JSON.stringify(t.name)).join(", ")}]`,
-  );
+    `count=${availableTools.length} attached=${toolsForProvider !== undefined}${isConversationOnly ? " (conversation-only)" : ""} ` +
+    `tools=[${availableTools.map(t => JSON.stringify(t.name)).join(", ")}]`;
+  console.log(sanitizeForLog(toolsLogLine));
   if (activeBuildPhase) {
 
     // Inject PhaseHandoff context — structured summary from the previous phase
@@ -1399,9 +1443,22 @@ export async function sendMessage(input: {
       const needsReview = (activeBuild!.taskResults as { tasks?: Array<{ outcome: string; title: string }> })?.tasks
         ?.filter(t => t.outcome !== "DONE") ?? [];
       const reviewItems = needsReview.length > 0
-        ? `\n\n**${needsReview.length} item${needsReview.length > 1 ? "s" : ""} flagged for review:**\n${needsReview.map(t => `- ${t.title}`).join("\n")}\n\nWould you like me to walk through each one, or do you want to check the sandbox preview first?`
-        : "\n\nAll tasks completed cleanly. Would you like me to run a final verification (tests + typecheck), or do you want to check the sandbox preview first?";
-      responseContent = `Build complete — ${storedResults!.completedTasks}/${storedResults!.totalTasks} tasks done.${reviewItems}`;
+        ? `\n\n**${needsReview.length} item${needsReview.length > 1 ? "s" : ""} flagged for review:**\n${needsReview.map(t => `- ${t.title}`).join("\n")}`
+        : "\n\nAll tasks completed cleanly.";
+      const closeout = needsReview.length > 0
+        ? formatCoworkerOperationalCloseout({
+          status: "needs review",
+          evidence: `${storedResults!.completedTasks}/${storedResults!.totalTasks} tasks are complete; ${needsReview.length} item${needsReview.length === 1 ? "" : "s"} are flagged for review.`,
+          nextAction: "review the flagged item output, then run the Build Studio review phase.",
+          owner: "Build Studio review agent",
+        })
+        : formatCoworkerOperationalCloseout({
+          status: "ready for review",
+          evidence: `${storedResults!.completedTasks}/${storedResults!.totalTasks} tasks are complete with no flagged task output.`,
+          nextAction: "run final verification in the Build Studio review phase.",
+          owner: "Build Studio review agent",
+        });
+      responseContent = `Build complete — ${storedResults!.completedTasks}/${storedResults!.totalTasks} tasks done.${reviewItems}\n\n${closeout}`;
       responseProviderId = "orchestrator";
       responseModelId = "multi-specialist";
       // Fall through to message persistence below
@@ -1478,6 +1535,11 @@ export async function sendMessage(input: {
       featureBuildId: activeBuild?.id ?? null,
       activeSkillId,
       agentMessageId: pendingAgentMessageId,
+      // sendMessage is the user-typed-a-question path. Chat mode disables the
+      // Operator Contract zero-tool-call / unsaved-evidence guards so a
+      // conversational reply ("yes do the truck list first") does not
+      // false-positive into a PlatformIssueReport.
+      interactionMode: "chat",
       ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
       onProgress: (event) => agentEventBus.emit(input.threadId, event),
     });

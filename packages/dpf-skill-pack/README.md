@@ -28,13 +28,18 @@ DPF therefore treats `dpf-platform` as the project-default plugin, not merely a 
 
 | Slug | Composes with (Surface A) | Coworker `assignTo` (Surface B) | What it adds |
 |---|---|---|---|
-| [`dpf-decision-via-kernel`](skills/dpf-decision-via-kernel/SKILL.md) | superpowers:brainstorming | `["*"]` | Maps options to `PRINCIPLE_DIMENSIONS`, invokes `principle_decide`, surfaces ledger, defers on commandment conflict |
+| [`dpf-decision-via-kernel`](skills/dpf-decision-via-kernel/SKILL.md) | dpf-brainstorming | `["*"]` | Maps options to `PRINCIPLE_DIMENSIONS`, invokes `principle_decide`, surfaces ledger, defers on commandment conflict |
 | [`dpf-verify-substrate-first`](skills/dpf-verify-substrate-first/SKILL.md) | (no analog) | `["*"]` | Grep + live-backlog + main-branch sweep before naming new types/tables/epics |
-| [`dpf-file-backlog-item`](skills/dpf-file-backlog-item/SKILL.md) | superpowers:writing-plans (predecessor) | `["build-specialist", "ops-coordinator", "platform-engineer"]` | Verify substrate → file BI → size → triage → link epic |
+| [`dpf-file-backlog-item`](skills/dpf-file-backlog-item/SKILL.md) | dpf-verify-substrate-first (`dpf-writing-plans` pending — slice 2) | `["build-specialist", "ops-coordinator", "platform-engineer"]` | Verify substrate → file BI → size → triage → link epic |
 | [`dpf-promote-to-build-studio`](skills/dpf-promote-to-build-studio/SKILL.md) | (no analog) | `["build-specialist", "ops-coordinator"]` | BI → promote → approve Ideate → let BS run |
-| [`dpf-worktree-per-session`](skills/dpf-worktree-per-session/SKILL.md) | superpowers:finishing-a-development-branch (predecessor) | `["build-specialist", "platform-engineer"]` | `git worktree add` + MCP seed + `COMPOSE_PROJECT_NAME` discipline |
-| [`dpf-pr-with-dco`](skills/dpf-pr-with-dco/SKILL.md) | superpowers:finishing-a-development-branch (successor) | `["build-specialist", "platform-engineer"]` | Branch from `origin/main`, `-s` sign-off, overlap-sweep, PR-when-ready |
-| [`dpf-evidence-before-diagnosis`](skills/dpf-evidence-before-diagnosis/SKILL.md) | superpowers:systematic-debugging (predecessor) | `["*"]` | Query DB/status before claiming cause; dynamic-analysis output discipline |
+| [`dpf-worktree-per-session`](skills/dpf-worktree-per-session/SKILL.md) | dpf-finishing-a-development-branch (predecessor) | `["build-specialist", "platform-engineer"]` | `git worktree add` + MCP seed + `COMPOSE_PROJECT_NAME` + compile-ready/source-only verification discipline |
+| [`dpf-pr-with-dco`](skills/dpf-pr-with-dco/SKILL.md) | dpf-finishing-a-development-branch (successor) | `["build-specialist", "platform-engineer"]` | Branch from `origin/main`, `-s` sign-off, overlap-sweep, PR-when-ready |
+| [`dpf-evidence-before-diagnosis`](skills/dpf-evidence-before-diagnosis/SKILL.md) | dpf-systematic-debugging (predecessor) | `["*"]` | Query DB/status before claiming cause; dynamic-analysis output discipline |
+| [`dpf-brainstorming`](skills/dpf-brainstorming/SKILL.md) | (DPF-native; predecessor to `dpf-decision-via-kernel`) | `["*"]` | Generate 2-4 substrate-grounded options before converging; replaces upstream `brainstorming` |
+| [`dpf-systematic-debugging`](skills/dpf-systematic-debugging/SKILL.md) | dpf-evidence-before-diagnosis, dpf-verify-substrate-first | `["*"]` | 4-phase root cause, DPF-gated: evidence-first, peer-session check, substrate check, functional (not structural) verification; replaces upstream `systematic-debugging` |
+| [`dpf-finishing-a-development-branch`](skills/dpf-finishing-a-development-branch/SKILL.md) | (DPF-native; successor `dpf-pr-with-dco`) | `["*"]` | Decide integration shape (one PR / stack / split), confirm green + signed, then hand off PR mechanics; replaces upstream `finishing-a-development-branch` |
+| [`dpf-writing-plans`](skills/dpf-writing-plans/SKILL.md) | dpf-file-backlog-item (predecessor) | `["*"]` | Phased implementation plan for a filed BI, grounded in substrate, saved to `docs/superpowers/plans/`; replaces upstream `writing-plans` |
+| [`dpf-tdd`](skills/dpf-tdd/SKILL.md) | (DPF-native) | `["*"]` | Test-first red-green-refactor, DPF-gated: failing test first for fixes, functional (not structural) green, never report an unrun pass; replaces upstream `test-driven-development` |
 | [`dpf-retrieve-decision-context`](skills/dpf-retrieve-decision-context/SKILL.md) | dpf-verify-substrate-first | `["*"]` | Pull repo, specs, live backlog, and kernel context before WWMD scoring |
 | [`dpf-compare-options`](skills/dpf-compare-options/SKILL.md) | dpf-retrieve-decision-context | `["*"]` | Score 2-4 options through `principle_decide` and return operator-safe recommendations |
 | [`dpf-record-decision-outcome`](skills/dpf-record-decision-outcome/SKILL.md) | dpf-decision-via-kernel | `["*"]` | Persist decision result, evidence summary, and next action through governed MCP |
@@ -42,6 +47,15 @@ DPF therefore treats `dpf-platform` as the project-default plugin, not merely a 
 | [`dpf-external-evidence-handoff`](skills/dpf-external-evidence-handoff/SKILL.md) | dpf-evidence-before-diagnosis | `["build-specialist", "platform-engineer"]` | Record Claude/Codex branch, files, tests, and unresolved questions for Build Studio |
 | [`dpf-use-shared-nonprod-environment`](skills/dpf-use-shared-nonprod-environment/SKILL.md) | dpf-worktree-per-session | `["build-specialist", "platform-engineer", "ops-coordinator"]` | Claim and release governed shared localhost environments instead of unmanaged servers |
 | [`dpf-local-merge-ci-before-push`](skills/dpf-local-merge-ci-before-push/SKILL.md) | dpf-pr-with-dco | `["build-specialist", "platform-engineer"]` | Run merged-code local integration gates and record results before push or PR |
+| [`dpf-architecture-review`](skills/dpf-architecture-review/SKILL.md) | dpf-retrieve-decision-context, dpf-decision-via-kernel | `["ea-architect", "build-specialist", "platform-engineer"]` | Chief-architect lens: review a spec/design/plan for architectural alignment against DPF standards, propose concrete edits, feed new standards back to the reference docs. Advisory `architect` reviewer at the Build Studio Ideate + Plan gates |
+
+### Upstream superpowers capabilities NOT re-authored (do not re-propose)
+
+The pack owns DPF-native equivalents only for the superpowers capabilities it actually composed with. The rest are deliberately not re-authored — assessed under BI-E3638D04:
+
+- **Already covered by DPF — don't duplicate:** `spec-reviewer` / `plan-document-reviewer` → `dpf-architecture-review`; `code-quality-reviewer` / `requesting-`/`receiving-code-review` → harness `/code-review`, `/review`, `/security-review`, `/simplify`; `subagent-driven-development` / `dispatching-parallel-agents` → `dpf-worktree-per-session` + Build Studio orchestrator-worker + the `Workflow` tool; `writing-skills` → `skill-creator` + this authoring contract.
+- **Left as optional upstream install:** `implementer`, `executing-plans` (Build Studio's build-specialist + `dpf-promote-to-build-studio` cover the DPF path).
+- **Folded, not authored:** `verification-before-completion` → `build-gate-mandatory` + `/verify` + `dpf-systematic-debugging` Phase 4 (kernel-ratified fold-in, not a standalone skill).
 
 ## Build Studio capability packs
 
@@ -71,6 +85,12 @@ Repo-level marketplace files live at the repository root:
 - `.agents/plugins/marketplace.json` — Codex repo marketplace, marked `INSTALLED_BY_DEFAULT` for the same plugin directory.
 
 The auto-install hook (BI-98683E68) wires these into portal install + worktree creation so contributors do not need to hand-run client plugin commands. MCP authentication still stays outside git: issue or rotate `DPF_MCP_BEARER_TOKEN` from Admin > Platform Development > MCP. The plugin supplies the client wiring; the portal owns the token.
+
+### Version bumps propagate automatically
+
+When this package's `.claude-plugin/plugin.json` version bumps (e.g. `0.1.0` → `0.2.0`), the `scripts/dpf-bootstrap-agent-toolchain.{ps1,sh}` adapter reads the new version from the manifest at install time and the planning library at `packages/dpf-bootstrap/` plans an upgrade write for contributors whose installed entry is at the older version. No manual `claude plugin install` is required. Contributors pick up the new skills on the next time the installer (or `install-dpf`, `fresh-install`, `setup`, or a fresh `git worktree add`) runs — and a re-run when nothing has drifted is a true no-op.
+
+Upstream-owned plugins (`superpowers@openai-curated`) follow a different rule: their pinned version lives in `packages/dpf-bootstrap/src/agent-toolchain/upstream-versions.ts` and drift is surfaced as an advisory line under the install banner. DPF does not auto-upgrade upstream plugins.
 
 ## See also
 

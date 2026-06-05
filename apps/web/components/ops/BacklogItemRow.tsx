@@ -77,11 +77,15 @@ export function BacklogItemRow({ item, onEdit, focused = false }: Props) {
         {item.priority ?? "—"}
       </span>
 
+      {/* Work-type badge */}
+      <WorkTypeBadge workType={item.workType} />
+
       {/* Main content */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-[var(--dpf-text)] leading-tight truncate">{item.title}</p>
         <p className="text-[10px] text-[var(--dpf-muted)] mt-0.5 truncate">
           {item.taxonomyNode?.nodeId ?? "—"}
+          {item.source ? ` · via ${item.source}` : ""}
           {item.digitalProduct ? ` · ${item.digitalProduct.name}` : ""}
           {item.agentId ? ` · ${AGENT_NAME_MAP[item.agentId] ?? item.agentId}` : ""}
           {item.submittedBy ? ` · by ${item.submittedBy.email}` : ""}
@@ -245,4 +249,31 @@ function statusBadgeClassName(status: string): string {
   };
 
   return classes[status] ?? classes.deferred;
+}
+
+const WORK_TYPE_BADGE_CLASS: Record<string, string> = {
+  bug: "border-[var(--dpf-error)]/40 bg-[var(--dpf-error)]/10 text-[var(--dpf-error)]",
+  feature: "border-[var(--dpf-accent)]/40 bg-[var(--dpf-accent-soft)] text-[var(--dpf-accent)]",
+  chore: "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]",
+  doc: "border-[var(--dpf-info)]/40 bg-[var(--dpf-info)]/10 text-[var(--dpf-info)]",
+  tool: "border-[var(--dpf-info)]/40 bg-[var(--dpf-info)]/10 text-[var(--dpf-info)]",
+  skill: "border-[var(--dpf-info)]/40 bg-[var(--dpf-info)]/10 text-[var(--dpf-info)]",
+  refactor: "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]",
+};
+
+function WorkTypeBadge({ workType }: { workType: string | null }) {
+  const label = workType ?? "unclassified";
+  const cls =
+    workType && WORK_TYPE_BADGE_CLASS[workType]
+      ? WORK_TYPE_BADGE_CLASS[workType]
+      : "border-dashed border-[var(--dpf-border)] bg-transparent text-[var(--dpf-muted)]";
+  return (
+    <span
+      className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}
+      title={workType ? `work type: ${workType}` : "work type not classified — open and reclassify"}
+      aria-label={`work type ${label}`}
+    >
+      {label}
+    </span>
+  );
 }

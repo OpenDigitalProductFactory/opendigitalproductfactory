@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { prisma } from "@dpf/db";
+import { prisma, Prisma } from "@dpf/db";
 
 export type SelfUpgradeRunStatus =
   | "pending"
@@ -12,6 +12,7 @@ export async function createRun(params: {
   triggeredBy?: string;
   fromVersion?: string;
   toVersion?: string;
+  expectedDeployedSha?: string;
 }) {
   const runId = `SUR-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
   return prisma.selfUpgradeRun.create({
@@ -21,6 +22,7 @@ export async function createRun(params: {
       trigger: params.triggeredBy ?? "unknown",
       currentSha: params.fromVersion ?? null,
       targetSha: params.toVersion ?? null,
+      deployedSha: params.expectedDeployedSha ?? null,
     },
   });
 }
@@ -46,6 +48,24 @@ export async function failRun(runId: string, error: string) {
   });
 }
 
+export async function recordRunRecoveryPoint(
+  runId: string,
+  recoveryPoint: unknown,
+) {
+  return prisma.selfUpgradeRun.update({
+    where: { runId },
+    data: {
+      completionEvidence: toJson({
+        recoveryPoint,
+      }),
+    },
+  });
+}
+
+function toJson(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
 export async function cancelRun(runId: string) {
   return prisma.selfUpgradeRun.update({
     where: { runId },
@@ -66,6 +86,20 @@ export async function appendLog(runId: string, chunk: string) {
 
 export async function getLatestRun() {
   return prisma.selfUpgradeRun.findFirst({
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+/**
+ * The most-recent successfully-completed run. Its `targetSha` is the upstream
+ * lineage marker the running build contains — the basis for the §5.0 freshness
+ * gate (don't re-merge an upstream we already carry). Distinct from the running
+ * `deployedSha`, which in merge mode is the merge-commit identity, not the
+ * upstream SHA it absorbed.
+ */
+export async function getLatestSucceededRun() {
+  return prisma.selfUpgradeRun.findFirst({
+    where: { status: "succeeded" },
     orderBy: { createdAt: "desc" },
   });
 }

@@ -49,21 +49,40 @@ scrape_configs:
           - "sandbox:3000"
     metrics_path: /api/metrics
 
+  # ─── Background jobs (Inngest) ──────────────────────────────
+  # Same rationale as the base prometheus.yml: scrape /metrics so the
+  # Health tab catches a wedged Inngest before background jobs silently
+  # back up.
+  - job_name: "inngest"
+    static_configs:
+      - targets: ["inngest:8288"]
+
+  # ─── ADP (payroll/HRIS MCP) ─────────────────────────────────
+  - job_name: "adp"
+    static_configs:
+      - targets: ["adp:8600"]
+
+  # ─── Redis (via redis-exporter sidecar) ─────────────────────
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+
   # ─── AI Inference ───────────────────────────────────────────
   # Docker Model Runner does not expose a Prometheus `/metrics` endpoint
   # (all paths 404). Inference health is tracked via the portal's
   # `dpf_ai_inference_duration_seconds_*` application metrics instead.
   # If/when Model Runner ships a metrics endpoint, re-add the scrape here.
 
-  # ─── Windows Host (real hardware via windows_exporter) ───────
-  # windows_exporter runs natively on the Windows host (not in Docker).
-  # Discovers real network interfaces, disk, memory — not WSL2 VM.
-  - job_name: "windows-host"
-    scrape_interval: 15s
-    static_configs:
-      - targets: ["host.docker.internal:9182"]
-        labels:
-          instance: "windows-host"
+  # ─── Host hardware ───────────────────────────────────────────
+  # No `windows-host` job here. windows_exporter is a native Windows
+  # service (port 9182) with no Linux equivalent, so scraping it on a
+  # native-Linux-Docker host would always fail and fire a false
+  # ContainerDown CRITICAL. The discovery network sweep
+  # (packages/db/src/discovery-collectors/network.ts) gets real Linux
+  # host NICs from node-exporter's `node_network_info` instead — see the
+  # "Network sweep data path" decision in
+  # docs/superpowers/plans/2026-05-09-macos-linux-native-support.md.
+  # The windows-host scrape stays only in the base prometheus.yml (Windows).
 
   # ─── Self-monitoring ────────────────────────────────────────
   - job_name: "prometheus"

@@ -31,7 +31,10 @@ COPY packages/ ./packages/
 COPY docker-entrypoint.sh ./
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @dpf/db exec prisma generate
-RUN pnpm --filter web build
+# Node 24 Alpine + Turbopack can crash the separate build worker in Docker
+# with SIGSEGV/SIGTRAP while the same source build passes on the host. Keep the
+# production bundler path but run Turbopack in-process for image builds.
+RUN NODE_OPTIONS="--max-old-space-size=4096" NEXT_TELEMETRY_DISABLED=1 NEXT_TURBOPACK_USE_WORKER=0 pnpm --filter web build
 
 # ─── Stage 4: init (build source for migrations, seed, Prisma client) ─────────
 FROM deps AS init
@@ -41,6 +44,13 @@ COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY prompts/ ./prompts/
 COPY skills/ ./skills/
+# Deliberation pattern definitions — markdown sources read at seed time by
+# seed-deliberation.ts (seed.ts:2480). Without this COPY the seed logs
+# "deliberation/ directory not found — skipping" and the DeliberationPattern
+# table stays empty, so reviewDesignDoc cannot select the "review" pattern,
+# the Build Studio review-gate trail never records, and every build wedges in
+# Ideate (Ideate -> Plan never opens). Mirrors prompts/skills handling.
+COPY deliberation/ ./deliberation/
 COPY docker-entrypoint.sh ./
 COPY docs/user-guide/ ./docs/user-guide/
 # Founder kernel content — markdown sources + wiki pages + manifest +
@@ -90,6 +100,9 @@ COPY --from=init /app/docs/user-guide ./docs/user-guide
 COPY --from=init /app/docs/founder-kernel ./docs/founder-kernel
 COPY --from=init /app/prompts ./prompts
 COPY --from=init /app/skills ./skills
+# Deliberation pattern sources must reach the runtime image too — the seed
+# runs in this unified runner stage at boot, reading /app/deliberation.
+COPY --from=init /app/deliberation ./deliberation
 COPY --from=init /app/docs/Reference ./docs/Reference
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
@@ -112,22 +125,47 @@ RUN rm -rf /app/apps/web-src/.next \
 # See docs/superpowers/specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md §4.1, §4.2.
 COPY version.json ./version.json
 
-# Version file baked in at build time. If a release version is not supplied,
-# derive one from the bundled source so managed /workspace volumes can detect
-# that the image source changed even during local dev builds.
+# Source content hash — ALWAYS computed from the bundled source bytes,
+# independent of the DPF_VERSION label. This is the honest fingerprint of what
+# actually went into the image: the self-upgrade promoter compares it between
+# the freshly built image and the recreated container (content-verify guard),
+# and it is the fallback identity when no explicit version is supplied.
+# Decoupling it from DPF_VERSION is the fix for BI-C8E90A79 — a stamped label
+# can no longer mask which source was built. Exclusions keep it reproducible
+# across builds of the same source (node_modules / .next / generated / tsbuildinfo).
+RUN (find /app/apps/web-src /app/packages-src /app/scripts -type f \
+      -not -path '*/node_modules/*' \
+      -not -path '*/.pnpm-store/*' \
+      -not -path '*/.next/*' \
+      -not -path '*/generated/*' \
+      -not -name '*.tsbuildinfo' \
+      -exec sha256sum {} +; \
+     sha256sum /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json /app/.gitignore) \
+      | sort -k 2 | sha256sum | cut -d ' ' -f 1 > /app/.dpf-source-content-hash
+
+# Operator-facing image version baked in at build time. The explicit
+# DPF_VERSION (a git SHA when built via scripts/build-images.{ps1,sh} or the
+# promoter) when supplied, else the source content hash so managed /workspace
+# volumes can still detect that the image source changed during local dev builds.
 ARG DPF_VERSION=
 RUN if [ -n "$DPF_VERSION" ]; then \
       echo "$DPF_VERSION" > /app/.dpf-image-version; \
     else \
-      (find /app/apps/web-src /app/packages-src /app/scripts -type f \
-        -not -path '*/node_modules/*' \
-        -not -path '*/.pnpm-store/*' \
-        -not -path '*/.next/*' \
-        -not -path '*/generated/*' \
-        -not -name '*.tsbuildinfo' \
-        -exec sha256sum {} +; \
-       sha256sum /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json /app/.gitignore) \
-        | sort -k 2 | sha256sum | cut -d ' ' -f 1 > /app/.dpf-image-version; \
+      cp /app/.dpf-source-content-hash /app/.dpf-image-version; \
+    fi
+
+# Build timestamp (UTC, ISO-8601), surfaced alongside the source identity in
+# /ops/self-upgrade so operators can see when the running image was produced,
+# independent of the static version.json baseline.
+RUN date -u +%Y-%m-%dT%H:%M:%SZ > /app/.dpf-image-built-at
+
+# Real platform version from the repo's git release tags (git describe),
+# supplied by the build (scripts/build-images.*, installer, CI, promoter).
+# When set, this is the authoritative version shown in the portal — version.json
+# is only a dev fallback. Leading "v" is normalized at read time.
+ARG DPF_PLATFORM_VERSION=
+RUN if [ -n "$DPF_PLATFORM_VERSION" ]; then \
+      echo "$DPF_PLATFORM_VERSION" > /app/.dpf-platform-version; \
     fi
 
 # Promoter build context (autonomous deployment pipeline)

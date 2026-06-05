@@ -320,6 +320,34 @@ export const qdrantBackupDurationSeconds = new Histogram({
   registers: [metricsRegistry],
 });
 
+// ─── Voice STT (speech-to-text adapter call) ──────────────────────────────
+// The hwdsl2/whisper-server image we ship doesn't expose a Prometheus
+// /metrics endpoint, so the only place we can observe its health is from
+// the caller side. Lives on the portal's /api/metrics surface; the Health
+// tab's "Voice STT" tile reads from these instead of from a direct scrape.
+
+export const voiceSttDuration = new Histogram({
+  name: "dpf_voice_stt_duration_seconds",
+  help: "Voice STT transcription call duration in seconds, by provider and model",
+  labelNames: ["provider", "model"] as const,
+  buckets: [0.5, 1, 2.5, 5, 10, 20, 30, 60, 120],
+  registers: [metricsRegistry],
+});
+
+export const voiceSttCallsTotal = new Counter({
+  name: "dpf_voice_stt_calls_total",
+  help: "Voice STT transcription calls by outcome (ok | error) and provider",
+  labelNames: ["provider", "model", "outcome"] as const,
+  registers: [metricsRegistry],
+});
+
+export const voiceSttErrors = new Counter({
+  name: "dpf_voice_stt_errors_total",
+  help: "Voice STT transcription errors by provider and classified error_type",
+  labelNames: ["provider", "error_type"] as const,
+  registers: [metricsRegistry],
+});
+
 // ─── Voice Slice 2 — Transcript Cleanup ─────────────────────────────────────
 // Spec: docs/superpowers/specs/2026-05-16-voice-input-and-transcription-design.md §9
 
@@ -334,5 +362,30 @@ export const voiceCleanupLevenshteinRatio = new Histogram({
   name: "dpf_voice_cleanup_levenshtein_ratio",
   help: "Levenshtein distance ratio between raw and cleaned transcript (0=identical, 1=totally different)",
   buckets: [0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9],
+  registers: [metricsRegistry],
+});
+
+// ─── Workspace-home resolver (BI-1CCC6264 follow-on telemetry) ─────────────
+// Spec: docs/superpowers/specs/2026-05-24-vertical-workspace-home-design.md §5.5
+//
+// Emitted on each /workspace render after the resolver runs. Surfaces the
+// silent-fallback case the substrate is honest about but otherwise invisible:
+// installs whose configured archetype has NO matching contribution still get
+// the platform fallback, and without this counter that gap is observable only
+// by per-customer inspection. The counter exposes it as a metric admins can
+// alert on.
+//
+// Labels:
+// - match: "exact" | "category" | "none" — which resolver path won.
+// - has_archetype: "true" | "false" — whether the install has a StorefrontConfig
+//   with an archetype at all. Lets us distinguish:
+//     match="none", has_archetype="true"  → configured-but-uncovered (the gap)
+//     match="none", has_archetype="false" → cold install (legitimate)
+//     match="exact" or "category"         → covered
+
+export const workspaceHomeResolutionsTotal = new Counter({
+  name: "dpf_workspace_home_resolutions_total",
+  help: "Workspace-home resolver outcomes by match kind and whether the install has a configured archetype. match=none + has_archetype=true is the substrate's honest-fallback surface — track to alert when an archetype lacks a vertical contribution.",
+  labelNames: ["match", "has_archetype"] as const,
   registers: [metricsRegistry],
 });

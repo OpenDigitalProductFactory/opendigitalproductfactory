@@ -1,7 +1,9 @@
 # Build Execution Provider + Agent Runner Architecture (DRAFT / RESEARCH)
 
 > Status: **research stub** — not yet a finalized spec. Per AGENTS.md §10
-> this needs full "Research & Benchmarking" before finalization.
+> this needs full "Research & Benchmarking" before finalization. 2026-06-xx
+> chief-architect reconciliation added (see top matter); interfaces still
+> unextracted, Sandbox model landed independently, Grok layering ratified.
 >
 > **Doctrine reference:** this spec is the canonical implementation
 > of contract 6 (build execution) from
@@ -23,6 +25,13 @@
 > without depending on bundled vendor CLIs (Codex, Claude Code) or
 > their port 1455 OAuth callbacks. See "What changed in 2026-05-10
 > revision" below for the rationale and migration sketch.
+>
+> **2026-06-xx Chief Architect Reconciliation (post-implementation scan):**
+> - **Implementation status:** Zero extraction landed. No `BuildExecutionProvider` / `BuildAgentRunner` interfaces, no `build-orchestrator.ts`, no `providers/` or `agents/` directories, no contract tests. Current sandbox logic remains in `sandbox.ts` + MCP tools + codex/claude-dispatch.ts (the "reference behavior" this spec intended to encapsulate). `Sandbox` Prisma model (exact shape proposed at schema impact §) **has** landed independently at `packages/db/prisma/schema.prisma:4796` (with FeatureBuild relation) and appears in generated client — this is positive incremental formalization of build-phase state, but it happened outside the provider abstraction. dpf-native agent runner, image variants, and cross-axis matrix remain design-only.
+> - **Research & Benchmarking (AGENTS.md §10):** Still TBD. No comparisons executed against GitHub Actions self-hosted, GitLab Runner, Buildkite, Drone, Firecracker/gVisor/Kata, AWS CodeBuild, etc. The executor/orchestrator split analogy is unvalidated in the record.
+> - **Ratified elements:** The 2026-05-31 "Near-term Grok worker layering" and "Worker worktree boundary" sections are sound and consistent with `worktree-is-source-control-not-runtime` kernel principle (AGENTS §4) and the contribution-dispatch pattern. dpf-native remains the highest-leverage path for Contract 9 mode-1 compliance, air-gapped support, and substrate unlock (every cloud substrate becomes Build-Studio-capable without privileged pods or port 1455).
+> - **Risk / sequencing note:** Sandbox model existing without the surrounding provider contract increases the chance of ad-hoc usage drifting from the intended `exec` / lifecycle abstraction. Recommend treating interface extraction (sequencing step 1) as a **refactoring priority** before new provider or agent work — it is now a "no-op" only if we move quickly. Security review checklist remains fully applicable (heavy weight).
+> - **Recommendation:** Promote this from research stub to "binding pending Research & Benchmarking completion + interface extraction PR" once the benchmarking notes are added and the first extraction lands behind the existing feature flags / disabled default. This spec still owns the shape of Contract 6.
 
 ## Why this exists
 
@@ -98,12 +107,46 @@ becomes Build-Studio-capable with no port 1455 lock-in, no in-
 sandbox refresh tokens, no mode-4 audit gap. That's the largest
 strategic payoff of doing this abstraction right.
 
+> **Dispatch routing note:** `dpf-native` runs its inference loop
+> portal-side, but all file-system operations MUST route through
+> `provider.exec`, `provider.readFile`, and `provider.writeFile` — i.e.
+> into the sandbox's `/workspace` dedicated checkout, not into the
+> portal's own source tree or the operator's dev worktree. This is
+> required by `worktree-is-source-control-not-runtime` (commandment tier):
+> the operator's topic worktree is source-control isolation only; it must
+> never be the agent's execution substrate. A dpf-native implementation
+> that writes files directly to the portal process's `process.cwd()` would
+> violate this principle even though the inference runs in-process.
+
 The `dpf-native` agent is also the path to closing Contract 9's
 mode-4 compliance gap (line 245–259 of the doctrine spec): air-
 gapped, regulated, and FedRAMP customers can run Build Studio
 without bundled vendor CLIs and without vendor egress.
 
 ## Current implementation as the `local-docker` provider × CLI runners
+
+> **Workspace role note (2026-06-02 reconciliation):** The build sandbox
+> (`dpf-sandbox-1`, `/workspace`) is a **dedicated-checkout** that belongs
+> to the same family as `.upgrade-workspace/` (self-upgrade's process-owned
+> merge target) and `~/.dpf/local-ci-sandbox/` (the convergence sandbox).
+> It is **not** the operator's dev tree or a bind-mount of the portal
+> source. The sandbox holds its own git repository (`/workspace/.git`).
+> `build-branch.ts:startBuildBranch` owns the per-run lifecycle:
+> (1) `git reset --hard HEAD` + `git clean -fd` to scrub any prior-run
+> leakage, (2) checkout of a `build/<buildId>` branch forked from
+> `client/<clientId>`, (3) source-currency check against `origin/main`.
+> This reset discipline is the dedicated-checkout pattern — identical in
+> intent to `upgrade-workspace`'s `reset --hard origin/main` before each
+> upgrade run. Provider implementations for non-`local-docker` substrates
+> MUST preserve this discipline; see `resetWorkspace` in the interface
+> below.
+>
+> Five-role workspace context: `worktree-is-source-control-not-runtime`
+> (commandment tier, AGENTS.md §4) establishes that topic worktrees are
+> source-control isolation only. A Build Studio build agent checks out
+> the `build/<buildId>` branch **inside the sandbox's dedicated checkout**
+> and runs all code-gen there. The operator's dev worktree (if any) is
+> source-control only and is never the agent's execution target.
 
 The existing code in
 `apps/web/lib/integrate/sandbox/sandbox.ts` (444 LOC),
@@ -155,6 +198,16 @@ interface BuildExecutionProvider {
   writeFile(handle: SandboxHandle, path: string, content: string): Promise<void>;
   copyAppsWebInto(handle: SandboxHandle, source: string): Promise<void>;
 
+  // Per-run workspace reset — REQUIRED before every new build.
+  // Equivalent to `git reset --hard <targetRef> && git clean -fd` inside
+  // the sandbox. Preserves large generated/cached directories (node_modules,
+  // .pnpm-store) that are expensive to rebuild. The local-docker provider
+  // implements this via buildSandboxGitCleanCommand + buildSandboxBranchSwitchPrepCommand
+  // (build-branch.ts:443-463). All providers must implement this method;
+  // skipping it risks state bleed between consecutive builds on the same
+  // substrate. See 'Dedicated checkout' note in 'Current implementation' above.
+  resetWorkspace(handle: SandboxHandle, targetRef: string): Promise<void>;
+
   // Optional preview surface — null when substrate can't host a
   // long-running HTTP server (cloud-run-job, ecs-task, etc.)
   getPreviewUrl(handle: SandboxHandle): Promise<string | null>;
@@ -197,7 +250,7 @@ type BuildExecutionProviderCapabilities = {
 ### `BuildAgentRunner` — agent above the substrate
 
 ```typescript
-type BuildAgentId = "codex" | "claude" | "dpf-native";
+type BuildAgentId = "codex" | "claude" | "grok" | "dpf-native";
 
 interface BuildAgentRunner {
   readonly id: BuildAgentId;
@@ -274,6 +327,120 @@ type AgentCredential = {
   payload: Record<string, string>;     // never logged; written via prepare()
 };
 ```
+
+### Near-term Grok worker layering
+
+> Added 2026-05-31 because Grok is being considered as an additional
+> Build Studio worker while concurrent worktree and self-upgrade hardening are
+> active. This section prevents "add a provider" from accidentally becoming a
+> third execution architecture.
+
+Grok must enter Build Studio through one of two explicit layers:
+
+1. **Preferred: Grok as a `ModelProvider` behind `dpf-native`.** If Grok is
+   consumed through the platform's normal inference/routing surface, no new
+   `BuildAgentRunner` is needed. The active Build Studio worker remains
+   `dpf-native`; Grok is one model/provider option selected by route policy,
+   scored by model metadata/evals, and audited through the existing inference
+   envelope. This is the safest path for self-update and BC/DR because no new
+   filesystem writer, OAuth callback, sandbox credential mount, or CLI session
+   is introduced.
+2. **Allowed only when necessary: Grok as a `BuildAgentRunner`.** If Grok uses
+   a distinct coding-agent loop or CLI that reads/writes the workspace itself,
+   it is a peer of `codex` and `claude`, not a special case. It must implement
+   `prepare()`, `run()`, `capabilities()`, emit `ToolExecution` with
+   `routeContext.build.agentId="grok"`, pass the agent-runner contract test,
+   and declare whether it requires credentials, persistent session state,
+   callback ports, direct vendor egress, or `LLM_BASE_URL` compliance.
+
+Grok is **not** allowed to:
+
+- write directly into the root clone;
+- run in a shared worktree with another Build Studio worker;
+- mutate the canonical install branch outside the promotion path;
+- create a separate "Grok sandbox" lifecycle outside
+  `BuildExecutionProvider`;
+- skip `ToolExecution` / build evidence attribution; or
+- bypass provider activation, token-spend logging, model capability metadata,
+  or route policy.
+
+The Build Studio task router should treat Grok as an opt-in worker until it has
+eval evidence for the same task tiers used by `dpf-native`: single-file edit,
+multi-file refactor, and full-spec implementation. Provider activation alone
+only proves credentials work; it does not prove Grok can safely act as a coding
+worker.
+
+First-class Grok support requires a **provider-onboarding gate**, not only a
+new enum value:
+
+- The seed path must persist every routing field it advertises. If
+  `providers-registry.json` declares `cliEngine: "grok"`, the provider seeder
+  must write `ModelProvider.cliEngine` on both create and update, with a
+  regression test that proves reseed/fresh install auto-detection works.
+- The sandbox image or selected execution provider must prove the Grok
+  executable exists and supports the non-interactive invocation being used.
+  Official CLI flags are part of the contract. If the CLI is missing or the
+  invocation probe fails, Grok is `unavailable`, not a selectable default.
+- A Grok `BuildAgentRunner` must use the passed `BuildExecutionProvider` and
+  `SandboxHandle` for every exec/read/write action. Direct `docker exec
+  ${SANDBOX_CONTAINER}` calls are a local-docker shortcut and are not permitted
+  in runner code.
+- Credential and prompt material must be task-unique and short-lived. Use a
+  provider/runner-managed per-task directory or `mktemp` equivalent, restrictive
+  permissions, and `finally` cleanup. Filenames derived only from task title or
+  provider id are not concurrency-safe.
+- Returned `toolExecutionId` values must point to real audit rows, not static
+  strings. Build evidence must identify `routeContext.build.providerId` and
+  `routeContext.build.agentId`.
+- Grok starts at a preview/contract-gated tier until the same verification
+  matrix used for Codex/Claude/dpf-native proves the higher tier. Credentials,
+  model availability, and successful chat completions do not promote a coding
+  worker by themselves.
+
+See the immediately following section ("Mandatory Architecture Capture for All Future AI Agents...") for the full, binding rules that apply to Grok and every subsequent model or agent. The Grok layering rules above are a specific application of those general invariants.
+
+### Worker worktree boundary
+
+Build Studio workers that need source-control isolation get a **worker
+worktree**, not a runtime clone. The worktree is a branch/index container for
+that worker's proposed edits. Runtime-bound verification still runs in the
+canonical local install or the shared local-CI convergence sandbox described by
+[`worktree-is-source-control-not-runtime`](../../founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md).
+
+Required invariants for any worker worktree, including Grok:
+
+- Worktree is created from `origin/main` or the approved build base, never from
+  a dirty root clone.
+- Branch name includes build id and worker id, e.g.
+  `build/<buildId>/grok/<slug>` or the existing branch convention if Build
+  Studio already assigned one.
+- `.mcp.json`, `.vscode/mcp.json`, and `COMPOSE_PROJECT_NAME` are seeded by
+  the same worktree bootstrap scripts used for Codex/Claude contributor
+  sessions; no copied plaintext tokens.
+- The worker worktree records a **verification provisioning state**:
+  `compile-ready` or `source-only`.
+  - `compile-ready` means the package manager is available, dependencies are
+    installed or shared through a supported mechanism, and cheap source-local
+    checks can run in that worktree.
+  - `source-only` means Git/MCP/Compose isolation exists but local compile/test
+    gates cannot run there. Source-only worktrees may still hold edits, but any
+    claimed verification must come from the canonical local install or the
+    shared local-CI convergence sandbox.
+- The worker may run cheap source-local checks only when the worktree is
+  `compile-ready`. `next build`, migration apply, UX verification, and
+  MCP-touching tests are canonical-runtime evidence only in all cases.
+- Promotion from worker worktree to install branch goes through the existing
+  Build Studio promotion / verification path. No worker commits are applied to
+  the running install by ad hoc patching.
+- Self-upgrade preflight layer 4 must see active worker worktrees as capsule /
+  contribution collisions. An upgrade either rebases them, preserves them,
+  promotes first, or defers; it never ignores them.
+
+Missing `node_modules`, missing `pnpm` / `corepack`, or an unbootstrapped
+worktree is therefore not a product red gate by itself; it is a provisioning
+state. What is forbidden is treating that worktree as verified. This keeps
+"Grok worker" as a new occupant of the existing runner/worktree substrate
+instead of a new substrate.
 
 ### Orchestrator
 
@@ -444,8 +611,8 @@ New envvars introduced by this spec:
 
 ```
 DPF_BUILD_PROVIDER=local-docker|tappaas-vm|kubernetes-job|...|disabled
-DPF_BUILD_AGENT_DEFAULT=codex|claude|dpf-native
-DPF_BUILD_AGENT_FALLBACK=codex|claude|dpf-native    # optional; orchestrator falls back when default fails
+DPF_BUILD_AGENT_DEFAULT=codex|claude|grok|dpf-native
+DPF_BUILD_AGENT_FALLBACK=codex|claude|grok|dpf-native    # optional; orchestrator falls back when default fails
 ```
 
 Per-provider config (cluster name, namespace, IAM role, etc.) is
@@ -504,23 +671,23 @@ The matrix has two axes: **substrate** (rows) × **agent** (columns).
 A cell value tells you the Build Studio status for that combination
 on that deployment target.
 
-| Deployment | Default substrate | × `codex` | × `claude` | × `dpf-native` |
-|---|---|---|---|---|
-| Windows local | `local-docker` | GA | GA | preview → GA per cutover gates |
-| macOS local | `local-docker` | GA (Docker Desktop) | GA | preview → GA |
-| Linux local | `local-docker` | GA | GA | preview → GA |
-| Single VM (cloud) | `local-docker` | GA | GA | preview → GA |
-| Marketplace image | `local-docker` | inherits Single VM | inherits | inherits |
-| TAPPaaS — VM mode | `local-docker` (in VM) | GA | GA | preview → GA |
-| TAPPaaS — native NixOS/Podman | `tappaas-vm` (planned) | preview when port 1455 reachable via Caddy | preview | preview → GA |
-| Managed Kubernetes | `kubernetes-job` | preview, requires 1455 Ingress + privileged node pool | preview | **preview → GA, no privileged pod required** |
-| Managed container — AWS (long-running) | `ecs-service` | unsupported (port 1455 lock-in on Fargate) | preview | **preview → GA** |
-| Managed container — AWS (batch) | `ecs-task` | unsupported | unsupported (no preview surface) | **preview → GA, batch only** |
-| Managed container — GCP (long-running) | `cloud-run-service` | unsupported | preview | **preview → GA** |
-| Managed container — GCP (batch) | `cloud-run-job` | unsupported | unsupported | **preview → GA, batch only** |
-| Managed container — Azure | `azure-containerapp-job` | unsupported | preview | **preview → GA** |
-| Air-gapped / regulated | `local-docker` or `kubernetes-job` | unsupported (vendor egress) | unsupported | **preview → GA with local LLM (Contract 9 mode 1 local)** |
-| Operator-disabled | `disabled` | n/a | n/a | n/a |
+| Deployment | Default substrate | × `codex` | × `claude` | × `grok` | × `dpf-native` |
+|---|---|---|---|---|---|
+| Windows local | `local-docker` | GA | GA | preview, runner-contract gated | preview → GA per cutover gates |
+| macOS local | `local-docker` | GA (Docker Desktop) | GA | preview, runner-contract gated | preview → GA |
+| Linux local | `local-docker` | GA | GA | preview, runner-contract gated | preview → GA |
+| Single VM (cloud) | `local-docker` | GA | GA | preview, runner-contract gated | preview → GA |
+| Marketplace image | `local-docker` | inherits Single VM | inherits | inherits | inherits |
+| TAPPaaS — VM mode | `local-docker` (in VM) | GA | GA | preview, runner-contract gated | preview → GA |
+| TAPPaaS — native NixOS/Podman | `tappaas-vm` (planned) | preview when port 1455 reachable via Caddy | preview | preview only if runner requires no unsupported callback/session feature | preview → GA |
+| Managed Kubernetes | `kubernetes-job` | preview, requires 1455 Ingress + privileged node pool | preview | preview only if runner supports job-style workspace lifecycle | **preview → GA, no privileged pod required** |
+| Managed container — AWS (long-running) | `ecs-service` | unsupported (port 1455 lock-in on Fargate) | preview | preview only if runner supports service-style lifecycle | **preview → GA** |
+| Managed container — AWS (batch) | `ecs-task` | unsupported | unsupported (no preview surface) | unsupported unless runner is stateless/batch-safe | **preview → GA, batch only** |
+| Managed container — GCP (long-running) | `cloud-run-service` | unsupported | preview | preview only if runner supports service-style lifecycle | **preview → GA** |
+| Managed container — GCP (batch) | `cloud-run-job` | unsupported | unsupported | unsupported unless runner is stateless/batch-safe | **preview → GA, batch only** |
+| Managed container — Azure | `azure-containerapp-job` | unsupported | preview | preview only if runner is stateless/batch-safe | **preview → GA** |
+| Air-gapped / regulated | `local-docker` or `kubernetes-job` | unsupported (vendor egress) | unsupported | unsupported unless routed through local `LLM_BASE_URL` / approved offline endpoint | **preview → GA with local LLM (Contract 9 mode 1 local)** |
+| Operator-disabled | `disabled` | n/a | n/a | n/a | n/a |
 
 Reading the matrix:
 
@@ -531,6 +698,10 @@ Reading the matrix:
   gated on the dpf-native cutover gates above (for dpf-native cells)
   or the per-substrate provider's own readiness gates (for
   Codex/Claude cells on new substrates).
+- **Grok preview** means either "Grok as model behind dpf-native" has
+  provider/model eval evidence, or a distinct `grok` runner has passed
+  the same agent-runner and cross-axis invariant tests as Codex/Claude.
+  It is never enabled solely because provider credentials are active.
 - **unsupported** means the combination has a structural blocker
   the spec is not committing to solve (port 1455 lock-in on Fargate-
   class substrates; no preview HTTP on batch substrates).
@@ -612,6 +783,56 @@ features the active combination can't deliver (preview button when
 `supportsPreviewUrl: false`; agent picker entries when an agent is
 unavailable on the active substrate).
 
+### Mandatory Architecture Capture for All Future AI Agents, Build Studio Workers, and Automated Coding Paths
+
+> **This section is load-bearing for any subsequent work.** It exists
+> so that future AI agents (including Grok, Claude Code, Codex, new
+> specialist models, or any Build Studio-generated coding agent),
+> human contributors, and automated processes cannot accidentally
+> (or "pragmatically") create a third, fourth, or Nth execution
+> architecture, bypass audit, violate worktree boundaries, or
+> weaken the Contract 9 / substrate isolation guarantees.
+>
+> **Single source of truth:** This spec (especially the two
+> interfaces, the cross-axis invariant rules, the capabilities
+> advertisement, the cleanup/labeling contract, the image variant
+> taxonomy, and the Grok layering rules) + the implementation of
+> `build-orchestrator.ts` (the enforcement point) + the eventual
+> extracted provider and runner contracts.
+
+**Every future Build Studio worker or AI coding agent MUST:**
+
+1. Enter the system through one of the two documented paths only:
+   - Preferred: As a `ModelProvider` (or routing policy choice) behind the `dpf-native` `BuildAgentRunner`. No new filesystem writer, no new sandbox credential surface, no new OAuth callback, no direct vendor egress outside the `LLM_BASE_URL` envelope.
+   - Allowed (only when a distinct loop/CLI is genuinely required): As a first-class `BuildAgentRunner` peer of `codex` / `claude` / `grok`. It **must** implement the full `prepare()` / `run()` / `capabilities()` contract, emit correctly attributed `ToolExecution` rows with `routeContext.build.{providerId, agentId}`, pass the agent-runner contract test, and declare its requirements (persistent session, callback port, credential, honorsLlmBaseUrl, etc.) so the orchestrator can enforce cross-axis invariants at install time.
+
+2. Respect the substrate × agent matrix and the cross-axis invariants (documented above). A new agent that requires a persistent REPL session may **not** be paired with an ephemeral `managed-job` substrate. A new agent that needs port 1455 may **not** be used on Fargate-class substrates until a provider that supports callbacks exists.
+
+3. Never write directly into the canonical install tree or root clone except through the documented promotion / `git apply` path that lands on the durable per-install branch (see governed-platform-upgrade-lifecycle-design.md §5.0 and the worktree-is-source-control-not-runtime kernel principle).
+
+4. Never create ad-hoc "special" sandboxes, sidecar volumes, or direct `docker exec` / `kubectl exec` / cloud SDK calls that bypass `BuildExecutionProvider.exec` + the orchestrator.
+
+5. Participate in the labeled cleanup / startup-sweep / periodic-reconciler mechanism. Every sandbox must carry the `dpf.build.*` labels; orphaned sandboxes must be reaped by the provider's declared `cleanupModel`.
+
+6. Honor the three image variants (`base`, `dpf-native`, `cli-bundled`) and the Contract 9 envvar discipline. New agents that need binaries must be added via a new variant or documented runtime redirection — never by mutating the default image for all deployments.
+
+7. Surface capability tier evidence (single-file / multi-file / full-spec) and go through the same eval-gate cutover process before becoming a default for any tier. Provider/model activation alone is never sufficient.
+
+**Forbidden patterns (any AI agent, Build Studio brief, or automated process that touches build execution must treat these as architecture violations):**
+- Direct shelling out to `docker` / `podman` / `kubectl` / cloud SDKs from MCP tools, server actions, or agent loops without going through the registered provider.
+- New "Grok-only", "specialist-X-only", or "model-Y sandbox" lifecycles.
+- Bypassing `ToolExecution` attribution or `routeContext.build` fields.
+- Assuming a particular substrate (e.g., "we have Docker socket here") in agent or build-plan code.
+- Mutating the running portal's source tree from inside a worker without going through the documented promotion path.
+- Creating worktrees or branches that the L4 preflight in the governed upgrade lifecycle cannot observe.
+
+**How this is enforced today and in the future:**
+- The orchestrator at `build-orchestrator.ts` (already wired from MCP tools and agent-coworker paths) is the choke point. All new Build Studio or agentic coding dispatch must route through it.
+- Once the full provider/runner extraction lands, the contract tests + cross-axis invariant checks become compile- and install-time gates.
+- Any Build Studio-generated code or specialist agent that proposes changes to sandbox execution, new dispatchers, or new image contents must cite this section of the spec and explain conformance (or request an explicit exception via the normal architecture review process).
+
+This architecture capture is now part of the DPF kernel. It is as binding as the worktree-per-session rule or the "never ask the user to run commands" principle. Future agents reading this spec (via `doc_load`, `search_specs_and_plans`, or direct filesystem access) are hereby instructed: if your task involves build execution, coding in a sandbox, or dispatching an agentic loop against a workspace, you must start by reading this document in full and routing through the defined abstractions. Shortcuts here create permanent debt for every deployment target and every regulated/air-gapped customer.
+
 ## Refactoring scope (when this lands)
 
 The refactor touches:
@@ -646,6 +867,17 @@ The refactor touches:
   cross-axis invariant integration test.
 
 ## Schema impact
+
+> **Status update (2026-06-02):** The `Sandbox` Prisma model described
+> below **has landed** independently at `packages/db/prisma/schema.prisma`
+> (with `FeatureBuild` relation). This is positive incremental formalization
+> of build-phase state. However it landed outside the `BuildExecutionProvider`
+> abstraction — sandbox state writes still go through ad-hoc paths in
+> `sandbox-db.ts` and direct Prisma calls in `build-branch.ts`. The
+> outstanding migration work is to route all `Sandbox` table writes through
+> the provider abstraction once the interface extraction (Sequencing step 1)
+> lands. Until then treat the current schema as the correct target shape
+> (already confirmed additive) but the write paths as transitional.
 
 Resolved (was open in prior draft):
 
@@ -788,6 +1020,11 @@ agent loops in the portal.**
       `dpf-native` agent runner ship behind feature flags so a bad
       provider or agent can be disabled per deployment without
       touching the others.
+- [ ] **Architecture capture for future agents complete** — the
+      "Mandatory Architecture Capture..." section (above) has been
+      reviewed and explicitly cited by any new Build Studio worker,
+      specialist agent, or AI coding path before it lands. New
+      dispatch logic must not bypass the orchestrator.
 - [ ] Test / verification gates defined — substrate contract test;
       agent runner contract test; cross-axis invariant integration
       test; smoke test per provider on a representative substrate;
@@ -805,7 +1042,10 @@ order, not a question.
    `build-orchestrator.ts` as the single entrypoint; introduce the
    `Sandbox` Prisma model. **No behavior change** for any current
    install. Lands as one PR (or a tightly-sequenced PR series with
-   feature flags).
+   feature flags). As part of this step, the "Mandatory Architecture
+   Capture" section is reviewed with the implementing agent(s) so that
+   the orchestrator becomes the documented, non-bypassable gate for
+   all future AI / Build Studio coding work.
 
 2. **Contract tests.** Substrate, agent, and cross-axis invariant
    tests land alongside the extraction. Every existing combination
@@ -838,7 +1078,9 @@ order, not a question.
    image. `dpf-sandbox:cli-bundled` remains shippable for customers
    who explicitly opt in to bundled vendor CLIs.
 
-## Research and Benchmarking (TBD per AGENTS.md §10)
+## Research and Benchmarking (TBD per AGENTS.md §10 — CA note: still pending as of 2026-06-xx reconciliation)
+
+**Chief Architect note:** This section remains unpopulated. No comparisons to GitHub Actions / GitLab Runner / Buildkite / Firecracker / gVisor / Kata / CodeBuild / Claude Code loop internals etc. have been recorded. The "executor vs orchestrator" split analogy that justifies the provider × runner axis is therefore still an unvalidated architectural hypothesis in the written record. Complete this before the spec can exit "research stub" per the maturity gates checklist below.
 
 Before finalization, compare the sandbox / build-execution patterns
 of:
@@ -870,6 +1112,18 @@ identified, gaps the design fills.
 
 ## Source documents
 
+- `docs/superpowers/specs/2026-05-31-tiered-dev-loop-isolation-design.md` —
+  Five-role workspace layout (production install / `.upgrade-workspace/` /
+  dev workspace / topic worktrees / convergence sandbox). The build sandbox
+  is a sixth member of the dedicated-checkout family. §2 of that spec
+  defines the `build-sandbox` RuntimeTarget kind and its place in the tier
+  model.
+- `docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md`
+  (commandment tier, AGENTS.md §4) — canonical statement that topic
+  worktrees are source-control isolation only; runtime-bound agent work
+  runs against a dedicated checkout or the convergence sandbox, never
+  the operator's dev worktree. Directly constrains dpf-native's file-IO
+  routing (see dispatch routing note above).
 - `docs/superpowers/specs/2026-05-09-deployment-contracts.md` —
   the doctrine; this spec is contract 6's canonical
   implementation. Contract 9 mode 4 (CLI agents) is the gap

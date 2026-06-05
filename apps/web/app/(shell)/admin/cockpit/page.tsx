@@ -37,6 +37,8 @@ import {
   resolveCockpitRowLabels,
 } from "@/lib/cockpit/install-terminology";
 import { GraduationVetoButton } from "@/components/cockpit/GraduationVetoButton";
+import { LocalTime } from "@/components/ui/LocalTime";
+import { CockpitEventsTable, type CockpitEventRow } from "./CockpitEventsTable";
 
 // All four ring interfaces. Phase 0 only emits at 1→2; the others render as
 // "no data" lanes so the operator sees the gear train honestly, not hidden.
@@ -91,6 +93,42 @@ export default async function CockpitPage({
   const activeInterfaceLabel = activeRing
     ? getCockpitInterfaceLabel(activeRing.innerRing, activeRing.outerRing, terminology)
     : null;
+
+  // Pre-resolve install-terminology labels server-side into flat, serializable
+  // rows for the client DataTable (the recent-transmissions log).
+  const eventRows: CockpitEventRow[] = recentRows.map((row) => {
+    const labels = resolveCockpitRowLabels(
+      {
+        innerRing: row.innerRing,
+        outerRing: row.outerRing,
+        transmissionDirection: row.transmissionDirection,
+        agentIdForTriple: row.actorId,
+        actorId: row.actorId,
+        capabilityName: row.capabilityName,
+        archetypeContext: row.archetypeContext,
+        shaftSourceType: row.shaftSourceType,
+        outcomeType: row.outcomeType,
+        slipDetected: row.slipDetected,
+        slipReason: row.slipReason,
+      },
+      terminology,
+    );
+    return {
+      id: row.id,
+      recordedAtISO: new Date(row.recordedAt).toISOString(),
+      interfaceLabel: labels.interfaceLabel,
+      capabilityLabel: labels.capabilityLabel,
+      capabilityName: row.capabilityName,
+      sourceLabel: labels.sourceLabel,
+      shaftSourceId: row.shaftSourceId,
+      actorLabel: labels.actorLabel,
+      actorId: row.actorId,
+      torqueTechnical: row.torqueTechnical,
+      outcomeLabel: labels.outcomeLabel,
+      slipDetected: row.slipDetected,
+      graderType: row.graderType,
+    };
+  });
 
   return (
     <div className="p-6 space-y-6">
@@ -392,7 +430,7 @@ export default async function CockpitPage({
               );
               return (
                 <li key={g.id} className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[var(--dpf-muted)]">{g.recordedAt.toISOString()}</span>
+                  <LocalTime value={g.recordedAt} className="text-[var(--dpf-muted)]" />
                   <span className="font-semibold">{labels.capabilityLabel}</span>
                   <span className="text-[var(--dpf-muted)]">for</span>
                   <span>{labels.agentLabel}</span>
@@ -441,73 +479,7 @@ export default async function CockpitPage({
               : "No GearInterface records in the window. Trigger a Build Studio phase completion to produce the first Ring 1→2 emit, or expand the window."}
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-[1120px] w-full table-fixed text-xs">
-              <thead className="text-[var(--dpf-muted)] text-left">
-                <tr>
-                  <th className="w-[72px] pb-1 pr-3 font-medium">When</th>
-                  <th className="w-[210px] px-3 pb-1 font-medium">Ring</th>
-                  <th className="w-[230px] px-3 pb-1 font-medium">Capability</th>
-                  <th className="w-[220px] px-3 pb-1 font-medium">Source</th>
-                  <th className="w-[150px] px-3 pb-1 font-medium">Actor</th>
-                  <th className="w-[82px] px-3 pb-1 text-right font-medium">Torque</th>
-                  <th className="w-[130px] px-3 pb-1 font-medium">Outcome</th>
-                  <th className="w-[90px] pl-3 pb-1 font-medium">Grader</th>
-                </tr>
-              </thead>
-              <tbody className="text-[var(--dpf-text)]">
-                {recentRows.map((row) => {
-                  const labels = resolveCockpitRowLabels(
-                    {
-                      innerRing: row.innerRing,
-                      outerRing: row.outerRing,
-                      transmissionDirection: row.transmissionDirection,
-                      agentIdForTriple: row.actorId,
-                      actorId: row.actorId,
-                      capabilityName: row.capabilityName,
-                      archetypeContext: row.archetypeContext,
-                      shaftSourceType: row.shaftSourceType,
-                      outcomeType: row.outcomeType,
-                      slipDetected: row.slipDetected,
-                      slipReason: row.slipReason,
-                    },
-                    terminology,
-                  );
-                  return (
-                    <tr key={row.id} className="border-t" style={{ borderColor: "var(--dpf-border)" }}>
-                      <td className="py-1.5 pr-3 text-[var(--dpf-muted)] whitespace-nowrap">
-                        {row.recordedAt.toISOString().slice(11, 19)}
-                      </td>
-                      <td className="px-3 py-1.5 truncate" title={labels.interfaceLabel}>
-                        {labels.interfaceLabel}
-                      </td>
-                      <td className="px-3 py-1.5 truncate" title={row.capabilityName}>
-                        {labels.capabilityLabel}
-                      </td>
-                      <td className="px-3 py-1.5 text-[var(--dpf-muted)]" title={row.shaftSourceId}>
-                        <div className="truncate">{labels.sourceLabel}</div>
-                        <div className="text-[10px] truncate">unknown source route: {row.shaftSourceId}</div>
-                      </td>
-                      <td className="px-3 py-1.5 truncate" title={row.actorId}>
-                        {labels.actorLabel}
-                      </td>
-                      <td className="px-3 py-1.5 text-right font-semibold" style={{ color: torqueColor(row.torqueTechnical) }}>
-                        {formatTorque(row.torqueTechnical)}
-                      </td>
-                      <td className="px-3 py-1.5">
-                        {row.slipDetected ? (
-                          <span style={{ color: "var(--dpf-error)" }}>{labels.outcomeLabel}</span>
-                        ) : (
-                          labels.outcomeLabel
-                        )}
-                      </td>
-                      <td className="py-1.5 pl-3 text-[var(--dpf-muted)]">{row.graderType}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <CockpitEventsTable rows={eventRows} />
         )}
       </section>
 

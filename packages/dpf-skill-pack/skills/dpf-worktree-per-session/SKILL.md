@@ -1,23 +1,23 @@
 ---
 name: dpf-worktree-per-session
-description: "Use when starting a concurrent DPF coding session that touches the working tree. Each thread gets its own git worktree (not a shared clone), its own .mcp.json + .vscode/mcp.json seeded from the root, and its own COMPOSE_PROJECT_NAME so docker-compose stacks don't collide. Composes with superpowers:finishing-a-development-branch as the predecessor isolation step. Encodes the worktree-per-session kernel principle plus the propose-acknowledge-reassign concurrency discipline."
+description: "Use when starting, entering, auditing, or managing a concurrent DPF coding session that touches the working tree. Each thread gets its own git worktree (not a shared clone), seeded MCP config, isolated COMPOSE_PROJECT_NAME, and an explicit compile-ready vs source-only verification-readiness classification so agents do not claim unrun local gates. Composes with dpf-finishing-a-development-branch as the predecessor isolation step."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
 user-invocable: true
-allowed-tools: Bash(git worktree *) Bash(git branch *) Bash(git checkout *) Bash(scripts/seed-worktree-mcp*) Bash(scripts/sync-mcp-worktrees*)
+allowed-tools: Bash(git fetch *) Bash(git worktree *) Bash(git branch *) Bash(git checkout *) Bash(git status *) Bash(git rev-parse *) Bash(git log *) Bash(grep *) Bash(test *) Bash(command -v *) Bash(pnpm *) Bash(corepack *) Bash(scripts/seed-worktree-mcp*) Bash(scripts/sync-mcp-worktrees*)
 
 # DPF coworker fields (Surface B — in-portal seed loader)
 category: ops
 assignTo: ["build-specialist", "platform-engineer"]
 capability: null
 taskType: workflow
-triggerPattern: "new worktree|create worktree|spawn session|concurrent session|parallel work|isolated branch"
+triggerPattern: "new worktree|create worktree|spawn session|concurrent session|parallel work|isolated branch|worktree readiness|source-only worktree|compile-ready worktree"
 userInvocable: true
 agentInvocable: true
 allowedTools: ["Bash"]
 composesFrom: []
-contextRequirements: ["git available; scripts/seed-worktree-mcp.{ps1,sh} present; .mcp.json populated in root clone"]
+contextRequirements: ["git available; scripts/seed-worktree-mcp.{ps1,sh} present; .mcp.json populated in root clone; worktree verification readiness must be classified"]
 riskBand: medium
 
 # Kernel principle enforcement
@@ -26,11 +26,18 @@ enforces:
   - kernel/principles/propose-acknowledge-reassign
   - kernel/principles/worktree-base-origin-main
   - kernel/principles/keep-root-clone-as-merge-worktree
+  - kernel/principles/worktree-is-source-control-not-runtime
 ---
 
 # DPF Worktree per Session
 
 Concurrent DPF coding sessions DO NOT share a working tree. **One session = one branch + one git worktree.** Branches alone are insufficient — the index, HEAD, and untracked files all live in the working tree, so two sessions in the same tree collide on commits, file sweeps, and stale buffer state. This skill walks the canonical worktree-creation flow with the MCP-seed step + COMPOSE_PROJECT_NAME isolation that makes the worktree usable end-to-end.
+
+## What a worktree is — and isn't
+
+A thread worktree is **source-control isolation**: its own branch, index, HEAD, untracked-file space. It is **not** a second DPF runtime. The MCP seed and `COMPOSE_PROJECT_NAME` set in the steps below are collision-avoidance, not an instruction to spin up a parallel runtime for every task.
+
+For normal feature/fix work: commit from the worktree, then route runtime-bound verification through the **shared local-CI convergence sandbox** by claiming a lease (`claim_nonprod_environment_lease(environmentKey="local-integration-ci")`). The sandbox is one shared runtime that every worktree uses sequentially — making each individual worktree runnable doesn't scale past tens of concurrent worktrees, let alone the 1,000–10,000 DPF expects. See [AGENTS.md §4 worktree bullet](../../../../AGENTS.md) and [`worktree-is-source-control-not-runtime`](../../../../docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md). The rare exception (destructive compose experiment where a disposable runtime IS the deliverable) is a dedicated platform task, not incidental scope on a feature/fix thread.
 
 ## When to use
 
@@ -51,7 +58,7 @@ Concurrent DPF coding sessions DO NOT share a working tree. **One session = one 
 |---|---|---|
 | Worktree doctrine | [AGENTS.md §4](../../../../AGENTS.md) | Branch naming, `--no-checkout`/`-b` flags, root-clone-as-merge-worktree rule |
 | Seed script | [`scripts/seed-worktree-mcp.ps1`](../../../../scripts/seed-worktree-mcp.ps1) (Windows) or [`.sh`](../../../../scripts/seed-worktree-mcp.sh) (macOS / Linux) | What the MCP-config seed step copies and where |
-| Bulk sync script | [`scripts/sync-mcp-worktrees.ps1`](../../../../scripts/sync-mcp-worktrees.ps1) | When operating across many worktrees |
+| Bulk sync script | [`scripts/sync-mcp-worktrees.ps1`](../../../../scripts/sync-mcp-worktrees.ps1) / [`.sh`](../../../../scripts/sync-mcp-worktrees.sh) | Repair or refresh MCP config, Compose isolation, and readiness markers across many worktrees |
 | Compose isolation rule | [AGENTS.md §4 (Compose project isolation)](../../../../AGENTS.md) | Why `COMPOSE_PROJECT_NAME` matters and what breaks without it |
 | WSL mirrored mode trap | `project_wsl_mirrored_docker_incompat` (user memory) | First-check when "portal won't start" in a fresh worktree |
 
@@ -61,6 +68,7 @@ Concurrent DPF coding sessions DO NOT share a working tree. **One session = one 
 - `kernel/principles/propose-acknowledge-reassign` — worktree boundaries are how the PAR discipline survives concurrency.
 - `kernel/principles/worktree-base-origin-main` — branch from `origin/main` so the worktree doesn't inherit unpushed local main commits.
 - `kernel/principles/keep-root-clone-as-merge-worktree` — root clone stays read-only for active feature work.
+- `kernel/principles/worktree-is-source-control-not-runtime` — local worktree gates are distinct from canonical-runtime evidence.
 
 ## Steps
 
@@ -79,7 +87,7 @@ Concurrent DPF coding sessions DO NOT share a working tree. **One session = one 
    - Windows: `pwsh scripts/seed-worktree-mcp.ps1`
    - macOS / Linux: `bash scripts/seed-worktree-mcp.sh`
 
-   The script copies `.mcp.json` and `.vscode/mcp.json` from the root clone AND sets `COMPOSE_PROJECT_NAME=dpf-<slug>` in the worktree's `.env`.
+   The script copies `.mcp.json` and `.vscode/mcp.json` from the root clone, sets `COMPOSE_PROJECT_NAME=dpf-<slug>` in `.env`, and writes `.dpf-worktree-readiness.json`.
 
 4. **Restart your agent in the worktree.** Claude Code / Codex need a fresh session to pick up the new `.mcp.json` — the `dpf` MCP connector won't appear in `/mcp` otherwise.
 
@@ -96,6 +104,25 @@ Concurrent DPF coding sessions DO NOT share a working tree. **One session = one 
    git log origin/main..HEAD --oneline  # should be empty (no commits yet)
    ```
 
+7. **Classify verification readiness.** Read `.dpf-worktree-readiness.json` or re-check:
+   ```
+   command -v pnpm >/dev/null || command -v corepack >/dev/null
+   test -d node_modules
+   ```
+   - `compile-ready`: package manager plus dependencies are present. Cheap source-local gates may run here.
+   - `source-only`: Git/MCP/Compose isolation is present, but local compile/test gates are not proven. Do code work here, but get verification from the shared local-CI convergence sandbox or canonical install.
+   - If a task requires cheap source-local gates and the worktree is source-only, try to make it compile-ready only when low-risk (`pnpm install --frozen-lockfile` with pinned pnpm available). If dependency bootstrap is unavailable or would distract from the task, record `source-only` and do not claim local gate passes.
+
+## Instructions for agents entering an existing worktree
+
+Before editing or reviewing from an existing worktree:
+
+1. Run `git status --short --branch` and `git rev-parse --abbrev-ref HEAD`. Abort serious implementation on `main` or detached `HEAD` unless the user explicitly asked for inspection only.
+2. Confirm `.env` has a non-root `COMPOSE_PROJECT_NAME`. If it is missing or `dpf`, run `scripts/seed-worktree-mcp.{ps1,sh}` before any Compose command.
+3. Read `.dpf-worktree-readiness.json` if present. If absent, run `scripts/seed-worktree-mcp.{ps1,sh}` for this worktree or `scripts/sync-mcp-worktrees.{ps1,sh}` from the root to refresh all worktrees; treat the worktree as `source-only` until a marker proves otherwise.
+4. If `source-only`, you may edit and commit, but final answers and PR/evidence notes must say local worktree gates were not run and must point to canonical-runtime/local-CI evidence for any verification claim.
+5. Commit or capture dirty work frequently. A dirty active worker worktree blocks upgrade apply because uncommitted output cannot be safely rebased, promoted, or abandoned by automation.
+
 ## Output template
 
 ```
@@ -105,6 +132,7 @@ Concurrent DPF coding sessions DO NOT share a working tree. **One session = one 
 - Path: <D:\DPF-slug | ~/dpf-worktrees/slug>
 - Branch: <prefix>/<slug>  (based on origin/main, 0 ahead)
 - MCP seed: done (.mcp.json + .vscode/mcp.json copied; COMPOSE_PROJECT_NAME=dpf-<slug> set in .env)
+- Verification readiness: <compile-ready | source-only> (<reason from .dpf-worktree-readiness.json>)
 - Next step: restart Claude Code / Codex in <path>, then verify `/mcp` shows the dpf connector.
 ```
 
@@ -115,6 +143,8 @@ Concurrent DPF coding sessions DO NOT share a working tree. **One session = one 
 - **Never base a topic branch on local `main`.** Always `origin/main` after `git fetch`.
 - **Never commit MCP config files.** `.mcp.json` and `.vscode/mcp.json` are gitignored for a reason — they carry bearer tokens.
 - **Never modify the root clone's working tree for active feature work.** The root clone is the merge/release worktree per `keep-root-clone-as-merge-worktree`.
+- Don't treat the worktree as a runtime by default. Commit from the worktree, verify against the canonical install. 'Make the worktree runnable' is a dedicated platform task, not a side-effect of every feature thread.
+- **Never claim unrun gates passed.** A `source-only` worktree can hold correct code, but its local typecheck/build/test status is unknown until proven in that worktree or in canonical runtime/local-CI.
 
 ## Worked example (this session, 2026-05-24)
 

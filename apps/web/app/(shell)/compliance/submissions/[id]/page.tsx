@@ -1,16 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSubmission, transitionSubmissionStatus } from "@/lib/actions/reporting";
+import { LocalTime } from "@/components/ui/LocalTime";
+import { StatusBadge } from "@/components/ui/report-kit";
 
 type Props = { params: Promise<{ id: string }> };
-
-const STATUS_COLORS: Record<string, string> = {
-  draft: "bg-gray-900/30 text-gray-400",
-  pending: "bg-yellow-900/30 text-yellow-400",
-  submitted: "bg-blue-900/30 text-blue-400",
-  acknowledged: "bg-green-900/30 text-green-400",
-  rejected: "bg-red-900/30 text-red-400",
-};
 
 const SUBMISSION_TRANSITIONS: Record<string, string[]> = {
   draft: ["pending"],
@@ -31,9 +25,9 @@ const SUBMISSION_TRANSITION_LABELS: Record<string, string> = {
 const SUBMISSION_TRANSITION_STYLES: Record<string, string> = {
   pending: "bg-[var(--dpf-accent)] text-white hover:opacity-90",
   submitted: "bg-[var(--dpf-accent)] text-white hover:opacity-90",
-  acknowledged: "bg-green-700 text-white hover:bg-green-600",
-  rejected: "bg-red-700 text-white hover:bg-red-600",
-  draft: "bg-gray-700 text-gray-200 hover:bg-gray-600",
+  acknowledged: "bg-[var(--dpf-success)] text-white hover:opacity-90",
+  rejected: "bg-[var(--dpf-error)] text-white hover:opacity-90",
+  draft: "bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] hover:opacity-90",
 };
 
 export default async function SubmissionDetailPage({ params }: Props) {
@@ -63,9 +57,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
           <h1 className="text-xl font-bold text-[var(--dpf-text)]">{submission.title}</h1>
-          <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${STATUS_COLORS[submission.status] ?? "bg-gray-900/30 text-gray-400"}`}>
-            {submission.status}
-          </span>
+          <StatusBadge domain="complianceSubmission" status={submission.status} variant="soft" uppercase={false} />
         </div>
         <p className="text-sm text-[var(--dpf-muted)]">{submission.recipientBody} · {submission.submissionType}</p>
       </div>
@@ -90,8 +82,8 @@ export default async function SubmissionDetailPage({ params }: Props) {
         {submission.dueDate && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Due Date</p>
-            <p className={`text-sm font-semibold ${daysRemaining !== null && daysRemaining < 0 ? "text-red-400" : daysRemaining !== null && daysRemaining < 7 ? "text-yellow-400" : "text-[var(--dpf-text)]"}`}>
-              {new Date(submission.dueDate).toLocaleDateString()}
+            <p className={`text-sm font-semibold ${daysRemaining !== null && daysRemaining < 0 ? "text-[var(--dpf-error)]" : daysRemaining !== null && daysRemaining < 7 ? "text-[var(--dpf-warning)]" : "text-[var(--dpf-text)]"}`}>
+              <LocalTime value={submission.dueDate} utc />
               {daysRemaining !== null && (
                 <span className="text-xs ml-1">({daysRemaining < 0 ? `${Math.abs(daysRemaining)}d overdue` : `${daysRemaining}d remaining`})</span>
               )}
@@ -101,7 +93,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
         {submission.submittedAt && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Submitted</p>
-            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(submission.submittedAt).toLocaleDateString()}</p>
+            <LocalTime value={submission.submittedAt} mode="date" className="text-sm font-semibold text-[var(--dpf-text)]" />
           </div>
         )}
         {submission.confirmationRef && (
@@ -120,7 +112,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
 
       {/* Regulation link */}
       {submission.regulation ? (
-        <p className="text-xs text-blue-400 mb-6">
+        <p className="text-xs text-[var(--dpf-info)] mb-6">
           Regulation:{" "}
           <a href={`/compliance/regulations/${submission.regulation.id}`} className="underline">
             {submission.regulation.name} ({submission.regulation.shortName})
@@ -139,7 +131,7 @@ export default async function SubmissionDetailPage({ params }: Props) {
           {submission.checklist.map((item: { obligationId: string; title: string; hasEvidence: boolean; evidenceCount: number }) => (
             <div key={item.obligationId} className="p-3 rounded-lg border border-[var(--dpf-border)] flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${item.hasEvidence ? "bg-green-400" : "bg-red-400"}`} />
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.hasEvidence ? "var(--dpf-success)" : "var(--dpf-error)" }} />
                 <span className="text-sm text-[var(--dpf-text)]">{item.title}</span>
               </div>
               <span className="text-xs text-[var(--dpf-muted)]">{item.evidenceCount} evidence record{item.evidenceCount !== 1 ? "s" : ""}</span>

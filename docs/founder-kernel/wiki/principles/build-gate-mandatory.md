@@ -46,6 +46,8 @@ In-platform coworkers (Build Studio's pre-ship sandbox verification mirrors this
 
 Run the four checks in order; stop on the first failure and fix it before continuing. The pre-commit hook at `.githooks/pre-commit` enforces a typecheck on TypeScript files as a fast feedback loop; the full gate runs at PR open via CI and locally before push. When the build fails for reasons unrelated to your change (a pre-existing problem), note it in the PR and fix if feasible — don't defer it, that's how unrelated-failure technical debt accumulates. Build Studio's sandbox runs the same gate before any PR leaves the sandbox; if a Build-Studio-produced PR would fail CI typecheck, it never leaves the sandbox.
 
+**Where each check runs matters.** Unit tests and typecheck can run in the topic worktree when the workspace shape allows. Production build, UX verification, and migration-apply checks run against the canonical install (root clone or a governed shared nonprod environment), per [`worktree-is-source-control-not-runtime`](worktree-is-source-control-not-runtime.md). A check that cannot run in the worktree because of harness limitations (missing pnpm/corepack on PATH, broken workspace symlinks, missing generated Prisma client, Next/Turbopack rejecting cross-workspace symlinks) is a **harness finding, not a product failure**: capture canonical-install verification evidence in the PR and file the harness gap as a separate platform BI rather than treating the worktree limitation as a build-gate failure.
+
 ## Decision Dimensions
 
 - `governance_compliance: 0.9` — the Build Gate IS the platform's primary done-state contract.

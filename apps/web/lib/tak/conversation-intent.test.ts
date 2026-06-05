@@ -3,7 +3,101 @@ import {
   isConversationalExpansionRequest,
   isPageExplanationOnlyRequest,
   isPlatformMechanismQuestion,
+  isRedundantReaskQuestion,
+  isTrivialSocialMessage,
 } from "./conversation-intent";
+
+describe("isRedundantReaskQuestion", () => {
+  it("flags a short re-ask of a question the model already asked", () => {
+    const prior = ["Which scope did you want — the whole portfolio or just Foundational?"];
+    expect(
+      isRedundantReaskQuestion(
+        "Just to confirm, which scope did you want — the whole portfolio or just Foundational?",
+        prior,
+      ),
+    ).toBe(true);
+  });
+
+  it("does NOT flag a substantive answer that merely ends with an engagement question", () => {
+    // The exact false-positive from the /portfolio trace, 2026-06-04: a good
+    // 1500-char answer that shares generic vocabulary with the greeting and
+    // ends with one engagement question must NOT trigger a re-dispatch.
+    const prior = [
+      "Hi! I'm your Portfolio Analyst on the /portfolio view. I see your portfolio has 58 products spread across 4 portfolios. What would you like to focus on?",
+    ];
+    const substantiveAnswer =
+      "You're looking at your portfolio dashboard — a bird's-eye view of every product initiative your company is running, organized into four strategic buckets. " +
+      "Foundational holds 57 of your 58 products, which is an extreme concentration worth watching. The other three portfolios are nearly empty. " +
+      "Budget sources aren't connected for any portfolio, so health scores are partial. What would you like to focus on first?";
+    expect(substantiveAnswer.length).toBeGreaterThan(350);
+    expect(isRedundantReaskQuestion(substantiveAnswer, prior)).toBe(false);
+  });
+
+  it("does not flag when there is no prior question to repeat", () => {
+    expect(
+      isRedundantReaskQuestion("Which portfolio did you mean?", [
+        "Your portfolio has 58 products across 4 buckets.",
+      ]),
+    ).toBe(false);
+  });
+
+  it("ignores responses with no question mark", () => {
+    expect(
+      isRedundantReaskQuestion("Here are your three risks.", ["What did you mean?"]),
+    ).toBe(false);
+  });
+});
+
+describe("isTrivialSocialMessage", () => {
+  it("matches greetings, thanks, acknowledgements, and farewells", () => {
+    for (const msg of [
+      "hello",
+      "Hi!",
+      "hey there",
+      "good morning",
+      "good evening",
+      "thanks",
+      "thank you",
+      "thank you so much",
+      "thx",
+      "ty",
+      "ok cool thanks",
+      "got it",
+      "that sounds great",
+      "perfect",
+      "awesome, thanks!",
+      "appreciate it",
+      "bye",
+      "see you later",
+      "cheers",
+    ]) {
+      expect(isTrivialSocialMessage(msg), msg).toBe(true);
+    }
+  });
+
+  it("does NOT strip tools for real requests, even terse ones", () => {
+    for (const msg of [
+      "what are my top 3 portfolio risks right now?",
+      "yes, do the truck list first",
+      "ok now create a backlog item",
+      "hi, can you summarize the open epics?",
+      "thanks — now deploy it",
+      "good work on the deploy", // contains a real noun
+      "show me the backlog",
+      "what's broken?",
+      "yes",
+      "no",
+      "deploy",
+    ]) {
+      expect(isTrivialSocialMessage(msg), msg).toBe(false);
+    }
+  });
+
+  it("ignores empty and whitespace-only input", () => {
+    expect(isTrivialSocialMessage("")).toBe(false);
+    expect(isTrivialSocialMessage("   ")).toBe(false);
+  });
+});
 
 describe("isPageExplanationOnlyRequest", () => {
   it("treats natural workspace UI explanation asks as conversation-only", () => {

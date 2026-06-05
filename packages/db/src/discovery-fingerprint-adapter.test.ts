@@ -13,10 +13,11 @@ const baseRule: AdapterRule = {
   identityConfidence: 0.9,
   taxonomyConfidence: 0.85,
   resolvedIdentity: {
-    manufacturer: "PostgreSQL Global Development Group",
-    productModel: "PostgreSQL",
-    technicalClass: "relational_database",
-    iconKey: "postgres",
+    kind: "software",
+    name: "PostgreSQL",
+    vendor: "PostgreSQL Global Development Group",
+    model: "PostgreSQL",
+    deviceClass: "relational_database",
   },
 };
 
@@ -40,10 +41,9 @@ describe("matchInventoryEntity", () => {
     expect(result!.ruleId).toBe("r_1");
     expect(result!.ruleKey).toBe("rule.foundational.postgres");
     expect(result!.taxonomyNodeId).toBe("tn_db");
-    expect(result!.manufacturer).toBe("PostgreSQL Global Development Group");
-    expect(result!.productModel).toBe("PostgreSQL");
-    expect(result!.technicalClass).toBe("relational_database");
-    expect(result!.iconKey).toBe("postgres");
+    expect(result!.resolvedIdentity.vendor).toBe("PostgreSQL Global Development Group");
+    expect(result!.resolvedIdentity.name).toBe("PostgreSQL");
+    expect(result!.resolvedIdentity.deviceClass).toBe("relational_database");
     expect(result!.combinedConfidence).toBeCloseTo(1.75);
   });
 
@@ -55,7 +55,7 @@ describe("matchInventoryEntity", () => {
       identityConfidence: 0.5,
       taxonomyConfidence: 0.5,
       taxonomyNodeId: "tn_generic_db",
-      resolvedIdentity: { technicalClass: "database" },
+      resolvedIdentity: { kind: "software", name: "Generic Database", deviceClass: "database" },
     };
     const result = matchInventoryEntity(obsPostgres, { rules: [lowConfRule, baseRule] });
     expect(result!.ruleId).toBe("r_1");
@@ -81,16 +81,15 @@ describe("matchInventoryEntity", () => {
     expect(matchInventoryEntity(obsPostgres, { rules: [] })).toBeNull();
   });
 
-  it("populates only the resolvedIdentity fields that are present", () => {
+  it("carries the resolvedIdentity through, omitting absent optional fields", () => {
     const partialRule: AdapterRule = {
       ...baseRule,
-      resolvedIdentity: { manufacturer: "Acme" },
+      resolvedIdentity: { kind: "device", name: "Acme Thing", vendor: "Acme" },
     };
     const result = matchInventoryEntity(obsPostgres, { rules: [partialRule] });
-    expect(result!.manufacturer).toBe("Acme");
-    expect(result!.productModel).toBeUndefined();
-    expect(result!.technicalClass).toBeUndefined();
-    expect(result!.iconKey).toBeUndefined();
+    expect(result!.resolvedIdentity.vendor).toBe("Acme");
+    expect(result!.resolvedIdentity.model).toBeUndefined();
+    expect(result!.resolvedIdentity.deviceClass).toBeUndefined();
   });
 
   it("breaks ties by preferring the earlier rule in the input list", () => {
@@ -127,7 +126,7 @@ describe("matchInventoryEntity", () => {
     const result = matchInventoryEntity(obsPostgres, { rules: [identityOnlyRule] });
     expect(result).not.toBeNull();
     expect(result!.taxonomyNodeId).toBeNull();
-    expect(result!.manufacturer).toBe("PostgreSQL Global Development Group");
+    expect(result!.resolvedIdentity.vendor).toBe("PostgreSQL Global Development Group");
     // Combined confidence still derived from sum, just with taxonomy=0.
     expect(result!.combinedConfidence).toBeCloseTo(0.9);
   });

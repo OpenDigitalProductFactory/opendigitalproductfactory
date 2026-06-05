@@ -34,13 +34,13 @@
     "react-native-safe-area-context": "~5.6.2",
     "react-native-screens": "~4.23.0",
     "react-native-sse": "^1.2.0",
-    "zustand": "^5.0.13"
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@testing-library/react-native": "^13.3.3",
-    "@types/jest": "^29.5.14",
+    "@types/jest": "^30.0.0",
     "@types/react": "^19",
-    "jest": "~29.7.0",
+    "jest": "~30.4.2",
     "jest-expo": "~56.0.4",
     "msw": "^2.14.6",
     "react-test-renderer": "19.2.6",

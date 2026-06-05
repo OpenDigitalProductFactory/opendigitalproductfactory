@@ -18,10 +18,23 @@ vi.mock("next/link", () => ({
 }));
 
 import { AccountantWorkLanePanel } from "./AccountantWorkLanePanel";
+import { buildBookkeeperAccountantWorkLane } from "@/lib/finance/accountant-work-lane";
+import type { QuickBooksReadinessConnection } from "@/lib/integrate/quickbooks/readiness";
+
+const CONNECTED: QuickBooksReadinessConnection = {
+  status: "connected",
+  companyName: "Test Bookkeeping Co",
+  realmId: "realm-test",
+  lastErrorMsg: null,
+  lastTestedAt: "2026-05-19T00:00:00.000Z",
+  environment: "sandbox",
+};
+
+const lane = buildBookkeeperAccountantWorkLane(CONNECTED);
 
 describe("AccountantWorkLanePanel", () => {
   it("renders the bookkeeper accountant lane with current DPF finance routes", () => {
-    const html = renderToStaticMarkup(<AccountantWorkLanePanel />);
+    const html = renderToStaticMarkup(<AccountantWorkLanePanel lane={lane} />);
 
     expect(html).toContain("Bookkeeper / Accountant");
     expect(html).toContain("Employee Work Lane");
@@ -33,7 +46,7 @@ describe("AccountantWorkLanePanel", () => {
   });
 
   it("renders coworker responsibilities and missing specialist handoff", () => {
-    const html = renderToStaticMarkup(<AccountantWorkLanePanel />);
+    const html = renderToStaticMarkup(<AccountantWorkLanePanel lane={lane} />);
 
     expect(html).toContain("finance-agent");
     expect(html).toContain("finance-controller");
@@ -43,7 +56,7 @@ describe("AccountantWorkLanePanel", () => {
   });
 
   it("renders QuickBooks, Stripe, missing coverage, and next backlog slices", () => {
-    const html = renderToStaticMarkup(<AccountantWorkLanePanel />);
+    const html = renderToStaticMarkup(<AccountantWorkLanePanel lane={lane} />);
 
     expect(html).toContain('href="/platform/tools/integrations/quickbooks"');
     expect(html).toContain('href="/platform/tools/integrations/stripe"');

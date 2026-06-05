@@ -6,6 +6,8 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { sendEmail, composeExpenseApprovalEmail } from "@/lib/email";
+import { getOrgIdentity } from "@/lib/org-identity";
+import { resolveAppBaseUrl } from "@/lib/app-url";
 import type { CreateExpenseClaimInput } from "@/lib/expense-validation";
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
@@ -153,6 +155,7 @@ export async function submitExpenseClaim(id: string): Promise<void> {
     where: { id },
     include: {
       employee: { select: { id: true, displayName: true, workEmail: true, userId: true } },
+      _count: { select: { items: true } },
     },
   });
   if (!claim) throw new Error("Expense claim not found");
@@ -195,10 +198,14 @@ export async function submitExpenseClaim(id: string): Promise<void> {
     },
   });
 
-  // Send approval email if a manager was found
-  if (managers.length > 0) {
+  // Send approval email if a manager was found and a usable link exists.
+  // The claim is already submitted (and visible in the in-portal queue); we
+  // never mail a dead localhost approve link in production.
+  const baseUrl = resolveAppBaseUrl();
+  if (managers.length > 0 && baseUrl) {
     const manager = managers[0]!;
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const issuer = await getOrgIdentity();
+    const fromHeader = issuer?.email ? `${issuer.name} <${issuer.email}>` : undefined;
     const approveUrl = `${baseUrl}/finance/expenses/approvals/${approvalToken}`;
 
     const emailPayload = composeExpenseApprovalEmail({
@@ -208,10 +215,14 @@ export async function submitExpenseClaim(id: string): Promise<void> {
       title: claim.title,
       totalAmount: Number(claim.totalAmount).toFixed(2),
       currency: claim.currency,
-      itemCount: 0, // items count will be fetched separately if needed
+      itemCount: claim._count.items,
       approveUrl,
     });
-    await sendEmail(emailPayload);
+    await sendEmail({ ...emailPayload, from: fromHeader });
+  } else if (managers.length > 0 && !baseUrl) {
+    console.warn(
+      `[expenses] No app base URL configured; skipped approval email for claim ${claim.claimId} (approval still queued in-portal)`,
+    );
   }
 
   revalidatePath("/finance/expenses");

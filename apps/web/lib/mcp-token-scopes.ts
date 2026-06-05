@@ -158,6 +158,20 @@ export type McpTokenTemplate = {
   grants: readonly string[];
 };
 
+export const CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS = [
+  "architecture_read",
+  "backlog_read",
+  "backlog_write",
+  "code_graph_read",
+  "file_read",
+  "spec_plan_read",
+  "work_capsule_read",
+  "work_capsule_write",
+  "work_capsule_adopt",
+  "sandbox_execute",
+  "iac_execute",
+] as const;
+
 const DEVELOPMENT_TEMPLATE_GRANTS = [
   // Reads needed to navigate the codebase, specs, backlog, and architecture
   "architecture_read",
@@ -364,4 +378,41 @@ export function resolveTemplateGrants(
 ): string[] {
   const available = new Set(availableScopes);
   return template.grants.filter((grant) => available.has(grant));
+}
+
+// ---------------------------------------------------------------------------
+// CLI / headless issuance defaults
+// ---------------------------------------------------------------------------
+//
+// The Admin UI's "Issue write token" routes through the `development` role
+// template (lib/actions/mcp-tokens.ts → issueMyWriteMcpToken). The headless
+// CLI (apps/web/scripts/issue-mcp-token.ts) and the contributor bootstrap MUST
+// match — otherwise a CLI-issued write token lands under-granted, missing
+// sandbox_execute / iac_execute / build_promote and the rest of the
+// build-studio + ship loop a coding agent needs (and that
+// CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS expects). That divergence is what
+// left the first macOS contributor token unable to run Build Studio / ship.
+//
+// Maps a coarse tier to the role template a token of that tier should carry,
+// resolved against what this install actually exposes. read has no richer
+// template by default (a coding-agent read token stays conservative); write →
+// development; admin → admin. Falls back to the coarse per-tier set (still
+// availability-filtered) if the template registers no grants here, so the
+// caller never issues an empty-scope token.
+const TIER_DEFAULT_TEMPLATE: Partial<Record<McpTokenScopeTier, McpTokenTemplateId>> = {
+  write: "development",
+  admin: "admin",
+};
+
+export function templateScopesForTier(
+  tier: McpTokenScopeTier,
+  availableScopes: readonly string[],
+): string[] {
+  const templateId = TIER_DEFAULT_TEMPLATE[tier];
+  if (templateId) {
+    const template = getMcpTokenTemplate(templateId);
+    const resolved = template ? resolveTemplateGrants(template, availableScopes) : [];
+    if (resolved.length > 0) return resolved;
+  }
+  return defaultMcpTokenScopes(availableScopes, tier);
 }

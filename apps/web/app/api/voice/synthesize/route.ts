@@ -9,7 +9,7 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@dpf/db"
 import { resolveVoiceStorageRoot } from "@/lib/voice-synthesis/storage-root"
-import { synthesizeSpeech, VoiceSynthesisError } from "@/lib/voice-synthesis/voice-service"
+import { synthesizeSpeech, VoiceSynthesisError, defaultProvider } from "@/lib/voice-synthesis/voice-service"
 import type { TTSProvider } from "@/lib/voice-synthesis/types"
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
@@ -17,10 +17,43 @@ import * as path from "node:path"
 interface SynthesizeBody {
   text: string
   voiceProfileId?: string
+  // Optional live-preview overrides from the voice page sliders. When present
+  // they win over the stored VoiceProfile.voiceSettings so the user hears the
+  // change before saving. Not persisted by this route.
+  settings?: {
+    speed?: number
+    exaggeration?: number
+    cfgWeight?: number
+    temperature?: number
+  }
 }
 
 function getStorageRoot(): string {
   return resolveVoiceStorageRoot()
+}
+
+const clamp = (v: unknown, lo: number, hi: number): number | undefined =>
+  typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : undefined
+
+/**
+ * Merge stored per-profile voiceSettings with optional live-preview overrides
+ * (overrides win) and clamp each field to a safe range. Returns undefined when
+ * nothing usable is set, so the provider keeps its own defaults.
+ */
+function resolveVoiceSettings(
+  stored: unknown,
+  override: SynthesizeBody["settings"],
+): import("@/lib/voice-synthesis/types").VoiceSettings | undefined {
+  const base = (stored && typeof stored === "object" ? stored : {}) as Record<string, unknown>
+  const ov = (override ?? {}) as Record<string, unknown>
+  const pick = (k: string) => (ov[k] !== undefined ? ov[k] : base[k])
+  const out = {
+    speed: clamp(pick("speed"), 0.5, 2.0),
+    exaggeration: clamp(pick("exaggeration"), 0.25, 1.0),
+    cfgWeight: clamp(pick("cfgWeight"), 0.2, 1.0),
+    temperature: clamp(pick("temperature"), 0.2, 1.2),
+  }
+  return Object.values(out).some((v) => v !== undefined) ? out : undefined
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -49,18 +82,19 @@ export async function POST(req: Request): Promise<Response> {
     providerVoiceId: string | null
     status: string
     language: string
+    voiceSettings: unknown
   } | null = null
 
   try {
     if (voiceProfileId) {
       voiceProfile = await prisma.voiceProfile.findUnique({
         where: { profileId: voiceProfileId },
-        select: { id: true, provider: true, providerVoiceId: true, status: true, language: true },
+        select: { id: true, provider: true, providerVoiceId: true, status: true, language: true, voiceSettings: true },
       })
     } else {
       voiceProfile = await prisma.voiceProfile.findFirst({
         where: { status: "ready", profile: { voiceEnabled: true } },
-        select: { id: true, provider: true, providerVoiceId: true, status: true, language: true },
+        select: { id: true, provider: true, providerVoiceId: true, status: true, language: true, voiceSettings: true },
         orderBy: { updatedAt: "desc" },
       })
     }
@@ -99,13 +133,23 @@ export async function POST(req: Request): Promise<Response> {
     )
   }
 
-  // Synthesize — reference audio passed inline for zero-shot cloning
+  // Synthesize — reference audio passed inline for zero-shot cloning.
+  // Prefer the deployment-configured provider (TTS_PROVIDER env) over the value
+  // stored on the profile at registration time. A profile registered as
+  // "chatterbox" must still route to "mlx" when the install switched providers
+  // (e.g. Apple Silicon hosts where dpf-tts can't run). defaultProvider()
+  // falls back to "chatterbox" when the env is unset, preserving prior behaviour.
+  const provider = defaultProvider()
+  // Resolve tuning: live-preview overrides from the request win over the stored
+  // per-profile settings; both clamped to safe ranges.
+  const settings = resolveVoiceSettings(voiceProfile.voiceSettings, body.settings)
   try {
     const result = await synthesizeSpeech(text.trim(), {
-      provider: voiceProfile.provider as TTSProvider,
+      provider,
       providerVoiceId: voiceProfile.providerVoiceId,
       language: voiceProfile.language,
       referenceAudioBuffer,
+      settings,
     } as Parameters<typeof synthesizeSpeech>[1])
 
     return new Response(result.audioBuffer, {

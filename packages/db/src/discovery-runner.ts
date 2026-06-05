@@ -9,8 +9,11 @@ import {
   normalizeDiscoveredFacts,
   type NormalizeDiscoveryOptions,
 } from "./discovery-normalize";
+import type { AdapterRule, AdapterRuleStatus } from "./discovery-fingerprint-adapter";
+import type { FingerprintMatchExpression, ResolvedIdentity } from "./discovery-fingerprint-rules";
 import { persistBootstrapDiscoveryRun } from "./discovery-sync";
 import { promoteInventoryEntities } from "./discovery-promotion";
+import { reconcilePromotedProducts } from "./discovery-reconcile";
 import {
   inferCrossCollectorRelationships,
   inferProductDependencies,
@@ -67,6 +70,17 @@ export async function runBootstrapCollectors(
   return runLocalDiscoveryCollectors(collectors);
 }
 
+/**
+ * Yield the Node event loop so pending I/O (HTTP accept, timer callbacks) can
+ * run before the next CPU-bound pass. Used between major discovery phases so a
+ * long sweep cannot monopolise the event loop and starve HTTP serving.
+ * setImmediate fires after I/O callbacks but before timers — cooperative yield
+ * within a long synchronous-heavy pipeline (BI-9F106818 Phase 0).
+ */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 export async function executeBootstrapDiscovery(
   db: BootstrapDiscoveryDb,
   options: BootstrapExecutionOptions = {},
@@ -89,8 +103,14 @@ export async function executeBootstrapDiscovery(
 
   const rawCollected = mergeCollectorOutputs([rawStaticOutput, connectionOutput]);
 
+  // Yield before CPU-bound inference/normalization passes so HTTP handling
+  // can proceed between phases (BI-9F106818 Phase 0).
+  await yieldToEventLoop();
+
   // Pass 1: Cross-collector relationship inference (host↔interfaces, target↔container)
   const collected = inferCrossCollectorRelationships(rawCollected);
+
+  await yieldToEventLoop();
 
   const taxonomyNodes = options.taxonomyNodes
     ?? (typeof (db as { taxonomyNode?: { findMany?: unknown } }).taxonomyNode?.findMany === "function"
@@ -109,8 +129,68 @@ export async function executeBootstrapDiscovery(
           enrichmentText: flattenEnrichmentForScoring(n.enrichment as Record<string, unknown> | null),
         }))
       : undefined);
+  // Active discovery-fingerprint rules (spec §4 layer 0). Loaded joined to the
+  // taxonomy node's semantic nodeId, because the normalizer attaches taxonomy by
+  // `connect: { nodeId }`. A confident match identifies + places the device
+  // deterministically, ahead of the heuristic taxonomy scoring.
+  const fingerprintRules = options.fingerprintRules
+    ?? (typeof (db as { discoveryFingerprintRule?: { findMany?: unknown } }).discoveryFingerprintRule?.findMany === "function"
+      ? (await ((db as unknown) as {
+          discoveryFingerprintRule: {
+            findMany(args: {
+              where: { status: "active" };
+              select: {
+                id: true;
+                ruleKey: true;
+                status: true;
+                matchExpression: true;
+                requiredEvidenceFamilies: true;
+                identityConfidence: true;
+                taxonomyConfidence: true;
+                resolvedIdentity: true;
+                taxonomyNode: { select: { nodeId: true } };
+              };
+            }): Promise<Array<{
+              id: string;
+              ruleKey: string;
+              status: string;
+              matchExpression: unknown;
+              requiredEvidenceFamilies: string[];
+              identityConfidence: number;
+              taxonomyConfidence: number;
+              resolvedIdentity: unknown;
+              taxonomyNode: { nodeId: string } | null;
+            }>>;
+          };
+        }).discoveryFingerprintRule.findMany({
+          where: { status: "active" },
+          select: {
+            id: true,
+            ruleKey: true,
+            status: true,
+            matchExpression: true,
+            requiredEvidenceFamilies: true,
+            identityConfidence: true,
+            taxonomyConfidence: true,
+            resolvedIdentity: true,
+            taxonomyNode: { select: { nodeId: true } },
+          },
+        })).map((rule): AdapterRule => ({
+          id: rule.id,
+          ruleKey: rule.ruleKey,
+          status: rule.status as AdapterRuleStatus,
+          matchExpression: rule.matchExpression as FingerprintMatchExpression,
+          requiredEvidenceFamilies: rule.requiredEvidenceFamilies,
+          taxonomyNodeId: rule.taxonomyNode?.nodeId ?? null,
+          identityConfidence: rule.identityConfidence,
+          taxonomyConfidence: rule.taxonomyConfidence,
+          resolvedIdentity: (rule.resolvedIdentity ?? {}) as ResolvedIdentity,
+        }))
+      : undefined);
+
   const normalized = (options.normalize ?? normalizeDiscoveredFacts)(collected, {
     ...(taxonomyNodes ? { taxonomyNodes } : {}),
+    ...(fingerprintRules ? { fingerprintRules } : {}),
     ...(options.softwareIdentities ? { softwareIdentities: options.softwareIdentities } : {}),
     ...(options.softwareRules ? { softwareRules: options.softwareRules } : {}),
   });
@@ -121,6 +201,14 @@ export async function executeBootstrapDiscovery(
     trigger: options.trigger ?? "bootstrap",
   });
 
+  // Yield between every major pass (BI-9F106818 Phase 0): these passes are
+  // CPU-bound or fire many small DB/Neo4j awaits without naturally yielding
+  // between iterations, so a long sweep can starve the HTTP event loop.
+  // yieldToEventLoop() (setImmediate) lets pending HTTP accepts and timer
+  // callbacks run before we start the next pass.
+
+  await yieldToEventLoop();
+
   // Auto-promote high-confidence entities to DigitalProduct records
   try {
     const promotionSummary = await promoteInventoryEntities(db as never);
@@ -130,6 +218,25 @@ export async function executeBootstrapDiscovery(
   } catch (err) {
     console.error("[discovery] Promotion pass failed (non-fatal):", err);
   }
+
+  await yieldToEventLoop();
+
+  // Reconcile: demote any previously-promoted infrastructure (host / NIC /
+  // subnet / gateway) that the structural type-gate now rejects, so the
+  // portfolio self-heals from earlier over-promotion instead of accumulating
+  // network noise. Idempotent and conservative (entityType-based).
+  try {
+    const reconcileSummary = await reconcilePromotedProducts(db as never);
+    if (reconcileSummary.demoted > 0) {
+      console.log(
+        `[discovery] Reconciled portfolio: demoted ${reconcileSummary.demoted} infrastructure products, kept ${reconcileSummary.detachedEntities} inventory rows`,
+      );
+    }
+  } catch (err) {
+    console.error("[discovery] Reconcile pass failed (non-fatal):", err);
+  }
+
+  await yieldToEventLoop();
 
   // Pass 2 & 3: Product-to-infrastructure relationship inference
   try {
@@ -143,6 +250,8 @@ export async function executeBootstrapDiscovery(
   } catch (err) {
     console.error("[discovery] Product inference pass failed (non-fatal):", err);
   }
+
+  await yieldToEventLoop();
 
   // Flag gateways that have no discovery connection configured
   try {

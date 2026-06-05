@@ -2,15 +2,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
-
-const STAGE_COLOURS: Record<string, string> = {
-  qualification: "#fbbf24",
-  discovery: "#fb923c",
-  proposal: "#38bdf8",
-  negotiation: "#a78bfa",
-  closed_won: "#4ade80",
-  closed_lost: "#ef4444",
-};
+import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
+import { PipelineStageInspector } from "@/components/customer/PipelineStageInspector";
+import { updateOpportunityStageFromForm } from "@/lib/actions/crm";
+import { getPipelineInspectorView } from "@/lib/crm/pipeline-inspector-data";
+import { getOpportunityStageMeta, getQuoteStatusMeta } from "@/lib/crm/presentation";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const ACTIVITY_ICONS: Record<string, string> = {
   note: "📝", call: "📞", email: "📧", meeting: "📅", task: "☑️",
@@ -24,7 +21,7 @@ export default async function OpportunityDetailPage({
 }) {
   const { id } = await params;
 
-  const [opportunity, quotes] = await Promise.all([
+  const [opportunity, quotes, inspector] = await Promise.all([
     prisma.opportunity.findUnique({
       where: { id },
       include: {
@@ -45,11 +42,12 @@ export default async function OpportunityDetailPage({
         totalAmount: true, currency: true, sentAt: true, acceptedAt: true,
       },
     }),
+    getPipelineInspectorView(id),
   ]);
 
-  if (!opportunity) notFound();
+  if (!opportunity || !inspector) notFound();
 
-  const stageColour = STAGE_COLOURS[opportunity.stage] ?? "#8888a0";
+  const stageMeta = getOpportunityStageMeta(opportunity.stage);
   const isClosed = opportunity.stage === "closed_won" || opportunity.stage === "closed_lost";
 
   return (
@@ -67,22 +65,22 @@ export default async function OpportunityDetailPage({
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
           <h1 className="text-xl font-bold text-[var(--dpf-text)]">{opportunity.title}</h1>
-          <span
-            className="text-[9px] px-1.5 py-0.5 rounded-full"
-            style={{ background: `${stageColour}20`, color: stageColour }}
-          >
-            {opportunity.stage.replace("_", " ")}
-          </span>
+          <CustomerStatusBadge label={stageMeta.label} tone={stageMeta.tone} />
           {opportunity.isDormant && (
-            <span className="text-[8px] px-1 py-0.5 rounded-full bg-red-900/30 text-red-400">
-              dormant
-            </span>
+            <CustomerStatusBadge label="Dormant" tone="warning" className="text-[8px]" />
           )}
         </div>
         <p className="text-[10px] font-mono text-[var(--dpf-muted)]">
           {opportunity.opportunityId}
         </p>
       </div>
+
+      <PipelineStageInspector
+        inspector={inspector}
+        showFullDetailLink={false}
+        stageFormAction={updateOpportunityStageFromForm}
+        className="mb-6"
+      />
 
       {/* Metadata */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
@@ -107,9 +105,11 @@ export default async function OpportunityDetailPage({
         {opportunity.expectedClose && (
           <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)]">
             <p className="text-[10px] text-[var(--dpf-muted)]">Expected Close</p>
-            <p className="text-sm text-[var(--dpf-text)]">
-              {new Date(opportunity.expectedClose).toLocaleDateString()}
-            </p>
+            <LocalTime
+              value={opportunity.expectedClose}
+              utc
+              className="text-sm text-[var(--dpf-text)]"
+            />
           </div>
         )}
         {opportunity.assignedTo && (
@@ -141,7 +141,7 @@ export default async function OpportunityDetailPage({
                       <p className="text-[10px] text-[var(--dpf-muted)] mt-0.5 line-clamp-2">{act.body}</p>
                     )}
                     <div className="flex gap-2 mt-1 text-[9px] text-[var(--dpf-muted)]">
-                      <span>{new Date(act.createdAt).toLocaleString()}</span>
+                      <LocalTime value={act.createdAt} />
                       {act.createdBy && <span>by {act.createdBy.email}</span>}
                     </div>
                   </div>
@@ -164,7 +164,7 @@ export default async function OpportunityDetailPage({
             ) : (
               <div className="space-y-2">
                 {quotes.map((q) => {
-                  const qColor = q.status === "accepted" ? "#4ade80" : q.status === "sent" ? "#38bdf8" : "#8888a0";
+                  const quoteMeta = getQuoteStatusMeta(q.status);
                   return (
                     <Link
                       key={q.id}
@@ -173,12 +173,7 @@ export default async function OpportunityDetailPage({
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-mono text-[var(--dpf-text)]">{q.quoteNumber}</span>
-                        <span
-                          className="text-[9px] px-1.5 py-0.5 rounded-full"
-                          style={{ background: `${qColor}20`, color: qColor }}
-                        >
-                          {q.status}
-                        </span>
+                        <CustomerStatusBadge label={quoteMeta.label} tone={quoteMeta.tone} />
                       </div>
                       <p className="text-[10px] font-mono text-[var(--dpf-text)] mt-1">
                         {q.currency} {Number(q.totalAmount).toLocaleString()}
@@ -214,7 +209,7 @@ export default async function OpportunityDetailPage({
               <h2 className="text-xs font-semibold text-[var(--dpf-muted)] uppercase tracking-widest mb-2">
                 Lost Reason
               </h2>
-              <p className="text-xs text-red-400">{opportunity.lostReason}</p>
+              <p className="text-xs text-[var(--dpf-text)]">{opportunity.lostReason}</p>
             </div>
           )}
 

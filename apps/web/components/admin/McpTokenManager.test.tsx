@@ -9,6 +9,7 @@ vi.mock("@/lib/actions/mcp-tokens", () => ({
   issueMyMcpToken: vi.fn(),
   issueMyTemplateMcpToken: vi.fn(),
   issueMyWriteMcpToken: vi.fn(),
+  getMyContributorMcpReadiness: vi.fn(),
   listAvailableMcpScopes: vi.fn(),
   listMcpTokenTemplates: vi.fn(),
   listMyMcpTokens: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock("@/lib/actions/mcp-tokens", () => ({
 import {
   bulkRevokeMyMcpTokens,
   copyMyMcpToken,
+  getMyContributorMcpReadiness,
   issueMyTemplateMcpToken,
   listAvailableMcpScopes,
   listMcpTokenTemplates,
@@ -32,6 +34,7 @@ import { McpTokenManager } from "./McpTokenManager";
 
 const bulkRevokeMock = bulkRevokeMyMcpTokens as unknown as ReturnType<typeof vi.fn>;
 const copyMock = copyMyMcpToken as unknown as ReturnType<typeof vi.fn>;
+const readinessMock = getMyContributorMcpReadiness as unknown as ReturnType<typeof vi.fn>;
 const scopesMock = listAvailableMcpScopes as unknown as ReturnType<typeof vi.fn>;
 const templatesMock = listMcpTokenTemplates as unknown as ReturnType<typeof vi.fn>;
 const templateIssueMock = issueMyTemplateMcpToken as unknown as ReturnType<typeof vi.fn>;
@@ -39,8 +42,35 @@ const tokensMock = listMyMcpTokens as unknown as ReturnType<typeof vi.fn>;
 const rotateMock = rotateMyMcpToken as unknown as ReturnType<typeof vi.fn>;
 const rotateWithEditMock = rotateMyMcpTokenWithEdit as unknown as ReturnType<typeof vi.fn>;
 
+function contributorReadiness(overrides: Record<string, unknown> = {}) {
+  return {
+    status: "ready",
+    recommendedAction: "test_connection",
+    identityBinding: "not_available",
+    token: {
+      id: "tok_active",
+      name: "Mark laptop",
+      prefix: "dpfmcp_MAR",
+      tokenSuffix: "A1B2",
+      scope: "write",
+      scopes: ["backlog_read", "backlog_write"],
+      lastUsedAt: "2026-05-18T12:00:00.000Z",
+      expiresAt: null,
+    },
+    missingGrants: [],
+    requiredGrants: ["backlog_read", "backlog_write"],
+    recommendedScopes: ["backlog_read", "backlog_write", "sandbox_execute"],
+    probe: { status: "not_run" },
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
+  readinessMock.mockResolvedValue({
+    ok: true,
+    readiness: contributorReadiness(),
+  });
   scopesMock.mockResolvedValue({
     scopes: ["backlog_read", "backlog_write", "spec_plan_read"],
   });
@@ -122,6 +152,99 @@ afterEach(() => {
 });
 
 describe("McpTokenManager", () => {
+  it("shows a compact ready banner for contributor MCP readiness", async () => {
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+
+    expect(await screen.findByText("Claude/Codex MCP readiness is satisfied.")).toBeTruthy();
+    expect(readinessMock).toHaveBeenCalledWith({
+      probe: false,
+    });
+  });
+
+  it("points missing contributor grants to rotate-with-edit instead of duplicating setup controls", async () => {
+    readinessMock.mockResolvedValue({
+      ok: true,
+      readiness: contributorReadiness({
+        status: "needs_grants",
+        recommendedAction: "rotate_development_token",
+        missingGrants: ["sandbox_execute"],
+      }),
+    });
+
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+
+    expect(await screen.findByText(/Development token needs attention: missing 1 grant/i)).toBeTruthy();
+    expect(screen.getByText(/Use Rotate with edit on the token row/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Test connection/i })).toBeNull();
+    expect(screen.queryByText("Required grants")).toBeNull();
+  });
+
+  it("labels read-only contributor tokens as read-only instead of missing zero grants", async () => {
+    readinessMock.mockResolvedValue({
+      ok: true,
+      readiness: contributorReadiness({
+        status: "needs_grants",
+        recommendedAction: "rotate_development_token",
+        missingGrants: [],
+        token: {
+          id: "tok_read_only",
+          name: "Read only laptop",
+          prefix: "dpfmcp_RD",
+          tokenSuffix: "R0",
+          scope: "read",
+          scopes: ["backlog_read", "backlog_write"],
+          lastUsedAt: "2026-05-18T12:00:00.000Z",
+          expiresAt: null,
+        },
+      }),
+    });
+
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+
+    expect(await screen.findByText(/Development token needs attention: read-only token/i)).toBeTruthy();
+    expect(screen.queryByText(/missing 0 grants/i)).toBeNull();
+  });
+
+  it("keeps lifecycle-managed ephemeral tokens out of contributor readiness", async () => {
+    readinessMock.mockResolvedValue({
+      ok: true,
+      readiness: contributorReadiness({
+        status: "needs_authorization",
+        recommendedAction: "issue_development_token",
+        token: null,
+        missingGrants: ["backlog_write"],
+      }),
+    });
+    tokensMock.mockResolvedValue({
+      ok: true,
+      archivedCount: 0,
+      tokens: [
+        {
+          id: "tok_ship",
+          name: "Ship phase token",
+          prefix: "dpfmcp_SHIP",
+          tokenSuffix: "S1P",
+          canCopy: false,
+          capability: "write",
+          scope: "write",
+          scopes: ["backlog_write"],
+          lastUsedAt: "2026-05-18T12:00:00.000Z",
+          idleDays: 0,
+          kind: "ephemeral_ship",
+          buildId: "build_123456789",
+          expiresAt: null,
+          revokedAt: null,
+          createdAt: "2026-05-18T10:00:00.000Z",
+        },
+      ],
+    });
+
+    render(<McpTokenManager baseUrl="http://localhost:3000" />);
+
+    expect(await screen.findByText(/Development token needs attention: no usable development token/i)).toBeTruthy();
+    expect(screen.getByText("ephemeral")).toBeTruthy();
+  });
+
   it("shows active token suffix, scope, issued time, last-used time, and lifecycle actions", async () => {
     render(<McpTokenManager baseUrl="http://localhost:3000" />);
 

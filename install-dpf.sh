@@ -13,9 +13,17 @@
 #   - --headless flag: non-interactive (default for CI).
 #   - doctor subcommand: emits a diagnostic bundle for support reports.
 #
-# Companion: scripts/setup.sh is the *contributor* bootstrap (clone,
-# install deps, run the dev loop). install-dpf.sh is the *end-user*
-# installer (release images, full stack, autostart).
+# Install modes (parity with install-dpf.ps1 Step 5): the installer prompts
+# for one of two modes, or takes --customer / --contributor:
+#   - customer    "Ready to go"  — pre-built release images, no contributor
+#                                  tooling. The default in headless/CI.
+#   - contributor "Customizable" — full stack built from local source, with
+#                                  contributor git hooks + agent-toolchain
+#                                  bootstrap.
+#
+# Companion: scripts/setup.sh remains the lightweight *contributor dev*
+# bootstrap (dev DB stack + `pnpm dev`), distinct from this installer's
+# from-source containerized contributor mode.
 #
 # Per the deployment doctrine: this implements Contracts 2 (runtime
 # config), 3 (lifecycle), 8 (secrets — via .env generation), and is
@@ -49,6 +57,8 @@ LIB_DIR="$REPO_ROOT/scripts/installer/lib"
 . "$LIB_DIR/docker.sh"
 # shellcheck source=scripts/installer/lib/autostart.sh
 . "$LIB_DIR/autostart.sh"
+# shellcheck source=scripts/installer/lib/github-cli.sh
+. "$LIB_DIR/github-cli.sh"
 
 # Installer version (semver-ish; bump per release).
 DPF_INSTALLER_VERSION="2026.05.11-phase10a"
@@ -69,12 +79,27 @@ Subcommands:
 Flags:
   --dry-run     Print the planned actions without touching the host.
                 Honors --headless. Useful for CI smoke and pre-flight review.
-  --headless    Non-interactive (no prompts). Defaults are used; required
-                for CI / unattended installs.
-  --release     Use pre-built multi-arch GHCR images
-                (docker-compose.release.yml overlay). Default in Phase 7+.
-  --dev         Build images locally (default for Phase 6 framework slice
-                until release-mode integration lands).
+  --headless    Non-interactive (no prompts). Defaults are used (install
+                mode defaults to "customer"); required for CI / unattended
+                installs.
+  --customer    Ready-to-go install: run the pre-built release images and
+                skip contributor tooling. Skips the interactive mode prompt.
+  --contributor Customizable install: build the full stack from local source,
+                enable contributor git hooks, and run the agent-toolchain
+                bootstrap. Skips the interactive mode prompt.
+  --dev-workspace-path <path>
+                Contributor-only. Absolute path to the operator's dev workspace
+                (where 'git worktree add' creates feature branches and where
+                Claude / Codex sessions open). Distinct from the install path
+                so the dev tree never collides with the production install or
+                the self-upgrade merge. Defaults to the install path (single-
+                tree mode — current behavior). When distinct, dev-loop scripts
+                refuse to create worktrees inside the install path. BI-0856A4CE.
+  --release     Force the pre-built multi-arch GHCR images
+                (docker-compose.release.yml overlay). Overrides the compose
+                mode that the install mode would otherwise derive.
+  --dev         Force locally-built images. Overrides the derived compose
+                mode (e.g. release images for a customer install).
   --force-unsupported-host
                 Override unsupported-host preflight refusal (advanced).
                 Equivalent to DPF_FORCE_UNSUPPORTED_HOST=1.
@@ -91,11 +116,10 @@ Flags:
                 § Approval policy.
   -h, --help    Show this help.
 
-Status: Phase 6 (framework vertical slice). Full end-user install (Docker
-auto-install, autostart, model pulls) lands in Phase 7. Until then,
-install-dpf.sh validates preflight, persists install-state.json, and
-prints the planned compose chain. Use scripts/setup.sh for contributor
-bootstrap.
+Status: Phase 6+ vertical slice. Full end-user install (Docker
+auto-install, autostart, model pulls) lands incrementally per the roadmap.
+Run with no flags for the interactive customer/contributor mode prompt, or
+pass --customer / --contributor to skip it.
 
 Roadmap: docs/superpowers/plans/2026-05-09-macos-linux-native-support.md
 Doctrine: docs/superpowers/specs/2026-05-09-deployment-contracts.md
@@ -103,17 +127,29 @@ EOF
 }
 
 DPF_DRY_RUN=0
-DPF_MODE="dev"   # dev | release
+DPF_MODE="dev"          # dev | release — compose chain. Derived from the
+                        # install mode below unless set explicitly via a flag.
+DPF_MODE_EXPLICIT=0     # 1 once --dev/--release is passed, so the install-mode
+                        # prompt does not override an explicit compose choice.
+DPF_INSTALL_MODE=""     # customer | contributor — resolved in "Install mode".
 DPF_AUTOSTART=1
 DPF_INCLUDE_EDGE="${DPF_INCLUDE_EDGE:-1}"   # 1 = bundle Edge Node; 0 = skip
+# BI-0856A4CE Phase 1 — optional contributor-only path that, when distinct from
+# the install path, becomes the worktree base. Empty = single-tree mode (current
+# behavior). Future phases will turn this into a hard install/dev separation.
+DPF_DEV_WORKSPACE_PATH_ARG=""
 SUBCOMMAND=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run)              DPF_DRY_RUN=1 ;;
     --headless)             DPF_HEADLESS=1; export DPF_HEADLESS ;;
-    --release)              DPF_MODE="release" ;;
-    --dev)                  DPF_MODE="dev" ;;
+    --release)              DPF_MODE="release"; DPF_MODE_EXPLICIT=1 ;;
+    --dev)                  DPF_MODE="dev"; DPF_MODE_EXPLICIT=1 ;;
+    --customer)             DPF_INSTALL_MODE="customer" ;;
+    --contributor)          DPF_INSTALL_MODE="contributor" ;;
+    --dev-workspace-path)   shift; DPF_DEV_WORKSPACE_PATH_ARG="${1:-}" ;;
+    --dev-workspace-path=*) DPF_DEV_WORKSPACE_PATH_ARG="${1#*=}" ;;
     --no-autostart)         DPF_AUTOSTART=0 ;;
     --no-edge)              DPF_INCLUDE_EDGE=0 ;;
     --force-unsupported-host)
@@ -147,7 +183,7 @@ echo "  =================================================================="
 dpf_platform
 dpf_arch
 echo "  Platform: $DPF_PLATFORM ($DPF_ARCH)"
-echo "  Mode: $DPF_MODE$(if [ "$DPF_DRY_RUN" = "1" ]; then echo "  [dry-run]"; fi)"
+if [ "$DPF_DRY_RUN" = "1" ]; then echo "  [dry-run]"; fi
 echo ""
 
 # 1. Preflight: unsupported-host detection + port conflicts.
@@ -191,6 +227,59 @@ case "$rc" in
   *) fail "Install state validation failed (see message above)" ;;
 esac
 
+# 2b. Choose install mode (parity with install-dpf.ps1 Step 5). Must run
+#     before the compose chain (Step 3) and the dry-run gate (Step 4) since
+#     it can derive DPF_MODE.
+#       customer    "Ready to go"  → release images, no contributor tooling
+#       contributor "Customizable" → from-source build + git hooks + toolchain
+step "Install mode"
+if [ -z "$DPF_INSTALL_MODE" ]; then
+  # Resume: reuse a previously-selected mode without re-prompting.
+  prior_mode="$(dpf_state_read installMode 2>/dev/null || true)"
+  if [ -n "$prior_mode" ]; then
+    DPF_INSTALL_MODE="$prior_mode"
+    ok "Using previously selected mode: $DPF_INSTALL_MODE"
+  elif [ "${DPF_HEADLESS:-0}" = "1" ] || [ "$DPF_DRY_RUN" = "1" ]; then
+    # Non-interactive (CI / dry-run): default to the end-user install.
+    DPF_INSTALL_MODE="customer"
+    info "Non-interactive run; defaulting to customer mode."
+  else
+    echo ""
+    echo "  How do you want to use Digital Product Factory?"
+    echo ""
+    echo "    [1] Ready to go   - Pre-built: use Build Studio inside the portal to extend the platform."
+    echo "    [2] Customizable  - Full source: Build Studio + your editor work from the same workspace."
+    echo ""
+    printf "  Choose [1/2] (default 1): "
+    read -r mode_choice
+    case "$mode_choice" in
+      2) DPF_INSTALL_MODE="contributor" ;;
+      *) DPF_INSTALL_MODE="customer" ;;
+    esac
+  fi
+fi
+
+case "$DPF_INSTALL_MODE" in
+  customer|contributor) ;;
+  *) fail "Unknown install mode '$DPF_INSTALL_MODE' (expected customer|contributor)." ;;
+esac
+
+# Derive the compose mode unless the operator forced it with --dev/--release.
+if [ "$DPF_MODE_EXPLICIT" = "0" ]; then
+  if [ "$DPF_INSTALL_MODE" = "contributor" ]; then
+    DPF_MODE="dev"      # build the stack from local source
+  else
+    DPF_MODE="release"  # pull pre-built GHCR images
+  fi
+fi
+
+# Persist only on a real run. A --dry-run defaults to customer; persisting it
+# would make a later real run "resume" that default and skip the prompt.
+if [ "$DPF_DRY_RUN" != "1" ]; then
+  dpf_state_write installMode "$DPF_INSTALL_MODE" 2>/dev/null || true
+fi
+ok "Install mode: $DPF_INSTALL_MODE (compose mode: $DPF_MODE)"
+
 # 3. Resolve the compose -f chain (per-platform via compose.sh).
 step "Compose chain"
 dpf_compose_files "$DPF_MODE"
@@ -216,7 +305,10 @@ step "Docker Engine"
 dpf_docker_ensure_installed; rc=$?
 case "$rc" in
   0) ok "Docker present and reachable"
-     dpf_state_write dockerEndpoint "$(dpf_docker_endpoint)" 2>/dev/null || true ;;
+     dpf_state_write dockerEndpoint "$(dpf_docker_endpoint)" 2>/dev/null || true
+     dpf_state_write dockerContext "$(dpf_docker_context)" 2>/dev/null || true
+     dpf_state_write_json composeFiles "$(dpf_compose_files_json)" 2>/dev/null || true
+     dpf_preflight_docker_memory ;;
   75) # Docker was just installed; operator must log out / newgrp
       echo ""
       warn "Re-run install-dpf.sh after logging out and back in (or 'newgrp docker')."
@@ -228,6 +320,17 @@ esac
 #    user choice (nvm / brew / distro pkg) outside the installer's
 #    governance. Phase 7 stays clear of language-runtime installation.
 step "Node.js and pnpm"
+if ! command -v node >/dev/null 2>&1; then
+  # Non-interactive shells (bash install-dpf.sh) don't source .zshrc/.bashrc,
+  # so nvm-managed node is invisible. Try to load nvm if present.
+  _nvm_sh="${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+  if [ -s "$_nvm_sh" ]; then
+    info "node not on PATH; sourcing nvm..."
+    # shellcheck source=/dev/null
+    . "$_nvm_sh" 2>/dev/null || true
+    nvm use default 2>/dev/null || nvm use node 2>/dev/null || true
+  fi
+fi
 if ! command -v node >/dev/null 2>&1; then
   fail "Node.js is not installed. Install Node 20+ via your platform's package manager (nvm, brew, apt) and re-run."
 fi
@@ -249,24 +352,131 @@ step "Workspace dependencies"
 pnpm install
 ok "Dependencies installed"
 
-# Contributor coding clients are optional for customer installs. If Claude Code
-# or Codex is present, wire the checked-in dpf-platform skill pack locally.
-step "Contributor skill pack"
-if [ -f scripts/ensure-dpf-skill-pack.sh ]; then
-  bash scripts/ensure-dpf-skill-pack.sh "$REPO_ROOT" || warn "DPF contributor skill pack setup failed (non-fatal)."
+# Contributor git hooks (contributor mode only). Mirrors scripts/setup.sh:
+# enables the in-repo .githooks/ (Prisma migration guard + secret scan).
+# Idempotent; customer installs skip it (they don't author commits here).
+if [ "$DPF_INSTALL_MODE" = "contributor" ] && [ -d .git ]; then
+  step "Contributor git hooks"
+  if git config core.hooksPath .githooks 2>/dev/null; then
+    ok "Git hooks path set to .githooks"
+  else
+    warn "Could not set core.hooksPath; run 'git config core.hooksPath .githooks' manually."
+  fi
+fi
+
+# GitHub CLI (contributor mode only). Auto-installs `gh` without Homebrew/sudo
+# so contributors can push branches and open PRs (and Build Studio's contribution
+# flow works) without the manual "install gh" detour on a fresh machine. Sign-in
+# is left to the operator: `gh auth login` is an interactive browser flow and the
+# OAuth path it uses is exempt from the fine-grained-PAT lifetime limits some orgs
+# enforce. Non-fatal: a failed auto-install just prints the manual fallback.
+if [ "$DPF_INSTALL_MODE" = "contributor" ]; then
+  step "GitHub CLI"
+  dpf_ensure_gh || warn "GitHub CLI auto-install incomplete (non-fatal)."
+  if command -v gh >/dev/null 2>&1 && ! gh auth status >/dev/null 2>&1; then
+    info "Sign in to GitHub to enable pushes and PRs (OAuth — avoids PAT lifetime limits):"
+    info "    gh auth login --git-protocol https --web"
+    info "  Then wire git:  gh auth setup-git"
+  fi
+fi
+
+# Agent toolchain bootstrap (BI-4B17051B Phase 4): converges Claude Code +
+# Codex CLI sessions, seeds kernel memory, persists agentToolchain readiness.
+# The script prints a six-state readiness banner (ready / partial /
+# missing_cli / missing_token / needs_refresh / failed_smoke) with no
+# substrate names or command snippets in operator-visible output.
+# Contributor mode only — customer installs don't need agent CLIs wired up.
+if [ "$DPF_INSTALL_MODE" = "contributor" ]; then
+  step "Agent toolchain bootstrap"
+  bootstrap_script="$REPO_ROOT/scripts/dpf-bootstrap-agent-toolchain.sh"
+  if [ -f "$bootstrap_script" ]; then
+    bootstrap_args=("$REPO_ROOT")
+    if [ "${DPF_HEADLESS:-0}" = "1" ]; then
+      bootstrap_args=(--headless "${bootstrap_args[@]}")
+    fi
+    if [ "${DPF_DRY_RUN:-0}" = "1" ]; then
+      bootstrap_args=(--dry-run "${bootstrap_args[@]}")
+    fi
+    bash "$bootstrap_script" "${bootstrap_args[@]}" || warn "Agent toolchain bootstrap reported an issue (non-fatal)."
+  else
+    warn "scripts/dpf-bootstrap-agent-toolchain.sh not found; skipping agent toolchain convergence."
+  fi
 else
-  warn "scripts/ensure-dpf-skill-pack.sh not found; skipping contributor skill pack setup."
+  info "Skipping agent toolchain bootstrap (customer mode)."
 fi
 
 # 8. Resolve host hardware profile (Phase 5 macOS / Linux detector).
 #    Writes DPF_HOST_PROFILE for docker-entrypoint.sh to consume on
 #    portal-init.
 step "Host hardware profile"
+DPF_SELECTED_MODEL=""
 if DPF_HOST_PROFILE_JSON="$(pnpm --filter @dpf/db exec tsx scripts/detect-hardware-host.ts 2>/dev/null)"; then
   export DPF_HOST_PROFILE="$DPF_HOST_PROFILE_JSON"
-  ok "Hardware profile detected (will be passed to portal-init via DPF_HOST_PROFILE)"
+  DPF_SELECTED_MODEL="$(printf '%s' "$DPF_HOST_PROFILE_JSON" | sed -nE 's/.*"selectedModel"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
+  if [ -n "$DPF_SELECTED_MODEL" ]; then
+    ok "Hardware profile detected — selected AI model: $DPF_SELECTED_MODEL"
+  else
+    ok "Hardware profile detected (will be passed to portal-init via DPF_HOST_PROFILE)"
+  fi
 else
   warn "Host hardware detection failed (non-fatal); portal-init will skip the profile step."
+fi
+
+# 8b. Set up Docker Model Runner and pull the selected chat model.
+#     Mirrors install-dpf.ps1 §Step 7 (lines 1895-1985). Docker Model
+#     Runner is DISABLED by default on fresh Docker Desktop installs; without
+#     enabling it first, `docker model pull` fails with "Docker Model Runner
+#     is not running" and the portal silently degrades to "AI provider is
+#     temporarily unavailable" on first load.
+step "AI Coworker setup (Docker Model Runner)"
+if [ "$DPF_PLATFORM" = "darwin" ] && command -v docker >/dev/null 2>&1; then
+  info "Enabling Docker Model Runner..."
+  if docker desktop enable model-runner >/dev/null 2>&1; then
+    ok "Docker Model Runner enabled"
+
+    # Wait for Model Runner to be ready before pulling.
+    mr_ready=0
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+      if docker model list >/dev/null 2>&1; then mr_ready=1; break; fi
+      sleep 2
+    done
+    if [ "$mr_ready" -ne 1 ]; then
+      warn "Docker Model Runner did not become ready within 30s. The model pull may fail."
+    fi
+
+    if [ -n "$DPF_SELECTED_MODEL" ]; then
+      # Skip pull if the EXACT selected model (family + tag/quant) is on
+      # disk. The earlier loose check stripped `ai/` and everything after
+      # `:`, so any pre-existing qwen3 quant satisfied the grep and the
+      # detector's recommendation never got pulled. That left users with
+      # whatever they happened to pull manually instead of the strong-tier
+      # model their hardware can run.
+      #
+      # `docker model list` prints rows like `qwen3:30B-A3B-Q4_K_M` (no
+      # `ai/` prefix; tag with quant suffix preserved). Match the full
+      # family:tag pair so 8B ≠ 14B ≠ 30B-A3B.
+      _selected_repo_tag="$(printf '%s' "$DPF_SELECTED_MODEL" | sed 's|^ai/||')"
+      if docker model list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$_selected_repo_tag"; then
+        ok "Model $DPF_SELECTED_MODEL already on disk"
+      else
+        info "Pulling AI model $DPF_SELECTED_MODEL via Docker Model Runner..."
+        info "  This may take several minutes depending on your internet speed."
+        if docker model pull "$DPF_SELECTED_MODEL" 2>&1 | grep -v "^Downloaded"; then
+          ok "AI Coworker model ready: $DPF_SELECTED_MODEL"
+        else
+          warn "Model pull may have failed. You can retry later: docker model pull $DPF_SELECTED_MODEL"
+        fi
+      fi
+    else
+      warn "No model selected by hardware detection; skipping chat-model pull."
+    fi
+  else
+    warn "Could not enable Docker Model Runner automatically."
+    warn "  Requires Docker Desktop 4.40+. Enable via Settings → AI → Enable Docker Model Runner,"
+    warn "  then re-run install-dpf.sh."
+  fi
+else
+  info "Skipping Model Runner setup (non-Darwin platform or docker unavailable)."
 fi
 
 # 9. Generate / ensure root .env exists. Mirrors scripts/setup.sh's
@@ -305,6 +515,54 @@ else
     info "Added DPF_BACKUPS_HOST_PATH=$REPO_ROOT-backups to existing .env"
   fi
 fi
+
+# BI-0856A4CE Phase 1 — record DPF_DEV_WORKSPACE_PATH when the contributor
+# passed --dev-workspace-path. This is the path where 'git worktree add' will
+# create feature branches; distinct from the install path so the dev tree and
+# the production install never collide. When unset, single-tree mode persists
+# (current behavior) and dev-loop scripts fall back to REPO_ROOT.
+if [ "$DPF_INSTALL_MODE" = "contributor" ] && [ -n "$DPF_DEV_WORKSPACE_PATH_ARG" ]; then
+  # Resolve to an absolute path (caller may have passed a relative path or ~/).
+  case "$DPF_DEV_WORKSPACE_PATH_ARG" in
+    \~*) DPF_DEV_WORKSPACE_PATH_ABS="${HOME}${DPF_DEV_WORKSPACE_PATH_ARG#\~}" ;;
+    /*)  DPF_DEV_WORKSPACE_PATH_ABS="$DPF_DEV_WORKSPACE_PATH_ARG" ;;
+    *)   DPF_DEV_WORKSPACE_PATH_ABS="$(cd "$DPF_DEV_WORKSPACE_PATH_ARG" 2>/dev/null && pwd)" \
+           || DPF_DEV_WORKSPACE_PATH_ABS="$(pwd)/$DPF_DEV_WORKSPACE_PATH_ARG" ;;
+  esac
+  if [ "$DPF_DEV_WORKSPACE_PATH_ABS" = "$REPO_ROOT" ]; then
+    info "--dev-workspace-path resolves to the install path; single-tree mode (skipping)."
+  else
+    if grep -q "^DPF_DEV_WORKSPACE_PATH=" .env 2>/dev/null; then
+      dpf_sed_inplace "s|^DPF_DEV_WORKSPACE_PATH=.*|DPF_DEV_WORKSPACE_PATH=$DPF_DEV_WORKSPACE_PATH_ABS|" .env
+    else
+      printf '\n# Contributor dev workspace (BI-0856A4CE Phase 1) — where git worktrees\n' >> .env
+      printf '# branch from. Distinct from DPF_HOST_INSTALL_PATH (the production install)\n' >> .env
+      printf '# so the dev tree never collides with the running portal or self-upgrade.\n' >> .env
+      printf 'DPF_DEV_WORKSPACE_PATH=%s\n' "$DPF_DEV_WORKSPACE_PATH_ABS" >> .env
+    fi
+    dpf_state_write devWorkspacePath "$DPF_DEV_WORKSPACE_PATH_ABS" 2>/dev/null || true
+    ok "Dev workspace path: $DPF_DEV_WORKSPACE_PATH_ABS (distinct from install $REPO_ROOT)"
+  fi
+fi
+
+# Record the resolved LLM provider and image tag from the generated .env
+# into install-state.json so lifecycle scripts read them from one place
+# instead of re-parsing .env. An empty DPF_LLM_PROVIDER means "use the
+# platform default" (model-runner on macOS, ollama on Linux) per the
+# deployment LLM-provider contract.
+_dpf_env_value() { grep -E "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2-; }
+DPF_RESOLVED_LLM_PROVIDER="$(_dpf_env_value DPF_LLM_PROVIDER)"
+if [ -z "$DPF_RESOLVED_LLM_PROVIDER" ]; then
+  case "$DPF_PLATFORM" in
+    darwin) DPF_RESOLVED_LLM_PROVIDER="model-runner" ;;
+    linux)  DPF_RESOLVED_LLM_PROVIDER="ollama" ;;
+  esac
+fi
+[ -n "$DPF_RESOLVED_LLM_PROVIDER" ] && \
+  dpf_state_write llmProvider "$DPF_RESOLVED_LLM_PROVIDER" 2>/dev/null || true
+DPF_RESOLVED_IMAGE_TAG="$(_dpf_env_value DPF_IMAGE_TAG)"
+[ -n "$DPF_RESOLVED_IMAGE_TAG" ] && \
+  dpf_state_write imageTag "$DPF_RESOLVED_IMAGE_TAG" 2>/dev/null || true
 
 # Ensure the backups host directory exists. Docker refuses to start the
 # service if a bind-mount source is missing, and the source now lives
@@ -387,12 +645,47 @@ export PATH="$SAFETY_BIN:$PATH"
 ok "Shell guard installed at $SAFETY_BIN"
 info "  Open a new terminal for the PATH change to take effect in other shells."
 
+# 9c. Customer mode pulls pre-built GHCR images (parity with the Windows
+#     consumer path). During early access those images may require a (free)
+#     GitHub login. Probe once and point the operator at `docker login`
+#     rather than letting `compose up` fail with an opaque manifest error.
+#     We never create accounts or store credentials on the operator's behalf.
+if [ "$DPF_INSTALL_MODE" = "customer" ]; then
+  step "Release image availability"
+  if docker pull ghcr.io/opendigitalproductfactory/dpf-portal:latest >/dev/null 2>&1; then
+    ok "Release images reachable"
+  else
+    warn "Could not pull the pre-built platform image."
+    info "  During early access the images need a free GitHub login:"
+    info "    docker login ghcr.io"
+    info "  Then re-run install-dpf.sh. (Contributor mode builds from source instead.)"
+  fi
+fi
+
 # 10. Bring up the platform-aware compose stack. Per the doctrine's
 #     Contract 9: the entrypoint is provider-aware, so model pulls
 #     happen inside portal-init using whatever DPF_LLM_PROVIDER
 #     resolves to (Docker Model Runner on Docker Desktop; Ollama on
 #     Linux native Docker via docker-compose.linux.yml).
 step "Bringing up the platform"
+# Stamp the build with the current commit so /ops/self-upgrade can compare the
+# running image to the upgrade target. Contributor mode builds from local
+# source; without this the Dockerfile falls back to a content hash that can
+# never match a git-SHA target, leaving freshness checks inert. Customer mode
+# pulls CI-stamped images, so we leave DPF_VERSION unset there (the host
+# checkout SHA is unrelated to the pulled image and would mislabel DEPLOYED_SHA).
+if [ "$DPF_INSTALL_MODE" = "contributor" ] && [ -d .git ]; then
+  if DPF_VERSION="$(git rev-parse HEAD 2>/dev/null)" && [ -n "$DPF_VERSION" ]; then
+    export DPF_VERSION
+    ok "Stamping local build with DPF_VERSION=$DPF_VERSION"
+  fi
+  # Real platform version from git release tags (e.g. "5.6.0"); shown in the
+  # portal instead of the stale version.json baseline.
+  if DPF_PLATFORM_VERSION="$(git describe --tags --always 2>/dev/null | sed 's/^v//')" && [ -n "$DPF_PLATFORM_VERSION" ]; then
+    export DPF_PLATFORM_VERSION
+    ok "Stamping local build with DPF_PLATFORM_VERSION=$DPF_PLATFORM_VERSION"
+  fi
+fi
 docker compose "${DPF_COMPOSE_FILES[@]}" up -d
 ok "docker compose up returned"
 
@@ -430,14 +723,35 @@ fi
 if [ "$DPF_INCLUDE_EDGE" = "1" ]; then
   step "Edge Node bootstrap"
 
-  # Mint a single-use auto-approve token via the same helper the verify
-  # wrapper uses. The token's plaintext appears once on stdout; we
-  # capture it without echoing.
-  if EDGE_TOKEN="$(pnpm --filter web exec tsx scripts/issue-edge-bootstrap-token.ts \
-       --ttl-minutes 30 \
-       --auto-approve 2>/dev/null | tail -1)"; then
+  # Mint a single-use auto-approve token. The script connects to
+  # DATABASE_URL=postgresql://...@postgres:5432/dpf, which is only
+  # resolvable from inside the docker compose network — postgres is NOT
+  # published to the host on customer installs (docker-compose.dev.yml is
+  # the only overlay that publishes 5432, and it's contributor-only). So
+  # we run the script INSIDE the portal-init container via `docker compose
+  # run --rm`, which shares the network and has the full workspace +
+  # tsx available at /workspace.
+  #
+  # The portal-init container's normal entrypoint runs migrations; we
+  # override with `sh -c '<tsx invocation>'` to run just the token script.
+  # Stderr is captured into a logfile (NOT swallowed with 2>/dev/null) so
+  # the next install diagnosis bundle has the actual failure reason
+  # instead of an opaque "output not recognized" warn line.
+  #
+  # History: prior versions ran `pnpm --filter web exec tsx ...` from the
+  # HOST, which always failed with ECONNREFUSED on customer installs (no
+  # exposed postgres port). The error was hidden by `2>/dev/null`, causing
+  # the edge-node container to crashloop indefinitely with an empty
+  # DPF_BOOTSTRAP_TOKEN. See edge-node Phase 0 first-mac postmortem.
+  EDGE_TOKEN_LOG="${TMPDIR:-/tmp}/dpf-edge-token-$$.log"
+  if EDGE_TOKEN="$(docker compose "${DPF_COMPOSE_FILES[@]}" run --rm --no-deps \
+       --entrypoint "" portal-init \
+       sh -c 'cd /workspace/apps/web && /workspace/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-edge-bootstrap-token.ts --ttl-minutes 30 --auto-approve' \
+       2>"$EDGE_TOKEN_LOG" | grep -E '^dpfboot_' | tail -1)"; then
     if [ -z "$EDGE_TOKEN" ] || [[ "$EDGE_TOKEN" != dpfboot_* ]]; then
-      warn "Edge Node bootstrap-token output not recognized; skipping enrollment wiring."
+      warn "Edge Node bootstrap-token issuance produced no token. Stderr captured at $EDGE_TOKEN_LOG"
+      info "  Last 5 lines:"
+      tail -5 "$EDGE_TOKEN_LOG" 2>/dev/null | sed 's|^|    |' >&2 || true
       info "  You can re-issue manually via Admin > Platform Development > Edge Nodes."
     else
       # Append (or replace) DPF_BOOTSTRAP_TOKEN in .env so the
@@ -467,8 +781,16 @@ if [ "$DPF_INCLUDE_EDGE" = "1" ]; then
       fi
     fi
   else
-    warn "Edge Node bootstrap-token issuance failed; skipping enrollment wiring."
+    warn "Edge Node bootstrap-token issuance command failed. Stderr captured at $EDGE_TOKEN_LOG"
+    info "  Last 5 lines:"
+    tail -5 "$EDGE_TOKEN_LOG" 2>/dev/null | sed 's|^|    |' >&2 || true
     info "  You can re-issue manually via Admin > Platform Development > Edge Nodes."
+  fi
+  # Clean up the stderr capture on the happy path; the warn branches above
+  # already printed the relevant tail so the logfile's diagnostic value is
+  # exhausted.
+  if [ -n "${EDGE_TOKEN:-}" ] && [[ "$EDGE_TOKEN" == dpfboot_* ]]; then
+    rm -f "$EDGE_TOKEN_LOG" 2>/dev/null || true
   fi
 else
   info "Edge Node bundling skipped (--no-edge). Add Edge Nodes later from separate hosts via docker-compose.edge-standalone.yml."
@@ -497,11 +819,13 @@ echo "  Password:      see ADMIN_PASSWORD in .env"
 echo ""
 echo "  Lifecycle:"
 echo "    bash install-dpf.sh doctor         Generate a diagnostic bundle"
+echo "    bash dpf-start.sh                   Start the stack"
+echo "    bash dpf-stop.sh                    Stop the stack"
+echo "    bash dpf-reinstall.sh              Clean reinstall (destructive)"
+echo "    bash dpf-release.sh --bump minor   Tag and push a release"
 echo "    docker compose ${DPF_COMPOSE_FILES[*]} logs -f"
 echo "    docker compose ${DPF_COMPOSE_FILES[*]} down"
 echo ""
 echo "  Autostart: $(if [ "$DPF_AUTOSTART" = "1" ]; then echo "enabled (will start at login / boot)"; else echo "DISABLED (run install-dpf.sh again without --no-autostart to enable)"; fi)"
-echo "  dpf-{start,stop,reinstall,release}.sh lifecycle scripts"
-echo "    land with installer-parity Phase 8."
 echo ""
 exit 0

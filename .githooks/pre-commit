@@ -95,6 +95,47 @@ if [ -n "$STAGED_FILES" ]; then
   fi
 fi
 
+# ─── Guard 5: schema regression ─────────────────────────────────────────────
+# When schema.prisma is staged, run the same reorder-tolerant set-based
+# check the CI workflow uses (.github/workflows/schema-regression-guard.yml
+# → packages/db/scripts/schema-regression-guard.mjs). Catches removed
+# fields/attributes/models/enum values BEFORE push so contributors don't
+# discover the regression after CI runs the same algorithm.
+#
+# Tolerates within-model attribute reorders (prisma format quirk that
+# tripped PR #1366) and whitespace / column-alignment changes.
+
+STAGED_SCHEMA=$(git diff --cached --name-only --diff-filter=ACMR \
+  | grep -E '^packages/db/prisma/schema\.prisma$' || true)
+
+if [ -n "$STAGED_SCHEMA" ]; then
+  echo "[pre-commit] schema.prisma staged — running schema regression guard..."
+
+  # Prefer origin/main as the comparison base. Fall back to upstream@{u}
+  # if the branch tracks something other than origin/main. Skip if neither
+  # is available (e.g. fresh clone with no upstream) — CI is the backstop.
+  if git rev-parse --verify origin/main >/dev/null 2>&1; then
+    SCHEMA_GUARD_BASE="origin/main"
+  elif git rev-parse --verify '@{u}' >/dev/null 2>&1; then
+    SCHEMA_GUARD_BASE="@{u}"
+  else
+    SCHEMA_GUARD_BASE=""
+  fi
+
+  if [ -n "$SCHEMA_GUARD_BASE" ]; then
+    if ! node packages/db/scripts/schema-regression-guard.mjs "$SCHEMA_GUARD_BASE"; then
+      echo ""
+      echo "Commit rejected. See the regressions above."
+      echo "If the removal is intentional, coordinate with the schema steward"
+      echo "(AGENTS.md §11) and add an explicit migration plan."
+      echo ""
+      exit 1
+    fi
+  else
+    echo "[pre-commit] no usable base ref for schema regression guard — skipping (CI backstop)."
+  fi
+fi
+
 # ─── Guard 4: typecheck gate ────────────────────────────────────────────────
 
 if [ "$DPF_SKIP_TYPECHECK" = "1" ]; then

@@ -88,7 +88,15 @@ export type ApiClientOptions = {
   timeoutMs?: number;
 };
 
-const DEFAULT_TIMEOUT_MS = 30_000;
+// Default per-call timeout. Bumped from 30 s → 60 s after a real Mac
+// install hit a 30 s portal warm-up window during first-run enrollment
+// (portal accepted + committed the EdgeNode row but the response arrived
+// after the client had already aborted, leaving a half-enrolled record
+// the client couldn't recover from). The portal's normal p99 enrollment
+// latency is < 300 ms; 60 s only matters when the portal is starting up
+// or under heavy compose-orchestration load. Override via
+// DPF_EDGE_HTTP_TIMEOUT_MS.
+const DEFAULT_TIMEOUT_MS = 60_000;
 
 export class AuthorityApiClient {
   private readonly base: string;
@@ -96,7 +104,15 @@ export class AuthorityApiClient {
 
   constructor(opts: ApiClientOptions) {
     this.base = opts.authorityUrl.replace(/\/+$/, "");
-    this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    // Env var > explicit opt > default. Env-var form lets operators
+    // tune for slow links / overloaded portals without code changes.
+    const envTimeout = Number.parseInt(
+      process.env.DPF_EDGE_HTTP_TIMEOUT_MS ?? "",
+      10,
+    );
+    this.timeoutMs = Number.isFinite(envTimeout) && envTimeout > 0
+      ? envTimeout
+      : opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
   /**

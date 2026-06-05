@@ -24,7 +24,7 @@ Tool-specific files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/cop
 ## 2. Project Architecture (current as of 2026-04-27)
 
 - **Stack.** Next.js 16 monorepo (pnpm workspaces): `apps/web`, `packages/db` (Prisma 7.x). Docker Compose: postgres:16-alpine, neo4j:5-community, qdrant, portal, portal-init. Local AI via Docker Model Runner (Docker Desktop 4.40+). All inference uses OpenAI-compatible `/v1/chat/completions` (`apps/web/lib/ai-inference.ts`).
-- **Deployment doctrine.** Every deployment target (Windows installer today; macOS / Linux / cloud / TAPPaaS per the architecture work in flight) wraps the same canonical contracts. See `docs/superpowers/specs/2026-05-09-deployment-contracts.md` for the 10 contracts and the spec ownership map. Substrate-specific deltas live in their owning specs; universal rules live in the doctrine.
+- **Deployment doctrine.** Every deployment target (Windows installer today; macOS / Linux / cloud / TAPPaaS per the architecture work in flight) wraps the same canonical contracts. See `docs/superpowers/specs/2026-05-09-deployment-contracts.md` for the 10 contracts and the spec ownership map. Substrate-specific deltas live in their owning specs; universal rules live in the doctrine. **Before adding anything host-coupled (a scrape target, service, bind mount, host path, default URL/port, or shell builtin), check the cross-platform gotcha tally at `docs/install/platform-support-watchlist.md` and add a row when you fix a new platform-specific defect.**
 - **Shell scripts** run in Linux containers — LF endings only, enforced by `.gitattributes`. Use `pnpm --filter <pkg> exec <tool>`, never `npx <tool>` (npx ignores pinned versions).
 - **PowerShell scripts** target Windows 10/11 + PS 5.1+. Plain ASCII only — no Unicode, BOM, smart quotes, em-dashes, emoji. Bash equivalents for macOS / Linux are landing per `docs/superpowers/plans/2026-05-09-macos-linux-native-support.md`; both surfaces remain canonical going forward.
 - **Migrations** live in `packages/db/prisma/migrations/`. Create with `pnpm --filter @dpf/db exec prisma migrate dev --name <name>`. Never `npx prisma`. Migration files are immutable after commit — Prisma stores checksums; modifying a committed migration causes drift.
@@ -40,13 +40,17 @@ Tool-specific files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/cop
 
 DB string columns with fixed valid values are canonical enums. Source of truth: `apps/web/lib/backlog.ts` (`EPIC_STATUSES`, union types) and `apps/web/lib/mcp-tools.ts` (`enum:` arrays). Match exactly.
 
-| Model         | Field    | Valid values                                |
-| ------------- | -------- | ------------------------------------------- |
-| `Epic`        | `status` | `open`, `in-progress`, `done`               |
-| `BacklogItem` | `status` | `open`, `in-progress`, `done`, `deferred`   |
-| `BacklogItem` | `type`   | `portfolio`, `product`                      |
+| Model         | Field      | Valid values                                                                |
+| ------------- | ---------- | --------------------------------------------------------------------------- |
+| `Epic`        | `status`   | `open`, `in-progress`, `done`                                               |
+| `BacklogItem` | `status`   | `open`, `in-progress`, `done`, `deferred`                                   |
+| `BacklogItem` | `type`     | `portfolio`, `product`                                                      |
+| `BacklogItem` | `workType` | `bug`, `feature`, `chore`, `doc`, `tool`, `skill`, `refactor`               |
+| `BacklogItem` | `source`   | `user-request`, `automated-detection`                                       |
 
 Hyphens, not underscores. Adding a new value requires updating both `backlog.ts` and the MCP tool definition in the same commit, before any data uses it.
+
+`BacklogItem.workType` is the closed *work-type* axis (the WHAT) and `BacklogItem.source` is the closed *intake-origin* axis (the HOW). Together they replace the legacy mixed-axis `source` enum (which had `feature-gap`, `bug`, `tool-gap`, `skill-gap`, `doc-gap`, `user-request`, `automated-detection` in one list). `FeatureBuild.kind` is derived from `workType` at promote time (`workType==="bug" ? "fix" : "feature"`). Spec: [`docs/superpowers/specs/2026-05-30-unified-backlog-worktype-design.md`](docs/superpowers/specs/2026-05-30-unified-backlog-worktype-design.md).
 
 ## 4. Branching, Commits & PRs
 
@@ -54,12 +58,14 @@ Hyphens, not underscores. Adding a new value requires updating both `backlog.ts`
 - **One concern per branch, one concern per PR.** Topic branches named by intent: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`, `doc/<slug>`, `clean/<slug>`. Branch from `main`. → [kernel principle](docs/founder-kernel/wiki/principles/one-concern-per-pr.md)
 - **DCO sign-off required on every commit.** Use `git commit -s`. The DCO bot blocks merge until every commit has a `Signed-off-by:` trailer. → [kernel principle](docs/founder-kernel/wiki/principles/dco-sign-off-required.md)
 - **Always push** after committing. Local-only commits are invisible to CI. → [kernel principle](docs/founder-kernel/wiki/principles/always-push-after-committing.md)
-- **PR creation means ready to merge.** A pushed branch is the handoff/recovery/review artifact while work is still in flight. Do not open a PR as a parking place, early visibility marker, or "draft handoff." Open the PR only when the branch has passed the relevant build gate, UX/migration evidence is captured, and the author believes it is ready for merge automation. If a PR is opened early by mistake, close it and keep the branch. → [kernel principle](docs/founder-kernel/wiki/principles/all-changes-land-via-pr.md)
+- **PR creation means ready to merge.** A pushed branch is the handoff/recovery/review artifact while work is still in flight. Do not open a PR as a parking place, early visibility marker, or "draft handoff." **Open regular ready-for-review PRs only; do not use GitHub draft PRs and do not pass `--draft` to `gh pr create`.** Open the PR only when the branch has passed the relevant build gate, UX/migration evidence is captured, and the author believes it is ready for merge automation. If a PR is opened early by mistake, close it and keep the branch. If a PR is accidentally opened as a draft after the gates are green, immediately mark it ready for review so CI/merge review is visible in the normal PR lane. → [kernel principle](docs/founder-kernel/wiki/principles/all-changes-land-via-pr.md)
 - **Squash-and-delete on merge:** `gh pr merge <n> --squash --delete-branch`.
 - **Concurrent sessions:** one thread = one branch + one git worktree. Create with `git worktree add ../DPF-<topic> -b <prefix>/<topic>`. Never share a working tree across sessions; doing so causes index/HEAD collisions and cross-thread file sweeps. → [kernel principle](docs/founder-kernel/wiki/principles/worktree-per-session.md)
-- **After creating a worktree, seed its MCP config:** `.mcp.json` and `.vscode/mcp.json` are gitignored (they carry your local `dpfmcp_...` bearer token), so `git worktree add` does not carry them across. Run `scripts/seed-worktree-mcp.ps1` (Windows) or `scripts/seed-worktree-mcp.sh` (macOS / Linux) from inside the new worktree to copy them from the root clone. The script is predicated on the platform being installed and an MCP token already generated at Admin > Platform Development. Restart Claude Code in the worktree afterwards so `/mcp` picks up the `dpf` connector.
+- **After creating a worktree, seed its MCP config + agent toolchain:** `.mcp.json` and `.vscode/mcp.json` are gitignored (they carry your local `dpfmcp_...` bearer token), so `git worktree add` does not carry them across. Run `scripts/dpf-bootstrap-agent-toolchain.ps1` (Windows) or `bash scripts/dpf-bootstrap-agent-toolchain.sh` (macOS / Linux) from inside the new worktree. The script copies the MCP config from the root clone, converges Claude Code + Codex CLI plugin state, seeds kernel-tier memory, runs read-only MCP + smoke probes, and prints a single six-state readiness banner. Re-running on a converged worktree is a no-op. The legacy `scripts/seed-worktree-mcp.{ps1,sh}` and `scripts/ensure-dpf-skill-pack.{ps1,sh}` scripts now shim into the new bootstrap; both names continue to work for one release cycle. Restart Claude Code in the worktree afterwards so `/mcp` picks up the `dpf` connector. See [docs/operations/install.md](docs/operations/install.md) for the readiness states and what each one means.
+- **Classify worktree verification readiness:** the MCP seed scripts write `.dpf-worktree-readiness.json` with `compile-ready` or `source-only`. `compile-ready` means a package manager and dependencies are present for cheap source-local gates. `source-only` means Git/MCP/Compose isolation exists, but local compile/test gates are unproven; do not claim them as passed. Use canonical runtime or the shared local-CI convergence sandbox for verification evidence.
 - **Compose project isolation is mandatory for worktrees and harnesses.** `docker-compose.yml` defaults to the root project `dpf`; linked worktrees must override it with an ignored `.env` value such as `COMPOSE_PROJECT_NAME=dpf-<topic>`. The worktree MCP seed scripts write this value automatically. Do not run `docker compose up`, `docker compose down`, or profile/harness Compose commands from a worktree until the worktree has a unique project name. CI and integration harnesses must use `node scripts/dpf-compose.mjs` with a unique `COMPOSE_PROJECT_NAME`; `down --volumes` against the root `dpf` project requires an intentional recovery/reinstall context and `DPF_ALLOW_DESTRUCTIVE_COMPOSE=1`.
 - **Keep the root clone as the merge/release worktree** — read-only for active feature work. Conventional locations: `d:\DPF` on Windows, `~/dpf` on macOS/Linux. Topic worktrees go alongside (`d:\DPF-<topic>` or `~/dpf-worktrees/<topic>`). → [kernel principle](docs/founder-kernel/wiki/principles/keep-root-clone-as-merge-worktree.md)
+- **Worktrees are source-control isolation, not runtime isolation.** A topic worktree exists to keep code changes off the root clone's HEAD; it is not a second DPF install. Implement and commit from the worktree, but route runtime-bound functional validation through the **shared local-CI convergence sandbox** via `claim_nonprod_environment_lease(environmentKey="local-integration-ci")` — one runtime that every worktree leases sequentially for canonical-runtime evidence. Per-worktree runnable runtimes don't scale past tens of concurrent worktrees, let alone the 1,000–10,000 DPF expects. Harness friction inside a worktree (missing pnpm/corepack on PATH, workspace links pointing outside the worktree, missing Prisma client, Next/Turbopack rejecting cross-workspace symlinks) is a **harness limitation, not a product defect** — verify via the sandbox lease instead. → [kernel principle](docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md) — see also §5 (where each gate runs) and §6 (canonical-runtime evidence).
 - **Branch guard before implementation and commit:** if `git status --short --branch` reports `HEAD (no branch)` or `git branch --show-current` returns `main`, abort before serious implementation. Create/switch to a topic branch first. Do not claim work is complete while commits are local-only; completion requires a pushed branch or PR unless the user explicitly asked not to publish. → [kernel principle](docs/founder-kernel/wiki/principles/branch-guard-before-implementation.md)
 
 ## 5. Verification — Build Gate (mandatory)
@@ -68,14 +74,18 @@ Hyphens, not underscores. Adding a new value requires updating both `backlog.ts`
 
 Work is not complete until all four pass:
 
-1. **Unit tests** — `npx vitest run` for affected files.
-2. **Production build** — `cd apps/web && npx next build` with zero errors.
+1. **Unit tests** — `pnpm --filter <pkg> exec vitest run` for affected files.
+2. **Production build** — `pnpm --filter web build` with zero errors.
 3. **UX verification** — for any UI/agent/coworker/workflow/forms change, exercise the affected path against the running app.
 4. **Migration applies cleanly** — if a migration was added.
 
 TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. Run the build per epic, not per release. Pre-existing failures: note them and fix if feasible. Do not defer.
 
+**Where each gate runs.** The four gates above describe *what* must pass, not *where* the binaries execute. Cheap source-local checks (targeted `vitest`, `pnpm --filter <pkg> typecheck`) can run in the topic worktree. Runtime-bound gates (`next build` against the production bundle, UX verification against the served portal, migration apply against a live Postgres) run against the **canonical local install** — the root clone's Docker stack, OR the **shared local-CI convergence sandbox** that every worktree leases sequentially via `claim_nonprod_environment_lease(environmentKey="local-integration-ci")`. A gate that did not execute because the worktree could not host its runtime is an **unrun gate, not a red gate**: re-run it via the sandbox lease, capture that evidence in the PR (§6). Per-worktree runnable runtimes are explicitly NOT the answer — at DPF's expected scale (1k–10k concurrent worktrees) the convergence sandbox is the only tenable substrate for runtime-bound verification. See [kernel principle](docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md) for the full scale rationale + lease workflow.
+
 **Local pre-commit gates.** Pre-commit hook at `.githooks/pre-commit` runs a staged Gitleaks secret scan before bytes enter Git history, then runs `pnpm --filter <affected> typecheck` on `.ts`/`.tsx`/`.mts`/`.cts` commits and rejects on failure. Set once: `git config core.hooksPath .githooks` (auto for new clones via `postinstall`). Manual scans: `pnpm security:secrets:staged` for staged content and `pnpm security:secrets` for the current tree. Emergency bypasses exist for verified false positives only: `DPF_SKIP_SECRET_SCAN=1` and `DPF_SKIP_TYPECHECK=1`; CI still gates the PR.
+
+**Opt-in local-CI pre-push gate.** Beyond the always-on pre-commit hook, `pnpm run pregate` leases the shared local-CI convergence sandbox, runs the CI-equivalent command supplied in `DPF_LOCAL_CI_COMMAND`, records a local-integration evidence record, and releases the lease; the `.githooks/pre-push-gate` hook then refuses a push unless a passing gate record exists for the current branch+SHA (bypass for verified-clean only: `DPF_SKIP_PREPUSH_GATE=1`). The full reference for the unit-test gate — the CI `Unit Tests` job, the `pregate`/pre-push-gate mechanics, and the load-bearing test-runner pins (mobile jest `^29.x`, web/db vitest) — is [`docs/testing/pre-pr-gate.md`](docs/testing/pre-pr-gate.md). That doc defers to this section for doctrine; this section defers to it for the test-gate detail. Keep them in sync.
 
 **Build Studio mirrors this gate.** Per-task and pre-ship verification in the sandbox must run typecheck + production build. A Build-Studio-produced PR cannot fail CI typecheck — if it would, it never leaves the sandbox. Implementation status: not yet landed (audited 2026-04-24); see `apps/web/lib/integrate/build-orchestrator.ts` and `apps/web/lib/queue/functions/build-review-verification.ts`.
 
@@ -88,13 +98,14 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 - **Before creating a new epic:** query existing epics for overlap. Prefer extending an existing epic over creating a new one. If superseding an old epic, mark it done in the same operation. → [kernel principle](docs/founder-kernel/wiki/principles/check-epic-overlap-before-creating.md)
 - **On completing items:** update status in the DB immediately. The system auto-closes epics when all items are done/deferred. Direct DB ops require manually flipping the parent epic.
 - **Periodic hygiene:** epics with 0 items + status `open` are noise — add items or delete. Epics where all items are done but status is still `open` must be flipped.
+- **Execution evidence is canonical-runtime evidence.** When recording build-gate, UX, or migration evidence via `record_execution_evidence` (or the Build Studio equivalent), the command + output must come from the canonical local install per §5. A worktree-only "green" for a runtime-bound gate is a source-control checkpoint, not execution evidence.
 
 ## 7. Subagent Dispatch Discipline
 
 **Subagents do not read this file.** They only know what the dispatcher prompt tells them. When dispatching:
 
 - **For TypeScript work:** include "run `pnpm --filter web typecheck` before committing and fix any errors."
-- **For final-task-in-epic work:** include "run `cd apps/web && npx next build` and fix any errors" plus the required UX verification path.
+- **For final-task-in-epic work:** include "run `pnpm --filter web build` and fix any errors" plus the required UX verification path. **Instruct the subagent to route that build through the shared local-CI convergence sandbox (`claim_nonprod_environment_lease(environmentKey="local-integration-ci")`) or the canonical local install — not inside the worktree itself.** (See §5 "Where each gate runs" and [kernel principle](docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md).)
 - **For UI work:** include the Theme-Aware Styling rules from §11. Without them, components ignore the platform's branding system.
 
 ## 8. Tool Authorization
@@ -114,10 +125,11 @@ Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:3000/api/mcp/token/refresh
 ```
 Then retry the MCP call in the running session. No file edits. No re-registration.
 
-**New worktree:** `.mcp.json` is gitignored so each worktree needs a hard link to `D:\DPF\.mcp.json`. After `git worktree add`, run:
+**New worktree MCP sync:** `.mcp.json` and `.vscode/mcp.json` are gitignored, so each worktree needs local MCP config plus its own `COMPOSE_PROJECT_NAME` and readiness marker. For a single new worktree, run the seed script from inside that worktree. To repair or rotate every linked worktree, run:
 ```powershell
 .\scripts\sync-mcp-worktrees.ps1
 ```
+The sync scripts copy MCP config, preserve non-root Compose isolation, and refresh `.dpf-worktree-readiness.json` so agents know whether the worktree is `compile-ready` or `source-only`.
 
 Agent `tool_grants` in `agent_registry.json` are enforced at runtime. `getAvailableTools()` (`apps/web/lib/agent-grants.ts`) intersects:
 
@@ -168,6 +180,10 @@ Before adding any large feature, audit the existing schema for refactoring oppor
 
 Sole exception: `text-white` on `bg-[var(--dpf-accent)]` buttons. Inline `style={{ color: "#xxx" }}` is equally prohibited — use `var(--dpf-text)`. `<option>` elements need explicit `bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]`. Variables defined in `globals.css`, overridden at runtime by branding tokens.
 
+→ [kernel principle](docs/founder-kernel/wiki/principles/compose-report-kit-for-reporting-ux.md)
+
+**Compose the report-kit palette for reporting UX.** Where the rule above binds *colors* to tokens, this binds whole *reporting components* to a shared palette. Reporting/data-display UX (status badges, list/detail tables, KPI cards, filters, CSV export, charts) is composed from `apps/web/components/ui/report-kit/` — `StatusBadge`, `DataTable`, `StatCard`, `FilterBar`, `ExportButton`/`toCsv`, `Chart`, and the `statusColors` intent registry. Never hand-roll a badge, `<table>`, per-page status color map, or KPI div. Status/severity colors resolve through `statusColors.ts` (status → semantic intent → `--dpf-*` token), never a local map or raw hex. **Discover before building:** read `apps/web/components/ui/report-kit/README.md`, and query the curated catalog via `search_design_intelligence` (domain `ux`/`chart`). If a primitive doesn't cover the case, extend report-kit rather than building a parallel one-off.
+
 Full standard: `docs/platform-usability-standards.md`. Other UI conventions: tab-nav with sub-routes for sections, progressive disclosure (3–5 essential fields, advanced via coworker), wizard-first setup with quick-edit on return, consistent welcome messages (identity → 2-3 capabilities → skills hint).
 
 ## 13. Login & Local QA
@@ -175,13 +191,13 @@ Full standard: `docs/platform-usability-standards.md`. Other UI conventions: tab
 - Login email: `admin@dpf.local` unless told otherwise.
 - Read the install's admin password from `ADMIN_PASSWORD` in repo-root `.env` — not from `apps/web/.env.local` (which may omit it).
 - If `/build` or another shell route redirects to `/welcome`, authenticate at `/login` first.
-- Verify production-path UI changes against the Docker-served app at the install's configured URL (`AUTH_URL`/`APP_URL` in `.env`), not stale `next dev` sessions. Rebuild with: `docker compose build --no-cache portal portal-init sandbox && docker compose up -d`.
+- Verify production-path UI changes against the **canonical local install** — the Docker-served app at the install's configured URL (`AUTH_URL`/`APP_URL` in `.env`) from the root clone (or a leased shared nonprod environment) — not against a worktree-local `next dev` / `next build` harness and not against stale `next dev` sessions. This is §5's validation surface applied to UX. Rebuild with: `docker compose build --no-cache portal portal-init sandbox && docker compose up -d`.
 
 ## 14. Release Testing
 
 → [kernel principle](docs/founder-kernel/wiki/principles/release-qa-plan.md)
 
-Every release passes the QA test plan at `tests/e2e/platform-qa-plan.md` (15 phases). For feature work, run the affected phases as part of definition of done — `next build` and unit tests do not replace UX exercise. Failures get a backlog item with repro steps under the active QA epic. Test results are release evidence.
+Every release passes the QA test plan at `tests/e2e/platform-qa-plan.md` (15 phases). For feature work, run the affected phases as part of definition of done — `next build` and unit tests do not replace UX exercise. Failures get a backlog item with repro steps under the active QA epic. Test results are release evidence. Release QA phases run against the canonical local install or a leased shared nonprod environment per §5 — never against a worktree's local harness. A worktree is the source-control container for the change under test, not a release-QA runtime.
 
 ## 15. Communication
 
@@ -190,6 +206,9 @@ Every release passes the QA test plan at `tests/e2e/platform-qa-plan.md` (15 pha
 - State results and decisions directly. No running commentary on internal deliberation. → [kernel principle](docs/founder-kernel/wiki/principles/state-results-directly.md)
 - Maintain forward momentum: when the current work naturally implies a next step, name the next smallest useful step from the thread direction and company context. Keep it quiet and operational - no sales pitch, no broad re-planning unless asked.
 - End-of-turn summary: one or two sentences — what changed, what's next.
+---
+- **Name the substrate when reporting verification results.** "Tests passed" or "build succeeded" is incomplete without naming where it ran. State the substrate (canonical local install, shared local-CI convergence sandbox lease, or — for source-local-only gates — the worktree). See §6 for what counts as canonical-runtime evidence and §5 for which gates require it.
+---
 
 ## 16. Skill Discovery
 
@@ -200,12 +219,14 @@ Every release passes the QA test plan at `tests/e2e/platform-qa-plan.md` (15 pha
   - `dpf-verify-substrate-first` — `new table|new type|new capability|new epic|new tool|new agent|new schema|propose .* new|we'll need|need to add`; `["*"]`; `verify-substrate-before-proposing-new`, `sweep-main-before-trusting-worktree-specs`, `single-source-of-truth`.
   - `dpf-file-backlog-item` — `file (a |new )?(backlog item|BI|bug|gap|ticket)|add to backlog|track this|new work item`; `["build-specialist", "ops-coordinator", "platform-engineer"]`; `backlog-lives-in-postgresql`, `check-epic-overlap-before-creating`, `live-state-over-seed-data`.
   - `dpf-promote-to-build-studio` — `promote to build studio|send to BS|kick off the build|start build|hand off to build|BS pipeline`; `["build-specialist", "ops-coordinator"]`; `architecture-over-shortcuts`, `governance-approves-evidence-not-provenance`.
-  - `dpf-worktree-per-session` — `new worktree|create worktree|spawn session|concurrent session|parallel work|isolated branch`; `["build-specialist", "platform-engineer"]`; `worktree-per-session`, `propose-acknowledge-reassign`, `worktree-base-origin-main`, `keep-root-clone-as-merge-worktree`.
+  - `dpf-worktree-per-session` — `new worktree|create worktree|spawn session|concurrent session|parallel work|isolated branch|worktree readiness|source-only worktree|compile-ready worktree`; `["build-specialist", "platform-engineer"]`; `worktree-per-session`, `propose-acknowledge-reassign`, `worktree-base-origin-main`, `keep-root-clone-as-merge-worktree`, `worktree-is-source-control-not-runtime`.
   - `dpf-pr-with-dco` — `open (a |the )?PR|pull request|push (and|to) PR|land this|ship this branch`; `["build-specialist", "platform-engineer"]`; `all-changes-land-via-pr`, `dco-sign-off-required`, `always-push-after-committing`, `branch-guard-before-implementation`, `one-concern-per-pr`.
   - `dpf-evidence-before-diagnosis` — `what's wrong|why is .* failing|why does .* not work|the cause is|looks like .* is broken|diagnose`; `["*"]`; `evidence-before-diagnosis`, `structural-verification-is-not-functional`, `check-tool-signals-first`, `never-fabricate`.
+  - `dpf-architecture-review` — `architecture review|architectural alignment|architectural concerns|review .* (spec|design|plan)|does this fit the architecture|chief architect`; `["ea-architect", "build-specialist", "platform-engineer"]`; `architecture-over-shortcuts`, `single-source-of-truth`, `research-and-use-standards`, `schema-audit-before-features`. Advisory chief-architect spec review; also the in-portal `architect` reviewer branch at the Build Studio Ideate + Plan gates.
   - `dev-portal-start` — contributor preview verification for `apps/web/` edits needing visual or HTTP confirmation on `:3001`; target `["platform-engineer", "build-specialist"]` when migrated; `structural-verification-is-not-functional`, `never-ask-user-to-run-commands`.
-  - `ui-ux-pro-max` — plan, build, review, fix, improve, or refactor UI/UX code and product surfaces; target `["*"]` when migrated; `no-hardcoded-colors`, `design-research-required`.
+  - `ui-ux-pro-max` — plan, build, review, fix, improve, or refactor UI/UX code and product surfaces; target `["*"]` when migrated; `no-hardcoded-colors`, `compose-report-kit-for-reporting-ux`, `design-research-required`.
 - **Legacy coworker skills (Surface B only).** Existing coworker skills live at `skills/<category>/*.skill.md` and keep the older frontmatter until EP-SKILL-001 migrates them opportunistically. New DPF skills MUST use the superset format in `packages/dpf-skill-pack/`.
 - **DPF spec/plan locations.** Specs live at `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`; plans live at `docs/superpowers/plans/YYYY-MM-DD-<feature>.md`. The DPF-only `/project:tool-evaluation` command remains at `.claude/commands/tool-evaluation.md` for EP-GOVERN-002 external-tool evaluation, alongside `.claude/commands/build-studio-operator.md` until a re-home BI says otherwise.
-- **Disambiguation rules.** Surface A: "DPF skill wins over superpowers when both could apply". Surface B: "plugin SKILL.md wins over legacy .skill.md at seed time".
+- **Disambiguation rules.** Surface A: "DPF skill wins over superpowers when both could apply". Surface B: "plugin SKILL.md wins over legacy .skill.md at seed time". **DPF-vs-DPF (intra-pack overlap):** when two DPF skills' `triggerPattern`s match the same task, resolve by (1) the `composesFrom` chain — the predecessor fires first (e.g. `dpf-evidence-before-diagnosis` before `dpf-systematic-debugging`; `dpf-brainstorming` before `dpf-decision-via-kernel`; `dpf-file-backlog-item` before `dpf-writing-plans`), then (2) the most specific `description` DPF-context selector. The chains encode intended order; a trigger overlap is not a conflict.
 - **Kernel principles (Surface C).** Durable doctrine lives at `docs/founder-kernel/wiki/principles/`. Use `wiki_query` for principle lookup and `principle_decide` for scored decisions when the connector is available; `dpf-decision-via-kernel` is the procedural bridge from either runtime.
+- **WWMD vs WWWD — which decision surface governs.** `dpf-decision-via-kernel` / `principle_decide` is the **platform-development (WWMD)** decision surface — for DPF contributors and Build Studio *platform* work, scored against the founder kernel. **A customer's business decision (in-portal coworker) must route through the Decision Perspective Gate against the organization's WWWD profile**, which enforces the non-inherit boundary: a customer profile does **not** inherit platform-specific business judgment as authority by default (DPF product doctrine is advisory only until the org seeds its own WWWD). The two surfaces are being consolidated so the Gate is the single governed door (BI-E1FB2307); until that lands, do not use raw `principle_decide` to settle a customer's business question. See `docs/user-guide/ai-workforce/decision-perspective.md`.

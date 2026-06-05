@@ -59,3 +59,27 @@ export function selectSupportedMimeType(
   }
   return null;
 }
+
+/**
+ * Resolve the MIME type to tag a recorded Blob with for client-side <audio>
+ * playback.
+ *
+ * `MediaRecorder.mimeType` is authoritative: after construction the UA sets it
+ * to the container it is ACTUALLY producing, even on the browser-default path
+ * (when the recorder was constructed without an explicit type because
+ * selectSupportedMimeType() returned the "" sentinel — e.g. Safari, which
+ * rejects webm/ogg and records mp4/AAC by default). We prefer it over the
+ * requested type so the blob is never mislabelled.
+ *
+ * Empty strings are treated as absent (the `||` chain, NOT `??`): a Blob built
+ * with `type: ""` produces an object URL with no content type, which <audio>
+ * cannot decode — the recording captures fine but playback silently fails.
+ * The final "audio/webm" is a last-resort default for environments that report
+ * neither value.
+ */
+export function resolveRecordingBlobMimeType(
+  recorderMimeType: string | null | undefined,
+  requestedMimeType: string | null | undefined,
+): string {
+  return recorderMimeType || requestedMimeType || "audio/webm";
+}

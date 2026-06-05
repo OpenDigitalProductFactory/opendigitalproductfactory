@@ -1,0 +1,180 @@
+// Tests for schema-regression-guard.mjs. The script and the test live next
+// to each other in packages/db/scripts/. Tests target the parser and diff
+// logic directly — the CLI wrapper is small and exercised in CI.
+//
+// What this proves:
+//   - Adding a field/attribute/model/enum-value: no regression
+//   - Removing a field/attribute/model/enum-value: regression
+//   - Reordering attributes within a model (the PR #1366 false-positive
+//     case): no regression
+//   - Whitespace / column-alignment changes (the other formatter quirk):
+//     no regression
+
+import { describe, expect, it } from "vitest";
+
+import { diffSchemas, parseSchema } from "./schema-regression-guard.mjs";
+
+// A minimal schema we can mutate per-test. Kept narrow so the diffs are easy
+// to reason about; real schema.prisma is thousands of lines but the algorithm
+// is the same.
+const BASE = `
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Widget {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String?
+  createdAt DateTime @default(now())
+
+  @@index([ownerId])
+  @@unique([name, ownerId])
+  @@index([createdAt(sort: Desc)])
+}
+
+enum WidgetStatus {
+  draft
+  active
+  archived
+}
+`;
+
+function regressions(base: string, head: string) {
+  return diffSchemas(parseSchema(base), parseSchema(head));
+}
+
+describe("schema-regression-guard", () => {
+  it("flags nothing when nothing changes", () => {
+    expect(regressions(BASE, BASE)).toEqual([]);
+  });
+
+  it("tolerates within-model attribute reorder (PR #1366 case)", () => {
+    // Same model, attributes shuffled — prisma format does this across
+    // formatter versions. Set semantics should treat this as a no-op.
+    const reordered = BASE.replace(
+      `  @@index([ownerId])
+  @@unique([name, ownerId])
+  @@index([createdAt(sort: Desc)])`,
+      `  @@unique([name, ownerId])
+  @@index([ownerId])
+  @@index([createdAt(sort: Desc)])`,
+    );
+    expect(regressions(BASE, reordered)).toEqual([]);
+  });
+
+  it("tolerates whitespace / column-alignment changes", () => {
+    // Replace double-space column alignment with single spaces. Same content.
+    const reformatted = BASE.replace(
+      /id        String/,
+      "id String",
+    ).replace(
+      /createdAt DateTime @default\(now\(\)\)/,
+      "createdAt   DateTime   @default(now())",
+    );
+    expect(regressions(BASE, reformatted)).toEqual([]);
+  });
+
+  it("tolerates trailing-comment changes", () => {
+    const withComments = BASE.replace(
+      /name      String/,
+      "name      String  // user-facing display name",
+    );
+    expect(regressions(BASE, withComments)).toEqual([]);
+  });
+
+  it("passes when a field is added", () => {
+    const added = BASE.replace(
+      /createdAt DateTime @default\(now\(\)\)/,
+      `createdAt DateTime @default(now())
+  description String?`,
+    );
+    expect(regressions(BASE, added)).toEqual([]);
+  });
+
+  it("flags a removed field", () => {
+    const dropped = BASE.replace(/  ownerId   String\?\n/, "");
+    const found = regressions(BASE, dropped);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatch(/model Widget: removed/);
+    expect(found[0]).toMatch(/ownerId/);
+  });
+
+  it("flags a removed attribute", () => {
+    const dropped = BASE.replace(/  @@unique\(\[name, ownerId\]\)\n/, "");
+    const found = regressions(BASE, dropped);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatch(/@@unique/);
+  });
+
+  it("flags a removed model entirely", () => {
+    const dropped = BASE.replace(/model Widget \{[\s\S]*?\n\}\n/, "");
+    const found = regressions(BASE, dropped);
+    expect(found).toEqual(["model Widget removed entirely"]);
+  });
+
+  it("flags a removed enum value", () => {
+    const dropped = BASE.replace(/  archived\n/, "");
+    const found = regressions(BASE, dropped);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatch(/enum WidgetStatus: removed value `archived`/);
+  });
+
+  it("flags a removed enum entirely", () => {
+    const dropped = BASE.replace(/enum WidgetStatus \{[\s\S]*?\n\}\n/, "");
+    const found = regressions(BASE, dropped);
+    expect(found).toEqual(["enum WidgetStatus removed entirely"]);
+  });
+
+  it("flags multiple regressions in one diff", () => {
+    const broken = BASE.replace(/  ownerId   String\?\n/, "").replace(
+      /  archived\n/,
+      "",
+    );
+    const found = regressions(BASE, broken);
+    expect(found).toHaveLength(2);
+  });
+
+  it("ignores top-level (datasource/generator) changes", () => {
+    // The guard is scoped to model + enum bodies. Datasource block changes
+    // don't surface as regressions — they're reviewed through a different
+    // channel.
+    const datasourceChanged = BASE.replace(
+      /provider = "postgresql"/,
+      'provider = "mysql"',
+    );
+    expect(regressions(BASE, datasourceChanged)).toEqual([]);
+  });
+
+  it("reproduces the PR #1366 PlatformIssueReport reorder as a no-op", () => {
+    // Smoke-test the exact reorder shape that tripped the original
+    // awk-based guard. The @@unique line moved from a different index in
+    // the constraint block; everything else is identical.
+    const before = `
+model PlatformIssueReport {
+  id           String  @id @default(cuid())
+  reportedById String?
+
+  @@index([featureBuildId])
+  @@index([threadId, createdAt(sort: Desc)])
+  @@index([taskRunId])
+  @@unique([reportedById, supportSessionId])
+  @@index([reportedById, supportSessionId, createdAt(sort: Desc)])
+}
+`;
+    const after = `
+model PlatformIssueReport {
+  id           String  @id @default(cuid())
+  reportedById String?
+
+  @@unique([reportedById, supportSessionId])
+  @@index([featureBuildId])
+  @@index([threadId, createdAt(sort: Desc)])
+  @@index([taskRunId])
+  @@index([reportedById, supportSessionId, createdAt(sort: Desc)])
+}
+`;
+    expect(regressions(before, after)).toEqual([]);
+  });
+});

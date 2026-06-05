@@ -1,11 +1,27 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
-import { getSelfUpgradeConfig, isInMaintenanceWindow } from "@/lib/self-upgrade/config";
-import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
+import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
+import { isUpgradeWindowOpen } from "@/lib/self-upgrade/window";
+import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
+import { getLastCheckedAt, recordCheckedAt, isCheckIntervalElapsed } from "@/lib/self-upgrade/last-check";
+import { buildFetchCommand, buildRemoteHeadCommand } from "@/lib/self-upgrade/version";
+import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepare-source";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
-import { createRun, startRun, completeRun, failRun, getLatestRun } from "@/lib/self-upgrade/run-store";
+import {
+  createRun,
+  startRun,
+  completeRun,
+  failRun,
+  recordRunRecoveryPoint,
+  getLatestRun,
+  getLatestSucceededRun,
+} from "@/lib/self-upgrade/run-store";
 import { runPromoter } from "@/lib/self-upgrade/promoter";
 import { emitUpgradeEvent } from "@/lib/self-upgrade/notifications";
+import {
+  createSelfUpgradeRecoveryPoint,
+  summarizeRecoveryPointFailure,
+} from "@/lib/self-upgrade/recovery-point";
 import {
   startQuiescence,
   signalSwapStarting,
@@ -23,10 +39,11 @@ export type SelfUpgradeRunEventData = {
   dryRun?: boolean;
   buildId?: string;
   /**
-   * Force-apply even when quiescence would defer the upgrade. Operator-
-   * confirmed only; never set by the scheduled cron. Surfaces as a
-   * ship-force-equivalent flag to the coordinator so it records the
-   * override on QuiescenceRun.forcedSurfaces for audit.
+   * Operator emergency override. Bypasses the maintenance-window gate so a
+   * manual trigger runs immediately, AND force-applies even when quiescence
+   * would defer the upgrade (surfaces as ship-force to the coordinator, which
+   * records the override on QuiescenceRun.forcedSurfaces for audit).
+   * Operator-confirmed only; never set by the scheduled cron.
    */
   force?: boolean;
   /**
@@ -35,6 +52,12 @@ export type SelfUpgradeRunEventData = {
    * raise/lower per upgrade attempt.
    */
   budgetMs?: number;
+  /**
+   * Set only by the scheduled cron. Gates the run on checkIntervalHours so the
+   * hourly tick polls no more often than the operator configured. Manual runs
+   * leave this unset and are never interval-throttled.
+   */
+  scheduled?: boolean;
 };
 
 export async function runSelfUpgrade(
@@ -43,23 +66,145 @@ export async function runSelfUpgrade(
   const config = await getSelfUpgradeConfig();
 
   if (!config.enabled && !params.dryRun) return { skipped: true, reason: "disabled" };
-  if (!isInMaintenanceWindow(config) && !params.dryRun) return { skipped: true, reason: "outside-window" };
+  // The upgrade window ("whenever the storefront is closed", derived from
+  // operating hours) gates ONLY the unattended scheduled poll. A manual operator
+  // trigger means "upgrade now" — the operator has explicitly chosen this moment,
+  // so it is NOT window-gated (it still drains via quiescence below unless force).
+  // An explicit maintenanceWindows config overrides the derived window for the
+  // scheduled path. force never set by the cron.
+  if (params.scheduled && !params.force) {
+    const { schedule, timezone } = await resolveOperatingScheduleForSystem();
+    const allowed = isUpgradeWindowOpen({
+      explicitWindows: config.maintenanceWindows,
+      schedule,
+      timeZone: timezone,
+    });
+    if (!allowed) return { skipped: true, reason: "outside-window" };
+  }
 
-  const targetSha = await resolveTargetSha(config.channel, config);
-  if (!targetSha) return { skipped: true, reason: "no-target" };
+  // checkIntervalHours throttle: only the scheduled cron is rate-limited, so the
+  // hourly tick polls no more often than the operator configured. Manual/forced
+  // runs are never throttled (the operator is asking now) but still reset the
+  // clock below.
+  if (params.scheduled && !params.dryRun && !params.force) {
+    const lastCheckedAt = await getLastCheckedAt();
+    if (!isCheckIntervalElapsed(lastCheckedAt, config.checkIntervalHours, new Date())) {
+      return { skipped: true, reason: "interval-not-elapsed" };
+    }
+  }
+  // A real check is proceeding now — reset the interval clock (scheduled, manual,
+  // or forced; never on dryRun).
+  if (!params.dryRun) await recordCheckedAt(new Date());
 
-  const deployedSha = getDeployedSha();
-  if (isShaFresh(deployedSha, targetSha)) return { skipped: true, reason: "up-to-date" };
+  const gitRun = defaultGitRunner;
+  const hostSourcePath =
+    config.hostSourceMountPath ??
+    process.env.DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT ??
+    process.env.HOST_SOURCE_PATH ??
+    "/host-dpf";
+  const remote = config.repositoryRemote ?? process.env.REPO_REMOTE ?? "origin";
+  const branch = config.repositoryBranch ?? process.env.REPO_BRANCH ?? "main";
+  // BI-A8A7CCFD — workspace-isolated upgrade source. The workspace lives as a
+  // subdirectory of the install clone so it's visible inside BOTH the portal
+  // container's existing `/host-dpf` mount AND the promoter's `/host-source`
+  // mount, with no docker-compose change required.
+  const upgradeWorkspaceMountPath = config.useIsolatedWorkspace
+    ? config.upgradeWorkspaceMountPath ?? `${hostSourcePath.replace(/\/$/, "")}/.upgrade-workspace`
+    : undefined;
+  const hostInstallPathResolved =
+    config.hostInstallPath ??
+    process.env.DPF_HOST_INSTALL_PATH ??
+    process.env.PROMOTE_SOURCE ??
+    "";
+  const upgradeWorkspaceHostPath =
+    config.useIsolatedWorkspace && hostInstallPathResolved
+      ? config.upgradeWorkspaceHostPath ?? `${hostInstallPathResolved.replace(/\/$/, "")}/.upgrade-workspace`
+      : undefined;
+
+  // ── Detection: resolve the upstream target and apply the lineage gate ──────
+  // In upstream mode we fetch first (fresh ref) and skip when the running build
+  // already contains this upstream SHA. The running deployedSha is the merge
+  // identity, NOT the upstream SHA it absorbed, so freshness is gated on the
+  // latest succeeded run's targetSha (the upstream lineage marker), per §5.0.
+  let upstreamSha: string | null = null;
+  if (config.sourceMode === "upstream") {
+    await gitRun(buildFetchCommand({ hostSourcePath, remote, branch }).slice(1));
+    const head = await gitRun(buildRemoteHeadCommand({ hostSourcePath, remote, branch }).slice(1));
+    upstreamSha = head.code === 0 ? head.stdout.trim() : null;
+    if (!upstreamSha) return { skipped: true, reason: "no-target" };
+
+    const lastOk = await getLatestSucceededRun();
+    if (!params.dryRun && !params.force && lastOk?.targetSha === upstreamSha) {
+      return { skipped: true, reason: "up-to-date", upstreamSha };
+    }
+  }
 
   const latestRun = await getLatestRun();
   if (latestRun?.status === "running") {
     return { skipped: true, reason: "active-run", runId: latestRun.runId };
   }
 
+  const deployedSha = await getDeployedSha();
+
+  // ── Source preparation: merge upstream into the durable install branch
+  // (upstream) or stamp the working tree (local). The honest stamp returned
+  // here is the identity the promoter must build and verify. dryRun must not
+  // mutate the host clone, so the merge is skipped and a placeholder stamp used.
+  let builtStamp: string;
+  if (params.dryRun) {
+    builtStamp = upstreamSha ?? deployedSha ?? "dry-run";
+  } else {
+    const prep = await prepareUpgradeSource(
+      {
+        sourceMode: config.sourceMode,
+        hostSourcePath,
+        remote,
+        branch,
+        installBranch: config.installBranch,
+        // BI-A8A7CCFD — pass the in-container workspace path when isolation is
+        // enabled. prepare-source switches to the workspace-merge code path
+        // automatically; undefined falls back to the legacy direct-merge.
+        workspacePath: upgradeWorkspaceMountPath,
+      },
+      gitRun,
+    );
+    if (!prep.ok) {
+      // Conflict / no-target / prep-error: record for audit, do NOT drain or
+      // swap. A merge conflict defers (operator resolves in the Upgrade Center);
+      // the current build keeps running.
+      const failedRun = await createRun({
+        triggeredBy: params.triggeredBy,
+        fromVersion: deployedSha ?? undefined,
+        toVersion: upstreamSha ?? undefined,
+      });
+      const reason =
+        prep.reason === "merge-conflict"
+          ? `merge-conflict: ${prep.conflictFiles.join(", ")}`
+          : `${prep.reason}: ${prep.message}`;
+      await failRun(failedRun.runId, reason);
+      await emitUpgradeEvent({ type: "upgrade.failed", runId: failedRun.runId });
+      return {
+        ok: false,
+        status: prep.reason === "merge-conflict" ? "deferred-conflict" : "failed",
+        runId: failedRun.runId,
+        reason: prep.reason,
+        conflictFiles: prep.reason === "merge-conflict" ? prep.conflictFiles : undefined,
+      };
+    }
+    builtStamp = prep.stamp;
+    upstreamSha = prep.upstreamSha ?? upstreamSha;
+  }
+
   const run = await createRun({
     triggeredBy: params.triggeredBy,
     fromVersion: deployedSha ?? undefined,
-    toVersion: targetSha,
+    // targetSha column carries the upstream lineage marker (what the build
+    // contains), falling back to the built stamp in local mode.
+    toVersion: upstreamSha ?? builtStamp,
+    // deployedSha carries the expected runtime identity the rebuilt image will
+    // report after boot. In upstream mode this is the install-branch merge
+    // commit, not the upstream lineage marker above.
+    expectedDeployedSha: builtStamp,
   });
   await startRun(run.runId);
   await emitUpgradeEvent({ type: "upgrade.started", runId: run.runId });
@@ -106,6 +251,31 @@ export async function runSelfUpgrade(
     }
   }
 
+  const recoveryPoint = await createSelfUpgradeRecoveryPoint({
+    runId: run.runId,
+    dryRun: params.dryRun,
+  });
+  await recordRunRecoveryPoint(run.runId, recoveryPoint);
+  if (recoveryPoint.status === "failed") {
+    const reason = summarizeRecoveryPointFailure(recoveryPoint);
+    if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, reason);
+    await failRun(run.runId, reason);
+    await emitUpgradeEvent({
+      type: "upgrade.failed",
+      runId: run.runId,
+      payload: { reason },
+    });
+    return {
+      ok: false,
+      status: "failed",
+      runId: run.runId,
+      quiescenceRunId,
+      reason: "recovery-point-failed",
+      recoveryPoint,
+      excerpt: reason,
+    };
+  }
+
   // Signal swap-starting for audit; record the moment we cross the
   // ready-to-swap → actually-swapping boundary on the QuiescenceRun.
   // No-op when quiescenceRunId is null (dryRun path).
@@ -113,13 +283,41 @@ export async function runSelfUpgrade(
     await signalSwapStarting(quiescenceRunId);
   }
 
-  const result = await runPromoter({
-    sourcePath: config.hostSourceMountPath ?? process.env.PROMOTE_SOURCE ?? "",
-    targetSha,
-    backupPath: process.env.PROMOTE_BACKUP_PATH ?? `/backups/self-upgrade/${run.runId}`,
-    healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
-    dryRun: params.dryRun,
-  });
+  let result: { exitCode: number; stdout: string; stderr: string };
+  try {
+    result = await runPromoter({
+      // HOST path of the install tree, bind-mounted into the promoter
+      // container. Daemon-resolved, so it must be a host path (not an
+      // in-portal path). hostSourceMountPath is the in-container mount and
+      // is no longer passed — runPromoter mounts to a fixed /host-source.
+      // BI-A8A7CCFD — when isolated workspace is on, the promoter builds from
+      // the workspace HOST path (which holds the merged tree), not the
+      // operator's install clone. The promoter mounts whatever we hand it
+      // here at `/host-source:ro` — same contract, just a different host dir.
+      hostInstallPath: upgradeWorkspaceHostPath ?? hostInstallPathResolved,
+      // The honest built identity from source prep (merge-commit SHA in upstream
+      // mode, HEAD/-dirty in local mode). promote.sh re-derives this from the
+      // tree's HEAD and cross-checks against it.
+      targetSha: builtStamp,
+      backupPath: process.env.PROMOTE_BACKUP_PATH ?? `/backups/self-upgrade/${run.runId}`,
+      backupHostPath: process.env.DPF_BACKUPS_HOST_PATH ?? undefined,
+      composeEnvFileHostPath: hostInstallPathResolved
+        ? `${hostInstallPathResolved.replace(/\/$/, "")}/.env`
+        : undefined,
+      healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
+      promoterImage: config.promoterImage,
+      dryRun: params.dryRun,
+    });
+  } catch (err) {
+    // The promoter failed to even spawn (e.g. docker missing). Without this
+    // catch the rejection would bubble up as an Inngest function error and
+    // leave the run stuck "running" — blocking every future trigger.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, msg);
+    await failRun(run.runId, `promoter-spawn-error: ${msg}`);
+    await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
+    return { ok: false, status: "failed", runId: run.runId, quiescenceRunId, excerpt: msg };
+  }
 
   if (result.exitCode === 0) {
     // Signal swap-complete BEFORE marking the upgrade succeeded so the
@@ -163,7 +361,7 @@ export const selfUpgradeScheduled = inngest.createFunction(
   },
   async ({ step }) => {
     return await step.run("run-self-upgrade-scheduled", () =>
-      runSelfUpgrade({ triggeredBy: "scheduled" }),
+      runSelfUpgrade({ triggeredBy: "scheduled", scheduled: true }),
     );
   },
 );

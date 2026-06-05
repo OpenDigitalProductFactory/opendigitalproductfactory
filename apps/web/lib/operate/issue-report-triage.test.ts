@@ -16,10 +16,17 @@ const report = {
 beforeEach(() => _resetCache());
 
 describe("buildIssueBacklogItem", () => {
-  it("creates item with BI-PIR prefix and issue_report source", () => {
+  it("creates item with BI-PIR prefix, workType=bug, source=automated-detection", () => {
     const item = buildIssueBacklogItem(report, "prod-1", "tax-1");
     expect(item.itemId).toMatch(/^BI-PIR-/);
-    expect(item.source).toBe("issue_report");
+    // workType is the closed work-type axis; source is intake origin.
+    // PIR rows are runtime evidence captured automatically, so:
+    //   source       = automated-detection
+    //   workType     = bug  (the bug discriminator that
+    //                       governed-backlog-tee-up reads to derive
+    //                       FeatureBuild.kind="fix")
+    expect(item.source).toBe("automated-detection");
+    expect(item.workType).toBe("bug");
     expect(item.type).toBe("product");
     expect(item.priority).toBe(1); // critical → 1
     expect(item.digitalProductId).toBe("prod-1");

@@ -2,13 +2,8 @@ import { listIncidents } from "@/lib/actions/compliance";
 import { INCIDENT_SEVERITIES, INCIDENT_STATUSES } from "@/lib/compliance-types";
 import Link from "next/link";
 import { CreateIncidentForm } from "@/components/compliance/CreateIncidentForm";
-
-const SEVERITY_COLORS: Record<string, string> = {
-  low: "bg-green-900/30 text-green-400",
-  medium: "bg-yellow-900/30 text-yellow-400",
-  high: "bg-orange-900/30 text-orange-400",
-  critical: "bg-red-900/30 text-red-400",
-};
+import { LocalTime } from "@/components/ui/LocalTime";
+import { StatusBadge } from "@/components/ui/report-kit";
 
 type Props = { searchParams: Promise<{ severity?: string; status?: string; regulatoryNotifiable?: string }> };
 
@@ -78,34 +73,28 @@ export default async function IncidentsPage({ searchParams }: Props) {
             const isOpen = inc.status === "open" || inc.status === "investigating";
             const isNotifiable = inc.regulatoryNotifiable;
             return (
-              <Link key={inc.id} href={`/compliance/incidents/${inc.id}`} className={`block p-3 rounded-lg border ${isNotifiable && isOpen ? "border-red-500/50" : "border-[var(--dpf-border)]"} hover:border-[var(--dpf-accent)] transition-colors`}>
+              <Link key={inc.id} href={`/compliance/incidents/${inc.id}`} className={`block p-3 rounded-lg border ${isNotifiable && isOpen ? "border-[color-mix(in_srgb,var(--dpf-error)_50%,transparent)]" : "border-[var(--dpf-border)]"} hover:border-[var(--dpf-accent)] transition-colors`}>
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-[var(--dpf-text)]">{inc.title}</span>
                       {isNotifiable && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-900/30 text-red-400 font-semibold">
-                          NOTIFIABLE
-                        </span>
+                        <StatusBadge intent="danger" label="Notifiable" variant="soft" />
                       )}
                     </div>
                     <div className="flex gap-2 mt-1">
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${SEVERITY_COLORS[inc.severity] ?? "bg-gray-900/30 text-gray-400"}`}>
-                        {inc.severity}
-                      </span>
+                      <StatusBadge domain="severity" status={inc.severity} variant="soft" uppercase={false} />
                       {inc.category && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{inc.category}</span>}
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${isOpen ? "bg-yellow-900/30 text-yellow-400" : "bg-green-900/30 text-green-400"}`}>
-                        {inc.status}
-                      </span>
+                      <StatusBadge intent={isOpen ? "warning" : "success"} label={inc.status} variant="soft" uppercase={false} />
                     </div>
                     {isNotifiable && inc.notificationDeadline && isOpen && (
-                      <p className="text-[9px] text-red-400 mt-1">
-                        Notification deadline: {new Date(inc.notificationDeadline).toLocaleString()}
+                      <p className="text-[9px] text-[var(--dpf-error)] mt-1">
+                        Notification deadline: <LocalTime value={inc.notificationDeadline} />
                       </p>
                     )}
                   </div>
                   <div className="text-right text-xs text-[var(--dpf-muted)]">
-                    <p>{new Date(inc.occurredAt).toLocaleDateString()}</p>
+                    <LocalTime value={inc.occurredAt} mode="date" />
                     <p>{inc._count.correctiveActions} action{inc._count.correctiveActions !== 1 ? "s" : ""}</p>
                     {inc.reportedBy && <p>{inc.reportedBy.displayName}</p>}
                   </div>

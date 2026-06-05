@@ -9,15 +9,64 @@ import { generateRfcId } from "./change-management";
 import { generatePromotionId } from "@/lib/version-tracking";
 import {
   getSelfUpgradeConfig,
-  isInMaintenanceWindow,
+  nextMaintenanceWindowStart,
   resolveTargetSha,
   isShaFresh,
   getDeployedSha,
   getLatestRun,
 } from "@/lib/self-upgrade";
+import {
+  isStoreOpen,
+  isUpgradeWindowOpen,
+  nextUpgradeWindowOpen,
+} from "@/lib/self-upgrade/window";
+import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
+import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
 import { loadPlatformVersion } from "@/lib/platform/version";
 import { inngest } from "@/lib/queue/inngest-client";
 import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
+
+const HOUR_MS = 60 * 60 * 1000;
+
+function nextHourlyCronAtOrAfter(base: Date, now: Date): Date {
+  let candidate = new Date(base);
+  candidate.setUTCMinutes(0, 0, 0);
+  if (candidate.getTime() < base.getTime()) {
+    candidate = new Date(candidate.getTime() + HOUR_MS);
+  }
+  if (candidate.getTime() <= now.getTime()) {
+    candidate = new Date(candidate.getTime() + HOUR_MS);
+  }
+  return candidate;
+}
+
+function computeNextScheduledUpgradeCheckAt(args: {
+  enabled: boolean;
+  inMaintenanceWindow: boolean;
+  nextWindowStart: Date | null;
+  lastCheckedAt: Date | null;
+  checkIntervalHours: number;
+  now: Date;
+}): Date | null {
+  if (!args.enabled) return null;
+
+  const intervalEligibleAt =
+    args.lastCheckedAt && args.checkIntervalHours > 0
+      ? new Date(args.lastCheckedAt.getTime() + args.checkIntervalHours * HOUR_MS)
+      : args.now;
+
+  if (!args.inMaintenanceWindow && !args.nextWindowStart) return null;
+
+  const base = new Date(
+    Math.max(
+      args.now.getTime(),
+      intervalEligibleAt.getTime(),
+      args.inMaintenanceWindow ? args.now.getTime() : args.nextWindowStart?.getTime() ?? 0,
+    ),
+  );
+
+  return nextHourlyCronAtOrAfter(base, args.now);
+}
 
 async function requireOpsAccess(): Promise<string> {
   const session = await auth();
@@ -541,6 +590,7 @@ export type SelfUpgradeRunDto = {
   currentSha: string | null;    // schema: currentSha (was: fromVersion)
   targetSha: string | null;     // schema: targetSha (was: toVersion)
   deployedSha: string | null;   // schema: deployedSha (was: absent — adding for completeness)
+  completionEvidence?: Prisma.JsonValue | null;
   startedAt: Date | null;
   completedAt: Date | null;
   failureLog: string | null;    // schema: failureLog (was: error)
@@ -567,6 +617,7 @@ export async function listSelfUpgradeRuns(opts?: {
       currentSha: true,
       targetSha: true,
       deployedSha: true,
+      completionEvidence: true,
       startedAt: true,
       completedAt: true,
       failureLog: true,
@@ -583,14 +634,52 @@ export async function listSelfUpgradeRuns(opts?: {
 export async function getSelfUpgradeStatus() {
   await requireOpsAccess();
 
-  const [config, latestRun, platformVersion] = await Promise.all([
+  const [config, latestRun, platformVersion, deployedSha, lastCheckedAt] = await Promise.all([
     getSelfUpgradeConfig(),
     getLatestRun(),
     loadPlatformVersion(),
+    getDeployedSha(),
+    getLastCheckedAt(),
   ]);
 
-  const inMaintenanceWindow = isInMaintenanceWindow(config);
-  const deployedSha = getDeployedSha();
+  // Upgrade timing follows the storefront's open/closed state (single source of
+  // truth: operating hours). inMaintenanceWindow = "upgrades may run now" =
+  // store closed (or inside an explicit override window). storeOpen lets the
+  // panel explain WHY truthfully.
+  const { schedule, timezone } = await resolveOperatingScheduleForSystem();
+  const hasExplicitWindows = config.maintenanceWindows.length > 0;
+  const storeOpen = isStoreOpen(schedule, new Date(), timezone);
+  const inMaintenanceWindow = isUpgradeWindowOpen({
+    explicitWindows: config.maintenanceWindows,
+    schedule,
+    timeZone: timezone,
+  });
+  // The window is always defined now (derived from operating hours), so it is
+  // never "unconfigured". windowSource tells the panel which model is in play.
+  const windowConfigured = true;
+  const windowSource: "explicit" | "operating-hours" = hasExplicitWindows
+    ? "explicit"
+    : "operating-hours";
+  // Next time the upgrade window opens, so the panel can show WHEN scheduled
+  // upgrades will next be eligible. Explicit windows use their configured start;
+  // the operating-hours model derives it from the next store-close transition
+  // (null only while already in-window or for a 24/7 store, where the panel
+  // already explains the state).
+  const now = new Date();
+  const nextWindowStart = hasExplicitWindows
+    ? nextMaintenanceWindowStart(config, now)?.toISOString() ?? null
+    : inMaintenanceWindow
+      ? null
+      : nextUpgradeWindowOpen(schedule, now, timezone)?.toISOString() ?? null;
+  const nextWindowStartDate = nextWindowStart ? new Date(nextWindowStart) : null;
+  const nextScheduledCheckAt = computeNextScheduledUpgradeCheckAt({
+    enabled: config.enabled,
+    inMaintenanceWindow,
+    nextWindowStart: nextWindowStartDate,
+    lastCheckedAt,
+    checkIntervalHours: config.checkIntervalHours,
+    now,
+  });
   const targetSha = await resolveTargetSha(config.channel, config);
   const isFresh = targetSha ? isShaFresh(deployedSha, targetSha) : false;
 
@@ -598,7 +687,13 @@ export async function getSelfUpgradeStatus() {
     enabled: config.enabled,
     channel: config.channel,
     inMaintenanceWindow,
+    windowConfigured,
+    windowSource,
+    storeOpen,
+    nextWindowStart,
+    nextScheduledCheckAt: nextScheduledCheckAt?.toISOString() ?? null,
     deployedSha,
+    deployedShaSource: platformVersion.imageVersion?.source ?? "unknown",
     targetSha,
     isFresh,
     latestRun,
@@ -606,12 +701,14 @@ export async function getSelfUpgradeStatus() {
       version: platformVersion.version,
       publishedAt: platformVersion.publishedAt.toISOString(),
       gitSha: platformVersion.gitSha,
+      imageVersion: platformVersion.imageVersion,
+      buildDate: platformVersion.buildDate,
       note: platformVersion.note,
     },
   };
 }
 
-export async function triggerSelfUpgrade(opts?: { dryRun?: boolean }) {
+export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: boolean }) {
   const userId = await requireOpsAccess();
 
   if (!opts?.dryRun) {
@@ -619,6 +716,10 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean }) {
     if (!config.enabled) {
       return { queued: false, reason: "disabled" } as const;
     }
+    // A manual trigger is NOT window-gated: the operator clicking "Upgrade now"
+    // has chosen this moment. The store-closed window only governs the unattended
+    // scheduled poll (runSelfUpgrade skips the window for non-scheduled runs).
+    // `force` is reserved for bypassing the quiescence drain in an emergency.
   }
 
   const latestRun = await getLatestRun();
@@ -631,7 +732,80 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean }) {
     data: {
       triggeredBy: `manual:${userId}`,
       ...(opts?.dryRun !== undefined ? { dryRun: opts.dryRun } : {}),
+      ...(opts?.force ? { force: true } : {}),
     },
   });
   return { queued: true } as const;
+}
+
+export async function rollbackSelfUpgrade(
+  runId: string,
+  typedConfirmation: string,
+): Promise<{
+  ok: boolean;
+  status?: "ok" | "failed";
+  error?: string;
+  restores?: Array<{
+    target: string;
+    sourceBackupRunId: string;
+    restoreId: string | null;
+    status: "ok" | "failed";
+    error?: string;
+  }>;
+}> {
+  const session = await auth();
+  const user = session?.user;
+  if (
+    !user ||
+    !can(
+      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
+      "view_operations",
+    ) ||
+    !can(
+      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
+      "manage_provider_connections",
+    )
+  ) {
+    return { ok: false, error: "You do not have permission to restore upgrade recovery points." };
+  }
+
+  const {
+    SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT,
+    SelfUpgradeRollbackError,
+    RestoreIntegrityError,
+    RestoreLockedError,
+    runSelfUpgradeRollback,
+  } = await import("@/lib/self-upgrade/rollback");
+
+  if (typedConfirmation !== SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT) {
+    return {
+      ok: false,
+      error: `Confirmation text must be exactly "${SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT}" to proceed.`,
+    };
+  }
+
+  try {
+    const result = await runSelfUpgradeRollback({
+      runId,
+      initiatedByUserId: user.id ?? null,
+    });
+    revalidatePath("/ops/self-upgrade");
+    revalidatePath("/admin/backups");
+    return {
+      ok: result.ok,
+      status: result.status,
+      restores: result.restores,
+      ...(result.error ? { error: result.error } : {}),
+    };
+  } catch (err) {
+    if (
+      err instanceof SelfUpgradeRollbackError ||
+      err instanceof RestoreIntegrityError ||
+      err instanceof RestoreLockedError
+    ) {
+      return { ok: false, error: err.message };
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message };
+  }
 }

@@ -10,7 +10,7 @@ import { kernelGateDecisionsTotal } from "@/lib/operate/metrics";
 import * as crypto from "crypto";
 import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { mergeHappyPathStateIntoPlan, generateBuildId } from "@/lib/feature-build-types";
-import { BACKLOG_SOURCE_VALUES, BACKLOG_STATUS_VALUES, EPIC_STATUSES } from "@/lib/explore/backlog";
+import { BACKLOG_SOURCE_VALUES, BACKLOG_STATUS_VALUES, BACKLOG_WORK_TYPE_VALUES, EPIC_STATUSES } from "@/lib/explore/backlog";
 import {
   analyzePublicWebsiteBranding,
   fetchPublicWebsiteEvidence,
@@ -99,7 +99,15 @@ type ToolExecutionContext = {
 
 /** MCP tool annotation hints (from MCP spec + n8n-MCP pattern).
  *  These let the agent router and governance layer make safety decisions
- *  without parsing the tool description text. */
+ *  without parsing the tool description text.
+ *
+ *  MCP-spec fields are advisory client hints, not server-side enforcement —
+ *  the grant system in agent-grants.ts is the authoritative check.
+ *  `irreversibleHint` is a DPF extension layered on top: every irreversible
+ *  tool is also destructive, but not every destructive tool is irreversible.
+ *  The envelope flow (Pseudo-User Contract spec §6.4 — BI-0F9C291C) uses
+ *  irreversibleHint to enforce the typed-phrase hard floor — irreversible
+ *  actions cannot be auto-approved by per-turn elevation. */
 export type ToolAnnotations = {
   /** Tool only reads data — never mutates state */
   readOnlyHint?: boolean;
@@ -109,6 +117,13 @@ export type ToolAnnotations = {
   idempotentHint?: boolean;
   /** Tool reaches outside the platform boundary (network, external API) */
   openWorldHint?: boolean;
+  /** DPF extension. Tool's effect cannot be undone by any existing inverse
+   *  tool — e.g. data deletion with no soft-delete column, a network send
+   *  that the recipient has already acted on, a financial transfer. Always
+   *  implies `destructiveHint: true`. Used by the Pseudo-User Contract
+   *  envelope flow (BI-0F9C291C) to require an explicit typed-phrase
+   *  confirmation regardless of per-turn elevation. */
+  irreversibleHint?: boolean;
 };
 
 export type ToolDefinition = {
@@ -119,11 +134,29 @@ export type ToolDefinition = {
   requiresExternalAccess?: boolean;
   executionMode?: "proposal" | "immediate";
   sideEffect?: boolean;
+  /**
+   * Tool captures the coworker's own recommendation or work product as a
+   * structured artifact (e.g. save_marketing_review). Persistence-only; no
+   * external action. Coworkers running in `advise` mode are still permitted
+   * to call these tools because the recommendation IS the deliverable — the
+   * advise/act distinction guards against acting on the outside world, not
+   * against recording the advice the user explicitly asked for. The tool
+   * remains `sideEffect: true` for MCP annotations and tool-execution
+   * memory; this flag only exempts it from the advise-mode runtime filter.
+   */
+  coworkerArtifact?: boolean;
   /** When set, tool is only available during these build phases.
    *  Null/undefined = available in all phases (non-build tools). */
   buildPhases?: BuildPhaseTag[] | null;
   /** MCP-spec tool annotations for governance and safety classification */
   annotations?: ToolAnnotations;
+  /** Pseudo-User Contract (spec §6.1 — BI-D9487754): the ScreenManifest
+   *  surface this tool is meaningful in. Used by the manifest CI lint to
+   *  validate that domain actions a manifest exposes have a matching tool
+   *  entry, and by the chat handler to filter the tool catalog by current
+   *  routeContext. Undefined = surface-agnostic (the tool is callable from
+   *  any context — most tools fall here). */
+  screenSurface?: string;
   /**
    * Predicate that lets an `executionMode: "proposal"` tool skip the proposal
    * card and execute immediately when the user has already pre-authorized the
@@ -259,13 +292,25 @@ export function resolveSavePhaseHandoffTransition(
 }
 
 /** Tools that perform destructive or irreversible actions beyond what
- *  sideEffect/executionMode already captures. */
+ *  sideEffect/executionMode already captures. Used by resolveAnnotations
+ *  to set destructiveHint on tools that don't carry an explicit
+ *  `annotations` block. */
 const DESTRUCTIVE_TOOLS = new Set([
   "deploy_feature",
   "execute_promotion",
   "transition_employee_status",
   "contribute_to_hive",
   "apply_platform_update",
+  // Pseudo-User Contract (BI-B2F7ABF5): build-phase and lifecycle ops that
+  // advance the FeatureBuild state machine are destructive in the
+  // can't-quietly-take-back sense. Promote/process write FeatureBuild rows
+  // and dispatch coworker work; approve_decomposition commits the
+  // decomposition that drives the Plan phase; start_build kicks off the
+  // sandbox/code-generation chain.
+  "promote_to_build_studio",
+  "process_backlog_for_build_studio",
+  "approve_decomposition",
+  "start_build",
 ]);
 
 export type ToolResult = {
@@ -395,7 +440,8 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         type: { type: "string", enum: ["portfolio", "product"], description: "Item type" },
         status: { type: "string", enum: ["triaging", "open", "in-progress"], description: "Initial status (defaults to triaging). Non-triaging requires a paired triageOutcome." },
         triageOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Required when status is not triaging" },
-        source: { type: "string", enum: ["feature-gap", "bug", "tool-gap", "skill-gap", "doc-gap", "user-request", "automated-detection"], description: "What kind of gap or signal produced this item" },
+        workType: { type: "string", enum: [...BACKLOG_WORK_TYPE_VALUES], description: "What kind of work this is (closed enum). bug == defect; feature == new capability; chore | doc | tool | skill | refactor for the corresponding work categories." },
+        source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "Intake origin — how did this item arrive. user-request (a human asked for it) or automated-detection (the platform observed it). Defaults to user-request when omitted." },
         proposedOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Advisory suggestion for Scrum Master triage (non-binding)" },
         priority: { type: "integer", description: "Optional ranked priority within the open pool (lower = higher priority)." },
         effortSize: { type: "string", enum: ["small", "medium", "large", "xlarge"], description: "Required when triageOutcome=build (skipping triage). Otherwise applied if provided." },
@@ -403,7 +449,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         epicId: { type: "string", description: "Epic ID to link to (optional)" },
         itemId: { type: "string", description: "Optional custom item ID (e.g. BI-PORT-005). Auto-generated if omitted." },
       },
-      required: ["title", "type", "source"],
+      required: ["title", "type", "workType"],
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
@@ -566,7 +612,8 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         status: { type: "string", enum: [...BACKLOG_STATUS_VALUES], description: "Update status. For triaged items only; use triage_backlog_item to leave triaging." },
         priority: { type: "number", description: "Priority number (lower = higher priority)" },
         body: { type: "string", description: "Updated description" },
-        source: { type: "string", enum: ["feature-gap", "bug", "tool-gap", "skill-gap", "doc-gap", "user-request", "automated-detection"], description: "Reclassify the source signal" },
+        workType: { type: "string", enum: [...BACKLOG_WORK_TYPE_VALUES], description: "Reclassify what kind of work this is (closed enum)." },
+        source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "Reclassify the intake origin." },
         proposedOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Advisory recommendation; non-binding on triage" },
       },
       required: ["itemId"],
@@ -979,12 +1026,14 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "list_backlog_items",
-    description: "List backlog items filtered by status, type, epic, claim state, or active-build state. Read-only. Returns semantic IDs (BI-*, EP-*) — never cuids.",
+    description: "List backlog items filtered by status, type, workType, source, epic, claim state, or active-build state. Read-only. Returns semantic IDs (BI-*, EP-*) — never cuids.",
     inputSchema: {
       type: "object",
       properties: {
         status: { type: "string", enum: ["triaging", "open", "in-progress", "done", "deferred"] },
         type: { type: "string", enum: ["portfolio", "product"] },
+        workType: { type: "string", enum: [...BACKLOG_WORK_TYPE_VALUES], description: "Filter by work-type (bug | feature | chore | doc | tool | skill | refactor)." },
+        source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "Filter by intake origin (user-request | automated-detection)." },
         epicId: { type: "string", description: "Semantic epic id (EP-*) to filter to" },
         unclaimed: { type: "boolean", description: "Only items with no user/agent claim" },
         hasActiveBuild: { type: "boolean", description: "Only items currently linked to a Build Studio build" },
@@ -1012,7 +1061,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "update_backlog_item_status",
-    description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table in apps/web/lib/backlog/transitions.ts; same-status calls are no-op successes. Setting status='triaging' on an already-triaged item is the *retriage* path — clears triageOutcome and effortSize so triage_backlog_item can re-decide. Setting status='done' requires a resolution. Writes a status_change activity row and may auto-close the parent epic.",
+    description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table in apps/web/lib/backlog/transitions.ts; same-status calls are no-op successes. Setting status='triaging' on an already-triaged item is the *retriage* path — clears triageOutcome and effortSize so triage_backlog_item can re-decide. Setting status='done' requires a resolution. Writes a status_change activity row and may auto-close the parent epic. NOTE: this only changes the status field — it does NOT start work. For a triageOutcome=build item, starting the work means promote_to_build_studio (creates the FeatureBuild + Build Studio Ideate); flipping such an item to in-progress returns an advisory and does not build anything.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1028,7 +1077,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "link_backlog_item_to_epic",
-    description: "Link a backlog item to an epic (or unlink with epicId=null). Recomputes target epic status — if a done epic gains a new open item, it flips back to open. Writes an epic_link activity row.",
+    description: "Link a backlog item to an epic (or unlink with epicId=null). Recomputes target epic status — if a done epic gains a new open item, it flips back to open. Writes an epic_link activity row. NOTE: linking is organizational only — it does NOT triage the item (use triage_backlog_item) and does NOT promote it or create a build (use promote_to_build_studio). Linking an untriaged/unpromoted item returns an advisory; never report an epic link as 'triaged' or 'promoted'.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1164,6 +1213,30 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         leaseId: { type: "string" },
       },
       required: ["leaseId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+  },
+  {
+    name: "record_local_integration_result",
+    description: "Record the result of a local merged-code integration gate before push or PR. Captures candidate branch, mode, pass/fail/conflict status, and evidence.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        provider: { type: "string", enum: ["build-studio", "claude", "codex", "coworker"] },
+        externalSessionId: { type: "string" },
+        routeContext: { type: "string" },
+        buildId: { type: "string" },
+        taskRunId: { type: "string" },
+        candidateBranch: { type: "string" },
+        mode: { type: "string", enum: ["single-branch", "sibling-set", "post-merge-main"] },
+        status: { type: "string", enum: ["passed", "failed", "conflict"] },
+        summary: { type: "string" },
+        evidence: { type: "object" },
+      },
+      required: ["provider", "externalSessionId", "routeContext", "candidateBranch", "mode", "status", "summary", "evidence"],
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
@@ -1315,6 +1388,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "operate_marketing",
     sideEffect: true,
+    coworkerArtifact: true,
   },
   {
     name: "create_marketing_campaign_brief",
@@ -1335,6 +1409,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "operate_marketing",
     sideEffect: true,
+    coworkerArtifact: true,
   },
   {
     name: "create_marketing_asset_task",
@@ -1352,6 +1427,115 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "operate_marketing",
     sideEffect: true,
+    coworkerArtifact: true,
+  },
+  {
+    name: "publish_to_linkedin",
+    description: "Publish an APPROVED marketing OutboundDraft (channelId=linkedin or linkedin-personal-social) to the operator's connected LinkedIn personal feed. Requires the LinkedIn integration to be connected via /platform/tools/integrations/linkedin-personal-social. Fails fast if the draft is not status=approved or no LinkedIn credential is connected. On success, writes an OutboundPublication row and flips the draft to status=published.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        draftId: { type: "string", description: "OutboundDraft.draftId in status='approved' on a LinkedIn channel" },
+      },
+      required: ["draftId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "send_marketing_email",
+    description: "Send an APPROVED marketing OutboundDraft (channelId=email or email-postmark, assetType=email) through the operator's connected Postmark server. Requires the Email (Postmark) integration to be connected via /platform/tools/integrations/email-postmark. Fails fast if the draft is not status=approved, the Postmark credential is not connected, or the From address is unverified. On success, writes an OutboundPublication row and flips the draft to status=published.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        draftId: { type: "string", description: "OutboundDraft.draftId in status='approved' on an email channel" },
+      },
+      required: ["draftId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "place_linkedin_ad",
+    description: "Place a LinkedIn Ads campaign from an APPROVED OutboundDraft (channelId=linkedin-ads, assetType=ad-creative). Requires the LinkedIn integration connected with the ads scope (r_ads, rw_ads). Refuses if the placement would exceed the per-channel weekly spend ceiling — operators must set a ceiling on /customer/marketing before any ad spend. AGENTS MUST NOT CALL THIS WITHOUT EXPLICIT USER CONFIRMATION naming the spend amount, audience, and ad account.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        draftId: { type: "string", description: "OutboundDraft.draftId in status='approved' on the linkedin-ads channel" },
+      },
+      required: ["draftId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "refresh_channel_kpis",
+    description: "Pull recent engagement metrics from a channel adapter (currently linkedin-ads) for OutboundPublication rows still inside their 30-day analytics window, write a per-publication snapshot, and aggregate channel-level impressions/clicks/cost/conversions into a fresh MarketingKpiCheckpoint row so the next strategist review sees real numbers.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        channelId: { type: "string", description: "Channel id, e.g. linkedin-ads" },
+        sinceDaysAgo: { type: "number", description: "Optional override for the analytics window (default 30)" },
+      },
+      required: ["channelId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "tick_marketing_scheduler",
+    description: "Phase 5: dispatch all ScheduledOutboundAction rows whose scheduledFor <= now. Fires each via the right Phase 1-4 service (draftMarketingAsset / publishApprovedDraft / pullChannelKpis) and reports fired vs failed counts. Idempotent and safe to call as often as the scheduler cadence requires.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "plan_upcoming_marketing_drafts",
+    description: "Phase 5: walk recent MarketingAssetTask rows for the organization and schedule a draft-marketing-asset action 3 days ahead of each task's due window (idempotent — skips tasks that already have a pending or fired schedule).",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "set_marketing_autopilot_policy",
+    description: "Phase 5: operator-only. Upsert a bounded per-channel autopilot policy. Channel must be in the autopilot allowlist (linkedin-personal-social, linkedin, email-postmark, email); ad channels are hard-refused by design. The runtime enforces channel allowlist + word-count threshold + weekly publish ceiling + low-confidence-marker check on every auto-approval.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        channelId: { type: "string", description: "Channel id; must be on the autopilot allowlist" },
+        enabled: { type: "boolean", description: "Whether the policy is active right now" },
+        autoApproveBelowWords: { type: "number", description: "Auto-approve only drafts shorter than this word count (null = no length gate)" },
+        autoPublishAfterMinutes: { type: "number", description: "Minutes a draft must age before autopilot fires (null = no aging gate)" },
+        weeklyCeiling: { type: "number", description: "Maximum publishes per rolling 7-day window for this channel" },
+      },
+      required: ["channelId", "enabled", "weeklyCeiling"],
+    },
+    requiredCapability: "manage_provider_connections",
+    sideEffect: true,
+  },
+  {
+    name: "draft_marketing_asset",
+    description: "Turn a saved MarketingAssetTask brief into a channel-shaped, human-reviewable draft. Creates an OutboundDraft with status='pending-review' that appears in the marketing approval queue on /customer/marketing. Phase 1: LinkedIn posts and emails only. No external API call — the draft is internal until a human approves and a publish tool fires.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        assetTaskId: { type: "string", description: "MarketingAssetTask.taskId to draft from" },
+        channelOverride: { type: "string", enum: [...MARKETING_CHANNELS], description: "Override the asset task's channel if drafting a variant" },
+        toneNotes: { type: "string", description: "Optional one-line guidance the drafter should respect (e.g. 'first person, technical, no emojis')" },
+      },
+      required: ["assetTaskId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+    coworkerArtifact: true,
   },
   {
     name: "record_marketing_kpi_checkpoint",
@@ -1368,6 +1552,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "operate_marketing",
     sideEffect: true,
+    coworkerArtifact: true,
   },
   {
     name: "create_marketing_automation_candidate",
@@ -1385,6 +1570,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
     requiredCapability: "operate_marketing",
     sideEffect: true,
+    coworkerArtifact: true,
   },
   {
     name: "analyze_seo_opportunity",
@@ -1584,6 +1770,18 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         inputs: { type: "array", items: { type: "string" }, description: "User inputs the feature accepts" },
         dataNeeds: { type: "string", description: "What data the feature stores" },
         acceptanceCriteria: { type: "array", items: { type: "string" }, description: "What done looks like" },
+        fixContext: {
+          type: "object",
+          description: "For fix builds (kind=fix): the defect diagnosis. reproSteps, rootCause, and fixApproach are all required before a fix build can advance to plan. Merged into any existing fixContext, so partial updates accumulate.",
+          properties: {
+            reproSteps: { type: "string", description: "How to reproduce the defect" },
+            expected: { type: "string", description: "Expected behavior" },
+            actual: { type: "string", description: "Actual (buggy) behavior" },
+            rootCause: { type: "string", description: "Identified root cause (file/function + why)" },
+            fixApproach: { type: "string", description: "Smallest correct fix + regression test" },
+            severity: { type: "string" },
+          },
+        },
       },
       required: ["title", "description", "portfolioContext", "targetRoles", "dataNeeds", "acceptanceCriteria"],
     },
@@ -3564,6 +3762,35 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    // BI-F9E7B780: governance-surface rollup. Same shape as
+    // list_my_capability_needs but UN-scoped from the calling agent —
+    // returns all coworker needs across all agents, plus filter-options
+    // and counts-by-status/severity/kind summaries that the existing
+    // /platform/ai/capability-needs admin page already renders. Lets
+    // taxonomy audits query governed capability evidence without direct
+    // SQL fallback.
+    name: "list_all_capability_needs",
+    description:
+      "List capability needs submitted by ALL coworkers (not scoped to the calling agent), optionally filtered by agentId, status, kind, or severity. Returns the rich review shape used by the /platform/ai/capability-needs admin page: summary counts by status/severity/kind, filter-option enums, and the full need list. Read-only governance surface for taxonomy audits.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agentId: { type: "string", description: "Optional — filter to one coworker's needs. Omit to return all." },
+        status: { type: "string", enum: [...COWORKER_CAPABILITY_NEED_STATUSES] },
+        kind: { type: "string", enum: [...COWORKER_CAPABILITY_NEED_KINDS] },
+        severity: { type: "string", enum: [...COWORKER_CAPABILITY_NEED_SEVERITIES] },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+    annotations: {
+      readOnlyHint: true,
+      idempotentHint: true,
+    },
+  },
+  {
     name: "prefill_onboarding_wizard",
     description: "Pre-fill the regulation onboarding wizard with AI-drafted data. Stores a draft and returns the wizard URL for human review.",
     inputSchema: {
@@ -3995,6 +4222,41 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: null,
     sideEffect: false,
   },
+  // ─── Multi-Agent Collaboration Tools (EP-A2A, 2026-06-04 spec) ─────────────
+  {
+    name: "request_coworker",
+    description:
+      "Hand off a scoped sub-task to a NAMED peer coworker. Unlike spawn_work_thread (anonymous child), this targets a specific coworker by agentId or slug and emits a VISIBLE handoff the user sees inline. Use when you need another coworker's distinct capability (e.g. ask the Enterprise Architect to review a schema).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        targetAgent: { type: "string", description: "Target coworker — canonical agentId (AGT-*) or slug alias (e.g. 'ea-architect')." },
+        objective: { type: "string", description: "The scoped sub-task for the peer coworker." },
+        questionPacketSummary: { type: "string", description: "Optional one-line summary of the intent/question shown on the handoff card." },
+        tier: { type: "number", enum: [2, 3], description: "Interaction tier (default 2). Tier 3 requires depth-2 spawn support." },
+        enteredVia: { type: "string", enum: ["handoff", "escalation", "spawn"], description: "How the peer is entering (default 'handoff')." },
+      },
+      required: ["targetAgent", "objective"],
+    },
+    requiredCapability: null,
+    sideEffect: true,
+  },
+  {
+    name: "summon_coworker",
+    description:
+      "Bring a NAMED coworker into the current conversation as a second/third-tier participant to address a request, emitting a VISIBLE summon. Typically invoked on the user's behalf.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        targetAgent: { type: "string", description: "Target coworker — canonical agentId (AGT-*) or slug alias." },
+        objective: { type: "string", description: "What the summoned coworker should address." },
+        tier: { type: "number", enum: [2, 3], description: "Interaction tier (default 2)." },
+      },
+      required: ["targetAgent", "objective"],
+    },
+    requiredCapability: null,
+    sideEffect: true,
+  },
   // ─── Deliberation Pattern Framework Tools (spec §6.8) ──────────────────────
   {
     name: "start_deliberation",
@@ -4102,6 +4364,243 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     sideEffect: false,
+  },
+  {
+    name: "trigger_contributor_inventory_sync",
+    description:
+      "Dispatch an on-demand contributor inventory sync (git worktrees, branches, GitHub PRs) without waiting for the 10-minute cron. Used by agents that just made an external change (pushed a branch, opened a PR) and want the /platform/development/change-lanes dashboard to reflect it on the next refresh. Returns the Inngest event id immediately; the runner creates the ContributorInventorySyncRun row asynchronously.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        reason: {
+          type: "string",
+          description: "Optional short tag propagated to the run row's triggeredBy field for audit.",
+        },
+      },
+    },
+    requiredCapability: "manage_provider_connections",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "summarize_upgrade_impact",
+    description:
+      "On-demand, install-tailored \"What's in this update?\" summary (BI-C26F7EE1). Compares the upstream lineage marker (latest succeeded SelfUpgradeRun.targetSha) to the resolved upstream HEAD, classifies the change set by Conventional Commit type, scores each commit's relevance to this install (archetype, industry, customization paths, open quality-issue themes), and returns a headline + ordered top-N items (most impactful first) plus the full list and a 'touches your customizations' callout that doubles as a §5.0 merge-conflict early warning. Advisory only — never queues or applies an upgrade. Cacheable per (currentLineageSha, targetSha); set refresh=true to bypass.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        refresh: {
+          type: "boolean",
+          description: "Bypass the per-process cache and recompute. Default false.",
+        },
+        topN: {
+          type: "number",
+          description: "Cap on items in the headline list (default 8). The full list is always returned alongside.",
+        },
+        skipPhrasing: {
+          type: "boolean",
+          description: "Return only the deterministic shape (no LLM phrasing). Default false. Useful when an external client wants to render its own copy.",
+        },
+      },
+      required: [],
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+
+  // ─── Pseudo-User Contract: screen_* view-command tool family (BI-DF6079E9) ──
+  // Spec §6.2. Each tool returns a structured `data.event` payload describing
+  // the requested screen action; the chat SSE stream emits the payload and the
+  // client-side relay (AgentCoworkerPanel.tsx) dispatches it as a window
+  // CustomEvent that the active page handles via its registered ScreenManifest
+  // (BI-D9487754). Per-tool MCP annotations are exact — destructiveHint flags
+  // propose_action and dispatch_action explicitly; the rest are advisory UI
+  // mutations the user can still see and override.
+  //
+  // The SSE emission + window-event relay plumbing lands as the follow-on
+  // half of this BI. For now the handlers return the event payload
+  // structurally so the chat surface is queryable and grant-checked.
+
+  {
+    name: "screen_describe",
+    description:
+      "Pseudo-User Contract (spec §6.1, BI-D9487754/BI-DF6079E9). Return the active ScreenManifest summary for the chat's current routeContext — the list of selections, navigations, panels, forms, and domain actions the coworker may invoke on this page. Read-only. Call once at the start of a turn to discover what's available before dispatching screen_* actions. Returns the manifest's serialisable metadata; live handlers stay on the client.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  {
+    name: "screen_get_state",
+    description:
+      "Pseudo-User Contract. Return the current observable state of the active screen — selected entities (by selectionId), focused field id, open panel ids, current scroll anchor, current form values. Read-only. Source of truth is the page; this tool returns the snapshot the chat session plumbed in via screenState. Call screen_describe first for the manifest shape, then screen_get_state for the live values.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  },
+  {
+    name: "screen_select_entity",
+    description:
+      "Pseudo-User Contract. Change the active screen's selection — e.g. switch which FeatureBuild is currently focused in Build Studio. The selectionId must match one declared by the active ScreenManifest; the entityId must come from that selection's listSource. Dispatches via the chat SSE channel; the page applies the change through its registered handler.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selectionId: { type: "string", description: "Manifest selection id (e.g. \"build\")." },
+        entityId: { type: "string", description: "Id of the entity to select (from the manifest's listSource enumeration)." },
+      },
+      required: ["selectionId", "entityId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    screenSurface: "*",
+  },
+  {
+    name: "screen_navigate",
+    description:
+      "Pseudo-User Contract. Navigate to another route within the portal — e.g. /build → /storefront. Conditionally destructive: if the current page has unsaved form state the chat handler auto-wraps the call in an envelope (spec §6.4). Cross-coworker-ownership navigations will fire a HITL handoff gate when BI-A32801C5 lands.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        route: { type: "string", description: "Target route path, e.g. \"/build/FB-5E20E793\"." },
+        params: { type: "object", description: "Optional path/query parameters." },
+      },
+      required: ["route"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    screenSurface: "*",
+  },
+  {
+    name: "screen_open_panel",
+    description:
+      "Pseudo-User Contract. Open a panel registered in the active manifest — drawer, collapsible section, modal. Idempotent: opening an already-open panel is a no-op.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        panelId: { type: "string", description: "Manifest panel id." },
+      },
+      required: ["panelId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    screenSurface: "*",
+  },
+  {
+    name: "screen_close_panel",
+    description:
+      "Pseudo-User Contract. Close a panel registered in the active manifest. Idempotent.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        panelId: { type: "string", description: "Manifest panel id." },
+      },
+      required: ["panelId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    screenSurface: "*",
+  },
+  {
+    name: "screen_focus_field",
+    description:
+      "Pseudo-User Contract. Focus a specific form field on the active screen — useful when guiding the user to fix a validation error or fill in a missing value. The field must belong to a form declared in the manifest. Idempotent; cosmetic if the field is already focused.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        formId: { type: "string", description: "Manifest form id." },
+        fieldId: { type: "string", description: "Field id within the form." },
+      },
+      required: ["formId", "fieldId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    screenSurface: "*",
+  },
+  {
+    name: "screen_set_input",
+    description:
+      "Pseudo-User Contract. Pre-fill a form field on the user's behalf. The user can still review and modify before submit; the visual cue contract (BI-5696B4D7) highlights coworker-set fields with an amber affordance + \"Set by <Coworker>\" tooltip. Not destructive by itself (reversible until submit) — submit is the destructive action and goes through the envelope flow.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        formId: { type: "string", description: "Manifest form id." },
+        fieldId: { type: "string", description: "Field id within the form." },
+        value: { description: "Value to set. Type depends on the field's declared type." },
+      },
+      required: ["formId", "fieldId", "value"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    screenSurface: "*",
+  },
+  {
+    name: "screen_scroll_to",
+    description:
+      "Pseudo-User Contract. Scroll the page to a named anchor — useful when surfacing a row, section, or message that's currently off-screen. Read-class side effect (page state, no domain mutation).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        anchor: { type: "string", description: "Anchor id, route fragment, or manifest-declared landmark." },
+      },
+      required: ["anchor"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    screenSurface: "*",
+  },
+  {
+    name: "screen_propose_action",
+    description:
+      "Pseudo-User Contract (spec §6.4 — destructive-action envelope flow). Propose a domain action that needs explicit user approval before execution. Creates a CoworkerActionEnvelope (BI-D887CD3B schema) in `proposed` status, emits the proposal to the chat UI, and returns the envelope id so the chat handler can correlate the user's approve/deny response. Subject to the per-turn N=3 destructive auto-approval cap (spec §6.4); irreversible actions require an explicit typed-phrase floor and ignore elevation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        manifestActionId: { type: "string", description: "actionId from the active manifest's domainActions list." },
+        args: { type: "object", description: "Arguments to pass to the underlying MCP tool when the envelope is approved." },
+        rationale: { type: "string", description: "One-line plain-English reason shown to the user in the approval card." },
+      },
+      required: ["manifestActionId", "rationale"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false, irreversibleHint: false },
+    screenSurface: "*",
+  },
+  {
+    name: "screen_dispatch_action",
+    description:
+      "Pseudo-User Contract. Execute a previously-proposed envelope by id once it's been approved (spec §6.4). Resolves the underlying tool from the envelope's manifestActionId + the active manifest's domainActions, runs it with the merged args, and records the outcome on the envelope (`executed` | `failed`). Destructive in the same sense as the underlying tool — the destructiveHint reflects the proposal's intent.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        envelopeId: { type: "string", description: "CoworkerActionEnvelope id returned by screen_propose_action." },
+      },
+      required: ["envelopeId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false, irreversibleHint: false },
+    screenSurface: "*",
   },
 ];
 
@@ -4413,6 +4912,28 @@ export async function executeTool(
   // Strip empty optional object params that models send as schema artifacts
   const params = sanitizeToolParams(toolName, rawParams);
 
+  // ─── Build-context hint (BI-2DAB02B4 / BI-F4A30FCB) ────────────────────────
+  // When the coworker is messaging from a specific build, that build is plumbed
+  // here as context.featureBuildId (a cuid). Resolve it to the FB- buildId and
+  // set params.buildId so phase-scoped tools (update_feature_brief,
+  // reviewDesignDoc, saveBuildEvidence, …) target THAT build via
+  // extractBuildIdHint — instead of resolveActiveBuildId silently falling back
+  // to the user's most-recently-updated non-terminal build, which
+  // cross-contaminates when several builds are active (the wrong-build-context
+  // bug). Only fills when the caller didn't pass an explicit buildId, and is
+  // inert for non-build tools (they never read params.buildId).
+  if (context?.featureBuildId && typeof params["buildId"] !== "string") {
+    try {
+      const ctxBuild = await prisma.featureBuild.findUnique({
+        where: { id: context.featureBuildId },
+        select: { buildId: true },
+      });
+      if (ctxBuild?.buildId) params["buildId"] = ctxBuild.buildId;
+    } catch {
+      // Non-fatal — fall back to the existing hint / active-build resolution.
+    }
+  }
+
   // ─── Runtime kernel-commandment gate (BI-43F95F77) ─────────────────────────
   // Consult the gate BEFORE the switch. If a tier-1 commandment matches this
   // tool name in the active session class, refuse (autonomous) or surface a
@@ -4648,16 +5169,99 @@ export async function executeTool(
         data: { threads },
       };
     }
+    case "request_coworker": {
+      if (!context?.threadId) {
+        return { success: false, error: "missing_threadId", message: "request_coworker requires caller thread context." };
+      }
+      const targetAgent = String(params["targetAgent"] ?? "").trim();
+      const objective = String(params["objective"] ?? "").trim();
+      if (!targetAgent || !objective) {
+        return { success: false, error: "invalid_params", message: "request_coworker requires targetAgent and objective." };
+      }
+      const tierParam = Number(params["tier"]);
+      const enteredViaParam = typeof params["enteredVia"] === "string" ? params["enteredVia"] : undefined;
+      const { requestCoworker } = await import("@/lib/tak/coworker-collaboration");
+      try {
+        const result = await requestCoworker(
+          {
+            parentThreadId: context.threadId,
+            targetAgent,
+            objective,
+            tier: tierParam === 3 ? 3 : 2,
+            enteredVia: enteredViaParam === "escalation" || enteredViaParam === "spawn" ? enteredViaParam : "handoff",
+            callerAgentId: context.agentId ?? null,
+            questionPacketSummary: typeof params["questionPacketSummary"] === "string" ? params["questionPacketSummary"] : undefined,
+            routeContext: context.routeContext,
+          },
+          userId,
+        );
+        return {
+          success: true,
+          entityId: result.childThreadId,
+          message: `Handed off to ${result.targetLabel}.`,
+          data: result,
+        };
+      } catch (err) {
+        return { success: false, error: "handoff_failed", message: err instanceof Error ? err.message : "request_coworker failed." };
+      }
+    }
+    case "summon_coworker": {
+      if (!context?.threadId) {
+        return { success: false, error: "missing_threadId", message: "summon_coworker requires caller thread context." };
+      }
+      const targetAgent = String(params["targetAgent"] ?? "").trim();
+      const objective = String(params["objective"] ?? "").trim();
+      if (!targetAgent || !objective) {
+        return { success: false, error: "invalid_params", message: "summon_coworker requires targetAgent and objective." };
+      }
+      const tierParam = Number(params["tier"]);
+      const { summonCoworker } = await import("@/lib/tak/coworker-collaboration");
+      try {
+        const result = await summonCoworker(
+          {
+            parentThreadId: context.threadId,
+            targetAgent,
+            objective,
+            tier: tierParam === 3 ? 3 : 2,
+            routeContext: context.routeContext,
+          },
+          userId,
+        );
+        return {
+          success: true,
+          entityId: result.childThreadId,
+          message: `Summoned ${result.targetLabel}.`,
+          data: result,
+        };
+      } catch (err) {
+        return { success: false, error: "summon_failed", message: err instanceof Error ? err.message : "summon_coworker failed." };
+      }
+    }
     case "create_backlog_item": {
       const itemId = typeof params["itemId"] === "string" && params["itemId"].trim()
         ? params["itemId"].trim()
         : `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
       const status = typeof params["status"] === "string" ? params["status"] : "triaging";
       const triageOutcome = typeof params["triageOutcome"] === "string" ? params["triageOutcome"] : null;
-      const source = typeof params["source"] === "string" ? params["source"] : null;
+      // workType is required by the tool schema; default to "feature" defensively
+      // so a missing payload field surfaces as a Prisma validation error rather
+      // than a silent insert with workType=NULL.
+      const workType = typeof params["workType"] === "string" ? params["workType"] : null;
+      // source defaults to "user-request" (the MCP tool is human-driven by
+      // contract — agents calling it on behalf of an operator are forwarding a
+      // human request).
+      const source = typeof params["source"] === "string" ? params["source"] : "user-request";
       const proposedOutcome = typeof params["proposedOutcome"] === "string" ? params["proposedOutcome"] : null;
       const effortSize = typeof params["effortSize"] === "string" ? params["effortSize"] : null;
       const priority = typeof params["priority"] === "number" ? params["priority"] : null;
+
+      if (!workType) {
+        return {
+          success: false,
+          error: "workType is required",
+          message: "workType is required (bug | feature | chore | doc | tool | skill | refactor).",
+        };
+      }
 
       // Validate the status / triageOutcome pairing rule from the tool description:
       // "supply status+triageOutcome together only when explicitly skipping triage"
@@ -4709,7 +5313,8 @@ export async function executeTool(
           ...(status === "done" ? { completedAt: new Date() } : {}),
           ...(typeof params["body"] === "string" ? { body: params["body"] } : {}),
           ...(epicCuid ? { epicId: epicCuid } : {}),
-          ...(source ? { source } : {}),
+          workType,
+          source,
           ...(triageOutcome ? { triageOutcome } : {}),
           ...(proposedOutcome ? { proposedOutcome } : {}),
           ...(effortSize ? { effortSize } : {}),
@@ -4932,13 +5537,41 @@ export async function executeTool(
         return { success: false, error: result.error, message: result.message };
       }
 
+      // BI-52022707 axis D — auto-dispatch Ideate after governed promotion.
+      // The transaction inside promoteBacklogItemToBuildDraft set
+      // draftApprovedAt for governed + non-empty-body promotions; that closes
+      // the "Record Approve Start" gate but does NOT fire the Ideate research.
+      // Mirror the approveBuildStart action's fire-and-forget pattern here so
+      // the BS pipeline actually starts work without a second operator click.
+      // Fire-and-forget on purpose: the operator's MCP call returns immediately
+      // with the FB-* id, and the ~3-min Codex research runs async, exactly
+      // like the manual UI button path. Errors are logged + written to
+      // BuildActivity by the helper itself — never thrown out here.
+      if (result.autoApprovedDispatchEligible) {
+        void (async () => {
+          try {
+            const { dispatchIdeateForApprovedBuild } = await import("@/lib/integrate/ideate-on-approval");
+            await dispatchIdeateForApprovedBuild({ buildId: result.build.buildId, userId });
+          } catch (err) {
+            console.error(
+              "[promote_to_build_studio] auto-dispatch Ideate failed (handler swallowed by ideate-on-approval but the dynamic import or top-level invocation rejected):",
+              { buildId: result.build.buildId },
+              err,
+            );
+          }
+        })();
+      }
+
       return {
         success: true,
         entityId: result.build.buildId,
-        message: `Promoted ${itemId} to Build Studio`,
+        message: result.autoApprovedDispatchEligible
+          ? `Promoted ${itemId} to Build Studio (auto-approved under governed flow — Ideate research dispatched)`
+          : `Promoted ${itemId} to Build Studio`,
         data: {
           buildId: result.build.buildId,
           backlogItemId: itemId,
+          autoApprovedDispatchEligible: result.autoApprovedDispatchEligible,
         },
       };
     }
@@ -5107,6 +5740,7 @@ export async function executeTool(
       }
       if (typeof params["priority"] === "number") data["priority"] = params["priority"];
       if (typeof params["body"] === "string") data["body"] = params["body"];
+      if (typeof params["workType"] === "string") data["workType"] = params["workType"];
       if (typeof params["source"] === "string") data["source"] = params["source"];
       if (typeof params["proposedOutcome"] === "string") data["proposedOutcome"] = params["proposedOutcome"];
       await prisma.backlogItem.update({ where: { itemId: String(params["itemId"]) }, data });
@@ -5236,6 +5870,8 @@ export async function executeTool(
       const where: Record<string, unknown> = {};
       if (typeof params["status"] === "string") where["status"] = params["status"];
       if (typeof params["type"] === "string") where["type"] = params["type"];
+      if (typeof params["workType"] === "string") where["workType"] = params["workType"];
+      if (typeof params["source"] === "string") where["source"] = params["source"];
       if (typeof params["epicId"] === "string" && params["epicId"].trim()) {
         const epicRow = await prisma.epic.findFirst({
           where: { OR: [{ epicId: params["epicId"].trim() }, { id: params["epicId"].trim() }] },
@@ -5266,6 +5902,8 @@ export async function executeTool(
           title: true,
           status: true,
           type: true,
+          workType: true,
+          source: true,
           priority: true,
           effortSize: true,
           activeBuildId: true,
@@ -5281,6 +5919,8 @@ export async function executeTool(
         title: i.title,
         status: i.status,
         type: i.type,
+        workType: i.workType,
+        source: i.source,
         priority: i.priority,
         effortSize: i.effortSize,
         triageOutcome: i.triageOutcome,
@@ -5343,6 +5983,8 @@ export async function executeTool(
           title: item.title,
           status: item.status,
           type: item.type,
+          workType: item.workType,
+          source: item.source,
           priority: item.priority,
           effortSize: item.effortSize,
           triageOutcome: item.triageOutcome,
@@ -5418,7 +6060,7 @@ export async function executeTool(
       // (Reason is checked against the *current* status below, after the item is loaded.)
       const item = await prisma.backlogItem.findUnique({
         where: { itemId: itemIdRaw },
-        select: { id: true, status: true, epicId: true, triageOutcome: true, effortSize: true },
+        select: { id: true, status: true, epicId: true, triageOutcome: true, effortSize: true, activeBuildId: true },
       });
       if (!item)
         return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
@@ -5503,11 +6145,28 @@ export async function executeTool(
         }
         return next;
       });
+      // Advisory: flipping a build item to in-progress is not the same as
+      // starting the work — surface the promote_to_build_studio path so the
+      // coworker can't report a no-op status change as "throughput".
+      const { buildPromoteAdvisory } = await import("@/lib/backlog/promote-advisory");
+      const promoteAdvisory = buildPromoteAdvisory({
+        itemId: updated.itemId,
+        targetStatus: updated.status,
+        triageOutcome: item.triageOutcome,
+        hasActiveBuild: item.activeBuildId != null,
+      });
       return {
         success: true,
         entityId: updated.itemId,
-        message: `${updated.itemId}: ${item.status} → ${updated.status}`,
-        data: { itemId: updated.itemId, status: updated.status, completedAt: updated.completedAt },
+        message:
+          `${updated.itemId}: ${item.status} → ${updated.status}` +
+          (promoteAdvisory ? ` — ADVISORY: ${promoteAdvisory}` : ""),
+        data: {
+          itemId: updated.itemId,
+          status: updated.status,
+          completedAt: updated.completedAt,
+          ...(promoteAdvisory ? { advisory: promoteAdvisory } : {}),
+        },
       };
     }
 
@@ -5533,7 +6192,14 @@ export async function executeTool(
       }
       const item = await prisma.backlogItem.findUnique({
         where: { itemId: itemIdRaw },
-        select: { id: true, epicId: true, status: true, epic: { select: { epicId: true } } },
+        select: {
+          id: true,
+          epicId: true,
+          status: true,
+          triageOutcome: true,
+          activeBuildId: true,
+          epic: { select: { epicId: true } },
+        },
       });
       if (!item)
         return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
@@ -5578,11 +6244,28 @@ export async function executeTool(
           }
         }
       });
+      // Advisory: a coworker asked to "triage + promote" may call this and then
+      // report the item as triaged/promoted, when an epic link is purely
+      // organizational. Surface the real triage_backlog_item / promote_to_build_studio
+      // path when triage/promotion is genuinely unfinished (BI-6C86ADEB).
+      const { buildEpicLinkAdvisory } = await import("@/lib/backlog/promote-advisory");
+      const epicLinkAdvisory = buildEpicLinkAdvisory({
+        itemId: itemIdRaw,
+        targetEpicId: targetEpicSemantic,
+        triageOutcome: item.triageOutcome,
+        hasActiveBuild: item.activeBuildId != null,
+      });
       return {
         success: true,
         entityId: itemIdRaw,
-        message: `Linked ${itemIdRaw} to ${targetEpicSemantic ?? "(no epic)"}`,
-        data: { itemId: itemIdRaw, epicId: targetEpicSemantic },
+        message:
+          `Linked ${itemIdRaw} to ${targetEpicSemantic ?? "(no epic)"}` +
+          (epicLinkAdvisory ? ` — ADVISORY: ${epicLinkAdvisory}` : ""),
+        data: {
+          itemId: itemIdRaw,
+          epicId: targetEpicSemantic,
+          ...(epicLinkAdvisory ? { advisory: epicLinkAdvisory } : {}),
+        },
       };
     }
 
@@ -5824,6 +6507,65 @@ export async function executeTool(
         entityId: lease.leaseId,
         message: `Released nonproduction environment lease ${lease.leaseId}.`,
         data: { lease },
+      };
+    }
+
+    case "record_local_integration_result": {
+      const { recordLocalIntegrationResult } = await import("@/lib/nonprod/local-integration");
+      const stringValue = (key: string) => (typeof params[key] === "string" ? String(params[key]).trim() : "");
+      const provider = stringValue("provider");
+      const externalSessionId = stringValue("externalSessionId");
+      const routeContext = stringValue("routeContext") || context?.routeContext || "";
+      const candidateBranch = stringValue("candidateBranch");
+      const mode = stringValue("mode");
+      const status = stringValue("status");
+      const summary = stringValue("summary");
+      const evidence = params["evidence"];
+      const missing = [
+        ["provider", provider],
+        ["externalSessionId", externalSessionId],
+        ["routeContext", routeContext],
+        ["candidateBranch", candidateBranch],
+        ["mode", mode],
+        ["status", status],
+        ["summary", summary],
+      ].filter(([, value]) => !value).map(([key]) => key);
+      if (evidence === undefined) missing.push("evidence");
+      if (missing.length > 0) {
+        return {
+          success: false,
+          error: "missing_required",
+          message: `Missing required local integration result field(s): ${missing.join(", ")}`,
+        };
+      }
+      if (!["build-studio", "claude", "codex", "coworker"].includes(provider)) {
+        return { success: false, error: "invalid_provider", message: `Unsupported provider: ${provider}` };
+      }
+      if (!["single-branch", "sibling-set", "post-merge-main"].includes(mode)) {
+        return { success: false, error: "invalid_mode", message: `Unsupported local integration mode: ${mode}` };
+      }
+      if (!["passed", "failed", "conflict"].includes(status)) {
+        return { success: false, error: "invalid_status", message: `Unsupported local integration status: ${status}` };
+      }
+
+      const result = await recordLocalIntegrationResult({
+        actorUserId: userId,
+        provider: provider as "build-studio" | "claude" | "codex" | "coworker",
+        externalSessionId,
+        routeContext,
+        buildId: stringValue("buildId") || undefined,
+        taskRunId: stringValue("taskRunId") || undefined,
+        candidateBranch,
+        mode: mode as "single-branch" | "sibling-set" | "post-merge-main",
+        status: status as "passed" | "failed" | "conflict",
+        summary,
+        evidence: evidence as import("@dpf/db").Prisma.InputJsonValue,
+      });
+      return {
+        success: true,
+        entityId: result.id,
+        message: `Recorded local integration result for ${candidateBranch}.`,
+        data: { evidenceId: result.id, status },
       };
     }
 
@@ -6248,17 +6990,38 @@ export async function executeTool(
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
       const { updateFeatureBrief } = await import("@/lib/actions/build");
+      // Merge OVER the existing brief. updateFeatureBrief persists the whole
+      // brief object, so rebuilding it from scratch would clobber any field the
+      // caller omits — notably fixContext, which the fix-flow ideate phase fills
+      // incrementally. A fix build is also promoted with title/description
+      // pre-seeded; without this merge a fixContext-only update would blank them
+      // and fail validateFeatureBrief.
+      const prior = (await prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: { brief: true },
+      }))?.brief as Partial<import("@/lib/feature-build-types").FeatureBrief> | null;
+      const str = (key: string, fallback: string) =>
+        params[key] != null ? String(params[key]) : fallback;
+      const arr = (key: string, fallback: string[]) =>
+        Array.isArray(params[key]) ? (params[key] as unknown[]).map(String) : fallback;
+      const incomingFix = params["fixContext"] && typeof params["fixContext"] === "object" && !Array.isArray(params["fixContext"])
+        ? (params["fixContext"] as Record<string, unknown>)
+        : null;
+      const mergedFix = (prior?.fixContext || incomingFix)
+        ? { ...(prior?.fixContext ?? {}), ...(incomingFix ?? {}) }
+        : undefined;
       const brief = {
-        title: String(params["title"] ?? ""),
-        description: String(params["description"] ?? ""),
-        portfolioContext: String(params["portfolioContext"] ?? ""),
-        targetRoles: Array.isArray(params["targetRoles"]) ? params["targetRoles"].map(String) : [],
-        inputs: Array.isArray(params["inputs"]) ? params["inputs"].map(String) : [],
-        dataNeeds: String(params["dataNeeds"] ?? ""),
-        acceptanceCriteria: Array.isArray(params["acceptanceCriteria"]) ? params["acceptanceCriteria"].map(String) : [],
+        title: str("title", prior?.title ?? ""),
+        description: str("description", prior?.description ?? ""),
+        portfolioContext: str("portfolioContext", prior?.portfolioContext ?? ""),
+        targetRoles: arr("targetRoles", prior?.targetRoles ?? []),
+        inputs: arr("inputs", prior?.inputs ?? []),
+        dataNeeds: str("dataNeeds", prior?.dataNeeds ?? ""),
+        acceptanceCriteria: arr("acceptanceCriteria", prior?.acceptanceCriteria ?? []),
+        ...(mergedFix ? { fixContext: mergedFix } : {}),
       };
       try {
-        await updateFeatureBrief(buildId, brief);
+        await updateFeatureBrief(buildId, brief as import("@/lib/feature-build-types").FeatureBrief);
         await updateBuildHappyPathState(userId, {
           intake: {
             constrainedGoal: brief.title || null,
@@ -6519,6 +7282,21 @@ export async function executeTool(
         contributionReadiness = "low";
       }
 
+      // Surface canonical first-party palettes the agent should COMPOSE instead
+      // of hand-rolling (e.g. report-kit for reporting/data-display UX). Sourced
+      // from the in-code registry; each carries its governing kernel principle.
+      const { matchCanonicalPrimitives } = await import("@/lib/canonical-primitives");
+      const reusablePrimitives = matchCanonicalPrimitives(
+        `${featureDescription} ${domainConcepts.join(" ")} ${abstractionBoundary}`,
+      ).map((p) => ({
+        name: p.name,
+        path: p.path,
+        purpose: p.purpose,
+        exports: p.exports,
+        principle: p.principleSlug,
+        docs: p.docs,
+      }));
+
       const analysis = {
         scope: userScope,
         domainEntities,
@@ -6526,11 +7304,18 @@ export async function executeTool(
           ? "Feature is designed for a single use case."
           : "Domain-specific values should be stored as configuration rather than hardcoded."),
         contributionReadiness,
+        reusablePrimitives,
       };
+
+      const primitiveHint = reusablePrimitives.length
+        ? ` Compose the existing palette instead of hand-rolling: ${reusablePrimitives
+            .map((p) => `${p.name} (${p.exports.slice(0, 3).join(", ")}…; principle ${p.principle})`)
+            .join("; ")}.`
+        : "";
 
       return {
         success: true,
-        message: `Reusability: ${userScope} — ${domainEntities.length} parameterizable concept(s), contribution readiness: ${contributionReadiness}.`,
+        message: `Reusability: ${userScope} — ${domainEntities.length} parameterizable concept(s), contribution readiness: ${contributionReadiness}.${primitiveHint}`,
         data: analysis as unknown as Record<string, unknown>,
       };
     }
@@ -6587,7 +7372,7 @@ export async function executeTool(
       if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
       const latestBuild = await prisma.featureBuild.findUnique({
         where: { buildId },
-        select: { buildId: true, phase: true, threadId: true, designDoc: true, designReview: true, buildPlan: true, planReview: true, verificationOut: true, acceptanceMet: true, uxTestResults: true, uxVerificationStatus: true, brief: true, plan: true },
+        select: { buildId: true, phase: true, kind: true, threadId: true, designDoc: true, designReview: true, buildPlan: true, planReview: true, verificationOut: true, acceptanceMet: true, uxTestResults: true, uxVerificationStatus: true, brief: true, plan: true },
       });
       if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
 
@@ -6657,11 +7442,15 @@ export async function executeTool(
         if (canTransitionPhase(latestBuild.phase as import("@/lib/feature-build-types").BuildPhase, toPhase as import("@/lib/feature-build-types").BuildPhase)) {
           const plan = (latestBuild.plan as Record<string, unknown> | null) ?? {};
           const happyPathState = normalizeHappyPathState(plan.happyPathState);
-          const handoffBrief = latestBuild.brief as { acceptanceCriteria?: string[] } | null;
+          const handoffBrief = latestBuild.brief as { acceptanceCriteria?: string[]; fixContext?: import("@/lib/feature-build-types").FixContext } | null;
           const gate = checkPhaseGate(
             latestBuild.phase as import("@/lib/feature-build-types").BuildPhase,
             toPhase as import("@/lib/feature-build-types").BuildPhase,
             {
+              kind: latestBuild.kind,
+              // Right-sizing matrix: persisted on plan.processSize at promote time.
+              processSize: (plan.processSize as string | undefined) ?? "medium",
+              fixContext: handoffBrief?.fixContext,
               designDoc: latestBuild.designDoc, designReview: latestBuild.designReview,
               buildPlan: latestBuild.buildPlan, planReview: latestBuild.planReview,
               verificationOut: latestBuild.verificationOut, acceptanceMet: latestBuild.acceptanceMet,
@@ -7062,14 +7851,96 @@ export async function executeTool(
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
       let phaseGateBlocker: string | null = null;
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true } });
+      // Right-sizing matrix: also select plan (carries processSize) so the
+      // fix-flow gate picks the (fix, small | medium | large | xlarge) cell
+      // rather than always falling back to (fix, medium). plan is also
+      // needed below for the standard feature path's intake fallback.
+      // BI-CE49D82E — also select prior designReview so we can pass its issues
+      // to the reviewer prompt for delta-awareness and surface the iteration
+      // trajectory in the operator-facing gate reason (mirror of BI-4396EFEC
+      // for the plan path). Live repro: FB-5E20E793 oscillated on the same
+      // "missing accessibility" complaint round after round.
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, designReview: true, kind: true, brief: true, plan: true } });
+
+      // Fix flow: a fix build has no feature design doc — it carries a structured
+      // diagnosis (fixContext) on its brief. Review the diagnosis for completeness
+      // and advance ideate → plan, instead of running the feature design reviewers.
+      if (build?.kind === "fix") {
+        const { isFixContextComplete, checkPhaseGate } = await import("@/lib/feature-build-types");
+        const fixBrief = (build.brief ?? null) as import("@/lib/feature-build-types").FeatureBrief | null;
+        const fixProcessSize = ((build.plan as Record<string, unknown> | null)?.processSize as string | undefined) ?? "medium";
+        const fc = fixBrief?.fixContext;
+        const complete = isFixContextComplete(fc);
+        const review = complete
+          ? { decision: "pass" as const, issues: [] as Array<{ severity: string; description: string }>, summary: "Fix diagnosis is complete: reproduction, root cause, and fix approach are all present." }
+          : { decision: "fail" as const, issues: [{ severity: "critical", description: "Fix diagnosis is incomplete. Reproduction steps, root cause, and fix approach are all required — use update_feature_brief to fill fixContext." }], summary: "Incomplete fix diagnosis." };
+        await prisma.featureBuild.update({ where: { buildId }, data: { designReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
+        const { agentEventBus } = await import("@/lib/agent-event-bus");
+        if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "designReview" });
+        logBuildActivity(buildId, "reviewDesignDoc", `Fix review: ${review.decision}. ${review.summary}`);
+        if (review.decision === "fail") {
+          return { success: true, message: `Fix review FAILED. ${review.issues[0]?.description ?? review.summary}`, data: { review, blocked: true, action: "revise_and_resubmit" } };
+        }
+        let fixPhaseGateBlocker: string | null = null;
+        try {
+          const gate = checkPhaseGate("ideate", "plan", { kind: "fix", processSize: fixProcessSize, fixContext: fc, designReview: review });
+          if (gate.allowed) {
+            const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/integrate/build-phase-run");
+            void completeBuildPhaseRun(buildId, "ideate");
+            void startBuildPhaseRun(buildId, "plan");
+            if (context?.threadId) {
+              const { persistPhaseHandoffSummary } = await import("@/lib/integrate/phase-compaction-wire");
+              void persistPhaseHandoffSummary(context.threadId, "ideate");
+            }
+            await prisma.featureBuild.update({ where: { buildId }, data: { phase: "plan" } });
+            if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "plan" });
+            logBuildActivity(buildId, "phase:advance", "Phase advanced: ideate → plan (fix)");
+          } else {
+            logBuildActivity(buildId, "phase:gate-blocked", gate.reason ?? "unknown");
+            fixPhaseGateBlocker = gate.reason ?? null;
+          }
+        } catch (err) {
+          console.error("[reviewDesignDoc:fix] auto-advance failed:", err);
+        }
+        const fixMsg = fixPhaseGateBlocker
+          ? `Fix review: ${review.decision}. ${review.summary}\n\nPhase did NOT advance to plan. Reason: ${fixPhaseGateBlocker}`
+          : `Fix review: ${review.decision}. ${review.summary} Phase advanced to plan.`;
+        return { success: true, message: fixMsg, data: { review, phaseGateBlocker: fixPhaseGateBlocker } };
+      }
+
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
-      const { buildDesignReviewPrompt, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
-      const prompt = buildDesignReviewPrompt(build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0], "");
+      const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
+      const designDocTyped = build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0];
+      // BI-CE49D82E — Compute the iteration context up front so we can
+      // (a) feed prior issues into the reviewer prompt and (b) populate
+      // ReviewResult.iteration on the output. Round is 1-based: first
+      // review = 1, every subsequent reviewDesignDoc call increments.
+      const priorDesignReview = (build.designReview ?? null) as
+        | { issues?: Array<{ severity?: string; description?: string }>; iteration?: { round?: number } }
+        | null;
+      const priorRound = priorDesignReview?.iteration?.round ?? 0;
+      const priorIssues = Array.isArray(priorDesignReview?.issues)
+        ? priorDesignReview!.issues!
+            .filter((i): i is { severity: string; description: string } =>
+              typeof i?.severity === "string" && typeof i?.description === "string",
+            )
+            .map((i) => ({ severity: i.severity, description: i.description }))
+        : [];
+      const currentRound = priorRound + 1;
+      const priorContext = priorIssues.length > 0
+        ? { round: priorRound, issues: priorIssues }
+        : null;
+      const prompt = buildDesignReviewPrompt(designDocTyped, "", priorContext);
+      const archPrompt = buildArchitectureReviewPrompt({ kind: "design", doc: designDocTyped }, "");
       const { routeAndCall } = await import("@/lib/routed-inference");
       const messages = [{ role: "user" as const, content: prompt }];
-      // Run two independent reviewers in parallel — conservative merge flags issues either catches.
-      const [r1settled, r2settled] = await Promise.allSettled([
+      // Run the two checklist reviewers PLUS the advisory architecture reviewer
+      // (chief-architect / Enterprise Architect lens) in parallel. The
+      // architecture reviewer NEVER enters mergeReviews — it is advisory only:
+      // it joins the deliberation trail as the `architect` branch and rides
+      // along on review.architectureAdvisory so the coworker can fold concerns
+      // into the spec, but it cannot gate pass/fail.
+      const [r1settled, r2settled, archSettled] = await Promise.allSettled([
         routeAndCall(messages, "You are a design reviewer.", "internal"),
         routeAndCall(
           messages,
@@ -7077,14 +7948,45 @@ export async function executeTool(
           "internal",
           { budgetClass: "minimize_cost" },
         ),
+        routeAndCall(
+          [{ role: "user" as const, content: archPrompt }],
+          "You are the Enterprise Architect (DPF chief-architect lens) reviewing for architectural alignment. Advisory only — surface concerns and concrete spec edits, never block the gate.",
+          "internal",
+          { budgetClass: "minimize_cost" },
+        ),
       ]);
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
       const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
-      const review = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
+      const archReview = archSettled.status === "fulfilled" ? parseReviewResponse(archSettled.value.content) : null;
+      const architectureAdvisory = architectureAdvisoryFromReview(archReview);
+      const reviewBase = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
         decision: "fail" as const,
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
         summary: "Review could not be completed — retry.",
       };
+      // BI-CE49D82E — Compute the iteration delta against the prior round and
+      // attach to the ReviewResult. computeReviewDelta + isOscillating live in
+      // feature-build-types so they're independently unit-testable and shared
+      // with the plan path.
+      const { computeReviewDelta, isOscillating } = await import("@/lib/feature-build-types");
+      const reviewWithIteration = (() => {
+        if (priorIssues.length === 0) {
+          return { ...reviewBase, iteration: { round: currentRound } };
+        }
+        const delta = computeReviewDelta(priorIssues, reviewBase.issues);
+        return {
+          ...reviewBase,
+          iteration: {
+            round: currentRound,
+            prior: delta,
+            oscillating: isOscillating(delta, reviewBase.issues.length),
+          },
+        };
+      })();
+      const review = architectureAdvisory ? { ...reviewWithIteration, architectureAdvisory } : reviewWithIteration;
+      const archAdvisoryNote = architectureAdvisory && architectureAdvisory.issues.length > 0
+        ? ` Architecture review (advisory): ${architectureAdvisory.summary} Fold actionable items into the design before building — they do not block this gate.`
+        : "";
 
       // Phase 2 of design-time decomposition (BI-2E6CC391, spec
       // docs/superpowers/specs/2026-05-24-build-studio-design-time-
@@ -7116,6 +8018,9 @@ export async function executeTool(
         const reviewerBranches: ReviewBranchInput[] = [];
         if (r1) reviewerBranches.push({ branchNodeId: "reviewer-1", role: "reviewer", review: r1 });
         if (r2) reviewerBranches.push({ branchNodeId: "reviewer-2", role: "reviewer", review: r2 });
+        // Advisory architecture branch — its objections become unresolved
+        // risks in the deliberation summary but never flip the gate.
+        if (archReview) reviewerBranches.push({ branchNodeId: "architect", role: "architect", review: archReview });
         if (reviewerBranches.length > 0) {
           const { runBuildReviewDeliberation } = await import("@/lib/integrate/build-orchestrator");
           await runBuildReviewDeliberation({
@@ -7137,9 +8042,18 @@ export async function executeTool(
         const issueList = criticalIssues.length > 0
           ? criticalIssues.map((i: { description: string }) => i.description).join("; ")
           : review.summary;
+        // BI-CE49D82E — Include the iteration trajectory in the agent-facing
+        // message so the implementer model sees when its revisions are trading
+        // one set of issues for another instead of converging. The oscillating
+        // signal recommends a scope split rather than another iteration —
+        // matching the plan path established by BI-4396EFEC (D38).
+        const iter = review.iteration;
+        const trajectoryNote = iter?.prior
+          ? ` (Round ${iter.round}: ${iter.prior.addressed} addressed, ${iter.prior.persisted} persist, ${iter.prior.newlySurfaced} new${iter.oscillating ? " — issues are not net-decreasing across rounds; consider proposing a scope split rather than another revision." : ""}.)`
+          : "";
         return {
           success: true,
-          message: `Design review FAILED. Blocking issues: ${issueList}. Revise the design document to address these issues, then call saveBuildEvidence with field "designDoc" and re-run reviewDesignDoc.`,
+          message: `Design review FAILED. Blocking issues: ${issueList}. Revise the design document to address these issues, then call saveBuildEvidence with field "designDoc" and re-run reviewDesignDoc.${trajectoryNote}${archAdvisoryNote}`,
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }
@@ -7169,6 +8083,10 @@ export async function executeTool(
           where: { buildId },
           select: {
             phase: true,
+            // Right-sizing matrix: kind drives policy selection in
+            // checkPhaseGate; pre-existing rows default to "feature" via
+            // the schema default, so this is back-compat-safe.
+            kind: true,
             originatingBacklogItemId: true,
             draftApprovedAt: true,
             designDoc: true,
@@ -7346,6 +8264,8 @@ export async function executeTool(
           }
 
           const gate = checkPhaseGate("ideate", "plan", {
+            kind: updatedBuild.kind,
+            processSize: ((updatedBuild.plan as Record<string, unknown> | null)?.processSize as string | undefined) ?? "medium",
             designDoc: updatedBuild.designDoc,
             designReview: updatedBuild.designReview,
             happyPathState,
@@ -7362,6 +8282,13 @@ export async function executeTool(
             await prisma.featureBuild.update({ where: { buildId }, data: { phase: "plan" } });
             if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "plan" });
             logBuildActivity(buildId, "phase:advance", "Phase advanced: ideate → plan");
+            // Auto-dispatch plan generation so the build advances without
+            // waiting for the operator to manually prompt the coworker. Mirrors
+            // the ideate auto-dispatch pattern (plan-on-approval.ts).
+            void import("@/lib/integrate/plan-on-approval").then(m =>
+              m.dispatchPlanForApprovedBuild({ buildId, userId })
+                .catch(err => console.error("[plan-on-approval] auto-dispatch failed:", err))
+            );
           } else {
             logBuildActivity(buildId, "phase:gate-blocked", gate.reason ?? "unknown");
             // Surface the blocker to the agent so it can self-correct on the next
@@ -7377,12 +8304,12 @@ export async function executeTool(
         console.error("[reviewDesignDoc] auto-advance failed:", err);
       }
 
-      const reviewMessage = phaseGateBlocker
+      const reviewMessage = (phaseGateBlocker
         ? `Design review: ${review.decision}. ${review.summary}\n\n` +
           `IMPORTANT: Phase did NOT advance to plan. Reason: ${phaseGateBlocker} ` +
           `Call confirm_taxonomy_placement (with the right taxonomyNodeId from suggest_taxonomy_placement) ` +
           `and update_feature_brief (with a concrete constrainedGoal) before re-running reviewDesignDoc.`
-        : `Design review: ${review.decision}. ${review.summary}`;
+        : `Design review: ${review.decision}. ${review.summary}`) + archAdvisoryNote;
       return { success: true, message: reviewMessage, data: { review, phaseGateBlocker } };
     }
 
@@ -7427,7 +8354,7 @@ export async function executeTool(
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }
-      const { buildPlanReviewPrompt, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
+      const { buildPlanReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
       // BI-4396EFEC (D38) — Compute the iteration context up front so we can
       // (a) feed prior issues into the reviewer prompt and (b) populate
       // ReviewResult.iteration on the output. Round is 1-based: first
@@ -7445,10 +8372,15 @@ export async function executeTool(
         ? { round: priorRound, issues: priorIssues }
         : null;
       const prompt = buildPlanReviewPrompt(normalizedPlan.plan, priorContext);
+      const archPrompt = buildArchitectureReviewPrompt({ kind: "plan", plan: normalizedPlan.plan }, "");
       const { routeAndCall } = await import("@/lib/routed-inference");
       const messages = [{ role: "user" as const, content: prompt }];
-      // Run two independent reviewers in parallel — conservative merge flags issues either catches.
-      const [r1settled, r2settled] = await Promise.allSettled([
+      // Two checklist reviewers PLUS the advisory architecture reviewer
+      // (chief-architect / Enterprise Architect lens), all in parallel. The
+      // architecture reviewer is advisory only — it never enters mergeReviews,
+      // it rides along on review.architectureAdvisory and the deliberation
+      // `architect` branch so the coworker can fold concerns into the plan.
+      const [r1settled, r2settled, archSettled] = await Promise.allSettled([
         routeAndCall(messages, "You are a plan reviewer.", "internal"),
         routeAndCall(
           messages,
@@ -7456,9 +8388,20 @@ export async function executeTool(
           "internal",
           { budgetClass: "minimize_cost" },
         ),
+        routeAndCall(
+          [{ role: "user" as const, content: archPrompt }],
+          "You are the Enterprise Architect (DPF chief-architect lens) reviewing for architectural alignment. Advisory only — surface concerns and concrete plan edits, never block the gate.",
+          "internal",
+          { budgetClass: "minimize_cost" },
+        ),
       ]);
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
       const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
+      const archReview = archSettled.status === "fulfilled" ? parseReviewResponse(archSettled.value.content) : null;
+      const architectureAdvisory = architectureAdvisoryFromReview(archReview);
+      const archAdvisoryNote = architectureAdvisory && architectureAdvisory.issues.length > 0
+        ? ` Architecture review (advisory): ${architectureAdvisory.summary} Fold actionable items into the plan before building — they do not block this gate.`
+        : "";
       const mergedReview = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
         decision: "fail" as const,
         issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
@@ -7468,7 +8411,7 @@ export async function executeTool(
       // round and attach to the ReviewResult. computeReviewDelta + isOscillating
       // live in feature-build-types so they're independently unit-testable.
       const { computeReviewDelta, isOscillating } = await import("@/lib/feature-build-types");
-      const review = (() => {
+      const reviewWithIteration = (() => {
         const base = mergedReview;
         if (priorIssues.length === 0) {
           return { ...base, iteration: { round: currentRound } };
@@ -7483,6 +8426,9 @@ export async function executeTool(
           },
         };
       })();
+      const review = architectureAdvisory
+        ? { ...reviewWithIteration, architectureAdvisory }
+        : reviewWithIteration;
       await prisma.featureBuild.update({ where: { buildId }, data: { planReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "planReview" });
@@ -7496,6 +8442,9 @@ export async function executeTool(
         const reviewerBranches: ReviewBranchInput[] = [];
         if (r1) reviewerBranches.push({ branchNodeId: "reviewer-1", role: "reviewer", review: r1 });
         if (r2) reviewerBranches.push({ branchNodeId: "reviewer-2", role: "reviewer", review: r2 });
+        // Advisory architecture branch — surfaces architectural risk into the
+        // deliberation summary without flipping the gate.
+        if (archReview) reviewerBranches.push({ branchNodeId: "architect", role: "architect", review: archReview });
         if (reviewerBranches.length > 0) {
           const { runBuildReviewDeliberation } = await import("@/lib/integrate/build-orchestrator");
           await runBuildReviewDeliberation({
@@ -7528,7 +8477,7 @@ export async function executeTool(
           : "";
         return {
           success: true,
-          message: `Plan review FAILED. Blocking issues: ${issueList}. Revise the implementation plan to address these issues, then call saveBuildEvidence with field "buildPlan" and re-run reviewBuildPlan.${trajectoryNote}`,
+          message: `Plan review FAILED. Blocking issues: ${issueList}. Revise the implementation plan to address these issues, then call saveBuildEvidence with field "buildPlan" and re-run reviewBuildPlan.${trajectoryNote}${archAdvisoryNote}`,
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }
@@ -7555,6 +8504,7 @@ export async function executeTool(
             id: true,
             buildId: true,
             title: true,
+            kind: true,
             parentEpicId: true,
             dependenciesOut: FEATURE_BUILD_DEPENDENCY_GATE_SELECT.dependenciesOut,
           },
@@ -7563,6 +8513,9 @@ export async function executeTool(
           const plan = (updatedBuild.plan as Record<string, unknown> | null) ?? {};
           const happyPathState = normalizeHappyPathState(plan.happyPathState);
           const gate = checkPhaseGate("plan", "build", {
+            kind: updatedBuild.kind,
+            // Right-sizing matrix: persisted on plan.processSize at promote time.
+            processSize: (plan.processSize as string | undefined) ?? "medium",
             buildPlan: updatedBuild.buildPlan,
             planReview: updatedBuild.planReview,
             happyPathState,
@@ -7596,6 +8549,14 @@ export async function executeTool(
                   await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
                   if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
                   logBuildActivity(buildId, "phase:advance", "Phase advanced: plan → build (buildBranch initialized)");
+                  // Auto-dispatch the build orchestrator so specialist code generation
+                  // runs immediately without waiting for an operator to prompt the
+                  // coworker. The orchestrator handles the full build phase including
+                  // task dispatch, progress tracking, and auto-advance to review.
+                  void import("@/lib/integrate/build-on-plan-approval").then(m =>
+                    m.dispatchBuildForApprovedPlan({ buildId, userId })
+                      .catch(err => console.error("[build-on-plan-approval] auto-dispatch failed:", err))
+                  );
                 }
               } catch (branchErr) {
                 logBuildActivity(buildId, "phase:gate-blocked", `startBuildBranch failed: ${(branchErr as Error).message?.slice(0, 200)}`);
@@ -7609,15 +8570,23 @@ export async function executeTool(
         console.error("[reviewBuildPlan] auto-advance failed:", err);
       }
 
-      return { success: true, message: `Plan review: ${review.decision}. ${review.summary}`, data: { review } };
+      return { success: true, message: `Plan review: ${review.decision}. ${review.summary}${archAdvisoryNote}`, data: { review } };
     }
 
     case "get_code_graph_freshness": {
       const { getCodeGraphFreshness } = await import("@/lib/integrate/code-graph-access");
+      const { buildTrustMessage } = await import("@/lib/trust-vector");
       const freshness = await getCodeGraphFreshness(undefined, { inspectStructuralHealth: true });
       return {
         success: true,
-        message: freshness.summary,
+        message: freshness.trust
+          ? buildTrustMessage(freshness.trust, {
+              currentFact: freshness.summary,
+              lastKnownFact: freshness.summary,
+              lowConfidenceResult: freshness.summary,
+              inferredResult: freshness.summary,
+            })
+          : freshness.summary,
         data: freshness,
       };
     }
@@ -10057,12 +11026,23 @@ export async function executeTool(
     case "run_ux_test": {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, sandboxPort: true, brief: true } });
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { sandboxId: true, sandboxPort: true, brief: true, kind: true } });
       if (!build?.sandboxPort || !build.sandboxId || !build.brief) return { success: false, error: "Sandbox or brief not ready.", message: "Launch sandbox and save brief first." };
 
-      const brief = build.brief as { acceptanceCriteria?: string[] };
-      const testCases = (params.tests as string[] | undefined) ?? brief.acceptanceCriteria ?? [];
-      if (testCases.length === 0) return { success: false, error: "No test cases.", message: "No acceptance criteria or test cases to run." };
+      const { deriveFixUxTestCases } = await import("@/lib/explore/feature-build-types");
+      const brief = build.brief as {
+        acceptanceCriteria?: string[];
+        fixContext?: import("@/lib/explore/feature-build-types").FixContext;
+      };
+      // Explicit `tests` always win. Otherwise, for a fix build derive the
+      // assertion from the structured fix diagnosis (defect-gone on its route)
+      // rather than the polluted feature acceptanceCriteria. (BI-AC5CFDB0)
+      const testCases =
+        (params.tests as string[] | undefined) ??
+        (build.kind === "fix"
+          ? deriveFixUxTestCases(brief.fixContext)
+          : brief.acceptanceCriteria ?? []);
+      if (testCases.length === 0) return { success: false, error: "No test cases.", message: build.kind === "fix" ? "No fix context (route/expected) or test cases to verify." : "No acceptance criteria or test cases to run." };
 
       try {
         const BROWSER_USE_URL = process.env.BROWSER_USE_URL || "http://browser-use:8500/mcp";
@@ -11541,8 +12521,22 @@ export async function executeTool(
         semanticFallbackWarnRatio: semanticWarnRatio,
       });
 
+      // BI-E1FB2307: resolve which decision-perspective profile governs this
+      // caller (WWMD platform vs WWWD organization) and name it in the response
+      // so agents/operators know which kernel weighed in. Additive — does not
+      // change scoring yet; Gate-routed scoring + boundary enforcement is the
+      // follow-on (C2b). callingPopulation was validated above.
+      const { resolveDecisionCallerContext } = await import(
+        "@/lib/decision/caller-context"
+      );
+      const governingProfile = await resolveDecisionCallerContext({
+        callingPopulation:
+          callingPopulation as "in_platform_coworker" | "external_coding_agent" | "human",
+        agentId: context?.agentId ?? null,
+      });
+
       const summary = result.recommendation
-        ? `Recommends ${result.recommendation.optionId} (confidence: ${result.recommendation.confidence}, composite ${result.recommendation.composite.toFixed(3)})`
+        ? `Recommends ${result.recommendation.optionId} (confidence: ${result.recommendation.confidence}, composite ${result.recommendation.composite.toFixed(3)}; governing profile: ${governingProfile.governingProfileKind})`
         : "No applicable principles to evaluate.";
 
       return {
@@ -11554,6 +12548,11 @@ export async function executeTool(
           flags: result.flags,
           reasoning: result.reasoning,
           appliedPrincipleCount: cappedPrinciples.length,
+          governingProfile: {
+            profileId: governingProfile.governingProfileId,
+            kind: governingProfile.governingProfileKind,
+            resolvedVia: governingProfile.resolvedVia,
+          },
         },
       };
     }
@@ -12221,6 +13220,54 @@ export async function executeTool(
         success: true,
         message: `Found ${needs.length} capability need${needs.length === 1 ? "" : "s"}.`,
         data: { needs },
+      };
+    }
+
+    case "list_all_capability_needs": {
+      // BI-F9E7B780 — governance-surface rollup, not scoped to the calling
+      // coworker. Reuses the same review-service helper that powers the
+      // /platform/ai/capability-needs admin page so the MCP surface and the
+      // operator UI agree on shape (summary counts, filter-option enums,
+      // full need list).
+      const { getCoworkerCapabilityNeedReview } = await import(
+        "@/lib/coworker-self-assessment/review-service"
+      );
+      const agentId = typeof params["agentId"] === "string" && params["agentId"].length > 0
+        ? params["agentId"]
+        : undefined;
+      const status = COWORKER_CAPABILITY_NEED_STATUSES.includes(
+        params["status"] as CoworkerCapabilityNeedStatus,
+      )
+        ? (params["status"] as CoworkerCapabilityNeedStatus)
+        : undefined;
+      const kind = COWORKER_CAPABILITY_NEED_KINDS.includes(
+        params["kind"] as CoworkerCapabilityNeedKind,
+      )
+        ? (params["kind"] as CoworkerCapabilityNeedKind)
+        : undefined;
+      const severity = COWORKER_CAPABILITY_NEED_SEVERITIES.includes(
+        params["severity"] as CoworkerCapabilityNeedSeverity,
+      )
+        ? (params["severity"] as CoworkerCapabilityNeedSeverity)
+        : undefined;
+
+      const review = await getCoworkerCapabilityNeedReview({
+        agentId,
+        status,
+        kind,
+        severity,
+      });
+
+      return {
+        success: true,
+        message: `Found ${review.summary.total} capability need${
+          review.summary.total === 1 ? "" : "s"
+        } across all coworkers.`,
+        data: {
+          summary: review.summary,
+          filterOptions: review.filterOptions,
+          needs: review.needs,
+        },
       };
     }
 
@@ -13049,6 +14096,128 @@ export async function executeTool(
       };
     }
 
+    case "publish_to_linkedin":
+    case "send_marketing_email":
+    case "place_linkedin_ad": {
+      const { publishApprovedDraft } = await import("./marketing/publish");
+      const result = await publishApprovedDraft({
+        draftId: String(params["draftId"] ?? ""),
+        publishedByUserId: userId,
+      });
+      if (!result.ok) {
+        return {
+          success: false,
+          message: result.message,
+          error: result.error,
+        };
+      }
+      return {
+        success: true,
+        entityId: result.publicationId,
+        message: result.message,
+        data: result,
+      };
+    }
+
+    case "refresh_channel_kpis": {
+      const { pullChannelKpis } = await import("./marketing/kpi-pullback");
+      const result = await pullChannelKpis({
+        channelId: String(params["channelId"] ?? ""),
+        sinceDaysAgo: typeof params["sinceDaysAgo"] === "number" ? (params["sinceDaysAgo"] as number) : undefined,
+      });
+      if (!result.ok && result.snapshotsWritten === 0) {
+        return {
+          success: false,
+          message: `KPI pullback returned no snapshots. Failures: ${result.failures.map((f) => f.error).join("; ")}`,
+          error: "kpi_pullback_failed",
+        };
+      }
+      return {
+        success: true,
+        message: `Pulled ${result.snapshotsWritten} ${params["channelId"]} snapshot${result.snapshotsWritten === 1 ? "" : "s"}; wrote ${result.checkpointsWritten} MarketingKpiCheckpoint row${result.checkpointsWritten === 1 ? "" : "s"}.`,
+        data: result,
+      };
+    }
+
+    case "tick_marketing_scheduler": {
+      const { tickScheduler } = await import("./marketing/scheduler");
+      const result = await tickScheduler({});
+      return {
+        success: true,
+        message: `Scheduler tick: scanned ${result.pendingScanned}, fired ${result.fired}, failed ${result.failed}.`,
+        data: result,
+      };
+    }
+
+    case "plan_upcoming_marketing_drafts": {
+      const { planUpcomingForAssetTasks } = await import("./marketing/scheduler");
+      const { prisma } = await import("@dpf/db");
+      const org = await prisma.organization.findFirst({ select: { id: true } });
+      if (!org) {
+        return { success: false, message: "No organization configured.", error: "no_org" };
+      }
+      const result = await planUpcomingForAssetTasks({ organizationId: org.id });
+      return {
+        success: true,
+        message: `Scheduled ${result.scheduled} drafter run${result.scheduled === 1 ? "" : "s"}; skipped ${result.skipped}.`,
+        data: result,
+      };
+    }
+
+    case "set_marketing_autopilot_policy": {
+      const { setAutopilotPolicy } = await import("./marketing/autopilot");
+      const { prisma } = await import("@dpf/db");
+      const org = await prisma.organization.findFirst({ select: { id: true } });
+      if (!org) {
+        return { success: false, message: "No organization configured.", error: "no_org" };
+      }
+      const result = await setAutopilotPolicy({
+        organizationId: org.id,
+        channelId: String(params["channelId"] ?? ""),
+        enabled: params["enabled"] === true,
+        autoApproveBelowWords:
+          typeof params["autoApproveBelowWords"] === "number" ? (params["autoApproveBelowWords"] as number) : null,
+        autoPublishAfterMinutes:
+          typeof params["autoPublishAfterMinutes"] === "number" ? (params["autoPublishAfterMinutes"] as number) : null,
+        weeklyCeiling: typeof params["weeklyCeiling"] === "number" ? (params["weeklyCeiling"] as number) : 0,
+        userId,
+      });
+      if (!result.ok) {
+        return { success: false, message: result.error, error: "policy_invalid" };
+      }
+      return {
+        success: true,
+        entityId: result.policyId,
+        message: `Autopilot policy ${result.policyId} ${params["enabled"] === true ? "enabled" : "saved disabled"}.`,
+        data: result,
+      };
+    }
+
+    case "draft_marketing_asset": {
+      const { draftMarketingAsset } = await import("./marketing/draft-builder");
+      const result = await draftMarketingAsset({
+        assetTaskId: String(params["assetTaskId"] ?? ""),
+        channelOverride: typeof params["channelOverride"] === "string" ? params["channelOverride"] : undefined,
+        toneNotes: typeof params["toneNotes"] === "string" ? params["toneNotes"] : undefined,
+        createdByAgentId: context?.agentId ?? null,
+      });
+
+      if (!result.success) {
+        return {
+          success: false,
+          message: result.message,
+          error: result.error,
+        };
+      }
+
+      return {
+        success: true,
+        entityId: result.draftId,
+        message: result.message,
+        data: result,
+      };
+    }
+
     case "record_marketing_kpi_checkpoint": {
       const result = await recordMarketingKpiCheckpoint({
         checkpoint: {
@@ -13629,6 +14798,488 @@ export async function executeTool(
         const msg = err instanceof Error ? err.message : String(err);
         return { success: false, error: msg, message: `get_deliberation_outcome failed: ${msg}` };
       }
+    }
+
+    case "trigger_contributor_inventory_sync": {
+      // BI-063BDF1B Phase 5 — admin-scope handle for agents to dispatch the
+      // on-demand Inngest event. The runner is contributorInventorySyncOnDemand
+      // in apps/web/lib/queue/functions/contributor-inventory-sync.ts.
+      const reason = typeof params["reason"] === "string" ? params["reason"] : null;
+      try {
+        const { inngest } = await import("@/lib/queue/inngest-client");
+        const result = await inngest.send({
+          name: "ops/contributor-inventory-sync.run",
+          data: { triggeredBy: reason ? `mcp:${reason}` : "mcp" },
+        });
+        return {
+          success: true,
+          message: "Queued an on-demand contributor inventory sync.",
+          data: { eventIds: result.ids, status: "queued" },
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          error: msg,
+          message: `trigger_contributor_inventory_sync failed: ${msg}`,
+        };
+      }
+    }
+
+    case "summarize_upgrade_impact": {
+      // BI-C26F7EE1 — on-demand install-tailored upgrade impact summary.
+      // Read-only, advisory; does not queue or apply anything.
+      const refresh = params["refresh"] === true;
+      const skipPhrasing = params["skipPhrasing"] === true;
+      const topNRaw = params["topN"];
+      const topN =
+        typeof topNRaw === "number" && Number.isFinite(topNRaw) && topNRaw > 0
+          ? Math.floor(topNRaw)
+          : undefined;
+      try {
+        const { summarizeUpgradeImpact } = await import("@/lib/self-upgrade/impact");
+        const result = await summarizeUpgradeImpact({ refresh, skipPhrasing, topN });
+        if (!result.ok) {
+          return {
+            success: true,
+            message: result.detail,
+            data: { ok: false, reason: result.reason, detail: result.detail },
+          };
+        }
+        return {
+          success: true,
+          message: result.summary.phrased?.headline
+            ?? `Upgrade impact summary: ${result.summary.counts.total} commit(s) since the last lineage marker.`,
+          data: result.summary as unknown as Record<string, unknown>,
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          error: msg,
+          message: `summarize_upgrade_impact failed: ${msg}`,
+        };
+      }
+    }
+
+    // ─── Pseudo-User Contract: screen_* view-command handlers (BI-DF6079E9) ─
+    // Each handler validates its args and returns a structured event payload
+    // under `data.event`. The chat SSE relay (a follow-on integration —
+    // tracked as the second half of this BI) will plumb the payload through
+    // /api/agent/stream so the client's screen-event listener can dispatch
+    // the corresponding action on the page via its registered manifest. For
+    // now the handler shape is testable and grant-checked; the actual SSE
+    // emission is wired by the chat handler in a focused follow-on PR.
+
+    case "screen_describe": {
+      const routeContext = context?.routeContext;
+      return {
+        success: true,
+        message: routeContext
+          ? `Active screen manifest discovery requested for ${routeContext}.`
+          : "Active screen manifest discovery requested (no routeContext plumbed).",
+        data: {
+          event: {
+            type: "screen:describe_requested",
+            payload: { routeContext: routeContext ?? null },
+          },
+          // The actual manifest summary will be returned by the chat handler
+          // once it plumbs the active manifest into the executeTool context
+          // (tracked in BI-DF6079E9 follow-on). Returning the request shape
+          // here makes the tool callable and grant-checked today.
+          note: "Manifest summary plumbing lands in BI-DF6079E9 follow-on.",
+        },
+      };
+    }
+
+    case "screen_get_state": {
+      return {
+        success: true,
+        message: "Screen state snapshot requested.",
+        data: {
+          event: {
+            type: "screen:state_requested",
+            payload: { routeContext: context?.routeContext ?? null },
+          },
+          note: "Screen state plumbing lands in BI-DF6079E9 follow-on.",
+        },
+      };
+    }
+
+    case "screen_select_entity": {
+      const selectionId = typeof params["selectionId"] === "string" ? params["selectionId"].trim() : "";
+      const entityId = typeof params["entityId"] === "string" ? params["entityId"].trim() : "";
+      if (!selectionId || !entityId) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: "screen_select_entity requires non-empty selectionId and entityId.",
+        };
+      }
+      return {
+        success: true,
+        message: `Selection ${selectionId} → ${entityId} dispatched.`,
+        data: {
+          event: {
+            type: "screen:select_entity",
+            payload: { selectionId, entityId },
+          },
+        },
+      };
+    }
+
+    case "screen_navigate": {
+      const route = typeof params["route"] === "string" ? params["route"].trim() : "";
+      if (!route) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: "screen_navigate requires a non-empty route.",
+        };
+      }
+      const navParams =
+        params["params"] && typeof params["params"] === "object" && !Array.isArray(params["params"])
+          ? (params["params"] as Record<string, unknown>)
+          : undefined;
+      return {
+        success: true,
+        message: `Navigation to ${route} dispatched.`,
+        data: {
+          event: {
+            type: "screen:navigate",
+            payload: navParams ? { route, params: navParams } : { route },
+          },
+        },
+      };
+    }
+
+    case "screen_open_panel":
+    case "screen_close_panel": {
+      const panelId = typeof params["panelId"] === "string" ? params["panelId"].trim() : "";
+      if (!panelId) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: `${toolName} requires a non-empty panelId.`,
+        };
+      }
+      const opening = toolName === "screen_open_panel";
+      return {
+        success: true,
+        message: `Panel ${panelId} ${opening ? "open" : "close"} dispatched.`,
+        data: {
+          event: {
+            type: opening ? "screen:open_panel" : "screen:close_panel",
+            payload: { panelId },
+          },
+        },
+      };
+    }
+
+    case "screen_focus_field": {
+      const formId = typeof params["formId"] === "string" ? params["formId"].trim() : "";
+      const fieldId = typeof params["fieldId"] === "string" ? params["fieldId"].trim() : "";
+      if (!formId || !fieldId) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: "screen_focus_field requires non-empty formId and fieldId.",
+        };
+      }
+      return {
+        success: true,
+        message: `Focus dispatched: ${formId}/${fieldId}.`,
+        data: { event: { type: "screen:focus_field", payload: { formId, fieldId } } },
+      };
+    }
+
+    case "screen_set_input": {
+      const formId = typeof params["formId"] === "string" ? params["formId"].trim() : "";
+      const fieldId = typeof params["fieldId"] === "string" ? params["fieldId"].trim() : "";
+      if (!formId || !fieldId) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: "screen_set_input requires non-empty formId and fieldId.",
+        };
+      }
+      if (!("value" in params)) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: "screen_set_input requires a value (any type).",
+        };
+      }
+      return {
+        success: true,
+        message: `Field ${formId}/${fieldId} set dispatched (visual cue BI-5696B4D7 will land alongside this in the client).`,
+        data: {
+          event: {
+            type: "screen:set_input",
+            payload: { formId, fieldId, value: params["value"] },
+          },
+        },
+      };
+    }
+
+    case "screen_scroll_to": {
+      const anchor = typeof params["anchor"] === "string" ? params["anchor"].trim() : "";
+      if (!anchor) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: "screen_scroll_to requires a non-empty anchor.",
+        };
+      }
+      return {
+        success: true,
+        message: `Scroll to ${anchor} dispatched.`,
+        data: { event: { type: "screen:scroll_to", payload: { anchor } } },
+      };
+    }
+
+    case "screen_propose_action": {
+      const manifestActionId =
+        typeof params["manifestActionId"] === "string" ? params["manifestActionId"].trim() : "";
+      const rationale = typeof params["rationale"] === "string" ? params["rationale"].trim() : "";
+      if (!manifestActionId || !rationale) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: "screen_propose_action requires manifestActionId and rationale.",
+        };
+      }
+      const args =
+        params["args"] && typeof params["args"] === "object" && !Array.isArray(params["args"])
+          ? (params["args"] as Record<string, unknown>)
+          : {};
+      // BI-0F9C291C wiring (part 3): write a CoworkerActionEnvelope row at
+      // proposal time. Status defaults to "proposed" via the schema;
+      // approveEnvelope / denyEnvelope from envelope-actions.ts drive the
+      // row toward terminal. coworkerAgentId + threadId are NOT NULL on
+      // the schema and come from the chat handler's execution context.
+      // chatMessageId stays null until BI-DF6079E9 part 2 plumbs the
+      // proposing AgentMessage id through. Per-turn N=3 destructive cap
+      // and irreversible typed-phrase hard floor remain follow-on chunks.
+      const coworkerAgentId = context?.agentId;
+      if (!coworkerAgentId) {
+        return {
+          success: false,
+          error: "missing_context",
+          message:
+            "screen_propose_action requires the executing coworker's agentId in execution context. Invoke via the chat handler, not directly.",
+        };
+      }
+      const threadId = context?.threadId;
+      if (!threadId) {
+        return {
+          success: false,
+          error: "missing_context",
+          message: "screen_propose_action requires threadId in execution context.",
+        };
+      }
+
+      let envelope;
+      try {
+        envelope = await prisma.coworkerActionEnvelope.create({
+          data: {
+            coworkerAgentId,
+            delegatingUserId: userId,
+            threadId,
+            // chatMessageId left null until BI-DF6079E9 part 2 plumbs
+            // the proposing AgentMessage id through the chat handler.
+            manifestActionId,
+            argsJson: args as import("@dpf/db").Prisma.InputJsonValue,
+            rationale,
+            // status defaults to "proposed" via schema.prisma column default.
+          },
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          error: "envelope_create_failed",
+          message: `Failed to create envelope: ${msg}`,
+        };
+      }
+
+      return {
+        success: true,
+        entityId: envelope.id,
+        message: `Proposal '${manifestActionId}' recorded as envelope ${envelope.id} (proposed).`,
+        data: {
+          event: {
+            type: "screen:action_proposed",
+            payload: {
+              envelopeId: envelope.id,
+              manifestActionId,
+              rationale,
+              args,
+              coworkerAgentId,
+              delegatingUserId: userId,
+            },
+          },
+        },
+      };
+    }
+
+    case "screen_dispatch_action": {
+      // BI-0F9C291C part 4 — end-to-end envelope execution. Closes the
+      // propose → approve → dispatch loop:
+      //   1. Load the envelope row (#1366 schema, #1415 propose-writes).
+      //   2. Verify it's in `approved` status (only approved envelopes
+      //      can dispatch — proposed envelopes must go through the
+      //      /api/agent/envelope/:id/approve route first).
+      //   3. Resolve manifestActionId → underlying MCP tool via
+      //      findManifestForRoute (the server-side mirror of the
+      //      client window registry — ALL_MANIFESTS is empty until
+      //      BI-6C9CC0EC registers Build Studio, so this path returns
+      //      a clear `no_manifest` error in the meantime).
+      //   4. Execute the underlying tool recursively under the
+      //      envelope's delegatingUserId (the human the coworker is
+      //      acting for — not whoever called dispatch, though they
+      //      should normally match).
+      //   5. Mark the envelope executed | failed via
+      //      markEnvelopeExecuted / markEnvelopeFailed from
+      //      envelope-actions.ts. Marking is best-effort; the side
+      //      effect already ran, so a finalisation write failure
+      //      doesn't roll back — it's logged in the response.
+      //
+      // Per-turn N=3 destructive cap and irreversible typed-phrase
+      // hard floor still land as separate follow-on chunks of
+      // BI-0F9C291C.
+
+      const envelopeId =
+        typeof params["envelopeId"] === "string" ? params["envelopeId"].trim() : "";
+      if (!envelopeId) {
+        return {
+          success: false,
+          error: "missing_args",
+          message: "screen_dispatch_action requires an envelopeId.",
+        };
+      }
+
+      const routeContext = context?.routeContext;
+      if (!routeContext) {
+        return {
+          success: false,
+          error: "missing_context",
+          message:
+            "screen_dispatch_action requires routeContext in execution context. Invoke via the chat handler, not directly.",
+        };
+      }
+
+      let envelope;
+      try {
+        envelope = await prisma.coworkerActionEnvelope.findUnique({ where: { id: envelopeId } });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          error: "envelope_load_failed",
+          message: `Failed to load envelope ${envelopeId}: ${msg}`,
+        };
+      }
+      if (!envelope) {
+        return {
+          success: false,
+          error: "envelope_not_found",
+          message: `Envelope ${envelopeId} not found.`,
+        };
+      }
+      if (envelope.status !== "approved") {
+        return {
+          success: false,
+          error: "envelope_not_approved",
+          message: `Envelope ${envelopeId} is in status '${envelope.status}'; must be 'approved' before dispatch.`,
+        };
+      }
+
+      // Resolve manifest + action server-side. Reuses the same
+      // route-matching the client registry uses (matchesRoute is
+      // exported from screen-manifest-registry).
+      const { findManifestForRoute } = await import("./coworker/manifests/index");
+      const manifest = findManifestForRoute(routeContext);
+      if (!manifest) {
+        return {
+          success: false,
+          error: "no_manifest",
+          message: `No ScreenManifest is registered for routeContext '${routeContext}'. ALL_MANIFESTS may still be empty (first consumer lands in BI-6C9CC0EC).`,
+        };
+      }
+      const domainAction = manifest.domainActions.find(
+        (a) => a.actionId === envelope.manifestActionId,
+      );
+      if (!domainAction) {
+        return {
+          success: false,
+          error: "action_not_in_manifest",
+          message: `Manifest '${manifest.surfaceId}' has no domain action '${envelope.manifestActionId}'.`,
+        };
+      }
+
+      // Recurse: execute the underlying tool under the envelope's
+      // delegating user (not necessarily the caller — see the doc
+      // block above).
+      const toolName = domainAction.tool;
+      const toolArgs =
+        envelope.argsJson && typeof envelope.argsJson === "object" && !Array.isArray(envelope.argsJson)
+          ? (envelope.argsJson as Record<string, unknown>)
+          : {};
+
+      const { markEnvelopeExecuted, markEnvelopeFailed } = await import("./coworker/envelope-actions");
+
+      let toolResult: ToolResult;
+      try {
+        toolResult = await executeTool(toolName, toolArgs, envelope.delegatingUserId, context);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // The underlying tool threw — mark the envelope failed, then
+        // return a structured tool_execution_threw response.
+        await markEnvelopeFailed(envelopeId).catch(() => undefined);
+        return {
+          success: false,
+          error: "tool_execution_threw",
+          message: `Underlying tool '${toolName}' threw: ${msg}`,
+          data: {
+            event: {
+              type: "screen:action_dispatch_failed",
+              payload: { envelopeId, tool: toolName, manifestActionId: envelope.manifestActionId, error: msg },
+            },
+          },
+        };
+      }
+
+      // Finalise the envelope based on the tool's structured success
+      // flag. markEnvelope* uses the state machine (#1390); a write
+      // failure here doesn't change the fact the side effect already
+      // ran — log it on the response so the chat handler can surface.
+      const finalise = toolResult.success
+        ? await markEnvelopeExecuted(envelopeId)
+        : await markEnvelopeFailed(envelopeId);
+
+      return {
+        success: toolResult.success,
+        entityId: envelopeId,
+        message: toolResult.success
+          ? `Envelope ${envelopeId} executed (${toolName}): ${toolResult.message}`
+          : `Envelope ${envelopeId} dispatch reported failure (${toolName}): ${toolResult.message}`,
+        data: {
+          event: {
+            type: "screen:action_dispatched",
+            payload: {
+              envelopeId,
+              tool: toolName,
+              manifestActionId: envelope.manifestActionId,
+              ok: toolResult.success,
+            },
+          },
+          toolResult,
+          // Surface finalisation outcome when it itself was refused —
+          // e.g. envelope already terminal due to a race with cancel.
+          ...(finalise.ok ? {} : { finaliseRefused: finalise.reason }),
+        },
+      };
     }
 
     default: {

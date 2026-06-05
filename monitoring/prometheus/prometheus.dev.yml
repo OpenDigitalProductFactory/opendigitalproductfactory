@@ -1,0 +1,76 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alerts.yml"
+
+# Contributor-preview overlay. Mounted onto Prometheus by docker-compose.dev.yml
+# (or docker-compose.dev-against-live-db.yml) when the `dev` profile is active.
+# This config is a SUPERSET of the substrate config that Prometheus would
+# otherwise use — instead of trying to merge configs at runtime (Prometheus
+# does not support config fragments), we list every scrape target here and
+# the overlay replaces the base mount.
+#
+# Customer installs never load this file, so their Prometheus never tries to
+# scrape `dev-portal:3000` and never fires a false ContainerDown alert for it.
+#
+# Substrate parity: this file mirrors prometheus.macos.yml's scrape set
+# (because dev-portal-start currently boots only the macOS / Docker Desktop
+# substrate combination from the skill). If you bring up `--profile dev` on
+# Linux, regenerate this file from prometheus.linux.yml and re-add the
+# `dev-portal` job below.
+scrape_configs:
+  # ─── Databases ───────────────────────────────────────────────
+  - job_name: "postgres"
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
+  - job_name: "qdrant"
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["qdrant:6333"]
+    metrics_path: /metrics
+
+  # ─── Application (live) ─────────────────────────────────────
+  - job_name: "portal"
+    static_configs:
+      - targets: ["portal:3000"]
+    metrics_path: /api/metrics
+
+  - job_name: "sandbox"
+    static_configs:
+      - targets:
+          - "sandbox:3000"
+    metrics_path: /api/metrics
+
+  # ─── Background jobs (Inngest) ──────────────────────────────
+  - job_name: "inngest"
+    static_configs:
+      - targets: ["inngest:8288"]
+
+  # ─── ADP (payroll/HRIS MCP) ─────────────────────────────────
+  - job_name: "adp"
+    static_configs:
+      - targets: ["adp:8600"]
+
+  # ─── Redis (via redis-exporter sidecar) ─────────────────────
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+
+  # ─── Contributor preview (dev-portal, port 3001 on host) ────
+  # Only present in this overlay so customer installs never see it.
+  # The Health tab tile is gated by ServiceDefinition.optional, which means
+  # the tile only renders when `up{job="dev-portal"}` shows up in the live
+  # `up` results — installs that haven't loaded this overlay won't have it.
+  - job_name: "dev-portal"
+    static_configs:
+      - targets: ["dev-portal:3000"]
+    metrics_path: /api/metrics
+
+  # ─── Self-monitoring ────────────────────────────────────────
+  - job_name: "prometheus"
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["localhost:9090"]

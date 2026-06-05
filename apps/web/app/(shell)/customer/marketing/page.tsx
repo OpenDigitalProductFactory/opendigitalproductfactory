@@ -5,6 +5,7 @@ import {
   getMarketingWorkspaceSnapshot,
 } from "@/lib/marketing";
 import { AgentWorkLauncher } from "@/components/agent/AgentWorkLauncher";
+import { ApprovalQueuePanel } from "@/components/customer-marketing/ApprovalQueuePanel";
 import { MarketingStrategyOverview } from "@/components/customer-marketing/MarketingStrategyOverview";
 
 export default async function CustomerMarketingPage() {
@@ -240,6 +241,13 @@ export default async function CustomerMarketingPage() {
       </section>
 
       <MarketingStrategyOverview snapshot={snapshot} />
+
+      <ApprovalQueuePanel
+        pendingDrafts={snapshot.pendingDrafts}
+        approvedDrafts={snapshot.approvedDrafts}
+        connectedChannels={snapshot.connectedChannels}
+        inboundMessages={snapshot.inboundMessages}
+      />
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { createVoiceConsentRecord } from "@/lib/actions/voice-consent"
+import { EmailInput } from "@/components/ui/EmailInput"
 
 interface Props {
   profileId: string
@@ -99,11 +100,10 @@ export function VoiceConsentForm({ profileId, capturedByPrincipalId, onSuccess }
         <label className="block text-sm font-medium text-gray-700" htmlFor="subjectEmail">
           Subject Email (optional)
         </label>
-        <input
+        <EmailInput
           id="subjectEmail"
-          type="email"
           value={subjectEmail}
-          onChange={(e) => setSubjectEmail(e.target.value)}
+          onValueChange={(v) => setSubjectEmail(v)}
           className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>

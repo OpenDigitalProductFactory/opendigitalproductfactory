@@ -26,6 +26,15 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/actions/promotions", () => ({
   triggerSelfUpgrade: vi.fn(),
+  rollbackSelfUpgrade: vi.fn(),
+}));
+
+// The global useState mock above keys off `initial === null`, so any child
+// component with its own `useState<X | null>(null)` would otherwise receive
+// `shared.triggerResult` and try to render it. Stub the impact panel so the
+// trigger-control tests stay focused on this component's behavior.
+vi.mock("@/components/ops/UpgradeImpactPanel", () => ({
+  default: () => null,
 }));
 
 import SelfUpgradeClient from "./SelfUpgradeClient";
@@ -34,6 +43,7 @@ const baseStatus = {
   enabled: true,
   channel: "stable",
   inMaintenanceWindow: false,
+  nextScheduledCheckAt: "2026-05-24T18:00:00.000Z",
   deployedSha: "abc1234",
   targetSha: "def5678",
   isFresh: false,
@@ -56,6 +66,7 @@ function makeRun(status: string, overrides: Record<string, unknown> = {}) {
     deployedSha: "def5678",
     startedAt: new Date("2026-05-20T02:00:00Z"),
     completedAt: new Date("2026-05-20T02:05:00Z"),
+    completionEvidence: null,
     failureLog: null as string | null,
     createdAt: new Date("2026-05-20T02:00:00Z"),
     ...overrides,
@@ -77,11 +88,11 @@ describe("SelfUpgradeClient – disabled", () => {
     expect(html).toContain("Disabled");
   });
 
-  it("does not render the Trigger Now button when disabled", () => {
+  it("does not render the Upgrade now button when disabled", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient {...baseStatus} enabled={false} />,
     );
-    expect(html).not.toContain("Trigger Now");
+    expect(html).not.toContain("Upgrade now");
   });
 
   it("shows the disabled notice copy", () => {
@@ -101,9 +112,9 @@ describe("SelfUpgradeClient – enabled", () => {
     expect(html).toContain("stable");
   });
 
-  it("renders the Trigger Now button when enabled", () => {
+  it("renders the Upgrade now button when enabled", () => {
     const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain("Trigger Now");
+    expect(html).toContain("Upgrade now");
   });
 
   it("shows the deployed and target SHA values", () => {
@@ -131,6 +142,8 @@ describe("SelfUpgradeClient – enabled", () => {
       <SelfUpgradeClient {...baseStatus} inMaintenanceWindow={true} />,
     );
     expect(html).toContain("maintenance window");
+    expect(html).toContain("next scheduled check");
+    expect(html).toContain("May 24, 2026");
   });
 });
 
@@ -178,6 +191,56 @@ describe("SelfUpgradeClient – succeeded", () => {
     );
     expect(html).toContain("Triggered by:");
     expect(html).toContain("scheduled");
+  });
+
+  it("shows rollback controls when the latest run has a complete recovery point", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("succeeded", {
+          completionEvidence: {
+            recoveryPoint: {
+              schemaVersion: 1,
+              status: "ok",
+              trigger: "pre-upgrade-recovery",
+              members: [
+                { target: "postgres", runId: "BR-PG", status: "ok" },
+                { target: "neo4j", runId: "BR-N4J", status: "ok" },
+                { target: "qdrant", runId: "BR-QD", status: "ok" },
+              ],
+            },
+          },
+        })}
+      />,
+    );
+    expect(html).toContain("Recovery point: ok");
+    expect(html).toContain("postgres:BR-PG");
+    expect(html).toContain("Restore recovery point");
+  });
+
+  it("does not show rollback button after recovery point rollback succeeds", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("succeeded", {
+          completionEvidence: {
+            recoveryPoint: {
+              schemaVersion: 1,
+              status: "ok",
+              trigger: "pre-upgrade-recovery",
+              members: [
+                { target: "postgres", runId: "BR-PG", status: "ok" },
+                { target: "neo4j", runId: "BR-N4J", status: "ok" },
+                { target: "qdrant", runId: "BR-QD", status: "ok" },
+              ],
+            },
+            rollback: { status: "ok" },
+          },
+        })}
+      />,
+    );
+    expect(html).toContain('data-rollback-status="ok"');
+    expect(html).not.toContain("Restore recovery point");
   });
 });
 
@@ -236,7 +299,7 @@ describe("SelfUpgradeClient – trigger control", () => {
 
   it("button is not disabled when no run is active", () => {
     const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain("Trigger Now");
+    expect(html).toContain("Upgrade now");
     expect(html).not.toContain('disabled=""');
   });
 
@@ -251,11 +314,13 @@ describe("SelfUpgradeClient – trigger control", () => {
 // ─── Loading state ────────────────────────────────────────────────────────────
 
 describe("SelfUpgradeClient – loading", () => {
-  it("shows Triggering... text when pending", () => {
+  it("shows Upgrading... text when pending", () => {
     shared.isPending = true;
     const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain("Triggering...");
-    expect(html).not.toContain("Trigger Now");
+    expect(html).toContain("Upgrading...");
+    // The idle button label ">Upgrade now<" is replaced while pending (the
+    // aria-label "Upgrade now" stays, so assert on the visible button text).
+    expect(html).not.toContain(">Upgrade now<");
   });
 
   it("button is disabled while pending", () => {
@@ -368,6 +433,29 @@ describe("SelfUpgradeClient – run history", () => {
     const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
     expect(html).not.toContain("Run History");
   });
+
+  it("renders a When column header for the timestamps", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        history={[makeRun("succeeded")]}
+        historyNextCursor={null}
+      />,
+    );
+    expect(html).toContain("When");
+  });
+
+  it("renders each run's duration in the history table", () => {
+    // baseStatus.latestRun is null, so the only 5m span comes from history.
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        history={[makeRun("succeeded")]}
+        historyNextCursor={null}
+      />,
+    );
+    expect(html).toContain("5m");
+  });
 });
 
 // ─── Latest run – timestamps ──────────────────────────────────────────────────
@@ -396,6 +484,34 @@ describe("SelfUpgradeClient – latest run timestamps", () => {
       />,
     );
     expect(html).not.toContain("5m");
+  });
+
+  it("shows a Completed label when a succeeded run has completedAt", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} latestRun={makeRun("succeeded")} />,
+    );
+    expect(html).toContain("Completed:");
+  });
+
+  it("labels the end timestamp as Failed for a failed run", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("failed", { failureLog: "boom" })}
+      />,
+    );
+    expect(html).toContain("Failed:");
+  });
+
+  it("falls back to a Created label when the run never started", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("skipped", { startedAt: null, completedAt: null })}
+      />,
+    );
+    expect(html).toContain("Created:");
+    expect(html).not.toContain("Started:");
   });
 });
 
@@ -454,7 +570,7 @@ describe("SelfUpgradeClient – config summary null SHAs", () => {
 describe("SelfUpgradeClient – platform version", () => {
   it("renders the Platform version label and value", () => {
     const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
-    expect(html).toContain("Platform version");
+    expect(html).toContain("Platform version:");
     expect(html).toContain("1.0.0");
   });
 
@@ -476,7 +592,7 @@ describe("SelfUpgradeClient – platform version", () => {
         }}
       />,
     );
-    expect(html).toContain("Platform version");
+    expect(html).toContain("Platform version:");
     expect(html).toContain("1.0.0");
     expect(html).not.toContain("9f8e7d6");
   });
@@ -485,7 +601,7 @@ describe("SelfUpgradeClient – platform version", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient {...baseStatus} enabled={false} />,
     );
-    expect(html).toContain("Platform version");
+    expect(html).toContain("Platform version:");
     expect(html).toContain("1.0.0");
   });
 });

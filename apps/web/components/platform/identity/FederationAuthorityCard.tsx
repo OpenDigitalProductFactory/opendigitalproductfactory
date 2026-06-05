@@ -1,3 +1,5 @@
+import { LocalTime } from "@/components/ui/LocalTime";
+
 type FederationAuthorityCardProps = {
   title: string;
   badge: string;
@@ -66,7 +68,7 @@ export function FederationAuthorityCard({
 
       {lastTestedAt ? (
         <p className="mt-4 text-xs text-[var(--dpf-muted)]">
-          Last validated {formatDateTime(lastTestedAt)}.
+          Last validated <LocalTime value={lastTestedAt} />.
         </p>
       ) : null}
       {lastErrorMsg ? (
@@ -83,18 +85,4 @@ export function FederationAuthorityCard({
       </a>
     </article>
   );
-}
-
-function formatDateTime(value: string) {
-  try {
-    return new Date(value).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return value;
-  }
 }

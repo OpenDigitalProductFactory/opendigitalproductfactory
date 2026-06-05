@@ -6,6 +6,21 @@ export type MaintenanceWindow = {
   endTime: string;
 };
 
+/**
+ * Where the bytes of an upgrade come from. See the governed-upgrade-lifecycle
+ * spec §5.0.
+ * - `upstream` (default): the install tracks an upstream release train. On
+ *   upgrade the orchestrator fetches the upstream target and MERGES it into the
+ *   durable install branch in the host clone, preserving local commits, then
+ *   builds the merged tree. The deployed stamp is the real merge-commit SHA.
+ * - `local`: self-hosted / contributor / air-gapped. The working tree is built
+ *   as-is and stamped with its own HEAD (plus `-dirty` when uncommitted), never
+ *   labelled with an upstream SHA it does not contain.
+ */
+export type UpgradeSourceMode = "upstream" | "local";
+
+export const DEFAULT_INSTALL_BRANCH = "dpf/install";
+
 export type SelfUpgradeConfig = {
   enabled: boolean;
   channel: string;
@@ -21,6 +36,38 @@ export type SelfUpgradeConfig = {
   repositoryBranch?: string;
   healthUrl?: string;
   promoterImage?: string;
+  /** How the upgrade source is resolved. Defaults to "upstream". */
+  sourceMode: UpgradeSourceMode;
+  /**
+   * The durable per-install branch in the host clone that carries local
+   * commits and receives the upstream merge. Defaults to `dpf/install`.
+   */
+  installBranch: string;
+  /**
+   * Run the upstream merge in a dedicated, process-owned workspace tree
+   * INSTEAD of the operator's install clone. The workspace lives under
+   * `${hostSourceMountPath}/.upgrade-workspace/` (so it shares the existing
+   * bind-mount — no docker-compose change needed) and is git-ignored.
+   * Resolves BI-A8A7CCFD / BI-888435E5 / BI-57E77CB4: contributor installs
+   * whose install clone doubles as a dirty dev tree no longer collide with
+   * the upgrade merge. Defaults to true; can be disabled per-install via
+   * PlatformConfig for fallback to the legacy direct-merge behavior.
+   */
+  useIsolatedWorkspace: boolean;
+  /**
+   * Override the in-container path of the upgrade workspace. Defaults to
+   * `${hostSourceMountPath}/.upgrade-workspace`. Only consulted when
+   * `useIsolatedWorkspace` is true.
+   */
+  upgradeWorkspaceMountPath?: string;
+  /**
+   * Override the HOST path of the upgrade workspace. The promoter mounts
+   * this as `/host-source` instead of the install clone, so the image is
+   * built from the merged workspace tree. Defaults to
+   * `${hostInstallPath}/.upgrade-workspace`. Only consulted when
+   * `useIsolatedWorkspace` is true.
+   */
+  upgradeWorkspaceHostPath?: string;
 };
 
 const DEFAULTS: SelfUpgradeConfig = {
@@ -29,6 +76,13 @@ const DEFAULTS: SelfUpgradeConfig = {
   checkIntervalHours: 24,
   healthTarget: 100,
   maintenanceWindows: [],
+  sourceMode: "upstream",
+  installBranch: DEFAULT_INSTALL_BRANCH,
+  // BI-A8A7CCFD — default-on isolation. Operators on installs without a
+  // doubling-as-dev-tree problem see the same outcome (a clean merge into
+  // dpf/install), but on contributor installs (where ~/dpf is dirty/divergent)
+  // the upgrade no longer fails on the operator's WIP.
+  useIsolatedWorkspace: true,
 };
 
 /**
@@ -49,6 +103,38 @@ export function isInMaintenanceWindow(config: SelfUpgradeConfig, now?: Date): bo
     // Overnight window: e.g. 22:00-06:00 → matches >= 22:00 OR < 06:00
     return currentTime >= w.startTime || currentTime < w.endTime;
   });
+}
+
+/**
+ * Returns the next datetime a maintenance window opens, scanning the next 7
+ * days. If a window is currently active, returns `now` (the scheduled upgrade
+ * can run on the next hourly cron tick). Returns null when no windows are
+ * configured — meaning scheduled upgrades will never fire on their own.
+ */
+export function nextMaintenanceWindowStart(
+  config: SelfUpgradeConfig,
+  now?: Date,
+): Date | null {
+  if (config.maintenanceWindows.length === 0) return null;
+  const base = now ?? new Date();
+  if (isInMaintenanceWindow(config, base)) return base;
+
+  let best: Date | null = null;
+  for (let offset = 0; offset <= 7; offset++) {
+    const day = new Date(base);
+    day.setDate(base.getDate() + offset);
+    const dow = day.getDay();
+    for (const w of config.maintenanceWindows) {
+      if (!w.dayOfWeek.includes(dow)) continue;
+      const [h, m] = w.startTime.split(":").map(Number);
+      const start = new Date(day);
+      start.setHours(h, m, 0, 0);
+      if (start.getTime() > base.getTime() && (!best || start < best)) {
+        best = start;
+      }
+    }
+  }
+  return best;
 }
 
 export const SELF_UPGRADE_CONFIG_KEY = "self_upgrade";
@@ -85,6 +171,17 @@ export function parseSelfUpgradeConfig(raw: unknown): SelfUpgradeConfig {
         ? cfg.healthTarget
         : DEFAULTS.healthTarget,
     maintenanceWindows: parseWindows(cfg.maintenanceWindows),
+    // Only "upstream" | "local" are valid; anything else falls back to the
+    // safe default rather than silently building an unknown source posture.
+    sourceMode: cfg.sourceMode === "local" ? "local" : DEFAULTS.sourceMode,
+    installBranch:
+      typeof cfg.installBranch === "string" && cfg.installBranch.trim().length > 0
+        ? cfg.installBranch.trim()
+        : DEFAULTS.installBranch,
+    useIsolatedWorkspace:
+      typeof cfg.useIsolatedWorkspace === "boolean"
+        ? cfg.useIsolatedWorkspace
+        : DEFAULTS.useIsolatedWorkspace,
   };
   for (const key of [
     "hostInstallPath",
@@ -96,6 +193,8 @@ export function parseSelfUpgradeConfig(raw: unknown): SelfUpgradeConfig {
     "repositoryBranch",
     "healthUrl",
     "promoterImage",
+    "upgradeWorkspaceMountPath",
+    "upgradeWorkspaceHostPath",
   ] as const) {
     if (typeof cfg[key] === "string" && cfg[key].trim().length > 0) {
       parsed[key] = cfg[key];

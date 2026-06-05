@@ -2,12 +2,43 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { readImageVersion } from "./image-version";
+import {
+  readImageBuiltAt,
+  readImageVersion,
+  readSourceContentHash,
+  readPlatformVersionTag,
+  type ImageVersion,
+} from "./image-version";
 
 export type PlatformVersion = {
   version: string;
   publishedAt: Date;
+  /**
+   * Comparable git SHA for the running image — preferred for freshness
+   * comparison and `compare_versions` lookups. Null when the image was built
+   * without a git-SHA build arg (image-version is a content hash) and no
+   * deploy pipeline set DEPLOYED_SHA.
+   */
   gitSha: string | null;
+  /**
+   * Always populated when the running portal was built from a Dockerfile —
+   * the literal contents of /app/.dpf-image-version plus a classification.
+   * Use this for display when you want to show *some* identity even when no
+   * git SHA is available.
+   */
+  imageVersion: ImageVersion | null;
+  /**
+   * ISO-8601 UTC timestamp baked into the image at build time
+   * (/app/.dpf-image-built-at). Null in dev/test and pre-marker images.
+   */
+  buildDate: string | null;
+  /**
+   * sha256 of the bundled source bytes, baked into every image independent of
+   * the gitSha/DPF_VERSION label (/app/.dpf-source-content-hash). The honest
+   * fingerprint of what was actually built — surfaced so a label/source
+   * divergence is observable (BI-C8E90A79). Null in dev/test and pre-marker images.
+   */
+  sourceContentHash: string | null;
   note: string | null;
 };
 
@@ -28,17 +59,29 @@ export async function loadPlatformVersion(): Promise<PlatformVersion> {
       const path = resolveVersionJsonPath();
       const raw = await readFile(path, "utf8");
       const parsed = parseVersionJson(JSON.parse(raw));
-      const image = await readImageVersion();
+      const [image, buildDate, sourceContentHash, tag] = await Promise.all([
+        readImageVersion(),
+        readImageBuiltAt(),
+        readSourceContentHash(),
+        readPlatformVersionTag(),
+      ]);
       const envSha = process.env.DEPLOYED_SHA;
+      // The REAL version comes from the repo's git release tags
+      // (git describe), baked into the image at build time. version.json is
+      // only a dev/non-git fallback — its hand-edited value was chronically
+      // stale (claimed "1.0.0" while the repo shipped v5.x).
       return {
-        version: parsed.version,
-        publishedAt: new Date(parsed.publishedAt),
+        version: tag ?? parsed.version,
+        publishedAt: new Date(tag && buildDate ? buildDate : parsed.publishedAt),
         gitSha:
           envSha && envSha.length > 0
             ? envSha
             : image?.source === "git-sha"
               ? image.raw
               : null,
+        imageVersion: image,
+        buildDate,
+        sourceContentHash,
         note: parsed.note ?? null,
       };
     })();

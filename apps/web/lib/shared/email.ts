@@ -5,6 +5,8 @@ type EmailOptions = {
   subject: string;
   text: string;
   html: string;
+  /** Resolved sender ("Name <email>"). Falls back to SMTP_FROM when unset. */
+  from?: string;
   attachments?: Array<{
     filename: string;
     content: Buffer;
@@ -20,12 +22,15 @@ type InvoiceEmailParams = {
   currency: string;
   dueDate: string;
   payUrl: string;
+  /** Issuing business name (from live org identity). Omitted when unknown — we
+   *  never substitute a placeholder like "your provider". */
+  orgName?: string | null;
 };
 
 export function composeInvoiceEmail(params: InvoiceEmailParams) {
-  const { to, invoiceRef, accountName, totalAmount, currency, dueDate, payUrl } = params;
+  const { to, invoiceRef, accountName, totalAmount, currency, dueDate, payUrl, orgName } = params;
 
-  const subject = `Invoice ${invoiceRef} from your provider`;
+  const subject = orgName ? `Invoice ${invoiceRef} from ${orgName}` : `Invoice ${invoiceRef}`;
 
   const text = [
     `Invoice ${invoiceRef}`,
@@ -300,11 +305,19 @@ export async function sendEmail(options: EmailOptions): Promise<{ messageId: str
   const port = parseInt(process.env.SMTP_PORT || "587", 10);
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
-  const from = process.env.SMTP_FROM || "noreply@example.com";
+  const from = options.from || process.env.SMTP_FROM || "noreply@example.com";
 
-  // In dev without SMTP config, log to console
+  // Without SMTP config: in production this is a hard failure — returning a
+  // fake success would let callers record an email as "sent" that never went
+  // out (silently dropping invoices, dunning, approvals). Only the dev path
+  // may log-and-continue.
   if (!host) {
-    console.log("[email] No SMTP configured. Would send:", {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "[email] SMTP is not configured (SMTP_HOST unset); refusing to report a fake send in production",
+      );
+    }
+    console.log("[email] No SMTP configured (dev). Would send:", {
       to: options.to,
       subject: options.subject,
       attachments: options.attachments?.map((a) => a.filename),

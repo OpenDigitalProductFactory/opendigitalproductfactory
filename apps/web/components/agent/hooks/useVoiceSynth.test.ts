@@ -1,52 +1,106 @@
 // @vitest-environment jsdom
-import { act, renderHook } from "@testing-library/react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { renderHook, act, waitFor } from "@testing-library/react"
 import { useVoiceSynth } from "./useVoiceSynth"
 
-const fetchMock = vi.fn()
-
-class FakeAudio {
-  src = ""
+// ── AudioContext mock ───────────────────────────────────────────────────────
+class MockAudioBufferSource {
+  buffer: null = null
   onended: (() => void) | null = null
-  onerror: (() => void) | null = null
-
-  constructor(src: string) {
-    this.src = src
-  }
-
-  pause() {}
-  play = vi.fn().mockResolvedValue(undefined)
+  connect = vi.fn()
+  start = vi.fn()
+  stop = vi.fn()
 }
 
-beforeEach(() => {
-  vi.stubGlobal("fetch", fetchMock)
-  vi.stubGlobal("Audio", FakeAudio)
-  vi.spyOn(console, "warn").mockImplementation(() => {})
-  fetchMock.mockReset()
-})
+class MockAudioContext {
+  state = "running"
+  currentTime = 0
+  sampleRate = 44100
+  createBuffer = vi.fn(() => ({} as AudioBuffer))
+  createBufferSource = vi.fn(() => new MockAudioBufferSource())
+  decodeAudioData = vi.fn(() =>
+    Promise.resolve({ duration: 2.0, numberOfChannels: 1, sampleRate: 24000 } as AudioBuffer),
+  )
+  resume = vi.fn()
+  destination = {} as AudioDestinationNode
+}
 
-afterEach(() => {
-  vi.restoreAllMocks()
-  vi.unstubAllGlobals()
-})
+function makeChunk() {
+  const wavBytes = new Uint8Array(44).fill(0)
+  const length = wavBytes.length
+  const buf = new Uint8Array(4 + length)
+  buf[0] = (length >> 24) & 0xff
+  buf[1] = (length >> 16) & 0xff
+  buf[2] = (length >> 8) & 0xff
+  buf[3] = length & 0xff
+  buf.set(wavBytes, 4)
+  return buf
+}
 
-describe("useVoiceSynth", () => {
-  it("marks synthesis unavailable when the ready profile is missing reference audio", async () => {
-    fetchMock.mockResolvedValue({
-      ok: false,
-      status: 422,
-      json: async () => ({ code: "reference_missing" }),
+describe("useVoiceSynth (streaming)", () => {
+  let originalFetch: typeof fetch
+  let originalAudioContext: typeof AudioContext
+
+  beforeEach(() => {
+    originalFetch = global.fetch
+    originalAudioContext = global.AudioContext
+    vi.spyOn(console, "warn").mockImplementation(() => {})
+    global.AudioContext = MockAudioContext as unknown as typeof AudioContext
+  })
+
+  afterEach(() => {
+    global.fetch = originalFetch
+    global.AudioContext = originalAudioContext
+    vi.restoreAllMocks()
+  })
+
+  it("calls /api/voice/synthesize/stream", async () => {
+    const chunk = makeChunk()
+    const readable = new ReadableStream({
+      start(controller) { controller.enqueue(chunk); controller.close() },
     })
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true, body: readable,
+      headers: new Headers({ "X-Sentence-Count": "1" }),
+    }) as unknown as typeof fetch
 
     const { result } = renderHook(() => useVoiceSynth())
+    await act(async () => { await result.current.synthesize("Hello world") })
 
-    expect(result.current.available).toBe(true)
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/voice/synthesize/stream",
+      expect.objectContaining({ method: "POST" }),
+    )
+  })
 
-    await act(async () => {
-      await result.current.synthesize("preview this", "mark-dpf-platform")
+  it("marks available false on 503 tts_unavailable", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false, status: 503,
+      json: () => Promise.resolve({ code: "tts_unavailable" }),
+    }) as unknown as typeof fetch
+
+    const { result } = renderHook(() => useVoiceSynth())
+    await act(async () => { await result.current.synthesize("Hello") })
+
+    await waitFor(() => {
+      expect(result.current.available).toBe(false)
+      expect(result.current.unavailableReason).toBe("Text-to-speech service is not running.")
     })
+  })
 
-    expect(result.current.available).toBe(false)
-    expect(result.current.unavailableReason).toMatch(/reference voice sample is missing/i)
+  it("stop() aborts the stream and clears state", async () => {
+    let abortCalled = false
+    global.fetch = vi.fn().mockImplementation((_url: string, opts: RequestInit) => {
+      (opts.signal as AbortSignal).addEventListener("abort", () => { abortCalled = true })
+      return new Promise(() => {})
+    }) as unknown as typeof fetch
+
+    const { result } = renderHook(() => useVoiceSynth())
+    act(() => { void result.current.synthesize("Hello") })
+    await act(async () => { result.current.stop() })
+
+    expect(abortCalled).toBe(true)
+    expect(result.current.isPlaying).toBe(false)
+    expect(result.current.isSynthesizing).toBe(false)
   })
 })

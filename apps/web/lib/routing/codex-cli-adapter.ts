@@ -26,6 +26,31 @@ import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const CLI_TIMEOUT_MS = 600_000; // 10 minutes — accumulated Build Studio context (>100K chars) takes longer than 3 min to process
 
+/**
+ * Auth/login failure signatures from the Codex CLI. Checked BEFORE rate-limit
+ * classification (routing-resilience spec D2): when an OAuth token has expired
+ * the CLI sometimes emits throttle-looking text, and misclassifying that as
+ * `rate_limit` sends the fallback chain into a 30s wait-and-retry loop against
+ * a provider that cannot succeed until re-authentication. Treating it as `auth`
+ * disables the provider and surfaces the reconnect action instead.
+ */
+const CLI_AUTH_FAILURE_PATTERNS: RegExp[] = [
+  /not logged in/i,
+  /unauthorized/i,
+  /\b401\b/,
+  /re-?authenticat/i,
+  /please log ?in/i,
+  /session (?:has )?expired/i,
+  /token (?:has )?expired/i,
+  /not authenticated/i,
+  /invalid api key/i,
+  /fix external api key/i,
+];
+
+export function looksLikeCliAuthFailure(text: string): boolean {
+  return CLI_AUTH_FAILURE_PATTERNS.some((p) => p.test(text));
+}
+
 // ─── Container file writer ─────────────────────────────────────────────────
 
 /**
@@ -254,7 +279,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       await writeContainerFileViaStdin(scriptB64, runnerScript, "755");
 
       // 5. Spawn the CLI process
-      console.log(`[codex-cli-adapter] Dispatching: model=${modelId}, provider=${providerId}, messages=${messages.length}`);
+      console.log(`[codex-cli-adapter] Dispatching: thread=${request.mcpSession?.threadId ?? "—"}, model=${modelId}, provider=${providerId}, messages=${messages.length}`);
       console.log(`[tool-trace] adapter=codex-cli PROMPT-FILE ${promptFile} slug=${slug} promptChars=${prompt.length}`);
 
       // Preserve prompt to a durable location BEFORE spawning codex so we
@@ -293,7 +318,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
           } else if (code === 0 || stdout.trim()) {
             resolve({ stdout });
           } else {
-            if (stderr.includes("Not logged in") || stderr.includes("unauthorized") || stderr.includes("401")) {
+            if (looksLikeCliAuthFailure(stderr)) {
               reject(new InferenceError(
                 `Codex CLI auth failed: ${stderr.slice(0, 300)}`,
                 "auth",
@@ -339,7 +364,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       const inferenceMs = Date.now() - startMs;
 
       console.log(
-        `[codex-cli-adapter] Completed: ${text.length} chars, ${inferenceMs}ms`,
+        `[codex-cli-adapter] Completed: thread=${request.mcpSession?.threadId ?? "—"}, ${text.length} chars, ${inferenceMs}ms`,
       );
 
       // Attempt to extract tool calls if the model responded with tool_use blocks
@@ -349,19 +374,12 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       // (observed payloads: "Invalid API key · Fix external API key",
       // "ERROR: unexpected status 401 Unauthorized: Missing bearer..."). The
       // stderr-keyword check earlier only catches stderr; mirror that logic
-      // on stdout to ensure fallback kicks in instead of the error text
-      // being shipped as assistant content.
-      const CLI_AUTH_ERROR_PATTERNS = [
-        /invalid api key/i,
-        /fix external api key/i,
-        /please log in/i,
-        /401 unauthorized/i,
-        /not authenticated/i,
-      ];
+      // on stdout (shared matcher, spec D2) to ensure fallback kicks in instead
+      // of the error text being shipped as assistant content.
       const looksLikeAuthError =
         toolCalls.length === 0 &&
         text.length < 300 &&
-        CLI_AUTH_ERROR_PATTERNS.some((p) => p.test(text));
+        looksLikeCliAuthFailure(text);
       if (looksLikeAuthError) {
         throw new InferenceError(
           `Codex CLI auth error (from stdout): ${text.slice(0, 200)}`,
@@ -381,17 +399,24 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       // "model hallucinated a tool call it never emitted".
       const mentionedNames = extractMentionedPlatformToolNames(text);
       const extractedNames = toolCalls.map((c) => c.name);
+      // Names mentioned in narration ARE a real signal when the parser
+      // returned them too (the agent did call the tool and also discussed
+      // it). Exclude those from "ghosts" so the NO-CALL-BUT-MENTIONED
+      // signature only fires when the agent talked about a tool the parser
+      // never extracted — the actual stuck-agent shape.
+      const ghostMentions = mentionedNames.filter((n) => !extractedNames.includes(n));
       console.log(
-        `[tool-trace] extracted=${toolCalls.length} names=${JSON.stringify(extractedNames)} mentioned=${JSON.stringify(mentionedNames)}`,
+        `[tool-trace] extracted=${toolCalls.length} names=${JSON.stringify(extractedNames)} mentioned=${JSON.stringify(mentionedNames)} ghosts=${JSON.stringify(ghostMentions)}`,
       );
 
       // Full dump on the diagnostically-interesting mismatches: the text
-      // references a tool name but the parser returned nothing — this is
-      // the classic "stuck agent" signature. 8k chars covers any realistic
+      // references a tool name but the parser returned nothing AND the
+      // mention isn't accounted for by another extracted call. This is the
+      // classic "stuck agent" signature. 8k chars covers any realistic
       // codex response.
-      if (toolCalls.length === 0 && mentionedNames.length > 0) {
+      if (toolCalls.length === 0 && ghostMentions.length > 0) {
         console.log(
-          `[tool-trace] NO-CALL-BUT-MENTIONED raw=${JSON.stringify(text.slice(0, 8000))}`,
+          `[tool-trace] NO-CALL-BUT-MENTIONED ghosts=${JSON.stringify(ghostMentions)} raw=${JSON.stringify(text.slice(0, 8000))}`,
         );
       } else if (toolCalls.length > 0) {
         // Also log a compact head of the raw text when calls DID parse —

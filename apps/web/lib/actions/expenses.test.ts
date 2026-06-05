@@ -22,6 +22,10 @@ vi.mock("@/lib/email", () => ({
   }),
 }));
 
+vi.mock("@/lib/org-identity", () => ({
+  getOrgIdentity: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     expenseClaim: {
@@ -211,6 +215,7 @@ describe("submitExpenseClaim", () => {
       currency: "USD",
       totalAmount: 77.5,
       employee: { id: "emp-001", displayName: "Alice Smith", workEmail: "alice@example.com", userId: "user-001" },
+      _count: { items: 2 },
     });
     mockPrisma.user.findMany.mockResolvedValue([{ id: "mgr-001", email: "mgr@example.com" }]);
     mockPrisma.expenseClaim.update.mockResolvedValue({});

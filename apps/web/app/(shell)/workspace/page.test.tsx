@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { getWorkspaceTiles } from "@/lib/permissions";
 import { buildWorkspaceCommandCenterView } from "@/lib/workspace/command-center";
+import { loadPlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-loader";
 
 describe("workspace tile derivation", () => {
   it("HR-500 sees Backlog tile", () => {
@@ -29,5 +30,9 @@ describe("workspace tile derivation", () => {
 
   it("keeps the command center projection importable from the workspace page package", () => {
     expect(typeof buildWorkspaceCommandCenterView).toBe("function");
+  });
+
+  it("loads platform workspace data through the workspace-home substrate boundary", () => {
+    expect(typeof loadPlatformWorkspaceHomeData).toBe("function");
   });
 });

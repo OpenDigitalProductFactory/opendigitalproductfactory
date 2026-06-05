@@ -27,6 +27,17 @@ describe("composeInvoiceEmail", () => {
     expect(result.to).toBe("jane@acme.com");
   });
 
+  it("names the issuing org in the subject when provided", () => {
+    const result = composeInvoiceEmail({ ...params, orgName: "Acme Trading Ltd" });
+    expect(result.subject).toBe("Invoice INV-2026-0001 from Acme Trading Ltd");
+  });
+
+  it("omits the issuer clause (no 'your provider' placeholder) when org is unknown", () => {
+    const result = composeInvoiceEmail(params);
+    expect(result.subject).toBe("Invoice INV-2026-0001");
+    expect(result.subject).not.toContain("your provider");
+  });
+
   it("includes pay URL in html body", () => {
     const result = composeInvoiceEmail(params);
     expect(result.html).toContain("https://example.com/s/pay/abc123");
@@ -56,5 +67,32 @@ describe("sendEmail", () => {
     });
     delete process.env.SMTP_HOST;
     expect(result.messageId).toBe("test-123");
+  });
+
+  it("throws in production when SMTP is unconfigured (no fake success)", async () => {
+    const savedHost = process.env.SMTP_HOST;
+    delete process.env.SMTP_HOST;
+    vi.stubEnv("NODE_ENV", "production");
+
+    await expect(
+      sendEmail({ to: "x@example.com", subject: "S", text: "t", html: "<p>t</p>" }),
+    ).rejects.toThrow(/SMTP is not configured/);
+
+    vi.unstubAllEnvs();
+    if (savedHost === undefined) delete process.env.SMTP_HOST;
+    else process.env.SMTP_HOST = savedHost;
+  });
+
+  it("logs and returns a dev messageId when SMTP is unconfigured outside production", async () => {
+    const savedHost = process.env.SMTP_HOST;
+    delete process.env.SMTP_HOST;
+    vi.stubEnv("NODE_ENV", "test");
+
+    const result = await sendEmail({ to: "x@example.com", subject: "S", text: "t", html: "<p>t</p>" });
+    expect(result.messageId).toMatch(/^dev-/);
+
+    vi.unstubAllEnvs();
+    if (savedHost === undefined) delete process.env.SMTP_HOST;
+    else process.env.SMTP_HOST = savedHost;
   });
 });

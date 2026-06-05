@@ -23,6 +23,9 @@ vi.mock("@dpf/db", () => ({
     user: {
       findUnique: vi.fn(),
     },
+    platformIssueReport: {
+      create: vi.fn(),
+    },
   },
 }));
 vi.mock("@/lib/routed-inference", () => ({
@@ -51,13 +54,15 @@ function mockResult(overrides: {
   providerId?: string;
   modelId?: string;
   toolsStripped?: boolean;
+  downgraded?: boolean;
+  downgradeMessage?: string | null;
 }) {
   return {
     content: overrides.content,
     providerId: overrides.providerId ?? "anthropic-sub",
     modelId: overrides.modelId ?? "claude-haiku-4-5-20251001",
-    downgraded: false,
-    downgradeMessage: null,
+    downgraded: overrides.downgraded ?? false,
+    downgradeMessage: overrides.downgradeMessage ?? null,
     toolsStripped: overrides.toolsStripped ?? false,
     inputTokens: overrides.inputTokens ?? 100,
     outputTokens: overrides.outputTokens ?? 50,
@@ -74,6 +79,23 @@ describe("shouldNudge", () => {
       hasTools: true, executedToolCount: 0, responseLength: 44,
       responseText: "I can help with that.",
     })).toBe(true);
+  });
+
+  // Regression for the setup-tour /workspace COO contradiction: route persona
+  // says "no tool calls, 2-3 sentences", coworker complies, but nudge fires
+  // "use a tool now" → coworker surfaces the contradiction to the user.
+  // Companion guard to c70a7db6 (which fixed the fabrication-detection arm
+  // of the same problem). Narrowed to the setup-tour signal so non-setup
+  // advise routes (e.g. /finance) still nudge + surface the local-model
+  // diagnostic.
+  it("does not nudge on a setup-tour turn (route persona says 'no tool calls')", () => {
+    expect(shouldNudge({
+      continuationNudges: 0, iteration: 0, maxIterations: 40,
+      hasTools: true,             // tools delivered (read-only / context tools)
+      isSetupTourTurn: true,      // SetupOverlay "[Setup step: …]" auto-message
+      executedToolCount: 0, responseLength: 44,
+      responseText: "Welcome to your workspace! Day-to-day work happens here.",
+    })).toBe(false);
   });
 
   it("does not nudge when response is a short clarifying question", () => {
@@ -368,6 +390,32 @@ describe("detectFabrication", () => {
       ["run_discovery_triage"],
       new Set(["run_discovery_triage"]),
     )).toBe(false);
+  });
+
+  it("does not flag advise-mode guidance when no authoritative tool is available", () => {
+    // Setup-tour case: the route persona is asked to "guide me through this
+    // step" with only read-only tools (wiki_query, search_knowledge). Its
+    // guidance naturally says "configured"/"set up", but with no action/build
+    // tool to call there is nothing it could have fabricated.
+    expect(detectFabrication(
+      "Once your operating hours are configured, bookings and availability stay aligned.",
+      0,
+      false,
+      [],
+      new Set(),
+      false, // hasAuthoritativeToolAvailable
+    )).toBe(false);
+  });
+
+  it("still flags completion claims when an authoritative tool was available but unused", () => {
+    expect(detectFabrication(
+      "I've configured your operating hours.",
+      0,
+      false,
+      [],
+      new Set(["create_backlog_item"]),
+      true, // hasAuthoritativeToolAvailable
+    )).toBe(true);
   });
 });
 
@@ -1242,7 +1290,17 @@ describe("runAgenticLoop", () => {
 
     mockExecuteTool.mockResolvedValueOnce({ success: true, message: "Found Build Studio workflow files." });
 
-    const result = await runAgenticLoop(baseParams);
+    // A real /build session exposes the authoritative build tools — the
+    // scenario is "the plan wasn't persisted via saveBuildEvidence", so those
+    // tools must be present for the read-only-claim to count as fabrication.
+    const result = await runAgenticLoop({
+      ...baseParams,
+      tools: [
+        ...baseParams.tools,
+        { name: "saveBuildEvidence", description: "Save evidence", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false, buildPhases: ["plan"] as const },
+        { name: "reviewBuildPlan", description: "Review plan", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false, buildPhases: ["plan"] as const },
+      ],
+    });
 
     expect(result.content).not.toContain("Plan ready");
     expect(mockExecuteTool).toHaveBeenCalledTimes(1);
@@ -1399,6 +1457,96 @@ describe("runAgenticLoop", () => {
     const lastUserMessage = [...thirdCallMessages].reverse().find((m: any) => m.role === "user");
     expect(lastUserMessage?.content).toContain("Do not pause after a failed read");
   });
+
+  // ─── Infra-aware fabrication guard (routing-resilience Slice D) ───────────
+  // An infrastructure failover (preferred provider failed, a backup answered)
+  // must NOT be reported to the user as model fabrication ("the underlying work
+  // wasn't recorded"). This is the 2026-06-02 incident. detectFabrication stays
+  // strict for healthy-provider false claims.
+  // Tools that make a completion-claim "fabrication" (need an authoritative,
+  // side-effecting tool available, else the claim is ordinary advice).
+  const authoritativeTools = {
+    tools: [
+      { name: "update_estate_posture", description: "Update estate posture", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: true },
+    ],
+    toolsForProvider: [
+      { type: "function", function: { name: "update_estate_posture", description: "Update estate posture", parameters: {} } },
+    ],
+  };
+
+  it("keeps the backup's answer on a downgraded conversational turn (does NOT show fabrication copy)", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    // Single downgraded response that trips the completion-claim guard.
+    mockRoute.mockResolvedValueOnce(mockResult({
+      content: "I've completed the analysis and configured the estate posture summary for you.",
+      downgraded: true,
+      downgradeMessage: "Switched to Claude after the preferred endpoint was unavailable.",
+    }));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/platform/estate", // NOT a /build route
+      ...authoritativeTools,
+    });
+
+    // The real answer is preserved; the build-recording failure copy is gone.
+    expect(result.content).toContain("completed the analysis");
+    expect(result.content.toLowerCase()).not.toContain("wasn't recorded");
+    expect(result.content.toLowerCase()).not.toContain("was not recorded");
+    expect(result.downgraded).toBe(true);
+  });
+
+  it("uses honest infra copy (not fabrication copy) for a downgraded build-route claim", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    // Two fabricated build claims → retry exhausted → final emission.
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "Built and deployed the feature — implementation completed.",
+        downgraded: true,
+        downgradeMessage: "Switched to Claude after the preferred endpoint was unavailable.",
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Built and deployed the feature — implementation completed.",
+        downgraded: true,
+        downgradeMessage: "Switched to Claude after the preferred endpoint was unavailable.",
+      }));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/build",
+      ...authoritativeTools,
+    });
+
+    // Honest infrastructure attribution, NOT "the underlying work wasn't recorded".
+    expect(result.content.toLowerCase()).not.toContain("wasn't recorded");
+    expect(result.content.toLowerCase()).toMatch(/unavailable|backup/);
+    // Must not leak internals (IDENTITY_BLOCK rule #5).
+    expect(result.content).not.toContain("update_estate_posture");
+  });
+
+  it("STILL fires the fabrication guard on a healthy (non-downgraded) false claim", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    // Healthy provider, repeated fabricated claim → fabrication copy must win.
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "Built and deployed the feature — implementation completed.",
+        downgraded: false,
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "Built and deployed the feature — implementation completed.",
+        downgraded: false,
+      }));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/build",
+      ...authoritativeTools,
+    });
+
+    // The original guard is unchanged for healthy providers.
+    expect(result.content).not.toContain("deployed the feature");
+    expect(result.content.toLowerCase()).toContain("wasn't recorded");
+  });
 });
 
 // ─── Build-specialist Operator Contract platform guards ────────────────────
@@ -1500,5 +1648,129 @@ describe("detectUnsavedEvidence (clause 2.4)", () => {
   it("returns null when phase is not ideate/plan/review", () => {
     expect(detectUnsavedEvidence("design doc", [], "build")).toBeNull();
     expect(detectUnsavedEvidence("design doc", [], null)).toBeNull();
+  });
+});
+
+// ── interactionMode gate over Operator Contract platform guards ──
+//
+// Phase J finding: chat-mode coworker replies that mention plan-phase
+// keywords ("yes do the truck list first") were triggering the unsaved-
+// evidence guard and writing phantom PlatformIssueReport rows. The
+// guards belong on autonomous phase execution (build-orchestrator,
+// pipeline) but not on a real user asking the build coworker a
+// conversational question.
+//
+// These tests pin the contract:
+//   - interactionMode default "autonomous" preserves prior behavior
+//     (guard fires on conversational-shaped text during plan phase)
+//   - interactionMode "chat" suppresses ALL three guards so the chat
+//     surface stops generating false-positive issue reports.
+describe("runAgenticLoop interactionMode gate (Phase J)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(prisma.agentModelConfig.findUnique).mockResolvedValue(null as never);
+    vi.mocked(prisma.toolExecution.create).mockResolvedValue({} as never);
+    vi.mocked(prisma.platformIssueReport.create).mockResolvedValue({} as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      isSuperuser: true,
+      groups: [{ platformRole: { roleId: "ceo" } }],
+    } as never);
+  });
+
+  const planPhaseConversationalParams = {
+    chatHistory: [
+      { role: "user" as const, content: "yes do the truck list first" },
+    ],
+    systemPrompt: "You are a helpful assistant.",
+    sensitivity: "internal" as const,
+    tools: [
+      {
+        name: "saveBuildEvidence",
+        description: "Save",
+        inputSchema: {},
+        requiredCapability: null,
+        executionMode: "immediate" as const,
+        sideEffect: true,
+      },
+    ],
+    toolsForProvider: [
+      {
+        type: "function",
+        function: { name: "saveBuildEvidence", description: "Save", parameters: {} },
+      },
+    ],
+    userId: "user-1",
+    routeContext: "/build",
+    agentId: "software-engineer",
+    threadId: "thread-1",
+    buildPhase: "plan" as const,
+    featureBuildId: "fb-internal-id",
+  };
+
+  // The agent's reply is a conversational Dale-answer that mentions
+  // "tasks" and "build plan" — enough to trip detectUnsavedEvidence's
+  // plan-phase regex. The first call returns the reply; the second/third
+  // return short status responses so the loop terminates without nudging
+  // forever.
+  function setupConversationalReply() {
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute
+      .mockResolvedValueOnce(
+        mockResult({
+          content:
+            "Got it. I'd recommend a smaller first slice: just the truck list with tasks: 1) show trucks, 2) attach techs. Parts can come in a follow-on build plan.",
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockResult({
+          content:
+            "Confirmed: the smaller scope is captured and the follow-on is documented.",
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockResult({
+          content:
+            "Confirmed: the smaller scope is captured and the follow-on is documented for the next pass.",
+        }),
+      );
+  }
+
+  it("writes a PlatformIssueReport in autonomous mode (default) for plan-phase conversational reply", async () => {
+    setupConversationalReply();
+    await runAgenticLoop(planPhaseConversationalParams);
+
+    const createCalls = vi.mocked(prisma.platformIssueReport.create).mock.calls;
+    const unsavedEvidenceCall = createCalls.find((c) =>
+      String((c[0] as any)?.data?.title ?? "").includes("unsaved-evidence"),
+    );
+    expect(unsavedEvidenceCall).toBeDefined();
+  });
+
+  it('skips the unsaved-evidence guard when interactionMode is "chat"', async () => {
+    setupConversationalReply();
+    await runAgenticLoop({
+      ...planPhaseConversationalParams,
+      interactionMode: "chat",
+    });
+
+    const createCalls = vi.mocked(prisma.platformIssueReport.create).mock.calls;
+    const unsavedEvidenceCall = createCalls.find((c) =>
+      String((c[0] as any)?.data?.title ?? "").includes("unsaved-evidence"),
+    );
+    expect(unsavedEvidenceCall).toBeUndefined();
+  });
+
+  it('also skips the zero-tool-call guard when interactionMode is "chat"', async () => {
+    setupConversationalReply();
+    await runAgenticLoop({
+      ...planPhaseConversationalParams,
+      interactionMode: "chat",
+    });
+
+    const createCalls = vi.mocked(prisma.platformIssueReport.create).mock.calls;
+    const zeroToolCall = createCalls.find((c) =>
+      String((c[0] as any)?.data?.title ?? "").includes("zero-tool-call"),
+    );
+    expect(zeroToolCall).toBeUndefined();
   });
 });

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   buildContextualDocsHref,
-  docsPathExists,
   getMappedDocsRoutes,
   resolveDocsExposurePolicy,
   resolveDocsPath,
   shouldShowDocsLink,
 } from "./docs-route-map";
+import { docsPathExists } from "./docs-route-map.server";
 
 describe("resolveDocsPath", () => {
   it("maps finance banking leaf routes to a workflow-specific doc", () => {

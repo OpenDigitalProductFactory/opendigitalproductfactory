@@ -4,6 +4,7 @@
 
 import type {
   ReviewResult,
+  ArchitectureAdvisory,
   BuildDesignDoc,
   BuildPlanDoc,
   BuildDeliberationPhase,
@@ -22,12 +23,25 @@ import type {
 
 // ─── Prompt Templates ────────────────────────────────────────────────────────
 
-export function buildDesignReviewPrompt(doc: BuildDesignDoc, projectContext: string): string {
+export function buildDesignReviewPrompt(
+  doc: BuildDesignDoc,
+  projectContext: string,
+  prior?: ReviewPriorContext | null,
+): string {
   // Detect whether this feature has a UI component. Backend-only features
   // (cron jobs, API routes, data models) shouldn't be flagged for accessibility.
   const approachLower = (doc.proposedApproach ?? "").toLowerCase();
   const hasUI = /\bui\b|page\.tsx|component|dashboard|panel|form|modal|button|card|tab/i.test(approachLower)
     || /\b(shell)\b.*page/i.test(approachLower);
+
+  // BI-CE49D82E — Delta-aware design review prompt, mirror of the plan path
+  // added in BI-4396EFEC (D38). Live repro: FB-5E20E793 (Voice Slice 1.6)
+  // looped on the same "missing accessibility section" complaint round after
+  // round because the reviewer re-evaluated from scratch each call. With the
+  // prior issues injected, round 2+ judges resolution instead of re-litigating.
+  const priorSection = prior && prior.issues.length > 0
+    ? `\n\nPRIOR REVIEW CONTEXT (this is review round ${prior.round + 1}):\nThe immediately-prior review of this design surfaced these ${prior.issues.length} issues:\n${prior.issues.map((i, idx) => `  ${idx + 1}. [${i.severity}] ${i.description}`).join("\n")}\n\nDelta-aware review protocol:\n- For each prior issue, judge whether the new design addresses it. If yes, do NOT re-surface it.\n- If a prior issue is still present, re-surface it but reuse the SAME description so the operator sees persistence.\n- Only add NEW issues that this revision genuinely introduces or that the prior round missed.\n- Goal: convergence, not re-litigation. Avoid trading one set of issues for another.\n`
+    : "";
 
   return `You are reviewing a design document for a platform feature.
 
@@ -42,7 +56,7 @@ ${doc.reusabilityAnalysis ? `Reusability Analysis: Scope=${doc.reusabilityAnalys
 ${(doc as { accessibility?: string }).accessibility ? `Accessibility: ${(doc as { accessibility?: string }).accessibility}` : ""}
 
 PROJECT CONTEXT:
-${projectContext}
+${projectContext}${priorSection}
 
 REVIEW CHECKLIST — evaluate EVERY item before responding:
 1. Is the problem statement clear and specific?
@@ -69,18 +83,19 @@ RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 }`;
 }
 
-/** Optional prior-round context passed to plan review on iterations 2+.
- *  Lets the reviewer judge which prior issues the new plan addresses, so
+/** Optional prior-round context passed to design / plan review on iterations 2+.
+ *  Lets the reviewer judge which prior issues the new artifact addresses, so
  *  the operator sees converging trajectory instead of issue-set churn.
- *  BI-4396EFEC (D38). */
-export type PlanReviewPriorContext = {
+ *  BI-4396EFEC (D38) introduced this for plan review; BI-CE49D82E generalized
+ *  the type so design review uses the same shape. */
+export type ReviewPriorContext = {
   round: number;
   issues: ReadonlyArray<{ severity: string; description: string }>;
 };
 
 export function buildPlanReviewPrompt(
   plan: BuildPlanDoc,
-  prior?: PlanReviewPriorContext | null,
+  prior?: ReviewPriorContext | null,
 ): string {
   const tasks = Array.isArray(plan?.tasks) ? plan.tasks : [];
   const files = Array.isArray(plan?.fileStructure) ? plan.fileStructure : [];
@@ -152,6 +167,148 @@ RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
   "issues": [{"severity": "critical|important|minor", "description": "..."}],
   "summary": "one sentence summary"
 }`;
+}
+
+// ─── Architecture Alignment Review (advisory) ────────────────────────────────
+// The chief-architect lens, attributed to the Enterprise Architect persona
+// (AGT-WS-EA). It reviews the design doc (Ideate gate) and the implementation
+// plan (Plan gate) for architectural ALIGNMENT against DPF's canonical
+// standards — never re-running the checklist reviewers, never gating pass/fail.
+// Findings join the deliberation trail as the `architect` branch and surface
+// back to the build coworker so it can fold them into the spec.
+
+/** The reference standards the architecture reviewer measures a spec against.
+ *  Single source of truth for "what we research/check first" — kept here so the
+ *  in-portal reviewer prompt and the external dpf-architecture-review skill
+ *  stay aligned. Paths are repo-relative. */
+export const ARCHITECTURE_REVIEW_REFERENCES: ReadonlyArray<{
+  label: string;
+  path: string;
+  covers: string;
+}> = [
+  {
+    label: "Agent rulebook",
+    path: "AGENTS.md",
+    covers:
+      "project architecture, canonical contracts, strongly-typed enums, data-model stewardship, deployment doctrine",
+  },
+  {
+    label: "Kernel principles",
+    path: "docs/founder-kernel/wiki/principles/",
+    covers:
+      "architecture-over-shortcuts, single-source-of-truth, schema-audit-before-features, organization-canonical-identity, principal-convergence",
+  },
+  {
+    label: "Platform usability standards",
+    path: "docs/platform-usability-standards.md",
+    covers: "theme-aware styling, progressive disclosure, wizard-first setup",
+  },
+  {
+    label: "Deployment contracts",
+    path: "docs/superpowers/specs/2026-05-09-deployment-contracts.md",
+    covers: "the canonical deployment contracts every substrate must wrap",
+  },
+];
+
+function formatArchitectureReferences(): string {
+  return ARCHITECTURE_REVIEW_REFERENCES.map(
+    (ref) => `- ${ref.label} (${ref.path}) — ${ref.covers}`,
+  ).join("\n");
+}
+
+export type ArchitectureReviewInput =
+  | { kind: "design"; doc: BuildDesignDoc }
+  | { kind: "plan"; plan: BuildPlanDoc };
+
+function describeArchitectureArtifact(input: ArchitectureReviewInput): string {
+  if (input.kind === "design") {
+    const doc = input.doc;
+    const acceptance = Array.isArray(doc.acceptanceCriteria)
+      ? doc.acceptanceCriteria.join("; ")
+      : (doc.acceptanceCriteria ?? "Not specified");
+    return [
+      `Problem: ${doc.problemStatement ?? "Not provided"}`,
+      doc.dataModel ? `Data Model: ${doc.dataModel}` : "",
+      `Existing Code Audit: ${doc.existingCodeAudit ?? doc.existingFunctionalityAudit ?? "Not provided"}`,
+      `Reuse Plan: ${doc.reusePlan ?? "Not provided"}`,
+      `Proposed Approach: ${doc.proposedApproach ?? "Not provided"}`,
+      `Acceptance Criteria: ${acceptance}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+  const plan = input.plan;
+  const files = Array.isArray(plan?.fileStructure) ? plan.fileStructure : [];
+  const tasks = Array.isArray(plan?.tasks) ? plan.tasks : [];
+  const fileList =
+    files.map((f) => `  ${f?.action ?? "?"}: ${f?.path ?? "?"} — ${f?.purpose ?? ""}`).join("\n") ||
+    "  (no file structure defined)";
+  const taskList =
+    tasks.map((t, i) => `  ${i + 1}. ${t?.title ?? "Untitled"}: ${t?.implement ?? ""}`).join("\n") ||
+    "  (no tasks defined)";
+  return `FILE STRUCTURE:\n${fileList}\n\nTASKS:\n${taskList}`;
+}
+
+/**
+ * Build the architecture-alignment reviewer prompt. The reviewer reads the
+ * artifact against the DPF reference standards and returns the same
+ * ReviewResult JSON shape the other reviewers use — but its decision is
+ * ADVISORY and is dropped by the caller (it never enters mergeReviews).
+ */
+export function buildArchitectureReviewPrompt(
+  input: ArchitectureReviewInput,
+  projectContext: string,
+): string {
+  const artifactLabel = input.kind === "design" ? "design document" : "implementation plan";
+  const focus =
+    input.kind === "design"
+      ? `- Does the data model EXTEND canonical models (Organization for identity, Principal/PrincipalAlias for identity-bearing entities) rather than create parallel tables?
+- Does the proposed approach respect single-source-of-truth (no rule/fact/decision duplicated)?
+- Does it choose the architecturally sound shape over a shortcut that creates debt?
+- Are string-enum columns aligned with the canonical enum registry (hyphens, not underscores)?
+- Does it sit on the right substrate (existing route/lib/tool) instead of a bespoke parallel one?`
+      : `- Does the file structure place each responsibility in its canonical home (schema in packages/db, routes under apps/web/app/api, etc.)?
+- Does the plan EXTEND existing files where the domain already lives instead of duplicating them?
+- Are migrations/backfills modeled per the deployment doctrine (inline backfill, immutable committed migrations)?
+- Does the decomposition keep coupling intentional and blast radius contained?`;
+
+  return `You are the Enterprise Architect performing an ADVISORY architectural-alignment review of a Build Studio ${artifactLabel}. You are the "chief architect" lens: you do NOT re-run the design/plan checklist (other reviewers own that) and you do NOT gate the build. Your job is to surface architectural alignment and concerns, and to propose concrete edits the author can fold into the spec.
+
+${artifactLabel.toUpperCase()}:
+${describeArchitectureArtifact(input)}
+
+PROJECT CONTEXT:
+${projectContext || "(none provided)"}
+
+MEASURE THE SPEC AGAINST THESE DPF REFERENCE STANDARDS (research the topic further when the spec touches an area these do not cover):
+${formatArchitectureReferences()}
+
+ARCHITECTURAL FOCUS — evaluate each:
+${focus}
+
+SEVERITY (advisory weight, NOT a gate): "critical" = would entrench architectural debt or violate a commandment-tier principle (e.g. duplicates a canonical model, breaks single-source-of-truth); "important" = a misalignment worth fixing before building; "minor" = a nicety or stylistic alignment note. For EACH finding, put a concrete spec edit in the "suggestion" field.
+
+REFERENCE-DOC FEEDBACK: if your research surfaces a standard the reference docs above do not yet capture and that would help future specs, add ONE issue with severity "minor" whose description begins with "[reference-doc]" naming the doc to update and the gap. This is how architectural learning flows back into the standards.
+
+If the spec is well-aligned, return decision "pass" with an empty (or minor-only) issues list and say so in the summary. Report ALL findings in a single response.
+
+RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
+{
+  "decision": "pass" or "fail",
+  "issues": [{"severity": "critical|important|minor", "description": "...", "suggestion": "concrete spec edit"}],
+  "summary": "one sentence architectural-alignment summary"
+}`;
+}
+
+/** Reduce a parsed architecture ReviewResult into the advisory record nested on
+ *  ReviewResult.architectureAdvisory. Returns null when the reviewer was absent
+ *  or its output failed to parse — an architecture reviewer that didn't answer
+ *  must not masquerade as "no concerns". */
+export function architectureAdvisoryFromReview(
+  arch: ReviewResult | null,
+): ArchitectureAdvisory | null {
+  if (!arch || arch.parseError) return null;
+  return { summary: arch.summary, issues: arch.issues };
 }
 
 // ─── Review Merging ──────────────────────────────────────────────────────────

@@ -13,6 +13,7 @@ import {
   computeReviewDelta,
   isOscillating,
   describePlanReviewFailure,
+  describeDesignReviewFailure,
 } from "./feature-build-types";
 import type { ReviewResult } from "./feature-build-types";
 
@@ -513,6 +514,74 @@ describe("describePlanReviewFailure (BI-4396EFEC)", () => {
       iteration: {
         round: 2,
         prior: { issueCount: 21, addressed: 10, persisted: 11, newlySurfaced: 0 },
+        oscillating: false,
+      },
+    }));
+    expect(reason).not.toContain("splitting this feature");
+  });
+});
+
+describe("describeDesignReviewFailure (BI-CE49D82E)", () => {
+  // Mirror of describePlanReviewFailure for the design path. Same convergence
+  // / oscillation language so the operator sees consistent trajectory framing
+  // across both phase gates. Live repro that drove this fix: FB-5E20E793
+  // (Voice Slice 1.6) sat silent for 17h after design review failed twice on
+  // the same "missing accessibility" complaint — without iteration metadata
+  // the gate reason looked identical across rounds, hiding the deadlock.
+  function review(overrides: Partial<ReviewResult> = {}): ReviewResult {
+    return {
+      decision: "fail",
+      issues: [{ severity: "critical", description: "x" }],
+      summary: "fail",
+      ...overrides,
+    };
+  }
+
+  it("returns base reason when no iteration metadata is attached", () => {
+    const reason = describeDesignReviewFailure(review());
+    expect(reason).toContain("Design review failed");
+    expect(reason).toContain("re-run reviewDesignDoc");
+    expect(reason).not.toContain("Round");
+  });
+
+  it("includes round label when iteration is present but no prior delta", () => {
+    const reason = describeDesignReviewFailure(review({ iteration: { round: 1 } }));
+    expect(reason).toContain("(Round 1)");
+    expect(reason).not.toContain("addressed");
+  });
+
+  it("includes addressed/persist/new breakdown when prior delta exists", () => {
+    const reason = describeDesignReviewFailure(review({
+      iteration: {
+        round: 2,
+        prior: { issueCount: 5, addressed: 3, persisted: 2, newlySurfaced: 1 },
+      },
+    }));
+    expect(reason).toContain("Round 2");
+    expect(reason).toContain("3 addressed");
+    expect(reason).toContain("2 persist");
+    expect(reason).toContain("1 new");
+  });
+
+  it("recommends scope-splitting when oscillating flag is set", () => {
+    const reason = describeDesignReviewFailure(review({
+      iteration: {
+        round: 3,
+        prior: { issueCount: 5, addressed: 2, persisted: 3, newlySurfaced: 4 },
+        oscillating: true,
+      },
+    }));
+    // The Voice Slice 1.6 deadlock would have surfaced here: operator sees
+    // "this won't converge — split it" in plain English at the gate.
+    expect(reason).toContain("not decreasing across rounds");
+    expect(reason).toContain("splitting this feature into smaller scopes");
+  });
+
+  it("omits the scope-split recommendation when not oscillating", () => {
+    const reason = describeDesignReviewFailure(review({
+      iteration: {
+        round: 2,
+        prior: { issueCount: 5, addressed: 4, persisted: 1, newlySurfaced: 0 },
         oscillating: false,
       },
     }));

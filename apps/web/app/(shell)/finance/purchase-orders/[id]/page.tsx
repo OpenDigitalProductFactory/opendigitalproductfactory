@@ -5,6 +5,7 @@ import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { POActionButtons } from "@/components/finance/POActionButtons";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -75,14 +76,12 @@ export default async function PODetailPage({ params }: Props) {
           { label: "Currency", value: po.currency },
           {
             label: "Delivery Date",
-            value: po.deliveryDate
-              ? new Date(po.deliveryDate).toLocaleDateString("en-GB")
-              : "—",
+            value: <LocalTime value={po.deliveryDate} utc />,
           },
           { label: "Terms", value: po.terms ?? "—" },
           {
             label: "Created",
-            value: new Date(po.createdAt).toLocaleDateString("en-GB"),
+            value: <LocalTime value={po.createdAt} mode="date" />,
           },
         ].map(({ label, value }) => (
           <div

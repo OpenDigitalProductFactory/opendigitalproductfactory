@@ -4,12 +4,14 @@ import type {
   BuildPhase,
   BuildPlanDoc,
   FeatureBrief,
+  FeatureBuildKind,
   ReviewResult,
   UxVerificationStatus,
   VerificationOutput,
 } from "@/lib/feature-build-types";
 import { PROJECT_CONTEXT } from "./build-project-context";
 import { loadPrompt } from "@/lib/tak/prompt-loader";
+import { withCoworkerInteractionContract } from "@/lib/tak/coworker-interaction-contract";
 
 // ─── IT4IT Value Stream Mapping ─────────────────────────────────────────────
 // Each build phase maps to an IT4IT value stream stage and responsible agents.
@@ -494,10 +496,212 @@ GUARDRAILS:
 If Dev mode is enabled, show the registration details, diff summary, deployment window info, assessment criteria scores, and IT4IT stage references.`,
 };
 
-export async function getBuildPhasePrompt(phase: BuildPhase): Promise<string> {
-  const hardcoded = PHASE_PROMPTS[phase] ?? "";
+// ─── Per-variant phase prompts ──────────────────────────────────────────────
+//
+// Right-sizing matrix:
+// docs/superpowers/specs/2026-05-30-build-studio-right-sizing-design.md
+//
+// Each LifecyclePolicy.promptVariant ∈ {feature, fix, chore, doc} maps to a
+// hardcoded prompt set below. Missing variant cells fall through to the
+// feature prompt for that phase, which preserves the original "fix flow
+// reuses the feature build prompt" behavior.
+
+const PHASE_PROMPTS_FIX: Record<string, string> = {
+  ideate: `You are diagnosing a reported defect. This is a FIX, not a new feature — do not design new capability.
+
+${PROJECT_CONTEXT}
+
+You are given a fix diagnosis (the "Fix Diagnosis" block in the Build Studio Context) carrying the originating issue report: severity, route, an error-stack excerpt, and reproduction notes.
+
+YOUR JOB — produce a complete diagnosis, then advance:
+  1. REPRODUCE: confirm the failing behavior from the report (route + steps). State the expected vs actual behavior plainly.
+  2. ROOT CAUSE: trace the defect to its source. Name the file/function and the specific cause — not a symptom.
+  3. SCOPE THE SMALLEST CORRECT FIX: the narrowest change that fixes the root cause without redesigning surrounding code. Prefer modifying existing files over adding new capability. Do NOT generalize, parameterize, or expand scope.
+
+Do NOT ask reusability/taxonomy/portfolio questions — a defect is not a portfolio feature.
+
+WHEN THE DIAGNOSIS IS COMPLETE: call update_feature_brief to persist fixContext with reproSteps, expected, actual, rootCause, and fixApproach all filled. Then call reviewDesignDoc — it reviews the diagnosis (not a design doc) and advances to plan when reproSteps + rootCause + fixApproach are all present.
+
+Keep responses short. The defect + reproduction IS the spec — you do not need a full design document.`,
+
+  plan: `You are planning a targeted defect fix. The diagnosis (fixContext) is approved.
+
+${PROJECT_CONTEXT}
+
+DO THIS NOW — in order. Use the approved fixContext (rootCause, fixApproach); do NOT re-research scope.
+
+STEP 1 — SAVE THE PLAN: call saveBuildEvidence with field "buildPlan" containing EXACTLY:
+  {
+    "fileStructure": [
+      { "path": "apps/web/lib/...", "action": "modify", "purpose": "Fix <root cause> at <function>" },
+      ...every file the fix touches — fixes almost always "modify", rarely "create"
+    ],
+    "tasks": [
+      { "title": "Fix <root cause>", "testFirst": "add a regression test that fails on the current bug", "implement": "Edit <full monorepo path> — apply the smallest change that addresses the root cause", "verify": "run the regression test + NODE_ENV=production pnpm --filter web build" },
+      ...keep tasks minimal — a fix is targeted, not a feature build
+    ]
+  }
+  Same format rules as feature plans: top-level "fileStructure" and "tasks" arrays, full monorepo-relative paths.
+  A FIX MUST INCLUDE A REGRESSION TEST: a test that fails against the current (buggy) behavior and passes after the fix. Make it an explicit task.
+
+STEP 2: call reviewBuildPlan. If it fails, revise and re-review.
+STEP 3: one sentence — "Fix plan ready — [N] tasks. Building now." — then call save_phase_handoff.
+
+RULES: do not ask questions; do not expand scope beyond the diagnosed root cause; maximum 1 sentence per response.`,
+
+  review: `You are verifying a defect fix. Acceptance for a fix is "the reported behavior is gone," not "a new capability works."
+
+${PROJECT_CONTEXT}
+
+VERIFY, IN ORDER:
+  1. The originally reported defect NO LONGER REPRODUCES — exercise the exact route/steps from the fix diagnosis.
+  2. A REGRESSION TEST was added that fails against the old behavior and passes now.
+  3. No collateral regressions — run the affected tests and the production build (NODE_ENV=production pnpm --filter web build).
+
+Record acceptance against the diagnosis: each fixContext expected/actual pair should now hold the expected behavior. Then advance toward ship.
+
+Keep responses short. Do not request new-feature acceptance criteria — the success criterion is the absence of the reported defect.`,
+};
+
+// Chore prompts — intent-driven cleanup / refactor. No design research,
+// no portfolio anchoring, no acceptance ceremony. Plan + verify is the work.
+const PHASE_PROMPTS_CHORE: Record<string, string> = {
+  ideate: `This build is a CHORE. There is no feature to design — advance to plan immediately.
+
+${PROJECT_CONTEXT}
+
+CHORES are intent-driven cleanups (refactors, dep bumps, internal moves, log noise reductions). The BI body IS the spec. You do NOT need a design document, taxonomy placement, or portfolio anchor.
+
+Read the BI title + body once. If the intent is already clear, call save_phase_handoff with a one-line summary and move on. If the intent is ambiguous, ask ONE clarifying question (e.g. "is this purely internal or is there any user-visible side?"). Do not generate a design doc.`,
+
+  plan: `You are planning a chore (refactor, cleanup, dep bump, internal move). The BI body is the spec.
+
+${PROJECT_CONTEXT}
+
+STEP 1 — SAVE THE PLAN via saveBuildEvidence field "buildPlan":
+  {
+    "fileStructure": [
+      { "path": "apps/web/...", "action": "modify", "purpose": "<what the cleanup changes here>" }
+    ],
+    "tasks": [
+      { "title": "<smallest unit of cleanup>", "testFirst": "<assertion that the cleanup preserves existing behavior — usually a typecheck or the relevant vitest>", "implement": "<full-path edit>", "verify": "pnpm --filter web typecheck" }
+    ]
+  }
+  Top-level "fileStructure" and "tasks" arrays. Full monorepo-relative paths.
+  A CHORE MUST PRESERVE BEHAVIOR. If your plan changes behavior, this is not a chore — escalate by updating the BI source/kind.
+
+STEP 2: call reviewBuildPlan. Minimal review is fine — chores don't need design deliberation, just a sanity check that the plan preserves behavior and isn't accidentally feature-shaped.
+
+STEP 3: one sentence — "Chore plan ready — [N] tasks. Building now." — then save_phase_handoff.
+
+RULES: no design questions; no scope expansion; max 1 sentence per response.`,
+
+  review: `You are verifying a chore. Acceptance for a chore is "behavior is unchanged and the cleanup intent is achieved".
+
+${PROJECT_CONTEXT}
+
+VERIFY, IN ORDER:
+  1. Typecheck passes (pnpm --filter web typecheck).
+  2. Relevant tests still pass.
+  3. The cleanup intent from the BI is visible in the diff (e.g. the deprecated import is gone, the dep is bumped, the dead code is deleted).
+
+Do NOT generate acceptance-criteria evaluation entries — chores don't have user-visible acceptance criteria. Save a one-line acceptance note covering the three checks above and advance to ship.
+
+Keep responses short.`,
+};
+
+// Doc prompts — content edits. No sandbox boot in spirit; the verification
+// still typechecks anything that imports embedded code samples, but UX
+// verification and acceptance-criteria evaluation are skipped.
+const PHASE_PROMPTS_DOC: Record<string, string> = {
+  ideate: `This build is a DOC gap. There is no feature to design — advance to plan immediately.
+
+${PROJECT_CONTEXT}
+
+A doc-gap fix is a content edit. The BI body identifies what needs to be added/corrected. You do NOT need a design document, portfolio anchor, or sandbox session.
+
+If the BI body names the target file(s), advance to plan with a one-line summary. If it does not, ask ONE clarifying question about which doc surface to edit.`,
+
+  plan: `You are planning a doc-gap fix. The BI body identifies the target.
+
+${PROJECT_CONTEXT}
+
+STEP 1 — SAVE THE PLAN via saveBuildEvidence field "buildPlan":
+  {
+    "fileStructure": [
+      { "path": "docs/...", "action": "create" | "modify", "purpose": "<what the doc edit covers>" }
+    ],
+    "tasks": [
+      { "title": "<doc edit unit>", "testFirst": "<link check / typecheck for embedded code / wiki-lint>", "implement": "<full-path edit>", "verify": "wiki_lint or pnpm --filter web typecheck if code samples are embedded" }
+    ]
+  }
+  Top-level "fileStructure" and "tasks" arrays. Full monorepo-relative paths.
+
+STEP 2: call reviewBuildPlan. Minimal review.
+
+STEP 3: one sentence — "Doc plan ready — [N] edits. Writing now." — then save_phase_handoff.
+
+RULES: no design questions; no scope expansion; max 1 sentence per response.`,
+
+  review: `You are verifying a doc-gap fix. Acceptance is "the doc reads correctly and any embedded code/links resolve".
+
+${PROJECT_CONTEXT}
+
+VERIFY, IN ORDER:
+  1. Any embedded code samples typecheck (or are explicitly marked non-runnable).
+  2. Links resolve (wiki_lint or equivalent).
+  3. The gap the BI identified is closed by the edit.
+
+Do NOT generate acceptance-criteria evaluation entries beyond the three checks above. Advance to ship.
+
+Keep responses short.`,
+};
+
+const PHASE_PROMPTS_BY_VARIANT: Record<string, Record<string, string>> = {
+  feature: PHASE_PROMPTS,
+  fix: PHASE_PROMPTS_FIX,
+  chore: PHASE_PROMPTS_CHORE,
+  doc: PHASE_PROMPTS_DOC,
+};
+
+/**
+ * Resolve the phase prompt for a build. Generalizes the previous
+ * (phase, kind) selector to consult the right-sizing matrix:
+ *
+ *   1. getProcessPolicy(kind, size) yields a LifecyclePolicy.
+ *   2. If `phase` is not in policy.phases, the prompt is empty
+ *      (the phase is effectively skipped — its gate auto-passes).
+ *   3. Otherwise, pick the variant's hardcoded prompt; if none exists for
+ *      this (variant, phase), fall through to the feature prompt for that
+ *      phase. This preserves the original "fix reuses feature build prompt"
+ *      behavior and gives chore/doc graceful fallbacks while the variant
+ *      prompts mature.
+ *   4. Load the DB override at slug "<phase>-<variant>" (or just "<phase>"
+ *      for feature), with the hardcoded prompt as fallback.
+ *
+ * Back-compat: getBuildPhasePrompt(phase) with no kind/size returns the
+ * exact same string as before for every (phase, "feature") pair.
+ */
+export async function getBuildPhasePrompt(
+  phase: BuildPhase,
+  kind: FeatureBuildKind = "feature",
+  size: import("@/lib/feature-build-types").BuildProcessSize = "medium",
+): Promise<string> {
+  const { getProcessPolicy, normalizeType, normalizeSize } = await import("@/lib/explore/build-process-matrix");
+  const policy = getProcessPolicy(normalizeType(kind), normalizeSize(size));
+
+  // Phase not in this policy's visible set → empty prompt (skip). Terminal
+  // phases ("complete", "failed") were always empty; this keeps them so for
+  // every variant.
+  if (!policy.phases.includes(phase)) return "";
+
+  const variant = policy.promptVariant;
+  const variantPrompts = PHASE_PROMPTS_BY_VARIANT[variant] ?? PHASE_PROMPTS;
+  const hardcoded = variantPrompts[phase] ?? PHASE_PROMPTS[phase] ?? "";
   if (!hardcoded) return "";
-  return loadPrompt("build-phase", phase, hardcoded);
+
+  const slug = variant === "feature" ? phase : `${phase}-${variant}`;
+  return withCoworkerInteractionContract(await loadPrompt("build-phase", slug, hardcoded));
 }
 
 export type PhaseHandoffSummary = {
@@ -513,6 +717,13 @@ export type PhaseHandoffSummary = {
 export type BuildContext = {
   buildId: string;
   phase: BuildPhase;
+  /** Work kind. Absent/null is treated as "feature". */
+  kind?: FeatureBuildKind | null;
+  /** Right-sizing process size, drawn from the originating BI's effortSize
+   *  and persisted at promote time in plan.processSize. Absent/null is
+   *  treated as "medium" — the default policy cell, byte-identical to
+   *  pre-matrix behavior. */
+  size?: import("@/lib/feature-build-types").BuildProcessSize | null;
   title: string;
   brief: FeatureBrief | null;
   designDoc?: BuildDesignDoc | null;
@@ -652,6 +863,23 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
     if (Array.isArray(ctx.brief.acceptanceCriteria) && ctx.brief.acceptanceCriteria.length > 0) {
       lines.push(`  Acceptance criteria: ${ctx.brief.acceptanceCriteria.join("; ")}`);
     }
+
+    // Fix flow: surface the structured defect diagnosis so the coworker starts
+    // from the reproduction + root cause rather than a blank brief.
+    const fc = ctx.brief.fixContext;
+    if (fc) {
+      lines.push("");
+      lines.push("Fix Diagnosis (this is a FIX, not a new feature):");
+      if (fc.severity) lines.push(`  Severity: ${fc.severity}`);
+      if (fc.originatingIssueReportPublicId) lines.push(`  Issue report: ${fc.originatingIssueReportPublicId}`);
+      if (fc.routeContext) lines.push(`  Route: ${fc.routeContext}`);
+      if (fc.reproSteps) lines.push(`  Reproduction: ${fc.reproSteps}`);
+      if (fc.expected) lines.push(`  Expected: ${fc.expected}`);
+      if (fc.actual) lines.push(`  Actual: ${fc.actual}`);
+      if (fc.rootCause) lines.push(`  Root cause: ${fc.rootCause}`);
+      if (fc.fixApproach) lines.push(`  Fix approach: ${fc.fixApproach}`);
+      if (fc.errorStackExcerpt) lines.push(`  Error stack (excerpt):\n${fc.errorStackExcerpt.slice(0, 1500)}`);
+    }
   }
 
   if (ctx.designDoc) {
@@ -746,7 +974,7 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
   }
 
   lines.push("");
-  lines.push(await getBuildPhasePrompt(ctx.phase));
+  lines.push(await getBuildPhasePrompt(ctx.phase, ctx.kind ?? "feature", ctx.size ?? "medium"));
 
   // Contribution mode awareness for all phases — agent should know this for design decisions
   if (ctx.contributionMode) {

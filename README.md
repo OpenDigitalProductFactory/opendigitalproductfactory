@@ -15,6 +15,7 @@ DPF's user story is now archetype-led rather than module-led:
 - Pick the business type first: HVAC, clinic, retail, nonprofit, HOA, professional services, software platform, and other small-business categories.
 - The selected archetype shapes the customer portal, internal workspace vocabulary, worker home, marketing posture, and feature-contribution applicability.
 - AI coworkers are the primary interaction surface. They are purposed by role and route, but every side effect still goes through role checks, agent grants, approval gates, and audit logs.
+- WWMD is the trust-building autonomy path: coworkers can consult the founder-kernel wiki and principle vectors for ambiguous decisions, then return a confidence-scored recommendation, arbitration, escalation, or deferral with sources and an audit ledger.
 - Voice is an optional coworker modality: speech-to-text for input, text-to-speech for narrated decision/profile output where consent and provider setup allow it.
 - Build Studio is the governed self-development surface, but it is still being hardened. Use it honestly: ready for guided platform work and evidence capture, not a claim that every complex source change is fully autonomous today.
 
@@ -92,6 +93,8 @@ Terraform modules for the cloud-VM path live under [`infra/terraform/single-vm/{
 
 The installer asks one question — **Ready to go** (pre-built images; Build Studio is the governed development surface) or **Customizable** (full source clone; Build Studio and a local IDE share the same workspace). Both modes include the full platform; the difference is whether direct IDE access is part of the supported workflow. For serious source changes while Build Studio continues hardening, use Customizable mode. Login credentials are saved to `.env` / `.admin-credentials` at the end of installation.
 
+**AI toolchain readiness.** If you have Claude Code or Codex CLI installed on the host, the installer wires them automatically — DPF skills, MCP tools, and kernel-tier memory all available on the first turn of every new contributor session. Re-running the installer is a no-op when nothing has drifted. See [Install operations](docs/operations/install.md) for the readiness states and what each one means.
+
 If you hit a wall — happy-path success stories and "the installer hit a wall at step X" failures are equally useful — open an issue using the [Install verification report template](.github/ISSUE_TEMPLATE/install_verification.md) and attach the bundle produced by `bash install-dpf.sh doctor`.
 
 ---
@@ -112,6 +115,19 @@ Self-developing installs use one shared workspace per install:
 - In customizable installs, VS Code works from the same workspace.
 - Production promotion is governed through the portal.
 - Contribution policy (`fork_only` / `selective` / `contribute_all`) is configured later in the portal.
+
+### Source isolation vs. runtime isolation
+
+Worktrees created by `scripts/new-dev-worktree.sh` give you **source-control** isolation — your branch, your working tree, your commits — so concurrent sessions and the self-upgrade loop don't reset your work. They are **not** a second runtime.
+
+For each change:
+
+- Edit and commit from the worktree.
+- Cheap source-local checks (targeted Vitest, `pnpm typecheck` on the changed package) can run in the worktree if its deps resolve cleanly.
+- For anything that exercises the live platform — portal routes, server actions, MCP tools, DB-bound behavior, Build Studio flows — verify against the canonical install at the root clone (or a leased shared nonprod environment), and capture that evidence in the PR.
+- If the worktree can't run a build/test because pnpm/corepack isn't on PATH, workspace symlinks point outside the worktree, the Prisma client is missing, or Turbopack rejects a cross-workspace symlink — that's a harness limitation, not a product defect. Route the verification through the **shared local-CI convergence sandbox** (one runtime every worktree leases sequentially via `local-integration-ci`); per-worktree runtimes don't scale at DPF's expected 1k–10k concurrent worktrees.
+
+Full rule: [AGENTS.md §5](AGENTS.md) and [`worktree-is-source-control-not-runtime`](docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md). The `Quick dev commands` below assume you're either in the root install or a worktree whose dep graph already resolves — they are not a claim that every worktree is a standalone runtime.
 
 ### Quick dev commands
 

@@ -5,6 +5,7 @@ import { join } from "path";
 import { prisma } from "./client.js";
 import { Prisma } from "../generated/client/client";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
+import { loadFingerprintCatalogIntoDb, defaultCatalogPath } from "./discovery-fingerprint-catalog-loader.js";
 import { seedEaArchimate4 } from "./seed-ea-archimate4.js";
 import { seedEaBpmn20 } from "./seed-ea-bpmn20.js";
 import { seedEaCrossNotation } from "./seed-ea-cross-notation.js";
@@ -13,6 +14,7 @@ import { seedEaStructureRules } from "./seed-ea-structure-rules.js";
 import { seedGovernanceReferenceData } from "./governance-seed.js";
 import { seedWorkforceReferenceData } from "./workforce-seed.js";
 import { seedStorefrontArchetypes } from "./seed-storefront-archetypes.js";
+import { seedBusinessCapabilityPerspective } from "./business-capability-perspectives.js";
 import { seedGeographicData } from "./seed-geographic-data.js";
 import { seedTaxJurisdictions } from "./seed-tax-jurisdictions.js";
 import { seedLicenseRequirements } from "./seed-license-requirements.js";
@@ -20,6 +22,7 @@ import { seedPromptTemplates } from "./seed-prompt-templates.js";
 import { seedSkills } from "./seed-skills.js";
 import { seedWikiKernel } from "./seed-wiki-kernel.js";
 import { seedDecisionPerspective } from "./seed-decision-perspective.js";
+import { seedPlatformVoice } from "./seed-platform-voice.js";
 import {
   SPEACHES_PROVIDER_ID,
   SPEACHES_MODEL_ID,
@@ -31,6 +34,7 @@ import { seedStallThresholds } from "./seed-stall-thresholds.js";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
 import { ensureAllBackupScheduledJobs } from "./seed-platform-backup.js";
+import { ensureContributorInventoryScheduledJob } from "./seed-contributor-inventory.js";
 import { seedAgentControlPlaneMaturity } from "./seed-agent-control-plane-maturity.js";
 import { syncCapabilities } from "./sync-capabilities.js";
 import { defaultGovernanceFor } from "./taxonomy-governance-defaults.js";
@@ -438,6 +442,26 @@ async function seedTaxonomyNodes(): Promise<void> {
   }
 
   console.log(`Seeded ${entries.length} taxonomy nodes`);
+}
+
+/**
+ * Load the discovery-fingerprint catalog into DiscoveryFingerprintRule rows so
+ * the discovery pipeline applies them at runtime (spec §8.3). Runs AFTER
+ * seedTaxonomyNodes so each rule's semantic taxonomyNodeId resolves to a cuid.
+ * Idempotent (upsert on ruleKey) — re-running seed reproduces the estate's
+ * identifications with zero SQL.
+ */
+async function seedDiscoveryFingerprints(): Promise<void> {
+  const result = await loadFingerprintCatalogIntoDb(prisma, defaultCatalogPath(__dirname));
+  if (result.unresolvedTaxonomy.length > 0) {
+    // Non-fatal: an identity-only rule (no placement) is valid, but flag so a
+    // typo'd nodeId surfaces instead of silently degrading placement.
+    console.warn(
+      `[seed] ${result.unresolvedTaxonomy.length} fingerprint rule(s) had unresolved taxonomy nodeIds: ` +
+        result.unresolvedTaxonomy.join(", "),
+    );
+  }
+  console.log(`Seeded ${result.loaded} discovery fingerprint rules (catalog ${result.catalogKey}@${result.version})`);
 }
 
 async function seedDigitalProducts(): Promise<void> {
@@ -1115,11 +1139,26 @@ async function seedCoworkerAgents(): Promise<void> {
     { agentId: "platform-engineer", slugId: "platform-engineer", name: "AI Ops Engineer", tier: 2, type: "coworker", description: "AI infrastructure, provider management, and cost optimization", valueStream: "operate", sensitivity: "confidential" },
     { agentId: "build-specialist", slugId: "build-specialist", name: "Software Engineer", tier: 2, type: "coworker", description: "Feature development, code generation, and implementation", valueStream: "integrate", sensitivity: "internal" },
     { agentId: "data-architect", slugId: "data-architect", name: "Data Architect", tier: 2, type: "coworker", description: "Schema design, data modeling (3NF/DAMA-DMBOK), migration validation, inverse relation checks, and index optimization. Validates all Prisma schema changes before migration.", valueStream: "integrate", sensitivity: "internal" },
-    { agentId: "admin-assistant", slugId: "admin-assistant", name: "System Admin", tier: 2, type: "coworker", description: "Access control, security posture, and platform configuration", valueStream: "operate", sensitivity: "restricted" },
+    // System Admin: platform configuration + access-control surfaces. Lowered
+    // from `restricted` to `confidential` 2026-05-28 — restricted-tier routing
+    // requires a local-only LLM (govern/activate-provider.ts deriveClearance),
+    // forcing a hard Docker Model Runner dependency for first-run users on a
+    // cloud provider (Anthropic OAuth, OpenAI API). System Admin operations
+    // (RBAC review, provider config, backup status, audit trail) don't
+    // typically include regulated personal data. Operators handling restricted
+    // data can elevate via Admin > Platform Development > AI Providers after
+    // acknowledging their provider's DPA terms.
+    { agentId: "admin-assistant", slugId: "admin-assistant", name: "System Admin", tier: 2, type: "coworker", description: "Access control, security posture, and platform configuration", valueStream: "operate", sensitivity: "confidential" },
     { agentId: "coo", slugId: "coo", name: "COO", tier: 1, type: "coworker", description: "Cross-cutting oversight, workforce orchestration, and strategic priorities", valueStream: "cross-cutting", sensitivity: "confidential" },
     { agentId: "doc-specialist", slugId: "doc-specialist", name: "Documentation Specialist", tier: 2, type: "coworker", description: "Mermaid diagram creation/regeneration, documentation structure/consistency, spec and architecture document quality, renderer compatibility awareness", valueStream: "cross-cutting", sensitivity: "internal" },
-    { agentId: "compliance-officer", slugId: "compliance-officer", name: "Compliance Officer", tier: 2, type: "coworker", description: "Regulatory compliance, policy governance, audit readiness, and risk management", valueStream: "cross-cutting", sensitivity: "restricted" },
-    { agentId: "finance-controller", slugId: "finance-controller", name: "Finance Controller", tier: 2, type: "coworker", description: "Financial controls, budget governance, cost management, and financial reporting", valueStream: "cross-cutting", sensitivity: "restricted" },
+    // Compliance + Finance default to 'confidential' — covers most policy and
+    // budget work without locking out cloud providers (which contractually
+    // support confidential data unconditionally per their Enterprise terms).
+    // Operators escalate to 'restricted' per-deployment when these coworkers
+    // genuinely handle PHI/PII/regulated data, after signing the relevant BAA
+    // / ZDR agreement and clearing the destination channel.
+    { agentId: "compliance-officer", slugId: "compliance-officer", name: "Compliance Officer", tier: 2, type: "coworker", description: "Regulatory compliance, policy governance, audit readiness, and risk management", valueStream: "cross-cutting", sensitivity: "confidential" },
+    { agentId: "finance-controller", slugId: "finance-controller", name: "Finance Controller", tier: 2, type: "coworker", description: "Financial controls, budget governance, cost management, and financial reporting", valueStream: "cross-cutting", sensitivity: "confidential" },
   ];
 
   // Tool grants per hardcoded coworker. Every coworker needs explicit grants —
@@ -1138,7 +1177,7 @@ async function seedCoworkerAgents(): Promise<void> {
     "storefront-advisor":   ["consumer_read", "registry_read", "backlog_read", "backlog_write", "marketing_read", "marketing_write", "web_search"],
     "ops-coordinator":      ["backlog_read", "backlog_write", "registry_read", "portfolio_read"],
     "platform-engineer":    ["agent_control_read", "admin_read", "admin_write", "registry_read", "telemetry_read"],
-    "build-specialist":     ["file_read", "code_graph_read", "backlog_read", "backlog_write", "architecture_read", "build_plan_write", "registry_read", "sandbox_execute", "deployment_plan_create", "iac_execute", "release_gate_create", "release_plan_create", "release_plan_read"],
+    "build-specialist":     ["file_read", "code_graph_read", "backlog_read", "backlog_write", "architecture_read", "build_plan_write", "registry_read", "sandbox_execute", "deployment_plan_create", "iac_execute", "release_gate_create", "release_plan_create", "release_plan_read", "coworker_screen_read", "coworker_screen_drive"],
     "data-architect":       ["file_read", "sandbox_execute", "architecture_read", "registry_read"],
     "admin-assistant":      ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read"],
     "coo":                  ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read"],
@@ -2405,6 +2444,7 @@ async function main(): Promise<void> {
   await seedAgentPromptContexts();
   await seedFeatureDegradationMappings();
   await seedTaxonomyNodes();
+  await seedDiscoveryFingerprints();
   await seedAgentControlPlaneMaturity(prisma);
   await seedEaReferenceModels().catch((err: unknown) => {
     console.warn("[seed] EA reference models skipped:", err instanceof Error ? err.message : err);
@@ -2421,6 +2461,7 @@ async function main(): Promise<void> {
   await ensureDiscoveryTriageScheduledTask(prisma);
   await ensureHiveScoutScheduledTask(prisma);
   await ensureAllBackupScheduledJobs(prisma);
+  await ensureContributorInventoryScheduledJob(prisma);
   await seedMcpServers();
   await seedSandboxPool();
   await seedRuntimeTargets();
@@ -2438,6 +2479,11 @@ async function main(): Promise<void> {
   await seedClientIdentity();
   await seedHiveContributionCredential();
   await seedStorefrontArchetypes(prisma);
+  const capabilityPerspectiveSeed = await seedBusinessCapabilityPerspective(prisma);
+  console.log(
+    `  business-capability-perspective: sources=${capabilityPerspectiveSeed.sourcePerspectiveIds.join(",")} ` +
+      `active=${capabilityPerspectiveSeed.appliedCount} deactivated=${capabilityPerspectiveSeed.deactivatedCount}`,
+  );
   await seedWorkQueues();
   await seedPromptTemplates(prisma);
   await seedSkills(prisma);
@@ -2460,6 +2506,9 @@ async function main(): Promise<void> {
     `  decision-perspective: profile=${decisionPerspectiveSeed.profileId} ` +
       `version=${decisionPerspectiveSeed.versionId} materials=${decisionPerspectiveSeed.materialCount}`,
   );
+  // BI-2535D6F4: ship the founder's recorded seed voice on the platform profile.
+  const platformVoice = await seedPlatformVoice(prisma);
+  console.log(`  platform-voice: ${platformVoice.status} (clip-copied=${platformVoice.copiedClip})`);
   await syncCapabilities(prisma);
   await assertActiveProvidersHaveClearance();
   await assertAnthropicSubToolCapability();

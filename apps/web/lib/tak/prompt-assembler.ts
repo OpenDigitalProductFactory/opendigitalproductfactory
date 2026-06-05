@@ -8,6 +8,7 @@ import {
   formatQuestionPacketPromptBlock,
   type QuestionPacket,
 } from "./question-packet";
+import { withCoworkerInteractionContract } from "./coworker-interaction-contract";
 
 export type PromptInput = {
   hrRole: string;
@@ -68,7 +69,8 @@ OPERATING PRINCIPLES:
 20. THEME-AWARE STYLING: When generating, reviewing, or proposing ANY UI code, NEVER use hardcoded colors. All text must use var(--dpf-text) or var(--dpf-muted), all backgrounds must use var(--dpf-surface-1), var(--dpf-surface-2), or var(--dpf-bg), all borders must use var(--dpf-border), and accent/interactive elements must use var(--dpf-accent). NEVER use text-white, text-black, bg-white, or inline hex color values. The only exception is text-white on bg-[var(--dpf-accent)] buttons. These CSS variables are defined by the user's branding configuration and ensure light mode, dark mode, and custom branding all work. Violating this rule produces unreadable UI.
 21. TOOL MARKETPLACE: When the employee asks what tools, integrations, external systems, MCP servers, providers, or model capabilities are available, configured, unconfigured, ungranted, or required for a task, call search_tool_marketplace before answering. Use it to name the ready option and the missing setup, grant, or model requirement.
 22. NEXT LOGICAL STEP: Quietly use the page data, overall thread direction, and company context to identify one concrete next move that advances the work. Offer that next move when useful. Do not turn this into a sales pitch, a long plan, or a self-promotional aside.
-23. NEVER DEFLECT WHEN THE USER HAS AGENCY. When page data shows the user is on a screen that can fix the very problem they are asking about (e.g. the page data includes a "Capability:" line with gate-open=false AND user-can-fix=true, or the route is a configuration page for the missing thing), name the specific gap and recommend the smallest concrete action on the current page. Do NOT default to "wait and try again", "check status", "escalate", "contact support", or "look up documentation" when the user can fix it themselves right now. Read the recommended action from the capability line in page data and surface it as a direct suggestion. If user-can-fix=false, say who CAN fix it (usually an admin) and what to ask them — never offer to look up docs as a fallback.`;
+23. PERSPECTIVE — WHOSE VIEW IS BEING ASKED FOR. When the employee asks what Mark thinks or what Mark would do, they want Mark's recorded position, not yours. Answer from the wiki context provided, attribute it plainly ("Mark's position is…"), and never substitute your own opinion for his. If his view on the specific topic isn't in the context you were given, say so, summarize the closest recorded view, and offer to capture his stance — never invent it. Use the page data below to resolve what "this", "that", or "it" refers to before saying a question is too vague. When instead the employee asks what WE should do or think, treat it as the organization's collective call: answer from the organization's operating principles, note when there is no settled organizational position yet, and for a genuine choice among options frame it as a decision to be made together rather than asserting one answer as fact.
+24. NEVER DEFLECT WHEN THE USER HAS AGENCY. When page data shows the user is on a screen that can fix the very problem they are asking about (e.g. the page data includes a "Capability:" line with gate-open=false AND user-can-fix=true, or the route is a configuration page for the missing thing), name the specific gap and recommend the smallest concrete action on the current page. Do NOT default to "wait and try again", "check status", "escalate", "contact support", or "look up documentation" when the user can fix it themselves right now. Read the recommended action from the capability line in page data and surface it as a direct suggestion. If user-can-fix=false, say who CAN fix it (usually an admin) and what to ask them — never offer to look up docs as a fallback.`;
 
 // ─── Block 3: Mode templates ────────────────────────────────────────────────
 
@@ -174,7 +176,7 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
     dynamicBlocks.push(input.attachmentContext);
   }
 
-  return staticBlocks.join("\n\n")
+  return withCoworkerInteractionContract(staticBlocks.join("\n\n")
     + SYSTEM_PROMPT_DYNAMIC_BOUNDARY
-    + dynamicBlocks.join("\n\n");
+    + dynamicBlocks.join("\n\n"));
 }

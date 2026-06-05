@@ -126,7 +126,7 @@
     },
     {
       "key": "backlog_write",
-      "description": "Create or update backlog.",
+      "description": "Create or update backlog. Pseudo-User Contract (BI-B2F7ABF5): implies the finer build-scoped grants build_evidence and build_phase_advance so existing roles keep working when build tools are refactored to the finer grants.",
       "category": "backlog",
       "sensitivity": "internal",
       "honored_by_tools": [
@@ -138,13 +138,10 @@
         "create_epic",
         "link_backlog_item_to_epic",
         "propose_decomposition",
-        "record_execution_evidence",
         "register_digital_product_from_build",
         "register_tech_debt",
         "retire_backlog_item",
         "report_quality_issue",
-        "saveBuildEvidence",
-        "save_build_notes",
         "save_phase_handoff",
         "submit_feedback",
         "update_backlog_item",
@@ -153,7 +150,10 @@
         "update_feature_brief",
         "update_lifecycle"
       ],
-      "implies": []
+      "implies": [
+        "build_evidence",
+        "build_phase_advance"
+      ]
     },
     {
       "key": "budget_read",
@@ -161,6 +161,41 @@
       "category": "governance",
       "sensitivity": "internal",
       "honored_by_tools": [],
+      "implies": []
+    },
+    {
+      "key": "build_evidence",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5): record evidence against a FeatureBuild — execution outcome, notes, persisted artifacts. Finer-grained successor to the build-evidence-related slice of backlog_write; lets scoped coworker tokens record build progress without authority to mutate the broader backlog. Implied by backlog_write (one-way).",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "record_execution_evidence",
+        "saveBuildEvidence",
+        "save_build_notes"
+      ],
+      "implies": []
+    },
+    {
+      "key": "build_lifecycle",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5): advance a FeatureBuild's lifecycle state — promote into Build Studio, process backlog batches into builds, and (when BI-0B3B0232 lands) reopen abandoned builds. Successor to build_promote; covers the full lifecycle surface required by the Pseudo-User Contract envelope flow. Implied by build_promote (one-way) for backwards compat.",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "process_backlog_for_build_studio",
+        "promote_to_build_studio"
+      ],
+      "implies": []
+    },
+    {
+      "key": "build_phase_advance",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5): advance a FeatureBuild's phase — approve or override a decomposition, propose a downstream decomposition. Finer-grained successor to the phase-advancing slice of backlog_write; gates the Ideate→Plan handoff. Implied by backlog_write (one-way).",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "approve_decomposition",
+        "propose_build_decomposition",
+        "record_decomposition_override"
+      ],
       "implies": []
     },
     {
@@ -175,14 +210,13 @@
     },
     {
       "key": "build_promote",
-      "description": "Promote build.",
+      "description": "Legacy promote-into-Build-Studio grant. Pseudo-User Contract (BI-B2F7ABF5) refactored consumers onto the broader build_lifecycle grant; this entry remains for backwards compat and implies build_lifecycle (one-way).",
       "category": "integrate",
       "sensitivity": "internal",
-      "honored_by_tools": [
-        "process_backlog_for_build_studio",
-        "promote_to_build_studio"
-      ],
-      "implies": []
+      "honored_by_tools": [],
+      "implies": [
+        "build_lifecycle"
+      ]
     },
     {
       "key": "work_capsule_read",
@@ -338,6 +372,44 @@
       "implies": []
     },
     {
+      "key": "coworker_screen_drive",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): drive the screen the user is on — select entities, navigate routes, open/close panels, focus fields. Read-only for the user (the coworker drives).",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "screen_close_panel",
+        "screen_dispatch_action",
+        "screen_focus_field",
+        "screen_navigate",
+        "screen_open_panel",
+        "screen_propose_action",
+        "screen_select_entity"
+      ],
+      "implies": []
+    },
+    {
+      "key": "coworker_screen_fill",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): pre-fill form fields on behalf of the user. Higher tier than coworker_screen_drive — the user can still override before submit, but the coworker is setting input without explicit user keystrokes.",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "screen_set_input"
+      ],
+      "implies": []
+    },
+    {
+      "key": "coworker_screen_read",
+      "description": "Pseudo-User Contract (BI-B2F7ABF5/BI-DF6079E9): read the current screen's state — selected entities, focused field, open panels, route, scroll anchor. Read-only side of the coworker view-command surface (POLA-aligned per chief-architect review of PR #1361 — screen_scroll_to is read-class).",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "screen_describe",
+        "screen_get_state",
+        "screen_scroll_to"
+      ],
+      "implies": []
+    },
+    {
       "key": "credential_scan",
       "description": "Scan credential.",
       "category": "governance",
@@ -408,12 +480,14 @@
     },
     {
       "key": "thread_write",
-      "description": "Spawn or cancel specialist subtask child threads.",
+      "description": "Spawn or cancel specialist subtask child threads, and hand off / summon a named coworker.",
       "category": "platform",
       "sensitivity": "internal",
       "honored_by_tools": [
         "spawn_work_thread",
-        "cancel_thread"
+        "cancel_thread",
+        "request_coworker",
+        "summon_coworker"
       ],
       "implies": []
     },

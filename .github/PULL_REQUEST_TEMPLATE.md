@@ -11,12 +11,33 @@
 
 ## Test plan
 
-<!-- How did you verify this works? Include commands and manual steps. -->
+<!--
+  Thread worktrees are source-control isolation, not runtime isolation.
+  Source-only checks can run in the worktree; runtime-bound checks should
+  run against the canonical local install or a governed shared nonprod
+  environment. See AGENTS.md §5 and
+  docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md.
+  Do NOT spend time making a thread worktree into a full DPF runtime
+  unless that is the object of this PR.
+-->
 
-- [ ] `pnpm typecheck`
-- [ ] `pnpm test`
-- [ ] `pnpm --filter web build`
-- [ ] Manual verification (describe below)
+- [ ] **Source-only change** (types, isolated unit logic, doc, schema-only)
+  - [ ] `pnpm typecheck` (worktree OK)
+  - [ ] Targeted unit tests (worktree OK; name the file(s) run)
+
+- [ ] **Runtime-bound change** (server route, MCP tool, build/runtime wiring, compose, installer, prisma migration, UX surface)
+  - [ ] Source checks above passed where they can run in the worktree
+  - [ ] Functional verification ran against the **canonical runtime** — pick one:
+        - [ ] root local install (`http://localhost:3000`)
+        - [ ] governed shared nonprod env (lease id: ____)
+        - [ ] CI workflow run (link: ____)
+  - [ ] Evidence captured below (command + observed output, screenshot, MCP record id, etc.)
+
+- [ ] **Verification-harness limitation acknowledged** (check if any worktree-side gate was skipped because the worktree is not a full runtime; do NOT classify this as a product defect — file a platform BI instead)
+
+### Verification evidence
+
+<!-- Paste the exact canonical-runtime evidence: command, output snippet, screenshot link, MCP evidence record, or CI job URL. -->
 
 ## Related issues
 

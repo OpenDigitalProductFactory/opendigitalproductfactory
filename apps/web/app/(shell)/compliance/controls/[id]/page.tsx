@@ -4,22 +4,10 @@ import { notFound } from "next/navigation";
 import { LinkObligationForm } from "@/components/compliance/LinkObligationForm";
 import { UnlinkControlButton } from "@/components/compliance/UnlinkControlButton";
 import { EditControlForm } from "@/components/compliance/EditControlForm";
+import { LocalTime } from "@/components/ui/LocalTime";
+import { StatusBadge } from "@/components/ui/report-kit";
 
 type Props = { params: Promise<{ id: string }> };
-
-const STATUS_COLORS: Record<string, string> = {
-  implemented: "bg-green-900/30 text-green-400",
-  "in-progress": "bg-yellow-900/30 text-yellow-400",
-  planned: "bg-blue-900/30 text-blue-400",
-  "not-applicable": "bg-gray-900/30 text-gray-400",
-};
-
-const EFFECTIVENESS_COLORS: Record<string, string> = {
-  effective: "bg-green-900/30 text-green-400",
-  "partially-effective": "bg-yellow-900/30 text-yellow-400",
-  ineffective: "bg-red-900/30 text-red-400",
-  "not-assessed": "bg-gray-900/30 text-gray-400",
-};
 
 export default async function ControlDetailPage({ params }: Props) {
   const { id } = await params;
@@ -55,13 +43,9 @@ export default async function ControlDetailPage({ params }: Props) {
         </div>
         <div className="flex gap-2 mt-1">
           <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{control.controlType}</span>
-          <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${STATUS_COLORS[control.implementationStatus] ?? "bg-gray-900/30 text-gray-400"}`}>
-            {control.implementationStatus}
-          </span>
+          <StatusBadge domain="controlStatus" status={control.implementationStatus} variant="soft" uppercase={false} />
           {control.effectiveness && (
-            <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${EFFECTIVENESS_COLORS[control.effectiveness] ?? "bg-gray-900/30 text-gray-400"}`}>
-              {control.effectiveness}
-            </span>
+            <StatusBadge domain="controlEffectiveness" status={control.effectiveness} variant="soft" uppercase={false} />
           )}
         </div>
       </div>
@@ -96,7 +80,7 @@ export default async function ControlDetailPage({ params }: Props) {
         {control.nextReviewDate && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Next Review</p>
-            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(control.nextReviewDate).toLocaleDateString()}</p>
+            <LocalTime value={control.nextReviewDate} utc className="text-sm font-semibold text-[var(--dpf-text)]" />
           </div>
         )}
       </div>
@@ -152,7 +136,7 @@ export default async function ControlDetailPage({ params }: Props) {
                   <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{ev.evidenceType}</span>
                 </div>
               </div>
-              <span className="text-xs text-[var(--dpf-muted)]">{new Date(ev.collectedAt).toLocaleDateString()}</span>
+              <LocalTime value={ev.collectedAt} mode="date" className="text-xs text-[var(--dpf-muted)]" />
             </div>
           ))}
         </div>

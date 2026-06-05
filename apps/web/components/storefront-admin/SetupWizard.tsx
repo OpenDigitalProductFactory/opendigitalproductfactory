@@ -1,10 +1,12 @@
 "use client";
 import { useState } from "react";
+import { setupQuestionsFor } from "@/lib/storefront/setup-questions";
 import { ArchetypeActivationSummary } from "./ArchetypeActivationSummary";
 import { FinancialSetupStep } from "./FinancialSetupStep";
 import { seedOnboardingBrandOffer } from "@/lib/actions/seed-onboarding-brand-offer";
 import { financeProfileSlugFromCategory } from "@/lib/finance/setup-profile";
 import { INDUSTRY_OPTIONS } from "@/lib/storefront/industries";
+import type { WorkspaceHomeSetupActivationSummary } from "@/lib/workspace-home";
 
 type Archetype = {
   archetypeId: string;
@@ -15,6 +17,7 @@ type Archetype = {
   itemTemplates: unknown;
   sectionTemplates: unknown;
   activationProfile?: unknown;
+  workspaceHomeActivation?: WorkspaceHomeSetupActivationSummary;
   isBuiltIn?: boolean;
 };
 
@@ -45,6 +48,7 @@ const CTA_OPTIONS = [
 ];
 
 
+
 export function SetupWizard({
   archetypes,
   orgNameFromDb,
@@ -65,6 +69,8 @@ export function SetupWizard({
   const [heroImageUrl, setHeroImageUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // EP-PARTNER-CHANNEL Phase 1b: per-capability setup answers (capabilityKey → enabled).
+  const [capabilityChoices, setCapabilityChoices] = useState<Record<string, boolean>>({});
 
   const displayPortalLabel = portalLabel ?? "Portal";
 
@@ -103,6 +109,11 @@ export function SetupWizard({
           orgSlug,
           tagline,
           heroImageUrl: heroImageUrl || null,
+          // Record the answer to each setup capability question (asked → decided).
+          capabilityChoices: setupQuestionsFor(selected!.activationProfile).map((q) => ({
+            capabilityKey: q.capabilityKey,
+            choice: capabilityChoices[q.capabilityKey] ? "enabled" : "disabled",
+          })),
         }),
       });
       if (!res.ok) {
@@ -182,6 +193,22 @@ export function SetupWizard({
         itemTemplates: created.itemTemplates,
         sectionTemplates: created.sectionTemplates,
         activationProfile: created.activationProfile,
+        workspaceHomeActivation: {
+          archetypeId: created.archetypeId,
+          archetypeName: created.name,
+          mode: "unconfigured",
+          match: "none",
+          label: "Platform workspace view",
+          status: "not-configured",
+          sourceContributionId: null,
+          primaryOperatingQuestion: null,
+          primitiveWidgets: [],
+          requiredCanonicalData: [],
+          requiredSignals: [],
+          missingDataBehavior: "platform-fallback",
+          fallback: "platform",
+          setupAction: "choose-or-finish-business-setup",
+        },
         isBuiltIn: false,
       });
       setStep(2);
@@ -406,7 +433,39 @@ export function SetupWizard({
           These sections and items will be created. You can edit them later.
           {selected?.isBuiltIn === false && " This is a custom template."}
         </p>
-        <ArchetypeActivationSummary activationProfile={selected?.activationProfile} />
+        <ArchetypeActivationSummary
+          activationProfile={selected?.activationProfile}
+          workspaceHomeActivation={selected?.workspaceHomeActivation}
+        />
+        {(() => {
+          const questions = setupQuestionsFor(selected?.activationProfile);
+          if (questions.length === 0) return null;
+          return (
+            <div style={{ marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+              {questions.map((q) => (
+                <label
+                  key={q.capabilityKey}
+                  style={{ display: "flex", gap: 10, alignItems: "flex-start", border: "1px solid var(--dpf-border)", borderRadius: 8, background: "var(--dpf-surface-1)", padding: 12, cursor: "pointer" }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={capabilityChoices[q.capabilityKey] ?? false}
+                    onChange={(e) =>
+                      setCapabilityChoices((prev) => ({ ...prev, [q.capabilityKey]: e.target.checked }))
+                    }
+                    style={{ marginTop: 2 }}
+                  />
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--dpf-text)" }}>{q.question}</span>
+                    {q.helpText && (
+                      <span style={{ display: "block", fontSize: 12, color: "var(--dpf-muted)", marginTop: 2 }}>{q.helpText}</span>
+                    )}
+                  </span>
+                </label>
+              ))}
+            </div>
+          );
+        })()}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
           <div>
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Sections</div>

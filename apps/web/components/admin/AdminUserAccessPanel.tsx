@@ -8,6 +8,7 @@ import {
   type PasswordResetIssueResult,
   type UserActionResult,
 } from "@/lib/actions/users";
+import { EmailInput } from "@/components/ui/EmailInput";
 
 type RoleOption = {
   roleId: string;
@@ -88,10 +89,9 @@ export function AdminUserAccessPanel({ roles, users }: Props) {
           <h4 className="text-xs font-semibold text-[var(--dpf-text)] uppercase tracking-wider">Create user</h4>
           <label className="block">
             <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-widest">Email</span>
-            <input
+            <EmailInput
               value={createEmail}
-              onChange={(e) => setCreateEmail(e.target.value)}
-              type="email"
+              onValueChange={(v) => setCreateEmail(v)}
               className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2.5 py-2 text-sm text-[var(--dpf-text)]"
               placeholder="person@company.com"
             />

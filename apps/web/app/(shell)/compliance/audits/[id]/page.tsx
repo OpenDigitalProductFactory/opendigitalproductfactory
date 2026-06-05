@@ -1,14 +1,16 @@
 import { prisma } from "@dpf/db";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { LocalTime } from "@/components/ui/LocalTime";
+import { StatusBadge, type Intent } from "@/components/ui/report-kit";
 
 type Props = { params: Promise<{ id: string }> };
 
-const FINDING_COLORS: Record<string, string> = {
-  "nonconformity-major": "bg-red-900/30 text-red-400",
-  "nonconformity-minor": "bg-orange-900/30 text-orange-400",
-  observation: "bg-yellow-900/30 text-yellow-400",
-  opportunity: "bg-blue-900/30 text-blue-400",
+const FINDING_INTENT: Record<string, Intent> = {
+  "nonconformity-major": "danger",
+  "nonconformity-minor": "warning",
+  observation: "warning",
+  opportunity: "info",
 };
 
 export default async function AuditDetailPage({ params }: Props) {
@@ -50,13 +52,13 @@ export default async function AuditDetailPage({ params }: Props) {
         {audit.scheduledAt && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Scheduled</p>
-            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(audit.scheduledAt).toLocaleDateString()}</p>
+            <LocalTime value={audit.scheduledAt} mode="date" className="text-sm font-semibold text-[var(--dpf-text)]" />
           </div>
         )}
         {audit.conductedAt && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Conducted</p>
-            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(audit.conductedAt).toLocaleDateString()}</p>
+            <LocalTime value={audit.conductedAt} mode="date" className="text-sm font-semibold text-[var(--dpf-text)]" />
           </div>
         )}
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
@@ -88,17 +90,13 @@ export default async function AuditDetailPage({ params }: Props) {
               <div>
                 <span className="text-sm text-[var(--dpf-text)]">{f.title}</span>
                 <div className="flex gap-2 mt-1">
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${FINDING_COLORS[f.findingType] ?? "bg-gray-900/30 text-gray-400"}`}>
-                    {f.findingType}
-                  </span>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${f.status === "open" ? "bg-yellow-900/30 text-yellow-400" : "bg-green-900/30 text-green-400"}`}>
-                    {f.status}
-                  </span>
+                  <StatusBadge intent={FINDING_INTENT[f.findingType] ?? "neutral"} label={f.findingType} variant="soft" uppercase={false} />
+                  <StatusBadge intent={f.status === "open" ? "warning" : "success"} label={f.status} variant="soft" uppercase={false} />
                   {f.control && <span className="text-[9px] text-[var(--dpf-muted)]">Control: {f.control.title}</span>}
                 </div>
               </div>
               <div className="text-right text-xs text-[var(--dpf-muted)]">
-                {f.dueDate && <p>Due: {new Date(f.dueDate).toLocaleDateString()}</p>}
+                {f.dueDate && <p>Due: <LocalTime value={f.dueDate} utc /></p>}
                 <p>{f._count.correctiveActions} action{f._count.correctiveActions !== 1 ? "s" : ""}</p>
               </div>
             </div>

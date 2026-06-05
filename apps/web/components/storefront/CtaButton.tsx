@@ -22,7 +22,7 @@ export function CtaButton({
 
   const href =
     ctaType === "booking" ? `/s/${orgSlug}/book/${itemId}`
-    : ctaType === "purchase" ? `/s/${orgSlug}/cart?add=${itemId}`
+    : ctaType === "purchase" ? `/s/${orgSlug}/order/${itemId}`
     : ctaType === "donation" ? `/s/${orgSlug}/donate`
     : `/s/${orgSlug}/inquire/${itemId}`;
 

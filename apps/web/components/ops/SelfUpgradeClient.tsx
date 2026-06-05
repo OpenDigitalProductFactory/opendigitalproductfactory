@@ -2,7 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { triggerSelfUpgrade } from "@/lib/actions/promotions";
+import { rollbackSelfUpgrade, triggerSelfUpgrade } from "@/lib/actions/promotions";
+import { LocalTime } from "@/components/ui/LocalTime";
+import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
 
 type LatestRun = {
   runId: string;
@@ -13,15 +15,28 @@ type LatestRun = {
   deployedSha: string | null;
   startedAt: Date | string | null;
   completedAt: Date | string | null;
+  completionEvidence?: unknown;
   failureLog: string | null;
   createdAt: Date | string;
 };
+
+type RecoveryPointSummary = {
+  status: string;
+  members: Array<{ target: string; runId: string | null; status: string }>;
+  rollbackStatus: string | null;
+};
+
+type ImageVersionSource = "git-sha" | "content-hash" | "unknown";
 
 type Props = {
   enabled: boolean;
   channel: string;
   inMaintenanceWindow: boolean;
+  windowConfigured?: boolean;
+  nextWindowStart?: string | null;
+  nextScheduledCheckAt?: string | null;
   deployedSha: string | null;
+  deployedShaSource?: ImageVersionSource;
   targetSha: string | null;
   isFresh: boolean;
   latestRun: LatestRun | null;
@@ -31,9 +46,27 @@ type Props = {
     version: string;
     publishedAt: string;
     gitSha: string | null;
+    imageVersion?: { raw: string; source: ImageVersionSource } | null;
+    buildDate?: string | null;
     note: string | null;
   };
 };
+
+function shortSha(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.length > 12 ? `${value.slice(0, 12)}…` : value;
+}
+
+function sourceLabel(source: ImageVersionSource | undefined): string {
+  switch (source) {
+    case "git-sha":
+      return "commit";
+    case "content-hash":
+      return "image hash";
+    default:
+      return "image";
+  }
+}
 
 function formatDuration(start: Date | string, end: Date | string): string {
   const ms = new Date(end).getTime() - new Date(start).getTime();
@@ -46,8 +79,28 @@ function formatDuration(start: Date | string, end: Date | string): string {
   return `${minutes}m ${seconds}s`;
 }
 
-function formatDate(d: Date | string): string {
-  return new Date(d).toISOString().slice(0, 16).replace("T", " ") + " UTC";
+function record(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function recoveryPointSummary(run: LatestRun | null): RecoveryPointSummary | null {
+  const evidence = record(run?.completionEvidence);
+  const point = record(evidence?.recoveryPoint);
+  if (!point || !Array.isArray(point.members)) return null;
+  const rollback = record(evidence?.rollback);
+  return {
+    status: String(point.status ?? "unknown"),
+    members: point.members.map((member) => {
+      const m = record(member);
+      return {
+        target: String(m?.target ?? "unknown"),
+        runId: typeof m?.runId === "string" ? m.runId : null,
+        status: String(m?.status ?? "unknown"),
+      };
+    }),
+    rollbackStatus: typeof rollback?.status === "string" ? rollback.status : null,
+  };
 }
 
 const RUN_STATUS_STYLES: Record<string, string> = {
@@ -64,7 +117,11 @@ export default function SelfUpgradeClient({
   enabled,
   channel,
   inMaintenanceWindow,
+  windowConfigured,
+  nextWindowStart,
+  nextScheduledCheckAt,
   deployedSha,
+  deployedShaSource,
   targetSha,
   isFresh,
   latestRun,
@@ -74,13 +131,46 @@ export default function SelfUpgradeClient({
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [isRollbackPending, startRollbackTransition] = useTransition();
+  const [override, setOverride] = useState(false);
   const [triggerResult, setTriggerResult] = useState<{ queued: boolean; reason?: string } | null>(null);
+  const [rollbackConfirmation, setRollbackConfirmation] = useState("");
+  const [rollbackResult, setRollbackResult] = useState<{
+    status: "idle" | "ok" | "error";
+    message: string;
+  }>({ status: "idle", message: "" });
+  const latestRecoveryPoint = recoveryPointSummary(latestRun);
+  const canRollbackLatest =
+    latestRun &&
+    latestRun.status !== "running" &&
+    latestRecoveryPoint?.status === "ok" &&
+    latestRecoveryPoint.rollbackStatus !== "ok";
 
   function handleTrigger() {
     setTriggerResult(null);
+    const force = override;
     startTransition(async () => {
-      const result = await triggerSelfUpgrade();
+      const result = await triggerSelfUpgrade(force ? { force: true } : undefined);
       setTriggerResult(result);
+      router.refresh();
+    });
+  }
+
+  function handleRollback(runId: string) {
+    setRollbackResult({ status: "idle", message: "" });
+    startRollbackTransition(async () => {
+      const result = await rollbackSelfUpgrade(runId, rollbackConfirmation);
+      if (result.ok) {
+        setRollbackResult({
+          status: "ok",
+          message: "Recovery point restored.",
+        });
+      } else {
+        setRollbackResult({
+          status: "error",
+          message: result.error ?? "Recovery point restore failed.",
+        });
+      }
       router.refresh();
     });
   }
@@ -104,16 +194,30 @@ export default function SelfUpgradeClient({
         </div>
 
         {enabled && (
-          <button
-            type="button"
-            onClick={handleTrigger}
-            disabled={isPending || latestRun?.status === "running"}
-            aria-busy={isPending}
-            aria-label="Trigger self-upgrade now"
-            className="px-3 py-1.5 text-xs rounded-lg bg-[var(--dpf-accent)]/20 text-[var(--dpf-accent)] border border-[var(--dpf-accent)]/40 hover:bg-[var(--dpf-accent)]/30 transition-colors disabled:opacity-50"
-          >
-            {isPending ? "Triggering..." : "Trigger Now"}
-          </button>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1.5 text-xs text-[var(--dpf-muted)] cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={override}
+                onChange={(e) => setOverride(e.target.checked)}
+                aria-label="Emergency override: bypass the safety drain"
+                title="Bypass the quiescence safety drain. Only for emergencies — it can interrupt in-flight work."
+                className="accent-[var(--dpf-warning)]"
+              />
+              Emergency override
+            </label>
+            <button
+              type="button"
+              onClick={handleTrigger}
+              disabled={isPending || latestRun?.status === "running"}
+              aria-busy={isPending}
+              aria-label="Upgrade now"
+              data-override={override ? "true" : "false"}
+              className="px-3 py-1.5 text-xs rounded-lg bg-[var(--dpf-accent)]/20 text-[var(--dpf-accent)] border border-[var(--dpf-accent)]/40 hover:bg-[var(--dpf-accent)]/30 transition-colors disabled:opacity-50"
+            >
+              {isPending ? "Upgrading..." : override ? "Force upgrade now" : "Upgrade now"}
+            </button>
+          </div>
         )}
       </div>
 
@@ -125,7 +229,18 @@ export default function SelfUpgradeClient({
 
       {enabled && inMaintenanceWindow && (
         <div className="p-3 rounded-lg bg-[var(--dpf-success)]/10 border border-[var(--dpf-success)]/30 text-sm text-[var(--dpf-text)]">
-          Currently in maintenance window — upgrades are scheduled.
+          Currently in maintenance window — next scheduled check: {" "}
+          {nextScheduledCheckAt ? (
+            <>
+              <LocalTime className="font-mono" value={nextScheduledCheckAt} />
+              <span>. If an update is still available, it can start then.</span>
+            </>
+          ) : (
+            <>
+              <span className="font-mono">pending scheduler tick</span>
+              <span>. If an update is still available, it can start then.</span>
+            </>
+          )}
         </div>
       )}
 
@@ -136,11 +251,26 @@ export default function SelfUpgradeClient({
         <div className="text-xs text-[var(--dpf-muted)]">
           <span className="font-medium text-[var(--dpf-text)]">Platform version:</span>{" "}
           <span className="font-mono text-[var(--dpf-text)]">
-            {platformVersion.version}
+            v{platformVersion.version}
           </span>
-          {platformVersion.gitSha && (
-            <span className="ml-2 font-mono text-[var(--dpf-muted)]">
-              ({platformVersion.gitSha.slice(0, 7)})
+        </div>
+        <div className="text-[11px] text-[var(--dpf-muted)]">
+          build{" "}
+          {platformVersion.gitSha || platformVersion.imageVersion?.raw ? (
+            <span className="font-mono">
+              {shortSha(platformVersion.gitSha ?? platformVersion.imageVersion?.raw ?? null)}
+            </span>
+          ) : (
+            <span className="font-mono">dev (unbuilt)</span>
+          )}
+          {platformVersion.imageVersion?.source && (
+            <span className="ml-1">
+              ({sourceLabel(platformVersion.imageVersion.source)})
+            </span>
+          )}
+          {platformVersion.buildDate && (
+            <span className="ml-1">
+              · built <LocalTime value={platformVersion.buildDate} />
             </span>
           )}
         </div>
@@ -148,7 +278,18 @@ export default function SelfUpgradeClient({
           <>
             <div className="text-xs text-[var(--dpf-muted)]">
               <span className="font-medium text-[var(--dpf-text)]">Deployed:</span>{" "}
-              <span className="font-mono">{deployedSha ?? "unknown"}</span>
+              {deployedSha ? (
+                <>
+                  <span className="font-mono">{deployedSha}</span>
+                  {deployedShaSource && deployedShaSource !== "unknown" && (
+                    <span className="ml-2 text-[var(--dpf-muted)]">
+                      ({sourceLabel(deployedShaSource)})
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="font-mono">unknown</span>
+              )}
             </div>
             <div className="text-xs text-[var(--dpf-muted)]">
               <span className="font-medium text-[var(--dpf-text)]">Target:</span>{" "}
@@ -157,12 +298,70 @@ export default function SelfUpgradeClient({
             {isFresh && (
               <div className="text-xs text-[var(--dpf-success)]">Up to date</div>
             )}
-            {!isFresh && targetSha && (
+            {!isFresh && targetSha && deployedShaSource === "content-hash" && (
+              <div className="text-xs text-[var(--dpf-warning)]">
+                This image wasn&apos;t stamped with a git commit, so it
+                can&apos;t be compared to the upgrade target. Published releases
+                are stamped automatically by CI; for a local build, rebuild with{" "}
+                <span className="font-mono">scripts/build-images.sh</span>{" "}
+                (<span className="font-mono">build-images.ps1</span> on Windows).
+              </div>
+            )}
+            {!isFresh && targetSha && deployedShaSource !== "content-hash" && (
               <div className="text-xs text-[var(--dpf-warning)]">Update available</div>
             )}
           </>
         )}
       </div>
+
+      {enabled && (
+        <div
+          className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-xs"
+          data-window-configured={windowConfigured ? "true" : "false"}
+        >
+          <span className="font-medium text-[var(--dpf-text)]">Schedule:</span>{" "}
+          {!windowConfigured ? (
+            <span className="text-[var(--dpf-warning)]">
+              No maintenance window configured — scheduled upgrades will not run
+              on their own. Use Emergency override to run now.
+            </span>
+          ) : inMaintenanceWindow ? (
+            <span className="text-[var(--dpf-success)]">
+              In maintenance window now — next scheduled check: {" "}
+              {nextScheduledCheckAt ? (
+                <>
+                  <LocalTime className="font-mono" value={nextScheduledCheckAt} />
+                  <span>.</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-mono">pending scheduler tick</span>
+                  <span>.</span>
+                </>
+              )}
+            </span>
+          ) : nextWindowStart ? (
+            <span className="text-[var(--dpf-muted)]">
+              Next maintenance window:{" "}
+              <LocalTime className="font-mono" value={nextWindowStart} /> —
+              {nextScheduledCheckAt ? (
+                <>
+                  {" "}next scheduled check: {" "}
+                  <LocalTime className="font-mono" value={nextScheduledCheckAt} />.
+                </>
+              ) : (
+                " upgrades are evaluated hourly."
+              )}
+            </span>
+          ) : (
+            <span className="text-[var(--dpf-muted)]">
+              Maintenance window configured.
+            </span>
+          )}
+        </div>
+      )}
+
+      <UpgradeImpactPanel enabled={enabled} />
 
       {enabled && !latestRun && (
         <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-xs text-[var(--dpf-muted)]">
@@ -202,13 +401,25 @@ export default function SelfUpgradeClient({
             </div>
           )}
 
-          {latestRun.startedAt && (
+          {latestRun.startedAt ? (
             <div className="text-xs text-[var(--dpf-muted)]">
               Started:{" "}
-              <span className="font-mono">{formatDate(latestRun.startedAt)}</span>
+              <LocalTime className="font-mono" value={latestRun.startedAt} />
               {latestRun.completedAt && (
                 <> · {formatDuration(latestRun.startedAt, latestRun.completedAt)}</>
               )}
+            </div>
+          ) : (
+            <div className="text-xs text-[var(--dpf-muted)]">
+              Created:{" "}
+              <LocalTime className="font-mono" value={latestRun.createdAt} />
+            </div>
+          )}
+
+          {latestRun.completedAt && (
+            <div className="text-xs text-[var(--dpf-muted)]">
+              {latestRun.status === "failed" ? "Failed" : "Completed"}:{" "}
+              <LocalTime className="font-mono" value={latestRun.completedAt} />
             </div>
           )}
 
@@ -222,6 +433,65 @@ export default function SelfUpgradeClient({
               </div>
             </details>
           )}
+
+          {latestRecoveryPoint && (
+            <div
+              className="mt-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-xs"
+              data-recovery-point-status={latestRecoveryPoint.status}
+            >
+              <div className="font-medium text-[var(--dpf-text)]">
+                Recovery point: {latestRecoveryPoint.status}
+              </div>
+              <div className="mt-1 text-[var(--dpf-muted)]">
+                {latestRecoveryPoint.members
+                  .map((member) => `${member.target}:${member.runId ?? "missing"}`)
+                  .join(" · ")}
+              </div>
+              {latestRecoveryPoint.rollbackStatus && (
+                <div
+                  className="mt-1 text-[var(--dpf-muted)]"
+                  data-rollback-status={latestRecoveryPoint.rollbackStatus}
+                >
+                  Rollback: {latestRecoveryPoint.rollbackStatus}
+                </div>
+              )}
+              {canRollbackLatest && (
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <input
+                    type="text"
+                    value={rollbackConfirmation}
+                    onChange={(event) => setRollbackConfirmation(event.target.value)}
+                    aria-label="Rollback confirmation"
+                    placeholder="Type ROLLBACK"
+                    className="w-full sm:w-44 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-xs text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRollback(latestRun.runId)}
+                    disabled={
+                      isRollbackPending ||
+                      rollbackConfirmation !== "ROLLBACK"
+                    }
+                    aria-busy={isRollbackPending}
+                    className="rounded-md border border-[var(--dpf-destructive)]/40 bg-[var(--dpf-destructive)]/10 px-3 py-1 text-xs font-medium text-[var(--dpf-destructive)] transition-colors hover:bg-[var(--dpf-destructive)]/20 disabled:opacity-50"
+                  >
+                    {isRollbackPending ? "Restoring..." : "Restore recovery point"}
+                  </button>
+                </div>
+              )}
+              {rollbackResult.status !== "idle" && (
+                <div
+                  className={`mt-2 rounded-md border px-2 py-1 ${
+                    rollbackResult.status === "ok"
+                      ? "border-[var(--dpf-success)]/30 bg-[var(--dpf-success)]/10 text-[var(--dpf-success)]"
+                      : "border-[var(--dpf-destructive)]/30 bg-[var(--dpf-destructive)]/10 text-[var(--dpf-destructive)]"
+                  }`}
+                >
+                  {rollbackResult.message}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -231,11 +501,19 @@ export default function SelfUpgradeClient({
             <span className="text-xs font-medium text-[var(--dpf-text)]">Run History</span>
           </div>
           <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[var(--dpf-muted)] text-left">
+                <th className="px-3 py-1.5 font-medium">Status</th>
+                <th className="px-3 py-1.5 font-medium">Run</th>
+                <th className="px-3 py-1.5 font-medium">Change</th>
+                <th className="px-3 py-1.5 font-medium text-right">When</th>
+              </tr>
+            </thead>
             <tbody>
               {history.map((run) => (
                 <tr
                   key={run.runId}
-                  className="border-b border-[var(--dpf-border)] last:border-0"
+                  className="border-t border-[var(--dpf-border)]"
                   data-run-id={run.runId}
                 >
                   <td className="px-3 py-2 w-24 shrink-0">
@@ -256,6 +534,14 @@ export default function SelfUpgradeClient({
                         <span className="font-mono">{run.targetSha}</span>
                       </>
                     ) : null}
+                  </td>
+                  <td className="px-3 py-2 text-right text-[var(--dpf-muted)] whitespace-nowrap align-top">
+                    <LocalTime value={run.startedAt ?? run.createdAt} />
+                    {run.startedAt && run.completedAt && (
+                      <span className="ml-1 opacity-70">
+                        · {formatDuration(run.startedAt, run.completedAt)}
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}

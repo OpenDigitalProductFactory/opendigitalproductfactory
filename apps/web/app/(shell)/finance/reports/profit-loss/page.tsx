@@ -1,5 +1,6 @@
 // apps/web/app/(shell)/finance/reports/profit-loss/page.tsx
 import Link from "next/link";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { getProfitAndLoss } from "@/lib/actions/reports";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
@@ -101,8 +102,8 @@ export default async function ProfitAndLossPage({
           {profitLabel}
         </p>
         <p className="text-xs text-[var(--dpf-muted)] mt-1">
-          {startDate.toLocaleDateString("en-GB")} –{" "}
-          {endDate.toLocaleDateString("en-GB")}
+          <LocalTime value={startDate} utc /> –{" "}
+          <LocalTime value={endDate} utc />
         </p>
       </div>
 

@@ -3,22 +3,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LinkRiskControlForm } from "@/components/compliance/LinkRiskControlForm";
 import { UnlinkRiskControlButton } from "@/components/compliance/UnlinkRiskControlButton";
+import { LocalTime } from "@/components/ui/LocalTime";
+import { StatusBadge } from "@/components/ui/report-kit";
 
 type Props = { params: Promise<{ id: string }> };
-
-const RISK_COLORS: Record<string, string> = {
-  low: "bg-green-900/30 text-green-400",
-  medium: "bg-yellow-900/30 text-yellow-400",
-  high: "bg-orange-900/30 text-orange-400",
-  critical: "bg-red-900/30 text-red-400",
-};
-
-const SEVERITY_COLORS: Record<string, string> = {
-  low: "bg-green-900/30 text-green-400",
-  medium: "bg-yellow-900/30 text-yellow-400",
-  high: "bg-orange-900/30 text-orange-400",
-  critical: "bg-red-900/30 text-red-400",
-};
 
 export default async function RiskDetailPage({ params }: Props) {
   const { id } = await params;
@@ -51,25 +39,15 @@ export default async function RiskDetailPage({ params }: Props) {
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
           <h1 className="text-xl font-bold text-[var(--dpf-text)]">{risk.title}</h1>
-          <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${risk.status === "active" ? "bg-green-900/30 text-green-400" : "bg-gray-900/30 text-gray-400"}`}>
-            {risk.status}
-          </span>
+          <StatusBadge intent={risk.status === "active" ? "success" : "neutral"} label={risk.status} variant="soft" uppercase={false} />
         </div>
         <div className="flex gap-2 mt-1">
-          <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${RISK_COLORS[risk.inherentRisk] ?? "bg-gray-900/30 text-gray-400"}`}>
-            Inherent: {risk.inherentRisk}
-          </span>
+          <StatusBadge domain="severity" status={risk.inherentRisk} label={`Inherent: ${risk.inherentRisk}`} variant="soft" uppercase={false} />
           {risk.residualRisk && (
-            <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${RISK_COLORS[risk.residualRisk] ?? "bg-gray-900/30 text-gray-400"}`}>
-              Residual: {risk.residualRisk}
-            </span>
+            <StatusBadge domain="severity" status={risk.residualRisk} label={`Residual: ${risk.residualRisk}`} variant="soft" uppercase={false} />
           )}
-          <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${RISK_COLORS[risk.likelihood] ?? "bg-gray-900/30 text-gray-400"}`}>
-            Likelihood: {risk.likelihood}
-          </span>
-          <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${SEVERITY_COLORS[risk.severity] ?? "bg-gray-900/30 text-gray-400"}`}>
-            Severity: {risk.severity}
-          </span>
+          <StatusBadge domain="severity" status={risk.likelihood} label={`Likelihood: ${risk.likelihood}`} variant="soft" uppercase={false} />
+          <StatusBadge domain="severity" status={risk.severity} label={`Severity: ${risk.severity}`} variant="soft" uppercase={false} />
         </div>
       </div>
 
@@ -93,12 +71,12 @@ export default async function RiskDetailPage({ params }: Props) {
         )}
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
           <p className="text-xs text-[var(--dpf-muted)]">Assessed At</p>
-          <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(risk.assessedAt).toLocaleDateString()}</p>
+          <LocalTime value={risk.assessedAt} mode="date" className="text-sm font-semibold text-[var(--dpf-text)]" />
         </div>
         {risk.nextReviewDate && (
           <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
             <p className="text-xs text-[var(--dpf-muted)]">Next Review</p>
-            <p className="text-sm font-semibold text-[var(--dpf-text)]">{new Date(risk.nextReviewDate).toLocaleDateString()}</p>
+            <LocalTime value={risk.nextReviewDate} utc className="text-sm font-semibold text-[var(--dpf-text)]" />
           </div>
         )}
         <div className="p-3 rounded-lg border border-[var(--dpf-border)]">
@@ -171,26 +149,22 @@ export default async function RiskDetailPage({ params }: Props) {
               <Link
                 key={inc.id}
                 href={`/compliance/incidents/${inc.id}`}
-                className={`block p-3 rounded-lg border ${inc.regulatoryNotifiable && isOpen ? "border-red-500/50" : "border-[var(--dpf-border)]"} hover:border-[var(--dpf-accent)] transition-colors`}
+                className={`block p-3 rounded-lg border ${inc.regulatoryNotifiable && isOpen ? "border-[color-mix(in_srgb,var(--dpf-error)_50%,transparent)]" : "border-[var(--dpf-border)]"} hover:border-[var(--dpf-accent)] transition-colors`}
               >
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-[var(--dpf-text)]">{inc.title}</span>
                       {inc.regulatoryNotifiable && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-900/30 text-red-400 font-semibold">NOTIFIABLE</span>
+                        <StatusBadge intent="danger" label="Notifiable" variant="soft" />
                       )}
                     </div>
                     <div className="flex gap-2 mt-1">
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${SEVERITY_COLORS[inc.severity] ?? "bg-gray-900/30 text-gray-400"}`}>
-                        {inc.severity}
-                      </span>
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${isOpen ? "bg-yellow-900/30 text-yellow-400" : "bg-green-900/30 text-green-400"}`}>
-                        {inc.status}
-                      </span>
+                      <StatusBadge domain="severity" status={inc.severity} variant="soft" uppercase={false} />
+                      <StatusBadge intent={isOpen ? "warning" : "success"} label={inc.status} variant="soft" uppercase={false} />
                     </div>
                   </div>
-                  <span className="text-xs text-[var(--dpf-muted)]">{new Date(inc.occurredAt).toLocaleDateString()}</span>
+                  <LocalTime value={inc.occurredAt} mode="date" className="text-xs text-[var(--dpf-muted)]" />
                 </div>
               </Link>
             );

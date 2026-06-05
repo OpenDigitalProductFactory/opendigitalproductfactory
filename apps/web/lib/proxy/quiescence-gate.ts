@@ -52,6 +52,12 @@ const ALLOW_LISTED_PREFIXES = [
   "/api/health",
   "/api/v1/edge/",
   "/api/internal/quiescence-state",
+  // The Inngest serve endpoint IS the control plane that DRIVES quiescence —
+  // the coordinator function executes via callbacks to this route. Gating it
+  // would deadlock the very function that transitions draining→ready-to-swap
+  // and flips the level back to normal, wedging the portal in "quiescing"
+  // forever. It has its own request-signature auth, so it's safe to bypass.
+  "/api/inngest",
 ];
 
 export function isAllowListed(pathname: string): boolean {

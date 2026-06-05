@@ -365,10 +365,18 @@ async function stepGenerateCode(
     }
   } catch { /* non-fatal */ }
 
+  // Right-sizing matrix: read processSize from plan.processSize (written
+  // at promote time) so the build phase prompt reflects the BI's declared
+  // effortSize. Default "medium" preserves today's behavior for builds
+  // promoted before plan.processSize existed.
+  const processSize = (plan["processSize"] as string | undefined) ?? "medium";
+
   // Build the system prompt with build context (same as the coworker uses)
   const buildContext = await getBuildContextSection({
     buildId,
     phase: "build",
+    kind: build.kind as import("@/lib/feature-build-types").FeatureBuildKind,
+    size: processSize as import("@/lib/feature-build-types").BuildProcessSize,
     title: brief?.title ?? "Feature",
     brief,
     portfolioId: build.portfolioId,

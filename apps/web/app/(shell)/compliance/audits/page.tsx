@@ -2,13 +2,8 @@ import { listAudits } from "@/lib/actions/compliance";
 import { AUDIT_TYPES, AUDIT_STATUSES } from "@/lib/compliance-types";
 import Link from "next/link";
 import { CreateAuditForm } from "@/components/compliance/CreateAuditForm";
-
-const STATUS_COLORS: Record<string, string> = {
-  planned: "bg-blue-900/30 text-blue-400",
-  "in-progress": "bg-yellow-900/30 text-yellow-400",
-  completed: "bg-green-900/30 text-green-400",
-  cancelled: "bg-gray-900/30 text-gray-400",
-};
+import { LocalTime } from "@/components/ui/LocalTime";
+import { StatusBadge } from "@/components/ui/report-kit";
 
 type Props = { searchParams: Promise<{ auditType?: string; status?: string }> };
 
@@ -73,16 +68,14 @@ export default async function AuditsPage({ searchParams }: Props) {
                   <span className="text-sm text-[var(--dpf-text)]">{a.title}</span>
                   <div className="flex gap-2 mt-1">
                     <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{a.auditType}</span>
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${STATUS_COLORS[a.status] ?? "bg-gray-900/30 text-gray-400"}`}>
-                      {a.status}
-                    </span>
+                    <StatusBadge domain="complianceAudit" status={a.status} variant="soft" uppercase={false} />
                     {a.overallRating && (
                       <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]">{a.overallRating}</span>
                     )}
                   </div>
                 </div>
                 <div className="text-right text-xs text-[var(--dpf-muted)]">
-                  {a.scheduledAt && <p>Scheduled: {new Date(a.scheduledAt).toLocaleDateString()}</p>}
+                  {a.scheduledAt && <p>Scheduled: <LocalTime value={a.scheduledAt} mode="date" /></p>}
                   <p>{a._count.findings} finding{a._count.findings !== 1 ? "s" : ""}</p>
                   {a.auditor && <p>{a.auditor.displayName}</p>}
                 </div>

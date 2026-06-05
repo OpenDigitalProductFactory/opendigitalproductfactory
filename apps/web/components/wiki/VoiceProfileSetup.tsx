@@ -2,8 +2,8 @@
 
 import { useState, useTransition, useRef, useCallback } from "react"
 import { VoiceConsentForm } from "@/components/admin/VoiceConsentForm"
-import { setVoiceEnabled, resetVoiceProfile } from "@/lib/actions/voice-profile"
-import { selectSupportedMimeType } from "@/components/agent/hooks/mime-probe"
+import { setVoiceEnabled, resetVoiceProfile, saveVoiceSettings } from "@/lib/actions/voice-profile"
+import { resolveRecordingBlobMimeType, selectSupportedMimeType } from "@/components/agent/hooks/mime-probe"
 import { useVoiceSynth } from "@/components/agent/hooks/useVoiceSynth"
 import { LoaderCircle, Pause, Play, VolumeX } from "lucide-react"
 
@@ -12,6 +12,20 @@ interface ConsentRecord {
   subjectName: string
   expiresAt: Date | string
   revokedAt: Date | string | null
+}
+
+interface VoiceTuning {
+  speed?: number
+  exaggeration?: number
+  cfgWeight?: number
+  temperature?: number
+}
+
+const TUNING_DEFAULTS: Required<VoiceTuning> = {
+  speed: 1.0,
+  exaggeration: 0.5,
+  cfgWeight: 0.5,
+  temperature: 0.8,
 }
 
 interface VoiceProfileData {
@@ -23,6 +37,7 @@ interface VoiceProfileData {
   qualityScore: number | null
   language: string
   consentRecord: ConsentRecord | null
+  voiceSettings?: VoiceTuning | null
 }
 
 interface Props {
@@ -47,6 +62,14 @@ export function VoiceProfileSetup({
   const [isPending, startTransition] = useTransition()
   const [resetting, setResetting] = useState(false)
   const voiceSynth = useVoiceSynth()
+
+  // Per-profile voice tuning (sliders). Seed from saved settings, else defaults.
+  const [tuning, setTuning] = useState<Required<VoiceTuning>>({
+    ...TUNING_DEFAULTS,
+    ...(voiceProfile?.voiceSettings ?? {}),
+  })
+  const [savingTuning, setSavingTuning] = useState(false)
+  const [tuningSaved, setTuningSaved] = useState(false)
 
   const hasValidConsent =
     voiceProfile?.consentRecord &&
@@ -138,6 +161,7 @@ export function VoiceProfileSetup({
         {!hasValidConsent ? (
           <p className="text-sm text-muted-foreground pl-8">Complete step 1 first.</p>
         ) : voiceProfile?.status === "ready" ? (
+          <>
           <div className="rounded-md border border-green-500/20 bg-green-500/5 px-4 py-3 text-sm flex flex-wrap items-center gap-3">
             <span>
               Voice profile ready.
@@ -154,7 +178,7 @@ export function VoiceProfileSetup({
                 if (voiceSynth.isPlaying) {
                   voiceSynth.stop()
                 } else {
-                  voiceSynth.synthesize(PREVIEW_TEXT, profileId)
+                  voiceSynth.synthesize(PREVIEW_TEXT, profileId, tuning)
                 }
               }}
               disabled={!voiceSynth.available || voiceSynth.isSynthesizing}
@@ -207,6 +231,69 @@ export function VoiceProfileSetup({
               {resetting ? "Resetting…" : "↺ Replace voice sample"}
             </button>
           </div>
+
+          {/* Voice tuning — adjust pace + expressiveness, hear via Preview above, then Save. */}
+          <div className="mt-3 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium uppercase tracking-wide text-[var(--dpf-muted)]">Voice tuning</p>
+              <button
+                type="button"
+                onClick={() => { setTuning(TUNING_DEFAULTS); setTuningSaved(false) }}
+                className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+              >
+                Reset to default
+              </button>
+            </div>
+
+            {([
+              { key: "speed", label: "Speed", min: 0.5, max: 2.0, step: 0.01, hint: "slower ↔ faster" },
+              { key: "exaggeration", label: "Enthusiasm", min: 0.25, max: 1.0, step: 0.01, hint: "calm ↔ energetic" },
+              { key: "cfgWeight", label: "Pacing", min: 0.2, max: 1.0, step: 0.01, hint: "natural ↔ deliberate" },
+              { key: "temperature", label: "Variation", min: 0.2, max: 1.2, step: 0.01, hint: "consistent ↔ varied" },
+            ] as const).map(({ key, label, min, max, step, hint }) => (
+              <div key={key} className="space-y-1">
+                <div className="flex items-center justify-between text-xs text-[var(--dpf-text)]">
+                  <span className="font-medium">{label}</span>
+                  <span className="text-[var(--dpf-muted)] tabular-nums">{tuning[key].toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={min} max={max} step={step}
+                  value={tuning[key]}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value)
+                    setTuning((t: Required<VoiceTuning>) => ({ ...t, [key]: v }))
+                    setTuningSaved(false)
+                  }}
+                  className="w-full accent-[var(--dpf-accent)]"
+                  aria-label={label}
+                />
+                <p className="text-[10px] text-[var(--dpf-muted)]">{hint}</p>
+              </div>
+            ))}
+
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setSavingTuning(true)
+                  startTransition(async () => {
+                    await saveVoiceSettings(profileId, tuning)
+                    setSavingTuning(false)
+                    setTuningSaved(true)
+                  })
+                }}
+                disabled={savingTuning}
+                className="rounded bg-[var(--dpf-accent)] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+              >
+                {savingTuning ? "Saving…" : "Save tuning"}
+              </button>
+              <span className="text-xs text-[var(--dpf-muted)]">
+                {tuningSaved ? "Saved — used for all narration." : "Use Preview above to hear changes before saving."}
+              </span>
+            </div>
+          </div>
+          </>
         ) : (
           <VoiceSampleCapture profileId={profileId} />
         )}
@@ -244,7 +331,7 @@ function VoiceSampleCapture({ profileId }: { profileId: string }) {
   return (
     <div className="rounded-md border border-border p-4 space-y-4">
       <p className="text-sm text-muted-foreground">
-        Provide 5–30 seconds of clean speech. Chatterbox clones your voice immediately — no training wait.
+        Provide about 6–12 seconds of clean, single-speaker speech in a quiet room, spoken at your natural conversational pace. Your voice is cloned immediately — no training wait.
       </p>
 
       {/* Mode toggle */}
@@ -273,6 +360,12 @@ function VoiceSampleCapture({ profileId }: { profileId: string }) {
 }
 
 // ─── Mic recorder ─────────────────────────────────────────────────────────────
+
+// Zero-shot cloning quality scales with reference length: a 3s clip clones
+// poorly and aggravates model instability. ~15-30s of clean, continuous speech
+// is the recipe sweet spot. Gate stop at the minimum; recommend the range.
+const MIN_RECORDING_SECONDS = 15
+const RECOMMENDED_MAX_SECONDS = 30
 
 function MicRecorder({ profileId }: { profileId: string }) {
   const [recState, setRecState] = useState<RecordState>("idle")
@@ -307,7 +400,19 @@ function MicRecorder({ profileId }: { profileId: string }) {
     setRecState("permission")
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // Capture recipe for good zero-shot cloning: clean, single-speaker audio.
+      // echo/noise/gain processing lifts SNR on laptop mics in untreated rooms,
+      // which every cloning model depends on; 48 kHz mono is the capture ideal
+      // (downsampled server-side as needed).
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: 48000,
+        },
+      })
       streamRef.current = stream
 
       const mimeType = selectSupportedMimeType() ?? undefined
@@ -317,7 +422,11 @@ function MicRecorder({ profileId }: { profileId: string }) {
 
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
       recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: mimeType ?? "audio/webm" })
+        // Tag the blob with the container the recorder ACTUALLY produced so the
+        // <audio> preview can decode it (see resolveRecordingBlobMimeType).
+        const blob = new Blob(chunksRef.current, {
+          type: resolveRecordingBlobMimeType(recorder.mimeType, mimeType),
+        })
         const url = URL.createObjectURL(blob)
         setAudioUrl(url)
         setAudioBlob(blob)
@@ -392,9 +501,14 @@ function MicRecorder({ profileId }: { profileId: string }) {
             <button onClick={() => setShowScript(false)} className="text-xs text-muted-foreground hover:text-foreground">dismiss</button>
           </div>
           <p className="text-sm text-muted-foreground italic leading-relaxed">
-            "I'm recording this voice sample to enable AI-narrated decision feedback
-            through the platform. My name is [your name] and I consent to this
-            voice profile being used for that purpose."
+            "My name is [your name], and I consent to this voice being used for
+            AI-narrated decision feedback. I'm speaking at my normal pace so the
+            system learns how I really sound."
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Read it once at a natural, conversational pace (~{MIN_RECORDING_SECONDS}–{RECOMMENDED_MAX_SECONDS}s).
+            Keep it short — a quiet room and your everyday speaking voice give the
+            best clone. A long or slowly-read clip makes the cloned voice drawl.
           </p>
         </div>
       )}
@@ -421,11 +535,18 @@ function MicRecorder({ profileId }: { profileId: string }) {
           </span>
           <button
             onClick={stopRecording}
-            disabled={elapsed < 3}
+            disabled={elapsed < MIN_RECORDING_SECONDS}
             className="rounded border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-40"
           >
-            {elapsed < 3 ? `Stop (${3 - elapsed}s min)` : "Stop"}
+            {elapsed < MIN_RECORDING_SECONDS
+              ? `Stop (${MIN_RECORDING_SECONDS - elapsed}s min)`
+              : "Stop"}
           </button>
+          {elapsed >= MIN_RECORDING_SECONDS && elapsed < RECOMMENDED_MAX_SECONDS && (
+            <span className="text-xs text-muted-foreground">
+              Good — keep going to ~{RECOMMENDED_MAX_SECONDS}s for the best clone.
+            </span>
+          )}
         </div>
       )}
 

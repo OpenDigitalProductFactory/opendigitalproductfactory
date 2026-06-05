@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   selectSupportedMimeType,
+  resolveRecordingBlobMimeType,
   PREFERRED_MEDIA_RECORDER_MIME_TYPES,
 } from "./mime-probe";
 
@@ -68,5 +69,31 @@ describe("selectSupportedMimeType", () => {
     const recorder = recorderStub(["audio/webm", "audio/webm;codecs=opus"]);
     // The order in the priority list matters more than insertion order in the stub.
     expect(selectSupportedMimeType(recorder)).toBe("audio/webm;codecs=opus");
+  });
+});
+
+describe("resolveRecordingBlobMimeType", () => {
+  it("prefers the recorder's actual mimeType over the requested one", () => {
+    // Safari default path: requested "" sentinel, but the recorder reports mp4.
+    expect(resolveRecordingBlobMimeType("audio/mp4", "")).toBe("audio/mp4");
+  });
+
+  it("never returns an empty string when both inputs are empty (the playback bug)", () => {
+    // The "" sentinel must NOT survive — a Blob tagged type:"" is undecodable.
+    expect(resolveRecordingBlobMimeType("", "")).toBe("audio/webm");
+  });
+
+  it("falls back to the requested type when the recorder reports nothing", () => {
+    expect(resolveRecordingBlobMimeType("", "audio/webm;codecs=opus")).toBe("audio/webm;codecs=opus");
+    expect(resolveRecordingBlobMimeType(undefined, "audio/mp4")).toBe("audio/mp4");
+  });
+
+  it("falls back to audio/webm when neither value is available", () => {
+    expect(resolveRecordingBlobMimeType(null, null)).toBe("audio/webm");
+    expect(resolveRecordingBlobMimeType(undefined, undefined)).toBe("audio/webm");
+  });
+
+  it("treats empty recorder mimeType as absent and uses the requested type", () => {
+    expect(resolveRecordingBlobMimeType("", "audio/mp4")).toBe("audio/mp4");
   });
 });

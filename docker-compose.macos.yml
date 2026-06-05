@@ -24,6 +24,14 @@
 #     Docker Desktop's own observability or external tooling per the
 #     Deployment Support Matrix.
 #
+#   - Prometheus mounts monitoring/prometheus/prometheus.macos.yml here
+#     instead of the base prometheus.yml. The base config carries the
+#     Windows-only `windows-host` job (windows_exporter on
+#     host.docker.internal:9182), which can never come up on macOS and
+#     would fire a false ContainerDown CRITICAL in Platform Health. The
+#     macOS config drops that job, mirroring how docker-compose.linux.yml
+#     mounts prometheus.linux.yml for its substrate.
+#
 #   - host.docker.internal is provided automatically by Docker Desktop;
 #     the extra_hosts entries in the base docker-compose.yml are
 #     harmless but redundant on this substrate.
@@ -34,6 +42,14 @@
 # Desktop's defaults align with the platform's needs.
 
 services:
+  prometheus:
+    # Mount the macOS scrape config (no windows-host / no Linux exporters)
+    # in place of the base prometheus.yml. See the header note above.
+    volumes:
+      - ./monitoring/prometheus/prometheus.macos.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+
   portal:
     environment:
       # Re-stating the Docker Desktop default for clarity. The base
@@ -42,6 +58,17 @@ services:
       # overriding LLM_BASE_URL elsewhere can rely on this overlay
       # value to scope the override to non-macOS deployments.
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
+
+      # Voice / TTS — Apple Silicon path.
+      # The native-host Chatterbox sidecar (provisioned by
+      # scripts/tts/setup-chatterbox-tts-macos.sh) listens on :8771.
+      # Docker Desktop has no Metal GPU passthrough so TTS must run
+      # host-native; the portal reaches it via host.docker.internal.
+      # Run the setup script once to provision the sidecar; it is
+      # idempotent and safe to re-run after updates.
+      TTS_PROVIDER: ${TTS_PROVIDER:-mlx}
+      DPF_TTS_URL: ${DPF_TTS_URL:-http://host.docker.internal:8771}
+      DPF_TTS_REFERENCE_HOST_ROOT: ${DPF_TTS_REFERENCE_HOST_ROOT:-}
 
   browser-use:
     environment:

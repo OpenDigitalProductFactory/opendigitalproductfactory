@@ -14,6 +14,7 @@ const mockPrisma = {
   },
   featureBuild: {
     create: vi.fn(),
+    update: vi.fn(),
   },
   buildActivity: {
     create: vi.fn(),
@@ -27,6 +28,11 @@ const mockPrisma = {
   },
   workCapsuleActivity: {
     create: vi.fn(),
+  },
+  platformIssueReport: {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    updateMany: vi.fn(),
   },
   $transaction: vi.fn(),
 };
@@ -51,6 +57,10 @@ describe("governed backlog tee-up", () => {
       capsuleId: "WC-BUILD01",
     });
     mockPrisma.workCapsuleActivity.create.mockResolvedValue({});
+    mockPrisma.featureBuild.update.mockResolvedValue({});
+    mockPrisma.platformIssueReport.findUnique.mockResolvedValue(null);
+    mockPrisma.platformIssueReport.findFirst.mockResolvedValue(null);
+    mockPrisma.platformIssueReport.updateMany.mockResolvedValue({ count: 0 });
 
     mockPrisma.$transaction.mockImplementation(async (callback: (tx: typeof mockPrisma) => Promise<unknown>) => {
       return callback(mockPrisma);
@@ -143,7 +153,7 @@ describe("governed backlog tee-up", () => {
     ]);
   });
 
-  it("creates draft builds for the selected items and leaves them awaiting approval", async () => {
+  it("creates draft builds for the selected items and auto-approves them under governed flow (BI-52022707 axis D)", async () => {
     mockPrisma.backlogItem.findMany.mockResolvedValue([
       {
         id: "backlog-epic",
@@ -242,7 +252,33 @@ describe("governed backlog tee-up", () => {
           description: "Implement governed workflow details",
           digitalProductId: "product-1",
           originatingBacklogItemId: "backlog-epic",
+          // BI-52022707 axis D: draft created with draftApprovedAt=null;
+          // the auto-approve happens as a separate featureBuild.update
+          // immediately after creation when governedBacklogEnabled=true
+          // and the BI body is non-empty (verified by the update assertion
+          // and the approve_start activity row assertion below).
           draftApprovedAt: null,
+        }),
+      }),
+    );
+
+    // BI-52022707 axis D — auto-approve fires on governed-mode promotion
+    // when the BI body is non-empty. The approve_start BuildActivity row
+    // pairs with the featureBuild.update that populates draftApprovedAt.
+    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "build-row-1" },
+        data: expect.objectContaining({
+          draftApprovedAt: expect.any(Date),
+        }),
+      }),
+    );
+    expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          buildId: "FB-11111111",
+          tool: "approve_start",
+          summary: expect.stringContaining("Auto-approved by governed backlog flow"),
         }),
       }),
     );
@@ -403,6 +439,66 @@ describe("governed backlog tee-up", () => {
         taxonomyNodeId: "taxonomy-cuid-ops",
         constrainedGoal: "Add taxonomy filter to operations map",
         failureReason: null,
+      });
+    });
+
+    it("promotes a bug workType item as kind=fix, carries fixContext, and back-links the issue report", async () => {
+      mockPrisma.backlogItem.findUnique.mockResolvedValueOnce({
+        id: "bi-cuid-bug",
+        itemId: "BI-PIR-abcd1234",
+        title: "Contact form 500s on submit",
+        body: "Server error on submit\n\nRoute: /portal/contact\n\nSource report: PIR-ABCDE",
+        status: "open",
+        triageOutcome: "build",
+        effortSize: "small",
+        activeBuildId: null,
+        digitalProductId: null,
+        epicId: null,
+        taxonomyNodeId: null,
+        // workType drives kind derivation (post 2026-05-30 spec). The legacy
+        // source value is left at the canonicalized origin so any reader of
+        // source sees the intake channel, not the work-type.
+        workType: "bug",
+        source: "automated-detection",
+        epic: null,
+      });
+      mockPrisma.platformIssueReport.findUnique.mockResolvedValueOnce({
+        id: "pir-row-1",
+        reportId: "PIR-ABCDE",
+        severity: "high",
+        routeContext: "/portal/contact",
+        errorStack: "TypeError: cannot read 'format' of undefined\n  at submitContact",
+        description: "500 error when submitting the contact form",
+      });
+      mockPrisma.epic.create.mockResolvedValueOnce({ id: "epic-cuid-fix", epicId: "EP-BUILD-FIX001" });
+      mockPrisma.featureBuild.create.mockResolvedValueOnce({ id: "build-row-fix", buildId: "FB-FIX00001" });
+
+      const { promoteBacklogItemToBuildDraft } = await import("./governed-backlog-tee-up");
+      const result = await promoteBacklogItemToBuildDraft({
+        tx: mockPrisma,
+        itemId: "BI-PIR-abcd1234",
+        userId: "user-1",
+        governedBacklogEnabled: true,
+      });
+
+      expect(result.kind).toBe("success");
+
+      const createData = mockPrisma.featureBuild.create.mock.calls[0]![0].data;
+      expect(createData.kind).toBe("fix");
+      expect(createData.brief.fixContext).toEqual(
+        expect.objectContaining({
+          severity: "high",
+          originatingIssueReportId: "pir-row-1",
+          originatingIssueReportPublicId: "PIR-ABCDE",
+          routeContext: "/portal/contact",
+        }),
+      );
+      expect(createData.brief.fixContext.errorStackExcerpt).toContain("TypeError");
+
+      // Back-link written in-transaction, guarded on featureBuildId: null.
+      expect(mockPrisma.platformIssueReport.updateMany).toHaveBeenCalledWith({
+        where: { id: "pir-row-1", featureBuildId: null },
+        data: { featureBuildId: "build-row-fix" },
       });
     });
 

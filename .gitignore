@@ -16,6 +16,10 @@ docker-compose.override.yml
 # does NOT match source-tree directories like apps/web/lib/operate/backups/
 # or apps/web/app/(shell)/admin/backups/, which are checked in.)
 /backups/
+# BI-A8A7CCFD — isolated self-upgrade workspace. A nested git clone of the
+# install tree that holds the active upstream merge; transient per upgrade
+# run. Root-anchored so it never silently shadows a source-tree directory.
+/.upgrade-workspace/
 
 # Git LFS writes generated hook shims into core.hooksPath=.githooks.
 .githooks/post-checkout
@@ -26,6 +30,7 @@ docker-compose.override.yml
 # Local install runtime state
 .host-profile.json
 .dpf-instance-id
+.dpf-worktree-readiness.json
 .admin-credentials
 .install-mode
 .install-progress

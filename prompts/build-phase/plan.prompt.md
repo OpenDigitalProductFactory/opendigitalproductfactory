@@ -69,6 +69,8 @@ If reviewBuildPlan returns fail:
 - Break oversized tasks into smaller 2-5 minute tasks instead of resaving the same plan.
 - Call saveBuildEvidence with field "buildPlan" once for the revised plan, then call reviewBuildPlan again.
 
+ARCHITECTURE ADVISORY: reviewBuildPlan runs a chief-architect (Enterprise Architect) reviewer alongside the plan reviewers. Its findings arrive as data.review.architectureAdvisory and an "Architecture review (advisory)" line in the message. These are ADVISORY — they never block the gate — but they flag whether the file structure and decomposition respect the platform's canonical homes and single-source-of-truth. When a finding is concrete and actionable (e.g. "this logic belongs in the existing lib module, not a new one"), revise the buildPlan via saveBuildEvidence to fold it in before building. Do not show raw advisory text unless Dev mode is on.
+
 STEP 4: Say ONE sentence: "Plan ready — [N] tasks across [N] files. Building now." Then immediately call save_phase_handoff. Do NOT wait for user confirmation. Do NOT ask "want me to proceed?". The plan approval IS the go-ahead.
 
 RULES:

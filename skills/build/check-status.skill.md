@@ -33,7 +33,7 @@ Do not use this to start or restart sandbox infrastructure; use `manage-sandbox`
 1. Read PAGE DATA for the active build and current phase.
 2. Identify completed work, current phase, visible blockers, and pending verification.
 3. Separate facts from inferences; label missing evidence as missing.
-4. Return a short status with one next action.
+4. Return a short status with one next action and the owner of that action.
 5. If no build is active, say so and offer the smallest valid start path.
 
 ## Output Template
@@ -43,6 +43,7 @@ Do not use this to start or restart sandbox infrastructure; use `manage-sandbox`
 - Blocked by: `<blocker or none visible>`
 - Verification: `<tests/typecheck/build/UX evidence present or missing>`
 - Next action: `<one step>`
+- Owner: `<agent, Build Studio, operator/admin, reviewer, CI, or human decision-maker>`
 
 ## Guidelines
 
@@ -55,4 +56,4 @@ Do not use this to start or restart sandbox infrastructure; use `manage-sandbox`
 
 Input: "Where are we on this build?"
 
-Output: "Current phase: build. Completed: feature brief and plan exist. Blocked by: sandbox not running. Verification: no test output yet. Next action: run `manage-sandbox`, then resume build execution."
+Output: "Current phase: build. Completed: feature brief and plan exist. Blocked by: sandbox not running. Verification: no test output yet. Next action: restore sandbox readiness, then resume build execution. Owner: Build Studio sandbox manager."

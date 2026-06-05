@@ -101,6 +101,18 @@ jobs:
       - name: Run tier-contract test
         run: pnpm --filter web exec vitest run lib/routing/tier-contract.test.ts
 
+  # Canonical-runtime equivalence: this job IS the binding `pnpm test`
+  # evidence for the PR. A thread worktree is source-control isolation,
+  # not runtime isolation (see AGENTS.md §5 and
+  # docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md).
+  # If the worktree cannot host pnpm/corepack, workspace links, or a
+  # generated Prisma client, the contributor is NOT required to make it
+  # host them. A green run of this job satisfies the PR template's
+  # `pnpm test` checkbox; running it against the root local install is the
+  # other accepted form of equivalent evidence. Treat worktree-side
+  # runtime-harness gaps as harness limitations, not product defects, and
+  # file a dedicated platform BI rather than in-lining a worktree-runnable
+  # fix on an unrelated PR.
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
@@ -147,6 +159,7 @@ jobs:
       - name: Run unit tests
         run: pnpm test
 
+  # Canonical-runtime equivalence: this job IS the binding `pnpm --filter web build` evidence — see comment above `test:` job.
   build:
     name: Production Build
     runs-on: ubuntu-latest

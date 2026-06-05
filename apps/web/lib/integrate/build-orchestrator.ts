@@ -43,6 +43,7 @@ import {
   artifactTypeForPhase,
   type ReviewBranchInput,
 } from "./build-reviewers";
+import { formatCoworkerOperationalCloseout } from "@/lib/tak/coworker-interaction-contract";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -343,11 +344,26 @@ export function formatBuildCompleteMessage(summary: BuildSummary): string {
 
   // Call to action
   if (hasBlocked || failedTasks > 0) {
-    parts.push("\nSome tasks need attention before proceeding.");
+    parts.push("\n" + formatCoworkerOperationalCloseout({
+      status: "not ready for review",
+      evidence: `${completedTasks}/${totalTasks} tasks completed; ${failedTasks} task${failedTasks === 1 ? "" : "s"} need review or repair.`,
+      nextAction: "resolve the blocked task output, then rerun Build Studio implementation or verification for the affected task.",
+      owner: "Build Studio build agent",
+    }));
   } else if (concerns.length > 0) {
-    parts.push("\nReady for review?");
+    parts.push("\n" + formatCoworkerOperationalCloseout({
+      status: "needs review",
+      evidence: `${completedTasks}/${totalTasks} tasks completed with ${concerns.length} concern${concerns.length === 1 ? "" : "s"} flagged.`,
+      nextAction: "run the review phase so acceptance, UX, and release-readiness evidence are checked.",
+      owner: "Build Studio review agent",
+    }));
   } else {
-    parts.push("\nReady for review?");
+    parts.push("\n" + formatCoworkerOperationalCloseout({
+      status: "ready for review",
+      evidence: `${completedTasks}/${totalTasks} tasks completed with no blocked task output.`,
+      nextAction: "run the review phase so tests, UX verification, and acceptance evidence are recorded.",
+      owner: "Build Studio review agent",
+    }));
   }
 
   return parts.join("\n");
@@ -966,7 +982,12 @@ export async function runBuildOrchestrator(params: {
       message: `Build plan refers to files that no longer exist: ${missingTargets}`,
     });
     return {
-      content: `Build cannot start because the implementation plan targets files that no longer exist in the current repo: ${missingTargets}. Refresh the plan against the current Build Studio file layout, then retry implementation.`,
+      content: formatCoworkerOperationalCloseout({
+        status: "blocked before implementation",
+        evidence: `the implementation plan targets files that no longer exist: ${missingTargets}.`,
+        nextAction: "refresh the plan against the current Build Studio file layout, then retry implementation.",
+        owner: "Build Studio plan agent",
+      }),
       totalTasks: 0,
       completedTasks: 0,
       failedTasks: 0,
@@ -1084,7 +1105,12 @@ export async function runBuildOrchestrator(params: {
           }).catch(() => {});
         }
         return {
-          content: `Build cannot start — the ${label} provider "${providerId}" is not connected.\n\nGo to Admin > AI Workforce > External Services and configure credentials, or switch providers in Build Studio.`,
+          content: formatCoworkerOperationalCloseout({
+            status: "blocked before implementation",
+            evidence: `the ${label} provider "${providerId}" is not connected.`,
+            nextAction: "connect the provider in Admin > AI Workforce > External Services, or switch providers in Build Studio.",
+            owner: "operator/admin",
+          }),
           totalTasks: 0, completedTasks: 0, failedTasks: 0,
           specialistResults: [], totalInputTokens: 0, totalOutputTokens: 0,
         };
@@ -1113,7 +1139,12 @@ export async function runBuildOrchestrator(params: {
         }).catch(() => {});
       }
       return {
-        content: "Build cannot start — could not verify AI provider credentials.\n\nGo to Admin > AI Workforce and ensure at least one code generation provider is connected.",
+        content: formatCoworkerOperationalCloseout({
+          status: "blocked before implementation",
+          evidence: "Build Studio could not verify AI provider credentials.",
+          nextAction: "confirm at least one code generation provider is connected in Admin > AI Workforce, then retry implementation.",
+          owner: "operator/admin",
+        }),
         totalTasks: 0, completedTasks: 0, failedTasks: 0,
         specialistResults: [], totalInputTokens: 0, totalOutputTokens: 0,
       };

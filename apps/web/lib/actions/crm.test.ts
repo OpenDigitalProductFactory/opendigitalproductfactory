@@ -23,8 +23,19 @@ vi.mock("@dpf/db", () => ({
     customerSiteNode: {
       create: vi.fn(),
     },
+    customerContact: {
+      findUnique: vi.fn(),
+    },
     customerConfigurationItem: {
       create: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+    engagement: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+    },
+    opportunity: {
       findUnique: vi.fn(),
       update: vi.fn(),
     },
@@ -58,7 +69,11 @@ import {
   searchCustomerSiteAddresses,
   createCustomerSite,
   createCustomerSiteNode,
+  advanceOpportunityStage,
+  updateOpportunityStageFromForm,
   updateCustomerConfigurationItem,
+  routeAcquisitionSignalToEngagement,
+  createEngagementFromSignalForm,
 } from "./crm";
 
 beforeEach(() => {
@@ -310,6 +325,196 @@ describe("createCustomerConfigurationItem", () => {
     });
     expect(revalidatePath).toHaveBeenCalledWith("/customer");
     expect(revalidatePath).toHaveBeenCalledWith("/customer/acct-1");
+  });
+});
+
+describe("routeAcquisitionSignalToEngagement", () => {
+  it("returns the existing engagement when source evidence was already routed", async () => {
+    vi.mocked(prisma.customerContact.findUnique).mockResolvedValue({
+      id: "contact-1",
+      accountId: "acct-1",
+      email: "bea@example.com",
+      firstName: "Bea",
+      lastName: "Buyer",
+    } as never);
+    vi.mocked(prisma.engagement.findFirst).mockResolvedValue({
+      id: "eng-1",
+      engagementId: "ENG-1",
+      title: "Website inquiry from Bea Buyer",
+      status: "new",
+      source: "web_inquiry",
+      sourceRefId: "inq-1",
+    } as never);
+
+    const result = await routeAcquisitionSignalToEngagement({
+      title: "Website inquiry from Bea Buyer",
+      contactId: "contact-1",
+      accountId: "acct-1",
+      source: "web_inquiry",
+      sourceRefId: "inq-1",
+      notes: "Source: storefront inquiry",
+    });
+
+    expect(result).toEqual({
+      status: "linked",
+      engagementId: "eng-1",
+      engagementTitle: "Website inquiry from Bea Buyer",
+    });
+    expect(prisma.engagement.findFirst).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { source: "web_inquiry", sourceRefId: "inq-1" },
+          {
+            accountId: "acct-1",
+            contactId: "contact-1",
+            source: "web_inquiry",
+            title: "Website inquiry from Bea Buyer",
+          },
+        ],
+      },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+      },
+    });
+    expect(prisma.engagement.create).not.toHaveBeenCalled();
+  });
+
+  it("creates an engagement from an explicit signal routing form and revalidates CRM surfaces", async () => {
+    vi.mocked(prisma.customerContact.findUnique).mockResolvedValue({
+      id: "contact-1",
+      accountId: "acct-1",
+      email: "bea@example.com",
+      firstName: "Bea",
+      lastName: "Buyer",
+    } as never);
+    vi.mocked(prisma.engagement.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.engagement.create).mockResolvedValue({
+      id: "eng-1",
+      engagementId: "ENG-1",
+      title: "Website inquiry from Bea Buyer",
+      status: "new",
+      source: "web_inquiry",
+      sourceRefId: "inq-1",
+      accountId: "acct-1",
+      contactId: "contact-1",
+    } as never);
+    vi.mocked(prisma.activity.create).mockResolvedValue({ id: "act-1" } as never);
+
+    const formData = new FormData();
+    formData.set("title", " Website inquiry from Bea Buyer ");
+    formData.set("contactId", "contact-1");
+    formData.set("accountId", "acct-1");
+    formData.set("source", "web_inquiry");
+    formData.set("sourceRefId", "inq-1");
+    formData.set("notes", " Source: storefront inquiry ");
+
+    const result = await createEngagementFromSignalForm(formData);
+
+    expect(result.status).toBe("created");
+    expect(prisma.engagement.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        title: "Website inquiry from Bea Buyer",
+        status: "new",
+        accountId: "acct-1",
+        contactId: "contact-1",
+        source: "web_inquiry",
+        sourceRefId: "inq-1",
+        notes: "Source: storefront inquiry",
+      }),
+      include: {
+        contact: true,
+        account: true,
+        assignedTo: { select: { id: true, email: true } },
+      },
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/customer");
+    expect(revalidatePath).toHaveBeenCalledWith("/customer/engagements");
+    expect(revalidatePath).toHaveBeenCalledWith("/customer/marketing");
+  });
+});
+
+describe("advanceOpportunityStage", () => {
+  it("updates stage, records a status-change activity, and revalidates opportunity routes", async () => {
+    vi.mocked(prisma.opportunity.findUnique).mockResolvedValue({
+      id: "opp-1",
+      title: "Modernize revenue workflow",
+      stage: "proposal",
+      probability: 70,
+      accountId: "acct-1",
+      contactId: "contact-1",
+    } as never);
+    vi.mocked(prisma.opportunity.update).mockResolvedValue({
+      id: "opp-1",
+      title: "Modernize revenue workflow",
+      stage: "negotiation",
+      probability: 80,
+      accountId: "acct-1",
+      contactId: "contact-1",
+      activities: [],
+    } as never);
+    vi.mocked(prisma.activity.create).mockResolvedValue({ id: "act-1" } as never);
+
+    const updated = await advanceOpportunityStage("opp-1", "negotiation", {
+      probability: 80,
+    });
+
+    expect(updated.stage).toBe("negotiation");
+    expect(prisma.opportunity.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "opp-1" },
+        data: expect.objectContaining({
+          stage: "negotiation",
+          stageChangedAt: expect.any(Date),
+          isDormant: false,
+        }),
+      }),
+    );
+    expect(prisma.activity.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: "status_change",
+        subject: "Opportunity stage: proposal -> negotiation (80%)",
+        accountId: "acct-1",
+        contactId: "contact-1",
+        opportunityId: "opp-1",
+      }),
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/customer/opportunities");
+    expect(revalidatePath).toHaveBeenCalledWith("/customer/opportunities/opp-1");
+  });
+
+  it("supports stage updates from an explicit form action", async () => {
+    vi.mocked(prisma.opportunity.findUnique).mockResolvedValue({
+      id: "opp-1",
+      title: "Modernize revenue workflow",
+      stage: "discovery",
+      probability: 40,
+      accountId: "acct-1",
+      contactId: null,
+    } as never);
+    vi.mocked(prisma.opportunity.update).mockResolvedValue({
+      id: "opp-1",
+      title: "Modernize revenue workflow",
+      stage: "proposal",
+      probability: 70,
+      accountId: "acct-1",
+      contactId: null,
+      activities: [],
+    } as never);
+
+    const formData = new FormData();
+    formData.set("opportunityId", "opp-1");
+    formData.set("stage", "proposal");
+
+    await updateOpportunityStageFromForm(formData);
+
+    expect(prisma.opportunity.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "opp-1" },
+        data: expect.objectContaining({ stage: "proposal" }),
+      }),
+    );
   });
 });
 

@@ -38,29 +38,26 @@ export default async function CustomerDashboardPage() {
 
       {/* Quick actions grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 32 }}>
+        {/* Orders/Services/Support backends are not built yet, so no count is
+            displayed — a hardcoded "0 active" would be a fabricated measurement.
+            Wire `count` to a real query once each backend ships. */}
         <DashboardCard
           title="Orders"
           description="View your order history and track deliveries"
           href="/portal/orders"
           color="#38bdf8"
-          count={0}
-          countLabel="active"
         />
         <DashboardCard
           title="Services"
           description="Manage your active services and subscriptions"
           href="/portal/services"
           color="#4ade80"
-          count={0}
-          countLabel="active"
         />
         <DashboardCard
           title="Support"
           description="Get help or submit a support request"
           href="/portal/support"
           color="#a78bfa"
-          count={0}
-          countLabel="open tickets"
         />
         <DashboardCard
           title="Account"
@@ -104,8 +101,8 @@ function DashboardCard({ title, description, href, color, count, countLabel }: {
   description: string;
   href: string;
   color: string;
-  count: number;
-  countLabel: string;
+  count?: number;
+  countLabel?: string;
 }) {
   return (
     <a
@@ -123,10 +120,12 @@ function DashboardCard({ title, description, href, color, count, countLabel }: {
     >
       <div style={{ fontSize: 14, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 4 }}>{title}</div>
       <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 8 }}>{description}</div>
-      <div style={{ fontSize: 18, fontWeight: 700, color }}>
-        {count}
-        <span style={{ fontSize: 10, color: "var(--dpf-muted)", marginLeft: 4 }}>{countLabel}</span>
-      </div>
+      {count !== undefined && (
+        <div style={{ fontSize: 18, fontWeight: 700, color }}>
+          {count}
+          <span style={{ fontSize: 10, color: "var(--dpf-muted)", marginLeft: 4 }}>{countLabel}</span>
+        </div>
+      )}
     </a>
   );
 }
