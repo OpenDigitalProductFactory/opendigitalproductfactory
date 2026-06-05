@@ -74,8 +74,8 @@ Hyphens, not underscores. Adding a new value requires updating both `backlog.ts`
 
 Work is not complete until all four pass:
 
-1. **Unit tests** — `npx vitest run` for affected files.
-2. **Production build** — `cd apps/web && npx next build` with zero errors.
+1. **Unit tests** — `pnpm --filter <pkg> exec vitest run` for affected files.
+2. **Production build** — `pnpm --filter web build` with zero errors.
 3. **UX verification** — for any UI/agent/coworker/workflow/forms change, exercise the affected path against the running app.
 4. **Migration applies cleanly** — if a migration was added.
 
@@ -84,6 +84,8 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 **Where each gate runs.** The four gates above describe *what* must pass, not *where* the binaries execute. Cheap source-local checks (targeted `vitest`, `pnpm --filter <pkg> typecheck`) can run in the topic worktree. Runtime-bound gates (`next build` against the production bundle, UX verification against the served portal, migration apply against a live Postgres) run against the **canonical local install** — the root clone's Docker stack, OR the **shared local-CI convergence sandbox** that every worktree leases sequentially via `claim_nonprod_environment_lease(environmentKey="local-integration-ci")`. A gate that did not execute because the worktree could not host its runtime is an **unrun gate, not a red gate**: re-run it via the sandbox lease, capture that evidence in the PR (§6). Per-worktree runnable runtimes are explicitly NOT the answer — at DPF's expected scale (1k–10k concurrent worktrees) the convergence sandbox is the only tenable substrate for runtime-bound verification. See [kernel principle](docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md) for the full scale rationale + lease workflow.
 
 **Local pre-commit gates.** Pre-commit hook at `.githooks/pre-commit` runs a staged Gitleaks secret scan before bytes enter Git history, then runs `pnpm --filter <affected> typecheck` on `.ts`/`.tsx`/`.mts`/`.cts` commits and rejects on failure. Set once: `git config core.hooksPath .githooks` (auto for new clones via `postinstall`). Manual scans: `pnpm security:secrets:staged` for staged content and `pnpm security:secrets` for the current tree. Emergency bypasses exist for verified false positives only: `DPF_SKIP_SECRET_SCAN=1` and `DPF_SKIP_TYPECHECK=1`; CI still gates the PR.
+
+**Opt-in local-CI pre-push gate.** Beyond the always-on pre-commit hook, `pnpm run pregate` leases the shared local-CI convergence sandbox, runs the CI-equivalent command supplied in `DPF_LOCAL_CI_COMMAND`, records a local-integration evidence record, and releases the lease; the `.githooks/pre-push-gate` hook then refuses a push unless a passing gate record exists for the current branch+SHA (bypass for verified-clean only: `DPF_SKIP_PREPUSH_GATE=1`). The full reference for the unit-test gate — the CI `Unit Tests` job, the `pregate`/pre-push-gate mechanics, and the load-bearing test-runner pins (mobile jest `^29.x`, web/db vitest) — is [`docs/testing/pre-pr-gate.md`](docs/testing/pre-pr-gate.md). That doc defers to this section for doctrine; this section defers to it for the test-gate detail. Keep them in sync.
 
 **Build Studio mirrors this gate.** Per-task and pre-ship verification in the sandbox must run typecheck + production build. A Build-Studio-produced PR cannot fail CI typecheck — if it would, it never leaves the sandbox. Implementation status: not yet landed (audited 2026-04-24); see `apps/web/lib/integrate/build-orchestrator.ts` and `apps/web/lib/queue/functions/build-review-verification.ts`.
 
@@ -103,7 +105,7 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 **Subagents do not read this file.** They only know what the dispatcher prompt tells them. When dispatching:
 
 - **For TypeScript work:** include "run `pnpm --filter web typecheck` before committing and fix any errors."
-- **For final-task-in-epic work:** include "run `cd apps/web && npx next build` and fix any errors" plus the required UX verification path. **Instruct the subagent to route that build through the shared local-CI convergence sandbox (`claim_nonprod_environment_lease(environmentKey="local-integration-ci")`) or the canonical local install — not inside the worktree itself.** (See §5 "Where each gate runs" and [kernel principle](docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md).)
+- **For final-task-in-epic work:** include "run `pnpm --filter web build` and fix any errors" plus the required UX verification path. **Instruct the subagent to route that build through the shared local-CI convergence sandbox (`claim_nonprod_environment_lease(environmentKey="local-integration-ci")`) or the canonical local install — not inside the worktree itself.** (See §5 "Where each gate runs" and [kernel principle](docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md).)
 - **For UI work:** include the Theme-Aware Styling rules from §11. Without them, components ignore the platform's branding system.
 
 ## 8. Tool Authorization
