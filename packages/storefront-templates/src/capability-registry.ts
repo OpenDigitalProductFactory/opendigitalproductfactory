@@ -128,6 +128,13 @@ export const CAPABILITY_REGISTRY = {
     defaultIsolation: "strict-customer-scope",
     surfaces: ["remote-support", "customers"],
   },
+  "partner-program": {
+    label: "Partner Program",
+    portfolio: "productsAndServicesSold",
+    defaultOwnershipScope: "partner-account",
+    defaultIsolation: "strict-partner-scope",
+    surfaces: ["partners", "partner-portal"],
+  },
 } as const satisfies Record<string, CapabilityRegistryEntry>;
 
 export type CapabilityKey = keyof typeof CAPABILITY_REGISTRY;
