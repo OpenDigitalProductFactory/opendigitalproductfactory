@@ -12,6 +12,11 @@ import { AgentSkillAttributionChip } from "./AgentSkillAttributionChip";
 import { AgentMessageBubble } from "./AgentMessageBubble";
 import { AgentMessageInput } from "./AgentMessageInput";
 import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
+import { ConversationParticipantRail } from "./ConversationParticipantRail";
+import { HandoffCard, type CollaborationCard } from "./HandoffCard";
+import { CoworkerSummonPicker } from "./CoworkerSummonPicker";
+import { getConversationParticipants } from "@/lib/actions/coworker-summon";
+import type { ConversationParticipant } from "@/lib/tak/conversation-participants-core";
 import { CoworkerHealthStatus } from "@/components/monitoring/CoworkerHealthStatus";
 import { SetupActionButtons } from "@/components/setup/SetupActionButtons";
 import { resolveCoworkerRuntimeMode } from "./coworker-runtime-mode";
@@ -151,7 +156,33 @@ export function AgentCoworkerPanel({
   // status line.
   const [activeSkill, setActiveSkill] = useState<{ skillId: string; label: string } | null>(null);
   const [marketingSkillRules, setMarketingSkillRules] = useState<Record<string, { visible?: boolean; label?: string; reframe?: string }> | null>(null);
+  // EP-A2A multi-agent collaboration (2026-06-04 spec, Slice 1): the live
+  // participant roster + the inline handoff/summon cards the user sees when a
+  // coworker hands off to, or the user summons, another coworker.
+  const [participants, setParticipants] = useState<ConversationParticipant[]>([]);
+  const [collaborationCards, setCollaborationCards] = useState<CollaborationCard[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const refreshParticipants = useCallback(() => {
+    if (!threadId) {
+      setParticipants([]);
+      return;
+    }
+    getConversationParticipants(threadId)
+      .then(setParticipants)
+      .catch(() => { /* projection failures must not break chat — quiet rail */ });
+  }, [threadId]);
+
+  // Ref so the SSE handler always calls the latest refresh without needing it
+  // in the EventSource effect's dependency array (mirrors voiceSynthRef below).
+  const refreshParticipantsRef = useRef(refreshParticipants);
+  refreshParticipantsRef.current = refreshParticipants;
+
+  // Initial + on-thread-change roster fetch. Collaboration SSE events below
+  // also trigger a refresh so the rail stays live during a turn.
+  useEffect(() => {
+    refreshParticipants();
+  }, [refreshParticipants]);
   const voiceSynth = useVoiceSynth();
   // Keep a ref so the SSE done handler always sees the latest voiceSynth state
   // without needing to re-subscribe the EventSource on every render.
@@ -275,6 +306,49 @@ export function AgentCoworkerPanel({
           });
         }
         // Brand-extraction progress from the Inngest worker (cross-process)
+        // EP-A2A multi-agent collaboration — render the handoff/summon/return
+        // inline and refresh the participant rail.
+        if (
+          data.type === "collaboration:handoff" ||
+          data.type === "collaboration:summon" ||
+          data.type === "collaboration:return"
+        ) {
+          const labelOf = (id: string | undefined, fallback: string) =>
+            (id ? AGENT_NAME_MAP[id] : undefined) ?? id ?? fallback;
+          let card: CollaborationCard;
+          if (data.type === "collaboration:handoff") {
+            card = {
+              id: `collab-handoff-${data.childThreadId}`,
+              kind: "handoff",
+              fromLabel: labelOf(data.fromAgentId, "Coworker"),
+              toLabel: labelOf(data.toAgentId, "Coworker"),
+              tier: data.tier === 3 ? 3 : 2,
+              summary: typeof data.questionPacketSummary === "string" ? data.questionPacketSummary : undefined,
+              childThreadId: data.childThreadId,
+            };
+          } else if (data.type === "collaboration:summon") {
+            card = {
+              id: `collab-summon-${data.childThreadId}`,
+              kind: "summon",
+              fromLabel: "You",
+              toLabel: labelOf(data.summonedAgentId, "Coworker"),
+              tier: data.tier === 3 ? 3 : 2,
+              childThreadId: data.childThreadId,
+            };
+          } else {
+            card = {
+              id: `collab-return-${data.childThreadId}`,
+              kind: "return",
+              fromLabel: labelOf(data.fromAgentId, "Coworker"),
+              toLabel: labelOf(data.toAgentId, "Owner"),
+              tier: 2,
+              outcome: data.outcome,
+              childThreadId: data.childThreadId,
+            };
+          }
+          setCollaborationCards((prev) => (prev.some((c) => c.id === card.id) ? prev : [...prev, card]));
+          refreshParticipantsRef.current();
+        }
         if (data.type === "brand:extract.progress") {
           setOrchestratorStatus(`${data.stage}: ${data.message} (${data.percent}%)`);
         }
@@ -749,6 +823,33 @@ export function AgentCoworkerPanel({
         />
       )}
 
+      {/* EP-A2A: multi-agent participant rail (quiet for 1-1) + summon affordance */}
+      <ConversationParticipantRail participants={participants} />
+      {threadId ? (
+        <CoworkerSummonPicker
+          parentThreadId={threadId}
+          routeContext={effectiveRoute}
+          onSummoned={(info) => {
+            setCollaborationCards((prev) =>
+              prev.some((c) => c.id === `collab-summon-${info.childThreadId}`)
+                ? prev
+                : [
+                    ...prev,
+                    {
+                      id: `collab-summon-${info.childThreadId}`,
+                      kind: "summon",
+                      fromLabel: "You",
+                      toLabel: info.targetLabel,
+                      tier: 2,
+                      childThreadId: info.childThreadId,
+                    },
+                  ],
+            );
+            refreshParticipants();
+          }}
+        />
+      ) : null}
+
       <div
         style={{
           flex: 1,
@@ -772,6 +873,10 @@ export function AgentCoworkerPanel({
             />
           );
         })}
+        {/* EP-A2A: inline handoff/summon/return cards (the visible multi-agent moments) */}
+        {collaborationCards.map((card) => (
+          <HandoffCard key={card.id} card={card} />
+        ))}
         {/* Setup action buttons — shown when setup overlay is active */}
         <SetupActionButtonsWrapper isPending={isBusy} />
         {(isBusy || isClearing || buildTasks.size > 0) && (

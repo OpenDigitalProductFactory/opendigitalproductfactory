@@ -101,8 +101,8 @@ export function buildParticipants(input: ParticipantProjectionInput): Conversati
 
   for (const thread of threads) {
     const isOwner = thread.id === rootThreadId;
-    const agentId =
-      (isOwner ? ownerAgentId ?? undefined : undefined) ?? actingAgentByThread[thread.id] ?? null;
+    const acting = actingAgentByThread[thread.id] ?? null;
+    const agentId = isOwner ? ownerAgentId ?? acting : acting;
     if (!agentId) continue; // a thread with no resolvable agent contributes no participant
 
     const identity: AgentIdentity = identities[agentId] ?? {
