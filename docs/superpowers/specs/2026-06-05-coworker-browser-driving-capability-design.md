@@ -81,7 +81,15 @@ Reuse and extend the existing audit/identity/grant substrate (`ToolExecution`, `
 
 Rejected: `parallel-browser-substrate` (3.53). Relevant retrieved core principles: *Audit Existing Schema Before Adding Large Features*, *Principal Convergence*, *Responsible Capacity Utilization*. The kernel reads the parallel substrate as the shortcut. This is `dpf-verify-substrate-first` made quantitative.
 
-**Everything in §4–§7 below is bound by these two verdicts.**
+### Verdict 3 — Autonomous profile binding
+
+> **Recommendation: `dedicated-service-profile-default`** — composite 6.403, margin 3.408, confidence **high**.
+
+Autonomous / unattended coworker runs bind to a **dedicated scoped service-account profile** (a separate Chromium `user-data-dir` whose cookie jar holds only that service account's provisioned logins, acting as `Principal kind=service`). **Live-operator-profile driving is reserved for human-attended (HITL) runs only.**
+
+Rejected: `live-operator-profile-default` (2.99). The kernel scores driving the operator's own live profile autonomously as a wide-blast-radius shortcut — *Destructive actions require explicit go* and *Architecture Over Shortcuts* both pull hard against it, because that profile carries the operator's **full ambient authority on every site it is logged into**, far beyond the task's intent, and shares one cookie jar + input device with a live human. The motivation for this decision is §4.10. This is the browser analog of least-privilege: a session should act with exactly the identity the task needs, not the broadest one available.
+
+**Everything in §4–§7 and §4.10 below is bound by these three verdicts.**
 
 ---
 
@@ -132,7 +140,7 @@ This is the only place new storage is justified, and it is deliberately minimal 
 - **Credential composition**, by means:
   - **M2 · Claude-in-Chrome** → composes with the **operator's live browser session**. No credential is stored by DPF at all — the session *is* the operator's. This is the lowest-storage, highest-trust-context path and the one the motivating thread used. The "browser on" posture is an explicit, revocable, session-scoped operator opt-in (reuse the External Site Access pill pattern).
   - **M1 / headless-M2 / M3** → a service account needs stored credentials. **Reuse `IntegrationCredential`** (already the OAuth/provider credential home) extended with a `browser-session` credential kind (cookie jar / storage-state blob / username-password under the existing encryption-at-rest path). **No new `BrowserCredentialVault`.**
-- **Session binding record** (the one new table): `BrowserSessionBinding` — a thin join recording an active or completed driven session: `{ sessionId, means (M1|M2|M3), driverRef, actingPrincipalId, delegatingUserId, delegationGrantId?, credentialId?, targetDomains[], status (active|closed|failed), startedAt, closedAt, evidenceDir }`. It exists so a session is **auditable and resumable** (the 2026-04-06 spec flagged "no table tracks session lifecycle" as the gap). It does **not** duplicate the action log — actions live in `ToolExecution`, keyed by `sessionId`. Consider modeling it as a specialization of the Automated Control Utility's proposed `ControlSession` (§4.8) rather than a sibling, if EP-CTRL lands first.
+- **Session binding record** (the one new table): `BrowserSessionBinding` — a thin join recording an active or completed driven session: `{ sessionId, means (M1|M2|M3), driverRef, engine (chromium|safari|firefox), profileRef, profileKind (operator-live|service-account), attended (bool), actingPrincipalId, delegatingUserId, delegationGrantId?, credentialId?, targetDomains[], status (active|closed|failed), startedAt, closedAt, evidenceDir }`. The `engine` + `profileRef` pair is **load-bearing** (§4.10): authentication is a property of a profile's cookie jar, not "the browser," so a session must bind to a specific `(engine, profile)`, never to "the browser" generically. `profileKind` + `attended` encode Verdict 3 — `operator-live` profiles are only valid when `attended = true`. It exists so a session is **auditable and resumable** (the 2026-04-06 spec flagged "no table tracks session lifecycle" as the gap), and does **not** duplicate the action log — actions live in `ToolExecution`, keyed by `sessionId`. Consider modeling it as a specialization of the Automated Control Utility's proposed `ControlSession` (§4.8) rather than a sibling, if EP-CTRL lands first.
 
 ### 4.8 Boundary with EP-CTRL-5E21A4 (Automated Control Utility)
 
@@ -141,6 +149,30 @@ EP-CTRL (`2026-04-23-automated-control-utility-design.md`) covers **Windows desk
 ### 4.9 Boundary with External Site Access (`2026-03-14`)
 
 External Site Access (`search_public_web` / `fetch_public_website` / `analyze_public_website_branding`, `web_search` grant) is **read-only, unauthenticated, platform-as-intermediary** — the platform fetches and normalizes; the coworker never drives. Browser-driving is its **authenticated, side-effecting successor** — the very "Phase 3+" that spec deferred. The SSRF protections (block localhost/private IPs/non-HTTP) and the per-session "External On" pill from that spec are **inherited**, not re-invented. `browser_read` is the bridge grant between the two.
+
+### 4.10 Session & profile binding (how a driver actually reaches an authenticated session)
+
+This is the architecturally load-bearing mechanism, and the place a natural assumption is wrong. "DPF runs in a browser, so it can act as the sessions logged into that browser" is **false at the page layer.** The portal is a web page at `localhost:3000`, sandboxed by the **same-origin policy**: its JavaScript has zero access to other tabs/windows, to cross-origin DOM, or to the cookies/sessions of `substack.com` or any other origin. If that weren't true, every site you visit could silently drive your logged-in bank. **The portal page can never be the thing that drives an external authenticated site.**
+
+Driving happens through a **privileged out-of-page channel** at a layer above the page sandbox. Three mechanism classes exist, mapping onto the three means:
+
+| Bridge mechanism | Privilege model | Session it uses | Means |
+|---|---|---|---|
+| **Browser extension** (Claude-in-Chrome) | Runs in the browser's privileged extension context (user-granted host/tabs/scripting permissions), not the page sandbox. Models multiple attached browsers (`list_connected_browsers`, `select_browser`, `tabs_*`). | Whatever the **attached profile** is logged into | M2 (attended) |
+| **CDP / remote-debug** (Playwright, headless `browser-use`) | External process attaches to a browser launched on a known `user-data-dir` / debug port | The cookie jar in **that profile's `user-data-dir`** | M1, M2-headless, M3 |
+| **OS-level** (computer-use) | Synthetic input + screenshots at the desktop layer | Whatever is on screen — but browsers are **"read" tier** (observe only, cannot click/type) | recovery/observation only |
+
+This is precisely why the motivating Substack thread worked: it was **Claude-in-Chrome (a privileged extension) attached to the operator's Chrome profile**, driving a tab in that profile that already held the Substack login — not the portal scripting across tabs. "Other browser windows" are reached by the *driver selecting which connected browser/profile to act on*, never by the page.
+
+**The load-bearing primitive is the profile, not the browser.** Authentication is a property of a browser **profile** (a cookie jar / `user-data-dir`), so:
+
+- A session binds to a specific **`(engine, profile)`** pair (the new `BrowserSessionBinding.engine` + `profileRef` fields, §4.7), explicitly — never to "the browser."
+- **Cross-browser is genuinely heterogeneous.** Chromium (Chrome/Edge) supports CDP + extensions — the only first-class drivable surface. Safari has no CDP (`safaridriver`/AppleScript only, macOS-only). Firefox uses its own protocol. **Architectural constraint: standardize the driven surface on a Chromium profile; treat Safari/Firefox as computer-use-observation-only fallbacks.** The means abstraction carries an `engine` target and must not assume the operator's everyday browser is drivable.
+
+**Attended vs. unattended is a first-class design axis (Verdict 3):**
+
+- **Attended — M2 on the operator's live profile (`profileKind: operator-live`, `attended: true`).** Highest trust context; DPF stores no credential because the session *is* the operator's. But the coworker now shares one cookie jar + input device with a live human (input collisions) and inherits the operator's **full ambient authority on every logged-in site** — far wider than the task. Acceptable only human-in-the-loop.
+- **Unattended — dedicated service-account profile (`profileKind: service-account`, `attended: false`).** A separate Chromium `user-data-dir` whose cookie jar holds only the service account's provisioned logins (`Principal kind=service`, §4.7). No human shares it; scope is bounded to exactly the provisioned sites; credentials are scoped + expiring via `DelegationGrant`. **This is the default for any autonomous run** — the browser analog of least-privilege. You never point an autonomous coworker at the human's live profile.
 
 ---
 
@@ -251,7 +283,7 @@ One **substrate BI** (the abstraction + identity bridge + audit wiring + grant e
 ## 11. Open questions
 
 1. **Q1 — EP-CTRL convergence.** Should `BrowserSessionBinding` be a specialization of the Automated Control Utility's `ControlSession`, or a sibling? Recommendation: specialize *if* EP-CTRL lands first; otherwise define thin and converge later as tracked debt. (Needs an architect call once EP-CTRL implementation status is known.)
-2. **Q2 — M2-Chrome transport in the portal.** The motivating thread used Claude-in-Chrome from an interactive agent session. How does an *in-portal* coworker reach a live operator browser session — via the operator's own Claude-in-Chrome, a portal-hosted browser extension bridge, or only via headless `browser-use` for autonomous runs (operator-session means reserved for human-attended runs)? Likely the latter for v1.
+2. **Q2 — M2 transport + profile provisioning (resolved in principle by Verdict 3; implementation open).** Verdict 3 settles the *policy*: autonomous runs use a dedicated service-account Chromium profile; operator-live driving is attended-only. Open implementation questions: (a) how does an *in-portal* coworker reach the operator's live profile for attended runs — the operator's own Claude-in-Chrome extension, or a portal-hosted bridge? (b) how is a service-account profile *provisioned and authenticated* the first time (operator logs the service account into each site once, persisting `storageState`), and how is it re-authenticated when a site's session expires? (c) where do the service-account `user-data-dir`s live (per-install Docker volume, like `browser_evidence`)? Recommendation for v1: headless `browser-use` on service-account profiles for autonomous; defer attended operator-live driving to a fast-follow.
 3. **Q3 — Credential kind on `IntegrationCredential`.** Confirm `storageState`/cookie-jar fits the existing `IntegrationCredential` encryption + `credentialOwnerMode` model without schema strain, or whether a `kind` discriminator suffices.
 4. **Q4 — WWMD selector latency.** A per-task `principle_decide` adds a round-trip before each browser task. Acceptable for bounded high-value workflows; confirm it is cached/short-circuited for repeat tasks on the same target (e.g. a recorded M1 script skips selection).
 5. **Q5 — Default grant assignment.** Which seeded personas get `browser_read` vs `browser_drive` by default (marketing, procurement), and which require explicit operator grant? Per `bundled-services-active-by-default` vs the high blast radius of `browser_drive`.
@@ -262,6 +294,7 @@ One **substrate BI** (the abstraction + identity bridge + audit wiring + grant e
 
 - **WWMD Verdict 1** (substrate shape): `multi-means-wwmd-per-task`, composite 6.357, margin 2.542, high confidence, no commandment conflict. `governingProfile: mark-dpf-platform`.
 - **WWMD Verdict 2** (reuse vs parallel): `reuse-existing-substrate`, composite 6.701, margin 3.174, high confidence, no commandment conflict.
+- **WWMD Verdict 3** (autonomous profile binding): `dedicated-service-profile-default`, composite 6.403, margin 3.408, high confidence, no commandment conflict. Autonomous runs bind a scoped service-account profile; operator-live profiles are attended-only. (Added 2026-06-05 after the operator raised the cross-tab / cross-browser session-reach question.)
 - **Epic**: EP-BROWSER-DRIVE (created 2026-06-05, this spec linked as `specPath`).
 - **Filed BIs**: BI-2AED4F15 (substrate), BI-09781F5F (P1 Substack/M2), BI-95F22C95 (P2 supplier/M2→M1), BI-91D64AD4 (P3 dashboard read), BI-2F287A19 (P4 cross-channel/M3) — all linked to EP-BROWSER-DRIVE, `proposedOutcome: build`, awaiting Scrum Master triage (linking is organizational only; not yet triaged or promoted).
 
@@ -269,4 +302,4 @@ One **substrate BI** (the abstraction + identity bridge + audit wiring + grant e
 
 ## 13. Recommendation
 
-Build browser-driving as **one `BrowserDriver` substrate with three separately-graspable means** (deterministic / plugin / delegated), selected **per-task by a scoped WWMD call**, composing with the operator's identity or a delegated `Principal kind=service`, and **reusing the existing grant / authority / delegation / envelope / `ToolExecution` / `GearInterface` substrate** — adding only a new grant key, the `TOOL_TO_GRANTS` wiring, an `IntegrationCredential` browser-session kind, and a thin `BrowserSessionBinding` record. Prove it with the Substack-publish install first (M2-Chrome), then graduate the recurring high-error-cost supplier workflow toward a deterministic M1 script. This gives Coworkers real reach into the auth-walled web with the same kernel-gated, audited, WWMD-scored discipline as every other capability — and no parallel machinery.
+Build browser-driving as **one `BrowserDriver` substrate with three separately-graspable means** (deterministic / plugin / delegated), selected **per-task by a scoped WWMD call**, each session bound to a specific **`(engine, profile)`** — autonomous runs to a scoped **service-account profile** (`Principal kind=service`), operator-live profiles **attended-only** (Verdict 3) — driven through a privileged out-of-page channel (extension or CDP), never the sandboxed portal page, and **reusing the existing grant / authority / delegation / envelope / `ToolExecution` / `GearInterface` substrate** — adding only a new grant key, the `TOOL_TO_GRANTS` wiring, an `IntegrationCredential` browser-session kind, and a thin `BrowserSessionBinding` record. Prove it with the Substack-publish install first (M2-Chrome), then graduate the recurring high-error-cost supplier workflow toward a deterministic M1 script. This gives Coworkers real reach into the auth-walled web with the same kernel-gated, audited, WWMD-scored discipline as every other capability — and no parallel machinery.
