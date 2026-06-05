@@ -11,6 +11,7 @@ import type {
   CapabilityOverride,
   CommercialModel,
   OperatingModelAxes,
+  PartnerProgramProfile,
   PortfolioDecomposition,
 } from "./types";
 
@@ -382,6 +383,26 @@ const RULES: ApplicabilityRule[] = [
       ];
     },
   },
+  {
+    name: "partner-channel-from-axes",
+    evaluate: (axes, portfolios) => {
+      const program = derivePartnerProgramProfile(axes, portfolios);
+      if (program.portalMode === "none") return [];
+
+      return [
+        {
+          key: "partner-program",
+          applicability: program.portalMode === "primary" ? "required" : "recommended",
+          reason:
+            program.portalMode === "primary"
+              ? "A channel-partner primary consumer sells through a partner/reseller network."
+              : "Platform/ecosystem, managed-service, and wholesale models commonly run a partner channel alongside direct sales.",
+          ownershipScopes: ["partner-account"],
+          isolation: "strict-partner-scope",
+        },
+      ];
+    },
+  },
 ];
 
 function applyOverrides(map: CapabilityMap, overrides: CapabilityOverride[]): void {
@@ -493,4 +514,79 @@ function supportedPatternsForCommercialModel(commercialModel: CommercialModel): 
 
 export function deriveBillingPatternProfile(axes: OperatingModelAxes): BillingPatternProfile {
   return supportedPatternsForCommercialModel(axes.commercialModel);
+}
+
+const NO_PARTNER_PROGRAM: PartnerProgramProfile = {
+  portalMode: "none",
+  partnerTypes: [],
+  tiers: [],
+  dealRegistration: false,
+  partnerGraph: "none",
+};
+
+/**
+ * Derives the partner/reseller operating model from the operating-model axes,
+ * the same way {@link deriveBillingPatternProfile} derives billing from
+ * `commercialModel`. Partner support is therefore a function of an archetype's
+ * axis values, not a hand-authored per-archetype flag — adding the 50th
+ * archetype to a partner channel is a matter of its axes, not a new rule.
+ *
+ * Precedence (first match wins):
+ *  1. `primaryConsumer === "channel-partner"` — selling *through* partners is the
+ *     primary motion → partner portal is primary, downstream projection on.
+ *  2. platform/ecosystem play (`platform !== "no"`) — SaaS/marketplace partner
+ *     program alongside direct sales.
+ *  3. managed service provider (B2B + recurring-agreement + primary delivery) —
+ *     MSPs are themselves channel partners and may sub-contract.
+ *  4. wholesale/distribution (physical goods sold to business buyers who resell).
+ */
+export function derivePartnerProgramProfile(
+  axes: OperatingModelAxes,
+  portfolios: PortfolioDecomposition,
+): PartnerProgramProfile {
+  if (axes.primaryConsumer === "channel-partner") {
+    return {
+      portalMode: "primary",
+      partnerTypes: ["reseller", "distributor", "managed-service-provider"],
+      tiers: ["registered", "authorized", "silver", "gold", "platinum"],
+      dealRegistration: true,
+      partnerGraph: "separate-partner-projection",
+    };
+  }
+
+  if (axes.platform === "yes-marketplace" || axes.platform === "yes-developer") {
+    return {
+      portalMode: "available",
+      partnerTypes: ["referral", "reseller", "technology"],
+      tiers: ["registered", "silver", "gold", "platinum"],
+      dealRegistration: true,
+      partnerGraph: "separate-partner-projection",
+    };
+  }
+
+  if (
+    axes.primaryConsumer === "business" &&
+    axes.commercialModel === "recurring-agreement" &&
+    portfolios.manufactureAndDeliver.scope === "primary"
+  ) {
+    return {
+      portalMode: "available",
+      partnerTypes: ["managed-service-provider", "technology"],
+      tiers: ["registered", "authorized"],
+      dealRegistration: true,
+      partnerGraph: "none",
+    };
+  }
+
+  if (axes.form === "goods" && axes.primaryConsumer === "business") {
+    return {
+      portalMode: "available",
+      partnerTypes: ["reseller", "distributor"],
+      tiers: ["registered", "authorized"],
+      dealRegistration: false,
+      partnerGraph: "separate-partner-projection",
+    };
+  }
+
+  return NO_PARTNER_PROGRAM;
 }

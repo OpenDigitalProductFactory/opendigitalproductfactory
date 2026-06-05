@@ -17,17 +17,26 @@ export type {
   WorkspaceHomeStorefrontConfigRef,
 };
 
+// The 11 spec-canonical component-renderer keys from parent §5.5 (vertical
+// workspace home design spec). Substrate-known set; additional vertical-
+// specific component keys may be added at the contribution layer via the
+// WorkspaceHomeComponentDescriptor.key `| string` escape.
+// BI-5B8FE5C1 Phase 1 rename — replaces the provisional substrate names from
+// PR #1237 with the parent-spec-canonical set the substrate sign-off ADR named
+// as a "boundary BI-5B8FE5C1 fills out" follow-up.
 const WORKSPACE_HOME_COMPONENT_KEYS = new Set<string>([
-  "today-now-strip",
-  "service-queue",
+  "today-schedule",
+  "unassigned-work",
+  "technician-load",
+  "customer-callbacks",
   "customer-map",
-  "customer-health-map",
-  "exception-queue",
-  "coworker-handoff-list",
-  "metric-tile",
-  "calendar-panel",
-  "activity-feed-panel",
-  "platform-tile-grid",
+  "parts-watch",
+  "notification-status",
+  "inventory-alerts",
+  "patient-queue",
+  "retail-replenishment",
+  "coworker-handoffs",
+  "shift-summary",
 ]);
 
 const WORKSPACE_HOME_DATA_REF_KINDS = new Set(["projection", "canonical-data", "signal"]);

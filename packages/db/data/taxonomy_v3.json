@@ -5754,5 +5754,65 @@
       "provisioningModel": "Account-based (role + entitlement)",
       "platformEcosystem": "Yes"
     }
+  },
+  {
+    "portfolio": "Foundational",
+    "portfolio_id": "foundational",
+    "level_1": "Building Management",
+    "level_2": "Security and Surveillance",
+    "level_3": "",
+    "definition": "Foundational digital products that monitor and secure the physical estate: IP cameras, NVR/DVR, video doorbells, alarm and intrusion sensors. Embedded software, network-connected, lifecycle-managed.",
+    "notes": "DPF estate extension — DPPM Foundational \"building management\" / \"client compute\" (The Open Group, Shift to Digital Product §4.3).",
+    "enrichment": {}
+  },
+  {
+    "portfolio": "Foundational",
+    "portfolio_id": "foundational",
+    "level_1": "Building Management",
+    "level_2": "Climate Control",
+    "level_3": "",
+    "definition": "Foundational digital products that regulate environment: smart thermostats, HVAC controllers, environmental sensors.",
+    "notes": "DPF estate extension — DPPM Foundational \"building management\" / \"client compute\" (The Open Group, Shift to Digital Product §4.3).",
+    "enrichment": {}
+  },
+  {
+    "portfolio": "Foundational",
+    "portfolio_id": "foundational",
+    "level_1": "Building Management",
+    "level_2": "Access Control",
+    "level_3": "",
+    "definition": "Foundational digital products governing physical access: smart locks, garage/gate controllers, entry remotes, intercoms.",
+    "notes": "DPF estate extension — DPPM Foundational \"building management\" / \"client compute\" (The Open Group, Shift to Digital Product §4.3).",
+    "enrichment": {}
+  },
+  {
+    "portfolio": "Foundational",
+    "portfolio_id": "foundational",
+    "level_1": "Building Management",
+    "level_2": "Lighting and Energy Management",
+    "level_3": "",
+    "definition": "Foundational digital products for lighting and energy: smart switches, smart plugs, energy monitors, irrigation and pool controllers.",
+    "notes": "DPF estate extension — DPPM Foundational \"building management\" / \"client compute\" (The Open Group, Shift to Digital Product §4.3).",
+    "enrichment": {}
+  },
+  {
+    "portfolio": "Foundational",
+    "portfolio_id": "foundational",
+    "level_1": "Building Management",
+    "level_2": "Connected Appliances",
+    "level_3": "",
+    "definition": "Foundational smart appliances with embedded software and APIs: ovens, washers/dryers, refrigerators, printers, and similar connected white-goods.",
+    "notes": "DPF estate extension — DPPM Foundational \"building management\" / \"client compute\" (The Open Group, Shift to Digital Product §4.3).",
+    "enrichment": {}
+  },
+  {
+    "portfolio": "Foundational",
+    "portfolio_id": "foundational",
+    "level_1": "Compute",
+    "level_2": "Client and End User Compute",
+    "level_3": "",
+    "definition": "Foundational client-compute digital products: laptops, desktops, tablets, smartphones, and wearables operated within the estate.",
+    "notes": "DPF estate extension — DPPM Foundational \"building management\" / \"client compute\" (The Open Group, Shift to Digital Product §4.3).",
+    "enrichment": {}
   }
 ]

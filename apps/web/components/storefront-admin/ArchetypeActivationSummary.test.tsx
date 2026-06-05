@@ -81,7 +81,7 @@ describe("ArchetypeActivationSummary", () => {
           status: "ready",
           sourceContributionId: "home-hvac-dispatch",
           primaryOperatingQuestion: null,
-          primitiveWidgets: ["service-queue", "customer-map", "coworker-handoffs"],
+          primitiveWidgets: ["decision-queue", "geo-map", "handoff-queue"],
           requiredCanonicalData: ["customer-account", "service-location", "work-order"],
           requiredSignals: ["scheduled-work", "urgent-exception", "coworker-handoff"],
           missingDataBehavior: "render-empty-state",
@@ -94,9 +94,10 @@ describe("ArchetypeActivationSummary", () => {
     expect(html).toContain("Worker Home");
     expect(html).toContain("HVAC dispatcher home");
     expect(html).toContain("Ready");
-    expect(html).toContain("Service Queue");
-    expect(html).toContain("Customer Map");
-    expect(html).toContain("Coworker Handoffs");
+    // Primitive widgets rendered as title-cased tokens (formatToken splits on `-`).
+    expect(html).toContain("Decision Queue");
+    expect(html).toContain("Geo Map");
+    expect(html).toContain("Handoff Queue");
     // primaryOperatingQuestion is null → operating-question line stays hidden
     expect(html).not.toContain("The worker arrives asking");
   });
@@ -120,7 +121,7 @@ describe("ArchetypeActivationSummary", () => {
           status: "ready",
           sourceContributionId: "home-hvac-dispatch",
           primaryOperatingQuestion: "what's on the board today?",
-          primitiveWidgets: ["service-queue", "customer-map", "coworker-handoffs"],
+          primitiveWidgets: ["decision-queue", "geo-map", "handoff-queue"],
           requiredCanonicalData: ["customer-account", "service-location", "work-order"],
           requiredSignals: ["scheduled-work", "urgent-exception", "coworker-handoff"],
           missingDataBehavior: "render-empty-state",
