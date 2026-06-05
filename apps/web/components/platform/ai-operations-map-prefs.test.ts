@@ -209,6 +209,7 @@ describe("AI operations map preferences", () => {
       states: ["failed", "blocked"],
       actorId: "brand-analyst",
       actorRole: "to",
+      authority: "governed",
     });
 
     expect(store.has(OPERATIONS_MAP_A2A_PREFERENCE_KEY)).toBe(true);
@@ -217,19 +218,21 @@ describe("AI operations map preferences", () => {
       states: ["failed", "blocked"],
       actorId: "brand-analyst",
       actorRole: "to",
+      authority: "governed",
     });
   });
 
   it("treats a stored empty A2A filter as show-all and drops unknown values", () => {
     store.set(
       OPERATIONS_MAP_A2A_PREFERENCE_KEY,
-      JSON.stringify({ types: ["bogus"], states: [], actorId: "x", actorRole: "sideways" }),
+      JSON.stringify({ types: ["bogus"], states: [], actorId: "x", actorRole: "sideways", authority: "nope" }),
     );
     const loaded = loadA2aFilterPreference();
     expect(loaded.types).toEqual(["a2a-delegation", "a2a-handoff", "a2a-task-lineage", "a2a-deliberation"]);
     expect(loaded.states).toEqual(["active", "completed", "failed", "blocked"]);
     expect(loaded.actorRole).toBe("either");
     expect(loaded.actorId).toBe("x");
+    expect(loaded.authority).toBe("all");
   });
 
   it("clears the A2A filter preference", () => {
