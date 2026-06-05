@@ -47,6 +47,9 @@ vi.mock("@dpf/db", () => ({
     scheduledJob: {
       findMany: vi.fn(),
     },
+    delegationChain: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -83,6 +86,7 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
 
     const data = await loadOperationsMapData();
 
@@ -116,6 +120,7 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
 
     const data = await loadOperationsMapData();
 
@@ -138,6 +143,7 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
 
     const data = await loadOperationsMapData();
 
@@ -253,6 +259,7 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([makeRouteOutcomeRow()] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([makeScheduledAgentTaskRow()] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([makeScheduledJobRow()] as never);
+    vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
 
     const data = await loadOperationsMapData();
 
@@ -362,6 +369,7 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
 
     const data = await loadOperationsMapData();
 
@@ -396,6 +404,7 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([makeRouteOutcomeRow()] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
 
     const data = await loadOperationsMapData();
 
