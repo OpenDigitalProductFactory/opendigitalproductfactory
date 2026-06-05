@@ -5,6 +5,7 @@ import { join } from "path";
 import { prisma } from "./client.js";
 import { Prisma } from "../generated/client/client";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
+import { loadFingerprintCatalogIntoDb, defaultCatalogPath } from "./discovery-fingerprint-catalog-loader.js";
 import { seedEaArchimate4 } from "./seed-ea-archimate4.js";
 import { seedEaBpmn20 } from "./seed-ea-bpmn20.js";
 import { seedEaCrossNotation } from "./seed-ea-cross-notation.js";
@@ -441,6 +442,26 @@ async function seedTaxonomyNodes(): Promise<void> {
   }
 
   console.log(`Seeded ${entries.length} taxonomy nodes`);
+}
+
+/**
+ * Load the discovery-fingerprint catalog into DiscoveryFingerprintRule rows so
+ * the discovery pipeline applies them at runtime (spec §8.3). Runs AFTER
+ * seedTaxonomyNodes so each rule's semantic taxonomyNodeId resolves to a cuid.
+ * Idempotent (upsert on ruleKey) — re-running seed reproduces the estate's
+ * identifications with zero SQL.
+ */
+async function seedDiscoveryFingerprints(): Promise<void> {
+  const result = await loadFingerprintCatalogIntoDb(prisma, defaultCatalogPath(__dirname));
+  if (result.unresolvedTaxonomy.length > 0) {
+    // Non-fatal: an identity-only rule (no placement) is valid, but flag so a
+    // typo'd nodeId surfaces instead of silently degrading placement.
+    console.warn(
+      `[seed] ${result.unresolvedTaxonomy.length} fingerprint rule(s) had unresolved taxonomy nodeIds: ` +
+        result.unresolvedTaxonomy.join(", "),
+    );
+  }
+  console.log(`Seeded ${result.loaded} discovery fingerprint rules (catalog ${result.catalogKey}@${result.version})`);
 }
 
 async function seedDigitalProducts(): Promise<void> {
@@ -2423,6 +2444,7 @@ async function main(): Promise<void> {
   await seedAgentPromptContexts();
   await seedFeatureDegradationMappings();
   await seedTaxonomyNodes();
+  await seedDiscoveryFingerprints();
   await seedAgentControlPlaneMaturity(prisma);
   await seedEaReferenceModels().catch((err: unknown) => {
     console.warn("[seed] EA reference models skipped:", err instanceof Error ? err.message : err);
