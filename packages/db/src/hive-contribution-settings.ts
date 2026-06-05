@@ -89,8 +89,19 @@ export type HiveLedgerEntryInput = {
   redactionStatus?: string | null;
 };
 
+/** Concrete ledger-row data shape (assignable to the Prisma create input). */
+export type HiveLedgerEntryData = {
+  contributionType: HiveContributionType;
+  contributor: string;
+  ruleKey: string | null;
+  summary: string;
+  payloadHash: string | null;
+  redactionStatus: string | null;
+  status: string;
+};
+
 /** Shape a ledger row payload (status starts "submitted"). */
-export function buildLedgerEntry(input: HiveLedgerEntryInput): Record<string, unknown> {
+export function buildLedgerEntry(input: HiveLedgerEntryInput): HiveLedgerEntryData {
   return {
     contributionType: input.contributionType,
     contributor: input.contributor,
