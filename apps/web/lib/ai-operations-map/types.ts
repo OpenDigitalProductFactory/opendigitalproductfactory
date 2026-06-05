@@ -222,13 +222,70 @@ export type OperationsMapRoutingLegendItem = {
   description: string;
 };
 
+// ─── Typed-node / typed-edge graph (A2A re-architecture) ───────────────
+//
+// The topology was originally a two-lane bipartite graph: every edge ran
+// coworker → provider. To surface coworker-to-coworker (A2A) interactions
+// — delegation, build phase-handoff, task spawn/lineage, deliberation
+// fan-out — the model is generalized so an edge declares its kind. Provider
+// routes remain `OperationsMapRoutingRoute` (the `provider-route` variant);
+// A2A interactions are `OperationsMapA2aEdge` and connect two coworkers.
+// See docs/superpowers/specs/2026-06-04-ai-operations-map-a2a-interaction-visibility-design.md
+
+export type OperationsMapNodeKind = "coworker" | "provider";
+
+export type OperationsMapEdgeKind =
+  | "provider-route"
+  | "a2a-delegation"
+  | "a2a-handoff"
+  | "a2a-task-lineage"
+  | "a2a-deliberation";
+
+export type OperationsMapA2aEdgeKind = Exclude<OperationsMapEdgeKind, "provider-route">;
+
+export type OperationsMapA2aInteractionState = "active" | "completed" | "failed" | "blocked";
+
+export type OperationsMapA2aEdge = {
+  id: string;
+  edgeKind: OperationsMapA2aEdgeKind;
+  fromCoworkerId: string;
+  toCoworkerId: string;
+  state: OperationsMapA2aInteractionState;
+  label: string;
+  summary: string;
+  occurredAt: string | null;
+  // Audit / troubleshooting envelope — populated where the source row carries it.
+  authorityScope?: string[];
+  sensitivity?: string | null;
+  skillId?: string | null;
+  buildId?: string | null;
+  gateResult?: string | null;
+  // Source-record references for click-through audit.
+  refs: {
+    delegationChainId?: string | null;
+    phaseHandoffId?: string | null;
+    taskRunId?: string | null;
+    parentTaskRunId?: string | null;
+    deliberationRunId?: string | null;
+  };
+  weight: number;
+};
+
+export type OperationsMapA2aLegendItem = {
+  edgeKind: OperationsMapA2aEdgeKind;
+  label: string;
+  description: string;
+};
+
 export type OperationsMapRoutingTopology = {
   coworkers: OperationsMapRoutingCoworker[];
   providers: OperationsMapRoutingProvider[];
   routes: OperationsMapRoutingRoute[];
+  a2aEdges: OperationsMapA2aEdge[];
   markers: OperationsMapRoutingMarker[];
   timeline: OperationsMapRoutingTimelineMarker[];
   legend: OperationsMapRoutingLegendItem[];
+  a2aLegend: OperationsMapA2aLegendItem[];
 };
 
 export type OperationsMapQuickViewId = "all" | "exceptions" | "evidence" | "tool-runs";
