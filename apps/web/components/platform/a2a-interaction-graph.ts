@@ -184,6 +184,18 @@ export function a2aEdgeVisibleAtReplayTime(
   return selectedTime - ts <= a2aReplayWindow(range);
 }
 
+/**
+ * An interaction is "governed" when it carries a delegated authority scope or a
+ * sensitivity boundary — the audit-relevant subset for "who acted under what
+ * authority". Delegation edges carry authorityScope; sensitivity is populated
+ * where the source records it.
+ */
+export function a2aEdgeIsGoverned(edge: { authorityScope?: string[]; sensitivity?: string | null }): boolean {
+  const hasAuthority = Array.isArray(edge.authorityScope) && edge.authorityScope.length > 0;
+  const hasSensitivity = typeof edge.sensitivity === "string" && edge.sensitivity.trim() !== "";
+  return hasAuthority || hasSensitivity;
+}
+
 export function svgClip(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, Math.max(0, maxLength - 1))}…`;

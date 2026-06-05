@@ -67,6 +67,7 @@ export interface CreatePlatformIssueReportInput {
   threadId?: string | null;
   taskRunId?: string | null;
   featureBuildId?: string | null;
+  agentId?: string | null;
 
   // Ownership — resolved automatically if not provided
   portfolioId?: string | null;
@@ -137,6 +138,7 @@ export async function createPlatformIssueReport(
       supportSessionId: trimTo(input.supportSessionId ?? null, LIMITS.supportSessionId),
       reportedById: input.reportedById ?? null,
       threadId: input.threadId ?? null,
+      agentId: input.agentId ?? null,
       taskRunId: input.taskRunId ?? null,
       featureBuildId: input.featureBuildId ?? null,
       source: input.source.slice(0, LIMITS.source),

@@ -16,12 +16,14 @@ export const OPERATIONS_MAP_SAVED_VIEWS_KEY = "ai-operations-map:saved-views";
 export const OPERATIONS_MAP_A2A_PREFERENCE_KEY = "ai-operations-map:a2a";
 
 export type A2aActorRole = "either" | "from" | "to";
+export type A2aAuthorityFilter = "all" | "governed" | "ungoverned";
 
 export type OperationsMapA2aFilterPreference = {
   types: OperationsMapA2aEdgeKind[];
   states: OperationsMapA2aInteractionState[];
   actorId: string;
   actorRole: A2aActorRole;
+  authority: A2aAuthorityFilter;
 };
 
 const A2A_EDGE_KIND_VALUES: OperationsMapA2aEdgeKind[] = [
@@ -32,6 +34,7 @@ const A2A_EDGE_KIND_VALUES: OperationsMapA2aEdgeKind[] = [
 ];
 const A2A_STATE_VALUES: OperationsMapA2aInteractionState[] = ["active", "completed", "failed", "blocked"];
 const A2A_ACTOR_ROLES = new Set<A2aActorRole>(["either", "from", "to"]);
+const A2A_AUTHORITY_FILTERS = new Set<A2aAuthorityFilter>(["all", "governed", "ungoverned"]);
 const A2A_EDGE_KIND_SET = new Set<OperationsMapA2aEdgeKind>(A2A_EDGE_KIND_VALUES);
 const A2A_STATE_SET = new Set<OperationsMapA2aInteractionState>(A2A_STATE_VALUES);
 
@@ -41,6 +44,7 @@ export function getDefaultA2aFilterPreference(): OperationsMapA2aFilterPreferenc
     states: [...A2A_STATE_VALUES],
     actorId: "all",
     actorRole: "either",
+    authority: "all",
   };
 }
 
@@ -58,6 +62,7 @@ export function loadA2aFilterPreference(): OperationsMapA2aFilterPreference {
       : [];
     const actorRole = A2A_ACTOR_ROLES.has(parsed.actorRole as A2aActorRole) ? (parsed.actorRole as A2aActorRole) : "either";
     const actorId = typeof parsed.actorId === "string" && parsed.actorId.trim() !== "" ? parsed.actorId : "all";
+    const authority = A2A_AUTHORITY_FILTERS.has(parsed.authority as A2aAuthorityFilter) ? (parsed.authority as A2aAuthorityFilter) : "all";
 
     return {
       // Empty arrays mean "show all" rather than "hide everything" — a stored
@@ -66,6 +71,7 @@ export function loadA2aFilterPreference(): OperationsMapA2aFilterPreference {
       states: states.length > 0 ? states : [...A2A_STATE_VALUES],
       actorId,
       actorRole,
+      authority,
     };
   } catch {
     return getDefaultA2aFilterPreference();

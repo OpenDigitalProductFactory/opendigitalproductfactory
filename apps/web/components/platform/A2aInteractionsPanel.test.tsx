@@ -137,6 +137,29 @@ describe("A2aInteractionsPanel", () => {
     expect(inspector.textContent).toContain("brand-extract");
   });
 
+  it("narrows by authority (governed vs ungoverned)", () => {
+    const { container } = render(
+      <A2aInteractionsPanel
+        coworkers={COWORKERS}
+        a2aEdges={[
+          edge({ id: "gov", authorityScope: ["brand:read"] }),
+          edge({ id: "ungov", toCoworkerId: "reviewer", authorityScope: [], sensitivity: null, skillId: null }),
+        ]}
+        a2aLegend={LEGEND}
+      />,
+    );
+    expect(container.querySelectorAll("[data-a2a-edge]").length).toBe(2);
+
+    fireEvent.click(findButton(container, "Governed"));
+    expect(container.querySelectorAll("[data-a2a-edge]").length).toBe(1);
+
+    fireEvent.click(findButton(container, "Ungoverned"));
+    const remaining = container.querySelectorAll("[data-a2a-edge]");
+    expect(remaining.length).toBe(1);
+    // The remaining edge is the ungoverned one (different target coworker).
+    expect(remaining[0]?.getAttribute("aria-label")).toContain("Reviewer");
+  });
+
   it("scrubs in lock-step with the shared replay playhead", () => {
     const range = { start: 0, current: 60 * 60 * 1000, end: 100 * 60 * 1000 };
     const at = (min: number) => new Date(min * 60 * 1000).toISOString();
