@@ -1,7 +1,7 @@
 {
   "catalogKey": "dpf-discovery-fingerprints",
   "version": "0.1.0",
-  "schemaVersion": "1",
+  "schemaVersion": "2",
   "rules": [
     "rules/foundational-observability.json"
   ]
