@@ -131,6 +131,20 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     active: "success",
     inactive: "danger",
   },
+  // Marketing strategy/work-product lifecycle.
+  marketing: {
+    draft: "neutral",
+    ready: "info",
+    active: "success",
+    pending: "warning",
+    "pending-review": "warning",
+    "needs-changes": "warning",
+    approved: "success",
+    rejected: "danger",
+    stale: "warning",
+    published: "success",
+    archived: "neutral",
+  },
   // Generic severity ramp, reusable by any surface that has none of its own.
   severity: {
     info: "info",
