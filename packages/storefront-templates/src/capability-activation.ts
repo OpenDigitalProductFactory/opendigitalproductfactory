@@ -81,3 +81,29 @@ export function resolveCapabilityActivation(
     source: choice ? "org-choice" : "default-off",
   };
 }
+
+export interface EffectiveCapabilityActivation extends CapabilityActivationResolution {
+  capabilityKey: string;
+}
+
+/**
+ * Shared read-path primitive: folds an organization's persisted opt-in choices
+ * (from the `OrganizationCapabilityActivation` overlay) over the archetype-derived
+ * capability applicabilities, producing the effective per-capability activation
+ * for that org. The setup wizard, the admin "add it later" toggle, and route/UI
+ * gating all resolve through this one function so they cannot drift — invariant
+ * #2 of the partner-channel plan (generic activation overlay).
+ *
+ * @param derived  the org's archetype-derived capability activations (each carries a
+ *                 `capabilityKey` and `applicability`) — e.g. `NormalizedActivationProfile.capabilityActivations`.
+ * @param choices  map of `capabilityKey → CapabilityActivationChoice` for this org.
+ */
+export function resolveOrgCapabilityActivations(
+  derived: ReadonlyArray<{ capabilityKey: string; applicability: CapabilityApplicability }>,
+  choices: Readonly<Record<string, CapabilityActivationChoice>> = {},
+): EffectiveCapabilityActivation[] {
+  return derived.map(({ capabilityKey, applicability }) => ({
+    capabilityKey,
+    ...resolveCapabilityActivation(applicability, choices[capabilityKey] ?? null),
+  }));
+}
