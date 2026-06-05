@@ -16,6 +16,7 @@
  * Operations Map fail-open rule.
  */
 import { prisma } from "@dpf/db";
+import { isSafeKey } from "@/lib/security/safe-property";
 import {
   buildParticipants,
   readCollaborationProvenance,
@@ -54,8 +55,12 @@ export async function projectParticipants(
   });
 
   // Persisted collaboration provenance per child thread (latest TaskRun wins).
+  // Keys (thread ids, agent ids) flow from DB rows; guard every computed-key
+  // write with isSafeKey to bar prototype-polluting keys (__proto__ etc.) —
+  // CodeQL js/remote-property-injection barrier (lib/security/safe-property.ts).
   const provenanceByThread: Record<string, CollaborationProvenance | null> = {};
   for (const t of threads) {
+    if (!isSafeKey(t.id)) continue;
     const tr = taskRuns
       .filter((r) => r.threadId === t.id)
       .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0];
@@ -66,6 +71,7 @@ export async function projectParticipants(
   // else the most recent assistant message's agentId on that thread.
   const actingAgentByThread: Record<string, string | null> = {};
   for (const t of threads) {
+    if (!isSafeKey(t.id)) continue;
     const tr = taskRuns
       .filter((r) => r.threadId === t.id)
       .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0];
@@ -79,6 +85,7 @@ export async function projectParticipants(
       select: { threadId: true, agentId: true },
     });
     for (const t of threadsMissingAgent) {
+      if (!isSafeKey(t.id)) continue;
       const msg = recentMsgs.find((m) => m.threadId === t.id && m.agentId);
       if (msg?.agentId) actingAgentByThread[t.id] = msg.agentId;
     }
@@ -107,6 +114,7 @@ export async function projectParticipants(
     const labelByAgent = new Map(agents.map((a) => [a.agentId, a.name]));
     const principalByAgent = new Map(aliases.map((a) => [a.aliasValue, a.principal.principalId]));
     for (const agentId of agentIds) {
+      if (!isSafeKey(agentId)) continue;
       identities[agentId] = {
         agentId,
         label: labelByAgent.get(agentId) ?? agentId,

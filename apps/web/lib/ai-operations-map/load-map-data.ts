@@ -8,6 +8,7 @@ import {
   projectToolExecution,
   projectToolExecutionReceipt,
 } from "./project-events";
+import { isSafeKey } from "@/lib/security/safe-property";
 import { projectRoutingTopology } from "./project-routing-topology";
 import { projectCollaborationTransfers } from "./project-collaboration-transfers";
 import type {
@@ -431,8 +432,10 @@ export async function loadOperationsMapData(): Promise<OperationsMapData> {
   });
   const agentLabelMap: Record<string, string> = {};
   for (const agent of stationedAgents) {
-    agentLabelMap[agent.agentId] = agent.name;
-    if (agent.slugId) agentLabelMap[agent.slugId] = agent.name;
+    // isSafeKey: bar prototype-polluting keys on computed-key writes
+    // (CodeQL js/remote-property-injection barrier).
+    if (isSafeKey(agent.agentId)) agentLabelMap[agent.agentId] = agent.name;
+    if (agent.slugId && isSafeKey(agent.slugId)) agentLabelMap[agent.slugId] = agent.name;
   }
   const collaborationTransfers = projectCollaborationTransfers({
     delegationChains,
