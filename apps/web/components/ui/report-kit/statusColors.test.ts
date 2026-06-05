@@ -51,4 +51,11 @@ describe("statusColors", () => {
     expect(resolveIntent("complaintSeverity", "critical")).toBe("danger");
     expect(resolveIntent("complaintStatus", "resolved")).toBe("success");
   });
+
+  it("maps marketing lifecycle statuses to operational intents", () => {
+    expect(resolveIntent("marketing", "draft")).toBe("neutral");
+    expect(resolveIntent("marketing", "pending-review")).toBe("warning");
+    expect(resolveIntent("marketing", "approved")).toBe("success");
+    expect(resolveIntent("marketing", "rejected")).toBe("danger");
+  });
 });

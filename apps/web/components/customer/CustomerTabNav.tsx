@@ -23,7 +23,7 @@ export function CustomerTabNav({ tabs }: Props) {
   if (tabs.length === 0) return null;
 
   return (
-    <div className="flex gap-1 mb-6 border-b border-[var(--dpf-border)]">
+    <div className="mb-6 flex flex-wrap gap-x-1 gap-y-2 border-b border-[var(--dpf-border)]">
       {tabs.map((t) => (
         <Link
           key={t.href}
