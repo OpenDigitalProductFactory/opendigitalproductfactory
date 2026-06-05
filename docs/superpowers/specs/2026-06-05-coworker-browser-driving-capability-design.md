@@ -1,365 +1,685 @@
-# Coworker Browser-Driving Capability — Design Spec
+# Coworker Browser-Driving Capability - Design Spec
 
 | Field | Value |
 |-------|-------|
-| **Epic** | EP-BROWSER-DRIVE — Coworker Browser-Driving Capability |
-| **Status** | Draft |
-| **Created** | 2026-06-05 |
-| **Author** | Claude Code (Opus 4.8) for Mark Bodman |
-| **Scope** | Browser-driving as a first-class AI Coworker capability — substrate abstraction, identity/session bridge, audit hook, capability-grant extension. **Scopes** the implementation; does not implement it. |
-| **Anchors** | `browser-use` MCP service (`docs/superpowers/specs/2026-04-06-browser-use-integration-design.md`), Coworker authority binding (`2026-04-24-coworker-authority-binding-admin-design.md`), Automated Control Utility (`2026-04-23-automated-control-utility-design.md`), External Site Access (`2026-03-14-external-site-access-design.md`), WWMD kernel (`principle_decide`), MCP tool registry (`McpServer`/`McpServerTool`), audit substrate (`ToolExecution` / `CoworkerActionEnvelope` / `GearInterface`) |
-| **Standing procedure** | Per the WWMD-as-procedure rule (2026-06-04), every architect-default decision below was scored through `principle_decide`. Verdicts recorded inline in §3 and §11. Operator may override. |
+| Epic | `EP-BROWSER-DRIVE` - Coworker Browser-Driving Capability |
+| Status | Draft, architect-reviewed 2026-06-05 |
+| Created | 2026-06-05 |
+| Author | Claude Code (Opus 4.8) for Mark Bodman; architect review by Codex |
+| Scope | Browser-driving as a first-class AI Coworker capability: substrate abstraction, identity/session bridge, audit hook, grant extension, service-account profile provisioning, and proving-install roster. This scopes implementation; it does not implement it. |
+| Anchors | `browser-use` MCP service, coworker authority binding, External Site Access, Automated Control Utility, Principal convergence, `ToolExecution`, `CoworkerActionEnvelope`, `GearInterface`, `IntegrationCredential`, report-kit UI primitives |
+| Standing procedure | Originating thread recorded WWMD verdicts 1-4. This architect pass verified the current repo and live MCP backlog, then added verdict 5 for the discovered MCP authority gap. |
 
 ---
 
-## 1. Problem Statement
+## 1. Architect Review Update
 
-DPF's AI Coworkers reach external systems through API-backed MCP tools (Stripe, QuickBooks, GitHub) plus the internal capability registry. But many real-world supplier interactions and marketing-distribution actions have **no stable API** — they live behind auth-walled web UIs: supplier portals, Substack, LinkedIn, X, Medium, ad-network dashboards, permit sites, vendor procurement portals.
+This pass preserves the spec's core direction: browser-driving should be one governed capability with three separately graspable means, not a one-off browser bot and not a parallel permission system. The direction is sound.
 
-A Coworker asked to *"publish this month's customer newsletter to the three channels we have on file"* or *"check the price and lead time for these five parts at our two suppliers"* cannot do it today with the same kernel-gated, audit-recorded, WWMD-scored discipline every other capability ships with.
+The draft needed tightening in five places:
 
-### 1.1 This is not "add browser automation" — that already exists
+1. It treated discovered MCP browser tools as if they were already under coworker grant enforcement. They are not. `getAvailableTools()` currently grant-filters first-party `PLATFORM_TOOLS`, then appends discovered MCP server tools when `externalAccessEnabled` is true. Browser-driving must close this before any side-effecting browser action ships.
+2. It used raw tool names such as `browse_act` in the grant map. The discovered tool names that enter the platform tool list are namespaced by `McpServer.serverId`, so the bundled sidecar is `mcp-browser-use__browse_act`, not only `browse_act`.
+3. It implied the Automated Control Utility's `ControlSession` table exists. It is still spec-only; there is no live Prisma `ControlSession`/`ControlRun` model today.
+4. It said `IntegrationCredential` has "no schema strain." Reuse is right, but the live model has `integrationId @unique` and no first-class `targetDomains` or provisioning-mode fields. The first implementation must either minimally extend it or deliberately encode those fields in `fieldsEnc` with known query limits.
+5. It underweighted operator UX. Service-account setup, approval, evidence, and audit review must use the platform's dense operational primitives (`report-kit`, token colors, existing authority surfaces), not a bespoke browser-automation console.
 
-Per `dpf-verify-substrate-first`, the substrate was swept before this spec was written. **A browser-automation engine already ships:** the `browser-use` MCP service (landed 2026-04-20, `2026-04-06-browser-use-integration-design.md`) — headless Chromium + an LLM intent layer + Playwright, registered as `McpServer { slug: "browser-use", transport: "http", url: "http://browser-use:8500/mcp" }`, exposing `browse_open / browse_act / browse_extract / browse_screenshot / browse_run_tests / browse_close`.
-
-Three gaps separate that engine from the capability this spec defines:
-
-1. **No identity composition.** `browser-use` runs headless Chromium in a container with *no logged-in session*. It can browse public pages and the internal sandbox; it cannot act as the operator on Substack, because it holds none of the operator's auth. The live thread that motivated this work (transcript `D:/DPF/.claude/notes/wwmd-substack-2026-06-05/`) populated a Substack draft end-to-end *only because* the Claude-in-Chrome browser MCP ran against the operator's already-logged-in browser session. **Authentication is the load-bearing primitive**, and the existing engine has none.
-2. **Not under Coworker authority.** `browse_run_tests` is dispatched by an Inngest function (`build/review.verify`) for Build Studio QA — autonomously, not through a Coworker's grants, AuthorityBinding, DelegationGrant, or proposal/envelope gate. There is no `browser_drive` grant key in `TOOL_TO_GRANTS`; a Coworker cannot today be *authorized* to drive a browser the way it is authorized to write the ledger.
-3. **One means, not a graspable set.** The engine is a single headless general-purpose driver. The use cases below span a trust/speed/generality spectrum that no single means serves well.
-
-### 1.2 What the motivating thread proved (design anchors)
-
-The Substack thread demonstrated three things this design must honor:
-
-1. **Authentication is load-bearing.** Without the operator's session the draft URL was a redirect-to-auth wall. The capability must *compose with* an identity (operator's, or a delegated machine identity for service accounts) — it must never invent its own.
-2. **Browser drivers cost real time per action.** Each type/click/screenshot round-trip is slow versus an API call. Hundreds-of-fields tasks are not the use case; **bounded, high-value workflows** are.
-3. **Recovery is a requirement, not an exception.** The first attempt merged the title and subtitle fields; the agent screenshot → clear → retry loop fixed it. The capability must make screenshot-then-replan a first-class loop.
-
-### 1.3 Use cases that drive the design
-
-- **Marketing distribution** — post articles to Substack, LinkedIn, X, Medium; run a campaign across channels from one Coworker brief. (Anchors to `EP-MARKETING-EXEC`, now done — this is the missing *execution* surface for auth-walled channels.)
-- **Supplier interaction** — log into supplier portals, check parts availability and lead time, place RFQ, retrieve invoices. Bounded workflows with **high error cost**.
-- **Form-filling on public-but-auth-walled sites** — permits, regulatory filings.
-- **Reading dashboards** — ad networks, analytics, where no API exists.
+This revision separates current repo truth from future contract and makes the grant/authority fix the first implementation blocker.
 
 ---
 
-## 2. The three means (separately-graspable)
+## 2. Current Repo Truth
 
-The capability does **not** pick one driver. It defines three *means*, each a distinct trust/speed/generality trade-off, and lets a per-task WWMD call pick (see §3, §6). A *means* is an adapter conforming to the `BrowserDriver` interface (§5.1).
+Verified 2026-06-05 in `D:\DPF\.claude\worktrees\zen-vaughan-f8713f` plus live DPF MCP reads.
 
-| Means | What it is | Speed | Generality | Identity it composes with | Trust posture |
-|-------|-----------|-------|-----------|---------------------------|---------------|
-| **M1 · Deterministic (Playwright)** | A version-pinned, per-site script (or a recorded-then-replayed `browser-use` session, the "Deterministic replay mode" already named in the 2026-04-06 spec §7). | Fastest | Lowest — needs per-site code | Service machine identity + stored credential | Highest — fixed action set, no LLM in the act loop |
-| **M2 · Plugin (general-purpose)** | LLM-driven adaptive driving via the existing `browser-use` MCP service (headless) **or** Claude-in-Chrome against a live logged-in session. Self-healing, screenshot→replan recovery. | Slowest | Highest — any site, no pre-script | Operator's live browser session (Claude-in-Chrome) **or** service identity + stored credential (headless `browser-use`) | Medium — LLM in the act loop; wide action space |
-| **M3 · Delegated CLI-with-plugin** | The Coworker delegates "drive this browser to do X" to a child agent (Codex/Claude CLI with a browser plugin) — the same shape as the operator delegating to the motivating thread. | Slow | High | Inherited from the parent delegation envelope; child runs in an isolated session | Medium — bounded by the delegation envelope and child sandbox |
+### 2.1 Live backlog state
 
-**M2 already half-exists** (the `browser-use` service). M1 is the 2026-04-06 spec's named "deterministic replay" future enhancement. M3 composes the existing CLI-dispatch provider substrate (`project_cli_dispatch_ux`, `project_codex_cli_integration`) with a browser plugin. None require a parallel substrate — see §3 verdict 2.
+Live MCP backlog contains:
 
----
+- Epic `EP-BROWSER-DRIVE`: `open`, title `Coworker Browser-Driving Capability - auth-walled web reach as a kernel-gated capability`, item count 5, all still `triaging`/`Captured`.
+- `BI-2AED4F15`: substrate BI.
+- `BI-09781F5F`: Substack-publish proving install.
+- `BI-95F22C95`: supplier portal proving install.
+- `BI-91D64AD4`: ad-network dashboard read proving install.
+- `BI-2F287A19`: cross-channel marketing distribution proving install.
 
-## 3. WWMD verdicts (architect defaults)
+`search_specs_and_plans` did not return this worktree-local spec yet. Treat this file as the working source until the branch lands and the docs index refreshes.
 
-Two load-bearing decisions were scored through `principle_decide` (`callingPopulation: external_coding_agent`, `callingSurface: browser-driving-capability-spec`, full kernel / universal ring — these are design-time kernel-architecture calls). Both resolved **high confidence, no commandment conflict**.
+### 2.2 Browser-use service
 
-### Verdict 1 — Substrate shape
+The browser engine is real and bundled:
 
-> **Recommendation: `multi-means-wwmd-per-task`** — composite 6.357, margin 2.542, confidence **high**.
+- `docker-compose.yml` defines `browser-use` on port `8500`.
+- The sidecar mounts `browser_evidence:/evidence`.
+- The sidecar sets `SESSION_TIMEOUT_SECONDS: "600"`.
+- The portal mounts the same `browser_evidence` volume read-only and serves build screenshots through `/api/build/[buildId]/evidence/[fileName]`.
+- There is no `browser_profiles` volume today.
 
-The capability defines all three means as separately-graspable behind one `BrowserDriver` substrate; a **per-task WWMD call picks the means at runtime** by the trust/speed/generality trade-off. It does **not** hard-pick a single default.
+The service implementation at `services/browser-use/server.py` exposes:
 
-Rejected: `default-playwright` (3.77), `default-browser-plugin` (3.78), `default-cli-with-plugin` (3.82) — all three single-default options clustered low. Strongest contributors to the winner: *All Changes Land via PR*, *Build Gate*, *DCO* (structured), with *Architecture Over Shortcuts* and *Never Fabricate* materially higher for the multi-means option than any single-default. The kernel reads "commit to one driver" as the shortcut and "graspable means + scored selection" as the architecturally sound path.
+- `browse_open`
+- `browse_act`
+- `browse_extract`
+- `browse_screenshot`
+- `browse_run_tests`
+- `browse_close`
 
-This mirrors `no-provider-pinning` for LLMs: just as routing picks the LLM by capability tier per task, browser-driving picks the *means* by trust/speed/generality per task. **No hard pin** in seeds or config.
+The service currently creates headless Chromium `BrowserSession` instances with no persisted `user-data-dir`, no account profile binding, and in-memory session lifecycle only. Authentication/session composition is therefore not an accessory; it is the first missing architectural primitive.
 
-### Verdict 2 — Reuse vs. parallel substrate
+### 2.3 MCP registry and tool naming
 
-> **Recommendation: `reuse-existing-substrate`** — composite 6.701, margin 3.174, confidence **high**.
+The seeded server is:
 
-Reuse and extend the existing audit/identity/grant substrate (`ToolExecution`, `CoworkerActionEnvelope`, `AgentToolGrant` + `TOOL_TO_GRANTS`, `AuthorityBinding`, `DelegationGrant`, `Principal`/`PrincipalAlias kind=service`, `IntegrationCredential`); add only a **thin browser-session binding record** and a **new grant key**. **No** parallel `BrowserSession`/`BrowserCredentialVault`/`BrowserActionLog` tables, no separate authority path.
+- `McpServer.serverId = "mcp-browser-use"`
+- `transport = "http"`
+- `config.url = "http://browser-use:8500/mcp"`
 
-Rejected: `parallel-browser-substrate` (3.53). Relevant retrieved core principles: *Audit Existing Schema Before Adding Large Features*, *Principal Convergence*, *Responsible Capacity Utilization*. The kernel reads the parallel substrate as the shortcut. This is `dpf-verify-substrate-first` made quantitative.
+`apps/web/lib/tak/mcp-server-tools.ts` namespaces discovered tools as:
 
-### Verdict 3 — Autonomous profile binding
+```text
+<serverId>__<toolName>
+```
 
-> **Recommendation: `dedicated-service-profile-default`** — composite 6.403, margin 3.408, confidence **high**.
+For this service, the platform-visible names are therefore:
 
-Autonomous / unattended coworker runs bind to a **dedicated scoped service-account profile** (a separate Chromium `user-data-dir` whose cookie jar holds only that service account's provisioned logins, acting as `Principal kind=service`). **Live-operator-profile driving is reserved for human-attended (HITL) runs only.**
+- `mcp-browser-use__browse_open`
+- `mcp-browser-use__browse_act`
+- `mcp-browser-use__browse_extract`
+- `mcp-browser-use__browse_screenshot`
+- `mcp-browser-use__browse_run_tests`
+- `mcp-browser-use__browse_close`
 
-Rejected: `live-operator-profile-default` (2.99). The kernel scores driving the operator's own live profile autonomously as a wide-blast-radius shortcut — *Destructive actions require explicit go* and *Architecture Over Shortcuts* both pull hard against it, because that profile carries the operator's **full ambient authority on every site it is logged into**, far beyond the task's intent, and shares one cookie jar + input device with a live human. The motivation for this decision is §4.10. This is the browser analog of least-privilege: a session should act with exactly the identity the task needs, not the broadest one available.
+The spec and implementation must not rely on raw `browse_*` names unless the call is explicitly inside the sidecar adapter after platform authorization has already succeeded.
 
-**Everything in §4–§7 and §4.10 below is bound by these three verdicts.**
+### 2.4 Authority and grant enforcement gap
 
----
+`apps/web/lib/tak/agent-grants.ts` already provides:
 
-## 4. How it composes with existing substrate
+- `TOOL_TO_GRANTS`
+- `GRANT_IMPLICATIONS`
+- `expandGrants()`
+- `isToolAllowedByGrants()`
 
-Per Verdict 2, the capability is mostly *wiring*, not new tables. Mapping:
+It default-denies tools missing from `TOOL_TO_GRANTS`.
 
-### 4.1 Capability grant — `AgentToolGrant` + `TOOL_TO_GRANTS`
+However, `apps/web/lib/mcp-tools.ts` currently:
 
-- Add one grant key: **`browser_drive`** (and a read-only sibling **`browser_read`** for dashboard-reading / extraction with no side effects).
-- Map the browser means' MCP tools in `TOOL_TO_GRANTS` (`apps/web/lib/tak/agent-grants.ts`):
-  - `browse_open`, `browse_screenshot`, `browse_extract`, `browse_close` → `["browser_read"]`
-  - `browse_act` (anything that types/clicks/submits) → `["browser_drive"]`
-  - M3 delegation tool (`browser_delegate_task`) → `["browser_drive"]`
-- Add a `GRANT_IMPLICATIONS` edge: `browser_drive → ["browser_read"]` (driving implies reading), matching the existing one-way, non-transitive `expandGrants()` pattern.
-- Default-deny is preserved: until a Coworker holds `browser_read`/`browser_drive`, every browser tool call is denied by the existing `getAvailableTools()` intersection. No coworker gets these grants by seed default except where a persona's job demands it (marketing, procurement).
+1. filters first-party `PLATFORM_TOOLS` by agent grant;
+2. then, when external access is enabled, appends discovered MCP tools from `getMcpServerTools()`.
 
-### 4.2 Applied authority — `AuthorityBinding` + `AuthorityBindingGrant`
+That means discovered MCP tools are not currently filtered through `isToolAllowedByGrants()` in the same path as first-party tools. This is acceptable for today's limited QA/debug use only because the browser-use sidecar is not yet exposed as a coworker browser-driving capability. It is not acceptable for authenticated, side-effecting browser-driving.
 
-- Browser-driving is **resource-scoped**. A binding on a route/workspace (e.g. the Marketing workspace) names the applied coworker and an `approvalMode`. `AuthorityBindingGrant` can **narrow** `browser_drive` to `require-approval` on a given resource without touching the intrinsic grant — exactly the monotonic-narrowing rule from `2026-04-24-coworker-authority-binding-admin-design.md` §"Effective authority rule".
-- The effective-authority intersection already evaluates: `humanPolicy ∩ intrinsicAgent ∩ delegationEnvelope ∩ binding ∩ runtimeTAKControls`. Browser-driving slots in with **no new term** — `browser_drive` is just another `actionKey`.
+### 2.5 Existing data substrate
 
-### 4.3 Per-act envelope — `DelegationGrant`
+The following live Prisma models exist and should be reused:
 
-- An authenticated browser session that will take side effects (post, submit RFQ, publish) runs under a `DelegationGrant` — it already carries `scopeJson`, `riskBand`, `validFrom`, `expiresAt`, `maxUses`, `workflowKey`. A browser-driving session maps cleanly: `scopeJson` = {means, target domain(s), allowed action classes}, `maxUses` = action budget, `expiresAt` = session TTL. This is the durable record of "the operator delegated *this* browser task, under *these* limits, until *then*."
+- `Principal` / `PrincipalAlias`: free-string `kind` and `aliasType`; principal convergence principle applies to any new service-account identity.
+- `McpServer` / `McpServerTool`: registry and discovered tool records.
+- `IntegrationCredential`: `integrationId @unique`, `provider`, `status`, `fieldsEnc`, `tokenCacheEnc`, `lastTestedAt`, `lastErrorAt`, `lastErrorMsg`, `certExpiresAt`.
+- `DelegationGrant`: `scopeJson`, `riskBand`, `validFrom`, `expiresAt`, `maxUses`, `useCount`, `workflowKey`, `objectRef`.
+- `AuthorityBinding` / `AuthorityBindingGrant`: resource binding, `approvalMode`, grant modes including require-approval semantics.
+- `ToolExecution`: includes `executionMode`, `capabilityId`, `apiTokenId`, `taskRunId`, `skillId`, `delegatingUserId`, `chatMessageId`, `envelopeId`.
+- `CoworkerActionEnvelope`: destructive-action proposal envelope with `manifestActionId`, `argsJson`, `rationale`, status lifecycle, and relation to `ToolExecution`.
+- `ToolExecutionReceipt`: existing evidence receipt model.
+- `GearInterface`: reusable transmission/graduation substrate.
 
-### 4.4 Destructive-action gate — `CoworkerActionEnvelope`
+The following do not exist today:
 
-- Any **outward-facing, hard-to-reverse** browser action (publish a post, submit an RFQ, send a message, place an order) is a destructive action under `destructive-actions-require-explicit-go` (commandment tier). It proposes a `CoworkerActionEnvelope` (`status: proposed → approved → executed`), carrying `manifestActionId`, `argsJson` (the rendered post / form payload), `rationale`, `delegatingUserId`, `threadId`. The human approves the *rendered artifact* (what will be posted) before bytes leave.
-- **Reading** a dashboard or **drafting** (the Substack thread only populated a draft — it did not hit Publish) does **not** require an envelope. The boundary is the irreversible outward action, consistent with the Pseudo-User Contract §6.4/§8 that `CoworkerActionEnvelope` already implements.
+- `BrowserSessionBinding`
+- `browser_profiles` volume
+- `ControlSession`, `ControlRun`, `ControlStep`, `ControlEvidence`, `ControlPolicy`
+- `browser_read` / `browser_drive` grants
 
-### 4.5 Per-action audit — `ToolExecution`
+### 2.6 UI substrate
 
-- Every browser tool call already writes a `ToolExecution` row (`toolName`, `agentId`, `userId`, `parameters`, `result`, `success`, `executionMode`, `routeContext`, `durationMs`, `delegatingUserId`, `chatMessageId`, `envelopeId`, `capabilityId`). Browser-driving inherits this for free. Two conventions:
-  - `executionMode`: `immediate` for `browser_read`; `proposal` for `browser_drive` side effects (envelope-gated); `permission` when the means is M2-Claude-in-Chrome against the operator's live session (the operator must have the "external/browser on" posture active, mirroring the External Site Access "External On" pill).
-  - `capabilityId` is set to the browser-driving capability so the authority surface (`/platform/ai/authority`) and `GearInterface` can roll it up.
-- **Evidence**: the screenshot-per-step evidence path already built for `browse_run_tests` (`/evidence/<dir>/<i>.png` on the `browser_evidence` volume, served auth-gated via `/api/build/<id>/evidence/...`) is reused. A driven session's screenshots are its `evidence_density` — the same dynamic-analysis evidence the platform already trusts (`feedback_dynamic_analysis_is_evidence`).
+Reporting/data-display surfaces must use `apps/web/components/ui/report-kit/`:
 
-### 4.6 Capability transmission — `GearInterface`
+- `StatusBadge`
+- `DataTable`
+- `StatCard`
+- `FilterBar`
+- `ExportButton` / `toCsv`
+- `Chart` where appropriate
+- `statusColors.ts`
 
-- When a browser-driving session graduates a capability (e.g. a proven Substack-publish workflow that can be promoted to a deterministic M1 replay, or contributed to the hive), it emits a `GearInterface` record (`shaftSourceType: "tool-execution"`, `capabilityName: "browser-drive.<workflow>"`, outcome `transmission`/`graduation`). This is how a one-off M2 adaptive run becomes a reusable M1 script — the ring-transmission substrate already models exactly this.
-
-### 4.7 Identity / session bridge — the one genuinely new (thin) piece
-
-This is the only place new storage is justified, and it is deliberately minimal (Verdict 2):
-
-- **Service machine identity** for M1/headless-M2: a `Principal { kind: "service" }` with a `PrincipalAlias` (the convergence target already enumerates `ServiceAccount`; `Principal.kind = service` already exists). The browser session acts *as* this principal, and the human who delegated is captured in `ToolExecution.delegatingUserId` — preserving "act-for" attribution without modeling the coworker as a fake human (the authority-binding spec's explicit non-goal).
-- **Credential composition**, by means:
-  - **M2 · Claude-in-Chrome** → composes with the **operator's live browser session**. No credential is stored by DPF at all — the session *is* the operator's. This is the lowest-storage, highest-trust-context path and the one the motivating thread used. The "browser on" posture is an explicit, revocable, session-scoped operator opt-in (reuse the External Site Access pill pattern).
-  - **M1 / headless-M2 / M3** → a service account needs stored credentials. **Reuse `IntegrationCredential`** (already the OAuth/provider credential home) extended with a `browser-session` credential kind (cookie jar / storage-state blob / username-password under the existing encryption-at-rest path). **No new `BrowserCredentialVault`.**
-- **Session binding record** (the one new table): `BrowserSessionBinding` — a thin join recording an active or completed driven session: `{ sessionId, means (M1|M2|M3), driverRef, engine (chromium|safari|firefox), profileRef, profileKind (operator-live|service-account), attended (bool), actingPrincipalId, delegatingUserId, delegationGrantId?, credentialId?, targetDomains[], status (active|closed|failed), startedAt, closedAt, evidenceDir }`. The `engine` + `profileRef` pair is **load-bearing** (§4.10): authentication is a property of a profile's cookie jar, not "the browser," so a session must bind to a specific `(engine, profile)`, never to "the browser" generically. `profileKind` + `attended` encode Verdict 3 — `operator-live` profiles are only valid when `attended = true`. It exists so a session is **auditable and resumable** (the 2026-04-06 spec flagged "no table tracks session lifecycle" as the gap), and does **not** duplicate the action log — actions live in `ToolExecution`, keyed by `sessionId`. Consider modeling it as a specialization of the Automated Control Utility's proposed `ControlSession` (§4.8) rather than a sibling, if EP-CTRL lands first.
-
-### 4.8 Boundary with EP-CTRL-5E21A4 (Automated Control Utility)
-
-EP-CTRL (`2026-04-23-automated-control-utility-design.md`) covers **Windows desktop/session automation** (structured UI automation + vision fallback) for managed sandbox/install hosts — `ManagedHost / ControlRun / ControlSession / ControlStep / ControlEvidence / ControlPolicy`. Browser-driving is the **browser-surface sibling**: same session/step/evidence/policy *shape*, different surface (a web page, not a desktop). The two should **share the session/evidence/policy vocabulary** (so `BrowserSessionBinding` is a `ControlSession` variant, browser steps are `ControlStep`s, screenshots are `ControlEvidence`) rather than fork it. If EP-CTRL has not landed when browser-driving implements, browser-driving defines the thin record itself and notes the convergence as tech debt. **Flagged as Open Question Q1.**
-
-### 4.9 Boundary with External Site Access (`2026-03-14`)
-
-External Site Access (`search_public_web` / `fetch_public_website` / `analyze_public_website_branding`, `web_search` grant) is **read-only, unauthenticated, platform-as-intermediary** — the platform fetches and normalizes; the coworker never drives. Browser-driving is its **authenticated, side-effecting successor** — the very "Phase 3+" that spec deferred. The SSRF protections (block localhost/private IPs/non-HTTP) and the per-session "External On" pill from that spec are **inherited**, not re-invented. `browser_read` is the bridge grant between the two.
-
-### 4.10 Session & profile binding (how a driver actually reaches an authenticated session)
-
-This is the architecturally load-bearing mechanism, and the place a natural assumption is wrong. "DPF runs in a browser, so it can act as the sessions logged into that browser" is **false at the page layer.** The portal is a web page at `localhost:3000`, sandboxed by the **same-origin policy**: its JavaScript has zero access to other tabs/windows, to cross-origin DOM, or to the cookies/sessions of `substack.com` or any other origin. If that weren't true, every site you visit could silently drive your logged-in bank. **The portal page can never be the thing that drives an external authenticated site.**
-
-Driving happens through a **privileged out-of-page channel** at a layer above the page sandbox. Three mechanism classes exist, mapping onto the three means:
-
-| Bridge mechanism | Privilege model | Session it uses | Means |
-|---|---|---|---|
-| **Browser extension** (Claude-in-Chrome) | Runs in the browser's privileged extension context (user-granted host/tabs/scripting permissions), not the page sandbox. Models multiple attached browsers (`list_connected_browsers`, `select_browser`, `tabs_*`). | Whatever the **attached profile** is logged into | M2 (attended) |
-| **CDP / remote-debug** (Playwright, headless `browser-use`) | External process attaches to a browser launched on a known `user-data-dir` / debug port | The cookie jar in **that profile's `user-data-dir`** | M1, M2-headless, M3 |
-| **OS-level** (computer-use) | Synthetic input + screenshots at the desktop layer | Whatever is on screen — but browsers are **"read" tier** (observe only, cannot click/type) | recovery/observation only |
-
-This is precisely why the motivating Substack thread worked: it was **Claude-in-Chrome (a privileged extension) attached to the operator's Chrome profile**, driving a tab in that profile that already held the Substack login — not the portal scripting across tabs. "Other browser windows" are reached by the *driver selecting which connected browser/profile to act on*, never by the page.
-
-**The load-bearing primitive is the profile, not the browser.** Authentication is a property of a browser **profile** (a cookie jar / `user-data-dir`), so:
-
-- A session binds to a specific **`(engine, profile)`** pair (the new `BrowserSessionBinding.engine` + `profileRef` fields, §4.7), explicitly — never to "the browser."
-- **Cross-browser is genuinely heterogeneous.** Chromium (Chrome/Edge) supports CDP + extensions — the only first-class drivable surface. Safari has no CDP (`safaridriver`/AppleScript only, macOS-only). Firefox uses its own protocol. **Architectural constraint: standardize the driven surface on a Chromium profile; treat Safari/Firefox as computer-use-observation-only fallbacks.** The means abstraction carries an `engine` target and must not assume the operator's everyday browser is drivable.
-
-**Attended vs. unattended is a first-class design axis (Verdict 3):**
-
-- **Attended — M2 on the operator's live profile (`profileKind: operator-live`, `attended: true`).** Highest trust context; DPF stores no credential because the session *is* the operator's. But the coworker now shares one cookie jar + input device with a live human (input collisions) and inherits the operator's **full ambient authority on every logged-in site** — far wider than the task. Acceptable only human-in-the-loop.
-- **Unattended — dedicated service-account profile (`profileKind: service-account`, `attended: false`).** A separate Chromium `user-data-dir` whose cookie jar holds only the service account's provisioned logins (`Principal kind=service`, §4.7). No human shares it; scope is bounded to exactly the provisioned sites; credentials are scoped + expiring via `DelegationGrant`. **This is the default for any autonomous run** — the browser analog of least-privilege. You never point an autonomous coworker at the human's live profile.
+Browser-driving setup and evidence review are operational admin surfaces. They should be dense, filterable, and audit-first, not a marketing page or decorative custom console.
 
 ---
 
-## 5. Substrate interfaces
+## 3. Problem Statement
 
-### 5.1 `BrowserDriver` interface (the abstraction the Coworker reaches for)
+DPF coworkers can reach many systems through API-backed MCP tools and native integrations. But many high-value business actions still live behind auth-walled web UIs with no stable API:
 
-One TypeScript interface (`apps/web/lib/browser-drive/driver.ts`) that all three means implement. The Coworker — and the per-task WWMD selector — depend only on this, never on a concrete means.
+- supplier portals;
+- Substack, LinkedIn, X, Medium, and ad dashboards;
+- permit and licensing sites;
+- procurement and vendor dashboards;
+- niche customer or partner portals.
+
+The current browser-use sidecar proves DPF can drive a browser for QA and public page extraction. It does not yet prove a coworker can act through an authenticated browser session under the same authority, audit, approval, and evidence rules that govern every other serious coworker action.
+
+The missing product capability is therefore not "add browser automation." The missing capability is:
+
+> Let a coworker use an authenticated browser surface as a governed means of work, with explicit identity composition, bounded authority, per-action audit, human approval at destructive boundaries, and reusable evidence.
+
+---
+
+## 4. Design Goals
+
+1. Reuse DPF's existing identity, authority, grant, proposal, audit, and evidence substrates.
+2. Support multiple browser-driving means behind one `BrowserDriver` contract.
+3. Bind every session to a specific `(engine, profile)` and an acting principal.
+4. Default autonomous runs to scoped service-account browser profiles, not a human's live profile.
+5. Keep operator-live browser driving attended-only.
+6. Make side-effecting browser actions impossible without `browser_drive`, an active authority context, and approval where required.
+7. Treat web page content as hostile data, not instructions.
+8. Capture screenshot/action evidence densely enough for review, replay, and eventual deterministic graduation.
+9. Build setup, approval, and evidence review with existing DPF operational UI standards.
+
+## 5. Non-Goals
+
+- No parallel browser-specific credential vault.
+- No parallel browser-specific action log.
+- No unrestricted autonomous use of the operator's live Chrome profile.
+- No arbitrary broad web crawling.
+- No bypass of the External Site Access target restrictions.
+- No new external browser plugin or dependency without the Tool Evaluation Pipeline.
+- No implementation in this spec.
+
+---
+
+## 6. Means Model
+
+The capability defines three means. A means is an adapter behind the `BrowserDriver` interface.
+
+| Means | What it is | Best fit | Identity | Trust posture |
+|---|---|---|---|---|
+| M1 deterministic | Version-pinned Playwright or recorded/replayed browser-use flow. | Recurring, high-error-cost workflows once proven. | Service account profile. | Highest: fixed action set, no LLM in the act loop. |
+| M2 plugin | Adaptive browser driving via browser-use headless profiles, or attended operator-live browser bridge. | New or changing auth-walled sites. | Service account profile for autonomous; operator live profile only when attended. | Medium: LLM in act loop, narrow session policy required. |
+| M3 delegated CLI-with-plugin | Parent coworker delegates a bounded browser task to a child CLI agent with a browser plugin. | Stretch cases requiring a specialist child session or operator-style intervention. | Inherited from delegation envelope; child session isolated. | Medium: bounded by parent envelope and child sandbox. |
+
+The capability does not hard-pin one means. A per-task selector chooses by task risk, recurrence, site volatility, identity availability, and evidence requirements.
+
+---
+
+## 7. Decision Record
+
+### Verdict 1 - Substrate shape
+
+Recorded recommendation: `multi-means-wwmd-per-task`.
+
+Use all three means behind one `BrowserDriver` substrate. Select per task. Do not pin a default means in seed or global config.
+
+### Verdict 2 - Reuse vs parallel substrate
+
+Recorded recommendation: `reuse-existing-substrate`.
+
+Reuse `ToolExecution`, `CoworkerActionEnvelope`, `AgentToolGrant`/`TOOL_TO_GRANTS`, `AuthorityBinding`, `DelegationGrant`, `Principal`/`PrincipalAlias`, `IntegrationCredential`, `ToolExecutionReceipt`, and `GearInterface`. Add only the minimum browser-session binding and grant keys needed to make sessions auditable and resumable.
+
+### Verdict 3 - Autonomous profile binding
+
+Recorded recommendation: `dedicated-service-profile-default`.
+
+Autonomous runs bind to a dedicated scoped service-account Chromium profile. Operator-live profile driving is attended-only.
+
+### Verdict 4 - Service-account provisioning
+
+Recorded recommendation: `hybrid-storagestate-default-credentials-where-needed`.
+
+Prefer attended `storageState` capture. Store full credentials only for accounts that truly need unattended re-auth and can safely support it.
+
+### Verdict 5 - Namespaced MCP tool authority
+
+Review-time `principle_decide` recommendation: `existing-grant-map-namespaced-mcp-overlay`, composite 6.467, margin 2.303, high confidence, no commandment conflict.
+
+Implementation must extend the existing grant-map path to cover namespaced MCP tools such as `mcp-browser-use__browse_act`. Do not add a browser-specific side gate as the primary permission model, and do not rely on the External Access pill alone.
+
+---
+
+## 8. Target Architecture
+
+### 8.1 BrowserDriver contract
 
 ```ts
+type BrowserMeans = "deterministic" | "plugin" | "delegated";
+type BrowserProfileKind = "service-account" | "operator-live";
+
 interface BrowserDriver {
-  readonly means: "M1-deterministic" | "M2-plugin" | "M3-delegated";
-  open(input: OpenInput): Promise<SessionHandle>;     // → BrowserSessionBinding row
-  act(session: SessionHandle, task: NLTask): Promise<ActResult>;   // type/click/navigate; LLM-adaptive for M2
-  read(session: SessionHandle, query: NLQuery): Promise<Extracted>; // browser_read; no side effects
-  screenshot(session: SessionHandle): Promise<EvidenceRef>;        // recovery primitive
-  close(session: SessionHandle): Promise<SessionEvidenceBundle>;
+  open(input: BrowserOpenInput): Promise<BrowserSessionHandle>;
+  read(session: BrowserSessionHandle, query: string): Promise<BrowserReadResult>;
+  act(session: BrowserSessionHandle, command: string): Promise<BrowserActResult>;
+  screenshot(session: BrowserSessionHandle): Promise<BrowserScreenshotResult>;
+  close(session: BrowserSessionHandle): Promise<BrowserCloseResult>;
 }
 ```
 
-- `act` is the **recovery loop owner**: on an ambiguous/failed action it screenshots, re-reads page state, and replans (the title/subtitle merge fix). This is a capability requirement (§1.2.3), enforced as an interface contract, not left to each means.
-- M1's `act` is constrained to a fixed recorded action set (no LLM in the loop); M2's `act` is the adaptive LLM driver; M3's `act` forwards the NL task to the delegated child agent.
+The contract owns screenshot-then-replan recovery as a required behavior for M2. For M1, failed deterministic steps must produce enough evidence to decide whether to retry adaptively or mark the deterministic replay stale.
 
-### 5.2 Per-task means selector (the runtime WWMD call)
+### 8.2 Authority gate: first implementation blocker
 
-When a Coworker invokes the browser-driving capability for a task, the selector runs a scoped `principle_decide` (`callingSurface: "browser-drive-means-select"`) scoring the three means with **task-derived features**, e.g.:
+Before browser-driving becomes coworker-callable:
 
-- `blast_radius` ← does the task take outward side effects? (publish/submit pull M1↑ for determinism, M2↓)
-- `speed_to_value` / `capacity_utilization` ← is a per-site script already recorded? (M1↑) or a novel site? (M2↑)
-- `data_privacy` ← does the task need the operator's live session? (M2-Chrome) or a service account? (M1/headless)
-- `reusability` ← is this a recurring channel worth a deterministic script? (M1↑)
+1. `TOOL_TO_GRANTS` must include namespaced browser-use tools:
+   - `mcp-browser-use__browse_open`: `["browser_read"]`
+   - `mcp-browser-use__browse_extract`: `["browser_read"]`
+   - `mcp-browser-use__browse_screenshot`: `["browser_read"]`
+   - `mcp-browser-use__browse_close`: `["browser_read"]`
+   - `mcp-browser-use__browse_act`: `["browser_drive"]`
+   - `mcp-browser-use__browse_run_tests`: keep QA-scoped, not general coworker driving. If exposed to coworkers, map to the narrowest read/QA grant, not `browser_drive` by default.
+2. `GRANT_IMPLICATIONS` must add `browser_drive: ["browser_read"]`.
+3. `getAvailableTools()` must grant-filter discovered MCP server tools before appending them for an agent.
+4. `getMcpServerTools()` needs a bundled policy overlay for discovered MCP tool metadata so read tools are not all treated as identical side-effecting actions.
+5. `EffectivePermissionsPanel` must stop drifting from the server map. Either update the mirror in the same PR or move to a shared/generated grant map so namespaced MCP tools appear in `/platform/ai/authority`.
+6. Tests must prove an agent without `browser_read`/`browser_drive` cannot see or call the namespaced tools even when External Access is enabled.
 
-The selector returns the means + the per-principle ledger; the ledger is surfaced to the operator (the `dpf-decision-via-kernel` contribution-ledger pattern) and recorded on the `BrowserSessionBinding`. A novel auth-walled site with no script defaults toward **M2**; a recurring high-error-cost supplier portal graduates toward **M1** as it proves out (via the §4.6 `GearInterface` transmission). This *is* the no-provider-pinning principle applied to browser means.
+External Access remains a human session posture. It is not a substitute for coworker grants.
 
----
+### 8.3 Applied authority
 
-## 6. End-to-end flow (Substack-publish, the proving case)
+Browser-driving uses existing `AuthorityBinding` and `AuthorityBindingGrant` semantics:
 
-1. Operator briefs the Marketing coworker: *"publish this month's newsletter to our three channels."* Coworker holds `browser_drive` (granted on the Marketing persona); the Marketing-workspace `AuthorityBinding` sets `approvalMode: proposal-required`.
-2. For the Substack channel, the **means selector** scores M1/M2/M3. No recorded Substack script exists; the operator is logged into Substack in their browser → selector picks **M2 · Claude-in-Chrome**, ledger surfaced.
-3. Coworker opens a session → `BrowserSessionBinding` row (`means: M2-plugin`, `actingPrincipal`: operator's session context, `delegatingUserId`: operator). `executionMode: permission` (operator's "browser on" posture must be active).
-4. Coworker `act`s: navigate to new-draft, fill title, fill subtitle, paste body. On the title/subtitle merge, the `act` recovery loop screenshots → clears → retries. Each step → `ToolExecution` + screenshot evidence under the session's `evidenceDir`.
-5. **Draft is populated. Publish is a destructive outward action** → Coworker proposes a `CoworkerActionEnvelope` with `argsJson` = the rendered post preview + the publish target. The operator approves the artifact. Only then does `act("click Publish")` run, as `executionMode: proposal` linked to the envelope.
-6. `close` returns the evidence bundle. The proven workflow can later be recorded as an **M1 deterministic** Substack-publish script and emitted as a `GearInterface` `graduation` for reuse / hive contribution.
+- A route/workspace binding applies the coworker.
+- `AuthorityBindingGrant` can narrow `browser_drive` to `require-approval` or `deny` on that resource.
+- Effective authority remains the intersection of human capability, intrinsic agent grant, delegation envelope, binding, and runtime controls.
+- No browser-specific authorization equation is introduced.
 
-Every step is grant-gated, binding-scoped, envelope-gated at the irreversible boundary, and `ToolExecution`-audited — the same discipline every other capability ships with. **Nothing here is browser-specific machinery; it is the existing machinery pointed at a browser means.**
+### 8.4 Delegation envelope
 
----
+Side-effecting browser sessions run under a `DelegationGrant`.
 
-## 7. Research & Benchmarking
+Recommended `scopeJson` shape:
 
-Per AGENTS.md §10. Compared against open-source leaders and commercial products (data models / auth models, not feature lists).
-
-### Open-source / framework leaders
-
-- **browser-use** (MIT, https://github.com/browser-use/browser-use) — already adopted as M2's headless engine (2026-04-06 spec). Data model: in-memory `Agent` + `Browser` session, action history list, no persistent identity. **Adopted**: LLM-intent driving, screenshot→replan recovery, the deterministic-replay-export idea (→ M1). **Rejected as-is**: its sessionless, identity-free model — DPF binds every session to a `Principal` + `DelegationGrant`.
-- **Playwright** (Apache-2.0) — the deterministic engine under M1 and under browser-use. Its `storageState` (cookie/localStorage blob) is exactly the **credential composition** primitive M1/headless-M2 need — DPF stores it as an `IntegrationCredential` of kind `browser-session`, encrypted at rest. **Adopted**: `storageState` as the auth-composition format. **Anti-pattern identified**: Playwright's per-site selector scripts rot on UI change — which is *why* M1 is gated behind "recurring + high-error-cost", not the default.
-- **Skyvern / LaVague (auth-walled web automation, open-source)** — both layer an LLM over Playwright for form-filling on sites you don't control. Their models confirm the M2 shape. **Anti-pattern**: both store site credentials in a bespoke vault with weak auth scoping — DPF explicitly rejects a parallel vault (Verdict 2) in favor of `IntegrationCredential` + `DelegationGrant` scoping.
-
-### Commercial products
-
-- **Microsoft Power Automate (Desktop) + Entra workload identities** — RPA flows run *as a workload identity*, not a fake user; conditional-access policies still bind them. **Adopted** (already adopted by the authority-binding spec): coworker-as-workload-principal, same authority plane as humans, distinct lifecycle. Browser-driving's service `Principal kind=service` is the DPF analog.
-- **Zapier / Make "no-API" web steps** — bounded, recorded, replayable web actions with per-connection stored auth. **Adopted**: bounded-workflow framing (not hundreds-of-fields), per-connection credential. **Rejected**: their opaque "we hold your password" model — DPF prefers operator-session composition (M2-Chrome) where possible and scoped, expiring `DelegationGrant`s where not.
-- **Anthropic Computer Use / Claude-in-Chrome** — the M2-Chrome and M3 substrate itself. **Adopted**: operator-session composition as the highest-trust-context path; delegated child-agent driving as M3. **Constraint inherited**: per-action cost is real → bounded workflows, WWMD gating cheap means first.
-
-### Gaps this design fills
-
-No surveyed system unifies (a) multiple driving means behind one selectable substrate, (b) per-action governance via a shared kernel + audit trail, and (c) identity composition that reuses an enterprise authority plane rather than a bespoke credential vault. That tri-fold is the DPF differentiator and the reason this is a capability spec, not a tool adoption.
-
----
-
-## 8. Security considerations
-
-- **SSRF / target allow-listing** inherited from External Site Access — block localhost/private IPs/non-HTTP; `targetDomains[]` on the `BrowserSessionBinding` bounds where a session may navigate, enforced per `act`.
-- **Credential blast radius** — operator-session means (M2-Chrome) stores nothing. Service-account means store `storageState`/credentials as encrypted `IntegrationCredential`s scoped to specific domains and bounded by `DelegationGrant.maxUses`/`expiresAt`. A leaked session binding cannot widen scope (monotonic-narrowing rule).
-- **Destructive-action gate** — irreversible outward actions are envelope-gated; the human approves the rendered artifact, not a vague intent. No silent publish/submit.
-- **External MCP / tool eval** — any *new* external browser plugin or npm dependency (e.g. a new M3 CLI plugin) passes the Tool Evaluation Pipeline (EP-GOVERN-002) before adoption. The existing `browser-use` service is already in-tree.
-- **Prompt-injection on driven pages** — a driven page is hostile input; the `act` LLM (M2) must treat page text as data, not instructions. M2 driving runs with a constrained tool surface and never escalates its own grants from page content (mirrors the mechanism-question grounding discipline).
-
----
-
-## 9. What this spec deliberately does NOT do
-
-- Does **not** implement any means — it scopes them as follow-on BIs (§10).
-- Does **not** create parallel browser substrate (Verdict 2).
-- Does **not** pin a default means (Verdict 1).
-- Does **not** define how Claude-in-Chrome is wired into the in-portal coworker runtime at the transport level — that is M2-Chrome's implementation BI.
-- Does **not** settle the EP-CTRL convergence (Open Question Q1).
-
----
-
-## 10. Backlog roster (filed from this thread)
-
-One **substrate BI** (the abstraction + identity bridge + audit wiring + grant extension) and a roster of **proving-install BIs** (each a concrete bounded workflow that exercises and hardens the substrate). All under **EP-BROWSER-DRIVE**. Filed via `create_backlog_item`; IDs recorded in §12 after filing.
-
-| BI | Title | Means exercised | Why this proving case |
-|----|-------|-----------------|----------------------|
-| **Substrate · BI-2AED4F15** | Browser-driving capability substrate: `BrowserDriver` interface, identity/session bridge, audit hook, `browser_drive`/`browser_read` grants | all | The reusable foundation §4–§5 |
-| **P1 · BI-09781F5F** | Substack-publish browser-driving proving install (M2-Chrome) | M2 | The motivating thread; operator-session composition + envelope-gated publish |
-| **P2 · BI-95F22C95** | Supplier-portal parts price + lead-time check proving install | M2 → M1 | High-error-cost bounded workflow; service-account credential; M1 graduation path |
-| **P3 · BI-91D64AD4** | Ad-network dashboard read proving install (`browser_read`) | M2 read-only | No-API dashboard reading; read grant boundary; no envelope |
-| **P4 · BI-2F287A19** | LinkedIn/X cross-channel marketing distribution proving install | M2/M3 | Multi-channel campaign; M3 delegated-child driving |
-
-(P4 is the stretch case validating M3 delegation; P1–P3 validate M1/M2 and the read/drive/envelope boundaries.)
-
----
-
-## 11. Open questions
-
-1. **Q1 — EP-CTRL convergence.** Should `BrowserSessionBinding` be a specialization of the Automated Control Utility's `ControlSession`, or a sibling? Recommendation: specialize *if* EP-CTRL lands first; otherwise define thin and converge later as tracked debt. (Needs an architect call once EP-CTRL implementation status is known.)
-2. **Q2 — M2 transport (parts b/c resolved by Appendix A; part a open).** Verdict 3 settled the policy and **Appendix A** now settles provisioning (b) and storage location (c). The remaining open part: **(a)** how does an *in-portal* coworker reach the operator's live profile for *attended* runs — the operator's own Claude-in-Chrome extension, or a portal-hosted bridge? Recommendation for v1: headless `browser-use` on service-account profiles for autonomous (fully specced); defer attended operator-live driving to a fast-follow.
-3. **Q3 — Credential kind on `IntegrationCredential` (resolved by Appendix A).** Confirmed: `storageState` fits `IntegrationCredential.fieldsEnc` (encrypted JSON blob via `credential-crypto.ts`, keyed by `CREDENTIAL_ENCRYPTION_KEY`) with `provider = "browser-session"` as the discriminator; `tokenCacheEnc` / `lastTestedAt` / `lastErrorAt` carry session-freshness signals. No schema strain; no new credential table. See Appendix A §A.3.
-4. **Q4 — WWMD selector latency.** A per-task `principle_decide` adds a round-trip before each browser task. Acceptable for bounded high-value workflows; confirm it is cached/short-circuited for repeat tasks on the same target (e.g. a recorded M1 script skips selection).
-5. **Q5 — Default grant assignment.** Which seeded personas get `browser_read` vs `browser_drive` by default (marketing, procurement), and which require explicit operator grant? Per `bundled-services-active-by-default` vs the high blast radius of `browser_drive`.
-
----
-
-## 12. Decision record + filed work
-
-- **WWMD Verdict 1** (substrate shape): `multi-means-wwmd-per-task`, composite 6.357, margin 2.542, high confidence, no commandment conflict. `governingProfile: mark-dpf-platform`.
-- **WWMD Verdict 2** (reuse vs parallel): `reuse-existing-substrate`, composite 6.701, margin 3.174, high confidence, no commandment conflict.
-- **WWMD Verdict 3** (autonomous profile binding): `dedicated-service-profile-default`, composite 6.403, margin 3.408, high confidence, no commandment conflict. Autonomous runs bind a scoped service-account profile; operator-live profiles are attended-only. (Added 2026-06-05 after the operator raised the cross-tab / cross-browser session-reach question.)
-- **WWMD Verdict 4** (service-account first-auth / re-auth): `hybrid-storagestate-default-credentials-where-needed`, composite 6.250, margin 0.581, high confidence, no commandment conflict. Prefer attended `storageState` capture; store full credentials only for accounts that need unattended re-auth. (`attended-storagestate-only` was a close runner-up at 5.669 — it edges ahead on `data_privacy`/`blast_radius` and is the conservative fallback for high-sensitivity accounts.) Detailed in Appendix A.
-- **Epic**: EP-BROWSER-DRIVE (created 2026-06-05, this spec linked as `specPath`).
-- **Filed BIs**: BI-2AED4F15 (substrate), BI-09781F5F (P1 Substack/M2), BI-95F22C95 (P2 supplier/M2→M1), BI-91D64AD4 (P3 dashboard read), BI-2F287A19 (P4 cross-channel/M3) — all linked to EP-BROWSER-DRIVE, `proposedOutcome: build`, awaiting Scrum Master triage (linking is organizational only; not yet triaged or promoted).
-
----
-
-## 13. Recommendation
-
-Build browser-driving as **one `BrowserDriver` substrate with three separately-graspable means** (deterministic / plugin / delegated), selected **per-task by a scoped WWMD call**, each session bound to a specific **`(engine, profile)`** — autonomous runs to a scoped **service-account profile** (`Principal kind=service`), operator-live profiles **attended-only** (Verdict 3) — driven through a privileged out-of-page channel (extension or CDP), never the sandboxed portal page, and **reusing the existing grant / authority / delegation / envelope / `ToolExecution` / `GearInterface` substrate** — adding only a new grant key, the `TOOL_TO_GRANTS` wiring, an `IntegrationCredential` browser-session kind, and a thin `BrowserSessionBinding` record. Service-account profiles are provisioned by **hybrid `storageState`-first capture** (Verdict 4, Appendix A), persisted on a per-install `browser_profiles` volume. Prove it with the Substack-publish install first (M2-Chrome), then graduate the recurring high-error-cost supplier workflow toward a deterministic M1 script. This gives Coworkers real reach into the auth-walled web with the same kernel-gated, audited, WWMD-scored discipline as every other capability — and no parallel machinery.
-
----
-
-## 14. Appendix A — Service-account profile provisioning (Q2b/c + Q3 resolution)
-
-Resolves how an autonomous service-account profile (Verdict 3) is first authenticated and re-authenticated. Decision: **Verdict 4 — `hybrid-storagestate-default-credentials-where-needed`** (margin 0.581; `attended-storagestate-only` close behind at 5.669 and the conservative fallback for high-sensitivity accounts). All facts below are grounded against the live tree (`docker-compose.yml`, `schema.prisma`, `credential-crypto.ts`).
-
-### A.1 Per-site provisioning modes
-
-Each `(service-account, target-site)` pair records one **provisioning mode** on the credential. Default to the least-secret-storage mode that meets the account's autonomy need:
-
-| Mode | First-auth | Re-auth on expiry | When to use | Secret stored |
-|------|-----------|-------------------|-------------|---------------|
-| **`storageState` (default)** | Operator does a **one-time attended login** in an M2 session; the driver captures Playwright `storageState` (cookies + localStorage) at session end. | Operator is **notified** (agent-as-conduit) to repeat the one-time login when freshness signals go stale. | Most accounts; anything MFA/CAPTCHA-guarded; high-sensitivity. | Session blob only — **never the password**. |
-| **`credentialed` (opt-in)** | Operator stores username/password (+ optional TOTP seed) once. | Driver logs in **programmatically** each time the session expires — fully unattended. | Accounts that *must* run unattended through expiry and permit programmatic login. | Full credentials + TOTP seed. |
-
-The mode is a per-credential field, not a global switch — the hybrid is realized as a column, so a marketing Substack account can be `storageState` while a supplier API-less portal that expires nightly is `credentialed`, in the same install.
-
-### A.2 Provisioning flow (the attended bootstrap)
-
-1. Operator opens a **Service Account Browser Setup** admin surface, picks the target site and the service `Principal`.
-2. The platform launches an **attended M2 session** on the service account's dedicated Chromium `user-data-dir` (not the operator's profile). The operator logs in (handling MFA/CAPTCHA themselves — the one thing automation cannot reliably do).
-3. On confirmation, the driver exports `storageState` → encrypted into `IntegrationCredential.fieldsEnc`, and the populated `user-data-dir` persists on the `browser_profiles` volume (§A.4).
-4. The credential's `status` flips to `configured`; `lastTestedAt` is stamped. A `targetDomains[]` allowlist is recorded so the profile can only be driven against the site it was provisioned for.
-
-This is the **only** step that asks the operator to act — and it is exactly the irreducible "a human must log in once" step, consistent with `never-ask-user-to-run-commands` (the agent does everything *around* the unavoidable human auth, never shell/SQL busywork).
-
-### A.3 Storage (Q3 resolved)
-
-No new credential table (Verdict 2 holds):
-
-- **`IntegrationCredential`** with `provider = "browser-session"`. `fieldsEnc` holds the encrypted `storageState` JSON (or, in `credentialed` mode, the encrypted username/password/TOTP-seed), via the existing `credential-crypto.ts` `encryptJson` path keyed by `CREDENTIAL_ENCRYPTION_KEY` (the same key the `adp` service already consumes).
-- **Freshness signals** reuse existing columns: `tokenCacheEnc` for a cached probe result, `lastTestedAt` / `lastErrorAt` / `lastErrorMsg` for the staleness/health surface, `certExpiresAt` (or a `fieldsEnc` field) for a known session-cookie expiry where the site exposes one.
-- `BrowserSessionBinding.credentialId` FKs to this row; `BrowserSessionBinding.profileRef` names the `user-data-dir`.
-
-### A.4 Where profiles live (Q2c resolved)
-
-A new per-install named Docker volume **`browser_profiles`**, mounted into `browser-use` exactly as the proven `browser_evidence` volume is:
-
-```yaml
-# docker-compose.yml — browser-use service (sibling of browser_evidence)
-volumes:
-  - browser_evidence:/evidence
-  - browser_profiles:/profiles      # service-account user-data-dirs, one subdir per (account, site)
+```json
+{
+  "means": "plugin",
+  "targetDomains": ["substack.com"],
+  "allowedActionClasses": ["draft", "publish"],
+  "profileKind": "operator-live",
+  "attended": true,
+  "maxActions": 20
+}
 ```
 
-Each `user-data-dir` is `/profiles/<serviceAccountId>/<siteKey>/`. The volume is **never** mounted into the portal (unlike `browser_evidence`, which the portal mounts read-only to serve screenshots) — profile cookie jars are driver-only. Note `browser-use`'s existing `SESSION_TIMEOUT_SECONDS: 600`: a *driving session* is ephemeral (10 min), but the *persisted profile* on the volume outlives it — that separation is what makes "log in once, drive many times" work.
+`expiresAt`, `maxUses`, `riskBand`, `workflowKey`, and `objectRef` bound the run. Browser-driving must increment usage at action boundaries that matter, not only at session open.
 
-### A.5 Expiry detection + re-auth loop
+### 8.5 Destructive-action envelope
 
-- Before an autonomous run, the driver opens the profile and probes a known authenticated endpoint. **Redirect-to-auth ⇒ session expired** (this is the exact failure the motivating thread hit when no session was present).
-- `storageState` mode → emit a **re-provision notification** through the agent event bus (agent-as-conduit), pause the dependent workflow as `blocked-on-reauth`, and resume when the operator re-bootstraps. Never silently fail a downstream destructive action on a dead session.
-- `credentialed` mode → the driver runs the programmatic login, refreshes `storageState`, stamps `lastTestedAt`. If login fails (CAPTCHA/novel MFA), it **falls back to the `storageState` notification path** rather than looping — degrade to attended, never brute-force.
+Irreversible or outward-facing actions require `CoworkerActionEnvelope` before the final act:
 
-### A.6 Security notes specific to provisioning
+- publish a post;
+- submit an RFQ;
+- send a message;
+- place an order;
+- submit a government or compliance form;
+- change external account configuration.
 
-- A `browser-session` credential is **scoped to `targetDomains[]`** and bounded by the governing `DelegationGrant` (`maxUses`/`expiresAt`); a stolen `storageState` blob cannot widen scope (monotonic-narrowing rule, §4.2).
-- `credentialed` mode is **opt-in per account** precisely because it stores the password — the higher-blast-radius choice the operator must consciously elect, surfaced as such in the setup UI (this is why Verdict 4 beat `stored-credentials-only`, which would have made it the default).
-- Profiles never co-mingle: one `user-data-dir` per `(service account, site)` means a compromise of one site's cookie jar does not expose another.
+The human approves the rendered artifact and target, not a vague instruction. Drafting and read-only extraction do not require an envelope by themselves.
+
+### 8.6 Per-action audit and evidence
+
+Every browser tool call must create or link to a `ToolExecution`.
+
+Conventions:
+
+- `executionMode = "immediate"` for read-only browser_read actions.
+- `executionMode = "permission"` for attended operator-live driving while the browser posture is active.
+- `executionMode = "proposal"` for the final envelope-gated side effect.
+- `capabilityId` identifies the browser-driving capability.
+- `delegatingUserId` records the human on whose behalf the action ran.
+- `envelopeId` links approved destructive actions.
+
+Screenshot evidence should reuse the existing `browser_evidence` pattern where possible, but browser-driving needs a session-scoped route, not only build-scoped `/api/build/<buildId>/evidence/<fileName>`. First slice can store session screenshots under a browser-session evidence directory and attach a `ToolExecutionReceipt`; it must not expose raw volume paths.
+
+### 8.7 BrowserSessionBinding
+
+Add a thin session binding table unless EP-CTRL's control tables land first. Because EP-CTRL is not implemented today, the browser-driving first slice should own this table and align naming for later convergence.
+
+Required fields:
+
+- `sessionId`
+- `means`
+- `driverRef`
+- `engine`
+- `profileRef`
+- `profileKind`
+- `attended`
+- `actingPrincipalId`
+- `delegatingUserId`
+- `delegationGrantId`
+- `credentialId`
+- `targetDomains`
+- `status`
+- `startedAt`
+- `closedAt`
+- `evidenceDir`
+- `selectorDecisionJson` or `meansDecisionJson`
+
+Invariants:
+
+- `profileKind = "operator-live"` is valid only when `attended = true`.
+- `profileKind = "service-account"` requires `actingPrincipalId`.
+- `targetDomains` is enforced per navigation and per act.
+- Actions remain in `ToolExecution`; the session binding is not an action log.
+
+### 8.8 Identity and credentials
+
+Service-account browser profiles resolve through `Principal`/`PrincipalAlias`.
+
+Preferred identity shape:
+
+- `Principal.kind = "service"`
+- `PrincipalAlias.aliasType = "service-account"` or a documented browser-specific service-account alias kind if the identity spec standardizes one first.
+- The coworker is not modeled as a fake human.
+- The human delegate remains visible through `delegatingUserId`.
+
+Credential custody reuses `IntegrationCredential`, but with explicit fit limits:
+
+- `provider = "browser-session"`.
+- `fieldsEnc` stores encrypted `storageState` and provisioning metadata, or encrypted username/password/TOTP only when credentialed mode is explicitly selected.
+- `tokenCacheEnc`, `lastTestedAt`, `lastErrorAt`, `lastErrorMsg`, and `certExpiresAt` carry health/freshness signals.
+- Because `IntegrationCredential.integrationId` is unique, each `(service account, site)` needs either a deterministic integration id such as `browser-session:<principalId>:<siteKey>` or a minimal schema extension that makes the account/site relationship first-class.
+- `targetDomains` and `provisioningMode` may be encoded in `fieldsEnc` for slice 1, but if the UI needs filtering/reporting by those fields, they should become first-class columns on the browser session/profile model instead of ad hoc JSON scanning.
+
+No browser-specific vault table is introduced.
+
+### 8.9 Profile persistence
+
+Add a per-install Docker volume:
+
+```yaml
+browser-use:
+  volumes:
+    - browser_evidence:/evidence
+    - browser_profiles:/profiles
+
+volumes:
+  browser_evidence:
+  browser_profiles:
+```
+
+Rules:
+
+- The portal never mounts `browser_profiles`.
+- The sidecar is the only writer.
+- Profiles live under `/profiles/<serviceAccountPrincipalId>/<siteKey>/`.
+- The persisted profile is long-lived; individual browser sessions still respect `SESSION_TIMEOUT_SECONDS`.
+- Backup/restore and uninstall semantics must be added to the deployment contract wrapper for all install targets. This volume contains impersonation-capable cookies and must be treated as secret material, not ordinary evidence.
+
+### 8.10 Boundary with External Site Access
+
+External Site Access is public, read-only, unauthenticated, and platform-mediated. It provides `search_public_web`, `fetch_public_website`, `analyze_public_website_branding`, and the `web_search` grant.
+
+Browser-driving is authenticated and may be side-effecting. It inherits these External Site Access constraints:
+
+- block localhost;
+- block private IP ranges;
+- block link-local and metadata endpoints;
+- allow only explicit HTTP/HTTPS targets;
+- require a visible human posture for external access in attended contexts.
+
+Browser-driving adds:
+
+- `browser_read`;
+- `browser_drive`;
+- target-domain allowlists per session;
+- service-account profile binding;
+- destructive-action envelopes.
+
+### 8.11 Boundary with Automated Control Utility
+
+EP-CTRL covers desktop/session automation for managed hosts and defines planned concepts such as `ManagedHost`, `ControlRun`, `ControlSession`, `ControlStep`, `ControlEvidence`, and `ControlPolicy`.
+
+Those are not live Prisma models today. Browser-driving should therefore:
+
+- use the same vocabulary where possible: session, step, evidence, policy;
+- add `BrowserSessionBinding` now if needed;
+- avoid naming/field choices that would block later convergence;
+- revisit convergence once EP-CTRL lands.
+
+Do not block browser-driving on EP-CTRL, but do not fork the language either.
+
+### 8.12 Boundary with marketing execution
+
+Marketing Execution Loop already owns native channel adapters, drafts, approvals, and outbound publication records for API-backed channels.
+
+Browser-driving does not replace native adapters. It fills the auth-walled/no-API gap:
+
+- native LinkedIn/Mailchimp/Postmark paths remain preferred when the API exists and is approved;
+- browser-driving handles bounded channels/workflows without usable APIs;
+- successful recurring browser workflows can graduate to M1 deterministic scripts or native adapter backlog items.
+
+---
+
+## 9. Service-Account Provisioning
+
+### 9.1 Modes
+
+| Mode | First auth | Re-auth | Secret stored | Use when |
+|---|---|---|---|---|
+| `storageState` | Operator performs one attended login into the service-account profile. Driver captures Playwright/browser state. | Operator repeats attended login when freshness probe fails. | Session blob only. | Default; MFA/CAPTCHA/high-sensitivity sites. |
+| `credentialed` | Operator stores username/password and optional TOTP seed. | Driver logs in programmatically, then refreshes `storageState`. | Full credential/TOTP. | Only for accounts that need unattended operation through expiry and permit programmatic login. |
+
+Playwright's authentication guidance treats stored browser state as sensitive impersonation material. Browser-driving must do the same: never commit it, never mount it into the portal, and never expose it through screenshots or logs.
+
+### 9.2 Setup flow
+
+1. Operator opens Service Account Browser Setup in the platform tools/integrations area.
+2. Operator selects target site, service principal, provisioning mode, and target-domain allowlist.
+3. Platform opens an attended M2 session on the service account's dedicated Chromium profile.
+4. Operator completes login/MFA/CAPTCHA.
+5. Driver captures `storageState`, persists profile data under `/profiles`, encrypts credential metadata into `IntegrationCredential`, and records a `BrowserSessionBinding`.
+6. Platform probes an authenticated endpoint and stamps health.
+7. Setup surface shows status, last tested time, expiry/freshness warnings, and re-auth action.
+
+This is not asking the operator to run commands. It is the irreducible human-auth step.
+
+### 9.3 Expiry and re-auth
+
+- Before autonomous use, the driver probes a known authenticated endpoint.
+- Redirect-to-auth means expired.
+- `storageState` mode blocks the dependent workflow as `blocked-on-reauth` and notifies the operator.
+- `credentialed` mode attempts login once under rate limits, refreshes state, and falls back to the attended path on CAPTCHA/MFA/novel challenge.
+- Never loop through failed logins.
+- Never silently execute a downstream destructive action after an auth failure.
+
+---
+
+## 10. Operator UX Requirements
+
+### 10.1 Surfaces
+
+The first implementation needs four operational surfaces:
+
+1. Service Account Browser Setup: configure site/account/profile, run attended bootstrap, test freshness, re-auth.
+2. Browser Session Ledger: list sessions, means, profile kind, target domains, status, evidence, actor/delegator.
+3. Approval Card: show rendered artifact, target site/account, risk band, and exact final action.
+4. Evidence Review: step timeline with screenshots, action summaries, errors, and receipt status.
+
+### 10.2 UI rules
+
+- Use report-kit `DataTable`, `FilterBar`, `StatusBadge`, `StatCard`, and `ExportButton` for setup and ledger surfaces.
+- Use token-backed colors only. No hardcoded colors.
+- Keep audit surfaces dense and scannable.
+- Do not create a landing page.
+- Do not invent a decorative browser console.
+- Do not expose internal tool names as primary user copy. "Browser read", "Browser action", "Needs re-auth", and "Awaiting approval" are acceptable; `mcp-browser-use__browse_act` belongs in details/debug panes only.
+- Reuse `/platform/ai/authority` and `/platform/audit/*` as evidence destinations where possible.
+
+### 10.3 Error posture
+
+Do not copy existing legacy unreachable messages that ask the operator to run Docker commands. If the browser-use sidecar is unavailable, the platform should:
+
+- record a platform issue or evidence row;
+- show the service status and recovery action in admin terms;
+- avoid telling the user to run shell commands.
+
+---
+
+## 11. Security Model
+
+- Page content is hostile input, not instructions.
+- `targetDomains` is enforced on every navigation and action.
+- Private/internal targets remain blocked unless a future, explicit private-connectivity spec allows them.
+- `browser_profiles` contains impersonation material and is secret state.
+- Operator-live profiles are attended-only.
+- Service-account profiles are least-privilege and per-site where possible.
+- Destructive actions require `CoworkerActionEnvelope`.
+- New external browser plugins or SaaS drivers require the Tool Evaluation Pipeline.
+- Screenshots can contain secrets; evidence routes need auth, path traversal checks, retention policy, and redaction strategy before broad rollout.
+- Prompt injection and social-engineering resistance must be verified with hostile-page fixtures before M2 is allowed on high-risk sites.
+
+---
+
+## 12. Research and Benchmarking
+
+### Open-source and framework references
+
+- [browser-use](https://github.com/browser-use/browser-use): confirms the M2 shape: LLM-guided browser automation with persistent browser sessions, CLI support, custom tools, and authentication/profile examples. DPF adopts the self-hosted sidecar but rejects identity-free/session-free operation for coworkers.
+- [Playwright authentication](https://playwright.dev/docs/auth): confirms `storageState` as a standard auth-state reuse primitive and warns that browser state can impersonate the account. DPF adopts this for service-account bootstrap and treats it as encrypted secret material.
+- [Skyvern](https://github.com/Skyvern-AI/skyvern): confirms the pattern of Playwright plus AI actions, extraction, validation, stored credentials, and livestream/observability. DPF adopts the architecture pattern, not a parallel credential store.
+- [LaVague](https://github.com/lavague-ai/LaVague): confirms multi-driver web-agent framing across Selenium, Playwright, and Chrome extension drivers. DPF adopts the driver abstraction lesson.
+
+### Commercial / platform references
+
+- [Microsoft Power Automate attended and unattended automation](https://learn.microsoft.com/en-us/power-automate/guidance/planning/attended-unattended): supports the attended/unattended split and warns against mixing attended and unattended automation on the same machine/session group. DPF maps this to operator-live attended-only versus service-account autonomous profiles.
+- Zapier/Make-style automation: validates bounded workflow framing and per-connection credentials, but DPF keeps credentials customer-owned and encrypted in the local install.
+- Anthropic computer-use / Claude-in-Chrome style operation: validates the operator-live attended path, but DPF treats it as a high-authority live session that must never become the autonomous default.
+
+### Adopted patterns
+
+- Multiple means behind one interface.
+- Stored browser state as sensitive auth material.
+- Attended and unattended separation.
+- Evidence-first browser automation.
+- Service-account identities rather than fake humans.
+
+### Rejected patterns
+
+- Single default browser driver.
+- Operator live profile for autonomous work.
+- Parallel browser-specific permission system.
+- Parallel browser-specific credential vault.
+- Opaque screenshots without `ToolExecution`/receipt linkage.
+
+---
+
+## 13. Proving Flow: Substack Publish
+
+1. Operator briefs the Marketing coworker: "Publish this month's newsletter to our channels."
+2. Coworker has `browser_drive`; Marketing workspace binding requires proposal for outward publish.
+3. Means selector sees no deterministic Substack script and an attended operator-live profile is available. It selects M2 attended.
+4. Browser session opens with `profileKind = "operator-live"`, `attended = true`, target domain allowlist, and `executionMode = "permission"` for draft actions.
+5. Coworker fills the draft. Screenshot-then-replan handles field merge or page drift.
+6. Publish is a destructive outward action. Coworker creates `CoworkerActionEnvelope` with rendered post preview, account/site, and target action.
+7. Operator approves.
+8. Final click executes with `executionMode = "proposal"` and `envelopeId`.
+9. Session closes with evidence receipts.
+10. If the workflow recurs, evidence can graduate into an M1 deterministic script or a native channel adapter backlog item.
+
+---
+
+## 14. Implementation Slices
+
+### Slice 0 - Authority blocker
+
+- Add `browser_read` and `browser_drive` to grant catalog/registry flow.
+- Add namespaced MCP tool entries to `TOOL_TO_GRANTS`.
+- Add `browser_drive -> browser_read` to `GRANT_IMPLICATIONS`.
+- Grant-filter discovered MCP tools before returning them from `getAvailableTools()`.
+- Add policy overlay for discovered MCP tool `sideEffect`, read/write posture, and execution mode hints.
+- Update authority UI mirror/shared map.
+- Tests prove external access alone does not expose browser tools.
+
+### Slice 1 - Session and credential substrate
+
+- Add `BrowserSessionBinding`.
+- Add service-account identity resolver.
+- Add `browser-session` credential discriminator and deterministic integration id strategy.
+- Add encryption/freshness helpers.
+- Add `browser_profiles` volume and deployment/backup notes.
+
+### Slice 2 - Browser-use profile support
+
+- Extend `services/browser-use/server.py` to open a specific profile/user-data-dir under `/profiles`.
+- Add target-domain enforcement.
+- Add session evidence directory support beyond build evidence.
+- Preserve the current `browse_run_tests` QA behavior.
+
+### Slice 3 - Setup and ledger UX
+
+- Build Service Account Browser Setup.
+- Build Browser Session Ledger and evidence review using report-kit.
+- Surface re-auth state and blocked workflows.
+- Do not expose raw tool names in default operator copy.
+
+### Slice 4 - Substack proving install
+
+- Implement M2 attended flow for Substack draft/publish.
+- Prove approval card boundary at Publish.
+- Capture end-to-end evidence on a real auth-walled path.
+
+### Slice 5 - Service-account and graduation proofs
+
+- Supplier portal read/procurement proof with service-account profile.
+- Dashboard read-only proof with `browser_read`.
+- M2-to-M1 graduation path for a recurring supplier workflow.
+- M3 delegated proof only after the M2/M1 path is stable.
+
+---
+
+## 15. Verification Requirements
+
+Source-local tests:
+
+- grant mapping for namespaced MCP tools;
+- `getAvailableTools()` filters discovered MCP tools by agent grants;
+- `GRANT_IMPLICATIONS` expansion for `browser_drive`;
+- `BrowserSessionBinding` invariants;
+- credential encryption/freshness helpers;
+- target-domain enforcement;
+- UI tests for setup/ledger states with report-kit primitives.
+
+Runtime-bound verification must run against the canonical local install or a shared local-CI convergence sandbox lease:
+
+- browser-use sidecar health and profile mount;
+- service-account attended setup;
+- expired-session detection;
+- real auth-walled draft path;
+- envelope-gated final side effect;
+- evidence route access and auth checks;
+- no operator-facing instruction asks the user to run shell/Docker commands.
+
+Functional verification is mandatory. A screenshot pile is not enough; the proof must drive a real happy path through login/session composition, action, approval, and evidence.
+
+---
+
+## 16. Backlog Roster
+
+Live MCP state on 2026-06-05:
+
+| BI | Title | Status | Means exercised | Notes |
+|---|---|---|---|---|
+| `BI-2AED4F15` | Browser-driving capability substrate | `triaging` / Captured | all | Must start with Slice 0 authority blocker. |
+| `BI-09781F5F` | Substack-publish browser-driving proving install | `triaging` / Captured | M2 | Motivating attended operator-live case. |
+| `BI-95F22C95` | Supplier-portal parts price + lead-time check | `triaging` / Captured | M2 -> M1 | Service-account credential and graduation proof. |
+| `BI-91D64AD4` | Ad-network dashboard read | `triaging` / Captured | M2 read-only | Proves `browser_read` without envelope. |
+| `BI-2F287A19` | LinkedIn/X cross-channel marketing distribution | `triaging` / Captured | M2/M3 | Stretch case; do after substrate and first proofs. |
+
+These items are captured and linked, not triaged, sized, promoted, or ready for Build Studio.
+
+---
+
+## 17. Open Questions
+
+1. EP-CTRL convergence: once `ControlSession` exists, should `BrowserSessionBinding` become a specialization or stay a sibling with shared vocabulary?
+2. Operator-live transport: should attended M2 use the operator's Claude-in-Chrome bridge, a DPF browser extension, or a portal-hosted bridge? Recommendation for v1: service-account headless first; operator-live attended Substack proof only where the bridge is already available.
+3. Credential field shape: encode `targetDomains`/`provisioningMode` in encrypted JSON for slice 1, or add first-class columns now? Recommendation: first-class on `BrowserSessionBinding` and profile/session metadata; encrypted credential payload stores secrets only.
+4. Means-selector cache: repeat tasks with a proven M1 script should not pay a full selector decision every run.
+5. Default personas: which coworkers receive `browser_read` by default, and which require explicit operator grant for `browser_drive`? Recommendation: no default `browser_drive` until the first proving install passes.
+6. Evidence retention/redaction: screenshots from third-party sites may include secrets or PII. Define retention before broad rollout.
+
+---
+
+## 18. Recommendation
+
+Build browser-driving as one governed `BrowserDriver` substrate with three means: deterministic, plugin, and delegated. The first PR must close the namespaced MCP authority gap, then add the thin session/profile bridge and service-account provisioning. Autonomous work uses scoped service-account Chromium profiles; operator-live browser driving is attended-only. All side effects flow through existing delegation, authority binding, `CoworkerActionEnvelope`, `ToolExecution`, and evidence receipts. No parallel vault, no parallel action log, no ambient operator profile automation.
