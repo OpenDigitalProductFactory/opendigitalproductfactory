@@ -277,11 +277,41 @@ export type OperationsMapA2aLegendItem = {
   description: string;
 };
 
+// ─── Deliberation lens (Option B — coordinator-internal fan, no fabricated
+// coworker identity) ────────────────────────────────────────────────────
+//
+// A deliberation is a coordinator coworker fanning a decision out to N branch
+// review personas. Today those branches are NOT distinct registered coworkers
+// (see docs/superpowers/specs/2026-06-05-deliberation-branch-identity-for-a2a-ops-map-design.md),
+// so they are rendered as a coordinator-side lens — role + (where the run is
+// diverse) model/provider pulled from TaskNode.routeDecision — rather than as
+// coworker↔coworker A2A edges.
+
+export type OperationsMapDeliberationBranch = {
+  nodeId: string;
+  role: string | null;
+  modelId: string | null;
+  providerId: string | null;
+  status: string | null;
+};
+
+export type OperationsMapDeliberation = {
+  id: string;
+  coordinatorCoworkerId: string | null;
+  coordinatorLabel: string;
+  pattern: string | null;
+  diversityMode: string;
+  consensusState: string;
+  occurredAt: string | null;
+  branches: OperationsMapDeliberationBranch[];
+};
+
 export type OperationsMapRoutingTopology = {
   coworkers: OperationsMapRoutingCoworker[];
   providers: OperationsMapRoutingProvider[];
   routes: OperationsMapRoutingRoute[];
   a2aEdges: OperationsMapA2aEdge[];
+  deliberations: OperationsMapDeliberation[];
   markers: OperationsMapRoutingMarker[];
   timeline: OperationsMapRoutingTimelineMarker[];
   legend: OperationsMapRoutingLegendItem[];

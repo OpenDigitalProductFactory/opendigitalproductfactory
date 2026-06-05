@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname } from "next/navigation";
 import type { AgentMessageRow, AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
@@ -12,6 +12,12 @@ import { AgentSkillAttributionChip } from "./AgentSkillAttributionChip";
 import { AgentMessageBubble } from "./AgentMessageBubble";
 import { AgentMessageInput } from "./AgentMessageInput";
 import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
+import { CollaborationActivityPanel } from "./CollaborationActivityPanel";
+import type { CollaborationCard } from "./HandoffCard";
+import { CoworkerSummonPicker } from "./CoworkerSummonPicker";
+import { getConversationParticipants } from "@/lib/actions/coworker-summon";
+import type { ConversationParticipant } from "@/lib/tak/conversation-participants-core";
+import { isTaskInFlight } from "@/lib/tak/task-state-intent";
 import { CoworkerHealthStatus } from "@/components/monitoring/CoworkerHealthStatus";
 import { SetupActionButtons } from "@/components/setup/SetupActionButtons";
 import { resolveCoworkerRuntimeMode } from "./coworker-runtime-mode";
@@ -151,7 +157,67 @@ export function AgentCoworkerPanel({
   // status line.
   const [activeSkill, setActiveSkill] = useState<{ skillId: string; label: string } | null>(null);
   const [marketingSkillRules, setMarketingSkillRules] = useState<Record<string, { visible?: boolean; label?: string; reframe?: string }> | null>(null);
+  // EP-A2A multi-agent collaboration (2026-06-04 spec, Slice 1): the live
+  // participant roster + the inline handoff/summon cards the user sees when a
+  // coworker hands off to, or the user summons, another coworker.
+  const [participants, setParticipants] = useState<ConversationParticipant[]>([]);
+  const [collaborationCards, setCollaborationCards] = useState<CollaborationCard[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const refreshParticipants = useCallback(() => {
+    if (!threadId) {
+      setParticipants([]);
+      return;
+    }
+    getConversationParticipants(threadId)
+      .then(setParticipants)
+      .catch(() => { /* projection failures must not break chat — quiet rail */ });
+  }, [threadId]);
+
+  // Ref so the SSE handler always calls the latest refresh without needing it
+  // in the EventSource effect's dependency array (mirrors voiceSynthRef below).
+  const refreshParticipantsRef = useRef(refreshParticipants);
+  refreshParticipantsRef.current = refreshParticipants;
+
+  // Initial + on-thread-change roster fetch. Collaboration SSE events below
+  // also trigger a refresh so the rail stays live during a turn.
+  useEffect(() => {
+    refreshParticipants();
+  }, [refreshParticipants]);
+
+  // While any sub-agent is in-flight, poll the roster so the done indicator
+  // flips to "done" when child tasks reach a terminal state. (Slice 2 wires
+  // collaboration:return from child terminal transitions to make this push.)
+  useEffect(() => {
+    const anyInFlight = participants.some((p) => p.role !== "owner" && isTaskInFlight(p.state));
+    if (!anyInFlight) return;
+    const t = setInterval(() => refreshParticipantsRef.current(), 4000);
+    return () => clearInterval(t);
+  }, [participants]);
+
+  // Cards shown in the disclosure = live SSE cards merged with cards
+  // reconstructed from persisted provenance (participant enteredVia), so
+  // handoff/summon cards survive a page refresh. Live cards win by id (they
+  // carry the question-packet summary the reconstruction lacks).
+  const collaborationCardsToShow = useMemo<CollaborationCard[]>(() => {
+    const ownerLabel = participants.find((p) => p.role === "owner")?.label ?? "Coworker";
+    const byId = new Map<string, CollaborationCard>();
+    for (const p of participants) {
+      if (p.role === "owner") continue;
+      if (p.enteredVia !== "summon" && p.enteredVia !== "handoff") continue;
+      const kind = p.enteredVia === "summon" ? "summon" : "handoff";
+      byId.set(`collab-${kind}-${p.threadId}`, {
+        id: `collab-${kind}-${p.threadId}`,
+        kind,
+        fromLabel: kind === "summon" ? "You" : ownerLabel,
+        toLabel: p.label,
+        tier: p.tier === 3 ? 3 : 2,
+        childThreadId: p.threadId,
+      });
+    }
+    for (const c of collaborationCards) byId.set(c.id, c); // live overrides reconstructed
+    return [...byId.values()];
+  }, [participants, collaborationCards]);
   const voiceSynth = useVoiceSynth();
   // Keep a ref so the SSE done handler always sees the latest voiceSynth state
   // without needing to re-subscribe the EventSource on every render.
@@ -275,6 +341,49 @@ export function AgentCoworkerPanel({
           });
         }
         // Brand-extraction progress from the Inngest worker (cross-process)
+        // EP-A2A multi-agent collaboration — render the handoff/summon/return
+        // inline and refresh the participant rail.
+        if (
+          data.type === "collaboration:handoff" ||
+          data.type === "collaboration:summon" ||
+          data.type === "collaboration:return"
+        ) {
+          const labelOf = (id: string | undefined, fallback: string) =>
+            (id ? AGENT_NAME_MAP[id] : undefined) ?? id ?? fallback;
+          let card: CollaborationCard;
+          if (data.type === "collaboration:handoff") {
+            card = {
+              id: `collab-handoff-${data.childThreadId}`,
+              kind: "handoff",
+              fromLabel: labelOf(data.fromAgentId, "Coworker"),
+              toLabel: labelOf(data.toAgentId, "Coworker"),
+              tier: data.tier === 3 ? 3 : 2,
+              summary: typeof data.questionPacketSummary === "string" ? data.questionPacketSummary : undefined,
+              childThreadId: data.childThreadId,
+            };
+          } else if (data.type === "collaboration:summon") {
+            card = {
+              id: `collab-summon-${data.childThreadId}`,
+              kind: "summon",
+              fromLabel: "You",
+              toLabel: labelOf(data.summonedAgentId, "Coworker"),
+              tier: data.tier === 3 ? 3 : 2,
+              childThreadId: data.childThreadId,
+            };
+          } else {
+            card = {
+              id: `collab-return-${data.childThreadId}`,
+              kind: "return",
+              fromLabel: labelOf(data.fromAgentId, "Coworker"),
+              toLabel: labelOf(data.toAgentId, "Owner"),
+              tier: 2,
+              outcome: data.outcome,
+              childThreadId: data.childThreadId,
+            };
+          }
+          setCollaborationCards((prev) => (prev.some((c) => c.id === card.id) ? prev : [...prev, card]));
+          refreshParticipantsRef.current();
+        }
         if (data.type === "brand:extract.progress") {
           setOrchestratorStatus(`${data.stage}: ${data.message} (${data.percent}%)`);
         }
@@ -748,6 +857,33 @@ export function AgentCoworkerPanel({
           onClose={() => setShowProfile(false)}
         />
       )}
+
+      {/* EP-A2A: collapsed/summarized sub-agent activity disclosure (quiet for 1-1) + summon affordance */}
+      <CollaborationActivityPanel participants={participants} cards={collaborationCardsToShow} />
+      {threadId ? (
+        <CoworkerSummonPicker
+          parentThreadId={threadId}
+          routeContext={effectiveRoute}
+          onSummoned={(info) => {
+            setCollaborationCards((prev) =>
+              prev.some((c) => c.id === `collab-summon-${info.childThreadId}`)
+                ? prev
+                : [
+                    ...prev,
+                    {
+                      id: `collab-summon-${info.childThreadId}`,
+                      kind: "summon",
+                      fromLabel: "You",
+                      toLabel: info.targetLabel,
+                      tier: 2,
+                      childThreadId: info.childThreadId,
+                    },
+                  ],
+            );
+            refreshParticipants();
+          }}
+        />
+      ) : null}
 
       <div
         style={{
