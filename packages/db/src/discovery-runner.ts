@@ -9,6 +9,8 @@ import {
   normalizeDiscoveredFacts,
   type NormalizeDiscoveryOptions,
 } from "./discovery-normalize";
+import type { AdapterRule, AdapterRuleStatus } from "./discovery-fingerprint-adapter";
+import type { FingerprintMatchExpression, ResolvedIdentity } from "./discovery-fingerprint-rules";
 import { persistBootstrapDiscoveryRun } from "./discovery-sync";
 import { promoteInventoryEntities } from "./discovery-promotion";
 import { reconcilePromotedProducts } from "./discovery-reconcile";
@@ -127,8 +129,68 @@ export async function executeBootstrapDiscovery(
           enrichmentText: flattenEnrichmentForScoring(n.enrichment as Record<string, unknown> | null),
         }))
       : undefined);
+  // Active discovery-fingerprint rules (spec §4 layer 0). Loaded joined to the
+  // taxonomy node's semantic nodeId, because the normalizer attaches taxonomy by
+  // `connect: { nodeId }`. A confident match identifies + places the device
+  // deterministically, ahead of the heuristic taxonomy scoring.
+  const fingerprintRules = options.fingerprintRules
+    ?? (typeof (db as { discoveryFingerprintRule?: { findMany?: unknown } }).discoveryFingerprintRule?.findMany === "function"
+      ? (await ((db as unknown) as {
+          discoveryFingerprintRule: {
+            findMany(args: {
+              where: { status: "active" };
+              select: {
+                id: true;
+                ruleKey: true;
+                status: true;
+                matchExpression: true;
+                requiredEvidenceFamilies: true;
+                identityConfidence: true;
+                taxonomyConfidence: true;
+                resolvedIdentity: true;
+                taxonomyNode: { select: { nodeId: true } };
+              };
+            }): Promise<Array<{
+              id: string;
+              ruleKey: string;
+              status: string;
+              matchExpression: unknown;
+              requiredEvidenceFamilies: string[];
+              identityConfidence: number;
+              taxonomyConfidence: number;
+              resolvedIdentity: unknown;
+              taxonomyNode: { nodeId: string } | null;
+            }>>;
+          };
+        }).discoveryFingerprintRule.findMany({
+          where: { status: "active" },
+          select: {
+            id: true,
+            ruleKey: true,
+            status: true,
+            matchExpression: true,
+            requiredEvidenceFamilies: true,
+            identityConfidence: true,
+            taxonomyConfidence: true,
+            resolvedIdentity: true,
+            taxonomyNode: { select: { nodeId: true } },
+          },
+        })).map((rule): AdapterRule => ({
+          id: rule.id,
+          ruleKey: rule.ruleKey,
+          status: rule.status as AdapterRuleStatus,
+          matchExpression: rule.matchExpression as FingerprintMatchExpression,
+          requiredEvidenceFamilies: rule.requiredEvidenceFamilies,
+          taxonomyNodeId: rule.taxonomyNode?.nodeId ?? null,
+          identityConfidence: rule.identityConfidence,
+          taxonomyConfidence: rule.taxonomyConfidence,
+          resolvedIdentity: (rule.resolvedIdentity ?? {}) as ResolvedIdentity,
+        }))
+      : undefined);
+
   const normalized = (options.normalize ?? normalizeDiscoveredFacts)(collected, {
     ...(taxonomyNodes ? { taxonomyNodes } : {}),
+    ...(fingerprintRules ? { fingerprintRules } : {}),
     ...(options.softwareIdentities ? { softwareIdentities: options.softwareIdentities } : {}),
     ...(options.softwareRules ? { softwareRules: options.softwareRules } : {}),
   });

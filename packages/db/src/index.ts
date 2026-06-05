@@ -252,6 +252,10 @@ export * from "./discovery-fingerprint-redaction";
 export * from "./discovery-fingerprint-policy";
 export * from "./discovery-fingerprint-rules";
 export * from "./discovery-mac-classification";
+export * from "./discovery-fingerprint-observation";
+export * from "./device-placement";
+export * from "./device-investigation";
+export * from "./device-fingerprint-contribution";
 // `./discovery-fingerprint-catalog` is intentionally NOT re-exported. Its
 // `validateFingerprintCatalog` helper uses dynamic `path.resolve(process.cwd(), ...)`
 // to locate catalog JSON at runtime, which Turbopack flags as an overly broad

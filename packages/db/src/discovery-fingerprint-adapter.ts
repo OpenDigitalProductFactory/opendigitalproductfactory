@@ -2,6 +2,7 @@ import {
   evaluateFingerprintRule,
   type FingerprintMatchExpression,
   type FingerprintRuleObservation,
+  type ResolvedIdentity,
 } from "./discovery-fingerprint-rules";
 
 /**
@@ -30,12 +31,7 @@ export interface AdapterRule {
   taxonomyNodeId: string | null;
   identityConfidence: number;
   taxonomyConfidence: number;
-  resolvedIdentity: {
-    manufacturer?: string;
-    productModel?: string;
-    technicalClass?: string;
-    iconKey?: string;
-  };
+  resolvedIdentity: ResolvedIdentity;
 }
 
 export interface AdapterMatch {
@@ -51,10 +47,8 @@ export interface AdapterMatch {
    * before combining.
    */
   combinedConfidence: number;
-  manufacturer?: string;
-  productModel?: string;
-  technicalClass?: string;
-  iconKey?: string;
+  /** The matched rule's resolved identity ({kind,name,vendor,model,deviceClass}). */
+  resolvedIdentity: ResolvedIdentity;
 }
 
 /**
@@ -114,6 +108,6 @@ export function matchInventoryEntity(
     identityConfidence: rule.identityConfidence,
     taxonomyConfidence: rule.taxonomyConfidence,
     combinedConfidence,
-    ...rule.resolvedIdentity,
+    resolvedIdentity: rule.resolvedIdentity,
   };
 }
