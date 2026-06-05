@@ -2773,6 +2773,33 @@ model Organization {
   researchProposals             ResearchProposal[]
   integrationCoverageProviders  IntegrationCoverageProvider[]  @relation("OrgToCoverageProviders")
   integrationRoleCoverages      IntegrationRoleCoverage[]      @relation("OrgToCoverageCells")
+  capabilityActivations         OrganizationCapabilityActivation[]
+}
+
+// EP-PARTNER-CHANNEL Phase 1b. Generic per-organization opt-in overlay on top of
+// the axis-derived capability applicability from @dpf/storefront-templates. The
+// derivation answers "is this capability applicable to the business model?"; this
+// row records "did this org turn it on?" — captured at setup (decidedVia="setup-wizard")
+// for capabilities that resolveCapabilityActivation() flags promptAtSetup, and
+// editable later from admin (decidedVia="admin"). Not partner-specific; partner-program
+// is the first consumer. Spec 2026-06-04-partner-reseller-archetype-identity §6.3.
+model OrganizationCapabilityActivation {
+  id             String       @id @default(cuid())
+  organizationId String
+  // Matches a @dpf/storefront-templates CapabilityKey (validated in app code via
+  // isCapabilityKey before write). Stored as String to avoid a DB enum that would
+  // need a migration every time the capability registry grows.
+  capabilityKey  String
+  // CapabilityActivationChoice: "enabled" | "disabled".
+  choice         String
+  // Provenance of the decision: "setup-wizard" | "admin".
+  decidedVia     String
+  decidedAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, capabilityKey])
+  @@index([organizationId])
 }
 
 model BusinessContext {
