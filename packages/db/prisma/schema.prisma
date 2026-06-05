@@ -1346,6 +1346,39 @@ model IntegrationCredential {
   @@index([provider, status])
 }
 
+// Browser-driving session binding (EP-BROWSER-DRIVE, spec 2026-06-05 §8.7).
+// A thin, auditable+resumable record of one driven browser session. It is NOT
+// an action log — individual actions live in ToolExecution keyed by sessionId.
+// Identity/credential/delegation refs are plain string semantic ids (matching
+// the CoworkerActionEnvelope convention), so this table does not add back-
+// relations to the heavily-related Principal/User/IntegrationCredential models.
+// Q1 (EP-CTRL convergence): no live ControlSession today, so this owns its own
+// table; field names are chosen to align with a future ControlSession.
+model BrowserSessionBinding {
+  id                String   @id @default(cuid())
+  sessionId         String   @unique
+  means             String // "deterministic" | "plugin" | "delegated"
+  driverRef         String? // adapter/sidecar session handle
+  engine            String // "chromium" | "safari" | "firefox"
+  profileRef        String // /profiles/<principalId>/<siteKey>/ or an operator-live handle
+  profileKind       String // "service-account" | "operator-live"
+  attended          Boolean  @default(false)
+  actingPrincipalId String? // Principal.principalId of the service account; null for operator-live
+  delegatingUserId  String // human on whose behalf the session runs
+  delegationGrantId String? // DelegationGrant.id bounding the run (side-effecting sessions)
+  credentialId      String? // IntegrationCredential.integrationId (browser-session kind)
+  targetDomains     String[] // navigation/act allowlist
+  status            String   @default("active") // active | closed | failed | blocked-on-reauth
+  meansDecisionJson Json? // per-task WWMD means-selector contribution ledger
+  evidenceDir       String? // session-scoped screenshot/evidence directory
+  startedAt         DateTime @default(now())
+  closedAt          DateTime?
+
+  @@index([actingPrincipalId])
+  @@index([delegatingUserId])
+  @@index([status])
+}
+
 // Call-level audit log for every enterprise-integration MCP tool invocation.
 // Distinct from ComplianceAuditLog (entity-diff focused) and AgentActionProposal
 // (write-proposal focused). Reusable across ADP, QuickBooks, Plaid, Workday.
