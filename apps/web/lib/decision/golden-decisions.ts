@@ -21,11 +21,61 @@ import { decide, type DecisionOption, type DecisionPrinciple, type DecisionResul
 // ─── Parsed-page shape (subset of WikiPage frontmatter we score against) ─────
 export type ParsedPrinciplePage = {
   slug: string;
+  pageKind?: string;
+  status?: string;
   principleTier?: string;
   principleAppliesTo?: string[];
   principleDimensionVector?: Record<string, number>;
   principleWeight?: number;
 };
+
+// ─── Minimal frontmatter parser ──────────────────────────────────────────────
+// Deterministic, self-contained parse of the SUBSET of principle frontmatter
+// this baseline scores against. Intentionally does NOT depend on the @dpf/db
+// `parseWikiFrontmatter` barrel — importing that heavy package barrel into an
+// apps/web vitest module resolves the named export to undefined under Vite's
+// SSR transform. The founder-kernel principle files use block-style lists and
+// single-line inline-JSON vectors, both handled here; mirrors the canonical
+// parser for these fields. Pure (string in, data out) — fs lives in the test.
+export function parsePrinciplePage(raw: string, slug: string): ParsedPrinciplePage {
+  const fmMatch = raw.replace(/\r\n/g, "\n").match(/^---\n([\s\S]*?)\n---/);
+  const fm = fmMatch ? fmMatch[1] : "";
+  const scalar = (key: string): string | undefined => {
+    const m = fm.match(new RegExp(`^${key}:(.*)$`, "m"));
+    if (!m) return undefined;
+    const v = m[1].trim().replace(/^["']|["']$/g, "");
+    return v.length ? v : undefined;
+  };
+  const blockList = (key: string): string[] => {
+    const lines = fm.split("\n");
+    const idx = lines.findIndex((l) => l === `${key}:` || l.startsWith(`${key}:`));
+    if (idx < 0) return [];
+    const inline = lines[idx].match(new RegExp(`^${key}:\\s*\\[(.*)\\]`));
+    if (inline) return inline[1].split(",").map((s) => s.trim().replace(/['"]/g, "")).filter(Boolean);
+    const out: string[] = [];
+    for (let j = idx + 1; j < lines.length; j++) {
+      const m = lines[j].match(/^\s+-\s+(.+?)\s*$/);
+      if (!m) { if (/^\S/.test(lines[j])) break; else continue; }
+      out.push(m[1].replace(/['"]/g, ""));
+    }
+    return out;
+  };
+  let principleDimensionVector: Record<string, number> | undefined;
+  const vecMatch = fm.match(/^principleDimensionVector:\s*(\{.*\})\s*$/m);
+  if (vecMatch) {
+    try { principleDimensionVector = JSON.parse(vecMatch[1]); } catch { /* leave undefined */ }
+  }
+  const weightStr = scalar("principleWeight");
+  return {
+    slug,
+    pageKind: scalar("pageKind"),
+    status: scalar("status"),
+    principleTier: scalar("principleTier"),
+    principleAppliesTo: blockList("principleAppliesTo"),
+    principleDimensionVector,
+    principleWeight: weightStr !== undefined ? Number(weightStr) : undefined,
+  };
+}
 
 const TIER_DEFAULT_WEIGHT: Record<string, number> = {
   commandment: 1.0,
