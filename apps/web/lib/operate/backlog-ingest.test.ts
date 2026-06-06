@@ -6,7 +6,7 @@ import {
   generateBacklogItemId,
   improvementCategoryToWorkType,
   ingestBacklogItem,
-  validateIngestStatus,
+  validateIngestInput,
   type IngestBacklogStore,
 } from "./backlog-ingest";
 
@@ -62,16 +62,25 @@ describe("improvementCategoryToWorkType", () => {
   });
 });
 
-describe("validateIngestStatus", () => {
-  it("allows triaging with no outcome", () => expect(validateIngestStatus("triaging", null, null)).toBeNull());
-  it("rejects non-triaging without an outcome", () =>
-    expect(validateIngestStatus("open", null, null)).toMatch(/triageOutcome is required/));
+describe("validateIngestInput", () => {
+  it("accepts a valid triaging request", () =>
+    expect(validateIngestInput({ workType: "feature", source: "automated-detection" })).toBeNull());
+  it("rejects an unknown workType", () =>
+    expect(validateIngestInput({ workType: "epic", source: "user-request" })).toMatch(/workType is required/));
+  it("rejects an unknown source", () =>
+    expect(validateIngestInput({ workType: "bug", source: "magic" })).toMatch(/source must be one of/));
+  it("rejects a non-triaging status without an outcome", () =>
+    expect(validateIngestInput({ workType: "bug", source: "user-request", status: "open" })).toMatch(
+      /triageOutcome is required/,
+    ));
   it("rejects triaging with an outcome", () =>
-    expect(validateIngestStatus("triaging", "build", null)).toMatch(/must not be set/));
+    expect(
+      validateIngestInput({ workType: "bug", source: "user-request", status: "triaging", triageOutcome: "build" }),
+    ).toMatch(/must not be set/));
   it("requires effortSize for build", () =>
-    expect(validateIngestStatus("open", "build", null)).toMatch(/effortSize is required/));
-  it("accepts build with effortSize", () =>
-    expect(validateIngestStatus("open", "build", "medium")).toBeNull());
+    expect(
+      validateIngestInput({ workType: "bug", source: "user-request", status: "open", triageOutcome: "build" }),
+    ).toMatch(/effortSize is required/));
 });
 
 // ─── Orchestrator (fake store, no DB) ─────────────────────────────────────────
@@ -80,9 +89,11 @@ function makeStore(overrides: Partial<IngestBacklogStore> = {}): {
   store: IngestBacklogStore;
   created: Array<Record<string, unknown>>;
   updated: Array<Record<string, unknown>>;
+  activities: Array<Record<string, unknown>>;
 } {
   const created: Array<Record<string, unknown>> = [];
   const updated: Array<Record<string, unknown>> = [];
+  const activities: Array<Record<string, unknown>> = [];
   const store: IngestBacklogStore = {
     backlogItem: {
       findFirst: async () => null,
@@ -93,21 +104,28 @@ function makeStore(overrides: Partial<IngestBacklogStore> = {}): {
       create: async (args) => {
         const data = (args as { data: Record<string, unknown> }).data;
         created.push(data);
-        return { itemId: data.itemId as string };
+        return { id: `cuid-${created.length}`, itemId: data.itemId as string };
       },
       ...(overrides.backlogItem ?? {}),
+    },
+    backlogItemActivity: {
+      create: async (args) => {
+        activities.push((args as { data: Record<string, unknown> }).data);
+        return {};
+      },
+      ...(overrides.backlogItemActivity ?? {}),
     },
     epic: {
       findFirst: async () => null,
       ...(overrides.epic ?? {}),
     },
   };
-  return { store, created, updated };
+  return { store, created, updated, activities };
 }
 
 describe("ingestBacklogItem", () => {
-  it("creates a triaging item by default, with workType/source and the origin marker in the body", async () => {
-    const { store, created } = makeStore();
+  it("creates a triaging item with workType/source, the origin marker, and an intake_origin activity", async () => {
+    const { store, created, activities } = makeStore();
     const indexKnowledge = vi.fn();
 
     const result = await ingestBacklogItem(
@@ -124,6 +142,7 @@ describe("ingestBacklogItem", () => {
 
     expect(result.created).toBe(true);
     expect(result.itemId).toMatch(/^BI-IMP-/);
+    expect(result.id).toBe("cuid-1");
     expect(created).toHaveLength(1);
     expect(created[0]).toMatchObject({
       status: "triaging",
@@ -133,13 +152,20 @@ describe("ingestBacklogItem", () => {
     });
     expect(created[0].body).toContain("[origin:improvement:IP-6F240]");
     expect(created[0].triageOutcome).toBeUndefined();
+    // Provenance: a typed audit row, not just a body marker.
+    expect(activities).toHaveLength(1);
+    expect(activities[0]).toMatchObject({
+      backlogItemId: "cuid-1",
+      kind: "intake_origin",
+      payload: { origin: { kind: "improvement", id: "IP-6F240" }, created: true, createdBy: "backlog-ingest" },
+    });
     expect(indexKnowledge).toHaveBeenCalledOnce();
   });
 
-  it("dedupes on the origin marker — bumps occurrence instead of creating a duplicate", async () => {
-    const { store, created, updated } = makeStore({
+  it("dedupes on the origin marker — bumps occurrence + writes a recurrence activity, no duplicate", async () => {
+    const { store, created, activities } = makeStore({
       backlogItem: {
-        findFirst: async () => ({ id: "cuid1", itemId: "BI-IMP-EXISTING" }),
+        findFirst: async () => ({ id: "cuid-existing", itemId: "BI-IMP-EXISTING" }),
         update: async () => ({}),
         create: async () => {
           throw new Error("should not create on dedup hit");
@@ -157,9 +183,25 @@ describe("ingestBacklogItem", () => {
       { store, indexKnowledge: () => {} },
     );
 
-    expect(result).toEqual({ itemId: "BI-IMP-EXISTING", created: false });
+    expect(result).toEqual({ itemId: "BI-IMP-EXISTING", id: "cuid-existing", created: false });
     expect(created).toHaveLength(0);
-    expect(updated).toHaveLength(0); // create path's update recorder unused; dedup update is in the override
+    expect(activities).toHaveLength(1);
+    expect(activities[0]).toMatchObject({
+      backlogItemId: "cuid-existing",
+      kind: "intake_origin",
+      payload: { created: false },
+    });
+  });
+
+  it("uses an explicit itemId when provided and writes no activity without an origin", async () => {
+    const { store, created, activities } = makeStore();
+    const result = await ingestBacklogItem(
+      { title: "Hand-filed", workType: "chore", source: "user-request", itemId: "BI-PORT-005" },
+      { store, indexKnowledge: () => {} },
+    );
+    expect(result.itemId).toBe("BI-PORT-005");
+    expect(created[0].itemId).toBe("BI-PORT-005");
+    expect(activities).toHaveLength(0); // no origin → no intake_origin row
   });
 
   it("resolves a semantic epic id to its cuid FK", async () => {
@@ -168,19 +210,14 @@ describe("ingestBacklogItem", () => {
     });
 
     await ingestBacklogItem(
-      {
-        title: "Linked to an epic",
-        workType: "feature",
-        source: "user-request",
-        epicId: "EP-INTAKE-UNIFY",
-      },
+      { title: "Linked to an epic", workType: "feature", source: "user-request", epicId: "EP-INTAKE-UNIFY" },
       { store, indexKnowledge: () => {} },
     );
 
     expect(created[0].epicId).toBe("epic-cuid-123");
   });
 
-  it("throws on an invalid status/outcome pairing rather than writing a bad row", async () => {
+  it("throws on invalid input rather than writing a bad row", async () => {
     const { store, created } = makeStore();
     await expect(
       ingestBacklogItem(

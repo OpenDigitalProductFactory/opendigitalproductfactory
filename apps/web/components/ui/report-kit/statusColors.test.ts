@@ -48,6 +48,7 @@ describe("statusColors", () => {
   it("maps known finance + complaint statuses to expected intents", () => {
     expect(resolveIntent("finance", "overdue")).toBe("danger");
     expect(resolveIntent("finance", "paid")).toBe("success");
+    expect(resolveIntent("aiFinanceWork", "browser_profile_needed")).toBe("warning");
     expect(resolveIntent("complaintSeverity", "critical")).toBe("danger");
     expect(resolveIntent("complaintStatus", "resolved")).toBe("success");
   });
