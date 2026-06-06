@@ -41,6 +41,32 @@
       ]
     },
     {
+      "key": "browser_drive",
+      "description": "Drive an authenticated browser session through the governed browser-use substrate. Side-effecting browser actions require this grant and remain bounded by approval, target-domain, and audit policies.",
+      "category": "platform",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "mcp-browser-use__browse_act"
+      ],
+      "implies": [
+        "browser_read"
+      ]
+    },
+    {
+      "key": "browser_read",
+      "description": "Open, read, screenshot, and close governed browser-use sessions without authorizing side-effecting browser actions.",
+      "category": "platform",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "mcp-browser-use__browse_close",
+        "mcp-browser-use__browse_extract",
+        "mcp-browser-use__browse_open",
+        "mcp-browser-use__browse_run_tests",
+        "mcp-browser-use__browse_screenshot"
+      ],
+      "implies": []
+    },
+    {
       "key": "adr_create",
       "description": "Create adr.",
       "category": "governance",

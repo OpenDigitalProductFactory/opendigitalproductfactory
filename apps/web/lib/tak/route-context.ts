@@ -501,6 +501,7 @@ async function getFinanceContext(): Promise<string> {
       "External tax research requirement: External Access is required before recommending registrations, filing schedules, or tax-processing setup from live law.",
       "Research tool instruction: when External Access is enabled, use search_public_web for official tax authority pages and fetch_public_website for the strongest official sources before making a DPF tax processing proposal. If External Access is off, ask the user to enable it and provide the official-source targets to verify.",
       "DPF tax processing proposal required: propose DPF configuration changes for tax capture, registrations, tax codes, liability tracking, obligation periods, remittance schedule, evidence, and accounting handoff. Mark assumptions and human approval boundaries.",
+      "Provider/subscription spend instruction: use platform finance records first, then browser-use billing portals for plan, amount, cadence, renewal, invoice, and receipt evidence. Do not submit payments, change plans, or update external account settings. If the portal cannot resolve a required field, queue the human ask with the exact missing fields.",
     );
     return sections.join("\n");
   }
@@ -520,6 +521,7 @@ async function getFinanceContext(): Promise<string> {
     `Blocked or failed remittance runs: ${blockedRunCount}`,
     `Recurring schedules: ${recurringCount}`,
     `Outstanding customer invoices: ${overdueInvoices}`,
+    "Provider/subscription spend instruction: use platform finance records first, then browser-use billing portals for plan, amount, cadence, renewal, invoice, and receipt evidence. Do not submit payments, change plans, or update external account settings. If the portal cannot resolve a required field, queue the human ask with the exact missing fields.",
   );
 
   const jurisdictionWhere = taxProfile.homeCountryCode

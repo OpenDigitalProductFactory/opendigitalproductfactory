@@ -104,11 +104,17 @@ fi
 # from the caller-supplied target. This is the load-bearing truth fix: the
 # image can only ever report the identity of the code it actually contains, so
 # the later sha-verify is a real check rather than reading back a value we set.
-# PROMOTE_TARGET_SHA is the orchestrator's EXPECTED identity (the stamp it
-# computed after preparing/merging the source); a mismatch is surfaced as a
-# warning so drift between prepare and build is visible without coupling this
-# script to the orchestrator's rollout state. The real platform version
-# (DPF_PLATFORM_VERSION, computed above from git tags) is baked in the same build.
+#
+# PROMOTE_TARGET_SHA is the orchestrator's intended identity (the stamp it
+# computed after preparing/merging the source). The spec §4.3 / BI-5B6C1C35
+# invariant is stamp == built HEAD == target, asserted PRE-SWAP. A divergence
+# here means the bytes about to be deployed are NOT the bytes the orchestrator
+# resolved — exactly the stale-image class of bug — so we FAIL LOUD before
+# building rather than recreating the portal under a label that lies about its
+# contents. (A dirty build tree is also rejected: a `-dirty` stamp can never
+# equal a clean target SHA, and promoting uncommitted bytes is never intended.)
+# The real platform version (DPF_PLATFORM_VERSION, from git tags) is baked in
+# the same build.
 emit_step docker-build
 if [[ $_dry_run -eq 0 ]]; then
   _built_sha=$(git -C "$PROMOTE_SOURCE" rev-parse HEAD 2>/dev/null | tr -d '[:space:]' || true)
@@ -119,9 +125,10 @@ if [[ $_dry_run -eq 0 ]]; then
   if [[ -n "$(git -C "$PROMOTE_SOURCE" status --porcelain 2>/dev/null || true)" ]]; then
     _built_sha="${_built_sha}-dirty"
   fi
-  if [[ -n "${PROMOTE_TARGET_SHA:-}" && "$PROMOTE_TARGET_SHA" != "$_built_sha" ]]; then
-    printf 'warning: build source identity %s differs from expected %s\n' \
+  if [[ "$PROMOTE_TARGET_SHA" != "$_built_sha" ]]; then
+    printf 'error: build source identity %s does not match promote target %s — refusing to build an image whose bytes diverge from the intended target (BI-5B6C1C35)\n' \
       "$_built_sha" "$PROMOTE_TARGET_SHA" >&2
+    exit 1
   fi
   export DPF_VERSION="$_built_sha"
   docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
@@ -166,20 +173,34 @@ fi
 
 # --- Step 6: sha-verify ---
 # Confirm the running deployment reports the SHA of the code we actually built
-# ($_built_sha from step 3) — NOT the caller-supplied target. Because the stamp
-# is derived from the build source's own HEAD, this genuinely proves the running
-# runtime is at the built commit rather than echoing a value we chose.
+# ($_built_sha from step 3). Step 3 already asserted _built_sha == target, so a
+# match here closes the three-way identity loop required by spec §4.3:
+# stamp(/sha) == built HEAD == target. The stamp is derived from the build
+# source's own HEAD (baked → DEPLOYED_SHA → /api/health/sha), so this genuinely
+# proves the running runtime is at the built commit rather than echoing a value
+# we chose. An EMPTY /sha is a hard failure, not a retry-until-timeout: it means
+# DEPLOYED_SHA was never populated in the running portal (the BI-5B6C1C35
+# symptom), so the runtime cannot prove its own identity and must not pass.
 emit_step sha-verify
 if [[ $_dry_run -eq 0 ]]; then
   _match=0
   _deployed_sha=""
   for _i in $(seq 1 30); do
     _deployed_sha=$(curl -fsS "${PROMOTE_HEALTH_URL}/sha" 2>/dev/null | tr -d '[:space:]' || true)
+    # An EMPTY /sha is a hard failure, not a transient miss to retry: DEPLOYED_SHA
+    # is unpopulated in the running image, so it can never report an identity no
+    # matter how long we wait. Break immediately and fail loud below rather than
+    # spinning the full retry budget (which would blow the verify timeout).
+    [[ -z "$_deployed_sha" ]] && break
     if [[ "$_deployed_sha" == "$_built_sha" ]]; then _match=1; break; fi
     sleep 3
   done
+  if [[ -z "$_deployed_sha" ]]; then
+    printf 'error: running portal reported an EMPTY deployed SHA at /sha — DEPLOYED_SHA is not populated in the running image, so it cannot prove it carries the built bytes (BI-5B6C1C35)\n' >&2
+    exit 1
+  fi
   [[ $_match -eq 1 ]] || {
-    printf 'error: deployed SHA %s does not match built SHA %s\n' \
+    printf 'error: deployed SHA %s does not match built/target SHA %s — running portal does not carry the bytes that were built (BI-5B6C1C35)\n' \
       "${_deployed_sha:-unknown}" "$_built_sha" >&2
     exit 1
   }
