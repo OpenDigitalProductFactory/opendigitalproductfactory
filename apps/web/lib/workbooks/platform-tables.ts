@@ -10,6 +10,8 @@ import { can } from "@/lib/permissions";
 import type { CapabilityKey } from "@/lib/govern/permissions";
 import { gridRegistry, type AdapterContext } from "./adapter";
 import "./backlog-adapter"; // self-register the backlog adapter
+import "./invoice-adapter"; // self-register the invoice adapter
+import "./risk-adapter"; // self-register the risk-assessment adapter
 import {
   type ColumnDefinition,
   type GridRow,
@@ -46,6 +48,20 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Every backlog item as an editable spreadsheet — same records as the backlog forms.",
     viewCapability: "view_operations",
     manageCapability: "manage_backlog",
+  },
+  {
+    entityType: "invoice",
+    label: "Invoices",
+    description: "Finance invoices as a grid — edit status inline; amounts/dates stay in the invoice form.",
+    viewCapability: "view_finance",
+    manageCapability: "manage_finance",
+  },
+  {
+    entityType: "risk_assessment",
+    label: "Risk assessments",
+    description: "Compliance risk register as an editable spreadsheet — same records as the risk forms.",
+    viewCapability: "view_compliance",
+    manageCapability: "manage_compliance",
   },
 ];
 
