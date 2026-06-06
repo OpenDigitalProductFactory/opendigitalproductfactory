@@ -42,10 +42,11 @@
     },
     {
       "key": "browser_drive",
-      "description": "Drive an authenticated browser session through the governed browser-use substrate. Side-effecting browser actions require this grant and remain bounded by approval, target-domain, and audit policies.",
+      "description": "Drive an authenticated browser session through the governed browser-use substrate. Side-effecting browser actions require this grant and remain bounded by approval, target-domain, and audit policies. Honors the coworker-facing drive_browser_task orchestrator and the namespaced browse_act sidecar tool.",
       "category": "platform",
       "sensitivity": "confidential",
       "honored_by_tools": [
+        "drive_browser_task",
         "mcp-browser-use__browse_act"
       ],
       "implies": [
@@ -1279,16 +1280,6 @@
         "fetch_public_website",
         "search_public_web",
         "start_scout_research"
-      ],
-      "implies": []
-    },
-    {
-      "key": "browser_drive",
-      "description": "Drive an authenticated browser via the browser-driving capability (drive_browser_task). Side-effecting; outward irreversible actions gate behind a CoworkerActionEnvelope. The read-only sibling grant browser_read gates the discovered mcp-browser-use__* sidecar tools directly.",
-      "category": "integrate",
-      "sensitivity": "confidential",
-      "honored_by_tools": [
-        "drive_browser_task"
       ],
       "implies": []
     }

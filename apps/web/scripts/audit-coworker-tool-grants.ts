@@ -115,7 +115,11 @@ function loadToolToGrants(): Record<string, string[]> {
   const map: Record<string, string[]> = {};
   if (!block) return map;
   for (const line of block[1].split("\n")) {
-    const m = line.match(/^\s*([a-zA-Z0-9_]+):\s*\[([^\]]*)\]/);
+    // Match both unquoted keys (create_backlog_item:) and quoted/hyphenated
+    // keys ("mcp-browser-use__browse_act":) — the latter are the namespaced
+    // discovered-MCP tools, which the prior [a-zA-Z0-9_]+ pattern silently
+    // skipped, making them look absent from TOOL_TO_GRANTS in GRANT-002/003.
+    const m = line.match(/^\s*"?([a-zA-Z0-9_-]+)"?:\s*\[([^\]]*)\]/);
     if (!m) continue;
     map[m[1]] = m[2]
       .split(",")
