@@ -98,6 +98,7 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     none: "success",
     plan_details_needed: "warning",
     commitment_details_needed: "warning",
+    browser_profile_needed: "warning",
     missing_usage_source: "danger",
     underused_commitment: "warning",
     critical_low_allowance: "danger",
