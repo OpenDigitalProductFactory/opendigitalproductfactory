@@ -1,6 +1,6 @@
 ---
 title: Unified Delivery Surfaces — one governed process, MCP coordination, execution alignment for Claude Code / Codex / Build Studio
-status: draft
+status: accepted
 date: 2026-06-05
 owner: platform
 relates:
@@ -68,7 +68,7 @@ The canonical lifecycle is the Build Studio one, already a clean evidence state 
 
 Right-sizing: `(type, size)` selects a `LifecyclePolicy` — a chore-small skips ideate+review; doc drops UX/acceptance; xlarge decomposes. The phase graph never changes; a skipped phase gets an auto-pass gate. Each transition runs `checkPhaseGate` — nothing is rubber-stamped, regardless of surface.
 
-**Process is sound; the BS *engine* is the unreliable part** — the inner `buildExecState` auto-advance pipeline (silent `step=complete`+error, restart-killed dispatch, "Reset Build" the only recovery). The interactive surfaces (Claude/Codex) bypass that engine by producing evidence and calling the gate directly through MCP. The embedded surface (BS) keeps the engine but must converge on the same gate/evidence contract.
+**Process is sound; the BS *engine* is the unreliable part** — the inner `buildExecState` auto-advance pipeline (silent `step=complete`+error, restart-killed dispatch, "Reset Build" the only recovery). The interactive surfaces (Claude/Codex) bypass that engine by producing evidence and calling the gate directly through MCP. The embedded surface (BS) keeps the engine but must converge on the same gate/evidence contract. **Per the §7 decision, stabilizing this engine is the engine-first priority** — BS becomes a true peer surface, not a workaround the other two route around indefinitely.
 
 ### 3.2 The MCP coordination plane (executor-agnostic source of truth)
 
@@ -155,15 +155,17 @@ The common contract is only real if each tool's actual client config enforces it
 1. **AGENTS.md** — new section "Delivery Surfaces & Execution Alignment" capturing §3.1–§3.3 invariants and the §4 contract (single source of truth; the surfaces' tool docs remain pointers).
 2. **Kernel principles** — promote the durable ones (`one-common-process-three-surfaces`, `mcp-is-the-coordination-plane`, `worktree-selection-and-reaping`, `reap-sidecars-to-upgrade-tools`, `runtime-gates-via-shared-lease`, `image-identity-equals-bytes`) under `docs/founder-kernel/wiki/principles/` so they ship with every install and hold offline.
 3. **dpf-platform skill pack** — wire the lifecycle skill chain to the gate/evidence contract; add worktree/sidecar/sandbox discipline to `dpf-worktree-per-session` and `dpf-finishing-a-development-branch`.
-4. **Code keystones (separate plans):** retire the `/workspace` second source-advance engine (converge on §5.0 host-clone); implement `dpf-native`; activate the janitor (BI-DBF3F426); enforce image stamp==bytes==target (BI-5B6C1C35).
+4. **Code keystones (separate plans), engine-first ordering:** (a) **stabilize the BS embedded engine** — the `buildExecState` auto-advance pipeline, contradictory-checkpoint recovery, restart-resume (the §7 Q4 priority); then (b) retire the `/workspace` second source-advance engine (converge on §5.0 host-clone); (c) implement `dpf-native`; (d) activate the janitor (BI-DBF3F426); (e) enforce image stamp==bytes==target (BI-5B6C1C35); (f) fold `:3001` into the `local-integration-ci` lease.
 
-## 7. Open questions (operator decisions)
+## 7. Decisions (WWMD-ratified 2026-06-05)
 
-1. **Worktree canonical location:** standardize on Claude Code's `<root>/.claude/worktrees/<name>` (nest-in-root, tool-native) **or** the §4 `D:/DPF-<topic>` (alongside)? One must become the hard rule for both surfaces.
-2. **Tooling-upgrade authority:** should a *quiesce-for-tooling-upgrade* be operator-triggered, or scheduled like the platform self-upgrade window?
-3. **Layman surface scope:** which existing surface (AI Coworker panel? Workspace Home?) is the canonical "hide complexity" front for delivery status?
-4. **BS engine vs. process:** do we invest in stabilizing the embedded engine now, or let Claude/Codex carry delivery while BS catches up to the same gate/evidence contract incrementally?
-5. **`:3001` Contributor preview disposition:** lease it as its own `contributor-preview` singleton, fold it into the `local-integration-ci` lease, or retire it in favor of the lease sandbox? (Today it is an unleased shared singleton writing to the live DB — it must not stay as-is.)
+Scored via `principle_decide` against the `mark-dpf-platform` profile (20 commandment-tier principles each; **zero commandment conflicts**; strong structured coverage, no semantic fallback). Operator-ratified; Q4 decided by the operator after the kernel returned a sub-threshold tie. The `principle_decide` traces (callingSurface `unified-delivery-spec-q1..q5`) are the audit record.
+
+1. **Worktree canonical location → dedicated sibling dir `D:/DPF-worktrees/<topic>`** for both host surfaces (not the tool-native `.claude/worktrees/` nesting). *Kernel: high confidence, margin 3.12 — the most decisive of the five; worktree-is-source-control-not-runtime + single-source-of-truth.*
+2. **Tooling-upgrade authority → operator-triggered** quiesce-reap-upgrade routine. *Kernel: high, margin 0.32; never-ask-the-user + destructive-actions-require-explicit-go.*
+3. **Layman front → the AI Coworker panel** (delivery status only; plumbing stays admin-only). *Kernel: high, margin 0.86; single-source-of-truth / agent-as-conduit.*
+4. **BS engine vs. process → engine-first.** Stabilize the embedded BS runtime engine now; the common process + MCP plane remain the contract all three surfaces share. *Kernel returned a sub-threshold tie (margin 0.027, low confidence) nominally tipping engine-first on single-source-of-truth + ship-real-functionality; **operator decided engine-first**.*
+5. **`:3001` disposition → fold into the `local-integration-ci` lease** (one lease-gated shared-runtime model; no standalone singleton, no silent re-bind). *Kernel: high, margin 0.63; single-source-of-truth.*
 
 ## 8. Acceptance
 
