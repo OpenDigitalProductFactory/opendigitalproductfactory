@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import { OperationsTopologyCanvas } from "./OperationsTopologyCanvas";
 import { buildOperationsMapTopologyFixture } from "@/test-support/operations-map-fixture";
 
@@ -125,5 +125,41 @@ describe("OperationsTopologyCanvas — shared replay scrubbing (Stage B2)", () =
     const states = [...container.querySelectorAll("[data-canvas-route]")].map((r) => r.getAttribute("data-route-state")).sort();
     expect(states).toEqual(["failover", "historical"]);
     expect(container.querySelectorAll("[data-canvas-a2a-arc]").length).toBe(2);
+  });
+});
+
+describe("OperationsTopologyCanvas — zoom controls (Stage B2b)", () => {
+  function findBtn(container: HTMLElement, name: string): HTMLButtonElement {
+    const b = [...container.querySelectorAll("button")].find((x) => x.getAttribute("aria-label") === name);
+    if (!b) throw new Error(`button "${name}" not found`);
+    return b as HTMLButtonElement;
+  }
+
+  it("renders zoom controls and zooms the viewBox in/out with a reset", () => {
+    const { container } = render(<OperationsTopologyCanvas topology={buildOperationsMapTopologyFixture()} />);
+    const svg = container.querySelector('svg[role="img"]') as SVGSVGElement;
+    const initial = svg.getAttribute("viewBox");
+    expect(initial?.startsWith("0 0 1040")).toBe(true); // 100% = full width from origin
+    expect(container.textContent).toContain("100%");
+
+    // Zoom in → viewBox narrows and recenters (no longer at origin).
+    fireEvent.click(findBtn(container, "Zoom in"));
+    const zoomed = container.querySelector('svg[role="img"]')?.getAttribute("viewBox");
+    expect(zoomed).not.toBe(initial);
+    expect(zoomed?.startsWith("0 0 1040")).toBe(false);
+    expect(container.textContent).toContain("125%");
+
+    // Reset → back to the default viewBox.
+    fireEvent.click(findBtn(container, "Reset zoom"));
+    expect(container.querySelector('svg[role="img"]')?.getAttribute("viewBox")).toBe(initial);
+  });
+
+  it("disables zoom-out at the minimum level and reset at the default", () => {
+    const { container } = render(<OperationsTopologyCanvas topology={buildOperationsMapTopologyFixture()} />);
+    // At default, reset is disabled.
+    expect(findBtn(container, "Reset zoom").disabled).toBe(true);
+    // Zoom out to the floor, then zoom-out is disabled.
+    fireEvent.click(findBtn(container, "Zoom out"));
+    expect(findBtn(container, "Zoom out").disabled).toBe(true);
   });
 });
