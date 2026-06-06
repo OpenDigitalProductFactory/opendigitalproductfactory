@@ -9,6 +9,10 @@
 //
 // Spec: docs/superpowers/specs/2026-06-05-ai-operations-map-three-band-cohesive-layout-design.md §7 Stage B
 
+"use client";
+
+import { useState } from "react";
+import { RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { intentStyle } from "@/components/ui/report-kit";
 import type { OperationsMapRoutingTopology } from "@/lib/ai-operations-map/types";
 import {
@@ -53,6 +57,9 @@ const CANVAS = {
   nodeRadius: 8,
 };
 
+const ZOOM_LEVELS = [0.8, 1, 1.25, 1.5] as const;
+const DEFAULT_ZOOM_INDEX = 1;
+
 export function OperationsTopologyCanvas({
   topology,
   viewport = "desktop",
@@ -61,6 +68,8 @@ export function OperationsTopologyCanvas({
   replayTime = null,
   replayRange = null,
 }: Props) {
+  const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
+  const zoomLevel = ZOOM_LEVELS[zoomIndex] ?? 1;
   const showProvider = dimension === "provider" || dimension === "both";
   const showA2a = dimension === "a2a" || dimension === "both";
 
@@ -99,19 +108,29 @@ export function OperationsTopologyCanvas({
       ? "Coworker spine with A2A interactions"
       : "Coworker spine with provider routing";
 
+  const canZoomOut = zoomIndex > 0;
+  const canZoomIn = zoomIndex < ZOOM_LEVELS.length - 1;
+
   return (
     <section
       aria-label="AI operations topology canvas"
       data-operations-topology-canvas
-      className="overflow-x-auto rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+      className="relative overflow-x-auto rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
     >
       {isEmpty ? (
         <p className="p-6 text-center text-sm text-[var(--dpf-muted)]">
           No provider routing or coworker activity in the current window.
         </p>
       ) : (
+        <>
+        <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5 rounded-full bg-[color-mix(in_srgb,var(--dpf-surface-1)_90%,transparent)] px-1.5 py-1 shadow-sm backdrop-blur">
+          <ZoomButton label="Zoom out" icon={ZoomOut} disabled={!canZoomOut} onClick={() => setZoomIndex((i) => Math.max(0, i - 1))} />
+          <span className="min-w-10 text-center text-[11px] font-medium text-[var(--dpf-text)]">{Math.round(zoomLevel * 100)}%</span>
+          <ZoomButton label="Zoom in" icon={ZoomIn} disabled={!canZoomIn} onClick={() => setZoomIndex((i) => Math.min(ZOOM_LEVELS.length - 1, i + 1))} />
+          <ZoomButton label="Reset zoom" icon={RotateCcw} disabled={zoomIndex === DEFAULT_ZOOM_INDEX} onClick={() => setZoomIndex(DEFAULT_ZOOM_INDEX)} />
+        </div>
         <svg
-          viewBox={`0 0 ${CANVAS.width} ${layout.height}`}
+          viewBox={zoomedViewBox(CANVAS.width, layout.height, zoomLevel)}
           role="img"
           aria-label={svgLabel}
           className="h-full w-full"
@@ -231,9 +250,48 @@ export function OperationsTopologyCanvas({
             </g>
           ))}
         </svg>
+        </>
       )}
     </section>
   );
+}
+
+function ZoomButton({
+  label,
+  icon: Icon,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  icon: typeof ZoomIn;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={[
+        "inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]",
+        disabled
+          ? "cursor-not-allowed text-[var(--dpf-muted)] opacity-50"
+          : "text-[var(--dpf-text)] hover:bg-[var(--dpf-accent-soft)]",
+      ].join(" ")}
+    >
+      <Icon aria-hidden="true" className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
+function zoomedViewBox(width: number, height: number, zoom: number): string {
+  const w = width / zoom;
+  const h = height / zoom;
+  const x = (width - w) / 2;
+  const y = (height - h) / 2;
+  return `${x} ${y} ${w} ${h}`;
 }
 
 function routePath(fromX: number, fromY: number, toX: number, toY: number, lane: number): string {
