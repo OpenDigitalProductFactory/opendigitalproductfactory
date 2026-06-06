@@ -1,0 +1,153 @@
+#!/usr/bin/env node
+/**
+ * BI-98AF1066 — Static bundle-boundary guard (EP-VERIFY-PROC).
+ *
+ * Catches "Docker-only" bundling failures in SECONDS, before a slow Next/Docker
+ * build — or worse, a shipped-but-corrupt runtime like the 2026-06-06 lazy-node
+ * `TypeError: d is not a function` crash that crash-looped /build. The point of
+ * EP-VERIFY-PROC: move this from "a human eventually notices in production" to a
+ * deterministic procedure the pipeline runs up front.
+ *
+ * Two checks (both pure string scans — no deps, runs with plain node):
+ *
+ *   1. BUNDLE-HOSTILE DYNAMIC REQUIRE: `new Function(... return require ...)`.
+ *      This shim is invisible to the bundler's static analysis and is undefined
+ *      in some Next server-chunk scopes — the exact lazy-node failure. The fix
+ *      is direct `import * as x from "node:<mod>"`.
+ *   2. NODE BUILT-INS IN A "use client" COMPONENT: fs / child_process / path /
+ *      crypto / etc. don't exist in the browser bundle and break the client
+ *      build. Server-only code must live in a server module / route / action.
+ *
+ * Run: node scripts/check-bundle-boundaries.mjs
+ * Exit 0 = clean; exit 1 = violations (with a clear, actionable report).
+ */
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+
+const ROOT = process.cwd();
+const SCAN_DIRS = [join(ROOT, "apps", "web")];
+
+// Node built-ins that have no browser equivalent. Importing any of these into a
+// client bundle breaks the build.
+const NODE_BUILTINS = [
+  "fs", "fs/promises", "child_process", "path", "crypto", "os", "net",
+  "http", "https", "stream", "zlib", "module", "dns", "tls", "cluster",
+  "worker_threads", "perf_hooks", "v8", "vm", "readline", "http2", "dgram",
+];
+
+// Allowlist for the dynamic-require check. Should stay EMPTY — direct node:
+// imports are always preferable. Add an entry only with a one-line reason.
+const DYNAMIC_REQUIRE_ALLOW = new Set([
+  // This guard itself documents the banned pattern in its header/comments.
+  "scripts/check-bundle-boundaries.mjs",
+]);
+
+// `new Function(` ... `require` on the same construct — catches
+// new Function("mod", "return require(mod)") and minor variants.
+const DYN_REQUIRE = /new\s+Function\s*\([^)]*require/;
+
+function* walk(dir) {
+  let entries;
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const full = join(dir, entry);
+    let s;
+    try {
+      s = statSync(full);
+    } catch {
+      continue;
+    }
+    if (s.isDirectory()) {
+      if (["node_modules", ".next", "__snapshots__", "dist", "public", "coverage"].includes(entry)) continue;
+      yield* walk(full);
+    } else if (s.isFile()) {
+      if (full.endsWith(".test.ts") || full.endsWith(".test.tsx") || full.endsWith(".d.ts")) continue;
+      if (!full.endsWith(".ts") && !full.endsWith(".tsx")) continue;
+      yield full;
+    }
+  }
+}
+
+// A file is a client component if a "use client" directive sits at the top
+// (optionally after comments). We only look at the head to avoid matching a
+// "use client" string literal deeper in the file.
+function isUseClient(body) {
+  const head = body.slice(0, 600);
+  return /(^|\n)\s*['"]use client['"]\s*;?/.test(head);
+}
+
+function clientNodeBuiltinImports(body) {
+  const hits = [];
+  for (const b of NODE_BUILTINS) {
+    const esc = b.replace("/", "\\/");
+    // import ... from "fs" | "node:fs" | require("fs")
+    const re = new RegExp(`(from\\s*['"](?:node:)?${esc}['"]|require\\(\\s*['"](?:node:)?${esc}['"]\\s*\\))`);
+    if (re.test(body)) hits.push(b);
+  }
+  return hits;
+}
+
+const dynViolations = [];
+const clientViolations = [];
+
+for (const baseDir of SCAN_DIRS) {
+  for (const file of walk(baseDir)) {
+    let body;
+    try {
+      body = readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    const rel = relative(ROOT, file).replace(/\\/g, "/");
+
+    if (DYN_REQUIRE.test(body) && !DYNAMIC_REQUIRE_ALLOW.has(rel)) {
+      dynViolations.push(rel);
+    }
+    if (isUseClient(body)) {
+      const hits = clientNodeBuiltinImports(body);
+      if (hits.length) clientViolations.push(`${rel}  (imports: ${hits.join(", ")})`);
+    }
+  }
+}
+
+let failed = false;
+
+if (dynViolations.length > 0) {
+  failed = true;
+  console.error("");
+  console.error('ERROR: BI-98AF1066 — bundle-hostile dynamic require found.');
+  console.error("");
+  console.error('`new Function(... require ...)` is invisible to the bundler and can resolve to');
+  console.error('undefined in a Next server chunk — the lazy-node "d is not a function" crash that');
+  console.error('crash-looped /build. Use a direct import instead:');
+  console.error('    import * as childProcess from "node:child_process";');
+  console.error("");
+  for (const v of dynViolations) console.error("  " + v);
+  console.error("");
+}
+
+if (clientViolations.length > 0) {
+  failed = true;
+  console.error("");
+  console.error('ERROR: BI-98AF1066 — Node built-in imported by a "use client" component.');
+  console.error("");
+  console.error("These modules don't exist in the browser bundle and break the client build.");
+  console.error("Move the server-only code to a server module, route handler, or server action,");
+  console.error("and call it from the client via that boundary.");
+  console.error("");
+  for (const v of clientViolations) console.error("  " + v);
+  console.error("");
+}
+
+if (failed) {
+  console.error("These are caught statically here so they don't surface as a slow Docker build");
+  console.error("failure or a corrupt runtime in production. Fix at the source above.");
+  console.error("");
+  process.exit(1);
+}
+
+console.log("✓ Bundle boundaries clean: no bundle-hostile dynamic requires, no Node built-ins in client components.");

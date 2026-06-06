@@ -71,6 +71,23 @@ jobs:
       - name: Run guard
         run: node scripts/check-mobile-jest-pin.mjs
 
+  bundle-boundary-guard:
+    name: Bundle Boundary Guard
+    runs-on: ubuntu-latest
+    # BI-98AF1066 (EP-VERIFY-PROC). Catches bundle-boundary failures statically
+    # in seconds — a bundle-hostile `new Function(...require...)` shim (the
+    # lazy-node "d is not a function" crash that crash-looped /build) or a Node
+    # built-in imported by a "use client" component — before they surface as a
+    # slow Docker build failure or a corrupt runtime in production.
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Run guard
+        run: node scripts/check-bundle-boundaries.mjs
+
   janitor-tests:
     name: Janitor Tests
     runs-on: ubuntu-latest
