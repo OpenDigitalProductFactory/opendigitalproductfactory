@@ -1298,20 +1298,17 @@ describe("runAgenticLoop", () => {
     const mockRoute = vi.mocked(routeAndCall);
     const mockExecuteTool = vi.mocked(executeTool);
 
-    mockRoute
-      .mockResolvedValueOnce(mockResult({
-        content: "Checking the existing Build Studio workflow files.",
-        toolCalls: [{ id: "toolu_read_1", name: "search_project_files", arguments: { query: "BuildStudio workflow actions" } }],
-      }))
-      .mockResolvedValueOnce(mockResult({
-        content: "Plan ready — 5 tasks across 4 files, and Start Implementation is the correct next approval in the product UI.",
-      }))
-      .mockResolvedValueOnce(mockResult({
-        content: "Plan ready — 5 tasks across 4 files, and Start Implementation is the correct next approval in the product UI.",
-      }))
-      .mockResolvedValueOnce(mockResult({
-        content: "",
-      }));
+    // Dispatch 1 runs the read-only tool; every subsequent dispatch repeats the
+    // unpersisted plan-ready claim so the build-route fabrication-retry budget
+    // (3, per BI-PIR-cc091267 / #1572) exhausts and the guard blocks it — rather
+    // than the mock running out and returning undefined.
+    mockRoute.mockResolvedValueOnce(mockResult({
+      content: "Checking the existing Build Studio workflow files.",
+      toolCalls: [{ id: "toolu_read_1", name: "search_project_files", arguments: { query: "BuildStudio workflow actions" } }],
+    }));
+    mockRoute.mockResolvedValue(mockResult({
+      content: "Plan ready — 5 tasks across 4 files, and Start Implementation is the correct next approval in the product UI.",
+    }));
 
     mockExecuteTool.mockResolvedValueOnce({ success: true, message: "Found Build Studio workflow files." });
 
@@ -1387,13 +1384,13 @@ describe("runAgenticLoop", () => {
   it("blocks a repeated fabricated plan-ready reply instead of surfacing it to the user", async () => {
     const mockRoute = vi.mocked(routeAndCall);
 
-    mockRoute
-      .mockResolvedValueOnce(mockResult({
-        content: "Plan ready — 5 tasks across 4 files. Building now.",
-      }))
-      .mockResolvedValueOnce(mockResult({
-        content: "Plan ready — 5 tasks across 4 files. Building now.",
-      }));
+    // BI-PIR-cc091267 (#1572) raised the build-route fabrication-retry budget to
+    // 3 (up to 4 dispatches). Return the fabricated reply for every dispatch so
+    // the budget exhausts and the guard emits its final message, instead of the
+    // mock running out and returning undefined on the 3rd call.
+    mockRoute.mockResolvedValue(mockResult({
+      content: "Plan ready — 5 tasks across 4 files. Building now.",
+    }));
 
     const result = await runAgenticLoop({
       ...baseParams,
@@ -1523,18 +1520,13 @@ describe("runAgenticLoop", () => {
 
   it("uses honest infra copy (not fabrication copy) for a downgraded build-route claim", async () => {
     const mockRoute = vi.mocked(routeAndCall);
-    // Two fabricated build claims → retry exhausted → final emission.
-    mockRoute
-      .mockResolvedValueOnce(mockResult({
-        content: "Built and deployed the feature — implementation completed.",
-        downgraded: true,
-        downgradeMessage: "Switched to Claude after the preferred endpoint was unavailable.",
-      }))
-      .mockResolvedValueOnce(mockResult({
-        content: "Built and deployed the feature — implementation completed.",
-        downgraded: true,
-        downgradeMessage: "Switched to Claude after the preferred endpoint was unavailable.",
-      }));
+    // Fabricated downgraded build claim on every dispatch → build-route retry
+    // budget (3, per BI-PIR-cc091267 / #1572) exhausts → final emission.
+    mockRoute.mockResolvedValue(mockResult({
+      content: "Built and deployed the feature — implementation completed.",
+      downgraded: true,
+      downgradeMessage: "Switched to Claude after the preferred endpoint was unavailable.",
+    }));
 
     const result = await runAgenticLoop({
       ...baseParams,
@@ -1551,16 +1543,12 @@ describe("runAgenticLoop", () => {
 
   it("STILL fires the fabrication guard on a healthy (non-downgraded) false claim", async () => {
     const mockRoute = vi.mocked(routeAndCall);
-    // Healthy provider, repeated fabricated claim → fabrication copy must win.
-    mockRoute
-      .mockResolvedValueOnce(mockResult({
-        content: "Built and deployed the feature — implementation completed.",
-        downgraded: false,
-      }))
-      .mockResolvedValueOnce(mockResult({
-        content: "Built and deployed the feature — implementation completed.",
-        downgraded: false,
-      }));
+    // Healthy provider, repeated fabricated claim on every dispatch → build-route
+    // retry budget (3, per BI-PIR-cc091267 / #1572) exhausts → fabrication copy wins.
+    mockRoute.mockResolvedValue(mockResult({
+      content: "Built and deployed the feature — implementation completed.",
+      downgraded: false,
+    }));
 
     const result = await runAgenticLoop({
       ...baseParams,
