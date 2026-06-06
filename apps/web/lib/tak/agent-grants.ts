@@ -52,6 +52,39 @@ export function expandGrants(grants: readonly string[]): string[] {
 }
 
 /**
+ * Read-only baseline every coworker holds, regardless of its agent-specific
+ * grants. Encodes the platform design criterion (operator, 2026-06-06,
+ * BI-FD7E4D72): a coworker must have complete visibility of the page it is on
+ * plus read access to the documentation, the source code, and the code graph
+ * for "how it works and the rest of the portal". Without this the page-scoped
+ * agents (e.g. AGT-WS-OPS, granted only backlog_*) could neither see their
+ * page's coordination data nor look anything up — making them, in the
+ * operator's words, "rather useless".
+ *
+ * Every grant here is READ-ONLY. The user-capability check in getAvailableTools
+ * (`can(userContext, requiredCapability)`) still applies on top, so this never
+ * escalates a coworker beyond what its human operator may see. Merged into the
+ * agent's grants at coworker tool-resolution time (see getAvailableTools'
+ * `additionalGrants` option) rather than hand-stamped onto every agent entry —
+ * one durable rule that new agents inherit automatically, and which sidesteps
+ * the DB-vs-JSON grant-sync problem since it is applied in code at runtime.
+ *
+ *  - registry_read     → knowledge base, wiki, portfolio context
+ *  - file_read         → read/search project source code
+ *  - document_read     → platform documentation (doc_search / doc_load)
+ *  - code_graph_read   → the code graph (search_code_graph / trace_code_surface)
+ *  - work_capsule_read → page coordination data (runtime targets, leases,
+ *                        build progress) — the data pages like /ops/dev-loop render
+ */
+export const COWORKER_READ_BASELINE_GRANTS: readonly string[] = [
+  "registry_read",
+  "file_read",
+  "document_read",
+  "code_graph_read",
+  "work_capsule_read",
+];
+
+/**
  * Maps platform tool names to agent grant categories.
  * A tool is allowed if the agent has ANY of the grants it maps to —
  * directly OR via GRANT_IMPLICATIONS expansion (see expandGrants).
