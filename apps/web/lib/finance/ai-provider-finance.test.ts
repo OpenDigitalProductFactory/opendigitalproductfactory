@@ -138,6 +138,60 @@ describe("seedAiProviderFinanceBridge", () => {
     expect(mocks.workItemCreate).not.toHaveBeenCalled();
     expect(result.workItemId).toBe("existing-work");
   });
+
+  it("does not requeue plan-details asks when the existing contract already has resolved finance details", async () => {
+    mocks.contractFindFirst.mockResolvedValue({
+      id: "contract-chatgpt",
+      contractId: "AIC-CHATGPT",
+      monthlyCommittedAmount: 106.4,
+      usageUnit: "subscription_seat",
+      allowances: [
+        {
+          id: "allowance-chatgpt",
+          includedQuantity: 0,
+          usageUnit: "subscription_seat",
+        },
+      ],
+    });
+
+    const result = await seedAiProviderFinanceBridge({
+      providerId: "chatgpt",
+      providerName: "ChatGPT (OpenAI Subscription)",
+    });
+
+    expect(mocks.workItemFindFirst).not.toHaveBeenCalled();
+    expect(mocks.workItemCreate).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        contractId: "contract-chatgpt",
+        workItemId: null,
+      }),
+    );
+  });
+
+  it("treats zero-dollar included-access contracts as resolved when usage unit and allowance are known", async () => {
+    mocks.contractFindFirst.mockResolvedValue({
+      id: "contract-codex",
+      contractId: "AIC-CODEX",
+      monthlyCommittedAmount: 0,
+      usageUnit: "included_subscription_access",
+      allowances: [
+        {
+          id: "allowance-codex",
+          includedQuantity: 0,
+          usageUnit: "included_subscription_access",
+        },
+      ],
+    });
+
+    const result = await seedAiProviderFinanceBridge({
+      providerId: "codex",
+      providerName: "OpenAI Codex",
+    });
+
+    expect(mocks.workItemCreate).not.toHaveBeenCalled();
+    expect(result.workItemId).toBeNull();
+  });
 });
 
 describe("ensureFinanceCommitment", () => {
