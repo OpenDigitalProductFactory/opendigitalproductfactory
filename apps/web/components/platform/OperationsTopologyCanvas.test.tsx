@@ -93,3 +93,37 @@ describe("OperationsTopologyCanvas — A2A arc half (Stage C)", () => {
     expect(container.querySelectorAll("[data-canvas-marker]").length).toBe(0);
   });
 });
+
+describe("OperationsTopologyCanvas — shared replay scrubbing (Stage B2)", () => {
+  // Fixture timestamps: T0=10:00, T1=10:05, T2=10:10, T3=10:15.
+  const ms = (iso: string) => Date.parse(iso);
+  const range = {
+    start: ms("2026-06-05T10:00:00.000Z"),
+    current: ms("2026-06-05T10:10:00.000Z"),
+    end: ms("2026-06-05T10:15:00.000Z"),
+  };
+
+  it("shows everything at the default (current) playhead", () => {
+    const { container } = render(
+      <OperationsTopologyCanvas topology={buildOperationsMapTopologyFixture()} replayTime={range.current} replayRange={range} />,
+    );
+    expect(container.querySelectorAll("[data-canvas-route]").length).toBe(4);
+    expect(container.querySelectorAll("[data-canvas-a2a-arc]").length).toBe(3);
+  });
+
+  it("hides future routes and arcs when the playhead is scrubbed back", () => {
+    // Scrub to T1 (10:05): future active route (T2) + scheduled (T3) hide; past
+    // failover (T1) + historical (T0) stay. A2A lineage (T2) hides; delegation
+    // (T0) + handoff (T1) stay.
+    const { container } = render(
+      <OperationsTopologyCanvas
+        topology={buildOperationsMapTopologyFixture()}
+        replayTime={ms("2026-06-05T10:05:00.000Z")}
+        replayRange={range}
+      />,
+    );
+    const states = [...container.querySelectorAll("[data-canvas-route]")].map((r) => r.getAttribute("data-route-state")).sort();
+    expect(states).toEqual(["failover", "historical"]);
+    expect(container.querySelectorAll("[data-canvas-a2a-arc]").length).toBe(2);
+  });
+});

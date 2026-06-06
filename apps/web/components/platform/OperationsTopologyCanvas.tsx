@@ -21,13 +21,16 @@ import {
   routeStateDash,
   routeStateOpacity,
   routeStateStroke,
+  routeVisibleAtReplayTime,
   routeWidth,
 } from "./operations-topology-style";
 import {
+  a2aEdgeVisibleAtReplayTime,
   a2aStateIntent,
   edgeKindDash,
   EDGE_KIND_LABEL,
   STATE_LABEL,
+  type A2aReplayRange,
 } from "./a2a-interaction-graph";
 
 export type TopologyDimension = "provider" | "a2a" | "both";
@@ -38,6 +41,9 @@ type Props = {
   selectedCoworkerId?: string | null;
   /** Which halves to render — mirrors the Provider/A2A/Both dimension toggle. */
   dimension?: TopologyDimension;
+  /** Shared replay playhead — when set, both halves scrub in lock-step. */
+  replayTime?: number | null;
+  replayRange?: A2aReplayRange | null;
 };
 
 const CANVAS = {
@@ -52,17 +58,30 @@ export function OperationsTopologyCanvas({
   viewport = "desktop",
   selectedCoworkerId = null,
   dimension = "both",
+  replayTime = null,
+  replayRange = null,
 }: Props) {
   const showProvider = dimension === "provider" || dimension === "both";
   const showA2a = dimension === "a2a" || dimension === "both";
+
+  // Shared replay window: filter both halves by the playhead before layout so
+  // the spine, routes, and arcs all reflect the same point in time. At the
+  // default playhead (>= "current") everything recent stays visible.
+  const replayActive = replayTime != null && replayRange != null;
+  const visibleRoutes = showProvider
+    ? (replayActive ? topology.routes.filter((route) => routeVisibleAtReplayTime(route, replayTime, replayRange)) : topology.routes)
+    : [];
+  const visibleA2aEdges = showA2a
+    ? (replayActive ? topology.a2aEdges.filter((edge) => a2aEdgeVisibleAtReplayTime(edge.occurredAt, replayTime, replayRange)) : topology.a2aEdges)
+    : [];
 
   // The spine is the union of the visible halves: provider-routing coworkers
   // and/or A2A participants. Each half is suppressed in single-dimension mode.
   const layout = buildOperationsTopologyLayout({
     coworkers: topology.coworkers,
     providers: showProvider ? topology.providers : [],
-    routes: showProvider ? topology.routes : [],
-    a2aEdges: showA2a ? topology.a2aEdges : [],
+    routes: visibleRoutes,
+    a2aEdges: visibleA2aEdges,
     markers: showProvider ? topology.markers : [],
     selectedCoworkerId,
     viewport,
