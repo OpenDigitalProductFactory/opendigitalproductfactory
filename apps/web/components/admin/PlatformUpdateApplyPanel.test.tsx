@@ -31,4 +31,21 @@ describe("PlatformUpdateApplyPanel", () => {
     expect(html).toContain("click Apply update again");
     expect(html).not.toMatch(/Build Studio/i);
   });
+
+  it("renders the Engine-B-retired result as a Self-Upgrade pointer, not a failure (BI-5B6C1C35)", () => {
+    const html = renderToStaticMarkup(
+      <ApplyResult
+        result={{
+          kind: "engine-retired",
+          message:
+            "Applying updates by merging into /workspace is retired. Open Self-Upgrade.",
+        }}
+      />,
+    );
+
+    expect(html).toMatch(/Use Self-Upgrade/i);
+    expect(html).toMatch(/retired/i);
+    // Not framed as an apply failure.
+    expect(html).not.toMatch(/Apply failed/i);
+  });
 });
