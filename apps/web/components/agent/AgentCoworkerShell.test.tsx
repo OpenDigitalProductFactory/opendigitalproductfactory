@@ -365,4 +365,34 @@ describe("AgentCoworkerShell support entry", () => {
     );
     expect(startFeedbackSupportMock).not.toHaveBeenCalled();
   });
+
+  it("passes guided work route context to the coworker panel", async () => {
+    pathname = "/customer";
+    renderShell();
+    await settleShellThread();
+
+    act(() => {
+      document.dispatchEvent(
+        new CustomEvent("open-agent-panel", {
+          detail: {
+            autoMessage: "Diagnose stage health for OPP-CODEX-001.",
+            routeContext: "/customer/opportunities/opp-1",
+          },
+        }),
+      );
+    });
+
+    expect(await screen.findByTestId("coworker-panel")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(getOrCreateThreadSnapshotMock).toHaveBeenCalledWith({
+        routeContext: "/customer/opportunities/opp-1",
+      });
+    });
+    await waitFor(() => {
+      const latestProps = agentCoworkerPanelMock.mock.calls.at(-1)?.[0] as
+        | Record<string, unknown>
+        | undefined;
+      expect(latestProps?.routeContextOverride).toBe("/customer/opportunities/opp-1");
+    });
+  });
 });
