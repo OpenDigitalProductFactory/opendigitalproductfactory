@@ -164,11 +164,13 @@ describe("buildPlanReviewPrompt", () => {
         round: 2,
         issues: [{ severity: "critical", description: "Some prior issue" }],
       });
-      // The three pillars of the delta protocol must be present so the
-      // reviewer can't fall back to re-evaluating from scratch.
+      // The convergence-enforcing delta protocol must be present so the
+      // reviewer can't fall back to re-evaluating from scratch and can't
+      // trade one issue set for another across rounds (BI-ACC6A4A7).
       expect(prompt).toContain("do NOT re-surface it");
-      expect(prompt).toContain("reuse the SAME description");
-      expect(prompt).toContain("Goal: convergence, not re-litigation");
+      expect(prompt).toContain("the SAME description");
+      expect(prompt).toContain("CONVERGENCE-ENFORCING");
+      expect(prompt).toContain("no CRITICAL issues remain");
     });
 
     it("computes the correct round label when prior round is 2", () => {
