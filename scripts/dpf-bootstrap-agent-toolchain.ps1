@@ -229,6 +229,17 @@ if ($plan.codex -and $plan.codex.writes.Count -gt 0) {
     }
     Write-Ok "Codex plugin wired."
     $codexWired = $true
+    # Report DPF-scoping convergence (generic-client disable + worktree trust)
+    # so drift is surfaced, not silently tolerated (spec S4.5).
+    if ($plan.codex.convergence -and @($plan.codex.convergence).Count -gt 0) {
+        foreach ($chg in $plan.codex.convergence) {
+            switch ($chg.kind) {
+                "plugin-disabled"     { Write-Info "Codex: disabled generic plugin '$($chg.key)' (DPF-scoped profile)." }
+                "mcp-server-disabled" { Write-Info "Codex: disabled generic MCP server '$($chg.key)' (orphaned-sidecar source)." }
+                "project-trusted"     { Write-Info "Codex: trusted worktree path '$($chg.key)'." }
+            }
+        }
+    }
 } elseif ($plan.codex) {
     if ($plan.codex.preservedUserIntent) {
         Write-Skip "Codex plugin manually disabled by user; preserving user intent."

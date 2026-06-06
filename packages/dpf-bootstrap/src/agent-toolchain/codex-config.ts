@@ -2,12 +2,38 @@
  * Plan idempotent edits to `~/.codex/config.toml` so the DPF skill pack is
  * enabled for the Codex CLI without clobbering any unrelated user config.
  *
- * Round-trips through `smol-toml` — never regex. Every other declared block
+ * Round-trips through `smol-toml` -- never regex. Every other declared block
  * is byte-equivalent across plan applications. User intent (`enabled = false`
  * set manually by the operator) is preserved.
+ *
+ * Convergence scope (per docs/superpowers/specs/2026-06-05-unified-delivery-
+ * surfaces-execution-alignment-design.md S4.5):
+ *   - ensure `[plugins."dpf-platform"]` + `[mcp_servers.dpf]` (the DPF baseline);
+ *   - DISABLE generic, non-DPF clients that auto-spawn orphaned npx/node
+ *     sidecars (`superpowers@openai-curated`, `build-ios-apps@openai-curated`
+ *     plugins; `nanobanana-mcp`, `youtube_transcript` MCP servers). The decision
+ *     is conservative: DISABLE, not delete, so the operator can re-enable and we
+ *     never destroy unrelated config. `superpowers@openai-curated` directly
+ *     conflicts with `dpf-platform`; per the spec DPF wins, so it is disabled in
+ *     the DPF working profile;
+ *   - TRUST the canonical worktree base + this worktree so Codex sessions in
+ *     `D:/DPF-worktrees/<topic>` do not hit trust friction (S4.1 decision #1).
+ *
+ * What this convergence does NOT touch: the MCP servers / plugins the operator
+ * legitimately uses outside DPF (`github@openai-curated`, `gmail@openai-curated`,
+ * `chrome@openai-bundled`, the document runtimes, the `node_repl` REPL
+ * transport, etc.) -- only the spec-named generic clients whose orphaned
+ * children pin the WindowsApps Store package against upgrade.
  */
 
 import { parse, stringify } from "smol-toml";
+
+export type CodexConfigConvergenceChange = {
+  /** Substrate kind that changed. */
+  kind: "plugin-disabled" | "mcp-server-disabled" | "project-trusted";
+  /** The config key affected (e.g. plugin id, mcp server name, trust path). */
+  key: string;
+};
 
 export type CodexConfigPlan = {
   /** Path/content pairs to write. Empty when the file already converged. */
@@ -18,6 +44,12 @@ export type CodexConfigPlan = {
   rationale: string;
   /** True when the user has explicitly disabled the plugin and the plan respects it. */
   preservedUserIntent: boolean;
+  /**
+   * Convergence changes beyond the plugin + MCP baseline (generic-client
+   * disable + worktree trust). Surfaced at the readiness banner so drift is
+   * reported, not silently tolerated. Empty when the profile already conforms.
+   */
+  convergence: CodexConfigConvergenceChange[];
 };
 
 const DPF_PLUGIN_KEY = "dpf-platform";
@@ -26,7 +58,30 @@ const DPF_PLUGIN_KEY = "dpf-platform";
 // depend on the web bundle. Keep the two in lockstep.
 const MCP_BEARER_TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN";
 
-/** Desired `[mcp_servers.dpf]` shape (secret-free — references the env var). */
+/**
+ * Generic, non-DPF Codex plugins that auto-spawn orphaned npx/node sidecars and
+ * are not project-default per AGENTS.md S16. Disabled (not deleted) in the DPF
+ * working profile. `superpowers@openai-curated` additionally conflicts with
+ * `dpf-platform`; DPF wins. Matched by the bare name before any `@marketplace`
+ * suffix so a beta-channel install is still caught.
+ */
+const GENERIC_PLUGINS_TO_DISABLE = ["superpowers", "build-ios-apps"] as const;
+
+/**
+ * Generic, non-DPF Codex MCP servers that auto-spawn orphaned npx children and
+ * are irrelevant to DPF development. Disabled (not deleted) in the DPF working
+ * profile by clearing the spawn command so the session does not launch them.
+ */
+const GENERIC_MCP_SERVERS_TO_DISABLE = ["nanobanana-mcp", "youtube_transcript"] as const;
+
+/**
+ * Canonical worktree base directory for the two interactive host surfaces
+ * (S4.1 decision #1). Worktree sessions live under `D:/DPF-worktrees/<topic>`;
+ * trusting the base avoids per-worktree trust friction in Codex.
+ */
+const CANONICAL_WORKTREE_BASE = "D:\\DPF-worktrees";
+
+/** Desired `[mcp_servers.dpf]` shape (secret-free -- references the env var). */
 function desiredMcpServerBlock(mcpEndpoint: string): Record<string, string> {
   return { url: mcpEndpoint, bearer_token_env_var: MCP_BEARER_TOKEN_ENV_VAR };
 }
@@ -41,26 +96,38 @@ function mcpBlockConverged(
   );
 }
 
+/** Does this plugin id (possibly `name@marketplace`) match a generic id? */
+function isGenericPlugin(pluginId: string): boolean {
+  const bare = pluginId.split("@")[0];
+  return (GENERIC_PLUGINS_TO_DISABLE as readonly string[]).includes(bare);
+}
+
 /**
  * Plan the Codex `config.toml` upsert for this contributor and repo.
  *
- * Converges two independent, secret-free blocks:
+ * Converges the DPF working profile:
  *   - `[plugins."dpf-platform"]` enabled = true (the DPF skill pack)
  *   - `[mcp_servers.dpf]` url + bearer_token_env_var (the governed MCP transport),
  *     written only when `mcpEndpoint` is supplied.
+ *   - generic, non-DPF plugins (`superpowers`, `build-ios-apps`) disabled.
+ *   - generic, non-DPF MCP servers (`nanobanana-mcp`, `youtube_transcript`)
+ *     disabled (spawn command cleared) so their orphaned children stop pinning
+ *     the WindowsApps Store package against upgrade.
+ *   - the canonical worktree base (`D:/DPF-worktrees`) and this worktree
+ *     (`repoRoot`) added to the project trust list.
  *
  * - `existingTomlText` is the file's current text (or "" for a fresh contributor).
- * - `repoRoot` is the absolute path of the contributor's DPF clone. Recorded in
- *   the plan rationale; not embedded in the TOML.
+ * - `repoRoot` is the absolute path of the contributor's DPF clone/worktree.
+ *   Added to the trust list and recorded in the rationale.
  * - `configPath` is the absolute path where the plan would write back.
  * - `mcpEndpoint` is the `/api/mcp/v1` URL. When omitted, the MCP block is left
  *   untouched (back-compat with callers that only manage the plugin block).
  *
- * Returns zero writes when the file is unparseable, zero writes when both
- * blocks already match the desired state, and a single full-file write with
- * the upserted blocks otherwise. Every other block is preserved byte-for-byte
- * via smol-toml round-tripping. A user-set `enabled = false` on the plugin is
- * honored (never silently re-enabled); MCP wiring is independent of that intent.
+ * Returns zero writes when the file is unparseable, zero writes when the whole
+ * profile already conforms, and a single full-file write otherwise. Every block
+ * outside the convergence scope is preserved byte-for-byte via smol-toml
+ * round-tripping. A user-set `enabled = false` on the DPF plugin is honored
+ * (never silently re-enabled); MCP wiring is independent of that intent.
  */
 export function planCodexConfig(
   existingTomlText: string,
@@ -77,6 +144,7 @@ export function planCodexConfig(
       deletes: [],
       rationale: `TOML parse error; refusing to write. (${(err as Error).message})`,
       preservedUserIntent: false,
+      convergence: [],
     };
   }
 
@@ -92,35 +160,105 @@ export function planCodexConfig(
   const wantMcp = typeof mcpEndpoint === "string" && mcpEndpoint.length > 0;
   const mcpConverged = !wantMcp || mcpBlockConverged(existingMcp, mcpEndpoint!);
 
-  // Nothing to do — both blocks already match desired state.
-  if (pluginConverged && mcpConverged) {
+  // --- Compute convergence deltas (idempotent, conservative) ----------------
+
+  const convergence: CodexConfigConvergenceChange[] = [];
+
+  // Generic plugins to disable: any present + still-enabled generic plugin.
+  const genericPluginsToDisable = Object.keys(plugins).filter((id) => {
+    if (!isGenericPlugin(id)) return false;
+    const blk = plugins[id] as { enabled?: boolean } | undefined;
+    // Already disabled (enabled === false) -> nothing to do.
+    return blk?.enabled !== false;
+  });
+
+  // Generic MCP servers to disable: present and still has a spawn command.
+  const genericMcpToDisable = (GENERIC_MCP_SERVERS_TO_DISABLE as readonly string[]).filter((name) => {
+    const blk = mcpServers[name] as { command?: unknown; enabled?: unknown } | undefined;
+    if (!blk || typeof blk !== "object") return false;
+    // Treat as needing convergence if it still has a spawn command or is not
+    // explicitly disabled.
+    return blk.command !== undefined || blk.enabled === true;
+  });
+
+  // Trust entries to add: the canonical worktree base and this worktree.
+  const projects = (parsed["projects"] as Record<string, unknown> | undefined) ?? {};
+  const trustTargets = [CANONICAL_WORKTREE_BASE, repoRoot];
+  const trustToAdd = trustTargets.filter((p) => {
+    const blk = projects[p] as { trust_level?: unknown } | undefined;
+    return blk?.trust_level !== "trusted";
+  });
+
+  const needsConvergence =
+    genericPluginsToDisable.length > 0 ||
+    genericMcpToDisable.length > 0 ||
+    trustToAdd.length > 0;
+
+  // Nothing to do anywhere -- baseline + convergence both already conform.
+  if (pluginConverged && mcpConverged && !needsConvergence) {
     return {
       writes: [],
       deletes: [],
       rationale: userDisabledPlugin
-        ? `Codex plugin disabled by user (preserved); MCP block ${wantMcp ? "already converged" : "unmanaged"}.`
-        : "Codex plugin + MCP block already converged; no write needed.",
+        ? `Codex plugin disabled by user (preserved); MCP + DPF profile already converged.`
+        : "Codex DPF profile already converged; no write needed.",
       preservedUserIntent: userDisabledPlugin,
+      convergence: [],
     };
   }
 
   const nextParsed: Record<string, unknown> = { ...parsed };
   const rationaleParts: string[] = [];
 
-  // Plugin block: add/enable unless the user explicitly disabled it.
-  if (!pluginConverged) {
+  // Plugin block: add/enable DPF unless the user explicitly disabled it.
+  // We also disable the generic plugins in the same plugins map.
+  if (!pluginConverged || genericPluginsToDisable.length > 0) {
     const nextPlugins: Record<string, unknown> = { ...plugins };
-    nextPlugins[DPF_PLUGIN_KEY] = { ...(existingBlock ?? {}), enabled: true };
+    if (!pluginConverged) {
+      nextPlugins[DPF_PLUGIN_KEY] = { ...(existingBlock ?? {}), enabled: true };
+      rationaleParts.push(`enable [plugins."${DPF_PLUGIN_KEY}"]`);
+    }
+    for (const id of genericPluginsToDisable) {
+      const blk = (plugins[id] as Record<string, unknown> | undefined) ?? {};
+      nextPlugins[id] = { ...blk, enabled: false };
+      convergence.push({ kind: "plugin-disabled", key: id });
+      rationaleParts.push(`disable generic plugin "${id}"`);
+    }
     nextParsed["plugins"] = nextPlugins;
-    rationaleParts.push(`enable [plugins."${DPF_PLUGIN_KEY}"]`);
   }
 
-  // MCP transport block: independent of plugin-enable intent.
-  if (wantMcp && !mcpConverged) {
+  // MCP servers: upsert the DPF transport; disable generic servers by clearing
+  // their spawn command (preserving any other keys) so the session stops
+  // launching their orphaned children.
+  if ((wantMcp && !mcpConverged) || genericMcpToDisable.length > 0) {
     const nextMcpServers: Record<string, unknown> = { ...mcpServers };
-    nextMcpServers["dpf"] = { ...(existingMcp ?? {}), ...desiredMcpServerBlock(mcpEndpoint!) };
+    if (wantMcp && !mcpConverged) {
+      nextMcpServers["dpf"] = { ...(existingMcp ?? {}), ...desiredMcpServerBlock(mcpEndpoint!) };
+      rationaleParts.push("upsert [mcp_servers.dpf]");
+    }
+    for (const name of genericMcpToDisable) {
+      const blk = (mcpServers[name] as Record<string, unknown> | undefined) ?? {};
+      // Remove the spawn command + args and mark disabled. Keeping the block
+      // (rather than deleting it) is the conservative choice: the operator can
+      // re-enable by restoring a command, and we never destroy unrelated keys.
+      const { command: _command, args: _args, ...rest } = blk;
+      nextMcpServers[name] = { ...rest, enabled: false };
+      convergence.push({ kind: "mcp-server-disabled", key: name });
+      rationaleParts.push(`disable generic MCP server "${name}"`);
+    }
     nextParsed["mcp_servers"] = nextMcpServers;
-    rationaleParts.push("upsert [mcp_servers.dpf]");
+  }
+
+  // Project trust: add the canonical worktree base + this worktree.
+  if (trustToAdd.length > 0) {
+    const nextProjects: Record<string, unknown> = { ...projects };
+    for (const p of trustToAdd) {
+      const blk = (projects[p] as Record<string, unknown> | undefined) ?? {};
+      nextProjects[p] = { ...blk, trust_level: "trusted" };
+      convergence.push({ kind: "project-trusted", key: p });
+      rationaleParts.push(`trust project "${p}"`);
+    }
+    nextParsed["projects"] = nextProjects;
   }
 
   return {
@@ -128,5 +266,6 @@ export function planCodexConfig(
     deletes: [],
     rationale: `${rationaleParts.join(" + ")} for ${repoRoot}.`,
     preservedUserIntent: userDisabledPlugin,
+    convergence,
   };
 }

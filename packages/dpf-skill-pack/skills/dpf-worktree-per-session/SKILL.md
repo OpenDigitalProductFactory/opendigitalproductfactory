@@ -77,17 +77,17 @@ For normal feature/fix work: commit from the worktree, then route runtime-bound 
 2. **Base the new branch on `origin/main`.** Per `worktree-base-origin-main`:
    ```
    git fetch origin main
-   git worktree add ../DPF-<slug> -b <prefix>/<slug> origin/main
+   git worktree add D:/DPF-worktrees/<slug> -b <prefix>/<slug> origin/main
    ```
    - Convention: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`, `doc/<slug>`, `clean/<slug>`.
-   - Worktree path: `D:\DPF-<slug>` on Windows, `~/dpf-worktrees/<slug>` on macOS/Linux.
+   - **Canonical worktree base** (the 2026-06-05 unified-delivery-surfaces decision #1): both host surfaces (Claude Code and Codex) put topic worktrees in the dedicated sibling dir `D:/DPF-worktrees/<slug>` on Windows, `~/dpf-worktrees/<slug>` on macOS/Linux. Do NOT use Claude Code's default `.claude/worktrees/<random>` nesting inside the root clone, and do NOT use the older `D:/DPF-<slug>` alongside-the-clone form — one base, both surfaces. The dedicated base keeps worktrees out of the root clone's tree and gives the janitor one place to reap. → spec [`2026-06-05-unified-delivery-surfaces-execution-alignment-design.md`](../../../../docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md) §4.1 + decision #1.
    - **Never** branch from local `main` — local main may carry unpushed commits that sweep into your PR and fail DCO.
 
-3. **Seed the MCP config.** `.mcp.json` and `.vscode/mcp.json` are gitignored (they carry your local `dpfmcp_...` bearer token), so `git worktree add` does NOT carry them across. Run the seed script from inside the new worktree:
-   - Windows: `pwsh scripts/seed-worktree-mcp.ps1`
-   - macOS / Linux: `bash scripts/seed-worktree-mcp.sh`
+3. **Seed the MCP config + agent toolchain.** `.mcp.json` and `.vscode/mcp.json` are gitignored (they carry your local `dpfmcp_...` bearer token), so `git worktree add` does NOT carry them across. Run the bootstrap from inside the new worktree:
+   - Windows: `pwsh scripts/dpf-bootstrap-agent-toolchain.ps1`
+   - macOS / Linux: `bash scripts/dpf-bootstrap-agent-toolchain.sh`
 
-   The script copies `.mcp.json` and `.vscode/mcp.json` from the root clone, sets `COMPOSE_PROJECT_NAME=dpf-<slug>` in `.env`, and writes `.dpf-worktree-readiness.json`.
+   The bootstrap copies `.mcp.json` and `.vscode/mcp.json` from the root clone, sets `COMPOSE_PROJECT_NAME=dpf-<slug>` in `.env`, converges the Claude Code + Codex client profiles to the DPF-scoped baseline (DPF MCP only + `dpf-platform` only; generic plugins/MCP servers disabled; the canonical worktree base + this worktree trusted in Codex), seeds kernel memory, runs probes, and prints a readiness banner that flags any residual drift. The legacy `scripts/seed-worktree-mcp.{ps1,sh}` shim still works for one release cycle.
 
 4. **Restart your agent in the worktree.** Claude Code / Codex need a fresh session to pick up the new `.mcp.json` — the `dpf` MCP connector won't appear in `/mcp` otherwise.
 
@@ -129,7 +129,7 @@ Before editing or reviewing from an existing worktree:
 **Worktree created.**
 
 - Topic: <slug>
-- Path: <D:\DPF-slug | ~/dpf-worktrees/slug>
+- Path: <D:\DPF-worktrees\slug | ~/dpf-worktrees/slug>
 - Branch: <prefix>/<slug>  (based on origin/main, 0 ahead)
 - MCP seed: done (.mcp.json + .vscode/mcp.json copied; COMPOSE_PROJECT_NAME=dpf-<slug> set in .env)
 - Verification readiness: <compile-ready | source-only> (<reason from .dpf-worktree-readiness.json>)

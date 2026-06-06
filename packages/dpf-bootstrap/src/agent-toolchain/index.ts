@@ -18,6 +18,7 @@ export type {
 export {
   planCodexConfig,
   type CodexConfigPlan,
+  type CodexConfigConvergenceChange,
 } from "./codex-config";
 
 export {

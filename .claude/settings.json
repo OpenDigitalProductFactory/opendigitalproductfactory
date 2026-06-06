@@ -3,7 +3,9 @@
     "allow": [
       "Bash(xargs grep:*)",
       "Bash(git fetch:*)",
-      "Bash(docker compose:*)",
+      "Bash(docker compose ps:*)",
+      "Bash(docker compose config:*)",
+      "Bash(docker compose logs:*)",
       "Bash(curl -s http://localhost:3000/api/health)",
       "WebFetch(domain:skillsllm.com)",
       "WebFetch(domain:skillsmp.com)",
@@ -32,6 +34,11 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/hooks/run-hook.mjs\" safety/transcript-snapshot",
+            "async": false
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/hooks/run-hook.mjs\" hooks/session-reaper",
             "async": false
           }
         ]
