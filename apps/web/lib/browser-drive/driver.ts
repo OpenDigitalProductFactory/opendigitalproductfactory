@@ -26,6 +26,8 @@ export type BrowserOpenInput = {
   delegationGrantId?: string | null;
   credentialId?: string | null;
   evidenceDir?: string;
+  /** Per-task WWMD means-selector contribution ledger, persisted on the binding. */
+  meansDecisionJson?: unknown;
   /** Audit attribution. */
   agentId: string;
   threadId: string;

@@ -73,6 +73,8 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   "mcp-browser-use__browse_close": ["browser_read"],
   "mcp-browser-use__browse_run_tests": ["browser_read"],
   "mcp-browser-use__browse_act": ["browser_drive"],
+  // The coworker-facing orchestrator entry point (drives a full bounded task).
+  drive_browser_task: ["browser_drive"],
 
   // Backlog
   create_backlog_item: ["backlog_write"],

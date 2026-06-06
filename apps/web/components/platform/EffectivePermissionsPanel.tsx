@@ -67,6 +67,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   "mcp-browser-use__browse_close": ["browser_read"],
   "mcp-browser-use__browse_run_tests": ["browser_read"],
   "mcp-browser-use__browse_act": ["browser_drive"],
+  drive_browser_task: ["browser_drive"],
   create_backlog_item: ["backlog_write"],
   update_backlog_item: ["backlog_write"],
   query_backlog: ["backlog_read"],
