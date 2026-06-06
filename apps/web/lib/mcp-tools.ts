@@ -4620,9 +4620,11 @@ export async function getAvailableTools(
   // Agent-scoped filtering: intersection of user capabilities and agent tool grants.
   // EP-AI-WORKFORCE-001: use the async DB-first resolver so grants written via
   // the DB (e.g. via seed or Admin UI) take precedence over the JSON fallback.
+  const { getAgentToolGrantsAsync, isToolAllowedByGrants, getToolGrantMapping } =
+    await import("./agent-grants");
+  let agentGrants: string[] = [];
   if (options?.agentId) {
-    const { getAgentToolGrantsAsync, isToolAllowedByGrants } = await import("./agent-grants");
-    const agentGrants = await getAgentToolGrantsAsync(options.agentId);
+    agentGrants = await getAgentToolGrantsAsync(options.agentId);
     if (agentGrants.length > 0) {
       platformTools = platformTools.filter((tool) => isToolAllowedByGrants(tool.name, agentGrants));
     }
@@ -4632,8 +4634,22 @@ export async function getAvailableTools(
     try {
       const { getMcpServerTools } = await import("./mcp-server-tools");
       const mcpTools = await getMcpServerTools();
-      const filtered = options?.mode === "advise" ? [] : mcpTools;
-      return [...platformTools, ...filtered];
+      const modeFiltered = options?.mode === "advise" ? [] : mcpTools;
+      // Grant-gate discovered MCP tools, closing the Verdict 5 authority gap
+      // (EP-BROWSER-DRIVE, spec 2026-06-05 §8.2). Previously every discovered
+      // MCP tool was appended ungated whenever External Access was on — so a
+      // side-effecting browser tool was ambiently callable. Now a discovered
+      // tool that carries a TOOL_TO_GRANTS entry (the namespaced browser-driving
+      // tools) is denied unless the agent holds the grant; this denies them even
+      // for an agent with no grants at all (empty agentGrants → false). Discovered
+      // tools WITHOUT a mapping retain prior behavior so other MCP servers are not
+      // regressed — tightening those to default-deny is tracked separately
+      // (architect review Slice 0 item 4, the discovered-tool policy overlay).
+      const grantMap = getToolGrantMapping();
+      const grantFiltered = modeFiltered.filter((tool) =>
+        grantMap[tool.name] ? isToolAllowedByGrants(tool.name, agentGrants) : true,
+      );
+      return [...platformTools, ...grantFiltered];
     } catch {
       // MCP server tools unavailable — return platform tools only
     }
