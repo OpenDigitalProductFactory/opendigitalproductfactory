@@ -1282,6 +1282,29 @@
         "start_scout_research"
       ],
       "implies": []
+    },
+    {
+      "key": "workbook_read",
+      "description": "Read user-defined Workbook / Universal Grid tables: list tables, read schema, and query rows (EP-GRID-WORKBOOKS).",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "workbook_get_schema",
+        "workbook_list_tables",
+        "workbook_query_rows"
+      ],
+      "implies": []
+    },
+    {
+      "key": "workbook_write",
+      "description": "Create and update rows and cells in user-defined Workbook / Universal Grid tables (EP-GRID-WORKBOOKS).",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "workbook_create_row",
+        "workbook_update_cells"
+      ],
+      "implies": []
     }
   ]
 }
