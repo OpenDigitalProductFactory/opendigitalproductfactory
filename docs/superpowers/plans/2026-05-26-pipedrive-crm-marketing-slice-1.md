@@ -16,7 +16,7 @@ This plan implements Slice 1 from `docs/superpowers/specs/2026-05-26-pipedrive-i
 
 It must also respect the binding UX-governance rules in `docs/superpowers/specs/2026-04-25-customer-marketing-coworker-led-ux-correction.md`: no card-as-send-button, no surprise prompts to the coworker. Slice 1 only adds navigation links and metric tiles to `/customer`; coworker-launching surfaces stay inside `AgentWorkLauncher` and are out of scope here.
 
-It must also pass the portal UX simplification fit gate before code edits. The feature belongs to Business > Customer and must not add global AppRail entries, Workspace cards, Platform nav entries, or vendor-branded user-facing language. "Pipedrive-inspired" is research language only; visible product copy should use DPF-native labels such as "Today in revenue", "Pipeline", "Engagements", "Quotes", "Orders", and "Marketing".
+It must also pass `dpf-ux-fit-review` before code edits. The feature belongs to Business > Customer and must not add global AppRail entries, Workspace cards, Platform nav entries, or vendor-branded user-facing language. "Pipedrive-inspired" is research language only; visible product copy should use DPF-native labels such as "Today in revenue", "Pipeline", "Engagements", "Quotes", "Orders", and "Marketing".
 
 PR strategy: Slice 1 is theme-aware refactor + dead-code removal + shared-helper extraction. It qualifies as a Claude-led maintenance PR per the `feedback_no_manual_prs` rule and does NOT need to flow through Build Studio. Slices 2–5 from the design spec are feature work and must be filed as backlog items, promoted, and run through Build Studio.
 
@@ -117,9 +117,9 @@ Run the project sync script from the root clone after the worktree is created:
 
 Expected: `.mcp.json` and `.vscode/mcp.json` are hardlinked or copied into the new worktree, and the worktree receives its own ignored Compose project configuration so stacks do not collide with sibling sessions.
 
-- [ ] **Step 3: Run the UX architecture fit gate**
+- [ ] **Step 3: Run `dpf-ux-fit-review`**
 
-Before writing code, record the answers in the implementation notes or PR body:
+Before writing code, run the DPF UX fit review skill and record the answers in the implementation notes or PR body:
 
 ```text
 Owning area: Business > Customer

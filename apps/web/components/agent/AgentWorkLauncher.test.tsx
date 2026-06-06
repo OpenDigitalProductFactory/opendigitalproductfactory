@@ -59,6 +59,7 @@ describe("AgentWorkLauncher", () => {
 
     expect(html).toContain("Start marketing review");
     expect(html).toContain("Choose where to start");
+    expect(html).not.toContain("Choose a starting point, review the message");
     expect(html).not.toContain("data-confirm-agent-work");
   });
 

@@ -62,10 +62,6 @@ export function AgentWorkLauncher({
           <h2 className="text-base font-semibold text-[var(--dpf-text)]">
             Start guided work
           </h2>
-          <p className="mt-1 max-w-2xl text-sm text-[var(--dpf-muted)]">
-            Choose a starting point, review the message, then decide whether to
-            send it to {agentName}.
-          </p>
         </div>
         <button
           type="button"
