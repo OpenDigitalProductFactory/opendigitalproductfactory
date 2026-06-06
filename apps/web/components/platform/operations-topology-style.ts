@@ -11,6 +11,33 @@ import type {
   OperationsMapRoutingMarkerType,
   OperationsMapRoutingRouteState,
 } from "@/lib/ai-operations-map/types";
+import { a2aReplayWindow, type A2aReplayRange } from "./a2a-interaction-graph";
+
+/**
+ * Whether a provider route is visible at the shared replay playhead. Mirrors
+ * AiOperationsMap's routeVisibleAtReplayTime so the unified canvas scrubs
+ * identically to the legacy panel, and reuses the same look-back window as the
+ * A2A band so both halves share one playhead.
+ */
+export function routeVisibleAtReplayTime(
+  route: { state: OperationsMapRoutingRouteState; occurredAt: string | null },
+  selectedTime: number,
+  range: A2aReplayRange,
+): boolean {
+  if (!route.occurredAt) return true;
+  const occurredAt = Date.parse(route.occurredAt);
+  if (!Number.isFinite(occurredAt)) return true;
+  const window = a2aReplayWindow(range);
+
+  if (route.state === "scheduled") {
+    return selectedTime >= range.current && selectedTime <= occurredAt + window;
+  }
+  if (selectedTime < occurredAt) return false;
+  if (route.state === "active" || route.state === "secondary" || route.state === "failover") {
+    return selectedTime >= range.current || selectedTime - occurredAt <= window;
+  }
+  return selectedTime - occurredAt <= window;
+}
 
 export function routeStateStroke(state: OperationsMapRoutingRouteState): string {
   switch (state) {

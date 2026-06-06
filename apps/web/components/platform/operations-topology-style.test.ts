@@ -5,6 +5,7 @@ import {
   routeStateDash,
   routeStateOpacity,
   routeStateStroke,
+  routeVisibleAtReplayTime,
   routeWidth,
 } from "./operations-topology-style";
 
@@ -38,5 +39,22 @@ describe("operations topology style", () => {
     expect(markerTypeStroke("error")).toBe("var(--dpf-error)");
     expect(markerTypeStroke("decision")).toBe("var(--dpf-accent)");
     expect(Object.keys(ROUTE_STATE_LABEL)).toHaveLength(5);
+  });
+
+  it("scrubs routes with the shared replay playhead", () => {
+    const min = (m: number) => m * 60 * 1000;
+    const range = { start: 0, current: min(60), end: min(100) }; // window = 45min
+    const at = (m: number) => new Date(min(m)).toISOString();
+
+    // Playhead at/after current → active route visible.
+    expect(routeVisibleAtReplayTime({ state: "active", occurredAt: at(10) }, range.current, range)).toBe(true);
+    // Scrubbed back to t=50: a future active route is hidden, a past one within window is shown.
+    expect(routeVisibleAtReplayTime({ state: "active", occurredAt: at(55) }, min(50), range)).toBe(false);
+    expect(routeVisibleAtReplayTime({ state: "active", occurredAt: at(48) }, min(50), range)).toBe(true);
+    // Scheduled is only visible once the playhead reaches "current".
+    expect(routeVisibleAtReplayTime({ state: "scheduled", occurredAt: at(70) }, min(50), range)).toBe(false);
+    expect(routeVisibleAtReplayTime({ state: "scheduled", occurredAt: at(70) }, range.current, range)).toBe(true);
+    // Undated routes are always visible.
+    expect(routeVisibleAtReplayTime({ state: "active", occurredAt: null }, min(50), range)).toBe(true);
   });
 });
