@@ -1977,6 +1977,7 @@
         "tool_grants": [
           "registry_read",
           "backlog_read",
+          "browser_drive",
           "budget_read",
           "chargeback_write",
           "financial_report_create",
