@@ -350,6 +350,16 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     sectionSiblings: platformSectionSiblings,
   },
   {
+    key: "platform-schedule",
+    label: "Schedule",
+    path: "/platform/schedule",
+    parentPath: "/platform",
+    domain: "platform",
+    audienceModes: ["operator"],
+    destinationKind: "section-page",
+    capabilityKey: "view_platform",
+  },
+  {
     key: "platform-identity",
     label: "Identity & Access",
     path: "/platform/identity",
