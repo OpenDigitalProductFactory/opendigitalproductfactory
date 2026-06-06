@@ -41,6 +41,8 @@ export type CapabilityKey =
   | "manage_tool_evaluations"
   | "approve_tool_evaluations"
   | "manage_business_models"
+  | "view_workbooks"
+  | "manage_workbooks"
   | "manage_platform";
 
 type Permission = {
@@ -76,6 +78,11 @@ export const PERMISSIONS: Record<CapabilityKey, Permission> = {
   manage_tool_evaluations:     { roles: ["HR-000", "HR-300"] },
   approve_tool_evaluations:    { roles: ["HR-000", "HR-300"] },
   manage_business_models:      { roles: ["HR-000", "HR-200", "HR-300"] },
+  // Workbooks are a cross-domain knowledge-worker tool; the coarse role gate is
+  // "can you use the feature", while fine-grained access is enforced per-workbook
+  // by WorkbookShare (owner/editor/viewer). Both granted to all roles.
+  view_workbooks:              { roles: ["HR-000", "HR-100", "HR-200", "HR-300", "HR-400", "HR-500"] },
+  manage_workbooks:            { roles: ["HR-000", "HR-100", "HR-200", "HR-300", "HR-400", "HR-500"] },
   manage_platform:             { roles: ["HR-000"] },
 };
 
@@ -154,6 +161,7 @@ const ALL_TILES: WorkspaceTile[] = [
   { key: "ai_workforce", label: "AI Workforce",  route: "/platform/ai",  capabilityKey: "view_platform",    accentColor: "var(--dpf-info)" },
   { key: "build",       label: "Build Studio", route: "/build",       capabilityKey: "view_platform",    accentColor: "var(--dpf-success)" },
   { key: "documents",   label: "Documents",    route: "/workspace/documents", capabilityKey: "view_platform", accentColor: "var(--dpf-accent)" },
+  { key: "workbooks",   label: "Workbooks",    route: "/workbooks",   capabilityKey: "view_workbooks",   accentColor: "var(--dpf-info)" },
   { key: "portfolio",  label: "Portfolio",  route: "/portfolio", capabilityKey: "view_portfolio",   accentColor: "var(--dpf-success)" },
   { key: "employee",   label: "Employee",   route: "/employee",  capabilityKey: "view_employee",    accentColor: "var(--dpf-info)" },
   { key: "customer",   label: "Customer",   route: "/customer",  capabilityKey: "view_customer",    accentColor: "var(--dpf-accent)" },
@@ -218,7 +226,7 @@ const WORKSPACE_SECTION_BLUEPRINTS: Array<{
     key: "product-oversight",
     label: "Shape products",
     description: "Move work from strategy to delivery while keeping estate context inside the product flow.",
-    tileKeys: ["portfolio", "backlog", "ea_modeler"],
+    tileKeys: ["portfolio", "backlog", "ea_modeler", "workbooks"],
   },
   {
     key: "business-operations",

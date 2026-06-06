@@ -1,0 +1,139 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { addColumnAction } from "@/lib/actions/workbooks";
+import type { FieldType, SelectOption } from "@/lib/workbooks/types";
+
+// Field types with a fully-functional in-grid editor in Phase 1.
+// multi_select and reference exist in the data model but are not offered here
+// yet (reference needs platform adapters; tracked under EP-GRID-WORKBOOKS).
+const OFFERED_TYPES: { value: FieldType; label: string }[] = [
+  { value: "text", label: "Text" },
+  { value: "number", label: "Number" },
+  { value: "date", label: "Date" },
+  { value: "datetime", label: "Date & time" },
+  { value: "checkbox", label: "Checkbox" },
+  { value: "select", label: "Single select" },
+  { value: "url", label: "URL" },
+  { value: "email", label: "Email" },
+];
+
+function slugify(label: string): string {
+  return label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+}
+
+function parseOptions(raw: string): SelectOption[] {
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((label) => ({ key: slugify(label) || label, label }));
+}
+
+export function AddColumnButton({
+  workbookId,
+  tableId,
+}: {
+  workbookId: string;
+  tableId: string;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [fieldType, setFieldType] = useState<FieldType>("text");
+  const [optionsRaw, setOptionsRaw] = useState("");
+  const [required, setRequired] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function reset() {
+    setOpen(false);
+    setName("");
+    setFieldType("text");
+    setOptionsRaw("");
+    setRequired(false);
+    setError(null);
+  }
+
+  function submit() {
+    setError(null);
+    startTransition(async () => {
+      const res = await addColumnAction(workbookId, tableId, {
+        name: name.trim(),
+        fieldType,
+        required,
+        config: fieldType === "select" ? { options: parseOptions(optionsRaw) } : undefined,
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      reset();
+      router.refresh();
+    });
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
+      >
+        + Add column
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Column name"
+        className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
+      />
+      <select
+        value={fieldType}
+        onChange={(e) => setFieldType(e.target.value as FieldType)}
+        className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
+      >
+        {OFFERED_TYPES.map((t) => (
+          <option key={t.value} value={t.value} className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
+            {t.label}
+          </option>
+        ))}
+      </select>
+      {fieldType === "select" && (
+        <input
+          value={optionsRaw}
+          onChange={(e) => setOptionsRaw(e.target.value)}
+          placeholder="Options (comma-separated)"
+          className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
+        />
+      )}
+      <label className="flex items-center gap-1 text-sm text-[var(--dpf-muted)]">
+        <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
+        Required
+      </label>
+      <button
+        type="button"
+        onClick={submit}
+        disabled={pending || !name.trim()}
+        className="rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-sm text-white disabled:opacity-50"
+      >
+        Add
+      </button>
+      <button
+        type="button"
+        onClick={reset}
+        className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
+      >
+        Cancel
+      </button>
+      {error && <span className="text-sm text-[var(--dpf-error)]">{error}</span>}
+    </div>
+  );
+}
