@@ -35,7 +35,7 @@ describe("planCodexConfig", () => {
     expect(parsed.plugins["dpf-platform"]).toEqual({ enabled: true });
   });
 
-  it("preserves byte-equivalence of all other declared blocks across the upsert", () => {
+  it("preserves byte-equivalence of all blocks OUTSIDE the convergence scope", () => {
     const plan = planCodexConfig(operatorRedacted, REPO, CONFIG_PATH);
     const beforeParsed = parse(operatorRedacted) as Record<string, unknown>;
     const afterParsed = parse(plan.writes[0].content) as Record<string, unknown>;
@@ -45,16 +45,102 @@ describe("planCodexConfig", () => {
       expect(afterParsed[key]).toEqual(beforeParsed[key]);
     }
 
-    const blockKeys = ["mcp_servers", "windows", "features", "projects", "marketplaces", "tui", "desktop"] as const;
+    // `mcp_servers` and `projects` are now within the convergence scope (generic
+    // servers disabled, worktree paths trusted) so they are asserted separately.
+    const blockKeys = ["windows", "features", "marketplaces", "tui", "desktop"] as const;
     for (const block of blockKeys) {
       expect(afterParsed[block]).toEqual(beforeParsed[block]);
     }
 
-    const beforePlugins = beforeParsed.plugins as Record<string, unknown>;
-    const afterPlugins = afterParsed.plugins as Record<string, unknown>;
+    // Non-DPF, non-generic plugins are preserved byte-for-byte.
+    const beforePlugins = beforeParsed.plugins as Record<string, { enabled?: boolean }>;
+    const afterPlugins = afterParsed.plugins as Record<string, { enabled?: boolean }>;
+    const generic = ["superpowers@openai-curated", "build-ios-apps@openai-curated"];
     for (const otherPlugin of Object.keys(beforePlugins)) {
+      if (generic.includes(otherPlugin)) continue;
       expect(afterPlugins[otherPlugin]).toEqual(beforePlugins[otherPlugin]);
     }
+
+    // The DPF MCP server + non-generic servers are preserved; the generic
+    // `node_repl` REPL transport is explicitly out of scope (not disabled).
+    const beforeMcp = beforeParsed.mcp_servers as Record<string, unknown>;
+    const afterMcp = afterParsed.mcp_servers as Record<string, unknown>;
+    const genericMcp = ["nanobanana-mcp", "youtube_transcript"];
+    for (const name of Object.keys(beforeMcp)) {
+      if (genericMcp.includes(name)) continue;
+      expect(afterMcp[name]).toEqual(beforeMcp[name]);
+    }
+    // Pre-existing trust entries survive.
+    const beforeProjects = beforeParsed.projects as Record<string, unknown>;
+    const afterProjects = afterParsed.projects as Record<string, unknown>;
+    for (const p of Object.keys(beforeProjects)) {
+      expect(afterProjects[p]).toEqual(beforeProjects[p]);
+    }
+  });
+
+  it("disables generic plugins (superpowers, build-ios-apps) in the DPF profile", () => {
+    const plan = planCodexConfig(operatorRedacted, REPO, CONFIG_PATH);
+    const parsed = parse(plan.writes[0].content) as {
+      plugins: Record<string, { enabled?: boolean }>;
+    };
+    expect(parsed.plugins["superpowers@openai-curated"].enabled).toBe(false);
+    expect(parsed.plugins["build-ios-apps@openai-curated"].enabled).toBe(false);
+    // Unrelated plugins stay enabled.
+    expect(parsed.plugins["github@openai-curated"].enabled).toBe(true);
+    expect(parsed.plugins["gmail@openai-curated"].enabled).toBe(true);
+
+    const disabled = plan.convergence
+      .filter((c) => c.kind === "plugin-disabled")
+      .map((c) => c.key);
+    expect(disabled).toContain("superpowers@openai-curated");
+    expect(disabled).toContain("build-ios-apps@openai-curated");
+    expect(plan.rationale).toMatch(/disable generic plugin/);
+  });
+
+  it("disables generic MCP servers (nanobanana-mcp, youtube_transcript) by clearing their spawn command", () => {
+    const plan = planCodexConfig(operatorRedacted, REPO, CONFIG_PATH);
+    const parsed = parse(plan.writes[0].content) as {
+      mcp_servers: Record<string, { command?: unknown; args?: unknown; enabled?: boolean }>;
+    };
+    expect(parsed.mcp_servers["nanobanana-mcp"].command).toBeUndefined();
+    expect(parsed.mcp_servers["nanobanana-mcp"].enabled).toBe(false);
+    expect(parsed.mcp_servers["youtube_transcript"].command).toBeUndefined();
+    expect(parsed.mcp_servers["youtube_transcript"].enabled).toBe(false);
+    // The DPF server keeps its transport.
+    expect(parsed.mcp_servers["dpf"]).toMatchObject({ bearer_token_env_var: "DPF_MCP_BEARER_TOKEN" });
+
+    const disabledMcp = plan.convergence
+      .filter((c) => c.kind === "mcp-server-disabled")
+      .map((c) => c.key);
+    expect(disabledMcp).toEqual(expect.arrayContaining(["nanobanana-mcp", "youtube_transcript"]));
+  });
+
+  it("adds the canonical worktree base + this worktree to the trust list", () => {
+    const worktree = "D:\\DPF-worktrees\\host-tooling-convergence";
+    const plan = planCodexConfig(operatorRedacted, worktree, CONFIG_PATH);
+    const parsed = parse(plan.writes[0].content) as {
+      projects: Record<string, { trust_level?: string }>;
+    };
+    expect(parsed.projects["D:\\DPF-worktrees"].trust_level).toBe("trusted");
+    expect(parsed.projects[worktree].trust_level).toBe("trusted");
+    // The pre-existing D:\DPF trust survives.
+    expect(parsed.projects["D:\\DPF"].trust_level).toBe("trusted");
+
+    const trusted = plan.convergence
+      .filter((c) => c.kind === "project-trusted")
+      .map((c) => c.key);
+    expect(trusted).toEqual(expect.arrayContaining(["D:\\DPF-worktrees", worktree]));
+  });
+
+  it("is idempotent across the full convergence: re-running produces zero writes", () => {
+    const worktree = "D:\\DPF-worktrees\\host-tooling-convergence";
+    const first = planCodexConfig(operatorRedacted, worktree, CONFIG_PATH, LOCAL_ENDPOINT);
+    expect(first.writes).toHaveLength(1);
+
+    const second = planCodexConfig(first.writes[0].content, worktree, CONFIG_PATH, LOCAL_ENDPOINT);
+    expect(second.writes).toEqual([]);
+    expect(second.convergence).toEqual([]);
+    expect(second.rationale).toMatch(/already converged/);
   });
 
   it("is idempotent: re-running on the post-upsert text produces zero writes", () => {
@@ -67,13 +153,30 @@ describe("planCodexConfig", () => {
     expect(secondPlan.rationale).toMatch(/already converged/);
   });
 
-  it("preserves user intent when the plugin is explicitly disabled", () => {
+  it("preserves the DPF-plugin-disable intent while still converging generic clients + trust", () => {
+    // The withUserDisable fixture has the DPF plugin disabled AND a generic
+    // `superpowers` plugin enabled AND no worktree trust, so a write IS
+    // produced now — but it must NOT re-enable the DPF plugin.
     const plan = planCodexConfig(withUserDisable, REPO, CONFIG_PATH);
 
-    expect(plan.writes).toEqual([]);
     expect(plan.preservedUserIntent).toBe(true);
-    expect(plan.rationale).toMatch(/disabled by user/);
-    expect(plan.rationale).toMatch(/preserved/);
+    const parsed = parse(plan.writes[0].content) as {
+      plugins: Record<string, { enabled?: boolean }>;
+    };
+    expect(parsed.plugins["dpf-platform"].enabled).toBe(false); // intent preserved
+    expect(parsed.plugins["superpowers@openai-curated"].enabled).toBe(false); // generic disabled
+    expect(plan.convergence.some((c) => c.kind === "plugin-disabled")).toBe(true);
+  });
+
+  it("preserves user intent AND already-converged generic/trust state as a no-op", () => {
+    // A fully-converged profile (DPF disabled by user, generics disabled,
+    // worktree trusted) produces zero writes.
+    const first = planCodexConfig(withUserDisable, REPO, CONFIG_PATH);
+    const second = planCodexConfig(first.writes[0].content, REPO, CONFIG_PATH);
+
+    expect(second.writes).toEqual([]);
+    expect(second.preservedUserIntent).toBe(true);
+    expect(second.rationale).toMatch(/disabled by user/);
   });
 
   it("returns zero writes with a parse-error rationale on unparseable TOML", () => {
@@ -109,15 +212,18 @@ describe("planCodexConfig", () => {
     });
   });
 
-  it("leaves an already-converged [mcp_servers.dpf] untouched (idempotent with endpoint)", () => {
-    // operatorRedacted already has [mcp_servers.dpf] at LOCAL_ENDPOINT, but no
-    // bare [plugins."dpf-platform"], so the first pass writes only the plugin.
+  it("leaves the already-converged [mcp_servers.dpf] block untouched while disabling generic servers", () => {
+    // operatorRedacted already has [mcp_servers.dpf] at LOCAL_ENDPOINT, so the
+    // DPF transport is NOT re-upserted (no "upsert [mcp_servers.dpf]" in the
+    // rationale), but the generic servers ARE disabled.
     const first = planCodexConfig(operatorRedacted, REPO, CONFIG_PATH, LOCAL_ENDPOINT);
     expect(first.writes).toHaveLength(1);
-    expect(first.rationale).not.toMatch(/mcp_servers/); // MCP already converged
-    const before = parse(operatorRedacted) as Record<string, unknown>;
-    const after = parse(first.writes[0].content) as Record<string, unknown>;
-    expect(after["mcp_servers"]).toEqual(before["mcp_servers"]);
+    expect(first.rationale).not.toMatch(/upsert \[mcp_servers\.dpf\]/); // DPF transport already converged
+    const before = parse(operatorRedacted) as { mcp_servers: Record<string, unknown> };
+    const after = parse(first.writes[0].content) as { mcp_servers: Record<string, unknown> };
+    // The DPF server is byte-identical; generics are now disabled.
+    expect(after.mcp_servers["dpf"]).toEqual(before.mcp_servers["dpf"]);
+    expect((after.mcp_servers["nanobanana-mcp"] as { enabled?: boolean }).enabled).toBe(false);
 
     const second = planCodexConfig(first.writes[0].content, REPO, CONFIG_PATH, LOCAL_ENDPOINT);
     expect(second.writes).toEqual([]);
