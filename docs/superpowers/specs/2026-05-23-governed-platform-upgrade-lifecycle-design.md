@@ -58,6 +58,24 @@ The goal is not zero-touch auto-update. The goal is for the operator to be able 
 
 This reconciliation keeps the doc as the single source of truth while honoring the "never fabricate / ground in code" and "architecture over shortcuts" principles.
 
+## 1.2 Chief Architect Pass-2 (2026-06-02)
+
+A second architect review folded into this spec after the PR #1414 substrate-topology pass. None of the 9 findings overlap with §1.1 or PR #1414's edits.
+
+**Corrections folded into this revision:**
+
+1. **Enum value convention normalized to hyphens** (AGENTS.md §11). `PreflightRun.status` value `awaiting_operator` → `awaiting-operator`. `fingerprintMode` values `CONTENT_HASH | OVERLAY | EXCLUDED_FIELDS | AUDIT_TRACE` → `content-hash | overlay | excluded-fields | audit-trace`. All spec-introduced string enums use hyphens; underscores and SCREAMING_SNAKE are not DPF convention.
+2. **`PreflightRun` vs `SelfUpgradeRun` two-table split justified.** §5.2 now states why a single `SelfUpgradeRun` with a phase discriminator was rejected (N preflights can fan out to M apply attempts; operator timeline needs independent lifecycle queries; pre-commit advisory state has no place on the apply audit row). (`schema-audit-before-features`, `verify-substrate-before-proposing-new`.)
+3. **`PlatformConfig` version mirror removed.** §4.1's "may carry a convenience mirror" was a single-source-of-truth landmine — a mirror that exists in code WILL be read by some code path eventually, and any stale read reintroduces the BI-C8E90A79 class of identity drift the spec is built to close. The mirror is now explicitly rejected; all callers consume `loadPlatformVersion()` directly. (`single-source-of-truth`, `architecture-over-shortcuts`.) AC 2 updated to match.
+4. **`seedContentHash` semantics per fingerprint mode documented.** §6.4 now names what gets hashed in each of the four modes: `content-hash` → full canonical content body; `overlay` → kernel-version reference (`kernelPageId@derivedFromKernelVersion`), NOT a content hash; `excluded-fields` → hash over the complement of `excludedFields[]`; `audit-trace` → `seedContentHash` remains null, revision walk is the merge base. Implementers had no way to apply the 5-field mixin uniformly without this clarification.
+5. **5-field mixin blast radius enumerated.** §6.2 now lists each model receiving the mixin (5 ad-hoc patterns today, ~10 needed via the registry) and confirms each addition is `additive` under §4.5 rule 3 so the migration does not force a major bump under the spec's own gates.
+6. **§5.6 L4 rebase-failure gap closed.** Rollback decision tree now covers the case where a capsule's PAR `rebase` or `promote-first` decision fails after the upgrade succeeds.
+7. **§9 AC 3 fallback wording added.** `releases.dpf.dev` unreachable → GitHub Releases API fallback (stable-channel-only) per §5.1.
+8. **§9 AC 10 detection path named.** `FeaturePack` auto-acceptance now references the seed-delta-manifest PR-list join, not a magic match.
+9. **BI-C26F7EE1 no-fabrication regression-test AC added.** Unit-test bullet locks in the "LLM never adds/drops/reorders items" contract in §5.0.1.
+
+**Reference-doc follow-up (not folded here; proposed as separate work):** capture the **"version identity is baked, not committed"** pattern from §1.1 / §4.1 as either an AGENTS.md §2 deployment-doctrine paragraph or a kernel principle slug `version-identity-baked-not-committed`, citing `apps/web/lib/platform/{version,image-version}.ts` as the canonical implementation and `version.json` as DEV-FALLBACK-ONLY. This is a generalizable architectural choice that should be captured at kernel level so future installer/release/distribution specs reach for it by default.
+
 ## 2. Current Repo Truth Checked
 
 > Updated 2026-05-31 after operator concern about seed clobbering, schema
@@ -323,7 +341,7 @@ A capsule in flight when upstream changes the files it touches has no defined ha
 - **`version.json` role:** Explicitly reduced to **DEV FALLBACK ONLY**. Current content documents its own deprecation for production identity. Release CI must **not** treat it as the mutable source of truth.
 - **Manifest / channel / release notes:** Still required exactly as written. The channel manifest (§4.4) carries the semver `version` (sourced from the tag that was baked), previousVersion, bumpType, minimumFromVersion, image digests (now with honest sourceContentHash for verification), seedDeltas, migrations, signatures, etc. GitHub Release + GHCR artifacts remain the distribution vehicles per deployment-contracts Contract 1.
 - **Image labels:** OCI labels remain valuable (and should be set from the same bake data).
-- **UI / API / config:** `/api/platform/version` (or equivalent health surface) and the Upgrade Center must surface the `loadPlatformVersion()` tuple. `PlatformConfig` may carry a convenience mirror of the version string for query simplicity, but it is **not** the source of truth.
+- **UI / API / config:** `/api/platform/version` (or equivalent health surface) and the Upgrade Center must surface the `loadPlatformVersion()` tuple. **No `PlatformConfig` mirror.** Pass-2 architect review (§1.2) rejected the previously-allowed "convenience mirror" — a mirror that exists WILL be read by some path eventually, and any stale read reintroduces the BI-C8E90A79 class of identity drift this spec is built to close. All callers consume `loadPlatformVersion()` directly. A CI assertion (Phase 1, `BI-UPGRADE-001`) MUST verify no code reads `PlatformConfig["platform.version"]` for runtime identity decisions.
 
 **Why this is better than the original proposal:** Eliminates the chronic staleness of a committed version.json (observed: it claimed 1.0.0 while real tags were v5.x). The content hash gives an objective "what was actually built" that no label can lie about. The git-describe approach naturally gives us the semver + distance-from-tag that the release train needs.
 
@@ -653,7 +671,9 @@ If the DPF-hosted manifest host is unreachable, install may fall back to GitHub 
 
 ### 5.2 Preflight gathers evidence across four layers
 
-A new entity `PreflightRun` is the pre-commit audit artifact, distinct from `SelfUpgradeRun` (which becomes the apply-phase audit):
+A new entity `PreflightRun` is the pre-commit audit artifact, distinct from `SelfUpgradeRun` (which is the apply-phase audit).
+
+**Why a separate model (pass-2 architect justification):** the closest existing fit is `SelfUpgradeRun` with a `phase: preflight | apply` discriminator and `preflightEvidence: Json` + `applyEvidence: Json` columns. That shape was rejected for three reasons. (a) **Lifecycle fan-out**: one approved preflight can produce multiple apply attempts (initial apply fails at L1, operator retries after fixing the integration) — N preflights to M applies is a real cardinality, not 1:1. (b) **Operator timeline queries**: the Upgrade Center shows preflight runs and apply runs as separate rows in the timeline (different statuses, different evidence panels); folding into one table would force every list query to filter by phase. (c) **Pre-commit advisory state**: preflight rows in `gathering`/`awaiting-operator` carry operator decisions that may never lead to an apply — those rows have no place on the apply audit table where every row represents a real attempt at the swap. The trade-off — two tables instead of one — is worth it; the alternative leaks preflight noise into the apply audit log.
 
 ```prisma
 model PreflightRun {
@@ -662,7 +682,7 @@ model PreflightRun {
   targetVersion     String
   channel           String
   bumpType          String   // patch | minor | major
-  status            String   // gathering | awaiting_operator | approved | rejected | applied | failed
+  status            String   // gathering | awaiting-operator | approved | rejected | applied | failed
   startedAt         DateTime
   completedAt       DateTime?
 
@@ -680,6 +700,8 @@ model PreflightRun {
   backupSnapshotId  String?  // legacy alias: Postgres backup id only
 }
 ```
+
+All status values use the hyphenated DPF enum convention (AGENTS.md §11); underscores in earlier drafts (`awaiting_operator`) were normalized in §1.2.
 
 The four layer evidence schemas:
 
@@ -720,7 +742,7 @@ Driven by the `SEED_REGISTRY` (§6.2). For each registered model:
 ```json
 {
   "model": "PromptTemplate",
-  "fingerprintMode": "CONTENT_HASH",
+  "fingerprintMode": "content-hash",
   "rowDeltas": {
     "noChange": 47,
     "safeAutoApply": 8,
@@ -1092,6 +1114,12 @@ Failed at L4 (sandbox reconciliation)
   → not a hard fail — surface as warning, keep new version
   → operator handles capsule decisions manually
 
+L4 capsule rebase / promote-first fails AFTER the upgrade succeeds
+  → upgrade itself stays `succeeded` — the new version is live
+  → affected capsule remains on its original base SHA; PAR card re-surfaces in the Upgrade Center
+  → operator may switch the decision to `preserve` or `abandon`, or fix-then-retry the rebase
+  → not counted as a rollback; the L4 reconciliation is unfinished work, not a failed upgrade
+
 Smoke window fails post-apply
   → if L2 was only additive AND release CI verified expand-then-contract → L1 rollback safe; auto-trigger
   → otherwise must roll forward via patch release; operator alert
@@ -1111,10 +1139,12 @@ Smoke window fails post-apply
 // Mixin pattern applied to each customizable model
 seedKey            String?  // e.g. "prompt:builder.architect-review"
 seedVersionAtBoot  String?  // platform version at last seed apply
-seedContentHash    String?  // SHA-256 of content as shipped
-isOverridden       Boolean  @default(false)  // operator edit marker (existing)
+seedContentHash    String?  // hash of shipped content; semantics vary by fingerprintMode — see §6.4
+isOverridden       Boolean  @default(false)  // operator edit marker (existing on 3 models; additive on the rest)
 seedAppliedAt      DateTime?
 ```
+
+**Migration blast radius (pass-2 architect enumeration).** The mixin lands on every model declared in `SEED_REGISTRY` (§6.4). As of 2026-05-31, `isOverridden` exists on 3 models (`PromptTemplate`, two reference-data models at schema lines 8383/8403); `seedKey` / `seedVersionAtBoot` / `seedContentHash` / `seedAppliedAt` exist on zero. Models expected to receive the full mixin (covering the 13 reconciliation modes in §2.4): `PromptTemplate`, `SkillDefinition`, `WikiPage` (uses overlay mode — `seedContentHash` stays null), `StorefrontArchetype`, `AgentToolGrant`, `Capability` / `ServiceOffering` (MCP service definitions), IT4IT taxonomy rows, principle kernel pages, and provider-registry rows that operators are allowed to override. Per §4.5 rule 3, every column addition MUST be `additive` (nullable, no `NOT NULL` without default, no rewriting existing rows) so the mixin can ship in a Phase 3 `minor` release without forcing a `major` bump. `SeedSnapshot.contentBody` is `String` (Prisma `Text`) — confirm Postgres `text` for unbounded length so large prompt files (10KB+) and archetype JSON payloads don't truncate. `BI-UPGRADE-005` MUST publish the per-model migration list before Phase 3 ships, with each migration's CI-asserted `additive` kind classification visible in the release manifest.
 
 ### 6.3 SeedSnapshot table holds the merge base
 
@@ -1142,21 +1172,30 @@ A new `packages/db/src/seed-registry.ts` declares every customizable model and i
 
 ```ts
 export const SEED_REGISTRY: SeedRegistryEntry[] = [
-  { model: "PromptTemplate",      keyField: "slug",       mode: "CONTENT_HASH",   auditTable: "PromptRevision" },
-  { model: "SkillDefinition",     keyField: "skillId",    mode: "CONTENT_HASH",   auditTable: "SkillRevision" },
-  { model: "WikiPage",            keyField: "pageId",     mode: "OVERLAY",        auditTable: "WikiPageRevision" },
-  { model: "StorefrontArchetype", keyField: "archetypeId",mode: "EXCLUDED_FIELDS",excludedFields: ["isActive"] },
-  { model: "AgentToolGrant",      keyField: "grantId",    mode: "AUDIT_TRACE",    auditTable: "BuildActivity" },
+  { model: "PromptTemplate",      keyField: "slug",       mode: "content-hash",    auditTable: "PromptRevision" },
+  { model: "SkillDefinition",     keyField: "skillId",    mode: "content-hash",    auditTable: "SkillRevision" },
+  { model: "WikiPage",            keyField: "pageId",     mode: "overlay",         auditTable: "WikiPageRevision" },
+  { model: "StorefrontArchetype", keyField: "archetypeId",mode: "excluded-fields", excludedFields: ["isActive"] },
+  { model: "AgentToolGrant",      keyField: "grantId",    mode: "audit-trace",     auditTable: "BuildActivity" },
   // remaining registry entries cover the inventory in §2.4
 ];
 ```
 
-Four fingerprint modes (formalizing the three ad-hoc patterns plus one additive):
+Four fingerprint modes (formalizing the three ad-hoc patterns plus one additive). All values are hyphenated per AGENTS.md §11 enum convention — pass-2 architect normalization (§1.2).
 
-- **CONTENT_HASH** — the new pattern (§6.2). Default. Used for prompts, skills, principles, IT4IT taxonomy, MCP service definitions.
-- **OVERLAY** — keep wiki kernel's existing pattern (`kernelPageId` + `derivedFromKernelVersion`). Used where rich org-overlay relationships exist.
-- **EXCLUDED_FIELDS** — formalize the archetype "exclude `isActive` on upsert" pattern. Registry declares operator-customizable columns; upgrade preserves those, replaces the rest. Used for archetype, MCP service definitions.
-- **AUDIT_TRACE** — for append-only or fully-audited tables (capsules, grants, build artifacts), customization is provable via revision walk. Used where upgrade never overwrites (only ADDS new rows).
+- **`content-hash`** — the new pattern (§6.2). Default. Used for prompts, skills, principles, IT4IT taxonomy, MCP service definitions.
+- **`overlay`** — keep wiki kernel's existing pattern (`kernelPageId` + `derivedFromKernelVersion`). Used where rich org-overlay relationships exist.
+- **`excluded-fields`** — formalize the archetype "exclude `isActive` on upsert" pattern. Registry declares operator-customizable columns; upgrade preserves those, replaces the rest. Used for archetype, MCP service definitions.
+- **`audit-trace`** — for append-only or fully-audited tables (capsules, grants, build artifacts), customization is provable via revision walk. Used where upgrade never overwrites (only ADDS new rows).
+
+**Hash semantics per fingerprint mode (pass-2 architect clarification).** The §6.2 mixin's `seedContentHash` column carries different meanings across the four modes; implementers must not collapse them to one shape:
+
+| Mode | What `seedContentHash` stores | What gets hashed |
+|---|---|---|
+| `content-hash` | sha256 hex string | The full canonical content body as shipped (prompt text, skill manifest JSON, principle markdown body). The 3-way merge compares `base.contentHash` vs `ours.contentHash` vs `theirs.contentHash`. |
+| `overlay` | kernel version reference (e.g. `kernelPageId@derivedFromKernelVersion`) — NOT a content hash | The merge base is the kernel page referenced; the overlay row's content is intentionally divergent. `seedContentHash` carries the reference identity, not a body hash, because comparing overlay body bytes to kernel body bytes is a category error in the overlay model. |
+| `excluded-fields` | sha256 hex string over the hashed projection | The complement of `excludedFields[]` from the seed-shipped row, canonicalized (key-sorted JSON) and hashed. Operator-owned fields are excluded from the hash so an operator's `isActive=false` doesn't show as a phantom "ours vs theirs" diff. |
+| `audit-trace` | `null` | No hash; the merge base is reconstructed from the audit-table revision walk (`auditTable: "PromptRevision"` etc.). Upgrade never overwrites these rows — it only ADDs new ones — so a hash would be meaningless. |
 
 The seed apply path reads from the registry; the preflight evidence path reads from the registry; the operator surface reads from the registry. One source of truth, no drift possible.
 
@@ -1217,7 +1256,7 @@ Proposed breakdown (each a Build Studio brief once spec is approved):
 - `BI-UPGRADE-000` — Self-upgrade substrate stabilization: one Inngest path, target SHA resolver, schema/DTO alignment, `/ops/self-upgrade` run listing, event-bus claim cleanup (Phase 0)
 - `BI-UPGRADE-000a` — Durable per-install branch (§5.0 prerequisite): commit Build-Studio promotions as real commits on a persistent install branch in the portal's build tree, so customizations survive container rebuild / Docker update / upgrade. Closes the `mcp-tools.ts:8891` "lost on rebuild" hazard. Independent of contribution mode (Phase 0)
 - `BI-UPGRADE-000b` — Merge-based upgrade source (§5.0): `git fetch` upstream target + **merge** into the install branch (not clean-checkout-replace); build merged result; stamp the true merge-commit SHA (non-circular sha-verify); track upstream lineage separately; clean auto-merge on disjoint files; genuine code conflicts surface in the Upgrade Center as keep-mine/take-upstream/show-diff (never a CLI ask), unresolved → defer and stay on current build. Extends §3.3/§6 3-way merge from seeded content to git/code (Phase 0/4)
-- `BI-C26F7EE1` — Upgrade impact summary (§5.0.1): on-demand, install-tailored "what's in this update?" digest in the `/ops/self-upgrade` Upgrade Center and as the `summarize_upgrade_impact` MCP tool. Pipeline: `git log <currentLineageSha>..<targetSha>` → Conventional-Commits classify → relevance score against install signals (archetype / industry / FeaturePack-touched paths and verticals / open `PortfolioQualityIssue` keyword themes) → best-effort GitHub PR enrichment → strict-JSON LLM phrasing. Advisory only; never queues or applies. Path overlap with FeaturePack-touched files doubles as the §5.0 merge-conflict early warning. Cacheable per (`currentLineageSha`, `targetSha`).
+- `BI-C26F7EE1` — Upgrade impact summary (§5.0.1): on-demand, install-tailored "what's in this update?" digest in the `/ops/self-upgrade` Upgrade Center and as the `summarize_upgrade_impact` MCP tool. Pipeline: `git log <currentLineageSha>..<targetSha>` → Conventional-Commits classify → relevance score against install signals (archetype / industry / FeaturePack-touched paths and verticals / open `PortfolioQualityIssue` keyword themes) → best-effort GitHub PR enrichment → strict-JSON LLM phrasing. Advisory only; never queues or applies. Path overlap with FeaturePack-touched files doubles as the §5.0 merge-conflict early warning. Cacheable per (`currentLineageSha`, `targetSha`). **Acceptance (pass-2):** unit tests confirm the orchestrator returns `phrased: null` plus the deterministic shape when the LLM returns (a) malformed JSON, (b) item-count mismatch vs the deterministic upstream list, (c) reordered items, or (d) when GitHub enrichment is unreachable. The UI displays raw commit subjects in those cases. No code path lets a fabricated headline, fabricated item, or reordered relevance score reach the operator.
 - `BI-UPGRADE-001` — Platform version baseline + `version.json` + `PlatformConfig["platform.version"]` + `/api/platform/version` (Phase 1)
 - `BI-UPGRADE-002` — Release-impact lint + release CI tag/build/GHCR publish/GitHub Releases metadata (Phase 2)
 - `BI-UPGRADE-003` — Channel manifest publication + signing + DPF release feed host (Phase 2)
@@ -1239,15 +1278,15 @@ Proposed breakdown (each a Build Studio brief once spec is approved):
 The system is complete when:
 
 1. `/ops/self-upgrade` uses one canonical self-upgrade path; run history can be listed from `SelfUpgradeRun` without schema/DTO drift, and target resolution returns a real candidate instead of `no-target`.
-2. The answer to "what platform version is this install on?" is identical from the UI, the API, `PlatformConfig["platform.version"]`, the manifest, the image labels, and the git tag.
-3. A `feat:` PR merged to main automatically produces a new minor release, signs the images and manifest, publishes GHCR image digests plus GitHub Release metadata, and the `edge` channel install detects it within one configured check interval.
+2. The answer to "what platform version is this install on?" is identical from the UI, the API (`/api/platform/version`), the channel manifest, the image labels, the git tag, and `loadPlatformVersion()` programmatic callers. **No `PlatformConfig` mirror exists** — a CI assertion confirms no code reads `PlatformConfig["platform.version"]` for runtime identity (pass-2 §1.2 / §4.1 correction; closes BI-C8E90A79 drift class).
+3. A `feat:` PR merged to main automatically produces a new minor release, signs the images and manifest, publishes GHCR image digests plus GitHub Release metadata, and the `edge` channel install detects it within one configured check interval. When `releases.dpf.dev` is unreachable, the install falls back to the GitHub Releases API for `stable`-channel-only recovery detection per §5.1; `edge` and `beta` remain manifest-only (no GitHub-latest fallback for prerelease channels).
 4. An operator on `stable` who has customized `prompt:builder.architect-review` sees a three-pane diff (base / ours / theirs) at preflight time when upstream changes that prompt — and their decision is recorded against the `PreflightRun`.
 5. A Prisma migration that adds a column to a 50M-row table is detected as `modifying` at release time, dry-runs against a shadow DB at preflight time, and surfaces lock-time estimate to the operator.
 6. A `destructive` migration is rejected by release CI if it appears in a non-major bump.
 7. Recycle during an active executor session: the session is paused, the user sees a banner, the swap happens, the session resumes from the same Inngest checkpoint without operator-visible work loss.
 8. A health-check failure post-swap automatically rolls back the L1 image when expand-then-contract was respected; surfaces operator alert otherwise.
 9. An archetype customization that was soft-deleted survives an upgrade where upstream renamed that archetype.
-10. A `FeaturePack` in `contributing` status whose upstream PR merges between cron cycles is auto-marked `accepted` after the next pull of the new version (because the train carrying it became the install's running version).
+10. A `FeaturePack` in `contributing` status whose upstream PR merges between cron cycles is auto-marked `accepted` after the next pull of the new version. **Detection path (pass-2 §1.2):** the release-CI seed-delta manifest (§4.3 step 6) lists the PR numbers included in the release; the install's seed-delta apply joins `FeaturePack.upstreamPRNumber` (new field; existing on the model — confirm in BI-UPGRADE-005) against that PR list and flips status to `accepted` for any matching `contributing` row. No structural file-content match required.
 11. The operator has never run a shell command, a SQL query, or a `docker` command during any successful upgrade.
 
 ## 10. Out of Scope
