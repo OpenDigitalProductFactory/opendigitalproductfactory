@@ -165,6 +165,187 @@ export async function resetStuckQuiescenceLevelOnBoot(
   }
 }
 
+/**
+ * FIX 1 (spec §3.1 engine-first / FB-78E967D4) — Contradictory-checkpoint
+ * auto-recovery. A portal restart or an older buggy pipeline pass can strand a
+ * build's `buildExecState` in one of three self-contradictory shapes that NO
+ * existing recovery path accepts, so "Reset Build" was the only escape:
+ *   • missing-step       — restart killed the pipeline before step 1
+ *   • error-without-fail — a non-`failed` step carrying an error/failedAt
+ *   • complete-no-verify — step=complete but verificationOut never populated
+ *
+ * This reconciler applies the same classification the UI uses
+ * (classifyContradictoryExecState) and the shared recovery plan
+ * (planExecStateRecovery) automatically, with no human:
+ *   • error-without-fail → coerce to `failed` so `retryBuildExecution`'s
+ *     machinery can resume from the failed step (container/port/diagnosis
+ *     preserved).
+ *   • missing-step / complete-no-verify → clear the checkpoint so the pipeline
+ *     restarts clean (its own self-heal re-runs setup idempotently).
+ *
+ * Idempotent: a healthy or already-`failed` row yields `action: "none"` and is
+ * skipped, so this is safe to run on every boot. Non-fatal. Exported for tests.
+ */
+export async function recoverContradictoryBuildExecStatesOnBoot(
+  logger: Pick<Console, "log" | "error"> = console,
+): Promise<{ recovered: number; cleared: number; failedCoerced: number } | null> {
+  try {
+    const { prisma, Prisma } = await import("@dpf/db");
+    const { planExecStateRecovery } = await import("@/lib/integrate/build-exec-types");
+    type ExecStateLike = import("@/lib/integrate/build-exec-types").ExecStateLike;
+    // Scan only rows still in the build phase; filter the null/contradictory
+    // discrimination in JS to avoid Prisma JSON-null filter subtleties.
+    const candidates = await prisma.featureBuild.findMany({
+      where: { phase: "build" },
+      select: { buildId: true, buildExecState: true, verificationOut: true },
+    });
+    let cleared = 0;
+    let failedCoerced = 0;
+    for (const build of candidates) {
+      const plan = planExecStateRecovery(
+        build.buildExecState as ExecStateLike | null,
+        build.verificationOut,
+      );
+      if (plan.action === "none") continue;
+      if (plan.action === "clear") {
+        await prisma.featureBuild.update({
+          where: { buildId: build.buildId },
+          // DbNull (SQL NULL) matches resetBuildExecution's clear semantics, so
+          // the UI reads `buildExecState == null` (not contradictory) afterwards.
+          data: { buildExecState: Prisma.DbNull },
+        });
+        cleared++;
+        logger.log(
+          `[build-exec-recover] ${build.buildId} -> cleared checkpoint (reason=${plan.reason}); pipeline will restart clean`,
+        );
+      } else {
+        await prisma.featureBuild.update({
+          where: { buildId: build.buildId },
+          data: {
+            buildExecState: plan.state as unknown as import("@dpf/db").Prisma.InputJsonValue,
+          },
+        });
+        failedCoerced++;
+        logger.log(
+          `[build-exec-recover] ${build.buildId} -> coerced to failed (reason=${plan.reason}); Retry can now resume from failedAt=${plan.state.failedAt ?? "?"}`,
+        );
+      }
+      await prisma.buildActivity
+        .create({
+          data: {
+            buildId: build.buildId,
+            tool: "recoverContradictoryBuildExecStatesOnBoot",
+            summary:
+              plan.action === "clear"
+                ? `Auto-recovered contradictory checkpoint on boot (reason=${plan.reason}): cleared for clean restart`
+                : `Auto-recovered contradictory checkpoint on boot (reason=${plan.reason}): coerced to failed for retry`,
+          },
+        })
+        .catch(() => {});
+    }
+    const recovered = cleared + failedCoerced;
+    if (recovered > 0) {
+      logger.log(
+        `[build-exec-recover] recovered ${recovered} contradictory checkpoint(s): ${cleared} cleared, ${failedCoerced} coerced to failed`,
+      );
+    }
+    return { recovered, cleared, failedCoerced };
+  } catch (err) {
+    logger.error("[build-exec-recover] failed (non-fatal):", err);
+    return null;
+  }
+}
+
+/**
+ * FIX 2 (spec §3.1 engine-first) — Restart-resume for stranded build rows. The
+ * pipeline is dispatched fire-and-forget (`autoExecuteBuild(...).catch(...)`),
+ * so a portal recycle silently kills it mid-flight, leaving a row in the `build`
+ * phase at a non-terminal step that nothing ever picks up again — the build just
+ * stops.
+ *
+ * This reconciler finds those rows and re-dispatches them. `autoExecuteBuild`
+ * reads the persisted `buildExecState` and `runBuildPipeline` resumes from
+ * `getResumeStep`, re-running the interrupted step idempotently — no work is
+ * lost and no duplicate sandbox is created.
+ *
+ * Liveness guard: only rows whose `updatedAt` is older than `staleAfterMs`
+ * (default 5 min — comfortably longer than the heartbeat-ticker cadence that
+ * touches `buildExecState` during a legitimately slow step) are resumed, so a
+ * genuinely in-flight build on a still-running portal is never double-dispatched.
+ * Contradictory shapes are left to recoverContradictoryBuildExecStatesOnBoot
+ * (which runs first); this only resumes internally-consistent, mid-step rows.
+ *
+ * Idempotent and safe to run every boot. Non-fatal. Exported for tests.
+ */
+export async function resumeStrandedBuildsOnBoot(
+  opts: { staleAfterMs?: number; dispatch?: (buildId: string) => void } = {},
+  logger: Pick<Console, "log" | "error"> = console,
+): Promise<{ resumed: number } | null> {
+  const staleAfterMs = opts.staleAfterMs ?? 5 * 60 * 1000;
+  try {
+    const { prisma } = await import("@dpf/db");
+    const { classifyContradictoryExecState } = await import(
+      "@/lib/integrate/build-exec-types"
+    );
+    type ExecStateLike = import("@/lib/integrate/build-exec-types").ExecStateLike;
+    const cutoff = new Date(Date.now() - staleAfterMs);
+    const candidates = await prisma.featureBuild.findMany({
+      where: { phase: "build", updatedAt: { lt: cutoff } },
+      select: { buildId: true, buildExecState: true, verificationOut: true },
+    });
+
+    // Default dispatcher lazy-imports the system executor to avoid pulling the
+    // server-action module (and its auth wrappers) into the module graph until
+    // a resume is actually needed.
+    const dispatch =
+      opts.dispatch ??
+      ((buildId: string) => {
+        void (async () => {
+          const { autoExecuteBuild } = await import("@/lib/actions/build");
+          await autoExecuteBuild(buildId);
+        })().catch((err) =>
+          logger.error(
+            "[build-resume] re-dispatch failed for %s: %s",
+            JSON.stringify(buildId),
+            err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
+          ),
+        );
+      });
+
+    let resumed = 0;
+    for (const build of candidates) {
+      const state = build.buildExecState as ExecStateLike | null;
+      // Skip contradictory shapes — the contradictory-recovery reconciler owns
+      // those. Skip null/terminal steps — nothing to resume.
+      if (classifyContradictoryExecState(state, build.verificationOut) !== null) continue;
+      const step = state?.step;
+      if (step == null || step === "complete" || step === "failed") continue;
+
+      logger.log(
+        `[build-resume] ${build.buildId} stranded at step=${step} (no progress since updatedAt) — re-dispatching pipeline`,
+      );
+      await prisma.buildActivity
+        .create({
+          data: {
+            buildId: build.buildId,
+            tool: "resumeStrandedBuildsOnBoot",
+            summary: `Re-dispatched stranded build on boot (step=${step}); pipeline resumes from getResumeStep`,
+          },
+        })
+        .catch(() => {});
+      dispatch(build.buildId);
+      resumed++;
+    }
+    if (resumed > 0) {
+      logger.log(`[build-resume] re-dispatched ${resumed} stranded build(s)`);
+    }
+    return { resumed };
+  } catch (err) {
+    logger.error("[build-resume] failed (non-fatal):", err);
+    return null;
+  }
+}
+
 export async function enqueueFirstBootEvals(providerId: string): Promise<{
   enqueued: number;
   error: string | null;
@@ -223,6 +404,20 @@ export async function register() {
     // (a real upgrade recreates this very container). Records succeeded when we
     // came up on the target SHA; fails orphans so triggers aren't blocked.
     void reconcileSelfUpgradeRunsOnBoot();
+
+    // Build Studio engine reliability (spec §3.1 engine-first / FB-78E967D4).
+    // These run unconditionally — they are correctness reconcilers, not optional
+    // maintenance — and FIX 1 runs before FIX 2 so contradictory checkpoints are
+    // coerced/cleared before the resume pass considers them.
+    //
+    // FIX 1: auto-recover builds whose buildExecState landed in a contradictory
+    // shape (was previously only escapable via the manual "Reset Build").
+    // FIX 2: re-dispatch builds whose fire-and-forget pipeline was killed by a
+    // portal recycle, leaving a row stranded mid-step that nothing resumes.
+    void (async () => {
+      await recoverContradictoryBuildExecStatesOnBoot();
+      await resumeStrandedBuildsOnBoot();
+    })();
 
     const optionalStartupTasksEnabled = areOptionalStartupTasksEnabled();
     if (!optionalStartupTasksEnabled) {
