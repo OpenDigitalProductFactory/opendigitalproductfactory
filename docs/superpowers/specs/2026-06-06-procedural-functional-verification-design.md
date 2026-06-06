@@ -122,6 +122,16 @@ The stop-rule only works if the BLOCKED reason is *actionable*. Two supporting p
 
 Claude Code and Codex ship capabilities almost daily. Per Unified Delivery Surfaces invariant 4, the **contract stays stable; surfaces adapt.** The preflight contract — *verdict + served-SHA source + the one governed advance action* — is surface-version-agnostic. New tool capabilities plug in at the adapter layer (how the skill drives the happy path, how it triggers self-upgrade) and never require editing the contract. A standing checklist evaluates each new Claude/Codex capability against the contract so changing tool capabilities are absorbed **procedurally, not by re-architecture**. If a rule would break on next week's Claude/Codex bump, it belongs in an adapter, not here.
 
+**Standing checklist — evaluate every new Claude Code / Codex capability against the contract** (run when a tool ships a capability that touches verification: a new browser/computer-use mode, a new dispatch/sandbox primitive, a new MCP transport, a new "run the app" affordance):
+
+1. **Does it change the *verdict*?** The contract is `verdict ∈ {CAN-TEST, MUST-ADVANCE, BLOCKED}` + served-SHA source + the one governed advance. A new capability must not add a verdict, a fourth state, or a second advance path. If it seems to, it's an *adapter* feature — wire it in step 4/5 of the skill, not here.
+2. **Which adapter slot does it fill?** Exactly one of: *how we read served identity* (today: `/api/platform/*`), *how we drive the happy path* (today: Chrome MCP / coworker), *how we trigger the governed advance* (today: `/ops/self-upgrade`). Name the slot; if it fits none, it's out of scope for verification.
+3. **Does it tempt a bypass?** A faster "just rebuild the portal" / "just run it in the worktree" capability is a contract violation regardless of how convenient — it breaks `image-identity-equals-bytes` / `worktree-is-source-control-not-runtime`. Reject the bypass; keep the governed path.
+4. **Does it weaken the stop-rule?** Any capability that makes "context-switch into fixing the blocker" frictionless still does NOT make it implicit — BLOCKED still files a BI and stops. Ease of pivot ≠ authority to pivot.
+5. **Record, don't pin.** If the operator adopts the capability as the default adapter, record it in the skill's adapter notes; never hard-pin a tool version in the contract (mirrors AGENTS.md §17 client-config discipline).
+
+Net: a Claude/Codex release can change *every adapter* and the preflight core, its tests, and this contract stay byte-for-byte unchanged.
+
 ### 3.5 Anti-scatter binding
 
 This spec is the single source of truth. AGENTS.md §5 names the preflight+skill as step zero and **points here**; the skill docs point here; `portal-version-check.sh` is reconciled to point at the governed advance (`BI-6B31D9FF`). No rule is copied into two places.
