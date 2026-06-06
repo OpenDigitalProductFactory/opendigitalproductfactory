@@ -222,6 +222,8 @@ No new epic. This is the default-home slice of the existing workspace-home work.
 
 ## 12. Verification Plan
 
+**Acceptance vehicle:** this redesign is verified through **§3 "Employee Work View"** of the [Archetype Acceptance Test Plan](../plans/2026-06-06-archetype-acceptance-test-plan.md), exercised on a clean install across the 12 representative archetypes. §3's fail condition — *"worker-facing UX still reads like platform operator tooling for ordinary business employees"* — is the exact defect this spec removes, so a §3 `Pass` on a non-`software-platform` archetype is the redesign's acceptance signal. The steps below are the focused redesign smoke that feeds that walkthrough.
+
 1. Drive `/workspace` on the Live install as a non-platform user; confirm first viewport = header + critical strip + Today&Next + work queue; confirm no readiness matrix, no cron/deployment events.
 2. Drive the operator `/platform/schedule` surface; confirm cron digests, deployment windows, blackouts, and agent-task runs are present there.
 3. Resize to mobile; confirm the §4.2 order.

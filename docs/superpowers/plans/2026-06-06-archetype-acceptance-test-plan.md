@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED: Use `superpowers:executing-plans` when running this plan end-to-end. This plan is a product-behavior walkthrough, not a build-system verification plan. Use the already-available sandbox/main build selected by the operator; do not turn failed access into a self-upgrade or deployment investigation unless the task is explicitly rescoped.
 
+> **Tied to the portal-redesign effort (2026-06-06).** This plan is the founder's clean-install acceptance vehicle for the main-portal redesign. Its **§3 "Employee Work View"** is the direct acceptance test for the [Main Portal Workspace Home Redesign](../specs/2026-06-06-main-portal-workspace-home-redesign-design.md) and the [Archetype Portal Screen Prototypes](../specs/2026-06-06-archetype-portal-screen-prototypes-design.md): §3's fail condition ("worker-facing UX still reads like platform operator tooling") is exactly the default-home defect the redesign removes. All three docs ship together on the same branch / PR under `EP-REDUCTION-GEAR-ARCH` so the test plan is not lost from the design it validates.
+
 **Goal:** Confirm that selecting a business archetype produces a coherent DPF experience across setup, business capabilities, employee work, customer/storefront flows, finance, integrations, AI coworkers, and portfolio/product/backlog surfaces.
 
 **Architecture:** Exercise a representative archetype coverage set rather than every vertical exhaustively. Each walkthrough follows the same surface checklist so repeated failures become cross-cutting backlog items instead of many duplicate vertical bugs.
