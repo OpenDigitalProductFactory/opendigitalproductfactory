@@ -1,50 +1,37 @@
-// Bundler-opaque lazy require for Node.js built-in modules.
-// Uses `new Function` to hide require() from Turbopack/NFT static analysis,
-// preventing whole-project tracing when server code uses fs, path, or child_process.
+// Stable accessors for Node.js built-in modules.
 //
-// Usage:
-//   const { readFile, mkdir } = lazyFs();
-//   const { join, resolve } = lazyPath();
-
-// Build a require() function that is invisible to Turbopack/NFT static analysis.
-// In CJS (Next.js server runtime), `new Function` hides the require call.
-// In ESM (vitest), fall back to module.createRequire.
-import { createRequire as _createRequire } from "module";
-
-const _require: (mod: string) => unknown = (() => {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
-    const fn = new Function("mod", "return require(mod)");
-    fn("path"); // probe — throws ReferenceError in pure ESM
-    return fn as (mod: string) => unknown;
-  } catch {
-    // For Node built-ins, the base URL doesn't matter
-    return _createRequire(typeof __filename !== "undefined" ? __filename : "/");
-  }
-})();
+// Keep these as static `node:` imports. The previous dynamic `require` resolver
+// bundled to an undefined helper in Next's standalone webpack output, which
+// made production callers fail before they could spawn CLI-backed providers.
+import * as childProcess from "node:child_process";
+import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as fsPromises from "node:fs/promises";
+import * as path from "node:path";
+import * as util from "node:util";
 
 export function lazyFs(): typeof import("fs") {
-  return _require("fs") as typeof import("fs");
+  return fs;
 }
 
 export function lazyFsPromises(): typeof import("fs/promises") {
-  return _require("fs/promises") as typeof import("fs/promises");
+  return fsPromises;
 }
 
 export function lazyPath(): typeof import("path") {
-  return _require("path") as typeof import("path");
+  return path;
 }
 
 export function lazyCrypto(): typeof import("crypto") {
-  return _require("crypto") as typeof import("crypto");
+  return crypto;
 }
 
 export function lazyChildProcess(): typeof import("child_process") {
-  return _require("child_process") as typeof import("child_process");
+  return childProcess;
 }
 
 export function lazyUtil(): typeof import("util") {
-  return _require("util") as typeof import("util");
+  return util;
 }
 
 /** Pre-built promisified exec that always returns strings (encoding: utf-8). */
