@@ -92,4 +92,26 @@ describe("AgentWorkLauncher", () => {
       globalThis.document = previousDocument;
     }
   });
+
+  it("dispatches route context with guided work prompts", () => {
+    const previousDocument = globalThis.document;
+    const dispatchEvent = vi.fn();
+    globalThis.document = {
+      dispatchEvent,
+    } as unknown as Document;
+
+    try {
+      dispatchAgentPrompt("Diagnose this stale opportunity.", {
+        routeContext: "/customer/opportunities/opp-1",
+      });
+
+      const event = dispatchEvent.mock.calls[0][0] as CustomEvent;
+      expect(event.detail).toEqual({
+        autoMessage: "Diagnose this stale opportunity.",
+        routeContext: "/customer/opportunities/opp-1",
+      });
+    } finally {
+      globalThis.document = previousDocument;
+    }
+  });
 });

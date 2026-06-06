@@ -12,11 +12,12 @@ This install runs three local runtime roles:
 
 ## Rules
 
-- Final acceptance always targets the Docker-served **Live portal** on `http://localhost:3000`.
+- Final acceptance always targets the Docker-served **Live portal** on `http://localhost:3000` after the target has reached it through the governed self-upgrade/promoter path.
 - Never use ad-hoc `pnpm dev`, `next dev`, or `next start` on port 3000 for customer-zero verification.
+- Do not refresh the Live portal with direct `docker compose build` / `docker compose up` during normal feature validation. Direct rebuilds of the main `dpf` `portal` / `portal-init` services are recovery or bootstrap actions only.
 - The **Build runtime** is the agent execution surface; humans see it through Build Studio's in-canvas preview (the footer "Open live preview" button) rather than treating it as a developer scratch surface.
 - The **Contributor preview** is opt-in via the `dev` compose profile. A plain `docker compose up -d` does not start it, and customer installs do not ship it by default.
-- Promote changes through branch → PR → verification → image rebuild flow rather than treating the Live portal as a scratch environment.
+- Promote changes through branch → PR → merge → `/ops/self-upgrade` / governed promoter → Live portal verification rather than treating the Live portal as a scratch environment.
 
 ## Why this matters
 

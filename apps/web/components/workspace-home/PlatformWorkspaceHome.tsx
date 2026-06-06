@@ -1,10 +1,9 @@
 import { Suspense } from "react";
 
-import { AttentionStrip } from "@/components/shell/AttentionStrip";
-import { WorkspaceTiles } from "@/components/shell/WorkspaceTiles";
 import { ActivityFeed } from "@/components/workspace/ActivityFeed";
 import { BusinessCommandCenter } from "@/components/workspace/BusinessCommandCenter";
 import { WorkspaceCalendar } from "@/components/workspace/WorkspaceCalendar";
+import { WorkspaceAreaLauncher } from "@/components/workspace-home/WorkspaceAreaLauncher";
 import type { PlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-loader";
 
 type PlatformWorkspaceHomeProps = {
@@ -31,22 +30,6 @@ export function PlatformWorkspaceHome({ data }: PlatformWorkspaceHomeProps) {
 
       <BusinessCommandCenter view={workspaceCommandCenter.commandCenter} />
 
-      <AttentionStrip items={workspaceCommandCenter.attentionItems} />
-
-      <div className="space-y-8">
-        {workspaceSections.map((section) => (
-          <section key={section.key}>
-            <div className="mb-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
-                {section.label}
-              </p>
-              <p className="mt-1 text-sm text-[var(--dpf-muted)]">{section.description}</p>
-            </div>
-            <WorkspaceTiles tiles={section.tiles} tileStatus={workspaceCommandCenter.tileStatus} />
-          </section>
-        ))}
-      </div>
-
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div>
           <p className="mb-3 text-xs uppercase tracking-widest text-[var(--dpf-muted)]">
@@ -63,6 +46,11 @@ export function PlatformWorkspaceHome({ data }: PlatformWorkspaceHomeProps) {
           <ActivityFeed items={feedItems} />
         </div>
       </div>
+
+      <WorkspaceAreaLauncher
+        sections={workspaceSections}
+        tileStatus={workspaceCommandCenter.tileStatus}
+      />
     </div>
   );
 }
