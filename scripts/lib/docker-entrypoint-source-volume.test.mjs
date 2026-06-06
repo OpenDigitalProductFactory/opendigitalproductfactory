@@ -48,6 +48,77 @@ test("workspace dependency install disables pnpm's interactive modules purge pro
   );
 });
 
+test("Engine B image-version source-advance is retired — no /workspace re-sync on version drift (BI-5B6C1C35)", () => {
+  // The image-version-vs-/workspace/.dpf-version detection block must NOT, on a
+  // version mismatch of an ALREADY-bootstrapped volume, silently re-sync the
+  // running container's source or arm an update. Per governed-upgrade spec §5.0
+  // the running install advances ONLY via the host-clone self-upgrade pipeline
+  // (Engine A). Assert the dangerous calls no longer live in that branch.
+  const driftBranch = entrypoint.match(
+    /elif \[ -f "\$WORKSPACE\/\.dpf-version" \]; then([\s\S]*?)\nelse\n  echo "  -- \/workspace not mounted/,
+  );
+  assert.ok(driftBranch, "the .dpf-version-present (drift-detection) branch should exist");
+  const body = driftBranch[1];
+
+  // Strip comment lines so the prose that EXPLAINS the retirement (which names
+  // the old mechanisms) doesn't trip the "no longer does X" assertions.
+  const executable = body
+    .split("\n")
+    .filter((line) => !/^\s*#/.test(line))
+    .join("\n");
+
+  // No raw psql write of the updatePending / pendingVersion sentinel.
+  assert.doesNotMatch(executable, /psql/, "must not run psql in the drift-detection branch");
+  assert.doesNotMatch(executable, /updatePending/, "must not write the updatePending sentinel via psql");
+  assert.doesNotMatch(executable, /pendingVersion/, "must not write the pendingVersion sentinel via psql");
+
+  // No silent source re-sync from the image into the running /workspace.
+  assert.doesNotMatch(
+    executable,
+    /sync_image_source_to_workspace/,
+    "must not re-sync image source into the running /workspace on version drift",
+  );
+  assert.doesNotMatch(
+    executable,
+    /commit_workspace_snapshot/,
+    "must not snapshot-commit a silently advanced /workspace on version drift",
+  );
+
+  // The branch must declare the retirement so the intent is auditable.
+  assert.match(body, /BI-5B6C1C35/, "the retired branch should cite the BI");
+  assert.match(body, /Self-Upgrade/i, "the retired branch should point operators at Engine A");
+});
+
+test("the entrypoint no longer issues any psql updatePending write (Engine B retired)", () => {
+  // Belt-and-braces across the whole script: no EXECUTABLE line may write
+  // PlatformDevConfig.updatePending. Engine A owns advance signalling. Comment
+  // prose that names the retired mechanism is allowed and is stripped here.
+  const executableLines = entrypoint
+    .split("\n")
+    .filter((line) => !/^\s*#/.test(line));
+  const offending = executableLines.filter((line) => /updatePending/.test(line));
+  assert.deepEqual(
+    offending,
+    [],
+    `no executable line may write updatePending; found: ${offending.join(" | ")}`,
+  );
+});
+
+test("first-install volume bootstrap is preserved (does not regress fresh installs)", () => {
+  // Neutralising Engine B must NOT break first-install: an EMPTY /workspace is
+  // still populated so surfaces that mount it (the :3001 contributor preview,
+  // sandbox tooling) have a source tree. The bootstrap branch keys off the
+  // ABSENCE of .dpf-version and still calls the populate + dependency-install path.
+  const bootstrapBranch = entrypoint.match(
+    /elif \[ -d "\$WORKSPACE" \] && \[ ! -f "\$WORKSPACE\/\.dpf-version" \]; then([\s\S]*?)\nelif \[ -f "\$WORKSPACE\/\.dpf-version" \]; then/,
+  );
+  assert.ok(bootstrapBranch, "the first-install (no-.dpf-version) bootstrap branch should exist");
+  const body = bootstrapBranch[1];
+  assert.match(body, /sync_image_source_to_workspace/, "first-install must still populate the empty volume");
+  assert.match(body, /install_workspace_dependencies/, "first-install must still install dependencies");
+  assert.match(body, /echo "\$IMAGE_VERSION" > "\$WORKSPACE\/\.dpf-version"/, "first-install must still write the version sentinel");
+});
+
 test("workspace dependency install skips lifecycle scripts before explicit Prisma generation", () => {
   const body = functionBody("install_workspace_dependencies");
   const installMatches = [...body.matchAll(/pnpm install(?: --frozen-lockfile)? --config\.confirmModulesPurge=false --ignore-scripts/g)];
