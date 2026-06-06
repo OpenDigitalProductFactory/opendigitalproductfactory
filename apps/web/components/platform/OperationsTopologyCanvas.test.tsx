@@ -55,3 +55,41 @@ describe("OperationsTopologyCanvas — provider parity (Stage B1)", () => {
     expect(container.querySelectorAll("[data-canvas-route]").length).toBe(0);
   });
 });
+
+describe("OperationsTopologyCanvas — A2A arc half (Stage C)", () => {
+  it("renders left-side A2A arcs on the same spine rows in both mode", () => {
+    const { container } = render(<OperationsTopologyCanvas topology={buildOperationsMapTopologyFixture()} />);
+    const arcs = container.querySelectorAll("[data-canvas-a2a-arc]");
+    expect(arcs.length).toBe(3);
+    expect([...arcs].map((a) => a.getAttribute("data-a2a-kind")).sort()).toEqual([
+      "a2a-delegation",
+      "a2a-handoff",
+      "a2a-task-lineage",
+    ]);
+    expect([...arcs].map((a) => a.getAttribute("data-a2a-state")).sort()).toEqual(["active", "completed", "failed"]);
+    arcs.forEach((a) => {
+      expect(a.getAttribute("aria-label")).toMatch(/→.*\(.+\)/);
+      expect(a.getAttribute("role")).toBe("button");
+      expect(a.getAttribute("tabindex")).toBe("0");
+    });
+    // Both halves share one spine.
+    expect(container.querySelectorAll("[data-canvas-route]").length).toBe(4);
+    expect(container.querySelectorAll("[data-canvas-coworker-row]").length).toBe(3);
+  });
+
+  it("provider-only mode hides the A2A arcs but keeps routes", () => {
+    const { container } = render(<OperationsTopologyCanvas topology={buildOperationsMapTopologyFixture()} dimension="provider" />);
+    expect(container.querySelectorAll("[data-canvas-a2a-arc]").length).toBe(0);
+    expect(container.querySelectorAll("[data-canvas-route]").length).toBe(4);
+    expect(container.querySelectorAll("[data-canvas-provider]").length).toBe(2);
+  });
+
+  it("A2A-only mode renders arcs and the spine but no provider routes or nodes", () => {
+    const { container } = render(<OperationsTopologyCanvas topology={buildOperationsMapTopologyFixture()} dimension="a2a" />);
+    expect(container.querySelectorAll("[data-canvas-a2a-arc]").length).toBe(3);
+    expect(container.querySelectorAll("[data-canvas-coworker-row]").length).toBe(3);
+    expect(container.querySelectorAll("[data-canvas-route]").length).toBe(0);
+    expect(container.querySelectorAll("[data-canvas-provider]").length).toBe(0);
+    expect(container.querySelectorAll("[data-canvas-marker]").length).toBe(0);
+  });
+});

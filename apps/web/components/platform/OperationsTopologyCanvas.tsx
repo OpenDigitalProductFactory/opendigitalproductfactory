@@ -9,6 +9,7 @@
 //
 // Spec: docs/superpowers/specs/2026-06-05-ai-operations-map-three-band-cohesive-layout-design.md §7 Stage B
 
+import { intentStyle } from "@/components/ui/report-kit";
 import type { OperationsMapRoutingTopology } from "@/lib/ai-operations-map/types";
 import {
   buildOperationsTopologyLayout,
@@ -22,11 +23,21 @@ import {
   routeStateStroke,
   routeWidth,
 } from "./operations-topology-style";
+import {
+  a2aStateIntent,
+  edgeKindDash,
+  EDGE_KIND_LABEL,
+  STATE_LABEL,
+} from "./a2a-interaction-graph";
+
+export type TopologyDimension = "provider" | "a2a" | "both";
 
 type Props = {
   topology: OperationsMapRoutingTopology;
   viewport?: TopologyViewport;
   selectedCoworkerId?: string | null;
+  /** Which halves to render — mirrors the Provider/A2A/Both dimension toggle. */
+  dimension?: TopologyDimension;
 };
 
 const CANVAS = {
@@ -36,15 +47,23 @@ const CANVAS = {
   nodeRadius: 8,
 };
 
-export function OperationsTopologyCanvas({ topology, viewport = "desktop", selectedCoworkerId = null }: Props) {
-  // Provider-only mode for B1: pass no A2A edges so the spine is the union of
-  // routing coworkers (the left arc half arrives in Stage C).
+export function OperationsTopologyCanvas({
+  topology,
+  viewport = "desktop",
+  selectedCoworkerId = null,
+  dimension = "both",
+}: Props) {
+  const showProvider = dimension === "provider" || dimension === "both";
+  const showA2a = dimension === "a2a" || dimension === "both";
+
+  // The spine is the union of the visible halves: provider-routing coworkers
+  // and/or A2A participants. Each half is suppressed in single-dimension mode.
   const layout = buildOperationsTopologyLayout({
     coworkers: topology.coworkers,
-    providers: topology.providers,
-    routes: topology.routes,
-    a2aEdges: [],
-    markers: topology.markers,
+    providers: showProvider ? topology.providers : [],
+    routes: showProvider ? topology.routes : [],
+    a2aEdges: showA2a ? topology.a2aEdges : [],
+    markers: showProvider ? topology.markers : [],
     selectedCoworkerId,
     viewport,
   });
@@ -52,8 +71,14 @@ export function OperationsTopologyCanvas({ topology, viewport = "desktop", selec
   const rowYById = new Map(layout.rows.map((row) => [row.coworkerId, row]));
   const providerYById = new Map(layout.providerNodes.map((node) => [node.providerId, node]));
   const routesById = new Map(topology.routes.map((route) => [route.id, route]));
+  const a2aById = new Map(topology.a2aEdges.map((edge) => [edge.id, edge]));
 
   const isEmpty = layout.rows.length === 0 && layout.providerNodes.length === 0;
+  const svgLabel = showProvider && showA2a
+    ? "Coworker spine with A2A interactions and provider routing"
+    : showA2a
+      ? "Coworker spine with A2A interactions"
+      : "Coworker spine with provider routing";
 
   return (
     <section
@@ -69,7 +94,7 @@ export function OperationsTopologyCanvas({ topology, viewport = "desktop", selec
         <svg
           viewBox={`0 0 ${CANVAS.width} ${layout.height}`}
           role="img"
-          aria-label="Coworker spine with provider routing"
+          aria-label={svgLabel}
           className="h-full w-full"
           style={{ minHeight: 220 }}
         >
@@ -79,15 +104,54 @@ export function OperationsTopologyCanvas({ topology, viewport = "desktop", selec
             </marker>
           </defs>
 
+          {showA2a ? (
+            <text x={CANVAS.spineX - 230} y="22" textAnchor="middle" className="fill-[var(--dpf-muted)] text-[10px] uppercase tracking-[0.16em]">
+              Coworker interactions
+            </text>
+          ) : null}
           <text x={CANVAS.spineX} y="22" textAnchor="middle" className="fill-[var(--dpf-muted)] text-[10px] uppercase tracking-[0.16em]">
             Coworkers
           </text>
-          <text x={CANVAS.providerX} y="22" textAnchor="middle" className="fill-[var(--dpf-muted)] text-[10px] uppercase tracking-[0.16em]">
-            Providers
-          </text>
+          {showProvider ? (
+            <text x={CANVAS.providerX} y="22" textAnchor="middle" className="fill-[var(--dpf-muted)] text-[10px] uppercase tracking-[0.16em]">
+              Providers
+            </text>
+          ) : null}
+
+          {/* A2A interaction arcs (left of the spine), coworker → coworker */}
+          {showA2a
+            ? layout.a2aArcs.map((arc) => {
+                const fromRow = rowYById.get(arc.fromCoworkerId);
+                const toRow = rowYById.get(arc.toCoworkerId);
+                if (!fromRow || !toRow) return null;
+                const edge = a2aById.get(arc.edgeId);
+                const stroke = intentStyle(a2aStateIntent(arc.state)).fg;
+                return (
+                  <path
+                    key={arc.edgeId}
+                    data-canvas-a2a-arc={arc.edgeId}
+                    data-a2a-kind={arc.edgeKind}
+                    data-a2a-state={arc.state}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${fromRow.label} → ${toRow.label}: ${EDGE_KIND_LABEL[arc.edgeKind]} (${STATE_LABEL[arc.state]})`}
+                    d={a2aArcPath(CANVAS.spineX, arc.fromY, arc.toY, arc.lane)}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={Math.min(4, 1.2 + (edge?.weight ?? 1) * 0.4)}
+                    strokeDasharray={edgeKindDash(arc.edgeKind)}
+                    strokeOpacity="0.9"
+                    strokeLinecap="round"
+                    markerEnd="url(#topology-route-arrow)"
+                  >
+                    <title>{`${fromRow.label} → ${toRow.label}: ${edge?.label ?? EDGE_KIND_LABEL[arc.edgeKind]}`}</title>
+                  </path>
+                );
+              })
+            : null}
 
           {/* Provider routes: spine row → provider node */}
-          {layout.routeLanes.map((lane) => {
+          {showProvider ? layout.routeLanes.map((lane) => {
             const row = rowYById.get(lane.coworkerId);
             const provider = providerYById.get(lane.providerId);
             if (!row || !provider) return null;
@@ -113,10 +177,10 @@ export function OperationsTopologyCanvas({ topology, viewport = "desktop", selec
                 <title>{`${row.label} → ${provider.label}: ${ROUTE_STATE_LABEL[lane.state]}`}</title>
               </path>
             );
-          })}
+          }) : null}
 
           {/* Markers (decision/error/etc.) — route-attached at midpoint, provider-side near the provider */}
-          {topology.markers.map((marker) => {
+          {showProvider ? topology.markers.map((marker) => {
             const anchor = markerAnchor(marker, layout, rowYById, providerYById);
             if (!anchor) return null;
             return (
@@ -125,7 +189,7 @@ export function OperationsTopologyCanvas({ topology, viewport = "desktop", selec
                 <circle cx={anchor.x} cy={anchor.y} r="5" fill="var(--dpf-surface-1)" stroke={markerTypeStroke(marker.type)} strokeWidth="2" />
               </g>
             );
-          })}
+          }) : null}
 
           {/* Coworker spine */}
           {layout.rows.map((row) => (
@@ -157,6 +221,15 @@ function routePath(fromX: number, fromY: number, toX: number, toY: number, lane:
   const midX = (fromX + toX) / 2;
   const bend = (lane % 2 === 0 ? 1 : -1) * Math.min(40, 12 + lane * 10);
   return `M ${fromX + 10} ${fromY} C ${midX} ${fromY + bend}, ${midX} ${toY - bend}, ${toX - 10} ${toY}`;
+}
+
+// Left-bulging arc between two spine rows (coworker → coworker). Both endpoints
+// sit on the spine; the curve bulges into the A2A interaction space on the left.
+function a2aArcPath(spineX: number, fromY: number, toY: number, lane: number): string {
+  const r = CANVAS.nodeRadius;
+  const bulge = 60 + lane * 28 + Math.abs(toY - fromY) * 0.12;
+  const cx = spineX - bulge;
+  return `M ${spineX - r} ${fromY} C ${cx} ${fromY}, ${cx} ${toY}, ${spineX - r} ${toY}`;
 }
 
 function markerAnchor(
