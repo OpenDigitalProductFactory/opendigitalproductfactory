@@ -5,6 +5,7 @@
 | Date | 2026-06-06 |
 | Status | Current-state reconciliation and UX fit review |
 | Branch | `feat/customer-crm-ux-reconcile` |
+| Follow-up branch | `fix/auth-login-crawl` |
 | Related plan | `docs/superpowers/plans/2026-05-26-pipedrive-crm-marketing-slice-1.md` |
 | Related spec | `docs/superpowers/specs/2026-05-26-pipedrive-inspired-crm-marketing-operations-design.md` |
 | Live backlog | `BI-D8E00326` - CRM marketing Slice 5: agentic sales and marketing operations |
@@ -48,11 +49,24 @@ The remaining product gap is Slice 5, not Slice 1:
 - External send, publish, schedule, or ad-spend actions remain approval-gated and must preserve consent and provenance.
 - Future generic reporting surfaces should use `report-kit` directly; Customer wrappers are acceptable only as thin vocabulary adapters.
 
-### Runtime Evidence Limitation
+### Runtime Evidence Follow-Up
 
-The canonical portal responded at `http://127.0.0.1:3000/welcome` and `/login`, and the Docker `dpf-portal-1` container was healthy. Authenticated route crawl was blocked because submitting the admin login form produced the app fallback text "This page couldn't load". No useful matching portal log appeared in the recent tail.
+The canonical portal responded at `http://127.0.0.1:3000/welcome` and `/login`, and the Docker `dpf-portal-1` container was healthy. The first authenticated route crawl was blocked because submitting the admin login form produced the app fallback text "This page couldn't load". No useful matching portal log appeared in the recent tail.
 
-Therefore this audit uses source-local route/component evidence plus focused tests for the code change. Authenticated browser screenshots for `/customer` and `/customer/marketing/*` remain unrun and should be repeated after the auth/runtime blocker is cleared.
+Follow-up on 2026-06-06 from `D:\DPF-worktrees\auth-login-crawl` did not reproduce the login fallback. The canonical login reached `/workspace`, established an `authjs.session-token`, and the authenticated crawl loaded:
+
+- `/customer`
+- `/customer/opportunities`
+- `/customer/engagements`
+- `/customer/marketing`
+- `/customer/marketing/strategy`
+- `/customer/marketing/campaigns`
+- `/customer/marketing/funnel`
+- `/customer/marketing/automation`
+
+No route showed the app fallback text. Browser events included expected aborted navigation and `/api/agent/system-stream` requests while moving route-to-route, but no page-level runtime error surfaced during the crawl.
+
+The visual finding from the authenticated crawl was that the global collapsed AI Coworker FAB defaulted to the vertical midpoint and could occlude primary page actions, most visibly the `/customer/marketing` "Start marketing review" action. The follow-up fix moves the collapsed FAB to a lower safe dock band (`72%`-`92%`, default `82%`) and migrates old midpoint preferences out of the action lane.
 
 ## 4. UX Fit Review - Customer CRM Marketing Reconciliation
 
@@ -68,12 +82,12 @@ Therefore this audit uses source-local route/component evidence plus focused tes
 - Required plan/spec edits:
   - Mark the old Slice 1 implementation plan as historical/current-main reconciled
   - Point remaining product work at `BI-D8E00326`
-  - Record the canonical auth-crawl blocker so route screenshots are not overclaimed
+  - Record the canonical auth-crawl follow-up so route screenshots are not overclaimed
 - Evidence before merge:
   - source-local focused component tests for Customer wrappers and `RevenueCockpit`
   - hardcoded-color scan over Customer CRM/Marketing route family
   - typecheck and production build
-  - authenticated browser crawl after login/runtime is healthy
+  - authenticated browser crawl once login/runtime is healthy
 - Captured in: this audit, the Slice 1 plan status block, and the Pipedrive CRM/Marketing spec runtime grounding
 
 ## 5. Next Slice
@@ -85,4 +99,4 @@ Proceed with `BI-D8E00326` as Slice 5 only after this reconciliation lands. The 
 3. save internal artifacts through governed tools
 4. show saved artifacts on the relevant Customer/Marketing route, not only in chat
 5. gate external side effects behind explicit approval
-6. re-run authenticated desktop and mobile browser crawls after the auth blocker is resolved
+6. re-run authenticated desktop and mobile browser crawls after the FAB safe-dock fix reaches the canonical runtime through the governed promotion path
