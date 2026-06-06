@@ -192,6 +192,15 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   register_digital_product_from_build: ["registry_read", "backlog_write"],
   create_build_epic: ["backlog_write"],
 
+  // Workbooks / spreadsheet grids. Platform capability checks still enforce
+  // view_workbooks/manage_workbooks before tool execution; these grants keep
+  // coworker routing explicit instead of default-denying the tools.
+  workbook_list_tables: ["document_read"],
+  workbook_get_schema: ["document_read"],
+  workbook_query_rows: ["document_read"],
+  workbook_create_row: ["document_write"],
+  workbook_update_cells: ["document_write"],
+
   // Web / External
   search_public_web: ["web_search"],
   fetch_public_website: ["web_search"],

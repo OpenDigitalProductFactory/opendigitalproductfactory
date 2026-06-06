@@ -287,6 +287,22 @@ describe("TOOL_TO_GRANTS — Backlog hygiene entries", () => {
   });
 });
 
+describe("TOOL_TO_GRANTS - Workbook entries", () => {
+  it("read-only workbook tools require document_read", () => {
+    for (const tool of ["workbook_list_tables", "workbook_get_schema", "workbook_query_rows"]) {
+      expect(isToolAllowedByGrants(tool, ["document_read"])).toBe(true);
+      expect(isToolAllowedByGrants(tool, ["document_write"])).toBe(false);
+    }
+  });
+
+  it("workbook mutation tools require document_write", () => {
+    expect(isToolAllowedByGrants("workbook_create_row", ["document_write"])).toBe(true);
+    expect(isToolAllowedByGrants("workbook_update_cells", ["document_write"])).toBe(true);
+    expect(isToolAllowedByGrants("workbook_create_row", ["document_read"])).toBe(false);
+    expect(isToolAllowedByGrants("workbook_update_cells", ["document_read"])).toBe(false);
+  });
+});
+
 describe("TOOL_TO_GRANTS - Work Capsule entries", () => {
   it("read tools require work_capsule_read", () => {
     expect(isToolAllowedByGrants("list_work_capsules", ["work_capsule_read"])).toBe(true);
