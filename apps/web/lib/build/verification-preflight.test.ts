@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   verificationPreflight,
   preflightDirective,
+  gatherPreflightSignals,
   type PreflightSignals,
 } from "./verification-preflight";
 
@@ -100,5 +101,47 @@ describe("preflightDirective", () => {
   it("greenlights testing on CAN_TEST", () => {
     const d = preflightDirective(verificationPreflight(READY));
     expect(d).toContain("CAN_TEST");
+  });
+});
+
+describe("gatherPreflightSignals", () => {
+  const healthyRuntime = { installHealthy: true, requiredServicesHealthy: true, explicitBlocker: null };
+  const buildRow = {
+    phase: "review",
+    acceptanceMet: null,
+    verificationOut: null,
+    buildExecState: { step: "code_generated" },
+  };
+
+  it("acceptanceAlreadyMet only when every criterion is met (non-empty)", () => {
+    expect(gatherPreflightSignals({ ...buildRow, acceptanceMet: [{ met: true }, { met: true }] }, healthyRuntime).acceptanceAlreadyMet).toBe(true);
+    expect(gatherPreflightSignals({ ...buildRow, acceptanceMet: [{ met: true }, { met: false }] }, healthyRuntime).acceptanceAlreadyMet).toBe(false);
+    expect(gatherPreflightSignals({ ...buildRow, acceptanceMet: [] }, healthyRuntime).acceptanceAlreadyMet).toBe(false);
+    expect(gatherPreflightSignals({ ...buildRow, acceptanceMet: null }, healthyRuntime).acceptanceAlreadyMet).toBe(false);
+  });
+
+  it("verificationAlreadyPassed when a record exists and typecheck didn't fail", () => {
+    expect(gatherPreflightSignals({ ...buildRow, verificationOut: { typecheckPassed: true, testsFailed: 0 } }, healthyRuntime).verificationAlreadyPassed).toBe(true);
+    // test failures are informational, not a negation
+    expect(gatherPreflightSignals({ ...buildRow, verificationOut: { typecheckPassed: true, testsFailed: 3 } }, healthyRuntime).verificationAlreadyPassed).toBe(true);
+    expect(gatherPreflightSignals({ ...buildRow, verificationOut: { typecheckPassed: false } }, healthyRuntime).verificationAlreadyPassed).toBe(false);
+    expect(gatherPreflightSignals({ ...buildRow, verificationOut: null }, healthyRuntime).verificationAlreadyPassed).toBe(false);
+  });
+
+  it("buildArtifactPresent only at/after build phase WITH execution state", () => {
+    expect(gatherPreflightSignals({ ...buildRow, phase: "review", buildExecState: { step: "x" } }, healthyRuntime).buildArtifactPresent).toBe(true);
+    expect(gatherPreflightSignals({ ...buildRow, phase: "plan", buildExecState: { step: "x" } }, healthyRuntime).buildArtifactPresent).toBe(false);
+    expect(gatherPreflightSignals({ ...buildRow, phase: "review", buildExecState: null }, healthyRuntime).buildArtifactPresent).toBe(false);
+  });
+
+  it("passes runtime probes through and feeds a usable verdict end-to-end", () => {
+    // No evidence yet, healthy, artifact present → CAN_TEST.
+    expect(verificationPreflight(gatherPreflightSignals(buildRow, healthyRuntime)).verdict).toBe("CAN_TEST");
+    // Acceptance met → MUST_ADVANCE regardless of artifact.
+    expect(verificationPreflight(gatherPreflightSignals({ ...buildRow, acceptanceMet: [{ met: true }] }, healthyRuntime)).verdict).toBe("MUST_ADVANCE");
+    // Explicit blocker propagates.
+    expect(verificationPreflight(gatherPreflightSignals(buildRow, { ...healthyRuntime, explicitBlocker: "Portal quiescing." })).verdict).toBe("BLOCKED");
+    // No artifact → BLOCKED.
+    expect(verificationPreflight(gatherPreflightSignals({ ...buildRow, buildExecState: null }, healthyRuntime)).blocker).toBe("no_build_artifact");
   });
 });
