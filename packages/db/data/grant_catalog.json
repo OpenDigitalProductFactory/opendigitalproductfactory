@@ -1255,6 +1255,16 @@
         "start_scout_research"
       ],
       "implies": []
+    },
+    {
+      "key": "browser_drive",
+      "description": "Drive an authenticated browser via the browser-driving capability (drive_browser_task). Side-effecting; outward irreversible actions gate behind a CoworkerActionEnvelope. The read-only sibling grant browser_read gates the discovered mcp-browser-use__* sidecar tools directly.",
+      "category": "integrate",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "drive_browser_task"
+      ],
+      "implies": []
     }
   ]
 }
