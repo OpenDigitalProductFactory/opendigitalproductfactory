@@ -2,7 +2,11 @@
 // One path every detector / queue files portal-dev work through, so work lands
 // in the backlog (BacklogItem) the instant it is detected — no manual promotion
 // step, no parallel queue. Generalizes the process-observer-triage pattern
-// (pure builder + dedup + injectable deps) and gives it an origin back-link.
+// (pure builder + dedup + injectable deps) and gives it three-layer provenance.
+//
+// Provenance (per EA review): typed back-link (set by the caller on its own
+// origin row), a BacklogItemActivity(kind="intake_origin") audit row written
+// here, and a body marker as a no-migration compatibility bridge.
 //
 // See docs/superpowers/specs/2026-06-06-work-intake-unification-design.md
 // (EP-INTAKE-UNIFY, BI-2BB06F90).
@@ -11,11 +15,13 @@ import { randomUUID } from "crypto";
 
 import { prisma as defaultPrisma } from "@dpf/db";
 
-import type {
-  BacklogWorkType,
-  BacklogSource,
-  BacklogTriageOutcome,
-  BacklogEffortSize,
+import {
+  BACKLOG_SOURCE_VALUES,
+  BACKLOG_WORK_TYPE_VALUES,
+  type BacklogWorkType,
+  type BacklogSource,
+  type BacklogTriageOutcome,
+  type BacklogEffortSize,
 } from "@/lib/explore/backlog";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -32,6 +38,8 @@ export interface BacklogIngestInput {
   /** Lifecycle status. Defaults to "triaging" so the item enters normal triage. */
   status?: "triaging" | "open" | "in-progress";
   triageOutcome?: BacklogTriageOutcome;
+  /** Advisory suggestion for triage (non-binding). */
+  proposedOutcome?: BacklogTriageOutcome;
   effortSize?: BacklogEffortSize;
   priority?: number;
   /** Semantic (EP-…) or cuid epic id; resolved to the FK in the orchestrator. */
@@ -40,27 +48,35 @@ export interface BacklogIngestInput {
   taxonomyNodeId?: string | null;
   submittedById?: string | null;
   agentId?: string | null;
-  /** Optional itemId prefix, e.g. "IMP" → BI-IMP-XXXXXXXX. */
+  /** Explicit full item id (e.g. BI-PORT-005). Generated when omitted. */
+  itemId?: string;
+  /** Item-id prefix used when no explicit itemId, e.g. "IMP" → BI-IMP-XXXXXXXX. */
   itemIdPrefix?: string;
   /** Provenance back-link to the origin record (e.g. {kind:"improvement", id:"IP-6F240"}). */
   origin?: { kind: string; id: string };
 }
 
 export interface BacklogIngestResult {
+  /** Semantic item id (BI-…). */
   itemId: string;
+  /** Internal cuid (BacklogItem.id) — useful for FK writes by callers. */
+  id: string;
   /** false = matched an existing non-terminal item (deduped, occurrence bumped). */
   created: boolean;
 }
 
 /**
- * Minimal structural view of the BacklogItem/Epic stores the front door touches.
- * Lets tests inject a fake without standing up a Prisma client.
+ * Minimal structural view of the stores the front door touches. Lets tests
+ * inject a fake without standing up a Prisma client.
  */
 export interface IngestBacklogStore {
   backlogItem: {
     findFirst(args: unknown): Promise<{ id: string; itemId: string } | null>;
     update(args: unknown): Promise<unknown>;
-    create(args: unknown): Promise<{ itemId: string }>;
+    create(args: unknown): Promise<{ id: string; itemId: string }>;
+  };
+  backlogItemActivity: {
+    create(args: unknown): Promise<unknown>;
   };
   epic: {
     findFirst(args: unknown): Promise<{ id: string } | null>;
@@ -118,22 +134,34 @@ export function improvementCategoryToWorkType(
 }
 
 /**
- * Enforce the same status/triageOutcome pairing rules as create_backlog_item.
- * Returns an error message, or null when valid.
+ * Validate an ingest request against the canonical enums and the same
+ * status/triageOutcome pairing rules create_backlog_item enforces. Returns an
+ * error message, or null when valid. Single validation authority for both the
+ * MCP boundary and queue callers (EA review: no duplicated validation path).
  */
-export function validateIngestStatus(
-  status: string,
-  triageOutcome: string | null,
-  effortSize: string | null,
-): string | null {
+export function validateIngestInput(input: {
+  workType?: string;
+  source?: string;
+  status?: string;
+  triageOutcome?: string | null;
+  effortSize?: string | null;
+}): string | null {
+  if (!input.workType || !(BACKLOG_WORK_TYPE_VALUES as readonly string[]).includes(input.workType)) {
+    return `workType is required (one of: ${BACKLOG_WORK_TYPE_VALUES.join(" | ")}).`;
+  }
+  if (!input.source || !(BACKLOG_SOURCE_VALUES as readonly string[]).includes(input.source)) {
+    return `source must be one of: ${BACKLOG_SOURCE_VALUES.join(" | ")}.`;
+  }
+  const status = input.status ?? "triaging";
+  const triageOutcome = input.triageOutcome ?? null;
   if (status !== "triaging" && !triageOutcome) {
-    return "triageOutcome is required when status is not 'triaging'";
+    return "triageOutcome is required when status is not 'triaging'.";
   }
   if (status === "triaging" && triageOutcome) {
-    return "triageOutcome must not be set when status='triaging'";
+    return "triageOutcome must not be set when status='triaging'.";
   }
-  if (triageOutcome === "build" && !effortSize) {
-    return "effortSize is required when triageOutcome='build'";
+  if (triageOutcome === "build" && !input.effortSize) {
+    return "effortSize is required when triageOutcome='build'.";
   }
   return null;
 }
@@ -156,13 +184,17 @@ function defaultIndexKnowledge(args: { entityId: string; title: string; content:
 // ─── Orchestrator ─────────────────────────────────────────────────────────────
 
 /**
- * File (or dedupe) a BacklogItem for portal-dev work. Every detector/queue
- * routes through here so the backlog is the single source of truth for the work
- * while the origin record stays the evidence.
+ * File (or dedupe) a BacklogItem for portal-dev work. Every detector/queue and
+ * create_backlog_item route through here so the backlog is the single source of
+ * truth for the work while the origin record stays the evidence.
+ *
+ * Throws on invalid input (the canonical validation authority). The MCP boundary
+ * (create_backlog_item) catches and maps to its structured {success:false}; queue
+ * callers may let it throw.
  *
  * Dedup: when `origin` is supplied and a non-terminal item already carries its
- * marker, the existing item's occurrenceCount is bumped and no duplicate is
- * created — so a recurring signal touches one item.
+ * marker, the existing item's occurrenceCount is bumped, an intake_origin
+ * activity row is appended, and no duplicate is created.
  */
 export async function ingestBacklogItem(
   input: BacklogIngestInput,
@@ -175,12 +207,35 @@ export async function ingestBacklogItem(
   const triageOutcome = input.triageOutcome ?? null;
   const effortSize = input.effortSize ?? null;
 
-  const validationError = validateIngestStatus(status, triageOutcome, effortSize);
+  const validationError = validateIngestInput({
+    workType: input.workType,
+    source: input.source,
+    status,
+    triageOutcome,
+    effortSize,
+  });
   if (validationError) {
     throw new Error(`[backlog-ingest] ${validationError}`);
   }
 
   const marker = input.origin ? backlogOriginMarker(input.origin.kind, input.origin.id) : null;
+
+  // Provenance audit row (canonical record; the body marker is only a bridge).
+  const writeOriginActivity = async (backlogCuid: string, created: boolean): Promise<void> => {
+    if (!input.origin) return;
+    await store.backlogItemActivity.create({
+      data: {
+        backlogItemId: backlogCuid,
+        kind: "intake_origin",
+        summary: created
+          ? `Filed from ${input.origin.kind} ${input.origin.id}`
+          : `Recurrence from ${input.origin.kind} ${input.origin.id}`,
+        payload: { origin: input.origin, created, createdBy: "backlog-ingest" },
+        ...(input.submittedById ? { recordedById: input.submittedById } : {}),
+        ...(input.agentId ? { recordedByAgentId: input.agentId } : {}),
+      },
+    });
+  };
 
   // Dedup by origin marker against non-terminal items.
   if (marker) {
@@ -194,7 +249,8 @@ export async function ingestBacklogItem(
         where: { id: existing.id },
         data: { occurrenceCount: { increment: 1 }, lastSeenAt: new Date() },
       });
-      return { itemId: existing.itemId, created: false };
+      await writeOriginActivity(existing.id, false);
+      return { itemId: existing.itemId, id: existing.id, created: false };
     }
   }
 
@@ -209,7 +265,7 @@ export async function ingestBacklogItem(
     epicCuid = epicRow?.id ?? null;
   }
 
-  const itemId = generateBacklogItemId(input.itemIdPrefix);
+  const itemId = input.itemId?.trim() || generateBacklogItemId(input.itemIdPrefix);
   const body = composeIngestBody(input.body, marker);
 
   const item = await store.backlogItem.create({
@@ -223,6 +279,7 @@ export async function ingestBacklogItem(
       lastSeenAt: new Date(),
       ...(body !== null ? { body } : {}),
       ...(triageOutcome ? { triageOutcome } : {}),
+      ...(input.proposedOutcome ? { proposedOutcome: input.proposedOutcome } : {}),
       ...(effortSize ? { effortSize } : {}),
       ...(typeof input.priority === "number" ? { priority: input.priority } : {}),
       ...(epicCuid ? { epicId: epicCuid } : {}),
@@ -233,7 +290,8 @@ export async function ingestBacklogItem(
     },
   });
 
+  await writeOriginActivity(item.id, true);
   indexKnowledge({ entityId: item.itemId, title: input.title, content: input.body ?? "" });
 
-  return { itemId: item.itemId, created: true };
+  return { itemId: item.itemId, id: item.id, created: true };
 }

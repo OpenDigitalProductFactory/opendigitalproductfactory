@@ -38,7 +38,23 @@ describe("AiSpendWorkspace", () => {
                 usageSnapshots: [],
               },
             ],
-            financeWorkItems: [{ id: "work-1", type: "plan_details_needed" }],
+            financeWorkItems: [
+              {
+                id: "work-1",
+                type: "browser_profile_needed",
+                title: "Provision Anthropic billing browser profile for Finance Specialist",
+                severity: "medium",
+                description: "Give Finance Specialist a scoped browser identity for Anthropic billing.",
+                metadata: {
+                  askKind: "human_finance_gap",
+                  providerName: "Anthropic",
+                  routeTarget: "/platform/ai/browser-sessions/setup",
+                  missingFields: ["serviceAccountBrowserProfile", "billingPortalAuthentication"],
+                  suggestedQuestion:
+                    "Can you sign in once to the Anthropic billing portal so Finance Specialist can read the current Claude subscription cost and renewal date?",
+                },
+              },
+            ],
             actualSpendMtd: { costUsd: 0, calls: 42 },
           },
         ] as any}
@@ -48,7 +64,13 @@ describe("AiSpendWorkspace", () => {
     expect(html).toContain("Unpriced active providers");
     expect(html).toContain("2 need finance setup");
     expect(html).toContain("Human asks queued");
-    expect(html).toContain("Plan details needed");
+    expect(html).toContain("Finance Specialist needs human input");
+    expect(html).toContain("Provision Anthropic billing browser profile for Finance Specialist");
+    expect(html).toContain("Can you sign in once to the Anthropic billing portal");
+    expect(html).toContain("Service account browser profile");
+    expect(html).toContain('href="/platform/ai/browser-sessions/setup"');
+    expect(html).toContain("Ask Finance Specialist");
+    expect(html).toContain("Browser profile needed");
     expect(html).not.toContain(">subscription<");
   });
 });
