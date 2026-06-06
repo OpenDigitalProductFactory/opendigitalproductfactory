@@ -43,15 +43,15 @@ const testData: Record<string, unknown> = {
 };
 
 describe("ViewRenderer", () => {
-  it("renders the title", () => {
-    const { getByText } = render(
+  it("renders the title", async () => {
+    const { getByText } = await render(
       <ViewRenderer schema={baseSchema} data={testData} />,
     );
     expect(getByText("Dashboard")).toBeTruthy();
   });
 
-  it("renders correct widget for each type", () => {
-    const { getByText } = render(
+  it("renders correct widget for each type", async () => {
+    const { getByText } = await render(
       <ViewRenderer schema={baseSchema} data={testData} />,
     );
     // Stat card
@@ -67,22 +67,22 @@ describe("ViewRenderer", () => {
     expect(getByText("2 markers")).toBeTruthy();
   });
 
-  it("passes data correctly to stat card", () => {
-    const { getByTestId } = render(
+  it("passes data correctly to stat card", async () => {
+    const { getByTestId } = await render(
       <ViewRenderer schema={baseSchema} data={testData} />,
     );
     expect(getByTestId("stat-totalOrders").props.children).toBe("142");
   });
 
-  it("shows loading state", () => {
-    const { getByTestId, queryByText } = render(
+  it("shows loading state", async () => {
+    const { getByTestId, queryByText } = await render(
       <ViewRenderer schema={baseSchema} data={{}} isLoading />,
     );
     expect(getByTestId("view-loading")).toBeTruthy();
     expect(queryByText("Dashboard")).toBeNull();
   });
 
-  it("handles unknown widget types gracefully", () => {
+  it("handles unknown widget types gracefully", async () => {
     const schema: DynamicViewSchema = {
       ...baseSchema,
       layout: [
@@ -98,14 +98,14 @@ describe("ViewRenderer", () => {
         },
       ],
     };
-    const { getByText, queryByText } = render(
+    const { getByText, queryByText } = await render(
       <ViewRenderer schema={schema} data={testData} />,
     );
     expect(getByText("Total Orders")).toBeTruthy();
     expect(queryByText("Unknown")).toBeNull();
   });
 
-  it("shows placeholder text when data is missing", () => {
+  it("shows placeholder text when data is missing", async () => {
     const schema: DynamicViewSchema = {
       ...baseSchema,
       layout: [
@@ -116,7 +116,7 @@ describe("ViewRenderer", () => {
         },
       ],
     };
-    const { getByText } = render(
+    const { getByText } = await render(
       <ViewRenderer schema={schema} data={{}} />,
     );
     expect(getByText("--")).toBeTruthy();

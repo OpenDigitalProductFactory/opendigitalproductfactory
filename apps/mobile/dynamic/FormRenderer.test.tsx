@@ -46,8 +46,8 @@ const baseSchema: DynamicFormSchema = {
 };
 
 describe("FormRenderer", () => {
-  it("renders a field component for each known field type", () => {
-    const { getByText } = render(
+  it("renders a field component for each known field type", async () => {
+    const { getByText } = await render(
       <FormRenderer schema={baseSchema} onSubmit={() => {}} />,
     );
 
@@ -65,8 +65,8 @@ describe("FormRenderer", () => {
     expect(getByText("Active")).toBeTruthy();
   });
 
-  it("renders the Submit button", () => {
-    const { getByText } = render(
+  it("renders the Submit button", async () => {
+    const { getByText } = await render(
       <FormRenderer schema={baseSchema} onSubmit={() => {}} />,
     );
     expect(getByText("Submit")).toBeTruthy();
@@ -74,11 +74,11 @@ describe("FormRenderer", () => {
 
   it("validates required fields and shows errors", async () => {
     const onSubmit = jest.fn();
-    const { getByText } = render(
+    const { getByText } = await render(
       <FormRenderer schema={baseSchema} onSubmit={onSubmit} />,
     );
 
-    fireEvent.press(getByText("Submit"));
+    await fireEvent.press(getByText("Submit"));
 
     await waitFor(() => {
       expect(getByText("Name is required")).toBeTruthy();
@@ -94,19 +94,19 @@ describe("FormRenderer", () => {
         { key: "name", type: "text", label: "Name", required: true },
       ],
     };
-    const { getByText, getByTestId } = render(
+    const { getByText, getByTestId } = await render(
       <FormRenderer schema={schema} onSubmit={onSubmit} />,
     );
 
-    fireEvent.changeText(getByTestId("field-name"), "Test Value");
-    fireEvent.press(getByText("Submit"));
+    await fireEvent.changeText(getByTestId("field-name"), "Test Value");
+    await fireEvent.press(getByText("Submit"));
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith({ name: "Test Value" });
     });
   });
 
-  it("gracefully skips unknown field types", () => {
+  it("gracefully skips unknown field types", async () => {
     const schema: DynamicFormSchema = {
       ...baseSchema,
       fields: [
@@ -114,15 +114,15 @@ describe("FormRenderer", () => {
         { key: "name", type: "text", label: "Name" },
       ],
     };
-    const { getByText, queryByText } = render(
+    const { getByText, queryByText } = await render(
       <FormRenderer schema={schema} onSubmit={() => {}} />,
     );
     expect(getByText("Name")).toBeTruthy();
     expect(queryByText("Unknown")).toBeNull();
   });
 
-  it("shows loading indicator on Submit button when isSubmitting", () => {
-    const { getByTestId } = render(
+  it("shows loading indicator on Submit button when isSubmitting", async () => {
+    const { getByTestId } = await render(
       <FormRenderer
         schema={baseSchema}
         onSubmit={() => {}}
