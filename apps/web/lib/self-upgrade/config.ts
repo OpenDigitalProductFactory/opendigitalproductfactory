@@ -39,6 +39,15 @@ export type SelfUpgradeConfig = {
   hostInstallPath?: string;
   hostSourceMountPath?: string;
   composeProject?: string;
+  /**
+   * The platform-correct compose chain the install was created with (relative
+   * filenames), recorded by install-dpf.sh in install-state.json's composeFiles
+   * and surfaced here so the self-upgrade promoter recreates the portal with the
+   * SAME overlays the install uses. Empty/unset => promote.sh uses its base-only
+   * fallback (never a platform overlay). Resolved with a process.env fallback in
+   * the orchestrator (DPF_SELF_UPGRADE_COMPOSE_FILES).
+   */
+  composeFiles?: string[];
   portalContainerName?: string;
   dbContainerName?: string;
   repositoryRemote?: string;
@@ -213,6 +222,14 @@ export function parseSelfUpgradeConfig(raw: unknown): SelfUpgradeConfig {
     if (typeof cfg[key] === "string" && cfg[key].trim().length > 0) {
       parsed[key] = cfg[key];
     }
+  }
+  // composeFiles is a string[] (compose filenames), parsed separately from the
+  // string-valued keys above. Keep only non-empty string entries.
+  if (Array.isArray(cfg.composeFiles)) {
+    const files = cfg.composeFiles.filter(
+      (f): f is string => typeof f === "string" && f.trim().length > 0,
+    );
+    if (files.length > 0) parsed.composeFiles = files;
   }
   return parsed;
 }

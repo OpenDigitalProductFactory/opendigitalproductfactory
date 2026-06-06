@@ -46,6 +46,17 @@ export type PromoterParams = {
   backupHostPath?: string;
   /** HOST path to the canonical install .env; mounted read-only for compose interpolation. */
   composeEnvFileHostPath?: string;
+  /**
+   * The platform-correct compose chain the install was created with (relative
+   * filenames, e.g. ["docker-compose.yml", "docker-compose.linux.yml",
+   * "docker-compose.edge.yml"]). Passed to promote.sh as PROMOTE_COMPOSE_FILES so
+   * the portal is recreated with the SAME overlays the install uses. When empty,
+   * promote.sh falls back to base-only — never a platform overlay, so it can't
+   * force macOS/Linux env onto the wrong host (the TTS-on-Windows defect).
+   */
+  composeFiles?: string[];
+  /** Compose project name (COMPOSE_PROJECT_NAME). Defaults to "dpf" in promote.sh. */
+  composeProject?: string;
   dryRun?: boolean;
 };
 
@@ -113,6 +124,17 @@ export function buildPromoterCommand(
 
   if (params.composeEnvFileHostPath && params.composeEnvFileHostPath.length > 0) {
     args.push("-e", `PROMOTE_COMPOSE_ENV_FILE=${PROMOTER_COMPOSE_ENV_FILE}`);
+  }
+
+  // Recreate the portal with the install's recorded platform chain. promote.sh
+  // splits PROMOTE_COMPOSE_FILES on whitespace, so a space-joined list is the
+  // contract. Omitted when empty so promote.sh applies its base-only fallback.
+  if (params.composeFiles && params.composeFiles.length > 0) {
+    args.push("-e", `PROMOTE_COMPOSE_FILES=${params.composeFiles.join(" ")}`);
+  }
+
+  if (params.composeProject && params.composeProject.length > 0) {
+    args.push("-e", `PROMOTE_COMPOSE_PROJECT=${params.composeProject}`);
   }
 
   args.push(
