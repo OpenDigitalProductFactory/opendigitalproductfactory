@@ -2130,6 +2130,21 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     annotations: { readOnlyHint: true, idempotentHint: true },
   },
   {
+    name: "verification_preflight",
+    description: "Deterministic verify-phase preflight (EP-VERIFY-PROC). Returns MUST_ADVANCE (evidence already sufficient — do not re-test), BLOCKED (a prerequisite is missing — report it, do not fabricate a result), or CAN_TEST (proceed to functional verification). Call this BEFORE attempting verification so testability is a procedural verdict, not a judgment call.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["build", "review"],
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
     name: "get_build_sandbox_state",
     description: "Read the source-bounded sandbox/git state for a Build Studio build, including branch, head SHA, source diffstat, ignored generated/dependency paths, and expected plan files.",
     inputSchema: {
@@ -7694,6 +7709,34 @@ export async function executeTool(
         entityId: buildId,
         message: `Build progress visibility loaded for ${buildId}: ${projection.progress.primary.completed}/${projection.progress.primary.total} tasks from ${projection.progress.primary.source}.`,
         data: projection as unknown as Record<string, unknown>,
+      };
+    }
+
+    case "verification_preflight": {
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      const build = await prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: { phase: true, acceptanceMet: true, verificationOut: true, buildExecState: true },
+      });
+      if (!build) return { success: false, error: "Build not found", message: `Build ${buildId} was not found.` };
+      const { verificationPreflight, gatherPreflightSignals, preflightDirective } = await import(
+        "@/lib/build/verification-preflight"
+      );
+      // The portal serving this tool is up (installHealthy) and its DB is reachable
+      // (this row just loaded). Sandbox/quiescence probes are a follow-up refinement;
+      // for now they default healthy so the verdict turns on evidence + artifact.
+      const signals = gatherPreflightSignals(build, {
+        installHealthy: true,
+        requiredServicesHealthy: true,
+        explicitBlocker: null,
+      });
+      const result = verificationPreflight(signals);
+      return {
+        success: true,
+        entityId: buildId,
+        message: preflightDirective(result),
+        data: { verdict: result.verdict, reason: result.reason, blocker: result.blocker },
       };
     }
 

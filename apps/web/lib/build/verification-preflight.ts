@@ -126,3 +126,50 @@ export function preflightDirective(r: PreflightResult): string {
       return `CAN_TEST — ${r.reason}`;
   }
 }
+
+/** The subset of a FeatureBuild row the preflight reads (JSON columns are unknown). */
+export type BuildPreflightInput = {
+  phase: string;
+  acceptanceMet: unknown;
+  verificationOut: unknown;
+  buildExecState: unknown;
+};
+
+/** Runtime signals the caller probes (portal/DB/sandbox health, quiescence). */
+export type PreflightRuntime = {
+  installHealthy: boolean;
+  requiredServicesHealthy: boolean;
+  explicitBlocker?: string | null;
+};
+
+/**
+ * Map a FeatureBuild row + runtime probes into PreflightSignals. Pure and
+ * exhaustively testable so the build-row→signal interpretation (the only new
+ * judgment) is covered, leaving the handler a thin gather-and-call.
+ */
+export function gatherPreflightSignals(
+  build: BuildPreflightInput,
+  runtime: PreflightRuntime,
+): PreflightSignals {
+  const acc = Array.isArray(build.acceptanceMet) ? (build.acceptanceMet as Array<{ met?: unknown }>) : [];
+  const acceptanceAlreadyMet = acc.length > 0 && acc.every((a) => a?.met === true);
+
+  const vo = build.verificationOut as { typecheckPassed?: unknown } | null | undefined;
+  // A prior verification "passed" if a verification record exists and typecheck
+  // didn't explicitly fail (test failures are informational per the build→review
+  // gate, so they don't negate a recorded verification).
+  const verificationAlreadyPassed = vo != null && (vo as { typecheckPassed?: unknown }).typecheckPassed !== false;
+
+  // Something is testable only once the build phase has produced an artifact —
+  // i.e. we're at/after the build phase AND execution state exists.
+  const buildArtifactPresent = build.buildExecState != null && ["build", "review", "ship"].includes(build.phase);
+
+  return {
+    acceptanceAlreadyMet,
+    verificationAlreadyPassed,
+    installHealthy: runtime.installHealthy,
+    requiredServicesHealthy: runtime.requiredServicesHealthy,
+    buildArtifactPresent,
+    explicitBlocker: runtime.explicitBlocker ?? null,
+  };
+}

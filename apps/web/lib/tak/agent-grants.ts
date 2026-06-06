@@ -243,6 +243,10 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   principle_decide: ["registry_read"],
 
   // Build / Sandbox
+  // Read-only verify-phase preflight (EP-VERIFY-PROC). Mapped to the build-context
+  // grant the build-specialist already holds so it's available in the verify phase
+  // without a new grant key; refine to a dedicated read grant if other roles need it.
+  verification_preflight: ["build_plan_write"],
   launch_sandbox: ["sandbox_execute"],
   generate_code: ["sandbox_execute"],
   iterate_sandbox: ["sandbox_execute"],
