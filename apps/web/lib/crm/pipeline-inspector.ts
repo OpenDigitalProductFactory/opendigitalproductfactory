@@ -48,6 +48,9 @@ const STAGE_EXIT_CRITERIA: Record<string, string[]> = {
   ],
 };
 
+const CRM_ADVISOR_BOUNDARY =
+  "Do not create CRM records, update stages, send, or schedule anything. Return review notes or draft copy for operator approval.";
+
 export const PIPELINE_STAGE_UPDATE_OPTIONS = OPEN_OPPORTUNITY_STAGES.map((stage) => ({
   value: stage,
   label: getOpportunityStageMeta(stage).label,
@@ -271,7 +274,8 @@ function buildAiTopics(input: {
       description: "Review account, activity, quote, and stage context.",
       prompt:
         `Summarize opportunity ${input.opportunityId}: ${input.title}. ` +
-        `${baseContext} Highlight current stage evidence, blockers, and the next best internal action.`,
+        `${baseContext} Highlight current stage evidence, blockers, and the next best internal action. ` +
+        CRM_ADVISOR_BOUNDARY,
       contextSummary: baseContext,
       expectedNextStep:
         "Customer Advisor should return a concise stage-aware deal summary without taking external action.",
@@ -282,7 +286,8 @@ function buildAiTopics(input: {
       description: "Inspect stage age, missing evidence, and what must happen next.",
       prompt:
         `Diagnose stage health for opportunity ${input.opportunityId}. ` +
-        `${baseContext} Suggested next action: ${input.suggestedNextAction}`,
+        `${baseContext} Suggested next action: ${input.suggestedNextAction}. ` +
+        CRM_ADVISOR_BOUNDARY,
       contextSummary: `${input.stageLabel}; ${input.stageAgeLabel}; next action: ${input.suggestedNextAction}`,
       expectedNextStep:
         "Customer Advisor should explain the stage posture and propose a governed follow-up task if needed.",
@@ -293,7 +298,7 @@ function buildAiTopics(input: {
       description: "Draft the next buyer-facing follow-up for review.",
       prompt:
         `Draft a buyer follow-up for opportunity ${input.opportunityId}. ` +
-        `${baseContext} Do not send or schedule anything; provide a draft for operator approval.`,
+        `${baseContext} ${CRM_ADVISOR_BOUNDARY}`,
       contextSummary: baseContext,
       expectedNextStep:
         "Customer Advisor should produce draft copy only; the operator decides whether to send it.",

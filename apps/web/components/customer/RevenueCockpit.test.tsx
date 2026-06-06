@@ -33,6 +33,7 @@ describe("RevenueCockpit", () => {
     expect(html).toContain("Pipeline");
     expect(html).toContain("2 stale opportunities need a next action");
     expect(html).toContain('href="/customer/opportunities"');
+    expect(html).toContain('data-intent="warning"');
   });
 
   it("renders a calm empty attention state", () => {
