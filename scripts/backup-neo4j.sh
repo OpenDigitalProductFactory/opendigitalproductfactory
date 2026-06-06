@@ -28,7 +28,16 @@
 
 set -eu
 
-log() { printf '[backup-neo4j-trace] %s\n' "$*"; }
+# Emit each trace line to stdout (captured by the TS orchestrator) AND mirror it
+# into $LOG_FILE so the admin "View log" drawer shows the curated run trace, not
+# just raw docker output. LOG_FILE is set later; the guard tolerates the early
+# prereq window, and `|| true` keeps `set -e` from tripping on the mirror write.
+log() {
+  printf '[backup-neo4j-trace] %s\n' "$*"
+  if [ -n "${LOG_FILE:-}" ]; then
+    printf '[backup-neo4j-trace] %s\n' "$*" >> "$LOG_FILE" 2>/dev/null || true
+  fi
+}
 fail() {
   log "failed: $1"
   exit "${2:-1}"
@@ -94,7 +103,9 @@ log "neo4j_image=$NEO4J_IMAGE"
 # Stop the running container so the database is offline for the dump.
 # 30-second grace period gives Neo4j time to flush + checkpoint.
 log "stopping Neo4j container"
-docker stop --timeout=30 "$NEO4J_CONTAINER" > "$LOG_FILE" 2>&1 || fail "could not stop $NEO4J_CONTAINER" 3
+# Append (>>) rather than truncate so the trace lines already mirrored into
+# log.txt (host path, image tag, "starting offline dump") are preserved.
+docker stop --timeout=30 "$NEO4J_CONTAINER" >> "$LOG_FILE" 2>&1 || fail "could not stop $NEO4J_CONTAINER" 3
 
 # Helper to restart the container on every exit path. Defined before the
 # dump so a dump failure still restarts Neo4j. We track success/fail of
