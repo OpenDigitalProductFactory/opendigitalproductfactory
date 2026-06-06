@@ -447,7 +447,7 @@ describe("runAgenticLoop", () => {
     threadId: "thread-1",
   };
 
-  it("explains missing tool-use capacity instead of masking it as a temporary outage", async () => {
+  it("points to the real provider surface when no tool-capable endpoint is active", async () => {
     const mockRoute = vi.mocked(routeAndCall);
     mockRoute.mockRejectedValueOnce(new Error(
       "No eligible endpoints for task 'unknown': No endpoint satisfies agent capability floor (EP-AGENT-CAP-002). Missing: toolUse.",
@@ -459,13 +459,15 @@ describe("runAgenticLoop", () => {
       agentId: "admin-assistant",
     });
 
-    expect(result.content).toContain("No tool-use-capable AI provider is available");
-    expect(result.content).toContain("Platform > AI > Model Assignment");
+    // Genuine config gap → name the REAL surface, not the old "Model Assignment".
+    expect(result.content).toContain("No AI model that supports tools is active");
+    expect(result.content).toContain("Providers & Routing");
+    expect(result.content).not.toContain("Model Assignment");
     expect(result.providerId).toBe("unknown");
     expect(result.modelId).toBe("unknown");
   });
 
-  it("explains exhausted tool-using endpoint failures instead of masking them as temporary", async () => {
+  it("explains a transient paid outage + local tool cap instead of blaming config", async () => {
     const mockRoute = vi.mocked(routeAndCall);
     mockRoute.mockRejectedValueOnce(new Error(
       'All endpoints failed for onboarding. Attempts: [{"endpointId":"local","error":"Network error calling local: fetch failed"},{"endpointId":"local","error":"skipped local fallback: 58 tools exceeds threshold for small local models"}]',
@@ -477,10 +479,30 @@ describe("runAgenticLoop", () => {
       agentId: "admin-assistant",
     });
 
-    expect(result.content).toContain("No tool-use-capable AI provider is available");
-    expect(result.content).toContain("Platform > AI > Model Assignment");
+    // The bundled local model was bypassed for tool count while paid providers
+    // were down — nothing is misconfigured, so do NOT send the operator to settings.
+    expect(result.content).toContain("briefly unavailable");
+    expect(result.content).toContain("58 of them");
+    expect(result.content).toContain("Nothing is misconfigured");
+    expect(result.content).not.toContain("Model Assignment");
     expect(result.providerId).toBe("unknown");
     expect(result.modelId).toBe("unknown");
+  });
+
+  it("treats a generic all-endpoints-failed as a transient retry, not a config error", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute.mockRejectedValueOnce(new Error(
+      'All endpoints failed for conversation. Attempts: [{"endpointId":"anthropic-sub","error":"429 rate limited"}]',
+    ));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/admin/issue-reports",
+      agentId: "admin-assistant",
+    });
+
+    expect(result.content).toContain("try again in about 30 seconds");
+    expect(result.content).not.toContain("Model Assignment");
   });
 
   it("executes tools through the governed lifecycle path", async () => {
