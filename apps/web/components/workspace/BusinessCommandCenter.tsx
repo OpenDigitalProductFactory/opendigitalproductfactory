@@ -33,6 +33,18 @@ function readinessTitle(cell: ReadinessCell) {
   return `${cell.label}: ${stateLabel[cell.state]} - ${cell.description}`;
 }
 
+function ReadinessStatusPill({ cell, className = "" }: { cell: ReadinessCell; className?: string }) {
+  return (
+    <span
+      className={`${className} ${stateClass[cell.state]}`}
+      title={readinessTitle(cell)}
+      aria-label={readinessTitle(cell)}
+    >
+      {stateLabel[cell.state]}
+    </span>
+  );
+}
+
 export function BusinessCommandCenter({ view }: Props) {
   return (
     <section aria-labelledby="business-command-center-title" className="mb-6 space-y-4">
@@ -101,15 +113,15 @@ export function BusinessCommandCenter({ view }: Props) {
             </a>
             <div className="mt-3 grid grid-cols-2 gap-2">
               {row.cells.map((cell) => (
-                <a
+                <div
                   key={`${row.id}-${cell.key}`}
-                  href={cell.href ?? row.href}
                   className={`flex min-h-16 flex-col justify-between rounded-md border px-3 py-2 text-xs ${stateClass[cell.state]}`}
                   title={readinessTitle(cell)}
+                  aria-label={readinessTitle(cell)}
                 >
                   <span className="font-semibold text-[var(--dpf-muted)]">{cell.label}</span>
                   <span className="font-semibold">{stateLabel[cell.state]}</span>
-                </a>
+                </div>
               ))}
             </div>
           </section>
@@ -138,13 +150,10 @@ export function BusinessCommandCenter({ view }: Props) {
                 </th>
                 {row.cells.map((cell) => (
                   <td key={`${row.id}-${cell.key}`} className="px-3 py-3 align-middle">
-                    <a
-                      href={cell.href ?? row.href}
-                      className={`inline-flex min-w-20 justify-center rounded-full border px-2 py-1 text-[11px] font-semibold ${stateClass[cell.state]}`}
-                      title={readinessTitle(cell)}
-                    >
-                      {stateLabel[cell.state]}
-                    </a>
+                    <ReadinessStatusPill
+                      cell={cell}
+                      className="inline-flex min-w-20 justify-center rounded-full border px-2 py-1 text-[11px] font-semibold"
+                    />
                   </td>
                 ))}
               </tr>
