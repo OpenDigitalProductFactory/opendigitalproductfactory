@@ -747,6 +747,150 @@ export function pickPrimaryBlocker(snapshot: ActiveSessionBlockers | null): stri
   return snapshot.surfaces[0].surface;
 }
 
+// ─── Operator-facing activity summary (Self-Upgrade panel) ───────────────
+
+/**
+ * One aggregated blocker line for the operator panel: a surface name, a
+ * human-readable label, how many in-flight items share it, and the worst-case
+ * wait. Built by collapsing the raw ActiveSessionBlockers.surfaces list (which
+ * has one entry per in-flight item) by surface name.
+ */
+export type QuiescenceBlockerLine = {
+  surface: string;
+  label: string;
+  kind: "hard" | "soft";
+  count: number;
+  estimatedWaitMs: number | null;
+};
+
+/**
+ * Everything the Self-Upgrade page needs to explain "what's happening" during a
+ * drain: the current level, the active QuiescenceRun (if any), and the list of
+ * activities currently holding the drain open. Fully serializable.
+ */
+export type QuiescenceActivity = {
+  level: QuiescenceLevel;
+  runId: string | null;
+  enteredAt: string;
+  run: {
+    runId: string;
+    status: string;
+    trigger: string;
+    targetVersion: string | null;
+    targetBundleHash: string | null;
+    deferSurface: string | null;
+    deferReason: string | null;
+    budgetMs: number | null;
+    drainStartedAt: string | null;
+    lastHeartbeatAt: string | null;
+  } | null;
+  /** Capture time of the snapshot the blockers were read from, if any. */
+  blockersCapturedAt: string | null;
+  blockers: QuiescenceBlockerLine[];
+};
+
+/** Map an internal surface key to a friendly operator label. */
+export function describeBlockerSurface(surface: string): string {
+  if (surface === "coworker.reasoning-loop") return "AI coworker working";
+  if (surface === "request.recent-tool-execution") return "Recent portal / MCP activity";
+  if (surface === "build-studio.phase.ship") return "Build Studio — ship phase";
+  if (surface.startsWith("build-studio.phase.")) {
+    const phase = surface.slice("build-studio.phase.".length);
+    return `Build Studio — ${phase} phase`;
+  }
+  return surface;
+}
+
+/** Collapse a raw blockers snapshot into one line per surface, with counts. */
+export function summarizeBlockers(
+  snapshot: ActiveSessionBlockers | null,
+): QuiescenceBlockerLine[] {
+  if (!snapshot || !Array.isArray(snapshot.surfaces)) return [];
+  const bySurface = new Map<string, QuiescenceBlockerLine>();
+  for (const s of snapshot.surfaces) {
+    const existing = bySurface.get(s.surface);
+    if (existing) {
+      existing.count += 1;
+      existing.estimatedWaitMs = maxWait(existing.estimatedWaitMs, s.estimatedWaitMs);
+    } else {
+      bySurface.set(s.surface, {
+        surface: s.surface,
+        label: describeBlockerSurface(s.surface),
+        kind: s.kind,
+        count: 1,
+        estimatedWaitMs: s.estimatedWaitMs,
+      });
+    }
+  }
+  // Hard blockers first (they're what actually defer the drain), then by count.
+  return [...bySurface.values()].sort(
+    (a, b) => Number(b.kind === "hard") - Number(a.kind === "hard") || b.count - a.count,
+  );
+}
+
+function maxWait(a: number | null, b: number | null): number | null {
+  if (a == null) return b;
+  if (b == null) return a;
+  return Math.max(a, b);
+}
+
+/**
+ * Read the current quiescence activity for the operator panel. Returns the live
+ * level plus, when a run is/was active, its target and the activities holding
+ * the drain open (from the final snapshot if the run is terminal, else the
+ * initial/live snapshot). Never throws on a missing prisma model (fresh boot).
+ */
+export async function getQuiescenceActivity(now: Date = new Date()): Promise<QuiescenceActivity> {
+  const config = await getQuiescenceConfig(now);
+  const base: QuiescenceActivity = {
+    level: config.level,
+    runId: config.runId,
+    enteredAt: config.enteredAt,
+    run: null,
+    blockersCapturedAt: null,
+    blockers: [],
+  };
+
+  if (typeof prisma.quiescenceRun?.findFirst !== "function") return base;
+
+  // Prefer the run named by the live level; otherwise fall back to the most
+  // recent run so a just-deferred drain still explains why it backed off.
+  const row = config.runId
+    ? await prisma.quiescenceRun.findUnique({ where: { runId: config.runId } })
+    : await prisma.quiescenceRun.findFirst({ orderBy: { createdAt: "desc" } });
+  if (!row) return base;
+
+  const snapshot =
+    parseSnapshot(row.finalSnapshot) ?? parseSnapshot(row.initialSnapshot);
+  const enteredStateAt =
+    (row.enteredStateAt as unknown as EnteredStateAt | null) ?? {};
+
+  return {
+    ...base,
+    run: {
+      runId: row.runId,
+      status: row.status,
+      trigger: row.trigger,
+      targetVersion: row.targetVersion ?? null,
+      targetBundleHash: row.targetBundleHash ?? null,
+      deferSurface: row.deferSurface ?? null,
+      deferReason: row.deferReason ?? null,
+      budgetMs: row.budgetMs ?? null,
+      drainStartedAt: enteredStateAt.draining ?? null,
+      lastHeartbeatAt: row.lastHeartbeatAt?.toISOString() ?? null,
+    },
+    blockersCapturedAt: snapshot?.capturedAt ?? null,
+    blockers: summarizeBlockers(snapshot),
+  };
+}
+
+function parseSnapshot(raw: unknown): ActiveSessionBlockers | null {
+  if (!raw || typeof raw !== "object") return null;
+  const snap = raw as Partial<ActiveSessionBlockers>;
+  if (!Array.isArray(snap.surfaces)) return null;
+  return snap as ActiveSessionBlockers;
+}
+
 // ─── Errors raised by entry-point gates (BI-QUIESCE-005 consumer) ────────
 
 /**

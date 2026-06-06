@@ -1,4 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// Stub @dpf/db so importing the cooldown module (which imports prisma at the top
+// for its IO helpers) doesn't pull the real workspace package — the pure gate
+// under test needs no DB.
+vi.mock("@dpf/db", () => ({
+  prisma: {
+    platformConfig: { findUnique: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() },
+  },
+}));
+
 import { isInCooldown, DEFAULT_COOLDOWN_MINUTES } from "./cooldown";
 
 const NOW = new Date("2026-06-05T12:00:00Z");

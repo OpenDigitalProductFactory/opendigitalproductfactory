@@ -439,6 +439,7 @@ describe("nextMaintenanceWindowStart", () => {
     enabled: true,
     channel: "stable",
     checkIntervalHours: 24,
+    cooldownMinutes: 30,
     healthTarget: 100,
     sourceMode: "upstream" as const,
     installBranch: "dpf/install",
