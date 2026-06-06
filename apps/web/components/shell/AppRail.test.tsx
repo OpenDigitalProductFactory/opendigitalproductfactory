@@ -87,4 +87,13 @@ describe("AppRail", () => {
     expect(html).not.toContain("Cashflow, receivables, payables, and close.");
     expect(html).not.toContain("Controls, risk, obligations, and posture.");
   });
+
+  it("uses a horizontal grouped rail on small screens and vertical rail on desktop", () => {
+    pathname = "/finance";
+    const html = renderToStaticMarkup(<AppRail sections={sections} />);
+
+    expect(html).toContain("overflow-x-auto");
+    expect(html).toContain("lg:grid");
+    expect(html).toContain("whitespace-nowrap");
+  });
 });

@@ -101,6 +101,14 @@ describe("BusinessCommandCenter", () => {
     expect(html).toContain("Context: Good - Evidence, docs, and operating knowledge");
   });
 
+  it("renders readiness cells as explanatory status instead of duplicate navigation links", () => {
+    const html = renderToStaticMarkup(<BusinessCommandCenter view={fixtureView} />);
+
+    expect(html).toContain('href="/platform/ai/operations-map"');
+    expect(html).not.toContain('href="/wiki"');
+    expect(html).not.toContain('href="/platform/tools/integrations"');
+  });
+
   it("uses DPF theme tokens instead of hardcoded neutral color classes", () => {
     const html = renderToStaticMarkup(<BusinessCommandCenter view={fixtureView} />);
 
