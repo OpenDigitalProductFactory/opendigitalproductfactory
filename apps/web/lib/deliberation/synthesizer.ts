@@ -18,7 +18,7 @@
 // The synthesizer NEVER fabricates consensus from zero branches
 // (memory: contribute_to_hive silent-success precedent).
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma, type PrismaClient } from "@dpf/db";
 import type {
   ClaimEvidenceGrade,
   ClaimType,
@@ -115,6 +115,50 @@ export interface SynthesizeResult {
   compactSummary: CompactBuildDeliberationSummary;
 }
 
+type SynthesizedClaimType = Extract<ClaimType, "assertion" | "objection" | "rebuttal">;
+type ClaimRefBucket = "assertions" | "objections" | "rebuttals";
+
+const SYNTHESIZED_CLAIM_TYPES: SynthesizedClaimType[] = [
+  "assertion",
+  "objection",
+  "rebuttal",
+];
+
+type DeliberationSynthesisPersistenceClient = Pick<
+  PrismaClient,
+  "claimRecord" | "deliberationOutcome" | "deliberationIssueSet" | "deliberationRun"
+>;
+
+interface ClaimToPersist {
+  bucket: ClaimRefBucket;
+  deliberationRunId: string;
+  branchNodeId: string | null;
+  claimText: string;
+  claimType: SynthesizedClaimType;
+  evidenceGrade: ClaimEvidenceGrade;
+  confidence: number | null;
+  supportingSourceIds: string[];
+  opposingSourceIds: string[];
+}
+
+interface PersistedClaimRefs {
+  claimRecordIds: string[];
+  assertionsRefs: Array<{ claimId: string }>;
+  objectionsRefs: Array<{ claimId: string }>;
+  rebuttalsRefs: Array<{ claimId: string }>;
+}
+
+interface OutcomeWriteData {
+  mergedRecommendation: string;
+  rationaleSummary: string;
+  confidence: number;
+  consensusState: DeliberationConsensusState;
+  evidenceQuality: CompactBuildDeliberationSummary["evidenceBadge"];
+  unresolvedRisks: string[];
+  diversityLabel: string | null;
+  branchRoster: Prisma.InputJsonValue;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Consensus detection                                                        */
 /* -------------------------------------------------------------------------- */
@@ -205,12 +249,9 @@ export async function synthesizeDeliberation(
 
   const consensusState = detectConsensusState(branches, budgetHalted);
 
-  // Aggregate claims and persist ClaimRecord rows.
-  const claimRecordIds: string[] = [];
-  const assertionsRefs: Array<{ claimId: string }> = [];
-  const objectionsRefs: Array<{ claimId: string }> = [];
-  const rebuttalsRefs: Array<{ claimId: string }> = [];
-
+  // Aggregate claims before persistence so a retry can replace the synthesized
+  // artifact set in one transaction instead of duplicating derived rows.
+  const claimsToPersist: ClaimToPersist[] = [];
   const unresolvedRisks: string[] = [];
   const gradesForBadge: Array<{ grade: ClaimEvidenceGrade }> = [];
   const confidences: number[] = [];
@@ -218,33 +259,33 @@ export async function synthesizeDeliberation(
   for (const b of branches) {
     if (!b.completed) continue;
 
-    await persistBranchClaims(
+    collectBranchClaims(
       deliberationRunId,
       b,
       "assertion",
       b.assertions ?? [],
-      assertionsRefs,
-      claimRecordIds,
+      "assertions",
+      claimsToPersist,
       gradesForBadge,
       confidences,
     );
-    await persistBranchClaims(
+    collectBranchClaims(
       deliberationRunId,
       b,
       "objection",
       b.objections ?? [],
-      objectionsRefs,
-      claimRecordIds,
+      "objections",
+      claimsToPersist,
       gradesForBadge,
       confidences,
     );
-    await persistBranchClaims(
+    collectBranchClaims(
       deliberationRunId,
       b,
       "rebuttal",
       b.rebuttals ?? [],
-      rebuttalsRefs,
-      claimRecordIds,
+      "rebuttals",
+      claimsToPersist,
       gradesForBadge,
       confidences,
     );
@@ -276,6 +317,7 @@ export async function synthesizeDeliberation(
     consensusState,
     budgetHalted,
   );
+  const evidenceBadge = computeEvidenceBadge(gradesForBadge);
 
   const outcome: SynthesizedOutcome = {
     deliberationRunId,
@@ -291,48 +333,6 @@ export async function synthesizeDeliberation(
     },
   };
 
-  const issueSet: SynthesizedIssueSet = {
-    deliberationRunId,
-    assertions: assertionsRefs,
-    objections: objectionsRefs,
-    rebuttals: rebuttalsRefs,
-    adjudicationNotes: buildAdjudicationNotes(branches, consensusState),
-  };
-
-  // Persist DeliberationOutcome + DeliberationIssueSet.
-  await prisma.deliberationOutcome.create({
-    data: {
-      deliberationRunId,
-      mergedRecommendation,
-      rationaleSummary,
-      confidence,
-      consensusState,
-      evidenceQuality: computeEvidenceBadge(gradesForBadge),
-      unresolvedRisks,
-      diversityLabel: input.diversityLabel ?? null,
-      branchRoster: JSON.parse(JSON.stringify(roster)),
-    },
-  });
-
-  await prisma.deliberationIssueSet.create({
-    data: {
-      deliberationRunId,
-      assertions: JSON.parse(JSON.stringify(assertionsRefs)),
-      objections: JSON.parse(JSON.stringify(objectionsRefs)),
-      rebuttals: JSON.parse(JSON.stringify(rebuttalsRefs)),
-      adjudicationNotes: issueSet.adjudicationNotes,
-    },
-  });
-
-  // Update DeliberationRun.consensusState snapshot + completion timestamp.
-  await prisma.deliberationRun.update({
-    where: { id: deliberationRunId },
-    data: {
-      consensusState,
-      completedAt: new Date(),
-    },
-  });
-
   const compactSummary: CompactBuildDeliberationSummary = {
     deliberationRunId,
     consensusState,
@@ -342,13 +342,41 @@ export async function synthesizeDeliberation(
     branchesTotal: branches.length,
     budgetHalted,
     degradedDiversity,
-    evidenceBadge: computeEvidenceBadge(gradesForBadge),
+    evidenceBadge,
+  };
+
+  const adjudicationNotes = buildAdjudicationNotes(branches, consensusState);
+  const branchRosterJson = JSON.parse(JSON.stringify(roster)) as Prisma.InputJsonValue;
+  const persisted = await prisma.$transaction((tx) =>
+    replaceSynthesizedPersistence(tx, {
+      deliberationRunId,
+      claimsToPersist,
+      outcome: {
+        mergedRecommendation,
+        rationaleSummary,
+        confidence,
+        consensusState,
+        evidenceQuality: evidenceBadge,
+        unresolvedRisks,
+        diversityLabel: input.diversityLabel ?? null,
+        branchRoster: branchRosterJson,
+      },
+      adjudicationNotes,
+    }),
+  );
+
+  const issueSet: SynthesizedIssueSet = {
+    deliberationRunId,
+    assertions: persisted.assertionsRefs,
+    objections: persisted.objectionsRefs,
+    rebuttals: persisted.rebuttalsRefs,
+    adjudicationNotes,
   };
 
   return {
     outcome,
     issueSet,
-    claimRecordIds,
+    claimRecordIds: persisted.claimRecordIds,
     compactSummary,
   };
 }
@@ -357,38 +385,109 @@ export async function synthesizeDeliberation(
 /* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
 
-async function persistBranchClaims(
+function collectBranchClaims(
   deliberationRunId: string,
   branch: BranchArtifact,
-  claimType: ClaimType,
+  claimType: SynthesizedClaimType,
   claims: BranchClaim[],
-  refs: Array<{ claimId: string }>,
-  allIds: string[],
+  bucket: ClaimRefBucket,
+  allClaims: ClaimToPersist[],
   gradesForBadge: Array<{ grade: ClaimEvidenceGrade }>,
   confidenceAcc: number[],
-): Promise<void> {
+): void {
   for (const c of claims) {
-    const created = await prisma.claimRecord.create({
-      data: {
-        deliberationRunId,
-        branchNodeId: branch.branchNodeId ?? null,
-        claimText: c.claimText,
-        claimType,
-        status: "unresolved",
-        evidenceGrade: c.evidenceGrade,
-        confidence: c.confidence ?? null,
-        supportingSourceIds: c.supportingSourceIds ?? [],
-        opposingSourceIds: c.opposingSourceIds ?? [],
-      },
-      select: { id: true },
+    allClaims.push({
+      bucket,
+      deliberationRunId,
+      branchNodeId: branch.branchNodeId ?? null,
+      claimText: c.claimText,
+      claimType,
+      evidenceGrade: c.evidenceGrade,
+      confidence: c.confidence ?? null,
+      supportingSourceIds: c.supportingSourceIds ?? [],
+      opposingSourceIds: c.opposingSourceIds ?? [],
     });
-    refs.push({ claimId: created.id });
-    allIds.push(created.id);
     gradesForBadge.push({ grade: c.evidenceGrade });
     if (typeof c.confidence === "number") {
       confidenceAcc.push(c.confidence);
     }
   }
+}
+
+async function replaceSynthesizedPersistence(
+  db: DeliberationSynthesisPersistenceClient,
+  input: {
+    deliberationRunId: string;
+    claimsToPersist: ClaimToPersist[];
+    outcome: OutcomeWriteData;
+    adjudicationNotes: string;
+  },
+): Promise<PersistedClaimRefs> {
+  const { deliberationRunId, claimsToPersist, outcome, adjudicationNotes } = input;
+  const refs: PersistedClaimRefs = {
+    claimRecordIds: [],
+    assertionsRefs: [],
+    objectionsRefs: [],
+    rebuttalsRefs: [],
+  };
+
+  await db.claimRecord.deleteMany({
+    where: {
+      deliberationRunId,
+      claimType: { in: SYNTHESIZED_CLAIM_TYPES },
+    },
+  });
+  await db.deliberationIssueSet.deleteMany({
+    where: { deliberationRunId },
+  });
+
+  for (const c of claimsToPersist) {
+    const created = await db.claimRecord.create({
+      data: {
+        deliberationRunId: c.deliberationRunId,
+        branchNodeId: c.branchNodeId,
+        claimText: c.claimText,
+        claimType: c.claimType,
+        status: "unresolved",
+        evidenceGrade: c.evidenceGrade,
+        confidence: c.confidence,
+        supportingSourceIds: c.supportingSourceIds,
+        opposingSourceIds: c.opposingSourceIds,
+      },
+      select: { id: true },
+    });
+    refs.claimRecordIds.push(created.id);
+    refs[`${c.bucket}Refs`].push({ claimId: created.id });
+  }
+
+  await db.deliberationOutcome.upsert({
+    where: { deliberationRunId },
+    create: {
+      deliberationRunId,
+      ...outcome,
+    },
+    update: outcome,
+  });
+
+  await db.deliberationIssueSet.create({
+    data: {
+      deliberationRunId,
+      assertions: JSON.parse(JSON.stringify(refs.assertionsRefs)),
+      objections: JSON.parse(JSON.stringify(refs.objectionsRefs)),
+      rebuttals: JSON.parse(JSON.stringify(refs.rebuttalsRefs)),
+      adjudicationNotes,
+    },
+  });
+
+  await db.deliberationRun.update({
+    where: { id: deliberationRunId },
+    data: {
+      consensusState: outcome.consensusState,
+      completedAt: new Date(),
+    },
+  });
+
+  return refs;
 }
 
 function pickMergedRecommendation(
