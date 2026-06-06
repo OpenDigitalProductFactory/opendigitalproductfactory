@@ -4,7 +4,7 @@
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import * as crypto from "crypto";
+import { ingestBacklogItem, improvementCategoryToWorkType } from "@/lib/operate/backlog-ingest";
 
 // ─── Allowed transitions ─────────────────────────────────────────────────────
 
@@ -59,30 +59,44 @@ export async function prioritizeImprovement(proposalId: string) {
   if (!proposal) return { error: "Not found" };
   if (proposal.status !== "reviewed") return { error: `Cannot prioritize from "${proposal.status}"` };
 
-  // Create a linked backlog item
-  const itemId = `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-  await prisma.backlogItem.create({
-    data: {
-      itemId,
+  // The backlog item is normally created when the proposal is filed
+  // (EP-INTAKE-UNIFY auto-file). Reuse it; only file one for legacy proposals
+  // that predate auto-filing. Route any creation through the shared front door
+  // so the item carries a workType (the historical defect was a workType-less,
+  // triage-skipping direct create here).
+  let backlogItemId = proposal.backlogItemId;
+  if (!backlogItemId) {
+    const ingest = await ingestBacklogItem({
       title: proposal.title,
-      type: "product",
-      status: "open",
-      body: `${proposal.description}\n\n---\nFrom improvement proposal ${proposal.proposalId}\nCategory: ${proposal.category} | Severity: ${proposal.severity}\nObserved: ${proposal.observedFriction ?? "N/A"}`,
-    },
-  });
+      body: [
+        proposal.description,
+        proposal.observedFriction ? `Observed friction: ${proposal.observedFriction}` : null,
+        `Category: ${proposal.category} | Severity: ${proposal.severity}`,
+        `From improvement proposal ${proposal.proposalId}`,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      workType: improvementCategoryToWorkType(proposal.category),
+      source: "automated-detection",
+      itemIdPrefix: "IMP",
+      submittedById: session.user.id,
+      origin: { kind: "improvement", id: proposal.proposalId },
+    });
+    backlogItemId = ingest.itemId;
+  }
 
   await prisma.improvementProposal.update({
     where: { proposalId },
     data: {
       status: "prioritized",
       prioritizedAt: new Date(),
-      backlogItemId: itemId,
+      backlogItemId,
     },
   });
 
   revalidatePath("/ops/improvements");
   revalidatePath("/ops");
-  return { success: true, backlogItemId: itemId };
+  return { success: true, backlogItemId };
 }
 
 export async function startImprovement(proposalId: string) {
