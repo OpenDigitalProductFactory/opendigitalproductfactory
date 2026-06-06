@@ -28,6 +28,7 @@ const { mockPrisma, mockInngest } = vi.hoisted(() => ({
     featureBuild: {
       create: vi.fn(),
       update: vi.fn(),
+      count: vi.fn(),
     },
     buildActivity: {
       create: vi.fn(),
@@ -80,6 +81,7 @@ describe("backlog MCP tool execution", () => {
     mockPrisma.employeeProfile.findFirst.mockResolvedValue(null);
     mockPrisma.backlogItemActivity.create.mockResolvedValue({});
     mockPrisma.featureBuild.update.mockResolvedValue({});
+    mockPrisma.featureBuild.count.mockResolvedValue(0);
     mockPrisma.buildActivity.create.mockResolvedValue({});
 
     mockPrisma.$transaction.mockImplementation(async (callback: (tx: typeof mockPrisma) => Promise<unknown>) => {

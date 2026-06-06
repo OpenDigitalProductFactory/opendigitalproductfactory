@@ -72,6 +72,7 @@ describe("getFeatureBuilds", () => {
       expect.objectContaining({
         where: {
           phase: { not: "failed" },
+          abandonedAt: null,
           parentEpicId: null,
           supersededByEpicId: null,
         },
