@@ -20,7 +20,16 @@
 
 set -eu
 
-log() { printf '[backup-qdrant-trace] %s\n' "$*"; }
+# Emit each trace line to stdout (captured by the TS orchestrator) AND mirror it
+# into $LOG_FILE so the admin "View log" drawer shows the curated run trace, not
+# just raw curl output. LOG_FILE is set later; the guard tolerates the early
+# prereq window, and `|| true` keeps `set -e` from tripping on the mirror write.
+log() {
+  printf '[backup-qdrant-trace] %s\n' "$*"
+  if [ -n "${LOG_FILE:-}" ]; then
+    printf '[backup-qdrant-trace] %s\n' "$*" >> "$LOG_FILE" 2>/dev/null || true
+  fi
+}
 fail() {
   log "failed: $1"
   exit "${2:-1}"
