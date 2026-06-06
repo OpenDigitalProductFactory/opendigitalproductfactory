@@ -1661,6 +1661,31 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: false,
   },
   {
+    name: "drive_browser_task",
+    description:
+      "Drive an authenticated browser to perform a bounded task on an auth-walled site (supplier portal, Substack, ad dashboard) that has no usable API. Picks the means by a governed decision, runs against a provisioned service-account profile (or the operator's attended session), and audits every action. Outward irreversible actions (publish/submit/send/order/configure) are NOT executed directly — they return awaiting-approval with an envelope the human approves first. Returns needs-provisioning when the site has no service-account profile yet (set one up in Service Account Browser Setup).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task: { type: "string", description: "Natural-language task for the browser, e.g. 'fill the newsletter draft title and body'." },
+        siteKey: { type: "string", description: "Site identifier selecting the provisioned profile, e.g. 'substack'." },
+        accountKey: { type: "string", description: "Account within the site. Defaults to 'default'." },
+        targetDomains: { type: "array", items: { type: "string" }, description: "Navigation allowlist; the session may only drive these domains." },
+        targetUrl: { type: "string", description: "Optional URL to open at." },
+        kind: { type: "string", enum: ["read", "act"], description: "read = extract data only; act = drive (default)." },
+        mode: { type: "string", enum: ["service-account", "operator-live"], description: "service-account (autonomous, default) or operator-live (attended)." },
+        outwardAction: { type: "string", enum: ["publish", "submit", "send", "order", "configure"], description: "Set ONLY when the task takes an outward irreversible action — gates an approval envelope instead of acting." },
+        renderedArtifact: { type: "object", description: "The exact payload the human approves at the destructive boundary (rendered post/form)." },
+        rationale: { type: "string", description: "Why this action — recorded on the approval envelope." },
+      },
+      required: ["task", "siteKey", "targetDomains"],
+    },
+    requiredCapability: null,
+    requiresExternalAccess: true,
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
     name: "extract_brand_design_system",
     description: "Kick off a background brand extraction for the organization. Reads any combination of a public website URL, the platform codebase, and uploaded brand assets, merges them into a BrandDesignSystem (palette, typography, component inventory, tokens), and writes the result to Organization.designSystem. Returns a taskRunId immediately; progress is streamed through the agent panel and the coworker re-surfaces with a summary when done. Use when the user asks to refresh the brand, build a design system, or analyze an existing site.",
     inputSchema: {
@@ -6886,6 +6911,42 @@ export async function executeTool(
         success: true,
         message: `Fetched ${evidence.finalUrl}${evidence.title ? ` (${evidence.title})` : ""}.`,
         data: evidence,
+      };
+    }
+
+    case "drive_browser_task": {
+      // Dynamic import: drive → select-means → mcp-tools forms a static cycle;
+      // importing here breaks it (same pattern as agent-grants / mcp-server-tools).
+      const { driveBrowserTask } = await import("./browser-drive/drive");
+      const { isDestructiveBrowserAction } = await import("./browser-drive/envelope");
+      const outward = String(params["outwardAction"] ?? "");
+      const result = await driveBrowserTask({
+        task: String(params["task"] ?? ""),
+        siteKey: String(params["siteKey"] ?? ""),
+        accountKey: typeof params["accountKey"] === "string" ? (params["accountKey"] as string) : undefined,
+        targetDomains: Array.isArray(params["targetDomains"]) ? (params["targetDomains"] as unknown[]).map(String) : [],
+        targetUrl: typeof params["targetUrl"] === "string" ? (params["targetUrl"] as string) : undefined,
+        kind: params["kind"] === "read" ? "read" : "act",
+        mode: params["mode"] === "operator-live" ? "operator-live" : "service-account",
+        outwardAction: isDestructiveBrowserAction(outward) ? outward : undefined,
+        renderedArtifact: params["renderedArtifact"],
+        rationale: typeof params["rationale"] === "string" ? (params["rationale"] as string) : undefined,
+        agentId: context?.agentId?.trim() || "coworker",
+        threadId: context?.threadId?.trim() || "",
+        userId,
+      });
+      const messages: Record<string, string> = {
+        completed: "Browser task completed.",
+        "awaiting-approval": "Rendered the action for your approval — it will run once you approve the envelope.",
+        "needs-provisioning": `No service-account profile for "${String(params["siteKey"] ?? "")}" yet. Set one up in Service Account Browser Setup.`,
+        "needs-human": "The means selector wasn't confident — needs a human decision.",
+        blocked: "Blocked.",
+        error: "Browser task failed.",
+      };
+      return {
+        success: result.status === "completed" || result.status === "awaiting-approval",
+        message: messages[result.status] ?? result.status,
+        data: result,
       };
     }
 

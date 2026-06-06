@@ -84,6 +84,7 @@ export class M2PluginDriver implements BrowserDriver {
       credentialId: input.credentialId ?? null,
       targetDomains: input.targetDomains,
       evidenceDir: input.evidenceDir ?? null,
+      meansDecisionJson: input.meansDecisionJson,
     });
 
     this.meta.set(sessionId, {
