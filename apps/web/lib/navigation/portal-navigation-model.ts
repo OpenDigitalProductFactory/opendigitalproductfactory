@@ -100,6 +100,22 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     },
   },
   {
+    key: "workbooks",
+    label: "Workbooks",
+    path: "/workbooks",
+    parentPath: "/workbooks",
+    domain: "workspace",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "domain-home",
+    capabilityKey: "view_workbooks",
+    primaryOrder: 15,
+    shellNav: {
+      sectionKey: "workspace",
+      description: "Spreadsheet-style grids for your own tables and platform data.",
+    },
+    sectionSiblings: ["/workbooks"],
+  },
+  {
     key: "customer",
     label: "Customer",
     sectionNavLabel: "Accounts",
