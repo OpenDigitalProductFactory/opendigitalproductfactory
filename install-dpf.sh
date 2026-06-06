@@ -516,6 +516,28 @@ else
   fi
 fi
 
+# Record the platform-correct compose chain for the self-upgrade promoter. The
+# orchestrator reads DPF_SELF_UPGRADE_COMPOSE_FILES and passes it to promote.sh as
+# PROMOTE_COMPOSE_FILES so the portal is recreated with THIS install's own
+# overlays (docker-compose.linux.yml / .macos.yml / .edge.yml). Without it the
+# promoter falls back to base-only and would force the wrong substrate's portal
+# env — e.g. the macOS TTS sidecar (mlx, :8771) on a Windows/Linux host, which
+# breaks voice; or drop the linux ollama LLM_BASE_URL. Mirrors composeFiles in
+# install-state.json (the array form) as the space-separated env form the portal
+# consumes. Re-run rewrites it so a platform/edge/mode change is always reflected.
+_self_upgrade_chain=""
+for _tok in "${DPF_COMPOSE_FILES[@]}"; do
+  [ "$_tok" = "-f" ] && continue
+  _self_upgrade_chain="${_self_upgrade_chain:+$_self_upgrade_chain }$_tok"
+done
+if grep -q "^DPF_SELF_UPGRADE_COMPOSE_FILES=" .env 2>/dev/null; then
+  dpf_sed_inplace "s|^DPF_SELF_UPGRADE_COMPOSE_FILES=.*|DPF_SELF_UPGRADE_COMPOSE_FILES=$_self_upgrade_chain|" .env
+else
+  printf '\n# Self-upgrade promoter compose chain — see install-dpf.sh for why this\n' >> .env
+  printf '# must match the install platform (prevents wrong-substrate portal env).\n' >> .env
+  printf 'DPF_SELF_UPGRADE_COMPOSE_FILES=%s\n' "$_self_upgrade_chain" >> .env
+fi
+
 # BI-0856A4CE Phase 1 — record DPF_DEV_WORKSPACE_PATH when the contributor
 # passed --dev-workspace-path. This is the path where 'git worktree add' will
 # create feature branches; distinct from the install path so the dev tree and

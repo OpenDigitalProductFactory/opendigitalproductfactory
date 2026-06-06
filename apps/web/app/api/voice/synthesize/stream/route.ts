@@ -8,8 +8,23 @@
 
 import { auth } from "@/lib/auth"
 import { prisma } from "@dpf/db"
-import { defaultProvider } from "@/lib/voice-synthesis/voice-service"
+import { defaultProvider, synthesizeSpeech, VoiceSynthesisError } from "@/lib/voice-synthesis/voice-service"
+import { resolveVoiceStorageRoot } from "@/lib/voice-synthesis/storage-root"
 import { DEFAULT_REF_TEXT, resolveReferenceHostPath } from "@/lib/voice-synthesis/adapters/mlx"
+import * as fs from "node:fs/promises"
+import * as path from "node:path"
+
+/**
+ * Frame a WAV buffer as the client's length-prefixed chunk: [4-byte BE length][WAV].
+ * Matches the framing useVoiceSynth.parseNextChunk decodes, so a single one-shot
+ * clip plays identically to a streamed one — just not sentence-by-sentence.
+ */
+function frameWavChunk(audio: ArrayBuffer): Buffer {
+  const wav = Buffer.from(audio)
+  const header = Buffer.alloc(4)
+  header.writeUInt32BE(wav.length, 0)
+  return Buffer.concat([header, wav])
+}
 
 interface StreamBody {
   text: string
@@ -97,6 +112,55 @@ export async function POST(req: Request): Promise<Response> {
   const settings = resolveSettings(voiceProfile.voiceSettings, overrideSettings)
   const provider = defaultProvider()
 
+  // ── Non-streaming providers: one-shot fallback ────────────────────────────
+  // Only the MLX host sidecar implements /v1/audio/speech/stream. The default
+  // self-hosted Chatterbox sidecar (dpf-tts:8000) exposes only /v1/audio/speech
+  // and /v1/audio/speech/upload — no streaming endpoint — and the hosted
+  // adapters (cartesia, fish-audio) have their own one-shot APIs. Proxying
+  // /stream to any of them 404s, which is why coworker voice never played on the
+  // default Chatterbox install. Synthesize the whole clip once via the shared
+  // voice-service (zero-shot clone from the stored reference audio) and emit it
+  // as a SINGLE length-prefixed chunk in the framing useVoiceSynth expects, so
+  // the client plays it identically — just without sentence-by-sentence streaming.
+  if (provider !== "mlx") {
+    let referenceAudioBuffer: Buffer | undefined
+    try {
+      const absPath = path.join(resolveVoiceStorageRoot(), voiceProfile.providerVoiceId)
+      referenceAudioBuffer = await fs.readFile(absPath)
+    } catch {
+      return Response.json(
+        { error: "Reference audio not found — please re-register your voice sample.", code: "reference_missing" },
+        { status: 422 },
+      )
+    }
+    try {
+      const result = await synthesizeSpeech(text.trim(), {
+        provider,
+        providerVoiceId: voiceProfile.providerVoiceId,
+        language: voiceProfile.language,
+        referenceAudioBuffer,
+        settings,
+      } as Parameters<typeof synthesizeSpeech>[1])
+      return new Response(new Uint8Array(frameWavChunk(result.audioBuffer)), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "Cache-Control": "no-store",
+          "X-Sentence-Count": "1",
+          "X-Voice-Provider": result.provider,
+        },
+      })
+    } catch (err) {
+      const status = err instanceof VoiceSynthesisError && err.statusCode ? err.statusCode : 503
+      console.warn("[voice/stream] one-shot synthesis failed:", err)
+      return Response.json(
+        { error: "Voice synthesis unavailable", code: "tts_unavailable" },
+        { status: status >= 500 ? 503 : status },
+      )
+    }
+  }
+
+  // ── MLX streaming path ─────────────────────────────────────────────────────
   // Build the body for the sidecar's streaming endpoint.
   const sidecarBody: Record<string, unknown> = {
     input: text.trim(),
@@ -104,15 +168,13 @@ export async function POST(req: Request): Promise<Response> {
     speed: settings?.speed ?? 1.0,
   }
 
-  if (provider === "mlx") {
-    const refPath = resolveReferenceHostPath(voiceProfile.providerVoiceId)
-    if (refPath) {
-      sidecarBody.ref_audio = refPath
-      sidecarBody.ref_text = DEFAULT_REF_TEXT
-      if (settings?.exaggeration !== undefined) sidecarBody.exaggeration = settings.exaggeration
-      if (settings?.cfgWeight !== undefined) sidecarBody.cfg_weight = settings.cfgWeight
-      sidecarBody.temperature = settings?.temperature ?? 0.6
-    }
+  const refPath = resolveReferenceHostPath(voiceProfile.providerVoiceId)
+  if (refPath) {
+    sidecarBody.ref_audio = refPath
+    sidecarBody.ref_text = DEFAULT_REF_TEXT
+    if (settings?.exaggeration !== undefined) sidecarBody.exaggeration = settings.exaggeration
+    if (settings?.cfgWeight !== undefined) sidecarBody.cfg_weight = settings.cfgWeight
+    sidecarBody.temperature = settings?.temperature ?? 0.6
   }
 
   // Proxy to the sidecar's streaming endpoint and pass the response through.

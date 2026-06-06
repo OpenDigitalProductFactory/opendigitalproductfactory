@@ -203,6 +203,13 @@ services:
       DPF_TTS_REFERENCE_HOST_ROOT: ${DPF_TTS_REFERENCE_HOST_ROOT:-}
       DPF_TTS_MLX_MODEL: ${DPF_TTS_MLX_MODEL:-}
       DPF_TTS_MLX_VOICE: ${DPF_TTS_MLX_VOICE:-}
+      # Platform-correct compose chain (space-separated) the install was created
+      # with. install-dpf.sh writes this from the same set it records in
+      # install-state.json. The self-upgrade orchestrator reads it and passes it to
+      # the promoter as PROMOTE_COMPOSE_FILES so the portal is recreated with the
+      # install's OWN overlays — never the macOS overlay force-applied on a
+      # Windows/Linux host (the broken-TTS defect). Empty => promote.sh base-only.
+      DPF_SELF_UPGRADE_COMPOSE_FILES: ${DPF_SELF_UPGRADE_COMPOSE_FILES:-}
       UPLOAD_STORAGE_PATH: ${UPLOAD_STORAGE_PATH:-/host-dpf/data/uploads}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # ensures host reachable on all platforms

@@ -174,6 +174,20 @@ export async function runSelfUpgrade(
       ? config.upgradeWorkspaceHostPath ?? `${hostInstallPathResolved.replace(/\/$/, "")}/.upgrade-workspace`
       : undefined;
 
+  // The platform-correct compose chain the install recorded. Without this the
+  // promoter falls back to base-only, which would drop a needed overlay
+  // (e.g. docker-compose.linux.yml's ollama LLM_BASE_URL). Prefer the DB config,
+  // then the .env-injected DPF_SELF_UPGRADE_COMPOSE_FILES (space-separated),
+  // which install-dpf.sh writes from the same chain it records in
+  // install-state.json. Empty => promote.sh uses its base-only fallback.
+  const composeFiles =
+    config.composeFiles ??
+    (process.env.DPF_SELF_UPGRADE_COMPOSE_FILES
+      ? process.env.DPF_SELF_UPGRADE_COMPOSE_FILES.split(/\s+/).filter(Boolean)
+      : undefined);
+  const composeProject =
+    config.composeProject ?? process.env.COMPOSE_PROJECT_NAME ?? undefined;
+
   // ── Detection: resolve the upstream target and apply the lineage gate ──────
   // In upstream mode we fetch first (fresh ref) and skip when the running build
   // already contains this upstream SHA. The running deployedSha is the merge
@@ -384,6 +398,11 @@ export async function runSelfUpgrade(
       composeEnvFileHostPath: hostInstallPathResolved
         ? `${hostInstallPathResolved.replace(/\/$/, "")}/.env`
         : undefined,
+      // Recreate the portal with the install's own platform chain so an overlay
+      // (linux ollama URL, macOS host TTS) is applied only on the host that
+      // recorded it — never force-applied to the wrong substrate.
+      composeFiles,
+      composeProject,
       healthUrl: config.healthUrl ?? process.env.PROMOTE_HEALTH_URL ?? "",
       promoterImage: config.promoterImage,
       dryRun: params.dryRun,
