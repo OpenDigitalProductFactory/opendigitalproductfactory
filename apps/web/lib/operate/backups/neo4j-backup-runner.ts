@@ -27,8 +27,6 @@
  * BackupRun.errorMessage and the admin readiness card.
  */
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -47,9 +45,7 @@ import {
   type BackupRetentionPolicy,
   type BackupTrigger,
 } from "./types";
-import { resolveManagedScriptPath } from "./managed-script-path";
-
-const execFileAsync = promisify(execFile);
+import { resolveManagedScriptPath, runManagedScript } from "./managed-script-path";
 
 const BACKUPS_ROOT = "/backups";
 const NEO4J_SUBDIR = "neo4j";
@@ -88,30 +84,9 @@ async function runScript(
   scriptPath: string,
   env: NodeJS.ProcessEnv,
 ): Promise<ScriptOutcome> {
-  try {
-    const { stdout, stderr } = await execFileAsync(scriptPath, [], {
-      env,
-      timeout: RUNNER_TIMEOUT_MS,
-      maxBuffer: 8 * 1024 * 1024,
-    });
-    return { ok: true, stdout, stderr, exitCode: 0 };
-  } catch (err: unknown) {
-    const e = err as {
-      stdout?: string;
-      stderr?: string;
-      code?: number | string;
-      signal?: string;
-      message?: string;
-    };
-    const exitCode =
-      typeof e.code === "number" ? e.code : -1;
-    return {
-      ok: false,
-      stdout: e.stdout ?? "",
-      stderr: e.stderr ?? e.message ?? String(err),
-      exitCode,
-    };
-  }
+  // Routes through the shared /bin/sh chokepoint so the script need not carry
+  // the executable bit (which git-on-Windows + the Docker COPY both strip).
+  return runManagedScript(scriptPath, { env, timeoutMs: RUNNER_TIMEOUT_MS });
 }
 
 async function readManifest(targetDir: string): Promise<Neo4jBackupManifest | null> {
@@ -152,7 +127,7 @@ function nextDailyRunAt(from: Date): Date {
 
 export async function runNeo4jBackup(
   args: RunNeo4jBackupArgs,
-): Promise<{ runId: string; status: "ok" | "failed" }> {
+): Promise<{ runId: string; status: "ok" | "failed"; error?: string }> {
   const now = args.now ?? (() => new Date());
   const startedAt = now();
   const trigger = args.trigger;
@@ -275,7 +250,7 @@ export async function runNeo4jBackup(
   neo4jBackupDurationSeconds.observe({ trigger }, durationMs / 1000);
 
   backupTraceLog(`run failed id=${created.id} reason=${errorSummary}`);
-  return { runId: created.id, status: "failed" };
+  return { runId: created.id, status: "failed", error: errorSummary };
 }
 
 function summarizeFailure(outcome: ScriptOutcome): string {
