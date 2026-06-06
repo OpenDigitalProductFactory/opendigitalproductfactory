@@ -34,13 +34,13 @@ Out of scope for the first increment:
 
 ## Task 2: Sales Advisor Boundary Review
 
-- [ ] Keep existing opportunity deal summary, stage health, and follow-up draft topics.
-- [ ] Verify no sales launcher claims persistence through tools that do not exist.
+- [x] Keep existing opportunity deal summary, stage health, and follow-up draft topics.
+- [x] Verify no sales launcher claims persistence through tools that do not exist.
 - [ ] Add tests if future CRM governed-write tools are introduced.
 
 ## Task 3: Marketing Artifact Creation Flow
 
-- [ ] Confirm `marketing-specialist` prompts and grants can use `save_marketing_review`, `create_marketing_campaign_brief`, `create_marketing_asset_task`, `record_marketing_kpi_checkpoint`, `create_marketing_automation_candidate`, and `draft_marketing_asset`.
+- [x] Confirm `marketing-specialist` prompts and grants can use `save_marketing_review`, `create_marketing_campaign_brief`, `create_marketing_asset_task`, `record_marketing_kpi_checkpoint`, `create_marketing_automation_candidate`, and `draft_marketing_asset`.
 - [ ] Exercise a guided prompt that saves a recommendation or campaign artifact.
 - [ ] Verify the saved artifact appears on the relevant Customer Marketing route outside chat.
 
