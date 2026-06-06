@@ -7,6 +7,7 @@ const { mockAuth, mockPrisma } = vi.hoisted(() => ({
       findUnique: vi.fn(),
       update: vi.fn(),
       create: vi.fn(),
+      count: vi.fn(),
     },
     businessBuildBrief: {
       findUnique: vi.fn(),
@@ -157,6 +158,7 @@ describe("governed build start approvals", () => {
     });
     mockPrisma.buildActivity.create.mockResolvedValue({});
     mockPrisma.phaseHandoff.create.mockResolvedValue({});
+    mockPrisma.featureBuild.count.mockResolvedValue(0);
     mockPrisma.employeeProfile.findFirst.mockResolvedValue(null);
     mockPrisma.calendarEvent.upsert.mockResolvedValue({});
     mockPrisma.backlogItemActivity.create.mockResolvedValue({});
