@@ -138,6 +138,13 @@ if [[ $_dry_run -eq 0 ]]; then
     exit 1
   fi
   export DPF_VERSION="$_built_sha"
+  # Force the classic BuildKit build path (via the docker daemon) instead of
+  # Compose Bake. The promoter image's Compose can default to Bake, which
+  # requires the buildx CLI plugin — absent in the promoter — and fails every
+  # self-upgrade at docker-build with "Docker Compose is configured to build
+  # using Bake, but buildx isn't installed". This matches the working manual
+  # `docker compose build` path. (Self-upgrade docker-build failures, 2026-06-06.)
+  export COMPOSE_BAKE=false
   docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
     "${_f_args[@]}" build portal
   # Capture the source content hash baked into the FRESHLY BUILT image. It is
