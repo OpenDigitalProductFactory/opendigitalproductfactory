@@ -220,6 +220,7 @@ export function PipelineStageInspector({
           agentName="Customer Advisor"
           primaryActionLabel="Ask Customer Advisor"
           topics={inspector.aiTopics}
+          routeContext={`/customer/opportunities/${inspector.id}`}
         />
       </div>
     </section>
