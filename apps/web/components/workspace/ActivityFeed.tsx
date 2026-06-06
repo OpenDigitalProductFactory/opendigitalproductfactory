@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+
+import { LocalTime } from "@/components/ui/LocalTime";
 import type { FeedItem } from "@/lib/activity-feed-data";
 
 const SECTION_CONFIG = {
@@ -78,7 +80,8 @@ export function ActivityFeed({ items }: Props) {
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-[var(--dpf-text)] truncate">{item.title}</p>
                       <p className="text-[10px] text-[var(--dpf-muted)] mt-0.5">
-                        {item.person ? `${item.person} · ` : ""}{new Date(item.date).toLocaleDateString()}
+                        {item.person ? `${item.person} · ` : ""}
+                        <LocalTime value={item.date} mode="date" />
                       </p>
                     </div>
                     {item.status && item.statusColor && (
