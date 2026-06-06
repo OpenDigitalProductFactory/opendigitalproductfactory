@@ -39,12 +39,13 @@ import {
   type BackupRetentionPolicy,
   type BackupTrigger,
 } from "./types";
+import { resolveManagedScriptPath } from "./managed-script-path";
 
 const execFileAsync = promisify(execFile);
 
 const BACKUPS_ROOT = "/backups";
 const POSTGRES_SUBDIR = "postgres";
-const SCRIPT_PATH = "/workspace/scripts/backup-postgres.sh";
+const SCRIPT_NAME = "backup-postgres.sh";
 const RUNNER_TIMEOUT_MS = 30 * 60 * 1000; // 30-minute hard cap
 
 export interface RunBackupArgs {
@@ -174,7 +175,7 @@ export async function runPostgresBackup(
   const trigger = args.trigger;
   const retention = args.retention ?? DEFAULT_BACKUP_RETENTION;
   const backupsRoot = args.backupsRoot ?? BACKUPS_ROOT;
-  const scriptPath = args.scriptPath ?? SCRIPT_PATH;
+  const scriptPath = args.scriptPath ?? resolveManagedScriptPath(SCRIPT_NAME);
   const composeProject = args.composeProject ?? process.env.COMPOSE_PROJECT_NAME ?? "dpf";
   const containerName =
     process.env.DPF_PRODUCTION_DB_CONTAINER ?? `${composeProject}-postgres-1`;

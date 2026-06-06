@@ -49,11 +49,29 @@ type PendingSupportSession = {
   featureBuildId: string | null;
 };
 
+type OpenAgentPanelDetail = {
+  autoMessage?: string;
+  welcomeMessage?: string;
+  targetBuildId?: string;
+  routeContext?: string;
+};
+
+type QueuedAutoMessage = {
+  message: string;
+  targetBuildId: string | null;
+  routeContext: string | null;
+};
+
 function getViewport() {
   return {
     width: window.innerWidth,
     height: window.innerHeight,
   };
+}
+
+function cleanRouteContext(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 }
 
 function getShellContentTop(): number {
@@ -104,16 +122,14 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [initialMessages, setInitialMessages] = useState<AgentMessageRow[]>([]);
   const [pendingAutoMessage, setPendingAutoMessage] = useState<string | null>(null);
+  const [guidedRouteContext, setGuidedRouteContext] = useState<string | null>(null);
   const [dockedFrame, setDockedFrame] = useState<DockedPanelFrame | null>(null);
   const lastAutoMessageRef = useRef<{ signature: string; at: number } | null>(null);
   // Queue auto-messages whose target thread hasn't loaded yet. The panel
   // can't submit to a thread until threadId is set; if the open-agent-panel
   // event arrives while the thread is mid-switch, we hold the message
   // here and release it when the thread context stabilises.
-  const [queuedAutoMessage, setQueuedAutoMessage] = useState<{
-    message: string;
-    targetBuildId: string | null;
-  } | null>(null);
+  const [queuedAutoMessage, setQueuedAutoMessage] = useState<QueuedAutoMessage | null>(null);
   const pendingSupportSessionsRef = useRef<Map<string, PendingSupportSession>>(new Map());
   const startedSupportSessionsRef = useRef<Set<string>>(new Set());
   const lastFocusRef = useRef<HTMLElement | null>(null);
@@ -197,9 +213,10 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
 
   // Thread-per-build: when on /build with an active build, scope the thread to that build.
   // This prevents 30+ messages from prior builds polluting the context (saves ~15K tokens/call).
+  const routeThreadContext = guidedRouteContext ?? pathname;
   const threadContext = activeBuildId && pathname === "/build"
     ? `${pathname}#${activeBuildId}`
-    : pathname;
+    : routeThreadContext;
 
   // Keep a ref in sync so the async load effect below can read the latest
   // queue without needing queuedAutoMessage in its dependency array (adding
@@ -238,7 +255,8 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
       // submit the message to the wrong thread.
       const queued = queuedAutoMessageRef.current;
       const expectedBuildId = activeBuildId && pathname === "/build" ? activeBuildId : null;
-      if (queued && snapshot?.threadId && queued.targetBuildId === expectedBuildId) {
+      const matchesRouteContext = !queued?.routeContext || queued.routeContext === threadContext;
+      if (queued && snapshot?.threadId && queued.targetBuildId === expectedBuildId && matchesRouteContext) {
         setPendingAutoMessage(queued.message);
         setQueuedAutoMessage(null);
       }
@@ -259,6 +277,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
       ? document.activeElement
       : null;
     setIsOpen(true);
+    setGuidedRouteContext(null);
     savePanelOpen(userKey, true);
   }
 
@@ -284,7 +303,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
   // Listen for panel open requests (feedback button, build creation, etc.)
   useEffect(() => {
     function handleOpenPanel(e: Event) {
-      const detail = (e as CustomEvent<{ autoMessage?: string; welcomeMessage?: string; targetBuildId?: string } | undefined>).detail;
+      const detail = (e as CustomEvent<OpenAgentPanelDetail | undefined>).detail;
       if (e.type === OPEN_AGENT_FEEDBACK_EVENT) {
         if (!isFeedbackEventDetail((e as CustomEvent<unknown>).detail)) {
           console.warn("Invalid open-agent-feedback detail");
@@ -296,6 +315,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
           ? document.activeElement
           : null;
         setIsOpen(true);
+        setGuidedRouteContext(null);
         savePanelOpen(userKey, true);
 
         const supportDetail = (e as CustomEvent<FeedbackEventDetail>).detail;
@@ -313,6 +333,8 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
         ? document.activeElement
         : null;
       setIsOpen(true);
+      const requestedRouteContext = cleanRouteContext(detail?.routeContext);
+      setGuidedRouteContext(requestedRouteContext);
       savePanelOpen(userKey, true);
 
       if (detail?.autoMessage) {
@@ -331,14 +353,26 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
         // immediately (legacy behaviour — route-level auto-messages, e.g.
         // the onboarding COO introducing each setup step, don't have a
         // targetBuildId and must fire right away).
-        if (shouldDispatchAutoMessageImmediately({
+        const routeSwitchRequested =
+          Boolean(requestedRouteContext) && requestedRouteContext !== threadContext;
+        if (routeSwitchRequested) {
+          setQueuedAutoMessage({
+            message: detail.autoMessage,
+            targetBuildId: detail.targetBuildId ?? null,
+            routeContext: requestedRouteContext,
+          });
+        } else if (shouldDispatchAutoMessageImmediately({
           targetBuildId: detail.targetBuildId ?? null,
           activeBuildId,
           threadId,
         })) {
           setPendingAutoMessage(detail.autoMessage);
         } else if (detail.targetBuildId) {
-          setQueuedAutoMessage({ message: detail.autoMessage, targetBuildId: detail.targetBuildId });
+          setQueuedAutoMessage({
+            message: detail.autoMessage,
+            targetBuildId: detail.targetBuildId,
+            routeContext: null,
+          });
         } else {
           setPendingAutoMessage(detail.autoMessage);
         }
@@ -540,7 +574,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker }: Props) {
             pendingAutoMessage={pendingAutoMessage}
             onAutoMessageConsumed={() => setPendingAutoMessage(null)}
             onConversationCleared={() => setInitialMessages([])}
-            routeContextOverride={undefined} /* setup uses each page's native coworker */
+            routeContextOverride={guidedRouteContext ?? undefined}
             isDocked={isDocked}
           />
           {!isDocked && (

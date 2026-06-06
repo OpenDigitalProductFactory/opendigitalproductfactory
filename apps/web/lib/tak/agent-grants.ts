@@ -28,6 +28,11 @@ export const GRANT_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
   // `build_promote` was the legacy promotion grant; `build_lifecycle` is the
   // broader Pseudo-User Contract grant covering reopen + cancel + promote.
   build_promote: ["build_lifecycle"],
+  // Browser-driving (EP-BROWSER-DRIVE, spec 2026-06-05 §8.2, Verdict 5):
+  // holding `browser_drive` (side-effecting browser actions) implies
+  // `browser_read` (navigate / extract / screenshot). One-way, as ever —
+  // `browser_read` alone never implies the drive grant.
+  browser_drive: ["browser_read"],
 };
 
 /** Expand a list of held grants by applying GRANT_IMPLICATIONS one-way.
@@ -53,6 +58,22 @@ export function expandGrants(grants: readonly string[]): string[] {
  * Tools not in this map are DENIED by default — every tool must have an entry.
  */
 const TOOL_TO_GRANTS: Record<string, string[]> = {
+  // Browser-driving (namespaced MCP, server slug `mcp-browser-use`) —
+  // EP-BROWSER-DRIVE, spec 2026-06-05 §8.2 (Verdict 5). These are the
+  // platform-visible `<serverId>__<toolName>` names (see mcp-server-tools.ts
+  // `namespaceTool`), because that is the form that enters the coworker tool
+  // list. Read tools require `browser_read`; the side-effecting `browse_act`
+  // requires `browser_drive` (which implies `browser_read`). `browse_run_tests`
+  // stays QA-scoped on `browser_read`, never `browser_drive`. Without an entry
+  // here these tools were appended ungated under External Access — the gap this
+  // closes (see getAvailableTools in apps/web/lib/mcp-tools.ts).
+  "mcp-browser-use__browse_open": ["browser_read"],
+  "mcp-browser-use__browse_extract": ["browser_read"],
+  "mcp-browser-use__browse_screenshot": ["browser_read"],
+  "mcp-browser-use__browse_close": ["browser_read"],
+  "mcp-browser-use__browse_run_tests": ["browser_read"],
+  "mcp-browser-use__browse_act": ["browser_drive"],
+
   // Backlog
   create_backlog_item: ["backlog_write"],
   update_backlog_item: ["backlog_write"],
