@@ -1,9 +1,10 @@
 ---
 title: Archetype Portal Screen Prototypes
 date: 2026-06-06
-status: draft - ready for critique
+status: draft — architect-reviewed 2026-06-06 (default-home gap resolved); ready for founder review
 owner: Mark Bodman
 author: Codex
+reviewer: Enterprise Architect persona (Claude) — review folded 2026-06-06
 scope: Text mockups and review criteria for archetype-specific main portal and worker-home screens
 out_of_scope:
   - Runtime implementation
@@ -16,6 +17,7 @@ related_specs:
   - docs/superpowers/specs/2026-05-24-vertical-workspace-home-design.md
   - docs/superpowers/specs/2026-06-04-workspace-home-contribution-roster-design.md
   - docs/superpowers/specs/2026-06-05-portal-navigation-archetype-ia-design.md
+  - docs/superpowers/specs/2026-06-06-main-portal-workspace-home-redesign-design.md
 primary_epics:
   - EP-REDUCTION-GEAR-ARCH
   - EP-BIZ-CAP
@@ -36,6 +38,16 @@ This spec captures low-fidelity text mockups for the archetype-specific DPF port
 - native vs integration-led posture
 
 It does not implement any UI. It makes the target screens concrete enough that Build Studio or another agent can critique the design before writing code.
+
+## 1a. Enterprise Architect Review (2026-06-06)
+
+**Verdict: keep the per-archetype prototype set; close the one gap it leaves open — the default home.** The category prototypes (§7), the worker-facing copy rule (§5.2), the critical-strip row format (§5.3), the contribution-manifest stubs (§5.4), and the all-archetype coverage decisions (§8) are sound and align with the canonical substrate ([vertical-workspace-home](2026-05-24-vertical-workspace-home-design.md), [archetype-aware-workspace](2026-05-31-archetype-aware-workspace-design.md)). They need no structural change.
+
+**The gap:** §7.1 treats the platform/operator home as the default and says only "preserve `PlatformWorkspaceHome`." But that platform-operator composition — a 6×6 Six-Cs *readiness maturity matrix*, a cross-domain tile launchpad, and a firehose calendar mixing customer bookings with platform cron digests and deployment windows — **is what every install lands on today**, because `defaultWorkspaceHomeRegistry` is empty and most archetypes have no registered contribution yet. That default home is *not* a business day-to-day surface; it is internal platform minutia occupying the company's prime screen (the same defect the [IA audit](2026-06-05-portal-navigation-archetype-ia-design.md) named).
+
+**Resolution (folded in):** the default/fallback `/workspace` home is now redesigned in a dedicated sibling spec — [Main Portal Workspace Home Redesign](2026-06-06-main-portal-workspace-home-redesign-design.md). It makes the default home answer "what is the immediate and next-up work for this business?" using the **report-kit** palette, wired to **real loaders** (no fabricated data), with the **full platform schedule moved to an operator admin surface** and replaced by a purposed business "Today & Next" agenda. The Six-Cs readiness matrix relocates to the operator surface, where it is the `software-platform` install's legitimate day-to-day. §7.1 below is updated to reference that redesign rather than implying operator chrome is an acceptable default for ordinary businesses.
+
+This prototype spec (the per-archetype mockups) and the default-home redesign together cover both halves of the main portal: the configured-vertical homes *and* the default home every business sees first.
 
 ## 2. Direct Answer: Is Main Portal Screen Configuration Mapped To This Work?
 
@@ -352,7 +364,7 @@ Representative archetype: `software-platform`
 
 Primary operating question: "What needs to ship, recover, or be governed today?"
 
-Architecture posture: preserve `PlatformWorkspaceHome` as platform-operator mode unless a later architect decision explicitly registers `software-platform` as a `WorkspaceHomeContribution`. This prototype is an operator target screen, not evidence that every business archetype should inherit platform chrome.
+Architecture posture: `PlatformWorkspaceHome` is the **platform-operator mode** and the legitimate day-to-day home for the `software-platform` (DPF-on-DPF) install only. It is **not** the acceptable default for ordinary businesses. The composition described here (readiness matrix, command center, full platform schedule) is the *operator* surface; ordinary installs that have no registered vertical contribution get the redesigned business default home instead — see [Main Portal Workspace Home Redesign](2026-06-06-main-portal-workspace-home-redesign-design.md), which moves the 6×6 readiness matrix and the full platform/cron schedule here (to the operator surface) and gives the default home a business "Today & Next" agenda + work queue wired to real data with report-kit. This prototype is an operator target screen, not evidence that every business archetype should inherit platform chrome.
 
 ```text
 Open Digital Product Factory - Platform Operator Home
