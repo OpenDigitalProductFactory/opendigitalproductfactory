@@ -33,11 +33,12 @@ import {
 } from "@/lib/operate/metrics";
 
 import { runPostgresBackup } from "./postgres-backup-runner";
+import { resolveManagedScriptPath } from "./managed-script-path";
 
 const execFileAsync = promisify(execFile);
 
 const BACKUPS_ROOT = "/backups";
-const RESTORE_SCRIPT_PATH = "/workspace/scripts/restore-postgres.sh";
+const RESTORE_SCRIPT_NAME = "restore-postgres.sh";
 const RUNNER_TIMEOUT_MS = 30 * 60 * 1000; // mirror backup runner
 
 /** Module-scoped portal mutex. Single Next.js server = single source of truth. */
@@ -217,7 +218,7 @@ export async function runPostgresRestore(
 ): Promise<{ restoreId: string; status: "ok" | "failed" }> {
   const now = args.now ?? (() => new Date());
   const backupsRoot = args.backupsRoot ?? BACKUPS_ROOT;
-  const scriptPath = args.scriptPath ?? RESTORE_SCRIPT_PATH;
+  const scriptPath = args.scriptPath ?? resolveManagedScriptPath(RESTORE_SCRIPT_NAME);
   const prisma = args.prismaClient ?? (await import("@dpf/db")).prisma;
 
   const release = args.acquireLock === false
