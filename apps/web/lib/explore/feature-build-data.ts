@@ -74,6 +74,9 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
   const rows = await prisma.featureBuild.findMany({
     where: {
       phase: { not: "failed" },
+      // Hide abandoned builds from the fleet — they are dead/cleaned-up work
+      // and otherwise clutter the queue as if they were unfinished efforts.
+      abandonedAt: null,
       parentEpicId: null,
       supersededByEpicId: null,
     },

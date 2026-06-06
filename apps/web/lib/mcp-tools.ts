@@ -5566,6 +5566,20 @@ export async function executeTool(
       });
       const governedBacklogEnabled = governedConfig?.governedBacklogEnabled === true;
 
+      // WIP cap (shared with the createFeatureBuild start path): refuse to
+      // promote another build into Build Studio while too many are unfinished.
+      {
+        const { wipCapReached, BUILD_WIP_CAP, BuildWipCapError, TERMINAL_BUILD_PHASES } =
+          await import("@/lib/build/wip-cap");
+        const activeBuilds = await prisma.featureBuild.count({
+          where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, abandonedAt: null, parentEpicId: null },
+        });
+        if (wipCapReached(activeBuilds)) {
+          const err = new BuildWipCapError(activeBuilds, BUILD_WIP_CAP);
+          return { success: false, error: "wip_cap_reached", message: err.message };
+        }
+      }
+
       const result = await prisma.$transaction(async (tx) => {
         return promoteBacklogItemToBuildDraft({
           tx,
