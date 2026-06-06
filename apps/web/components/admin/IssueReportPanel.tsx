@@ -7,6 +7,7 @@ import { StatCard, StatusBadge } from "@/components/ui/report-kit";
 import { ISSUE_REPORT_STATUS, type IssueReportStatus } from "@/lib/quality/issue-report-status";
 import {
   classifyIssueReport,
+  explainIssueReport,
   normalizeIssueReportStatus,
   summarizeIssueReportQueue,
   type IssueReportCategory,
@@ -261,6 +262,7 @@ function IssueReportRow({
   isPending: boolean;
 }) {
   const classification = classifyIssueReport(report);
+  const explanation = explainIssueReport(report);
   const status = normalizeIssueReportStatus(report.status);
   const isCoworkerRegression = report.source === "coworker-regression-detector";
   const diagnosis = isCoworkerRegression ? parseCoworkerDiagnosis(report.description) : null;
@@ -340,6 +342,15 @@ function IssueReportRow({
 
       {expanded && (
         <div className="space-y-3 border-t border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
+          {/* Plain-language explanation for non-technical operators (BI-E42C0B7E).
+              Shown first so a founder understands the report without reading a stack trace. */}
+          <div className="rounded-md border border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] p-3">
+            <h4 className="mb-1 text-[10px] font-semibold uppercase text-[var(--dpf-accent)]">What this means</h4>
+            <p className="text-xs leading-5 text-[var(--dpf-text)]">{explanation.meaning}</p>
+            <h4 className="mb-1 mt-3 text-[10px] font-semibold uppercase text-[var(--dpf-accent)]">What you can do</h4>
+            <p className="text-xs leading-5 text-[var(--dpf-text)]">{explanation.whatToDo}</p>
+          </div>
+
           {diagnosis && (
             <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -372,12 +383,14 @@ function IssueReportRow({
           )}
 
           {report.errorStack && (
-            <div>
-              <h4 className="mb-1 text-[10px] font-semibold uppercase text-[var(--dpf-muted)]">Stack trace</h4>
-              <pre className="max-h-48 overflow-auto rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 text-[10px] leading-relaxed text-[var(--dpf-muted)]">
+            <details>
+              <summary className="cursor-pointer text-[10px] font-semibold uppercase text-[var(--dpf-muted)]">
+                Technical detail (stack trace)
+              </summary>
+              <pre className="mt-1 max-h-48 overflow-auto rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 text-[10px] leading-relaxed text-[var(--dpf-muted)]">
                 {report.errorStack}
               </pre>
-            </div>
+            </details>
           )}
 
           {report.reportedBy && (
