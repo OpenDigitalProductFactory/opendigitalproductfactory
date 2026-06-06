@@ -115,6 +115,19 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   query_backlog: ["backlog_read"],
   report_quality_issue: ["backlog_write"],
 
+  // Workbooks / Universal Grid (EP-GRID-WORKBOOKS, #1582). These MCP tools
+  // shipped without a grant mapping, so every tool was default-deny (INV-1) and
+  // unreachable from any coworker. The handler's capability split is
+  // view_workbooks (read) / manage_workbooks (write); mirror it as read/write
+  // grant categories. Held by no agent yet — workbook tools stay coworker-deny
+  // until a role grants them, which is the correct conservative default for a
+  // user-facing grid feature.
+  workbook_list_tables: ["workbook_read"],
+  workbook_get_schema: ["workbook_read"],
+  workbook_query_rows: ["workbook_read"],
+  workbook_create_row: ["workbook_write"],
+  workbook_update_cells: ["workbook_write"],
+
   // Governed MCP backlog surface (spec 2026-04-25)
   create_epic: ["backlog_write"],
   update_epic: ["backlog_write"],
