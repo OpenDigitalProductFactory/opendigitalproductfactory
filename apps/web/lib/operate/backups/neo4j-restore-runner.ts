@@ -31,11 +31,12 @@ import {
   RestoreIntegrityError,
 } from "./postgres-restore-runner";
 import { runNeo4jBackup } from "./neo4j-backup-runner";
+import { resolveManagedScriptPath } from "./managed-script-path";
 
 const execFileAsync = promisify(execFile);
 
 const BACKUPS_ROOT = "/backups";
-const RESTORE_SCRIPT_PATH = "/workspace/scripts/restore-neo4j.sh";
+const RESTORE_SCRIPT_NAME = "restore-neo4j.sh";
 const RUNNER_TIMEOUT_MS = 10 * 60 * 1000;
 
 export interface Neo4jRestoreArgs {
@@ -115,7 +116,7 @@ export async function runNeo4jRestore(
 ): Promise<{ restoreId: string; status: "ok" | "failed" }> {
   const now = args.now ?? (() => new Date());
   const backupsRoot = args.backupsRoot ?? BACKUPS_ROOT;
-  const scriptPath = args.scriptPath ?? RESTORE_SCRIPT_PATH;
+  const scriptPath = args.scriptPath ?? resolveManagedScriptPath(RESTORE_SCRIPT_NAME);
   const prisma = args.prismaClient ?? (await import("@dpf/db")).prisma;
 
   const release = args.acquireLock === false

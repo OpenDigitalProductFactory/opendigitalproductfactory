@@ -40,12 +40,13 @@ import {
   type BackupRetentionPolicy,
   type BackupTrigger,
 } from "./types";
+import { resolveManagedScriptPath } from "./managed-script-path";
 
 const execFileAsync = promisify(execFile);
 
 const BACKUPS_ROOT = "/backups";
 const QDRANT_SUBDIR = "qdrant";
-const SCRIPT_PATH = "/workspace/scripts/backup-qdrant.sh";
+const SCRIPT_NAME = "backup-qdrant.sh";
 const RUNNER_TIMEOUT_MS = 30 * 60 * 1000; // 30-minute hard cap
 
 export interface RunQdrantBackupArgs {
@@ -147,7 +148,7 @@ export async function runQdrantBackup(
   const trigger = args.trigger;
   const retention = args.retention ?? DEFAULT_BACKUP_RETENTION;
   const backupsRoot = args.backupsRoot ?? BACKUPS_ROOT;
-  const scriptPath = args.scriptPath ?? SCRIPT_PATH;
+  const scriptPath = args.scriptPath ?? resolveManagedScriptPath(SCRIPT_NAME);
 
   const prisma = args.prismaClient ?? (await import("@dpf/db")).prisma;
 

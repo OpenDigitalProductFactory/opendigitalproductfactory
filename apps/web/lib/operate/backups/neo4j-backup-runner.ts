@@ -47,12 +47,13 @@ import {
   type BackupRetentionPolicy,
   type BackupTrigger,
 } from "./types";
+import { resolveManagedScriptPath } from "./managed-script-path";
 
 const execFileAsync = promisify(execFile);
 
 const BACKUPS_ROOT = "/backups";
 const NEO4J_SUBDIR = "neo4j";
-const SCRIPT_PATH = "/workspace/scripts/backup-neo4j.sh";
+const SCRIPT_NAME = "backup-neo4j.sh";
 const RUNNER_TIMEOUT_MS = 10 * 60 * 1000; // 10-minute hard cap (Neo4j stop+dump+start)
 
 export interface RunNeo4jBackupArgs {
@@ -157,7 +158,7 @@ export async function runNeo4jBackup(
   const trigger = args.trigger;
   const retention = args.retention ?? DEFAULT_BACKUP_RETENTION;
   const backupsRoot = args.backupsRoot ?? BACKUPS_ROOT;
-  const scriptPath = args.scriptPath ?? SCRIPT_PATH;
+  const scriptPath = args.scriptPath ?? resolveManagedScriptPath(SCRIPT_NAME);
   const composeProject = args.composeProject ?? process.env.COMPOSE_PROJECT_NAME ?? "dpf";
   const containerName =
     process.env.DPF_NEO4J_CONTAINER ?? `${composeProject}-neo4j-1`;

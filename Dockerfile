@@ -40,6 +40,13 @@ RUN NODE_OPTIONS="--max-old-space-size=4096" NEXT_TELEMETRY_DISABLED=1 NEXT_TURB
 FROM deps AS init
 COPY pnpm-workspace.yaml tsconfig.base.json .gitignore ./
 COPY scripts/set-hooks-path.mjs ./scripts/
+COPY scripts/backup-postgres.sh ./scripts/
+COPY scripts/backup-neo4j.sh ./scripts/
+COPY scripts/backup-qdrant.sh ./scripts/
+COPY scripts/restore-postgres.sh ./scripts/
+COPY scripts/restore-neo4j.sh ./scripts/
+COPY scripts/restore-qdrant.sh ./scripts/
+COPY scripts/postgres-trial-restore.sh ./scripts/
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
 COPY prompts/ ./prompts/
