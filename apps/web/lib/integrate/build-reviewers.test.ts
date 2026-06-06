@@ -102,8 +102,11 @@ describe("buildPlanReviewPrompt", () => {
       fileStructure: [],
       tasks: [{ title: "Task 1", testFirst: "t", implement: "i", verify: "v" }],
     });
-    expect(prompt).toContain("MUST report ALL issues in a SINGLE response");
-    expect(prompt).toContain("ZERO surprise issues on a re-review");
+    // PR #1573 reworded the anti-oscillation copy: the reviewer must not raise
+    // the bar across rounds, and must converge rather than surface a fresh issue
+    // each re-review. Same whack-a-mole requirement, bounded/size-aligned text.
+    expect(prompt).toContain("do not escalate the bar across review rounds");
+    expect(prompt).toContain("a short, converging review beats a long one");
   });
 
   it("includes task count for reviewer context", () => {
