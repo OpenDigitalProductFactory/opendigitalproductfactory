@@ -114,6 +114,7 @@ describe("TOOL_TO_GRANTS — Marketing entries", () => {
     const tools = [
       "create_marketing_campaign_brief",
       "create_marketing_asset_task",
+      "draft_marketing_asset",
       "record_marketing_kpi_checkpoint",
       "create_marketing_automation_candidate",
     ];
@@ -423,6 +424,7 @@ describe("getToolGrantMapping reflects all entries", () => {
     expect(mapping["save_marketing_review"]).toEqual(["marketing_write"]);
     expect(mapping["create_marketing_campaign_brief"]).toEqual(["marketing_write"]);
     expect(mapping["create_marketing_asset_task"]).toEqual(["marketing_write"]);
+    expect(mapping["draft_marketing_asset"]).toEqual(["marketing_write"]);
     expect(mapping["record_marketing_kpi_checkpoint"]).toEqual(["marketing_write"]);
     expect(mapping["create_marketing_automation_candidate"]).toEqual(["marketing_write"]);
     expect(mapping["generate_custom_archetype"]).toEqual(["marketing_write"]);
