@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { CustomerMetricTile } from "./CustomerMetricTile";
 import type { RevenueCockpitSummary } from "@/lib/crm/revenue-cockpit";
-import { CRM_TONE_CLASSES } from "@/lib/crm/presentation";
+import { StatusBadge } from "@/components/ui/report-kit";
+import { CRM_TONE_INTENT } from "./crmToneIntent";
 
 type RevenueCockpitProps = {
   summary: RevenueCockpitSummary;
@@ -46,12 +47,14 @@ export function RevenueCockpit({ summary }: RevenueCockpitProps) {
             <Link
               key={item.id}
               href={item.href}
-              className={[
-                "rounded-full border px-3 py-1.5 text-xs transition-colors hover:bg-[var(--dpf-surface-2)]",
-                CRM_TONE_CLASSES[item.tone].badge,
-              ].join(" ")}
+              className="inline-flex max-w-full rounded transition-opacity hover:opacity-80"
             >
-              {item.label}
+              <StatusBadge
+                intent={CRM_TONE_INTENT[item.tone]}
+                label={item.label}
+                uppercase={false}
+                size="md"
+              />
             </Link>
           ))
         ) : (
