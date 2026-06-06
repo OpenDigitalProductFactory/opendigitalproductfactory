@@ -23,6 +23,7 @@ const STRUCTURAL_NODE_LABELS = [
   "CodeRoute",
   "CodeTool",
   "PrismaModel",
+  "PrismaField",
   "PromptTemplateSource",
   "TestFile",
   "ExternalModule",
@@ -62,6 +63,7 @@ export async function ensureCodeGraphNeo4jSchema(): Promise<void> {
     "CREATE CONSTRAINT cr_routeKey IF NOT EXISTS FOR (n:CodeRoute) REQUIRE n.codeRouteKey IS UNIQUE",
     "CREATE CONSTRAINT ct_toolKey IF NOT EXISTS FOR (n:CodeTool) REQUIRE n.codeToolKey IS UNIQUE",
     "CREATE CONSTRAINT pm_modelKey IF NOT EXISTS FOR (n:PrismaModel) REQUIRE n.prismaModelKey IS UNIQUE",
+    "CREATE CONSTRAINT pf_fieldKey IF NOT EXISTS FOR (n:PrismaField) REQUIRE n.prismaFieldKey IS UNIQUE",
     "CREATE CONSTRAINT pts_promptKey IF NOT EXISTS FOR (n:PromptTemplateSource) REQUIRE n.promptTemplateSourceKey IS UNIQUE",
     "CREATE CONSTRAINT tf_testFileKey IF NOT EXISTS FOR (n:TestFile) REQUIRE n.testFileKey IS UNIQUE",
     "CREATE CONSTRAINT em_moduleKey IF NOT EXISTS FOR (n:ExternalModule) REQUIRE n.externalModuleKey IS UNIQUE",
@@ -71,6 +73,7 @@ export async function ensureCodeGraphNeo4jSchema(): Promise<void> {
     "CREATE INDEX cr_graphKey IF NOT EXISTS FOR (n:CodeRoute) ON (n.graphKey)",
     "CREATE INDEX ct_graphKey IF NOT EXISTS FOR (n:CodeTool) ON (n.graphKey)",
     "CREATE INDEX pm_graphKey IF NOT EXISTS FOR (n:PrismaModel) ON (n.graphKey)",
+    "CREATE INDEX pf_graphKey IF NOT EXISTS FOR (n:PrismaField) ON (n.graphKey)",
     "CREATE INDEX pts_graphKey IF NOT EXISTS FOR (n:PromptTemplateSource) ON (n.graphKey)",
     "CREATE INDEX tf_graphKey IF NOT EXISTS FOR (n:TestFile) ON (n.graphKey)",
     "CREATE INDEX em_graphKey IF NOT EXISTS FOR (n:ExternalModule) ON (n.graphKey)",
@@ -113,6 +116,7 @@ function endpointForKey(graphKey: string, key: string): NodeEndpointProjection |
     { prefix: `${graphKey}:route:`, label: "CodeRoute" },
     { prefix: `${graphKey}:tool:`, label: "CodeTool" },
     { prefix: `${graphKey}:prisma-model:`, label: "PrismaModel" },
+    { prefix: `${graphKey}:prisma-field:`, label: "PrismaField" },
     { prefix: `${graphKey}:test:`, label: "TestFile" },
     { prefix: `${graphKey}:module:`, label: "ExternalModule" },
   ];
@@ -141,6 +145,13 @@ function chunks<T>(items: T[], size: number): T[][] {
     result.push(items.slice(index, index + size));
   }
   return result;
+}
+
+// `SET n += map` requires a non-null map; default missing attributes to {}.
+function withAttributeDefaults<T extends { attributes?: Record<string, unknown> }>(
+  facts: T[],
+): Array<T & { attributes: Record<string, unknown> }> {
+  return facts.map((fact) => ({ ...fact, attributes: fact.attributes ?? {} }));
 }
 
 async function projectCodeFileFacts(files: CodeFileProjection[]): Promise<void> {
@@ -179,9 +190,10 @@ async function projectNodeFacts(label: CodeGraphNodeKind, facts: CodeGraphNodeFa
         "    n.path = fact.filePath,",
         "    n.startLine = fact.startLine,",
         "    n.endLine = fact.endLine,",
-        "    n.extractor = fact.extractor",
+        "    n.extractor = fact.extractor,",
+        "    n += fact.attributes",
       ].join("\n"),
-      { facts: batch },
+      { facts: withAttributeDefaults(batch) },
     );
   }
 }
@@ -204,9 +216,10 @@ async function projectTypedEdgeFacts(
         "    r.startLine = fact.startLine,",
         "    r.endLine = fact.endLine,",
         "    r.confidence = fact.confidence,",
-        "    r.extractor = fact.extractor",
+        "    r.extractor = fact.extractor,",
+        "    r += fact.attributes",
       ].join("\n"),
-      { facts: batch },
+      { facts: withAttributeDefaults(batch) },
     );
   }
 }
@@ -226,9 +239,10 @@ async function projectGenericEdgeFacts(kind: CodeGraphEdgeKind, facts: CodeGraph
         "    r.startLine = fact.startLine,",
         "    r.endLine = fact.endLine,",
         "    r.confidence = fact.confidence,",
-        "    r.extractor = fact.extractor",
+        "    r.extractor = fact.extractor,",
+        "    r += fact.attributes",
       ].join("\n"),
-      { facts: batch },
+      { facts: withAttributeDefaults(batch) },
     );
   }
 }
