@@ -45,7 +45,7 @@ echo "[version-check] Portal image version: $image_version"
 echo "[version-check] Local origin/main   : $expected"
 
 if [ "$image_source" != "git-sha" ]; then
-  echo "[version-check] Image was built without DPF_VERSION (content-hash fallback) - cannot compare to a SHA. Rebuild/redeploy with scripts/redeploy-portal.sh to stamp a git SHA."
+  echo "[version-check] Image was built without DPF_VERSION (content-hash fallback) - cannot compare to a SHA. Advance the live install via the governed self-upgrade path (/ops/self-upgrade) to restamp a git SHA. Do NOT redeploy-portal directly for feature verification (AGENTS.md S5)."
   exit 2
 fi
 
@@ -55,5 +55,5 @@ if [ "$(printf '%s' "$image_version" | tr 'A-F' 'a-f')" = "$(printf '%s' "$expec
 fi
 
 echo "[version-check] DRIFT - portal is NOT serving origin/main."
-echo "[version-check] Rebuild/redeploy with: scripts/redeploy-portal.sh"
+echo "[version-check] Advance via the governed self-upgrade path (/ops/self-upgrade) - the only sanctioned feature-verification advance (AGENTS.md S5). Direct redeploy-portal/compose rebuilds are reserved for install/bootstrap/recovery."
 exit 1
