@@ -52,8 +52,21 @@ type EffectivePermissionsProps = {
 /**
  * Maps platform tool names to agent grant categories.
  * Mirrors TOOL_TO_GRANTS from agent-grants.ts for client-side evaluation.
+ *
+ * NOTE: this is a hand-maintained mirror and drifts from the server map. It is
+ * display-only — enforcement is server-side via getAvailableTools /
+ * isToolAllowedByGrants. Collapsing this onto a single shared/generated grant
+ * map is tracked as architect-review Slice 0 item 5 (EP-BROWSER-DRIVE). Until
+ * then, add new grant mappings here in the same change as agent-grants.ts.
  */
 const TOOL_TO_GRANTS: Record<string, string[]> = {
+  // Browser-driving (namespaced MCP) — EP-BROWSER-DRIVE, spec 2026-06-05 §8.2.
+  "mcp-browser-use__browse_open": ["browser_read"],
+  "mcp-browser-use__browse_extract": ["browser_read"],
+  "mcp-browser-use__browse_screenshot": ["browser_read"],
+  "mcp-browser-use__browse_close": ["browser_read"],
+  "mcp-browser-use__browse_run_tests": ["browser_read"],
+  "mcp-browser-use__browse_act": ["browser_drive"],
   create_backlog_item: ["backlog_write"],
   update_backlog_item: ["backlog_write"],
   query_backlog: ["backlog_read"],

@@ -685,3 +685,44 @@ describe("Existing coworkers — no behavior regression from the refactor", () =
     expect(isToolAllowedByGrants("promote_to_build_studio", cooGrants)).toBe(false);
   });
 });
+
+describe("TOOL_TO_GRANTS — Browser-driving entries (EP-BROWSER-DRIVE, Verdict 5)", () => {
+  it("browse_act (side-effecting) requires browser_drive, not browser_read", () => {
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_act", ["browser_drive"])).toBe(true);
+    // browser_read alone is NOT enough to drive — the whole point of the split.
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_act", ["browser_read"])).toBe(false);
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_act", [])).toBe(false);
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_act", ["backlog_write"])).toBe(false);
+  });
+
+  it("read tools require browser_read, and browser_drive satisfies them via implication", () => {
+    for (const tool of [
+      "mcp-browser-use__browse_open",
+      "mcp-browser-use__browse_extract",
+      "mcp-browser-use__browse_screenshot",
+      "mcp-browser-use__browse_close",
+      "mcp-browser-use__browse_run_tests",
+    ]) {
+      expect(isToolAllowedByGrants(tool, ["browser_read"])).toBe(true);
+      // browser_drive implies browser_read, so a driver can also read.
+      expect(isToolAllowedByGrants(tool, ["browser_drive"])).toBe(true);
+      expect(isToolAllowedByGrants(tool, [])).toBe(false);
+    }
+  });
+
+  it("browse_run_tests stays QA-scoped on browser_read, never browser_drive", () => {
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_run_tests", ["browser_read"])).toBe(true);
+  });
+
+  it("GRANT_IMPLICATIONS is one-way: browser_drive implies browser_read, not the reverse", () => {
+    expect(GRANT_IMPLICATIONS["browser_drive"]).toEqual(["browser_read"]);
+    expect(expandGrants(["browser_drive"])).toContain("browser_read");
+    expect(expandGrants(["browser_read"])).not.toContain("browser_drive");
+  });
+
+  it("the namespaced browser tools are present in the grant mapping (so they don't default-deny)", () => {
+    const map = getToolGrantMapping();
+    expect(map["mcp-browser-use__browse_act"]).toEqual(["browser_drive"]);
+    expect(map["mcp-browser-use__browse_open"]).toEqual(["browser_read"]);
+  });
+});
