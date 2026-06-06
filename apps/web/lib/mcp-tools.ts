@@ -13879,6 +13879,10 @@ export async function executeTool(
       const result = await applyPlatformUpdate();
 
       switch (result.kind) {
+        case "engine-retired":
+          // BI-5B6C1C35: the /workspace merge engine is retired; the install
+          // advances only via the Self-Upgrade pipeline (governed-upgrade §5.0).
+          return { success: false, message: result.message, error: "Engine retired — use Self-Upgrade" };
         case "no-update-pending":
           return { success: false, message: result.message, error: "No update pending" };
         case "invalid-version":
