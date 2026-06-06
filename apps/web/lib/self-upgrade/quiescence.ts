@@ -857,7 +857,7 @@ export async function getQuiescenceActivity(now: Date = new Date()): Promise<Qui
   // recent run so a just-deferred drain still explains why it backed off.
   const row = config.runId
     ? await prisma.quiescenceRun.findUnique({ where: { runId: config.runId } })
-    : await prisma.quiescenceRun.findFirst({ orderBy: { createdAt: "desc" } });
+    : await prisma.quiescenceRun.findFirst({ orderBy: { startedAt: "desc" } });
   if (!row) return base;
 
   const snapshot =

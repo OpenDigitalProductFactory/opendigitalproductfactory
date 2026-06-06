@@ -53,6 +53,26 @@ vi.mock("@/lib/self-upgrade/last-check", () => ({
   getLastCheckedAt: vi.fn().mockResolvedValue(null),
 }));
 
+// getSelfUpgradeStatus now reads live drain activity + cooldown for the panel;
+// stub both so the status read stays hermetic (the @dpf/db mock above has no
+// platformConfig / quiescenceRun models).
+vi.mock("@/lib/self-upgrade/quiescence", () => ({
+  getQuiescenceActivity: vi.fn().mockResolvedValue({
+    level: "normal",
+    runId: null,
+    enteredAt: "1970-01-01T00:00:00.000Z",
+    run: null,
+    blockersCapturedAt: null,
+    blockers: [],
+  }),
+}));
+
+vi.mock("@/lib/self-upgrade/cooldown", () => ({
+  getCooldownUntil: vi.fn().mockResolvedValue(null),
+  // config.ts imports this default transitively (via the queue function module).
+  DEFAULT_COOLDOWN_MINUTES: 30,
+}));
+
 vi.mock("@/lib/queue/inngest-client", () => ({
   inngest: {
     send: vi.fn().mockResolvedValue(undefined),
