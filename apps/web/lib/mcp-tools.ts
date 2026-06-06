@@ -17,6 +17,7 @@ import {
   searchPublicWeb,
 } from "@/lib/public-web-tools";
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
+import type { BacklogIngestInput } from "@/lib/operate/backlog-ingest";
 import { activeBrandExtractionWhere } from "@/lib/brand/active-extraction";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 import { createPlatformIssueReport } from "@/lib/quality/platform-issue-reports";
@@ -5299,107 +5300,54 @@ export async function executeTool(
       }
     }
     case "create_backlog_item": {
-      const itemId = typeof params["itemId"] === "string" && params["itemId"].trim()
-        ? params["itemId"].trim()
-        : `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      const status = typeof params["status"] === "string" ? params["status"] : "triaging";
-      const triageOutcome = typeof params["triageOutcome"] === "string" ? params["triageOutcome"] : null;
-      // workType is required by the tool schema; default to "feature" defensively
-      // so a missing payload field surfaces as a Prisma validation error rather
-      // than a silent insert with workType=NULL.
-      const workType = typeof params["workType"] === "string" ? params["workType"] : null;
-      // source defaults to "user-request" (the MCP tool is human-driven by
-      // contract — agents calling it on behalf of an operator are forwarding a
-      // human request).
-      const source = typeof params["source"] === "string" ? params["source"] : "user-request";
-      const proposedOutcome = typeof params["proposedOutcome"] === "string" ? params["proposedOutcome"] : null;
-      const effortSize = typeof params["effortSize"] === "string" ? params["effortSize"] : null;
-      const priority = typeof params["priority"] === "number" ? params["priority"] : null;
+      // Converged onto the shared backlog-ingest front door (EP-INTAKE-UNIFY):
+      // one validation + create + semantic-index + epic-resolve path, shared
+      // with every detector/queue. This MCP boundary preserves its structured
+      // {success:false} contract by catching the front door's validation throws.
+      const ingestInput = {
+        title: String(params["title"] ?? "Untitled"),
+        // Historical default for the MCP tool is product (ownership axis).
+        type: params["type"] === "portfolio" ? "portfolio" : "product",
+        workType: typeof params["workType"] === "string" ? params["workType"] : "",
+        // The MCP tool is human-driven by contract; default origin = user-request.
+        source: typeof params["source"] === "string" ? params["source"] : "user-request",
+        status: typeof params["status"] === "string" ? params["status"] : "triaging",
+        triageOutcome: typeof params["triageOutcome"] === "string" ? params["triageOutcome"] : undefined,
+        proposedOutcome: typeof params["proposedOutcome"] === "string" ? params["proposedOutcome"] : undefined,
+        effortSize: typeof params["effortSize"] === "string" ? params["effortSize"] : undefined,
+        priority: typeof params["priority"] === "number" ? params["priority"] : undefined,
+        body: typeof params["body"] === "string" ? params["body"] : undefined,
+        itemId:
+          typeof params["itemId"] === "string" && params["itemId"].trim()
+            ? params["itemId"].trim()
+            : undefined,
+        epicId:
+          typeof params["epicId"] === "string" && params["epicId"].trim()
+            ? params["epicId"].trim()
+            : undefined,
+        submittedById: userId,
+        agentId: context?.agentId ?? null,
+      } as unknown as BacklogIngestInput;
 
-      if (!workType) {
-        return {
-          success: false,
-          error: "workType is required",
-          message: "workType is required (bug | feature | chore | doc | tool | skill | refactor).",
-        };
+      try {
+        const { ingestBacklogItem } = await import("@/lib/operate/backlog-ingest");
+        const result = await ingestBacklogItem(ingestInput);
+        if (context?.routeContext === "/build") {
+          await updateBuildHappyPathState(userId, {
+            intake: {
+              backlogItemId: result.itemId,
+              epicId: typeof params["epicId"] === "string" ? params["epicId"] : null,
+            },
+          });
+        }
+        return { success: true, entityId: result.itemId, message: `Created backlog item ${result.itemId}` };
+      } catch (err) {
+        const msg =
+          err instanceof Error
+            ? err.message.replace(/^\[backlog-ingest\]\s*/, "")
+            : "Failed to create backlog item";
+        return { success: false, error: msg, message: msg };
       }
-
-      // Validate the status / triageOutcome pairing rule from the tool description:
-      // "supply status+triageOutcome together only when explicitly skipping triage"
-      // Concretely: status=triaging requires no triageOutcome; any other status requires one.
-      if (status !== "triaging" && !triageOutcome) {
-        return {
-          success: false,
-          error: "triageOutcome is required when status is not 'triaging'",
-          message: "When skipping triage (status='open' or 'in-progress'), pass triageOutcome to record the decision. Otherwise omit status to default to 'triaging'.",
-        };
-      }
-      if (status === "triaging" && triageOutcome) {
-        return {
-          success: false,
-          error: "triageOutcome must not be set when status='triaging'",
-          message: "Items in triaging status have not been triaged yet. Use triage_backlog_item to set triageOutcome.",
-        };
-      }
-      // When triageOutcome=build, effortSize is required (matches triage_backlog_item rules
-      // so the ready-for-build pool is consistently sized).
-      if (triageOutcome === "build" && !effortSize) {
-        return {
-          success: false,
-          error: "effortSize is required when triageOutcome='build'",
-          message: "Build-bound items must declare effortSize ('small'|'medium'|'large'|'xlarge').",
-        };
-      }
-
-      // BacklogItem.epicId is a FK to Epic.id (cuid). Agents typically pass
-      // the semantic epicId ("EP-..."), so resolve to cuid before inserting.
-      let epicCuid: string | null = null;
-      if (typeof params["epicId"] === "string" && params["epicId"].trim()) {
-        const raw = params["epicId"].trim();
-        const epicRow = await prisma.epic.findFirst({
-          where: { OR: [{ epicId: raw }, { id: raw }] },
-          select: { id: true },
-        });
-        epicCuid = epicRow?.id ?? null;
-      }
-
-      const item = await prisma.backlogItem.create({
-        data: {
-          itemId,
-          title: String(params["title"] ?? "Untitled"),
-          type: String(params["type"] ?? "product"),
-          status,
-          submittedById: userId,
-          agentId: context?.agentId ?? null,
-          ...(status === "done" ? { completedAt: new Date() } : {}),
-          ...(typeof params["body"] === "string" ? { body: params["body"] } : {}),
-          ...(epicCuid ? { epicId: epicCuid } : {}),
-          workType,
-          source,
-          ...(triageOutcome ? { triageOutcome } : {}),
-          ...(proposedOutcome ? { proposedOutcome } : {}),
-          ...(effortSize ? { effortSize } : {}),
-          ...(priority !== null ? { priority } : {}),
-        },
-      });
-      // Index in platform knowledge for semantic search
-      import("@/lib/semantic-memory").then(({ storePlatformKnowledge }) =>
-        storePlatformKnowledge({
-          entityId: item.itemId,
-          entityType: "backlog",
-          title: String(params["title"] ?? ""),
-          content: String(params["body"] ?? ""),
-        })
-      ).catch(() => {});
-      if (context?.routeContext === "/build") {
-        await updateBuildHappyPathState(userId, {
-          intake: {
-            backlogItemId: item.itemId,
-            epicId: typeof params["epicId"] === "string" ? params["epicId"] : null,
-          },
-        });
-      }
-      return { success: true, entityId: item.itemId, message: `Created backlog item ${item.itemId}` };
     }
 
     case "triage_backlog_item": {
