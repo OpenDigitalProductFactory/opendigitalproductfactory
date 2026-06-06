@@ -97,15 +97,35 @@ describe("checkMcpServerHealth", () => {
 
     it("accepts a valid MCP runner basename even with absolute path", async () => {
       // The allowlist matches on basename, so a fully-qualified
-      // `/usr/local/bin/npx` is still accepted. We only assert that
-      // safeSpawn doesn't reject — the subsequent spawn is mocked
-      // upstream and won't actually run.
+      // `/usr/local/bin/npx` is still accepted (not rejected by safeSpawn).
+      // The mocked runner answers the initialize handshake immediately so the
+      // check resolves in milliseconds instead of waiting out the real 10s
+      // stdio timeout — which exceeds vitest's 5s default test timeout and
+      // made this test fail spuriously (timeout race, not an allowlist reject).
       const { spawn } = await import("child_process");
+      let onStdoutData: ((chunk: Buffer) => void) | undefined;
       vi.mocked(spawn).mockImplementation(
         () =>
           ({
-            stdout: { on: vi.fn() },
-            stdin: { write: vi.fn() },
+            stdout: {
+              on: (event: string, cb: (chunk: Buffer) => void) => {
+                if (event === "data") onStdoutData = cb;
+              },
+            },
+            stdin: {
+              write: () => {
+                // Simulate the server replying to the initialize request.
+                onStdoutData?.(
+                  Buffer.from(
+                    JSON.stringify({
+                      jsonrpc: "2.0",
+                      id: 1,
+                      result: { protocolVersion: "2024-11-05" },
+                    }) + "\n",
+                  ),
+                );
+              },
+            },
             on: vi.fn(),
             kill: vi.fn(),
           }) as unknown as ReturnType<typeof spawn>,
@@ -115,8 +135,10 @@ describe("checkMcpServerHealth", () => {
         command: "/usr/local/bin/npx",
         args: ["-y", "some-server"],
       });
-      // Timeout because no protocolVersion response, but NOT an allowlist reject.
+      // The valid basename is accepted (no allowlist rejection) and the
+      // handshake completes.
       expect(result.error ?? "").not.toMatch(/allowlist/);
+      expect(result.healthy).toBe(true);
     });
   });
 });
