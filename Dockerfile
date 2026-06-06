@@ -31,10 +31,11 @@ COPY packages/ ./packages/
 COPY docker-entrypoint.sh ./
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @dpf/db exec prisma generate
-# Node 24 Alpine + Turbopack can crash the separate build worker in Docker
-# with SIGSEGV/SIGTRAP while the same source build passes on the host. Keep the
-# production bundler path but run Turbopack in-process for image builds.
-RUN NODE_OPTIONS="--max-old-space-size=4096" NEXT_TELEMETRY_DISABLED=1 NEXT_TURBOPACK_USE_WORKER=0 pnpm --filter web build
+# Node 24 Alpine + Turbopack can fail Linux image builds with duplicate asset
+# emission while the same source builds cleanly on the host. Use Next's
+# framework-supported webpack builder in the image until that Turbopack path is
+# stable again.
+RUN NODE_OPTIONS="--max-old-space-size=4096" NEXT_TELEMETRY_DISABLED=1 pnpm --filter web exec next build --webpack
 
 # ─── Stage 4: init (build source for migrations, seed, Prisma client) ─────────
 FROM deps AS init

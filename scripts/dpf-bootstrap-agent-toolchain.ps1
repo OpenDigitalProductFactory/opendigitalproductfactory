@@ -112,7 +112,7 @@ if ($HasToken -and $AutoMint -and -not $DryRun.IsPresent) {
             $HasToken = $false
         }
     } catch {
-        # Unreachable / ambiguous — fail safe, leave the present token untouched.
+        # Unreachable / ambiguous - fail safe, leave the present token untouched.
     }
 }
 
@@ -172,7 +172,13 @@ if ($ReconcileStaleEntries.IsPresent) { $nodeArgs += "--reconcile-stale-entries"
 
 $planJson = & pnpm @nodeArgs 2>$null
 if ($LASTEXITCODE -ne 0 -or -not $planJson) {
-    Write-Fail2 "compute-plan failed; cannot proceed with bootstrap."
+    Write-Warn2 "compute-plan failed; using standalone skill-pack updater fallback."
+    $fallback = Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1"
+    if (Test-Path -LiteralPath $fallback) {
+        & $fallback -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -McpUrl $McpEndpoint -DryRun:$DryRun
+        exit $LASTEXITCODE
+    }
+    Write-Fail2 "Standalone updater missing at $fallback; cannot proceed."
     exit 1
 }
 
@@ -320,7 +326,7 @@ if (-not $DryRun.IsPresent) {
             $probeJson = & pnpm @probeArgs 2>$null
             if ($LASTEXITCODE -eq 0 -and $probeJson) {
                 $probeResult = $probeJson | ConvertFrom-Json
-                # ConvertFrom-Json returns PSCustomObject — re-serialize as
+                # ConvertFrom-Json returns PSCustomObject - re-serialize as
                 # nested hashtables so Set-DpfStateValue round-trips cleanly.
                 $mcpReadiness = $probeResult.mcpReadiness | ConvertTo-Json -Depth 6 -Compress | ConvertFrom-Json -AsHashtable
                 $smokeResult  = $probeResult.smokeTest    | ConvertTo-Json -Depth 6 -Compress | ConvertFrom-Json -AsHashtable

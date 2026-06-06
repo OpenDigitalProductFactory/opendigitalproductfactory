@@ -7,14 +7,10 @@ import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { revalidatePath } from "next/cache";
 import { generateRfcId } from "./change-management";
 import { generatePromotionId } from "@/lib/version-tracking";
-import {
-  getSelfUpgradeConfig,
-  nextMaintenanceWindowStart,
-  resolveTargetSha,
-  isShaFresh,
-  getDeployedSha,
-  getLatestRun,
-} from "@/lib/self-upgrade";
+import { getSelfUpgradeConfig, nextMaintenanceWindowStart } from "@/lib/self-upgrade/config";
+import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
+import { getDeployedSha } from "@/lib/self-upgrade/completion";
+import { getLatestRun } from "@/lib/self-upgrade/run-store";
 import {
   isStoreOpen,
   isUpgradeWindowOpen,

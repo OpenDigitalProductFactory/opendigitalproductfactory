@@ -85,6 +85,14 @@ export async function createFeatureBuild(input: {
 
   if (!input.title.trim()) throw new Error("Title is required");
 
+  // WIP cap: don't let a new build start while too many are unfinished
+  // (all builds share one sandbox). Surfaces a plain-English message.
+  const { assertWipCapacity, TERMINAL_BUILD_PHASES } = await import("@/lib/build/wip-cap");
+  const activeBuilds = await prisma.featureBuild.count({
+    where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, abandonedAt: null, parentEpicId: null },
+  });
+  assertWipCapacity(activeBuilds);
+
   const buildId = generateBuildId();
 
   const result = await prisma.$transaction(async (tx) => {
