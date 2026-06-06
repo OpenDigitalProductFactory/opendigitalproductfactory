@@ -97,13 +97,17 @@ describe("buildPlanReviewPrompt", () => {
     expect(prompt).toContain("Add filter");
   });
 
-  it("includes comprehensive review instruction to prevent whack-a-mole feedback", () => {
+  it("includes bounded, size-aware decision discipline to prevent whack-a-mole feedback", () => {
     const prompt = buildPlanReviewPrompt({
       fileStructure: [],
       tasks: [{ title: "Task 1", testFirst: "t", implement: "i", verify: "v" }],
     });
-    expect(prompt).toContain("MUST report ALL issues in a SINGLE response");
-    expect(prompt).toContain("ZERO surprise issues on a re-review");
+    // PR #1573 replaced the old "report ALL issues / ZERO surprise" instruction
+    // (which drove issue-volume + oscillation) with bounded, severity-disciplined,
+    // size-aware review. Assert the new contract.
+    expect(prompt).toContain("DECISION DISCIPLINE");
+    expect(prompt).toContain("do NOT pad the list to be exhaustive");
+    expect(prompt).toContain("SIZE-AWARENESS");
   });
 
   it("includes task count for reviewer context", () => {

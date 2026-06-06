@@ -1523,18 +1523,19 @@ describe("runAgenticLoop", () => {
 
   it("uses honest infra copy (not fabrication copy) for a downgraded build-route claim", async () => {
     const mockRoute = vi.mocked(routeAndCall);
-    // Two fabricated build claims → retry exhausted → final emission.
+    // BI-PIR-cc091267: a DOWNGRADED build-route turn gets 3 fabrication retries
+    // (to ride out a transient blip), so it takes 4 fabricated claims to exhaust
+    // them and reach the final honest-infra emission.
+    const downgradedFab = () => mockResult({
+      content: "Built and deployed the feature — implementation completed.",
+      downgraded: true,
+      downgradeMessage: "Switched to Claude after the preferred endpoint was unavailable.",
+    });
     mockRoute
-      .mockResolvedValueOnce(mockResult({
-        content: "Built and deployed the feature — implementation completed.",
-        downgraded: true,
-        downgradeMessage: "Switched to Claude after the preferred endpoint was unavailable.",
-      }))
-      .mockResolvedValueOnce(mockResult({
-        content: "Built and deployed the feature — implementation completed.",
-        downgraded: true,
-        downgradeMessage: "Switched to Claude after the preferred endpoint was unavailable.",
-      }));
+      .mockResolvedValueOnce(downgradedFab())
+      .mockResolvedValueOnce(downgradedFab())
+      .mockResolvedValueOnce(downgradedFab())
+      .mockResolvedValueOnce(downgradedFab());
 
     const result = await runAgenticLoop({
       ...baseParams,

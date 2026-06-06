@@ -241,8 +241,8 @@ describe("Build Disciplines — Full Flow Integration", () => {
         fileStructure: [{ path: "test.ts", action: "create", purpose: "test" }],
         tasks: [{ title: "task 1", testFirst: "write test", implement: "code", verify: "run" }],
       });
-      expect(prompt).toContain("test-first");
-      expect(prompt).toContain("bite-sized");
+      expect(prompt).toContain("TEST-FIRST");
+      expect(prompt).toContain("BITE-SIZED");
     });
   });
 });
