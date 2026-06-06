@@ -8,6 +8,10 @@ import { buildFetchCommand, buildRemoteHeadCommand } from "@/lib/self-upgrade/ve
 import { prepareUpgradeSource, defaultGitRunner } from "@/lib/self-upgrade/prepare-source";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import {
+  classifyBuildFailure,
+  formatClassifiedExcerpt,
+} from "@/lib/self-upgrade/build-failure-classifier";
+import {
   createRun,
   startRun,
   completeRun,
@@ -436,7 +440,15 @@ export async function runSelfUpgrade(
     return { ok: true, status: "succeeded", runId: run.runId, quiescenceRunId, deployed };
   }
 
-  const excerpt = result.stderr || result.stdout || "unknown error";
+  const rawExcerpt = result.stderr || result.stdout || "unknown error";
+  // Classify the build-gate failure into a known recurring class so the
+  // persisted failure — and the BLOCKED reason an agent reads downstream —
+  // leads with an actionable diagnosis instead of a raw log to reproduce from
+  // zero (BI-E4CBC7C1; spec §3.3).
+  const failureClass = classifyBuildFailure({
+    log: `${result.stdout}\n${result.stderr}`,
+  });
+  const excerpt = formatClassifiedExcerpt(failureClass, rawExcerpt);
   // Promoter failed — signal failure to the coordinator so it transitions
   // to failed + flips level back to normal (critical: without this, the
   // portal stays draining forever after a failed swap).
@@ -452,6 +464,7 @@ export async function runSelfUpgrade(
     runId: run.runId,
     quiescenceRunId,
     exitCode: result.exitCode,
+    failureClass: failureClass.class,
     excerpt,
   };
 }

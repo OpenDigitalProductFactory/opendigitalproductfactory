@@ -589,28 +589,38 @@ describe("failure path", () => {
     expect(result).toMatchObject({ ok: false, status: "failed", runId: "SUR-FAILTEST" });
   });
 
-  it("includes excerpt from stderr in return value", async () => {
+  // The failure excerpt now LEADS with a build-failure classification and
+  // PRESERVES the raw log beneath it (BI-E4CBC7C1), so the BLOCKED reason an
+  // agent reads downstream carries an actionable class, not a raw log.
+  it("includes the raw stderr in the classified excerpt and a class header", async () => {
     mocks.runPromoter.mockResolvedValue({ exitCode: 1, stdout: "some stdout", stderr: "fatal: deploy error" });
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(result).toMatchObject({ excerpt: "fatal: deploy error" });
+    expect(result).toMatchObject({
+      excerpt: expect.stringContaining("fatal: deploy error"),
+      failureClass: "unknown",
+    });
+    expect(result.excerpt).toMatch(/^\[build-failure-class\]/);
   });
 
-  it("falls back to stdout for excerpt when stderr is empty", async () => {
+  it("falls back to stdout for the raw log when stderr is empty", async () => {
     mocks.runPromoter.mockResolvedValue({ exitCode: 2, stdout: "stdout only output", stderr: "" });
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(result).toMatchObject({ excerpt: "stdout only output" });
+    expect(result).toMatchObject({ excerpt: expect.stringContaining("stdout only output") });
   });
 
-  it("uses unknown error as excerpt when both stderr and stdout are empty", async () => {
+  it("uses unknown error as the raw log when both stderr and stdout are empty", async () => {
     mocks.runPromoter.mockResolvedValue({ exitCode: 1, stdout: "", stderr: "" });
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(result).toMatchObject({ excerpt: "unknown error" });
+    expect(result).toMatchObject({ excerpt: expect.stringContaining("unknown error") });
   });
 
-  it("calls failRun with runId and excerpt", async () => {
+  it("calls failRun with runId and the classified excerpt", async () => {
     mocks.runPromoter.mockResolvedValue({ exitCode: 1, stdout: "", stderr: "promote script failed" });
     await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(mocks.failRun).toHaveBeenCalledWith("SUR-FAILTEST", "promote script failed");
+    expect(mocks.failRun).toHaveBeenCalledWith(
+      "SUR-FAILTEST",
+      expect.stringContaining("promote script failed"),
+    );
   });
 
   it("emits upgrade.failed notification on promoter failure", async () => {
@@ -632,7 +642,10 @@ describe("failure path", () => {
   it("signals failQuiescenceSwap on promoter failure (level returns to normal)", async () => {
     mocks.runPromoter.mockResolvedValue({ exitCode: 1, stdout: "", stderr: "fatal" });
     await runSelfUpgrade({ triggeredBy: "ops" });
-    expect(mocks.failQuiescenceSwap).toHaveBeenCalledWith("QR-2026-05-24-test1234", "fatal");
+    expect(mocks.failQuiescenceSwap).toHaveBeenCalledWith(
+      "QR-2026-05-24-test1234",
+      expect.stringContaining("fatal"),
+    );
     expect(mocks.signalSwapComplete).not.toHaveBeenCalled();
   });
 });
