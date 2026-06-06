@@ -124,13 +124,14 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
   it("stamps the source HEAD and sha-verify passes against a correctly-stamped portal", () => {
     const { root, source, backup, fakeBin, head } = makeScratch();
     try {
-      // Orchestrator passes the prepared stamp as the expected identity; it
-      // equals HEAD here, so no warning and a clean verify.
+      // Orchestrator passes the intended target; it equals HEAD here, so the
+      // pre-swap identity assertion (stamp == built HEAD == target) holds and
+      // the run completes cleanly through sha-verify + content-verify.
       const r = runPromote({ source, backup, targetSha: head, fakeBin });
       expect(r.status).toBe(0);
       // sha-verify completed against the SHA actually built (HEAD).
       expect(r.stdout).toContain(`step=done target=${head}`);
-      expect(r.stderr).not.toContain("warning: build source identity");
+      expect(r.stderr).not.toContain("does not match promote target");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -148,15 +149,64 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
     }
   }, PROMOTE_TEST_TIMEOUT_MS);
 
-  it("warns (does not silently mislabel) when the tree identity differs from the expected stamp", () => {
+  it("FAILS LOUD (does not deploy) when the build tree identity differs from the promote target", () => {
     const { root, source, backup, fakeBin, head } = makeScratch();
     try {
-      // Orchestrator expected a different SHA than what's on disk → drift.
+      // Orchestrator's intended target ≠ what's on disk → the bytes about to be
+      // deployed are not the bytes that were resolved. Spec §4.3 / BI-5B6C1C35:
+      // stamp == built HEAD == target must hold pre-swap; a divergence is a hard
+      // failure, NOT a warning that lets a mislabeled image ship.
       const r = runPromote({ source, backup, targetSha: "0000000000000000000000000000000000000000", fakeBin });
-      expect(r.status).toBe(0);
-      // It still stamps the TRUTH (HEAD), and flags the drift.
-      expect(r.stdout).toContain(`step=done target=${head}`);
-      expect(r.stderr).toContain("warning: build source identity");
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("does not match promote target");
+      // It never reached the swap/verify steps — no image was recreated.
+      expect(r.stdout).not.toContain(`step=done`);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  it("FAILS LOUD when a -dirty build tree cannot equal the clean target SHA", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    try {
+      // Uncommitted bytes in the build tree → stamp becomes `${head}-dirty`,
+      // which can never equal the clean target `head`. Promoting uncommitted
+      // bytes is never intended, so the script must refuse before building.
+      writeFileSync(join(source, "Dockerfile"), "FROM scratch\n# uncommitted\n");
+      const r = runPromote({ source, backup, targetSha: head, fakeBin });
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("does not match promote target");
+      expect(r.stdout).not.toContain("step=done");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  it("FAILS LOUD when the running portal reports an EMPTY /sha (DEPLOYED_SHA unpopulated)", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    try {
+      // Model the BI-5B6C1C35 symptom: DEPLOYED_SHA never made it into the
+      // running container, so /sha returns blank. The verify step must treat an
+      // empty stamp as a hard failure (the runtime cannot prove its identity),
+      // not retry-until-timeout then pass.
+      const emptyShaBin = join(root, "bin-emptysha");
+      mkdirSync(emptyShaBin, { recursive: true });
+      writeFileSync(
+        join(emptyShaBin, "docker"),
+        '#!/bin/sh\ncase "$*" in\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
+      );
+      // /sha → empty (the bug); other probes → ok.
+      writeFileSync(
+        join(emptyShaBin, "curl"),
+        '#!/bin/sh\nfor a in "$@"; do url="$a"; done\ncase "$url" in\n  */sha) printf "" ;;\n  *) printf "ok" ;;\nesac\nexit 0\n',
+      );
+      chmodSync(join(emptyShaBin, "docker"), 0o755);
+      chmodSync(join(emptyShaBin, "curl"), 0o755);
+
+      const r = runPromote({ source, backup, targetSha: head, fakeBin: emptyShaBin });
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("EMPTY deployed SHA");
+      expect(r.stdout).not.toContain("step=done");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
