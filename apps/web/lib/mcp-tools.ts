@@ -4738,7 +4738,20 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
 
 export async function getAvailableTools(
   userContext: UserContext,
-  options?: { externalAccessEnabled?: boolean; mode?: "advise" | "act"; unifiedMode?: boolean; agentId?: string },
+  options?: {
+    externalAccessEnabled?: boolean;
+    mode?: "advise" | "act";
+    unifiedMode?: boolean;
+    agentId?: string;
+    /**
+     * Extra grants to union with the agent's own grants before tool gating.
+     * Used by the coworker path to apply COWORKER_READ_BASELINE_GRANTS so every
+     * coworker can read its page data, docs, source, and the code graph
+     * (BI-FD7E4D72). Read-only by construction; the user-capability check above
+     * still bounds what the human operator may see.
+     */
+    additionalGrants?: readonly string[];
+  },
 ): Promise<ToolDefinition[]> {
   let platformTools = PLATFORM_TOOLS.filter(
     (tool) =>
@@ -4755,6 +4768,14 @@ export async function getAvailableTools(
   let agentGrants: string[] = [];
   if (options?.agentId) {
     agentGrants = await getAgentToolGrantsAsync(options.agentId);
+    // Union the agent's own grants with any baseline read grants (the coworker
+    // path passes COWORKER_READ_BASELINE_GRANTS). Done here so the merged set is
+    // also used by the discovered-MCP-tool gating below. The merge only widens
+    // toward read-only tools; agents that hold no grants AND get no baseline are
+    // left ungated exactly as before (length-0 → no filtering).
+    if (options.additionalGrants?.length) {
+      agentGrants = Array.from(new Set([...agentGrants, ...options.additionalGrants]));
+    }
     if (agentGrants.length > 0) {
       platformTools = platformTools.filter((tool) => isToolAllowedByGrants(tool.name, agentGrants));
     }
@@ -11764,12 +11785,13 @@ export async function executeTool(
         }
       }
 
+      const category = String(params["category"] ?? "missing_feature");
       const proposal = await prisma.improvementProposal.create({
         data: {
           proposalId,
           title: String(params["title"] ?? "Untitled improvement"),
           description: String(params["description"] ?? ""),
-          category: String(params["category"] ?? "missing_feature"),
+          category,
           severity: String(params["severity"] ?? "medium"),
           observedFriction: typeof params["observedFriction"] === "string" ? params["observedFriction"] : null,
           conversationExcerpt,
@@ -11779,20 +11801,63 @@ export async function executeTool(
           threadId: context?.threadId ?? null,
         },
       });
+
+      // Consolidation (EP-INTAKE-UNIFY / BI-7541AB88): file the work into the
+      // backlog the moment the proposal exists, so it is visible and triageable
+      // without the old manual Review→Prioritize promotion that never happened.
+      // The proposal stays the evidence record; the BacklogItem is the work.
+      let backlogItemId: string | null = null;
+      try {
+        const { ingestBacklogItem, improvementCategoryToWorkType } = await import(
+          "@/lib/operate/backlog-ingest"
+        );
+        const ingest = await ingestBacklogItem({
+          title: proposal.title,
+          body: [
+            proposal.description,
+            proposal.observedFriction ? `Observed friction: ${proposal.observedFriction}` : null,
+            `Category: ${category} | Severity: ${proposal.severity}`,
+            `From improvement proposal ${proposal.proposalId}`,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          workType: improvementCategoryToWorkType(category),
+          source: "automated-detection",
+          itemIdPrefix: "IMP",
+          submittedById: userId,
+          agentId: context?.agentId ?? null,
+          origin: { kind: "improvement", id: proposal.proposalId },
+        });
+        backlogItemId = ingest.itemId;
+        await prisma.improvementProposal.update({
+          where: { proposalId: proposal.proposalId },
+          data: { backlogItemId },
+        });
+      } catch (err) {
+        // Non-fatal: the proposal is still recorded even if the backlog projection fails.
+        console.error("[propose_improvement] backlog auto-file failed", err);
+      }
+
+      // Index the proposal in platform knowledge (was previously unreachable
+      // dead code after the return).
+      import("@/lib/semantic-memory")
+        .then(({ storePlatformKnowledge }) =>
+          storePlatformKnowledge({
+            entityId: proposal.proposalId,
+            entityType: "improvement",
+            title: proposal.title,
+            content: String(params["description"] ?? ""),
+          }),
+        )
+        .catch(() => {});
+
       return {
         success: true,
         entityId: proposal.proposalId,
-        message: `Improvement proposal ${proposal.proposalId} created: "${proposal.title}". It will be reviewed by a manager.`,
+        message: backlogItemId
+          ? `Improvement proposal ${proposal.proposalId} created and filed to the backlog as ${backlogItemId} for triage.`
+          : `Improvement proposal ${proposal.proposalId} created: "${proposal.title}".`,
       };
-      // Index in platform knowledge
-      import("@/lib/semantic-memory").then(({ storePlatformKnowledge }) =>
-        storePlatformKnowledge({
-          entityId: proposal.proposalId,
-          entityType: "improvement",
-          title: proposal.title,
-          content: String(params["description"] ?? ""),
-        })
-      ).catch(() => {});
     }
 
     case "propose_skill_improvement": {

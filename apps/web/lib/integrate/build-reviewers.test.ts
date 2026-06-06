@@ -102,8 +102,11 @@ describe("buildPlanReviewPrompt", () => {
       fileStructure: [],
       tasks: [{ title: "Task 1", testFirst: "t", implement: "i", verify: "v" }],
     });
-    expect(prompt).toContain("MUST report ALL issues in a SINGLE response");
-    expect(prompt).toContain("ZERO surprise issues on a re-review");
+    // PR #1573 reworded the anti-oscillation copy: the reviewer must not raise
+    // the bar across rounds, and must converge rather than surface a fresh issue
+    // each re-review. Same whack-a-mole requirement, bounded/size-aligned text.
+    expect(prompt).toContain("do not escalate the bar across review rounds");
+    expect(prompt).toContain("a short, converging review beats a long one");
   });
 
   it("includes task count for reviewer context", () => {
@@ -164,11 +167,13 @@ describe("buildPlanReviewPrompt", () => {
         round: 2,
         issues: [{ severity: "critical", description: "Some prior issue" }],
       });
-      // The three pillars of the delta protocol must be present so the
-      // reviewer can't fall back to re-evaluating from scratch.
+      // The convergence-enforcing delta protocol must be present so the
+      // reviewer can't fall back to re-evaluating from scratch and can't
+      // trade one issue set for another across rounds (BI-ACC6A4A7).
       expect(prompt).toContain("do NOT re-surface it");
-      expect(prompt).toContain("reuse the SAME description");
-      expect(prompt).toContain("Goal: convergence, not re-litigation");
+      expect(prompt).toContain("the SAME description");
+      expect(prompt).toContain("CONVERGENCE-ENFORCING");
+      expect(prompt).toContain("no CRITICAL issues remain");
     });
 
     it("computes the correct round label when prior round is 2", () => {
