@@ -163,3 +163,31 @@ describe("OperationsTopologyCanvas — zoom controls (Stage B2b)", () => {
     expect(findBtn(container, "Zoom out").disabled).toBe(true);
   });
 });
+
+describe("OperationsTopologyCanvas — marker popover (inspector)", () => {
+  it("opens a detail inspector when a marker is selected and closes it", () => {
+    const { container } = render(<OperationsTopologyCanvas topology={buildOperationsMapTopologyFixture()} />);
+    expect(container.querySelector("[data-canvas-marker-detail]")).toBeNull();
+
+    const decision = container.querySelector('[data-canvas-marker="marker:d1:decision"]') as Element;
+    expect(decision.getAttribute("role")).toBe("button");
+    expect(decision.getAttribute("tabindex")).toBe("0");
+    fireEvent.click(decision);
+
+    const detail = container.querySelector("[data-canvas-marker-detail]") as HTMLElement;
+    expect(detail).not.toBeNull();
+    expect(detail.textContent).toContain("Route decision");
+    expect(detail.textContent).toContain("CEO Coworker"); // resolved coworker label
+    expect(detail.textContent).toContain("Claude"); // resolved provider label
+
+    fireEvent.click([...container.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === "Close marker detail")!);
+    expect(container.querySelector("[data-canvas-marker-detail]")).toBeNull();
+  });
+
+  it("shows 'Not recorded' for the unattributed (coworker-less) marker", () => {
+    const { container } = render(<OperationsTopologyCanvas topology={buildOperationsMapTopologyFixture()} />);
+    fireEvent.click(container.querySelector('[data-canvas-marker="marker:unattributed"]') as Element);
+    const detail = container.querySelector("[data-canvas-marker-detail]") as HTMLElement;
+    expect(detail.textContent).toContain("Not recorded");
+  });
+});
