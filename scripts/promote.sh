@@ -36,12 +36,19 @@ if [[ ${#_missing[@]} -gt 0 ]]; then
   exit 1
 fi
 
-# Compose chain used to rebuild/recreate the portal. Defaults to the macOS
-# dev chain; override with PROMOTE_COMPOSE_FILES (space-separated, relative to
-# PROMOTE_SOURCE) for other platforms.
+# Compose chain used to rebuild/recreate the portal. The orchestrator passes
+# PROMOTE_COMPOSE_FILES (space-separated, relative to PROMOTE_SOURCE) carrying
+# the platform-correct chain the install was created with — base + the host
+# platform overlay (docker-compose.linux.yml / .macos.yml) + edge, recorded in
+# install-state.json's composeFiles. The fallback is BASE-ONLY: it must never be
+# a platform overlay, because force-applying e.g. docker-compose.macos.yml on a
+# Windows/Linux host overrides portal env (TTS_PROVIDER=mlx, DPF_TTS_URL=:8771,
+# ollama LLM_BASE_URL) with values for the wrong substrate. Base-only is the only
+# safe platform-agnostic default; the recorded chain is what makes overlays apply
+# where the install actually needs them.
 _project="${PROMOTE_COMPOSE_PROJECT:-dpf}"
 # shellcheck disable=SC2206
-_compose_files=(${PROMOTE_COMPOSE_FILES:-docker-compose.yml docker-compose.macos.yml})
+_compose_files=(${PROMOTE_COMPOSE_FILES:-docker-compose.yml})
 _f_args=()
 for _f in "${_compose_files[@]}"; do
   _f_args+=(-f "$PROMOTE_SOURCE/$_f")
