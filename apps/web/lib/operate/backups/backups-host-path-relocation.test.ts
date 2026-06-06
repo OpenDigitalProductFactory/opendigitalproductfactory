@@ -79,6 +79,26 @@ describe("DPF_BACKUPS_HOST_PATH relocation (BI-8004BCD8)", () => {
   });
 
   describe("TypeScript runners", () => {
+    const dockerfile = read("Dockerfile");
+    const managedScripts = [
+      "backup-postgres.sh",
+      "backup-neo4j.sh",
+      "backup-qdrant.sh",
+      "restore-postgres.sh",
+      "restore-neo4j.sh",
+      "restore-qdrant.sh",
+      "postgres-trial-restore.sh",
+    ];
+
+    it("runtime image packages the managed backup and restore scripts", () => {
+      for (const script of managedScripts) {
+        expect(dockerfile, `${script} must be copied into /app/scripts`).toContain(
+          `scripts/${script}`,
+        );
+      }
+      expect(dockerfile).toContain("COPY --from=init /app/scripts ./scripts");
+    });
+
     it("neo4j-backup-runner.ts forwards DPF_BACKUPS_HOST_PATH explicitly", () => {
       const body = read("apps/web/lib/operate/backups/neo4j-backup-runner.ts");
       expect(body).toContain('DPF_BACKUPS_HOST_PATH: process.env.DPF_BACKUPS_HOST_PATH ?? ""');
