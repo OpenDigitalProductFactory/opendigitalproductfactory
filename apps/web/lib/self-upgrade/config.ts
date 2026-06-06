@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { DEFAULT_COOLDOWN_MINUTES } from "./cooldown";
 
 export type MaintenanceWindow = {
   dayOfWeek: number[];
@@ -25,6 +26,14 @@ export type SelfUpgradeConfig = {
   enabled: boolean;
   channel: string;
   checkIntervalHours: number;
+  /**
+   * Backoff (minutes) before self-upgrade re-attempts a drain after a DEFERRED
+   * or FAILED run. Stops the portal re-entering quiescence within minutes of a
+   * defer (active session) or a failed swap (e.g. missing promoter image).
+   * Applies to every trigger source, not just the scheduled poll. Defaults to
+   * {@link DEFAULT_COOLDOWN_MINUTES}.
+   */
+  cooldownMinutes: number;
   healthTarget: number;
   maintenanceWindows: MaintenanceWindow[];
   hostInstallPath?: string;
@@ -74,6 +83,7 @@ const DEFAULTS: SelfUpgradeConfig = {
   enabled: false,
   channel: "stable",
   checkIntervalHours: 24,
+  cooldownMinutes: DEFAULT_COOLDOWN_MINUTES,
   healthTarget: 100,
   maintenanceWindows: [],
   sourceMode: "upstream",
@@ -164,6 +174,10 @@ export function parseSelfUpgradeConfig(raw: unknown): SelfUpgradeConfig {
       typeof cfg.checkIntervalHours === "number" && cfg.checkIntervalHours > 0
         ? cfg.checkIntervalHours
         : DEFAULTS.checkIntervalHours,
+    cooldownMinutes:
+      typeof cfg.cooldownMinutes === "number" && cfg.cooldownMinutes >= 0
+        ? cfg.cooldownMinutes
+        : DEFAULTS.cooldownMinutes,
     healthTarget:
       typeof cfg.healthTarget === "number" &&
       cfg.healthTarget >= 0 &&

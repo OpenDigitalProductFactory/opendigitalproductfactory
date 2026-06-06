@@ -125,6 +125,41 @@ export function buildPromoterCommand(
   return { command: "docker", args };
 }
 
+/**
+ * Whether the promoter image is present on the daemon.
+ *
+ * A self-upgrade can never complete a swap without it, so the orchestrator
+ * checks this BEFORE draining the portal — otherwise it drains, burns the full
+ * quiescence budget, then fails at `docker run` because there's no `dpf-promoter`
+ * image, leaving the portal needlessly cycled (the live BI-A3930CD7 cluster
+ * symptom). Returns false when the image is absent OR docker itself is
+ * unreachable (the portal can't promote either way). Never throws.
+ *
+ * dryRun never swaps, so callers skip this check on the dry-run path.
+ */
+export async function isPromoterAvailable(promoterImage?: string): Promise<boolean> {
+  const image =
+    promoterImage && promoterImage.length > 0 ? promoterImage : DEFAULT_PROMOTER_IMAGE;
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (ok: boolean): void => {
+      if (settled) return;
+      settled = true;
+      resolve(ok);
+    };
+    try {
+      const child = spawn("docker", ["image", "inspect", image], { env: { ...process.env } });
+      // Drain stdio so the child can exit cleanly; we only care about the code.
+      child.stdout?.on("data", () => {});
+      child.stderr?.on("data", () => {});
+      child.on("close", (code: number | null) => finish(code === 0));
+      child.on("error", () => finish(false));
+    } catch {
+      finish(false);
+    }
+  });
+}
+
 export async function runPromoter(params: PromoterParams): Promise<PromoterResult> {
   const { command, args } = buildPromoterCommand(params);
 

@@ -22,6 +22,8 @@ import {
 } from "@/lib/self-upgrade/window";
 import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
+import { getQuiescenceActivity } from "@/lib/self-upgrade/quiescence";
+import { getCooldownUntil } from "@/lib/self-upgrade/cooldown";
 import { loadPlatformVersion } from "@/lib/platform/version";
 import { inngest } from "@/lib/queue/inngest-client";
 import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
@@ -634,13 +636,18 @@ export async function listSelfUpgradeRuns(opts?: {
 export async function getSelfUpgradeStatus() {
   await requireOpsAccess();
 
-  const [config, latestRun, platformVersion, deployedSha, lastCheckedAt] = await Promise.all([
-    getSelfUpgradeConfig(),
-    getLatestRun(),
-    loadPlatformVersion(),
-    getDeployedSha(),
-    getLastCheckedAt(),
-  ]);
+  const [config, latestRun, platformVersion, deployedSha, lastCheckedAt, quiescence, cooldownUntil] =
+    await Promise.all([
+      getSelfUpgradeConfig(),
+      getLatestRun(),
+      loadPlatformVersion(),
+      getDeployedSha(),
+      getLastCheckedAt(),
+      // Live drain activity (what's holding an upgrade) + the post-defer/fail
+      // backoff window, so the panel can explain "what's happening" truthfully.
+      getQuiescenceActivity(),
+      getCooldownUntil(),
+    ]);
 
   // Upgrade timing follows the storefront's open/closed state (single source of
   // truth: operating hours). inMaintenanceWindow = "upgrades may run now" =
@@ -697,6 +704,8 @@ export async function getSelfUpgradeStatus() {
     targetSha,
     isFresh,
     latestRun,
+    quiescence,
+    cooldownUntil: cooldownUntil?.toISOString() ?? null,
     platformVersion: {
       version: platformVersion.version,
       publishedAt: platformVersion.publishedAt.toISOString(),

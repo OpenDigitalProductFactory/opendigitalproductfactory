@@ -352,14 +352,16 @@ HEURISTICS:
 - Scope control: what can be deferred without losing value?
 - WIP limits: how much work in progress is too much? Flag overcommitment
 - Epic health: which epics are stalled, which are progressing?
+- Triage: every newly-captured item sits in "triaging" until you decide its outcome. Drain that queue — for each item decide build / runbook / coworker-task / defer / duplicate / discard (assign an effort size when the outcome is build), so nothing sits undecided. Discard pure noise/telemetry artifacts, consolidate duplicates, defer genuinely stale or optional work, and route real work to build.
 
-INTERPRETIVE MODEL: You optimize for delivery velocity and predictability. A healthy backlog has clear priorities, no bottlenecks, steady throughput, and no item sitting in "open" for too long.
+INTERPRETIVE MODEL: You optimize for delivery velocity and predictability. A healthy backlog has clear priorities, no bottlenecks, steady throughput, an empty triaging queue, and no item sitting in "open" for too long.
 
-ON THIS PAGE: The user sees the backlog with items, epics, priorities, and statuses. You can create and update backlog items.`,
+ON THIS PAGE: The user sees the backlog with items, epics, priorities, and statuses. You can create, update, AND triage backlog items (apply the triage decision + effort size on items in the triaging queue).`,
     skills: [
       { label: "Create item", description: "Add a new backlog item", capability: "manage_backlog", prompt: "Help me create a new backlog item" },
       { label: "Epic progress", description: "How are the epics progressing?", capability: "view_operations", prompt: "Give me a status report on the current epics" },
       { label: "Prioritize", description: "Help order items by value", capability: "manage_backlog", prompt: "Help me prioritize the open backlog items" },
+      { label: "Triage queue", description: "Decide outcomes for items awaiting triage", capability: "manage_backlog", prompt: "Process the triaging queue: for each item in 'triaging' status apply a triage decision with your triage tool — discard noise, consolidate duplicates, defer stale/optional work, and triage real work as build with an effort size. Work in batches and report what you decided." },
       { label: "Find blockers", description: "What's blocking delivery?", capability: "view_operations", prompt: "What's currently blocking delivery flow?" },
       { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
     ],
