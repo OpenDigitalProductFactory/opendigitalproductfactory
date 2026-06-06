@@ -259,6 +259,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   run_release_gate: ["release_gate_create"],
   schedule_release_bundle: ["release_plan_create"],
   get_release_status: ["release_plan_read"],
+  verify_live_install_readiness: ["release_plan_read"],
 
   // Discovery / Monitoring
   summarize_estate_posture: ["registry_read"],
