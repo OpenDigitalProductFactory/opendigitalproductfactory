@@ -23,6 +23,7 @@
     "graph:init": "pnpm --filter @dpf/db exec tsx scripts/init-neo4j.ts",
     "test:endpoints": "tsx scripts/test-endpoints.ts",
     "verify:preflight": "tsx scripts/dpf-verify-preflight.ts",
+    "check:bundle-boundaries": "node scripts/check-bundle-boundaries.mjs",
     "security:secrets": "node scripts/security/run-gitleaks-local.mjs --tree",
     "security:secrets:staged": "node scripts/security/run-gitleaks-local.mjs --staged",
     "docs:tak": "node docs/architecture/generate-tak-docx.mjs",
