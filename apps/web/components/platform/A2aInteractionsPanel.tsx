@@ -40,6 +40,7 @@ import {
   type A2aActorRole,
   type A2aAuthorityFilter,
 } from "./ai-operations-map-prefs";
+import type { A2aControlCriteria } from "./operations-control-filters";
 
 const AUTHORITY_OPTIONS: Array<{ id: A2aAuthorityFilter; label: string }> = [
   { id: "all", label: "All" },
@@ -54,9 +55,11 @@ type Props = {
   /** Shared replay playhead from the provider routing timeline (null = no sync). */
   replayTime?: number | null;
   replayRange?: A2aReplayRange | null;
+  /** Publish resolved A2A control filters up so the preview canvas mirrors this panel (Stage D). */
+  onFilterChange?: (criteria: A2aControlCriteria) => void;
 };
 
-export function A2aInteractionsPanel({ coworkers, a2aEdges, a2aLegend, replayTime, replayRange }: Props) {
+export function A2aInteractionsPanel({ coworkers, a2aEdges, a2aLegend, replayTime, replayRange, onFilterChange }: Props) {
   const defaults = getDefaultA2aFilterPreference();
   const [typeFilters, setTypeFilters] = useState<OperationsMapA2aEdgeKind[]>(defaults.types);
   const [stateFilters, setStateFilters] = useState<OperationsMapA2aInteractionState[]>(defaults.states);
@@ -82,6 +85,13 @@ export function A2aInteractionsPanel({ coworkers, a2aEdges, a2aLegend, replayTim
     if (!hydrated.current) return;
     saveA2aFilterPreference({ types: typeFilters, states: stateFilters, actorId, actorRole, authority });
   }, [typeFilters, stateFilters, actorId, actorRole, authority]);
+
+  // Publish resolved control filters up so the preview canvas (Stage D) mirrors
+  // this panel exactly. Stable parent handler (useCallback). Replay is layered
+  // by the canvas separately, so only the control criteria are published here.
+  useEffect(() => {
+    onFilterChange?.({ types: typeFilters, states: stateFilters, actorId, actorRole, authority });
+  }, [onFilterChange, typeFilters, stateFilters, actorId, actorRole, authority]);
 
   const labelByAgentId = useMemo(
     () => new Map(coworkers.map((coworker) => [coworker.agentId, coworker.label])),
