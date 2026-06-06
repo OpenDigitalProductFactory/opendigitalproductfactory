@@ -119,7 +119,6 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   heartbeat_runtime_target: ["work_capsule_write"],
   release_runtime_target: ["work_capsule_write"],
   record_runtime_verification: ["work_capsule_write"],
-  verify_live_install_readiness: ["work_capsule_read"],
   list_nonprod_environment_leases: ["work_capsule_read"],
   claim_nonprod_environment_lease: ["work_capsule_write"],
   release_nonprod_environment_lease: ["work_capsule_write"],

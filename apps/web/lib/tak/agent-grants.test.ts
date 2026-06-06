@@ -81,12 +81,6 @@ describe("TOOL_TO_GRANTS — Deploy / Release entries", () => {
     expect(isToolAllowedByGrants("execute_promotion", ["sandbox_execute"])).toBe(false);
     expect(isToolAllowedByGrants("execute_promotion", [])).toBe(false);
   });
-
-  it("verify_live_install_readiness requires read-only work capsule access", () => {
-    expect(isToolAllowedByGrants("verify_live_install_readiness", ["work_capsule_read"])).toBe(true);
-    expect(isToolAllowedByGrants("verify_live_install_readiness", ["iac_execute"])).toBe(false);
-    expect(isToolAllowedByGrants("verify_live_install_readiness", [])).toBe(false);
-  });
 });
 
 describe("TOOL_TO_GRANTS — Marketing entries", () => {
