@@ -37,7 +37,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@testing-library/react-native": "^13.3.3",
+    "@testing-library/react-native": "^14.0.0",
     "@types/jest": "^30.0.0",
     "@types/react": "^19",
     "jest": "~30.4.2",
