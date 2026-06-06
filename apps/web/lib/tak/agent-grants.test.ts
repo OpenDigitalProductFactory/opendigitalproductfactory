@@ -493,6 +493,17 @@ describe("agent registry grant lookup", () => {
     expect(isToolAllowedByGrants("get_finance_period_summary", financeGrants ?? [])).toBe(true);
   });
 
+  it("lets the finance specialist drive browser-use for authenticated billing evidence", () => {
+    const financeGrants = getAgentToolGrants("finance-agent");
+
+    expect(financeGrants).toEqual(expect.arrayContaining(["browser_drive"]));
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_open", financeGrants ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_extract", financeGrants ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_screenshot", financeGrants ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_act", financeGrants ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_close", financeGrants ?? [])).toBe(true);
+  });
+
   it("lets the build specialist use the read-only code graph tools", () => {
     const bySlug = getAgentToolGrants("build-specialist");
     const byRegistryId = getAgentToolGrants("AGT-WS-BUILD");
