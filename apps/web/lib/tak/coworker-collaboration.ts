@@ -1,17 +1,20 @@
 /**
  * EP-A2A — Coworker collaboration core (2026-06-04 spec, Slice 1).
  *
- * Shared logic behind the governed `request_coworker` (coworker-initiated
- * handoff) and `summon_coworker` (user/UI-initiated) surfaces. Reuses the
- * existing `spawnWorkThread` machinery and emits a VISIBLE `collaboration:*`
- * event on the parent thread's channel so the user's coworker panel renders the
- * handoff/summon inline (closing G1/G2). Depth/fan-out caps are inherited from
+ * Shared logic behind the governed `request_coworker` (delegate a scoped
+ * sub-task to a peer) and `summon_coworker` (bring a peer into the conversation)
+ * surfaces. BOTH are coworker-initiated: the active coworker decides which peers
+ * to bring in and what to task them with — the human never picks or tasks peers
+ * (corrected 2026-06-06). Reuses the existing `spawnWorkThread` machinery and
+ * emits a VISIBLE `collaboration:*` event on the parent thread's channel so the
+ * user's coworker panel renders the handoff/summon inline as visibility only
+ * (closing G1/G2). Depth/fan-out caps are inherited from
  * `spawnWorkThread` (depth-1, max-5 children) — so tier-2 is supported now;
  * tier-3 awaits depth-2 spawn support (tracked for Slice 2+).
  *
- * Authority note: Slice 1 makes collaboration VISIBLE and (for the coworker
- * path) proposal-eligible. Hard delegatesTo/escalatesTo denial + DelegationChain
- * hop writes are Slice 2, layered on the existing `delegation-authority.ts`.
+ * Authority note: Slice 1 makes collaboration VISIBLE and proposal-eligible.
+ * Hard delegatesTo/escalatesTo denial + DelegationChain hop writes are Slice 2,
+ * layered on the existing `delegation-authority.ts`.
  */
 import { randomUUID } from "crypto";
 import { prisma } from "@dpf/db";
@@ -138,6 +141,8 @@ export type SummonCoworkerInput = {
   targetAgent: string;
   objective: string;
   tier?: 2 | 3;
+  /** The active coworker that summoned the peer, for attribution. */
+  callerAgentId?: string | null;
   byUserId?: string;
   routeContext?: string;
 };
@@ -213,9 +218,10 @@ export async function requestCoworker(
 }
 
 /**
- * The user (or a coworker on the user's behalf) brings a specific coworker into
- * the conversation as a tier-2 participant. Spawns a targeted child thread and
- * emits `collaboration:summon`.
+ * The active coworker brings a specific peer into the conversation as a tier-2
+ * participant to address part of the work. Spawns a targeted child thread and
+ * emits `collaboration:summon` so the user SEES the peer being brought in
+ * (visibility only — the human does not initiate summons).
  */
 export async function summonCoworker(
   input: SummonCoworkerInput,
@@ -239,7 +245,7 @@ export async function summonCoworker(
   const byUserId = input.byUserId ?? userId;
   await persistProvenance(taskRunId, {
     kind: "summon",
-    fromAgentId: null,
+    fromAgentId: input.callerAgentId ?? null,
     toAgentId: target.agentId,
     enteredVia: "summon",
     tier,
@@ -250,6 +256,7 @@ export async function summonCoworker(
     type: "collaboration:summon",
     parentThreadId: input.parentThreadId,
     childThreadId: child.id,
+    ...(input.callerAgentId ? { fromAgentId: input.callerAgentId } : {}),
     summonedAgentId: target.agentId,
     tier,
     byUserId,

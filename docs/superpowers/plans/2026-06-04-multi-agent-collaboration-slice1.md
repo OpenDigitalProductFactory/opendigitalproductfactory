@@ -9,7 +9,7 @@
 
 ## Outcome
 
-A coworker can request a named peer/sub-agent and the user **sees the handoff inline** with a question-packet summary; the user can **summon a specific coworker** as a tier-2 participant from the chat. Every handoff resolves to a real `AgentEvent` + `TaskRun` (trace integrity). Pure projection + two governed tools + bus discriminants + UI — no schema migration.
+The active coworker can request or summon a named peer/sub-agent and the user **sees that activity inline** with a one-line summary of what each peer is tasked with. Choosing and tasking peers is the active coworker's job; the user-facing surface is **visibility only** (no picker, dropdown, or objective entry — corrected 2026-06-06). Every handoff/summon resolves to a real `AgentEvent` + `TaskRun` (trace integrity). Pure projection + two coworker-initiated governed tools + bus discriminants + read-only UI — no schema migration.
 
 ## Phase 1 — Canonical event discriminants (foundation seam)
 
@@ -40,9 +40,9 @@ Gate: typecheck + vitest.
 ## Phase 4 — `AgentCoworkerPanel` UI
 
 9. **`apps/web/components/agent/ConversationParticipantRail.tsx`** (new) — compact roster: owner + active peers/sub-agents, per-participant `state` chip via report-kit `StatusBadge` + `statusColors` (no hand-rolled badge, AGENTS.md §12). Tier shown as depth indicator. Reduced-motion + ARIA roles/labels first-class.
-10. **`apps/web/components/agent/HandoffCard.tsx`** (new) — inline message-stream card rendering `collaboration:handoff` ("🤝 *A* asked *B* to …") with expandable question-packet summary + link into the sub-task. Theme tokens only.
-11. **`apps/web/components/agent/CoworkerSummonPicker.tsx`** (new) — coworker picker backed by the agent registry / AgentCard projection, gated by the viewer's capabilities; `@mention` affordance in the input. Wire to a `summonCoworker` server action calling `summon_coworker`.
-12. **`apps/web/components/agent/AgentCoworkerPanel.tsx`** — consume the existing `/api/agent/stream` SSE; merge `collaboration:*` events into participant state + render the rail, handoff cards, and picker. **No parallel WebSocket.**
+10. **`apps/web/components/agent/HandoffCard.tsx`** (new) — inline message-stream card rendering `collaboration:handoff` ("*A* asked *B* to …") with the question-packet summary + link into the sub-task. Theme tokens + lucide icons only.
+11. **~~`CoworkerSummonPicker.tsx`~~ (removed 2026-06-06).** The original plan built a human picker (coworker dropdown + objective field) wired to a user-facing summon action. Per Mark's correction, choosing/tasking peers is the active coworker's responsibility, not the human's — so there is no picker. Summon is a coworker-initiated MCP tool (`summon_coworker`); the user-facing surface is the read-only `CollaborationActivityPanel`.
+12. **`apps/web/components/agent/AgentCoworkerPanel.tsx`** — consume the existing `/api/agent/stream` SSE; merge `collaboration:*` events into participant state + render the read-only collaboration disclosure (roster + handoff/summon/return cards), each attributed to the active coworker as source. **No parallel WebSocket. No human entry controls.**
 13. **Vitest/component tests** — rail renders roster from projection; reduced-motion renders static state chips with labels (axe-core pass); handoff card has no dead link (trace-integrity).
 
 Gate: typecheck + vitest.
@@ -50,7 +50,7 @@ Gate: typecheck + vitest.
 ## Phase 5 — Build gate + UX verification (final)
 
 14. `cd apps/web && npx next build` (zero errors) routed through the canonical local install or shared local-CI convergence sandbox (AGENTS.md §5) — not the worktree harness.
-15. **UX verification** on the running portal: drive a conversation where a coworker calls a peer; confirm the handoff renders inline with the question-packet summary and the participant rail updates; summon a second coworker as tier-2 and confirm it joins. Capture as dynamic-analysis evidence (drove X / observed Y / signed off Z), per founder feedback — not screenshots.
+15. **UX verification** on the running portal: drive a conversation where the active coworker calls a peer and brings in a second coworker as tier-2; confirm both render inline with their one-line task summaries, attributed to the active coworker (not "You"), and that the roster updates. Confirm there is no human picker/dropdown/objective control on the panel. Capture as dynamic-analysis evidence (drove X / observed Y / signed off Z), per founder feedback — not screenshots.
 16. `record_execution_evidence` for build + UX gates, naming the substrate.
 
 ## PR hygiene (AGENTS.md §4)
