@@ -445,6 +445,11 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       "This page displays finance operations data classified as confidential: invoices, bills, expense claims, recurring schedules, collections posture, tax remittance readiness, and accounting handoff boundaries. Treat finance figures as evidence-backed operational summaries, not guesses. Use canonical finance records for financial answers, call out open or incomplete records, and keep tax/legal recommendations separate from verified transaction totals.",
     domainTools: [
       "get_finance_period_summary",
+      "mcp-browser-use__browse_open",
+      "mcp-browser-use__browse_act",
+      "mcp-browser-use__browse_extract",
+      "mcp-browser-use__browse_screenshot",
+      "mcp-browser-use__browse_close",
       "search_public_web",
       "fetch_public_website",
       "wiki_query",
@@ -464,6 +469,12 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
         description: "Summarize finance configuration, recurring billing, and handoff boundaries",
         capability: "view_finance",
         prompt: "Summarize our current finance operating posture and where tax or accounting handoffs still need clarification.",
+      },
+      {
+        label: "Retrieve billing portal costs",
+        description: "Use the governed browser to collect subscription cost, renewal, and invoice evidence",
+        capability: "view_finance",
+        prompt: "Use browser-use to retrieve current provider and subscription billing details from the relevant billing portal. Extract plan name, amount, currency, cadence, renewal date, invoice or receipt evidence, and any access blocker. Do not change plans, submit payments, or update external account settings. If the portal cannot resolve a required field, queue the human ask with the exact missing fields.",
       },
       {
         label: "Review tax setup",
