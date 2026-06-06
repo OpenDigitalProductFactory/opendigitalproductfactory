@@ -567,7 +567,9 @@ export function BackupsClient({
                     color: "var(--dpf-text)",
                   }}
                 >
-                  {openLog.data.logTail ?? "(log empty)"}
+                  {openLog.data.logTail && openLog.data.logTail.trim().length > 0
+                    ? openLog.data.logTail
+                    : "(log empty)"}
                 </pre>
               </>
             )}

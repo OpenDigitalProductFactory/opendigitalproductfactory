@@ -31,7 +31,18 @@
 
 set -eu
 
-log() { printf '[backup-trace] %s\n' "$*"; }
+# Emit each trace line to stdout (captured by the TS orchestrator's console)
+# AND mirror it into $LOG_FILE so the admin "View log" drawer has meaningful
+# content. Without the file mirror, log.txt only ever held pg_dump's stderr —
+# which is empty on a successful dump, leaving the operator with a blank log.
+# LOG_FILE is set later; the guard tolerates the early prereq window before it
+# exists, and `|| true` keeps `set -e` from tripping on the mirror write.
+log() {
+  printf '[backup-trace] %s\n' "$*"
+  if [ -n "${LOG_FILE:-}" ]; then
+    printf '[backup-trace] %s\n' "$*" >> "$LOG_FILE" 2>/dev/null || true
+  fi
+}
 fail() {
   log "failed: $1"
   exit "${2:-1}"
@@ -67,7 +78,9 @@ log "pg_version=$PG_VERSION"
 # Run pg_dump inside the postgres container; stream output to a host file.
 # Custom format (-Fc) is compressed, supports selective restore, and is what
 # the existing promoter script uses (scripts/promote.sh:157).
-if docker exec "$DB_CONTAINER" pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB" > "$DUMP_FILE" 2> "$LOG_FILE"; then
+# Append (2>>) rather than truncate so the [backup-trace] lines already mirrored
+# into log.txt survive; pg_dump's stderr (empty on success) is added after them.
+if docker exec "$DB_CONTAINER" pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB" > "$DUMP_FILE" 2>> "$LOG_FILE"; then
   log "pg_dump succeeded size=$(wc -c < "$DUMP_FILE")"
 else
   EXIT=$?
