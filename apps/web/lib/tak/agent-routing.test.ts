@@ -64,8 +64,12 @@ describe("resolveAgentForRoute", () => {
     expect(result.systemPrompt).toContain("fetch_public_website");
     expect(result.systemPrompt).toContain("DPF tax processing proposal");
     expect(result.systemPrompt).toContain("get_finance_period_summary");
+    expect(result.systemPrompt).toContain("browser-use");
+    expect(result.systemPrompt).toContain("billing portal");
+    expect(result.systemPrompt).toContain("queue the human ask");
     expect(result.skills.some((skill) => skill.label === "Income vs expenses this month")).toBe(true);
     expect(result.skills.some((skill) => skill.label === "Research tax processing proposal")).toBe(true);
+    expect(result.skills.some((skill) => skill.label === "Retrieve billing portal costs")).toBe(true);
   });
 
   it("returns canAssist=false when platformRole is null on gated route", () => {
