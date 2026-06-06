@@ -41,12 +41,20 @@ import {
   updateCellsAction,
   deleteRowAction,
 } from "@/lib/actions/workbooks";
+import { updatePlatformCellsAction } from "@/lib/actions/platform-grid";
 
 export interface WorkbookGridProps {
+  /** custom WorkbookTable id (TBL-*) or, for platform data, the entity type. */
   tableId: string;
   columns: ColumnDefinition[];
   rows: GridRow[];
   capabilities: GridCapabilities;
+  /**
+   * "custom" = user-defined WorkbookTable (default).
+   * "platform" = a live grid over platform records (e.g. backlog); edits route
+   * through the domain's validated update action, not the workbook store.
+   */
+  source?: "custom" | "platform";
 }
 
 function toRowData(rows: GridRow[]): GridRowData[] {
@@ -130,7 +138,13 @@ function compareValues(a: CellValue, b: CellValue): number {
   return av < bv ? -1 : 1;
 }
 
-export function WorkbookGrid({ tableId, columns, rows, capabilities }: WorkbookGridProps) {
+export function WorkbookGrid({
+  tableId,
+  columns,
+  rows,
+  capabilities,
+  source = "custom",
+}: WorkbookGridProps) {
   const [rowData, setRowData] = useState<GridRowData[]>(() => toRowData(rows));
   const [sortColumns, setSortColumns] = useState<readonly SortColumn[]>([]);
   const [selectedRows, setSelectedRows] = useState<ReadonlySet<string>>(() => new Set());
@@ -158,10 +172,13 @@ export function WorkbookGrid({ tableId, columns, rows, capabilities }: WorkbookG
   const persistCell = useCallback(
     async (rowId: string, columnId: string, value: CellValue) => {
       setError(null);
-      const res = await updateCellsAction(tableId, rowId, { [columnId]: value });
+      const res =
+        source === "platform"
+          ? await updatePlatformCellsAction(tableId, rowId, { [columnId]: value })
+          : await updateCellsAction(tableId, rowId, { [columnId]: value });
       if (!res.ok) setError(res.error);
     },
-    [tableId],
+    [tableId, source],
   );
 
   const onRowsChange = useCallback(
