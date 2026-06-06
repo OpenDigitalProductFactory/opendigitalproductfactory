@@ -13495,7 +13495,7 @@ export async function executeTool(
       return {
         success: true,
         entityId: result.assessmentId,
-        message: `Submitted ${result.needIds.length} capability need${result.needIds.length === 1 ? "" : "s"} for review.`,
+        message: `Submitted ${result.needIds.length} capability need${result.needIds.length === 1 ? "" : "s"} and filed ${result.backlogItemIds?.length ?? 0} to the backlog for triage.`,
         data: result,
       };
     }

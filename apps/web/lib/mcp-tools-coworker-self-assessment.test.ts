@@ -34,6 +34,7 @@ vi.mock("@/lib/coworker-self-assessment/assessment-service", () => ({
   submitCoworkerSelfAssessment: vi.fn().mockResolvedValue({
     assessmentId: "CWSA-000001",
     needIds: ["CWN-000001"],
+    backlogItemIds: ["BI-CWN-000001"],
   }),
 }));
 
