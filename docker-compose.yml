@@ -340,6 +340,10 @@ services:
       - "8500:8500"
     volumes:
       - browser_evidence:/evidence
+      # Service-account Chromium user-data-dirs at /profiles/<principalId>/<siteKey>/.
+      # Secret impersonation material — sidecar is the only writer; the portal
+      # never mounts this volume (EP-BROWSER-DRIVE, spec §8.9).
+      - browser_profiles:/profiles
     environment:
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
       LLM_MODEL: ${BROWSER_USE_MODEL:-gpt-4o}
@@ -776,6 +780,11 @@ volumes:
   qdrant_data:
   dpf-source-code:
   browser_evidence:
+  # Service-account browser profiles (EP-BROWSER-DRIVE, spec §8.9). Holds
+  # Chromium user-data-dirs whose cookie jars are impersonation-capable —
+  # SECRET material, not ordinary evidence. Sidecar-only: never mounted into
+  # the portal (cf. browser_evidence, which the portal mounts read-only).
+  browser_profiles:
   dev_pgdata:
   dev_neo4jdata:
   dev_qdrant_data:

@@ -310,6 +310,10 @@ describe("dpf-platform mirror-field invariant", () => {
     expect(uxFitReview?.triggerPattern).toContain("UX fit");
     expect(uxFitReview?.triggerPattern).toContain("new route");
     expect(uxFitReview?.triggerPattern).toContain("dashboard");
+    expect(uxFitReview?.triggerPattern).toContain("first viewport");
+    expect(uxFitReview?.allowedTools).toEqual(expect.arrayContaining([
+      "mcp__dpf__search_design_intelligence",
+    ]));
     expect(uxFitReview?.enforces).toEqual(expect.arrayContaining([
       "kernel/principles/no-hardcoded-colors",
       "kernel/principles/compose-report-kit-for-reporting-ux",

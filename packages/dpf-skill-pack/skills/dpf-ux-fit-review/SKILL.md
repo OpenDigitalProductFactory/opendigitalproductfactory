@@ -1,22 +1,22 @@
 ---
 # Single fields shared by both surfaces
 name: dpf-ux-fit-review
-description: "Use when reviewing, planning, or implementing UI-impacting DPF work for UX/IA fit before code or PR handoff. Triggers on UX fit, UI fit, design fit, feature fit, new route, new tab, dashboard, cockpit, metric tile, KPI, status badge, card, coworker launcher, empty state, navigation change, portal UX, customer/workspace/business/platform surface, or any feature that could add another dashboard, tab row, component family, or confusing portal entry point. Produces a fit decision with required guardrails and concrete plan/spec edits."
+description: "Use when reviewing, planning, or implementing UI-impacting DPF work for UX/IA fit before code or PR handoff. Triggers on UX fit, UI fit, design fit, feature fit, new route, new tab, first viewport, guided work, dashboard, cockpit, metric tile, KPI, status badge, card, coworker launcher, empty state, navigation change, portal UX, customer/workspace/business/platform surface, or any feature that could add another dashboard, tab row, component family, or confusing portal entry point."
 
 # Agent Skills standard fields (Surface A - Claude Code / Codex)
 disable-model-invocation: false
 user-invocable: true
-allowed-tools: Read Grep Glob Bash mcp__dpf__search_specs_and_plans mcp__dpf__wiki_query mcp__dpf__list_epics mcp__dpf__list_backlog_items
+allowed-tools: Read Grep Glob Bash mcp__dpf__search_specs_and_plans mcp__dpf__search_design_intelligence mcp__dpf__wiki_query mcp__dpf__list_epics mcp__dpf__list_backlog_items
 
 # DPF coworker fields (Surface B - in-portal seed loader)
 category: governance
 assignTo: ["ea-architect", "build-specialist", "platform-engineer"]
 capability: null
 taskType: review
-triggerPattern: "UX fit|UI fit|design fit|feature fit|new route|new tab|dashboard|cockpit|metric tile|KPI|status badge|card|coworker launcher|empty state|navigation change|portal UX|customer surface|workspace surface|business surface|platform surface"
+triggerPattern: "UX fit|UI fit|design fit|feature fit|new route|new tab|first viewport|guided work|dashboard|cockpit|metric tile|KPI|status badge|card|coworker launcher|empty state|navigation change|portal UX|customer surface|workspace surface|business surface|platform surface"
 userInvocable: true
 agentInvocable: true
-allowedTools: ["Read", "Grep", "Glob", "Bash", "mcp__dpf__search_specs_and_plans", "mcp__dpf__wiki_query", "mcp__dpf__list_epics", "mcp__dpf__list_backlog_items"]
+allowedTools: ["Read", "Grep", "Glob", "Bash", "mcp__dpf__search_specs_and_plans", "mcp__dpf__search_design_intelligence", "mcp__dpf__wiki_query", "mcp__dpf__list_epics", "mcp__dpf__list_backlog_items"]
 composesFrom: ["dpf-architecture-review", "dpf-verify-substrate-first"]
 contextRequirements: ["AGENTS.md readable; docs/platform-usability-standards.md readable; portal UX simplification spine readable when present"]
 riskBand: low
@@ -60,6 +60,7 @@ This is a fit review, not a visual taste review. Decide where the feature belong
 | Portal UX spine | `docs/superpowers/plans/2026-05-26-portal-ux-simplification-spine.md` | Current target areas, persona gates, UX feature fit gate |
 | Feature spec/plan | User-provided path or Build Studio artifact | Proposed route, component, data, AI, and verification changes |
 | Existing specs/plans | `mcp__dpf__search_specs_and_plans` | Prior design decisions the feature should extend |
+| Design intelligence | `mcp__dpf__search_design_intelligence` | Current UX/reporting/chart/product recommendations to compare against the proposed pattern |
 | Existing components | `rg` / `Grep` over `apps/web/components` and `apps/web/app` | Reuse candidates, duplicate patterns, and route families |
 | Report-kit | `apps/web/components/ui/report-kit/README.md` | Canonical reporting components for status badges, tables, KPI cards, filters, charts |
 
@@ -105,6 +106,8 @@ This is a fit review, not a visual taste review. Decide where the feature belong
    - `defer` - the feature needs data/source-truth/backlog/route work first.
    - `reject` - the feature duplicates an existing home or violates a durable UX rule.
 
+11. **Store the review.** Put the fit decision where the next worker will actually see it: in the feature plan, linked audit, spec section, or PR body. Do not leave the result only in chat.
+
 ## Required Output
 
 ```
@@ -124,6 +127,7 @@ This is a fit review, not a visual taste review. Decide where the feature belong
   - <edit 2>
 - Evidence before merge:
   - <route tests, theme scan, browser route, viewport, data fixture>
+- Captured in: <plan/audit/spec/PR path or section>
 ```
 
 ## Worked Example
