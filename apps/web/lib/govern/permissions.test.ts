@@ -68,11 +68,12 @@ describe("getWorkspaceTiles()", () => {
     expect(tiles).not.toContain("inventory");
   });
 
-  it("superuser gets all 13 top-level tiles regardless of role", () => {
+  it("superuser gets all 14 top-level tiles regardless of role", () => {
     const tiles = getWorkspaceTiles(superuser);
 
-    expect(tiles.length).toBe(13);
+    expect(tiles.length).toBe(14);
     expect(tiles.map((tile) => tile.key)).toContain("documents");
+    expect(tiles.map((tile) => tile.key)).toContain("workbooks");
   });
 });
 
