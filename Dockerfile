@@ -183,4 +183,14 @@ COPY Dockerfile /promoter/portal.Dockerfile
 RUN chmod +x /promoter/promote.sh
 
 EXPOSE 3000
-CMD ["node", "apps/web/server.js"]
+# Self-upgrade image-identity guard (BI-5B6C1C35, spec §4.3): the running portal
+# must carry the identity of the bytes it contains. Compose resolves
+# `DEPLOYED_SHA: ${DEPLOYED_SHA:-${DPF_VERSION:-}}` from the SHELL env at
+# `up` time, which is empty on a normal install/restart (neither var is exported)
+# — leaving `printenv DEPLOYED_SHA` blank on the Live portal and silencing the
+# only env-level drift signal. The image already bakes its true identity into
+# /app/.dpf-image-version (the DPF_VERSION git SHA when promoted, else the source
+# content hash); seed DEPLOYED_SHA from that baked file whenever the env is unset
+# so the runtime always reports the identity of its own bytes regardless of how
+# it was started. An explicit DEPLOYED_SHA from the deploy pipeline still wins.
+CMD ["sh", "-c", "if [ -z \"$DEPLOYED_SHA\" ] && [ -s /app/.dpf-image-version ]; then DEPLOYED_SHA=\"$(tr -d '[:space:]' < /app/.dpf-image-version)\"; export DEPLOYED_SHA; fi; exec node apps/web/server.js"]
