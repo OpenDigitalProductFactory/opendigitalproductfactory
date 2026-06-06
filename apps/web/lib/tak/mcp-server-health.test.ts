@@ -104,9 +104,10 @@ describe("checkMcpServerHealth", () => {
 
     it("accepts a valid MCP runner basename even with absolute path", async () => {
       // The allowlist matches on basename, so a fully-qualified
-      // `/usr/local/bin/npx` is still accepted. We only assert that
-      // safeSpawn doesn't reject. The mocked process replies with a minimal
-      // initialize response so the health check resolves immediately.
+      // `/usr/local/bin/npx` is still accepted (not rejected by safeSpawn).
+      // The mocked lazy-node spawn answers the initialize handshake immediately
+      // so the check resolves in milliseconds instead of waiting out the real
+      // 10s stdio timeout.
       mockSpawn.mockImplementation(
         () => {
           const proc = new EventEmitter() as EventEmitter & {
@@ -120,7 +121,13 @@ describe("checkMcpServerHealth", () => {
               queueMicrotask(() => {
                 proc.stdout.emit(
                   "data",
-                  Buffer.from(JSON.stringify({ result: { protocolVersion: "2024-11-05" } }) + "\n"),
+                  Buffer.from(
+                    JSON.stringify({
+                      jsonrpc: "2.0",
+                      id: 1,
+                      result: { protocolVersion: "2024-11-05" },
+                    }) + "\n",
+                  ),
                 );
               });
             }),
@@ -134,8 +141,10 @@ describe("checkMcpServerHealth", () => {
         command: "/usr/local/bin/npx",
         args: ["-y", "some-server"],
       });
-      expect(result.healthy).toBe(true);
+      // The valid basename is accepted (no allowlist rejection) and the
+      // handshake completes.
       expect(result.error ?? "").not.toMatch(/allowlist/);
+      expect(result.healthy).toBe(true);
     });
   });
 });
