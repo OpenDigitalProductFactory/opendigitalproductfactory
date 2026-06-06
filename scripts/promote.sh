@@ -187,6 +187,11 @@ if [[ $_dry_run -eq 0 ]]; then
   _deployed_sha=""
   for _i in $(seq 1 30); do
     _deployed_sha=$(curl -fsS "${PROMOTE_HEALTH_URL}/sha" 2>/dev/null | tr -d '[:space:]' || true)
+    # An EMPTY /sha is a hard failure, not a transient miss to retry: DEPLOYED_SHA
+    # is unpopulated in the running image, so it can never report an identity no
+    # matter how long we wait. Break immediately and fail loud below rather than
+    # spinning the full retry budget (which would blow the verify timeout).
+    [[ -z "$_deployed_sha" ]] && break
     if [[ "$_deployed_sha" == "$_built_sha" ]]; then _match=1; break; fi
     sleep 3
   done
