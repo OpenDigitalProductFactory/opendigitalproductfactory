@@ -27,49 +27,49 @@ describe("ApprovalCard", () => {
     jest.clearAllMocks();
   });
 
-  it("renders action type", () => {
-    const { getByText } = render(
+  it("renders action type", async () => {
+    const { getByText } = await render(
       <ApprovalCard approval={fakeApproval} onDecide={mockDecide} />,
     );
     expect(getByText("create-backlog-item")).toBeTruthy();
   });
 
-  it("renders parameter summary", () => {
-    const { getByText } = render(
+  it("renders parameter summary", async () => {
+    const { getByText } = await render(
       <ApprovalCard approval={fakeApproval} onDecide={mockDecide} />,
     );
     expect(getByText(/title: New feature/)).toBeTruthy();
   });
 
-  it("renders agent name", () => {
-    const { getByText } = render(
+  it("renders agent name", async () => {
+    const { getByText } = await render(
       <ApprovalCard approval={fakeApproval} onDecide={mockDecide} />,
     );
     expect(getByText("Agent: ops-coordinator")).toBeTruthy();
   });
 
-  it("calls onDecide with approve when Approve pressed", () => {
-    const { getByText } = render(
+  it("calls onDecide with approve when Approve pressed", async () => {
+    const { getByText } = await render(
       <ApprovalCard approval={fakeApproval} onDecide={mockDecide} />,
     );
-    fireEvent.press(getByText("Approve"));
+    await fireEvent.press(getByText("Approve"));
     expect(mockDecide).toHaveBeenCalledWith("prop-1", "approve", undefined);
   });
 
-  it("calls onDecide with reject when Reject pressed", () => {
-    const { getByText } = render(
+  it("calls onDecide with reject when Reject pressed", async () => {
+    const { getByText } = await render(
       <ApprovalCard approval={fakeApproval} onDecide={mockDecide} />,
     );
-    fireEvent.press(getByText("Reject"));
+    await fireEvent.press(getByText("Reject"));
     expect(mockDecide).toHaveBeenCalledWith("prop-1", "reject", undefined);
   });
 
-  it("passes rationale when provided", () => {
-    const { getByText, getByLabelText } = render(
+  it("passes rationale when provided", async () => {
+    const { getByText, getByLabelText } = await render(
       <ApprovalCard approval={fakeApproval} onDecide={mockDecide} />,
     );
-    fireEvent.changeText(getByLabelText("Rationale"), "Looks good to me");
-    fireEvent.press(getByText("Approve"));
+    await fireEvent.changeText(getByLabelText("Rationale"), "Looks good to me");
+    await fireEvent.press(getByText("Approve"));
     expect(mockDecide).toHaveBeenCalledWith(
       "prop-1",
       "approve",
