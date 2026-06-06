@@ -328,8 +328,15 @@ bridge_args=(
 PLAN_TMP="$(mktemp)"
 trap 'rm -f "$PLAN_TMP"' EXIT
 if ! pnpm "${bridge_args[@]}" > "$PLAN_TMP" 2>&1; then
-  fail "compute-plan failed; cannot proceed with bootstrap."
+  warn "compute-plan failed; using standalone skill-pack updater fallback."
   cat "$PLAN_TMP" >&2
+  FALLBACK="$REPO_ROOT/packages/dpf-skill-pack/scripts/update-agent-toolchain.sh"
+  if [ -f "$FALLBACK" ]; then
+    fallback_args=(--mcp-url "$MCP_ENDPOINT")
+    [ "$DRY_RUN" -eq 1 ] && fallback_args+=(--dry-run)
+    exec bash "$FALLBACK" "${fallback_args[@]}"
+  fi
+  fail "Standalone updater missing at $FALLBACK; cannot proceed."
   exit 1
 fi
 if [ ! -s "$PLAN_TMP" ]; then
