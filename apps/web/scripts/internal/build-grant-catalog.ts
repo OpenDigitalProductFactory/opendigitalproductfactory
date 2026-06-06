@@ -34,10 +34,10 @@ const block = grantsSrc.match(/TOOL_TO_GRANTS:[^=]*= \{([\s\S]*?)\n\};/);
 const grantToTools: Record<string, string[]> = {};
 if (block) {
   for (const line of block[1].split("\n")) {
-    const m = line.match(/^\s*([a-zA-Z0-9_]+):\s*\[([^\]]*)\]/);
+    const m = line.match(/^\s*(?:"([^"]+)"|'([^']+)'|([a-zA-Z0-9_]+)):\s*\[([^\]]*)\]/);
     if (!m) continue;
-    const tool = m[1];
-    const gs = m[2].split(",").map((s) => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+    const tool = m[1] ?? m[2] ?? m[3];
+    const gs = m[4].split(",").map((s) => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
     for (const g of gs) {
       (grantToTools[g] ??= []).push(tool);
     }
