@@ -21,8 +21,6 @@
  * a typed-RESTORE confirmation already verified.
  */
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -33,9 +31,7 @@ import {
 } from "@/lib/operate/metrics";
 
 import { runPostgresBackup } from "./postgres-backup-runner";
-import { resolveManagedScriptPath } from "./managed-script-path";
-
-const execFileAsync = promisify(execFile);
+import { resolveManagedScriptPath, runManagedScript } from "./managed-script-path";
 
 const BACKUPS_ROOT = "/backups";
 const RESTORE_SCRIPT_NAME = "restore-postgres.sh";
@@ -140,28 +136,9 @@ async function runRestoreScript(
   scriptPath: string,
   env: NodeJS.ProcessEnv,
 ): Promise<ScriptOutcome> {
-  try {
-    const { stdout, stderr } = await execFileAsync(scriptPath, [], {
-      env,
-      timeout: RUNNER_TIMEOUT_MS,
-      maxBuffer: 8 * 1024 * 1024,
-    });
-    return { ok: true, stdout, stderr, exitCode: 0 };
-  } catch (err: unknown) {
-    const e = err as {
-      stdout?: string;
-      stderr?: string;
-      code?: number | string;
-      message?: string;
-    };
-    const exitCode = typeof e.code === "number" ? e.code : -1;
-    return {
-      ok: false,
-      stdout: e.stdout ?? "",
-      stderr: e.stderr ?? e.message ?? String(err),
-      exitCode,
-    };
-  }
+  // Routes through the shared /bin/sh chokepoint so the script need not carry
+  // the executable bit (which git-on-Windows + the Docker COPY both strip).
+  return runManagedScript(scriptPath, { env, timeoutMs: RUNNER_TIMEOUT_MS });
 }
 
 function summarizeScriptFailure(outcome: ScriptOutcome): string {
