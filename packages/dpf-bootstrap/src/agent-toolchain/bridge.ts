@@ -246,6 +246,7 @@ export function summarizePlan(plan: AgentToolchainPlan): string {
   parts.push(`codex=${plan.codexCliPresent ? "present" : "missing"}`);
   parts.push(`token=${plan.hasToken ? "present" : "missing"}`);
   parts.push(`codex-writes=${plan.codex?.writes.length ?? 0}`);
+  parts.push(`codex-convergence=${plan.codex?.convergence.length ?? 0}`);
   parts.push(`mcp-client-writes=${plan.mcpClientConfig.writes.length}`);
   parts.push(`claude-writes=${plan.claude?.writes.length ?? 0}`);
   parts.push(`memory-writes=${plan.memory.writes.length}`);
