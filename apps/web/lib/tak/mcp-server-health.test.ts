@@ -1,8 +1,15 @@
+import { EventEmitter } from "node:events";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { McpConnectionConfig } from "./mcp-server-types";
 
-vi.mock("child_process", () => ({
-  spawn: vi.fn(),
+const { mockSpawn } = vi.hoisted(() => ({
+  mockSpawn: vi.fn(),
+}));
+
+vi.mock("@/lib/shared/lazy-node", () => ({
+  lazyChildProcess: () => ({
+    spawn: mockSpawn,
+  }),
 }));
 
 import { checkMcpServerHealth } from "./mcp-server-health";
@@ -98,24 +105,22 @@ describe("checkMcpServerHealth", () => {
     it("accepts a valid MCP runner basename even with absolute path", async () => {
       // The allowlist matches on basename, so a fully-qualified
       // `/usr/local/bin/npx` is still accepted (not rejected by safeSpawn).
-      // The mocked runner answers the initialize handshake immediately so the
-      // check resolves in milliseconds instead of waiting out the real 10s
-      // stdio timeout — which exceeds vitest's 5s default test timeout and
-      // made this test fail spuriously (timeout race, not an allowlist reject).
-      const { spawn } = await import("child_process");
-      let onStdoutData: ((chunk: Buffer) => void) | undefined;
-      vi.mocked(spawn).mockImplementation(
-        () =>
-          ({
-            stdout: {
-              on: (event: string, cb: (chunk: Buffer) => void) => {
-                if (event === "data") onStdoutData = cb;
-              },
-            },
-            stdin: {
-              write: () => {
-                // Simulate the server replying to the initialize request.
-                onStdoutData?.(
+      // The mocked lazy-node spawn answers the initialize handshake immediately
+      // so the check resolves in milliseconds instead of waiting out the real
+      // 10s stdio timeout.
+      mockSpawn.mockImplementation(
+        () => {
+          const proc = new EventEmitter() as EventEmitter & {
+            stdout: EventEmitter;
+            stdin: { write: ReturnType<typeof vi.fn> };
+            kill: ReturnType<typeof vi.fn>;
+          };
+          proc.stdout = new EventEmitter();
+          proc.stdin = {
+            write: vi.fn(() => {
+              queueMicrotask(() => {
+                proc.stdout.emit(
+                  "data",
                   Buffer.from(
                     JSON.stringify({
                       jsonrpc: "2.0",
@@ -124,11 +129,12 @@ describe("checkMcpServerHealth", () => {
                     }) + "\n",
                   ),
                 );
-              },
-            },
-            on: vi.fn(),
-            kill: vi.fn(),
-          }) as unknown as ReturnType<typeof spawn>,
+              });
+            }),
+          };
+          proc.kill = vi.fn();
+          return proc as never;
+        },
       );
       const result = await checkMcpServerHealth({
         transport: "stdio",
