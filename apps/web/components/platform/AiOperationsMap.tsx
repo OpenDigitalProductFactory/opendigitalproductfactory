@@ -38,6 +38,7 @@ import {
 import { StalledTaskRecoveryActions } from "./StalledTaskRecoveryActions";
 import { A2aInteractionsPanel } from "./A2aInteractionsPanel";
 import { DeliberationLensPanel } from "./DeliberationLensPanel";
+import { OperationsTopologyCanvas } from "./OperationsTopologyCanvas";
 
 type SelectedItem =
   | { kind: "station"; id: string }
@@ -260,6 +261,13 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
     [],
   );
 
+  // Stage D temporary preview switch: render the unified OperationsTopologyCanvas
+  // ABOVE the legacy panels so operators can verify parity side-by-side against
+  // the canonical runtime before Stage E cutover. Default OFF; the legacy panels
+  // remain the authoritative surface and the replay source. This toggle is
+  // explicitly temporary and is removed at cutover (spec §7 Stage D/E).
+  const [canvasPreview, setCanvasPreview] = useState(false);
+
   const selectedStation = selected.kind === "station"
     ? template.stations.find((station) => station.id === selected.id) ?? null
     : null;
@@ -301,7 +309,44 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
           </p>
         </header>
 
-        <DimensionToggle dimension={dimension} onChange={setDimension} />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <DimensionToggle dimension={dimension} onChange={setDimension} />
+          <button
+            type="button"
+            data-canvas-preview-toggle
+            aria-pressed={canvasPreview}
+            onClick={() => setCanvasPreview((value) => !value)}
+            className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)] ${
+              canvasPreview
+                ? "border-[var(--dpf-accent)] bg-[var(--dpf-accent)]/10 text-[var(--dpf-text)]"
+                : "border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+            }`}
+          >
+            <span
+              aria-hidden
+              className={`h-1.5 w-1.5 rounded-full ${canvasPreview ? "bg-[var(--dpf-accent)]" : "bg-[var(--dpf-muted)]"}`}
+            />
+            {canvasPreview ? "Unified canvas: on" : "Unified canvas (preview)"}
+          </button>
+        </div>
+
+        {canvasPreview ? (
+          <section
+            data-canvas-preview
+            aria-label="Unified operations topology (preview)"
+            className="space-y-2 rounded-lg border border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] p-3"
+          >
+            <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
+              Unified canvas · preview — verifying parity against the panels below
+            </p>
+            <OperationsTopologyCanvas
+              topology={routingTopology}
+              dimension={dimension}
+              replayTime={sharedReplay?.time ?? null}
+              replayRange={sharedReplay?.range ?? null}
+            />
+          </section>
+        ) : null}
 
         {showProvider ? (
           <RoutingTopologyPanel routingTopology={routingTopology} onReplayChange={handleReplayChange} />
