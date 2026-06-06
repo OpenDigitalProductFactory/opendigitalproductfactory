@@ -1108,6 +1108,25 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: false,
   },
   {
+    name: "verify_live_install_readiness",
+    description:
+      "Preflight a feature against the live install before driving its happy path. Returns the same deterministic verdict as `pnpm verify:preflight` — CAN-TEST (served bytes contain the feature commit), MUST-ADVANCE (behind/unprovable → advance via the governed self-upgrade path), or BLOCKED (no testable runtime → file a BI and stop) — plus one next action. Surface-agnostic: identical verdict logic for CLI and in-portal/Build Studio. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        featureSha: {
+          type: "string",
+          description:
+            "The commit the feature under test requires — a PR/BI merge SHA or a build's commit. Compared against the live install's served image identity.",
+        },
+      },
+      required: ["featureSha"],
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
     name: "record_execution_evidence",
     description: "Attach an evidence record to a backlog item (test pass/fail, build pass/fail, ux verification, spec review, manual check, external link). Writes an evidence activity row; the cross-cutting audit lives in ToolExecution. Side-effecting.",
     inputSchema: {
@@ -6343,6 +6362,23 @@ export async function executeTool(
         success: true,
         message: `Found ${results.length} match(es).`,
         data: { results },
+      };
+    }
+
+    case "verify_live_install_readiness": {
+      const featureSha = String(params["featureSha"] ?? "").trim();
+      if (!featureSha)
+        return {
+          success: false,
+          error: "missing_feature_sha",
+          message: "featureSha is required (a PR/BI merge SHA or a build's commit).",
+        };
+      const { resolveLiveInstallReadiness } = await import("@/lib/verify/preflight-service");
+      const verdict = await resolveLiveInstallReadiness({ featureSha });
+      return {
+        success: true,
+        message: `${verdict.verdict}: ${verdict.reason}`,
+        data: verdict,
       };
     }
 

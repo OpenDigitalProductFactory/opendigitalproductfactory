@@ -1,0 +1,76 @@
+import { describe, expect, it } from "vitest";
+import type { ImageVersion } from "@/lib/platform/image-version";
+import {
+  resolveLiveInstallReadiness,
+  type ReadinessDeps,
+} from "./preflight-service";
+
+const FEATURE = "a".repeat(40);
+const SERVED = "b".repeat(40);
+
+function deps(over: Partial<ReadinessDeps>): ReadinessDeps {
+  return {
+    readImage: async (): Promise<ImageVersion | null> => ({ raw: SERVED, source: "git-sha" }),
+    isAncestor: async () => null,
+    ...over,
+  };
+}
+
+describe("resolveLiveInstallReadiness", () => {
+  it("CAN-TEST when the served git-sha image contains the feature commit", async () => {
+    const r = await resolveLiveInstallReadiness(
+      { featureSha: FEATURE },
+      deps({ isAncestor: async () => true }),
+    );
+    expect(r.verdict).toBe("CAN-TEST");
+    expect(r.nextAction.kind).toBe("drive-happy-path");
+  });
+
+  it("MUST-ADVANCE when the served git-sha image does not contain the feature commit", async () => {
+    const r = await resolveLiveInstallReadiness(
+      { featureSha: FEATURE },
+      deps({ isAncestor: async () => false }),
+    );
+    expect(r.verdict).toBe("MUST-ADVANCE");
+  });
+
+  it("BLOCKED when ancestry is uncomputable (git unavailable in-portal)", async () => {
+    const r = await resolveLiveInstallReadiness(
+      { featureSha: FEATURE },
+      deps({ isAncestor: async () => null }),
+    );
+    expect(r.verdict).toBe("BLOCKED");
+  });
+
+  it("MUST-ADVANCE when the served identity is a content-hash (not comparable)", async () => {
+    const r = await resolveLiveInstallReadiness(
+      { featureSha: FEATURE },
+      deps({ readImage: async () => ({ raw: "c".repeat(64), source: "content-hash" }) }),
+    );
+    expect(r.verdict).toBe("MUST-ADVANCE");
+  });
+
+  it("BLOCKED when there is no image marker (not a built image)", async () => {
+    const r = await resolveLiveInstallReadiness(
+      { featureSha: FEATURE },
+      deps({ readImage: async () => null }),
+    );
+    expect(r.verdict).toBe("BLOCKED");
+    expect(r.nextAction.kind).toBe("file-blocker-bi");
+  });
+
+  it("does not call ancestry when the image is not a git-sha", async () => {
+    let called = false;
+    await resolveLiveInstallReadiness(
+      { featureSha: FEATURE },
+      deps({
+        readImage: async () => ({ raw: "c".repeat(64), source: "content-hash" }),
+        isAncestor: async () => {
+          called = true;
+          return null;
+        },
+      }),
+    );
+    expect(called).toBe(false);
+  });
+});
