@@ -16,7 +16,14 @@ import {
   getLatestRun,
   getLatestSucceededRun,
 } from "@/lib/self-upgrade/run-store";
-import { runPromoter } from "@/lib/self-upgrade/promoter";
+import { runPromoter, isPromoterAvailable } from "@/lib/self-upgrade/promoter";
+import {
+  getCooldownUntil,
+  isInCooldown,
+  recordCooldown,
+  clearCooldown,
+  DEFAULT_COOLDOWN_MINUTES,
+} from "@/lib/self-upgrade/cooldown";
 import { emitUpgradeEvent } from "@/lib/self-upgrade/notifications";
 import {
   createSelfUpgradeRecoveryPoint,
@@ -64,8 +71,27 @@ export async function runSelfUpgrade(
   params: SelfUpgradeRunEventData,
 ): Promise<Record<string, unknown>> {
   const config = await getSelfUpgradeConfig();
+  const now = new Date();
+  const cooldownMinutes = config.cooldownMinutes ?? DEFAULT_COOLDOWN_MINUTES;
 
   if (!config.enabled && !params.dryRun) return { skipped: true, reason: "disabled" };
+
+  // Cooldown backoff. After a deferred or failed drain we set a cooldown so the
+  // NEXT attempt — from ANY trigger (scheduled cron, manual `ops/self-upgrade.run`
+  // event, autonomous deploy) — waits instead of re-draining the portal within
+  // minutes. This is what breaks the live draining↔normal cycle that refuses
+  // every MCP/UX action ~5 of every 6 minutes. Operator force / dry-run bypass
+  // it (the operator is asking now).
+  if (!params.dryRun && !params.force) {
+    const cooldownUntil = await getCooldownUntil();
+    if (isInCooldown(cooldownUntil, now)) {
+      return {
+        skipped: true,
+        reason: "cooldown",
+        cooldownUntil: cooldownUntil?.toISOString() ?? null,
+      };
+    }
+  }
   // The upgrade window ("whenever the storefront is closed", derived from
   // operating hours) gates ONLY the unattended scheduled poll. A manual operator
   // trigger means "upgrade now" — the operator has explicitly chosen this moment,
@@ -88,13 +114,31 @@ export async function runSelfUpgrade(
   // clock below.
   if (params.scheduled && !params.dryRun && !params.force) {
     const lastCheckedAt = await getLastCheckedAt();
-    if (!isCheckIntervalElapsed(lastCheckedAt, config.checkIntervalHours, new Date())) {
+    if (!isCheckIntervalElapsed(lastCheckedAt, config.checkIntervalHours, now)) {
       return { skipped: true, reason: "interval-not-elapsed" };
     }
   }
   // A real check is proceeding now — reset the interval clock (scheduled, manual,
   // or forced; never on dryRun).
-  if (!params.dryRun) await recordCheckedAt(new Date());
+  if (!params.dryRun) await recordCheckedAt(now);
+
+  // Promoter-availability precheck — skip BEFORE any drain. A swap is impossible
+  // without the promoter image, so if it isn't on the daemon we must NOT drain
+  // the portal (which would burn the full quiescence budget and then fail at
+  // `docker run`). This is the live symptom: promoterImage `dpf-promoter` was
+  // never built, yet the portal kept draining. dryRun never swaps, so it skips
+  // this check. A skip here is a clean no-op: it sets no cooldown and the next
+  // tick re-checks, so the upgrade resumes the moment the image appears.
+  if (!params.dryRun) {
+    const promoterReady = await isPromoterAvailable(config.promoterImage);
+    if (!promoterReady) {
+      return {
+        skipped: true,
+        reason: "promoter-unavailable",
+        promoterImage: config.promoterImage ?? "dpf-promoter",
+      };
+    }
+  }
 
   const gitRun = defaultGitRunner;
   const hostSourcePath =
@@ -182,6 +226,9 @@ export async function runSelfUpgrade(
           ? `merge-conflict: ${prep.conflictFiles.join(", ")}`
           : `${prep.reason}: ${prep.message}`;
       await failRun(failedRun.runId, reason);
+      // Back off so a persistent conflict / prep error (which needs operator
+      // resolution) doesn't re-attempt every tick and spam failed runs.
+      await recordCooldown(now, cooldownMinutes);
       await emitUpgradeEvent({ type: "upgrade.failed", runId: failedRun.runId });
       return {
         ok: false,
@@ -193,6 +240,17 @@ export async function runSelfUpgrade(
     }
     builtStamp = prep.stamp;
     upstreamSha = prep.upstreamSha ?? upstreamSha;
+  }
+
+  // Nothing-newer guard — skip BEFORE drain. If the honest built identity is
+  // already what the runtime reports as deployed, there is nothing to swap, so
+  // do NOT drain. The upstream lineage gate above catches the common pre-merge
+  // case; this catches the post-merge case where the merge produced no new
+  // commit (the install branch already contained upstream) and the stamp equals
+  // the running SHA. A clean no-op: no run row, no QuiescenceRun, no cooldown.
+  // force/dryRun bypass (operator asked; dry-run never swaps).
+  if (!params.dryRun && !params.force && deployedSha && builtStamp === deployedSha) {
+    return { skipped: true, reason: "up-to-date", builtStamp };
   }
 
   const run = await createRun({
@@ -225,6 +283,12 @@ export async function runSelfUpgrade(
       triggerRefId: run.runId,
       budgetMs: params.budgetMs,
       shipForce: params.force,
+      // Stamp the QuiescenceRun with the real target identity so the drain is
+      // never recorded against an empty bundle. We only reach here once a
+      // concrete bundle to swap to has been resolved (the nothing-newer guard
+      // above already short-circuited the no-op case).
+      targetVersion: upstreamSha ?? builtStamp,
+      targetBundleHash: builtStamp,
     });
     quiescenceRunId = qRunId;
 
@@ -239,6 +303,11 @@ export async function runSelfUpgrade(
           ? `quiescence-deferred: ${outcome.deferSurface ?? "unknown"}`
           : `quiescence-${outcome.outcome}: ${("reason" in outcome ? outcome.reason : null) ?? "unknown"}`,
       );
+      // Back off before the next attempt. A defer means an active session held
+      // the drain; without a cooldown the next trigger would re-drain within
+      // seconds and refuse work again. The level is already back to normal
+      // (coordinator on defer/abort/fail) — the cooldown keeps it that way.
+      await recordCooldown(now, cooldownMinutes);
       await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
       return {
         ok: false,
@@ -260,6 +329,7 @@ export async function runSelfUpgrade(
     const reason = summarizeRecoveryPointFailure(recoveryPoint);
     if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, reason);
     await failRun(run.runId, reason);
+    await recordCooldown(now, cooldownMinutes);
     await emitUpgradeEvent({
       type: "upgrade.failed",
       runId: run.runId,
@@ -315,6 +385,7 @@ export async function runSelfUpgrade(
     const msg = err instanceof Error ? err.message : String(err);
     if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, msg);
     await failRun(run.runId, `promoter-spawn-error: ${msg}`);
+    await recordCooldown(now, cooldownMinutes);
     await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
     return { ok: false, status: "failed", runId: run.runId, quiescenceRunId, excerpt: msg };
   }
@@ -328,6 +399,9 @@ export async function runSelfUpgrade(
       await signalSwapComplete(quiescenceRunId);
     }
     await completeRun(run.runId);
+    // Clear any prior cooldown — a swap succeeded, so the backoff from an
+    // earlier defer/fail no longer applies.
+    if (!params.dryRun) await clearCooldown();
     await emitUpgradeEvent({ type: "upgrade.succeeded", runId: run.runId });
     const deployed = params.buildId ? await isFeatureBuildDeployed(params.buildId) : null;
     return { ok: true, status: "succeeded", runId: run.runId, quiescenceRunId, deployed };
@@ -341,6 +415,7 @@ export async function runSelfUpgrade(
     await failQuiescenceSwap(quiescenceRunId, excerpt);
   }
   await failRun(run.runId, excerpt);
+  await recordCooldown(now, cooldownMinutes);
   await emitUpgradeEvent({ type: "upgrade.failed", runId: run.runId });
   return {
     ok: false,

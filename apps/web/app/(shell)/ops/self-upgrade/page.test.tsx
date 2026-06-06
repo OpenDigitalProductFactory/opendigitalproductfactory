@@ -74,6 +74,15 @@ const baseStatus = {
   targetSha: null,
   isFresh: false,
   latestRun: null,
+  quiescence: {
+    level: "normal" as const,
+    runId: null,
+    enteredAt: "1970-01-01T00:00:00.000Z",
+    run: null,
+    blockersCapturedAt: null,
+    blockers: [],
+  },
+  cooldownUntil: null,
   platformVersion: {
     version: "1.0.0",
     publishedAt: "2026-05-24T00:00:00.000Z",
@@ -82,7 +91,7 @@ const baseStatus = {
     buildDate: null,
     note: "baseline",
   },
-} as const;
+};
 
 describe("SelfUpgradePage", () => {
   it("renders page title and ops tab nav", async () => {
