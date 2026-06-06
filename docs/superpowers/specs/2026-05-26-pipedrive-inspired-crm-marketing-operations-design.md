@@ -47,7 +47,7 @@ Live DB fallback found an existing in-progress epic:
 - 9 backlog items are linked.
 - Statuses include `done`, `in-progress`, and two existing `triaging` rows.
 
-Live MCP state on 2026-06-06 shows `BI-D8E00326` open for CRM marketing Slice 5: agentic sales and marketing operations, under `EP-CRM-MKT-OPS`. Use that item for the next product slice rather than reopening the historical Slice 1 checklist.
+Live MCP state on 2026-06-06 shows `BI-D8E00326` open for CRM marketing Slice 5: agentic sales and marketing operations, under `EP-CRM-MKT-OPS`. Use that item for the next product slice rather than reopening the historical Slice 1 checklist. The implementation plan is `docs/superpowers/plans/2026-06-06-pipedrive-crm-marketing-slice-5.md`.
 
 ## 4. Research and Benchmarking
 

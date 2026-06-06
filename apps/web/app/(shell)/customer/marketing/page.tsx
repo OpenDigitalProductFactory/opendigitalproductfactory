@@ -7,6 +7,10 @@ import {
 import { AgentWorkLauncher } from "@/components/agent/AgentWorkLauncher";
 import { ApprovalQueuePanel } from "@/components/customer-marketing/ApprovalQueuePanel";
 import { MarketingStrategyOverview } from "@/components/customer-marketing/MarketingStrategyOverview";
+import {
+  MARKETING_AGENTIC_OPERATIONS_ROUTE,
+  buildMarketingAgenticOperationTopics,
+} from "@/lib/marketing/agentic-operations";
 
 export default async function CustomerMarketingPage() {
   const snapshot = await getMarketingWorkspaceSnapshot();
@@ -56,35 +60,17 @@ export default async function CustomerMarketingPage() {
   const kpiStack = latestRecommendation?.kpis.length
     ? latestRecommendation.kpis.join(", ")
     : "No saved KPI stack yet";
-  const launcherTopics = [
-    {
-      id: "strategy-review",
-      label: "Strategy review",
-      description: "Have the strategist translate the current assumptions into plain language and ask the next useful question.",
-      prompt:
-        "Run a marketing review for this business. Use the current business, storefront, customer, and strategy context. Start by telling me what you think the first marketing decision should be, then ask me one focused question before recommending campaigns.",
-      contextSummary: `Market: ${marketFocus}. Buyer: ${audienceFocus}. Motion: ${routeFocus}.`,
-      expectedNextStep: "The strategist will ask one focused question before suggesting campaigns.",
-    },
-    {
-      id: "campaign-directions",
-      label: "Campaign ideas",
-      description: "Turn the current focus into practical campaign options for email, LinkedIn, events, outbound, or content.",
-      prompt:
-        "Suggest 3 practical campaign directions for this business based on the current strategy. Make them specific to the audience, market, route to market, and likely proof assets. Include the first step I should approve or change.",
-      contextSummary: `Channels: ${primaryChannels}. Proof: ${proofFocus}.`,
-      expectedNextStep: "The strategist will propose options and ask what you want to shape first.",
-    },
-    {
-      id: "proof-plan",
-      label: "Proof of expertise",
-      description: "Identify the proof, examples, or authority signals needed before we ask the market to act.",
-      prompt:
-        "Help me build a proof-of-expertise plan for this business. Identify the testimonials, case studies, outcomes, credentials, examples, or FAQs that would make campaigns more credible, and tell me what to collect first.",
-      contextSummary: `Current proof: ${proofFocus}. Buyer: ${audienceFocus}.`,
-      expectedNextStep: "The strategist will recommend the first proof asset to collect or draft.",
-    },
-  ];
+  const launcherTopics = buildMarketingAgenticOperationTopics({
+    marketFocus,
+    audienceFocus,
+    routeFocus,
+    primaryChannels,
+    recommendedChannels,
+    skippedChannels,
+    proofFocus,
+    kpiStack,
+    suggestions,
+  });
 
   return (
     <div className="space-y-6">
@@ -116,6 +102,7 @@ export default async function CustomerMarketingPage() {
         agentName="Marketing Strategist"
         primaryActionLabel="Start marketing review"
         topics={launcherTopics}
+        routeContext={MARKETING_AGENTIC_OPERATIONS_ROUTE}
       />
 
       <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
