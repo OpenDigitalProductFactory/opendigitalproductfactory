@@ -235,12 +235,28 @@ describe("AiOperationsMap", () => {
     expect(source).toContain("{canvasPreview ? (");
     expect(source).toContain("data-canvas-preview");
     expect(source).toContain("<OperationsTopologyCanvas");
-    expect(source).toContain("topology={routingTopology}");
+    expect(source).toContain("topology={canvasTopology}");
     expect(source).toContain("dimension={dimension}");
     expect(source).toContain("replayTime={sharedReplay?.time ?? null}");
     expect(source).toContain("replayRange={sharedReplay?.range ?? null}");
 
     // Legacy panels remain the default authoritative surface + replay source.
-    expect(source).toContain("<RoutingTopologyPanel routingTopology={routingTopology} onReplayChange={handleReplayChange} />");
+    expect(source).toContain("onReplayChange={handleReplayChange}");
+  });
+
+  it("feeds the preview canvas a control-filtered topology the panels publish up (Stage D1)", () => {
+    const source = readFileSync(new URL("./AiOperationsMap.tsx", import.meta.url), "utf8");
+
+    // Shared pure filter helpers (single source of truth for canvas + panels).
+    expect(source).toContain('from "./operations-control-filters"');
+    expect(source).toContain("applyRoutingControlFilters(routingTopology, routingControl)");
+    expect(source).toContain("applyA2aControlFilters(routingTopology.a2aEdges, a2aControl)");
+
+    // Panels publish their resolved criteria up (mirrors onReplayChange).
+    expect(source).toContain("onControlFilterChange={handleRoutingControlChange}");
+    expect(source).toContain("onFilterChange={handleA2aControlChange}");
+
+    // The canvas consumes the filtered topology, not the raw one.
+    expect(source).toContain("topology={canvasTopology}");
   });
 });
