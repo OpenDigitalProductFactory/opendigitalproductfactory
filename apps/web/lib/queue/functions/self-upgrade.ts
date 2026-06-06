@@ -16,7 +16,6 @@ import {
   getLatestRun,
   getLatestSucceededRun,
 } from "@/lib/self-upgrade/run-store";
-import { runPromoter, isPromoterAvailable } from "@/lib/self-upgrade/promoter";
 import {
   getCooldownUntil,
   isInCooldown,
@@ -40,6 +39,15 @@ export const SELF_UPGRADE_FUNCTION_ID_SCHEDULED = "ops/self-upgrade-scheduled";
 export const SELF_UPGRADE_FUNCTION_ID_MANUAL = "ops/self-upgrade-manual";
 export const SELF_UPGRADE_CRON = "0 * * * *";
 export const SELF_UPGRADE_EVENT = "ops/self-upgrade.run";
+
+type PromoterRuntime = Pick<
+  typeof import("@/lib/self-upgrade/promoter"),
+  "isPromoterAvailable" | "runPromoter"
+>;
+
+async function loadPromoterRuntime(): Promise<PromoterRuntime> {
+  return await import(/* turbopackIgnore: true */ "@/lib/self-upgrade/promoter");
+}
 
 export type SelfUpgradeRunEventData = {
   triggeredBy?: string;
@@ -130,6 +138,7 @@ export async function runSelfUpgrade(
   // this check. A skip here is a clean no-op: it sets no cooldown and the next
   // tick re-checks, so the upgrade resumes the moment the image appears.
   if (!params.dryRun) {
+    const { isPromoterAvailable } = await loadPromoterRuntime();
     const promoterReady = await isPromoterAvailable(config.promoterImage);
     if (!promoterReady) {
       return {
@@ -355,6 +364,7 @@ export async function runSelfUpgrade(
 
   let result: { exitCode: number; stdout: string; stderr: string };
   try {
+    const { runPromoter } = await loadPromoterRuntime();
     result = await runPromoter({
       // HOST path of the install tree, bind-mounted into the promoter
       // container. Daemon-resolved, so it must be a host path (not an
