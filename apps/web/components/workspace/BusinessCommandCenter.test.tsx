@@ -8,63 +8,25 @@ const fixtureView: WorkspaceCommandCenterView = {
     {
       id: "cmd-1",
       label: "Approval required",
-      description: "2 proposals are waiting for containment review",
+      description: "2 proposals are waiting for review",
       severity: "warning",
-      href: "/platform/ai/authority",
+      href: "/ops/improvements",
     },
   ],
   snapshot: [
     { id: "ai", label: "AI coworkers", value: 4, href: "/platform/ai" },
     { id: "work", label: "Open work", value: 7, href: "/ops" },
   ],
+  // Readiness is still present on the view (the loader builds it) but the
+  // business command center must NOT render it — it relocated to the platform
+  // surface (PlatformReadinessMatrix).
   readiness: [
     {
       id: "ai",
       label: "AI workforce",
       href: "/platform/ai/operations-map",
       cells: [
-        {
-          key: "context",
-          label: "Context",
-          description: "Evidence, docs, and operating knowledge",
-          state: "good",
-          href: "/wiki",
-        },
-        {
-          key: "connections",
-          label: "Connections",
-          description: "Provider, integration, and customer-system links",
-          state: "attention",
-          href: "/platform/tools/integrations",
-        },
-        {
-          key: "capabilities",
-          label: "Capabilities",
-          description: "People and AI coworkers able to act",
-          state: "good",
-          href: "/platform/ai",
-        },
-        {
-          key: "cadence",
-          label: "Cadence",
-          description: "Scheduled work, reviews, and follow-up rhythm",
-          state: "good",
-          href: "/workspace",
-        },
-        {
-          key: "confidence",
-          label: "Confidence",
-          description: "Recent receipts and low-risk signals",
-          state: "attention",
-          href: "/platform/ai/operations-map",
-        },
-        {
-          key: "containment",
-          label: "Containment",
-          description: "Approvals, route scope, and side-effect controls",
-          state: "blocked",
-          href: "/platform/ai/authority",
-        },
+        { key: "context", label: "Context", description: "Evidence and operating knowledge", state: "good", href: "/wiki" },
       ],
     },
   ],
@@ -80,33 +42,25 @@ const fixtureView: WorkspaceCommandCenterView = {
 };
 
 describe("BusinessCommandCenter", () => {
-  it("renders the command center, six-C labels, work in motion, and AI Operations link", () => {
+  it("renders the critical strip, snapshot, and work in motion", () => {
     const html = renderToStaticMarkup(<BusinessCommandCenter view={fixtureView} />);
 
-    expect(html).toContain("Command Center");
+    expect(html).toContain("Needs attention");
     expect(html).toContain("Approval required");
-    expect(html).toContain("Context");
-    expect(html).toContain("Connections");
-    expect(html).toContain("Capabilities");
-    expect(html).toContain("Cadence");
-    expect(html).toContain("Confidence");
-    expect(html).toContain("Containment");
+    expect(html).toContain("AI coworkers");
+    expect(html).toContain("Open work");
+    expect(html).toContain("Work in motion");
     expect(html).toContain("Reconcile overdue invoices");
-    expect(html).toContain("AI Operations Map");
   });
 
-  it("puts six-C descriptions into cell titles without adding another visible text tier", () => {
+  it("does NOT render the six-C readiness matrix (it moved to the platform surface)", () => {
     const html = renderToStaticMarkup(<BusinessCommandCenter view={fixtureView} />);
 
-    expect(html).toContain("Context: Good - Evidence, docs, and operating knowledge");
-  });
-
-  it("renders readiness cells as explanatory status instead of duplicate navigation links", () => {
-    const html = renderToStaticMarkup(<BusinessCommandCenter view={fixtureView} />);
-
-    expect(html).toContain('href="/platform/ai/operations-map"');
+    expect(html).not.toContain("Domain readiness");
+    expect(html).not.toContain("Containment");
+    // No deep platform-meta drill links leak onto the business home.
     expect(html).not.toContain('href="/wiki"');
-    expect(html).not.toContain('href="/platform/tools/integrations"');
+    expect(html).not.toContain("AI Operations Map");
   });
 
   it("uses DPF theme tokens instead of hardcoded neutral color classes", () => {

@@ -1,9 +1,11 @@
 import { prisma } from "@dpf/db";
 import { PlatformTabNav } from "@/components/platform/PlatformTabNav";
 import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
+import { PlatformReadinessMatrix } from "@/components/workspace/PlatformReadinessMatrix";
 import { getProposalStats } from "@/lib/evaluate/proposal-data";
 import { getToolExecutionStats } from "@/lib/tool-execution-data";
 import { buildAuthoritySummaryMetrics, getPlatformAuthoritySummary } from "@/lib/platform-authority-summary";
+import { loadWorkspaceCommandCenter } from "@/lib/workspace/command-center";
 
 export default async function PlatformPage() {
   const [
@@ -18,6 +20,7 @@ export default async function PlatformPage() {
     userCount,
     roleCount,
     capabilityCount,
+    commandCenter,
   ] = await Promise.all([
     prisma.agent.count(),
     prisma.modelProvider.count({ where: { status: "active" } }),
@@ -30,6 +33,7 @@ export default async function PlatformPage() {
     prisma.user.count(),
     prisma.platformRole.count(),
     prisma.platformCapability.count(),
+    loadWorkspaceCommandCenter(prisma),
   ]);
   const authorityMetrics = buildAuthoritySummaryMetrics(authoritySummary);
 
@@ -105,6 +109,18 @@ export default async function PlatformPage() {
           <p className="mt-2 text-2xl font-semibold text-[var(--dpf-text)]">{toolStats.failed}</p>
         </div>
       </div>
+
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Operations</h2>
+        <a
+          href="/platform/schedule"
+          className="inline-flex items-center rounded-md border border-[var(--dpf-border)] px-3 py-2 text-sm font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+        >
+          Platform schedule →
+        </a>
+      </div>
+
+      <PlatformReadinessMatrix readiness={commandCenter.commandCenter.readiness} />
     </div>
   );
 }
