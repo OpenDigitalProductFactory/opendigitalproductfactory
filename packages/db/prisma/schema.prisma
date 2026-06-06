@@ -4451,6 +4451,10 @@ model ImprovementSignal {
   objectiveImpactHypothesis String?
   graphNodeRefs             String[] @default([])
   graphEdgeRefs             String[] @default([])
+  // EP-INTAKE-UNIFY / BI-B716B387: back-link to the BacklogItem a persistent
+  // signal was projected into (semantic itemId, BI-…). Null until the signal
+  // crosses the recurrence threshold and is filed through the shared front door.
+  backlogItemId             String?
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
   lastSeenAt                DateTime @default(now())
@@ -4460,6 +4464,7 @@ model ImprovementSignal {
   @@index([routeContext, createdAt(sort: Desc)])
   @@index([agentId, createdAt(sort: Desc)])
   @@index([toolName, createdAt(sort: Desc)])
+  @@index([backlogItemId])
 }
 
 model ExternalEvidenceRecord {
