@@ -989,6 +989,9 @@ export async function sendMessage(input: {
 
   // Get ALL platform tools (no mode filtering — we filter the merged set below)
   const { getAvailableTools, toolsToOpenAIFormat } = await import("@/lib/mcp-tools");
+  // Every coworker holds a read-only baseline (page coordination data, docs,
+  // source, code graph) on top of its agent-specific grants — BI-FD7E4D72.
+  const { COWORKER_READ_BASELINE_GRANTS } = await import("@/lib/tak/agent-grants");
   const toolUserContext = {
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
@@ -998,6 +1001,7 @@ export async function sendMessage(input: {
     // Skip mode filtering here — applied to merged set
     unifiedMode: useUnified,
     agentId: agent.agentId,
+    additionalGrants: COWORKER_READ_BASELINE_GRANTS,
   });
 
   // Get page-specific actions
@@ -1049,6 +1053,7 @@ export async function sendMessage(input: {
       externalAccessEnabled: true,
       unifiedMode: useUnified,
       agentId: agent.agentId,
+      additionalGrants: COWORKER_READ_BASELINE_GRANTS,
     });
     disabledExternalTools = getExternalAccessToolSummaries(
       filterToolsForCoworkerRuntime(externalEnabledPlatformTools, {

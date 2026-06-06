@@ -672,6 +672,92 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   // ─── Work Capsule control harness (spec 2026-05-14) ────────────────────────
   {
+    name: "workbook_list_tables",
+    description: "List the Workbook tables the agent can access (grid/spreadsheet data). Read-only. Pass workbookId to scope to one workbook.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workbookId: { type: "string", description: "Optional semantic workbook id (WB-*) to scope to." },
+      },
+      required: [],
+    },
+    requiredCapability: "view_workbooks",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "workbook_get_schema",
+    description: "Get a Workbook table's column definitions and the agent's capabilities on it. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
+      },
+      required: ["tableId"],
+    },
+    requiredCapability: "view_workbooks",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "workbook_query_rows",
+    description: "Query rows from a Workbook table with optional sort/filter and cursor pagination. Read-only. Cells are keyed by columnId (COL-*).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
+        limit: { type: "number", description: "Max rows (default 50, max 200)." },
+        cursor: { type: "string", description: "Pagination cursor (rowId of the last row from the previous page)." },
+        sort: {
+          type: "array",
+          description: "Sort specs.",
+          items: {
+            type: "object",
+            properties: {
+              columnId: { type: "string" },
+              direction: { type: "string", enum: ["asc", "desc"] },
+            },
+          },
+        },
+      },
+      required: ["tableId"],
+    },
+    requiredCapability: "view_workbooks",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "workbook_create_row",
+    description: "Insert a new row into a custom Workbook table. cells is a map of columnId (COL-*) to value; values are validated against each column's field type.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
+        cells: { type: "object", description: "Map of columnId -> value.", additionalProperties: true },
+      },
+      required: ["tableId"],
+    },
+    requiredCapability: "manage_workbooks",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "workbook_update_cells",
+    description: "Update specific cells in a Workbook row. cells is a map of columnId (COL-*) to new value, validated against each column's field type.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
+        rowId: { type: "string", description: "Semantic row id (ROW-*)." },
+        cells: { type: "object", description: "Map of columnId -> new value.", additionalProperties: true },
+      },
+      required: ["tableId", "rowId"],
+    },
+    requiredCapability: "manage_workbooks",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
     name: "list_work_capsules",
     description: "List Work Capsule coordination records for active portal, Build Studio, and external agent work. Read-only.",
     inputSchema: {
@@ -4653,7 +4739,20 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
 
 export async function getAvailableTools(
   userContext: UserContext,
-  options?: { externalAccessEnabled?: boolean; mode?: "advise" | "act"; unifiedMode?: boolean; agentId?: string },
+  options?: {
+    externalAccessEnabled?: boolean;
+    mode?: "advise" | "act";
+    unifiedMode?: boolean;
+    agentId?: string;
+    /**
+     * Extra grants to union with the agent's own grants before tool gating.
+     * Used by the coworker path to apply COWORKER_READ_BASELINE_GRANTS so every
+     * coworker can read its page data, docs, source, and the code graph
+     * (BI-FD7E4D72). Read-only by construction; the user-capability check above
+     * still bounds what the human operator may see.
+     */
+    additionalGrants?: readonly string[];
+  },
 ): Promise<ToolDefinition[]> {
   let platformTools = PLATFORM_TOOLS.filter(
     (tool) =>
@@ -4670,6 +4769,14 @@ export async function getAvailableTools(
   let agentGrants: string[] = [];
   if (options?.agentId) {
     agentGrants = await getAgentToolGrantsAsync(options.agentId);
+    // Union the agent's own grants with any baseline read grants (the coworker
+    // path passes COWORKER_READ_BASELINE_GRANTS). Done here so the merged set is
+    // also used by the discovered-MCP-tool gating below. The merge only widens
+    // toward read-only tools; agents that hold no grants AND get no baseline are
+    // left ungated exactly as before (length-0 → no filtering).
+    if (options.additionalGrants?.length) {
+      agentGrants = Array.from(new Set([...agentGrants, ...options.additionalGrants]));
+    }
     if (agentGrants.length > 0) {
       platformTools = platformTools.filter((tool) => isToolAllowedByGrants(tool.name, agentGrants));
     }
@@ -5086,6 +5193,26 @@ export async function executeTool(
     }
     case "deliberate_on": {
       return deliberateOnMcpHandler(params, userId, context);
+    }
+    case "workbook_list_tables": {
+      const { workbookListTablesTool } = await import("@/lib/workbooks/mcp-handlers");
+      return workbookListTablesTool(params, userId);
+    }
+    case "workbook_get_schema": {
+      const { workbookGetSchemaTool } = await import("@/lib/workbooks/mcp-handlers");
+      return workbookGetSchemaTool(params, userId);
+    }
+    case "workbook_query_rows": {
+      const { workbookQueryRowsTool } = await import("@/lib/workbooks/mcp-handlers");
+      return workbookQueryRowsTool(params, userId);
+    }
+    case "workbook_create_row": {
+      const { workbookCreateRowTool } = await import("@/lib/workbooks/mcp-handlers");
+      return workbookCreateRowTool(params, userId);
+    }
+    case "workbook_update_cells": {
+      const { workbookUpdateCellsTool } = await import("@/lib/workbooks/mcp-handlers");
+      return workbookUpdateCellsTool(params, userId);
     }
     case "list_work_capsules": {
       const { listWorkCapsulesTool } = await import("@/lib/work-capsules/mcp-handlers");

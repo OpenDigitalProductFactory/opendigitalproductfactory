@@ -497,6 +497,45 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     ],
   },
 
+  "/ops/dev-loop": {
+    routePrefix: "/ops/dev-loop",
+    domain: "Dev Loop — Runtime Coordination",
+    sensitivity: "internal",
+    domainContext:
+      "This page is the Dev Loop runtime coordination map. It shows governed RuntimeTargets (root portal, dev portal, build sandboxes, promotion sandboxes) grouped by lifecycle status, the active non-prod environment leases, and the runtimeTargetJanitor rules (BI-AD949172). It is NOT the delivery backlog. Use the PAGE DATA block as ground truth for what is currently deployed where. Multiple targets can legitimately share a status and even a URL/port at once — each build sandbox registers its own target on the shared sandbox port, and a 'running' target whose lastHeartbeat is stale simply has not been swept to 'expired' yet (janitor: running + no heartbeat for 2h → expired). Always reconcile a target's status against its lastHeartbeat before treating it as live, and prefer get_runtime_coordination_map for the full live record.",
+    domainTools: [
+      "get_runtime_coordination_map",
+      "list_nonprod_environment_leases",
+      "search_code_graph",
+      "trace_code_surface",
+      "doc_search",
+      "search_knowledge",
+    ],
+    docsPath: "/docs/operations/index",
+    skills: [
+      {
+        label: "Explain the runtime map",
+        description: "Summarize what is deployed where and flag anything stale",
+        capability: "view_platform",
+        taskType: "analysis",
+        prompt: "Look at the PAGE DATA for this Dev Loop page. Summarize the active runtime targets and leases in plain language, and flag any 'running' target whose lastHeartbeat is old enough that the janitor should sweep it to expired. Explain why duplicates on the same port can be normal. Don't call tools unless the page data is missing something you need from get_runtime_coordination_map.",
+      },
+      {
+        label: "Why is this here?",
+        description: "Trace a runtime target or janitor rule back to the code that creates it",
+        capability: "view_platform",
+        taskType: "analysis",
+        prompt: "I'll name a runtime target, lease, or janitor behavior on this page. Use search_code_graph / trace_code_surface and read_project_file to find the code that registers or sweeps it, and the docs that describe it, then explain how it works and why this entry exists.",
+      },
+      {
+        label: "Report an issue",
+        description: "Report a bug or give feedback",
+        capability: null,
+        prompt: "I'd like to report an issue or give feedback about this page.",
+      },
+    ],
+  },
+
   "/ops": {
     routePrefix: "/ops",
     domain: "Operations",
