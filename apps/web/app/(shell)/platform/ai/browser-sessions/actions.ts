@@ -3,7 +3,10 @@
 import { randomUUID } from "node:crypto";
 import { auth } from "@/lib/auth";
 import { provisionServiceAccount } from "@/lib/browser-drive/provisioning";
-import { serviceAccountPrincipalId } from "@/lib/browser-drive/identity";
+import {
+  serviceAccountPrincipalId,
+  resolveServiceAccountPrincipal,
+} from "@/lib/browser-drive/identity";
 import type { BrowserCredentialFields } from "@/lib/browser-drive/credentials";
 
 // Persist a freshly bootstrapped service-account profile (EP-BROWSER-DRIVE §9.2).
@@ -38,6 +41,47 @@ export async function provisionServiceAccountAction(input: {
       sessionId: randomUUID(),
     });
     return { ok: true, ...res };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// Begin the one-time attended setup for a service account (EP-BROWSER-DRIVE §9.2).
+// Registers the service Principal now (real, idempotent) and returns the next
+// step. The attended login that captures the profile's storageState runs against
+// a live browser — the spec-Q2 runtime interaction validated on portal rebuild;
+// once captured, the runtime calls provisionServiceAccountAction to persist it.
+export type BeginSetupResult =
+  | { ok: true; principalId: string; profileRef: string; loginUrl: string | null }
+  | { ok: false; error: string };
+
+export async function beginServiceAccountSetupAction(input: {
+  siteKey: string;
+  accountKey: string;
+  targetDomains: string[];
+  loginUrl?: string;
+  displayName?: string;
+}): Promise<BeginSetupResult> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "Not authenticated" };
+  const siteKey = input.siteKey.trim();
+  const accountKey = (input.accountKey || "default").trim();
+  const targetDomains = input.targetDomains.map((d) => d.trim()).filter(Boolean);
+  if (!siteKey) return { ok: false, error: "A site key is required." };
+  if (!targetDomains.length) return { ok: false, error: "At least one target domain is required." };
+
+  try {
+    const { principalId } = await resolveServiceAccountPrincipal({
+      siteKey,
+      accountKey,
+      displayName: input.displayName,
+    });
+    return {
+      ok: true,
+      principalId,
+      profileRef: `/profiles/${principalId}/${siteKey}/`,
+      loginUrl: input.loginUrl?.trim() || null,
+    };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
