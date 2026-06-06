@@ -1046,7 +1046,7 @@ export async function runAgenticLoop(params: {
   const executedTools: AgenticResult["executedTools"] = [];
   let lastResult: RoutedInferenceResult | null = null;
   let continuationNudges = 0;
-  let fabricationRetried = false;
+  let fabricationRetries = 0;
   let frustrationCount = 0;
   let bestPreNudgeContent = ""; // Preserve best text from before nudge
   const startTime = Date.now();
@@ -1519,10 +1519,18 @@ export async function runAgenticLoop(params: {
           };
         }
 
-        if (!fabricationRetried) {
-          fabricationRetried = true;
+        // BI-PIR-cc091267 — a build-route fabrication signal (completion claim
+        // with zero tool calls) is most often a TRANSIENT provider downgrade:
+        // the preferred provider 529s, a weaker backup confabulates "done"
+        // without emitting the required tool call. A single retry can't ride out
+        // a blip that self-clears in ~30s, so give build routes a few attempts —
+        // each re-dispatches and can re-route to the recovered preferred
+        // provider. Conversational routes keep a single retry (unchanged).
+        const maxFabricationRetries = isBuildRoute ? 3 : 1;
+        if (fabricationRetries < maxFabricationRetries) {
+          fabricationRetries++;
           console.warn(
-            "[agentic-loop] fabrication detected: claimed completion without the required tool-backed evidence. Retrying.",
+            `[agentic-loop] fabrication detected: claimed completion without the required tool-backed evidence. Retrying (${fabricationRetries}/${maxFabricationRetries}).`,
           );
           messages = [
             ...messages,
