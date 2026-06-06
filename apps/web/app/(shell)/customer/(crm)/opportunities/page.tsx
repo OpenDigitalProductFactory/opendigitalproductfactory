@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
+import { EmptyPipelineGuidance } from "@/components/customer/EmptyPipelineGuidance";
 import { PipelineStageInspector } from "@/components/customer/PipelineStageInspector";
 import { updateOpportunityStageFromForm } from "@/lib/actions/crm";
 import {
@@ -193,12 +194,7 @@ export default async function OpportunitiesPage({ searchParams }: OpportunitiesP
               stageFormAction={updateOpportunityStageFromForm}
             />
           ) : (
-            <section className="rounded-lg border border-dashed border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
-              <p className="text-sm font-medium text-[var(--dpf-text)]">No opportunities yet</p>
-              <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-                Qualified engagements will appear here when they become pipeline work.
-              </p>
-            </section>
+            <EmptyPipelineGuidance />
           )}
         </aside>
       </div>
