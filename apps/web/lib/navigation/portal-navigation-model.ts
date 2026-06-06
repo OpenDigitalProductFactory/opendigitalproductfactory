@@ -62,6 +62,7 @@ export type PortalShellNavEntry = PortalNavEntry & {
 
 const platformSectionSiblings = [
   "/platform",
+  "/platform/schedule",
   "/platform/identity",
   "/platform/ai",
   "/platform/tools",
@@ -347,6 +348,17 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
       sectionKey: "platform",
       description: "Providers, integrations, services, and governance.",
     },
+    sectionSiblings: platformSectionSiblings,
+  },
+  {
+    key: "platform-schedule",
+    label: "Schedule",
+    path: "/platform/schedule",
+    parentPath: "/platform",
+    domain: "platform",
+    audienceModes: ["operator"],
+    destinationKind: "section-page",
+    capabilityKey: "view_platform",
     sectionSiblings: platformSectionSiblings,
   },
   {
