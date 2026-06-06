@@ -4652,7 +4652,20 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
 
 export async function getAvailableTools(
   userContext: UserContext,
-  options?: { externalAccessEnabled?: boolean; mode?: "advise" | "act"; unifiedMode?: boolean; agentId?: string },
+  options?: {
+    externalAccessEnabled?: boolean;
+    mode?: "advise" | "act";
+    unifiedMode?: boolean;
+    agentId?: string;
+    /**
+     * Extra grants to union with the agent's own grants before tool gating.
+     * Used by the coworker path to apply COWORKER_READ_BASELINE_GRANTS so every
+     * coworker can read its page data, docs, source, and the code graph
+     * (BI-FD7E4D72). Read-only by construction; the user-capability check above
+     * still bounds what the human operator may see.
+     */
+    additionalGrants?: readonly string[];
+  },
 ): Promise<ToolDefinition[]> {
   let platformTools = PLATFORM_TOOLS.filter(
     (tool) =>
@@ -4669,6 +4682,14 @@ export async function getAvailableTools(
   let agentGrants: string[] = [];
   if (options?.agentId) {
     agentGrants = await getAgentToolGrantsAsync(options.agentId);
+    // Union the agent's own grants with any baseline read grants (the coworker
+    // path passes COWORKER_READ_BASELINE_GRANTS). Done here so the merged set is
+    // also used by the discovered-MCP-tool gating below. The merge only widens
+    // toward read-only tools; agents that hold no grants AND get no baseline are
+    // left ungated exactly as before (length-0 → no filtering).
+    if (options.additionalGrants?.length) {
+      agentGrants = Array.from(new Set([...agentGrants, ...options.additionalGrants]));
+    }
     if (agentGrants.length > 0) {
       platformTools = platformTools.filter((tool) => isToolAllowedByGrants(tool.name, agentGrants));
     }
