@@ -115,9 +115,10 @@ function loadToolToGrants(): Record<string, string[]> {
   const map: Record<string, string[]> = {};
   if (!block) return map;
   for (const line of block[1].split("\n")) {
-    const m = line.match(/^\s*([a-zA-Z0-9_]+):\s*\[([^\]]*)\]/);
+    const m = line.match(/^\s*(?:"([^"]+)"|'([^']+)'|([a-zA-Z0-9_]+)):\s*\[([^\]]*)\]/);
     if (!m) continue;
-    map[m[1]] = m[2]
+    const toolName = m[1] ?? m[2] ?? m[3];
+    map[toolName] = m[4]
       .split(",")
       .map((s) => s.trim().replace(/^["']|["']$/g, ""))
       .filter(Boolean);

@@ -708,6 +708,7 @@ export type ApplyPlatformUpdateConflict = {
 };
 
 export type ApplyPlatformUpdateResult =
+  | { kind: "engine-retired"; message: string }
   | { kind: "no-update-pending"; message: string }
   | { kind: "invalid-version"; message: string; version: string | null }
   | {
@@ -1075,7 +1076,56 @@ async function finishPlatformUpdateMerge(
   };
 }
 
+// ─── Engine B retirement (BI-5B6C1C35) ──────────────────────────────────────
+//
+// `applyPlatformUpdate` is the in-portal half of the RETIRED `/workspace`
+// image-sync source-advance engine (Engine B). Per the governed-platform-upgrade
+// spec §5.0 and the unified-delivery-surfaces spec §2 GAP 1, the running install
+// advances ONLY via the canonical host-clone self-upgrade pipeline (Engine A:
+// apps/web/lib/self-upgrade/*, scripts/promote.sh, Ops → Self-Upgrade). Two
+// competing source-advance engines were the root cause of the
+// stale-mislabeled-portal bug.
+//
+// The entrypoint no longer arms this path (it stopped writing
+// `PlatformDevConfig.updatePending`; see docker-entrypoint.sh), so in normal
+// operation this action is unreachable. We additionally HARD-REFUSE here as a
+// belt-and-braces guard: even if a stale `updatePending=true` row survives from
+// a pre-retirement image, the `/workspace` `my-changes` merge must not run and
+// silently mutate the running container's source behind Engine A's back. The
+// implementation below (merge helpers, branch repair, conflict parsing) is kept
+// for now only so the deferred-removal diff stays small and reviewable.
+//
+// TODO(BI-5B6C1C35): once Engine A is confirmed as the sole advance path in
+// production telemetry, delete `applyPlatformUpdate` and its merge helpers
+// entirely, drop the `apply_platform_update` MCP tool, and remove the
+// `PlatformUpdateApplyPanel` surface.
+const ENGINE_B_RETIRED_MESSAGE =
+  "Applying updates by merging into /workspace is retired. The platform now " +
+  "updates only through the Self-Upgrade pipeline (Ops → Self-Upgrade), which " +
+  "merges upstream into your install branch and rebuilds the portal from those " +
+  "exact bytes. Open Self-Upgrade to check for and apply updates.";
+
 export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> {
+  // Auth first so the refusal can't be used to probe state without permission.
+  await requireManagePlatform();
+
+  // Engine B retired (BI-5B6C1C35 / governed-upgrade spec §5.0). Refuse before
+  // touching git or the DB so no /workspace source mutation can occur via this
+  // path. Engine A (Self-Upgrade) is the sole sanctioned advance path. The
+  // original `/workspace` merge implementation is preserved (uncalled) below as
+  // `legacyApplyPlatformUpdateImpl` to keep the eventual removal diff small and
+  // reviewable; see the TODO(BI-5B6C1C35) above.
+  return { kind: "engine-retired", message: ENGINE_B_RETIRED_MESSAGE };
+}
+
+/**
+ * RETIRED Engine B implementation (BI-5B6C1C35). No longer called — the
+ * `/workspace` `my-changes` merge silently mutated the running container's
+ * source, racing the canonical host-clone self-upgrade promoter (Engine A,
+ * governed-upgrade spec §5.0). Kept verbatim for one release so the
+ * deferred-removal diff is mechanical; do NOT re-wire it to any surface.
+ */
+async function legacyApplyPlatformUpdateImpl(): Promise<ApplyPlatformUpdateResult> {
   await requireManagePlatform();
 
   const { exec: execCb } = lazyChildProcess();

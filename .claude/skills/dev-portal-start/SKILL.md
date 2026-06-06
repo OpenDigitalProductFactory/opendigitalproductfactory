@@ -13,6 +13,8 @@ This eliminates the ~2-minute Live-portal-rebuild loop that otherwise gates ever
 
 The Contributor preview is a **DPF-contributor-only** surface, gated behind the `dev` compose profile. Customer installs (e.g. Dale's HVAC shop) do not ship it by default and do not see a `:3001` URL. If you are not a DPF contributor editing the platform source, you do not need this skill.
 
+> **`:3001` is a lease-gated shared singleton — claim before you bind.** `dev-portal` is a **single** shared container that can be bind-mounted to **only one worktree at a time** (via `DPF_DEV_WORKTREE`) and it **writes to the LIVE database**. If you `compose up` it without coordinating, you silently re-point `:3001` at *your* worktree — so every other contributor's "preview" is now rendering your code, and a coding mistake there mutates production data. Per the accepted spec [Unified Delivery Surfaces §4.3 + §7 decision #5](../../../docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md), `:3001` is **folded into the governed `local-integration-ci` lease** (one lease-gated shared-runtime model; no standalone singleton; no silent re-bind). **Always claim the lease first** with `scripts/dev-portal-lease.sh claim`; it refuses to re-bind while another holder is active and tells you who holds it.
+
 ## When to Use
 
 **Symptoms that trigger this skill (contributor workflow):**
@@ -56,33 +58,57 @@ Total: ~30+ minutes for the first edit-verify cycle. Repeated every session.
 # Tell the override which worktree to bind-mount.
 $env:DPF_DEV_WORKTREE = (Get-Location).Path.Replace('\', '/')
 
-# Bring up dev-portal:
+# 1) CLAIM the shared lease BEFORE binding :3001. This refuses to silently
+#    re-bind while another holder is active; on conflict it prints who holds it
+#    and exits non-zero (no docker is touched). Capture the lease id to release
+#    later. (Requires DPF_MCP_BEARER_TOKEN — already seeded in every worktree.)
+sh scripts/dev-portal-lease.sh claim    # prints LEASE_ID=NPEL-... on success
+# If this exits with "REFUSING to silently re-bind", STOP. Coordinate with the
+# named holder — do not compose up. See "When :3001 is already held" below.
+
+# 2) Only after a successful claim, bring up dev-portal:
 docker compose -p dpf \
   -f /d/DPF/docker-compose.yml \
   -f docker-compose.dev-against-live-db.yml \
   --profile dev up -d dev-portal
 
-# Wait for ready:
+# 3) Wait for ready:
 until curl -sf http://localhost:3001/api/health >/dev/null 2>&1; do sleep 3; done
 
 # Open http://localhost:3001/<route> — your edits are live.
+
+# 4) When done verifying, tear down AND release the lease (see "When to Tear Down").
 ```
 
 Total: ~30 seconds on first bring-up, ~5 seconds for subsequent edits (just save and refresh).
+
+The `claim` / `release` calls go through the same governed MCP lease the pre-PR CI gate uses (`claim_nonprod_environment_lease` with `environmentKey="local-integration-ci"`); the guard script `scripts/dev-portal-lease.sh` is a thin wrapper around those tools. There is no separate, ungoverned `:3001` singleton anymore — claiming the lease *is* how you acquire `:3001`.
 
 ## Quick Reference
 
 | Task                         | Command                                                                                                                                            |
 |------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
-| First bring-up               | `$env:DPF_DEV_WORKTREE = (Get-Location).Path.Replace('\', '/'); docker compose -p dpf -f /d/DPF/docker-compose.yml -f docker-compose.dev-against-live-db.yml --profile dev up -d dev-portal` |
+| Who holds :3001              | `sh scripts/dev-portal-lease.sh status`                                                                                                            |
+| Claim the lease (before bind)| `$env:DPF_DEV_WORKTREE = (Get-Location).Path.Replace('\', '/'); sh scripts/dev-portal-lease.sh claim`                                              |
+| First bring-up (after claim) | `docker compose -p dpf -f /d/DPF/docker-compose.yml -f docker-compose.dev-against-live-db.yml --profile dev up -d dev-portal`                       |
 | Wait for ready               | `until curl -sf http://localhost:3001/api/health >/dev/null 2>&1; do sleep 3; done`                                                                |
 | Force-reload after edit      | `docker restart dpf-dev-portal-1` (use when file-watcher misses the edit)                                                                          |
 | Tail logs                    | `docker logs --tail 50 -f dpf-dev-portal-1`                                                                                                        |
 | Inspect path inside container| `MSYS_NO_PATHCONV=1 docker exec dpf-dev-portal-1 ls /workspace/...`                                                                                |
 | Stop dev-portal              | `docker compose -p dpf --profile dev stop dev-portal`                                                                                              |
-| Stop and remove              | `docker compose -p dpf --profile dev rm -sf dev-portal`                                                                                            |
+| Stop and remove + release    | `docker compose -p dpf --profile dev rm -sf dev-portal; sh scripts/dev-portal-lease.sh release --lease-id <NPEL-...>`                              |
 
 Verify the gate / page renders at `http://localhost:3001/<route>` (not `:3000`).
+
+### When :3001 is already held
+
+If `scripts/dev-portal-lease.sh claim` exits with `REFUSING to silently re-bind :3001`, another worktree currently owns the preview. The script prints the holder (lease id, provider, session, branch, worktree). **Do not `compose up` anyway** — that is exactly the silent re-bind the lease exists to prevent. Instead:
+
+1. Run `sh scripts/dev-portal-lease.sh status` to confirm the current holder.
+2. Coordinate explicitly (Propose → Acknowledge → Reassign). The holder releases with `sh scripts/dev-portal-lease.sh release --lease-id <their NPEL-...>` when they finish.
+3. Only after the lease is free does your `claim` succeed and the bind become yours.
+
+A held lease is *not* an invitation to take over — `:3001` is a single live-DB-writing surface, so a takeover means the previous holder loses their preview mid-task and could be surprised by your data writes. Wait for an explicit release.
 
 ## Common Mistakes
 
@@ -140,14 +166,21 @@ The bind mount is explicit through `DPF_DEV_WORKTREE`; if that variable is missi
 
 ### Mistake 8 — Treating dev-portal data as throwaway
 
-This is intentional: the Contributor preview (`dev-portal`) writes to the LIVE DB. A coding mistake under `apps/web/` that mutates DB state will affect the Live portal at `:3000` too. Keep `:3000` as the safety reference; use `:3001` knowingly.
+This is intentional: the Contributor preview (`dev-portal`) writes to the LIVE DB. A coding mistake under `apps/web/` that mutates DB state will affect the Live portal at `:3000` too. Keep `:3000` as the safety reference; use `:3001` knowingly. Because the live-DB write makes `:3001` a shared mutable resource, it is lease-gated (see the lease-gate callout in Overview): claim before binding, release when done.
+
+### Mistake 9 — Binding `:3001` without claiming the lease ("just grab it")
+
+The single worst failure mode: running `compose up -d dev-portal` directly, skipping `scripts/dev-portal-lease.sh claim`. That silently re-points the **one** shared `:3001` container at your worktree — so any other contributor mid-verification is now staring at *your* code against the *live* DB, and your edits can write data they didn't expect. Always `claim` first; the script refuses the re-bind and names the current holder instead of letting you stomp them. Skipping the claim is exactly the unleased-shared-mutable-resource antipattern the spec closes.
 
 ## When to Tear Down
 
-When you're done verifying:
+When you're done verifying, remove the container **and release the lease** so the next contributor can claim `:3001`:
 
 ```bash
 docker compose -p dpf --profile dev rm -sf dev-portal
+sh scripts/dev-portal-lease.sh release --lease-id <NPEL-...>   # the id printed at claim time
 ```
+
+Holding the lease after you stop using `:3001` blocks every other worktree from previewing (and the CI gate shares the same `local-integration-ci` lease), so release promptly — same discipline as any other shared nonprod environment. If you've lost the lease id, `sh scripts/dev-portal-lease.sh status` prints the active holder's id.
 
 The override file stays in the worktree (it's checked in). The dev-postgres / dev-neo4j containers from the unused `dev-init` step can be left running idle or stopped with `docker compose -p dpf --profile dev stop`.
