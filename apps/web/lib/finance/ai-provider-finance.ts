@@ -66,6 +66,38 @@ function humanizeWorkItemType(value: string): string {
     .join(" ");
 }
 
+type ExistingAiProviderContractPlan = {
+  monthlyCommittedAmount?: number | Prisma.Decimal | null;
+  usageUnit?: string | null;
+  allowances?: Array<{
+    includedQuantity?: number | Prisma.Decimal | null;
+    usageUnit?: string | null;
+  }>;
+};
+
+function hasKnownNumber(value: number | Prisma.Decimal | null | undefined): boolean {
+  return value !== undefined && value !== null;
+}
+
+function getMissingAiProviderPlanFields(
+  input: SeedAiProviderFinanceBridgeInput,
+  existingContract?: ExistingAiProviderContractPlan | null,
+): string[] {
+  const existingAllowance = existingContract?.allowances?.find(
+    (allowance) => hasKnownNumber(allowance.includedQuantity) || Boolean(allowance.usageUnit),
+  );
+
+  return [
+    input.monthlyCommittedAmount === undefined && !hasKnownNumber(existingContract?.monthlyCommittedAmount)
+      ? "monthlyCommittedAmount"
+      : null,
+    input.includedQuantity === undefined && !hasKnownNumber(existingAllowance?.includedQuantity)
+      ? "includedQuantity"
+      : null,
+    !input.usageUnit && !existingContract?.usageUnit && !existingAllowance?.usageUnit ? "usageUnit" : null,
+  ].filter((field): field is string => Boolean(field));
+}
+
 async function ensureSupplier(input: SeedAiProviderFinanceBridgeInput) {
   const supplierName = input.supplierName ?? input.providerName;
   const existing = await prisma.supplier.findFirst({
@@ -154,7 +186,20 @@ export async function seedAiProviderFinanceBridge(input: SeedAiProviderFinanceBr
 
   const existingContract = await prisma.supplierContract.findFirst({
     where: { profileId: profile.id, status: { in: ["draft", "active"] } },
-    select: { id: true, contractId: true },
+    select: {
+      id: true,
+      contractId: true,
+      monthlyCommittedAmount: true,
+      usageUnit: true,
+      allowances: {
+        orderBy: { sortOrder: "asc" },
+        take: 1,
+        select: {
+          includedQuantity: true,
+          usageUnit: true,
+        },
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
 
@@ -179,14 +224,23 @@ export async function seedAiProviderFinanceBridge(input: SeedAiProviderFinanceBr
       usageUrl: input.usageUrl ?? null,
       allowsOverage: false,
     },
-    select: { id: true, contractId: true },
+    select: {
+      id: true,
+      contractId: true,
+      monthlyCommittedAmount: true,
+      usageUnit: true,
+      allowances: {
+        orderBy: { sortOrder: "asc" },
+        take: 1,
+        select: {
+          includedQuantity: true,
+          usageUnit: true,
+        },
+      },
+    },
   });
 
-  const missingFields = [
-    input.monthlyCommittedAmount === undefined ? "monthlyCommittedAmount" : null,
-    input.includedQuantity === undefined ? "includedQuantity" : null,
-    !input.usageUnit ? "usageUnit" : null,
-  ].filter((field): field is string => Boolean(field));
+  const missingFields = getMissingAiProviderPlanFields(input, contract);
   const missingPlanDetails = missingFields.length > 0;
 
   const workItem = missingPlanDetails

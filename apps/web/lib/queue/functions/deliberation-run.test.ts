@@ -10,6 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  transaction: vi.fn(),
   taskRunUpdate: vi.fn(),
   taskRunFindUnique: vi.fn(),
   deliberationRunFindUnique: vi.fn(),
@@ -17,8 +18,11 @@ const mocks = vi.hoisted(() => ({
   taskNodeUpdate: vi.fn(),
   taskNodeFindMany: vi.fn(),
   outcomeCreate: vi.fn(),
+  outcomeUpsert: vi.fn(),
   issueSetCreate: vi.fn(),
+  issueSetDeleteMany: vi.fn(),
   claimCreate: vi.fn(),
+  claimDeleteMany: vi.fn(),
   pushThreadProgress: vi.fn(),
   getPattern: vi.fn(),
   extractRoleRecipes: vi.fn(),
@@ -30,6 +34,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    $transaction: mocks.transaction,
     taskRun: { update: mocks.taskRunUpdate, findUnique: mocks.taskRunFindUnique },
     deliberationRun: {
       findUnique: mocks.deliberationRunFindUnique,
@@ -39,9 +44,12 @@ vi.mock("@dpf/db", () => ({
       update: mocks.taskNodeUpdate,
       findMany: mocks.taskNodeFindMany,
     },
-    deliberationOutcome: { create: mocks.outcomeCreate },
-    deliberationIssueSet: { create: mocks.issueSetCreate },
-    claimRecord: { create: mocks.claimCreate },
+    deliberationOutcome: { create: mocks.outcomeCreate, upsert: mocks.outcomeUpsert },
+    deliberationIssueSet: {
+      create: mocks.issueSetCreate,
+      deleteMany: mocks.issueSetDeleteMany,
+    },
+    claimRecord: { create: mocks.claimCreate, deleteMany: mocks.claimDeleteMany },
   },
 }));
 
@@ -68,12 +76,34 @@ import { runDeliberation } from "./deliberation-run";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.transaction.mockImplementation(async (callback: (client: unknown) => unknown) =>
+    callback({
+      taskRun: { update: mocks.taskRunUpdate, findUnique: mocks.taskRunFindUnique },
+      deliberationRun: {
+        findUnique: mocks.deliberationRunFindUnique,
+        update: mocks.deliberationRunUpdate,
+      },
+      taskNode: {
+        update: mocks.taskNodeUpdate,
+        findMany: mocks.taskNodeFindMany,
+      },
+      deliberationOutcome: { create: mocks.outcomeCreate, upsert: mocks.outcomeUpsert },
+      deliberationIssueSet: {
+        create: mocks.issueSetCreate,
+        deleteMany: mocks.issueSetDeleteMany,
+      },
+      claimRecord: { create: mocks.claimCreate, deleteMany: mocks.claimDeleteMany },
+    }),
+  );
   mocks.taskRunUpdate.mockResolvedValue({});
   mocks.taskRunFindUnique.mockResolvedValue({ routeContext: "deliberation" });
   mocks.deliberationRunUpdate.mockResolvedValue({});
   mocks.taskNodeUpdate.mockResolvedValue({});
   mocks.outcomeCreate.mockResolvedValue({});
+  mocks.outcomeUpsert.mockResolvedValue({});
   mocks.issueSetCreate.mockResolvedValue({});
+  mocks.issueSetDeleteMany.mockResolvedValue({ count: 0 });
+  mocks.claimDeleteMany.mockResolvedValue({ count: 0 });
   mocks.pushThreadProgress.mockResolvedValue(undefined);
   mocks.extractRoleRecipes.mockReturnValue(new Map());
   mocks.getPattern.mockResolvedValue({
