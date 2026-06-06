@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Table2 } from "lucide-react";
+import { Table2, Database } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { listWorkbooks } from "@/lib/workbooks/workbook-service";
+import { listPlatformTablesForUser } from "@/lib/workbooks/platform-tables";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { CreateWorkbookButton } from "@/components/workbooks/CreateWorkbookButton";
 
@@ -18,6 +19,11 @@ export default async function WorkbooksHubPage() {
   }
 
   const workbooks = await listWorkbooks({ id: user.id, isSuperuser: user.isSuperuser });
+  const platformTables = listPlatformTablesForUser({
+    id: user.id,
+    platformRole: user.platformRole,
+    isSuperuser: user.isSuperuser,
+  });
   const canManage = can(
     { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
     "manage_workbooks",
@@ -70,6 +76,31 @@ export default async function WorkbooksHubPage() {
             </li>
           ))}
         </ul>
+      )}
+
+      {platformTables.length > 0 && (
+        <section className="mt-10">
+          <h2 className="mb-1 text-lg font-semibold text-[var(--dpf-text)]">Platform data</h2>
+          <p className="mb-3 text-sm text-[var(--dpf-muted)]">
+            Existing platform records, opened as live spreadsheets. Edits here are the same data as the forms.
+          </p>
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {platformTables.map((t) => (
+              <li key={t.entityType}>
+                <Link
+                  href={`/workbooks/system/${t.entityType}`}
+                  className="block rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 transition hover:bg-[var(--dpf-surface-2)]"
+                >
+                  <div className="flex items-center gap-2">
+                    <Database className="h-4 w-4 text-[var(--dpf-muted)]" />
+                    <span className="font-medium text-[var(--dpf-text)]">{t.label}</span>
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-sm text-[var(--dpf-muted)]">{t.description}</p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </div>
   );

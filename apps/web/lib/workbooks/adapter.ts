@@ -20,6 +20,12 @@ export interface AdapterContext {
   userId: string;
   /** workbook-level role for the current user, when the table belongs to a workbook */
   workbookRole?: "owner" | "editor" | "viewer";
+  /**
+   * For platform-data adapters (not backed by a WorkbookShare): whether the user
+   * holds the domain's manage capability (e.g. manage_backlog). The service
+   * resolves it from the domain permission and passes it in.
+   */
+  canManage?: boolean;
 }
 
 export interface ReferenceResolution {
