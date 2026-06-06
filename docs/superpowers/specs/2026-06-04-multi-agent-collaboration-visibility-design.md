@@ -4,13 +4,13 @@
 | --- | --- |
 | Status | Reviewed and corrected for implementation alignment |
 | Created | 2026-06-04 |
-| Last reviewed | 2026-06-05 by Codex |
+| Last reviewed | 2026-06-06 — G2 corrected to visibility-only (Mark): human summon-entry path removed |
 | Author | Claude (Opus 4.8) + Mark Bodman; review pass by Codex |
 | Primary audience | Platform architecture, AI workforce UX, governance, standards |
 | Epic | `EP-A2A` - agent-to-agent coworker team orchestration |
 | Live backlog context | MCP `list_epics` verified `EP-A2A` open with 2 items; MCP semantic search found `BI-65B0D697` (`AI Operations Map - coworker-to-coworker (A2A) interaction visibility re-architecture`) as directly related. `search_specs_and_plans` returned no indexed matches for the main terms during this pass, so repo-file verification below is the stronger source. |
 | Related standards | `A2A` 1.0.0, `TAK`, `GAID`, PAR, orchestrator-worker |
-| Related repo areas | `apps/web/components/agent/*`, `apps/web/lib/tak/*`, `apps/web/lib/actions/agent-threads.ts`, `apps/web/lib/actions/coworker-summon.ts`, `apps/web/lib/mcp-tools.ts`, `apps/web/lib/ai-operations-map/*`, `apps/web/app/api/agent/stream/route.ts`, `packages/db/prisma/schema.prisma` |
+| Related repo areas | `apps/web/components/agent/*`, `apps/web/lib/tak/*`, `apps/web/lib/actions/agent-threads.ts`, `apps/web/lib/actions/conversation-participants-action.ts`, `apps/web/lib/mcp-tools.ts`, `apps/web/lib/ai-operations-map/*`, `apps/web/app/api/agent/stream/route.ts`, `packages/db/prisma/schema.prisma` |
 | Related prior artifacts | `2026-04-23-a2a-aligned-coworker-runtime-design.md`, `2026-05-10-ai-coworker-visual-control-surface-design.md`, `2026-04-21-deliberation-pattern-framework-design.md`, `2026-04-29-orchestration-primitives-design.md`, `2026-05-31-pseudo-user-contract-design.md`, `2026-04-03-value-stream-team-architecture-design.md` |
 
 ## Purpose
@@ -32,8 +32,10 @@ Mark's framing (2026-06-04): "Today there is a very 1-1 interaction between huma
 The problem decomposes into three product gaps:
 
 - **G1 - Handoff/collaboration visibility.** A user must see when the primary coworker brings another coworker into the work, why that peer was invoked, what state the peer is in, and when control returns.
-- **G2 - User-directed coworker summon.** A user must be able to bring in a named coworker as a tier-2 participant through a governed UX, without knowing internal tool names.
+- **G2 - Coworker-driven tasking, shown to the user.** The active coworker — not the human — chooses which peers to bring in and what to task them with. The user-facing surface for the active thread is **visibility only**: it shows which coworkers the active coworker is tasking and a summary of what each is doing. There is no human picker, dropdown, or objective field.
 - **G3 - Collaboration optimization.** Operators must be able to see recurring collaboration patterns, stalls, latency, and successful handoff paths so repeated ad-hoc behavior can be improved or codified into procedural orchestration.
+
+> **Correction (Mark, 2026-06-06).** The first G2 implementation shipped a human-facing summon picker (a "Bring in a coworker" button with a coworker dropdown and a "What should they do?" field). That puts the burden of choosing and tasking peers on the human, which is wrong: *"This is not the responsibility of the human… this is the sole responsibility of the active AI coworker to choose and task the other AI Coworkers. This spec is in spirit right, but it should not be for entry. Instead, the UI for the active thread should show what other AI coworkers it is tasking and a summary of what they are doing."* G2 is therefore **visibility, not entry**. The picker is removed; the active coworker drives `request_coworker` / `summon_coworker` itself; the portal only renders the resulting activity.
 
 ## Current Repo & Runtime Truth
 
@@ -60,11 +62,11 @@ Verified against this worktree on 2026-06-05. The important correction: the firs
 | Participant projection | `apps/web/lib/tak/conversation-participants-core.ts`, `apps/web/lib/tak/conversation-participants.ts` | Built as a pure core plus DB wrapper. Projects owner + depth-1 children from `AgentThread.parentThreadId`, `TaskRun`, latest assistant message, and `PrincipalAlias(aliasType="agent")`. Fails open to `agentId` when legacy agents lack a principal alias. |
 | Targeted coworker collaboration core | `apps/web/lib/tak/coworker-collaboration.ts` | Built for `requestCoworker()` and `summonCoworker()`. Reuses child thread spawning and emits `collaboration:*` events. Current comments correctly state hard `delegatesTo` / `escalatesTo` enforcement is still Slice 2. |
 | MCP tools | `apps/web/lib/mcp-tools.ts` | `request_coworker` and `summon_coworker` exist and dispatch to the collaboration core. They have `TOOL_TO_GRANTS` entries in `apps/web/lib/tak/agent-grants.ts` requiring `thread_write`. |
-| User-facing summon action | `apps/web/lib/actions/coworker-summon.ts` | Built. Lists active coworkers and summons one into the current thread. Current state returns the full active registry and calls the collaboration core directly after auth. Governance scoping still needs tightening. |
-| Coworker panel projection | `apps/web/components/agent/AgentCoworkerPanel.tsx` | Built. Imports `ConversationParticipantRail`, `HandoffCard`, and `CoworkerSummonPicker`; handles `collaboration:handoff|summon|return` SSE events; refreshes participants. |
+| Participant projection action | `apps/web/lib/actions/conversation-participants-action.ts` | Built (read-only). Projects the live participant roster for the visibility panel. **Replaces the removed `coworker-summon.ts`**, which exposed a user-facing `listSummonableCoworkers` + `summonCoworkerAction` entry path; per the 2026-06-06 correction the human entry path was deleted and only the read-only projection remains. |
+| Coworker panel projection | `apps/web/components/agent/AgentCoworkerPanel.tsx` | Built. Imports `CollaborationActivityPanel` (which composes `ConversationParticipantRail` + `HandoffCard`); handles `collaboration:handoff|summon|return` SSE events; refreshes participants. The `CoworkerSummonPicker` entry form is removed (2026-06-06). |
 | Participant rail | `apps/web/components/agent/ConversationParticipantRail.tsx` | Built and quiet for 1-1 conversations. Reuses report-kit `StatusBadge`, but currently carries a local task-state-to-intent map that should move into report-kit/status intent registry. |
 | Inline collaboration card | `apps/web/components/agent/HandoffCard.tsx` | Built. Renders handoff/summon/return cards. Current glyphs are emoji; UI hardening should replace them with `lucide-react` icons per the frontend design standard. |
-| Summon picker | `apps/web/components/agent/CoworkerSummonPicker.tsx` | Built as a compact picker plus objective textarea. `@mention` input behavior is not built. |
+| ~~Summon picker~~ (removed 2026-06-06) | ~~`apps/web/components/agent/CoworkerSummonPicker.tsx`~~ | **Deleted.** This was a human entry form (coworker dropdown + "what should they do?" textarea). Per the G2 correction, choosing and tasking peers is the active coworker's job, not the human's. The visibility panel (`CollaborationActivityPanel`) is the only user-facing collaboration surface. |
 | Unit coverage | `apps/web/lib/tak/conversation-participants.test.ts`, `apps/web/lib/actions/agent-threads.test.ts` | Participant projection has focused tests. The collaboration core, summon action, and visual components need targeted tests. |
 
 ### Not built yet
@@ -72,8 +74,6 @@ Verified against this worktree on 2026-06-05. The important correction: the firs
 - Hard runtime enforcement of `Agent.delegatesTo` / `Agent.escalatesTo` inside the collaboration tools.
 - `DelegationChain` hop writes for request/summon attempts, including denied attempts.
 - Persistent collaboration provenance that survives refresh. Current live cards come from SSE/client state; participant projection sees existing child threads as `enteredVia: "spawn"` because no persisted `handoff` / `summon` metadata is attached to the child task/thread.
-- `@mention` summon in the message composer.
-- Archetype/value-stream scoped coworker picker with an explicit "all coworkers" escape hatch.
 - Operations Map transfer edges, transfer inspector, and collaboration graph overlay.
 - `CollaborationPattern` aggregation or Process Observer feed.
 
@@ -133,7 +133,7 @@ Required hardening:
 `request_coworker` and `summon_coworker` exist. The remaining architectural requirement is governance parity:
 
 - `request_coworker` must be proposal-aware when the target exceeds the caller's delegated scope. Current MCP definitions do not declare `executionMode: "proposal"` for these tools; the hardening pass must add the correct PAR behavior or explicitly document why the existing `thread_write` grant is sufficient for a limited MVP.
-- `summonCoworkerAction()` must not bypass governed policy by calling the collaboration core after only `auth()`. It should either call the same MCP/governed execution path or enforce the same user capability and target-agent grant intersection before spawning.
+- Both `request_coworker` and `summon_coworker` are **coworker-initiated** and flow through the governed MCP execution path (`mcp-governed-execute.ts`), carrying the active coworker's `callerAgentId` for authority enforcement and attribution. There is no user-facing summon action: the human cannot pick or task a peer, so there is no `auth()`-only side door to govern. (The removed `summonCoworkerAction()` was exactly that side door; deleting it closes the bypass risk rather than papering over it.)
 - `Agent.delegatesTo` / `Agent.escalatesTo` must become enforcement inputs, not display-only metadata. Denied attempts write an auditable reason and do not spawn a child thread.
 - Every accepted or denied request/summon writes or extends a `DelegationChain` hop once Slice 2 starts; until then, the UX must not imply that chain-of-custody is already complete.
 
@@ -163,8 +163,8 @@ Remaining refinements:
 - Use report-kit status semantics end to end. Move the local `TaskState -> Intent` map from `ConversationParticipantRail.tsx` into the central `statusColors.ts` registry or a shared task-state badge wrapper.
 - Replace emoji glyphs in the collaboration UI with `lucide-react` icons such as `Handshake`, `UserPlus`, `Undo2`, `Users`, `ChevronRight`/`ChevronDown` (disclosure), `Loader2` (in-flight), and `CheckCircle2` (done).
 - Keep the disclosure compact and stable: fixed collapsed height, truncation, and tooltips so participant labels cannot resize the coworker panel or overlap the message stream.
-- Add `@mention` invocation as a separate refinement after the governed picker is correct. Do not ship `@mention` before governance and scoping are solved.
-- Scope the picker to route/value-stream/archetype-relevant coworkers by default, with an explicit "all coworkers" mode for advanced cases.
+- **The disclosure is read-only.** It carries no human controls for choosing or tasking a coworker — no picker, dropdown, objective field, or `@mention` summon. Per the 2026-06-06 correction, the active coworker decides which peers to bring in (via `request_coworker` / `summon_coworker`); the user only sees the resulting roster and per-event cards. Each card attributes the action to the **active coworker** as the source (not "You").
+- Each summon/handoff card shows a one-line summary of what the peer was tasked with, so the user understands *what* each coworker is doing without expanding into the sub-thread.
 - Apply the portal UI rules: CSS variables only, no local raw color maps, WCAG 2.2 AA contrast, color never as the sole channel, reduced-motion compatible activity indicators, and visible focus states.
 
 ### Layer B - Collaboration Topology in the AI Operations Map
@@ -279,17 +279,17 @@ Scope: finish the implementation already present in this worktree.
 - **Collapsed/summarized disclosure (Mark, 2026-06-05):** introduce a `CollaborationActivityPanel` that is collapsed and summarized by default with a done indicator, composing the existing rail (as expanded detail) and the handoff/summon/return cards. Replace the always-visible rail + loose card stream with this disclosure.
 - Add the return event path for child task terminal states so the done indicator is a confirmed runtime fact; while the return event is being wired, drive the indicator from participant `TaskState` (poll while in-flight).
 - Persist collaboration provenance in `TaskRun.a2aMetadata` so cards and participant `enteredVia` survive refresh.
-- Route UI summon through governed policy; make `request_coworker` proposal-aware or explicitly bounded.
+- **Remove the human summon-entry path (2026-06-06 correction):** delete `CoworkerSummonPicker` and the user-facing `summonCoworkerAction`; the disclosure is visibility-only. Summon stays a coworker-initiated MCP tool (`summon_coworker`) carrying `callerAgentId`. Make `request_coworker` proposal-aware or explicitly bounded.
 - Replace local status intent mapping with report-kit central status semantics.
 - Replace emoji glyphs with lucide icons and verify compact responsive behavior.
-- Add focused tests for `coworker-collaboration.ts`, `coworker-summon.ts`, the collaboration disclosure summary/done logic, and the panel's collaboration event handling.
+- Add focused tests for `coworker-collaboration.ts`, the participant projection action, the collaboration disclosure summary/done logic, and the panel's collaboration event handling.
 
 Acceptance:
 
 - By default the panel shows a single collapsed, summarized collaboration row with a clear in-progress/done indicator; expanding reveals the roster and cards. Nothing renders for a 1-1 conversation.
 - The done indicator flips to "done" when all sub-agents reach a terminal `TaskState`, confirmed by `collaboration:return` where available.
-- A coworker can request a named peer, and the user sees the persisted summary after refresh.
-- A user can summon a coworker through a governed picker; out-of-scope summon attempts are denied with a clear user-safe reason and no child thread.
+- The active coworker can bring in a named peer (handoff or summon), and the user sees the peer plus a one-line summary of what it was tasked with, persisted across refresh and attributed to the active coworker (not "You").
+- The user-facing surface is read-only: there is no picker, dropdown, objective field, or `@mention` summon by which a human could choose or task a coworker.
 - Participant state uses central report-kit semantics and no local status color map.
 - Component tests cover no-overlap/no-overflow core states; UX verification runs against the canonical local install or shared local-CI convergence sandbox.
 
@@ -352,7 +352,7 @@ Reserve at least 20 percent of the implementation effort for refactoring and UI 
 
 ## Risks
 
-1. **Governance bypass.** The current UI summon action can become a side door if it bypasses the governed execution path. Mitigation: Slice 1A makes policy parity explicit before broad UX rollout.
+1. **Governance bypass.** A user-facing summon action that called the collaboration core after only `auth()` was a side door around the governed execution path. Mitigation (done, 2026-06-06): the human summon-entry path is removed entirely; summon is only reachable as a coworker-initiated MCP tool through `mcp-governed-execute.ts`. There is no human entry surface left to bypass.
 2. **Visible but non-persistent handoffs.** Live cards that disappear on refresh create false confidence. Mitigation: persist provenance on existing task metadata and reconstruct cards/read models from it.
 3. **Owner dilution.** Multi-agent UX can imply authority moved to the peer. Mitigation: PAR states owner, peer, return, and mutation authority explicitly.
 4. **Parallel visualization surface.** A new graph page would duplicate the Operations Map. Mitigation: transfer overlay composes into the existing map and inspector.
@@ -362,7 +362,7 @@ Reserve at least 20 percent of the implementation effort for refactoring and UI 
 ## Open Questions
 
 1. Should ownership ever transfer to a summoned orchestrator coworker, or is the route-resolved owner fixed for the conversation lifetime?
-2. Should the coworker picker default scope be route, value stream, archetype, or a weighted blend of those?
+2. ~~Should the coworker picker default scope be route, value stream, archetype, or a weighted blend of those?~~ **Resolved 2026-06-06:** there is no human picker. The active coworker selects peers, so scoping is the coworker's routing/judgment concern, not a UI default.
 3. Should `request_coworker` be a proposal-mode tool in all cases, or only when delegation scope is exceeded?
 4. Should persisted collaboration provenance live only in `TaskRun.a2aMetadata`, or also produce a compact `AgentMessage` system card for transcript history?
 5. Should pattern keys prefer AgentCard capability over role/agent id to survive future agent reorgs?

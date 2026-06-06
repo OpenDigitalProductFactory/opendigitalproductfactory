@@ -4269,7 +4269,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   {
     name: "summon_coworker",
     description:
-      "Bring a NAMED coworker into the current conversation as a second/third-tier participant to address a request, emitting a VISIBLE summon. Typically invoked on the user's behalf.",
+      "Bring a NAMED coworker into the current conversation as a second/third-tier participant to address part of the work, emitting a VISIBLE summon the user sees inline. YOU (the active coworker) decide which peer to bring in and what to task them with — this is your responsibility, not the user's. Use when a request needs a peer's distinct capability alongside you in the conversation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -5264,6 +5264,7 @@ export async function executeTool(
             targetAgent,
             objective,
             tier: tierParam === 3 ? 3 : 2,
+            callerAgentId: context.agentId ?? null,
             routeContext: context.routeContext,
           },
           userId,

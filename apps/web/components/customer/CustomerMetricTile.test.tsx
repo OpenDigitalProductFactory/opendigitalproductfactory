@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CustomerMetricTile } from "./CustomerMetricTile";
 
 describe("CustomerMetricTile", () => {
-  it("renders a linked metric with DPF theme classes", () => {
+  it("renders a linked metric through the shared report-kit StatCard", () => {
     const html = renderToStaticMarkup(
       <CustomerMetricTile
         href="/customer/opportunities"
@@ -18,7 +18,8 @@ describe("CustomerMetricTile", () => {
     expect(html).toContain(">Pipeline<");
     expect(html).toContain(">3<");
     expect(html).toContain("£6,000 open");
-    expect(html).toContain("border-[var(--dpf-accent)]");
+    expect(html).toContain("border-left-color:var(--dpf-accent)");
+    expect(html).not.toContain("border-[var(--dpf-accent)]");
     expect(html).not.toMatch(/#[0-9a-f]{3,6}/i);
   });
 });

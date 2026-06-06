@@ -4,6 +4,8 @@ import {
   isInngestSelfSyncOnBootEnabled,
   isStartupModelRevalidationEnabled,
   reconcileSelfUpgradeRunsOnBoot,
+  recoverContradictoryBuildExecStatesOnBoot,
+  resumeStrandedBuildsOnBoot,
   warnIfLegacyHiveTokenEnvSet,
   syncPlatformVersionOnBoot,
 } from "./instrumentation";
@@ -13,6 +15,9 @@ const getDeployedShaMock = vi.fn();
 const completeRunMock = vi.fn();
 const failRunMock = vi.fn();
 const selfUpgradeRunFindManyMock = vi.fn();
+const featureBuildFindManyMock = vi.fn();
+const featureBuildUpdateMock = vi.fn();
+const buildActivityCreateMock = vi.fn();
 
 vi.mock("@/lib/platform/version-config", () => ({
   syncPlatformVersionConfig: (...args: unknown[]) => syncPlatformVersionConfigMock(...args),
@@ -32,7 +37,16 @@ vi.mock("@dpf/db", () => ({
     selfUpgradeRun: {
       findMany: (...args: unknown[]) => selfUpgradeRunFindManyMock(...args),
     },
+    featureBuild: {
+      findMany: (...args: unknown[]) => featureBuildFindManyMock(...args),
+      update: (...args: unknown[]) => featureBuildUpdateMock(...args),
+    },
+    buildActivity: {
+      create: (...args: unknown[]) => buildActivityCreateMock(...args),
+    },
   },
+  // Sentinels — the reconcilers only need identity equality, not real Prisma.
+  Prisma: { DbNull: { __dbnull: true }, JsonNull: { __jsonnull: true } },
 }));
 
 beforeEach(() => {
@@ -40,6 +54,11 @@ beforeEach(() => {
   completeRunMock.mockReset();
   failRunMock.mockReset();
   selfUpgradeRunFindManyMock.mockReset();
+  featureBuildFindManyMock.mockReset();
+  featureBuildUpdateMock.mockReset();
+  buildActivityCreateMock.mockReset();
+  featureBuildUpdateMock.mockResolvedValue({});
+  buildActivityCreateMock.mockResolvedValue({});
 });
 
 describe("warnIfLegacyHiveTokenEnvSet", () => {
@@ -206,5 +225,140 @@ describe("areOptionalStartupTasksEnabled", () => {
         DPF_OPTIONAL_STARTUP_TASKS_ENABLED: "true",
       }),
     ).toBe(true);
+  });
+});
+
+// ─── Build Studio engine reliability (spec §3.1 engine-first / FB-78E967D4) ───
+
+describe("recoverContradictoryBuildExecStatesOnBoot (FIX 1)", () => {
+  it("coerces an error-without-fail checkpoint to `failed` so Retry can resume", async () => {
+    featureBuildFindManyMock.mockResolvedValueOnce([
+      {
+        buildId: "BLD-ERR",
+        buildExecState: { step: "complete", error: "threw mid-run", containerId: "c-1" },
+        verificationOut: null,
+      },
+    ]);
+
+    const log = vi.fn();
+    const result = await recoverContradictoryBuildExecStatesOnBoot({ log, error: vi.fn() });
+
+    expect(result).toEqual({ recovered: 1, cleared: 0, failedCoerced: 1 });
+    expect(featureBuildUpdateMock).toHaveBeenCalledTimes(1);
+    const updateArg = featureBuildUpdateMock.mock.calls[0]![0] as {
+      where: { buildId: string };
+      data: { buildExecState: { step: string; containerId: string } };
+    };
+    expect(updateArg.where.buildId).toBe("BLD-ERR");
+    expect(updateArg.data.buildExecState.step).toBe("failed");
+    // Live pointers preserved so retry reuses the sandbox.
+    expect(updateArg.data.buildExecState.containerId).toBe("c-1");
+    expect(buildActivityCreateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears a missing-step checkpoint (SQL NULL) for a clean restart", async () => {
+    featureBuildFindManyMock.mockResolvedValueOnce([
+      { buildId: "BLD-NOSTEP", buildExecState: { sourceCurrency: { a: 1 } }, verificationOut: null },
+    ]);
+
+    const result = await recoverContradictoryBuildExecStatesOnBoot({ log: vi.fn(), error: vi.fn() });
+
+    expect(result).toEqual({ recovered: 1, cleared: 1, failedCoerced: 0 });
+    const updateArg = featureBuildUpdateMock.mock.calls[0]![0] as {
+      data: { buildExecState: unknown };
+    };
+    // DbNull sentinel from the mocked Prisma.
+    expect(updateArg.data.buildExecState).toEqual({ __dbnull: true });
+  });
+
+  it("clears a complete-no-verify checkpoint for a clean restart", async () => {
+    featureBuildFindManyMock.mockResolvedValueOnce([
+      { buildId: "BLD-NOVERIFY", buildExecState: { step: "complete" }, verificationOut: null },
+    ]);
+
+    const result = await recoverContradictoryBuildExecStatesOnBoot({ log: vi.fn(), error: vi.fn() });
+
+    expect(result).toEqual({ recovered: 1, cleared: 1, failedCoerced: 0 });
+  });
+
+  it("leaves healthy and already-failed rows untouched (idempotent)", async () => {
+    featureBuildFindManyMock.mockResolvedValueOnce([
+      { buildId: "BLD-OK", buildExecState: { step: "deps_installed" }, verificationOut: null },
+      { buildId: "BLD-DONE", buildExecState: { step: "complete" }, verificationOut: { typecheckPassed: true } },
+      { buildId: "BLD-FAILED", buildExecState: { step: "failed", failedAt: "db_ready", error: "x" }, verificationOut: null },
+    ]);
+
+    const result = await recoverContradictoryBuildExecStatesOnBoot({ log: vi.fn(), error: vi.fn() });
+
+    expect(result).toEqual({ recovered: 0, cleared: 0, failedCoerced: 0 });
+    expect(featureBuildUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("is non-fatal: returns null and logs when the query throws", async () => {
+    featureBuildFindManyMock.mockRejectedValueOnce(new Error("db down"));
+    const error = vi.fn();
+
+    const result = await recoverContradictoryBuildExecStatesOnBoot({ log: vi.fn(), error });
+
+    expect(result).toBeNull();
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error.mock.calls[0]![0]).toContain("[build-exec-recover]");
+  });
+});
+
+describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
+  it("re-dispatches a stranded, internally-consistent mid-step build", async () => {
+    featureBuildFindManyMock.mockResolvedValueOnce([
+      { buildId: "BLD-STRANDED", buildExecState: { step: "deps_installed" }, verificationOut: null },
+    ]);
+    const dispatch = vi.fn();
+
+    const result = await resumeStrandedBuildsOnBoot({ dispatch }, { log: vi.fn(), error: vi.fn() });
+
+    expect(result).toEqual({ resumed: 1 });
+    expect(dispatch).toHaveBeenCalledWith("BLD-STRANDED");
+    expect(buildActivityCreateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips contradictory shapes (owned by FIX 1) and terminal/null steps", async () => {
+    featureBuildFindManyMock.mockResolvedValueOnce([
+      // contradictory: error-without-fail
+      { buildId: "BLD-CONTRA", buildExecState: { step: "complete", error: "x" }, verificationOut: null },
+      // terminal
+      { buildId: "BLD-COMPLETE", buildExecState: { step: "complete" }, verificationOut: { typecheckPassed: true } },
+      { buildId: "BLD-FAILED", buildExecState: { step: "failed", failedAt: "db_ready", error: "x" }, verificationOut: null },
+      // missing step (contradictory)
+      { buildId: "BLD-NOSTEP", buildExecState: { sourceCurrency: { a: 1 } }, verificationOut: null },
+    ]);
+    const dispatch = vi.fn();
+
+    const result = await resumeStrandedBuildsOnBoot({ dispatch }, { log: vi.fn(), error: vi.fn() });
+
+    expect(result).toEqual({ resumed: 0 });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("passes a staleAfter cutoff to the query so live builds are excluded", async () => {
+    featureBuildFindManyMock.mockResolvedValueOnce([]);
+    const dispatch = vi.fn();
+
+    await resumeStrandedBuildsOnBoot({ staleAfterMs: 60_000, dispatch }, { log: vi.fn(), error: vi.fn() });
+
+    const where = (featureBuildFindManyMock.mock.calls[0]![0] as {
+      where: { phase: string; updatedAt: { lt: Date } };
+    }).where;
+    expect(where.phase).toBe("build");
+    expect(where.updatedAt.lt).toBeInstanceOf(Date);
+  });
+
+  it("is non-fatal: returns null and logs when the query throws", async () => {
+    featureBuildFindManyMock.mockRejectedValueOnce(new Error("db down"));
+    const error = vi.fn();
+
+    const result = await resumeStrandedBuildsOnBoot({ dispatch: vi.fn() }, { log: vi.fn(), error });
+
+    expect(result).toBeNull();
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error.mock.calls[0]![0]).toContain("[build-resume]");
   });
 });
