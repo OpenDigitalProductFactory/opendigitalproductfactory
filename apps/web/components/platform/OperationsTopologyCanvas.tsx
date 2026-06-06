@@ -14,6 +14,7 @@
 import { useState } from "react";
 import { RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { intentStyle } from "@/components/ui/report-kit";
+import { LocalTime } from "@/components/ui/LocalTime";
 import type { OperationsMapRoutingTopology } from "@/lib/ai-operations-map/types";
 import {
   buildOperationsTopologyLayout,
@@ -69,6 +70,7 @@ export function OperationsTopologyCanvas({
   replayRange = null,
 }: Props) {
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
+  const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
   const zoomLevel = ZOOM_LEVELS[zoomIndex] ?? 1;
   const showProvider = dimension === "provider" || dimension === "both";
   const showA2a = dimension === "a2a" || dimension === "both";
@@ -100,6 +102,11 @@ export function OperationsTopologyCanvas({
   const providerYById = new Map(layout.providerNodes.map((node) => [node.providerId, node]));
   const routesById = new Map(topology.routes.map((route) => [route.id, route]));
   const a2aById = new Map(topology.a2aEdges.map((edge) => [edge.id, edge]));
+  const coworkerLabelById = new Map(topology.coworkers.map((c) => [c.agentId, c.label]));
+  const providerLabelById = new Map(topology.providers.map((p) => [p.providerId, p.label]));
+  const selectedMarker = selectedMarkerId
+    ? topology.markers.find((marker) => marker.id === selectedMarkerId) ?? null
+    : null;
 
   const isEmpty = layout.rows.length === 0 && layout.providerNodes.length === 0;
   const svgLabel = showProvider && showA2a
@@ -221,10 +228,27 @@ export function OperationsTopologyCanvas({
           {showProvider ? topology.markers.map((marker) => {
             const anchor = markerAnchor(marker, layout, rowYById, providerYById);
             if (!anchor) return null;
+            const isSelected = marker.id === selectedMarkerId;
             return (
-              <g key={marker.id} data-canvas-marker={marker.id} data-marker-type={marker.type}>
+              <g
+                key={marker.id}
+                data-canvas-marker={marker.id}
+                data-marker-type={marker.type}
+                data-marker-selected={isSelected ? "true" : "false"}
+                role="button"
+                tabIndex={0}
+                aria-label={`${marker.label}: ${marker.summary}`}
+                className="cursor-pointer focus:outline-none"
+                onClick={() => setSelectedMarkerId(marker.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSelectedMarkerId(marker.id);
+                  }
+                }}
+              >
                 <title>{`${marker.label}: ${marker.summary}`}</title>
-                <circle cx={anchor.x} cy={anchor.y} r="5" fill="var(--dpf-surface-1)" stroke={markerTypeStroke(marker.type)} strokeWidth="2" />
+                <circle cx={anchor.x} cy={anchor.y} r={isSelected ? 7 : 5} fill="var(--dpf-surface-1)" stroke={markerTypeStroke(marker.type)} strokeWidth={isSelected ? 3 : 2} />
               </g>
             );
           }) : null}
@@ -250,6 +274,46 @@ export function OperationsTopologyCanvas({
             </g>
           ))}
         </svg>
+        {selectedMarker ? (
+          <aside
+            data-canvas-marker-detail={selectedMarker.id}
+            aria-label="Marker detail"
+            className="absolute bottom-2 left-2 z-10 max-w-xs rounded-md border border-[var(--dpf-border)] bg-[color-mix(in_srgb,var(--dpf-surface-1)_94%,transparent)] p-3 text-xs shadow-lg backdrop-blur"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <p className="font-semibold text-[var(--dpf-text)]" style={{ color: markerTypeStroke(selectedMarker.type) }}>
+                {selectedMarker.label}
+              </p>
+              <button
+                type="button"
+                aria-label="Close marker detail"
+                onClick={() => setSelectedMarkerId(null)}
+                className="text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mt-1 leading-5 text-[var(--dpf-muted)]">{selectedMarker.summary}</p>
+            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-[11px]">
+              <dt className="font-semibold text-[var(--dpf-muted)]">When</dt>
+              <dd className="min-w-0 break-words text-[var(--dpf-text)]">
+                <LocalTime value={selectedMarker.occurredAt} fallback="Current state" />
+              </dd>
+              <dt className="font-semibold text-[var(--dpf-muted)]">Coworker</dt>
+              <dd className="min-w-0 break-words text-[var(--dpf-text)]">
+                {selectedMarker.coworkerId
+                  ? coworkerLabelById.get(selectedMarker.coworkerId) ?? selectedMarker.coworkerId
+                  : "Not recorded"}
+              </dd>
+              <dt className="font-semibold text-[var(--dpf-muted)]">Provider</dt>
+              <dd className="min-w-0 break-words text-[var(--dpf-text)]">
+                {selectedMarker.providerId
+                  ? providerLabelById.get(selectedMarker.providerId) ?? selectedMarker.providerId
+                  : "Not provider-specific"}
+              </dd>
+            </dl>
+          </aside>
+        ) : null}
         </>
       )}
     </section>
