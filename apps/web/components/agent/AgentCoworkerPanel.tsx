@@ -776,9 +776,36 @@ export function AgentCoworkerPanel({
     setClearConfirmOpen(false);
 
     startClearing(async () => {
-      const result = await clearConversation({ threadId });
+      // BI-63906D5D — coworker panel wedge: useTransition keeps `isClearing`
+      // true until this async resolves, and `isClearing` disables the input
+      // (placeholder "Sending..."). clearConversation can hang server-side
+      // (observed after an aborted/ghost-called coworker turn left the thread
+      // mid-flight), which left the panel permanently wedged — surviving a
+      // page reload and a portal restart, with no operator recovery. Race the
+      // call against a timeout so the transition — and therefore the input —
+      // always recovers, then reset local state best-effort so the operator can
+      // keep working even if the server side never confirmed the clear.
+      const CLEAR_TIMEOUT_MS = 10_000;
+      let timedOut = false;
+      const result = await Promise.race([
+        clearConversation({ threadId }),
+        new Promise<{ error: string }>((resolve) =>
+          setTimeout(() => {
+            timedOut = true;
+            resolve({ error: "clearConversation timed out" });
+          }, CLEAR_TIMEOUT_MS),
+        ),
+      ]);
       if ("error" in result) {
         console.warn("clearConversation error:", result.error);
+        if (timedOut) {
+          // Best-effort local reset so a hung server action doesn't strand the
+          // operator. The input re-enables as soon as this async returns.
+          setMessages([]);
+          setBuildTasks(new Map());
+          setBuildProgress(null);
+          onConversationCleared?.();
+        }
         return;
       }
       setMessages([]);
