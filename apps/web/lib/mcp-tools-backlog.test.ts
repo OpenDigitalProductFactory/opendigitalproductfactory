@@ -26,6 +26,7 @@ const { mockPrisma, mockInngest } = vi.hoisted(() => ({
       findFirst: vi.fn(),
     },
     featureBuild: {
+      count: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
     },
@@ -79,6 +80,7 @@ describe("backlog MCP tool execution", () => {
     mockPrisma.epic.findMany.mockResolvedValue([]);
     mockPrisma.employeeProfile.findFirst.mockResolvedValue(null);
     mockPrisma.backlogItemActivity.create.mockResolvedValue({});
+    mockPrisma.featureBuild.count.mockResolvedValue(0);
     mockPrisma.featureBuild.update.mockResolvedValue({});
     mockPrisma.buildActivity.create.mockResolvedValue({});
 
