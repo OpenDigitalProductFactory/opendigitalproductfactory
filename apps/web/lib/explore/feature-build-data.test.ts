@@ -70,12 +70,13 @@ describe("getFeatureBuilds", () => {
 
     expect(prisma.featureBuild.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: {
+        where: expect.objectContaining({
+          abandonedAt: null,
           phase: { not: "failed" },
           abandonedAt: null,
           parentEpicId: null,
           supersededByEpicId: null,
-        },
+        }),
       }),
     );
   });
