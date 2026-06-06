@@ -30,11 +30,12 @@ import {
   RestoreIntegrityError,
 } from "./postgres-restore-runner";
 import { runQdrantBackup } from "./qdrant-backup-runner";
+import { resolveManagedScriptPath } from "./managed-script-path";
 
 const execFileAsync = promisify(execFile);
 
 const BACKUPS_ROOT = "/backups";
-const RESTORE_SCRIPT_PATH = "/workspace/scripts/restore-qdrant.sh";
+const RESTORE_SCRIPT_NAME = "restore-qdrant.sh";
 const RUNNER_TIMEOUT_MS = 30 * 60 * 1000;
 
 export interface QdrantRestoreArgs {
@@ -113,7 +114,7 @@ export async function runQdrantRestore(
 ): Promise<{ restoreId: string; status: "ok" | "failed" }> {
   const now = args.now ?? (() => new Date());
   const backupsRoot = args.backupsRoot ?? BACKUPS_ROOT;
-  const scriptPath = args.scriptPath ?? RESTORE_SCRIPT_PATH;
+  const scriptPath = args.scriptPath ?? resolveManagedScriptPath(RESTORE_SCRIPT_NAME);
   const prisma = args.prismaClient ?? (await import("@dpf/db")).prisma;
 
   const release = args.acquireLock === false

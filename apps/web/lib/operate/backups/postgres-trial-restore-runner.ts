@@ -31,11 +31,12 @@ import {
   TRIAL_RESTORE_DEFAULT_ASSERT_TABLES,
   TRIAL_RESTORE_TRIGGER,
 } from "./constants";
+import { resolveManagedScriptPath } from "./managed-script-path";
 
 const execFileAsync = promisify(execFile);
 
 const BACKUPS_ROOT = "/backups";
-const TRIAL_RESTORE_SCRIPT_PATH = "/workspace/scripts/postgres-trial-restore.sh";
+const TRIAL_RESTORE_SCRIPT_NAME = "postgres-trial-restore.sh";
 const RUNNER_TIMEOUT_MS = 10 * 60 * 1000; // 10-minute hard cap
 
 export interface RunPostgresTrialRestoreArgs {
@@ -188,7 +189,7 @@ export async function runPostgresTrialRestore(
   const now = args.now ?? (() => new Date());
   const startedAt = now();
   const backupsRoot = args.backupsRoot ?? BACKUPS_ROOT;
-  const scriptPath = args.scriptPath ?? TRIAL_RESTORE_SCRIPT_PATH;
+  const scriptPath = args.scriptPath ?? resolveManagedScriptPath(TRIAL_RESTORE_SCRIPT_NAME);
   const assertTables = args.assertTables ?? TRIAL_RESTORE_DEFAULT_ASSERT_TABLES;
   const runScript = args.runScript ?? defaultRunScript;
   const prisma = args.prismaClient ?? (await import("@dpf/db")).prisma;
