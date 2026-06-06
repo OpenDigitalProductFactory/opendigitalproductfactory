@@ -18,39 +18,39 @@ describe("BacklogItemCard", () => {
     updatedAt: "2026-03-19T00:00:00Z",
   } as any;
 
-  it("renders item title", () => {
-    const { getByText } = render(<BacklogItemCard item={fakeItem} />);
+  it("renders item title", async () => {
+    const { getByText } = await render(<BacklogItemCard item={fakeItem} />);
     expect(getByText("Design wireframes")).toBeTruthy();
   });
 
-  it("renders priority", () => {
-    const { getByText } = render(<BacklogItemCard item={fakeItem} />);
+  it("renders priority", async () => {
+    const { getByText } = await render(<BacklogItemCard item={fakeItem} />);
     expect(getByText("P100")).toBeTruthy();
   });
 
-  it("renders epic name", () => {
-    const { getByText } = render(<BacklogItemCard item={fakeItem} />);
+  it("renders epic name", async () => {
+    const { getByText } = await render(<BacklogItemCard item={fakeItem} />);
     expect(getByText("Onboarding Flow")).toBeTruthy();
   });
 
-  it("renders 'No epic' when epic is null", () => {
+  it("renders 'No epic' when epic is null", async () => {
     const item = { ...fakeItem, epic: null };
-    const { getByText } = render(<BacklogItemCard item={item} />);
+    const { getByText } = await render(<BacklogItemCard item={item} />);
     expect(getByText("No epic")).toBeTruthy();
   });
 
-  it("calls onPress when tapped", () => {
+  it("calls onPress when tapped", async () => {
     const onPress = jest.fn();
-    const { getByLabelText } = render(
+    const { getByLabelText } = await render(
       <BacklogItemCard item={fakeItem} onPress={onPress} />,
     );
-    fireEvent.press(getByLabelText("Backlog item: Design wireframes"));
+    await fireEvent.press(getByLabelText("Backlog item: Design wireframes"));
     expect(onPress).toHaveBeenCalledWith(fakeItem);
   });
 
-  it("does not crash when no onPress provided", () => {
-    const { getByLabelText } = render(<BacklogItemCard item={fakeItem} />);
+  it("does not crash when no onPress provided", async () => {
+    const { getByLabelText } = await render(<BacklogItemCard item={fakeItem} />);
     // Should not throw
-    fireEvent.press(getByLabelText("Backlog item: Design wireframes"));
+    await fireEvent.press(getByLabelText("Backlog item: Design wireframes"));
   });
 });

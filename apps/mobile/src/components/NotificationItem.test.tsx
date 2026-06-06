@@ -27,8 +27,8 @@ describe("NotificationItem", () => {
     jest.clearAllMocks();
   });
 
-  it("renders notification title", () => {
-    const { getByText } = render(
+  it("renders notification title", async () => {
+    const { getByText } = await render(
       <NotificationItem
         notification={unreadNotification}
         onPress={mockOnPress}
@@ -37,8 +37,8 @@ describe("NotificationItem", () => {
     expect(getByText("New approval needed")).toBeTruthy();
   });
 
-  it("renders notification body", () => {
-    const { getByText } = render(
+  it("renders notification body", async () => {
+    const { getByText } = await render(
       <NotificationItem
         notification={unreadNotification}
         onPress={mockOnPress}
@@ -49,19 +49,19 @@ describe("NotificationItem", () => {
     ).toBeTruthy();
   });
 
-  it("calls onPress with notification when tapped", () => {
-    const { getByText } = render(
+  it("calls onPress with notification when tapped", async () => {
+    const { getByText } = await render(
       <NotificationItem
         notification={unreadNotification}
         onPress={mockOnPress}
       />,
     );
-    fireEvent.press(getByText("New approval needed"));
+    await fireEvent.press(getByText("New approval needed"));
     expect(mockOnPress).toHaveBeenCalledWith(unreadNotification);
   });
 
-  it("includes unread in accessibility label for unread items", () => {
-    const { getByLabelText } = render(
+  it("includes unread in accessibility label for unread items", async () => {
+    const { getByLabelText } = await render(
       <NotificationItem
         notification={unreadNotification}
         onPress={mockOnPress}
@@ -72,8 +72,8 @@ describe("NotificationItem", () => {
     ).toBeTruthy();
   });
 
-  it("does not include unread in accessibility label for read items", () => {
-    const { getByLabelText } = render(
+  it("does not include unread in accessibility label for read items", async () => {
+    const { getByLabelText } = await render(
       <NotificationItem
         notification={readNotification}
         onPress={mockOnPress}

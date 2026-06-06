@@ -30,53 +30,53 @@ describe("PortfolioNode", () => {
     jest.clearAllMocks();
   });
 
-  it("renders portfolio name", () => {
-    const { getByText } = render(
+  it("renders portfolio name", async () => {
+    const { getByText } = await render(
       <PortfolioNode portfolio={fakePortfolio} />,
     );
     expect(getByText("Platform Portfolio")).toBeTruthy();
   });
 
-  it("renders product count", () => {
-    const { getByText } = render(
+  it("renders product count", async () => {
+    const { getByText } = await render(
       <PortfolioNode portfolio={fakePortfolio} />,
     );
     expect(getByText("2 products")).toBeTruthy();
   });
 
-  it("renders singular product count for 1 product", () => {
+  it("renders singular product count for 1 product", async () => {
     const portfolio = { ...fakePortfolio, products: [{ id: "prod-1" }] };
-    const { getByText } = render(
+    const { getByText } = await render(
       <PortfolioNode portfolio={portfolio} />,
     );
     expect(getByText("1 product")).toBeTruthy();
   });
 
-  it("shows description when expanded", () => {
-    const { getByLabelText, getByText, queryByText } = render(
+  it("shows description when expanded", async () => {
+    const { getByLabelText, getByText, queryByText } = await render(
       <PortfolioNode portfolio={fakePortfolio} />,
     );
     // Description should not be visible initially
     expect(queryByText("Main platform portfolio")).toBeNull();
 
     // Tap to expand
-    fireEvent.press(getByLabelText("Portfolio: Platform Portfolio"));
+    await fireEvent.press(getByLabelText("Portfolio: Platform Portfolio"));
     expect(getByText("Main platform portfolio")).toBeTruthy();
   });
 
-  it("navigates to detail on long press", () => {
-    const { getByLabelText } = render(
+  it("navigates to detail on long press", async () => {
+    const { getByLabelText } = await render(
       <PortfolioNode portfolio={fakePortfolio} />,
     );
     fireEvent(getByLabelText("Portfolio: Platform Portfolio"), "longPress");
     expect(mockPush).toHaveBeenCalledWith("/portfolio/port-1");
   });
 
-  it("navigates to detail via arrow button", () => {
-    const { getByLabelText } = render(
+  it("navigates to detail via arrow button", async () => {
+    const { getByLabelText } = await render(
       <PortfolioNode portfolio={fakePortfolio} />,
     );
-    fireEvent.press(
+    await fireEvent.press(
       getByLabelText("View Platform Portfolio details"),
     );
     expect(mockPush).toHaveBeenCalledWith("/portfolio/port-1");
