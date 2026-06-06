@@ -2,7 +2,12 @@ import type { BackupTarget } from "@/lib/operate/backups/types";
 
 const RECOVERY_TRIGGER = "pre-upgrade-recovery" as const;
 
-type BackupRunnerResult = { runId: string; status: "ok" | "failed" };
+type BackupRunnerResult = {
+  runId: string;
+  status: "ok" | "failed";
+  /** Human-readable failure summary surfaced into the recovery-point member. */
+  error?: string;
+};
 type ClusteredBackupRunner = (args: {
   trigger: typeof RECOVERY_TRIGGER;
   composeProject?: string;
@@ -136,6 +141,12 @@ async function runMember(
       target,
       runId: result.runId,
       status: result.status,
+      // A runner can return status:"failed" without throwing (e.g. the backup
+      // script exits non-zero). Carry its summary so the operator-facing
+      // recovery-point message names the cause, not just an opaque run id.
+      ...(result.status === "failed" && result.error
+        ? { error: result.error }
+        : {}),
     };
   } catch (err) {
     return {

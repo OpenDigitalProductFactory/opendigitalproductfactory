@@ -103,6 +103,14 @@ COPY --from=init /app/packages ./packages
 COPY --from=init /app/node_modules ./node_modules
 COPY --from=init /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json /app/tsconfig.base.json /app/.gitignore ./
 COPY --from=init /app/scripts ./scripts
+# Managed operational scripts (backup/restore/trial-restore) are invoked at
+# runtime by the backup runners. They are committed from a Windows checkout,
+# where git cannot store the Unix executable bit, so they land here as 0644.
+# The runners now invoke them via `/bin/sh <script>` (executable-bit
+# independent), but restore the bit anyway as defense in depth so any direct
+# exec — here or in a future call site — still works. chmod only touches the
+# mode, not file content, so the source-content-hash below is unaffected.
+RUN chmod +x ./scripts/*.sh
 COPY --from=init /app/docs/user-guide ./docs/user-guide
 COPY --from=init /app/docs/founder-kernel ./docs/founder-kernel
 COPY --from=init /app/prompts ./prompts
