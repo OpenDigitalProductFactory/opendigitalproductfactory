@@ -362,6 +362,20 @@ shell_var("CLAUDE_MODE", claude.get("mode", "skip") if claude else "skip")
 shell_var("CLAUDE_STALE_COUNT", len(claude.get("staleEntriesToReconcile", [])) if claude else 0)
 shell_var("CODEX_WRITES_COUNT", len(codex.get("writes", [])) if codex else 0)
 shell_var("CODEX_PRESERVED_USER_INTENT", "true" if codex.get("preservedUserIntent") else "false")
+# DPF-scoping convergence (generic-client disable + worktree trust), rendered
+# one change per line for the readiness banner (spec S4.5). Newline-joined so a
+# single shell var carries the whole list; the printf loop below splits on it.
+_conv_kind = {
+    "plugin-disabled": "disabled generic plugin",
+    "mcp-server-disabled": "disabled generic MCP server",
+    "project-trusted": "trusted worktree path",
+}
+_conv_lines = [
+    f"Codex: {_conv_kind.get(c.get('kind'), c.get('kind'))} '{c.get('key')}'."
+    for c in (codex.get("convergence", []) if codex else [])
+]
+shell_var("CODEX_CONVERGENCE_COUNT", len(_conv_lines))
+shell_var("CODEX_CONVERGENCE", "\n".join(_conv_lines))
 shell_var("MCP_CLIENT_WRITES_COUNT", len(mcp_client.get("writes", [])))
 shell_var("MEMORY_WRITES_COUNT", len(memory.get("writes", [])))
 shell_var("PREVIEW_STATE", plan.get("preview", {}).get("readinessState", "missing_cli"))
@@ -409,6 +423,13 @@ fi
 if [ "$DRY_RUN" -eq 1 ]; then
   if [ "${PLAN_CODEX_WRITES_COUNT:-0}" -gt 0 ]; then
     info "DRY-RUN: write Codex config (1 file)"
+    if [ "${PLAN_CODEX_CONVERGENCE_COUNT:-0}" -gt 0 ] && [ -n "${PLAN_CODEX_CONVERGENCE:-}" ]; then
+      while IFS= read -r _conv_line; do
+        [ -n "$_conv_line" ] && info "DRY-RUN: $_conv_line"
+      done <<EOF
+$PLAN_CODEX_CONVERGENCE
+EOF
+    fi
   fi
   if [ "${PLAN_MCP_CLIENT_WRITES_COUNT:-0}" -gt 0 ]; then
     info "DRY-RUN: write $PLAN_MCP_CLIENT_WRITES_COUNT MCP client config file(s) (.mcp.json / .vscode/mcp.json)"
@@ -460,6 +481,15 @@ PY
   if [ "${PLAN_CODEX_WRITES_COUNT:-0}" -gt 0 ]; then
     ok "Codex plugin wired."
     CODEX_WIRED=1
+    # Report DPF-scoping convergence so drift is surfaced, not silently
+    # tolerated (spec S4.5). One [..] line per change.
+    if [ "${PLAN_CODEX_CONVERGENCE_COUNT:-0}" -gt 0 ] && [ -n "${PLAN_CODEX_CONVERGENCE:-}" ]; then
+      while IFS= read -r _conv_line; do
+        [ -n "$_conv_line" ] && info "$_conv_line"
+      done <<EOF
+$PLAN_CODEX_CONVERGENCE
+EOF
+    fi
   elif [ "$CODEX_PRESENT" -eq 1 ]; then
     if [ "$PLAN_CODEX_PRESERVED_USER_INTENT" = "true" ]; then
       skip "Codex plugin manually disabled by user; preserving user intent."
