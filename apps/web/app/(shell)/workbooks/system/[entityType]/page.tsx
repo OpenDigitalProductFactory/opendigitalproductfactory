@@ -8,18 +8,24 @@ import {
   type PlatformUser,
 } from "@/lib/workbooks/platform-tables";
 import { WorkbookError } from "@/lib/workbooks/workbook-service";
+import { defaultGroupByColumn } from "@/lib/workbooks/kanban-grouping";
 import { WorkbookGrid } from "@/components/workbooks/Grid";
+import { KanbanBoard } from "@/components/workbooks/KanbanBoard";
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: Promise<{ entityType: string }> };
+type Props = {
+  params: Promise<{ entityType: string }>;
+  searchParams: Promise<{ view?: string }>;
+};
 
-export default async function PlatformTablePage({ params }: Props) {
+export default async function PlatformTablePage({ params, searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const user = session.user;
 
   const { entityType } = await params;
+  const { view } = await searchParams;
   const def = getPlatformTable(entityType);
   if (!def) notFound();
 
@@ -62,15 +68,58 @@ export default async function PlatformTablePage({ params }: Props) {
         <p className="text-sm text-[var(--dpf-muted)]">{def.description}</p>
       </div>
 
-      <div className="min-h-0 flex-1">
-        <WorkbookGrid
-          source="platform"
-          tableId={entityType}
-          columns={grid.schema.columns}
-          rows={grid.rows}
-          capabilities={grid.schema.capabilities}
-        />
-      </div>
+      {(() => {
+        const groupBy = defaultGroupByColumn(grid.schema.columns);
+        const boardView = view === "board" && groupBy !== null;
+        return (
+          <>
+            {groupBy !== null && (
+              <div className="mb-3 inline-flex w-fit overflow-hidden rounded-md border border-[var(--dpf-border)] text-sm">
+                <Link
+                  href={`/workbooks/system/${entityType}`}
+                  className={
+                    boardView
+                      ? "px-3 py-1.5 text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+                      : "bg-[var(--dpf-surface-2)] px-3 py-1.5 font-medium text-[var(--dpf-text)]"
+                  }
+                >
+                  Grid
+                </Link>
+                <Link
+                  href={`/workbooks/system/${entityType}?view=board`}
+                  className={
+                    boardView
+                      ? "bg-[var(--dpf-surface-2)] px-3 py-1.5 font-medium text-[var(--dpf-text)]"
+                      : "px-3 py-1.5 text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+                  }
+                >
+                  Board
+                </Link>
+              </div>
+            )}
+            <div className="min-h-0 flex-1">
+              {boardView && groupBy !== null ? (
+                <KanbanBoard
+                  source="platform"
+                  tableId={entityType}
+                  columns={grid.schema.columns}
+                  rows={grid.rows}
+                  capabilities={grid.schema.capabilities}
+                  groupByColumnId={groupBy}
+                />
+              ) : (
+                <WorkbookGrid
+                  source="platform"
+                  tableId={entityType}
+                  columns={grid.schema.columns}
+                  rows={grid.rows}
+                  capabilities={grid.schema.capabilities}
+                />
+              )}
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }
