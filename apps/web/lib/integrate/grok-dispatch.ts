@@ -157,9 +157,9 @@ Key patterns:
  * - Audit via recordBuildDispatchAttempt
  * - Graceful fallback for Grok CLI output format (text today; --json when supported)
  *
- * Grok uniques vs peers:
+ * Grok uniques vs peers (verified against grok 0.2.32):
  * - Auth: single XAI_API_KEY env (no auth.json dance, no OAuth refresh)
- * - Binary: `grok` (with -p for prompt, --dangerously-skip-permissions supported)
+ * - Binary: `grok` (official xAI Build CLI; --prompt-file + --always-approve for headless)
  * - Session: lighter (no persistent sessionId yet)
  */
 export async function dispatchGrokTask(params: {
@@ -251,7 +251,13 @@ export async function dispatchGrokTask(params: {
       "trap cleanup EXIT INT TERM",
       "cd /workspace",
       `export XAI_API_KEY=$(cat ${authKeyFile} 2>/dev/null || echo '')`,
-      `grok ${modelFlag} -p - --always-approve --no-auto-update < ${promptFile}`,
+      // Headless single-turn run, verified against grok 0.2.32:
+      //  --prompt-file  : read the prompt from a file. `-p/--single` takes a literal prompt
+      //                   ARGUMENT (not stdin), so the old `-p - < file` passed "-" as the
+      //                   prompt and ignored the file — it never worked.
+      //  --always-approve : auto-approve tool executions (unattended build mode).
+      // (`--no-auto-update` was removed: it is not a flag in current Grok Build and errored.)
+      `grok ${modelFlag} --prompt-file ${promptFile} --always-approve`,
       "cleanup",
     ].join("\n");
     const scriptB64 = Buffer.from(script).toString("base64");
