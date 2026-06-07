@@ -161,7 +161,6 @@ const ALL_TILES: WorkspaceTile[] = [
   { key: "ai_workforce", label: "AI Workforce",  route: "/platform/ai",  capabilityKey: "view_platform",    accentColor: "var(--dpf-info)" },
   { key: "build",       label: "Build Studio", route: "/build",       capabilityKey: "view_platform",    accentColor: "var(--dpf-success)" },
   { key: "documents",   label: "Documents",    route: "/workspace/documents", capabilityKey: "view_platform", accentColor: "var(--dpf-accent)" },
-  { key: "workbooks",   label: "Workbooks",    route: "/workbooks",   capabilityKey: "view_workbooks",   accentColor: "var(--dpf-info)" },
   { key: "portfolio",  label: "Portfolio",  route: "/portfolio", capabilityKey: "view_portfolio",   accentColor: "var(--dpf-success)" },
   { key: "employee",   label: "Employee",   route: "/employee",  capabilityKey: "view_employee",    accentColor: "var(--dpf-info)" },
   { key: "customer",   label: "Customer",   route: "/customer",  capabilityKey: "view_customer",    accentColor: "var(--dpf-accent)" },
@@ -226,7 +225,7 @@ const WORKSPACE_SECTION_BLUEPRINTS: Array<{
     key: "product-oversight",
     label: "Shape products",
     description: "Move work from strategy to delivery while keeping estate context inside the product flow.",
-    tileKeys: ["portfolio", "backlog", "ea_modeler", "workbooks"],
+    tileKeys: ["portfolio", "backlog", "ea_modeler"],
   },
   {
     key: "business-operations",

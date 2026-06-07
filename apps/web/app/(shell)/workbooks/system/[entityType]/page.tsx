@@ -47,10 +47,10 @@ export default async function PlatformTablePage({ params, searchParams }: Props)
   return (
     <div className="mx-auto flex h-full w-full max-w-6xl flex-col p-6">
       <Link
-        href="/workbooks"
+        href={def.homeSurface.path}
         className="mb-2 inline-flex items-center gap-1 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
       >
-        <ChevronLeft className="h-4 w-4" /> Workbooks
+        <ChevronLeft className="h-4 w-4" /> {def.homeSurface.label}
       </Link>
 
       <div className="mb-4">

@@ -32,12 +32,25 @@ export interface PlatformUser {
   isSuperuser: boolean;
 }
 
+/**
+ * Where a platform grid lives in the portal IA. Each platform dataset is revealed
+ * in-place on its own domain surface (EP-GRID-WORKBOOKS per-surface integration),
+ * not on a standalone Workbooks hub. `board` marks whether the grid has a groupable
+ * column suitable for a Kanban Board view.
+ */
+export interface PlatformTableHomeSurface {
+  path: string;
+  label: string;
+  board: boolean;
+}
+
 export interface PlatformTableDef {
   entityType: string;
   label: string;
   description: string;
   viewCapability: CapabilityKey;
   manageCapability: CapabilityKey;
+  homeSurface: PlatformTableHomeSurface;
 }
 
 /** The registry of platform datasets available as grids. Add a row per adapter. */
@@ -48,6 +61,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Every backlog item as an editable spreadsheet — same records as the backlog forms.",
     viewCapability: "view_operations",
     manageCapability: "manage_backlog",
+    homeSurface: { path: "/ops", label: "Operations", board: true },
   },
   {
     entityType: "invoice",
@@ -55,6 +69,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Finance invoices as a grid — edit status inline; amounts/dates stay in the invoice form.",
     viewCapability: "view_finance",
     manageCapability: "manage_finance",
+    homeSurface: { path: "/finance/invoices", label: "Invoices", board: true },
   },
   {
     entityType: "risk_assessment",
@@ -62,6 +77,7 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     description: "Compliance risk register as an editable spreadsheet — same records as the risk forms.",
     viewCapability: "view_compliance",
     manageCapability: "manage_compliance",
+    homeSurface: { path: "/compliance/risks", label: "Risk assessments", board: true },
   },
 ];
 
@@ -71,6 +87,12 @@ function userCtx(user: PlatformUser) {
 
 export function getPlatformTable(entityType: string): PlatformTableDef | undefined {
   return PLATFORM_TABLES.find((t) => t.entityType === entityType);
+}
+
+export function getHomeSurfaceForEntity(
+  entityType: string,
+): PlatformTableHomeSurface | undefined {
+  return getPlatformTable(entityType)?.homeSurface;
 }
 
 export function listPlatformTablesForUser(user: PlatformUser): PlatformTableDef[] {

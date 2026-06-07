@@ -27,6 +27,7 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
     subItems: [
       { label: "Platform Hub", href: "/platform" },
       { label: "Schedule", href: "/platform/schedule" },
+      { label: "Workbooks", href: "/workbooks" },
     ],
   },
   {
