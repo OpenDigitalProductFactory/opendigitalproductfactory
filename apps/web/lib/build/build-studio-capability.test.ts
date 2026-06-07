@@ -35,6 +35,11 @@ describe("deriveBuildStudioCapability", () => {
         recommended: true,
       },
       {
+        name: "Claude - Subscription (CLI)",
+        description: "Recommended: sign in with your Claude (Anthropic) subscription via OAuth. Build Studio runs code generation through the Claude CLI path; no API key needed.",
+        recommended: true,
+      },
+      {
         name: "OpenAI API key",
         description: "Separate OpenAI platform billing. Use this when you want pay-per-token API usage instead of ChatGPT plan limits.",
       },
@@ -47,6 +52,12 @@ describe("deriveBuildStudioCapability", () => {
         description: "Useful for light or backup routing. Free-tier keys have lower quotas than paid API or subscription CLI paths.",
       },
     ]);
+  });
+
+  it("surfaces the Claude subscription CLI as a recommended runner", () => {
+    expect(
+      SUGGESTED_PROVIDERS.some((p) => p.name === "Claude - Subscription (CLI)" && p.recommended),
+    ).toBe(true);
   });
 
   it("returns only_local_provider_active when only Docker Model Runner has under-tier models", () => {
@@ -171,6 +182,73 @@ describe("deriveBuildStudioCapability", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.satisfyingProviderNames).toEqual(["Claude / Anthropic (OAuth Subscription)"]);
+    }
+  });
+
+  it("treats an enabled anthropic-sub as a code-capable runner so the gate opens", () => {
+    // The build orchestrator already runs codegen on the Claude subscription;
+    // the OAuth-subscription provider must satisfy the gate, not be filtered as local.
+    const result = deriveBuildStudioCapability([
+      model({
+        providerId: "anthropic-sub",
+        providerName: "Claude / Anthropic (OAuth Subscription)",
+        modelId: "claude-sonnet-4-6",
+      }),
+    ]);
+    expect(result.ok).toBe(true);
+  });
+
+  it("surfaces configured-but-disabled CLI runners as enableable (inactive → one-click Enable)", () => {
+    const result = deriveBuildStudioCapability(
+      [
+        model({
+          providerId: "local",
+          providerName: "Docker Model Runner (local)",
+          modelId: "ai/qwen3:14B-Q6_K",
+          maxInputTokens: 32_768,
+        }),
+      ],
+      [
+        { providerId: "anthropic-sub", name: "Claude / Anthropic (OAuth Subscription)", cliEngine: "claude" },
+        { providerId: "codex", name: "OpenAI Codex", cliEngine: "codex" },
+      ],
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("only_local_provider_active");
+      expect(result.enableableRunners).toEqual([
+        { providerId: "anthropic-sub", name: "Claude / Anthropic (OAuth Subscription)", shortLabel: "Claude" },
+        { providerId: "codex", name: "OpenAI Codex", shortLabel: "Codex" },
+      ]);
+    }
+  });
+
+  it("surfaces enableable runners even when zero providers are active", () => {
+    const result = deriveBuildStudioCapability(
+      [],
+      [{ providerId: "anthropic-sub", name: "Claude / Anthropic (OAuth Subscription)", cliEngine: "claude" }],
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("no_active_llm_providers");
+      expect(result.enableableRunners).toEqual([
+        { providerId: "anthropic-sub", name: "Claude / Anthropic (OAuth Subscription)", shortLabel: "Claude" },
+      ]);
+    }
+  });
+
+  it("returns empty enableableRunners when nothing is merely disabled", () => {
+    const result = deriveBuildStudioCapability([
+      model({
+        providerId: "local",
+        providerName: "Docker Model Runner (local)",
+        modelId: "ai/qwen3:14B-Q6_K",
+        maxInputTokens: 32_768,
+      }),
+    ]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.enableableRunners).toEqual([]);
     }
   });
 });

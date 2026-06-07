@@ -33,6 +33,10 @@ export type BuildStudioCapability =
         | "no_strong_tier_model_available";
       activeProviderNames: string[];
       suggestedProviders: ReadonlyArray<SuggestedProvider>;
+      // Configured-but-disabled CLI code runners (e.g. anthropic-sub, codex)
+      // that the operator can switch on in place — no trip to
+      // /platform/ai/providers. Empty when nothing is merely turned off.
+      enableableRunners: ReadonlyArray<EnableableRunner>;
     };
 
 export interface ActiveProviderModel {
@@ -51,10 +55,43 @@ export interface SuggestedProvider {
   recommended?: boolean;
 }
 
+/**
+ * A code-capable CLI runner that exists in ModelProvider with status
+ * `inactive` — credentialed/configured but switched off. Surfaced on the
+ * build gate with an inline "Enable" action (toggleProviderStatus) so the
+ * operator never has to leave the screen for /platform/ai/providers.
+ */
+export interface EnableableRunner {
+  providerId: string;
+  /** Full provider display name, e.g. "Claude / Anthropic (OAuth Subscription)". */
+  name: string;
+  /** Short user-facing label for inline copy + the Enable button, e.g. "Claude" / "Codex". */
+  shortLabel: string;
+}
+
+/** Raw DB shape for a configured-but-disabled CLI runner, fed to the pure decision fn. */
+export interface ConfiguredInactiveRunner {
+  providerId: string;
+  name: string;
+  /** "claude" | "codex" | null — which CLI dispatch engine, drives the short label. */
+  cliEngine: string | null;
+}
+
+function shortRunnerLabel(runner: ConfiguredInactiveRunner): string {
+  if (runner.cliEngine === "claude") return "Claude";
+  if (runner.cliEngine === "codex") return "Codex";
+  return runner.name;
+}
+
 export const SUGGESTED_PROVIDERS: ReadonlyArray<SuggestedProvider> = [
   {
     name: "ChatGPT / OpenAI Codex - Subscription sign-in",
     description: "Recommended: sign in with OpenAI OAuth. Build Studio uses the Codex CLI path; no API key needed.",
+    recommended: true,
+  },
+  {
+    name: "Claude - Subscription (CLI)",
+    description: "Recommended: sign in with your Claude (Anthropic) subscription via OAuth. Build Studio runs code generation through the Claude CLI path; no API key needed.",
     recommended: true,
   },
   {
@@ -99,13 +136,23 @@ function isLocalProviderName(name: string): boolean {
  * sufficient" so a freshly connected REMOTE provider isn't blocked while
  * model discovery is still running in the background.
  */
-export function deriveBuildStudioCapability(models: ActiveProviderModel[]): BuildStudioCapability {
+export function deriveBuildStudioCapability(
+  models: ActiveProviderModel[],
+  inactiveRunners: ConfiguredInactiveRunner[] = [],
+): BuildStudioCapability {
+  const enableableRunners: EnableableRunner[] = inactiveRunners.map((r) => ({
+    providerId: r.providerId,
+    name: r.name,
+    shortLabel: shortRunnerLabel(r),
+  }));
+
   if (models.length === 0) {
     return {
       ok: false,
       reason: "no_active_llm_providers",
       activeProviderNames: [],
       suggestedProviders: SUGGESTED_PROVIDERS,
+      enableableRunners,
     };
   }
 
@@ -139,6 +186,7 @@ export function deriveBuildStudioCapability(models: ActiveProviderModel[]): Buil
     reason: onlyLocal ? "only_local_provider_active" : "no_strong_tier_model_available",
     activeProviderNames,
     suggestedProviders: SUGGESTED_PROVIDERS,
+    enableableRunners,
   };
 }
 
@@ -147,20 +195,32 @@ export function deriveBuildStudioCapability(models: ActiveProviderModel[]): Buil
  * calls the pure decision function. Used at /build page render time.
  */
 export async function loadBuildStudioCapability(): Promise<BuildStudioCapability> {
-  const profiles = await prisma.modelProfile.findMany({
-    where: {
-      modelClass: { in: ["chat", "code"] },
-      modelStatus: { in: ["active", "degraded"] },
-      provider: { status: "active" },
-    },
-    select: {
-      providerId: true,
-      modelId: true,
-      supportsToolUse: true,
-      maxInputTokens: true,
-      provider: { select: { name: true } },
-    },
-  });
+  const [profiles, inactiveProviders] = await Promise.all([
+    prisma.modelProfile.findMany({
+      where: {
+        modelClass: { in: ["chat", "code"] },
+        modelStatus: { in: ["active", "degraded"] },
+        provider: { status: "active" },
+      },
+      select: {
+        providerId: true,
+        modelId: true,
+        supportsToolUse: true,
+        maxInputTokens: true,
+        provider: { select: { name: true } },
+      },
+    }),
+    // Code runners that are configured/credentialed but switched off
+    // (status="inactive"). cliEngine!=null means it dispatches the Claude or
+    // Codex CLI path — exactly the runners the build orchestrator can drive.
+    // These get an inline Enable action on the gate; "unconfigured" providers
+    // (never set up) are intentionally excluded — they need the connect flow.
+    prisma.modelProvider.findMany({
+      where: { status: "inactive", cliEngine: { not: null } },
+      select: { providerId: true, name: true, cliEngine: true },
+      orderBy: { providerId: "asc" },
+    }),
+  ]);
 
   const models: ActiveProviderModel[] = profiles.map((p) => ({
     providerId: p.providerId,
@@ -170,7 +230,13 @@ export async function loadBuildStudioCapability(): Promise<BuildStudioCapability
     maxInputTokens: p.maxInputTokens,
   }));
 
-  return deriveBuildStudioCapability(models);
+  const inactiveRunners: ConfiguredInactiveRunner[] = inactiveProviders.map((p) => ({
+    providerId: p.providerId,
+    name: p.name,
+    cliEngine: p.cliEngine,
+  }));
+
+  return deriveBuildStudioCapability(models, inactiveRunners);
 }
 
 /**
