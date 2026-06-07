@@ -141,6 +141,7 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       "step=prepare",
       "step=backup",
       "step=docker-build",
+      "step=migrate",
       "step=docker-up",
       "step=health",
       "step=sha-verify",
@@ -169,6 +170,11 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       expect(dryRunResult.stdout).toContain("step=docker-build");
     });
 
+    // BI-D9BAB4FA: migrations must run on the new image before the swap.
+    it("emits migrate step", () => {
+      expect(dryRunResult.stdout).toContain("step=migrate");
+    });
+
     it("emits docker-up step", () => {
       expect(dryRunResult.stdout).toContain("step=docker-up");
     });
@@ -185,7 +191,7 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       expect(dryRunResult.stdout).toContain("step=content-verify");
     });
 
-    it("steps appear in order: prepare → backup → docker-build → docker-up → health → sha-verify → content-verify", () => {
+    it("steps appear in order: prepare → backup → docker-build → migrate → docker-up → health → sha-verify → content-verify", () => {
       const positions = STEPS.map((s) => dryRunResult.stdout.indexOf(s));
       for (let i = 1; i < positions.length; i++) {
         expect(positions[i]).toBeGreaterThan(positions[i - 1]);

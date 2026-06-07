@@ -159,6 +159,27 @@ if [[ $_dry_run -eq 0 ]]; then
   }
 fi
 
+# --- Step 3b: migrate ---
+# Apply DB migrations using the FRESHLY BUILT portal image BEFORE recreating the
+# long-running portal. The swap in step 4 recreates ONLY `portal` (--no-deps),
+# so it never runs the one-shot `portal-init` service that a normal
+# `docker compose up` runs to migrate the DB. Without this step a self-upgrade
+# that ships a migration leaves the live DB drifted, and every query for a new
+# column throws Prisma P2022 ColumnNotFound — the 2026-06-07 crash incident
+# (BI-D9BAB4FA) where /ops/self-upgrade, /build, /platform and /workbooks all
+# died after a swap. Running `prisma migrate deploy` from the new image's own
+# bytes is forward-only and FAIL-CLOSED: `set -e` aborts the upgrade on a
+# migration error BEFORE the swap, so the OLD portal keeps serving the OLD code
+# against a consistent DB rather than a new image landing on an un-migrated one.
+# DPF migrations are additive (expand), so applying them while the old portal is
+# still running is safe — it simply ignores the new columns until it is replaced.
+emit_step migrate
+if [[ $_dry_run -eq 0 ]]; then
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+    "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
+    -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate deploy'
+fi
+
 # --- Step 4: docker-up ---
 # Recreate ONLY the portal from the freshly built image. --no-deps leaves
 # postgres/neo4j/etc. running. DEPLOYED_SHA resolves to DPF_VERSION (the
