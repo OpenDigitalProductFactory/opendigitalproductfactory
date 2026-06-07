@@ -259,7 +259,24 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @dpf/db exec prisma generate
 
+      # Restore Turbopack's filesystem cache (written under .next/cache when
+      # DPF_TURBOPACK_BUILD_CACHE=1 enables experimental.turbopackFileSystemCacheForBuild).
+      # Key rolls on any web source change; restore-keys warm-start from the
+      # most recent build for the same deps. NOTE: hashFiles does NOT support
+      # brace globs ({ts,tsx}), so each extension is a separate arg.
+      - name: Cache Turbopack build cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/apps/web/.next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**/*.ts', 'apps/web/**/*.tsx', 'apps/web/**/*.js', 'apps/web/**/*.jsx') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
       - name: Build web (Next.js production)
+        # Experimental Turbopack build FS cache, scoped to this verification
+        # gate only — the Docker release build does not set this env.
+        env:
+          DPF_TURBOPACK_BUILD_CACHE: "1"
         run: pnpm --filter web build
 
   dockerfile-node-version:
