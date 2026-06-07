@@ -1,20 +1,26 @@
 /**
  * Chunk 8 — end-to-end integration test for the coworker-driven UX
- * verification pipeline. Exercises the full sequence in isolation:
+ * verification pipeline.
  *
- *   1. `checkPhaseGate(review -> ship)` blocks while `uxVerificationStatus`
- *      is null with non-empty `acceptanceCriteria` ("verification has not
- *      run yet").
- *   2. `checkPhaseGate(review -> ship)` blocks while status is "running".
- *   3. After the Inngest handler runs with one passing + one failing step,
- *      `uxVerificationStatus` is "failed", `uxTestResults` contains both
- *      steps with the correct shapes, and `designReview` is UNCHANGED
- *      (the handler must not write to it — reviewer pipeline owns that
- *      field and would overwrite).
- *   4. `checkPhaseGate` returns `{ allowed: false, reason: /UX verification
- *      failed/ }` naming the failing step.
- *   5. The override path (overrideUxFailure with a 10+ char reason)
- *      unblocks UX failures but does NOT override other blocker classes.
+ * ADVISORY (operator decision 2026-06-07, commit 231bb62b / BI-4BD81F3B):
+ * UX verification is recorded for visibility but does NOT hard-block the
+ * review -> ship transition — mirroring the informational unit-test gate.
+ * A CLI-developed, committed, serving build ships on the CLI's evidence;
+ * browser-use UX results (incl. null = not-run, and failed) are advisory,
+ * surfaced in the Review panel rather than blocking. Only the transient
+ * "running" state briefly defers, since the check is genuinely in-flight.
+ *
+ * This file pins the gate behavior:
+ *
+ *   1. `checkPhaseGate(review -> ship)` ALLOWS while `uxVerificationStatus`
+ *      is null (verification not run) — advisory, not blocking.
+ *   2. `checkPhaseGate(review -> ship)` blocks ONLY while status is
+ *      "running" (transient in-flight defer).
+ *   3. `checkPhaseGate(review -> ship)` ALLOWS when status is "failed"
+ *      (or when uxTestResults carries failures) — advisory, not blocking.
+ *   4. The Inngest handler persists only `uxTestResults` +
+ *      `uxVerificationStatus` and leaves `designReview` UNCHANGED (the
+ *      reviewer pipeline owns that field and would overwrite).
  */
 
 import { describe, it, expect } from "vitest";
@@ -37,13 +43,13 @@ function evidence(overrides: Partial<Record<string, unknown>> = {}): Record<stri
 }
 
 describe("coworker-driven UX verification — gate behavior", () => {
-  it("blocks review -> ship when status is null and acceptance criteria exist", () => {
+  it("allows review -> ship when status is null even with acceptance criteria (advisory)", () => {
     const gate = checkPhaseGate("review", "ship", evidence({
       uxVerificationStatus: null,
       uxTestResults: null,
     }));
-    expect(gate.allowed).toBe(false);
-    expect(gate.reason).toMatch(/UX verification has not run yet/);
+    // UX verification not having run is advisory, not a hard block.
+    expect(gate.allowed).toBe(true);
   });
 
   it("blocks review -> ship while verification is running", () => {
@@ -76,7 +82,7 @@ describe("coworker-driven UX verification — gate behavior", () => {
     expect(gate.allowed).toBe(true);
   });
 
-  it("blocks review -> ship when one step failed, naming the step", () => {
+  it("allows review -> ship when one step failed (advisory, not blocking)", () => {
     const steps: UxStep[] = [
       { step: "User can click the button", passed: true, screenshotUrl: null, error: null },
       { step: "Form submits without error", passed: false, screenshotUrl: null, error: "Submit button not found" },
@@ -85,24 +91,21 @@ describe("coworker-driven UX verification — gate behavior", () => {
       uxVerificationStatus: "failed",
       uxTestResults: steps,
     }));
-    expect(gate.allowed).toBe(false);
-    expect(gate.reason).toMatch(/UX verification failed/);
-    expect(gate.reason).toContain("Form submits without error");
+    // A failed UX check is surfaced in the Review panel but does not block ship.
+    expect(gate.allowed).toBe(true);
   });
 
-  it("also blocks when uxTestResults has failures but status was not yet updated", () => {
-    // Defense in depth: if the Inngest handler crashed after writing
-    // uxTestResults but before updating uxVerificationStatus, the gate still
-    // blocks because the array itself contains failures.
+  it("allows review -> ship when uxTestResults carries failures (advisory)", () => {
+    // Even when the array itself contains failures, the gate does not block —
+    // UX results are advisory. The Review panel surfaces the failures.
     const steps: UxStep[] = [
       { step: "Form submits without error", passed: false, screenshotUrl: null, error: "timeout" },
     ];
     const gate = checkPhaseGate("review", "ship", evidence({
-      uxVerificationStatus: "complete", // wrong, but the array is the truth
+      uxVerificationStatus: "complete",
       uxTestResults: steps,
     }));
-    expect(gate.allowed).toBe(false);
-    expect(gate.reason).toMatch(/UX verification failed/);
+    expect(gate.allowed).toBe(true);
   });
 });
 
