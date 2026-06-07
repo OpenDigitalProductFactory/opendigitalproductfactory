@@ -19,6 +19,9 @@ export async function POST(request: Request): Promise<Response> {
       description: typeof body.description === "string" ? body.description : null,
       routeContext: typeof body.routeContext === "string" ? body.routeContext : null,
       errorStack: typeof body.errorStack === "string" ? body.errorStack : null,
+      // BI-B4F401B3: crash-boundary diagnostics forwarded from error.tsx.
+      errorDigest: typeof body.errorDigest === "string" ? body.errorDigest : null,
+      deployedSha: typeof body.deployedSha === "string" ? body.deployedSha : null,
       userAgent: typeof body.userAgent === "string" ? body.userAgent : null,
       triggerKind: typeof body.triggerKind === "string" ? body.triggerKind : null,
       supportSessionId,

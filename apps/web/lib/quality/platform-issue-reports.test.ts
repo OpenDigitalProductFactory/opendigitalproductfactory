@@ -102,6 +102,39 @@ describe("createPlatformIssueReport", () => {
     expect(createArgs?.data.errorStack.length).toBe(20000);
   });
 
+  it("persists crash-boundary diagnostics (errorDigest, deployedSha) — BI-B4F401B3", async () => {
+    await createPlatformIssueReport({
+      type: "runtime_error",
+      title: "Test",
+      source: "crash_boundary",
+      errorDigest: "abc123digest",
+      deployedSha: "f002cd496f1e2e696deefedb8319a1e57e12df11",
+    });
+    const args = prismaMock.platformIssueReport.create.mock.calls[0]?.[0];
+    expect(args?.data.errorDigest).toBe("abc123digest");
+    expect(args?.data.deployedSha).toBe("f002cd496f1e2e696deefedb8319a1e57e12df11");
+  });
+
+  it("defaults errorDigest / deployedSha to null when absent", async () => {
+    await createPlatformIssueReport({ type: "user_report", title: "Test", source: "manual" });
+    const args = prismaMock.platformIssueReport.create.mock.calls[0]?.[0];
+    expect(args?.data.errorDigest).toBeNull();
+    expect(args?.data.deployedSha).toBeNull();
+  });
+
+  it("truncates errorDigest (191) and deployedSha (64)", async () => {
+    await createPlatformIssueReport({
+      type: "runtime_error",
+      title: "Test",
+      source: "crash_boundary",
+      errorDigest: "x".repeat(300),
+      deployedSha: "y".repeat(100),
+    });
+    const args = prismaMock.platformIssueReport.create.mock.calls[0]?.[0];
+    expect(args?.data.errorDigest.length).toBe(191);
+    expect(args?.data.deployedSha.length).toBe(64);
+  });
+
   it("truncates routeContext, userAgent, type, source, severity", async () => {
     await createPlatformIssueReport({
       type: "x".repeat(60),

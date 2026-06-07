@@ -4426,6 +4426,13 @@ model PlatformIssueReport {
   description         String?
   routeContext        String?
   errorStack          String?
+  // BI-B4F401B3: crash-boundary diagnostics. errorDigest is the Next.js server
+  // digest token (stable per real error on a build) — it lets operators and AI
+  // clients grep server logs for the message Next.js sanitizes away, and lets
+  // triage dedup a whole crash incident across routes. deployedSha anchors the
+  // diagnostic prompt to the exact image SHA that crashed.
+  errorDigest         String?
+  deployedSha         String?
   userAgent           String?
   reportedById        String?
   digitalProductId    String?
@@ -4450,6 +4457,8 @@ model PlatformIssueReport {
   @@index([featureBuildId])
   @@index([threadId, createdAt(sort: Desc)])
   @@index([taskRunId])
+  // BI-B4F401B3: digest lookup powers cross-route incident dedup at triage time.
+  @@index([errorDigest])
   @@unique([reportedById, supportSessionId])
   @@index([reportedById, supportSessionId, createdAt(sort: Desc)])
 }
