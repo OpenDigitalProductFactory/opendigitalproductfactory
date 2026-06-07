@@ -461,7 +461,8 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         Expect 5&ndash;10 minutes for the platform itself, plus additional time for the initial AI model download. Login credentials are shown at the end of installation and saved to <code>.admin-credentials</code> in your install directory. After installation: <code>dpf-start</code> to start, <code>dpf-stop</code> to stop.
       </div>
       <div class="note" style="margin-top:14px;">
-        <strong>Other platforms (early access &mdash; pilots wanted):</strong> the macOS Apple Silicon, native Linux, and Cloud Single-VM (AWS / GCP / Azure, with Terraform modules) installers are code-complete on <code>main</code> with green CI. Real-hardware verification reports are what graduate them from Early Access to GA &mdash; see the <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/README.md#quick-start">Quick Start table</a> and the dedicated install runbooks under <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/install">docs/install/</a>.
+        <strong>macOS Apple Silicon (GA):</strong> validated end-to-end on real Apple Silicon hardware (M-series, macOS 14+), including the voice STT + native-host TTS path &mdash; see the <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/install/macos.md">macOS install guide</a>.<br>
+        <strong>Other platforms (early access &mdash; pilots wanted):</strong> the native Linux and Cloud Single-VM (AWS / GCP / Azure, with Terraform modules) installers are code-complete on <code>main</code> with green CI. Real-hardware verification reports are what graduate them from Early Access to GA &mdash; see the <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/README.md#quick-start">Quick Start table</a> and the dedicated install runbooks under <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/install">docs/install/</a>.
       </div>
     </div>
   </section>
@@ -1552,8 +1553,8 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         </tr>
         <tr>
           <td><strong>macOS workstation</strong></td>
-          <td>Early access</td>
-          <td>The macOS Apple Silicon installer is code-complete on <code>main</code> with Docker Desktop and Docker Model Runner support. Real Apple Silicon install reports are needed before GA.</td>
+          <td><strong>GA</strong></td>
+          <td>The macOS Apple Silicon installer is validated end-to-end on real Apple Silicon hardware (M-series, macOS 14+) with Docker Desktop and Docker Model Runner, including the voice STT + native-host TTS sidecar path. Verification reports on additional Mac models / macOS versions remain welcome to widen the tested matrix.</td>
         </tr>
         <tr>
           <td><strong>Cloud single-VM (AWS / GCP / Azure)</strong></td>
