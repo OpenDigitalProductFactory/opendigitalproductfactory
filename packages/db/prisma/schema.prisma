@@ -1741,6 +1741,21 @@ model ScheduledJob {
   // sweep that prunes ContributorInventorySyncRun history.
   // Spec: docs/superpowers/specs/2026-05-26-contributor-inventory-sync-design.md §Etag persistence.
   metadata   Json?
+  // Classification + per-job control (BI-5A42E572 / EP-PROACTIVE-OPS).
+  // The static SCHEDULED_JOB_CATALOG (apps/web/lib/operate/scheduled-jobs/
+  // catalog.ts) is authoritative for known jobs; these columns persist
+  // classification for rows with no catalog entry plus any audited override.
+  //   category — "core" (platform-integrity cron, operator read-only) vs
+  //              "editable" (operationally tunable after install).
+  //   locked   — blocks operator edits even for an "editable" job until an
+  //              explicit override clears it; always true for core jobs.
+  //   enabled  — per-job kill switch complementing the global
+  //              DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED gate. Jobs that
+  //              honour it skip execution when false (the visibility gap the
+  //              13-day silent code-graph outage exposed).
+  category   String    @default("editable")
+  locked     Boolean   @default(false)
+  enabled    Boolean   @default(true)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 }
