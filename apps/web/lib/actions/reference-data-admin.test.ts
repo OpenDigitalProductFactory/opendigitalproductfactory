@@ -13,9 +13,9 @@ vi.mock("@/lib/permissions", () => ({
 vi.mock("@dpf/db", () => ({
   prisma: {
     country: { findUnique: vi.fn(), update: vi.fn() },
-    region: { findUnique: vi.fn(), update: vi.fn() },
-    city: { findUnique: vi.fn(), update: vi.fn() },
-    address: { create: vi.fn(), update: vi.fn() },
+    region: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() },
+    city: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(), findMany: vi.fn() },
+    address: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
     workLocation: { findUnique: vi.fn(), update: vi.fn() },
     $transaction: vi.fn(),
   },
@@ -35,6 +35,10 @@ import {
   toggleCityStatus,
   linkWorkLocationAddress,
   unlinkWorkLocationAddress,
+  previewCityMerge,
+  mergeCity,
+  previewRegionMerge,
+  mergeRegion,
 } from "./reference-data-admin";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -419,5 +423,121 @@ describe("unlinkWorkLocationAddress", () => {
 
     expect(result.ok).toBe(false);
     expect(result.message).toContain("not found");
+  });
+});
+
+// ─── Reference-data merge (MDM-5) ─────────────────────────────────────────────
+
+describe("city merge", () => {
+  it("rejects merging a city into itself", async () => {
+    mockAdmin();
+    vi.mocked(prisma.city.findUnique)
+      .mockResolvedValueOnce({ id: "c1", regionId: "r1", name: "Springfield" } as never)
+      .mockResolvedValueOnce({ id: "c1", regionId: "r1", name: "Springfield" } as never);
+
+    const result = await mergeCity("c1", "c1");
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("itself");
+  });
+
+  it("rejects merging cities across regions", async () => {
+    mockAdmin();
+    vi.mocked(prisma.city.findUnique)
+      .mockResolvedValueOnce({ id: "c1", regionId: "r1", name: "A" } as never)
+      .mockResolvedValueOnce({ id: "c2", regionId: "r2", name: "B" } as never);
+
+    const result = await mergeCity("c1", "c2");
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("different regions");
+  });
+
+  it("repoints addresses and tombstones the loser on a valid merge", async () => {
+    mockAdmin();
+    vi.mocked(prisma.city.findUnique)
+      .mockResolvedValueOnce({ id: "c1", regionId: "r1", name: "Calfornia City" } as never)
+      .mockResolvedValueOnce({ id: "c2", regionId: "r1" } as never);
+    vi.mocked(prisma.$transaction).mockImplementation(
+      ((cb: (tx: typeof prisma) => Promise<unknown>) => cb(prisma)) as never,
+    );
+
+    const result = await mergeCity("c1", "c2");
+
+    expect(result.ok).toBe(true);
+    expect(prisma.address.updateMany).toHaveBeenCalledWith({
+      where: { cityId: "c1" },
+      data: { cityId: "c2" },
+    });
+    expect(prisma.city.update).toHaveBeenCalledWith({
+      where: { id: "c1" },
+      data: { status: "superseded", mergedIntoId: "c2" },
+    });
+  });
+
+  it("previewCityMerge reports the address impact without mutating", async () => {
+    mockAdmin();
+    vi.mocked(prisma.city.findUnique)
+      .mockResolvedValueOnce({ id: "c1", regionId: "r1", name: "Calfornia City" } as never)
+      .mockResolvedValueOnce({ id: "c2", regionId: "r1", name: "California City" } as never);
+    vi.mocked(prisma.address.count).mockResolvedValue(3 as never);
+
+    const result = await previewCityMerge("c1", "c2");
+
+    expect(result.ok).toBe(true);
+    expect(result.impact).toEqual({ citiesRepointed: 0, citiesMerged: 1, addressesAffected: 3 });
+    expect(prisma.address.updateMany).not.toHaveBeenCalled();
+    expect(prisma.city.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("region merge", () => {
+  it("rejects cross-country region merges", async () => {
+    mockAdmin();
+    vi.mocked(prisma.region.findUnique)
+      .mockResolvedValueOnce({ id: "r1", countryId: "us", name: "Calfornia" } as never)
+      .mockResolvedValueOnce({ id: "r2", countryId: "ca", name: "California" } as never);
+
+    const result = await mergeRegion("r1", "r2");
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("different countries");
+  });
+
+  it("repoints non-colliding cities, merges colliding ones, and tombstones the loser region", async () => {
+    mockAdmin();
+    vi.mocked(prisma.region.findUnique)
+      .mockResolvedValueOnce({ id: "r1", countryId: "us", name: "Calfornia" } as never)
+      .mockResolvedValueOnce({ id: "r2", countryId: "us" } as never);
+    // loser cities: "san francisco" collides with survivor; "fresno" does not
+    vi.mocked(prisma.city.findMany)
+      .mockResolvedValueOnce([
+        { id: "lc1", nameNormalized: "san francisco" },
+        { id: "lc2", nameNormalized: "fresno" },
+      ] as never)
+      .mockResolvedValueOnce([{ id: "sc1", nameNormalized: "san francisco" }] as never);
+    vi.mocked(prisma.$transaction).mockImplementation(
+      ((cb: (tx: typeof prisma) => Promise<unknown>) => cb(prisma)) as never,
+    );
+
+    const result = await mergeRegion("r1", "r2");
+
+    expect(result.ok).toBe(true);
+    // colliding city merged into survivor city
+    expect(prisma.address.updateMany).toHaveBeenCalledWith({
+      where: { cityId: "lc1" },
+      data: { cityId: "sc1" },
+    });
+    expect(prisma.city.update).toHaveBeenCalledWith({
+      where: { id: "lc1" },
+      data: { status: "superseded", mergedIntoId: "sc1" },
+    });
+    // non-colliding city repointed to survivor region
+    expect(prisma.city.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["lc2"] } },
+      data: { regionId: "r2" },
+    });
+    // loser region tombstoned
+    expect(prisma.region.update).toHaveBeenCalledWith({
+      where: { id: "r1" },
+      data: { status: "superseded", mergedIntoId: "r2" },
+    });
   });
 });
