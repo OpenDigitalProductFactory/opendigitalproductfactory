@@ -6,13 +6,15 @@
 > everything CI can't reach** — and you're the person who can close
 > those gaps.
 >
-> The macOS and Linux installers are code-complete and statically
-> CI-green. They graduate to GA when the community sends us
-> verification reports from real hardware. If you have an Apple
-> Silicon Mac, a non-Ubuntu Linux box, a TAPPaaS environment, or a
-> cloud VM you can spare for an hour, **please pick a section below
-> and run through it.** Both happy-path and failure reports are
-> valuable.
+> macOS Apple Silicon is **GA** — validated end-to-end on real
+> hardware. The Linux and cloud installers are code-complete and
+> statically CI-green and graduate to GA when the community sends us
+> verification reports from real hardware. Reports still widen the
+> tested matrix on every platform, including additional Mac models /
+> macOS versions. If you have an Apple Silicon Mac, a non-Ubuntu Linux
+> box, a TAPPaaS environment, or a cloud VM you can spare for an hour,
+> **please pick a section below and run through it.** Both happy-path
+> and failure reports are valuable.
 >
 > **How to report:** open an issue using the
 > [Install verification report template](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/new?template=install_verification.md)
