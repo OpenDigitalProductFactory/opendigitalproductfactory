@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import { configureProvider, testProviderAuth, discoverModels, profileModels } from "@/lib/actions/ai-providers";
 import { startProviderOAuth, disconnectProviderOAuth } from "@/lib/actions/provider-oauth";
+import { ConnectGrokCard } from "./ConnectGrokCard";
 import type { ProviderWithCredential, DiscoveredModelRow, ModelProfileRow } from "@/lib/ai-provider-types";
 import { ModelSection } from "@/components/platform/ModelSection";
 import { ProviderStatusToggle } from "@/components/platform/ProviderStatusToggle";
@@ -308,6 +309,12 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           </span>
         )}
       </div>
+
+      {/* Grok (xAI) device-code OAuth — preferred "sign in with Google" path. Additive
+          to the API-key field below, which stays available as a fallback. */}
+      {provider.providerId === "xai" && provider.supportedAuthMethods?.includes("oauth2_device") && (
+        <ConnectGrokCard canWrite={canWrite} />
+      )}
 
       {/* API key / subscription token credential field */}
       {selectedAuthMethod === "api_key" && (() => {
