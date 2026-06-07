@@ -35,6 +35,16 @@ export const codeGraphReconcileScheduled = inngest.createFunction(
     const gate = await gateAtEntry(step);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
+    // Per-job kill switch (BI-5A42E572). Honour an operator's disable from the
+    // Scheduled Jobs admin surface in addition to the global gate. Defaults to
+    // enabled when no row exists, so a never-touched job runs normally.
+    const enabled = await step.run("check-job-enabled", async () => {
+      const { isJobEnabled } = await import("@/lib/operate/scheduled-jobs/core");
+      const { CODE_GRAPH_JOB_ID } = await import("@/lib/integrate/code-graph/constants");
+      return isJobEnabled(CODE_GRAPH_JOB_ID);
+    });
+    if (!enabled) return { skipped: true, reason: "job_disabled_by_operator" };
+
     try {
       const result = await step.run("reconcile-code-graph-scheduled", async () => {
         const { reconcileCodeGraph } = await import("@/lib/integrate/code-graph-refresh");
