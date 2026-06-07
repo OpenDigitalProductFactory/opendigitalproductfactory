@@ -7,7 +7,13 @@ import { can } from "@/lib/permissions";
 import {
   validateBacklogInput,
   validateEpicInput,
+  BACKLOG_STATUS_VALUES,
+  BACKLOG_WORK_TYPE_VALUES,
+  BACKLOG_SOURCE_VALUES,
   type BacklogItemInput,
+  type BacklogStatus,
+  type BacklogWorkType,
+  type BacklogSource,
   type EpicInput,
 } from "@/lib/backlog";
 
@@ -93,6 +99,88 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
           data: { status: "done", completedAt: new Date() },
         });
       }
+    }
+  }
+}
+
+/**
+ * Partial field update for a backlog item — only the supplied fields are written
+ * and only those fields are validated. Unlike updateBacklogItem (which requires a
+ * complete, fully-valid BacklogItemInput), this does NOT re-require untouched
+ * fields, so a single-field edit (e.g. priority/status from the grid) succeeds
+ * even on items whose other fields are incomplete (null workType, legacy items).
+ * Mirrors the conditional-spread pattern of updateRiskAssessment. Preserves the
+ * status side-effects (completedAt) and epic auto-completion of the full update.
+ */
+export type BacklogFieldPatch = {
+  title?: string;
+  status?: BacklogStatus;
+  priority?: number | null;
+  type?: "product" | "portfolio";
+  workType?: BacklogWorkType;
+  source?: BacklogSource;
+  body?: string | null;
+};
+
+export async function updateBacklogItemFields(id: string, patch: BacklogFieldPatch): Promise<void> {
+  await requireManageBacklog();
+
+  const existing = await prisma.backlogItem.findUnique({
+    where: { id },
+    select: { status: true, type: true, digitalProductId: true, epicId: true },
+  });
+  if (!existing) throw new Error("Backlog item not found");
+
+  // Validate ONLY the fields actually being changed.
+  if (patch.title !== undefined && !patch.title.trim()) throw new Error("Title is required");
+  if (patch.status !== undefined && !BACKLOG_STATUS_VALUES.includes(patch.status)) {
+    throw new Error(`Invalid status: ${patch.status}`);
+  }
+  if (patch.workType !== undefined && !BACKLOG_WORK_TYPE_VALUES.includes(patch.workType)) {
+    throw new Error(`Invalid work type: ${patch.workType}`);
+  }
+  if (patch.source !== undefined && !BACKLOG_SOURCE_VALUES.includes(patch.source)) {
+    throw new Error(`Invalid source: ${patch.source}`);
+  }
+  if (patch.type !== undefined && patch.type !== "product" && patch.type !== "portfolio") {
+    throw new Error(`Invalid type: ${patch.type}`);
+  }
+  // Only enforce the product->digitalProduct rule when the caller is switching to
+  // product without one — never block edits to items that are already product.
+  if (patch.type === "product" && !existing.digitalProductId) {
+    throw new Error("A digital product is required for product-type items");
+  }
+
+  const nextStatus = patch.status ?? existing.status;
+  const isNowDone = nextStatus === "done" || nextStatus === "deferred";
+  const wasDone = existing.status === "done" || existing.status === "deferred";
+
+  const data: Record<string, unknown> = {};
+  if (patch.title !== undefined) data.title = patch.title.trim();
+  if (patch.status !== undefined) data.status = patch.status;
+  if (patch.priority !== undefined) data.priority = patch.priority;
+  if (patch.type !== undefined) data.type = patch.type;
+  if (patch.workType !== undefined) data.workType = patch.workType;
+  if (patch.source !== undefined) data.source = patch.source;
+  if (patch.body !== undefined) data.body = patch.body && patch.body.trim() ? patch.body.trim() : null;
+  if (patch.status !== undefined) {
+    if (isNowDone && !wasDone) data.completedAt = new Date();
+    if (!isNowDone && wasDone) data.completedAt = null;
+  }
+
+  if (Object.keys(data).length === 0) return;
+  await prisma.backlogItem.update({ where: { id }, data });
+
+  // Auto-complete the epic when this status change makes all its items done/deferred.
+  if (patch.status !== undefined && isNowDone && !wasDone && existing.epicId) {
+    const remaining = await prisma.backlogItem.count({
+      where: { epicId: existing.epicId, status: { notIn: ["done", "deferred"] } },
+    });
+    if (remaining === 0) {
+      await prisma.epic.update({
+        where: { id: existing.epicId },
+        data: { status: "done", completedAt: new Date() },
+      });
     }
   }
 }

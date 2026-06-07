@@ -170,13 +170,19 @@ export function WorkbookGrid({
   }, [rowData, sortColumns]);
 
   const persistCell = useCallback(
-    async (rowId: string, columnId: string, value: CellValue) => {
+    async (rowId: string, columnId: string, value: CellValue, prevValue: CellValue) => {
       setError(null);
       const res =
         source === "platform"
           ? await updatePlatformCellsAction(tableId, rowId, { [columnId]: value })
           : await updateCellsAction(tableId, rowId, { [columnId]: value });
-      if (!res.ok) setError(res.error);
+      if (!res.ok) {
+        setError(res.error);
+        // Revert the optimistic edit so the grid doesn't show an unsaved value.
+        setRowData((prev) =>
+          prev.map((r) => (r.rowId === rowId ? { ...r, [columnId]: prevValue } : r)),
+        );
+      }
     },
     [tableId, source],
   );
@@ -185,14 +191,17 @@ export function WorkbookGrid({
     (newRows: GridRowData[], data: RowsChangeData<GridRowData>) => {
       // newRows are in sorted order; map back into the canonical rowData by rowId.
       const byId = new Map(newRows.map((r) => [r.rowId, r]));
-      setRowData((prev) => prev.map((r) => byId.get(r.rowId) ?? r));
       const columnId = data.column.key;
       for (const idx of data.indexes) {
         const changed = newRows[idx];
-        if (changed) void persistCell(changed.rowId, columnId, changed[columnId] ?? null);
+        if (!changed) continue;
+        const prevRow = rowData.find((r) => r.rowId === changed.rowId);
+        const prevValue: CellValue = prevRow ? prevRow[columnId] ?? null : null;
+        void persistCell(changed.rowId, columnId, changed[columnId] ?? null, prevValue);
       }
+      setRowData((prev) => prev.map((r) => byId.get(r.rowId) ?? r));
     },
-    [persistCell],
+    [persistCell, rowData],
   );
 
   const onAddRow = useCallback(async () => {

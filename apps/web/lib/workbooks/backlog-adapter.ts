@@ -2,12 +2,13 @@
 //
 // Renders real BacklogItem records as an editable grid. This is the first
 // platform-data adapter: the grid is a live view over the same records the
-// backlog forms edit, NOT a copy. Writes route through the canonical
-// updateBacklogItem server action (which itself enforces manage_backlog and all
-// status/validation rules) — never a raw prisma write.
+// backlog forms edit, NOT a copy. Single-cell edits route through the
+// updateBacklogItemFields partial update (enforces manage_backlog; validates only
+// the changed fields) so editing one cell never requires the rest of the record
+// to be complete — never a raw prisma write.
 
 import { prisma } from "@dpf/db";
-import { updateBacklogItem } from "@/lib/actions/backlog";
+import { updateBacklogItemFields } from "@/lib/actions/backlog";
 import { getBacklogItems } from "@/lib/explore/backlog-data";
 import {
   gridRegistry,
@@ -18,8 +19,7 @@ import {
   BACKLOG_ENTITY_TYPE,
   BACKLOG_COLUMNS,
   backlogItemToGridRow,
-  buildBacklogInput,
-  type BacklogEditableExisting,
+  buildBacklogPatch,
 } from "./backlog-adapter-mapping";
 import {
   type ColumnDefinition,
@@ -82,38 +82,13 @@ class BacklogItemAdapter implements DataSourceAdapter {
   ): Promise<GridRow> {
     const existing = await prisma.backlogItem.findUnique({
       where: { itemId: rowId },
-      select: {
-        id: true,
-        title: true,
-        type: true,
-        status: true,
-        workType: true,
-        source: true,
-        priority: true,
-        body: true,
-        epicId: true,
-        digitalProductId: true,
-        taxonomyNodeId: true,
-      },
+      select: { id: true },
     });
     if (!existing) throw new Error("Backlog item not found");
 
-    const editable: BacklogEditableExisting = {
-      title: existing.title,
-      type: existing.type,
-      status: existing.status,
-      workType: existing.workType,
-      source: existing.source,
-      priority: existing.priority,
-      body: existing.body,
-      epicId: existing.epicId,
-      digitalProductId: existing.digitalProductId,
-      taxonomyNodeId: existing.taxonomyNodeId,
-    };
-
-    const input = buildBacklogInput(editable, changes);
-    // Canonical, fully-validated + authorized update path (enforces manage_backlog).
-    await updateBacklogItem(existing.id, input);
+    // Partial update: only the changed fields are written + validated. Enforces
+    // manage_backlog and preserves status side-effects / epic auto-completion.
+    await updateBacklogItemFields(existing.id, buildBacklogPatch(changes));
 
     const updated = await readGridRow(rowId);
     if (!updated) throw new Error("Item updated but could not be read back");
