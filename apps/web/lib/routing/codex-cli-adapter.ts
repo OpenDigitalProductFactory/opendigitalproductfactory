@@ -247,6 +247,10 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
     const slug = `codex-conv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const promptFile = `/tmp/${slug}-prompt.txt`;
     const runnerScript = `/tmp/${slug}-run.sh`;
+    // Records the in-container codex PID so a timeout can reap the actual
+    // process inside the sandbox (BI-F36E7510). proc.kill() below only reaches
+    // the local `docker exec` client, not the containerized process.
+    const pidFile = `/tmp/${slug}-pid.txt`;
 
     const cp = lazyChildProcess();
     const execAsync = lazyUtil().promisify(cp.exec);
@@ -268,11 +272,18 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
         authExportLine = "# OAuth auth via ~/.codex/auth.json";
       }
 
+      // codex is backgrounded (NOT `exec`ed) so the runner sh stays the parent
+      // and records codex's PID to pidFile — letting the timeout path reap the
+      // real in-container process tree (BI-F36E7510). stdout/stderr are
+      // inherited by the background child, so capture is unchanged.
       const script = [
         "#!/bin/sh",
         "cd /workspace",
         authExportLine,
-        `exec codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < ${promptFile}`,
+        `codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < ${promptFile} &`,
+        `CLIPID=$!`,
+        `echo "$CLIPID" > ${pidFile}`,
+        `wait "$CLIPID"`,
       ].join("\n");
 
       const scriptB64 = Buffer.from(script).toString("base64");
@@ -302,6 +313,17 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
         const timer = setTimeout(() => {
           timedOut = true;
           proc.kill("SIGTERM");
+          // proc.kill() only signals the local `docker exec` client; the
+          // containerized process is not forwarded the signal and would orphan,
+          // pinning the shared sandbox and leaking pids/threads (BI-F36E7510).
+          // Reap the in-container tree explicitly, escalating to SIGKILL.
+          const reap = (sig: "TERM" | "KILL") =>
+            execAsync(
+              `docker exec ${SANDBOX_CONTAINER} sh -c "kill -${sig} $(cat ${pidFile} 2>/dev/null) 2>/dev/null; pkill -${sig} -f ${runnerScript} 2>/dev/null; true"`,
+              { timeout: 5_000 },
+            ).catch(() => {});
+          void reap("TERM");
+          setTimeout(() => void reap("KILL"), 3_000);
         }, CLI_TIMEOUT_MS);
 
         proc.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
@@ -439,7 +461,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
     } finally {
       // Clean up temp files (fire-and-forget)
       execAsync(
-        `docker exec ${SANDBOX_CONTAINER} sh -c "rm -f ${promptFile} ${runnerScript}"`,
+        `docker exec ${SANDBOX_CONTAINER} sh -c "rm -f ${promptFile} ${runnerScript} ${pidFile}"`,
         { timeout: 5_000 },
       ).catch(() => {});
     }
