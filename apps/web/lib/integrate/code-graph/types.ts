@@ -4,6 +4,7 @@ export type CodeGraphNodeKind =
   | "CodeRoute"
   | "CodeTool"
   | "PrismaModel"
+  | "PrismaField"
   | "PromptTemplateSource"
   | "TestFile"
   | "ExternalModule";
@@ -16,9 +17,17 @@ export type CodeGraphEdgeKind =
   | "EXPOSES_TOOL"
   | "USES_MODEL"
   | "USES_PROMPT"
-  | "TESTED_BY";
+  | "TESTED_BY"
+  | "HAS_FIELD"
+  | "RELATES_TO";
 
 export type CodeGraphConfidence = "exact" | "heuristic";
+
+/**
+ * Optional primitive metadata projected onto a node/edge (Neo4j `SET n += map`).
+ * Values are limited to primitives so they map cleanly to graph properties.
+ */
+export type CodeGraphAttributes = Record<string, string | number | boolean>;
 
 export type CodeGraphNodeFact = {
   graphKey: string;
@@ -29,6 +38,8 @@ export type CodeGraphNodeFact = {
   startLine: number | null;
   endLine: number | null;
   extractor: string;
+  /** Optional primitive metadata (e.g. Prisma field type/flags). */
+  attributes?: CodeGraphAttributes;
 };
 
 export type CodeGraphEdgeFact = {
@@ -41,6 +52,8 @@ export type CodeGraphEdgeFact = {
   endLine: number | null;
   confidence: CodeGraphConfidence;
   extractor: string;
+  /** Optional primitive metadata (e.g. relation cardinality / FK info). */
+  attributes?: CodeGraphAttributes;
 };
 
 export type CodeGraphExtraction = {
