@@ -11,6 +11,8 @@
 //   4. Otherwise: collect change set -> classify -> score -> phrase -> cache.
 
 import { getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
+import { getDeployedSha } from "@/lib/self-upgrade/completion";
+import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { resolveTargetSha } from "@/lib/self-upgrade/version";
 import { cacheKey, getCached, setCached } from "./cache";
 import { collectChangeSet } from "./change-set";
@@ -47,16 +49,23 @@ export type SummarizeDeps = {
   phraseSummary?: typeof phraseSummary;
 };
 
+const GIT_SHA_RE = /^[0-9a-f]{40}$/i;
+
 async function defaultLoadCurrentLineageSha(): Promise<string | null> {
   const run = await getLatestSucceededRun();
   // The upstream lineage marker is the targetSha of the latest succeeded run
   // (the upstream commit absorbed into the running build) — NOT deployedSha,
   // which in merge mode is the merge-commit identity (see run-store.ts).
-  return run?.targetSha ?? null;
-}
+  if (run?.targetSha && GIT_SHA_RE.test(run.targetSha)) return run.targetSha;
 
-async function defaultLoadTargetSha(): Promise<string | null> {
-  return resolveTargetSha("operator-impact-summary");
+  // No succeeded self-upgrade yet (a never-upgraded install). Fall back to the
+  // commit THIS install was built from, so a CI-stamped ("labeled") production
+  // build can still summarize everything between install and the upstream
+  // target. A local/content-hash build has no git-SHA identity, so this stays
+  // null and the panel honestly reports "no lineage" rather than a wall of hex.
+  const deployed = await getDeployedSha();
+  if (deployed && GIT_SHA_RE.test(deployed)) return deployed;
+  return null;
 }
 
 /**
@@ -68,10 +77,27 @@ export async function summarizeUpgradeImpact(
   options: SummarizeOptions = {},
   deps: SummarizeDeps = {},
 ): Promise<SummaryResult> {
+  // The self-upgrade config carries the host clone path + remote/branch the git
+  // reads must use. getSelfUpgradeStatus threads this into resolveTargetSha; the
+  // impact summary historically did NOT, so both the target resolve and the
+  // change-set `git log` ran against the wrong default path (`/workspace`) and
+  // the panel could never produce output on any real install. Load it once and
+  // pass it through (only when the caller hasn't injected its own loaders).
+  const needsConfig = !deps.loadTargetSha || !deps.loadChangeSet;
+  const config = needsConfig ? await getSelfUpgradeConfig() : null;
+
   const loadCurrentLineageSha = deps.loadCurrentLineageSha ?? defaultLoadCurrentLineageSha;
-  const loadTargetSha = deps.loadTargetSha ?? defaultLoadTargetSha;
+  const loadTargetSha =
+    deps.loadTargetSha ??
+    (() => resolveTargetSha("operator-impact-summary", config ?? {}));
   const loadInstallSignals = deps.loadInstallSignals ?? (() => collectInstallSignals());
-  const loadChangeSet = deps.loadChangeSet ?? ((input) => collectChangeSet(input));
+  const loadChangeSet =
+    deps.loadChangeSet ??
+    ((input) =>
+      collectChangeSet({
+        ...input,
+        config: { hostSourcePath: config?.hostSourceMountPath },
+      }));
   const enrich = deps.enrichPrs ?? enrichPrs;
   const phrase = deps.phraseSummary ?? phraseSummary;
 

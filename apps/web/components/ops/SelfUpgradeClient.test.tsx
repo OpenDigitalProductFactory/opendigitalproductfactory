@@ -334,6 +334,24 @@ describe("SelfUpgradeClient – loading", () => {
     const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
     expect(html).toContain('aria-busy="true"');
   });
+
+  it("shows the 'starting' hint while busy and no run is running yet", () => {
+    // The manual trigger only queues the upgrade; the worker takes a few seconds
+    // to flip the run to running. The hint reassures the operator so they don't
+    // re-click thinking it's broken.
+    shared.isPending = true;
+    const html = renderToStaticMarkup(<SelfUpgradeClient {...baseStatus} />);
+    expect(html).toContain('data-upgrade-starting="true"');
+    expect(html).toContain("No need to click again");
+  });
+
+  it("does not show the 'starting' hint once a run is already running", () => {
+    shared.isPending = false;
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} latestRun={makeRun("running")} />,
+    );
+    expect(html).not.toContain('data-upgrade-starting="true"');
+  });
 });
 
 // ─── Success feedback ─────────────────────────────────────────────────────────

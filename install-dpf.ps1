@@ -1839,6 +1839,34 @@ if (-not (Test-StepDone "started")) {
     docker compose @coreComposeArgs up -d
     $ErrorActionPreference = $oldEAP
 
+    # Voice / TTS sidecar. Spoken output uses the bundled dpf-tts container, but
+    # it's behind the `tts` compose profile (and carries an NVIDIA deploy
+    # reservation), so a plain `up` never starts it -- leaving voice silent out
+    # of the box. Start it here so a fresh install speaks, per
+    # bundled-services-active-by-default. Only enabled when an NVIDIA GPU with
+    # >=6 GB VRAM is detected (the deploy reservation would fail on a GPU-less
+    # host; the CPU tier is ~10-30x slower). Non-fatal: a GPU-runtime hiccup
+    # must not abort the install.
+    $ttsVram = 0.0
+    if (Test-Path "$DPF_DIR\.host-profile.json") {
+        try { $ttsVram = [double]((Get-Content "$DPF_DIR\.host-profile.json" -Raw | ConvertFrom-Json).gpuVramGB) } catch { $ttsVram = 0.0 }
+    }
+    if ($ttsVram -ge 6) {
+        Write-Action "Starting voice TTS sidecar (dpf-tts -- NVIDIA GPU detected)..."
+        $oldEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        docker compose @coreComposeArgs --profile tts up -d dpf-tts 2>&1 | Out-Null
+        $ttsExit = $LASTEXITCODE
+        $ErrorActionPreference = $oldEAP
+        if ($ttsExit -eq 0) {
+            Write-Action "Voice TTS container started -- spoken output works out of the box."
+        } else {
+            Write-Warn "dpf-tts failed to start (NVIDIA container runtime / GPU issue?); voice output will stay silent."
+        }
+    } else {
+        Write-Action "Voice TTS sidecar skipped (no NVIDIA GPU >=6 GB VRAM detected); STT still works. See docs/install/windows.md -> Voice to enable."
+    }
+
     # Sync postgres password -- if the volume was reused from a prior install,
     # the DB user still has the old password. Update it to match the new .env.
     Write-Action "Syncing database credentials..."

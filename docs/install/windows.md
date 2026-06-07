@@ -142,6 +142,33 @@ LLM_BASE_URL=https://api.example.com/v1
 DPF_LLM_PROVIDER=external
 ```
 
+## Voice (STT + TTS)
+
+DPF coworkers support voice **input** (speech-to-text) and voice
+**output** (text-to-speech).
+
+**Speech-to-text (STT) — works out of the box.** The bundled `dpf-stt`
+container (faster-whisper) is profile-free, so it starts on a plain
+install and the coworker mic button works immediately. CPU-friendly; no
+GPU required.
+
+**Text-to-speech (TTS) — automatic on an NVIDIA GPU.** Spoken output
+uses the bundled `dpf-tts` container (Chatterbox — self-hosted, no API
+key). It needs hardware acceleration, so the installer starts it
+**automatically when it detects an NVIDIA GPU with ≥ 6 GB VRAM** — no
+manual `--profile tts` step. The portal is already wired to reach it
+(`TTS_PROVIDER=chatterbox`, `DPF_TTS_URL=http://dpf-tts:8000`). GPU
+passthrough requires Docker Desktop on the WSL2 backend with current
+NVIDIA drivers installed on the Windows host.
+
+**No NVIDIA GPU?** The installer skips `dpf-tts` — its GPU reservation
+can't start on a GPU-less host, and the self-hosted CPU tier is
+~10–30× slower. STT still works. For spoken output without a GPU, route
+to a managed TTS API: set `TTS_PROVIDER=cartesia` or
+`TTS_PROVIDER=fish-audio` (plus the provider's API key) in `.env` and
+re-run the installer. (A GPU-reservation-free CPU-tier default is
+tracked as a follow-up.)
+
 ## Autostart
 
 The installer registers a Windows **Scheduled Task** that starts the
