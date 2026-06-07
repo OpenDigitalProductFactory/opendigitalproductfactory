@@ -33,6 +33,9 @@ const mocks = vi.hoisted(() => ({
   signalSwapStarting: vi.fn(),
   signalSwapComplete: vi.fn(),
   failQuiescenceSwap: vi.fn(),
+  // Activity precheck snapshot (BI-F36E7510). Default empty so existing tests
+  // proceed to the drain exactly as before; the new skip-path test overrides it.
+  captureActiveSessionBlockers: vi.fn().mockResolvedValue({ surfaces: [] }),
 }));
 
 vi.mock("@/lib/self-upgrade/config", () => ({
@@ -122,6 +125,7 @@ vi.mock("@/lib/self-upgrade/quiescence", () => ({
   signalSwapStarting: mocks.signalSwapStarting,
   signalSwapComplete: mocks.signalSwapComplete,
   failQuiescenceSwap: mocks.failQuiescenceSwap,
+  captureActiveSessionBlockers: mocks.captureActiveSessionBlockers,
 }));
 
 import type { SelfUpgradeRunEventData } from "./self-upgrade";
@@ -370,6 +374,28 @@ describe("success path", () => {
     expect(result).toMatchObject({ skipped: true, reason: "up-to-date" });
     expect(mocks.prepareUpgradeSource).not.toHaveBeenCalled();
     expect(mocks.runPromoter).not.toHaveBeenCalled();
+  });
+
+  it("skips BEFORE draining when activity is in flight — no drain/defer/cooldown cycle (BI-F36E7510)", async () => {
+    // Build Studio work in flight: the activity precheck must skip cleanly
+    // instead of flipping the portal to draining and burning the full budget
+    // waiting for a BuildPhaseRun that outlasts it (the periodic bad-state bug).
+    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
+      surfaces: [{ surface: "build-studio.phase.plan" }],
+    });
+    const result = await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(result).toMatchObject({ skipped: true, reason: "activity-in-flight" });
+    // The whole point: no drain, no cooldown — the portal never refuses actions.
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+    expect(mocks.recordCooldown).not.toHaveBeenCalled();
+  });
+
+  it("force bypasses the activity precheck and proceeds to drain", async () => {
+    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
+      surfaces: [{ surface: "build-studio.phase.plan" }],
+    });
+    await runSelfUpgrade({ triggeredBy: "ops", force: true });
+    expect(mocks.startQuiescence).toHaveBeenCalled();
   });
 
   it("runs the promoter with the host install path, backup, image, and health paths", async () => {
