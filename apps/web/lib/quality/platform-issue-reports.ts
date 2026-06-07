@@ -11,6 +11,8 @@ const LIMITS = {
   description: 10_000,
   routeContext: 500,
   errorStack: 20_000,
+  errorDigest: 191,
+  deployedSha: 64,
   userAgent: 500,
   triggerKind: 100,
   supportSessionId: 191,
@@ -59,6 +61,10 @@ export interface CreatePlatformIssueReportInput {
   description?: string | null;
   routeContext?: string | null;
   errorStack?: string | null;
+  // BI-B4F401B3: crash-boundary diagnostics. errorDigest = Next.js server
+  // digest token; deployedSha = running image SHA at crash time.
+  errorDigest?: string | null;
+  deployedSha?: string | null;
   userAgent?: string | null;
   triggerKind?: string | null;
   supportSessionId?: string | null;
@@ -134,6 +140,8 @@ export async function createPlatformIssueReport(
       description: trimTo(input.description ?? null, LIMITS.description),
       routeContext: trimTo(input.routeContext ?? null, LIMITS.routeContext),
       errorStack: trimTo(input.errorStack ?? null, LIMITS.errorStack),
+      errorDigest: trimTo(input.errorDigest ?? null, LIMITS.errorDigest),
+      deployedSha: trimTo(input.deployedSha ?? null, LIMITS.deployedSha),
       userAgent: trimTo(input.userAgent ?? null, LIMITS.userAgent),
       triggerKind: trimTo(input.triggerKind ?? null, LIMITS.triggerKind),
       supportSessionId: trimTo(input.supportSessionId ?? null, LIMITS.supportSessionId),
