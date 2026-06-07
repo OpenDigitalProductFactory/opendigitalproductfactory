@@ -98,6 +98,7 @@ const ALL_AGENT_IDS = [
   "coo",
   "compliance-officer",
   "docs-specialist",
+  "data-architect",
 ];
 
 /**

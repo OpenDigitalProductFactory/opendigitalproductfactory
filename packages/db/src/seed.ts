@@ -32,6 +32,7 @@ import {
 import { seedDeliberationPatterns } from "./seed-deliberation.js";
 import { seedStallThresholds } from "./seed-stall-thresholds.js";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
+import { ensureDataModelMirrorScheduledTask } from "./seed-data-model-mirror.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
 import { ensureAllBackupScheduledJobs } from "./seed-platform-backup.js";
 import { ensureContributorInventoryScheduledJob } from "./seed-contributor-inventory.js";
@@ -2482,6 +2483,7 @@ async function main(): Promise<void> {
   await seedDpfSelfRegistration();
   await seedDefaultAdminUser();
   await ensureDiscoveryTriageScheduledTask(prisma);
+  await ensureDataModelMirrorScheduledTask(prisma);
   await ensureHiveScoutScheduledTask(prisma);
   await ensureAllBackupScheduledJobs(prisma);
   await ensureContributorInventoryScheduledJob(prisma);

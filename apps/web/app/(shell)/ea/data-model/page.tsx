@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { EaTabNav } from "@/components/ea/EaTabNav";
+import { GenerateDataModelButton } from "@/components/ea/GenerateDataModelButton";
 
 const MIRROR_ISSUE_TYPE = "mirror-duplicate-source-key";
 
@@ -121,9 +122,12 @@ export default async function EaDataModelPage() {
           </p>
           <p className="mb-4 text-xs text-[var(--dpf-muted)]">
             The live ERD is mirrored from the Prisma schema by the data-architecture mirror. It runs on schema
-            changes, on a schedule, and on demand. Once it has run, the data objects and their relationships
-            appear here as an interactive ERD with an evolution timeline.
+            changes, nightly on a schedule, and on demand. Once it has run, the data objects and their
+            relationships appear here as an interactive ERD with an evolution timeline.
           </p>
+          <div className="mb-4 flex justify-center">
+            <GenerateDataModelButton />
+          </div>
           <Link
             href="/ea/views"
             className="text-xs font-medium text-[var(--dpf-accent)] hover:text-[var(--dpf-text)]"
