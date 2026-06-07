@@ -180,6 +180,53 @@ describe("cliAdapter", () => {
     );
   });
 
+  it("reaps the in-sandbox process tree on dispatch timeout (BI-F36E7510)", async () => {
+    vi.useFakeTimers();
+    try {
+      mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-test" });
+
+      // A hung dispatch: the spawned proc never emits "close" until we kill it.
+      const proc = new EventEmitter() as EventEmitter & {
+        stdout: EventEmitter;
+        stderr: EventEmitter;
+        kill: ReturnType<typeof vi.fn>;
+      };
+      proc.stdout = new EventEmitter();
+      proc.stderr = new EventEmitter();
+      proc.kill = vi.fn();
+      mockSpawn.mockReturnValue(proc);
+
+      const p = cliAdapter.execute(makeRequest());
+      p.catch(() => {}); // prevent unhandled-rejection noise before we assert
+
+      // Advance past CLI_TIMEOUT_MS — the dispatch timer fires.
+      await vi.advanceTimersByTimeAsync(600_000);
+
+      // The local docker-exec client is signalled...
+      expect(proc.kill).toHaveBeenCalledWith("SIGTERM");
+      // ...AND the in-container tree is reaped (the actual fix): a docker exec
+      // that SIGTERMs the recorded pid + the runner sh.
+      const calls = mockExecAsync.mock.calls.map((c) => String(c[0]));
+      const termReap = calls.find(
+        (cmd) => /kill -TERM/.test(cmd) && /(cli-pid-|cli-run-)/.test(cmd),
+      );
+      expect(termReap).toBeDefined();
+
+      // After the grace period it escalates to SIGKILL.
+      await vi.advanceTimersByTimeAsync(3_000);
+      const killReap = mockExecAsync.mock.calls
+        .map((c) => String(c[0]))
+        .some((cmd) => /kill -KILL/.test(cmd) && /(cli-pid-|cli-run-)/.test(cmd));
+      expect(killReap).toBe(true);
+
+      // The wrapper dies → the dispatch rejects as a timeout.
+      proc.emit("close", null);
+      await expect(p).rejects.toThrow(/timed out/i);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("parses tool calls from CLI JSON output", async () => {
     mockGetProviderBearerToken.mockResolvedValue({
       token: "sk-ant-oat01-test-token",
