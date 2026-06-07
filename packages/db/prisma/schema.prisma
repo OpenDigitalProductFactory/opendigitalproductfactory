@@ -2300,6 +2300,7 @@ model CustomerAccount {
   recurringSchedules     RecurringSchedule[]
   inventoryEntities      InventoryEntity[]           @relation("InventoryEntityCustomerAccount")
   inventoryRelationships InventoryRelationship[]     @relation("InventoryRelationshipCustomerAccount")
+  masterDataSourceRefs   MasterDataSourceRef[]       @relation("CustomerAccountMdmSourceRef")
 
   @@index([status])
   @@index([parentAccountId])
@@ -7734,8 +7735,44 @@ model Supplier {
   aiProviderProfiles AiProviderFinanceProfile[]
   supplierContracts  SupplierContract[]
   financeWorkItems   FinanceWorkItem[]
+  masterDataSourceRefs MasterDataSourceRef[] @relation("SupplierMdmSourceRef")
 
   @@index([status])
+}
+
+/// Master Data Management source crosswalk (MDM spec §6.2, typed-FK hybrid,
+/// resolved 2026-06-06). The durable, resolved mapping from a source-system
+/// record to a canonical DPF record — written once a staged import record is
+/// accepted/linked, not a second intake table. Identity-bearing domains
+/// (organization, customer-contact) crosswalk via PrincipalAlias instead and
+/// are out of scope here. High-volume domains (customer-account, supplier)
+/// carry a typed FK for DB-enforced cascade; low-volume domains rely on the
+/// polymorphic (domain, canonicalId) pointer with application-enforced integrity.
+model MasterDataSourceRef {
+  id                String   @id @default(cuid())
+  domain            String
+  canonicalId       String
+  customerAccountId String?
+  supplierId        String?
+  sourceSystem      String
+  sourceEntityType  String?
+  sourceEntityId    String
+  sourcePayloadHash String?
+  observedAt        DateTime
+  lastSeenAt        DateTime
+  trustTier         String   @default("unknown")
+  status            String   @default("active")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  customerAccount CustomerAccount? @relation("CustomerAccountMdmSourceRef", fields: [customerAccountId], references: [id], onDelete: Cascade)
+  supplier        Supplier?        @relation("SupplierMdmSourceRef", fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([domain, sourceSystem, sourceEntityId])
+  @@index([domain, canonicalId])
+  @@index([sourceSystem, sourceEntityId])
+  @@index([customerAccountId])
+  @@index([supplierId])
 }
 
 model AiProviderFinanceProfile {
