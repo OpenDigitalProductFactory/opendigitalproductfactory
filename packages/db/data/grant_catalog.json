@@ -83,6 +83,8 @@
       "honored_by_tools": [
         "add_provider",
         "configure_gateway_scan",
+        "grok_signin_start",
+        "grok_signin_status",
         "run_endpoint_tests",
         "update_provider_category"
       ],

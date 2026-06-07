@@ -223,7 +223,13 @@ export type TrustDimensionKey =
   | "conflictContradiction"
   | "runtimeAvailability"
   | "sampleSize"
-  | "riskImpact";
+  | "riskImpact"
+  // Master Data Management dimensions (added 2026-06-06, MDM spec §6.5).
+  // This registry is the single source of trust vocabulary; MDM and
+  // EP-DATA-ARCH steward drift both consume these by canonical key.
+  | "validityConformity"
+  | "uniqueness"
+  | "relationshipIntegrity";
 
 export type TrustDimension = {
   key: TrustDimensionKey;
@@ -296,6 +302,9 @@ export type TrustAssessment = {
 | `runtimeAvailability` | Whether dependencies needed to answer were available. | Neo4j unavailable, so graph view is Postgres-only. |
 | `sampleSize` | Whether the denominator is meaningful. | Portfolio health from 1 product vs 200 products. |
 | `riskImpact` | How much trust is required before presenting the result as current. | Compliance/security claims need higher thresholds than decorative summary counts. |
+| `validityConformity` | Whether the value conforms to its expected format/domain. | Email/domain/phone pass validation; status is an allowed enum value; postal code matches country format. (MDM §6.5) |
+| `uniqueness` | Whether the record is free of duplicate-candidate risk. | No high-confidence duplicate candidate above the match threshold for this canonical record. (MDM §6.5) |
+| `relationshipIntegrity` | Whether the record's relationships/crosswalk references resolve. | All `MasterDataSourceRef` rows resolve to a live canonical id; FK targets exist; no orphaned polymorphic pointer. (MDM §6.5) |
 
 Not every surface needs every dimension. The scorer excludes `null` dimensions from the denominator but includes "unknown" dimensions when the missing dimension itself should reduce trust.
 
