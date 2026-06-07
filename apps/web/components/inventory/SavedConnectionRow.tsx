@@ -19,6 +19,7 @@
 import { useState, useTransition } from "react";
 import {
   deleteDiscoveryConnection,
+  rerunDiscoveryConnection,
   testDiscoveryConnection,
   type DiscoveryConnectionSummary,
 } from "@/lib/actions/discovery";
@@ -61,9 +62,25 @@ export function SavedConnectionRow({ connection }: Props) {
   const [mode, setMode] = useState<"view" | "editing" | "confirming-delete">("view");
   const [lastAction, setLastAction] = useState<{ kind: "ok" | "err"; message: string } | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isRunning, startRerun] = useTransition();
 
   const statusInfo = STATUS_LABELS[connection.status] ?? { label: connection.status, tone: "muted" as const };
   const tone = TONE_STYLES[statusInfo.tone];
+
+  const handleRerun = () => {
+    setLastAction(null);
+    startRerun(async () => {
+      const result = await rerunDiscoveryConnection(connection.id);
+      if (!result.ok) {
+        setLastAction({ kind: "err", message: result.error });
+        return;
+      }
+      setLastAction({
+        kind: "ok",
+        message: `Re-run complete — ${result.itemCount} item(s), ${result.relationshipCount} relationship(s)`,
+      });
+    });
+  };
 
   const handleRetest = () => {
     setLastAction(null);
@@ -152,8 +169,16 @@ export function SavedConnectionRow({ connection }: Props) {
         <div className="flex shrink-0 items-center gap-1.5">
           <button
             type="button"
+            onClick={handleRerun}
+            disabled={isPending || isRunning}
+            className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-1 text-xs text-[var(--dpf-text)] hover:border-[var(--dpf-accent)] disabled:opacity-50"
+          >
+            {isRunning ? "Running…" : "Re-run"}
+          </button>
+          <button
+            type="button"
             onClick={handleRetest}
-            disabled={isPending}
+            disabled={isPending || isRunning}
             className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-1 text-xs text-[var(--dpf-text)] hover:border-[var(--dpf-accent)] disabled:opacity-50"
           >
             {isPending && mode === "view" ? "Testing…" : "Re-test"}

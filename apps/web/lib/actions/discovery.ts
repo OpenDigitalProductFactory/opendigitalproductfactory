@@ -2,6 +2,7 @@
 
 import {
   executeBootstrapDiscovery,
+  normalizeDiscoveredFacts,
   persistBootstrapDiscoveryRun,
   prisma,
   type Prisma,
@@ -410,6 +411,74 @@ export async function testDiscoveryConnection(connectionId: string): Promise<
     return { ok: true, status: "ok", deviceCount };
   }
   return { ok: true, status: "ok", deviceCount, message: testMessage };
+}
+
+export type RerunDiscoveryResult =
+  | { ok: true; runId: string; itemCount: number; relationshipCount: number; status: string }
+  | { ok: false; error: string };
+
+/** Re-run discovery for an existing connection. */
+export async function rerunDiscoveryConnection(connectionId: string): Promise<RerunDiscoveryResult> {
+  const authResult = await requireManageDiscovery();
+  if (!authResult.ok) return authResult;
+
+  const conn = await prisma.discoveryConnection.findUnique({
+    where: { id: connectionId },
+  });
+  if (!conn) return { ok: false, error: "Connection not found" };
+
+  if (conn.status === "unconfigured" || conn.status === "auth_failed") {
+    return { ok: false, error: `Cannot rerun discovery for connection with status "${conn.status}"` };
+  }
+
+  if (!conn.encryptedApiKey) return { ok: false, error: "No API key configured" };
+  const apiKey = decryptSecret(conn.encryptedApiKey);
+  if (!apiKey) return { ok: false, error: "Cannot decrypt API key" };
+
+  const { collectUnifiDiscovery, buildDepsFromConnection } = await import("@dpf/db/discovery-collectors-unifi");
+  const config = (conn.configuration ?? {}) as Record<string, unknown>;
+  const deps = buildDepsFromConnection({
+    endpointUrl: conn.endpointUrl,
+    apiKey,
+    configuration: {
+      site: (config.site as string) ?? "default",
+      discoverClients: (config.discoverClients as boolean) ?? false,
+    },
+  });
+
+  const collectorOutput = await collectUnifiDiscovery({ sourceKind: conn.collectorType as never }, deps);
+  const normalized = normalizeDiscoveredFacts(collectorOutput);
+
+  const summary = await persistBootstrapDiscoveryRun(
+    prisma as never,
+    normalized,
+    {
+      runKey: conn.connectionKey,
+      sourceSlug: conn.connectionKey,
+      trigger: "manual_connection",
+    },
+  );
+
+  const status = "active";
+  await prisma.discoveryConnection.update({
+    where: { id: connectionId },
+    data: {
+      lastTestedAt: new Date(),
+      lastTestStatus: "ok",
+      lastTestMessage: `Discovered ${summary.createdEntities + summary.updatedEntities} items`,
+      status,
+    },
+  });
+
+  revalidateDiscoverySurfaces();
+
+  return {
+    ok: true,
+    runId: summary.runId ?? "",
+    itemCount: summary.createdEntities + summary.updatedEntities,
+    relationshipCount: summary.createdRelationships + summary.updatedRelationships,
+    status,
+  };
 }
 
 /** Delete a discovery connection. */
