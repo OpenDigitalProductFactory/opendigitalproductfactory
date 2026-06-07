@@ -115,4 +115,45 @@ describe("scoreTrustVector", () => {
     expect(assessment.tier).toBe("high");
     expect(assessment.overallScore).toBe(1);
   });
+
+  it("scores master-data dimensions (validity/uniqueness/relationship integrity) through the shared registry", () => {
+    const assessment = scoreTrustVector({
+      subject: {
+        type: "customer-account",
+        id: "cust-1",
+        label: "Acme Corp",
+      },
+      asOf: "2026-06-06T12:00:00.000Z",
+      dimensions: [
+        dimension("validityConformity", 0.9, "Email and domain pass format validation."),
+        dimension("uniqueness", 0.85, "No duplicate candidate above threshold."),
+        dimension("relationshipIntegrity", 0.95, "All crosswalk rows resolve to live canonical ids."),
+      ],
+    });
+
+    const keys = assessment.dimensions.map((d) => d.key);
+    expect(keys).toEqual(["validityConformity", "uniqueness", "relationshipIntegrity"]);
+    expect(assessment.tier).toBe("high");
+    expect(assessment.overallScore).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it("qualifies a master-data record with low uniqueness (duplicate risk)", () => {
+    const assessment = scoreTrustVector({
+      subject: {
+        type: "customer-account",
+        id: "cust-2",
+        label: "Acme Corporation",
+      },
+      asOf: "2026-06-06T12:00:00.000Z",
+      dimensions: [
+        dimension("validityConformity", 0.9, "Fields well-formed."),
+        dimension("uniqueness", 0.2, "A high-confidence duplicate candidate exists."),
+        dimension("relationshipIntegrity", 0.9, "Crosswalk rows resolve."),
+      ],
+    });
+
+    expect(assessment.tier).toBe("low");
+    expect(assessment.action).not.toBe("present");
+    expect(assessment.primaryRationale).toContain("duplicate");
+  });
 });

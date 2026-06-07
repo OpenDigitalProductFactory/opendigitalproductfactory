@@ -20,6 +20,10 @@ export default async function ImprovementsPage() {
           {total} improvement{total !== 1 ? "s" : ""}
           {actionable > 0 ? ` · ${actionable} need${actionable !== 1 ? "" : "s"} attention` : ""}
         </p>
+        <p className="text-xs text-[var(--dpf-muted)] mt-1">
+          Evidence view — each proposal is auto-filed to the backlog for triage and
+          prioritized there. The backlog is the one place work is tracked.
+        </p>
       </div>
 
       <OpsTabNav />
