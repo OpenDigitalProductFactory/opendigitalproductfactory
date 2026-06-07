@@ -29,7 +29,13 @@ export type TrustDimensionKey =
   | "conflictContradiction"
   | "runtimeAvailability"
   | "sampleSize"
-  | "riskImpact";
+  | "riskImpact"
+  // Master Data Management dimensions (MDM spec sec 6.5; shared with EP-DATA-ARCH
+  // steward drift detection). Added 2026-06-06 — this union is the single trust
+  // vocabulary registry; MDM does not introduce a parallel dimension list.
+  | "validityConformity"
+  | "uniqueness"
+  | "relationshipIntegrity";
 
 export type TrustEvidenceRef = {
   kind:
