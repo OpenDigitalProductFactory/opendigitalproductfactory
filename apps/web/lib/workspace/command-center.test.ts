@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildWorkspaceCommandCenterView,
   deriveContainmentState,
-  deriveReadinessCell,
+  selectReadinessAttention,
   type WorkspaceCommandCenterInput,
 } from "./command-center";
 
@@ -64,16 +64,47 @@ function makeInput(overrides: Partial<WorkspaceCommandCenterInput> = {}): Worksp
 }
 
 describe("workspace command center readiness", () => {
-  it("marks confidence as attention when evidence is stale or missing", () => {
-    expect(
-      deriveReadinessCell("confidence", {
-        hasFreshEvidence: false,
-        hasActiveConnection: true,
-        hasActor: true,
-        hasCadence: true,
-        hasContainment: true,
-      }).state,
-    ).toBe("attention");
+  it("marks AI-workforce confidence as attention when no receipts are recent", () => {
+    const view = buildWorkspaceCommandCenterView(makeInput({ recentReceiptCount: 0 }));
+    const aiRow = view.readiness.find((row) => row.id === "ai-workforce");
+    const confidence = aiRow?.cells.find((cell) => cell.key === "confidence");
+
+    expect(confidence?.state).toBe("attention");
+    expect(confidence?.reason).toContain("No valid execution receipts");
+    expect(confidence?.action?.href).toBe("/platform/ai/operations-map");
+  });
+
+  it("derives context and confidence from distinct signals (no shared flag)", () => {
+    // Fresh receipts but no operating docs/views: context should flag while
+    // confidence stays good — proving the columns are not the same signal.
+    const view = buildWorkspaceCommandCenterView(
+      makeInput({
+        metrics: { ...makeInput().metrics, documentCount: 0, eaViewCount: 0 },
+        recentReceiptCount: 3,
+        lowConfidenceAssessmentCount: 0,
+        recentFailedToolExecutionCount: 0,
+      }),
+    );
+    const aiRow = view.readiness.find((row) => row.id === "ai-workforce");
+    const context = aiRow?.cells.find((cell) => cell.key === "context");
+    const confidence = aiRow?.cells.find((cell) => cell.key === "confidence");
+
+    expect(context?.state).toBe("attention");
+    expect(confidence?.state).toBe("good");
+  });
+
+  it("gives every cell a concrete reason and every non-good cell an action", () => {
+    const view = buildWorkspaceCommandCenterView(makeInput());
+    const cells = view.readiness.flatMap((row) => row.cells);
+
+    expect(cells.length).toBeGreaterThan(0);
+    for (const cell of cells) {
+      expect(cell.reason.length).toBeGreaterThan(0);
+      if (cell.state !== "good") {
+        expect(cell.action?.href).toBeTruthy();
+        expect(cell.action?.label).toBeTruthy();
+      }
+    }
   });
 
   it("marks containment as blocked when an action-capable signal lacks approval or route scope", () => {
@@ -129,11 +160,32 @@ describe("workspace command center readiness", () => {
   });
 
   it("describes six-C readiness cells in operator language", () => {
-    expect(
-      deriveReadinessCell("context", {
-        hasFreshEvidence: true,
-      }).description,
-    ).toBe("Evidence, docs, and operating knowledge");
+    const view = buildWorkspaceCommandCenterView(makeInput());
+    const context = view.readiness
+      .flatMap((row) => row.cells)
+      .find((cell) => cell.key === "context");
+
+    expect(context?.description).toBe("Evidence, docs, and operating knowledge");
+  });
+
+  it("selects a blocked-first, drill-to-action attention list from the matrix", () => {
+    const view = buildWorkspaceCommandCenterView(
+      makeInput({
+        metrics: { ...makeInput().metrics, agentCount: 0, activeProviderCount: 0 },
+      }),
+    );
+    const attention = selectReadinessAttention(view.readiness);
+
+    expect(attention.length).toBeGreaterThan(0);
+    // Blocked cells sort ahead of attention/unknown.
+    const firstNonGood = attention[0];
+    expect(firstNonGood?.state).toBe("blocked");
+    // Every item resolves to a real drill-down destination.
+    expect(attention.every((item) => item.href.length > 0)).toBe(true);
+    // States are ordered blocked -> attention -> unknown.
+    const rank = { blocked: 0, attention: 1, unknown: 2 } as const;
+    const ranks = attention.map((item) => rank[item.state]);
+    expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
   });
 
   it("includes AI work in motion when active task runs exist", () => {

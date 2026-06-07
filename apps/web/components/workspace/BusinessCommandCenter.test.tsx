@@ -26,7 +26,7 @@ const fixtureView: WorkspaceCommandCenterView = {
       label: "AI workforce",
       href: "/platform/ai/operations-map",
       cells: [
-        { key: "context", label: "Context", description: "Evidence and operating knowledge", state: "good", href: "/wiki" },
+        { key: "context", label: "Context", description: "Evidence and operating knowledge", state: "good", reason: "5 documents on record", href: "/wiki" },
       ],
     },
   ],
