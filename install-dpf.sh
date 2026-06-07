@@ -711,6 +711,33 @@ fi
 docker compose "${DPF_COMPOSE_FILES[@]}" up -d
 ok "docker compose up returned"
 
+# 10b. Voice / TTS sidecar (Linux hosts with an NVIDIA GPU).
+#      Spoken output uses the bundled dpf-tts container, but it's behind the
+#      `tts` compose profile (and carries an NVIDIA deploy reservation), so a
+#      plain `up` never starts it — leaving voice silent out of the box. Start
+#      it here so a fresh customer install speaks, per
+#      bundled-services-active-by-default. We only enable it when an NVIDIA GPU
+#      with >=6 GB VRAM is detected: the deploy reservation would fail on a
+#      GPU-less host, and the CPU tier is ~10-30x slower (no fast CPU path like
+#      the Mac's native MPS sidecar). Guarded + non-fatal so a missing
+#      nvidia-container runtime can't abort the install (set -euo pipefail).
+#      Skipped on macOS, which uses the native-host sidecar above.
+if [ "$DPF_PLATFORM" != "darwin" ]; then
+  _tts_vram="$(printf '%s' "${DPF_HOST_PROFILE:-}" | sed -nE 's/.*"vramGB"[[:space:]]*:[[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/p')"
+  if [ -n "$_tts_vram" ] && awk "BEGIN{exit !(${_tts_vram} >= 6)}" 2>/dev/null; then
+    step "Voice / TTS sidecar (NVIDIA GPU)"
+    if docker compose "${DPF_COMPOSE_FILES[@]}" --profile tts up -d dpf-tts; then
+      ok "Voice TTS container started (dpf-tts) — spoken output works out of the box"
+    else
+      warn "dpf-tts failed to start (NVIDIA container runtime / GPU issue?); voice output will stay silent."
+      info "  Inspect: docker compose ${DPF_COMPOSE_FILES[*]} --profile tts logs dpf-tts"
+    fi
+  else
+    info "Voice TTS sidecar skipped (no NVIDIA GPU >=6 GB VRAM detected); STT still works."
+    info "  Enable later (CPU tier or managed API): see docs/install/linux.md → Voice."
+  fi
+fi
+
 # 11. Wait for /api/health (or DPF_HEALTH_TIMEOUT seconds, default 300).
 step "Health check"
 HEALTH_TIMEOUT="${DPF_HEALTH_TIMEOUT:-300}"
