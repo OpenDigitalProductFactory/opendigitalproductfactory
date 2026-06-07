@@ -8,6 +8,8 @@ import { BuildStudio } from "@/components/build/BuildStudio";
 import { BuildStudioV2 } from "@/components/build-studio/BuildStudioV2";
 import { loadBuildStudioCapability } from "@/lib/build/build-studio-capability";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
+import { can } from "@/lib/govern/permissions";
+import { EnableRunnerButton } from "@/components/build/EnableRunnerButton";
 import Link from "next/link";
 import { execSync } from "child_process";
 
@@ -112,12 +114,27 @@ export default async function BuildPage({ searchParams }: PageProps) {
   const capability = await loadBuildStudioCapability();
   if (!capability.ok) {
     const isOnlyLocal = capability.reason === "only_local_provider_active";
-    const heading = isOnlyLocal
-      ? "Connect a code-capable AI runner to start building"
-      : "Build Studio needs a code-capable AI runner";
-    const body = isOnlyLocal
-      ? "Build Studio writes code and orchestrates tools for you. The local AI on this install can chat, but it is not the right runner for production code work yet. Connect a subscription CLI path or an API-key provider below, then the build flow opens up."
-      : "Build Studio needs an active runner that can write code and use tools at production quality. ChatGPT/OpenAI Codex can satisfy this through OAuth and Codex CLI; OpenAI and Anthropic API keys are separate pay-per-token licensing paths.";
+    // Inline-enable only makes sense for operators who can flip provider
+    // status; everyone else still gets the connect-a-provider link.
+    const canManageProviders = can(
+      { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
+      "manage_provider_connections",
+    );
+    const enableableRunners = canManageProviders ? capability.enableableRunners : [];
+    // Prefer Claude as the headline runner when present (matches the
+    // orchestrator's default subscription codegen path), else first available.
+    const primaryRunner =
+      enableableRunners.find((r) => r.shortLabel === "Claude") ?? enableableRunners[0];
+    const heading = primaryRunner
+      ? `${primaryRunner.shortLabel} is connected but turned off`
+      : isOnlyLocal
+        ? "Connect a code-capable AI runner to start building"
+        : "Build Studio needs a code-capable AI runner";
+    const body = primaryRunner
+      ? `${primaryRunner.shortLabel} is already set up on this install — it's just disabled. Enable it right here to start building; no trip to provider settings needed.`
+      : isOnlyLocal
+        ? "Build Studio writes code and orchestrates tools for you. The local AI on this install can chat, but it is not the right runner for production code work yet. Connect a subscription CLI path or an API-key provider below, then the build flow opens up."
+        : "Build Studio needs an active runner that can write code and use tools at production quality. ChatGPT/OpenAI Codex and Claude can both satisfy this through OAuth subscription CLI paths; OpenAI and Anthropic API keys are separate pay-per-token licensing paths.";
     return (
       <div className="flex items-start justify-center min-h-[60vh] px-6 py-10">
         <div className="max-w-2xl w-full space-y-6 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface)] p-8 shadow-sm">
@@ -131,7 +148,34 @@ export default async function BuildPage({ searchParams }: PageProps) {
             </div>
           </div>
 
-          <ul className="space-y-3 border-t border-[var(--dpf-border)] pt-5">
+          {enableableRunners.length > 0 ? (
+            <div className="space-y-3 border-t border-[var(--dpf-border)] pt-5">
+              {enableableRunners.map((runner) => (
+                <div
+                  key={runner.providerId}
+                  className="flex items-center justify-between gap-4 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3"
+                >
+                  <div className="space-y-0.5">
+                    <div className="text-sm font-medium text-[var(--dpf-text)]">{runner.name}</div>
+                    <div className="text-xs text-[var(--dpf-muted)]">
+                      Connected but turned off — enable to start building.
+                    </div>
+                  </div>
+                  <EnableRunnerButton providerId={runner.providerId} label={runner.shortLabel} />
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {enableableRunners.length > 0 ? (
+            <p className="text-xs font-medium uppercase tracking-wide text-[var(--dpf-muted)]">
+              Or connect a different runner
+            </p>
+          ) : null}
+
+          <ul
+            className={`space-y-3 ${enableableRunners.length > 0 ? "pt-1" : "border-t border-[var(--dpf-border)] pt-5"}`}
+          >
             {capability.suggestedProviders.map((provider) => (
               <li key={provider.name} className="flex items-start gap-3">
                 <span
@@ -158,9 +202,13 @@ export default async function BuildPage({ searchParams }: PageProps) {
           <div className="flex flex-col gap-3 border-t border-[var(--dpf-border)] pt-5 sm:flex-row sm:items-center sm:justify-between">
             <Link
               href="/platform/ai/providers"
-              className="inline-block rounded px-5 py-2.5 text-sm font-medium bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity"
+              className={`inline-block rounded px-5 py-2.5 text-sm font-medium transition-opacity hover:opacity-90 ${
+                enableableRunners.length > 0
+                  ? "border border-[var(--dpf-border)] text-[var(--dpf-text)]"
+                  : "bg-[var(--dpf-accent)] text-white"
+              }`}
             >
-              Connect a provider &rarr;
+              {enableableRunners.length > 0 ? "Connect a different provider" : "Connect a provider"} &rarr;
             </Link>
             <span className="text-xs text-[var(--dpf-muted)]">
               {capability.activeProviderNames.length === 0
