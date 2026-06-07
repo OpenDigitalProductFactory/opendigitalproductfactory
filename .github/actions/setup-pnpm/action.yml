@@ -1,0 +1,37 @@
+# Shared CI setup: Node 24 + pnpm (corepack) + a restored pnpm store cache +
+# a frozen-lockfile install. Before this existed, every CI job re-ran a cold
+# `pnpm install` from an empty store, paying the full download cost 5+ times
+# per PR. The pnpm store is content-addressed and keyed on the lockfile hash,
+# so an unchanged lockfile restores instantly and only changed deps download.
+# pnpm version is pinned by the root package.json `packageManager` field, so
+# `corepack enable` alone activates the correct pnpm — no version to drift here.
+name: Setup pnpm with cache
+description: Set up Node 24 and pnpm via corepack, restore the pnpm store cache, and install dependencies with a frozen lockfile.
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: 24
+
+    - name: Enable pnpm (corepack)
+      shell: bash
+      run: corepack enable
+
+    - name: Resolve pnpm store path
+      shell: bash
+      run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+    - name: Cache pnpm store
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.PNPM_STORE_PATH }}
+        key: pnpm-store-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: |
+          pnpm-store-${{ runner.os }}-
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
