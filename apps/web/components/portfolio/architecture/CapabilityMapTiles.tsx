@@ -43,7 +43,10 @@ export function CapabilityMapCanvas({
   return (
     <div className="space-y-4">
       {mapRows.map((row) => (
-        <div key={row.id} className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div
+          key={row.id}
+          className="grid items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(20rem,1fr))]"
+        >
           {row.families.map((family) => (
             <CapabilityFamilyBand
               key={family.id}
@@ -117,7 +120,7 @@ function CapabilityFamilyBand({
           No L2 capabilities mapped under this family.
         </p>
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid items-start gap-3 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
           {family.children.map((capability) => (
             <CapabilityTile
               key={capability.id}

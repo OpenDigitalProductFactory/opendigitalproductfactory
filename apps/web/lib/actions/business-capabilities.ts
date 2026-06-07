@@ -111,7 +111,7 @@ export async function createBusinessCapabilityFromForm(formData: FormData) {
     },
   });
 
-  revalidatePath("/portfolio/architecture");
+  revalidatePath("/ea/capabilities");
 }
 
 export async function updateBusinessCapabilityMaturityFromForm(formData: FormData) {
@@ -129,7 +129,7 @@ export async function updateBusinessCapabilityMaturityFromForm(formData: FormDat
     },
   });
 
-  revalidatePath("/portfolio/architecture");
+  revalidatePath("/ea/capabilities");
 }
 
 async function resolveTraceTarget(targetType: TraceTargetType, targetId: string) {
@@ -198,5 +198,5 @@ export async function createBusinessCapabilityTraceLinkFromForm(formData: FormDa
     },
   });
 
-  revalidatePath("/portfolio/architecture");
+  revalidatePath("/ea/capabilities");
 }
