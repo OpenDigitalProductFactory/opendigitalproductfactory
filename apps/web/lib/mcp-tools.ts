@@ -21,6 +21,7 @@ import type { BacklogIngestInput } from "@/lib/operate/backlog-ingest";
 import { activeBrandExtractionWhere } from "@/lib/brand/active-extraction";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 import { createPlatformIssueReport } from "@/lib/quality/platform-issue-reports";
+import { escalateReportUpstream } from "@/lib/actions/feedback-escalation";
 import {
   MARKETING_CHANNELS,
   MARKETING_REVIEW_CADENCE,
@@ -1416,6 +1417,20 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
         severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
       },
       required: ["type", "title"],
+    },
+    requiredCapability: null,
+    sideEffect: true,
+  },
+  {
+    name: "escalate_feedback_upstream",
+    description:
+      "Send a previously-captured platform issue report to the upstream project team as a GitHub issue, if this install has opted in to upstream feedback. Use after a user asks to share their report/feedback with the platform maintainers. Submitted under the install's anonymous handle with machine names redacted; respects opt-in consent, fork_only, and the contributions pause. Idempotent per report.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        reportId: { type: "string", description: "The PlatformIssueReport id (e.g. PIR-AB12C) to escalate." },
+      },
+      required: ["reportId"],
     },
     requiredCapability: null,
     sideEffect: true,
@@ -7017,6 +7032,27 @@ export async function executeTool(
           : {}),
       });
       return { success: true, entityId: reportId, message: `Filed report ${reportId}` };
+    }
+
+    case "escalate_feedback_upstream": {
+      const reportId = String(params["reportId"] ?? "").trim();
+      if (!reportId) {
+        return { success: false, error: "reportId is required", message: "reportId is required" };
+      }
+      const result = await escalateReportUpstream({ reportId });
+      if (result.ok) {
+        return {
+          success: true,
+          ...(result.status === "filed" || result.status === "already-filed"
+            ? { entityId: String(result.issueNumber ?? reportId) }
+            : {}),
+          message:
+            result.status === "already-filed"
+              ? `Report ${reportId} was already sent to the project team${result.url ? ` (${result.url})` : ""}.`
+              : `Sent ${reportId} to the project team${result.url ? ` (${result.url})` : ""}.`,
+        };
+      }
+      return { success: false, error: result.reason, message: result.reason };
     }
 
     case "search_public_web": {

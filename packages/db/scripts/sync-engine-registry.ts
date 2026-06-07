@@ -1,0 +1,93 @@
+/// <reference types="node" />
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { prisma } from '../src/client';
+
+type EngineEntry = {
+  binary: string;
+  verify: { command: string; versionRegex: string };
+  bakeInDefault: boolean;
+  recipes: unknown[];
+};
+
+type SyncEngineClient = {
+  buildEngine: {
+    upsert(args: {
+      where: { engineId: string };
+      create: {
+        engineId: string;
+        binary: string;
+        verifyCommand: string;
+        versionRegex: string;
+        bakeInDefault: boolean;
+        recipes: unknown[];
+      };
+      update: {
+        binary: string;
+        verifyCommand: string;
+        versionRegex: string;
+        bakeInDefault: boolean;
+        recipes: unknown[];
+      };
+    }): Promise<{ createdAt: Date; updatedAt: Date }>;
+  };
+};
+
+export async function syncEngineRegistry(prisma: SyncEngineClient, dataPath: string): Promise<void> {
+  const raw = readFileSync(dataPath, 'utf-8');
+
+  let engines: Record<string, EngineEntry>;
+  try {
+    engines = JSON.parse(raw) as Record<string, EngineEntry>;
+  } catch (e) {
+    throw new Error(`Failed to parse ${dataPath}: ${(e as Error).message}`);
+  }
+
+  let created = 0;
+  let updated = 0;
+
+  for (const [engineId, entry] of Object.entries(engines)) {
+    const result = await prisma.buildEngine.upsert({
+      where: { engineId },
+      create: {
+        engineId,
+        binary: entry.binary,
+        verifyCommand: entry.verify.command,
+        versionRegex: entry.verify.versionRegex,
+        bakeInDefault: entry.bakeInDefault ?? false,
+        recipes: entry.recipes,
+      },
+      update: {
+        binary: entry.binary,
+        verifyCommand: entry.verify.command,
+        versionRegex: entry.verify.versionRegex,
+        bakeInDefault: entry.bakeInDefault ?? false,
+        recipes: entry.recipes,
+      },
+    });
+
+    if (result.createdAt.getTime() === result.updatedAt.getTime()) {
+      created++;
+    } else {
+      updated++;
+    }
+  }
+
+  console.log(`Done: ${created} created, ${updated} updated`);
+}
+
+async function main() {
+  const dataPath = join(__dirname, '..', 'data', 'build-engines.json');
+  try {
+    await syncEngineRegistry(prisma, dataPath);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+if (require.main === module) {
+  main().catch((e) => {
+    console.error('FATAL:', e.message);
+    process.exit(1);
+  });
+}

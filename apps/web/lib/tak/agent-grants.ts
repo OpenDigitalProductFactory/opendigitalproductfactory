@@ -114,6 +114,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   update_backlog_item: ["backlog_write"],
   query_backlog: ["backlog_read"],
   report_quality_issue: ["backlog_write"],
+  escalate_feedback_upstream: ["backlog_write"],
 
   // Workbooks / Universal Grid (EP-GRID-WORKBOOKS, #1582). These MCP tools
   // shipped without a grant mapping, so every tool was default-deny (INV-1) and

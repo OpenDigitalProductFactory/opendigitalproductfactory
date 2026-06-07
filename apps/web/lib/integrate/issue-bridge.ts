@@ -43,7 +43,7 @@ interface IssuePayload {
 
 // ─── Source loading ─────────────────────────────────────────────────────────
 
-interface NormalizedSource {
+export interface NormalizedSource {
   title: string;
   body: string | null;
   severity: string | null;
@@ -54,7 +54,7 @@ interface NormalizedSource {
   upstreamIssueNumber: number | null;
 }
 
-async function loadSource(
+export async function loadSource(
   kind: EscalationKind,
   id: string,
 ): Promise<NormalizedSource | null> {
@@ -218,10 +218,28 @@ export function buildIssueTitle(pseudonym: string, rawTitle: string): string {
 
 // ─── Labels ─────────────────────────────────────────────────────────────────
 
-function buildLabels(kind: EscalationKind, severity: string | null): string[] {
+export function buildLabels(kind: EscalationKind, severity: string | null): string[] {
   const labels = ["hive:submitted", `hive:${KIND_LABEL[kind]}`];
   if (severity) labels.push(`severity:${severity}`);
   return labels;
+}
+
+/**
+ * Builds the full redacted issue payload (title + body + labels) for an
+ * escalation. Shared by the direct GitHub path below and the relay transport
+ * (`feedback-transport.ts`) so both file byte-identical, equally-redacted
+ * issues regardless of which credential path is used.
+ */
+export function buildEscalationPayload(input: {
+  kind: EscalationKind;
+  pseudonym: string;
+  source: NormalizedSource;
+}): { title: string; body: string; labels: string[] } {
+  return {
+    title: buildIssueTitle(input.pseudonym, input.source.title),
+    body: buildIssueBody(input),
+    labels: buildLabels(input.kind, input.source.severity),
+  };
 }
 
 // ─── Persistence ────────────────────────────────────────────────────────────
@@ -372,15 +390,12 @@ export async function escalateToUpstreamIssue(
   }
 
   const identity = await getPlatformIdentity();
-  const payload: IssuePayload = {
-    title: buildIssueTitle(identity.authorName, source.title),
-    body: buildIssueBody({
-      kind: input.kind,
-      pseudonym: identity.authorName,
-      source,
-    }),
-  };
-  const labels = buildLabels(input.kind, source.severity);
+  const { title, body, labels } = buildEscalationPayload({
+    kind: input.kind,
+    pseudonym: identity.authorName,
+    source,
+  });
+  const payload: IssuePayload = { title, body };
 
   const result = await postIssue({ coordinates, token, payload, labels });
   if ("error" in result) {

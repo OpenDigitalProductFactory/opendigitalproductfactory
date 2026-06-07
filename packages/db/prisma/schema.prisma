@@ -84,6 +84,7 @@ model User {
   businessModelRoleAssignments  BusinessModelRoleAssignment[]
   platformDevConfigs            PlatformDevConfig[]           @relation("PlatformDevConfiguredBy")
   platformDevDcoAcceptances     PlatformDevConfig[]           @relation("PlatformDevDcoAcceptedBy")
+  platformDevFeedbackOptIns     PlatformDevConfig[]           @relation("PlatformDevUpstreamFeedbackOptInBy")
   agentModelConfigs             AgentModelConfig[]            @relation("AgentModelConfiguredBy")
   knowledgeArticles             KnowledgeArticle[]            @relation("KnowledgeArticleAuthor")
   knowledgeRevisions            KnowledgeArticleRevision[]    @relation("KnowledgeRevisionCreator")
@@ -5426,6 +5427,18 @@ model PlatformDevConfig {
   // contribution types immediately.
   deviceFingerprintOptIn   Boolean @default(true)
   hiveContributionsPaused  Boolean @default(false)
+  // Upstream feedback escalation consent (BI-6D45BA27, spec 2026-06-06 §3).
+  // OPT-IN, defaulted OFF: nothing leaves the install until a user explicitly
+  // consents. The AI coworker surfaces the consent prompt and the
+  // "Report to the project team" action.
+  upstreamFeedbackOptIn     Boolean   @default(false)
+  upstreamFeedbackOptInAt   DateTime?
+  upstreamFeedbackOptInById String?
+  upstreamFeedbackOptInBy   User?     @relation("PlatformDevUpstreamFeedbackOptInBy", fields: [upstreamFeedbackOptInById], references: [id])
+  // Configurable intake relay target (spec §4). When set, the install posts
+  // redacted reports here (install-authenticated) instead of calling GitHub
+  // directly — the no-token consumer path and the reseller seam.
+  upstreamRelayUrl          String?
 }
 
 // One ledger for everything that flows to the hive — what was shared, when,
@@ -10229,4 +10242,17 @@ model WorkbookView {
   updatedAt   DateTime      @updatedAt
 
   @@index([tableId, createdById])
+}
+
+model BuildEngine {
+  engineId        String   @id
+  binary          String
+  verifyCommand   String
+  versionRegex    String
+  bakeInDefault   Boolean  @default(false)
+  recipes         Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("build_engine")
 }
