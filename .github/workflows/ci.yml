@@ -22,16 +22,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: Install pnpm
-        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm with cache
+        uses: ./.github/actions/setup-pnpm
 
       - name: Generate Prisma client
         run: pnpm --filter @dpf/db exec prisma generate
@@ -123,16 +115,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: Install pnpm
-        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm with cache
+        uses: ./.github/actions/setup-pnpm
 
       - name: Generate Prisma client
         run: pnpm --filter @dpf/db exec prisma generate
@@ -140,20 +124,68 @@ jobs:
       - name: Run tier-contract test
         run: pnpm --filter web exec vitest run lib/routing/tier-contract.test.ts
 
-  # Canonical-runtime equivalence: this job IS the binding `pnpm test`
-  # evidence for the PR. A thread worktree is source-control isolation,
-  # not runtime isolation (see AGENTS.md §5 and
+  # Unit Tests — sharded. apps/web holds ~86% of the suite (1192 of 1378 test
+  # files as of 2026-06-07), so it is split across parallel runners via
+  # `vitest run --shard`; every other workspace runs in one separate job.
+  # Each job owns its own Postgres service container, so there is no
+  # cross-workspace DB-pool contention — which is exactly what
+  # `--workspace-concurrency=1` (BI-335D7B54) existed to prevent on the old
+  # single-runner job. The `unit-tests` aggregator below fans these back into
+  # one stable "Unit Tests" status check.
+  #
+  # Canonical-runtime equivalence: these jobs ARE the binding `pnpm test`
+  # evidence for the PR. A thread worktree is source-control isolation, not
+  # runtime isolation (see AGENTS.md §5 and
   # docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md).
-  # If the worktree cannot host pnpm/corepack, workspace links, or a
-  # generated Prisma client, the contributor is NOT required to make it
-  # host them. A green run of this job satisfies the PR template's
-  # `pnpm test` checkbox; running it against the root local install is the
-  # other accepted form of equivalent evidence. Treat worktree-side
-  # runtime-harness gaps as harness limitations, not product defects, and
-  # file a dedicated platform BI rather than in-lining a worktree-runnable
-  # fix on an unrelated PR.
-  test:
-    name: Unit Tests
+  # If the worktree cannot host pnpm/corepack, workspace links, or a generated
+  # Prisma client, the contributor is NOT required to make it host them. A
+  # green run satisfies the PR template's `pnpm test` checkbox; running it
+  # against the root local install is the other accepted form of equivalent
+  # evidence. Treat worktree-side runtime-harness gaps as harness limitations,
+  # not product defects, and file a dedicated platform BI rather than in-lining
+  # a worktree-runnable fix on an unrelated PR.
+  test-web:
+    name: Unit Tests (web shard ${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    strategy:
+      # Surface every shard's failures, don't cancel siblings on first red.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dpf
+          POSTGRES_PASSWORD: ci_test_password
+          POSTGRES_DB: dpf
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dpf"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://dpf:ci_test_password@localhost:5432/dpf
+      ADMIN_PASSWORD: ci_admin_changeme
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup pnpm with cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Generate Prisma client
+        run: pnpm --filter @dpf/db exec prisma generate
+
+      - name: Apply migrations
+        run: pnpm --filter @dpf/db exec prisma migrate deploy
+
+      - name: Run web unit tests (shard ${{ matrix.shard }}/4)
+        run: pnpm --filter web exec vitest run --shard=${{ matrix.shard }}/4
+
+  test-packages:
+    name: Unit Tests (packages)
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -172,22 +204,11 @@ jobs:
     env:
       DATABASE_URL: postgresql://dpf:ci_test_password@localhost:5432/dpf
       ADMIN_PASSWORD: ci_admin_changeme
-    # Unit Tests is now a binding merge gate. The suite reached 0 failures
-    # via #693 (packages/db pool:forks isolation) and #694 (AgentDetailPage
-    # auth mock). All 5 980 tests pass on main as of 2026-05-17.
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: Install pnpm
-        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm with cache
+        uses: ./.github/actions/setup-pnpm
 
       - name: Generate Prisma client
         run: pnpm --filter @dpf/db exec prisma generate
@@ -195,8 +216,35 @@ jobs:
       - name: Apply migrations
         run: pnpm --filter @dpf/db exec prisma migrate deploy
 
-      - name: Run unit tests
-        run: pnpm test
+      # Every workspace EXCEPT web (sharded in test-web above) AND the root
+      # `dpf` project. The `!dpf` exclusion is load-bearing: a negation-only
+      # `--filter` re-includes the workspace root, and the root's own `test`
+      # script is itself `pnpm -r ... test` (no filter) — so without `!dpf`
+      # the root re-runs the ENTIRE suite (web included), duplicating work.
+      # --workspace-concurrency=1 keeps @dpf/db and the other DB-touching
+      # suites from racing on this job's single Postgres (BI-335D7B54);
+      # --no-bail keeps every suite's pass/fail visible even if one fails.
+      - name: Run non-web unit tests
+        run: pnpm -r --if-present --filter '!web' --filter '!dpf' --workspace-concurrency=1 --no-bail test
+
+  # Stable aggregate status. Humans (and any future branch-protection rule)
+  # watch one "Unit Tests" check; it passes only if every web shard AND the
+  # packages job passed. `if: always()` so it still runs to report failure
+  # when an upstream shard fails.
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: [test-web, test-packages]
+    if: always()
+    steps:
+      - name: Assert all unit-test jobs passed
+        run: |
+          echo "web shards: ${{ needs.test-web.result }}"
+          echo "packages:   ${{ needs.test-packages.result }}"
+          if [ "${{ needs.test-web.result }}" != "success" ] || [ "${{ needs.test-packages.result }}" != "success" ]; then
+            echo "::error::One or more unit-test jobs failed"
+            exit 1
+          fi
 
   # Canonical-runtime equivalence: this job IS the binding `pnpm --filter web build` evidence — see comment above `test:` job.
   build:
@@ -205,16 +253,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: Install pnpm
-        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm with cache
+        uses: ./.github/actions/setup-pnpm
 
       - name: Generate Prisma client
         run: pnpm --filter @dpf/db exec prisma generate
@@ -268,16 +308,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: Install pnpm
-        run: corepack enable && corepack prepare pnpm@10.33.2 --activate
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm with cache
+        uses: ./.github/actions/setup-pnpm
 
       - name: Build and start integration-test-harness
         run: |
