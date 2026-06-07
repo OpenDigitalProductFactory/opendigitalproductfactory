@@ -13,6 +13,11 @@ const LOW_DIMENSION_THRESHOLD = 0.4;
 const CAP_ORDER: TrustDimensionKey[] = [
   "conflictContradiction",
   "runtimeAvailability",
+  // Master-data integrity dimensions (MDM §6.5): a broken crosswalk reference or
+  // a high-confidence duplicate must degrade trust the same way a source conflict
+  // does — a duplicated/orphaned record cannot be presented as a clean fact.
+  "relationshipIntegrity",
+  "uniqueness",
   "freshness",
   "evidenceGrade",
   "coverageCompleteness",
@@ -132,7 +137,12 @@ function determineStatementKind(input: {
   freshnessLow: boolean;
   graphTraversalLow: boolean;
 }): TrustStatementKind {
-  if (input.capKey === "conflictContradiction" || input.capKey === "runtimeAvailability") {
+  if (
+    input.capKey === "conflictContradiction" ||
+    input.capKey === "runtimeAvailability" ||
+    input.capKey === "relationshipIntegrity" ||
+    input.capKey === "uniqueness"
+  ) {
     return "low-confidence-result";
   }
 
@@ -158,6 +168,8 @@ function determineAction(input: {
   highRisk: boolean;
 }): TrustAction {
   if (input.capKey === "conflictContradiction") return "escalate";
+  if (input.capKey === "relationshipIntegrity") return "escalate";
+  if (input.capKey === "uniqueness") return "qualify";
   if (input.capKey === "runtimeAvailability") return "defer";
   if (input.capKey === "evidenceGrade") return "defer";
   if (input.capKey === "freshness") {
