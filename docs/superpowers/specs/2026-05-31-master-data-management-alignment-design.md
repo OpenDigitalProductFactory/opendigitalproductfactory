@@ -2,7 +2,7 @@
 title: Master Data Management Alignment Design
 authoredAt: 2026-05-31
 authoredBy: codex
-status: draft
+status: approved
 specKind: design
 relatedSpecs:
   - docs/superpowers/specs/2026-03-17-admin-reference-data-design.md
@@ -224,6 +224,12 @@ model MasterDataSourceRef {
   id              String   @id @default(cuid())
   domain          String
   canonicalId     String
+  // Typed FK columns for high-volume domains (resolved typed-FK hybrid).
+  // Exactly one is populated when domain is customer-account / supplier;
+  // null for polymorphic-only domains. A CHECK constraint requires the
+  // populated column to equal canonicalId for its domain.
+  customerAccountId String?
+  supplierId        String?
   sourceSystem    String
   sourceEntityType String?
   sourceEntityId  String
@@ -235,9 +241,14 @@ model MasterDataSourceRef {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  customerAccount CustomerAccount? @relation(fields: [customerAccountId], references: [id], onDelete: Cascade)
+  supplier        Supplier?        @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
   @@unique([domain, sourceSystem, sourceEntityId])
   @@index([domain, canonicalId])
   @@index([sourceSystem, sourceEntityId])
+  @@index([customerAccountId])
+  @@index([supplierId])
 }
 ```
 
@@ -269,17 +280,30 @@ string-enum columns: register their values in `apps/web/lib/backlog.ts` and
 AGENTS.md §3, and constrain `trustTier` to the `TrustTier` set
 (`high | medium | low | unknown`) rather than a free string.
 
-**Referential integrity (polymorphic by design).** `(domain, canonicalId)` is a
-polymorphic pointer with no foreign key, because one table spans many canonical
-models. The cost is that the database cannot enforce the link: deleting a
-`CustomerAccount` does not cascade, and a merge must repoint crosswalk rows from
-the losing canonical id to the surviving one. The spec therefore requires
-application-level integrity: (a) the merge flow (§6.6) repoints all
-`MasterDataSourceRef` rows for the losing id, and (b) an orphan sweep reconciles
-crosswalk rows whose `canonicalId` no longer resolves. Whether the highest-volume
-domains (`customer-account`, `supplier`) instead warrant a typed nullable FK
-column for DB-enforced integrity is an open decision (§10) for
-`dpf-decision-via-kernel`, not settled here.
+**Referential integrity (resolved 2026-06-06: typed-FK hybrid).** The crosswalk
+integrity shape was an open decision (§10) resolved via `dpf-decision-via-kernel`
+(`callingSurface: mdm-spec-open-decision`, high confidence, no commandment
+conflict). The kernel recommended the **typed-FK hybrid** over a pure polymorphic
+pointer — *Single Source of Truth*, *Architecture Over Shortcuts*, and *Research
+and Use Standards* weight a database-guaranteed link over application-code
+integrity that can drift into orphans. The resolved shape:
+
+- **High-volume domains (`customer-account`, `supplier`)** carry a **typed
+  nullable FK column** on the crosswalk row, so the database enforces cascade and
+  referential integrity directly. These two domains dominate import volume and
+  duplicate risk; DB-enforced integrity is worth the per-domain column.
+- **Low-volume domains (`digital-product`, `inventory-entity`, `reference-data`)**
+  retain the **polymorphic `(domain, canonicalId)` pointer** on the same
+  `MasterDataSourceRef` table — one reusable table, no per-domain column churn.
+
+The model below therefore keeps `(domain, canonicalId)` as the universal pointer
+**and** adds nullable typed FK columns (`customerAccountId`, `supplierId`) used by
+the high-volume domains. Where a typed FK is present the DB enforces the link;
+where only the polymorphic pointer is present the application enforces integrity
+via (a) the merge flow (§6.6) repointing all `MasterDataSourceRef` rows for the
+losing id, and (b) an orphan sweep reconciling crosswalk rows whose `canonicalId`
+no longer resolves. A `CHECK` constraint requires that, for the FK-backed
+domains, the typed column is populated and matches `canonicalId`.
 
 ### 6.3 Match candidate queue
 
@@ -368,9 +392,16 @@ Reversibility requires a **pre-merge snapshot**: the losing record's attributes,
 its `MasterDataSourceRef` rows, and its relationships, captured as receipt
 evidence on that `ToolExecution` before mutation. Reversal repoints crosswalk
 rows back and restores the snapshot; it is itself a governed, audited steward
-action. Destructive hard-delete of the losing canonical row is deferred (§7
-step 3) until this snapshot/reversal path exists — until then a "merge" is a
-link + supersede, never a delete.
+action.
+
+**Merge severity resolved (§10, 2026-06-06): tombstone, never hard-delete.** The
+kernel resolved this decisively in favour of permanent tombstoning over
+hard-delete. A "merge" is always a link + supersede: the losing canonical row is
+retained as a superseded tombstone (status flag, excluded from default reads)
+carrying its pre-merge snapshot. There is no destructive hard-delete path in v1
+or later — this honours *Never wipe the DB to fix code* and *Destructive actions
+require explicit go*. Right-to-erasure, if needed, is a separate governed flow,
+not a side effect of a merge.
 
 ## 7. Implementation Sequence
 
@@ -426,27 +457,34 @@ link + supersede, never a delete.
 - Survivorship rules are stored as governed, versioned config — not a code
   constant — and a change shows usage impact before it takes effect.
 
-## 10. Open Decisions and Backlog Linkage
+## 10. Resolved Decisions and Backlog Linkage
 
-**Open decisions (for `dpf-decision-via-kernel`, not settled here):**
+**Resolved decisions (via `dpf-decision-via-kernel`, 2026-06-06, profile
+`mark-dpf-platform`, `callingSurface: mdm-spec-open-decision` — both high
+confidence, strong structured coverage, no commandment conflict):**
 
-- **Crosswalk integrity shape.** Polymorphic `(domain, canonicalId)` with
-  application-enforced integrity (this spec's default) vs. typed nullable FK
-  columns per high-volume domain for DB-enforced cascade. Trade-off: one
-  reusable table vs. referential safety on `customer-account`/`supplier`.
-- **Merge severity.** Whether v1 ever hard-deletes a losing canonical row once
-  the snapshot/reversal path exists, or permanently keeps it as a superseded
-  tombstone.
+- **Crosswalk integrity shape → typed-FK hybrid.** Recommendation `typed-fk`
+  (composite 7.77 vs polymorphic 5.82, margin 1.95). This **flipped the spec's
+  original polymorphic default**: top contributors *Single Source of Truth*,
+  *Research and Use Standards*, *Architecture Over Shortcuts*, and *Never
+  Assume—Verify* weight a DB-guaranteed link over application-enforced integrity.
+  Resolution: typed nullable FK columns for `customer-account` and `supplier`;
+  polymorphic `(domain, canonicalId)` retained for low-volume domains. See §6.2.
+- **Merge severity → tombstone.** Recommendation `tombstone` (composite 10.71 vs
+  hard-delete 3.53, margin 7.19 — decisive). Top contributors *Never wipe the DB
+  to fix code* and *Destructive actions require explicit go*. Resolution: a merge
+  never hard-deletes; the losing canonical row is kept permanently as a
+  superseded tombstone with its pre-merge snapshot, fully reversible. See §6.6.
 
-**Backlog linkage.** Per DPF doctrine a spec is built against a backlog item,
-not floating intent. This design still needs an epic + sized BIs filed and
-promoted to Build Studio, sequenced per §7. One BI is **cross-spec**: adding
-`validityConformity`, `uniqueness`, and `relationshipIntegrity` to the
-`TrustDimensionKey` registry in
-`docs/superpowers/specs/2026-05-26-graph-data-trust-vector-design.md` must land
-before MDM consumes them, so it is a coordinated dependency, not an MDM-internal
-task. Status stays `draft` until the epic is filed and the two open decisions
-are resolved.
+**Backlog linkage.** Per DPF doctrine a spec is built against a backlog item, not
+floating intent. Epic **EP-MDM** and the foundational item **BI-C5F3CB36** were
+filed 2026-06-06; §7 is sliced into child BIs in the implementation plan
+(`docs/superpowers/plans/2026-06-06-master-data-management-foundation.md`). One BI
+is **cross-spec** and **must land first**: adding `validityConformity`,
+`uniqueness`, and `relationshipIntegrity` to the `TrustDimensionKey` registry in
+`docs/superpowers/specs/2026-05-26-graph-data-trust-vector-design.md`, since MDM
+consumes them (§6.5). With the epic filed and both decisions resolved, the spec
+moves from `draft` to `approved`.
 
 ## 11. Architecture Review Notes
 
@@ -458,3 +496,10 @@ audit/reversibility on the existing `ToolExecution` envelope (§6.6),
 survivorship config storage (§6.4), and the steward gate bound to
 `PlatformCapability` (§6.1). No new audit, config, or steward-action tables were
 introduced — each concern was placed on substrate that already exists.
+
+The two open decisions that kept the spec at `draft` were resolved 2026-06-06 via
+`dpf-decision-via-kernel` (§10): crosswalk integrity → typed-FK hybrid (a flip of
+the original polymorphic default), and merge severity → permanent tombstone. With
+epic `EP-MDM` and `BI-C5F3CB36` filed, the spec advanced to `approved` and is
+sliced for delivery in
+`docs/superpowers/plans/2026-06-06-master-data-management-foundation.md`.
