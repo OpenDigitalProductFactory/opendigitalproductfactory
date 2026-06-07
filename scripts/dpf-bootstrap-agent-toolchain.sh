@@ -669,9 +669,9 @@ fi
 # --- Readiness banner --------------------------------------------------------
 
 case "$FINAL_STATE" in
-  ready)         BANNER_MSG="Claude Code, Codex, and Grok are ready for DPF work.";                               BANNER_ACTION="Open readiness" ;;
-  partial)       BANNER_MSG="One or more contributor clients are ready; others need setup.";                     BANNER_ACTION="Repair toolchain" ;;
-  missing_cli)   BANNER_MSG="Install a supported agent client (Claude Code, Codex, or Grok) to enable contributor sessions."; BANNER_ACTION="Open setup guide" ;;
+  ready)         BANNER_MSG="Claude Code and Codex are ready for DPF work.";                                     BANNER_ACTION="Open readiness" ;;
+  partial)       BANNER_MSG="One contributor client is ready; the other needs setup.";                           BANNER_ACTION="Repair toolchain" ;;
+  missing_cli)   BANNER_MSG="Install the selected agent client to enable contributor sessions.";                 BANNER_ACTION="Open setup guide" ;;
   missing_token) BANNER_MSG="DPF MCP needs a development token before agents can use governed tools.";           BANNER_ACTION="Issue development token" ;;
   needs_refresh) BANNER_MSG="A token exists, but the running client has not picked it up yet.";                  BANNER_ACTION="Refresh client binding" ;;
   failed_smoke)  BANNER_MSG="The agent is installed but did not apply a DPF kernel principle.";                  BANNER_ACTION="View evidence" ;;
