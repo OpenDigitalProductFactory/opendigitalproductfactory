@@ -5855,6 +5855,9 @@ model InventoryEntity {
   observedVersion             String?
   normalizedVersion           String?
   supportStatus               String                            @default("unknown")
+  // Vendor end-of-support date; drives the canonical `currency` axis + technology_currency
+  // gaps. Spec 2026-06-07 §8.7. Null = no EOL signal (currency falls back to supportStatus).
+  supportEndsAt               DateTime?
   status                      String                            @default("active")
   attributionStatus           String                            @default("needs_review")
   confidence                  Float?
@@ -8471,6 +8474,44 @@ model PlateauMembership {
   @@index([governedThingKind, governedThingId])
   @@index([membershipSource])
   @@index([plateauElementId])
+}
+
+// A typed delta between the baseline and a target plateau, or a cross-cutting concern
+// (EOL, vulnerability, data-quality, break-fix) raised against the current-state baseline.
+// Spec 2026-06-07 §6-7, §8.6. The gap NEVER owns work status — backlogItemId is a soft
+// pointer; work status is read from BacklogItem/Epic/FeatureBuild. Plateau/work-package/
+// ea-gap/backlog references are plain id columns (no FK, like EaElement.infraCiKey) to keep
+// EaElement and BacklogItem free of four back-relations; the app layer validates them.
+model LifecycleGap {
+  id                   String    @id @default(cuid())
+  gapKey               String    @unique // stable dedup key (dimension+thing+signal identity)
+  kind                 String // add | change | remove
+  dimension            String // capability | technology_currency | vulnerability | data_quality | operational | cost | regulatory
+  severity             String    @default("medium") // info | low | medium | high | critical
+  status               String    @default("open") // open | scoped | resolved | dismissed
+  scopeLevel           String    @default("portfolio") // portfolio | product
+  governedThingKind    String
+  governedThingId      String
+  title                String
+  detail               String?   @db.Text
+  baselinePlateauId    String? // EaElement.id (Plateau) — soft pointer
+  targetPlateauId      String? // EaElement.id (Plateau) — soft pointer
+  workPackageElementId String? // EaElement.id (Work Package) — soft pointer
+  eaGapElementId       String? // EaElement.id (ArchiMate Gap) — soft pointer
+  backlogItemId        String? // BacklogItem.id — soft pointer; gap never owns work status
+  digitalProductId     String? // product-level scope target
+  evidenceRef          String?
+  detectedAt           DateTime  @default(now())
+  resolvedAt           DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([status])
+  @@index([dimension])
+  @@index([scopeLevel])
+  @@index([governedThingKind, governedThingId])
+  @@index([backlogItemId])
+  @@index([digitalProductId])
 }
 
 model CapabilityMaturityAssessment {
