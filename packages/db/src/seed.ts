@@ -671,6 +671,13 @@ async function seedEaViewpoints(): Promise<void> {
       elementSlugs: ["business_capability"],
       relSlugs: ["composed_of", "associated_with"],
     },
+    {
+      // EP-DATA-ARCH: live ERD mirrored from the Prisma schema (data objects).
+      name: "Data Model",
+      description: "Logical data model mirrored from the Prisma schema as a live ERD.",
+      elementSlugs: ["data_object"],
+      relSlugs: ["associated_with"],
+    },
   ];
 
   for (const vp of viewpoints) {
@@ -682,7 +689,7 @@ async function seedEaViewpoints(): Promise<void> {
       create: { name: vp.name, description: vp.description, allowedElementTypeSlugs, allowedRelTypeSlugs },
     });
   }
-  console.log("Seeded 4 viewpoint definitions");
+  console.log(`Seeded ${viewpoints.length} viewpoint definitions`);
 
   // ── BPMN 2.0 viewpoints ───────────────────────────────────────────────
   const bpmnNotation = await prisma.eaNotation.findUnique({
@@ -752,6 +759,10 @@ async function seedEaViews(): Promise<void> {
     where: { name: "Business Architecture" },
     select: { id: true },
   });
+  const dataModelVp = await prisma.viewpointDefinition.findUnique({
+    where: { name: "Data Model" },
+    select: { id: true },
+  });
   const views = [
     {
       name: "DPF Platform — Application Architecture",
@@ -768,6 +779,16 @@ async function seedEaViews(): Promise<void> {
       scopeType: "custom",
       scopeRef: null,
       viewpointId: bizVp?.id ?? null,
+    },
+    {
+      // EP-DATA-ARCH: system-owned host view; populated by the data-model mirror
+      // (reconcileDataModelMirror finds it by scopeType+scopeRef and reuses it).
+      name: "Data Model",
+      description: "Live ERD mirrored from the Prisma schema (system-owned).",
+      layoutType: "graph",
+      scopeType: "data-model",
+      scopeRef: "prisma",
+      viewpointId: dataModelVp?.id ?? null,
     },
   ];
   for (const v of views) {

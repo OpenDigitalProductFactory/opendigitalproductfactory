@@ -19,10 +19,12 @@ describe("EaTabNav", () => {
 
     expect(html).toContain(">Capability Map<");
     expect(html).toContain(">Value Streams<");
+    expect(html).toContain(">Data Model<");
     expect(html).toContain(">Reference Models<");
     expect(html).not.toContain(">Agents<");
     expect(html).toContain('href="/ea/capabilities"');
     expect(html).toContain('href="/ea/value-streams"');
+    expect(html).toContain('href="/ea/data-model"');
     expect(html).toContain('href="/ea/views"');
     expect(html).toContain('href="/ea/models"');
   });
