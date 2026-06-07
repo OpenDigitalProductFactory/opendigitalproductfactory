@@ -14,12 +14,16 @@ vi.mock("next/link", () => ({
 import { EaTabNav } from "@/components/ea/EaTabNav";
 
 describe("EaTabNav", () => {
-  it("renders Views and Reference Models tabs without Agents", () => {
+  it("renders the architecture aspect tabs without Agents", () => {
     const html = renderToStaticMarkup(<EaTabNav />);
 
-    expect(html).toContain(">Views<");
+    expect(html).toContain(">Capability Map<");
+    expect(html).toContain(">Value Streams<");
     expect(html).toContain(">Reference Models<");
     expect(html).not.toContain(">Agents<");
+    expect(html).toContain('href="/ea/capabilities"');
+    expect(html).toContain('href="/ea/value-streams"');
+    expect(html).toContain('href="/ea/views"');
     expect(html).toContain('href="/ea/models"');
   });
 });

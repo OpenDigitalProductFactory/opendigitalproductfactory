@@ -293,16 +293,23 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   {
     key: "ea_modeler",
     label: "Architecture",
-    path: "/portfolio/architecture",
-    parentPath: "/portfolio",
+    path: "/ea",
+    parentPath: "/ea",
     domain: "delivery",
     audienceModes: ["operator"],
-    destinationKind: "section-page",
+    destinationKind: "domain-home",
     capabilityKey: "view_ea_modeler",
     shellNav: {
       sectionKey: "products",
-      description: "Reference models, capabilities, and structure.",
+      description: "Capability map, value streams, EA views, and data architecture.",
     },
+    sectionSiblings: [
+      "/ea",
+      "/ea/capabilities",
+      "/ea/value-streams",
+      "/ea/views",
+      "/ea/models",
+    ],
   },
   {
     key: "ai_workforce",
