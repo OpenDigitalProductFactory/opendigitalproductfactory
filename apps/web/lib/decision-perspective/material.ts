@@ -1,4 +1,5 @@
 import { DECISION_DOMAIN_CLASSES, type DecisionDomainClass } from "./types";
+import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
 import type {
   DecisionAutonomyPolicy,
   DecisionPerspectiveProfile,
@@ -52,6 +53,22 @@ type PerspectiveMaterialClient = {
     findMany(args: {
       where: Record<string, unknown>;
       orderBy: Array<Record<string, string>>;
+    }): Promise<unknown>;
+  };
+};
+
+/**
+ * Minimal client for selecting a per-org DecisionPerspectiveProfile by the
+ * organization it belongs to. Satisfied by the real PrismaClient and by test
+ * fakes. Kept separate from {@link PerspectiveMaterialClient} so callers that
+ * only resolve material do not have to provide `findFirst`.
+ */
+type OrgProfileClient = {
+  decisionPerspectiveProfile: {
+    findFirst(args: {
+      where: Record<string, unknown>;
+      select: Record<string, unknown>;
+      orderBy?: Record<string, string> | Array<Record<string, string>>;
     }): Promise<unknown>;
   };
 };
@@ -297,4 +314,73 @@ export async function resolveProfileMaterial(input: {
     coverageGap: true,
     materials: [],
   };
+}
+
+/**
+ * Org DecisionPerspectiveProfile resolution entry-point (BI-230C9EF7).
+ *
+ * Maps an organization to its active, org-owned WWWD profile. Until this
+ * existed, the decision gate could only enter the resolution chain at a known
+ * `profileId` (e.g. the platform WWMD profile) — `ownerOrganizationId` was
+ * written by `seedOrgWwwdCorpus` but never read, so business decisions silently
+ * fell back to founder/platform doctrine. This is the missing primitive that
+ * lets a business-decision surface select the customer's own profile.
+ *
+ * Returns the profileId of the org's active `kind="organization"` profile, or
+ * `null` when the org has none (caller then uses its platform/default fallback).
+ * Deterministic: when more than one matches, the oldest (stable) wins.
+ */
+export async function resolveOrgProfileId(input: {
+  db: OrgProfileClient;
+  organizationId: string | null | undefined;
+}): Promise<string | null> {
+  if (!input.organizationId) return null;
+
+  const row = (await input.db.decisionPerspectiveProfile.findFirst({
+    where: {
+      ownerOrganizationId: input.organizationId,
+      kind: "organization",
+      status: "active",
+    },
+    select: { profileId: true },
+    orderBy: { createdAt: "asc" },
+  })) as { profileId: string } | null;
+
+  return row?.profileId ?? null;
+}
+
+/**
+ * Resolve decision material for an organization (BI-230C9EF7).
+ *
+ * Convenience composition of {@link resolveOrgProfileId} +
+ * {@link resolveProfileMaterial}: selects the org's WWWD profile when one
+ * exists and enters the resolution/fallback chain there; otherwise enters at
+ * `fallbackProfileId` (defaulting to the platform WWMD profile). The returned
+ * `orgProfileSelected` flag lets callers and audit records record *which*
+ * doctrine governed the decision (WWWD org vs WWMD platform) — the non-inherit
+ * boundary the gate exists to enforce.
+ */
+export async function resolveProfileMaterialForOrg(input: {
+  db: PerspectiveMaterialClient & OrgProfileClient;
+  organizationId: string | null | undefined;
+  domainClass: DecisionDomainClass;
+  fallbackProfileId?: string;
+  maxDepth?: number;
+}): Promise<ResolvedProfileMaterial & { orgProfileSelected: boolean }> {
+  const orgProfileId = await resolveOrgProfileId({
+    db: input.db,
+    organizationId: input.organizationId,
+  });
+
+  const entryProfileId =
+    orgProfileId ?? input.fallbackProfileId ?? MARK_DPF_PLATFORM_PROFILE.profileId;
+
+  const resolved = await resolveProfileMaterial({
+    db: input.db,
+    profileId: entryProfileId,
+    domainClass: input.domainClass,
+    maxDepth: input.maxDepth,
+  });
+
+  return { ...resolved, orgProfileSelected: orgProfileId !== null };
 }
