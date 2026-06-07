@@ -351,6 +351,7 @@ model Principal {
   documentAccessGrants                DocumentAccessGrant[]               @relation("DocumentAccessGrantPrincipal")
   documentAccessGrantsCreated         DocumentAccessGrant[]               @relation("DocumentAccessGrantCreator")
   documentLifecycleEvents             DocumentLifecycleEvent[]            @relation("DocumentLifecycleActor")
+  lifecycleEvents                     LifecycleEvent[]                    @relation("LifecycleEventActor")
   ownedDecisionPerspectiveProfiles    DecisionPerspectiveProfile[]        @relation("DecisionPerspectiveProfileOwner")
   promotedDecisionPerspectiveVersions DecisionPerspectiveProfileVersion[] @relation("DecisionPerspectiveProfileVersionPromoter")
   decisionEscalationsResolved         EscalationCapture[]                 @relation("DecisionEscalationResolverPrincipal")
@@ -6319,6 +6320,7 @@ model ToolExecution {
   receipt                 ToolExecutionReceipt?
   assuranceRun            AssuranceRun?
   documentLifecycleEvents DocumentLifecycleEvent[]
+  lifecycleEvents         LifecycleEvent[]
   // Pseudo-User Contract (spec §6.5 + §8). Dual-principal audit + envelope:
   // delegatingUserId is the human the coworker acted for (distinct from
   // userId which is the executing identity); chatMessageId is the
@@ -8406,11 +8408,69 @@ model EaElement {
   viewElements                  EaViewElement[]
   businessCapabilityLinks       BusinessCapabilityTraceLink[]  @relation("BusinessCapabilityEaElementLinks")
   capabilityMaturityAssessments CapabilityMaturityAssessment[]
+  // Plateau membership: when this element is a Plateau (slug=plateau), the governed
+  // things that belong to that architecture state. Spec 2026-06-07 §5, §8.5.
+  plateauMemberships            PlateauMembership[]            @relation("PlateauMembershipPlateau")
 
   @@index([portfolioId])
   @@index([taxonomyNodeId])
   @@index([digitalProductId])
   @@index([elementTypeId])
+  // Unified lifecycle backbone: realization-stage axis is queried by the baseline
+  // projector and current/future views. Spec 2026-06-07 §8.3.
+  @@index([refinementLevel])
+}
+
+// ─── Unified Lifecycle Backbone (EP-LIFECYCLE) ──────────────────────────────────────
+// Spec: docs/superpowers/specs/2026-06-07-unified-lifecycle-backbone-design.md §8.4-8.5.
+// Canonical axes + governed-thing allowlist live in apps/web/lib/lifecycle.ts and
+// apps/web/lib/governed-thing-ref.ts (single source of truth for the string enums).
+
+// Universal append-only lifecycle transition log. Generalises DocumentLifecycleEvent to
+// every governed thing. Identity-bearing actors resolve through Principal (AGENTS.md §11),
+// not a new actor table.
+model LifecycleEvent {
+  id                String         @id @default(cuid())
+  governedThingKind String // GovernedThingKind (apps/web/lib/governed-thing-ref.ts)
+  governedThingId   String
+  fromStage         String? // LifecycleStage | null
+  toStage           String? // LifecycleStage | null
+  fromStatus        String? // LifecycleStatus | null
+  toStatus          String? // LifecycleStatus | null
+  reason            String?        @db.Text
+  evidenceRef       String? // pointer to corroborating evidence (discovery run, probe, etc.)
+  actorPrincipalId  String?
+  toolExecutionId   String?
+  createdAt         DateTime       @default(now())
+  actorPrincipal    Principal?     @relation("LifecycleEventActor", fields: [actorPrincipalId], references: [id])
+  toolExecution     ToolExecution? @relation(fields: [toolExecutionId], references: [id])
+
+  @@index([governedThingKind, governedThingId, createdAt])
+  @@index([actorPrincipalId])
+  @@index([toolExecutionId])
+}
+
+// Membership of a governed thing in a Plateau (a relatively stable architecture state —
+// ArchiMate Plateau element type, already seeded). The baseline (current-state) plateau is
+// populated by the projector with membershipSource="projected"; target plateaus are curated.
+model PlateauMembership {
+  id                String    @id @default(cuid())
+  plateauElementId  String // EaElement with elementType.slug = "plateau"
+  governedThingKind String
+  governedThingId   String
+  membershipSource  String    @default("projected") // projected | curated | imported
+  validFrom         DateTime  @default(now())
+  validTo           DateTime?
+  stateSnapshot     Json      @default("{}") // CanonicalLifecycle snapshot at membership time
+  evidenceRef       String? // required for projected baseline members (enforced in app layer)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  plateauElement    EaElement @relation("PlateauMembershipPlateau", fields: [plateauElementId], references: [id], onDelete: Cascade)
+
+  @@unique([plateauElementId, governedThingKind, governedThingId])
+  @@index([governedThingKind, governedThingId])
+  @@index([membershipSource])
+  @@index([plateauElementId])
 }
 
 model CapabilityMaturityAssessment {
