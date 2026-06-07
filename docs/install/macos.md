@@ -162,9 +162,17 @@ single-tree mode persists — current behavior, full back-compat.
     native macOS Edge Node binary (T3) — until then, the Edge Node
     here demonstrates the enrollment + heartbeat + submission path
     but not L2 host-network discovery.
-14. **Persist state** — records `lastSuccessfulInstallVersion` and
+14. **Voice / TTS sidecar** (Apple Silicon only) — runs
+    `scripts/tts/setup-chatterbox-tts-macos.sh` to provision the
+    native-host text-to-speech sidecar (port `8771`) and wire its
+    `TTS_PROVIDER` / `DPF_TTS_URL` / `DPF_TTS_REFERENCE_HOST_ROOT`
+    values into `.env`, so spoken output works out of the box. Idempotent
+    and non-fatal (warns and continues if it fails); skipped on
+    Linux/Windows, which use the bundled `dpf-tts` container. See
+    [Voice (STT + TTS)](#voice-stt--tts).
+15. **Persist state** — records `lastSuccessfulInstallVersion` and
     `lastHealthCheck`.
-15. **LaunchAgent** — installs `~/Library/LaunchAgents/local.dpf-autostart.plist`
+16. **LaunchAgent** — installs `~/Library/LaunchAgents/local.dpf-autostart.plist`
     so the stack auto-starts at login (skip with `--no-autostart`).
 
 Total wall time: ~10 minutes including the AI-model download (varies
@@ -222,31 +230,37 @@ coworker panel works immediately after install — click it, speak, and
 your words land in the message box. STT is identical across macOS,
 Linux, and Windows.
 
-**Text-to-speech (TTS) — one-time native-host step on Apple Silicon.**
+**Text-to-speech (TTS) — provisioned automatically on Apple Silicon.**
 Spoken output needs a synthesis engine with hardware acceleration.
 Docker Desktop can't expose the Mac's Neural Engine to a container, so
 on Apple Silicon the TTS engine runs as a **native-host sidecar** on
 the Mac instead of in Docker. The `docker-compose.macos.yml` overlay is
 already wired to talk to it (`TTS_PROVIDER=mlx`,
-`DPF_TTS_URL=http://host.docker.internal:8771`); you just provision the
-sidecar once:
+`DPF_TTS_URL=http://host.docker.internal:8771`).
 
-```bash
-bash scripts/tts/setup-chatterbox-tts-macos.sh
-```
+**`bash install-dpf.sh` provisions this sidecar for you** — no manual
+step. On an Apple Silicon host the installer runs
+`scripts/tts/setup-chatterbox-tts-macos.sh`, which installs a launch
+agent so the sidecar restarts at login, listens on port `8771`, and
+writes the matching `TTS_PROVIDER` / `DPF_TTS_URL` /
+`DPF_TTS_REFERENCE_HOST_ROOT` values into `.env`. A **founder seed
+voice** ships in the install seed (with a consent record), so spoken
+output works as soon as the install finishes — no voice recording
+required to get started.
 
-The script is idempotent (safe to re-run), installs a launch agent so
-the sidecar restarts at login, listens on port `8771`, and writes the
-matching `TTS_PROVIDER` / `DPF_TTS_URL` / `DPF_TTS_REFERENCE_HOST_ROOT`
-values into `.env`. A **founder seed voice** ships in the install seed
-(with a consent record), so spoken output works as soon as the sidecar
-is up — no voice recording required to get started.
-
-> **Contributor installs** run this provisioning automatically as part
-> of `scripts/setup.sh`. **Customer** installs (`bash install-dpf.sh`)
-> do not, so run the command above once if you want spoken output.
-> On Linux / Windows hosts TTS uses the bundled `dpf-tts` Docker
-> container instead and needs no host-side step.
+> Both **customer** (`bash install-dpf.sh`) and **contributor**
+> (`scripts/setup.sh`) installs provision the sidecar automatically on
+> Apple Silicon; the step is idempotent and skips cleanly on re-runs.
+> If the sidecar setup fails the install still completes — it just warns
+> and points you at the manual command below. On Linux / Windows hosts
+> TTS uses the bundled `dpf-tts` Docker container instead and needs no
+> host-side step.
+>
+> To (re-)provision by hand at any time:
+>
+> ```bash
+> bash scripts/tts/setup-chatterbox-tts-macos.sh
+> ```
 
 Once the sidecar is running, voice output features — per-profile
 speed / enthusiasm tuning and sentence-level streaming for low
