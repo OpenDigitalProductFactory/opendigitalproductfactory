@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { rollbackSelfUpgrade, triggerSelfUpgrade } from "@/lib/actions/promotions";
 import { LocalTime } from "@/components/ui/LocalTime";
@@ -193,6 +193,7 @@ export default function SelfUpgradeClient({
   const [isPending, startTransition] = useTransition();
   const [isRollbackPending, startRollbackTransition] = useTransition();
   const [override, setOverride] = useState(false);
+  const [justQueued, setJustQueued] = useState(false);
   const [triggerResult, setTriggerResult] = useState<{ queued: boolean; reason?: string } | null>(null);
   const [rollbackConfirmation, setRollbackConfirmation] = useState("");
   const [rollbackResult, setRollbackResult] = useState<{
@@ -215,12 +216,43 @@ export default function SelfUpgradeClient({
   const showActivity =
     draining || cooldownActive || (!!deferredRun && (quiescence?.blockers.length ?? 0) > 0);
 
+  // True once the worker has actually picked the upgrade up — the run is running
+  // or the portal is draining/swapping for the swap.
+  const upgradeInFlight = latestRun?.status === "running" || draining;
+
+  // The manual trigger only *queues* an upgrade: the server action returns
+  // `{ queued: true }` in well under a second, but the Inngest worker still has
+  // to fetch + compare SHAs before the run flips to "running". Without a held
+  // state the button would snap straight back to "Upgrade now" while nothing
+  // visibly happened — which reads as "broken" and invites repeat clicks (each
+  // one firing another upgrade event). We hold a "Starting…" state until the run
+  // actually appears, poll so progress shows up on its own, and time out as a
+  // safety net if the queued event never materialises (e.g. skipped for cooldown).
+  useEffect(() => {
+    if (justQueued && upgradeInFlight) setJustQueued(false);
+  }, [justQueued, upgradeInFlight]);
+
+  useEffect(() => {
+    if (!justQueued) return;
+    const timeout = setTimeout(() => setJustQueued(false), 45_000);
+    return () => clearTimeout(timeout);
+  }, [justQueued]);
+
+  useEffect(() => {
+    if (!justQueued && !upgradeInFlight) return;
+    const interval = setInterval(() => router.refresh(), 4_000);
+    return () => clearInterval(interval);
+  }, [justQueued, upgradeInFlight, router]);
+
+  const triggerBusy = isPending || justQueued;
+
   function handleTrigger() {
     setTriggerResult(null);
     const force = override;
     startTransition(async () => {
       const result = await triggerSelfUpgrade(force ? { force: true } : undefined);
       setTriggerResult(result);
+      if (result.queued) setJustQueued(true);
       router.refresh();
     });
   }
@@ -278,17 +310,34 @@ export default function SelfUpgradeClient({
             <button
               type="button"
               onClick={handleTrigger}
-              disabled={isPending || latestRun?.status === "running"}
-              aria-busy={isPending}
+              disabled={triggerBusy || latestRun?.status === "running"}
+              aria-busy={triggerBusy}
               aria-label="Upgrade now"
               data-override={override ? "true" : "false"}
               className="px-3 py-1.5 text-xs rounded-lg bg-[var(--dpf-accent)]/20 text-[var(--dpf-accent)] border border-[var(--dpf-accent)]/40 hover:bg-[var(--dpf-accent)]/30 transition-colors disabled:opacity-50"
             >
-              {isPending ? "Upgrading..." : override ? "Force upgrade now" : "Upgrade now"}
+              {isPending
+                ? "Upgrading..."
+                : justQueued
+                  ? "Starting…"
+                  : override
+                    ? "Force upgrade now"
+                    : "Upgrade now"}
             </button>
           </div>
         )}
       </div>
+
+      {enabled && triggerBusy && latestRun?.status !== "running" && (
+        <div
+          className="text-xs text-[var(--dpf-muted)]"
+          data-upgrade-starting="true"
+          aria-live="polite"
+        >
+          Upgrade starting — the worker is checking for a new build. This can take
+          a few seconds; progress will appear below. No need to click again.
+        </div>
+      )}
 
       {!enabled && (
         <div className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-sm text-[var(--dpf-muted)]">
