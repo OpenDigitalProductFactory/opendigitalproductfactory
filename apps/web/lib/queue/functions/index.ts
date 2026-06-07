@@ -6,6 +6,7 @@ import { mcpCatalogSync } from "./mcp-catalog-sync";
 import { codeGraphReconcileEvent, codeGraphReconcileScheduled } from "./code-graph-reconcile";
 import { routeWorkItem } from "./route-work-item";
 import { issueReportTriage } from "./issue-report-triage";
+import { issueReportProjectOnCreate } from "./issue-report-project";
 import { backlogTriageDrain } from "./backlog-triage-drain";
 import { coworkerRegressionDetect } from "./coworker-regression-detect";
 import { agentTaskDispatch } from "./agent-task-dispatch";
@@ -84,6 +85,7 @@ export const eventFunctions = [
   assuranceScanRun,
   deliberationRun,
   governedBacklogTeeUpRequested,
+  issueReportProjectOnCreate,
   contributorInventorySyncOnDemand,
   gitPromotionSandboxVerification,
   postgresBackupRequested,

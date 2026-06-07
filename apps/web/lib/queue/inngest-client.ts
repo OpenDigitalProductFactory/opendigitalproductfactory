@@ -11,6 +11,14 @@ export interface ResearchExecuteRunEvent {
   data: { proposalId: string; organizationId: string; topic: string; query: string };
 }
 
+/** EP-INTAKE-UNIFY Phase 4 / BI-EDFBE081: project a freshly-created OPEN
+ *  PlatformIssueReport into the backlog immediately (handled by
+ *  issue-report-project.ts). The 15-min triage cron is the safety net. */
+export interface IssueReportCreatedEvent {
+  name: "quality/issue-report.created";
+  data: { reportId: string };
+}
+
 export interface CwqItemCreatedEvent {
   name: "cwq/item.created";
   data: { workItemId: string; sourceType: string; urgency: string };
