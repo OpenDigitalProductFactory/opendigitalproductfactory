@@ -58,6 +58,7 @@ export async function runIssueReportTriage(opts: { reportId?: string } = {}) {
           routeContext: true,
           errorStack: true,
           source: true,
+          errorDigest: true,
         },
       }),
 
@@ -91,6 +92,17 @@ export async function runIssueReportTriage(opts: { reportId?: string } = {}) {
         where: { id },
         data: { status: ISSUE_REPORT_STATUS.TRIAGED_LOCAL },
       });
+    },
+
+    // BI-B4F401B3: find an existing crash BI that already captured this digest.
+    // buildCrashBoundaryItem writes `Error digest: <digest>` into the body, so a
+    // body match folds repeat crashes (same real error, any route) into one item.
+    findCrashItemTitleByDigest: async (digest) => {
+      const existing = await prisma.backlogItem.findFirst({
+        where: { workType: "bug", body: { contains: `Error digest: ${digest}` } },
+        select: { title: true },
+      });
+      return existing?.title ?? null;
     },
 
     resolveTaxonomyNodeByPath: async (path) => {
