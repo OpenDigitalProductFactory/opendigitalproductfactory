@@ -108,11 +108,9 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     audienceModes: ["worker", "operator"],
     destinationKind: "domain-home",
     capabilityKey: "view_workbooks",
-    primaryOrder: 15,
-    shellNav: {
-      sectionKey: "workspace",
-      description: "Spreadsheet-style grids for your own tables and platform data.",
-    },
+    // Demoted from the primary Workspace nav (EP-GRID-WORKBOOKS): the platform-data
+    // grids now live in-place on their domain surfaces; the user-tables hub is
+    // surfaced under Platform Hub (see platform-nav.ts). Record kept so links resolve.
     sectionSiblings: ["/workbooks"],
   },
   {

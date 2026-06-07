@@ -5,6 +5,8 @@ import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { SurfaceViewSwitcher } from "@/components/workbooks/SurfaceViewSwitcher";
+import { SurfacePlatformGrid } from "@/components/workbooks/SurfacePlatformGrid";
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -26,10 +28,11 @@ const ALL_STATUSES = [
   "paid",
 ];
 
-type Props = { searchParams: Promise<{ status?: string }> };
+type Props = { searchParams: Promise<{ status?: string; view?: string }> };
 
 export default async function InvoicesPage({ searchParams }: Props) {
-  const { status } = await searchParams;
+  const { status, view: viewParam } = await searchParams;
+  const view = viewParam === "grid" || viewParam === "board" ? viewParam : null;
 
   const [invoices, statusCounts, orgSettings] = await Promise.all([
     prisma.invoice.findMany({
@@ -87,6 +90,12 @@ export default async function InvoicesPage({ searchParams }: Props) {
 
       <FinanceTabNav />
 
+      <SurfaceViewSwitcher entityType="invoice" current={view ?? "list"} />
+
+      {view ? (
+        <SurfacePlatformGrid entityType="invoice" view={view} />
+      ) : (
+        <>
       {/* Status filter pills */}
       <div className="flex flex-wrap gap-2 mb-6">
         <Link
@@ -194,6 +203,8 @@ export default async function InvoicesPage({ searchParams }: Props) {
             </tbody>
           </table>
         </div>
+      )}
+        </>
       )}
     </div>
   );
