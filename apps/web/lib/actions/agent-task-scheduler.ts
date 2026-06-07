@@ -1,8 +1,9 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import { prisma } from "@dpf/db";
+import { prisma, DATA_MODEL_MIRROR_TASK_ID } from "@dpf/db";
 import { randomUUID } from "crypto";
+import { runDataModelMirror } from "@/lib/ea/run-data-model-mirror";
 import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
 import {
   createTaskRunForScheduledTask,
@@ -195,6 +196,40 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     where: { taskId },
   });
   if (!task || !task.isActive) return;
+
+  // EP-DATA-ARCH Phase 6: the data-model mirror is deterministic — run it
+  // directly instead of through the LLM agentic loop.
+  if (task.taskId === DATA_MODEL_MIRROR_TASK_ID) {
+    const startedAt = new Date();
+    try {
+      const result = await runDataModelMirror();
+      console.info(
+        "[agent-task-scheduler] data-model mirror %s (created=%d, steward=%d)",
+        JSON.stringify(result.mirror.status),
+        result.mirror.summary.created,
+        result.steward.created,
+      );
+      const nextRunAt = computeNextCronRun(task.schedule, startedAt);
+      await prisma.scheduledAgentTask.update({
+        where: { taskId },
+        data: { lastRunAt: startedAt, lastStatus: "ok", lastError: null, nextRunAt },
+      });
+      await prisma.scheduledJob
+        .update({ where: { jobId: taskId }, data: { lastRunAt: startedAt, lastStatus: "ok", lastError: null, nextRunAt } })
+        .catch(() => {});
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "unknown error";
+      const nextRunAt = computeNextCronRun(task.schedule, startedAt);
+      await prisma.scheduledAgentTask.update({
+        where: { taskId },
+        data: { lastRunAt: startedAt, lastStatus: "error", lastError: errMsg, nextRunAt },
+      });
+      await prisma.scheduledJob
+        .update({ where: { jobId: taskId }, data: { lastRunAt: startedAt, lastStatus: "error", lastError: errMsg, nextRunAt } })
+        .catch(() => {});
+    }
+    return;
+  }
 
   const now = new Date();
   let taskRunRef: ScheduledTaskRunRef | null = null;

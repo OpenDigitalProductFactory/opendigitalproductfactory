@@ -125,7 +125,14 @@ export {
   syncIT4ITLabels,
   syncDocumentNode,
   syncDocumentReference,
+  syncEaElement,
+  syncEaRelationship,
 } from "./neo4j-sync";
+export {
+  readCanonicalPrismaSchema,
+  CANONICAL_PRISMA_SCHEMA_PATH,
+} from "./schema-source";
+export { DATA_MODEL_MIRROR_TASK_ID } from "./data-model-mirror-config";
 export {
   buildDiscoveredKey,
   buildInventoryEntityKey,
