@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/self-upgrade/run-store", () => ({
+  getLatestSucceededRun: vi.fn(),
+}));
+vi.mock("@/lib/self-upgrade/completion", () => ({
+  getDeployedSha: vi.fn(),
+}));
+
 import { summarizeUpgradeImpact } from "./index";
 import { _resetCacheForTest } from "./cache";
+import { getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
+import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import type { InstallSignals, RawCommit } from "./types";
 
 afterEach(() => {
@@ -123,6 +132,38 @@ describe("summarizeUpgradeImpact — orchestrator", () => {
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(true);
     if (second.ok) expect(second.summary.fromCache).toBe(true);
+  });
+
+  it("falls back to the deployed git SHA as the baseline when no succeeded run exists", async () => {
+    // A never-upgraded but CI-stamped ("labeled") install: no succeeded run, but
+    // the image identity IS a git SHA, so we can still summarize since-install.
+    vi.mocked(getLatestSucceededRun).mockResolvedValue(null as never);
+    vi.mocked(getDeployedSha).mockResolvedValue("c".repeat(40));
+    const out = await summarizeUpgradeImpact({ skipPhrasing: true }, {
+      // loadCurrentLineageSha intentionally NOT injected → exercises the default
+      // fallback chain (succeeded-run marker → deployed git SHA → null).
+      loadTargetSha: async () => "b".repeat(40),
+      loadInstallSignals: async () => SIGNALS,
+      loadChangeSet: async () => [rawCommit("feat: x", [], "1".repeat(40))],
+      enrichPrs: async () => ({ reachable: false, enriched: 0, byPr: new Map() }),
+      phraseSummary: async () => null,
+    });
+    expect(out.ok).toBe(true);
+  });
+
+  it("stays no-lineage when neither a succeeded run nor a git-SHA image identity exists", async () => {
+    // A local/content-hash build: image identity is a 64-char content hash, not a
+    // git SHA, so there is genuinely no comparable baseline.
+    vi.mocked(getLatestSucceededRun).mockResolvedValue(null as never);
+    vi.mocked(getDeployedSha).mockResolvedValue("e".repeat(64));
+    const out = await summarizeUpgradeImpact({}, {
+      loadTargetSha: async () => "b".repeat(40),
+      loadInstallSignals: async () => SIGNALS,
+      loadChangeSet: async () => [],
+      enrichPrs: async () => ({ reachable: false, enriched: 0, byPr: new Map() }),
+      phraseSummary: async () => null,
+    });
+    expect(out).toMatchObject({ ok: false, reason: "no-lineage" });
   });
 
   it("refresh=true bypasses the cache and reruns the change-set collector", async () => {
