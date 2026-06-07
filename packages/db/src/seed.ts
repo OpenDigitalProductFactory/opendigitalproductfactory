@@ -2450,96 +2450,134 @@ async function seedWorkQueues(): Promise<void> {
 
 async function main(): Promise<void> {
   console.log("Starting seed...");
+
+  // Fault-isolation: every step runs independently. A failure is recorded and
+  // logged loudly but does NOT abort the remaining steps — so an unrelated
+  // failure (e.g. a ScheduledJob schema drift) can no longer silently skip the
+  // idempotent catalog/provider reconciles that follow on a portal update.
+  // Reconciles are upsert/merge only and never delete operator-owned rows
+  // (enforced by seed-reconcile-no-wipe.test.ts).
+  const failures: Array<{ step: string; error: string }> = [];
+  const step = async (name: string, fn: () => Promise<unknown>): Promise<void> => {
+    try {
+      await fn();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      failures.push({ step: name, error: message });
+      console.error(`  ✗ [seed] step "${name}" FAILED (continuing): ${message}`);
+    }
+  };
+
+  // Bootstrap org is a hard prerequisite for everything below; if it cannot be
+  // created the seed genuinely cannot proceed, so it is intentionally not isolated.
   const bootstrapOrganizationId = await ensureBootstrapOrganization();
-  await seedIntegrationCoverage(prisma, bootstrapOrganizationId);
-  await seedStallThresholds(prisma);
-  await seedGeographicData(prisma);
-  await seedTaxJurisdictions(prisma);
-  await seedLicenseRequirements(prisma);
-  await seedRoles();
-  await seedGovernanceReferenceData(prisma);
-  await seedWorkforceReferenceData(prisma);
-  await seedPortfolios();
-  await seedBusinessModels();
-  await seedAgents();
-  await seedCoworkerAgents();
+
+  await step("integrationCoverage", () => seedIntegrationCoverage(prisma, bootstrapOrganizationId));
+  await step("stallThresholds", () => seedStallThresholds(prisma));
+  await step("geographicData", () => seedGeographicData(prisma));
+  await step("taxJurisdictions", () => seedTaxJurisdictions(prisma));
+  await step("licenseRequirements", () => seedLicenseRequirements(prisma));
+  await step("roles", () => seedRoles());
+  await step("governanceReferenceData", () => seedGovernanceReferenceData(prisma));
+  await step("workforceReferenceData", () => seedWorkforceReferenceData(prisma));
+  await step("portfolios", () => seedPortfolios());
+  await step("businessModels", () => seedBusinessModels());
+  await step("agents", () => seedAgents());
+  await step("coworkerAgents", () => seedCoworkerAgents());
   // EP-AI-WORKFORCE-001: Seed unified agent lifecycle data
-  await seedCoworkerSkills();
-  await seedAgentPromptContexts();
-  await seedFeatureDegradationMappings();
-  await seedTaxonomyNodes();
-  await seedDiscoveryFingerprints();
-  await seedAgentControlPlaneMaturity(prisma);
-  await seedEaReferenceModels().catch((err: unknown) => {
-    console.warn("[seed] EA reference models skipped:", err instanceof Error ? err.message : err);
-  });
-  await seedDigitalProducts();
-  await seedEaArchimate4();
-  await seedEaBpmn20();
-  await seedEaCrossNotation();
-  await seedEaStructureRules();
-  await seedEaViewpoints();
-  await seedEaViews();
-  await seedDpfSelfRegistration();
-  await seedDefaultAdminUser();
-  await ensureDiscoveryTriageScheduledTask(prisma);
-  await ensureDataModelMirrorScheduledTask(prisma);
-  await ensureHiveScoutScheduledTask(prisma);
-  await ensureAllBackupScheduledJobs(prisma);
-  await ensureContributorInventoryScheduledJob(prisma);
-  await seedMcpServers();
-  await seedSandboxPool();
-  await seedRuntimeTargets();
-  await seedProviderRegistry();
-  await seedCodexModels();
-  await seedChatGPTModels();
-  await seedLocalModels();
-  await seedModelProfiles();
-  await seedSpeachesTranscriptionModel();
-  await seedAnthropicSubScope();
-  await ensureBuildStudioModelConfig();
-  await seedModelPricing();
-  await seedAgentModelDefaults();
-  await seedPlatformConfig();
-  await seedClientIdentity();
-  await seedHiveContributionCredential();
-  await seedStorefrontArchetypes(prisma);
-  const capabilityPerspectiveSeed = await seedBusinessCapabilityPerspective(prisma);
-  console.log(
-    `  business-capability-perspective: sources=${capabilityPerspectiveSeed.sourcePerspectiveIds.join(",")} ` +
-      `active=${capabilityPerspectiveSeed.appliedCount} deactivated=${capabilityPerspectiveSeed.deactivatedCount}`,
-  );
-  await seedWorkQueues();
-  await seedPromptTemplates(prisma);
-  await seedSkills(prisma);
-  const wikiSeed = await seedWikiKernel(prisma);
-  if (wikiSeed.emptyKernel) {
-    console.log("  founder-kernel: empty (no docs/founder-kernel/wiki/ or raw-sources/ content yet)");
-  } else {
-    const qdrantSummary = wikiSeed.embeddingsSidecarPresent
-      ? `qdrant=${wikiSeed.qdrantPointsSeeded}`
-      : "qdrant=no-sidecar";
+  await step("coworkerSkills", () => seedCoworkerSkills());
+  await step("agentPromptContexts", () => seedAgentPromptContexts());
+  await step("featureDegradationMappings", () => seedFeatureDegradationMappings());
+  await step("taxonomyNodes", () => seedTaxonomyNodes());
+  await step("discoveryFingerprints", () => seedDiscoveryFingerprints());
+  await step("agentControlPlaneMaturity", () => seedAgentControlPlaneMaturity(prisma));
+  await step("eaReferenceModels", () => seedEaReferenceModels());
+  await step("digitalProducts", () => seedDigitalProducts());
+  await step("eaArchimate4", () => seedEaArchimate4());
+  await step("eaBpmn20", () => seedEaBpmn20());
+  await step("eaCrossNotation", () => seedEaCrossNotation());
+  await step("eaStructureRules", () => seedEaStructureRules());
+  await step("eaViewpoints", () => seedEaViewpoints());
+  await step("eaViews", () => seedEaViews());
+  await step("dpfSelfRegistration", () => seedDpfSelfRegistration());
+  await step("defaultAdminUser", () => seedDefaultAdminUser());
+  await step("discoveryTriageScheduledTask", () => ensureDiscoveryTriageScheduledTask(prisma));
+  await step("dataModelMirrorScheduledTask", () => ensureDataModelMirrorScheduledTask(prisma));
+  await step("hiveScoutScheduledTask", () => ensureHiveScoutScheduledTask(prisma));
+  await step("allBackupScheduledJobs", () => ensureAllBackupScheduledJobs(prisma));
+  await step("contributorInventoryScheduledJob", () => ensureContributorInventoryScheduledJob(prisma));
+  await step("mcpServers", () => seedMcpServers());
+  await step("sandboxPool", () => seedSandboxPool());
+  await step("runtimeTargets", () => seedRuntimeTargets());
+  await step("providerRegistry", () => seedProviderRegistry());
+  await step("codexModels", () => seedCodexModels());
+  await step("chatGPTModels", () => seedChatGPTModels());
+  await step("localModels", () => seedLocalModels());
+  await step("modelProfiles", () => seedModelProfiles());
+  await step("speachesTranscriptionModel", () => seedSpeachesTranscriptionModel());
+  await step("anthropicSubScope", () => seedAnthropicSubScope());
+  await step("buildStudioModelConfig", () => ensureBuildStudioModelConfig());
+  await step("modelPricing", () => seedModelPricing());
+  await step("agentModelDefaults", () => seedAgentModelDefaults());
+  await step("platformConfig", () => seedPlatformConfig());
+  await step("clientIdentity", () => seedClientIdentity());
+  await step("hiveContributionCredential", () => seedHiveContributionCredential());
+  await step("storefrontArchetypes", () => seedStorefrontArchetypes(prisma));
+  await step("businessCapabilityPerspective", async () => {
+    const capabilityPerspectiveSeed = await seedBusinessCapabilityPerspective(prisma);
     console.log(
-      `  founder-kernel: kernelVersion=${wikiSeed.kernelVersion} ` +
-        `pages=${wikiSeed.pageCount} sources=${wikiSeed.sourceCount} ` +
-        `orphan-links=${wikiSeed.orphanLinks.length} ${qdrantSummary}`,
+      `  business-capability-perspective: sources=${capabilityPerspectiveSeed.sourcePerspectiveIds.join(",")} ` +
+        `active=${capabilityPerspectiveSeed.appliedCount} deactivated=${capabilityPerspectiveSeed.deactivatedCount}`,
     );
-  }
-  await seedDeliberationPatterns(prisma);
-  const decisionPerspectiveSeed = await seedDecisionPerspective(prisma);
-  console.log(
-    `  decision-perspective: profile=${decisionPerspectiveSeed.profileId} ` +
-      `version=${decisionPerspectiveSeed.versionId} materials=${decisionPerspectiveSeed.materialCount}`,
-  );
+  });
+  await step("workQueues", () => seedWorkQueues());
+  await step("promptTemplates", () => seedPromptTemplates(prisma));
+  await step("skills", () => seedSkills(prisma));
+  await step("wikiKernel", async () => {
+    const wikiSeed = await seedWikiKernel(prisma);
+    if (wikiSeed.emptyKernel) {
+      console.log("  founder-kernel: empty (no docs/founder-kernel/wiki/ or raw-sources/ content yet)");
+    } else {
+      const qdrantSummary = wikiSeed.embeddingsSidecarPresent
+        ? `qdrant=${wikiSeed.qdrantPointsSeeded}`
+        : "qdrant=no-sidecar";
+      console.log(
+        `  founder-kernel: kernelVersion=${wikiSeed.kernelVersion} ` +
+          `pages=${wikiSeed.pageCount} sources=${wikiSeed.sourceCount} ` +
+          `orphan-links=${wikiSeed.orphanLinks.length} ${qdrantSummary}`,
+      );
+    }
+  });
+  await step("deliberationPatterns", () => seedDeliberationPatterns(prisma));
+  await step("decisionPerspective", async () => {
+    const decisionPerspectiveSeed = await seedDecisionPerspective(prisma);
+    console.log(
+      `  decision-perspective: profile=${decisionPerspectiveSeed.profileId} ` +
+        `version=${decisionPerspectiveSeed.versionId} materials=${decisionPerspectiveSeed.materialCount}`,
+    );
+  });
   // BI-2535D6F4: ship the founder's recorded seed voice on the platform profile.
-  const platformVoice = await seedPlatformVoice(prisma);
-  console.log(`  platform-voice: ${platformVoice.status} (clip-copied=${platformVoice.copiedClip})`);
-  await syncCapabilities(prisma);
-  await assertActiveProvidersHaveClearance();
-  await assertAnthropicSubToolCapability();
-  await assertCoworkerAgentsHaveGrants();
-  await assertSharedOAuthClientsHaveSharedRedirectUri();
-  console.log("Seed complete.");
+  await step("platformVoice", async () => {
+    const platformVoice = await seedPlatformVoice(prisma);
+    console.log(`  platform-voice: ${platformVoice.status} (clip-copied=${platformVoice.copiedClip})`);
+  });
+  await step("syncCapabilities", () => syncCapabilities(prisma));
+  // Invariant asserts — isolated so a violation is surfaced in the summary
+  // rather than aborting the whole seed (they run after all seeding).
+  await step("assert:activeProvidersHaveClearance", () => assertActiveProvidersHaveClearance());
+  await step("assert:anthropicSubToolCapability", () => assertAnthropicSubToolCapability());
+  await step("assert:coworkerAgentsHaveGrants", () => assertCoworkerAgentsHaveGrants());
+  await step("assert:sharedOAuthClientsHaveSharedRedirectUri", () => assertSharedOAuthClientsHaveSharedRedirectUri());
+
+  if (failures.length > 0) {
+    console.error(`\n================ SEED INCOMPLETE: ${failures.length} step(s) failed ================`);
+    for (const f of failures) console.error(`  - ${f.step}: ${f.error}`);
+    console.error("  Surfaced (not swallowed) so a partially-failed update is visible. Other steps still ran.");
+    console.error("============================================================================");
+    process.exitCode = 1;
+  } else {
+    console.log("Seed complete.");
+  }
 }
 
 /**

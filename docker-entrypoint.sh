@@ -25,12 +25,12 @@ echo "  OK Migrations complete"
 
 echo "[2/5] Syncing provider registry..."
 cd /app
-pnpm --filter @dpf/db exec tsx scripts/sync-provider-registry.ts || echo "  WARN Provider sync had warnings (non-fatal)"
+pnpm --filter @dpf/db exec tsx scripts/sync-provider-registry.ts || echo "  ⚠️  PROVIDER SYNC FAILED — provider catalog (new providers, auth methods, cliEngine) was NOT reconciled into the DB on this start. The portal will run, but provider/Build-Studio catalog updates from this release may be missing. See the error above."
 echo "  OK Provider registry synced"
 
 echo "[3/5] Seeding reference data..."
 cd /app
-pnpm --filter @dpf/db exec tsx src/seed.ts || echo "  WARN Seed had warnings (non-fatal)"
+pnpm --filter @dpf/db exec tsx src/seed.ts || echo "  ⚠️  SEED INCOMPLETE — one or more reconcile steps failed (see the 'SEED INCOMPLETE' summary above). The portal will start; catalog/reference updates from this release may be partial."
 echo "  OK Seed complete"
 
 echo "[3b/5] Reconciling model capability catalog..."
