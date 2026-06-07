@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { inngest } from "@/lib/queue/inngest-client";
 import { ISSUE_REPORT_STATUS, type IssueReportStatus } from "./issue-report-status";
 
 // Field length limits — matched to existing writers and Prisma schema column widths.
@@ -147,6 +148,20 @@ export async function createPlatformIssueReport(
       ...(input.status !== undefined ? { status: input.status } : {}),
     },
   });
+
+  // EP-INTAKE-UNIFY Phase 4 (BI-EDFBE081): project OPEN reports into the backlog
+  // immediately via a durable event, instead of waiting up to 15 min for the
+  // triage cron. Support-flow reports (status !== open) are owned by the support
+  // pipeline and skipped. Best-effort — the cron remains the safety net, so a
+  // send failure never loses the projection.
+  const effectiveStatus = input.status ?? ISSUE_REPORT_STATUS.OPEN;
+  if (effectiveStatus === ISSUE_REPORT_STATUS.OPEN) {
+    try {
+      await inngest.send({ name: "quality/issue-report.created", data: { reportId } });
+    } catch (err) {
+      console.error("[platform-issue-reports] immediate-projection event send failed", err);
+    }
+  }
 
   return { reportId };
 }
