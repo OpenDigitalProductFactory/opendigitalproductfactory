@@ -818,11 +818,50 @@ else
   info "Edge Node bundling skipped (--no-edge). Add Edge Nodes later from separate hosts via docker-compose.edge-standalone.yml."
 fi
 
-# 13. Persist successful install state.
+# 13. Voice / TTS sidecar (Apple Silicon only).
+#     Spoken output (text-to-speech) needs hardware-accelerated synthesis, but
+#     Docker Desktop on macOS can't reach the Apple Neural Engine — so on Apple
+#     Silicon the TTS engine runs as a native-host sidecar (port 8771) instead
+#     of in a container. The docker-compose.macos.yml overlay is already wired
+#     to talk to it (TTS_PROVIDER=mlx, DPF_TTS_URL=host.docker.internal:8771);
+#     we just provision the sidecar here so a fresh customer install speaks out
+#     of the box (zero-click-provider-setup / bundled-services-active-by-default)
+#     rather than transcribing silently until the user runs the script by hand.
+#     Mirrors the contributor path in scripts/setup.sh. Idempotent — safe to
+#     re-run. Failure is non-fatal: the rest of the install still completes and
+#     we point the operator at the manual command. Linux/Windows installs use
+#     the dpf-tts Docker container instead, so skip there.
+if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
+  step "Voice / TTS sidecar (Apple Silicon)"
+  # Invoke via `bash <script>` (never execute the .sh directly — Windows git
+  # drops the exec bit and the script's own shebang can't be relied on across
+  # clones). Stderr is intentionally NOT swallowed so a failure leaves a
+  # diagnosable trail, matching the Edge Node bootstrap above.
+  if bash "$REPO_ROOT/scripts/tts/setup-chatterbox-tts-macos.sh" \
+       --data-root "$REPO_ROOT/data/uploads"; then
+    # The script provisions the launchd sidecar; wire the matching .env values
+    # the portal container needs to reach it, only if not already present
+    # (idempotent — successive installer runs don't duplicate the keys).
+    if ! grep -qE "^TTS_PROVIDER=" .env 2>/dev/null; then
+      printf '\n# Voice / TTS (Apple Silicon — written by install-dpf.sh)\n' >> .env
+      printf 'TTS_PROVIDER=mlx\n' >> .env
+      printf 'DPF_TTS_URL=http://host.docker.internal:8771\n' >> .env
+      printf 'DPF_TTS_REFERENCE_HOST_ROOT=%s/data/uploads\n' "$REPO_ROOT" >> .env
+    fi
+    ok "Voice TTS sidecar provisioned — spoken output works out of the box (port 8771)"
+  else
+    warn "TTS sidecar setup failed; coworkers will transcribe but stay silent until you run:"
+    info "  bash scripts/tts/setup-chatterbox-tts-macos.sh"
+  fi
+else
+  info "Voice TTS sidecar skipped (Linux/Windows uses the bundled dpf-tts Docker container)."
+fi
+
+# 14. Persist successful install state.
 dpf_state_write lastSuccessfulInstallVersion "$DPF_INSTALLER_VERSION" 2>/dev/null || true
 dpf_state_write lastHealthCheck "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null || true
 
-# 14. Autostart unit (LaunchAgent on macOS, systemd-user unit on Linux).
+# 15. Autostart unit (LaunchAgent on macOS, systemd-user unit on Linux).
 #     Gated by --no-autostart for operators who manage their own.
 if [ "$DPF_AUTOSTART" = "1" ]; then
   step "Autostart"

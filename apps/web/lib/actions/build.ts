@@ -968,20 +968,12 @@ export async function recordBuildAcceptance(
     throw new Error("Typecheck must be clean before acceptance can be recorded");
   }
 
-  const uxStatus = build.uxVerificationStatus;
-  if (uxStatus !== "complete" && uxStatus !== "skipped") {
-    throw new Error("UX verification must be complete before acceptance can be recorded");
-  }
-
-  const uxTestResults = Array.isArray(build.uxTestResults)
-    ? build.uxTestResults as Array<{ passed?: boolean }>
-    : [];
-  const failedUxSteps = uxTestResults.length > 0
-    ? uxTestResults.filter((step) => !step.passed)
-    : [];
-  if (failedUxSteps.length > 0) {
-    throw new Error("Fix the failed UX verification steps before recording acceptance");
-  }
+  // ADVISORY (operator decision 2026-06-07): UX verification is recorded for
+  // visibility but no longer hard-blocks recording acceptance — consistent with
+  // the uxVerification-not-blocking phase gate and the informational unit-test
+  // gate. browser-use UX results (incl. not-run / failed) are advisory and shown
+  // in the Review panel; the QUALITY of the UX check itself is tracked in
+  // BI-4BD81F3B. Typecheck (checked above) remains a hard gate.
 
   const brief = build.brief as { acceptanceCriteria?: string[] } | null;
   const designDoc = build.designDoc as { acceptanceCriteria?: string[] } | null;

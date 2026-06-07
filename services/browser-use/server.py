@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 
 # browser-use 0.12.x: Agent + BrowserSession live at top-level, ChatOpenAI is
 # shipped by the library (no langchain dependency).
-from browser_use import Agent, BrowserSession, ChatOpenAI
+from browser_use import Agent, BrowserSession, ChatOpenAI, ChatAnthropic
 
 # Pure URL navigation policy (SSRF guard + per-session target-domain allowlist).
 # EP-BROWSER-DRIVE Phase 2 — kept in a stdlib-only module so it is unit-testable
@@ -36,6 +36,7 @@ PORT = int(os.environ.get("PORT", "8500"))
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://model-runner.docker.internal/v1")
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "not-needed-for-local")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 EVIDENCE_DIR = os.environ.get("EVIDENCE_DIR", "/evidence")
 SESSION_TIMEOUT_SECONDS = int(os.environ.get("SESSION_TIMEOUT_SECONDS", "600"))
 # The Dockerfile installs the system Chromium at /usr/bin/chromium. browser-use
@@ -195,8 +196,19 @@ class SessionManager:
         self._sessions.pop(session.session_id, None)
 
 
-def _build_llm() -> ChatOpenAI:
-    """Build the LLM client for browser-use agents."""
+def _build_llm():
+    """Build the LLM client for browser-use agents.
+
+    Capable agentic browser-driving needs a strong model. When configured for
+    Anthropic (LLM_MODEL begins with "claude", or LLM_PROVIDER=anthropic), use
+    ChatAnthropic with the direct Anthropic API key. Otherwise fall back to the
+    OpenAI-compatible client (LLM_BASE_URL), which also covers local model
+    runners. (2026-06-07: the prior gpt-4o-against-local-runner config produced
+    empty agent histories / vacuous passes; operator chose Anthropic Claude.)
+    """
+    provider = os.environ.get("LLM_PROVIDER", "").lower()
+    if provider == "anthropic" or LLM_MODEL.startswith("claude"):
+        return ChatAnthropic(model=LLM_MODEL, api_key=ANTHROPIC_API_KEY)
     return ChatOpenAI(
         model=LLM_MODEL,
         base_url=LLM_BASE_URL,
