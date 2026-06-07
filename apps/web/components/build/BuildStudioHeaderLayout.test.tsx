@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BuildStudio } from "@/components/build/BuildStudio";
@@ -211,6 +211,22 @@ function makeEpicRollup(overrides: Partial<EpicRollupView> = {}): EpicRollupView
 }
 
 describe("BuildStudio active-build header layout", () => {
+  it("intake CTA is labelled 'Start a new build' not just 'New' (BI-950FE085)", () => {
+    // Regression guard: Dale had no idea what "New" created. The CTA must
+    // name the action + artifact so it's discoverable without training.
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[]}
+        portfolios={[]}
+        governedBacklogEnabled
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+      />,
+    );
+    expect(html).toContain("Start a new build");
+    expect(html).not.toContain(">New<");
+  });
+
   it("renders the empty state instead of crashing when server data arrays are missing", () => {
     const html = renderToStaticMarkup(
       <BuildStudio
@@ -313,7 +329,12 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).toMatch(/class=\"m-0 max-h-\[3rem\] min-w-0 overflow-hidden break-words text-base font-bold leading-6 text-\[var\(--dpf-text\)\] line-clamp-2\"/);
   });
 
-  it("renders the submission branch badge in a truncating wrapper instead of an unconstrained inline chip", () => {
+  it("hides submission branch badge by default (BI-63EAD801); Details toggle is rendered instead", () => {
+    // BI-63EAD801: git branch names are internal plumbing — hidden by default.
+    // The branch chip is only visible when the operator expands Details.
+    // This replaces the old "truncating wrapper" assertion which tested that
+    // the chip rendered at all; the chip now only renders after Details is
+    // expanded, which requires an interactive test (see the BI-63EAD801 suite).
     const html = renderToStaticMarkup(
       <BuildStudio
         builds={[makeBuild()]}
@@ -324,8 +345,11 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    expect(html).toMatch(/class=\"inline-flex max-w-full min-w-0 items-center gap-1 rounded border border-\[var\(--dpf-border\)\] bg-\[var\(--dpf-surface-2\)\] px-1\.5 py-0\.5 font-mono\"/);
-    expect(html).toMatch(/class=\"truncate\">dpf\/fb8783b9\/fix-build-studio-header-content-overlap-in-workflo/);
+    // Details toggle button is present
+    expect(html).toContain("aria-expanded=\"false\"");
+    expect(html).toContain(">Details<");
+    // Branch chip is NOT in the static HTML (hidden by default)
+    expect(html).not.toMatch(/dpf\/fb8783b9\//);
   });
 
   it("makes the workflow graph the always-visible primary surface; tabs are gone", () => {
@@ -538,6 +562,111 @@ describe("BuildStudio active-build header layout", () => {
 
     expect(html).toContain("release-decision-panel");
     expect(html).toContain(">Release<");
+  });
+});
+
+describe("BuildStudio header — hide internal IDs by default (BI-63EAD801)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("AC1: default view shows feature title but hides the build ID chip", () => {
+    const { getAllByText, queryByTestId, getByRole } = render(
+      <BuildStudio
+        builds={[makeBuild({ buildId: "FB-DALE01" })]}
+        epicRollups={[]}
+        portfolios={[]}
+        governedBacklogEnabled
+        portalContext={makePortalContextEnvelope()}
+        projectBranch="main"
+        submissionBranchShortId="aabbccdd"
+      />,
+    );
+    // Feature title always visible (may appear multiple times — in header + fleet rail)
+    const titleElements = getAllByText("Fix Build Studio header/content overlap in workflow view");
+    expect(titleElements.length).toBeGreaterThan(0);
+    // Details toggle shown, details panel hidden by default
+    const btn = getByRole("button", { name: /Details/ });
+    expect(btn.getAttribute("aria-expanded")).toBe("false");
+    // Build ID hidden by default
+    expect(queryByTestId("build-studio-build-id")).toBeNull();
+    expect(queryByTestId("build-studio-header-details")).toBeNull();
+  });
+
+  it("clicking Details reveals the build ID chip", async () => {
+    const { getByRole, findByTestId } = render(
+      <BuildStudio
+        builds={[makeBuild({ buildId: "FB-DALE02" })]}
+        epicRollups={[]}
+        portfolios={[]}
+        governedBacklogEnabled
+        portalContext={makePortalContextEnvelope()}
+        projectBranch="main"
+        submissionBranchShortId="aabbccdd"
+      />,
+    );
+    const detailsBtn = getByRole("button", { name: /Details/ });
+    expect(detailsBtn.getAttribute("aria-expanded")).toBe("false");
+
+    detailsBtn.click();
+
+    const details = await findByTestId("build-studio-header-details");
+    expect(details).toBeDefined();
+    expect(details.textContent).toContain("FB-DALE02");
+  });
+
+  it("clicking Details again collapses the panel", async () => {
+    const { getByRole, queryByTestId } = render(
+      <BuildStudio
+        builds={[makeBuild({ buildId: "FB-DALE03" })]}
+        epicRollups={[]}
+        portfolios={[]}
+        governedBacklogEnabled
+        portalContext={makePortalContextEnvelope()}
+        projectBranch="main"
+        submissionBranchShortId="aabbccdd"
+      />,
+    );
+    const btn = getByRole("button", { name: /Details/ });
+    btn.click();
+    await waitFor(() => expect(queryByTestId("build-studio-header-details")).not.toBeNull());
+    btn.click();
+    await waitFor(() => expect(queryByTestId("build-studio-header-details")).toBeNull());
+  });
+
+  it("persists expanded state to localStorage", async () => {
+    const { getByRole } = render(
+      <BuildStudio
+        builds={[makeBuild()]}
+        epicRollups={[]}
+        portfolios={[]}
+        governedBacklogEnabled
+        portalContext={makePortalContextEnvelope()}
+        projectBranch="main"
+        submissionBranchShortId="aabbccdd"
+      />,
+    );
+    getByRole("button", { name: /Details/ }).click();
+    await waitFor(() =>
+      expect(localStorage.getItem("dpf:build-studio-header-details-expanded")).toBe("true"),
+    );
+  });
+
+  it("restores expanded state from localStorage on mount", async () => {
+    localStorage.setItem("dpf:build-studio-header-details-expanded", "true");
+    const { findByTestId } = render(
+      <BuildStudio
+        builds={[makeBuild({ buildId: "FB-RESTORED" })]}
+        epicRollups={[]}
+        portfolios={[]}
+        governedBacklogEnabled
+        portalContext={makePortalContextEnvelope()}
+        projectBranch="main"
+        submissionBranchShortId="aabbccdd"
+      />,
+    );
+    const details = await findByTestId("build-studio-header-details");
+    expect(details.textContent).toContain("FB-RESTORED");
   });
 });
 

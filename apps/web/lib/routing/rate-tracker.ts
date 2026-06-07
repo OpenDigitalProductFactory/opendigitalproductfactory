@@ -21,12 +21,42 @@ export interface ModelRateLimits {
 
 // ── Internal types ────────────────────────────────────────────────────────
 
+/**
+ * Runtime circuit-breaker reason. Low-cardinality, mirrors InferenceError.code
+ * classes that open the runtime circuit. Kept separate from admin lifecycle
+ * (ModelProvider.status) and model-quality state (ModelProfile.modelStatus):
+ * this is an ephemeral, process-local "this endpoint just failed, stop hammering
+ * it" signal that auto-expires. See
+ * docs/specs/routing-resilience-and-failure-observability-spec.md §4.1.
+ */
+export type EndpointUnavailableReason =
+  | "rate_limit"
+  | "auth"
+  | "billing"
+  | "overloaded"
+  | "transient"
+  | "provider_error";
+
+export interface EndpointRuntimeState {
+  /** True when the endpoint is inside an active cooldown window. */
+  unavailable: boolean;
+  reason?: EndpointUnavailableReason;
+  /** Epoch ms when the cooldown lifts. Undefined when available. */
+  until?: number;
+  /** Short digest of the last failure message, for operator surfacing. */
+  lastFailureDigest?: string;
+}
+
 interface ModelRateState {
   limits: ModelRateLimits;
   requestTimestamps: number[];
   tokenCounts: Array<{ timestamp: number; tokens: number }>;
   dailyRequests: number;
   dailyResetDate: string; // "2026-03-20" — reset when UTC date changes
+  // ── Runtime circuit-breaker (EP routing-resilience Slice A) ──
+  unavailableUntilMs?: number;
+  unavailableReason?: EndpointUnavailableReason;
+  lastFailureDigest?: string;
 }
 
 // ── State ─────────────────────────────────────────────────────────────────
@@ -261,6 +291,83 @@ function parseDuration(duration: string): number | undefined {
   const seconds = match[3] ? parseFloat(match[3]) : 0;
 
   return (hours * 3600 + minutes * 60 + seconds) * 1000;
+}
+
+// ── Runtime circuit breaker (EP routing-resilience Slice A) ─────────────────
+
+/**
+ * Open the runtime circuit for an endpoint after a hard failure. The endpoint
+ * is excluded from selection (when an alternative exists) until `cooldownMs`
+ * elapses. This is process-local and ephemeral by design — it does NOT survive
+ * a portal restart and does NOT mutate ModelProvider.status / ModelProfile
+ * lifecycle state. See spec §4.1 and Open Question 2.
+ *
+ * @param cooldownMs  How long to keep the circuit open. Caller chooses a
+ *                    reason-scoped duration (short for rate_limit/transient,
+ *                    long for auth/billing).
+ * @param failureDigest  Optional short message digest for operator surfacing.
+ */
+export function markEndpointUnavailable(
+  providerId: string,
+  modelId: string,
+  reason: EndpointUnavailableReason,
+  cooldownMs: number,
+  failureDigest?: string,
+): void {
+  const state = getOrCreate(providerId, modelId);
+  const until = Date.now() + Math.max(0, cooldownMs);
+  // Never shorten an existing, longer cooldown (e.g. an auth lock should not be
+  // overwritten by a subsequent short rate-limit blip on the same endpoint).
+  if (state.unavailableUntilMs === undefined || until > state.unavailableUntilMs) {
+    state.unavailableUntilMs = until;
+    state.unavailableReason = reason;
+  }
+  if (failureDigest) {
+    state.lastFailureDigest = failureDigest.slice(0, 200);
+  }
+}
+
+/**
+ * Close the runtime circuit for an endpoint. Call after a successful call or a
+ * successful explicit provider test/health probe.
+ */
+export function clearEndpointUnavailable(
+  providerId: string,
+  modelId: string,
+): void {
+  const state = stateMap.get(key(providerId, modelId));
+  if (!state) return;
+  delete state.unavailableUntilMs;
+  delete state.unavailableReason;
+  delete state.lastFailureDigest;
+}
+
+/**
+ * Read the runtime circuit state for an endpoint. Auto-expires: once the
+ * cooldown window has elapsed the state is cleared and reported available.
+ */
+export function getEndpointRuntimeState(
+  providerId: string,
+  modelId: string,
+): EndpointRuntimeState {
+  const state = stateMap.get(key(providerId, modelId));
+  if (!state || state.unavailableUntilMs === undefined) {
+    return { unavailable: false };
+  }
+  if (Date.now() >= state.unavailableUntilMs) {
+    // Window elapsed — auto-recover.
+    delete state.unavailableUntilMs;
+    delete state.unavailableReason;
+    delete state.lastFailureDigest;
+    return { unavailable: false };
+  }
+  const result: EndpointRuntimeState = {
+    unavailable: true,
+    until: state.unavailableUntilMs,
+  };
+  if (state.unavailableReason) result.reason = state.unavailableReason;
+  if (state.lastFailureDigest) result.lastFailureDigest = state.lastFailureDigest;
+  return result;
 }
 
 /**

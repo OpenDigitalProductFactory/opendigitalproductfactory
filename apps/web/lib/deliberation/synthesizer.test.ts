@@ -11,18 +11,26 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  transaction: vi.fn(),
   outcomeCreate: vi.fn(),
+  outcomeUpsert: vi.fn(),
   issueSetCreate: vi.fn(),
+  issueSetDeleteMany: vi.fn(),
   runUpdate: vi.fn(),
   claimCreate: vi.fn(),
+  claimDeleteMany: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
-    deliberationOutcome: { create: mocks.outcomeCreate },
-    deliberationIssueSet: { create: mocks.issueSetCreate },
+    $transaction: mocks.transaction,
+    deliberationOutcome: { create: mocks.outcomeCreate, upsert: mocks.outcomeUpsert },
+    deliberationIssueSet: {
+      create: mocks.issueSetCreate,
+      deleteMany: mocks.issueSetDeleteMany,
+    },
     deliberationRun: { update: mocks.runUpdate },
-    claimRecord: { create: mocks.claimCreate },
+    claimRecord: { create: mocks.claimCreate, deleteMany: mocks.claimDeleteMany },
   },
 }));
 
@@ -37,9 +45,23 @@ let claimCounter = 0;
 beforeEach(() => {
   vi.clearAllMocks();
   claimCounter = 0;
+  mocks.transaction.mockImplementation(async (callback: (client: unknown) => unknown) =>
+    callback({
+      deliberationOutcome: { create: mocks.outcomeCreate, upsert: mocks.outcomeUpsert },
+      deliberationIssueSet: {
+        create: mocks.issueSetCreate,
+        deleteMany: mocks.issueSetDeleteMany,
+      },
+      deliberationRun: { update: mocks.runUpdate },
+      claimRecord: { create: mocks.claimCreate, deleteMany: mocks.claimDeleteMany },
+    }),
+  );
   mocks.outcomeCreate.mockResolvedValue({});
+  mocks.outcomeUpsert.mockResolvedValue({});
   mocks.issueSetCreate.mockResolvedValue({});
+  mocks.issueSetDeleteMany.mockResolvedValue({ count: 0 });
   mocks.runUpdate.mockResolvedValue({});
+  mocks.claimDeleteMany.mockResolvedValue({ count: 0 });
   mocks.claimCreate.mockImplementation(async () => ({
     id: `claim-${++claimCounter}`,
   }));
@@ -127,7 +149,7 @@ describe("synthesizeDeliberation", () => {
       branches,
     });
 
-    expect(mocks.outcomeCreate).toHaveBeenCalledTimes(1);
+    expect(mocks.outcomeUpsert).toHaveBeenCalledTimes(1);
     expect(mocks.issueSetCreate).toHaveBeenCalledTimes(1);
     expect(mocks.runUpdate).toHaveBeenCalledTimes(1);
     expect(result.outcome.consensusState).toBe("consensus");
@@ -241,6 +263,47 @@ describe("synthesizeDeliberation", () => {
     expect(result.outcome.branchCompletionRoster.length).toBe(2);
     const failed = result.outcome.branchCompletionRoster.find((r) => !r.completed);
     expect(failed?.failureReason).toBe("no endpoint");
+  });
+
+  it("replaces synthesized rows through an outcome upsert so retries can complete", async () => {
+    const branches: BranchArtifact[] = [
+      makeBranch({
+        branchNodeId: "b1",
+        role: "reviewer",
+        completed: true,
+        recommendation: "ship",
+        assertions: [{ claimText: "retry-safe outcome", evidenceGrade: "A" }],
+      }),
+    ];
+
+    const result = await synthesizeDeliberation({
+      deliberationRunId: "delib-retry",
+      artifactType: "code-change",
+      branches,
+    });
+
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.claimDeleteMany).toHaveBeenCalledWith({
+      where: {
+        deliberationRunId: "delib-retry",
+        claimType: { in: ["assertion", "objection", "rebuttal"] },
+      },
+    });
+    expect(mocks.issueSetDeleteMany).toHaveBeenCalledWith({
+      where: { deliberationRunId: "delib-retry" },
+    });
+    expect(mocks.outcomeUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { deliberationRunId: "delib-retry" },
+      }),
+    );
+    expect(mocks.outcomeCreate).not.toHaveBeenCalled();
+    expect(mocks.runUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "delib-retry" },
+        data: expect.objectContaining({ consensusState: result.outcome.consensusState }),
+      }),
+    );
   });
 
   it("persists ClaimRecord rows per assertion/objection/rebuttal", async () => {

@@ -17,6 +17,7 @@ import {
   searchPublicWeb,
 } from "@/lib/public-web-tools";
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
+import type { BacklogIngestInput } from "@/lib/operate/backlog-ingest";
 import { activeBrandExtractionWhere } from "@/lib/brand/active-extraction";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 import { createPlatformIssueReport } from "@/lib/quality/platform-issue-reports";
@@ -671,6 +672,92 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   // ─── Work Capsule control harness (spec 2026-05-14) ────────────────────────
   {
+    name: "workbook_list_tables",
+    description: "List the Workbook tables the agent can access (grid/spreadsheet data). Read-only. Pass workbookId to scope to one workbook.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workbookId: { type: "string", description: "Optional semantic workbook id (WB-*) to scope to." },
+      },
+      required: [],
+    },
+    requiredCapability: "view_workbooks",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "workbook_get_schema",
+    description: "Get a Workbook table's column definitions and the agent's capabilities on it. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
+      },
+      required: ["tableId"],
+    },
+    requiredCapability: "view_workbooks",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "workbook_query_rows",
+    description: "Query rows from a Workbook table with optional sort/filter and cursor pagination. Read-only. Cells are keyed by columnId (COL-*).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
+        limit: { type: "number", description: "Max rows (default 50, max 200)." },
+        cursor: { type: "string", description: "Pagination cursor (rowId of the last row from the previous page)." },
+        sort: {
+          type: "array",
+          description: "Sort specs.",
+          items: {
+            type: "object",
+            properties: {
+              columnId: { type: "string" },
+              direction: { type: "string", enum: ["asc", "desc"] },
+            },
+          },
+        },
+      },
+      required: ["tableId"],
+    },
+    requiredCapability: "view_workbooks",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
+    name: "workbook_create_row",
+    description: "Insert a new row into a custom Workbook table. cells is a map of columnId (COL-*) to value; values are validated against each column's field type.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
+        cells: { type: "object", description: "Map of columnId -> value.", additionalProperties: true },
+      },
+      required: ["tableId"],
+    },
+    requiredCapability: "manage_workbooks",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "workbook_update_cells",
+    description: "Update specific cells in a Workbook row. cells is a map of columnId (COL-*) to new value, validated against each column's field type.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
+        rowId: { type: "string", description: "Semantic row id (ROW-*)." },
+        cells: { type: "object", description: "Map of columnId -> new value.", additionalProperties: true },
+      },
+      required: ["tableId", "rowId"],
+    },
+    requiredCapability: "manage_workbooks",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
     name: "list_work_capsules",
     description: "List Work Capsule coordination records for active portal, Build Studio, and external agent work. Read-only.",
     inputSchema: {
@@ -1108,6 +1195,25 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: false,
   },
   {
+    name: "verify_live_install_readiness",
+    description:
+      "Preflight a feature against the live install before driving its happy path. Returns the same deterministic verdict as `pnpm verify:preflight` — CAN-TEST (served bytes contain the feature commit), MUST-ADVANCE (behind/unprovable → advance via the governed self-upgrade path), or BLOCKED (no testable runtime → file a BI and stop) — plus one next action. Surface-agnostic: identical verdict logic for CLI and in-portal/Build Studio. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        featureSha: {
+          type: "string",
+          description:
+            "The commit the feature under test requires — a PR/BI merge SHA or a build's commit. Compared against the live install's served image identity.",
+        },
+      },
+      required: ["featureSha"],
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
+  {
     name: "record_execution_evidence",
     description: "Attach an evidence record to a backlog item (test pass/fail, build pass/fail, ux verification, spec review, manual check, external link). Writes an evidence activity row; the cross-cutting audit lives in ToolExecution. Side-effecting.",
     inputSchema: {
@@ -1443,6 +1549,85 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "send_marketing_email",
+    description: "Send an APPROVED marketing OutboundDraft (channelId=email or email-postmark, assetType=email) through the operator's connected Postmark server. Requires the Email (Postmark) integration to be connected via /platform/tools/integrations/email-postmark. Fails fast if the draft is not status=approved, the Postmark credential is not connected, or the From address is unverified. On success, writes an OutboundPublication row and flips the draft to status=published.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        draftId: { type: "string", description: "OutboundDraft.draftId in status='approved' on an email channel" },
+      },
+      required: ["draftId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "place_linkedin_ad",
+    description: "Place a LinkedIn Ads campaign from an APPROVED OutboundDraft (channelId=linkedin-ads, assetType=ad-creative). Requires the LinkedIn integration connected with the ads scope (r_ads, rw_ads). Refuses if the placement would exceed the per-channel weekly spend ceiling — operators must set a ceiling on /customer/marketing before any ad spend. AGENTS MUST NOT CALL THIS WITHOUT EXPLICIT USER CONFIRMATION naming the spend amount, audience, and ad account.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        draftId: { type: "string", description: "OutboundDraft.draftId in status='approved' on the linkedin-ads channel" },
+      },
+      required: ["draftId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "refresh_channel_kpis",
+    description: "Pull recent engagement metrics from a channel adapter (currently linkedin-ads) for OutboundPublication rows still inside their 30-day analytics window, write a per-publication snapshot, and aggregate channel-level impressions/clicks/cost/conversions into a fresh MarketingKpiCheckpoint row so the next strategist review sees real numbers.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        channelId: { type: "string", description: "Channel id, e.g. linkedin-ads" },
+        sinceDaysAgo: { type: "number", description: "Optional override for the analytics window (default 30)" },
+      },
+      required: ["channelId"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "tick_marketing_scheduler",
+    description: "Phase 5: dispatch all ScheduledOutboundAction rows whose scheduledFor <= now. Fires each via the right Phase 1-4 service (draftMarketingAsset / publishApprovedDraft / pullChannelKpis) and reports fired vs failed counts. Idempotent and safe to call as often as the scheduler cadence requires.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "plan_upcoming_marketing_drafts",
+    description: "Phase 5: walk recent MarketingAssetTask rows for the organization and schedule a draft-marketing-asset action 3 days ahead of each task's due window (idempotent — skips tasks that already have a pending or fired schedule).",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+  },
+  {
+    name: "set_marketing_autopilot_policy",
+    description: "Phase 5: operator-only. Upsert a bounded per-channel autopilot policy. Channel must be in the autopilot allowlist (linkedin-personal-social, linkedin, email-postmark, email); ad channels are hard-refused by design. The runtime enforces channel allowlist + word-count threshold + weekly publish ceiling + low-confidence-marker check on every auto-approval.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        channelId: { type: "string", description: "Channel id; must be on the autopilot allowlist" },
+        enabled: { type: "boolean", description: "Whether the policy is active right now" },
+        autoApproveBelowWords: { type: "number", description: "Auto-approve only drafts shorter than this word count (null = no length gate)" },
+        autoPublishAfterMinutes: { type: "number", description: "Minutes a draft must age before autopilot fires (null = no aging gate)" },
+        weeklyCeiling: { type: "number", description: "Maximum publishes per rolling 7-day window for this channel" },
+      },
+      required: ["channelId", "enabled", "weeklyCeiling"],
+    },
+    requiredCapability: "manage_provider_connections",
+    sideEffect: true,
+  },
+  {
     name: "draft_marketing_asset",
     description: "Turn a saved MarketingAssetTask brief into a channel-shaped, human-reviewable draft. Creates an OutboundDraft with status='pending-review' that appears in the marketing approval queue on /customer/marketing. Phase 1: LinkedIn posts and emails only. No external API call — the draft is internal until a human approves and a publish tool fires.",
     inputSchema: {
@@ -1580,6 +1765,31 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiresExternalAccess: true,
     executionMode: "immediate",
     sideEffect: false,
+  },
+  {
+    name: "drive_browser_task",
+    description:
+      "Drive an authenticated browser to perform a bounded task on an auth-walled site (supplier portal, Substack, ad dashboard) that has no usable API. Picks the means by a governed decision, runs against a provisioned service-account profile (or the operator's attended session), and audits every action. Outward irreversible actions (publish/submit/send/order/configure) are NOT executed directly — they return awaiting-approval with an envelope the human approves first. Returns needs-provisioning when the site has no service-account profile yet (set one up in Service Account Browser Setup).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task: { type: "string", description: "Natural-language task for the browser, e.g. 'fill the newsletter draft title and body'." },
+        siteKey: { type: "string", description: "Site identifier selecting the provisioned profile, e.g. 'substack'." },
+        accountKey: { type: "string", description: "Account within the site. Defaults to 'default'." },
+        targetDomains: { type: "array", items: { type: "string" }, description: "Navigation allowlist; the session may only drive these domains." },
+        targetUrl: { type: "string", description: "Optional URL to open at." },
+        kind: { type: "string", enum: ["read", "act"], description: "read = extract data only; act = drive (default)." },
+        mode: { type: "string", enum: ["service-account", "operator-live"], description: "service-account (autonomous, default) or operator-live (attended)." },
+        outwardAction: { type: "string", enum: ["publish", "submit", "send", "order", "configure"], description: "Set ONLY when the task takes an outward irreversible action — gates an approval envelope instead of acting." },
+        renderedArtifact: { type: "object", description: "The exact payload the human approves at the destructive boundary (rendered post/form)." },
+        rationale: { type: "string", description: "Why this action — recorded on the approval envelope." },
+      },
+      required: ["task", "siteKey", "targetDomains"],
+    },
+    requiredCapability: null,
+    requiresExternalAccess: true,
+    executionMode: "immediate",
+    sideEffect: true,
   },
   {
     name: "extract_brand_design_system",
@@ -1917,6 +2127,21 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
     buildPhases: ["ideate", "plan", "build", "review", "ship"],
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
+    name: "verification_preflight",
+    description: "Deterministic verify-phase preflight (EP-VERIFY-PROC). Returns MUST_ADVANCE (evidence already sufficient — do not re-test), BLOCKED (a prerequisite is missing — report it, do not fabricate a result), or CAN_TEST (proceed to functional verification). Call this BEFORE attempting verification so testability is a procedural verdict, not a judgment call.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        buildId: { type: "string", description: "Optional FB-* build ID. Omit to target the current active build." },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["build", "review"],
     annotations: { readOnlyHint: true, idempotentHint: true },
   },
   {
@@ -4143,6 +4368,41 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     requiredCapability: null,
     sideEffect: false,
   },
+  // ─── Multi-Agent Collaboration Tools (EP-A2A, 2026-06-04 spec) ─────────────
+  {
+    name: "request_coworker",
+    description:
+      "Hand off a scoped sub-task to a NAMED peer coworker. Unlike spawn_work_thread (anonymous child), this targets a specific coworker by agentId or slug and emits a VISIBLE handoff the user sees inline. Use when you need another coworker's distinct capability (e.g. ask the Enterprise Architect to review a schema).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        targetAgent: { type: "string", description: "Target coworker — canonical agentId (AGT-*) or slug alias (e.g. 'ea-architect')." },
+        objective: { type: "string", description: "The scoped sub-task for the peer coworker." },
+        questionPacketSummary: { type: "string", description: "Optional one-line summary of the intent/question shown on the handoff card." },
+        tier: { type: "number", enum: [2, 3], description: "Interaction tier (default 2). Tier 3 requires depth-2 spawn support." },
+        enteredVia: { type: "string", enum: ["handoff", "escalation", "spawn"], description: "How the peer is entering (default 'handoff')." },
+      },
+      required: ["targetAgent", "objective"],
+    },
+    requiredCapability: null,
+    sideEffect: true,
+  },
+  {
+    name: "summon_coworker",
+    description:
+      "Bring a NAMED coworker into the current conversation as a second/third-tier participant to address part of the work, emitting a VISIBLE summon the user sees inline. YOU (the active coworker) decide which peer to bring in and what to task them with — this is your responsibility, not the user's. Use when a request needs a peer's distinct capability alongside you in the conversation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        targetAgent: { type: "string", description: "Target coworker — canonical agentId (AGT-*) or slug alias." },
+        objective: { type: "string", description: "What the summoned coworker should address." },
+        tier: { type: "number", enum: [2, 3], description: "Interaction tier (default 2)." },
+      },
+      required: ["targetAgent", "objective"],
+    },
+    requiredCapability: null,
+    sideEffect: true,
+  },
   // ─── Deliberation Pattern Framework Tools (spec §6.8) ──────────────────────
   {
     name: "start_deliberation",
@@ -4494,7 +4754,20 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
 
 export async function getAvailableTools(
   userContext: UserContext,
-  options?: { externalAccessEnabled?: boolean; mode?: "advise" | "act"; unifiedMode?: boolean; agentId?: string },
+  options?: {
+    externalAccessEnabled?: boolean;
+    mode?: "advise" | "act";
+    unifiedMode?: boolean;
+    agentId?: string;
+    /**
+     * Extra grants to union with the agent's own grants before tool gating.
+     * Used by the coworker path to apply COWORKER_READ_BASELINE_GRANTS so every
+     * coworker can read its page data, docs, source, and the code graph
+     * (BI-FD7E4D72). Read-only by construction; the user-capability check above
+     * still bounds what the human operator may see.
+     */
+    additionalGrants?: readonly string[];
+  },
 ): Promise<ToolDefinition[]> {
   let platformTools = PLATFORM_TOOLS.filter(
     (tool) =>
@@ -4506,9 +4779,19 @@ export async function getAvailableTools(
   // Agent-scoped filtering: intersection of user capabilities and agent tool grants.
   // EP-AI-WORKFORCE-001: use the async DB-first resolver so grants written via
   // the DB (e.g. via seed or Admin UI) take precedence over the JSON fallback.
+  const { getAgentToolGrantsAsync, isToolAllowedByGrants, getToolGrantMapping } =
+    await import("./agent-grants");
+  let agentGrants: string[] = [];
   if (options?.agentId) {
-    const { getAgentToolGrantsAsync, isToolAllowedByGrants } = await import("./agent-grants");
-    const agentGrants = await getAgentToolGrantsAsync(options.agentId);
+    agentGrants = await getAgentToolGrantsAsync(options.agentId);
+    // Union the agent's own grants with any baseline read grants (the coworker
+    // path passes COWORKER_READ_BASELINE_GRANTS). Done here so the merged set is
+    // also used by the discovered-MCP-tool gating below. The merge only widens
+    // toward read-only tools; agents that hold no grants AND get no baseline are
+    // left ungated exactly as before (length-0 → no filtering).
+    if (options.additionalGrants?.length) {
+      agentGrants = Array.from(new Set([...agentGrants, ...options.additionalGrants]));
+    }
     if (agentGrants.length > 0) {
       platformTools = platformTools.filter((tool) => isToolAllowedByGrants(tool.name, agentGrants));
     }
@@ -4518,8 +4801,22 @@ export async function getAvailableTools(
     try {
       const { getMcpServerTools } = await import("./mcp-server-tools");
       const mcpTools = await getMcpServerTools();
-      const filtered = options?.mode === "advise" ? [] : mcpTools;
-      return [...platformTools, ...filtered];
+      const modeFiltered = options?.mode === "advise" ? [] : mcpTools;
+      // Grant-gate discovered MCP tools, closing the Verdict 5 authority gap
+      // (EP-BROWSER-DRIVE, spec 2026-06-05 §8.2). Previously every discovered
+      // MCP tool was appended ungated whenever External Access was on — so a
+      // side-effecting browser tool was ambiently callable. Now a discovered
+      // tool that carries a TOOL_TO_GRANTS entry (the namespaced browser-driving
+      // tools) is denied unless the agent holds the grant; this denies them even
+      // for an agent with no grants at all (empty agentGrants → false). Discovered
+      // tools WITHOUT a mapping retain prior behavior so other MCP servers are not
+      // regressed — tightening those to default-deny is tracked separately
+      // (architect review Slice 0 item 4, the discovered-tool policy overlay).
+      const grantMap = getToolGrantMapping();
+      const grantFiltered = modeFiltered.filter((tool) =>
+        grantMap[tool.name] ? isToolAllowedByGrants(tool.name, agentGrants) : true,
+      );
+      return [...platformTools, ...grantFiltered];
     } catch {
       // MCP server tools unavailable — return platform tools only
     }
@@ -4912,6 +5209,26 @@ export async function executeTool(
     case "deliberate_on": {
       return deliberateOnMcpHandler(params, userId, context);
     }
+    case "workbook_list_tables": {
+      const { workbookListTablesTool } = await import("@/lib/workbooks/mcp-handlers");
+      return workbookListTablesTool(params, userId);
+    }
+    case "workbook_get_schema": {
+      const { workbookGetSchemaTool } = await import("@/lib/workbooks/mcp-handlers");
+      return workbookGetSchemaTool(params, userId);
+    }
+    case "workbook_query_rows": {
+      const { workbookQueryRowsTool } = await import("@/lib/workbooks/mcp-handlers");
+      return workbookQueryRowsTool(params, userId);
+    }
+    case "workbook_create_row": {
+      const { workbookCreateRowTool } = await import("@/lib/workbooks/mcp-handlers");
+      return workbookCreateRowTool(params, userId);
+    }
+    case "workbook_update_cells": {
+      const { workbookUpdateCellsTool } = await import("@/lib/workbooks/mcp-handlers");
+      return workbookUpdateCellsTool(params, userId);
+    }
     case "list_work_capsules": {
       const { listWorkCapsulesTool } = await import("@/lib/work-capsules/mcp-handlers");
       return listWorkCapsulesTool(params);
@@ -5055,108 +5372,124 @@ export async function executeTool(
         data: { threads },
       };
     }
-    case "create_backlog_item": {
-      const itemId = typeof params["itemId"] === "string" && params["itemId"].trim()
-        ? params["itemId"].trim()
-        : `BI-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      const status = typeof params["status"] === "string" ? params["status"] : "triaging";
-      const triageOutcome = typeof params["triageOutcome"] === "string" ? params["triageOutcome"] : null;
-      // workType is required by the tool schema; default to "feature" defensively
-      // so a missing payload field surfaces as a Prisma validation error rather
-      // than a silent insert with workType=NULL.
-      const workType = typeof params["workType"] === "string" ? params["workType"] : null;
-      // source defaults to "user-request" (the MCP tool is human-driven by
-      // contract — agents calling it on behalf of an operator are forwarding a
-      // human request).
-      const source = typeof params["source"] === "string" ? params["source"] : "user-request";
-      const proposedOutcome = typeof params["proposedOutcome"] === "string" ? params["proposedOutcome"] : null;
-      const effortSize = typeof params["effortSize"] === "string" ? params["effortSize"] : null;
-      const priority = typeof params["priority"] === "number" ? params["priority"] : null;
-
-      if (!workType) {
-        return {
-          success: false,
-          error: "workType is required",
-          message: "workType is required (bug | feature | chore | doc | tool | skill | refactor).",
-        };
+    case "request_coworker": {
+      if (!context?.threadId) {
+        return { success: false, error: "missing_threadId", message: "request_coworker requires caller thread context." };
       }
-
-      // Validate the status / triageOutcome pairing rule from the tool description:
-      // "supply status+triageOutcome together only when explicitly skipping triage"
-      // Concretely: status=triaging requires no triageOutcome; any other status requires one.
-      if (status !== "triaging" && !triageOutcome) {
-        return {
-          success: false,
-          error: "triageOutcome is required when status is not 'triaging'",
-          message: "When skipping triage (status='open' or 'in-progress'), pass triageOutcome to record the decision. Otherwise omit status to default to 'triaging'.",
-        };
+      const targetAgent = String(params["targetAgent"] ?? "").trim();
+      const objective = String(params["objective"] ?? "").trim();
+      if (!targetAgent || !objective) {
+        return { success: false, error: "invalid_params", message: "request_coworker requires targetAgent and objective." };
       }
-      if (status === "triaging" && triageOutcome) {
-        return {
-          success: false,
-          error: "triageOutcome must not be set when status='triaging'",
-          message: "Items in triaging status have not been triaged yet. Use triage_backlog_item to set triageOutcome.",
-        };
-      }
-      // When triageOutcome=build, effortSize is required (matches triage_backlog_item rules
-      // so the ready-for-build pool is consistently sized).
-      if (triageOutcome === "build" && !effortSize) {
-        return {
-          success: false,
-          error: "effortSize is required when triageOutcome='build'",
-          message: "Build-bound items must declare effortSize ('small'|'medium'|'large'|'xlarge').",
-        };
-      }
-
-      // BacklogItem.epicId is a FK to Epic.id (cuid). Agents typically pass
-      // the semantic epicId ("EP-..."), so resolve to cuid before inserting.
-      let epicCuid: string | null = null;
-      if (typeof params["epicId"] === "string" && params["epicId"].trim()) {
-        const raw = params["epicId"].trim();
-        const epicRow = await prisma.epic.findFirst({
-          where: { OR: [{ epicId: raw }, { id: raw }] },
-          select: { id: true },
-        });
-        epicCuid = epicRow?.id ?? null;
-      }
-
-      const item = await prisma.backlogItem.create({
-        data: {
-          itemId,
-          title: String(params["title"] ?? "Untitled"),
-          type: String(params["type"] ?? "product"),
-          status,
-          submittedById: userId,
-          agentId: context?.agentId ?? null,
-          ...(status === "done" ? { completedAt: new Date() } : {}),
-          ...(typeof params["body"] === "string" ? { body: params["body"] } : {}),
-          ...(epicCuid ? { epicId: epicCuid } : {}),
-          workType,
-          source,
-          ...(triageOutcome ? { triageOutcome } : {}),
-          ...(proposedOutcome ? { proposedOutcome } : {}),
-          ...(effortSize ? { effortSize } : {}),
-          ...(priority !== null ? { priority } : {}),
-        },
-      });
-      // Index in platform knowledge for semantic search
-      import("@/lib/semantic-memory").then(({ storePlatformKnowledge }) =>
-        storePlatformKnowledge({
-          entityId: item.itemId,
-          entityType: "backlog",
-          title: String(params["title"] ?? ""),
-          content: String(params["body"] ?? ""),
-        })
-      ).catch(() => {});
-      if (context?.routeContext === "/build") {
-        await updateBuildHappyPathState(userId, {
-          intake: {
-            backlogItemId: item.itemId,
-            epicId: typeof params["epicId"] === "string" ? params["epicId"] : null,
+      const tierParam = Number(params["tier"]);
+      const enteredViaParam = typeof params["enteredVia"] === "string" ? params["enteredVia"] : undefined;
+      const { requestCoworker } = await import("@/lib/tak/coworker-collaboration");
+      try {
+        const result = await requestCoworker(
+          {
+            parentThreadId: context.threadId,
+            targetAgent,
+            objective,
+            tier: tierParam === 3 ? 3 : 2,
+            enteredVia: enteredViaParam === "escalation" || enteredViaParam === "spawn" ? enteredViaParam : "handoff",
+            callerAgentId: context.agentId ?? null,
+            questionPacketSummary: typeof params["questionPacketSummary"] === "string" ? params["questionPacketSummary"] : undefined,
+            routeContext: context.routeContext,
           },
-        });
+          userId,
+        );
+        return {
+          success: true,
+          entityId: result.childThreadId,
+          message: `Handed off to ${result.targetLabel}.`,
+          data: result,
+        };
+      } catch (err) {
+        return { success: false, error: "handoff_failed", message: err instanceof Error ? err.message : "request_coworker failed." };
       }
-      return { success: true, entityId: item.itemId, message: `Created backlog item ${item.itemId}` };
+    }
+    case "summon_coworker": {
+      if (!context?.threadId) {
+        return { success: false, error: "missing_threadId", message: "summon_coworker requires caller thread context." };
+      }
+      const targetAgent = String(params["targetAgent"] ?? "").trim();
+      const objective = String(params["objective"] ?? "").trim();
+      if (!targetAgent || !objective) {
+        return { success: false, error: "invalid_params", message: "summon_coworker requires targetAgent and objective." };
+      }
+      const tierParam = Number(params["tier"]);
+      const { summonCoworker } = await import("@/lib/tak/coworker-collaboration");
+      try {
+        const result = await summonCoworker(
+          {
+            parentThreadId: context.threadId,
+            targetAgent,
+            objective,
+            tier: tierParam === 3 ? 3 : 2,
+            callerAgentId: context.agentId ?? null,
+            routeContext: context.routeContext,
+          },
+          userId,
+        );
+        return {
+          success: true,
+          entityId: result.childThreadId,
+          message: `Summoned ${result.targetLabel}.`,
+          data: result,
+        };
+      } catch (err) {
+        return { success: false, error: "summon_failed", message: err instanceof Error ? err.message : "summon_coworker failed." };
+      }
+    }
+    case "create_backlog_item": {
+      // Converged onto the shared backlog-ingest front door (EP-INTAKE-UNIFY):
+      // one validation + create + semantic-index + epic-resolve path, shared
+      // with every detector/queue. This MCP boundary preserves its structured
+      // {success:false} contract by catching the front door's validation throws.
+      const ingestInput = {
+        title: String(params["title"] ?? "Untitled"),
+        // Historical default for the MCP tool is product (ownership axis).
+        type: params["type"] === "portfolio" ? "portfolio" : "product",
+        workType: typeof params["workType"] === "string" ? params["workType"] : "",
+        // The MCP tool is human-driven by contract; default origin = user-request.
+        source: typeof params["source"] === "string" ? params["source"] : "user-request",
+        status: typeof params["status"] === "string" ? params["status"] : "triaging",
+        triageOutcome: typeof params["triageOutcome"] === "string" ? params["triageOutcome"] : undefined,
+        proposedOutcome: typeof params["proposedOutcome"] === "string" ? params["proposedOutcome"] : undefined,
+        effortSize: typeof params["effortSize"] === "string" ? params["effortSize"] : undefined,
+        priority: typeof params["priority"] === "number" ? params["priority"] : undefined,
+        body: typeof params["body"] === "string" ? params["body"] : undefined,
+        itemId:
+          typeof params["itemId"] === "string" && params["itemId"].trim()
+            ? params["itemId"].trim()
+            : undefined,
+        epicId:
+          typeof params["epicId"] === "string" && params["epicId"].trim()
+            ? params["epicId"].trim()
+            : undefined,
+        submittedById: userId,
+        agentId: context?.agentId ?? null,
+      } as unknown as BacklogIngestInput;
+
+      try {
+        const { ingestBacklogItem } = await import("@/lib/operate/backlog-ingest");
+        const result = await ingestBacklogItem(ingestInput);
+        if (context?.routeContext === "/build") {
+          await updateBuildHappyPathState(userId, {
+            intake: {
+              backlogItemId: result.itemId,
+              epicId: typeof params["epicId"] === "string" ? params["epicId"] : null,
+            },
+          });
+        }
+        return { success: true, entityId: result.itemId, message: `Created backlog item ${result.itemId}` };
+      } catch (err) {
+        const msg =
+          err instanceof Error
+            ? err.message.replace(/^\[backlog-ingest\]\s*/, "")
+            : "Failed to create backlog item";
+        return { success: false, error: msg, message: msg };
+      }
     }
 
     case "triage_backlog_item": {
@@ -5341,6 +5674,20 @@ export async function executeTool(
         select: { governedBacklogEnabled: true },
       });
       const governedBacklogEnabled = governedConfig?.governedBacklogEnabled === true;
+
+      // WIP cap (shared with the createFeatureBuild start path): refuse to
+      // promote another build into Build Studio while too many are unfinished.
+      {
+        const { wipCapReached, BUILD_WIP_CAP, BuildWipCapError, TERMINAL_BUILD_PHASES } =
+          await import("@/lib/build/wip-cap");
+        const activeBuilds = await prisma.featureBuild.count({
+          where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, abandonedAt: null, parentEpicId: null },
+        });
+        if (wipCapReached(activeBuilds)) {
+          const err = new BuildWipCapError(activeBuilds, BUILD_WIP_CAP);
+          return { success: false, error: "wip_cap_reached", message: err.message };
+        }
+      }
 
       const result = await prisma.$transaction(async (tx) => {
         return promoteBacklogItemToBuildDraft({
@@ -6108,6 +6455,23 @@ export async function executeTool(
       };
     }
 
+    case "verify_live_install_readiness": {
+      const featureSha = String(params["featureSha"] ?? "").trim();
+      if (!featureSha)
+        return {
+          success: false,
+          error: "missing_feature_sha",
+          message: "featureSha is required (a PR/BI merge SHA or a build's commit).",
+        };
+      const { resolveLiveInstallReadiness } = await import("@/lib/verify/preflight-service");
+      const verdict = await resolveLiveInstallReadiness({ featureSha });
+      return {
+        success: true,
+        message: `${verdict.verdict}: ${verdict.reason}`,
+        data: verdict,
+      };
+    }
+
     case "record_execution_evidence": {
       const itemIdRaw = String(params["itemId"] ?? "").trim();
       const kindRaw = String(params["kind"] ?? "");
@@ -6688,6 +7052,42 @@ export async function executeTool(
         success: true,
         message: `Fetched ${evidence.finalUrl}${evidence.title ? ` (${evidence.title})` : ""}.`,
         data: evidence,
+      };
+    }
+
+    case "drive_browser_task": {
+      // Dynamic import: drive → select-means → mcp-tools forms a static cycle;
+      // importing here breaks it (same pattern as agent-grants / mcp-server-tools).
+      const { driveBrowserTask } = await import("./browser-drive/drive");
+      const { isDestructiveBrowserAction } = await import("./browser-drive/envelope");
+      const outward = String(params["outwardAction"] ?? "");
+      const result = await driveBrowserTask({
+        task: String(params["task"] ?? ""),
+        siteKey: String(params["siteKey"] ?? ""),
+        accountKey: typeof params["accountKey"] === "string" ? (params["accountKey"] as string) : undefined,
+        targetDomains: Array.isArray(params["targetDomains"]) ? (params["targetDomains"] as unknown[]).map(String) : [],
+        targetUrl: typeof params["targetUrl"] === "string" ? (params["targetUrl"] as string) : undefined,
+        kind: params["kind"] === "read" ? "read" : "act",
+        mode: params["mode"] === "operator-live" ? "operator-live" : "service-account",
+        outwardAction: isDestructiveBrowserAction(outward) ? outward : undefined,
+        renderedArtifact: params["renderedArtifact"],
+        rationale: typeof params["rationale"] === "string" ? (params["rationale"] as string) : undefined,
+        agentId: context?.agentId?.trim() || "coworker",
+        threadId: context?.threadId?.trim() || "",
+        userId,
+      });
+      const messages: Record<string, string> = {
+        completed: "Browser task completed.",
+        "awaiting-approval": "Rendered the action for your approval — it will run once you approve the envelope.",
+        "needs-provisioning": `No service-account profile for "${String(params["siteKey"] ?? "")}" yet. Set one up in Service Account Browser Setup.`,
+        "needs-human": "The means selector wasn't confident — needs a human decision.",
+        blocked: "Blocked.",
+        error: "Browser task failed.",
+      };
+      return {
+        success: result.status === "completed" || result.status === "awaiting-approval",
+        message: messages[result.status] ?? result.status,
+        data: result,
       };
     }
 
@@ -7309,6 +7709,34 @@ export async function executeTool(
         entityId: buildId,
         message: `Build progress visibility loaded for ${buildId}: ${projection.progress.primary.completed}/${projection.progress.primary.total} tasks from ${projection.progress.primary.source}.`,
         data: projection as unknown as Record<string, unknown>,
+      };
+    }
+
+    case "verification_preflight": {
+      const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
+      if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
+      const build = await prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: { phase: true, acceptanceMet: true, verificationOut: true, buildExecState: true },
+      });
+      if (!build) return { success: false, error: "Build not found", message: `Build ${buildId} was not found.` };
+      const { verificationPreflight, gatherPreflightSignals, preflightDirective } = await import(
+        "@/lib/build/verification-preflight"
+      );
+      // The portal serving this tool is up (installHealthy) and its DB is reachable
+      // (this row just loaded). Sandbox/quiescence probes are a follow-up refinement;
+      // for now they default healthy so the verdict turns on evidence + artifact.
+      const signals = gatherPreflightSignals(build, {
+        installHealthy: true,
+        requiredServicesHealthy: true,
+        explicitBlocker: null,
+      });
+      const result = verificationPreflight(signals);
+      return {
+        success: true,
+        entityId: buildId,
+        message: preflightDirective(result),
+        data: { verdict: result.verdict, reason: result.reason, blocker: result.blocker },
       };
     }
 
@@ -8100,6 +8528,13 @@ export async function executeTool(
             await prisma.featureBuild.update({ where: { buildId }, data: { phase: "plan" } });
             if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "plan" });
             logBuildActivity(buildId, "phase:advance", "Phase advanced: ideate → plan");
+            // Auto-dispatch plan generation so the build advances without
+            // waiting for the operator to manually prompt the coworker. Mirrors
+            // the ideate auto-dispatch pattern (plan-on-approval.ts).
+            void import("@/lib/integrate/plan-on-approval").then(m =>
+              m.dispatchPlanForApprovedBuild({ buildId, userId })
+                .catch(err => console.error("[plan-on-approval] auto-dispatch failed:", err))
+            );
           } else {
             logBuildActivity(buildId, "phase:gate-blocked", gate.reason ?? "unknown");
             // Surface the blocker to the agent so it can self-correct on the next
@@ -8360,6 +8795,14 @@ export async function executeTool(
                   await prisma.featureBuild.update({ where: { buildId }, data: { phase: "build" } });
                   if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "build" });
                   logBuildActivity(buildId, "phase:advance", "Phase advanced: plan → build (buildBranch initialized)");
+                  // Auto-dispatch the build orchestrator so specialist code generation
+                  // runs immediately without waiting for an operator to prompt the
+                  // coworker. The orchestrator handles the full build phase including
+                  // task dispatch, progress tracking, and auto-advance to review.
+                  void import("@/lib/integrate/build-on-plan-approval").then(m =>
+                    m.dispatchBuildForApprovedPlan({ buildId, userId })
+                      .catch(err => console.error("[build-on-plan-approval] auto-dispatch failed:", err))
+                  );
                 }
               } catch (branchErr) {
                 logBuildActivity(buildId, "phase:gate-blocked", `startBuildBranch failed: ${(branchErr as Error).message?.slice(0, 200)}`);
@@ -11333,12 +11776,13 @@ export async function executeTool(
         }
       }
 
+      const category = String(params["category"] ?? "missing_feature");
       const proposal = await prisma.improvementProposal.create({
         data: {
           proposalId,
           title: String(params["title"] ?? "Untitled improvement"),
           description: String(params["description"] ?? ""),
-          category: String(params["category"] ?? "missing_feature"),
+          category,
           severity: String(params["severity"] ?? "medium"),
           observedFriction: typeof params["observedFriction"] === "string" ? params["observedFriction"] : null,
           conversationExcerpt,
@@ -11348,20 +11792,63 @@ export async function executeTool(
           threadId: context?.threadId ?? null,
         },
       });
+
+      // Consolidation (EP-INTAKE-UNIFY / BI-7541AB88): file the work into the
+      // backlog the moment the proposal exists, so it is visible and triageable
+      // without the old manual Review→Prioritize promotion that never happened.
+      // The proposal stays the evidence record; the BacklogItem is the work.
+      let backlogItemId: string | null = null;
+      try {
+        const { ingestBacklogItem, improvementCategoryToWorkType } = await import(
+          "@/lib/operate/backlog-ingest"
+        );
+        const ingest = await ingestBacklogItem({
+          title: proposal.title,
+          body: [
+            proposal.description,
+            proposal.observedFriction ? `Observed friction: ${proposal.observedFriction}` : null,
+            `Category: ${category} | Severity: ${proposal.severity}`,
+            `From improvement proposal ${proposal.proposalId}`,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          workType: improvementCategoryToWorkType(category),
+          source: "automated-detection",
+          itemIdPrefix: "IMP",
+          submittedById: userId,
+          agentId: context?.agentId ?? null,
+          origin: { kind: "improvement", id: proposal.proposalId },
+        });
+        backlogItemId = ingest.itemId;
+        await prisma.improvementProposal.update({
+          where: { proposalId: proposal.proposalId },
+          data: { backlogItemId },
+        });
+      } catch (err) {
+        // Non-fatal: the proposal is still recorded even if the backlog projection fails.
+        console.error("[propose_improvement] backlog auto-file failed", err);
+      }
+
+      // Index the proposal in platform knowledge (was previously unreachable
+      // dead code after the return).
+      import("@/lib/semantic-memory")
+        .then(({ storePlatformKnowledge }) =>
+          storePlatformKnowledge({
+            entityId: proposal.proposalId,
+            entityType: "improvement",
+            title: proposal.title,
+            content: String(params["description"] ?? ""),
+          }),
+        )
+        .catch(() => {});
+
       return {
         success: true,
         entityId: proposal.proposalId,
-        message: `Improvement proposal ${proposal.proposalId} created: "${proposal.title}". It will be reviewed by a manager.`,
+        message: backlogItemId
+          ? `Improvement proposal ${proposal.proposalId} created and filed to the backlog as ${backlogItemId} for triage.`
+          : `Improvement proposal ${proposal.proposalId} created: "${proposal.title}".`,
       };
-      // Index in platform knowledge
-      import("@/lib/semantic-memory").then(({ storePlatformKnowledge }) =>
-        storePlatformKnowledge({
-          entityId: proposal.proposalId,
-          entityType: "improvement",
-          title: proposal.title,
-          content: String(params["description"] ?? ""),
-        })
-      ).catch(() => {});
     }
 
     case "propose_skill_improvement": {
@@ -12105,6 +12592,13 @@ export async function executeTool(
       const organizationId: string | null = org?.id ?? null;
 
       // 1. Commandments from Postgres (full dimension vector). Always applied.
+      // limit 50 (not 10): commandments are uncapped doctrine as of 2026-05-22
+      // and the comment above claims they are "Always applied" — but there are
+      // now 19+ commandment principles, so a limit of 10 silently truncated ~9
+      // of them from every decision (ordered by lastReviewedAt/title), letting
+      // process commandments crowd out doctrine like architecture-over-shortcuts.
+      // 50 matches listPrinciplesByTier's own default and leaves headroom.
+      // See docs/superpowers/specs/2026-06-05-situational-aware-decision-weighting-design.md §1 RC4.
       let commandments: Array<Record<string, unknown>> = [];
       try {
         commandments = (await listPrinciplesByTier(prisma, {
@@ -12112,7 +12606,7 @@ export async function executeTool(
           organizationId,
           appliesTo: callingPopulation,
           ringScope,
-          limit: 10,
+          limit: 50,
         })) as Array<Record<string, unknown>>;
       } catch (err) {
         console.warn("[principle_decide] commandment Postgres lookup failed:", err);
@@ -13001,7 +13495,7 @@ export async function executeTool(
       return {
         success: true,
         entityId: result.assessmentId,
-        message: `Submitted ${result.needIds.length} capability need${result.needIds.length === 1 ? "" : "s"} for review.`,
+        message: `Submitted ${result.needIds.length} capability need${result.needIds.length === 1 ? "" : "s"} and filed ${result.backlogItemIds?.length ?? 0} to the backlog for triage.`,
         data: result,
       };
     }
@@ -13659,6 +14153,10 @@ export async function executeTool(
       const result = await applyPlatformUpdate();
 
       switch (result.kind) {
+        case "engine-retired":
+          // BI-5B6C1C35: the /workspace merge engine is retired; the install
+          // advances only via the Self-Upgrade pipeline (governed-upgrade §5.0).
+          return { success: false, message: result.message, error: "Engine retired — use Self-Upgrade" };
         case "no-update-pending":
           return { success: false, message: result.message, error: "No update pending" };
         case "invalid-version":
@@ -13899,7 +14397,9 @@ export async function executeTool(
       };
     }
 
-    case "publish_to_linkedin": {
+    case "publish_to_linkedin":
+    case "send_marketing_email":
+    case "place_linkedin_ad": {
       const { publishApprovedDraft } = await import("./marketing/publish");
       const result = await publishApprovedDraft({
         draftId: String(params["draftId"] ?? ""),
@@ -13916,6 +14416,80 @@ export async function executeTool(
         success: true,
         entityId: result.publicationId,
         message: result.message,
+        data: result,
+      };
+    }
+
+    case "refresh_channel_kpis": {
+      const { pullChannelKpis } = await import("./marketing/kpi-pullback");
+      const result = await pullChannelKpis({
+        channelId: String(params["channelId"] ?? ""),
+        sinceDaysAgo: typeof params["sinceDaysAgo"] === "number" ? (params["sinceDaysAgo"] as number) : undefined,
+      });
+      if (!result.ok && result.snapshotsWritten === 0) {
+        return {
+          success: false,
+          message: `KPI pullback returned no snapshots. Failures: ${result.failures.map((f) => f.error).join("; ")}`,
+          error: "kpi_pullback_failed",
+        };
+      }
+      return {
+        success: true,
+        message: `Pulled ${result.snapshotsWritten} ${params["channelId"]} snapshot${result.snapshotsWritten === 1 ? "" : "s"}; wrote ${result.checkpointsWritten} MarketingKpiCheckpoint row${result.checkpointsWritten === 1 ? "" : "s"}.`,
+        data: result,
+      };
+    }
+
+    case "tick_marketing_scheduler": {
+      const { tickScheduler } = await import("./marketing/scheduler");
+      const result = await tickScheduler({});
+      return {
+        success: true,
+        message: `Scheduler tick: scanned ${result.pendingScanned}, fired ${result.fired}, failed ${result.failed}.`,
+        data: result,
+      };
+    }
+
+    case "plan_upcoming_marketing_drafts": {
+      const { planUpcomingForAssetTasks } = await import("./marketing/scheduler");
+      const { prisma } = await import("@dpf/db");
+      const org = await prisma.organization.findFirst({ select: { id: true } });
+      if (!org) {
+        return { success: false, message: "No organization configured.", error: "no_org" };
+      }
+      const result = await planUpcomingForAssetTasks({ organizationId: org.id });
+      return {
+        success: true,
+        message: `Scheduled ${result.scheduled} drafter run${result.scheduled === 1 ? "" : "s"}; skipped ${result.skipped}.`,
+        data: result,
+      };
+    }
+
+    case "set_marketing_autopilot_policy": {
+      const { setAutopilotPolicy } = await import("./marketing/autopilot");
+      const { prisma } = await import("@dpf/db");
+      const org = await prisma.organization.findFirst({ select: { id: true } });
+      if (!org) {
+        return { success: false, message: "No organization configured.", error: "no_org" };
+      }
+      const result = await setAutopilotPolicy({
+        organizationId: org.id,
+        channelId: String(params["channelId"] ?? ""),
+        enabled: params["enabled"] === true,
+        autoApproveBelowWords:
+          typeof params["autoApproveBelowWords"] === "number" ? (params["autoApproveBelowWords"] as number) : null,
+        autoPublishAfterMinutes:
+          typeof params["autoPublishAfterMinutes"] === "number" ? (params["autoPublishAfterMinutes"] as number) : null,
+        weeklyCeiling: typeof params["weeklyCeiling"] === "number" ? (params["weeklyCeiling"] as number) : 0,
+        userId,
+      });
+      if (!result.ok) {
+        return { success: false, message: result.error, error: "policy_invalid" };
+      }
+      return {
+        success: true,
+        entityId: result.policyId,
+        message: `Autopilot policy ${result.policyId} ${params["enabled"] === true ? "enabled" : "saved disabled"}.`,
         data: result,
       };
     }
@@ -14780,25 +15354,102 @@ export async function executeTool(
         params["args"] && typeof params["args"] === "object" && !Array.isArray(params["args"])
           ? (params["args"] as Record<string, unknown>)
           : {};
-      // The actual CoworkerActionEnvelope row creation (and per-turn N=3 cap
-      // + irreversible typed-phrase floor) lands in BI-0F9C291C. Until then
-      // the tool returns the structured proposal payload so the agent can
-      // see what would be proposed, and the chat handler can stub-write the
-      // envelope when wiring SSE emission.
+      // BI-0F9C291C wiring (part 3): write a CoworkerActionEnvelope row at
+      // proposal time. Status defaults to "proposed" via the schema;
+      // approveEnvelope / denyEnvelope from envelope-actions.ts drive the
+      // row toward terminal. coworkerAgentId + threadId are NOT NULL on
+      // the schema and come from the chat handler's execution context.
+      // chatMessageId stays null until BI-DF6079E9 part 2 plumbs the
+      // proposing AgentMessage id through. Per-turn N=3 destructive cap
+      // and irreversible typed-phrase hard floor remain follow-on chunks.
+      const coworkerAgentId = context?.agentId;
+      if (!coworkerAgentId) {
+        return {
+          success: false,
+          error: "missing_context",
+          message:
+            "screen_propose_action requires the executing coworker's agentId in execution context. Invoke via the chat handler, not directly.",
+        };
+      }
+      const threadId = context?.threadId;
+      if (!threadId) {
+        return {
+          success: false,
+          error: "missing_context",
+          message: "screen_propose_action requires threadId in execution context.",
+        };
+      }
+
+      let envelope;
+      try {
+        envelope = await prisma.coworkerActionEnvelope.create({
+          data: {
+            coworkerAgentId,
+            delegatingUserId: userId,
+            threadId,
+            // chatMessageId left null until BI-DF6079E9 part 2 plumbs
+            // the proposing AgentMessage id through the chat handler.
+            manifestActionId,
+            argsJson: args as import("@dpf/db").Prisma.InputJsonValue,
+            rationale,
+            // status defaults to "proposed" via schema.prisma column default.
+          },
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          error: "envelope_create_failed",
+          message: `Failed to create envelope: ${msg}`,
+        };
+      }
+
       return {
         success: true,
-        message: `Proposal '${manifestActionId}' dispatched.`,
+        entityId: envelope.id,
+        message: `Proposal '${manifestActionId}' recorded as envelope ${envelope.id} (proposed).`,
         data: {
           event: {
             type: "screen:action_proposed",
-            payload: { manifestActionId, rationale, args },
+            payload: {
+              envelopeId: envelope.id,
+              manifestActionId,
+              rationale,
+              args,
+              coworkerAgentId,
+              delegatingUserId: userId,
+            },
           },
-          note: "Envelope creation + per-turn cap enforcement lands in BI-0F9C291C.",
         },
       };
     }
 
     case "screen_dispatch_action": {
+      // BI-0F9C291C part 4 — end-to-end envelope execution. Closes the
+      // propose → approve → dispatch loop:
+      //   1. Load the envelope row (#1366 schema, #1415 propose-writes).
+      //   2. Verify it's in `approved` status (only approved envelopes
+      //      can dispatch — proposed envelopes must go through the
+      //      /api/agent/envelope/:id/approve route first).
+      //   3. Resolve manifestActionId → underlying MCP tool via
+      //      findManifestForRoute (the server-side mirror of the
+      //      client window registry — ALL_MANIFESTS is empty until
+      //      BI-6C9CC0EC registers Build Studio, so this path returns
+      //      a clear `no_manifest` error in the meantime).
+      //   4. Execute the underlying tool recursively under the
+      //      envelope's delegatingUserId (the human the coworker is
+      //      acting for — not whoever called dispatch, though they
+      //      should normally match).
+      //   5. Mark the envelope executed | failed via
+      //      markEnvelopeExecuted / markEnvelopeFailed from
+      //      envelope-actions.ts. Marking is best-effort; the side
+      //      effect already ran, so a finalisation write failure
+      //      doesn't roll back — it's logged in the response.
+      //
+      // Per-turn N=3 destructive cap and irreversible typed-phrase
+      // hard floor still land as separate follow-on chunks of
+      // BI-0F9C291C.
+
       const envelopeId =
         typeof params["envelopeId"] === "string" ? params["envelopeId"].trim() : "";
       if (!envelopeId) {
@@ -14808,15 +15459,126 @@ export async function executeTool(
           message: "screen_dispatch_action requires an envelopeId.",
         };
       }
+
+      const routeContext = context?.routeContext;
+      if (!routeContext) {
+        return {
+          success: false,
+          error: "missing_context",
+          message:
+            "screen_dispatch_action requires routeContext in execution context. Invoke via the chat handler, not directly.",
+        };
+      }
+
+      let envelope;
+      try {
+        envelope = await prisma.coworkerActionEnvelope.findUnique({ where: { id: envelopeId } });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          error: "envelope_load_failed",
+          message: `Failed to load envelope ${envelopeId}: ${msg}`,
+        };
+      }
+      if (!envelope) {
+        return {
+          success: false,
+          error: "envelope_not_found",
+          message: `Envelope ${envelopeId} not found.`,
+        };
+      }
+      if (envelope.status !== "approved") {
+        return {
+          success: false,
+          error: "envelope_not_approved",
+          message: `Envelope ${envelopeId} is in status '${envelope.status}'; must be 'approved' before dispatch.`,
+        };
+      }
+
+      // Resolve manifest + action server-side. Reuses the same
+      // route-matching the client registry uses (matchesRoute is
+      // exported from screen-manifest-registry).
+      const { findManifestForRoute } = await import("./coworker/manifests/index");
+      const manifest = findManifestForRoute(routeContext);
+      if (!manifest) {
+        return {
+          success: false,
+          error: "no_manifest",
+          message: `No ScreenManifest is registered for routeContext '${routeContext}'. ALL_MANIFESTS may still be empty (first consumer lands in BI-6C9CC0EC).`,
+        };
+      }
+      const domainAction = manifest.domainActions.find(
+        (a) => a.actionId === envelope.manifestActionId,
+      );
+      if (!domainAction) {
+        return {
+          success: false,
+          error: "action_not_in_manifest",
+          message: `Manifest '${manifest.surfaceId}' has no domain action '${envelope.manifestActionId}'.`,
+        };
+      }
+
+      // Recurse: execute the underlying tool under the envelope's
+      // delegating user (not necessarily the caller — see the doc
+      // block above).
+      const toolName = domainAction.tool;
+      const toolArgs =
+        envelope.argsJson && typeof envelope.argsJson === "object" && !Array.isArray(envelope.argsJson)
+          ? (envelope.argsJson as Record<string, unknown>)
+          : {};
+
+      const { markEnvelopeExecuted, markEnvelopeFailed } = await import("./coworker/envelope-actions");
+
+      let toolResult: ToolResult;
+      try {
+        toolResult = await executeTool(toolName, toolArgs, envelope.delegatingUserId, context);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // The underlying tool threw — mark the envelope failed, then
+        // return a structured tool_execution_threw response.
+        await markEnvelopeFailed(envelopeId).catch(() => undefined);
+        return {
+          success: false,
+          error: "tool_execution_threw",
+          message: `Underlying tool '${toolName}' threw: ${msg}`,
+          data: {
+            event: {
+              type: "screen:action_dispatch_failed",
+              payload: { envelopeId, tool: toolName, manifestActionId: envelope.manifestActionId, error: msg },
+            },
+          },
+        };
+      }
+
+      // Finalise the envelope based on the tool's structured success
+      // flag. markEnvelope* uses the state machine (#1390); a write
+      // failure here doesn't change the fact the side effect already
+      // ran — log it on the response so the chat handler can surface.
+      const finalise = toolResult.success
+        ? await markEnvelopeExecuted(envelopeId)
+        : await markEnvelopeFailed(envelopeId);
+
       return {
-        success: true,
-        message: `Envelope ${envelopeId} dispatch requested.`,
+        success: toolResult.success,
+        entityId: envelopeId,
+        message: toolResult.success
+          ? `Envelope ${envelopeId} executed (${toolName}): ${toolResult.message}`
+          : `Envelope ${envelopeId} dispatch reported failure (${toolName}): ${toolResult.message}`,
         data: {
           event: {
-            type: "screen:dispatch_requested",
-            payload: { envelopeId },
+            type: "screen:action_dispatched",
+            payload: {
+              envelopeId,
+              tool: toolName,
+              manifestActionId: envelope.manifestActionId,
+              ok: toolResult.success,
+            },
           },
-          note: "Envelope execution (read row → run underlying tool → mark executed) lands in BI-0F9C291C.",
+          toolResult,
+          // Surface finalisation outcome when it itself was refused —
+          // e.g. envelope already terminal due to a race with cancel.
+          ...(finalise.ok ? {} : { finaliseRefused: finalise.reason }),
         },
       };
     }

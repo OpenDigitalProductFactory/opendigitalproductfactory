@@ -85,6 +85,24 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     inbound: "success",
     outbound: "warning",
   },
+  aiFinance: {
+    tracked: "success",
+    needs_setup: "warning",
+    untracked: "danger",
+    active: "success",
+    draft: "warning",
+    seeded: "warning",
+    attention_needed: "danger",
+  },
+  aiFinanceWork: {
+    none: "success",
+    plan_details_needed: "warning",
+    commitment_details_needed: "warning",
+    browser_profile_needed: "warning",
+    missing_usage_source: "danger",
+    underused_commitment: "warning",
+    critical_low_allowance: "danger",
+  },
   // Compliance control implementation status (was raw Tailwind palette classes).
   controlStatus: {
     planned: "info",
@@ -130,6 +148,54 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
   complianceRegulation: {
     active: "success",
     inactive: "danger",
+  },
+  // Marketing strategy/work-product lifecycle.
+  marketing: {
+    draft: "neutral",
+    ready: "info",
+    active: "success",
+    pending: "warning",
+    "pending-review": "warning",
+    "needs-changes": "warning",
+    approved: "success",
+    rejected: "danger",
+    stale: "warning",
+    published: "success",
+    archived: "neutral",
+  },
+  // Coworker-to-coworker (A2A) interaction state on the AI Operations Map.
+  // Keeps the A2A panel's state→color semantics in the one shared registry
+  // instead of a private color map. See A2aInteractionsPanel.
+  a2aInteraction: {
+    active: "accent",
+    completed: "success",
+    failed: "danger",
+    blocked: "warning",
+  },
+  // Deliberation consensus outcome on the AI Operations Map deliberation lens.
+  deliberationConsensus: {
+    consensus: "success",
+    "partial-consensus": "warning",
+    "no-consensus": "danger",
+    "insufficient-evidence": "warning",
+    pending: "accent",
+  },
+  // Platform issue-report severity (Admin > Issue Reports). Mirrors the
+  // operator-facing severity semantics where an unbreached high is already
+  // danger-tier, distinct from the generic `severity` ramp below.
+  issueSeverity: {
+    info: "info",
+    low: "neutral",
+    medium: "warning",
+    high: "danger",
+    critical: "danger",
+  },
+  // Platform issue-report lifecycle bucket (needs_action/triaged/resolved/...).
+  issueStatus: {
+    needs_action: "danger",
+    triaged: "warning",
+    resolved: "success",
+    suppressed: "neutral",
   },
   // Generic severity ramp, reusable by any surface that has none of its own.
   severity: {

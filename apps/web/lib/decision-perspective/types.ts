@@ -107,7 +107,7 @@ export type PerspectiveMaterialScore = {
   reviewFactor: number;
   promotionFactor: number;
   effectiveWeight: number;
-  exclusionReason: "contradicted" | "rejected" | "revoked" | null;
+  exclusionReason: "contradicted" | "superseded" | "rejected" | "revoked" | null;
 };
 
 export type DecisionPerspectiveEvaluationInput = {

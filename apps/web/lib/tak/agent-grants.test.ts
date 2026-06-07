@@ -5,6 +5,7 @@ import {
   isToolAllowedByGrants,
   getAgentToolGrants,
   getToolGrantMapping,
+  COWORKER_READ_BASELINE_GRANTS,
 } from "./agent-grants";
 
 describe("TOOL_TO_GRANTS — Build / Sandbox entries", () => {
@@ -114,6 +115,7 @@ describe("TOOL_TO_GRANTS — Marketing entries", () => {
     const tools = [
       "create_marketing_campaign_brief",
       "create_marketing_asset_task",
+      "draft_marketing_asset",
       "record_marketing_kpi_checkpoint",
       "create_marketing_automation_candidate",
     ];
@@ -423,6 +425,7 @@ describe("getToolGrantMapping reflects all entries", () => {
     expect(mapping["save_marketing_review"]).toEqual(["marketing_write"]);
     expect(mapping["create_marketing_campaign_brief"]).toEqual(["marketing_write"]);
     expect(mapping["create_marketing_asset_task"]).toEqual(["marketing_write"]);
+    expect(mapping["draft_marketing_asset"]).toEqual(["marketing_write"]);
     expect(mapping["record_marketing_kpi_checkpoint"]).toEqual(["marketing_write"]);
     expect(mapping["create_marketing_automation_candidate"]).toEqual(["marketing_write"]);
     expect(mapping["generate_custom_archetype"]).toEqual(["marketing_write"]);
@@ -493,6 +496,17 @@ describe("agent registry grant lookup", () => {
     expect(isToolAllowedByGrants("get_finance_period_summary", financeGrants ?? [])).toBe(true);
   });
 
+  it("lets the finance specialist drive browser-use for authenticated billing evidence", () => {
+    const financeGrants = getAgentToolGrants("finance-agent");
+
+    expect(financeGrants).toEqual(expect.arrayContaining(["browser_drive"]));
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_open", financeGrants ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_extract", financeGrants ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_screenshot", financeGrants ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_act", financeGrants ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_close", financeGrants ?? [])).toBe(true);
+  });
+
   it("lets the build specialist use the read-only code graph tools", () => {
     const bySlug = getAgentToolGrants("build-specialist");
     const byRegistryId = getAgentToolGrants("AGT-WS-BUILD");
@@ -504,6 +518,15 @@ describe("agent registry grant lookup", () => {
     expect(isToolAllowedByGrants("search_code_graph", bySlug ?? [])).toBe(true);
     expect(isToolAllowedByGrants("trace_code_surface", bySlug ?? [])).toBe(true);
     expect(isToolAllowedByGrants("find_related_tests", bySlug ?? [])).toBe(true);
+  });
+
+  it("lets the build specialist drive Build Studio screen controls", () => {
+    const grants = getAgentToolGrants("build-specialist");
+
+    expect(grants).toEqual(expect.arrayContaining(["coworker_screen_read", "coworker_screen_drive"]));
+    expect(isToolAllowedByGrants("screen_describe", grants ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("screen_select_entity", grants ?? [])).toBe(true);
+    expect(isToolAllowedByGrants("screen_navigate", grants ?? [])).toBe(true);
   });
 
   it("lets the admin assistant use read-only admin and backlog tools from the registry seed", () => {
@@ -674,5 +697,116 @@ describe("Existing coworkers — no behavior regression from the refactor", () =
   it("COO still cannot call build-lifecycle (build_promote not in their set)", () => {
     // Sanity: backlog_write does NOT imply build_lifecycle (separate finer grant).
     expect(isToolAllowedByGrants("promote_to_build_studio", cooGrants)).toBe(false);
+  });
+});
+
+describe("TOOL_TO_GRANTS — Browser-driving entries (EP-BROWSER-DRIVE, Verdict 5)", () => {
+  it("browse_act (side-effecting) requires browser_drive, not browser_read", () => {
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_act", ["browser_drive"])).toBe(true);
+    // browser_read alone is NOT enough to drive — the whole point of the split.
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_act", ["browser_read"])).toBe(false);
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_act", [])).toBe(false);
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_act", ["backlog_write"])).toBe(false);
+  });
+
+  it("read tools require browser_read, and browser_drive satisfies them via implication", () => {
+    for (const tool of [
+      "mcp-browser-use__browse_open",
+      "mcp-browser-use__browse_extract",
+      "mcp-browser-use__browse_screenshot",
+      "mcp-browser-use__browse_close",
+      "mcp-browser-use__browse_run_tests",
+    ]) {
+      expect(isToolAllowedByGrants(tool, ["browser_read"])).toBe(true);
+      // browser_drive implies browser_read, so a driver can also read.
+      expect(isToolAllowedByGrants(tool, ["browser_drive"])).toBe(true);
+      expect(isToolAllowedByGrants(tool, [])).toBe(false);
+    }
+  });
+
+  it("browse_run_tests stays QA-scoped on browser_read, never browser_drive", () => {
+    expect(isToolAllowedByGrants("mcp-browser-use__browse_run_tests", ["browser_read"])).toBe(true);
+  });
+
+  it("GRANT_IMPLICATIONS is one-way: browser_drive implies browser_read, not the reverse", () => {
+    expect(GRANT_IMPLICATIONS["browser_drive"]).toEqual(["browser_read"]);
+    expect(expandGrants(["browser_drive"])).toContain("browser_read");
+    expect(expandGrants(["browser_read"])).not.toContain("browser_drive");
+  });
+
+  it("the namespaced browser tools are present in the grant mapping (so they don't default-deny)", () => {
+    const map = getToolGrantMapping();
+    expect(map["mcp-browser-use__browse_act"]).toEqual(["browser_drive"]);
+    expect(map["mcp-browser-use__browse_open"]).toEqual(["browser_read"]);
+  });
+});
+
+// BI-FD7E4D72 — every coworker gets a read-only baseline so it can see its
+// page's coordination data and read the docs, source, and code graph. The
+// coworker path (agent-coworker.ts) unions this set with the agent's own grants
+// before tool gating in getAvailableTools.
+describe("COWORKER_READ_BASELINE_GRANTS — page visibility + docs/source/code-graph reads", () => {
+  it("is read-only: only *_read grants plus file_read", () => {
+    for (const g of COWORKER_READ_BASELINE_GRANTS) {
+      expect(g === "file_read" || g.endsWith("_read")).toBe(true);
+    }
+  });
+
+  it("unlocks the page coordination, docs, source, and code-graph read tools", () => {
+    const baseline = [...COWORKER_READ_BASELINE_GRANTS];
+    // The exact tools the operator's Dev Loop question needed:
+    expect(isToolAllowedByGrants("get_runtime_coordination_map", baseline)).toBe(true);
+    expect(isToolAllowedByGrants("list_nonprod_environment_leases", baseline)).toBe(true);
+    // Documentation:
+    expect(isToolAllowedByGrants("doc_search", baseline)).toBe(true);
+    expect(isToolAllowedByGrants("doc_load", baseline)).toBe(true);
+    // Source code:
+    expect(isToolAllowedByGrants("read_project_file", baseline)).toBe(true);
+    expect(isToolAllowedByGrants("search_project_files", baseline)).toBe(true);
+    expect(isToolAllowedByGrants("read_source_at_version", baseline)).toBe(true);
+    // Code graph ("the code graph especially"):
+    expect(isToolAllowedByGrants("search_code_graph", baseline)).toBe(true);
+    expect(isToolAllowedByGrants("trace_code_surface", baseline)).toBe(true);
+    expect(isToolAllowedByGrants("find_related_tests", baseline)).toBe(true);
+    // Knowledge / wiki:
+    expect(isToolAllowedByGrants("search_knowledge", baseline)).toBe(true);
+    expect(isToolAllowedByGrants("wiki_query", baseline)).toBe(true);
+  });
+
+  it("does NOT unlock any write, sandbox, deploy, or admin authority", () => {
+    const baseline = [...COWORKER_READ_BASELINE_GRANTS];
+    expect(isToolAllowedByGrants("create_backlog_item", baseline)).toBe(false);
+    expect(isToolAllowedByGrants("update_backlog_item", baseline)).toBe(false);
+    expect(isToolAllowedByGrants("write_sandbox_file", baseline)).toBe(false);
+    expect(isToolAllowedByGrants("launch_sandbox", baseline)).toBe(false);
+    expect(isToolAllowedByGrants("claim_nonprod_environment_lease", baseline)).toBe(false);
+    expect(isToolAllowedByGrants("register_runtime_target", baseline)).toBe(false);
+    expect(isToolAllowedByGrants("execute_promotion", baseline)).toBe(false);
+    expect(isToolAllowedByGrants("admin_run_command", baseline)).toBe(false);
+  });
+
+  it("lifts the ops coordinator (AGT-WS-OPS) from backlog-only to page-visible when unioned", () => {
+    const opsGrants = getAgentToolGrants("AGT-WS-OPS") ?? [];
+    // Before: the backlog-scoped agent (backlog_read/backlog_write/registry_read)
+    // cannot see the runtime coordination map, the code graph, or the source.
+    // (Note: doc_search/doc_load are already reachable via its registry_read —
+    // TOOL_TO_GRANTS is ANY-of — so the docs were never the gap; the page's own
+    // coordination data and the code graph were.)
+    expect(isToolAllowedByGrants("get_runtime_coordination_map", opsGrants)).toBe(false);
+    expect(isToolAllowedByGrants("list_nonprod_environment_leases", opsGrants)).toBe(false);
+    expect(isToolAllowedByGrants("search_code_graph", opsGrants)).toBe(false);
+    expect(isToolAllowedByGrants("trace_code_surface", opsGrants)).toBe(false);
+    expect(isToolAllowedByGrants("read_project_file", opsGrants)).toBe(false);
+
+    // After: union with the coworker read baseline (what getAvailableTools does).
+    const merged = Array.from(new Set([...opsGrants, ...COWORKER_READ_BASELINE_GRANTS]));
+    expect(isToolAllowedByGrants("get_runtime_coordination_map", merged)).toBe(true);
+    expect(isToolAllowedByGrants("list_nonprod_environment_leases", merged)).toBe(true);
+    expect(isToolAllowedByGrants("search_code_graph", merged)).toBe(true);
+    expect(isToolAllowedByGrants("trace_code_surface", merged)).toBe(true);
+    expect(isToolAllowedByGrants("read_project_file", merged)).toBe(true);
+    expect(isToolAllowedByGrants("doc_search", merged)).toBe(true);
+    // But its own backlog-write authority is preserved, not lost.
+    expect(isToolAllowedByGrants("create_backlog_item", merged)).toBe(true);
   });
 });

@@ -109,6 +109,28 @@ export async function publishApprovedDraft(input: {
     };
   }
 
+  // Phase 4: spend gate for paid channels. Runs BEFORE the adapter so a
+  // ceiling violation can never leak through to a real ads API call.
+  if (adapter.capabilities.includes("place-ad")) {
+    const { assertSpendWithinCeiling } = await import("./spend-gate");
+    const metadata = (draft.metadata ?? {}) as { dailyBudgetCents?: number; totalBudgetCents?: number };
+    const proposedSpendCents =
+      metadata.totalBudgetCents ?? metadata.dailyBudgetCents ?? 0;
+    const gate = await assertSpendWithinCeiling({
+      organizationId: draft.organizationId,
+      channelId: adapter.channelId,
+      proposedSpendCents,
+    });
+    if (!gate.ok) {
+      return {
+        ok: false,
+        error: "spend_ceiling_exceeded",
+        retryable: false,
+        message: gate.reason,
+      };
+    }
+  }
+
   const result = await adapter.publish(draft, credential);
   if (!result.ok) {
     return {

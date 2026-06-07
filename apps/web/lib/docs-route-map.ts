@@ -183,23 +183,6 @@ export function buildContextualDocsHref(pathname: string): string | null {
     : `${docsPath}?sourceRoute=${encodeURIComponent(pathname)}`;
 }
 
-export function getUserGuideDocsDir() {
-  const fs = require("node:fs") as typeof import("node:fs");
-  const path = require("node:path") as typeof import("node:path");
-  const repoRootPath = path.resolve(process.cwd(), "docs", "user-guide");
-  const appPath = path.resolve(process.cwd(), "..", "..", "docs", "user-guide");
-  return fs.existsSync(repoRootPath) ? repoRootPath : appPath;
-}
-
-export function docsPathExists(docsPath: string): boolean {
-  const fs = require("node:fs") as typeof import("node:fs");
-  const path = require("node:path") as typeof import("node:path");
-  if (docsPath === "/docs") return true;
-
-  const slug = docsPath.replace(/^\/docs\//, "");
-  return fs.existsSync(path.join(getUserGuideDocsDir(), `${slug}.md`));
-}
-
 export function getMappedDocsRoutes(): DocsRouteEntry[] {
   return [...DOCS_ROUTE_MAP];
 }

@@ -110,18 +110,39 @@ export function planKernelMemorySeed(
     const content = renderMemoryFile(fm, slug);
 
     let mode: PlanWriteMode = "create";
-    if (_exists && _exists(destPath)) {
+    let skipBecauseUnchanged = false;
+    // EAFP: read the destination file directly instead of using an existsSync
+    // guard before readFileSync. The existsSync→readFileSync pattern is a TOCTOU
+    // (time-of-check-time-of-use) race condition that CodeQL flags as a
+    // potential security vulnerability (even in non-server contexts, it's still
+    // correct to prefer atomic-ish reads). If the file is absent, readFileSync
+    // throws and the catch block keeps mode at "create".
+    try {
+      const existingContent = _readFile(destPath, "utf8");
+      // File exists and is readable. Check mtime for user-edit detection.
       const mtime = _stat(destPath).mtime.getTime();
       if (baseline > 0 && mtime > baseline) {
         mode = "preserve-user-edit";
+      } else if (existingContent === content) {
+        // Phase 6 idempotence: content already matches — skip the write.
+        skipBecauseUnchanged = true;
+        mode = "update";
       } else {
         mode = "update";
       }
+    } catch {
+      // File absent or unreadable — default "create" mode applies.
     }
 
     if (mode === "preserve-user-edit") {
       // Don't emit a write — but still index it.
       indexLines.push(`- [kernel: ${fm.title ?? slug}](kernel_${slug}.md) — user-edited, preserved`);
+      continue;
+    }
+
+    if (skipBecauseUnchanged) {
+      // Already converged; index it but emit no write.
+      indexLines.push(`- [kernel: ${fm.title ?? slug}](kernel_${slug}.md) — tier: ${fm.principleTier ?? "unknown"}`);
       continue;
     }
 
@@ -137,6 +158,28 @@ export function planKernelMemorySeed(
     "\n";
   const indexPath = join(contributorMemoryDir, projectSlug, "MEMORY.md");
 
+  // Phase 6: only emit the index when (a) we have writes to surface, OR
+  // (b) the existing index content differs from what we'd write. The Phase 5
+  // adapter rewrote the index on every run; Phase 6 makes that a noop too.
+  let indexEntry: { path: string; content: string } | null = null;
+  if (writes.length > 0) {
+    indexEntry = { path: indexPath, content: indexContent };
+  } else if (_exists && _exists(indexPath)) {
+    try {
+      const existingIndex = _readFile(indexPath, "utf8");
+      if (existingIndex !== indexContent) {
+        indexEntry = { path: indexPath, content: indexContent };
+      }
+    } catch {
+      indexEntry = { path: indexPath, content: indexContent };
+    }
+  } else {
+    // No writes and no existing index — first-run, index alongside the seeds.
+    // But writes.length === 0 means there were no seeds either; still emit
+    // the index for diagnostics (it lists the principles we considered).
+    indexEntry = { path: indexPath, content: indexContent };
+  }
+
   const rationale =
     writes.length === 0
       ? `Kernel memory already converged for ${projectSlug} (${indexLines.length} principles indexed).`
@@ -144,7 +187,7 @@ export function planKernelMemorySeed(
 
   return {
     writes,
-    indexEntry: writes.length > 0 ? { path: indexPath, content: indexContent } : null,
+    indexEntry,
     rationale,
   };
 }

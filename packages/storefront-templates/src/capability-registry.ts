@@ -5,6 +5,18 @@ import type {
   PortfolioRole,
 } from "./types";
 
+/**
+ * Operator-facing copy for the setup-wizard / admin opt-in question, for
+ * capabilities that should *ask* the operator whether to activate (i.e. those
+ * that derive to `recommended` — see `resolveCapabilityActivation`). Capabilities
+ * with no `setupPrompt` are not surfaced as a setup question. Default microcopy
+ * lives here next to the capability; localization/overrides can layer on later.
+ */
+export interface CapabilitySetupPrompt {
+  question: string;
+  helpText?: string;
+}
+
 export interface CapabilityRegistryEntry {
   label: string;
   portfolio: PortfolioRole;
@@ -12,6 +24,7 @@ export interface CapabilityRegistryEntry {
   defaultOwnershipScope: OwnershipScope;
   defaultIsolation: CapabilityIsolation;
   surfaces: string[];
+  setupPrompt?: CapabilitySetupPrompt;
 }
 
 export const CAPABILITY_REGISTRY = {
@@ -128,6 +141,18 @@ export const CAPABILITY_REGISTRY = {
     defaultIsolation: "strict-customer-scope",
     surfaces: ["remote-support", "customers"],
   },
+  "partner-program": {
+    label: "Partner Program",
+    portfolio: "productsAndServicesSold",
+    defaultOwnershipScope: "partner-account",
+    defaultIsolation: "strict-partner-scope",
+    surfaces: ["partners", "partner-portal"],
+    setupPrompt: {
+      question: "Do you sell through partners or resellers?",
+      helpText:
+        "Turns on a partner portal, deal registration, and partner tiers for resellers, distributors, or referral partners. You can add this later.",
+    },
+  },
 } as const satisfies Record<string, CapabilityRegistryEntry>;
 
 export type CapabilityKey = keyof typeof CAPABILITY_REGISTRY;
@@ -136,4 +161,18 @@ export const CAPABILITY_KEYS = Object.keys(CAPABILITY_REGISTRY) as CapabilityKey
 
 export function isCapabilityKey(value: string): value is CapabilityKey {
   return Object.prototype.hasOwnProperty.call(CAPABILITY_REGISTRY, value);
+}
+
+/**
+ * Returns the setup-wizard opt-in prompt for a capability, or `null` if the
+ * capability is not surfaced as a setup question. The wizard should only ask
+ * for capabilities whose resolved activation has `promptAtSetup === true`
+ * (see `resolveCapabilityActivation`) *and* that declare a `setupPrompt`.
+ */
+export function getCapabilitySetupPrompt(
+  capabilityKey: CapabilityKey | string,
+): CapabilitySetupPrompt | null {
+  if (!isCapabilityKey(capabilityKey)) return null;
+  const entry: CapabilityRegistryEntry = CAPABILITY_REGISTRY[capabilityKey];
+  return entry.setupPrompt ?? null;
 }

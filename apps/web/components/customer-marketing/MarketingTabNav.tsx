@@ -6,6 +6,9 @@ import { usePathname } from "next/navigation";
 const TABS = [
   { label: "Overview", href: "/customer/marketing" },
   { label: "Strategy", href: "/customer/marketing/strategy" },
+  { label: "Campaigns", href: "/customer/marketing/campaigns" },
+  { label: "Funnel", href: "/customer/marketing/funnel" },
+  { label: "Automation", href: "/customer/marketing/automation" },
 ] as const;
 
 export function MarketingTabNav() {

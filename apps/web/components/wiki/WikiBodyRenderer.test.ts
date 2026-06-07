@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { splitWikilinks } from "./WikiBodyRenderer";
+import { renderToStaticMarkup } from "react-dom/server";
+import { splitMarkdownSections, splitWikilinks, WikiBodyRenderer } from "./WikiBodyRenderer";
 
 describe("splitWikilinks", () => {
   it("returns the whole string when no wikilinks are present", () => {
@@ -47,5 +48,35 @@ describe("splitWikilinks", () => {
 
   it("returns an empty array for an empty string", () => {
     expect(splitWikilinks("")).toEqual([]);
+  });
+});
+
+describe("splitMarkdownSections", () => {
+  it("keeps introduction markdown visible before collapsible h2 sections", () => {
+    expect(splitMarkdownSections("Intro copy\n\n## Rule\nBody\n\n## Why\nMore")).toEqual([
+      { kind: "intro", markdown: "Intro copy" },
+      { kind: "section", heading: "Rule", markdown: "Body" },
+      { kind: "section", heading: "Why", markdown: "More" },
+    ]);
+  });
+
+  it("does not split headings inside fenced code blocks", () => {
+    expect(
+      splitMarkdownSections("## Rule\n\n```md\n## Not a section\n```\n\nBody"),
+    ).toEqual([
+      { kind: "section", heading: "Rule", markdown: "```md\n## Not a section\n```\n\nBody" },
+    ]);
+  });
+
+  it("renders h2 sections as native disclosure controls", () => {
+    const html = renderToStaticMarkup(
+      WikiBodyRenderer({ body: "## Rule\nBody\n\n## Why\nMore" }),
+    );
+
+    expect(html).toContain("<details");
+    expect(html).toContain("<summary");
+    expect(html).toContain("Rule");
+    expect(html).toContain("Why");
+    expect(html).toContain("Body");
   });
 });

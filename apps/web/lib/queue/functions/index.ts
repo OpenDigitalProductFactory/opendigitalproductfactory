@@ -6,10 +6,15 @@ import { mcpCatalogSync } from "./mcp-catalog-sync";
 import { codeGraphReconcileEvent, codeGraphReconcileScheduled } from "./code-graph-reconcile";
 import { routeWorkItem } from "./route-work-item";
 import { issueReportTriage } from "./issue-report-triage";
+import { backlogTriageDrain } from "./backlog-triage-drain";
+import { coworkerRegressionDetect } from "./coworker-regression-detect";
 import { agentTaskDispatch } from "./agent-task-dispatch";
 import { taskrunWatchdog } from "./taskrun-watchdog";
 import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
+import { materialFreshnessDecay } from "./material-freshness-decay";
+import { researchExecute } from "./research-execute";
+import { researchScheduleScan } from "./research-schedule";
 import { buildReviewVerification } from "./build-review-verification";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
@@ -37,6 +42,7 @@ import {
   neo4jBackupRequested,
   qdrantBackupRequested,
 } from "./postgres-daily-backup";
+import { runtimeTargetJanitor } from "./runtime-target-janitor";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 export const scheduledFunctions = [
@@ -46,6 +52,8 @@ export const scheduledFunctions = [
   infraPrune,
   codeGraphReconcileScheduled,
   issueReportTriage,
+  backlogTriageDrain,
+  coworkerRegressionDetect,
   agentTaskDispatch,
   taskrunWatchdog,
   governedBacklogTeeUpScheduled,
@@ -54,9 +62,12 @@ export const scheduledFunctions = [
   wikiLint,
   skillMetricsAggregator,
   skillCurator,
+  researchScheduleScan,
+  materialFreshnessDecay,
   allBackupsDailyScheduled,
   postgresDailyBackupScheduled,
   selfUpgradeScheduled,
+  runtimeTargetJanitor,  // BI-AD949172: RT heartbeat sweep + lease expiry, hourly
 ];
 
 export const eventFunctions = [
@@ -67,6 +78,7 @@ export const eventFunctions = [
   evalBackground,
   probeBackground,
   brandExtract,
+  researchExecute,
   buildReviewVerification,
   assuranceBomGenerate,
   assuranceScanRun,

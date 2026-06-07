@@ -98,6 +98,42 @@ describe("draft state machine", () => {
   });
 });
 
+describe("Phase 5 catalogs", () => {
+  it("exposes SCHEDULED_ACTION_KIND + STATUS", async () => {
+    const { SCHEDULED_ACTION_KIND, SCHEDULED_ACTION_STATUS } = await import("./execution");
+    expect([...SCHEDULED_ACTION_KIND].sort()).toEqual([
+      "draft-marketing-asset",
+      "publish-approved-draft",
+      "pull-channel-kpis",
+    ]);
+    expect([...SCHEDULED_ACTION_STATUS].sort()).toEqual([
+      "cancelled",
+      "failed",
+      "fired",
+      "paused",
+      "pending",
+    ]);
+  });
+
+  it("scheduled-action state machine: terminal = fired + cancelled", async () => {
+    const { isAllowedScheduledTransition } = await import("./execution");
+    expect(isAllowedScheduledTransition("pending", "fired")).toBe(true);
+    expect(isAllowedScheduledTransition("pending", "paused")).toBe(true);
+    expect(isAllowedScheduledTransition("fired", "pending")).toBe(false);
+    expect(isAllowedScheduledTransition("cancelled", "pending")).toBe(false);
+    expect(isAllowedScheduledTransition("failed", "pending")).toBe(true); // retry path
+    expect(isAllowedScheduledTransition("paused", "pending")).toBe(true);
+  });
+
+  it("autopilot allowlist excludes the ad channel", async () => {
+    const { isAutopilotAllowedChannel } = await import("./execution");
+    expect(isAutopilotAllowedChannel("linkedin-personal-social")).toBe(true);
+    expect(isAutopilotAllowedChannel("email-postmark")).toBe(true);
+    expect(isAutopilotAllowedChannel("linkedin-ads")).toBe(false);
+    expect(isAutopilotAllowedChannel("snapchat")).toBe(false);
+  });
+});
+
 describe("draftStatusForDecision", () => {
   it("maps approved decision to approved status", () => {
     expect(draftStatusForDecision("approved")).toBe("approved");

@@ -103,11 +103,24 @@ export async function resolvePortalContextEnvelopeUncached(
   // build was created — every evidence slot is a "gap" until something fills
   // it, so a brand-new FB-* always showed an alarming yellow warning before
   // the user had done anything. The gate now only triggers after the
-  // build has moved past Ideate (Ideate is conversational / scoping; real
-  // evidence production starts at Plan and beyond).
+  // build has moved past Ideate AND a 30-second grace window has elapsed.
+  //
+  // BI-DFC11F59 (2026-06-03): the original gate (`!== "ideate"`) was too coarse.
+  // The moment Ideate → Plan transition fires, the Plan-phase evidence set is
+  // "missing" by definition because Plan hasn't run yet. This triggered the
+  // same alarming warning at every phase boundary. Option-1 fix: suppress for
+  // 30s after the most recent FeatureBuild.updatedAt update (phase transitions
+  // always bump updatedAt, so updatedAt ≈ phaseEnteredAt within one DB write).
+  // This covers Dale's live repro on FB-6F7D6AC4 transitioning Ideate → Plan.
+  const MISSING_EVIDENCE_GRACE_MS = 30_000; // 30 seconds after phase entry
   const featureBuildPhase = workProjection.work.featureBuild?.phase ?? null;
+  const featureBuildUpdatedAt = workProjection.work.featureBuild?.updatedAt ?? null;
+  const msSincePhaseEntry = featureBuildUpdatedAt
+    ? now.getTime() - new Date(featureBuildUpdatedAt).getTime()
+    : Infinity;
   const phaseHasAttemptedEvidence = featureBuildPhase !== null
-    && featureBuildPhase !== "ideate";
+    && featureBuildPhase !== "ideate"
+    && msSincePhaseEntry > MISSING_EVIDENCE_GRACE_MS;
   if (phaseHasAttemptedEvidence && evidence.some((item) => item.isGap)) {
     attention.push({
       kind: "missing_evidence",

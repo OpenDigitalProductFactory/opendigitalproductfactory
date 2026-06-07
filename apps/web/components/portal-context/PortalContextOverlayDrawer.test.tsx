@@ -105,6 +105,7 @@ function makeEnvelope(overrides: Partial<PortalContextEnvelope> = {}): PortalCon
         phase: "implement",
         status: "active",
         evidenceComplete: false,
+        updatedAt: null,
         href: "/build?buildId=FB-123",
       },
       taskRun: null,

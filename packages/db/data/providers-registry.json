@@ -41,9 +41,8 @@
     "category": "direct",
     "cliEngine": "claude",
     "baseUrl": "https://api.anthropic.com/v1",
-    "authMethod": "api_key",
+    "authMethod": "oauth2_authorization_code",
     "supportedAuthMethods": [
-      "api_key",
       "oauth2_authorization_code"
     ],
     "authHeader": "x-api-key",
@@ -57,7 +56,7 @@
     "docsUrl": "https://code.claude.com/docs",
     "consoleUrl": "https://claude.ai/settings/billing",
     "billingLabel": "Max subscription (included)",
-    "costPerformanceNotes": "Uses your Claude Max subscription. Sign in via OAuth or paste a token from 'claude setup-token'. No prompt caching, no 1M context.",
+    "costPerformanceNotes": "Uses your Claude Max subscription. Sign in via OAuth. No prompt caching, no 1M context.",
     "authorizeUrl": "https://claude.ai/oauth/authorize",
     "tokenUrl": "https://platform.claude.com/v1/oauth/token",
     "oauthClientId": "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
@@ -67,7 +66,7 @@
     "catalogVisibility": "visible",
     "userFacing": {
       "plainDescription": "Anthropic's Claude models accessed through a subscription plan.",
-      "authExplained": "Sign in with your Claude account via OAuth, or paste a subscription token. No separate API key needed.",
+      "authExplained": "Sign in with your Claude account via OAuth. No separate API key needed.",
       "costTier": "subscription",
       "costExplained": "Included in your Claude subscription. Availability can vary by account and backend state.",
       "capabilitySummary": "Good at conversation, analysis, code, and governed platform tool use through the Claude CLI adapter.",

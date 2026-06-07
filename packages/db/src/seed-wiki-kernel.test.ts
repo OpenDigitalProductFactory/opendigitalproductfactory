@@ -610,4 +610,52 @@ describe("seed-wiki-kernel: buildKernelQdrantPoints", () => {
     );
     expect((points[0].payload.contentPreview as string).length).toBe(500);
   });
+
+  it("writes principle payload fields for principle pages and omits them for others (BI-30AA6B76)", () => {
+    const mixed: SeedablePage[] = [
+      {
+        id: "wp_principle_1",
+        slug: "principles/architecture-over-shortcuts",
+        title: "Architecture Over Shortcuts",
+        body: "Prefer the architecturally sound solution...",
+        pageKind: "principle",
+        status: "published",
+        principleTier: "commandment",
+        principleAppliesTo: ["in_platform_coworker", "external_coding_agent"],
+        principleRingScope: ["universal-ring"],
+        principleDimensions: ["long_term_maintainability", "blast_radius"],
+        principlePublic: true,
+      },
+      {
+        id: "wp_entity_1",
+        slug: "entities/digital-product",
+        title: "Digital Product",
+        body: "A digital product is...",
+        pageKind: "entity",
+        status: "published",
+      },
+    ];
+    const points = buildKernelQdrantPoints(
+      mixed,
+      [
+        { slug: "principles/architecture-over-shortcuts", vector: [0.1], model: "m" },
+        { slug: "entities/digital-product", vector: [0.2], model: "m" },
+      ],
+      "0.2.1",
+      now,
+    );
+    // Principle page carries the filter axes principle_decide / wiki_query use.
+    expect(points[0].payload).toMatchObject({
+      pageKind: "principle",
+      principleTier: "commandment",
+      principleAppliesTo: ["in_platform_coworker", "external_coding_agent"],
+      principleRingScope: ["universal-ring"],
+      principleDimensions: ["long_term_maintainability", "blast_radius"],
+      principlePublic: true,
+    });
+    // Non-principle page must NOT carry principle keys (absence is the marker).
+    expect(points[1].payload).not.toHaveProperty("principleTier");
+    expect(points[1].payload).not.toHaveProperty("principleAppliesTo");
+    expect(points[1].payload).not.toHaveProperty("principleRingScope");
+  });
 });

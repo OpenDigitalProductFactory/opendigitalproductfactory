@@ -85,6 +85,14 @@ export async function createFeatureBuild(input: {
 
   if (!input.title.trim()) throw new Error("Title is required");
 
+  // WIP cap: don't let a new build start while too many are unfinished
+  // (all builds share one sandbox). Surfaces a plain-English message.
+  const { assertWipCapacity, TERMINAL_BUILD_PHASES } = await import("@/lib/build/wip-cap");
+  const activeBuilds = await prisma.featureBuild.count({
+    where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, abandonedAt: null, parentEpicId: null },
+  });
+  assertWipCapacity(activeBuilds);
+
   const buildId = generateBuildId();
 
   const result = await prisma.$transaction(async (tx) => {
@@ -715,8 +723,16 @@ export async function advanceBuildPhase(
   }
 }
 
-/** System-level build execution — delegates to checkpoint pipeline. */
-async function autoExecuteBuild(buildId: string): Promise<void> {
+/**
+ * System-level build execution — delegates to checkpoint pipeline.
+ *
+ * Exported so the boot reconciler (instrumentation.ts) can re-dispatch builds
+ * stranded by a portal restart. It carries no auth (it is the system executor,
+ * not a user-facing server action); the only callers are this module's own
+ * server actions (which authorize first) and the boot reconciler (which only
+ * invokes it for rows it has already confirmed are resumable in-flight builds).
+ */
+export async function autoExecuteBuild(buildId: string): Promise<void> {
   const { agentEventBus } = await import("@/lib/agent-event-bus");
   const { runBuildPipeline } = await import("@/lib/build-pipeline");
 

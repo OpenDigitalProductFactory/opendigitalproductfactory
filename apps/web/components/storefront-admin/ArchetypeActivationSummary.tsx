@@ -192,6 +192,18 @@ export function ArchetypeActivationSummary({
               {formatToken(workspaceHomeActivation.status)}
             </span>
           </div>
+          {workspaceHomeActivation.primaryOperatingQuestion && (
+            <p
+              style={{
+                marginTop: 8,
+                fontSize: 12,
+                color: "var(--dpf-muted)",
+                fontStyle: "italic",
+              }}
+            >
+              The worker arrives asking: {workspaceHomeActivation.primaryOperatingQuestion}
+            </p>
+          )}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
             {workspaceHomeActivation.primitiveWidgets.length > 0 ? (
               workspaceHomeActivation.primitiveWidgets.map((primitive) => (

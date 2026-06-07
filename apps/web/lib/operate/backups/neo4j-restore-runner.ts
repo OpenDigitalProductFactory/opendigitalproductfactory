@@ -19,8 +19,6 @@
  * Postgres BEFORE the restore persist normally (no re-insert dance needed).
  */
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -31,21 +29,22 @@ import {
   RestoreIntegrityError,
 } from "./postgres-restore-runner";
 import { runNeo4jBackup } from "./neo4j-backup-runner";
-
-const execFileAsync = promisify(execFile);
+import { resolveManagedScriptPath, runManagedScript } from "./managed-script-path";
 
 const BACKUPS_ROOT = "/backups";
-const RESTORE_SCRIPT_PATH = "/workspace/scripts/restore-neo4j.sh";
+const RESTORE_SCRIPT_NAME = "restore-neo4j.sh";
 const RUNNER_TIMEOUT_MS = 10 * 60 * 1000;
 
 export interface Neo4jRestoreArgs {
   sourceBackupRunId: string;
   initiatedByUserId?: string | null;
+  trigger?: string | null;
   backupsRoot?: string;
   scriptPath?: string;
   prismaClient?: PrismaLike;
   now?: () => Date;
   takeSafetyBackup?: () => Promise<{ runId: string; status: "ok" | "failed" }>;
+  acquireLock?: boolean;
 }
 
 type PrismaLike = typeof import("@dpf/db").prisma;
@@ -78,22 +77,9 @@ async function fileSha256(absolutePath: string): Promise<string> {
 }
 
 async function runScript(scriptPath: string, env: NodeJS.ProcessEnv): Promise<ScriptOutcome> {
-  try {
-    const { stdout, stderr } = await execFileAsync(scriptPath, [], {
-      env,
-      timeout: RUNNER_TIMEOUT_MS,
-      maxBuffer: 8 * 1024 * 1024,
-    });
-    return { ok: true, stdout, stderr, exitCode: 0 };
-  } catch (err: unknown) {
-    const e = err as { stdout?: string; stderr?: string; code?: number | string; message?: string };
-    return {
-      ok: false,
-      stdout: e.stdout ?? "",
-      stderr: e.stderr ?? e.message ?? String(err),
-      exitCode: typeof e.code === "number" ? e.code : -1,
-    };
-  }
+  // Routes through the shared /bin/sh chokepoint so the script need not carry
+  // the executable bit (which git-on-Windows + the Docker COPY both strip).
+  return runManagedScript(scriptPath, { env, timeoutMs: RUNNER_TIMEOUT_MS });
 }
 
 function summarizeFailure(outcome: ScriptOutcome): string {
@@ -113,10 +99,12 @@ export async function runNeo4jRestore(
 ): Promise<{ restoreId: string; status: "ok" | "failed" }> {
   const now = args.now ?? (() => new Date());
   const backupsRoot = args.backupsRoot ?? BACKUPS_ROOT;
-  const scriptPath = args.scriptPath ?? RESTORE_SCRIPT_PATH;
+  const scriptPath = args.scriptPath ?? resolveManagedScriptPath(RESTORE_SCRIPT_NAME);
   const prisma = args.prismaClient ?? (await import("@dpf/db")).prisma;
 
-  const release = acquireRestoreLock(args.sourceBackupRunId);
+  const release = args.acquireLock === false
+    ? () => {}
+    : acquireRestoreLock(args.sourceBackupRunId);
   const startedAt = now();
   restoreTraceLog(`acquired lock for source=${args.sourceBackupRunId}`);
 
@@ -187,6 +175,7 @@ export async function runNeo4jRestore(
         startedAt,
         finishedAt,
         status: outcome.ok ? "ok" : "failed",
+        trigger: args.trigger ?? null,
         sourceBackupRunId: source.id,
         preRestoreBackupRunId: safety.runId,
         initiatedByUserId: args.initiatedByUserId ?? null,

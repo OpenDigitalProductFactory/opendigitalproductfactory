@@ -4,6 +4,7 @@
 // Server component. Pages are passed in already filtered + sorted.
 
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 
 import {
@@ -357,28 +358,43 @@ export function WikiPageList({ pages }: Props): ReactNode {
     <div className="space-y-6">
       {orderedKinds.map((kind) => {
         const items = byKind.get(kind) ?? [];
+        const label = KIND_GROUP_LABEL[kind] ?? kind;
         if (kind === "principle") {
           const consumerGroups = groupPrinciplesByConsumerArchetype(items);
           return (
-            <section key={kind}>
-              <h2 className="text-xs uppercase tracking-wide text-[var(--dpf-muted)] mb-2">
-                {KIND_GROUP_LABEL[kind] ?? kind} · {items.length}
-              </h2>
-              <div className="space-y-5">
+            <details
+              key={kind}
+              className="group rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
+            >
+              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)] hover:bg-[var(--dpf-surface-2)] focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
+                <ChevronRight
+                  aria-hidden="true"
+                  className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90"
+                />
+                <span className="min-w-0">{label} · {items.length}</span>
+              </summary>
+              <div className="space-y-5 border-t border-[var(--dpf-border)] p-3">
                 {renderPrincipleConsumerGroups(consumerGroups)}
               </div>
-            </section>
+            </details>
           );
         }
         return (
-          <section key={kind}>
-            <h2 className="text-xs uppercase tracking-wide text-[var(--dpf-muted)] mb-2">
-              {KIND_GROUP_LABEL[kind] ?? kind} · {items.length}
-            </h2>
-            <ul className="divide-y divide-[var(--dpf-border)] border border-[var(--dpf-border)] rounded">
+          <details
+            key={kind}
+            className="group rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
+          >
+            <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--dpf-muted)] hover:bg-[var(--dpf-surface-2)] focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
+              <ChevronRight
+                aria-hidden="true"
+                className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90"
+              />
+              <span className="min-w-0">{label} · {items.length}</span>
+            </summary>
+            <ul className="divide-y divide-[var(--dpf-border)] border-t border-[var(--dpf-border)]">
               {items.map(renderItemRow)}
             </ul>
-          </section>
+          </details>
         );
       })}
     </div>

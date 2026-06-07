@@ -235,6 +235,17 @@ describe("assembleSystemPrompt", () => {
     expect(prompt).toContain("Do not turn this into a sales pitch");
   });
 
+  it("includes the cross-surface interaction closeout contract", async () => {
+    const prompt = await assembleSystemPrompt(fullInput);
+
+    expect(prompt).toContain("COWORKER INTERACTION CONTRACT");
+    expect(prompt).toContain("Status:");
+    expect(prompt).toContain("Evidence:");
+    expect(prompt).toContain("Next action:");
+    expect(prompt).toContain("Owner:");
+    expect(prompt).toContain("Never ask the human to run terminal commands");
+  });
+
   // ─── EP-WIKI-001 §7: wikiContext injection in Block 5 ─────────────────────
 
   it("omits the wiki block when wikiContext is null or undefined", async () => {

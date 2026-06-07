@@ -12,8 +12,18 @@
  * `pre-restore-safety` is added by Slice 2: every restore writes a safety
  * dump first, recorded as a BackupRun row so it shows up in history and is
  * subject to the same GFS retention as any other successful backup.
+ *
+ * `pre-upgrade-recovery` is used by the governed self-upgrade lifecycle:
+ * before the swap boundary, the upgrade run takes a recovery point across the
+ * managed data stores and links those BackupRun ids into SelfUpgradeRun
+ * evidence. It is intentionally a BackupRun trigger, not a separate backup
+ * substrate.
  */
-export type BackupTrigger = "scheduled" | "manual" | "pre-restore-safety";
+export type BackupTrigger =
+  | "scheduled"
+  | "manual"
+  | "pre-restore-safety"
+  | "pre-upgrade-recovery";
 export type BackupRunStatus = "running" | "ok" | "failed";
 export type BackupTarget = "postgres" | "neo4j" | "qdrant";
 

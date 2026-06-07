@@ -5,6 +5,7 @@ import { join } from "path";
 import { prisma } from "./client.js";
 import { Prisma } from "../generated/client/client";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
+import { loadFingerprintCatalogIntoDb, defaultCatalogPath } from "./discovery-fingerprint-catalog-loader.js";
 import { seedEaArchimate4 } from "./seed-ea-archimate4.js";
 import { seedEaBpmn20 } from "./seed-ea-bpmn20.js";
 import { seedEaCrossNotation } from "./seed-ea-cross-notation.js";
@@ -21,6 +22,7 @@ import { seedPromptTemplates } from "./seed-prompt-templates.js";
 import { seedSkills } from "./seed-skills.js";
 import { seedWikiKernel } from "./seed-wiki-kernel.js";
 import { seedDecisionPerspective } from "./seed-decision-perspective.js";
+import { seedPlatformVoice } from "./seed-platform-voice.js";
 import {
   SPEACHES_PROVIDER_ID,
   SPEACHES_MODEL_ID,
@@ -442,6 +444,26 @@ async function seedTaxonomyNodes(): Promise<void> {
   console.log(`Seeded ${entries.length} taxonomy nodes`);
 }
 
+/**
+ * Load the discovery-fingerprint catalog into DiscoveryFingerprintRule rows so
+ * the discovery pipeline applies them at runtime (spec §8.3). Runs AFTER
+ * seedTaxonomyNodes so each rule's semantic taxonomyNodeId resolves to a cuid.
+ * Idempotent (upsert on ruleKey) — re-running seed reproduces the estate's
+ * identifications with zero SQL.
+ */
+async function seedDiscoveryFingerprints(): Promise<void> {
+  const result = await loadFingerprintCatalogIntoDb(prisma, defaultCatalogPath(__dirname));
+  if (result.unresolvedTaxonomy.length > 0) {
+    // Non-fatal: an identity-only rule (no placement) is valid, but flag so a
+    // typo'd nodeId surfaces instead of silently degrading placement.
+    console.warn(
+      `[seed] ${result.unresolvedTaxonomy.length} fingerprint rule(s) had unresolved taxonomy nodeIds: ` +
+        result.unresolvedTaxonomy.join(", "),
+    );
+  }
+  console.log(`Seeded ${result.loaded} discovery fingerprint rules (catalog ${result.catalogKey}@${result.version})`);
+}
+
 async function seedDigitalProducts(): Promise<void> {
   const registry = readJson<{
     digital_products: Array<{
@@ -649,6 +671,13 @@ async function seedEaViewpoints(): Promise<void> {
       elementSlugs: ["business_capability"],
       relSlugs: ["composed_of", "associated_with"],
     },
+    {
+      // EP-DATA-ARCH: live ERD mirrored from the Prisma schema (data objects).
+      name: "Data Model",
+      description: "Logical data model mirrored from the Prisma schema as a live ERD.",
+      elementSlugs: ["data_object"],
+      relSlugs: ["associated_with"],
+    },
   ];
 
   for (const vp of viewpoints) {
@@ -660,7 +689,7 @@ async function seedEaViewpoints(): Promise<void> {
       create: { name: vp.name, description: vp.description, allowedElementTypeSlugs, allowedRelTypeSlugs },
     });
   }
-  console.log("Seeded 4 viewpoint definitions");
+  console.log(`Seeded ${viewpoints.length} viewpoint definitions`);
 
   // ── BPMN 2.0 viewpoints ───────────────────────────────────────────────
   const bpmnNotation = await prisma.eaNotation.findUnique({
@@ -730,6 +759,10 @@ async function seedEaViews(): Promise<void> {
     where: { name: "Business Architecture" },
     select: { id: true },
   });
+  const dataModelVp = await prisma.viewpointDefinition.findUnique({
+    where: { name: "Data Model" },
+    select: { id: true },
+  });
   const views = [
     {
       name: "DPF Platform — Application Architecture",
@@ -746,6 +779,16 @@ async function seedEaViews(): Promise<void> {
       scopeType: "custom",
       scopeRef: null,
       viewpointId: bizVp?.id ?? null,
+    },
+    {
+      // EP-DATA-ARCH: system-owned host view; populated by the data-model mirror
+      // (reconcileDataModelMirror finds it by scopeType+scopeRef and reuses it).
+      name: "Data Model",
+      description: "Live ERD mirrored from the Prisma schema (system-owned).",
+      layoutType: "graph",
+      scopeType: "data-model",
+      scopeRef: "prisma",
+      viewpointId: dataModelVp?.id ?? null,
     },
   ];
   for (const v of views) {
@@ -1153,9 +1196,9 @@ async function seedCoworkerAgents(): Promise<void> {
     "customer-advisor":     ["consumer_read", "registry_read", "backlog_read", "backlog_write", "marketing_read"],
     "marketing-specialist": ["marketing_read", "marketing_write", "consumer_read", "registry_read"],
     "storefront-advisor":   ["consumer_read", "registry_read", "backlog_read", "backlog_write", "marketing_read", "marketing_write", "web_search"],
-    "ops-coordinator":      ["backlog_read", "backlog_write", "registry_read", "portfolio_read"],
+    "ops-coordinator":      ["backlog_read", "backlog_write", "backlog_triage", "registry_read", "portfolio_read"],
     "platform-engineer":    ["agent_control_read", "admin_read", "admin_write", "registry_read", "telemetry_read"],
-    "build-specialist":     ["file_read", "code_graph_read", "backlog_read", "backlog_write", "architecture_read", "build_plan_write", "registry_read", "sandbox_execute", "deployment_plan_create", "iac_execute", "release_gate_create", "release_plan_create", "release_plan_read"],
+    "build-specialist":     ["file_read", "code_graph_read", "backlog_read", "backlog_write", "architecture_read", "build_plan_write", "registry_read", "sandbox_execute", "deployment_plan_create", "iac_execute", "release_gate_create", "release_plan_create", "release_plan_read", "coworker_screen_read", "coworker_screen_drive"],
     "data-architect":       ["file_read", "sandbox_execute", "architecture_read", "registry_read"],
     "admin-assistant":      ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read"],
     "coo":                  ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read"],
@@ -2424,6 +2467,7 @@ async function main(): Promise<void> {
   await seedAgentPromptContexts();
   await seedFeatureDegradationMappings();
   await seedTaxonomyNodes();
+  await seedDiscoveryFingerprints();
   await seedAgentControlPlaneMaturity(prisma);
   await seedEaReferenceModels().catch((err: unknown) => {
     console.warn("[seed] EA reference models skipped:", err instanceof Error ? err.message : err);
@@ -2485,6 +2529,9 @@ async function main(): Promise<void> {
     `  decision-perspective: profile=${decisionPerspectiveSeed.profileId} ` +
       `version=${decisionPerspectiveSeed.versionId} materials=${decisionPerspectiveSeed.materialCount}`,
   );
+  // BI-2535D6F4: ship the founder's recorded seed voice on the platform profile.
+  const platformVoice = await seedPlatformVoice(prisma);
+  console.log(`  platform-voice: ${platformVoice.status} (clip-copied=${platformVoice.copiedClip})`);
   await syncCapabilities(prisma);
   await assertActiveProvidersHaveClearance();
   await assertAnthropicSubToolCapability();

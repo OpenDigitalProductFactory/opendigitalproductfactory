@@ -26,6 +26,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/actions/promotions", () => ({
   triggerSelfUpgrade: vi.fn(),
+  rollbackSelfUpgrade: vi.fn(),
 }));
 
 // The global useState mock above keys off `initial === null`, so any child
@@ -65,6 +66,7 @@ function makeRun(status: string, overrides: Record<string, unknown> = {}) {
     deployedSha: "def5678",
     startedAt: new Date("2026-05-20T02:00:00Z"),
     completedAt: new Date("2026-05-20T02:05:00Z"),
+    completionEvidence: null,
     failureLog: null as string | null,
     createdAt: new Date("2026-05-20T02:00:00Z"),
     ...overrides,
@@ -189,6 +191,56 @@ describe("SelfUpgradeClient – succeeded", () => {
     );
     expect(html).toContain("Triggered by:");
     expect(html).toContain("scheduled");
+  });
+
+  it("shows rollback controls when the latest run has a complete recovery point", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("succeeded", {
+          completionEvidence: {
+            recoveryPoint: {
+              schemaVersion: 1,
+              status: "ok",
+              trigger: "pre-upgrade-recovery",
+              members: [
+                { target: "postgres", runId: "BR-PG", status: "ok" },
+                { target: "neo4j", runId: "BR-N4J", status: "ok" },
+                { target: "qdrant", runId: "BR-QD", status: "ok" },
+              ],
+            },
+          },
+        })}
+      />,
+    );
+    expect(html).toContain("Recovery point: ok");
+    expect(html).toContain("postgres:BR-PG");
+    expect(html).toContain("Restore recovery point");
+  });
+
+  it("does not show rollback button after recovery point rollback succeeds", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("succeeded", {
+          completionEvidence: {
+            recoveryPoint: {
+              schemaVersion: 1,
+              status: "ok",
+              trigger: "pre-upgrade-recovery",
+              members: [
+                { target: "postgres", runId: "BR-PG", status: "ok" },
+                { target: "neo4j", runId: "BR-N4J", status: "ok" },
+                { target: "qdrant", runId: "BR-QD", status: "ok" },
+              ],
+            },
+            rollback: { status: "ok" },
+          },
+        })}
+      />,
+    );
+    expect(html).toContain('data-rollback-status="ok"');
+    expect(html).not.toContain("Restore recovery point");
   });
 });
 
@@ -583,5 +635,130 @@ describe("SelfUpgradeClient – failure detail", () => {
       <SelfUpgradeClient {...baseStatus} latestRun={makeRun("succeeded")} />,
     );
     expect(html).not.toContain("<details");
+  });
+});
+
+// ─── Upgrade activity (drain blockers + cooldown) ──────────────────────────
+
+function drainingActivity(overrides: Record<string, unknown> = {}) {
+  return {
+    level: "draining" as const,
+    runId: "QR-DRAIN",
+    enteredAt: "2026-06-06T01:44:00.000Z",
+    run: {
+      runId: "QR-DRAIN",
+      status: "draining",
+      trigger: "self-upgrade",
+      targetVersion: "abcdef0123456789",
+      targetBundleHash: "abcdef0123456789",
+      deferSurface: null,
+      deferReason: null,
+      budgetMs: 300000,
+      drainStartedAt: "2026-06-06T01:44:00.000Z",
+      lastHeartbeatAt: "2026-06-06T01:44:30.000Z",
+    },
+    blockersCapturedAt: "2026-06-06T01:44:30.000Z",
+    blockers: [
+      {
+        surface: "build-studio.phase.build",
+        label: "Build Studio — build phase",
+        kind: "hard" as const,
+        count: 1,
+        estimatedWaitMs: 1800000,
+      },
+      {
+        surface: "coworker.reasoning-loop",
+        label: "AI coworker working",
+        kind: "hard" as const,
+        count: 6,
+        estimatedWaitMs: 30000,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+describe("SelfUpgradeClient – upgrade activity", () => {
+  it("renders the activity panel while draining, listing what's holding the drain", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} quiescence={drainingActivity()} />,
+    );
+    expect(html).toContain("Upgrade activity");
+    expect(html).toContain('data-quiescence-level="draining"');
+    expect(html).toContain("Waiting on:");
+    expect(html).toContain("Build Studio — build phase");
+    expect(html).toContain("AI coworker working");
+    // count + worst-case wait surfaced
+    expect(html).toContain("×6");
+    // target build short hash
+    expect(html).toContain("abcdef012345");
+  });
+
+  it("does not render the activity panel when level is normal and nothing is cooling down", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        quiescence={{
+          level: "normal",
+          runId: null,
+          enteredAt: "2026-06-06T00:00:00.000Z",
+          run: null,
+          blockersCapturedAt: null,
+          blockers: [],
+        }}
+      />,
+    );
+    expect(html).not.toContain("Upgrade activity");
+  });
+
+  it("explains a deferred attempt and the cooldown window without claiming work was interrupted", () => {
+    const future = new Date(Date.now() + 25 * 60 * 1000).toISOString();
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        cooldownUntil={future}
+        quiescence={{
+          level: "normal",
+          runId: null,
+          enteredAt: "2026-06-06T00:00:00.000Z",
+          run: {
+            runId: "QR-DEFER",
+            status: "deferred",
+            trigger: "self-upgrade",
+            targetVersion: "abcdef0123456789",
+            targetBundleHash: "abcdef0123456789",
+            deferSurface: "build-studio.phase.build",
+            deferReason: "quiescence-deferred",
+            budgetMs: 300000,
+            drainStartedAt: "2026-06-06T01:40:00.000Z",
+            lastHeartbeatAt: "2026-06-06T01:44:00.000Z",
+          },
+          blockersCapturedAt: "2026-06-06T01:44:00.000Z",
+          blockers: [
+            {
+              surface: "build-studio.phase.build",
+              label: "Build Studio — build phase",
+              kind: "hard",
+              count: 1,
+              estimatedWaitMs: 1800000,
+            },
+          ],
+        }}
+      />,
+    );
+    expect(html).toContain("Upgrade activity");
+    expect(html).toContain("Last upgrade attempt deferred");
+    expect(html).toContain("Build Studio — build phase");
+    expect(html).toContain("never interrupted");
+    expect(html).toContain("Automatic upgrades paused until");
+    expect(html).toContain('data-cooldown="active"');
+  });
+
+  it("renders the cooldown notice even with no quiescence run when a cooldown is active", () => {
+    const future = new Date(Date.now() + 25 * 60 * 1000).toISOString();
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} cooldownUntil={future} quiescence={null} />,
+    );
+    expect(html).toContain("Automatic upgrades paused until");
   });
 });

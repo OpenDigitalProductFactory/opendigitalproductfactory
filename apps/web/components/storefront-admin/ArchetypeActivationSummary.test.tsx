@@ -80,7 +80,8 @@ describe("ArchetypeActivationSummary", () => {
           label: "HVAC dispatcher home",
           status: "ready",
           sourceContributionId: "home-hvac-dispatch",
-          primitiveWidgets: ["service-queue", "customer-map", "coworker-handoffs"],
+          primaryOperatingQuestion: null,
+          primitiveWidgets: ["decision-queue", "geo-map", "handoff-queue"],
           requiredCanonicalData: ["customer-account", "service-location", "work-order"],
           requiredSignals: ["scheduled-work", "urgent-exception", "coworker-handoff"],
           missingDataBehavior: "render-empty-state",
@@ -93,9 +94,46 @@ describe("ArchetypeActivationSummary", () => {
     expect(html).toContain("Worker Home");
     expect(html).toContain("HVAC dispatcher home");
     expect(html).toContain("Ready");
-    expect(html).toContain("Service Queue");
-    expect(html).toContain("Customer Map");
-    expect(html).toContain("Coworker Handoffs");
+    // Primitive widgets rendered as title-cased tokens (formatToken splits on `-`).
+    expect(html).toContain("Decision Queue");
+    expect(html).toContain("Geo Map");
+    expect(html).toContain("Handoff Queue");
+    // primaryOperatingQuestion is null → operating-question line stays hidden
+    expect(html).not.toContain("The worker arrives asking");
+  });
+
+  it("renders the architect-amended primaryOperatingQuestion when the contribution declares one", () => {
+    const html = renderToStaticMarkup(
+      <ArchetypeActivationSummary
+        activationProfile={{
+          profileType: "standard",
+          modules: ["integrations"],
+          billingReadinessMode: "none",
+          customerGraph: "none",
+          estateSeparation: "shared",
+        }}
+        workspaceHomeActivation={{
+          archetypeId: "hvac-contractor",
+          archetypeName: "HVAC Contractor",
+          mode: "vertical",
+          match: "exact",
+          label: "HVAC dispatcher home",
+          status: "ready",
+          sourceContributionId: "home-hvac-dispatch",
+          primaryOperatingQuestion: "what's on the board today?",
+          primitiveWidgets: ["decision-queue", "geo-map", "handoff-queue"],
+          requiredCanonicalData: ["customer-account", "service-location", "work-order"],
+          requiredSignals: ["scheduled-work", "urgent-exception", "coworker-handoff"],
+          missingDataBehavior: "render-empty-state",
+          fallback: null,
+          setupAction: null,
+        }}
+      />,
+    );
+
+    expect(html).toContain("The worker arrives asking: what&#x27;s on the board today?");
+    // Architect amendment must not introduce gear/cockpit vocabulary on this worker surface.
+    expect(html).not.toMatch(/gear|cockpit|ring|torque|slip|wear|triple/i);
   });
 
   it("renders honest platform fallback when a worker home is not configured", () => {
@@ -109,6 +147,7 @@ describe("ArchetypeActivationSummary", () => {
           label: "Platform workspace view",
           status: "not-configured",
           sourceContributionId: null,
+          primaryOperatingQuestion: null,
           primitiveWidgets: [],
           requiredCanonicalData: [],
           requiredSignals: [],
@@ -122,6 +161,7 @@ describe("ArchetypeActivationSummary", () => {
     expect(html).toContain("Worker Home");
     expect(html).toContain("Platform workspace view");
     expect(html).toContain("Not Configured");
+    expect(html).not.toContain("The worker arrives asking");
     expect(html).not.toMatch(/gear|architecture|contribution|specialist|platform layer|business layer|market vertical/i);
   });
 });

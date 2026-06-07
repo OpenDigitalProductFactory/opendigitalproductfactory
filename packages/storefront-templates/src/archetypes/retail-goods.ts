@@ -83,4 +83,58 @@ export const retailGoodsArchetypes: ArchetypeDefinition[] = [
       { name: "budget", label: "Budget", type: "select" as const, required: false, options: ["Under £30", "£30–£60", "£60–£100", "£100–£200", "£200+", "Let the florist decide"] },
     ],
   },
+  {
+    // Wholesale / distribution: a goods brand selling B2B to trade buyers who
+    // resell — the retail-goods archetype that typically runs a partner channel.
+    // form=goods + primaryConsumer=business derives partner-program = "available"
+    // (see derivePartnerProgramProfile branch 4); customer-accounts become required
+    // for the business buyers. Spec 2026-06-04-partner-reseller-archetype-identity §6.1.
+    archetypeId: "wholesale-distribution",
+    name: "Wholesale & Distribution",
+    category: "retail-goods",
+    ctaType: "inquiry",
+    tags: ["wholesale", "distribution", "trade", "reseller", "b2b", "stockist"],
+    itemTemplates: [
+      { name: "Trade Catalogue", description: "Full wholesale range with case and pallet pricing for trade accounts", priceType: "quote", ctaType: "inquiry", ctaLabel: "Request trade pricing" },
+      { name: "Open a Trade Account", description: "Apply for a credit account with wholesale terms", priceType: "free", ctaType: "inquiry", ctaLabel: "Apply for an account" },
+      { name: "Become a Stockist", description: "Join our reseller network and stock our range", priceType: "quote", ctaType: "inquiry", ctaLabel: "Become a stockist" },
+      { name: "Distributor Program", description: "Territory distribution for high-volume partners", priceType: "quote", ctaType: "inquiry", ctaLabel: "Discuss distribution" },
+      { name: "Bulk / Pallet Order", description: "Volume order with tiered trade discounts", priceType: "from", ctaType: "inquiry", ctaLabel: "Request a quote" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "items", title: "Trade & Wholesale", sortOrder: 1 },
+      { type: "about", title: "About Us", sortOrder: 2 },
+      { type: "gallery", title: "Our Range", sortOrder: 3 },
+      { type: "contact", title: "Open a Trade Account", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...CONTACT_FIELDS,
+      { name: "companyName", label: "Trading / company name", type: "text" as const, required: true },
+      { name: "partnerType", label: "How will you sell our products?", type: "select" as const, required: false, options: ["Reseller / retailer", "Distributor", "Online marketplace", "Other"] },
+      { name: "estimatedVolume", label: "Estimated monthly volume", type: "select" as const, required: false, options: ["Under £1k", "£1k–£5k", "£5k–£20k", "£20k+"] },
+    ],
+    activationProfile: {
+      profileType: "standard",
+      modules: [],
+      billingReadinessMode: "prepared-not-prescribed",
+      customerGraph: "separate-customer-projection",
+      estateSeparation: "shared",
+      axes: {
+        form: "goods",
+        delivery: "physical",
+        primaryConsumer: "business",
+        consumptionChannel: "sales-assisted",
+        commercialModel: "account-based-fees",
+        provisioning: "account-with-billing",
+        platform: "no",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: { scope: "minimal" },
+        forEmployees: { scope: "minimal" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+    },
+  },
 ];

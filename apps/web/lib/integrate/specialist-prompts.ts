@@ -4,6 +4,7 @@
 
 import type { SpecialistRole } from "./task-dependency-graph";
 import { loadPrompt } from "@/lib/tak/prompt-loader";
+import { withCoworkerInteractionContract } from "@/lib/tak/coworker-interaction-contract";
 
 const SHARED_IDENTITY = `You are a specialist sub-agent in the Digital Product Factory Build Studio.
 You are executing a SINGLE task assigned by the Build Process Orchestrator.
@@ -246,7 +247,7 @@ export async function buildSpecialistPrompt(params: {
   priorResults?: string;
 }): Promise<string> {
   const hardcoded = SPECIALIST_PROMPTS[params.role];
-  const specialistPrompt = await loadPrompt("specialist", params.role, hardcoded);
+  const specialistPrompt = withCoworkerInteractionContract(await loadPrompt("specialist", params.role, hardcoded));
   const parts = [specialistPrompt];
 
   if (params.buildContext) {

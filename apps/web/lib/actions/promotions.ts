@@ -7,14 +7,10 @@ import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { revalidatePath } from "next/cache";
 import { generateRfcId } from "./change-management";
 import { generatePromotionId } from "@/lib/version-tracking";
-import {
-  getSelfUpgradeConfig,
-  nextMaintenanceWindowStart,
-  resolveTargetSha,
-  isShaFresh,
-  getDeployedSha,
-  getLatestRun,
-} from "@/lib/self-upgrade";
+import { getSelfUpgradeConfig, nextMaintenanceWindowStart } from "@/lib/self-upgrade/config";
+import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
+import { getDeployedSha } from "@/lib/self-upgrade/completion";
+import { getLatestRun } from "@/lib/self-upgrade/run-store";
 import {
   isStoreOpen,
   isUpgradeWindowOpen,
@@ -22,6 +18,8 @@ import {
 } from "@/lib/self-upgrade/window";
 import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
+import { getQuiescenceActivity } from "@/lib/self-upgrade/quiescence";
+import { getCooldownUntil } from "@/lib/self-upgrade/cooldown";
 import { loadPlatformVersion } from "@/lib/platform/version";
 import { inngest } from "@/lib/queue/inngest-client";
 import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
@@ -590,6 +588,7 @@ export type SelfUpgradeRunDto = {
   currentSha: string | null;    // schema: currentSha (was: fromVersion)
   targetSha: string | null;     // schema: targetSha (was: toVersion)
   deployedSha: string | null;   // schema: deployedSha (was: absent — adding for completeness)
+  completionEvidence?: Prisma.JsonValue | null;
   startedAt: Date | null;
   completedAt: Date | null;
   failureLog: string | null;    // schema: failureLog (was: error)
@@ -616,6 +615,7 @@ export async function listSelfUpgradeRuns(opts?: {
       currentSha: true,
       targetSha: true,
       deployedSha: true,
+      completionEvidence: true,
       startedAt: true,
       completedAt: true,
       failureLog: true,
@@ -632,13 +632,18 @@ export async function listSelfUpgradeRuns(opts?: {
 export async function getSelfUpgradeStatus() {
   await requireOpsAccess();
 
-  const [config, latestRun, platformVersion, deployedSha, lastCheckedAt] = await Promise.all([
-    getSelfUpgradeConfig(),
-    getLatestRun(),
-    loadPlatformVersion(),
-    getDeployedSha(),
-    getLastCheckedAt(),
-  ]);
+  const [config, latestRun, platformVersion, deployedSha, lastCheckedAt, quiescence, cooldownUntil] =
+    await Promise.all([
+      getSelfUpgradeConfig(),
+      getLatestRun(),
+      loadPlatformVersion(),
+      getDeployedSha(),
+      getLastCheckedAt(),
+      // Live drain activity (what's holding an upgrade) + the post-defer/fail
+      // backoff window, so the panel can explain "what's happening" truthfully.
+      getQuiescenceActivity(),
+      getCooldownUntil(),
+    ]);
 
   // Upgrade timing follows the storefront's open/closed state (single source of
   // truth: operating hours). inMaintenanceWindow = "upgrades may run now" =
@@ -695,6 +700,8 @@ export async function getSelfUpgradeStatus() {
     targetSha,
     isFresh,
     latestRun,
+    quiescence,
+    cooldownUntil: cooldownUntil?.toISOString() ?? null,
     platformVersion: {
       version: platformVersion.version,
       publishedAt: platformVersion.publishedAt.toISOString(),
@@ -734,4 +741,76 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: bool
     },
   });
   return { queued: true } as const;
+}
+
+export async function rollbackSelfUpgrade(
+  runId: string,
+  typedConfirmation: string,
+): Promise<{
+  ok: boolean;
+  status?: "ok" | "failed";
+  error?: string;
+  restores?: Array<{
+    target: string;
+    sourceBackupRunId: string;
+    restoreId: string | null;
+    status: "ok" | "failed";
+    error?: string;
+  }>;
+}> {
+  const session = await auth();
+  const user = session?.user;
+  if (
+    !user ||
+    !can(
+      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
+      "view_operations",
+    ) ||
+    !can(
+      { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
+      "manage_provider_connections",
+    )
+  ) {
+    return { ok: false, error: "You do not have permission to restore upgrade recovery points." };
+  }
+
+  const {
+    SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT,
+    SelfUpgradeRollbackError,
+    RestoreIntegrityError,
+    RestoreLockedError,
+    runSelfUpgradeRollback,
+  } = await import("@/lib/self-upgrade/rollback");
+
+  if (typedConfirmation !== SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT) {
+    return {
+      ok: false,
+      error: `Confirmation text must be exactly "${SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT}" to proceed.`,
+    };
+  }
+
+  try {
+    const result = await runSelfUpgradeRollback({
+      runId,
+      initiatedByUserId: user.id ?? null,
+    });
+    revalidatePath("/ops/self-upgrade");
+    revalidatePath("/admin/backups");
+    return {
+      ok: result.ok,
+      status: result.status,
+      restores: result.restores,
+      ...(result.error ? { error: result.error } : {}),
+    };
+  } catch (err) {
+    if (
+      err instanceof SelfUpgradeRollbackError ||
+      err instanceof RestoreIntegrityError ||
+      err instanceof RestoreLockedError
+    ) {
+      return { ok: false, error: err.message };
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: message };
+  }
 }

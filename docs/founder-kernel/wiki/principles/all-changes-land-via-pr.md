@@ -25,7 +25,7 @@ sources:
 
 Every change lands via PR against `main` — including the maintainer's. Branch protection enforces it. No direct pushes, no admin-bypass merges, no "I'll fix it after." Every commit on `main` traces back to a PR; every PR traces back to a reviewed branch.
 
-Opening a PR is also the ready-to-merge signal. A pushed branch, Work Capsule, or Build Studio build is the place for in-flight handoff and recovery. Do not open a PR as a parking place, early visibility marker, or draft handoff. If an agent opens a PR before the branch has passed the relevant build, migration, and UX gates, close the PR and keep the branch alive.
+Opening a PR is also the ready-to-merge signal. A pushed branch, Work Capsule, or Build Studio build is the place for in-flight handoff and recovery. Do not open a PR as a parking place, early visibility marker, or draft handoff. GitHub draft PRs are not used in DPF's normal delivery lane: agents must open regular ready-for-review PRs and must not pass `--draft` to `gh pr create`. If an agent opens a PR before the branch has passed the relevant build, migration, and UX gates, close the PR and keep the branch alive. If an agent accidentally opens a draft PR after gates are green, immediately mark it ready for review so CI and operator review stay visible in the normal PR lane.
 
 ## Why
 
@@ -50,7 +50,7 @@ Create a topic branch named by intent: `feat/<slug>`, `fix/<slug>`, `chore/<slug
 - **Positive:** A typo fix in a README still lands via PR. The PR description says "typo fix"; CI runs; the merge happens via squash-and-delete. The PR record is permanent evidence that the change was reviewed.
 - **Positive:** A coding agent pushes `feat/work-capsule-phase-1` after each verified commit but leaves PR creation until the branch has passed focused tests, typecheck, production build, migration apply, and the affected UI smoke.
 - **Counterexample:** A maintainer pushes a "trivial" change directly to `main` because it's "just a comment." Three weeks later someone tries to find when that comment changed and which discussion drove it; the git blame points at a commit with no PR, no description, and no review — the audit chain is broken for that line.
-- **Counterexample:** An agent opens a draft PR merely to show progress. Merge automation treats the PR as merge-ready, so unfinished work enters the merge lane before the branch has evidence. The correct handoff artifact was the pushed branch or Work Capsule, not a PR.
+- **Counterexample:** An agent opens a draft PR merely to show progress. The PR is easy for the operator to miss, and unfinished work sits outside the normal merge lane without the expected ready-for-review signal. The correct handoff artifact was the pushed branch or Work Capsule, not a PR.
 
 ## Sources
 

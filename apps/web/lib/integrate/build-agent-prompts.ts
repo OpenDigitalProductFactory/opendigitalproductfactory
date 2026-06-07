@@ -11,6 +11,7 @@ import type {
 } from "@/lib/feature-build-types";
 import { PROJECT_CONTEXT } from "./build-project-context";
 import { loadPrompt } from "@/lib/tak/prompt-loader";
+import { withCoworkerInteractionContract } from "@/lib/tak/coworker-interaction-contract";
 
 // ─── IT4IT Value Stream Mapping ─────────────────────────────────────────────
 // Each build phase maps to an IT4IT value stream stage and responsible agents.
@@ -700,7 +701,7 @@ export async function getBuildPhasePrompt(
   if (!hardcoded) return "";
 
   const slug = variant === "feature" ? phase : `${phase}-${variant}`;
-  return loadPrompt("build-phase", slug, hardcoded);
+  return withCoworkerInteractionContract(await loadPrompt("build-phase", slug, hardcoded));
 }
 
 export type PhaseHandoffSummary = {

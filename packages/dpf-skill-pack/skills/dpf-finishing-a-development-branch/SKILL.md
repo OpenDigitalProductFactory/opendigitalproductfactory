@@ -65,7 +65,7 @@ This is the **decision** step; `dpf-pr-with-dco` is the **execution** step that 
 ## Guardrails
 
 - **Don't bundle concerns to save a PR.** A mixed PR is harder to review and revert; split it.
-- **Don't open a PR as a parking place.** Open it when it is ready to merge, not to stash in-progress work (this is `dpf-pr-with-dco`'s contract).
+- **Don't open a PR as a parking place.** Open it when it is ready to merge, not to stash in-progress work (this is `dpf-pr-with-dco`'s contract). DPF delivery PRs are regular ready-for-review PRs, not GitHub draft PRs.
 - **Don't finish on a red or unverified branch.** Green gate + functional verification first.
 
 ## See also

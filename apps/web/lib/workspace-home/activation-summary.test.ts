@@ -16,7 +16,7 @@ function makeContribution(
     archetypeCategories: ["trades-maintenance"],
     setupActivation: {
       status: "ready",
-      primitiveWidgets: ["service-queue", "customer-map", "coworker-handoffs"],
+      primitiveWidgets: ["decision-queue", "geo-map", "handoff-queue"],
       requiredCanonicalData: ["customer-account", "service-location", "work-order"],
       requiredSignals: ["scheduled-work", "urgent-exception", "coworker-handoff"],
       missingDataBehavior: "render-empty-state",
@@ -28,23 +28,23 @@ function makeContribution(
     ],
     components: [
       {
-        key: "service-queue",
+        key: "unassigned-work",
         slotId: "today-now",
-        primitiveKey: "service-queue",
+        primitiveKey: "decision-queue",
         title: "Service queue",
         dataRefs: [{ kind: "projection", key: "workspaceHome.workOrders", required: true }],
       },
       {
         key: "customer-map",
         slotId: "today-now",
-        primitiveKey: "customer-map",
+        primitiveKey: "geo-map",
         title: "Customer map",
         dataRefs: [{ kind: "projection", key: "workspaceHome.customerLocations", required: true }],
       },
       {
-        key: "coworker-handoff-list",
+        key: "coworker-handoffs",
         slotId: "coworker-handoffs",
-        primitiveKey: "coworker-handoffs",
+        primitiveKey: "handoff-queue",
         title: "Coworker handoffs",
         dataRefs: [{ kind: "projection", key: "workspaceHome.coworkerHandoffs", required: false }],
       },
@@ -74,7 +74,7 @@ describe("workspace home activation summaries", () => {
       label: "HVAC dispatcher home",
       status: "ready",
       sourceContributionId: "home-hvac-dispatch",
-      primitiveWidgets: ["service-queue", "customer-map", "coworker-handoffs"],
+      primitiveWidgets: ["decision-queue", "geo-map", "handoff-queue"],
       requiredCanonicalData: ["customer-account", "service-location", "work-order"],
       requiredSignals: ["scheduled-work", "urgent-exception", "coworker-handoff"],
       fallback: null,
@@ -127,6 +127,53 @@ describe("workspace home activation summaries", () => {
       fallback: "platform",
       setupAction: "choose-or-finish-business-setup",
     });
+  });
+
+  it("projects an architect-amended primaryOperatingQuestion into the summary when the contribution declares one", () => {
+    const registry = createWorkspaceHomeRegistry([
+      makeContribution({ primaryOperatingQuestion: "what's on the board today?" }),
+    ]);
+
+    const summary = buildWorkspaceHomeActivationSummary({
+      archetype: {
+        archetypeId: "hvac-contractor",
+        category: "trades-maintenance",
+        name: "HVAC Contractor",
+      },
+      registry,
+    });
+
+    expect(summary.primaryOperatingQuestion).toBe("what's on the board today?");
+  });
+
+  it("reports primaryOperatingQuestion as null when the contribution omits the architect-amended field", () => {
+    const registry = createWorkspaceHomeRegistry([makeContribution()]);
+
+    const summary = buildWorkspaceHomeActivationSummary({
+      archetype: {
+        archetypeId: "hvac-contractor",
+        category: "trades-maintenance",
+        name: "HVAC Contractor",
+      },
+      registry,
+    });
+
+    expect(summary.primaryOperatingQuestion).toBeNull();
+  });
+
+  it("reports primaryOperatingQuestion as null on the unconfigured platform fallback", () => {
+    const registry = createWorkspaceHomeRegistry();
+
+    const summary = buildWorkspaceHomeActivationSummary({
+      archetype: {
+        archetypeId: "training-company",
+        category: "education-training",
+        name: "Training Company",
+      },
+      registry,
+    });
+
+    expect(summary.primaryOperatingQuestion).toBeNull();
   });
 
   it("builds serializable summaries keyed by the archetype ids loaded by setup", () => {

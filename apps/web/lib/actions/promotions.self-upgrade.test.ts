@@ -29,13 +29,21 @@ vi.mock("@/lib/shared/lazy-node", () => ({
   lazyUtil: vi.fn(),
 }));
 
-vi.mock("@/lib/self-upgrade", () => ({
+vi.mock("@/lib/self-upgrade/config", () => ({
   getSelfUpgradeConfig: vi.fn(),
-  isInMaintenanceWindow: vi.fn(),
   nextMaintenanceWindowStart: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock("@/lib/self-upgrade/version", () => ({
   resolveTargetSha: vi.fn(),
   isShaFresh: vi.fn(),
+}));
+
+vi.mock("@/lib/self-upgrade/completion", () => ({
   getDeployedSha: vi.fn(),
+}));
+
+vi.mock("@/lib/self-upgrade/run-store", () => ({
   getLatestRun: vi.fn(),
 }));
 
@@ -51,6 +59,26 @@ vi.mock("@/lib/operating-hours-read", () => ({
 
 vi.mock("@/lib/self-upgrade/last-check", () => ({
   getLastCheckedAt: vi.fn().mockResolvedValue(null),
+}));
+
+// getSelfUpgradeStatus now reads live drain activity + cooldown for the panel;
+// stub both so the status read stays hermetic (the @dpf/db mock above has no
+// platformConfig / quiescenceRun models).
+vi.mock("@/lib/self-upgrade/quiescence", () => ({
+  getQuiescenceActivity: vi.fn().mockResolvedValue({
+    level: "normal",
+    runId: null,
+    enteredAt: "1970-01-01T00:00:00.000Z",
+    run: null,
+    blockersCapturedAt: null,
+    blockers: [],
+  }),
+}));
+
+vi.mock("@/lib/self-upgrade/cooldown", () => ({
+  getCooldownUntil: vi.fn().mockResolvedValue(null),
+  // config.ts imports this default transitively (via the queue function module).
+  DEFAULT_COOLDOWN_MINUTES: 30,
 }));
 
 vi.mock("@/lib/queue/inngest-client", () => ({
@@ -71,14 +99,56 @@ vi.mock("@/lib/platform/version", () => ({
   }),
 }));
 
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+}));
+
+vi.mock("@/lib/self-upgrade/rollback", () => {
+  class SelfUpgradeRollbackError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "SelfUpgradeRollbackError";
+    }
+  }
+  class RestoreIntegrityError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "RestoreIntegrityError";
+    }
+  }
+  class RestoreLockedError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "RestoreLockedError";
+    }
+  }
+  return {
+    SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT: "ROLLBACK",
+    SelfUpgradeRollbackError,
+    RestoreIntegrityError,
+    RestoreLockedError,
+    runSelfUpgradeRollback: vi.fn(),
+  };
+});
+
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
-import * as SelfUpgrade from "@/lib/self-upgrade";
+import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
+import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
+import { getDeployedSha } from "@/lib/self-upgrade/completion";
+import { getLatestRun } from "@/lib/self-upgrade/run-store";
 import { isUpgradeWindowOpen, nextUpgradeWindowOpen } from "@/lib/self-upgrade/window";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
 import { inngest } from "@/lib/queue/inngest-client";
-import { getSelfUpgradeStatus, listSelfUpgradeRuns, triggerSelfUpgrade } from "./promotions";
+import { revalidatePath } from "next/cache";
+import { runSelfUpgradeRollback, SelfUpgradeRollbackError } from "@/lib/self-upgrade/rollback";
+import {
+  getSelfUpgradeStatus,
+  listSelfUpgradeRuns,
+  rollbackSelfUpgrade,
+  triggerSelfUpgrade,
+} from "./promotions";
 
 const mockSession = {
   user: {
@@ -107,6 +177,7 @@ const mockRun = {
   deployedSha: "def5678",
   startedAt: new Date("2026-05-20T02:00:00Z"),
   completedAt: new Date("2026-05-20T02:05:00Z"),
+  completionEvidence: null,
   failureLog: null,
   createdAt: new Date("2026-05-20T02:00:00Z"),
   updatedAt: new Date("2026-05-20T02:05:00Z"),
@@ -116,8 +187,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(auth).mockResolvedValue(mockSession as never);
   vi.mocked(can).mockReturnValue(true);
-  vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
-  vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
+  vi.mocked(getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
+  vi.mocked(getLatestRun).mockResolvedValue(null);
   vi.mocked(getLastCheckedAt).mockResolvedValue(null);
   vi.mocked(nextUpgradeWindowOpen).mockReturnValue(null);
   // Default: treat triggers as in-window so dispatch tests exercise the happy
@@ -143,12 +214,12 @@ describe("getSelfUpgradeStatus – access control", () => {
   });
 
   it("checks view_operations permission with user role", async () => {
-    vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
+    vi.mocked(getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
     vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
-    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue(null);
-    vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue(null);
-    vi.mocked(SelfUpgrade.isShaFresh).mockReturnValue(false);
-    vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
+    vi.mocked(getDeployedSha).mockResolvedValue(null);
+    vi.mocked(resolveTargetSha).mockResolvedValue(null);
+    vi.mocked(isShaFresh).mockReturnValue(false);
+    vi.mocked(getLatestRun).mockResolvedValue(null);
 
     await getSelfUpgradeStatus();
 
@@ -166,12 +237,12 @@ describe("getSelfUpgradeStatus – access control", () => {
 
 describe("getSelfUpgradeStatus", () => {
   it("returns config fields, window status, sha info, and latest run", async () => {
-    vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
+    vi.mocked(getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
     vi.mocked(isUpgradeWindowOpen).mockReturnValue(true);
-    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue("abc1234");
-    vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue("def5678");
-    vi.mocked(SelfUpgrade.isShaFresh).mockReturnValue(false);
-    vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(mockRun as never);
+    vi.mocked(getDeployedSha).mockResolvedValue("abc1234");
+    vi.mocked(resolveTargetSha).mockResolvedValue("def5678");
+    vi.mocked(isShaFresh).mockReturnValue(false);
+    vi.mocked(getLatestRun).mockResolvedValue(mockRun as never);
 
     const result = await getSelfUpgradeStatus();
 
@@ -192,13 +263,13 @@ describe("getSelfUpgradeStatus", () => {
   it("reports when the next scheduled check can run inside the current window", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-24T17:21:00.000Z"));
-    vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
+    vi.mocked(getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
     vi.mocked(isUpgradeWindowOpen).mockReturnValue(true);
     vi.mocked(getLastCheckedAt).mockResolvedValue(new Date("2026-05-23T16:00:00.000Z"));
-    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue("abc1234");
-    vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue("def5678");
-    vi.mocked(SelfUpgrade.isShaFresh).mockReturnValue(false);
-    vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
+    vi.mocked(getDeployedSha).mockResolvedValue("abc1234");
+    vi.mocked(resolveTargetSha).mockResolvedValue("def5678");
+    vi.mocked(isShaFresh).mockReturnValue(false);
+    vi.mocked(getLatestRun).mockResolvedValue(null);
 
     const result = await getSelfUpgradeStatus();
 
@@ -209,13 +280,13 @@ describe("getSelfUpgradeStatus", () => {
   it("delays the scheduled check until the configured interval has elapsed", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-24T17:21:00.000Z"));
-    vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
+    vi.mocked(getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
     vi.mocked(isUpgradeWindowOpen).mockReturnValue(true);
     vi.mocked(getLastCheckedAt).mockResolvedValue(new Date("2026-05-24T10:30:00.000Z"));
-    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue("abc1234");
-    vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue("def5678");
-    vi.mocked(SelfUpgrade.isShaFresh).mockReturnValue(false);
-    vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
+    vi.mocked(getDeployedSha).mockResolvedValue("abc1234");
+    vi.mocked(resolveTargetSha).mockResolvedValue("def5678");
+    vi.mocked(isShaFresh).mockReturnValue(false);
+    vi.mocked(getLatestRun).mockResolvedValue(null);
 
     const result = await getSelfUpgradeStatus();
 
@@ -226,13 +297,13 @@ describe("getSelfUpgradeStatus", () => {
   it("reports the first hourly tick after the next maintenance window opens", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-24T16:10:00.000Z"));
-    vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
+    vi.mocked(getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
     vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
     vi.mocked(nextUpgradeWindowOpen).mockReturnValue(new Date("2026-05-24T17:30:00.000Z"));
-    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue("abc1234");
-    vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue("def5678");
-    vi.mocked(SelfUpgrade.isShaFresh).mockReturnValue(false);
-    vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
+    vi.mocked(getDeployedSha).mockResolvedValue("abc1234");
+    vi.mocked(resolveTargetSha).mockResolvedValue("def5678");
+    vi.mocked(isShaFresh).mockReturnValue(false);
+    vi.mocked(getLatestRun).mockResolvedValue(null);
 
     const result = await getSelfUpgradeStatus();
 
@@ -242,12 +313,12 @@ describe("getSelfUpgradeStatus", () => {
   });
 
   it("returns isFresh=true when deployed sha matches target", async () => {
-    vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
+    vi.mocked(getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
     vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
-    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue("def5678");
-    vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue("def5678");
-    vi.mocked(SelfUpgrade.isShaFresh).mockReturnValue(true);
-    vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
+    vi.mocked(getDeployedSha).mockResolvedValue("def5678");
+    vi.mocked(resolveTargetSha).mockResolvedValue("def5678");
+    vi.mocked(isShaFresh).mockReturnValue(true);
+    vi.mocked(getLatestRun).mockResolvedValue(null);
 
     const result = await getSelfUpgradeStatus();
 
@@ -256,26 +327,26 @@ describe("getSelfUpgradeStatus", () => {
   });
 
   it("returns isFresh=false and skips isShaFresh when targetSha is null", async () => {
-    vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
+    vi.mocked(getSelfUpgradeConfig).mockResolvedValue(mockConfig as never);
     vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
-    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue("abc1234");
-    vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue(null);
-    vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
+    vi.mocked(getDeployedSha).mockResolvedValue("abc1234");
+    vi.mocked(resolveTargetSha).mockResolvedValue(null);
+    vi.mocked(getLatestRun).mockResolvedValue(null);
 
     const result = await getSelfUpgradeStatus();
 
     expect(result.isFresh).toBe(false);
     expect(result.targetSha).toBeNull();
-    expect(SelfUpgrade.isShaFresh).not.toHaveBeenCalled();
+    expect(isShaFresh).not.toHaveBeenCalled();
   });
 
   it("returns disabled status when self-upgrade is disabled", async () => {
     const disabledConfig = { ...mockConfig, enabled: false };
-    vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(disabledConfig as never);
+    vi.mocked(getSelfUpgradeConfig).mockResolvedValue(disabledConfig as never);
     vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
-    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue(null);
-    vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue(null);
-    vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
+    vi.mocked(getDeployedSha).mockResolvedValue(null);
+    vi.mocked(resolveTargetSha).mockResolvedValue(null);
+    vi.mocked(getLatestRun).mockResolvedValue(null);
 
     const result = await getSelfUpgradeStatus();
 
@@ -285,11 +356,11 @@ describe("getSelfUpgradeStatus", () => {
   it("evaluates the upgrade window from explicit windows + operating-hours schedule", async () => {
     const explicit = [{ dayOfWeek: [2], startTime: "02:00", endTime: "04:00" }];
     const windowConfig = { ...mockConfig, maintenanceWindows: explicit };
-    vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(windowConfig as never);
+    vi.mocked(getSelfUpgradeConfig).mockResolvedValue(windowConfig as never);
     vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
-    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue(null);
-    vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue(null);
-    vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
+    vi.mocked(getDeployedSha).mockResolvedValue(null);
+    vi.mocked(resolveTargetSha).mockResolvedValue(null);
+    vi.mocked(getLatestRun).mockResolvedValue(null);
 
     const result = await getSelfUpgradeStatus();
 
@@ -304,15 +375,15 @@ describe("getSelfUpgradeStatus", () => {
 
   it("passes channel and source config to resolveTargetSha", async () => {
     const betaConfig = { ...mockConfig, channel: "beta" };
-    vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue(betaConfig as never);
+    vi.mocked(getSelfUpgradeConfig).mockResolvedValue(betaConfig as never);
     vi.mocked(isUpgradeWindowOpen).mockReturnValue(false);
-    vi.mocked(SelfUpgrade.getDeployedSha).mockResolvedValue(null);
-    vi.mocked(SelfUpgrade.resolveTargetSha).mockResolvedValue(null);
-    vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue(null);
+    vi.mocked(getDeployedSha).mockResolvedValue(null);
+    vi.mocked(resolveTargetSha).mockResolvedValue(null);
+    vi.mocked(getLatestRun).mockResolvedValue(null);
 
     await getSelfUpgradeStatus();
 
-    expect(SelfUpgrade.resolveTargetSha).toHaveBeenCalledWith("beta", betaConfig);
+    expect(resolveTargetSha).toHaveBeenCalledWith("beta", betaConfig);
   });
 });
 
@@ -327,6 +398,7 @@ const mockRunRow1 = {
   deployedSha: "def5678",
   startedAt: new Date("2026-05-20T02:00:00Z"),
   completedAt: new Date("2026-05-20T02:05:00Z"),
+  completionEvidence: { recoveryPoint: { status: "ok" } },
   failureLog: null,
   createdAt: new Date("2026-05-20T02:00:00Z"),
 };
@@ -340,6 +412,7 @@ const mockRunRow2 = {
   deployedSha: null,
   startedAt: new Date("2026-05-19T02:00:00Z"),
   completedAt: new Date("2026-05-19T02:01:00Z"),
+  completionEvidence: null,
   failureLog: "promoter exited with code 1",
   createdAt: new Date("2026-05-19T02:00:00Z"),
 };
@@ -451,6 +524,7 @@ describe("listSelfUpgradeRuns – DTO shape", () => {
     expect(run.currentSha).toBe(mockRunRow1.currentSha);
     expect(run.targetSha).toBe(mockRunRow1.targetSha);
     expect(run.deployedSha).toBe(mockRunRow1.deployedSha);
+    expect(run.completionEvidence).toEqual(mockRunRow1.completionEvidence);
     expect(run.startedAt).toEqual(mockRunRow1.startedAt);
     expect(run.completedAt).toEqual(mockRunRow1.completedAt);
     expect(run.failureLog).toBeNull();
@@ -475,6 +549,7 @@ describe("listSelfUpgradeRuns – DTO shape", () => {
     expect(select.currentSha).toBe(true);
     expect(select.targetSha).toBe(true);
     expect(select.deployedSha).toBe(true);
+    expect(select.completionEvidence).toBe(true);
     expect(select.startedAt).toBe(true);
     expect(select.completedAt).toBe(true);
     expect(select.failureLog).toBe(true);
@@ -484,6 +559,71 @@ describe("listSelfUpgradeRuns – DTO shape", () => {
     expect(select).not.toHaveProperty("fromVersion");
     expect(select).not.toHaveProperty("toVersion");
     expect(select).not.toHaveProperty("error");
+  });
+});
+
+// ─── rollbackSelfUpgrade ───────────────────────────────────────────────────────
+
+describe("rollbackSelfUpgrade", () => {
+  beforeEach(() => {
+    vi.mocked(runSelfUpgradeRollback).mockResolvedValue({
+      ok: true,
+      status: "ok",
+      runId: "SUR-AAAA0001",
+      restores: [
+        {
+          target: "postgres",
+          sourceBackupRunId: "BR-PG",
+          restoreId: "RR-PG",
+          status: "ok",
+        },
+      ],
+    });
+  });
+
+  it("rejects callers without restore authority", async () => {
+    vi.mocked(can).mockImplementation((_user, capability) => capability === "view_operations");
+
+    const result = await rollbackSelfUpgrade("SUR-AAAA0001", "ROLLBACK");
+
+    expect(result).toEqual({
+      ok: false,
+      error: "You do not have permission to restore upgrade recovery points.",
+    });
+    expect(runSelfUpgradeRollback).not.toHaveBeenCalled();
+  });
+
+  it("requires the exact rollback confirmation text", async () => {
+    const result = await rollbackSelfUpgrade("SUR-AAAA0001", "restore");
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('Confirmation text must be exactly "ROLLBACK"');
+    expect(runSelfUpgradeRollback).not.toHaveBeenCalled();
+  });
+
+  it("runs the governed rollback and revalidates operations views", async () => {
+    const result = await rollbackSelfUpgrade("SUR-AAAA0001", "ROLLBACK");
+
+    expect(result).toMatchObject({ ok: true, status: "ok" });
+    expect(runSelfUpgradeRollback).toHaveBeenCalledWith({
+      runId: "SUR-AAAA0001",
+      initiatedByUserId: mockSession.user.id,
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/ops/self-upgrade");
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/backups");
+  });
+
+  it("returns governed rollback errors as operator-safe messages", async () => {
+    vi.mocked(runSelfUpgradeRollback).mockRejectedValue(
+      new SelfUpgradeRollbackError("Self-upgrade run has no governed recovery point."),
+    );
+
+    const result = await rollbackSelfUpgrade("SUR-AAAA0001", "ROLLBACK");
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Self-upgrade run has no governed recovery point.",
+    });
   });
 });
 
@@ -579,7 +719,7 @@ describe("triggerSelfUpgrade – manual is not window-gated", () => {
 
 describe("triggerSelfUpgrade – guard: already-running", () => {
   it("returns queued: false with reason already-running when a run is active", async () => {
-    vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue({
+    vi.mocked(getLatestRun).mockResolvedValue({
       ...mockRun,
       status: "running",
       runId: "SUR-RUNNING1",
@@ -594,7 +734,7 @@ describe("triggerSelfUpgrade – guard: already-running", () => {
   });
 
   it("includes runId of the active run in the response", async () => {
-    vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue({
+    vi.mocked(getLatestRun).mockResolvedValue({
       ...mockRun,
       status: "running",
       runId: "SUR-RUNNING1",
@@ -606,7 +746,7 @@ describe("triggerSelfUpgrade – guard: already-running", () => {
   });
 
   it("applies already-running guard even when dryRun is true", async () => {
-    vi.mocked(SelfUpgrade.getLatestRun).mockResolvedValue({
+    vi.mocked(getLatestRun).mockResolvedValue({
       ...mockRun,
       status: "running",
       runId: "SUR-RUNNING1",
@@ -625,7 +765,7 @@ describe("triggerSelfUpgrade – guard: already-running", () => {
 
 describe("triggerSelfUpgrade – guard: invalid-config", () => {
   it("returns queued: false with reason disabled when config.enabled is false", async () => {
-    vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue({
+    vi.mocked(getSelfUpgradeConfig).mockResolvedValue({
       ...mockConfig,
       enabled: false,
     } as never);
@@ -639,7 +779,7 @@ describe("triggerSelfUpgrade – guard: invalid-config", () => {
   });
 
   it("dryRun bypasses the disabled guard and dispatches the event", async () => {
-    vi.mocked(SelfUpgrade.getSelfUpgradeConfig).mockResolvedValue({
+    vi.mocked(getSelfUpgradeConfig).mockResolvedValue({
       ...mockConfig,
       enabled: false,
     } as never);

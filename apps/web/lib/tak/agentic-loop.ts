@@ -4,9 +4,11 @@
 
 import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference";
 import { detectRepeatedToolCall, recordRepeatedToolIssue } from "@/lib/tak/runtime-issues";
+import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
 import { PLATFORM_TOOLS, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { sanitizeForLog } from "@/lib/security/safe-log";
+import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { prisma } from "@dpf/db";
 import { agentEventBus } from "./agent-event-bus";
@@ -50,6 +52,71 @@ const MAX_TEXT_MESSAGE_CHARS = 4_000;
 /** Determine whether the loop should nudge the model to use tools. */
 const COMPLETION_CLAIM_PATTERN =
   /\b(built|deployed|shipped|created|implemented|saved|configured|tested|fixed|completed|installed|launched|starting up|initializing|applying|generating)\b|tests?\s+pass|plan(?:ning)?\s+(?:is\s+done|ready)|building\s+now|start\s+implementation/i;
+
+/**
+ * Build a plain-language, non-technical explanation when an agent turn fails
+ * because routing could not complete a tool-using call (BI-23E0714C).
+ *
+ * The old behavior lumped every tool-route failure into one message that told
+ * the operator to "Configure an active model that supports tools in
+ * Platform > AI > Model Assignment" — which is wrong and a dead end whenever a
+ * tool-capable provider IS already configured (the common case). This classifier
+ * distinguishes the real situations so we never send a non-technical operator to
+ * fix config that is already correct:
+ *
+ *  - REQUEST_TOO_LARGE  → context overflow; start a new thread.
+ *  - local bypassed for tool count + paid providers down → the bundled local
+ *    model can't drive this coworker's large tool set and paid providers are
+ *    briefly unavailable (usually a short rate-limit). Nothing is misconfigured.
+ *  - genuinely no tool-capable endpoint active → point to the REAL surface.
+ *  - other endpoint failures → transient; retry shortly.
+ */
+export function describeToolRouteFailure(
+  errorMessage: string,
+  toolCount: number,
+): string {
+  const msg = errorMessage ?? "";
+
+  if (msg.startsWith("REQUEST_TOO_LARGE:")) {
+    return "Your conversation is too long for this AI provider. Please start a new thread to continue.";
+  }
+
+  // Most common real cause: the bundled local model was bypassed because this
+  // coworker exposes more tools than a small local model can reliably handle,
+  // and no paid provider was available to take the work. This is NOT a
+  // misconfiguration, so do not point the operator at a settings page.
+  if (/exceeds threshold|skipped local fallback/i.test(msg)) {
+    // Prefer the exact count the router reported ("58 tools exceeds threshold");
+    // fall back to the tool count we were handed.
+    const reported = msg.match(/(\d+)\s+tools?\s+exceeds threshold/i);
+    const count = reported ? Number(reported[1]) : toolCount;
+    const tools = count > 0 ? `${count} of them` : "many";
+    return (
+      "Your paid AI providers (such as Claude or GPT) are briefly unavailable right now — " +
+      "usually a short rate-limit that clears within a minute — and this coworker uses too many " +
+      `tools (${tools}) for the bundled local model to run on its own. Nothing is misconfigured. ` +
+      "Please wait a moment and try again."
+    );
+  }
+
+  // Genuine config gap: routing found no active model that supports tools at all.
+  if (/No eligible endpoints/i.test(msg) && /toolUse/i.test(msg)) {
+    return (
+      "No AI model that supports tools is active right now. Open Platform > AI > " +
+      "Providers & Routing to activate a tool-capable provider, then try again."
+    );
+  }
+
+  // Endpoints exist but all transiently failed (rate-limit / overload / network).
+  if (/All endpoints failed/i.test(msg)) {
+    return (
+      "The AI providers are momentarily busy (usually rate-limited or overloaded). " +
+      "Please try again in about 30 seconds — no setup change is needed."
+    );
+  }
+
+  return "The AI provider is temporarily unavailable. Please try again in about 30 seconds.";
+}
 
 // Narration patterns: agent describes code or announces intent instead of calling tools.
 // Includes preamble narration ("Let me check", "I need to fix") and intent announcements
@@ -333,6 +400,26 @@ function buildFabricationFailureMessage(params: {
   return (
     "I couldn't complete that — the underlying work wasn't recorded. "
     + "Try rephrasing the request, or open the build details to see what's saved so far."
+  );
+}
+
+/**
+ * Honest, infrastructure-aware copy for when a completion-claim trips the
+ * fabrication guard ON A DOWNGRADED TURN — i.e. the preferred AI provider
+ * failed and a backup produced the answer. The fabrication signal here is most
+ * likely an artifact of the failover (a weaker backup model), NOT the model
+ * faking work, so we must NOT show the build-recording failure copy ("the
+ * underlying work wasn't recorded") — that misreports an infrastructure failure
+ * as model misbehavior. This is the exact 2026-06-02 incident. Respects
+ * IDENTITY_BLOCK rule #5 — no provider/model/tool internals exposed.
+ * See spec docs/specs/routing-resilience-and-failure-observability-spec.md §4.5.
+ */
+function buildDowngradedFabricationMessage(): string {
+  return (
+    "My usual AI provider was unavailable, so I worked through a backup that "
+    + "couldn't fully complete this — nothing was left half-saved on your side. "
+    + "Please try again (the primary connection may have recovered), or break "
+    + "the request into a smaller step."
   );
 }
 
@@ -959,13 +1046,50 @@ export async function runAgenticLoop(params: {
   const executedTools: AgenticResult["executedTools"] = [];
   let lastResult: RoutedInferenceResult | null = null;
   let continuationNudges = 0;
-  let fabricationRetried = false;
+  let fabricationRetries = 0;
   let frustrationCount = 0;
   let bestPreNudgeContent = ""; // Preserve best text from before nudge
   const startTime = Date.now();
   let inferenceCallCount = 0;
   let sandboxUnavailableCount = 0; // Circuit breaker: stop trying sandbox tools if unavailable
   let previousResponseId: string | undefined; // Responses API conversation chaining
+
+  // Per-turn observability: one structured summary line per user turn, carrying
+  // the correlation key (threadId) and the figures that make a slow turn
+  // self-evident — number of inference dispatches, nudges, whether tools were
+  // attached, and total wall-clock. Before this, diagnosing a 135s "hello"
+  // meant hand-stitching timestamps across un-correlated [cli-adapter] /
+  // [agentic-loop] lines while a concurrent coworker's logs interleaved. See
+  // the Portfolio Analyst latency investigation, 2026-06-04.
+  const toolsAttachedForTurn = Boolean(toolsForProvider && toolsForProvider.length > 0);
+  const logTurnSummary = (provider: string, model: string): void => {
+    console.log(
+      sanitizeForLog(
+        `[turn] thread=${JSON.stringify(threadId)} agent=${JSON.stringify(agentId)} ` +
+        `route=${JSON.stringify(routeContext)} provider=${provider} model=${model} ` +
+        `dispatches=${inferenceCallCount} nudges=${continuationNudges} ` +
+        `toolsAttached=${toolsAttachedForTurn} executedTools=${executedTools.length} ` +
+        `totalMs=${Date.now() - startTime}`,
+      ),
+    );
+    // BI-47443B67: persist the same rollup durably so the regression detector
+    // can compute nudge-rate windows. Fire-and-forget — the writer never throws.
+    void recordCoworkerTurnMetric({
+      threadId,
+      agentMessageId: agentMessageId ?? null,
+      agentId,
+      routeContext,
+      taskType: taskType ?? null,
+      providerId: provider,
+      modelId: model,
+      dispatches: inferenceCallCount,
+      nudges: continuationNudges,
+      toolsAttached: toolsAttachedForTurn,
+      executedTools: executedTools.length,
+      totalMs: Date.now() - startTime,
+    });
+  };
+
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
     // EP-ASYNC-COWORKER-001: Check cancellation flag at each iteration boundary
     if (agentEventBus.isCancelled(threadId)) {
@@ -1153,18 +1277,9 @@ export async function runAgenticLoop(params: {
     } catch (routeErr) {
       const msg = routeErr instanceof Error ? routeErr.message : String(routeErr);
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
-      const isTooLarge = msg.startsWith("REQUEST_TOO_LARGE:");
-      const isMissingToolUseCapacity =
-        /No eligible endpoints/i.test(msg) && /toolUse/i.test(msg);
-      const isToolUsingEndpointFailure =
-        Boolean(routeOptions.tools && routeOptions.tools.length > 0) &&
-        (/All endpoints failed/i.test(msg) || /tools exceeds threshold/i.test(msg));
+      logTurnSummary("unknown", "unknown");
       return {
-        content: isTooLarge
-          ? "Your conversation is too long for this AI provider. Please start a new thread to continue."
-          : isMissingToolUseCapacity || isToolUsingEndpointFailure
-            ? "No tool-use-capable AI provider is available for this coworker. Configure an active model that supports tools in Platform > AI > Model Assignment, then retry this task."
-          : "The AI provider is temporarily unavailable. Please try again in about 30 seconds.",
+        content: describeToolRouteFailure(msg, routeOptions.tools?.length ?? 0),
         providerId: "unknown",
         modelId: "unknown",
         downgraded: false,
@@ -1212,7 +1327,7 @@ export async function runAgenticLoop(params: {
 
       // Diagnostic: log raw response so we can trace stalls
       console.log(
-        `[agentic-loop] iter=${iteration} provider=${result.providerId} model=${result.modelId} ` +
+        `[agentic-loop] thread=${JSON.stringify(threadId)} iter=${iteration} provider=${result.providerId} model=${result.modelId} ` +
         `toolCalls=0 contentLen=${trimmed.length} nudges=${continuationNudges} ` +
         `executedTools=${executedTools.length} content=${JSON.stringify(trimmed.slice(0, 200))}`,
       );
@@ -1351,25 +1466,16 @@ export async function runAgenticLoop(params: {
         continue;
       }
 
-      // Repetition detector: if the model's response is asking a question that's
-      // very similar to a previous assistant message, the user already answered it.
-      // Inject a nudge telling the model to proceed with the answer already given.
-      // This prevents the "ask the same scope question 5 times" loop.
-      if (trimmed.length > 20 && trimmed.includes("?")) {
+      // Repetition detector: if the model is REDUNDANTLY re-asking a question
+      // it already asked, nudge it to proceed with the answer already given.
+      // This prevents the "ask the same scope question 5 times" loop WITHOUT
+      // misfiring on a substantive answer that merely ends with an engagement
+      // question — see isRedundantReaskQuestion for the false-positive history.
+      {
         const previousAssistantMessages = messages
           .filter(m => m.role === "assistant")
           .map(m => typeof m.content === "string" ? m.content : "");
-        const trimmedLower = trimmed.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
-        const isRepeatQuestion = previousAssistantMessages.some(prev => {
-          const prevLower = prev.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
-          if (prevLower.length < 20) return false;
-          // Check word overlap — if >60% of words match, it's a repeated question
-          const trimmedWords = new Set(trimmedLower.split(/\s+/));
-          const prevWords = prevLower.split(/\s+/);
-          const overlap = prevWords.filter(w => trimmedWords.has(w)).length;
-          return overlap / Math.max(prevWords.length, 1) > 0.6;
-        });
-        if (isRepeatQuestion) {
+        if (isRedundantReaskQuestion(trimmed, previousAssistantMessages)) {
           console.log(`[agentic-loop] Repeated question detected, injecting proceed nudge: ${trimmed.slice(0, 100)}`);
           continuationNudges++;
           messages = [
@@ -1388,10 +1494,43 @@ export async function runAgenticLoop(params: {
       }
 
       if (looksFabricated) {
-        if (!fabricationRetried) {
-          fabricationRetried = true;
+        // Routing-resilience Slice D: an infrastructure failover (the preferred
+        // provider failed and a backup answered) is NOT model fabrication. On a
+        // downgraded conversational turn the fabrication signal is a false
+        // positive caused by the failover — keep the backup's answer rather than
+        // replacing it with the build-recording failure copy. This is the exact
+        // 2026-06-02 incident (a good estate answer hidden behind "the
+        // underlying work wasn't recorded"). detectFabrication stays pure; the
+        // infra context (downgraded, build-route) is applied only here.
+        if (result.downgraded && !isBuildRoute) {
           console.warn(
-            "[agentic-loop] fabrication detected: claimed completion without the required tool-backed evidence. Retrying.",
+            "[agentic-loop] fabrication signal on a downgraded conversational turn — keeping the backup answer (infra failover, not fabrication).",
+          );
+          return {
+            content: trimmed,
+            providerId: result.providerId,
+            modelId: result.modelId,
+            downgraded: result.downgraded,
+            downgradeMessage: result.downgradeMessage,
+            totalInputTokens,
+            totalOutputTokens,
+            executedTools,
+            proposal: null,
+          };
+        }
+
+        // BI-PIR-cc091267 — a build-route fabrication signal (completion claim
+        // with zero tool calls) is most often a TRANSIENT provider downgrade:
+        // the preferred provider 529s, a weaker backup confabulates "done"
+        // without emitting the required tool call. A single retry can't ride out
+        // a blip that self-clears in ~30s, so give build routes a few attempts —
+        // each re-dispatches and can re-route to the recovered preferred
+        // provider. Conversational routes keep a single retry (unchanged).
+        const maxFabricationRetries = isBuildRoute ? 3 : 1;
+        if (fabricationRetries < maxFabricationRetries) {
+          fabricationRetries++;
+          console.warn(
+            `[agentic-loop] fabrication detected: claimed completion without the required tool-backed evidence. Retrying (${fabricationRetries}/${maxFabricationRetries}).`,
           );
           messages = [
             ...messages,
@@ -1409,11 +1548,16 @@ export async function runAgenticLoop(params: {
         }
 
         return {
-          content: buildFabricationFailureMessage({
-            response: trimmed,
-            tools,
-            executedTools,
-          }),
+          // Downgraded build-route claim: the completion claim is load-bearing
+          // ("I shipped it"), so we don't keep it — but we still attribute the
+          // failure to infrastructure, not to the model fabricating work.
+          content: result.downgraded
+            ? buildDowngradedFabricationMessage()
+            : buildFabricationFailureMessage({
+                response: trimmed,
+                tools,
+                executedTools,
+              }),
           providerId: result.providerId,
           modelId: result.modelId,
           downgraded: result.downgraded,
@@ -1580,6 +1724,7 @@ export async function runAgenticLoop(params: {
         console.log(`[agentic-loop] recovering pre-nudge content (${bestPreNudgeContent.length} chars)`);
       }
 
+      logTurnSummary(result.providerId, result.modelId);
       return {
         content: finalContent,
         providerId: result.providerId,
@@ -1620,6 +1765,7 @@ export async function runAgenticLoop(params: {
           }
         }
         if (!preAuthorized) {
+          logTurnSummary(result.providerId, result.modelId);
           return {
             content: result.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
             providerId: result.providerId,
@@ -1762,19 +1908,28 @@ export async function runAgenticLoop(params: {
     new Set(tools.filter((tool) => tool.sideEffect).map((tool) => tool.name)),
     tools.some((tool) => tool.sideEffect || BUILD_TOOL_NAMES.has(tool.name)),
   );
+  const downgraded = lastResult?.downgraded ?? false;
   const exhaustedMessage = buildMaxIterationsExhaustedMessage({
-    downgraded: lastResult?.downgraded ?? false,
+    downgraded,
     executedTools,
   });
   return {
+    // Routing-resilience Slice D: a raw tool-use loop is a genuine model
+    // hallucination and still gets the loop message. But a fabrication signal on
+    // a DOWNGRADED turn yields to the downgrade-aware exhausted message (honest
+    // infra copy) instead of the "underlying work wasn't recorded" build copy —
+    // the exhaustion was driven by the backup provider, not by the model faking
+    // work. Fabrication copy is reserved for healthy-provider false claims.
     content: fallbackIsRawToolUse
       ? buildRuntimeLimitToolLoopMessage(executedTools)
       : fallbackIsFabricated
-      ? buildFabricationFailureMessage({
-          response: fallbackContent,
-          tools,
-          executedTools,
-        })
+      ? (downgraded
+          ? exhaustedMessage
+          : buildFabricationFailureMessage({
+              response: fallbackContent,
+              tools,
+              executedTools,
+            }))
       : (lastResult?.content?.trim() ? lastResult.content : exhaustedMessage),
     providerId: lastResult?.providerId ?? "unknown",
     modelId: lastResult?.modelId ?? "unknown",

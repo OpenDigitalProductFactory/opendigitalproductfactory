@@ -75,8 +75,14 @@ function dispatchChangeEvent(): void {
  *  value. Used by getActiveManifest. Not a full router — pages with
  *  complex matching needs may add a more sophisticated matcher in
  *  BI-6C9CC0EC (Build Studio manifest registration) without changing
- *  this signature. */
-function matchesRoute(actualRoute: string, pattern: string): boolean {
+ *  this signature.
+ *
+ *  Exported so the server-side dispatch path (mcp-tools.ts
+ *  screen_dispatch_action / manifests/index.ts findManifestForRoute)
+ *  can reuse the exact same matching logic the client runtime uses —
+ *  no risk of the two layers disagreeing about which manifest is
+ *  active for a given route. */
+export function matchesRoute(actualRoute: string, pattern: string): boolean {
   const stripTrailing = (s: string) => (s.endsWith("/") && s.length > 1 ? s.slice(0, -1) : s);
   const patternParts = stripTrailing(pattern).split("/");
   const actualParts = stripTrailing(actualRoute).split("/");

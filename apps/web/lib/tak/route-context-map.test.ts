@@ -107,7 +107,15 @@ describe("resolveRouteContext", () => {
     expect(ctx.routePrefix).toBe("/finance");
     expect(ctx.sensitivity).toBe("confidential");
     expect(ctx.domainTools).toContain("get_finance_period_summary");
+    expect(ctx.domainTools).toEqual(expect.arrayContaining([
+      "mcp-browser-use__browse_open",
+      "mcp-browser-use__browse_act",
+      "mcp-browser-use__browse_extract",
+      "mcp-browser-use__browse_screenshot",
+      "mcp-browser-use__browse_close",
+    ]));
     expect(ctx.skills.some((skill) => skill.label === "Income vs expenses this month")).toBe(true);
+    expect(ctx.skills.some((skill) => skill.label === "Retrieve billing portal costs")).toBe(true);
   });
 
   it("matches licensing routes ahead of the broader compliance context", () => {

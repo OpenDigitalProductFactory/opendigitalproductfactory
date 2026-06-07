@@ -28,6 +28,8 @@ const {
     taxRemittanceRun: { count: vi.fn() },
     taxObligationPeriod: { count: vi.fn() },
     taxJurisdictionReference: { findMany: vi.fn() },
+    runtimeTarget: { findMany: vi.fn() },
+    nonProductionEnvironmentLease: { findMany: vi.fn() },
   },
   mockGetPlaybook: vi.fn(),
   mockGetVocabulary: vi.fn(),
@@ -140,6 +142,10 @@ beforeEach(() => {
   mockPrisma.taxRemittanceRun.count.mockResolvedValue(0);
   mockPrisma.taxObligationPeriod.count.mockResolvedValue(0);
   mockPrisma.taxJurisdictionReference.findMany.mockResolvedValue([]);
+  mockPrisma.runtimeTarget.findMany.mockReset();
+  mockPrisma.nonProductionEnvironmentLease.findMany.mockReset();
+  mockPrisma.runtimeTarget.findMany.mockResolvedValue([]);
+  mockPrisma.nonProductionEnvironmentLease.findMany.mockResolvedValue([]);
 
   mockGetPlaybook.mockReturnValue({
     primaryGoal: "Build authority pipeline through expertise demonstration and client nurture",
@@ -272,5 +278,63 @@ describe("getRouteDataContext", () => {
     expect(context).toContain("DPF tax processing proposal required");
     expect(context).toContain("Likely DPF/Texas research focus");
     expect(context).toContain("Texas Comptroller");
+  });
+
+  it("gives /ops/dev-loop its own runtime-coordination page data, not the backlog (BI-FD7E4D72)", async () => {
+    const now = Date.now();
+    mockPrisma.runtimeTarget.findMany.mockResolvedValue([
+      {
+        targetId: "RT-ROOT-PORTAL",
+        kind: "root-portal",
+        status: "running",
+        hostUrl: "http://localhost:3000",
+        lastHeartbeatAt: new Date(now - 5 * 60_000),
+        expiresAt: null,
+        updatedAt: new Date(now - 5 * 60_000),
+        workCapsule: null,
+        featureBuild: null,
+      },
+      {
+        targetId: "RT-BUILD-SANDBOX-9E4FA6DE",
+        kind: "build-sandbox",
+        status: "running",
+        hostUrl: "http://localhost:3035",
+        // stale: heartbeat is days old, janitor should have swept it
+        lastHeartbeatAt: new Date(now - 11 * 24 * 3_600_000),
+        expiresAt: null,
+        updatedAt: new Date(now - 11 * 24 * 3_600_000),
+        workCapsule: { headBranch: "fix/some-branch" },
+        featureBuild: { buildId: "FB-12345678" },
+      },
+    ]);
+    mockPrisma.nonProductionEnvironmentLease.findMany.mockResolvedValue([
+      {
+        leaseId: "LEASE-1",
+        environmentKey: "local-integration-ci",
+        status: "active",
+        ownerProvider: "codex",
+        purpose: "Validate self-upgrade backup script path repair",
+        branchName: "fix/self-upgrade-backup-script-path",
+        worktreePath: "/work/abc",
+        expiresAt: new Date(now + 3 * 3_600_000),
+        releasedAt: null,
+      },
+    ]);
+
+    const context = await getRouteDataContext("/ops/dev-loop", "user-1");
+
+    expect(context).toContain("PAGE DATA — Dev Loop (runtime coordination map):");
+    // The runtime targets the page renders must be present...
+    expect(context).toContain("RT-ROOT-PORTAL");
+    expect(context).toContain("RT-BUILD-SANDBOX-9E4FA6DE");
+    expect(context).toContain("ACTIVE RUNTIME TARGETS (2)");
+    expect(context).toContain("ACTIVE NON-PROD LEASES (1)");
+    expect(context).toContain("local-integration-ci");
+    // ...and it must explain stale-vs-live + same-port duplicates (the operator's question).
+    expect(context).toContain("no heartbeat for 2h");
+    expect(context).toMatch(/lastHeartbeat=.*h ago/);
+    // It must NOT have fallen back to the /ops backlog provider.
+    expect(context).not.toContain("PAGE DATA — Operations Backlog:");
+    expect(mockPrisma.runtimeTarget.findMany).toHaveBeenCalled();
   });
 });

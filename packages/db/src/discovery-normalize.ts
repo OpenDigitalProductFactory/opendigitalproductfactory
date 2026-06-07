@@ -3,6 +3,8 @@ import {
   type RankedTaxonomyCandidate,
   type TaxonomyNodeCandidate,
 } from "./discovery-attribution";
+import { matchInventoryEntity, type AdapterRule } from "./discovery-fingerprint-adapter";
+import { buildDeviceFingerprintObservation } from "./discovery-fingerprint-observation";
 import {
   buildDiscoveredKey,
   buildInventoryEntityKey,
@@ -95,7 +97,74 @@ export type NormalizeDiscoveryOptions = {
   softwareIdentities?: SoftwareIdentityCandidate[];
   softwareRules?: SoftwareNormalizationRuleInput[];
   discoveryScope?: DiscoveryScopeContext;
+  /**
+   * Active discovery-fingerprint rules (spec §4 layer 0). When present, an
+   * entity whose day-one signals (OUI vendor / MAC / hostname) confidently
+   * match a rule is identified + placed deterministically — overriding the
+   * heuristic taxonomy attribution. Each rule's `taxonomyNodeId` must be the
+   * semantic nodeId STRING (loaded joined to TaxonomyNode.nodeId), since the
+   * normalizer attaches taxonomy via `connect: { nodeId }`.
+   */
+  fingerprintRules?: AdapterRule[];
+  /**
+   * Both confidences must clear this for a fingerprint match to auto-attribute
+   * (reuses AUTO_PROMOTE_THRESHOLD = 0.9 by default; spec §5).
+   */
+  fingerprintAutoApplyThreshold?: number;
 };
+
+const DEFAULT_FINGERPRINT_AUTO_APPLY = 0.9;
+
+/**
+ * Layer-0 fingerprint attribution: if the item's day-one signals confidently
+ * match an active rule, return a deterministic attribution that takes
+ * precedence over the heuristic. Returns null when no rule matches or the
+ * match is below threshold (the caller then falls back to the heuristic).
+ */
+function fingerprintAttribution(
+  item: DiscoveredItemInput,
+  options: NormalizeDiscoveryOptions,
+): DerivedAttribution | null {
+  const rules = options.fingerprintRules;
+  if (!rules || rules.length === 0) {
+    return null;
+  }
+  const observation = buildDeviceFingerprintObservation({
+    name: item.name,
+    attributes: item.attributes ?? {},
+  });
+  if (observation === null) {
+    return null;
+  }
+  const match = matchInventoryEntity(observation, { rules });
+  if (match === null || match.taxonomyNodeId === null) {
+    return null;
+  }
+  const threshold = options.fingerprintAutoApplyThreshold ?? DEFAULT_FINGERPRINT_AUTO_APPLY;
+  // Both the identity and the placement must clear the bar — a confident
+  // identity placed into an uncertain node should not auto-attribute, and vice
+  // versa. min() captures "both high".
+  const confidence = Math.min(match.identityConfidence, match.taxonomyConfidence);
+  if (confidence < threshold) {
+    return null;
+  }
+  return {
+    attributionStatus: "attributed",
+    attributionMethod: "rule",
+    confidence,
+    // Foundational sub-portfolio nodes all live under the "foundational" portfolio.
+    portfolioSlug: match.taxonomyNodeId.startsWith("foundational/") ? "foundational" : null,
+    taxonomyNodeId: match.taxonomyNodeId,
+    candidateTaxonomy: [],
+    evidence: {
+      source: "discovery-fingerprint",
+      ruleKey: match.ruleKey,
+      identityConfidence: match.identityConfidence,
+      taxonomyConfidence: match.taxonomyConfidence,
+      resolvedIdentity: match.resolvedIdentity,
+    },
+  };
+}
 
 type DerivedAttribution = {
   attributionStatus: "attributed" | "needs_review";
@@ -191,15 +260,20 @@ function normalizeItem(
     discoveredItem.confidence = item.confidence;
   }
 
-  const attributed: DerivedAttribution = options.taxonomyNodes && options.taxonomyNodes.length > 0
-    ? attributeInventoryEntity({
-      entityKey,
-      entityType,
-      itemType: item.itemType,
-      name: item.name,
-      properties: item.attributes ?? {},
-    }, options.taxonomyNodes)
-    : buildFallbackAttribution(item);
+  // Layer 0 (spec §4): a confident fingerprint match identifies + places the
+  // device deterministically and wins over the heuristic. Only when no rule
+  // matches do we fall through to taxonomy scoring / the fallback.
+  const attributed: DerivedAttribution =
+    fingerprintAttribution(item, options)
+    ?? (options.taxonomyNodes && options.taxonomyNodes.length > 0
+      ? attributeInventoryEntity({
+        entityKey,
+        entityType,
+        itemType: item.itemType,
+        name: item.name,
+        properties: item.attributes ?? {},
+      }, options.taxonomyNodes)
+      : buildFallbackAttribution(item));
 
   const inventoryEntity: NormalizedInventoryEntity = {
     entityKey,

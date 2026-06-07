@@ -24,6 +24,7 @@ riskBand: medium
 enforces:
   - kernel/principles/architecture-over-shortcuts
   - kernel/principles/governance-approves-evidence-not-provenance
+  - kernel/principles/worktree-is-source-control-not-runtime
 ---
 
 # DPF Promote to Build Studio

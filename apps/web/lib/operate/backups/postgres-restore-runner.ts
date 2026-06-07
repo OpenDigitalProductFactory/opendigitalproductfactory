@@ -21,8 +21,6 @@
  * a typed-RESTORE confirmation already verified.
  */
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -33,11 +31,10 @@ import {
 } from "@/lib/operate/metrics";
 
 import { runPostgresBackup } from "./postgres-backup-runner";
-
-const execFileAsync = promisify(execFile);
+import { resolveManagedScriptPath, runManagedScript } from "./managed-script-path";
 
 const BACKUPS_ROOT = "/backups";
-const RESTORE_SCRIPT_PATH = "/workspace/scripts/restore-postgres.sh";
+const RESTORE_SCRIPT_NAME = "restore-postgres.sh";
 const RUNNER_TIMEOUT_MS = 30 * 60 * 1000; // mirror backup runner
 
 /** Module-scoped portal mutex. Single Next.js server = single source of truth. */
@@ -67,6 +64,8 @@ export interface RestoreArgs {
   sourceBackupRunId: string;
   /** User id who clicked confirm. Stored on BackupRestore for audit. */
   initiatedByUserId?: string | null;
+  /** Restore trigger discriminator written to BackupRestore.trigger. */
+  trigger?: string | null;
   /** Override backups root for tests. */
   backupsRoot?: string;
   /** Override restore script path for tests. */
@@ -80,9 +79,30 @@ export interface RestoreArgs {
    * runPostgresBackup with trigger="pre-restore-safety".
    */
   takeSafetyBackup?: () => Promise<{ runId: string; status: "ok" | "failed" }>;
+  /** Internal orchestration hook: caller already holds the shared restore lock. */
+  acquireLock?: boolean;
 }
 
 type PrismaLike = typeof import("@dpf/db").prisma;
+
+type BackupRunSnapshot = {
+  id: string;
+  target: string;
+  startedAt: Date;
+  finishedAt: Date | null;
+  status: string;
+  trigger: string;
+  schedule: string | null;
+  sizeBytes: bigint | number | null;
+  durationMs: number | null;
+  sha256: string | null;
+  pgVersion: string | null;
+  dpfVersion: string | null;
+  storagePath: string;
+  errorMessage: string | null;
+  prunedAt: Date | null;
+  createdAt: Date;
+};
 
 function restoreTraceLog(...parts: unknown[]) {
   // CodeQL js/log-injection: parts may contain user-influenced values.
@@ -116,28 +136,9 @@ async function runRestoreScript(
   scriptPath: string,
   env: NodeJS.ProcessEnv,
 ): Promise<ScriptOutcome> {
-  try {
-    const { stdout, stderr } = await execFileAsync(scriptPath, [], {
-      env,
-      timeout: RUNNER_TIMEOUT_MS,
-      maxBuffer: 8 * 1024 * 1024,
-    });
-    return { ok: true, stdout, stderr, exitCode: 0 };
-  } catch (err: unknown) {
-    const e = err as {
-      stdout?: string;
-      stderr?: string;
-      code?: number | string;
-      message?: string;
-    };
-    const exitCode = typeof e.code === "number" ? e.code : -1;
-    return {
-      ok: false,
-      stdout: e.stdout ?? "",
-      stderr: e.stderr ?? e.message ?? String(err),
-      exitCode,
-    };
-  }
+  // Routes through the shared /bin/sh chokepoint so the script need not carry
+  // the executable bit (which git-on-Windows + the Docker COPY both strip).
+  return runManagedScript(scriptPath, { env, timeoutMs: RUNNER_TIMEOUT_MS });
 }
 
 function summarizeScriptFailure(outcome: ScriptOutcome): string {
@@ -194,10 +195,12 @@ export async function runPostgresRestore(
 ): Promise<{ restoreId: string; status: "ok" | "failed" }> {
   const now = args.now ?? (() => new Date());
   const backupsRoot = args.backupsRoot ?? BACKUPS_ROOT;
-  const scriptPath = args.scriptPath ?? RESTORE_SCRIPT_PATH;
+  const scriptPath = args.scriptPath ?? resolveManagedScriptPath(RESTORE_SCRIPT_NAME);
   const prisma = args.prismaClient ?? (await import("@dpf/db")).prisma;
 
-  const release = acquireRestoreLock(args.sourceBackupRunId);
+  const release = args.acquireLock === false
+    ? () => {}
+    : acquireRestoreLock(args.sourceBackupRunId);
   const startedAt = now();
   restoreTraceLog(`acquired lock for source=${args.sourceBackupRunId}`);
 
@@ -293,41 +296,24 @@ export async function runPostgresRestore(
     const durationMs = finishedAt.getTime() - startedAt.getTime();
 
     // ── 4. Re-insert audit rows AFTER the restore ─────────────────────────
-    // The DB is now in the source-dump state. The safety BackupRun row is
-    // gone; our BackupRestore row was never inserted. Re-insert both so the
-    // operator sees the restore in history and can find the safety dump.
+    // The DB is now in the source-dump state. The source BackupRun row may
+    // have been rewound to its initial "running" state because the backup row
+    // is created before pg_dump and updated to "ok" after pg_dump completes.
+    // The safety BackupRun row is gone; our BackupRestore row was never
+    // inserted. Re-insert/update all three audit facts so the operator sees
+    // the restore in history and can find both source and safety dumps.
     //
-    // We use upsert on BackupRun because the safety dump's id may collide
-    // with whatever the dump contains (extremely unlikely with cuids but
-    // defensive). We use create on BackupRestore because it's fresh.
-    await prisma.backupRun.upsert({
-      where: { id: safetyRowSnapshot.id },
-      update: {}, // if it somehow exists, leave alone
-      create: {
-        id: safetyRowSnapshot.id,
-        target: safetyRowSnapshot.target,
-        startedAt: safetyRowSnapshot.startedAt,
-        finishedAt: safetyRowSnapshot.finishedAt,
-        status: safetyRowSnapshot.status,
-        trigger: safetyRowSnapshot.trigger,
-        schedule: safetyRowSnapshot.schedule,
-        sizeBytes: safetyRowSnapshot.sizeBytes,
-        durationMs: safetyRowSnapshot.durationMs,
-        sha256: safetyRowSnapshot.sha256,
-        pgVersion: safetyRowSnapshot.pgVersion,
-        dpfVersion: safetyRowSnapshot.dpfVersion,
-        storagePath: safetyRowSnapshot.storagePath,
-        errorMessage: safetyRowSnapshot.errorMessage,
-        prunedAt: safetyRowSnapshot.prunedAt,
-        createdAt: safetyRowSnapshot.createdAt,
-      },
-    });
+    // We use upsert on BackupRun because the dump may already contain an older
+    // copy of the row. We use create on BackupRestore because it's fresh.
+    await upsertBackupRunSnapshot(prisma, source);
+    await upsertBackupRunSnapshot(prisma, safetyRowSnapshot);
 
     const created = await prisma.backupRestore.create({
       data: {
         startedAt,
         finishedAt: outcome.ok ? finishedAt : finishedAt,
         status: outcome.ok ? "ok" : "failed",
+        trigger: args.trigger ?? null,
         sourceBackupRunId: source.id,
         preRestoreBackupRunId: safety.runId,
         initiatedByUserId: args.initiatedByUserId ?? null,
@@ -353,6 +339,35 @@ export async function runPostgresRestore(
     release();
     restoreTraceLog("released lock");
   }
+}
+
+async function upsertBackupRunSnapshot(
+  prisma: PrismaLike,
+  row: BackupRunSnapshot | null,
+) {
+  if (!row) return;
+  const data = {
+    target: row.target,
+    startedAt: row.startedAt,
+    finishedAt: row.finishedAt,
+    status: row.status,
+    trigger: row.trigger,
+    schedule: row.schedule,
+    sizeBytes: row.sizeBytes,
+    durationMs: row.durationMs,
+    sha256: row.sha256,
+    pgVersion: row.pgVersion,
+    dpfVersion: row.dpfVersion,
+    storagePath: row.storagePath,
+    errorMessage: row.errorMessage,
+    prunedAt: row.prunedAt,
+    createdAt: row.createdAt,
+  };
+  await prisma.backupRun.upsert({
+    where: { id: row.id },
+    update: data,
+    create: { id: row.id, ...data },
+  });
 }
 
 // Test-only exports

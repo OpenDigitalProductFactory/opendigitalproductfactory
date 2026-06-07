@@ -37,6 +37,7 @@ import { assembleSystemPrompt } from "@/lib/prompt-assembler";
 import type { QuestionPacket } from "@/lib/tak/question-packet";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import type { PortalContextEnvelope, PortalObjectAnchor } from "@/lib/portal-context";
+import { formatCoworkerOperationalCloseout } from "@/lib/tak/coworker-interaction-contract";
 import {
   extractInvokedSkillId,
   getSkillsForAgent,
@@ -66,6 +67,7 @@ import {
   isConversationalExpansionRequest,
   isPageExplanationOnlyRequest,
   isPlatformMechanismQuestion,
+  isTrivialSocialMessage,
 } from "@/lib/tak/conversation-intent";
 import {
   buildExternalAccessDisabledInstruction,
@@ -987,6 +989,9 @@ export async function sendMessage(input: {
 
   // Get ALL platform tools (no mode filtering — we filter the merged set below)
   const { getAvailableTools, toolsToOpenAIFormat } = await import("@/lib/mcp-tools");
+  // Every coworker holds a read-only baseline (page coordination data, docs,
+  // source, code graph) on top of its agent-specific grants — BI-FD7E4D72.
+  const { COWORKER_READ_BASELINE_GRANTS } = await import("@/lib/tak/agent-grants");
   const toolUserContext = {
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
@@ -996,6 +1001,7 @@ export async function sendMessage(input: {
     // Skip mode filtering here — applied to merged set
     unifiedMode: useUnified,
     agentId: agent.agentId,
+    additionalGrants: COWORKER_READ_BASELINE_GRANTS,
   });
 
   // Get page-specific actions
@@ -1047,6 +1053,7 @@ export async function sendMessage(input: {
       externalAccessEnabled: true,
       unifiedMode: useUnified,
       agentId: agent.agentId,
+      additionalGrants: COWORKER_READ_BASELINE_GRANTS,
     });
     disabledExternalTools = getExternalAccessToolSummaries(
       filterToolsForCoworkerRuntime(externalEnabledPlatformTools, {
@@ -1067,7 +1074,12 @@ export async function sendMessage(input: {
   // important on Build Studio routes where the tool surface is large enough
   // to drown a small local fallback model. See FB-71FB3A53 thread, 2026-05-22.
   const isMechanismQuestion = isPlatformMechanismQuestion(trimmedContent);
-  const isConversationOnly = isExplicitConversationSkill || isPageExplanationOnly || isExpansionFollowup || isMechanismQuestion;
+  // Trivial social turns ("hello", "thanks", "ok cool") carry no task. With the
+  // full tool surface attached they dispatch the heavyweight tool-loaded CLI
+  // agentic loop (8-130s); tool-free they answer in ~2s. See the Portfolio
+  // Analyst latency investigation, 2026-06-04.
+  const isTrivialSocial = isTrivialSocialMessage(trimmedContent);
+  const isConversationOnly = isExplicitConversationSkill || isPageExplanationOnly || isExpansionFollowup || isMechanismQuestion || isTrivialSocial;
 
   const toolsForProvider = (!isConversationOnly && availableTools.length > 0)
     ? toolsToOpenAIFormat(availableTools)
@@ -1079,10 +1091,15 @@ export async function sendMessage(input: {
   // CodeQL js/log-injection: input.routeContext + agent.agentId + tool names
   // are user-influenced. Compose the line, then route it through the registered
   // sanitizeForLog sanitizer so embedded control chars can't forge log entries.
+  // `attached` reflects what the model ACTUALLY receives: on a conversation-only
+  // turn (greeting, page-explanation, mechanism question) tools are stripped, so
+  // `count` (the available surface) overstates it. Logging both removes the
+  // long-standing ambiguity where count=38 implied 38 tools were sent.
   const toolsLogLine =
-    `[tools] route=${JSON.stringify(input.routeContext)} agent=${JSON.stringify(agent.agentId)} ` +
+    `[tools] thread=${JSON.stringify(input.threadId)} route=${JSON.stringify(input.routeContext)} agent=${JSON.stringify(agent.agentId)} ` +
     `${activeBuildPhase ? `buildPhase=${JSON.stringify(activeBuildPhase)} ` : ""}` +
-    `count=${availableTools.length} tools=[${availableTools.map(t => JSON.stringify(t.name)).join(", ")}]`;
+    `count=${availableTools.length} attached=${toolsForProvider !== undefined}${isConversationOnly ? " (conversation-only)" : ""} ` +
+    `tools=[${availableTools.map(t => JSON.stringify(t.name)).join(", ")}]`;
   console.log(sanitizeForLog(toolsLogLine));
   if (activeBuildPhase) {
 
@@ -1431,9 +1448,22 @@ export async function sendMessage(input: {
       const needsReview = (activeBuild!.taskResults as { tasks?: Array<{ outcome: string; title: string }> })?.tasks
         ?.filter(t => t.outcome !== "DONE") ?? [];
       const reviewItems = needsReview.length > 0
-        ? `\n\n**${needsReview.length} item${needsReview.length > 1 ? "s" : ""} flagged for review:**\n${needsReview.map(t => `- ${t.title}`).join("\n")}\n\nWould you like me to walk through each one, or do you want to check the sandbox preview first?`
-        : "\n\nAll tasks completed cleanly. Would you like me to run a final verification (tests + typecheck), or do you want to check the sandbox preview first?";
-      responseContent = `Build complete — ${storedResults!.completedTasks}/${storedResults!.totalTasks} tasks done.${reviewItems}`;
+        ? `\n\n**${needsReview.length} item${needsReview.length > 1 ? "s" : ""} flagged for review:**\n${needsReview.map(t => `- ${t.title}`).join("\n")}`
+        : "\n\nAll tasks completed cleanly.";
+      const closeout = needsReview.length > 0
+        ? formatCoworkerOperationalCloseout({
+          status: "needs review",
+          evidence: `${storedResults!.completedTasks}/${storedResults!.totalTasks} tasks are complete; ${needsReview.length} item${needsReview.length === 1 ? "" : "s"} are flagged for review.`,
+          nextAction: "review the flagged item output, then run the Build Studio review phase.",
+          owner: "Build Studio review agent",
+        })
+        : formatCoworkerOperationalCloseout({
+          status: "ready for review",
+          evidence: `${storedResults!.completedTasks}/${storedResults!.totalTasks} tasks are complete with no flagged task output.`,
+          nextAction: "run final verification in the Build Studio review phase.",
+          owner: "Build Studio review agent",
+        });
+      responseContent = `Build complete — ${storedResults!.completedTasks}/${storedResults!.totalTasks} tasks done.${reviewItems}\n\n${closeout}`;
       responseProviderId = "orchestrator";
       responseModelId = "multi-specialist";
       // Fall through to message persistence below

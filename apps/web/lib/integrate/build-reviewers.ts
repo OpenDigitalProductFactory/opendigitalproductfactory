@@ -73,7 +73,7 @@ SEVERITY CALIBRATION: Use "critical" ONLY for issues that would cause data loss,
 
 "NOT APPLICABLE" HANDLING: Sections may legitimately not apply to a given feature (e.g. a UI-only fix has no data model change, a standalone utility has no reuse target). When a section's value begins with "Not applicable —" followed by a reason, evaluate only whether that reason is CORRECT for this feature. If the reason is correct, the section passes — do NOT flag it as "missing content", "underspecified", or "needs detail". If the reason is wrong (e.g. the author wrote "Not applicable — UI-only change" but the proposedApproach actually introduces new tables), flag that as an important issue.
 
-CRITICAL INSTRUCTION: You MUST report ALL issues in a SINGLE response. Do not stop after finding the first issue. Review the entire design document comprehensively. A revision cycle costs significant time and tokens. The goal is ZERO surprise issues on a re-review.
+DECISION DISCIPLINE: report the genuine BLOCKING issues in a single response — be comprehensive about real blockers so there are no surprises on re-review, but do NOT pad the list with nice-to-haves. Reserve "critical" for issues that would cause data loss, security holes, or broken functionality; "important"/"minor" do not block. If the design meets the checklist at a level appropriate to its scope, return "pass". A short, converging review beats an exhaustive one.
 
 RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 {
@@ -109,7 +109,7 @@ export function buildPlanReviewPrompt(
   // anything still present using the SAME description so the operator sees
   // persistence, (c) flag only NEW issues the prior round didn't catch.
   const priorSection = prior && prior.issues.length > 0
-    ? `\n\nPRIOR REVIEW CONTEXT (this is review round ${prior.round + 1}):\nThe immediately-prior review of this plan surfaced these ${prior.issues.length} issues:\n${prior.issues.map((i, idx) => `  ${idx + 1}. [${i.severity}] ${i.description}`).join("\n")}\n\nDelta-aware review protocol:\n- For each prior issue, judge whether the new plan addresses it. If yes, do NOT re-surface it.\n- If a prior issue is still present, re-surface it but reuse the SAME description so the operator sees persistence.\n- Only add NEW issues that this revision genuinely introduces or that the prior round missed.\n- Goal: convergence, not re-litigation. Avoid trading one set of issues for another.\n`
+    ? `\n\nPRIOR REVIEW CONTEXT (this is review round ${prior.round + 1}):\nThe immediately-prior review of this plan surfaced these ${prior.issues.length} issues:\n${prior.issues.map((i, idx) => `  ${idx + 1}. [${i.severity}] ${i.description}`).join("\n")}\n\nDelta-aware review protocol (CONVERGENCE-ENFORCING — the issue set must shrink each round, never trade one set for another):\n- For each prior issue, judge whether the new plan addresses it. If yes, do NOT re-surface it.\n- If a prior issue is still present, re-surface it with the SAME description.\n- Do NOT introduce NEW important/minor issues on a re-review. The bar was set in round 1; later rounds VERIFY that bar is met — they do not raise it. (Surfacing fresh nit-level findings each round is the oscillation this protocol exists to stop.)\n- The ONLY new issue you may add on a re-review is a genuine CRITICAL regression THIS revision introduced (e.g. it deleted an error guard). Name exactly what changed.\n- DECISION on a re-review: return "pass" as soon as no CRITICAL issues remain — even if important/minor issues are still open. Those are caught downstream at the build + code-review gates; they must not block plan convergence here. This guarantees the loop converges instead of trading 4 issues for 8.\n`
     : "";
 
   return `You are reviewing an implementation plan for a platform feature.
@@ -120,16 +120,16 @@ ${fileList}
 TASKS (${tasks.length} total):
 ${taskList}${priorSection}
 
-REVIEW CHECKLIST — evaluate EVERY item against EVERY task before responding:
-1. Are tasks bite-sized (each should be 2-5 minutes of work)? Check EACH task individually.
-2. Does each task have a test-first step?
-3. Are file paths specific (not vague)?
-4. Is the file structure sensible (one responsibility per file)?
-5. Are there any missing tasks for the described file changes?
-6. Does the plan include data seeding/population tasks if new database entities are introduced?
-7. Are dependencies between tasks clear (does task N depend on task M completing first)?
+REVIEW CHECKLIST — judge the plan against THIS list and ONLY this list. It is the SAME standard the planner was given, so a plan that meets it MUST pass. Do not invent requirements beyond these, and do not escalate the bar across review rounds:
+1. REAL TEST-FIRST: does every task that adds/changes LOGIC (server action, API route handler, data transform, permission/auth check) name a real failing test to write first — a unit test for action/transform logic (incl. error + permission cases), an integration test for an API route (unauth, unauthorized, invalid input, success + status codes)? \`tsc --noEmit\` / "validate types" / "manual: read X" are NOT tests for a logic task (schema-only tasks may use validate_schema; pure presentational tasks may use a component/interaction test).
+2. BITE-SIZED: is each task ~2-5 min / one responsibility? Flag a task ONLY if it clearly bundles >~5 distinct sub-steps.
+3. ERROR PATHS: does each logic task state failure handling, not just the happy path?
+4. DEPENDENCIES + PATHS: are task ordering dependencies stated and file paths specific?
+5. COMPLETENESS: any file with no task, or any task missing for the described changes (incl. data seeding if new entities are introduced)?
 
-CRITICAL INSTRUCTION: You MUST report ALL issues in a SINGLE response. Do not stop after finding the first issue. Review the entire plan comprehensively — every task, every file, every dependency. A revision cycle costs significant time and tokens. The goal is ZERO surprise issues on a re-review.
+SIZE-AWARENESS (prevents over-strict oscillation): scale expectations to the change. A one-file presentational tweak needs ONE small interaction test, not a full suite; a feature touching server action + API + UI needs a test for each of those surfaces. Do NOT demand integration/E2E ceremony a small change doesn't warrant.
+
+DECISION DISCIPLINE: reserve "critical" for a genuine blocking gap (a logic change with NO real test, a clearly oversized task, a missing error path on a risky action). Use "important"/"minor" for everything else — they do NOT block. If the plan meets the checklist at a level appropriate to its scope, return "pass" even if more tests could theoretically be added. Report the genuine blocking issues concisely — do NOT pad the list to be exhaustive; a short, converging review beats a long one.
 
 RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 {
@@ -159,7 +159,7 @@ REVIEW CHECKLIST — evaluate EVERY item before responding:
 6. Does the code use CSS variables (var(--dpf-*)) for all colors — no text-white, bg-white, text-black, bg-black, or inline hex values? (Exception: text-white on accent-background buttons, semantic status colors from ThemeTokens.states)
 7. Are interactive elements keyboard-accessible with visible focus indicators? Do form inputs have associated labels? Do buttons have descriptive accessible names?
 
-CRITICAL INSTRUCTION: You MUST report ALL issues in a SINGLE response. Do not stop after finding the first issue. Review the entire code change comprehensively. A revision cycle costs significant time and tokens. The goal is ZERO surprise issues on a re-review.
+DECISION DISCIPLINE: report the genuine BLOCKING issues in a single response — be comprehensive about real blockers so there are no surprises on re-review, but do NOT pad the list with nice-to-haves. Reserve "critical" for issues that would cause data loss, security holes, or broken functionality; "important"/"minor" do not block. If the change is correct and tested at a level appropriate to its scope, return "pass". A short, converging review beats an exhaustive one.
 
 RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 {

@@ -2,12 +2,51 @@ import "server-only";
 
 import { prisma } from "@dpf/db";
 import type { ChatMessage } from "@/lib/inference/ai-inference";
+import { agentEventBus } from "@/lib/agent-event-bus";
+import { readCollaborationProvenance } from "@/lib/tak/conversation-participants-core";
 import {
   executeAutonomousAgenticLoop,
   resolveAutonomousWorkAgent,
   resolveAutonomousWorkTools,
   type AutonomousWorkUserContext,
 } from "@/lib/tak/autonomous-work-run";
+
+/**
+ * EP-A2A: when a collaboration child thread reaches a terminal state, emit
+ * collaboration:return on the PARENT thread so the coworker panel can render
+ * the "returned" card and refresh the done indicator without polling. Best-
+ * effort: a missing parent or provenance simply means no return card.
+ */
+async function emitCollaborationReturn(
+  childThreadId: string,
+  taskRunId: string,
+  outcome: "completed" | "failed" | "canceled",
+): Promise<void> {
+  try {
+    const child = await prisma.agentThread.findUnique({
+      where: { id: childThreadId },
+      select: { parentThreadId: true },
+    });
+    if (!child?.parentThreadId) return;
+    const tr = await prisma.taskRun.findUnique({
+      where: { taskRunId },
+      select: { a2aMetadata: true },
+    });
+    const prov = readCollaborationProvenance(tr?.a2aMetadata);
+    if (!prov) return; // only emit returns for governed collaboration spawns
+    agentEventBus.emit(child.parentThreadId, {
+      type: "collaboration:return",
+      parentThreadId: child.parentThreadId,
+      childThreadId,
+      fromAgentId: prov.toAgentId,
+      toAgentId: prov.fromAgentId ?? "",
+      taskRunId,
+      outcome,
+    });
+  } catch {
+    // non-fatal — the panel's in-flight poll still flips the done indicator.
+  }
+}
 
 const TERMINAL_STATUSES = new Set([
   "completed",
@@ -163,6 +202,7 @@ export async function runChildThreadExecution(context: ChildRuntimeContext): Pro
         },
       },
     });
+    await emitCollaborationReturn(context.threadId, context.taskRunId, "completed");
   } catch (err) {
     const message = err instanceof Error ? err.message : "Child thread execution failed";
     await markChildThreadFailed(context, message);
@@ -232,4 +272,6 @@ async function markChildThreadFailed(
         error: err instanceof Error ? err.message : String(err),
       });
     });
+
+  await emitCollaborationReturn(context.threadId, context.taskRunId, "failed");
 }

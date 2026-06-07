@@ -59,6 +59,7 @@ describe("AgentWorkLauncher", () => {
 
     expect(html).toContain("Start marketing review");
     expect(html).toContain("Choose where to start");
+    expect(html).not.toContain("Choose a starting point, review the message");
     expect(html).not.toContain("data-confirm-agent-work");
   });
 
@@ -87,6 +88,28 @@ describe("AgentWorkLauncher", () => {
       expect(event.type).toBe("open-agent-panel");
       expect(event.detail).toEqual({
         autoMessage: "Run a marketing review.",
+      });
+    } finally {
+      globalThis.document = previousDocument;
+    }
+  });
+
+  it("dispatches route context with guided work prompts", () => {
+    const previousDocument = globalThis.document;
+    const dispatchEvent = vi.fn();
+    globalThis.document = {
+      dispatchEvent,
+    } as unknown as Document;
+
+    try {
+      dispatchAgentPrompt("Diagnose this stale opportunity.", {
+        routeContext: "/customer/opportunities/opp-1",
+      });
+
+      const event = dispatchEvent.mock.calls[0][0] as CustomEvent;
+      expect(event.detail).toEqual({
+        autoMessage: "Diagnose this stale opportunity.",
+        routeContext: "/customer/opportunities/opp-1",
       });
     } finally {
       globalThis.document = previousDocument;

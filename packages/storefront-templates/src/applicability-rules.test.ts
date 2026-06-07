@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveBillingPatternProfile,
   deriveCapabilityApplicability,
+  derivePartnerProgramProfile,
 } from "./applicability-rules";
 import type {
   CapabilityActivation,
@@ -79,6 +80,36 @@ const hoaAxes: OperatingModelAxes = {
   platform: "no",
 };
 
+const platformAxes: OperatingModelAxes = {
+  form: "services",
+  delivery: "digital",
+  primaryConsumer: "business",
+  consumptionChannel: "api-portal-cli",
+  commercialModel: "subscription",
+  provisioning: "account-and-entitlement",
+  platform: "yes-developer",
+};
+
+const channelPartnerAxes: OperatingModelAxes = {
+  form: "services",
+  delivery: "hybrid",
+  primaryConsumer: "channel-partner",
+  consumptionChannel: "portal-api",
+  commercialModel: "recurring-agreement",
+  provisioning: "account-and-entitlement",
+  platform: "no",
+};
+
+const wholesaleAxes: OperatingModelAxes = {
+  form: "goods",
+  delivery: "physical",
+  primaryConsumer: "business",
+  consumptionChannel: "sales-assisted",
+  commercialModel: "transactional",
+  provisioning: "account-with-billing",
+  platform: "no",
+};
+
 describe("deriveCapabilityApplicability", () => {
   it("derives MSP capabilities from axes and portfolios, with only remote support overridden", () => {
     const overrides: CapabilityOverride[] = [
@@ -147,5 +178,63 @@ describe("deriveBillingPatternProfile", () => {
       recurringBillingApplicability: "optional",
       invoiceExecutionMode: "manual",
     });
+  });
+});
+
+describe("derivePartnerProgramProfile", () => {
+  it("makes the partner portal primary when the primary consumer is a channel partner", () => {
+    expect(derivePartnerProgramProfile(channelPartnerAxes, mspPortfolios)).toMatchObject({
+      portalMode: "primary",
+      dealRegistration: true,
+      partnerGraph: "separate-partner-projection",
+    });
+  });
+
+  it("offers an available partner program for platform/ecosystem (SaaS) archetypes", () => {
+    const program = derivePartnerProgramProfile(platformAxes, mspPortfolios);
+    expect(program.portalMode).toBe("available");
+    expect(program.partnerTypes).toContain("technology");
+    expect(program.dealRegistration).toBe(true);
+  });
+
+  it("offers an available partner program for managed service providers", () => {
+    expect(derivePartnerProgramProfile(mspAxes, mspPortfolios)).toMatchObject({
+      portalMode: "available",
+      partnerTypes: ["managed-service-provider", "technology"],
+    });
+  });
+
+  it("offers an available partner program for wholesale/distribution (goods sold to business)", () => {
+    expect(derivePartnerProgramProfile(wholesaleAxes, salonPortfolios)).toMatchObject({
+      portalMode: "available",
+      partnerTypes: ["reseller", "distributor"],
+    });
+  });
+
+  it("activates no partner channel for direct-to-consumer archetypes", () => {
+    expect(derivePartnerProgramProfile(salonAxes, salonPortfolios).portalMode).toBe("none");
+    expect(derivePartnerProgramProfile(retailAxes, salonPortfolios).portalMode).toBe("none");
+    expect(derivePartnerProgramProfile(hoaAxes, salonPortfolios).portalMode).toBe("none");
+  });
+});
+
+describe("partner-program capability derivation", () => {
+  it("requires the partner program when selling through channel partners", () => {
+    const capabilities = deriveCapabilityApplicability(channelPartnerAxes, mspPortfolios);
+    expect(getCapability(capabilities, "partner-program")).toMatchObject({
+      applicability: "required",
+      ownershipScopes: ["partner-account"],
+      isolation: "strict-partner-scope",
+    });
+  });
+
+  it("recommends the partner program for platform/MSP/wholesale models", () => {
+    expect(getCapability(deriveCapabilityApplicability(platformAxes, mspPortfolios), "partner-program").applicability).toBe("recommended");
+    expect(getCapability(deriveCapabilityApplicability(mspAxes, mspPortfolios), "partner-program").applicability).toBe("recommended");
+    expect(getCapability(deriveCapabilityApplicability(wholesaleAxes, salonPortfolios), "partner-program").applicability).toBe("recommended");
+  });
+
+  it("leaves the partner program not-applicable for direct-to-consumer archetypes", () => {
+    expect(getCapability(deriveCapabilityApplicability(salonAxes, salonPortfolios), "partner-program").applicability).toBe("not-applicable");
   });
 });

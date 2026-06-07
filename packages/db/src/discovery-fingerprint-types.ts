@@ -14,7 +14,11 @@ export type FingerprintEvidenceFamily =
   | "http_banner"
   | "tls_certificate"
   | "prometheus_target"
-  | "human_confirmation";
+  | "human_confirmation"
+  // Day-one device signals (spec §3c): captured today via ARP + the embedded
+  // IEEE OUI library, with no edge-node detection-engine dependency.
+  | "mac_oui"
+  | "hostname";
 
 export type FingerprintPolicyInput = {
   identityConfidence: number;

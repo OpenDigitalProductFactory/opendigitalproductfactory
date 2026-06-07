@@ -572,6 +572,11 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <tr><td>Financial Management</td><td>Invoices, suppliers and bills, purchase orders, banking and reconciliation, AI-spend visibility.</td></tr>
         <tr><td>Enterprise Architecture</td><td>Model the application, technology, and business layers with ArchiMate notation; graph-backed via Neo4j.</td></tr>
         <tr><td>Archetype-led portal</td><td>Public-facing storefront or service portal plus internal vocabulary for the selected business type. Driven by an archetype that seeds sections, flows, item templates, finance assumptions, marketing posture, and worker-home direction.</td></tr>
+        <tr><td>Internal workspace homes</td><td>Archetype-driven daily boards for the people doing the work &mdash; dispatch boards for trades, appointment-readiness for clinics, merchandising for retail &mdash; rendered from a reusable primitive library and a projection service that speaks worker vocabulary (jobs, technicians, sites, handoffs) rather than platform jargon.</td></tr>
+        <tr><td>Partner &amp; reseller channel</td><td>Activate a reseller, distributor, MSP, or technology-partner program when the business model calls for it. Support is derived from the archetype&rsquo;s operating-model axes (rather than per-archetype flags) and can be turned on at setup or later from admin.</td></tr>
+        <tr><td>Marketing execution loop</td><td>Draft &rarr; approve &rarr; publish &rarr; respond &rarr; measure for outbound marketing across LinkedIn posts, LinkedIn Ads, and email &mdash; with hard spend ceilings, per-send human approval, and a bounded autopilot scheduler. Every external publish is gated and audited.</td></tr>
+        <tr><td>Coworker screen actions</td><td>Coworkers can read what a screen offers (via a screen manifest) and propose on-screen actions on your behalf. Destructive actions flow through a propose &rarr; approve &rarr; dispatch envelope so the coworker drives the real UI under the same human-in-the-loop gates as a button click.</td></tr>
+        <tr><td>Organization knowledge corpus (WWWD)</td><td>A governed, org-scoped knowledge base built from onboarding context, uploaded business documents, Q&amp;A, and approved AI research. Everything enters draft-by-default with provenance and trust grading; reviewed material feeds the WWMD decision gate and coworker recall.</td></tr>
         <tr><td>Build Studio</td><td>A guided five-phase pipeline (ideate, plan, build, review, ship) with AI coworkers, sandbox execution, code intelligence, impact reports, and promotion or PR handoff where configured. Active hardening is underway for oversized-build decomposition and safer portal upgrades.</td></tr>
         <tr><td>Operations &amp; Backlog</td><td>Manage delivery work with epics, items, priorities, and status tracking. Coworkers create, triage, size, and link items through governed MCP tools.</td></tr>
         <tr><td>AI Workforce</td><td>Provider configuration, dynamic model discovery, capability-tier routing, operations map, capacity continuity, capability-needs review, agent registry, and per-agent grants.</td></tr>
@@ -601,7 +606,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
       <div class="pillar">
         <div class="tag">Archetypes</div>
         <strong>Pick a market archetype &mdash; the platform reshapes itself.</strong>
-        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Twelve market categories and 45 leaf archetype templates ship with the platform. Choosing one bootstraps the customer portal, vocabulary, booking and form rules, finance assumptions, marketing posture, and internal worker-home direction. The archetype is the single source of truth for industry; downstream surfaces read from it rather than from a separately editable string.</p>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Twelve market categories and 46 leaf archetype templates ship with the platform &mdash; including a B2B wholesale-distribution archetype that derives a partner/reseller program from its operating-model axes. Choosing one bootstraps the customer portal, vocabulary, booking and form rules, finance assumptions, marketing posture, and internal worker-home direction. The archetype is the single source of truth for industry; downstream surfaces read from it rather than from a separately editable string.</p>
       </div>
       <div class="pillar">
         <div class="tag">Common Skills</div>
@@ -617,9 +622,9 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
   </section>
 
   <section id="archetypes">
-    <h2>Twelve market categories, 45 leaf archetypes</h2>
+    <h2>Twelve market categories, 46 leaf archetypes</h2>
     <p class="sub">
-      Archetypes are the bootstrap mechanism that turns a fresh install into a working business setup. Each one carries storefront design, vocabulary, role emphasis, process defaults, finance assumptions, and marketing posture. The next design wave extends the same archetype into internal workspace homes: dispatch boards for trades, appointment-readiness boards for clinics, merchandising boards for retail, and equivalent daily boards for other categories.
+      Archetypes are the bootstrap mechanism that turns a fresh install into a working business setup. Each one carries storefront design, vocabulary, role emphasis, process defaults, finance assumptions, and marketing posture. The same archetype now also drives <strong>internal workspace homes</strong> &mdash; dispatch boards for trades, appointment-readiness boards for clinics, merchandising boards for retail, and equivalent daily boards for other categories. The workspace-home substrate (registry, resolver, projection service) has landed; the HVAC dispatcher board is the first vertical being implemented against it.
     </p>
     <div class="grid">
       <div class="card"><h3>Healthcare &amp; Wellness</h3><p>Clinics, practitioners, wellness providers; appointment-centric flows.</p></div>
@@ -630,7 +635,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
       <div class="card"><h3>Education &amp; Training</h3><p>Schools, training providers, coaches; cohorts, enrollment, certification.</p></div>
       <div class="card"><h3>Pet Services</h3><p>Vets, groomers, trainers, boarding; pet records and visit history.</p></div>
       <div class="card"><h3>Food &amp; Hospitality</h3><p>Restaurants, caterers, hosts; menus, reservations, events.</p></div>
-      <div class="card"><h3>Retail &amp; Goods</h3><p>Retailers and product sellers; inventory, orders, fulfillment.</p></div>
+      <div class="card"><h3>Retail &amp; Goods</h3><p>Retailers and product sellers; inventory, orders, fulfillment. Includes a B2B wholesale-distribution leaf that derives a partner/reseller program.</p></div>
       <div class="card"><h3>Fitness &amp; Recreation</h3><p>Gyms, studios, leagues; memberships, classes, attendance.</p></div>
       <div class="card"><h3>Nonprofit &amp; Community</h3><p>Charities, associations, community groups; donations, programs, volunteers.</p></div>
       <div class="card"><h3>HOA &amp; Property Management</h3><p>Homeowners associations and property managers; residents, dues, violations.</p></div>
@@ -664,7 +669,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
   <section id="build-studio">
     <h2>Build Studio: the five-phase pipeline</h2>
     <p class="sub">
-      Build Studio is how the platform extends itself. A user (or a coworker on a user&rsquo;s behalf) proposes a feature, and the request flows through five governed phases. Each phase has its own gate &mdash; nothing advances until the previous gate&rsquo;s artifacts are present and acceptable. It is actively being hardened, so treat it as the governed evidence and development surface, not a promise that every complex source change is already fully autonomous.
+      Build Studio is how the platform extends itself. A user (or a coworker on a user&rsquo;s behalf) proposes a feature, and the request flows through five governed phases. Each phase has its own gate &mdash; nothing advances until the previous gate&rsquo;s artifacts are present and acceptable. Phase-to-phase dispatch is now automatic: once a build is approved to start, Ideate &rarr; Plan &rarr; Build &rarr; Review run without an operator clicking between them, and the deliberate human gate is the final diff review before anything ships. The lifecycle is also right-sized by work type and size, so a bug fix or doc change carries lighter ceremony than a net-new feature. End-to-end reliability hardening continues, so treat Build Studio as the governed evidence and development surface rather than a guarantee that every complex source change lands untouched.
     </p>
     <table class="guide">
       <thead>
@@ -706,6 +711,21 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <div class="tag">Design-time decomposition</div>
         <strong>Oversized builds split before Plan churn.</strong>
         <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">The Dale HVAC dogfood run exposed a real cliff: a feature can be directionally correct but too large for one Build Studio plan. The new design-time decomposition work keeps one parent design contract and creates smaller child builds before plan review oscillates.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Phase auto-dispatch</div>
+        <strong>Approve once; the pipeline runs itself.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Approving a build to start dispatches Ideate, Plan, Build, and Review verification in sequence without an operator clicking between phases. The intentional human gate is the final diff review before ship &mdash; closing the long-standing &ldquo;autonomy gap&rdquo; where promoted builds stalled at a phase boundary.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Right-sized lifecycle</div>
+        <strong>Ceremony scales to the work.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">A (work-type &times; work-size) policy matrix replaces binary feature/fix branching. Bugs, chores, and docs carry fewer gates and thinner prompts; a net-new feature gets the full design-doc and review treatment. Reported issues route into a lighter fix-kind build with repro / expected / actual / root-cause context.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Advisory architecture review</div>
+        <strong>An EA persona rides along.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">A chief-architect persona reviews at the Ideate and Plan gates as advisory-only &mdash; surfacing alignment concerns without gating pass/fail &mdash; so architectural drift is caught early without adding a hard stop.</p>
       </div>
       <div class="pillar">
         <div class="tag">Concurrency</div>
@@ -773,13 +793,18 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
       </div>
       <div class="pillar">
         <div class="tag">Persona Voice Layer</div>
-        <strong>WWTD: coworkers can speak, without gaining authority.</strong>
-        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">A bundled speaches (faster-whisper) STT service is the default path for voice input where enabled. TTS profiles are optional enrichment for spoken decision rationales and read-back of profile output. Voice never changes approval, confidence, or audit rules, and real-person voice requires consent.</p>
+        <strong>Coworkers can speak, without gaining authority.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">A bundled speaches (faster-whisper) STT service handles voice input, and a founder seed voice now ships in the install seed (with a consent record) so spoken output works out of the box. TTS providers include Apple-Silicon-native sidecars (Chatterbox, MLX) with sentence-level streaming for low time-to-first-audio and per-profile speed/enthusiasm tuning. Voice never changes approval, confidence, or audit rules, and real-person voice requires consent.</p>
+      </div>
+      <div class="pillar">
+        <div class="tag">Routing resilience</div>
+        <strong>Dead providers fail over in seconds, not minutes.</strong>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">A runtime circuit breaker excludes a failing endpoint from selection the moment it errors &mdash; turning a multi-iteration stall on a dead provider into sub-second failover when a live alternative exists. A live-health projection separates admin lifecycle from runtime circuit state from operator-visible health, and failover never surfaces &ldquo;your work wasn&rsquo;t recorded&rdquo; fabrication copy after an infrastructure blip.</p>
       </div>
       <div class="pillar">
         <div class="tag">Operations map</div>
         <strong>See the workforce as an operating system.</strong>
-        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Saved operator views, reset controls, capacity continuity, and capability-needs review help operators see where AI work is active, blocked, underused, or asking for new platform support. Route topology overlays live provider activity, failover curves, quota pressure, and scheduled-window forecasts onto a single time-scrubbable map.</p>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Saved operator views, reset controls, capacity continuity, and capability-needs review help operators see where AI work is active, blocked, underused, or asking for new platform support. Route topology overlays live provider activity, failover curves, quota pressure, and scheduled-window forecasts onto a single time-scrubbable map, and coworker-to-coworker (A2A) interactions are surfaced so delegation between agents is visible, not hidden.</p>
       </div>
     </div>
   </section>
@@ -876,6 +901,11 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
     <p class="note">
       Why this matters: every unanswered or low-confidence WWMD question is a chance to improve the kernel. Over time, repeated human resolutions become reviewed wiki and perspective material, which lets coworkers handle more decisions safely without losing the audit trail. See the deeper architecture note: <a href="/architecture/autonomy-and-wwmd">Autonomy, WWMD, and trusted coworker decisions</a>.
     </p>
+
+    <h3 style="margin-top:24px; font-size:16px;">The organization corpus (WWWD): your business, not just the founder kernel</h3>
+    <p class="sub" style="margin-top:0;">
+      WWMD draws on the shared founder-kernel principles. WWWD &mdash; the organization knowledge corpus &mdash; is the org-specific complement: a governed, single-org knowledge base built from onboarding context, uploaded business documents, market Q&amp;A, and approved AI research. Every source &mdash; data entry, document upload, scheduled research, integrations, coverage-gap detection &mdash; flows through one enrichment contract that handles idempotency, provenance, and trust grading (first-party, derived, researched). Material lands <em>draft-by-default</em> regardless of source; human review promotes it to authoritative before it influences anything. Reviewed material projects into the decision profile that feeds the WWMD gate and coworker recall, and a freshness-governance layer supersedes stale material and re-enqueues research when coverage gaps appear.
+    </p>
   </section>
 
   <section id="data-layer">
@@ -949,6 +979,10 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <tr>
           <td><strong>Model Context Protocol (MCP)</strong></td>
           <td>Tool and context interoperability for the AI workforce. Platform capabilities, backlog operations, build operations, and hive contribution all expose MCP tools that any conformant client can call &mdash; under the same grant and approval gates that the in-product coworkers face.</td>
+        </tr>
+        <tr>
+          <td><strong>Pseudo-user contract (screen actions)</strong></td>
+          <td>A coworker discovers what a screen offers through a registered <em>screen manifest</em> rather than guessing, then drives view commands (navigate, select, focus, fill) directly. Anything destructive &mdash; a form submit, a domain mutation &mdash; is written as a <code>CoworkerActionEnvelope</code> the user approves or declines inline before the underlying tool runs. Per-turn elevation allows a small number of approved actions without re-confirming; hard floors (irreversible operations) always require an explicit typed phrase. Every action is recorded under both the delegating user and the coworker principal.</td>
         </tr>
       </tbody>
     </table>
@@ -1343,7 +1377,37 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <tr>
           <td>Build Studio (5 phases)</td>
           <td><strong>Production</strong></td>
-          <td>Governed lifecycle through ship with sandbox execution, review evidence, code intelligence, and promotion or PR handoff where configured; hardening continues for oversized builds and safer portal upgrades.</td>
+          <td>Governed lifecycle through ship with sandbox execution, review evidence, code intelligence, and promotion or PR handoff where configured. Phase auto-dispatch (Ideate&nbsp;&rarr;&nbsp;Plan&nbsp;&rarr;&nbsp;Build&nbsp;&rarr;&nbsp;Review) now runs without operator clicks between phases, with the final diff review as the kept human gate; lifecycle is right-sized by work type and size; an advisory chief-architect reviews at Ideate and Plan. End-to-end reliability hardening for oversized builds and safer portal upgrades continues.</td>
+        </tr>
+        <tr>
+          <td>Marketing execution loop</td>
+          <td><strong>Early access</strong></td>
+          <td>Full draft&nbsp;&rarr;&nbsp;approve&nbsp;&rarr;&nbsp;publish&nbsp;&rarr;&nbsp;respond&nbsp;&rarr;&nbsp;measure lifecycle across LinkedIn posts, LinkedIn Ads, and email shipped in five phases, with hard spend ceilings, per-send human approval, an inbound responder, and a bounded autopilot scheduler. Real-account pilots are what graduate it to GA.</td>
+        </tr>
+        <tr>
+          <td>Internal workspace homes</td>
+          <td><strong>Partial</strong></td>
+          <td>Substrate is live &mdash; registry, resolver, platform fallback, activation summary, and the GearInterface&nbsp;&rarr;&nbsp;worker-signal projection service with banned-copy lint. The 11-primitive renderer library and the first vertical (HVAC dispatcher board) are in implementation.</td>
+        </tr>
+        <tr>
+          <td>Partner &amp; reseller channel</td>
+          <td><strong>Early access</strong></td>
+          <td>Axes-derived partner-program profiles, the wholesale-distribution and IT-managed-services archetypes, and setup-time / admin add-later capability activation have landed. Partner identity convergence, the <code>/partners</code> portal, deal registration, and tiering are designed and staged.</td>
+        </tr>
+        <tr>
+          <td>Coworker screen actions (pseudo-user contract)</td>
+          <td><strong>Partial</strong></td>
+          <td>Substrate complete: screen-manifest registry, the <code>screen_*</code> view-command tools, the <code>CoworkerActionEnvelope</code> propose&nbsp;&rarr;&nbsp;approve&nbsp;&rarr;&nbsp;dispatch state machine with approve/deny routes, finer screen-grant taxonomy, and a Screen Actions authority tab. Build Studio is the first vertical; storefront, admin, and platform verticals follow.</td>
+        </tr>
+        <tr>
+          <td>Organization knowledge corpus (WWWD)</td>
+          <td><strong>Early access</strong></td>
+          <td>One governed enrichment contract with idempotency, provenance, and trust grading; draft-by-default review; onboarding seeds (mission, business documents, market &amp; scope); a market-research producer with proposal&nbsp;&rarr;&nbsp;approval&nbsp;&rarr;&nbsp;scheduled-refresh; and freshness governance (supersession + decay). Deeper Build Studio profile-resolver integration is the closing piece.</td>
+        </tr>
+        <tr>
+          <td>Routing resilience &amp; failover</td>
+          <td><strong>Production</strong></td>
+          <td>Runtime circuit breaker excludes failing endpoints for sub-second failover; live-health projection separates admin lifecycle, runtime circuit, and operator-visible health; failover no longer surfaces fabrication copy. Layered on top of the existing capability-tier routing.</td>
         </tr>
         <tr>
           <td>Coworker workforce, grants, tool gating</td>
@@ -1351,7 +1415,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
           <td>Default-deny grants, route-scoped agent identity, immutable directive injection, audit log all live.</td>
         </tr>
         <tr>
-          <td>Archetypes (12 categories, 45 leaf templates)</td>
+          <td>Archetypes (12 categories, 46 leaf templates)</td>
           <td><strong>Production</strong></td>
           <td>Bootstrap on storefront setup; sections, vocabulary, finance profile, design system, marketing posture, and workspace-home direction seeded.</td>
         </tr>
@@ -1418,7 +1482,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <tr>
           <td>Decision Perspective Gate (WWMD) + Persona Voice Layer</td>
           <td><strong>Early access</strong></td>
-          <td>WWMD is the canonical handler for open-question and ambiguity surfaces, returning <em>recommend</em> / <em>arbitrate</em> / <em>escalate</em> / <em>defer</em> with confidence and audit trail; also exposed as an MCP tool. The Persona Voice Layer ships speaches-based STT and admin-configurable per-coworker TTS profiles for spoken decision rationales.</td>
+          <td>WWMD is the canonical handler for open-question and ambiguity surfaces, returning <em>recommend</em> / <em>arbitrate</em> / <em>escalate</em> / <em>defer</em> with confidence and audit trail; also exposed as an MCP tool, and now backed by the org WWWD corpus for org-specific judgment. The Persona Voice Layer ships speaches-based STT, a seeded founder voice, Apple-Silicon-native TTS sidecars (Chatterbox, MLX) with sentence-level streaming, and per-profile voice tuning.</td>
         </tr>
         <tr>
           <td>Cloud Single-VM (AWS / GCP / Azure)</td>
@@ -1428,7 +1492,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         <tr>
           <td>Portal self-upgrade runtime</td>
           <td><strong>Early access</strong></td>
-          <td>Bundle-hash-driven self-upgrade keeps a long-lived install current with <code>main</code>; canonical-URL middleware handles multi-origin remediation. In-session UX continuity during recycles is the active hardening surface.</td>
+          <td>Self-upgrade keeps a long-lived install current with <code>main</code> using merge-based source prep; the upgrade window is when the storefront is closed (operating hours), with an operator emergency override and next-check visibility. Governed pre-upgrade recovery points (Postgres, Neo4j, Qdrant) can be restored from the upgrade center, and an on-demand &ldquo;What&rsquo;s in this update?&rdquo; impact summary is available before draining. Seed/customization reconciliation on merge and in-session UX continuity during recycles remain the active hardening surfaces.</td>
         </tr>
         <tr>
           <td>A2A-aligned coworker runtime</td>
@@ -1674,7 +1738,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
       </div>
       <div class="card">
         <h3>What does the install include?</h3>
-        <p>Portal, init container, Postgres, Neo4j, Qdrant, Inngest, Redis, the local model runner, and on-demand sandbox containers. Twelve market categories, 45 leaf archetype templates, purposed coworkers, the skill registry, and a seeded role hierarchy come pre-loaded.</p>
+        <p>Portal, init container, Postgres, Neo4j, Qdrant, Inngest, Redis, the local model runner, and on-demand sandbox containers. Twelve market categories, 46 leaf archetype templates, purposed coworkers, the skill registry, and a seeded role hierarchy come pre-loaded.</p>
       </div>
       <div class="card">
         <h3>How do I uninstall?</h3>

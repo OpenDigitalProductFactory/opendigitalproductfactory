@@ -24,6 +24,7 @@ import {
   buildPhaseGraph,
   buildTaskGraph,
   getPhaseNodeStatus,
+  graphSignature,
   normalizeBuildSnapshot,
   getTaskNodeStatus,
   type ProcessNode,
@@ -167,14 +168,26 @@ export function ProcessGraph({ build, workflowLabel, governedBacklogEnabled, pro
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState(mergedEdges);
 
-  // Re-seed when the computed graph changes
+  // Re-seed xyflow state only when the graph's *content* changes — not on
+  // every new array identity. Mirroring derived nodes/edges into
+  // useNodesState on identity churn races xyflow's internal measurement
+  // (onNodesChange) updates and can drive a React max-update-depth (#185)
+  // render loop that wedges Build Studio intake (BI-87CEAFEE). Upstream
+  // re-renders (rapid `build`-prop updates during new-build intake / SSE
+  // refetch) produce content-equal graphs with fresh identities; the
+  // signature guard makes those no-ops while genuine status/position/edge
+  // changes still re-seed.
+  const graphSig = useMemo(
+    () => graphSignature(mergedNodes, mergedEdges),
+    [mergedNodes, mergedEdges],
+  );
+  const lastGraphSig = useRef<string | null>(null);
   useEffect(() => {
+    if (graphSig === lastGraphSig.current) return;
+    lastGraphSig.current = graphSig;
     setNodes(mergedNodes as Node[]);
-  }, [mergedNodes, setNodes]);
-
-  useEffect(() => {
     setEdges(mergedEdges);
-  }, [mergedEdges, setEdges]);
+  }, [graphSig, mergedNodes, mergedEdges, setNodes, setEdges]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {

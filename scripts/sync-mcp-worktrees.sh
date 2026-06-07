@@ -3,9 +3,8 @@
 #
 # POSIX counterpart of sync-mcp-worktrees.ps1 -- propagate the gitignored DPF
 # MCP client config (.mcp.json + .vscode/mcp.json) from the root clone into
-# every LINKED git worktree, and give each linked worktree a unique
-# COMPOSE_PROJECT_NAME. This is the macOS/Linux analog of the Windows
-# fsutil-hardlink sync.
+# every LINKED git worktree, give each linked worktree a unique
+# COMPOSE_PROJECT_NAME, and stamp its compile-ready/source-only readiness.
 #
 # Invoked automatically by the Claude Code WorktreeCreate hook through
 # scripts/hooks/run-hook.mjs (see .claude/settings.json), and runnable by hand
@@ -13,9 +12,9 @@
 #
 # Scope vs scripts/seed-worktree-mcp.sh: seed-worktree-mcp.sh is full one-time
 # per-worktree setup (incl. the DPF skill-pack / agent-toolchain bootstrap).
-# This script stays deliberately lean -- only MCP config + compose name -- so
-# it is cheap and safe to fire on EVERY worktree creation. Reach for
-# seed-worktree-mcp.sh when you also want the skill pack in a worktree.
+# This script stays deliberately lean -- MCP config + compose name + readiness
+# marker -- so it is cheap and safe to fire on EVERY worktree creation. Reach
+# for seed-worktree-mcp.sh when you also want the skill pack in a worktree.
 #
 # Differences vs the .ps1: copies the files (no hardlinks -- portable across
 # filesystems and works for worktrees anywhere, not just one drive) and
@@ -101,6 +100,44 @@ copy_into() {
     cp -f "$src" "$dst" 2>/dev/null || true
 }
 
+write_readiness_marker() {
+    wt="$1"
+    pnpm_on_path=false
+    corepack_on_path=false
+    node_modules_present=false
+    readiness_state="source-only"
+    readiness_reason="dependencies_missing"
+
+    command -v pnpm >/dev/null 2>&1 && pnpm_on_path=true
+    command -v corepack >/dev/null 2>&1 && corepack_on_path=true
+    [ -d "$wt/node_modules" ] && node_modules_present=true
+
+    if [ "$node_modules_present" = true ] && { [ "$pnpm_on_path" = true ] || [ "$corepack_on_path" = true ]; }; then
+        readiness_state="compile-ready"
+        readiness_reason="package_manager_and_dependencies_present"
+    elif [ "$node_modules_present" != true ]; then
+        readiness_reason="node_modules_missing"
+    elif [ "$pnpm_on_path" != true ] && [ "$corepack_on_path" != true ]; then
+        readiness_reason="pnpm_corepack_missing"
+    fi
+
+    {
+        cat <<EOF
+{
+  "schemaVersion": 1,
+  "state": "$readiness_state",
+  "reason": "$readiness_reason",
+  "checkedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "checks": {
+    "pnpmOnPath": $pnpm_on_path,
+    "corepackOnPath": $corepack_on_path,
+    "nodeModulesPresent": $node_modules_present
+  }
+}
+EOF
+    } > "$wt/.dpf-worktree-readiness.json" 2>/dev/null || true
+}
+
 # ---- Sync every linked worktree (skip the root clone itself) ----------------
 
 synced=0
@@ -115,6 +152,7 @@ while IFS= read -r line; do
             copy_into "$SRC_MCP" "$wt_abs/.mcp.json"
             copy_into "$SRC_VSCODE" "$wt_abs/.vscode/mcp.json"
             set_compose_project_env "$wt_abs/.env" "$(compose_project_name_for "$wt_abs")"
+            write_readiness_marker "$wt_abs"
             synced=$((synced + 1))
             ;;
     esac
@@ -122,5 +160,5 @@ done <<EOF
 $WORKTREES
 EOF
 
-printf 'sync-mcp-worktrees: synced %s linked worktree(s) from %s\n' "$synced" "$MAIN_ROOT"
+printf 'sync-mcp-worktrees: synced %s linked worktree(s) from %s; readiness markers updated\n' "$synced" "$MAIN_ROOT"
 exit 0

@@ -125,7 +125,7 @@ export const buildReviewVerification = inngest.createFunction(
     });
 
     const allPass = steps.length > 0 && steps.every((s) => s.passed);
-    const finalStatus: "complete" | "failed" = allPass ? "complete" : "failed";
+    const finalStatus: "complete" | "failed" | "skipped" = allPass ? "complete" : "failed";
 
     await step.run("persist-results", async () => {
       const { prisma } = await import("@dpf/db");
@@ -180,6 +180,30 @@ export const buildReviewVerification = inngest.createFunction(
         },
       }).catch(() => {});
     });
+
+    // Auto-dispatch ship when UX verification passes or skips (no test cases).
+    // This closes the last manual gate: the operator no longer needs to click
+    // "Ship" — the build ships automatically once review verification completes.
+    // Failure or infra-error keeps the build in review for manual inspection.
+    // finalStatus is "complete" | "failed" here (skipped was handled above).
+    // Treat "complete" as the passing signal for auto-ship dispatch.
+    if (finalStatus === "complete") {
+      await step.run("auto-dispatch-ship", async () => {
+        const { prisma: db } = await import("@dpf/db");
+        const b = await db.featureBuild.findUnique({
+          where: { buildId },
+          select: { createdById: true },
+        });
+        const actorUserId = b?.createdById ?? "system";
+        const { dispatchShipForVerifiedBuild } = await import("@/lib/integrate/ship-on-review-approval");
+        const outcome = await dispatchShipForVerifiedBuild({
+          buildId,
+          userId: actorUserId,
+          verificationStatus: "complete",
+        });
+        return { shipOutcome: outcome.kind };
+      });
+    }
 
     return { status: finalStatus, passed: steps.filter((s) => s.passed).length, total: steps.length };
   },

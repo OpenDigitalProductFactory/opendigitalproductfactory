@@ -271,7 +271,20 @@ export type MarketingWorkspaceSnapshot = {
   pendingDrafts: OutboundDraftRow[];
   approvedDrafts: OutboundDraftRow[];
   connectedChannels: string[]; // IntegrationCredential.integrationId values with status="connected"
+  inboundMessages: InboundMessageRow[];
   staleAreas: string[];
+};
+
+export type InboundMessageRow = {
+  inboundId: string;
+  channelId: string;
+  fromAddress: string | null;
+  fromDisplayName: string | null;
+  subject: string | null;
+  body: string;
+  receivedAt: Date;
+  classification: "qualified-inquiry" | "support" | "spam" | "other" | null;
+  draftedReplyId: string | null;
 };
 
 export type OutboundDraftRow = {
@@ -1149,6 +1162,7 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
     pendingDraftsRaw,
     approvedDraftsRaw,
     connectedIntegrations,
+    inboundRaw,
   ] = await Promise.all([
     prisma.marketingCampaignBrief.findMany({
       where: { strategyId: strategy.strategyId },
@@ -1192,6 +1206,11 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
       where: { status: "connected" },
       select: { integrationId: true },
     }),
+    prisma.inboundChannelMessage.findMany({
+      where: { organizationId: organization.id, domain: "marketing" },
+      orderBy: { receivedAt: "desc" },
+      take: 20,
+    }),
   ]);
 
   // Map asset task ids to titles for the queue panel
@@ -1215,6 +1234,17 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
   const pendingDrafts: OutboundDraftRow[] = pendingDraftsRaw.map(toRow);
   const approvedDrafts: OutboundDraftRow[] = approvedDraftsRaw.map(toRow);
   const connectedChannels = connectedIntegrations.map((i) => i.integrationId);
+  const inboundMessages: InboundMessageRow[] = inboundRaw.map((m) => ({
+    inboundId: m.inboundId,
+    channelId: m.channelId,
+    fromAddress: m.fromAddress,
+    fromDisplayName: m.fromDisplayName,
+    subject: m.subject,
+    body: m.body,
+    receivedAt: m.receivedAt,
+    classification: m.classification as InboundMessageRow["classification"],
+    draftedReplyId: m.draftedReplyId,
+  }));
 
   const normalizedSnapshot: MarketingWorkspaceSnapshot = {
     organization: {
@@ -1315,6 +1345,7 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
     pendingDrafts,
     approvedDrafts,
     connectedChannels,
+    inboundMessages,
     staleAreas: [],
   };
 

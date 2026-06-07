@@ -114,7 +114,7 @@ if ($HasToken -and $AutoMint -and -not $DryRun.IsPresent) {
             $HasToken = $false
         }
     } catch {
-        # Unreachable / ambiguous — fail safe, leave the present token untouched.
+        # Unreachable / ambiguous - fail safe, leave the present token untouched.
     }
 }
 
@@ -175,7 +175,13 @@ if ($ReconcileStaleEntries.IsPresent) { $nodeArgs += "--reconcile-stale-entries"
 
 $planJson = & pnpm @nodeArgs 2>$null
 if ($LASTEXITCODE -ne 0 -or -not $planJson) {
-    Write-Fail2 "compute-plan failed; cannot proceed with bootstrap."
+    Write-Warn2 "compute-plan failed; using standalone skill-pack updater fallback."
+    $fallback = Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1"
+    if (Test-Path -LiteralPath $fallback) {
+        & $fallback -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -McpUrl $McpEndpoint -DryRun:$DryRun
+        exit $LASTEXITCODE
+    }
+    Write-Fail2 "Standalone updater missing at $fallback; cannot proceed."
     exit 1
 }
 
@@ -233,6 +239,17 @@ if ($plan.codex -and $plan.codex.writes.Count -gt 0) {
     }
     Write-Ok "Codex plugin wired."
     $codexWired = $true
+    # Report DPF-scoping convergence (generic-client disable + worktree trust)
+    # so drift is surfaced, not silently tolerated (spec S4.5).
+    if ($plan.codex.convergence -and @($plan.codex.convergence).Count -gt 0) {
+        foreach ($chg in $plan.codex.convergence) {
+            switch ($chg.kind) {
+                "plugin-disabled"     { Write-Info "Codex: disabled generic plugin '$($chg.key)' (DPF-scoped profile)." }
+                "mcp-server-disabled" { Write-Info "Codex: disabled generic MCP server '$($chg.key)' (orphaned-sidecar source)." }
+                "project-trusted"     { Write-Info "Codex: trusted worktree path '$($chg.key)'." }
+            }
+        }
+    }
 } elseif ($plan.codex) {
     if ($plan.codex.preservedUserIntent) {
         Write-Skip "Codex plugin manually disabled by user; preserving user intent."
@@ -325,7 +342,7 @@ if (-not $DryRun.IsPresent) {
             $probeJson = & pnpm @probeArgs 2>$null
             if ($LASTEXITCODE -eq 0 -and $probeJson) {
                 $probeResult = $probeJson | ConvertFrom-Json
-                # ConvertFrom-Json returns PSCustomObject — re-serialize as
+                # ConvertFrom-Json returns PSCustomObject - re-serialize as
                 # nested hashtables so Set-DpfStateValue round-trips cleanly.
                 $mcpReadiness = $probeResult.mcpReadiness | ConvertTo-Json -Depth 6 -Compress | ConvertFrom-Json -AsHashtable
                 $smokeResult  = $probeResult.smokeTest    | ConvertTo-Json -Depth 6 -Compress | ConvertFrom-Json -AsHashtable
@@ -408,11 +425,19 @@ $copyTable = @{
 }
 $copy = $copyTable[$state.readinessState]
 
+$upstreamAdvisory = $null
+if ($plan.upstreamDrift -and $plan.upstreamDrift.advisory) {
+    $upstreamAdvisory = [string]$plan.upstreamDrift.advisory
+}
+
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host "  DPF agent toolchain: $($state.readinessState.ToUpper())" -ForegroundColor Cyan
 Write-Host "  $($copy.message)" -ForegroundColor White
 Write-Host "  Next: $($copy.primaryAction)" -ForegroundColor Yellow
+if (-not [string]::IsNullOrWhiteSpace($upstreamAdvisory)) {
+    Write-Host "  $upstreamAdvisory" -ForegroundColor DarkYellow
+}
 Write-Host "================================================================" -ForegroundColor Cyan
 
 if ($ShowSubstrate.IsPresent) {

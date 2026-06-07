@@ -1,6 +1,7 @@
 import {
   deriveBillingPatternProfile,
   deriveCapabilityApplicability,
+  derivePartnerProgramProfile,
 } from "./applicability-rules";
 import {
   isCapabilityKey,
@@ -21,6 +22,7 @@ import type {
   OperatingModelAxes,
   OperatingModelDelivery,
   OperatingModelForm,
+  PartnerProgramProfile,
   PlatformEcosystem,
   PortfolioDecomposition,
   PortfolioScope,
@@ -106,6 +108,7 @@ export interface NormalizedActivationProfile extends ActivationProfile {
   portfolios: PortfolioDecomposition;
   capabilityOverrides: CapabilityOverride[];
   billingProfile: BillingPatternProfile;
+  partnerProgram: PartnerProgramProfile;
   capabilityActivations: CapabilityActivation[];
 }
 
@@ -331,6 +334,7 @@ export function readActivationProfile(raw: unknown): NormalizedActivationProfile
 
   const capabilityMap = deriveCapabilityApplicability(axes, portfolios, capabilityOverrides);
   const billingProfile = deriveBillingPatternProfile(axes);
+  const partnerProgram = derivePartnerProgramProfile(axes, portfolios);
 
   return {
     ...legacyShape,
@@ -338,6 +342,7 @@ export function readActivationProfile(raw: unknown): NormalizedActivationProfile
     portfolios,
     capabilityOverrides,
     billingProfile,
+    partnerProgram,
     capabilityActivations: Array.from(capabilityMap.values()),
     ...(raw.seededServiceCategories !== undefined && isStringArray(raw.seededServiceCategories)
       ? { seededServiceCategories: raw.seededServiceCategories }

@@ -28,6 +28,11 @@ export const GRANT_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
   // `build_promote` was the legacy promotion grant; `build_lifecycle` is the
   // broader Pseudo-User Contract grant covering reopen + cancel + promote.
   build_promote: ["build_lifecycle"],
+  // Browser-driving (EP-BROWSER-DRIVE, spec 2026-06-05 §8.2, Verdict 5):
+  // holding `browser_drive` (side-effecting browser actions) implies
+  // `browser_read` (navigate / extract / screenshot). One-way, as ever —
+  // `browser_read` alone never implies the drive grant.
+  browser_drive: ["browser_read"],
 };
 
 /** Expand a list of held grants by applying GRANT_IMPLICATIONS one-way.
@@ -47,17 +52,81 @@ export function expandGrants(grants: readonly string[]): string[] {
 }
 
 /**
+ * Read-only baseline every coworker holds, regardless of its agent-specific
+ * grants. Encodes the platform design criterion (operator, 2026-06-06,
+ * BI-FD7E4D72): a coworker must have complete visibility of the page it is on
+ * plus read access to the documentation, the source code, and the code graph
+ * for "how it works and the rest of the portal". Without this the page-scoped
+ * agents (e.g. AGT-WS-OPS, granted only backlog_*) could neither see their
+ * page's coordination data nor look anything up — making them, in the
+ * operator's words, "rather useless".
+ *
+ * Every grant here is READ-ONLY. The user-capability check in getAvailableTools
+ * (`can(userContext, requiredCapability)`) still applies on top, so this never
+ * escalates a coworker beyond what its human operator may see. Merged into the
+ * agent's grants at coworker tool-resolution time (see getAvailableTools'
+ * `additionalGrants` option) rather than hand-stamped onto every agent entry —
+ * one durable rule that new agents inherit automatically, and which sidesteps
+ * the DB-vs-JSON grant-sync problem since it is applied in code at runtime.
+ *
+ *  - registry_read     → knowledge base, wiki, portfolio context
+ *  - file_read         → read/search project source code
+ *  - document_read     → platform documentation (doc_search / doc_load)
+ *  - code_graph_read   → the code graph (search_code_graph / trace_code_surface)
+ *  - work_capsule_read → page coordination data (runtime targets, leases,
+ *                        build progress) — the data pages like /ops/dev-loop render
+ */
+export const COWORKER_READ_BASELINE_GRANTS: readonly string[] = [
+  "registry_read",
+  "file_read",
+  "document_read",
+  "code_graph_read",
+  "work_capsule_read",
+];
+
+/**
  * Maps platform tool names to agent grant categories.
  * A tool is allowed if the agent has ANY of the grants it maps to —
  * directly OR via GRANT_IMPLICATIONS expansion (see expandGrants).
  * Tools not in this map are DENIED by default — every tool must have an entry.
  */
 const TOOL_TO_GRANTS: Record<string, string[]> = {
+  // Browser-driving (namespaced MCP, server slug `mcp-browser-use`) —
+  // EP-BROWSER-DRIVE, spec 2026-06-05 §8.2 (Verdict 5). These are the
+  // platform-visible `<serverId>__<toolName>` names (see mcp-server-tools.ts
+  // `namespaceTool`), because that is the form that enters the coworker tool
+  // list. Read tools require `browser_read`; the side-effecting `browse_act`
+  // requires `browser_drive` (which implies `browser_read`). `browse_run_tests`
+  // stays QA-scoped on `browser_read`, never `browser_drive`. Without an entry
+  // here these tools were appended ungated under External Access — the gap this
+  // closes (see getAvailableTools in apps/web/lib/mcp-tools.ts).
+  "mcp-browser-use__browse_open": ["browser_read"],
+  "mcp-browser-use__browse_extract": ["browser_read"],
+  "mcp-browser-use__browse_screenshot": ["browser_read"],
+  "mcp-browser-use__browse_close": ["browser_read"],
+  "mcp-browser-use__browse_run_tests": ["browser_read"],
+  "mcp-browser-use__browse_act": ["browser_drive"],
+  // The coworker-facing orchestrator entry point (drives a full bounded task).
+  drive_browser_task: ["browser_drive"],
+
   // Backlog
   create_backlog_item: ["backlog_write"],
   update_backlog_item: ["backlog_write"],
   query_backlog: ["backlog_read"],
   report_quality_issue: ["backlog_write"],
+
+  // Workbooks / Universal Grid (EP-GRID-WORKBOOKS, #1582). These MCP tools
+  // shipped without a grant mapping, so every tool was default-deny (INV-1) and
+  // unreachable from any coworker. The handler's capability split is
+  // view_workbooks (read) / manage_workbooks (write); mirror it as read/write
+  // grant categories. Held by no agent yet — workbook tools stay coworker-deny
+  // until a role grants them, which is the correct conservative default for a
+  // user-facing grid feature.
+  workbook_list_tables: ["workbook_read"],
+  workbook_get_schema: ["workbook_read"],
+  workbook_query_rows: ["workbook_read"],
+  workbook_create_row: ["workbook_write"],
+  workbook_update_cells: ["workbook_write"],
 
   // Governed MCP backlog surface (spec 2026-04-25)
   create_epic: ["backlog_write"],
@@ -124,6 +193,11 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   get_thread_result:         ["thread_read"],
   get_child_threads:         ["thread_read"],
 
+  // Multi-agent collaboration (EP-A2A) — targeted handoff / summon spawn a
+  // child work thread, so they require the same thread_write grant as spawn.
+  request_coworker:          ["thread_write"],
+  summon_coworker:           ["thread_write"],
+
   // Registry / Products
   create_digital_product: ["registry_read", "backlog_write"],
   update_lifecycle: ["backlog_write"],
@@ -182,6 +256,10 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   principle_decide: ["registry_read"],
 
   // Build / Sandbox
+  // Read-only verify-phase preflight (EP-VERIFY-PROC). Mapped to the build-context
+  // grant the build-specialist already holds so it's available in the verify phase
+  // without a new grant key; refine to a dedicated read grant if other roles need it.
+  verification_preflight: ["build_plan_write"],
   launch_sandbox: ["sandbox_execute"],
   generate_code: ["sandbox_execute"],
   iterate_sandbox: ["sandbox_execute"],
@@ -231,6 +309,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   run_release_gate: ["release_gate_create"],
   schedule_release_bundle: ["release_plan_create"],
   get_release_status: ["release_plan_read"],
+  verify_live_install_readiness: ["release_plan_read"],
 
   // Discovery / Monitoring
   summarize_estate_posture: ["registry_read"],
@@ -319,6 +398,19 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   create_marketing_automation_candidate: ["marketing_write"],
   draft_marketing_asset:         ["marketing_write"],
   publish_to_linkedin:           ["marketing_write"],
+  send_marketing_email:          ["marketing_write"],
+  place_linkedin_ad:             ["marketing_write"],
+  refresh_channel_kpis:          ["marketing_write"],
+  tick_marketing_scheduler:      ["marketing_write"],
+  plan_upcoming_marketing_drafts: ["marketing_write"],
+  // Tool checks `requiredCapability: "manage_provider_connections"` at the
+  // user-capability layer (operator-only). The agent-grant layer just gates
+  // whether the agent may attempt the tool; marketing-specialist needs
+  // marketing_write here for the prompt to even surface the tool name. The
+  // OPERATOR's capability gate is the real "operator-only" enforcement;
+  // marketing-specialist's prompt is also explicit that it must not call
+  // this tool itself.
+  set_marketing_autopilot_policy: ["marketing_write"],
   analyze_seo_opportunity:      ["marketing_read"],
   generate_custom_archetype:    ["marketing_write"],
   assess_archetype_refinement:  ["marketing_read"],

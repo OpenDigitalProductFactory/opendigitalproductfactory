@@ -26,15 +26,18 @@ vi.mock("next/link", () => ({
 import { MarketingTabNav } from "./MarketingTabNav";
 
 describe("MarketingTabNav", () => {
-  it("renders only implemented marketing routes", () => {
+  it("renders every implemented marketing route", () => {
     pathname = "/customer/marketing";
     const html = renderToStaticMarkup(<MarketingTabNav />);
 
     expect(html).toContain('href="/customer/marketing"');
     expect(html).toContain('href="/customer/marketing/strategy"');
-    expect(html).not.toContain("Campaigns");
-    expect(html).not.toContain("Funnel");
-    expect(html).not.toContain("Automation");
+    expect(html).toContain('href="/customer/marketing/campaigns"');
+    expect(html).toContain('href="/customer/marketing/funnel"');
+    expect(html).toContain('href="/customer/marketing/automation"');
+    expect(html).toContain("Campaigns");
+    expect(html).toContain("Funnel");
+    expect(html).toContain("Automation");
     expect(html).not.toContain("Phase 2");
     expect(html).not.toContain("Phase 3");
   });
@@ -43,6 +46,14 @@ describe("MarketingTabNav", () => {
     pathname = "/customer/marketing/strategy";
     const html = renderToStaticMarkup(<MarketingTabNav />);
 
+    expect(html).toContain("border-[var(--dpf-accent)]");
+  });
+
+  it("keeps Campaigns active for nested campaign routes", () => {
+    pathname = "/customer/marketing/campaigns/briefs";
+    const html = renderToStaticMarkup(<MarketingTabNav />);
+
+    expect(html).toContain('href="/customer/marketing/campaigns"');
     expect(html).toContain("border-[var(--dpf-accent)]");
   });
 });

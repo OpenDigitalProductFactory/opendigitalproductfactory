@@ -3,7 +3,7 @@
 | Field | Value |
 | ----- | ----- |
 | Date | 2026-05-26 |
-| Status | Fit review for circulation; source plan amended |
+| Status | Fit review for circulation; source plan amended; generalized by `dpf-ux-fit-review` |
 | Reviewed source | `docs/superpowers/plans/2026-05-26-pipedrive-crm-marketing-slice-1.md` in concurrent branch `doc/pipedrive-crm-marketing` |
 | Related design | `docs/superpowers/specs/2026-05-26-pipedrive-inspired-crm-marketing-operations-design.md` |
 | UX governance anchor | `docs/superpowers/specs/2026-04-25-customer-marketing-coworker-led-ux-correction.md` |
@@ -81,4 +81,19 @@ Expected behavior:
 - Require route-family ownership, persona, navigation layer, component convergence, empty-state behavior, source truth, AI action boundary, and verification evidence.
 - Store the output as a design artifact or plan section so review does not depend on chat memory.
 
-This should become a first-class follow-up after the current UX packet is reviewed. Until then, use the template in this audit manually for every incoming UI plan.
+This is now implemented as `packages/dpf-skill-pack/skills/dpf-ux-fit-review/SKILL.md`. Use the skill before incoming UI plans add routes, tabs, dashboard bands, metric tiles, status badges, empty states, or coworker launchers.
+
+## 6. 2026-06-06 Reconciliation Note
+
+The original Slice 1 fit review remains the right guardrail, but the implementation state has moved on. The current audit is `docs/superpowers/audits/2026-06-06-customer-crm-marketing-ux-reconciliation.md`.
+
+Current `origin/main` evidence shows:
+
+- Slice 1 CRM presentation metadata, revenue cockpit, Customer metric/status wrappers, and color cleanup are present.
+- Slice 2 pipeline inspector is present.
+- Slice 3 acquisition signal routing is present.
+- Slice 4 marketing Campaigns/Funnel/Automation routes are present and no longer phase placeholders.
+- `CustomerMetricTile` and `CustomerStatusBadge` now compose `report-kit` primitives through a CRM tone adapter.
+- Remaining product work is Slice 5, tracked as `BI-D8E00326`.
+
+The authenticated canonical browser crawl was blocked by a login-submit runtime/auth failure on 2026-06-06, so future Slice 5 verification must re-run the crawl after that blocker is resolved.

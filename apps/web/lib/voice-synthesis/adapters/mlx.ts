@@ -20,7 +20,7 @@
 //
 // Spec: docs/superpowers/specs/2026-05-28-tts-apple-silicon-local-design.md
 
-import path from "node:path"
+import { posix as posixPath } from "node:path"
 import type { VoiceSynthesisConfig } from "../types"
 import { VoiceSynthesisError, type RawSynthesisResult } from "./cartesia"
 
@@ -66,7 +66,9 @@ export interface MlxSynthesisConfig extends VoiceSynthesisConfig {
 export function resolveReferenceHostPath(providerVoiceId: string | undefined | null): string | null {
   const root = process.env.DPF_TTS_REFERENCE_HOST_ROOT
   if (!root || !providerVoiceId) return null
-  return path.join(root, providerVoiceId)
+  const normalizedRoot = root.replace(/\\/g, "/").replace(/\/+$/, "") || "/"
+  const normalizedVoiceId = providerVoiceId.replace(/\\/g, "/").replace(/^\/+/, "")
+  return posixPath.join(normalizedRoot, normalizedVoiceId)
 }
 
 // CSM generation is stochastic: identical requests intermittently return empty

@@ -32,7 +32,7 @@ DPF therefore treats `dpf-platform` as the project-default plugin, not merely a 
 | [`dpf-verify-substrate-first`](skills/dpf-verify-substrate-first/SKILL.md) | (no analog) | `["*"]` | Grep + live-backlog + main-branch sweep before naming new types/tables/epics |
 | [`dpf-file-backlog-item`](skills/dpf-file-backlog-item/SKILL.md) | dpf-verify-substrate-first (`dpf-writing-plans` pending — slice 2) | `["build-specialist", "ops-coordinator", "platform-engineer"]` | Verify substrate → file BI → size → triage → link epic |
 | [`dpf-promote-to-build-studio`](skills/dpf-promote-to-build-studio/SKILL.md) | (no analog) | `["build-specialist", "ops-coordinator"]` | BI → promote → approve Ideate → let BS run |
-| [`dpf-worktree-per-session`](skills/dpf-worktree-per-session/SKILL.md) | dpf-finishing-a-development-branch (predecessor) | `["build-specialist", "platform-engineer"]` | `git worktree add` + MCP seed + `COMPOSE_PROJECT_NAME` discipline |
+| [`dpf-worktree-per-session`](skills/dpf-worktree-per-session/SKILL.md) | dpf-finishing-a-development-branch (predecessor) | `["build-specialist", "platform-engineer"]` | `git worktree add` + MCP seed + `COMPOSE_PROJECT_NAME` + compile-ready/source-only verification discipline |
 | [`dpf-pr-with-dco`](skills/dpf-pr-with-dco/SKILL.md) | dpf-finishing-a-development-branch (successor) | `["build-specialist", "platform-engineer"]` | Branch from `origin/main`, `-s` sign-off, overlap-sweep, PR-when-ready |
 | [`dpf-evidence-before-diagnosis`](skills/dpf-evidence-before-diagnosis/SKILL.md) | dpf-systematic-debugging (predecessor) | `["*"]` | Query DB/status before claiming cause; dynamic-analysis output discipline |
 | [`dpf-brainstorming`](skills/dpf-brainstorming/SKILL.md) | (DPF-native; predecessor to `dpf-decision-via-kernel`) | `["*"]` | Generate 2-4 substrate-grounded options before converging; replaces upstream `brainstorming` |
@@ -48,6 +48,7 @@ DPF therefore treats `dpf-platform` as the project-default plugin, not merely a 
 | [`dpf-use-shared-nonprod-environment`](skills/dpf-use-shared-nonprod-environment/SKILL.md) | dpf-worktree-per-session | `["build-specialist", "platform-engineer", "ops-coordinator"]` | Claim and release governed shared localhost environments instead of unmanaged servers |
 | [`dpf-local-merge-ci-before-push`](skills/dpf-local-merge-ci-before-push/SKILL.md) | dpf-pr-with-dco | `["build-specialist", "platform-engineer"]` | Run merged-code local integration gates and record results before push or PR |
 | [`dpf-architecture-review`](skills/dpf-architecture-review/SKILL.md) | dpf-retrieve-decision-context, dpf-decision-via-kernel | `["ea-architect", "build-specialist", "platform-engineer"]` | Chief-architect lens: review a spec/design/plan for architectural alignment against DPF standards, propose concrete edits, feed new standards back to the reference docs. Advisory `architect` reviewer at the Build Studio Ideate + Plan gates |
+| [`dpf-ux-fit-review`](skills/dpf-ux-fit-review/SKILL.md) | dpf-architecture-review, dpf-verify-substrate-first | `["ea-architect", "build-specialist", "platform-engineer"]` | UX/IA fit gate for UI-impacting feature plans: route family, persona, first viewport, nav layer, component convergence, empty/failure states, coworker boundaries, design-intelligence lookup, captured review artifact, and merge evidence |
 
 ### Upstream superpowers capabilities NOT re-authored (do not re-propose)
 
@@ -89,6 +90,94 @@ Repo-level marketplace files live at the repository root:
 - `.agents/plugins/marketplace.json` — Codex repo marketplace, marked `INSTALLED_BY_DEFAULT` for the same plugin directory.
 
 The auto-install hook (BI-98683E68) wires these into portal install + worktree creation so contributors do not need to hand-run client plugin commands. MCP authentication still stays outside git: issue or rotate `DPF_MCP_BEARER_TOKEN` from Admin > Platform Development > MCP. The plugin supplies the client wiring; the portal owns the token.
+
+## Standalone install and update
+
+The DPF skill pack can be installed or updated without installing the full DPF
+project. This is the supported path for contributors who only need the governed
+Codex / Claude workflows and an existing DPF MCP endpoint.
+
+The dependency-free updater lives in this package:
+
+- Windows: `packages/dpf-skill-pack/scripts/update-agent-toolchain.ps1`
+- macOS / Linux: `packages/dpf-skill-pack/scripts/update-agent-toolchain.sh`
+- Direct Python: `packages/dpf-skill-pack/scripts/update_agent_toolchain.py`
+
+What the updater does:
+
+1. Validates the skill-pack manifests and `skills/` directory.
+2. Copies the current skill pack to the managed personal plugin location:
+   `~/.agents/plugins/plugins/dpf-platform`.
+3. Writes or updates Codex's personal marketplace at
+   `~/.agents/plugins/marketplace.json` with `dpf-platform` marked
+   `INSTALLED_BY_DEFAULT`.
+4. Writes or updates `~/.codex/config.toml` with:
+   - `[plugins."dpf-platform"] enabled = true`
+   - `[mcp_servers.dpf]` pointing to the DPF MCP URL and
+     `bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"`
+5. Writes a Claude local marketplace at
+   `~/.agents/plugins/.claude-plugin/marketplace.json` pointing to the same
+   managed plugin copy.
+6. If the Claude CLI is available, runs the Claude plugin marketplace/install
+   commands from that local marketplace.
+
+The updater does not require Docker, pnpm, Node dependencies, Prisma, Postgres,
+or the DPF portal runtime. It does not mint tokens. The operator must provide
+`DPF_MCP_BEARER_TOKEN` and, when the MCP endpoint is not local, `DPF_MCP_URL`.
+
+### Codex procedure
+
+Windows:
+
+```powershell
+$env:DPF_MCP_URL = "http://127.0.0.1:3000/api/mcp/v1"
+.\packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1 -CodexOnly
+```
+
+macOS / Linux:
+
+```bash
+export DPF_MCP_URL="${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}"
+bash packages/dpf-skill-pack/scripts/update-agent-toolchain.sh --codex-only
+```
+
+Start a new Codex thread after the updater finishes; skills and MCP tools are
+loaded at session start.
+
+### Claude Code procedure
+
+Windows:
+
+```powershell
+$env:DPF_MCP_URL = "http://127.0.0.1:3000/api/mcp/v1"
+.\packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1 -ClaudeOnly
+```
+
+macOS / Linux:
+
+```bash
+export DPF_MCP_URL="${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}"
+bash packages/dpf-skill-pack/scripts/update-agent-toolchain.sh --claude-only
+```
+
+Start a new Claude Code session after the updater finishes. If the Claude CLI is
+not on PATH, the updater still writes the marketplace; run it again after Claude
+Code is installed or pass `--skip-claude-cli-install` to intentionally skip the
+CLI install step.
+
+### Updating after skill changes
+
+Rerun the same updater from the newer skill-pack folder. It replaces the managed
+copy, refreshes both marketplaces, and updates the MCP/client configuration
+without touching the full DPF runtime. This is the agent-toolchain-only update
+path; `scripts/dpf-bootstrap-agent-toolchain.{ps1,sh}` falls back to it when the
+full Node planner is unavailable in a source-only checkout.
+
+### Version bumps propagate automatically
+
+When this package's `.claude-plugin/plugin.json` version bumps (e.g. `0.1.0` → `0.2.0`), the `scripts/dpf-bootstrap-agent-toolchain.{ps1,sh}` adapter reads the new version from the manifest at install time and the planning library at `packages/dpf-bootstrap/` plans an upgrade write for contributors whose installed entry is at the older version. No manual `claude plugin install` is required. Contributors pick up the new skills on the next time the installer (or `install-dpf`, `fresh-install`, `setup`, or a fresh `git worktree add`) runs — and a re-run when nothing has drifted is a true no-op.
+
+Upstream-owned plugins (`superpowers@openai-curated`) follow a different rule: their pinned version lives in `packages/dpf-bootstrap/src/agent-toolchain/upstream-versions.ts` and drift is surfaced as an advisory line under the install banner. DPF does not auto-upgrade upstream plugins.
 
 ## See also
 

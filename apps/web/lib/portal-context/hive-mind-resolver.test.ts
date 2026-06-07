@@ -100,6 +100,7 @@ function activeBuildWork(): WorkProjection {
       phase: "build",
       status: "working",
       evidenceComplete: false,
+      updatedAt: null,
       href: "/build?buildId=FB-123",
     },
     taskRun: null,

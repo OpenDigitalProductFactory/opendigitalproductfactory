@@ -94,7 +94,15 @@ export function parseSchema(source) {
     // Drop trailing line comment (but keep the content before it).
     // We don't try to be smart about strings — Prisma schema doesn't have
     // `//` inside strings in practice.
-    let line = rawLine.replace(/\/\/.*$/, "");
+    //
+    // CRLF guard: working trees on Windows / autocrlf=true have lines
+    // ending in `\r`. JavaScript regex `.` does NOT match `\r` (it's a
+    // line terminator), so `\/\/.*$` would refuse to match comments on
+    // CRLF lines — the comment text leaked into the normalized line and
+    // set comparison flagged every CRLF line as "missing" from the
+    // base (which is read via `git show` and is always LF-terminated).
+    // Strip the trailing `\r` before stripping comments.
+    let line = rawLine.replace(/\r$/, "").replace(/\/\/.*$/, "");
 
     // Normalize whitespace.
     line = line.trim().replace(/\s+/g, " ");
@@ -111,6 +119,27 @@ export function parseSchema(source) {
 //
 // Compare two parsed schemas. Returns an array of human-readable regression
 // strings. An empty array means no regressions.
+function parseModelFieldLine(line) {
+  if (line.startsWith("@")) return null;
+  const match = /^(\w+)\s+([^\s]+)(.*)$/.exec(line);
+  if (!match) return null;
+  return {
+    name: match[1],
+    type: match[2],
+    suffix: match[3].trim(),
+  };
+}
+
+function isOptionalityWidening(baseLine, headLine) {
+  const base = parseModelFieldLine(baseLine);
+  const head = parseModelFieldLine(headLine);
+  if (!base || !head) return false;
+  if (base.name !== head.name) return false;
+  if (base.type.endsWith("?")) return false;
+  if (head.type !== `${base.type}?`) return false;
+  return base.suffix === head.suffix;
+}
+
 export function diffSchemas(base, head) {
   const regressions = [];
 
@@ -123,6 +152,10 @@ export function diffSchemas(base, head) {
     const headLines = head.models.get(name);
     for (const line of baseLines) {
       if (!headLines.has(line)) {
+        const equivalentWidening = [...headLines].some((headLine) =>
+          isOptionalityWidening(line, headLine),
+        );
+        if (equivalentWidening) continue;
         regressions.push(`model ${name}: removed \`${line}\``);
       }
     }

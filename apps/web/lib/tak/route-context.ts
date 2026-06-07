@@ -17,6 +17,11 @@ const ROUTE_CONTEXT_PROVIDERS: Record<string, (userId: string, routeContext: str
   "/platform/ai": getAiWorkforceContext,
   "/platform/ai/providers": getProvidersContext,
   "/platform/tools/discovery": getDiscoveryOperationsContext,
+  // /ops/dev-loop renders the runtime coordination map (targets + leases), NOT
+  // the backlog. Without its own provider it fell back to /ops → getOpsContext
+  // and the coworker only saw backlog items + epics (BI-FD7E4D72). More-specific
+  // prefix wins via longest-match below, so this must precede "/ops".
+  "/ops/dev-loop": getDevLoopContext,
   "/ops": getOpsContext,
   "/compliance/licensing": getLicensingReadinessContext,
   "/compliance": getComplianceContext,
@@ -397,6 +402,92 @@ async function getOpsContext(): Promise<string> {
   ].join("\n");
 }
 
+// /ops/dev-loop — the runtime coordination map. Mirrors the data the page
+// renders (apps/web/app/(shell)/ops/dev-loop/page.tsx getData): RuntimeTargets
+// grouped by lifecycle + active NonProductionEnvironmentLeases, plus the janitor
+// rules so the coworker can reason about staleness (e.g. why several targets
+// show "running" on the same port — stale ones await the 2h-no-heartbeat sweep).
+// BI-FD7E4D72 / BI-AD949172.
+async function getDevLoopContext(): Promise<string> {
+  const [targets, leases] = await Promise.all([
+    prisma.runtimeTarget.findMany({
+      orderBy: { updatedAt: "desc" },
+      take: 50,
+      select: {
+        targetId: true,
+        kind: true,
+        status: true,
+        hostUrl: true,
+        lastHeartbeatAt: true,
+        expiresAt: true,
+        updatedAt: true,
+        workCapsule: { select: { headBranch: true } },
+        featureBuild: { select: { buildId: true } },
+      },
+    }),
+    prisma.nonProductionEnvironmentLease.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      select: {
+        leaseId: true,
+        environmentKey: true,
+        status: true,
+        ownerProvider: true,
+        purpose: true,
+        branchName: true,
+        worktreePath: true,
+        expiresAt: true,
+        releasedAt: true,
+      },
+    }),
+  ]);
+
+  const now = Date.now();
+  const ageHours = (d: Date | null): string =>
+    d ? `${Math.round(((now - d.getTime()) / 3_600_000) * 10) / 10}h ago` : "never";
+
+  const ACTIVE = ["running", "starting", "verifying", "assigned"];
+  const STALE = ["expired", "failed"];
+  const INACTIVE = ["planned", "verified", "released"];
+
+  const fmtTarget = (t: (typeof targets)[number]): string => {
+    const branch = t.workCapsule?.headBranch ? ` branch=${t.workCapsule.headBranch}` : "";
+    const build = t.featureBuild?.buildId ? ` build=${t.featureBuild.buildId}` : "";
+    const url = t.hostUrl ? ` url=${t.hostUrl}` : "";
+    return `- ${t.targetId} [${t.kind}/${t.status}]${url} lastHeartbeat=${ageHours(t.lastHeartbeatAt)}${branch}${build}`;
+  };
+
+  const active = targets.filter((t) => ACTIVE.includes(t.status));
+  const stale = targets.filter((t) => STALE.includes(t.status));
+  const inactive = targets.filter((t) => INACTIVE.includes(t.status));
+  const activeLeases = leases.filter((l) => l.status === "active" && !l.releasedAt);
+
+  const leaseLines = activeLeases.map(
+    (l) =>
+      `- ${l.environmentKey} (${l.leaseId}) provider=${l.ownerProvider}` +
+      `${l.branchName ? ` branch=${l.branchName}` : ""} purpose="${l.purpose}" expires=${ageHours(l.expiresAt).replace(" ago", " from update")}`,
+  );
+
+  return [
+    "\nPAGE DATA — Dev Loop (runtime coordination map):",
+    "This page shows governed RuntimeTargets and non-prod environment leases, not the backlog.",
+    "",
+    `ACTIVE RUNTIME TARGETS (${active.length}) — status in running/starting/verifying/assigned:`,
+    ...(active.length ? active.map(fmtTarget) : ["- (none)"]),
+    "",
+    `STALE / FAILED TARGETS (${stale.length}) — status expired/failed:`,
+    ...(stale.length ? stale.map(fmtTarget) : ["- (none)"]),
+    "",
+    `INACTIVE TARGETS (${inactive.length}) — status planned/verified/released:`,
+    ...(inactive.length ? inactive.map(fmtTarget) : ["- (none)"]),
+    "",
+    `ACTIVE NON-PROD LEASES (${activeLeases.length}):`,
+    ...(leaseLines.length ? leaseLines : ["- (none)"]),
+    "",
+    "JANITOR RULES (runtimeTargetJanitor, BI-AD949172): running/starting + no heartbeat for 2h → expired; planned + no consumer for 7 days → released; lease past expiresAt → expired. So several targets can show the SAME status (e.g. running) and even the same URL/port concurrently — multiple build sandboxes register their own target on the shared sandbox port; a 'running' target whose lastHeartbeat is hours/days old is stale and simply has not been swept to 'expired' yet. Cross-check status against lastHeartbeat before assuming a target is live. Use get_runtime_coordination_map for the full live record (verifications, capsule/build linkage).",
+  ].join("\n");
+}
+
 // ─── Cross-Cutting Workspace Context ──────────────────────────────────────
 
 async function getWorkspaceContext(): Promise<string> {
@@ -501,6 +592,7 @@ async function getFinanceContext(): Promise<string> {
       "External tax research requirement: External Access is required before recommending registrations, filing schedules, or tax-processing setup from live law.",
       "Research tool instruction: when External Access is enabled, use search_public_web for official tax authority pages and fetch_public_website for the strongest official sources before making a DPF tax processing proposal. If External Access is off, ask the user to enable it and provide the official-source targets to verify.",
       "DPF tax processing proposal required: propose DPF configuration changes for tax capture, registrations, tax codes, liability tracking, obligation periods, remittance schedule, evidence, and accounting handoff. Mark assumptions and human approval boundaries.",
+      "Provider/subscription spend instruction: use platform finance records first, then browser-use billing portals for plan, amount, cadence, renewal, invoice, and receipt evidence. Do not submit payments, change plans, or update external account settings. If the portal cannot resolve a required field, queue the human ask with the exact missing fields.",
     );
     return sections.join("\n");
   }
@@ -520,6 +612,7 @@ async function getFinanceContext(): Promise<string> {
     `Blocked or failed remittance runs: ${blockedRunCount}`,
     `Recurring schedules: ${recurringCount}`,
     `Outstanding customer invoices: ${overdueInvoices}`,
+    "Provider/subscription spend instruction: use platform finance records first, then browser-use billing portals for plan, amount, cadence, renewal, invoice, and receipt evidence. Do not submit payments, change plans, or update external account settings. If the portal cannot resolve a required field, queue the human ask with the exact missing fields.",
   );
 
   const jurisdictionWhere = taxProfile.homeCountryCode

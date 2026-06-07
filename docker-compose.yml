@@ -139,11 +139,16 @@ services:
       # docker-compose.linux.yml overlay instead (to http://ollama:11434).
       OLLAMA_INTERNAL_URL: ${OLLAMA_INTERNAL_URL:-http://host.docker.internal:11434}
       DEPLOYED_VERSION: ${DEPLOYED_VERSION:-}
-      # Git SHA of the running image — set by the deploy pipeline (or
-      # scripts/build-images.{ps1,sh}) to give /ops/self-upgrade a comparable
-      # identity. When unset, the portal falls back to /app/.dpf-image-version
-      # (baked at build time). See spec §4.1 of
-      # docs/superpowers/specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md.
+      # Git SHA of the running image. This compose interpolation only resolves
+      # to a value when DEPLOYED_SHA or DPF_VERSION is exported in the SHELL env
+      # at `docker compose up` time (true for the promoter, which exports
+      # DPF_VERSION; empty for a normal installer/restart `up`). To guarantee the
+      # running portal ALWAYS carries the identity of its own bytes — the
+      # BI-5B6C1C35 / spec §4.3 invariant — the runtime CMD (Dockerfile) seeds
+      # DEPLOYED_SHA from the baked /app/.dpf-image-version when this resolves
+      # empty, so `printenv DEPLOYED_SHA` is never blank on a built image. An
+      # explicit value here (deploy pipeline) still takes precedence. See spec
+      # §4.1 of docs/superpowers/specs/2026-05-23-governed-platform-upgrade-lifecycle-design.md.
       DEPLOYED_SHA: ${DEPLOYED_SHA:-${DPF_VERSION:-}}
       DPF_ENVIRONMENT: production
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
@@ -198,6 +203,13 @@ services:
       DPF_TTS_REFERENCE_HOST_ROOT: ${DPF_TTS_REFERENCE_HOST_ROOT:-}
       DPF_TTS_MLX_MODEL: ${DPF_TTS_MLX_MODEL:-}
       DPF_TTS_MLX_VOICE: ${DPF_TTS_MLX_VOICE:-}
+      # Platform-correct compose chain (space-separated) the install was created
+      # with. install-dpf.sh writes this from the same set it records in
+      # install-state.json. The self-upgrade orchestrator reads it and passes it to
+      # the promoter as PROMOTE_COMPOSE_FILES so the portal is recreated with the
+      # install's OWN overlays — never the macOS overlay force-applied on a
+      # Windows/Linux host (the broken-TTS defect). Empty => promote.sh base-only.
+      DPF_SELF_UPGRADE_COMPOSE_FILES: ${DPF_SELF_UPGRADE_COMPOSE_FILES:-}
       UPLOAD_STORAGE_PATH: ${UPLOAD_STORAGE_PATH:-/host-dpf/data/uploads}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # ensures host reachable on all platforms
@@ -340,6 +352,10 @@ services:
       - "8500:8500"
     volumes:
       - browser_evidence:/evidence
+      # Service-account Chromium user-data-dirs at /profiles/<principalId>/<siteKey>/.
+      # Secret impersonation material — sidecar is the only writer; the portal
+      # never mounts this volume (EP-BROWSER-DRIVE, spec §8.9).
+      - browser_profiles:/profiles
     environment:
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
       LLM_MODEL: ${BROWSER_USE_MODEL:-gpt-4o}
@@ -686,9 +702,10 @@ services:
   # No profile gate — voice ships working on `docker compose up`.
   dpf-stt:
     # Pinned to the multi-arch index digest for hwdsl2/whisper-server:latest
-    # resolved on 2026-05-26. Bump deliberately; never reach for `:latest`
+    # resolved on 2026-06-05 (the prior de379f07… digest was deleted from the
+    # registry and now 404s). Bump deliberately; never reach for `:latest`
     # in shipped compose because it makes the install non-reproducible.
-    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:de379f0727e4c6b64bfb1be5c0c1c66bda215beb6a3e8e0c5d63061c73e9ec3b}
+    image: ${DPF_STT_IMAGE:-hwdsl2/whisper-server@sha256:4e1d727c2d9a3d2e89e38a8f3fd21fcbdb2398ae2772b9f0fafec7fb662426d8}
     restart: unless-stopped
     environment:
       # `base` (~145 MB) is the smallest model with usable accuracy on English.
@@ -776,6 +793,11 @@ volumes:
   qdrant_data:
   dpf-source-code:
   browser_evidence:
+  # Service-account browser profiles (EP-BROWSER-DRIVE, spec §8.9). Holds
+  # Chromium user-data-dirs whose cookie jars are impersonation-capable —
+  # SECRET material, not ordinary evidence. Sidecar-only: never mounted into
+  # the portal (cf. browser_evidence, which the portal mounts read-only).
+  browser_profiles:
   dev_pgdata:
   dev_neo4jdata:
   dev_qdrant_data:

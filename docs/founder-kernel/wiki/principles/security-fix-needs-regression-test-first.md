@@ -42,7 +42,7 @@ The principle is also OPT-IN-able for false-positive dismissals: if a finding is
 ## How To Apply
 
 1. **Reproduce the finding as a test.** Construct the minimal input that triggers the vulnerability. Run the test; confirm it fails for the exact reason the finding describes (not for some incidental reason).
-2. **Land the test first** in a draft PR or as the first commit of the working branch. The red CI run is the evidence.
+2. **Land the test first** as the first commit of the working branch. The red CI run is the evidence. Do not use a GitHub draft PR for this; DPF PRs are regular ready-for-review PRs only once the branch is ready for merge review.
 3. **Implement the fix.** Drive the test green.
 4. **Sweep for siblings.** Most CWEs cluster — if you fixed SSRF in one file, search the codebase for the same pattern in others. Each sibling gets the same test-first treatment.
 5. **Document the suppression** if you'd like CodeQL to learn the sanitizer pattern: add a `.github/codeql/config.yml` entry or an inline `// codeql[rule-id]: justification` comment. The suppression is part of the regression evidence — without it, CodeQL re-flags the fixed code on next scan.

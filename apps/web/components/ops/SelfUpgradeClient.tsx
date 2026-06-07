@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { triggerSelfUpgrade } from "@/lib/actions/promotions";
+import { rollbackSelfUpgrade, triggerSelfUpgrade } from "@/lib/actions/promotions";
 import { LocalTime } from "@/components/ui/LocalTime";
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
 
@@ -15,11 +15,46 @@ type LatestRun = {
   deployedSha: string | null;
   startedAt: Date | string | null;
   completedAt: Date | string | null;
+  completionEvidence?: unknown;
   failureLog: string | null;
   createdAt: Date | string;
 };
 
+type RecoveryPointSummary = {
+  status: string;
+  members: Array<{ target: string; runId: string | null; status: string }>;
+  rollbackStatus: string | null;
+};
+
 type ImageVersionSource = "git-sha" | "content-hash" | "unknown";
+
+type QuiescenceBlockerLine = {
+  surface: string;
+  label: string;
+  kind: "hard" | "soft";
+  count: number;
+  estimatedWaitMs: number | null;
+};
+
+type QuiescenceActivity = {
+  level: "normal" | "draining" | "swapping";
+  runId: string | null;
+  enteredAt: string;
+  run: {
+    runId: string;
+    status: string;
+    trigger: string;
+    targetVersion: string | null;
+    targetBundleHash: string | null;
+    deferSurface: string | null;
+    deferReason: string | null;
+    budgetMs: number | null;
+    drainStartedAt: string | null;
+    lastHeartbeatAt: string | null;
+  } | null;
+  blockersCapturedAt: string | null;
+  blockers: QuiescenceBlockerLine[];
+};
 
 type Props = {
   enabled: boolean;
@@ -33,6 +68,8 @@ type Props = {
   targetSha: string | null;
   isFresh: boolean;
   latestRun: LatestRun | null;
+  quiescence?: QuiescenceActivity | null;
+  cooldownUntil?: string | null;
   history?: LatestRun[];
   historyNextCursor?: string | null;
   platformVersion: {
@@ -72,6 +109,58 @@ function formatDuration(start: Date | string, end: Date | string): string {
   return `${minutes}m ${seconds}s`;
 }
 
+function approxWait(ms: number | null): string | null {
+  if (ms == null || ms <= 0) return null;
+  if (!Number.isFinite(ms)) return "indefinite";
+  const totalSeconds = Math.round(ms / 1000);
+  if (totalSeconds < 90) return `~${totalSeconds}s`;
+  return `~${Math.round(totalSeconds / 60)}m`;
+}
+
+// Friendly label for a deferSurface key (mirrors describeBlockerSurface on the
+// server so the panel reads the same whether it's a blocker line or the
+// primary defer reason).
+function surfaceLabel(surface: string | null): string | null {
+  if (!surface) return null;
+  if (surface === "coworker.reasoning-loop") return "AI coworker working";
+  if (surface === "request.recent-tool-execution") return "Recent portal / MCP activity";
+  if (surface === "build-studio.phase.ship") return "Build Studio — ship phase";
+  if (surface.startsWith("build-studio.phase.")) {
+    return `Build Studio — ${surface.slice("build-studio.phase.".length)} phase`;
+  }
+  return surface;
+}
+
+const QUIESCENCE_LEVEL_STYLES: Record<string, string> = {
+  draining: "bg-[var(--dpf-warning)]/20 text-[var(--dpf-warning)] border-[var(--dpf-warning)]/30",
+  swapping: "bg-[var(--dpf-info)]/20 text-[var(--dpf-info)] border-[var(--dpf-info)]/30",
+  normal: "bg-[var(--dpf-muted)]/20 text-[var(--dpf-muted)] border-[var(--dpf-muted)]/30",
+};
+
+function record(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function recoveryPointSummary(run: LatestRun | null): RecoveryPointSummary | null {
+  const evidence = record(run?.completionEvidence);
+  const point = record(evidence?.recoveryPoint);
+  if (!point || !Array.isArray(point.members)) return null;
+  const rollback = record(evidence?.rollback);
+  return {
+    status: String(point.status ?? "unknown"),
+    members: point.members.map((member) => {
+      const m = record(member);
+      return {
+        target: String(m?.target ?? "unknown"),
+        runId: typeof m?.runId === "string" ? m.runId : null,
+        status: String(m?.status ?? "unknown"),
+      };
+    }),
+    rollbackStatus: typeof rollback?.status === "string" ? rollback.status : null,
+  };
+}
+
 const RUN_STATUS_STYLES: Record<string, string> = {
   running: "bg-[var(--dpf-info)]/20 text-[var(--dpf-info)] border-[var(--dpf-info)]/30",
   succeeded: "bg-[var(--dpf-success)]/20 text-[var(--dpf-success)] border-[var(--dpf-success)]/30",
@@ -94,14 +183,37 @@ export default function SelfUpgradeClient({
   targetSha,
   isFresh,
   latestRun,
+  quiescence,
+  cooldownUntil,
   history,
   historyNextCursor,
   platformVersion,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [isRollbackPending, startRollbackTransition] = useTransition();
   const [override, setOverride] = useState(false);
   const [triggerResult, setTriggerResult] = useState<{ queued: boolean; reason?: string } | null>(null);
+  const [rollbackConfirmation, setRollbackConfirmation] = useState("");
+  const [rollbackResult, setRollbackResult] = useState<{
+    status: "idle" | "ok" | "error";
+    message: string;
+  }>({ status: "idle", message: "" });
+  const latestRecoveryPoint = recoveryPointSummary(latestRun);
+  const canRollbackLatest =
+    latestRun &&
+    latestRun.status !== "running" &&
+    latestRecoveryPoint?.status === "ok" &&
+    latestRecoveryPoint.rollbackStatus !== "ok";
+
+  // Live upgrade activity: is the portal draining for a swap right now, is it
+  // backing off after a defer/fail, and what work is/was holding the drain?
+  const draining = !!quiescence && quiescence.level !== "normal";
+  const cooldownActive =
+    !!cooldownUntil && new Date(cooldownUntil).getTime() > Date.now();
+  const deferredRun = quiescence?.run?.status === "deferred";
+  const showActivity =
+    draining || cooldownActive || (!!deferredRun && (quiescence?.blockers.length ?? 0) > 0);
 
   function handleTrigger() {
     setTriggerResult(null);
@@ -109,6 +221,25 @@ export default function SelfUpgradeClient({
     startTransition(async () => {
       const result = await triggerSelfUpgrade(force ? { force: true } : undefined);
       setTriggerResult(result);
+      router.refresh();
+    });
+  }
+
+  function handleRollback(runId: string) {
+    setRollbackResult({ status: "idle", message: "" });
+    startRollbackTransition(async () => {
+      const result = await rollbackSelfUpgrade(runId, rollbackConfirmation);
+      if (result.ok) {
+        setRollbackResult({
+          status: "ok",
+          message: "Recovery point restored.",
+        });
+      } else {
+        setRollbackResult({
+          status: "error",
+          message: result.error ?? "Recovery point restore failed.",
+        });
+      }
       router.refresh();
     });
   }
@@ -178,6 +309,102 @@ export default function SelfUpgradeClient({
               <span className="font-mono">pending scheduler tick</span>
               <span>. If an update is still available, it can start then.</span>
             </>
+          )}
+        </div>
+      )}
+
+      {enabled && showActivity && (
+        <div
+          className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] space-y-2"
+          data-quiescence-level={quiescence?.level ?? "normal"}
+          data-upgrade-activity="true"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-[var(--dpf-text)]">
+              Upgrade activity
+            </span>
+            {quiescence && (
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs border ${
+                  QUIESCENCE_LEVEL_STYLES[quiescence.level] ?? DEFAULT_STATUS_STYLE
+                }`}
+              >
+                {quiescence.level === "draining"
+                  ? "draining"
+                  : quiescence.level === "swapping"
+                    ? "swapping"
+                    : "idle"}
+              </span>
+            )}
+          </div>
+
+          {draining && (
+            <p className="text-xs text-[var(--dpf-muted)]">
+              Preparing a platform upgrade — new actions are paused while
+              in-flight work finishes. They resume automatically once the swap
+              completes or the drain defers.
+            </p>
+          )}
+
+          {quiescence?.run?.targetBundleHash && (
+            <div className="text-xs text-[var(--dpf-muted)]">
+              Target build:{" "}
+              <span className="font-mono">
+                {shortSha(quiescence.run.targetBundleHash)}
+              </span>
+            </div>
+          )}
+
+          {quiescence && quiescence.blockers.length > 0 && (
+            <div className="text-xs">
+              <div className="text-[var(--dpf-muted)] mb-1">
+                {draining ? "Waiting on:" : "Was waiting on:"}
+              </div>
+              <ul className="space-y-1">
+                {quiescence.blockers.map((b) => (
+                  <li
+                    key={b.surface}
+                    className="flex items-center gap-2"
+                    data-blocker-surface={b.surface}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        b.kind === "hard"
+                          ? "bg-[var(--dpf-warning)]"
+                          : "bg-[var(--dpf-muted)]"
+                      }`}
+                    />
+                    <span className="text-[var(--dpf-text)]">{b.label}</span>
+                    {b.count > 1 && (
+                      <span className="text-[var(--dpf-muted)]">×{b.count}</span>
+                    )}
+                    {approxWait(b.estimatedWaitMs) && (
+                      <span className="text-[var(--dpf-muted)]">
+                        · {approxWait(b.estimatedWaitMs)}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {deferredRun && !draining && (
+            <p className="text-xs text-[var(--dpf-muted)]">
+              Last upgrade attempt deferred
+              {surfaceLabel(quiescence?.run?.deferSurface ?? null) ? (
+                <> — {surfaceLabel(quiescence?.run?.deferSurface ?? null)} was active</>
+              ) : null}
+              . Your work was never interrupted.
+            </p>
+          )}
+
+          {cooldownActive && (
+            <div className="text-xs text-[var(--dpf-muted)]" data-cooldown="active">
+              Automatic upgrades paused until{" "}
+              <LocalTime className="font-mono" value={cooldownUntil ?? ""} /> after
+              a deferred or failed attempt. Use Emergency override to run now.
+            </div>
           )}
         </div>
       )}
@@ -370,6 +597,65 @@ export default function SelfUpgradeClient({
                 {latestRun.failureLog}
               </div>
             </details>
+          )}
+
+          {latestRecoveryPoint && (
+            <div
+              className="mt-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-xs"
+              data-recovery-point-status={latestRecoveryPoint.status}
+            >
+              <div className="font-medium text-[var(--dpf-text)]">
+                Recovery point: {latestRecoveryPoint.status}
+              </div>
+              <div className="mt-1 text-[var(--dpf-muted)]">
+                {latestRecoveryPoint.members
+                  .map((member) => `${member.target}:${member.runId ?? "missing"}`)
+                  .join(" · ")}
+              </div>
+              {latestRecoveryPoint.rollbackStatus && (
+                <div
+                  className="mt-1 text-[var(--dpf-muted)]"
+                  data-rollback-status={latestRecoveryPoint.rollbackStatus}
+                >
+                  Rollback: {latestRecoveryPoint.rollbackStatus}
+                </div>
+              )}
+              {canRollbackLatest && (
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <input
+                    type="text"
+                    value={rollbackConfirmation}
+                    onChange={(event) => setRollbackConfirmation(event.target.value)}
+                    aria-label="Rollback confirmation"
+                    placeholder="Type ROLLBACK"
+                    className="w-full sm:w-44 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-xs text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRollback(latestRun.runId)}
+                    disabled={
+                      isRollbackPending ||
+                      rollbackConfirmation !== "ROLLBACK"
+                    }
+                    aria-busy={isRollbackPending}
+                    className="rounded-md border border-[var(--dpf-destructive)]/40 bg-[var(--dpf-destructive)]/10 px-3 py-1 text-xs font-medium text-[var(--dpf-destructive)] transition-colors hover:bg-[var(--dpf-destructive)]/20 disabled:opacity-50"
+                  >
+                    {isRollbackPending ? "Restoring..." : "Restore recovery point"}
+                  </button>
+                </div>
+              )}
+              {rollbackResult.status !== "idle" && (
+                <div
+                  className={`mt-2 rounded-md border px-2 py-1 ${
+                    rollbackResult.status === "ok"
+                      ? "border-[var(--dpf-success)]/30 bg-[var(--dpf-success)]/10 text-[var(--dpf-success)]"
+                      : "border-[var(--dpf-destructive)]/30 bg-[var(--dpf-destructive)]/10 text-[var(--dpf-destructive)]"
+                  }`}
+                >
+                  {rollbackResult.message}
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}

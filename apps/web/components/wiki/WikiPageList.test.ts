@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
   groupPrinciplesByConsumerArchetype,
   groupPrinciplesByTier,
+  WikiPageList,
   type WikiPageListItem,
 } from "./WikiPageList";
 
@@ -160,5 +162,31 @@ describe("groupPrinciplesByConsumerArchetype", () => {
         ],
       },
     ]);
+  });
+});
+
+describe("WikiPageList", () => {
+  it("renders top-level kind groups as native disclosure sections", () => {
+    const html = renderToStaticMarkup(
+      WikiPageList({
+        pages: [
+          makeItem("principle-a", "core", "universal"),
+          {
+            id: "entity-a",
+            slug: "entities/entity-a",
+            title: "Entity A",
+            pageKind: "entity",
+            status: "published",
+            isKernel: true,
+            abstract: null,
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain("<details");
+    expect(html).toContain("<summary");
+    expect(html).toContain("Principles");
+    expect(html).toContain("Entities");
   });
 });

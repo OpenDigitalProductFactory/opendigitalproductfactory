@@ -9,6 +9,7 @@ const TABS = [
   { label: "Changes", href: "/ops/changes" },
   { label: "Promotions", href: "/ops/promotions" },
   { label: "Self-upgrade", href: "/ops/self-upgrade" },
+  { label: "Dev Loop", href: "/ops/dev-loop" },  // BI-AD949172
 ];
 
 export function OpsTabNav() {

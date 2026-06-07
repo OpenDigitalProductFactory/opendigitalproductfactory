@@ -7,8 +7,23 @@ vi.mock("@/lib/actions/promotions", () => ({
   listSelfUpgradeRuns: vi.fn(),
 }));
 
+vi.mock("@/lib/actions/platform-dev-config", () => ({
+  getPlatformDevConfig: vi.fn(),
+}));
+
 vi.mock("@/components/ops/OpsTabNav", () => ({
   OpsTabNav: () => <div data-testid="ops-tab-nav" />,
+}));
+
+// BI-D43EB266: the source-merge sub-step is folded into the Self-Upgrade page.
+vi.mock("@/components/admin/PlatformUpdateApplyPanel", () => ({
+  PlatformUpdateApplyPanel: (props: { updatePending: boolean; pendingVersion: string | null }) => (
+    <div
+      data-testid="platform-update-apply-panel"
+      data-update-pending={String(props.updatePending)}
+      data-pending-version={props.pendingVersion ?? ""}
+    />
+  ),
 }));
 
 vi.mock("@/components/ops/SelfUpgradeClient", () => ({
@@ -36,10 +51,13 @@ vi.mock("@/components/ops/SelfUpgradeClient", () => ({
 }));
 
 import { getSelfUpgradeStatus, listSelfUpgradeRuns } from "@/lib/actions/promotions";
+import { getPlatformDevConfig } from "@/lib/actions/platform-dev-config";
 import SelfUpgradePage from "./page";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: install does not customise source — panel stays dormant.
+  vi.mocked(getPlatformDevConfig).mockResolvedValue(null as never);
 });
 
 const baseStatus = {
@@ -56,6 +74,15 @@ const baseStatus = {
   targetSha: null,
   isFresh: false,
   latestRun: null,
+  quiescence: {
+    level: "normal" as const,
+    runId: null,
+    enteredAt: "1970-01-01T00:00:00.000Z",
+    run: null,
+    blockersCapturedAt: null,
+    blockers: [],
+  },
+  cooldownUntil: null,
   platformVersion: {
     version: "1.0.0",
     publishedAt: "2026-05-24T00:00:00.000Z",
@@ -64,7 +91,7 @@ const baseStatus = {
     buildDate: null,
     note: "baseline",
   },
-} as const;
+};
 
 describe("SelfUpgradePage", () => {
   it("renders page title and ops tab nav", async () => {
@@ -138,5 +165,29 @@ describe("SelfUpgradePage", () => {
 
     expect(html).toContain('data-platform-version="1.0.0"');
     expect(html).toContain('data-platform-git-sha="abc1234"');
+  });
+
+  it("renders the source-merge sub-step with the install's pending update state (BI-D43EB266)", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue(baseStatus);
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+    vi.mocked(getPlatformDevConfig).mockResolvedValue({
+      updatePending: true,
+      pendingVersion: "v9c92036a",
+    } as never);
+
+    const html = renderToStaticMarkup(await SelfUpgradePage());
+
+    expect(html).toContain('data-testid="platform-update-apply-panel"');
+    expect(html).toContain('data-update-pending="true"');
+    expect(html).toContain('data-pending-version="v9c92036a"');
+  });
+
+  it("leaves the source-merge sub-step dormant when the install does not customise source", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue(baseStatus);
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+
+    const html = renderToStaticMarkup(await SelfUpgradePage());
+
+    expect(html).toContain('data-update-pending="false"');
   });
 });

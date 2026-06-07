@@ -16,6 +16,14 @@ type CatalogManifest = {
   rules: string[];
 };
 
+type CatalogFixture = FingerprintRuleObservation & {
+  name?: string;
+  expectedRedactionStatus?: RedactionStatus;
+};
+
+/** A fixture may be referenced by path or inlined directly in the rule file. */
+type FixtureRef = string | CatalogFixture;
+
 type CatalogRuleFile = FingerprintRuleInput & {
   status?: string;
   scope?: string;
@@ -24,16 +32,16 @@ type CatalogRuleFile = FingerprintRuleInput & {
     path?: string;
     deprecated?: boolean;
   };
+  /** Placement target: the semantic taxonomy nodeId string (resolved to a cuid at load). */
+  taxonomyNodeId?: string;
   identityConfidence?: number;
   taxonomyConfidence?: number;
-  positiveFixtures?: string[];
-  negativeFixtures?: string[];
+  positiveFixtures?: FixtureRef[];
+  negativeFixtures?: FixtureRef[];
 };
 
-type CatalogFixture = FingerprintRuleObservation & {
-  name?: string;
-  expectedRedactionStatus?: RedactionStatus;
-};
+/** A rule file holds either one rule object or an array of rules. */
+type CatalogRuleFileContent = CatalogRuleFile | CatalogRuleFile[];
 
 export type FingerprintCatalogValidationResult = {
   valid: boolean;
@@ -53,16 +61,19 @@ export async function validateFingerprintCatalog(catalogPath: string): Promise<F
 
   for (const ruleRef of manifest.rules ?? []) {
     const rulePath = path.join(catalogDir, ruleRef);
-    const rule = await readJson<CatalogRuleFile>(rulePath);
+    const content = await readJson<CatalogRuleFileContent>(rulePath);
+    const rules = Array.isArray(content) ? content : [content];
 
-    if (seenRuleKeys.has(rule.ruleKey)) {
-      errors.push(`duplicate_rule_key:${rule.ruleKey}`);
-      continue;
+    for (const rule of rules) {
+      if (seenRuleKeys.has(rule.ruleKey)) {
+        errors.push(`duplicate_rule_key:${rule.ruleKey}`);
+        continue;
+      }
+      seenRuleKeys.add(rule.ruleKey);
+
+      validateRuleShape(rule, ruleRef, errors);
+      await validateRuleFixtures(rule, catalogDir, errors);
     }
-    seenRuleKeys.add(rule.ruleKey);
-
-    validateRuleShape(rule, ruleRef, errors);
-    await validateRuleFixtures(rule, catalogDir, errors);
   }
 
   return {
@@ -99,33 +110,43 @@ async function validateRuleFixtures(rule: CatalogRuleFile, catalogDir: string, e
 
   for (const fixtureRef of positiveFixtures) {
     const fixture = await readFixture(catalogDir, fixtureRef);
+    const label = fixtureLabel(fixtureRef, fixture);
     const redaction = redactFingerprintEvidence(fixture.normalizedEvidence);
     if (redaction.status === "blocked_sensitive") {
-      errors.push(`positive_fixture_blocked_sensitive:${rule.ruleKey}:${fixtureRef}`);
+      errors.push(`positive_fixture_blocked_sensitive:${rule.ruleKey}:${label}`);
     }
 
     const result = evaluateFingerprintRule(rule, fixture);
     if (!result.matched) {
-      errors.push(`positive_fixture_not_matched:${rule.ruleKey}:${fixtureRef}`);
+      errors.push(`positive_fixture_not_matched:${rule.ruleKey}:${label}`);
     }
   }
 
   for (const fixtureRef of negativeFixtures) {
     const fixture = await readFixture(catalogDir, fixtureRef);
+    const label = fixtureLabel(fixtureRef, fixture);
     const result = evaluateFingerprintRule(rule, fixture);
     if (result.matched) {
-      errors.push(`negative_fixture_matched:${rule.ruleKey}:${fixtureRef}`);
+      errors.push(`negative_fixture_matched:${rule.ruleKey}:${label}`);
     }
 
     const redaction = redactFingerprintEvidence(fixture.normalizedEvidence);
     if (fixture.expectedRedactionStatus && redaction.status !== fixture.expectedRedactionStatus) {
-      errors.push(`negative_fixture_redaction_mismatch:${rule.ruleKey}:${fixtureRef}`);
+      errors.push(`negative_fixture_redaction_mismatch:${rule.ruleKey}:${label}`);
     }
   }
 }
 
-async function readFixture(catalogDir: string, fixtureRef: string): Promise<CatalogFixture> {
-  return readJson<CatalogFixture>(path.join(catalogDir, fixtureRef));
+function fixtureLabel(fixtureRef: FixtureRef, fixture: CatalogFixture): string {
+  return typeof fixtureRef === "string" ? fixtureRef : fixture.name ?? "inline-fixture";
+}
+
+async function readFixture(catalogDir: string, fixtureRef: FixtureRef): Promise<CatalogFixture> {
+  if (typeof fixtureRef === "string") {
+    return readJson<CatalogFixture>(path.join(catalogDir, fixtureRef));
+  }
+  // Inline fixture — used directly.
+  return fixtureRef;
 }
 
 async function readJson<T>(filePath: string): Promise<T> {

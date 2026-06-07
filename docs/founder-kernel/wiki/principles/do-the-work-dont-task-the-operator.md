@@ -59,7 +59,7 @@ If none of those four apply, the agent finishes the work.
 - **Positive:** An operator asks "did the build pass?" — the agent runs `pnpm --filter web build` in the sandbox, captures the output, and answers from real evidence. It does not say "please run the build and let me know."
 - **Positive:** An agent ships a Dockerfile fix. Instead of writing "operator step — please rebuild and verify", the agent stands up Postgres in the sandbox, applies migrations, runs the seed, builds the portal, starts the server, and curls the affected route. It reports the actual rendered output, then ships the PR with that evidence inline.
 - **Counterexample:** An agent ships a PR with `[ ] Post-merge: please run the seed and confirm X` in the test plan, when the sandbox has Postgres available and the agent could have run the seed itself. The hand-off was avoidable; the agent absorbed neither the work nor the verification.
-- **Counterexample:** An agent claims "all tests pass" based on unit tests against mocked Prisma clients, when the build gate (`npx next build`) was within reach and would have caught a real regression. The agent picked the easier work and tasked the operator with the rest.
+- **Counterexample:** An agent claims "all tests pass" based on unit tests against mocked Prisma clients, when the build gate (`pnpm --filter web build`) was within reach and would have caught a real regression. The agent picked the easier work and tasked the operator with the rest.
 
 ## When this does not apply
 

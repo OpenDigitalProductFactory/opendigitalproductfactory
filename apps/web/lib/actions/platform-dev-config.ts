@@ -708,6 +708,7 @@ export type ApplyPlatformUpdateConflict = {
 };
 
 export type ApplyPlatformUpdateResult =
+  | { kind: "engine-retired"; message: string }
   | { kind: "no-update-pending"; message: string }
   | { kind: "invalid-version"; message: string; version: string | null }
   | {
@@ -736,6 +737,20 @@ const UPDATE_WORK_BRANCH = "my-changes";
 const HOOKLESS_GIT = "git -c core.hooksPath=/dev/null";
 const PLATFORM_UPDATE_SOURCE_PATHS = ["apps/web", "packages"] as const;
 const STALE_GIT_INDEX_LOCK_MS = 30_000;
+const VERSION_SENTINEL_FILE = ".dpf-version";
+
+// BI-4112378F: the image-sync snapshot path that builds `my-changes` and the
+// source-copy path that builds `dpf-upstream` normalise line endings
+// differently, so two trees that are byte-identical modulo CRLF↔LF diverge
+// wholesale (verified: 4,186 files, ~99.96% of which collapse when CR-at-EOL
+// is ignored). `-X ignore-cr-at-eol` makes the merge compare content the way
+// the clean-check guards already do (see gitDiffHasRealChanges), neutralising
+// the phantom conflicts at merge time. The `.gitattributes` policy below
+// declares the durable normalisation contract so future commits on both
+// branches converge on LF.
+const MERGE_EOL_TOLERANT_OPTS = "-X ignore-cr-at-eol";
+const GIT_ATTRIBUTES_FILE = ".gitattributes";
+const GIT_ATTRIBUTES_POLICY = "* text=auto eol=lf\n";
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
@@ -750,6 +765,61 @@ async function ensureWorkspaceSafeDirectory(
     `git config --global --add safe.directory ${shellQuote(workspace)} >/dev/null 2>&1 || true`,
     gitOpts,
   );
+}
+
+/**
+ * Read the installed-version sentinel (`.dpf-version`) written by the last
+ * successful apply. Returns the trimmed contents, or null when the sentinel
+ * is absent / unreadable (e.g. a freshly bootstrapped workspace).
+ *
+ * Used to short-circuit a redundant same-version apply: if the install is
+ * already on `pendingVersion`, re-running the merge would only surface the
+ * BI-4112378F phantom EOL conflicts, so we treat it as a no-op instead.
+ */
+function readInstalledVersion(
+  workspace: string,
+  resolvePath: (...parts: string[]) => string,
+): string | null {
+  const { readFileSync } = lazyFs();
+  const sentinel = resolvePath(workspace, VERSION_SENTINEL_FILE);
+  // Read directly and treat any failure (absent / unreadable) as "no sentinel".
+  // Reading-then-catching rather than exists-then-read avoids a check-to-use
+  // TOCTOU race (CodeQL js/file-system-race).
+  try {
+    const trimmed = readFileSync(sentinel, "utf-8").trim();
+    return trimmed.length > 0 ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ensure the durable line-ending normalisation policy (`.gitattributes`
+ * `* text=auto eol=lf`) is present in the workspace and staged. Idempotent —
+ * skips the write/add when the policy already matches. Declaring this on the
+ * `dpf-upstream` refresh lands it on both managed branches once merged, so the
+ * snapshot and source-copy population paths converge on LF going forward.
+ */
+async function ensureLineEndingPolicy(
+  execUpdate: ExecUpdate,
+  gitOpts: ExecUpdateOptions,
+  workspace: string,
+  resolvePath: (...parts: string[]) => string,
+): Promise<void> {
+  const { readFileSync, writeFileSync } = lazyFs();
+  const target = resolvePath(workspace, GIT_ATTRIBUTES_FILE);
+  // Read-or-default rather than exists-then-read — avoids a check-to-use
+  // TOCTOU race (CodeQL js/file-system-race). A missing/unreadable file just
+  // means the policy isn't present yet, so we write it.
+  let current = "";
+  try {
+    current = readFileSync(target, "utf-8");
+  } catch {
+    current = "";
+  }
+  if (current === GIT_ATTRIBUTES_POLICY) return;
+  writeFileSync(target, GIT_ATTRIBUTES_POLICY, "utf-8");
+  await execUpdate(`git add ${GIT_ATTRIBUTES_FILE}`, gitOpts);
 }
 
 function recoverStaleGitIndexLock(
@@ -814,6 +884,16 @@ async function ensureManagedUpdateBranches(
   await execUpdate("git rev-parse --is-inside-work-tree", gitOpts);
   await execUpdate('git config user.email "build-studio@dpf.local"', gitOpts);
   await execUpdate('git config user.name "DPF Build Studio"', gitOpts);
+  // BI-4112378F: the managed workspace lives on a Windows/WSL bind mount where
+  // the filesystem reports every file as executable. With the default
+  // core.fileMode=true, the image-sync snapshot path's `git add` records a
+  // spurious 100755 bit on ~every source file, while the source-copy path that
+  // builds dpf-upstream records 100644 — so the two trees disagree on mode for
+  // thousands of otherwise-identical files and the merge conflicts on each.
+  // Persisting core.fileMode=false in .git/config stops BOTH population paths
+  // from recording the executable bit going forward. (A merge-time -X flag
+  // cannot fix this: the mode is baked into the committed trees.)
+  await execUpdate("git config core.fileMode false", gitOpts);
 
   const missingBranches: string[] = [];
   for (const branch of [UPDATE_UPSTREAM_BRANCH, UPDATE_WORK_BRANCH]) {
@@ -996,7 +1076,56 @@ async function finishPlatformUpdateMerge(
   };
 }
 
+// ─── Engine B retirement (BI-5B6C1C35) ──────────────────────────────────────
+//
+// `applyPlatformUpdate` is the in-portal half of the RETIRED `/workspace`
+// image-sync source-advance engine (Engine B). Per the governed-platform-upgrade
+// spec §5.0 and the unified-delivery-surfaces spec §2 GAP 1, the running install
+// advances ONLY via the canonical host-clone self-upgrade pipeline (Engine A:
+// apps/web/lib/self-upgrade/*, scripts/promote.sh, Ops → Self-Upgrade). Two
+// competing source-advance engines were the root cause of the
+// stale-mislabeled-portal bug.
+//
+// The entrypoint no longer arms this path (it stopped writing
+// `PlatformDevConfig.updatePending`; see docker-entrypoint.sh), so in normal
+// operation this action is unreachable. We additionally HARD-REFUSE here as a
+// belt-and-braces guard: even if a stale `updatePending=true` row survives from
+// a pre-retirement image, the `/workspace` `my-changes` merge must not run and
+// silently mutate the running container's source behind Engine A's back. The
+// implementation below (merge helpers, branch repair, conflict parsing) is kept
+// for now only so the deferred-removal diff stays small and reviewable.
+//
+// TODO(BI-5B6C1C35): once Engine A is confirmed as the sole advance path in
+// production telemetry, delete `applyPlatformUpdate` and its merge helpers
+// entirely, drop the `apply_platform_update` MCP tool, and remove the
+// `PlatformUpdateApplyPanel` surface.
+const ENGINE_B_RETIRED_MESSAGE =
+  "Applying updates by merging into /workspace is retired. The platform now " +
+  "updates only through the Self-Upgrade pipeline (Ops → Self-Upgrade), which " +
+  "merges upstream into your install branch and rebuilds the portal from those " +
+  "exact bytes. Open Self-Upgrade to check for and apply updates.";
+
 export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> {
+  // Auth first so the refusal can't be used to probe state without permission.
+  await requireManagePlatform();
+
+  // Engine B retired (BI-5B6C1C35 / governed-upgrade spec §5.0). Refuse before
+  // touching git or the DB so no /workspace source mutation can occur via this
+  // path. Engine A (Self-Upgrade) is the sole sanctioned advance path. The
+  // original `/workspace` merge implementation is preserved (uncalled) below as
+  // `legacyApplyPlatformUpdateImpl` to keep the eventual removal diff small and
+  // reviewable; see the TODO(BI-5B6C1C35) above.
+  return { kind: "engine-retired", message: ENGINE_B_RETIRED_MESSAGE };
+}
+
+/**
+ * RETIRED Engine B implementation (BI-5B6C1C35). No longer called — the
+ * `/workspace` `my-changes` merge silently mutated the running container's
+ * source, racing the canonical host-clone self-upgrade promoter (Engine A,
+ * governed-upgrade spec §5.0). Kept verbatim for one release so the
+ * deferred-removal diff is mechanical; do NOT re-wire it to any surface.
+ */
+async function legacyApplyPlatformUpdateImpl(): Promise<ApplyPlatformUpdateResult> {
   await requireManagePlatform();
 
   const { exec: execCb } = lazyChildProcess();
@@ -1033,7 +1162,33 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
     await ensureWorkspaceSafeDirectory(execUpdate, gitOpts, workspace);
     recoverStaleGitIndexLock(workspace, resolvePath);
 
-    if (existsSync(resolvePath(workspace, ".git", "MERGE_HEAD"))) {
+    const mergeInProgress = existsSync(resolvePath(workspace, ".git", "MERGE_HEAD"));
+
+    // BI-4112378F: short-circuit a redundant same-version apply. When the
+    // install is already on `pendingVersion` (no merge mid-flight), there is
+    // nothing to merge — proceeding would only re-derive the phantom EOL
+    // conflicts between the snapshot-built and source-copied trees. Treat it
+    // as a clean no-op: clear the pending flag and report zero files changed.
+    if (!mergeInProgress) {
+      const installedVersion = readInstalledVersion(workspace, resolvePath);
+      if (installedVersion !== null && installedVersion === pendingVersion) {
+        await prisma.platformDevConfig.update({
+          where: { id: "singleton" },
+          data: { updatePending: false, pendingVersion: null },
+        });
+        revalidatePath("/admin/platform-development");
+        revalidatePath("/ops/self-upgrade");
+        revalidatePath("/", "layout"); // banner lives in shell layout
+        return {
+          kind: "clean-merge",
+          message: `Already on v${pendingVersion}. No changes to merge.`,
+          version: pendingVersion,
+          filesUpdated: 0,
+        };
+      }
+    }
+
+    if (mergeInProgress) {
       const conflicts = await collectPlatformUpdateConflicts(
         execUpdate,
         gitOpts,
@@ -1063,6 +1218,7 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
 
     // Step 1-3: Refresh dpf-upstream branch with new source
     await checkoutManagedUpdateBranch(execUpdate, gitOpts, UPDATE_UPSTREAM_BRANCH);
+    await ensureLineEndingPolicy(execUpdate, gitOpts, workspace, resolvePath);
     await execUpdate("rm -rf apps/web packages", gitOpts);
     await execUpdate("cp -r /app/apps/web-src/. apps/web/", gitOpts);
     await execUpdate("cp -r /app/packages-src/. packages/", gitOpts);
@@ -1080,10 +1236,16 @@ export async function applyPlatformUpdate(): Promise<ApplyPlatformUpdateResult> 
       );
     }
 
-    // Step 4: Merge into my-changes
+    // Step 4: Merge into my-changes. `-X ignore-cr-at-eol` (BI-4112378F)
+    // prevents the snapshot-vs-source CRLF↔LF mismatch from manufacturing
+    // conflicts on otherwise-identical files. HOOKLESS_GIT keeps host
+    // checkout/commit hooks (git-lfs, pre-commit) out of the merge.
     await checkoutManagedUpdateBranch(execUpdate, gitOpts, UPDATE_WORK_BRANCH);
     try {
-      await execUpdate(`git merge ${UPDATE_UPSTREAM_BRANCH} --no-commit --no-ff`, gitOpts);
+      await execUpdate(
+        `${HOOKLESS_GIT} merge ${MERGE_EOL_TOLERANT_OPTS} ${UPDATE_UPSTREAM_BRANCH} --no-commit --no-ff`,
+        gitOpts,
+      );
     } catch {
       // Merge conflicts surface as a non-zero exit — expected, handled below
     }

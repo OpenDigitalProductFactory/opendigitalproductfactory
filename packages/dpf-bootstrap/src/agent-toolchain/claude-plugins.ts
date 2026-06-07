@@ -11,6 +11,7 @@
 
 import { existsSync } from "node:fs";
 
+import { repoPathsMatch } from "./path-normalize";
 import type { PlanWriteMode } from "./types";
 
 export type InstalledPluginEntry = {
@@ -72,7 +73,9 @@ export function planClaudePluginConfig(
 
   const entries = file.plugins[PLUGIN_KEY] ?? [];
 
-  // Identify stale entries (projectPath no longer on disk).
+  // Identify stale entries (projectPath no longer on disk). pathExists is
+  // called against the raw (un-normalized) entry path so the FS lookup
+  // matches the on-disk reality the Claude CLI wrote.
   const staleEntriesToReconcile: Array<{ plugin: string; projectPath: string }> = [];
   for (const entry of entries) {
     if (entry.projectPath && !pathExists(entry.projectPath)) {
@@ -83,8 +86,12 @@ export function planClaudePluginConfig(
     }
   }
 
-  // Find any entry pinning the current repo root.
-  const existingForRepo = entries.find((e) => e.projectPath === repoRoot);
+  // Find any entry pinning the current repo root. Equality is via
+  // normalizeRepoPath so backslash-vs-forward-slash + drive-letter case
+  // variants don't cause spurious re-installs. See path-normalize.ts.
+  const existingForRepo = entries.find(
+    (e) => e.projectPath && repoPathsMatch(e.projectPath, repoRoot),
+  );
 
   // Decide the mode.
   let mode: PlanWriteMode | "noop" = "noop";
@@ -116,7 +123,12 @@ export function planClaudePluginConfig(
       installedAt: existingForRepo?.installedAt ?? now,
       lastUpdated: now,
     };
-    nextEntries = nextEntries.filter((e) => e.projectPath !== repoRoot);
+    // Drop any prior entry (in any path-format) for THIS repo before adding
+    // the fresh one. Prevents duplicate accumulation when the CLI and the
+    // bridge use different path conventions for the same logical worktree.
+    nextEntries = nextEntries.filter(
+      (e) => !e.projectPath || !repoPathsMatch(e.projectPath, repoRoot),
+    );
     nextEntries.push(nextEntry);
   }
 

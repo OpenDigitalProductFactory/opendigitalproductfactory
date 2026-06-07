@@ -206,8 +206,12 @@ describe("orchestrator communication templates", () => {
       ],
     });
     expect(msg).toContain("all 4 tasks done");
-    expect(msg).toContain("Ready for review");
+    expect(msg).toContain("Status: ready for review");
+    expect(msg).toContain("Evidence: 4/4 tasks completed");
+    expect(msg).toContain("Next action: run the review phase");
+    expect(msg).toContain("Owner: Build Studio review agent");
     expect(msg).toContain("Add Complaint model");
+    expect(msg).not.toContain("Ready for review?");
   });
 
   it("formats partial failure message", () => {
@@ -225,7 +229,9 @@ describe("orchestrator communication templates", () => {
     expect(msg).toContain("3 of 4 tasks completed");
     expect(msg).toContain("1 need review");
     expect(msg).toContain("Create API routes");
-    expect(msg).not.toContain("Ready for review");
+    expect(msg).toContain("Status: not ready for review");
+    expect(msg).toContain("Owner: Build Studio build agent");
+    expect(msg).not.toContain("Ready for review?");
   });
 });
 

@@ -8,6 +8,7 @@ import {
   validateWorkspaceHomeContribution,
   type WorkspaceHomeContribution,
 } from "./registry";
+import { WORKSPACE_HOME_SLOT_ZONES, type WorkspaceHomeSlotZone } from "./types";
 
 function makeContribution(
   overrides: Partial<WorkspaceHomeContribution> = {},
@@ -19,7 +20,7 @@ function makeContribution(
     archetypeCategories: ["trades-maintenance"],
     setupActivation: {
       status: "ready",
-      primitiveWidgets: ["service-queue", "customer-map", "coworker-handoffs"],
+      primitiveWidgets: ["decision-queue", "geo-map", "handoff-queue"],
       requiredCanonicalData: ["customer-account", "service-location", "work-order"],
       requiredSignals: ["scheduled-work", "urgent-exception", "coworker-handoff"],
       missingDataBehavior: "render-empty-state",
@@ -31,23 +32,23 @@ function makeContribution(
     ],
     components: [
       {
-        key: "service-queue",
+        key: "unassigned-work",
         slotId: "today-now",
-        primitiveKey: "service-queue",
+        primitiveKey: "decision-queue",
         title: "Service queue",
         dataRefs: [{ kind: "projection", key: "workspaceHome.workOrders", required: true }],
       },
       {
         key: "customer-map",
         slotId: "today-now",
-        primitiveKey: "customer-map",
+        primitiveKey: "geo-map",
         title: "Customer map",
         dataRefs: [{ kind: "projection", key: "workspaceHome.customerLocations", required: true }],
       },
       {
-        key: "coworker-handoff-list",
+        key: "coworker-handoffs",
         slotId: "coworker-handoffs",
-        primitiveKey: "coworker-handoffs",
+        primitiveKey: "handoff-queue",
         title: "Coworker handoffs",
         dataRefs: [{ kind: "projection", key: "workspaceHome.coworkerHandoffs", required: false }],
       },
@@ -80,7 +81,7 @@ describe("workspace home contribution registry", () => {
     const validation = validateWorkspaceHomeComponent({
       key: "unsupported-widget",
       slotId: "today-now",
-      primitiveKey: "service-queue",
+      primitiveKey: "decision-queue",
       title: "Mystery widget",
       dataRefs: [{ kind: "projection", key: "workspaceHome.workOrders", required: true }],
     });
@@ -94,9 +95,9 @@ describe("workspace home contribution registry", () => {
 
   it("rejects inline component data in favor of typed canonical data references", () => {
     const validation = validateWorkspaceHomeComponent({
-      key: "service-queue",
+      key: "unassigned-work",
       slotId: "today-now",
-      primitiveKey: "service-queue",
+      primitiveKey: "decision-queue",
       title: "Service queue",
       dataRefs: [
         {
@@ -209,5 +210,49 @@ describe("workspace home contribution registry", () => {
 
     expect(first.contribution?.id).toBe("hvac-home");
     expect(second.contribution?.id).toBe("msp-home");
+  });
+
+  it("accepts the architect-amended optional zone on baseline slots without breaking the covenant", () => {
+    const contribution = makeContribution({
+      slots: [
+        { id: "today-now", label: "Today", zone: "critical-strip" },
+        { id: "exceptions-needs-review", label: "Needs review", zone: "primary" },
+        { id: "coworker-handoffs", label: "Coworker handoffs", zone: "briefing" },
+      ],
+    });
+
+    const validation = validateWorkspaceHomeContribution(contribution);
+
+    expect(validation.ok).toBe(true);
+    expect(validation.errors).toEqual([]);
+    // Architect amendment enumerates exactly five presentation zones.
+    expect(WORKSPACE_HOME_SLOT_ZONES).toEqual([
+      "critical-strip",
+      "primary",
+      "secondary",
+      "briefing",
+      "setup",
+    ]);
+    // Each zone in the amendment must remain expressible as a WorkspaceHomeSlotZone.
+    const allZones: WorkspaceHomeSlotZone[] = [
+      "critical-strip",
+      "primary",
+      "secondary",
+      "briefing",
+      "setup",
+    ];
+    expect(allZones).toEqual([...WORKSPACE_HOME_SLOT_ZONES]);
+  });
+
+  it("treats the architect-amended primaryOperatingQuestion as additive — contributions without it still validate", () => {
+    const without = makeContribution();
+    const withQuestion = makeContribution({
+      primaryOperatingQuestion: "what's red on the estate?",
+    });
+
+    expect(validateWorkspaceHomeContribution(without).ok).toBe(true);
+    expect(validateWorkspaceHomeContribution(withQuestion).ok).toBe(true);
+    expect(without.primaryOperatingQuestion).toBeUndefined();
+    expect(withQuestion.primaryOperatingQuestion).toBe("what's red on the estate?");
   });
 });

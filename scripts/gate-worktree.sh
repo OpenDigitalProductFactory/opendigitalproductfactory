@@ -13,6 +13,8 @@ POLL_SECONDS="${DPF_GATE_POLL_SECONDS:-10}"
 EXPIRES_MINUTES="${DPF_GATE_EXPIRES_MINUTES:-60}"
 PUSH_BRANCH=1
 DRY_RUN=0
+LOCAL_CI_COMMAND="${DPF_LOCAL_CI_COMMAND:-}"
+ALLOW_STUB="${DPF_ALLOW_LOCAL_CI_STUB:-0}"
 URL="${DPF_LOCAL_CI_URL:-http://localhost:3010}"
 PORTS="3010"
 GIT_BIN="${DPF_GATE_GIT_BIN:-git}"
@@ -37,6 +39,10 @@ Options:
   --no-push                  Do not push before claiming the lease
   --dry-run                  Print planned actions; skip git push and MCP calls
   --help                     Show this help
+
+Environment:
+  DPF_LOCAL_CI_COMMAND        Command to run while holding the local-CI lease.
+  DPF_ALLOW_LOCAL_CI_STUB=1   Test-only escape hatch for the Phase 1 stub.
 EOF
 }
 
@@ -142,9 +148,18 @@ STATE_FILE="$("$GIT_BIN" rev-parse --git-path dpf-local-ci-gate.json)"
 if [ "$DRY_RUN" = "1" ]; then
   printf 'gate-worktree dry-run\n'
   printf 'branch=%s\nsha=%s\nworktree=%s\nremote=%s\nmcpUrl=%s\n' "$BRANCH" "$SHA" "$WORKTREE_PATH" "$REMOTE" "$MCP_URL"
-  printf 'would call claim_nonprod_environment_lease and record_local_integration_result\n'
+  if [ -n "$LOCAL_CI_COMMAND" ]; then
+    printf 'localCiCommand=%s\n' "$LOCAL_CI_COMMAND"
+  elif [ "$ALLOW_STUB" = "1" ]; then
+    printf 'localCiCommand=sandbox checkout/build stub (explicitly allowed)\n'
+  else
+    printf 'localCiCommand=missing; gate would fail before push/lease\n'
+  fi
+  printf 'would call claim_nonprod_environment_lease and record_local_integration_result only when a real command or explicit stub is configured\n'
   exit 0
 fi
+
+[ -n "$LOCAL_CI_COMMAND" ] || [ "$ALLOW_STUB" = "1" ] || die "local-CI gate runner is not wired; refusing to record passing stub evidence. Set DPF_LOCAL_CI_COMMAND to the canonical sandbox command, or use DPF_ALLOW_LOCAL_CI_STUB=1 only in contract tests."
 
 [ -n "${DPF_MCP_BEARER_TOKEN:-}" ] || die "DPF_MCP_BEARER_TOKEN is required to claim the local-CI lease"
 
@@ -193,14 +208,30 @@ done
 gate_passed=false
 evidence_id=""
 status="failed"
+gate_command_label=""
+gate_output_file="$(mktemp)"
+gate_output=""
 
 set +e
 printf '%s\n' "local-CI sandbox lease claimed: $lease_id"
-printf '%s\n' "sandbox checkout/build stub: gate passed"
-stub_status=0
+if [ -n "$LOCAL_CI_COMMAND" ]; then
+  gate_command_label="$LOCAL_CI_COMMAND"
+  printf '%s\n' "running local-CI command: $LOCAL_CI_COMMAND"
+  sh -c "$LOCAL_CI_COMMAND" >"$gate_output_file" 2>&1
+  gate_status=$?
+else
+  gate_command_label="sandbox checkout/build stub"
+  printf '%s\n' "sandbox checkout/build stub: gate passed (explicit test-only mode)"
+  printf '%s\n' "sandbox checkout/build stub: gate passed (DPF_ALLOW_LOCAL_CI_STUB=1)" >"$gate_output_file"
+  gate_status=0
+fi
 set -e
 
-if [ "$stub_status" -eq 0 ]; then
+cat "$gate_output_file"
+gate_output="$(tail -c 12000 "$gate_output_file" 2>/dev/null || cat "$gate_output_file")"
+rm -f "$gate_output_file"
+
+if [ "$gate_status" -eq 0 ]; then
   gate_passed=true
   status="passed"
 fi
@@ -215,21 +246,21 @@ const evidence = {
   branch: process.argv[4],
   sha: process.argv[5],
   gatePassed,
-  commands: ["sandbox checkout/build stub"],
-  output: "gate passed",
+  commands: [process.argv[7]],
+  output: process.argv[8],
   url: process.argv[6]
 };
 process.stdout.write(JSON.stringify({
-  provider: process.argv[7],
-  externalSessionId: process.argv[8],
+  provider: process.argv[9],
+  externalSessionId: process.argv[10],
   routeContext: "/build",
   candidateBranch: process.argv[4],
   mode: "single-branch",
   status,
-  summary: gatePassed ? "Phase 1 local-CI lease gate passed." : "Phase 1 local-CI lease gate failed.",
+  summary: gatePassed ? "local-CI lease gate passed." : "local-CI lease gate failed.",
   evidence
 }));
-' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$OWNER_PROVIDER" "$OWNER_SESSION_ID")"
+' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$gate_command_label" "$gate_output" "$OWNER_PROVIDER" "$OWNER_SESSION_ID")"
 evidence_response="$(mcp_call record_local_integration_result "$evidence_args" | extract_tool_result)"
 evidence_success="$(printf '%s' "$evidence_response" | field success)"
 if [ "$evidence_success" = "true" ]; then

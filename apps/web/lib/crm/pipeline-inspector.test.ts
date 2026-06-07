@@ -92,4 +92,48 @@ describe("pipeline inspector view model", () => {
       "follow-up-draft",
     ]);
   });
+
+  it("keeps opportunity advisor topics bounded to review and draft work", () => {
+    const view = buildPipelineInspectorView({
+      now,
+      opportunity: {
+        id: "opp-1",
+        opportunityId: "OPP-CODEX-001",
+        title: "Modernize revenue workflow",
+        stage: "proposal",
+        isDormant: false,
+        probability: 70,
+        expectedValue: 15000,
+        currency: "GBP",
+        expectedClose: new Date("2026-06-10T00:00:00.000Z"),
+        stageChangedAt: new Date("2026-05-06T12:00:00.000Z"),
+        notes: "Proposal sent after discovery.",
+        account: { id: "acct-1", name: "Acme Ops" },
+        contact: { email: "buyer@example.com", firstName: "Bea", lastName: "Buyer" },
+        engagement: {
+          id: "eng-1",
+          title: "Website pricing inquiry",
+          status: "qualified",
+          source: "web_inquiry",
+          sourceRefId: "inq-1",
+        },
+        quotes: [],
+        activities: [],
+      },
+    });
+
+    const combinedPrompt = view.aiTopics.map((topic) => topic.prompt).join("\n");
+
+    for (const topic of view.aiTopics) {
+      expect(topic.prompt).toContain("Do not create CRM records, update stages, send, or schedule anything.");
+    }
+    expect(combinedPrompt).not.toMatch(/\b(create|update)_opportunity\b/);
+    expect(combinedPrompt).not.toMatch(/\bsend_(email|marketing_email)\b/);
+    expect(combinedPrompt).not.toMatch(/\bschedule_(meeting|follow_up)\b/);
+    expect(view.aiTopics.map((topic) => topic.id)).toEqual([
+      "deal-summary",
+      "stale-stage-diagnosis",
+      "follow-up-draft",
+    ]);
+  });
 });

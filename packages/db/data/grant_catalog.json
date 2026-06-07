@@ -41,6 +41,33 @@
       ]
     },
     {
+      "key": "browser_drive",
+      "description": "Drive an authenticated browser session through the governed browser-use substrate. Side-effecting browser actions require this grant and remain bounded by approval, target-domain, and audit policies. Honors the coworker-facing drive_browser_task orchestrator and the namespaced browse_act sidecar tool.",
+      "category": "platform",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "drive_browser_task",
+        "mcp-browser-use__browse_act"
+      ],
+      "implies": [
+        "browser_read"
+      ]
+    },
+    {
+      "key": "browser_read",
+      "description": "Open, read, screenshot, and close governed browser-use sessions without authorizing side-effecting browser actions.",
+      "category": "platform",
+      "sensitivity": "confidential",
+      "honored_by_tools": [
+        "mcp-browser-use__browse_close",
+        "mcp-browser-use__browse_extract",
+        "mcp-browser-use__browse_open",
+        "mcp-browser-use__browse_run_tests",
+        "mcp-browser-use__browse_screenshot"
+      ],
+      "implies": []
+    },
+    {
       "key": "adr_create",
       "description": "Create adr.",
       "category": "governance",
@@ -480,12 +507,14 @@
     },
     {
       "key": "thread_write",
-      "description": "Spawn or cancel specialist subtask child threads.",
+      "description": "Spawn or cancel specialist subtask child threads, and hand off / summon a named coworker.",
       "category": "platform",
       "sensitivity": "internal",
       "honored_by_tools": [
         "spawn_work_thread",
-        "cancel_thread"
+        "cancel_thread",
+        "request_coworker",
+        "summon_coworker"
       ],
       "implies": []
     },
@@ -1251,6 +1280,29 @@
         "fetch_public_website",
         "search_public_web",
         "start_scout_research"
+      ],
+      "implies": []
+    },
+    {
+      "key": "workbook_read",
+      "description": "Read user-defined Workbook / Universal Grid tables: list tables, read schema, and query rows (EP-GRID-WORKBOOKS).",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "workbook_get_schema",
+        "workbook_list_tables",
+        "workbook_query_rows"
+      ],
+      "implies": []
+    },
+    {
+      "key": "workbook_write",
+      "description": "Create and update rows and cells in user-defined Workbook / Universal Grid tables (EP-GRID-WORKBOOKS).",
+      "category": "platform",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "workbook_create_row",
+        "workbook_update_cells"
       ],
       "implies": []
     }

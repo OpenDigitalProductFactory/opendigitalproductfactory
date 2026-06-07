@@ -70,4 +70,23 @@ describe("CustomerTabNav", () => {
     expect(html).toContain('href="/customer/marketing"');
     expect(html).toContain("border-[var(--dpf-accent)]");
   });
+
+  it("allows many customer tabs to wrap on narrow screens", () => {
+    pathname = "/customer/marketing/campaigns";
+    const html = renderToStaticMarkup(
+      <CustomerTabNav
+        tabs={[
+          { label: "Accounts", href: "/customer" },
+          { label: "Opportunities", href: "/customer/opportunities" },
+          { label: "Engagements", href: "/customer/engagements" },
+          { label: "Quotes", href: "/customer/quotes" },
+          { label: "Orders", href: "/customer/sales-orders" },
+          { label: "Funnel", href: "/customer/funnel" },
+          { label: "Marketing", href: "/customer/marketing" },
+        ]}
+      />,
+    );
+
+    expect(html).toContain("flex-wrap");
+  });
 });

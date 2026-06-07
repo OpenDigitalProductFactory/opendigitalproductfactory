@@ -63,9 +63,11 @@ export const ADMIN_FAMILIES: AdminFamily[] = [
       "/admin/diagnostics",
       "/admin/backups",
       "/admin/cockpit",
+      "/admin/hive",
     ],
     subItems: [
       { label: "Platform Development", href: "/admin/platform-development" },
+      { label: "Hive Contributions", href: "/admin/hive" },
       { label: "Issue Reports", href: "/admin/issue-reports" },
       { label: "Diagnostics", href: "/admin/diagnostics" },
       { label: "Backups", href: "/admin/backups" },

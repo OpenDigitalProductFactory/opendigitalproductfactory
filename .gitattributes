@@ -1,8 +1,32 @@
+# Line-ending policy — deterministic blobs across Windows, macOS, and Linux so
+# the same file produces the same bytes regardless of editor, tool, or host.
+# This prevents whole-file CRLF<->LF churn in diffs and blame (the failure mode
+# where one edit on a Windows box silently flips an entire file's line endings).
+#
+# Added forward-only: NO mass renormalize was run, so existing files normalize
+# to this policy the next time they are committed — one file at a time, when you
+# are already touching it. `text=auto` auto-detects binary files; the Git LFS
+# rules below still override for the listed asset types.
+# See docs/testing/pre-pr-gate.md and AGENTS.md §2.
+* text=auto eol=lf
+
+# Shell scripts run in Linux containers — LF required.
+docker-entrypoint.sh text eol=lf
+*.sh text eol=lf
+
+# Windows-native scripts — CRLF. Batch files are line-ending-sensitive, and the
+# PowerShell scripts here are authored and committed as CRLF. Overrides the LF
+# default above.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.ps1xml text eol=crlf
+
+# Binary assets via Git LFS — never treat as text.
 *.pdf filter=lfs diff=lfs merge=lfs -text
 *.xlsx filter=lfs diff=lfs merge=lfs -text
 *.docx filter=lfs diff=lfs merge=lfs -text
-docker-entrypoint.sh text eol=lf
-*.sh text eol=lf
 
 # Upstream Model Context Protocol spec — preserve LF line endings so the local
 # copy stays byte-identical to upstream and refresh diffs are clean.

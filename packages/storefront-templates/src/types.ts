@@ -164,7 +164,8 @@ export type OwnershipScope =
   | "customer-account"
   | "customer-site"
   | "configuration-item"
-  | "edge-node";
+  | "edge-node"
+  | "partner-account";
 
 export type TransactionContext =
   | "service-agreement"
@@ -174,7 +175,11 @@ export type TransactionContext =
   | "billing-period"
   | "episode-of-care";
 
-export type CapabilityIsolation = "organization-scope" | "strict-customer-scope" | "shared";
+export type CapabilityIsolation =
+  | "organization-scope"
+  | "strict-customer-scope"
+  | "shared"
+  | "strict-partner-scope";
 
 export type PaymentPattern =
   | "point-of-sale"
@@ -250,6 +255,84 @@ export interface BillingPatternProfile {
   supportedPaymentPatterns: PaymentPattern[];
   invoiceExecutionMode: InvoiceExecutionMode;
   recurringBillingApplicability: Exclude<CapabilityApplicability, "hidden">;
+}
+
+/**
+ * Channel-partner / reseller archetypes. Names follow the established
+ * Partner Relationship Management (PRM) taxonomy so the platform classification
+ * stays aligned with how the channel-sales industry already segments partners
+ * (see docs/superpowers/specs/2026-06-04-partner-reseller-archetype-identity-design.md §3).
+ *
+ * - `referral` / `affiliate`: introduce or market leads; paid on close, never take title.
+ * - `reseller`: buys-to-resell / value-added reseller (VAR); transacts under their own paper.
+ * - `distributor`: sells to downstream resellers; needs tiered access and inventory visibility.
+ * - `managed-service-provider`: delivers and resells the offer under their own brand.
+ * - `technology`: ISV / integration / alliance partner; co-built or co-marketed solutions.
+ * - `franchise`: operates the brand under a licensed territory.
+ * - `agent-broker`: sells on commission without taking title to goods or contracts.
+ */
+export type PartnerType =
+  | "referral"
+  | "affiliate"
+  | "reseller"
+  | "distributor"
+  | "managed-service-provider"
+  | "technology"
+  | "franchise"
+  | "agent-broker";
+
+/**
+ * Partner program tier ladder. Empty tier list means a flat, untiered program.
+ * Tier governs deal-registration priority, margin, and portal entitlements.
+ */
+export type PartnerTier =
+  | "registered"
+  | "authorized"
+  | "silver"
+  | "gold"
+  | "platinum";
+
+/**
+ * How prominent the partner channel is for this archetype.
+ * - `none`: no partner channel; the partner portal route stays hidden.
+ * - `available`: partner channel runs alongside direct sales (platform/SaaS, MSP, wholesale).
+ * - `primary`: the business sells *through* partners as its main go-to-market motion.
+ */
+export type PartnerPortalMode = "none" | "available" | "primary";
+
+/**
+ * Whether partners get an isolated downstream projection of their own
+ * sub-customers / managed estate, mirroring {@link CustomerGraphMode} for the
+ * customer side. `separate-partner-projection` means a partner's records are
+ * scoped to the partner account under strict isolation.
+ */
+export type PartnerGraphMode = "none" | "separate-partner-projection";
+
+/**
+ * An organization's stored decision about an offered (recommended/optional)
+ * capability. This is the *persisted opt-in overlay* that sits on top of the
+ * derived {@link CapabilityApplicability}: the derivation answers "is this
+ * applicable to the business model?"; the choice answers "did this org turn it
+ * on?". Captured at setup when a capability is `recommended`, and editable later
+ * from admin (the "add it later" path). Resolution lives in
+ * `resolveCapabilityActivation` (capability-activation.ts).
+ */
+export type CapabilityActivationChoice = "enabled" | "disabled";
+
+/**
+ * The partner/reseller operating model an archetype activates. Derived from the
+ * {@link OperatingModelAxes} (platform, primaryConsumer, form, commercialModel)
+ * the same way {@link BillingPatternProfile} is derived from `commercialModel`,
+ * so adding partner support to an archetype is a function of its axis values —
+ * not a hand-authored per-archetype flag.
+ */
+export interface PartnerProgramProfile {
+  portalMode: PartnerPortalMode;
+  partnerTypes: PartnerType[];
+  tiers: PartnerTier[];
+  /** Deal-registration / channel-conflict protection applies. */
+  dealRegistration: boolean;
+  partnerGraph: PartnerGraphMode;
 }
 
 export interface SeededConfigurationItemType {

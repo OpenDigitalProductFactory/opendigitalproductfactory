@@ -75,6 +75,19 @@ export async function spawnWorkThread(
         data: { childCount: { increment: 1 } },
       });
 
+      // EP-A2A: complete the TaskRun lineage graph. spawnWorkThread previously
+      // hardcoded parentTaskRunId=null, leaving the child task an orphan in the
+      // task graph even though the AgentThread lineage (parentThreadId) was set.
+      // Link the child TaskRun to the parent thread's most-recent TaskRun when
+      // one exists (build/proactive flows); root coworker threads often have no
+      // TaskRun, in which case this stays null and AgentThread.parentThreadId
+      // remains the load-bearing lineage edge. References the stable taskRunId.
+      const parentTaskRun = await tx.taskRun.findFirst({
+        where: { threadId: parent.id },
+        orderBy: { startedAt: "desc" },
+        select: { taskRunId: true },
+      });
+
       const taskRunId = createId();
       const tr = await tx.taskRun.create({
         data: {
@@ -84,7 +97,7 @@ export async function spawnWorkThread(
           contextId: child.id,
           initiatingAgentId: opts.agentId ?? null,
           currentAgentId: opts.agentId ?? null,
-          parentTaskRunId: null,
+          parentTaskRunId: parentTaskRun?.taskRunId ?? null,
           routeContext: opts.routeContext ?? null,
           title: opts.title?.trim() || objective.slice(0, 100),
           objective,

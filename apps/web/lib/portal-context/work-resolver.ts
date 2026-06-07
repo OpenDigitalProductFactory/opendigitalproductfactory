@@ -201,6 +201,10 @@ function buildAnchor(build: FeatureBuildRow): FeatureBuildAnchor {
     status: build.status ?? (build.abandonedAt ? "abandoned" : "active"),
     evidenceComplete: Boolean(build.acceptanceMet || build.verificationOut),
     href: `/build?buildId=${encodeURIComponent(build.buildId)}`,
+    // BI-DFC11F59: phase transitions bump updatedAt; exposed so the
+    // missing_evidence grace-window gate can compute seconds-since-phase-entry
+    // without a dedicated phaseEnteredAt column.
+    updatedAt: build.updatedAt ? new Date(build.updatedAt).toISOString() : null,
   };
 }
 

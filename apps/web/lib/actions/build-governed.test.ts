@@ -4,6 +4,7 @@ const { mockAuth, mockPrisma } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
   mockPrisma: {
     featureBuild: {
+      count: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
       create: vi.fn(),
@@ -74,6 +75,10 @@ const { mockEvaluateBuildStudioDecision } = vi.hoisted(() => ({
   mockEvaluateBuildStudioDecision: vi.fn(),
 }));
 
+const { mockRunBuildPipeline } = vi.hoisted(() => ({
+  mockRunBuildPipeline: vi.fn(),
+}));
+
 vi.mock("@/lib/auth", () => ({
   auth: mockAuth,
 }));
@@ -112,6 +117,32 @@ vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 
+// `resumeBuildImplementation` / `advanceBuildPhase` fire `autoExecuteBuild`
+// fire-and-forget (build.ts). That background chain dynamically imports the
+// real build pipeline and event bus, whose console.log calls land AFTER the
+// test resolves — leaving an onUserConsoleLog RPC pending at worker teardown
+// (EnvironmentTeardownError, 0 failed tests, exit 1). Mocking both modules
+// makes the dispatch a silent no-op so the run is deterministic. These tests
+// assert governed-action behavior, not pipeline execution.
+vi.mock("@/lib/build-pipeline", () => ({
+  runBuildPipeline: mockRunBuildPipeline,
+}));
+
+vi.mock("@/lib/agent-event-bus", () => ({
+  agentEventBus: {
+    emit: vi.fn(),
+    subscribe: vi.fn(),
+    subscribeSystem: vi.fn(),
+    broadcastSystem: vi.fn(),
+    requestCancel: vi.fn(),
+    isCancelled: vi.fn(),
+    clearCancel: vi.fn(),
+    markActive: vi.fn(),
+    markIdle: vi.fn(),
+    isActive: vi.fn(),
+  },
+}));
+
 import { revalidatePath } from "next/cache";
 import { approveBuildStart, advanceBuildPhase, completeBuild, createFeatureBuild, recordBuildAcceptance, resumeBuildImplementation, runBuildReviewVerification, updateBusinessBuildBrief, updateFeatureBrief } from "./build";
 
@@ -126,6 +157,7 @@ describe("governed build start approvals", () => {
       },
     });
     mockPrisma.buildActivity.create.mockResolvedValue({});
+    mockPrisma.featureBuild.count.mockResolvedValue(0);
     mockPrisma.phaseHandoff.create.mockResolvedValue({});
     mockPrisma.employeeProfile.findFirst.mockResolvedValue(null);
     mockPrisma.calendarEvent.upsert.mockResolvedValue({});
@@ -144,6 +176,7 @@ describe("governed build start approvals", () => {
     mockPrisma.platformConfig.findUnique.mockResolvedValue(null);
     mockIsSandboxAvailable.mockResolvedValue(false);
     mockStartBuildBranch.mockResolvedValue(undefined);
+    mockRunBuildPipeline.mockResolvedValue({ step: "complete" });
     mockQueueBuildReviewVerification.mockResolvedValue(undefined);
     mockEvaluateBuildStudioPlanAdvancementGate.mockResolvedValue({
       allowed: true,

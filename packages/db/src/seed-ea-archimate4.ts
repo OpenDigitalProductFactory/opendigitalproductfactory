@@ -144,6 +144,8 @@ const RULES: RuleDef[] = [
   ["application_component", "application_component", "composed_of"],
   ["application_component", "application_service",   "serves"],
   ["application_component", "data_object",           "accesses"],
+  // Data model mirror (EP-DATA-ARCH): Prisma relations between logical data objects.
+  ["data_object",           "data_object",           "associated_with"],
   // Business internal
   ["business_actor",        "business_role",         "assigned_to"],
   ["business_capability",   "business_capability",   "associated_with"],

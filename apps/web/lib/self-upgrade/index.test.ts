@@ -58,4 +58,9 @@ describe("self-upgrade barrel export", () => {
   it("exports notification APIs", () => {
     expect(SelfUpgrade).toHaveProperty("emitUpgradeEvent");
   });
+
+  it("exports recovery-point APIs without eagerly loading backup runners", () => {
+    expect(SelfUpgrade).toHaveProperty("createSelfUpgradeRecoveryPoint");
+    expect(SelfUpgrade).toHaveProperty("summarizeRecoveryPointFailure");
+  });
 });

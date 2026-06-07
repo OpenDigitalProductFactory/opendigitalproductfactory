@@ -103,4 +103,31 @@ describe("archetype catalog", () => {
     expect(softwarePlatform?.ctaType).toBe("inquiry");
     expect(softwarePlatform?.itemTemplates.some((item) => item.name === "Open Digital Product Factory")).toBe(true);
   });
+
+  it("derives a partner program for archetypes that typically sell through partners", () => {
+    // Wholesale/distribution (goods sold B2B to resellers) → partner-program recommended.
+    const wholesale = ALL_ARCHETYPES.find((a) => a.archetypeId === "wholesale-distribution");
+    expect(wholesale, "wholesale-distribution archetype should exist").toBeDefined();
+    expect(wholesale?.activationProfile?.axes).toMatchObject({ form: "goods", primaryConsumer: "business" });
+    const wholesaleProfile = readActivationProfile(wholesale?.activationProfile);
+    expect(wholesaleProfile?.partnerProgram).toMatchObject({
+      portalMode: "available",
+      partnerTypes: ["reseller", "distributor"],
+    });
+    expect(getCapabilityApplicability(wholesaleProfile, "partner-program")).toBe("recommended");
+    expect(getCapabilityApplicability(wholesaleProfile, "customer-accounts")).toBe("required");
+
+    // IT managed services (B2B + recurring-agreement + primary delivery) → also recommended.
+    const msp = ALL_ARCHETYPES.find((a) => a.archetypeId === "it-managed-services");
+    const mspProfile = readActivationProfile(msp?.activationProfile);
+    expect(mspProfile?.partnerProgram.portalMode).toBe("available");
+    expect(getCapabilityApplicability(mspProfile, "partner-program")).toBe("recommended");
+  });
+
+  it("does not derive a partner program for direct-to-consumer archetypes", () => {
+    const salon = ALL_ARCHETYPES.find((a) => a.archetypeId === "hair-salon");
+    const salonProfile = readActivationProfile(salon?.activationProfile);
+    expect(salonProfile?.partnerProgram.portalMode).toBe("none");
+    expect(getCapabilityApplicability(salonProfile, "partner-program")).toBe("not-applicable");
+  });
 });

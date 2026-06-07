@@ -3,9 +3,11 @@
 import { useMemo, useState, useTransition } from "react";
 import { Archive, Bot, CheckCircle2, Filter, ShieldAlert, Wrench } from "lucide-react";
 import { updateIssueReportStatus, sendIssueReportToBuildStudioAsFix } from "@/lib/actions/quality";
+import { StatCard, StatusBadge } from "@/components/ui/report-kit";
 import { ISSUE_REPORT_STATUS, type IssueReportStatus } from "@/lib/quality/issue-report-status";
 import {
   classifyIssueReport,
+  explainIssueReport,
   normalizeIssueReportStatus,
   summarizeIssueReportQueue,
   type IssueReportCategory,
@@ -23,6 +25,7 @@ interface ReportRow {
   routeContext: string | null;
   errorStack: string | null;
   source: string;
+  triggerKind: string | null;
   createdAt: string;
   reportedBy: { id: string; name: string | null; email: string | null } | null;
 }
@@ -122,11 +125,11 @@ export function IssueReportPanel({
   return (
     <div className="space-y-5">
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-        <StatCard label="Needs action" value={queueSummary.actionable} tone="var(--dpf-error)" />
-        <StatCard label="Process guard" value={queueSummary.processGuard} tone="var(--dpf-accent)" />
-        <StatCard label="Warmup noise" value={queueSummary.warmupNoise} tone="var(--dpf-warning)" />
-        <StatCard label="Triaged" value={queueSummary.triaged} tone="var(--dpf-warning)" />
-        <StatCard label="Resolved" value={queueSummary.resolved} tone="var(--dpf-success)" />
+        <StatCard label="Needs action" value={queueSummary.actionable} intent="danger" />
+        <StatCard label="Process guard" value={queueSummary.processGuard} intent="accent" />
+        <StatCard label="Warmup noise" value={queueSummary.warmupNoise} intent="warning" />
+        <StatCard label="Triaged" value={queueSummary.triaged} intent="warning" />
+        <StatCard label="Resolved" value={queueSummary.resolved} intent="success" />
         <StatCard label="Total" value={total} />
       </section>
 
@@ -175,18 +178,16 @@ export function IssueReportPanel({
 
       {Object.keys(stats.bySeverity).length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {Object.entries(stats.bySeverity).map(([severity, count]) => {
-            const tone = toneForSeverity(severity);
-            return (
-              <span
-                key={severity}
-                className="rounded-md border px-2 py-1 text-xs"
-                style={{ color: tone, borderColor: tone }}
-              >
-                {severity}: {count}
-              </span>
-            );
-          })}
+          {Object.entries(stats.bySeverity).map(([severity, count]) => (
+            <StatusBadge
+              key={severity}
+              domain="issueSeverity"
+              status={severity}
+              label={`${severity}: ${count}`}
+              uppercase={false}
+              size="md"
+            />
+          ))}
         </div>
       )}
 
@@ -261,26 +262,32 @@ function IssueReportRow({
   isPending: boolean;
 }) {
   const classification = classifyIssueReport(report);
+  const explanation = explainIssueReport(report);
   const status = normalizeIssueReportStatus(report.status);
-  const severityTone = toneForSeverity(report.severity);
-  const statusTone = toneForStatusBucket(status.bucket);
+  const isCoworkerRegression = report.source === "coworker-regression-detector";
+  const diagnosis = isCoworkerRegression ? parseCoworkerDiagnosis(report.description) : null;
 
   return (
     <article className="bg-[var(--dpf-surface-1)]">
       <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
         <button type="button" onClick={onToggle} className="min-w-0 text-left">
           <div className="flex min-w-0 items-center gap-3">
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: severityTone }}
-              title={report.severity}
+            <StatusBadge
+              domain="issueSeverity"
+              status={report.severity}
+              variant="soft"
+              size="sm"
+              className="shrink-0"
             />
             <span className="truncate font-mono text-xs text-[var(--dpf-muted)]">{report.reportId}</span>
             <span className="truncate text-sm font-medium text-[var(--dpf-text)]">{report.title}</span>
           </div>
-          <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-[var(--dpf-muted)]">
-            <Badge label={classification.categoryLabel} />
-            <Badge label={status.label} tone={statusTone} />
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-[var(--dpf-muted)]">
+            <StatusBadge intent="neutral" label={classification.categoryLabel} size="sm" />
+            <StatusBadge domain="issueStatus" status={status.bucket} label={status.label} size="sm" />
+            {isCoworkerRegression && (
+              <StatusBadge intent="accent" label="Coworker regression" size="sm" />
+            )}
             <span>{report.source}</span>
             {report.routeContext && <span className="font-mono">{report.routeContext}</span>}
             <span>{new Date(report.createdAt).toLocaleString()}</span>
@@ -335,6 +342,39 @@ function IssueReportRow({
 
       {expanded && (
         <div className="space-y-3 border-t border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
+          {/* Plain-language explanation for non-technical operators (BI-E42C0B7E).
+              Shown first so a founder understands the report without reading a stack trace. */}
+          <div className="rounded-md border border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] p-3">
+            <h4 className="mb-1 text-[10px] font-semibold uppercase text-[var(--dpf-accent)]">What this means</h4>
+            <p className="text-xs leading-5 text-[var(--dpf-text)]">{explanation.meaning}</p>
+            <h4 className="mb-1 mt-3 text-[10px] font-semibold uppercase text-[var(--dpf-accent)]">What you can do</h4>
+            <p className="text-xs leading-5 text-[var(--dpf-text)]">{explanation.whatToDo}</p>
+          </div>
+
+          {diagnosis && (
+            <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge intent="accent" label="Coworker regression" size="sm" />
+                {diagnosis.probableCause && (
+                  <StatusBadge intent="danger" label={diagnosis.probableCause} size="sm" uppercase={false} />
+                )}
+              </div>
+              {diagnosis.summary && (
+                <p className="mt-2 text-xs leading-5 text-[var(--dpf-text)]">{diagnosis.summary}</p>
+              )}
+              {diagnosis.metrics.length > 0 && (
+                <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-4">
+                  {diagnosis.metrics.map(({ label, value }) => (
+                    <div key={label} className="min-w-0">
+                      <dt className="text-[10px] font-semibold uppercase text-[var(--dpf-muted)]">{label}</dt>
+                      <dd className="truncate font-mono text-xs text-[var(--dpf-text)]">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </div>
+          )}
+
           {report.description && (
             <div>
               <h4 className="mb-1 text-[10px] font-semibold uppercase text-[var(--dpf-muted)]">Description</h4>
@@ -343,12 +383,14 @@ function IssueReportRow({
           )}
 
           {report.errorStack && (
-            <div>
-              <h4 className="mb-1 text-[10px] font-semibold uppercase text-[var(--dpf-muted)]">Stack trace</h4>
-              <pre className="max-h-48 overflow-auto rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 text-[10px] leading-relaxed text-[var(--dpf-muted)]">
+            <details>
+              <summary className="cursor-pointer text-[10px] font-semibold uppercase text-[var(--dpf-muted)]">
+                Technical detail (stack trace)
+              </summary>
+              <pre className="mt-1 max-h-48 overflow-auto rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-2 text-[10px] leading-relaxed text-[var(--dpf-muted)]">
                 {report.errorStack}
               </pre>
-            </div>
+            </details>
           )}
 
           {report.reportedBy && (
@@ -375,17 +417,6 @@ function IssueReportRow({
   );
 }
 
-function StatCard({ label, value, tone }: { label: string; value: number; tone?: string }) {
-  return (
-    <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
-      <p className="text-[10px] font-semibold uppercase text-[var(--dpf-muted)]">{label}</p>
-      <p className="text-xl font-bold text-[var(--dpf-text)]" style={tone ? { color: tone } : undefined}>
-        {value}
-      </p>
-    </div>
-  );
-}
-
 function PostureBlock({ label, value, detail }: { label: string; value: number; detail: string }) {
   return (
     <div>
@@ -396,40 +427,51 @@ function PostureBlock({ label, value, detail }: { label: string; value: number; 
   );
 }
 
-function Badge({ label, tone }: { label: string; tone?: string }) {
-  return (
-    <span
-      className="rounded-md border border-[var(--dpf-border)] px-1.5 py-0.5 font-semibold uppercase"
-      style={tone ? { color: tone, borderColor: tone } : undefined}
-    >
-      {label}
-    </span>
-  );
-}
+type CoworkerDiagnosis = {
+  probableCause: string | null;
+  summary: string | null;
+  metrics: Array<{ label: string; value: string }>;
+};
 
-function toneForSeverity(severity: string): string {
-  switch (severity) {
-    case "critical":
-    case "high":
-      return "var(--dpf-error)";
-    case "medium":
-      return "var(--dpf-warning)";
-    default:
-      return "var(--dpf-muted)";
-  }
-}
+// Parse the deterministic diagnosis block the detector writes into
+// PlatformIssueReport.description (see coworker-regression-diagnosis.ts). The
+// description is a stable "Key: value" line format; we surface a scannable
+// subset as operator evidence and leave the full text in the Description panel.
+function parseCoworkerDiagnosis(description: string | null): CoworkerDiagnosis | null {
+  if (!description) return null;
 
-function toneForStatusBucket(bucket: string): string {
-  switch (bucket) {
-    case "needs_action":
-      return "var(--dpf-error)";
-    case "resolved":
-      return "var(--dpf-success)";
-    case "suppressed":
-      return "var(--dpf-muted)";
-    default:
-      return "var(--dpf-warning)";
+  const fields = new Map<string, string>();
+  for (const line of description.split("\n")) {
+    const sep = line.indexOf(":");
+    if (sep === -1) continue;
+    const key = line.slice(0, sep).trim().toLowerCase();
+    const value = line.slice(sep + 1).trim();
+    if (key && value && !fields.has(key)) fields.set(key, value);
   }
+
+  const probableCause = fields.get("probable cause") ?? fields.get("diagnosis") ?? null;
+  const summary = fields.get("summary") ?? null;
+
+  const metricSpecs: Array<{ key: string; label: string }> = [
+    { key: "recent p95", label: "Recent p95" },
+    { key: "baseline p95", label: "Baseline p95" },
+    { key: "ratio", label: "Ratio" },
+    { key: "recent nudge rate", label: "Recent nudge rate" },
+    { key: "baseline nudge rate", label: "Baseline nudge rate" },
+    { key: "dispatches", label: "Dispatches" },
+    { key: "nudges", label: "Nudges" },
+    { key: "tools attached", label: "Tools attached" },
+    { key: "executed tools", label: "Executed tools" },
+    { key: "provider", label: "Provider" },
+    { key: "model", label: "Model" },
+  ];
+
+  const metrics = metricSpecs
+    .filter((spec) => fields.has(spec.key))
+    .map((spec) => ({ label: spec.label, value: fields.get(spec.key) as string }));
+
+  if (!probableCause && !summary && metrics.length === 0) return null;
+  return { probableCause, summary, metrics };
 }
 
 function buildAdminPrompt(report: ReportRow, category: IssueReportCategory): string {

@@ -3,6 +3,8 @@ import {
   OPERATIONS_MAP_QUICK_VIEWS,
 } from "@/lib/ai-operations-map/project-events";
 import type {
+  OperationsMapA2aEdgeKind,
+  OperationsMapA2aInteractionState,
   OperationsMapProjectionFilters,
   OperationsMapProjectionSource,
   OperationsMapQuickViewId,
@@ -11,6 +13,127 @@ import type {
 
 export const OPERATIONS_MAP_VIEW_PREFERENCE_KEY = "ai-operations-map:view";
 export const OPERATIONS_MAP_SAVED_VIEWS_KEY = "ai-operations-map:saved-views";
+export const OPERATIONS_MAP_A2A_PREFERENCE_KEY = "ai-operations-map:a2a";
+
+export type A2aActorRole = "either" | "from" | "to";
+export type A2aAuthorityFilter = "all" | "governed" | "ungoverned";
+
+export type OperationsMapA2aFilterPreference = {
+  types: OperationsMapA2aEdgeKind[];
+  states: OperationsMapA2aInteractionState[];
+  actorId: string;
+  actorRole: A2aActorRole;
+  authority: A2aAuthorityFilter;
+};
+
+const A2A_EDGE_KIND_VALUES: OperationsMapA2aEdgeKind[] = [
+  "a2a-delegation",
+  "a2a-handoff",
+  "a2a-task-lineage",
+  "a2a-deliberation",
+];
+const A2A_STATE_VALUES: OperationsMapA2aInteractionState[] = ["active", "completed", "failed", "blocked"];
+const A2A_ACTOR_ROLES = new Set<A2aActorRole>(["either", "from", "to"]);
+const A2A_AUTHORITY_FILTERS = new Set<A2aAuthorityFilter>(["all", "governed", "ungoverned"]);
+const A2A_EDGE_KIND_SET = new Set<OperationsMapA2aEdgeKind>(A2A_EDGE_KIND_VALUES);
+const A2A_STATE_SET = new Set<OperationsMapA2aInteractionState>(A2A_STATE_VALUES);
+
+export function getDefaultA2aFilterPreference(): OperationsMapA2aFilterPreference {
+  return {
+    types: [...A2A_EDGE_KIND_VALUES],
+    states: [...A2A_STATE_VALUES],
+    actorId: "all",
+    actorRole: "either",
+    authority: "all",
+  };
+}
+
+export function loadA2aFilterPreference(): OperationsMapA2aFilterPreference {
+  try {
+    const raw = localStorage.getItem(OPERATIONS_MAP_A2A_PREFERENCE_KEY);
+    if (!raw) return getDefaultA2aFilterPreference();
+
+    const parsed = JSON.parse(raw) as Partial<OperationsMapA2aFilterPreference>;
+    const types = Array.isArray(parsed.types)
+      ? parsed.types.filter((value): value is OperationsMapA2aEdgeKind => A2A_EDGE_KIND_SET.has(value as OperationsMapA2aEdgeKind))
+      : [];
+    const states = Array.isArray(parsed.states)
+      ? parsed.states.filter((value): value is OperationsMapA2aInteractionState => A2A_STATE_SET.has(value as OperationsMapA2aInteractionState))
+      : [];
+    const actorRole = A2A_ACTOR_ROLES.has(parsed.actorRole as A2aActorRole) ? (parsed.actorRole as A2aActorRole) : "either";
+    const actorId = typeof parsed.actorId === "string" && parsed.actorId.trim() !== "" ? parsed.actorId : "all";
+    const authority = A2A_AUTHORITY_FILTERS.has(parsed.authority as A2aAuthorityFilter) ? (parsed.authority as A2aAuthorityFilter) : "all";
+
+    return {
+      // Empty arrays mean "show all" rather than "hide everything" — a stored
+      // empty filter must never blank the panel.
+      types: types.length > 0 ? types : [...A2A_EDGE_KIND_VALUES],
+      states: states.length > 0 ? states : [...A2A_STATE_VALUES],
+      actorId,
+      actorRole,
+      authority,
+    };
+  } catch {
+    return getDefaultA2aFilterPreference();
+  }
+}
+
+export function saveA2aFilterPreference(preference: OperationsMapA2aFilterPreference): void {
+  try {
+    localStorage.setItem(OPERATIONS_MAP_A2A_PREFERENCE_KEY, JSON.stringify(preference));
+  } catch {
+    // localStorage can be unavailable or full; the panel remains usable without persistence.
+  }
+}
+
+export function clearA2aFilterPreference(): void {
+  try {
+    localStorage.removeItem(OPERATIONS_MAP_A2A_PREFERENCE_KEY);
+  } catch {
+    // localStorage can be unavailable; resetting in-memory state still keeps the panel usable.
+  }
+}
+
+// ─── Operations Map dimension toggle (Provider routes · A2A · Both) ───────
+// Lets the operator focus the map on provider routing, coworker-to-coworker
+// (A2A) interactions, or both. Defaults to "both" (the full surface).
+
+export const OPERATIONS_MAP_DIMENSION_KEY = "ai-operations-map:dimension";
+
+export type OperationsMapDimension = "provider" | "a2a" | "both";
+
+const OPERATIONS_MAP_DIMENSIONS = new Set<OperationsMapDimension>(["provider", "a2a", "both"]);
+
+export function getDefaultOperationsMapDimension(): OperationsMapDimension {
+  return "both";
+}
+
+export function loadOperationsMapDimension(): OperationsMapDimension {
+  try {
+    const raw = localStorage.getItem(OPERATIONS_MAP_DIMENSION_KEY);
+    return OPERATIONS_MAP_DIMENSIONS.has(raw as OperationsMapDimension)
+      ? (raw as OperationsMapDimension)
+      : getDefaultOperationsMapDimension();
+  } catch {
+    return getDefaultOperationsMapDimension();
+  }
+}
+
+export function saveOperationsMapDimension(dimension: OperationsMapDimension): void {
+  try {
+    localStorage.setItem(OPERATIONS_MAP_DIMENSION_KEY, dimension);
+  } catch {
+    // localStorage can be unavailable or full; the map remains usable without persistence.
+  }
+}
+
+export function clearOperationsMapDimension(): void {
+  try {
+    localStorage.removeItem(OPERATIONS_MAP_DIMENSION_KEY);
+  } catch {
+    // localStorage can be unavailable; resetting in-memory state still keeps the map usable.
+  }
+}
 
 export type OperationsMapStoredQuickViewId = OperationsMapQuickViewId | "custom";
 

@@ -21,8 +21,24 @@ vi.mock("@/lib/voice-synthesis/adapters/mlx", async (importOriginal) => {
   }
 })
 
+// Keep defaultProvider real (env-driven); stub the actual synthesis call so the
+// Chatterbox one-shot fallback can be exercised without a live sidecar.
+vi.mock("@/lib/voice-synthesis/voice-service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/voice-synthesis/voice-service")>()
+  return { ...actual, synthesizeSpeech: vi.fn() }
+})
+
+vi.mock("@/lib/voice-synthesis/storage-root", () => ({
+  resolveVoiceStorageRoot: vi.fn(() => "/host/uploads"),
+}))
+
+vi.mock("node:fs/promises", () => ({
+  readFile: vi.fn(async () => Buffer.from([9, 9, 9])),
+}))
+
 import { prisma } from "@dpf/db"
 import { DEFAULT_REF_TEXT } from "@/lib/voice-synthesis/adapters/mlx"
+import { synthesizeSpeech } from "@/lib/voice-synthesis/voice-service"
 import { POST } from "./route"
 
 const voiceProfile = {
@@ -81,5 +97,34 @@ describe("POST /api/voice/synthesize/stream", () => {
       cfg_weight: 0.3,
       temperature: 0.8,
     })
+  })
+
+  it("falls back to one-shot synthesis as a single framed chunk for Chatterbox", async () => {
+    // Chatterbox (dpf-tts) has no /v1/audio/speech/stream endpoint, so the route
+    // must NOT proxy — it synthesizes once and frames the clip for the client.
+    vi.stubEnv("TTS_PROVIDER", "chatterbox")
+    const wav = new Uint8Array([1, 2, 3, 4, 5])
+    vi.mocked(synthesizeSpeech).mockResolvedValue({
+      audioBuffer: wav.buffer,
+      provider: "chatterbox",
+    } as never)
+
+    const req = new Request("http://dpf.local/api/voice/synthesize/stream", {
+      method: "POST",
+      body: JSON.stringify({ text: "Hello there.", voiceProfileId: "profile-1" }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get("Content-Type")).toBe("application/octet-stream")
+    expect(res.headers.get("X-Sentence-Count")).toBe("1")
+    // The streaming proxy must never fire for a non-streaming provider.
+    expect(global.fetch).not.toHaveBeenCalled()
+
+    const bytes = new Uint8Array(await res.arrayBuffer())
+    // [4-byte big-endian length][WAV] — the framing useVoiceSynth.parseNextChunk decodes.
+    expect(Array.from(bytes.slice(0, 4))).toEqual([0, 0, 0, 5])
+    expect(Array.from(bytes.slice(4))).toEqual([1, 2, 3, 4, 5])
   })
 })

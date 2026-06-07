@@ -52,7 +52,26 @@ describe("BuildAgentRunner compatibility", () => {
     expect(getBuildAgentRunner("claude").id).toBe("claude");
   });
 
-  it("does not expose dpf-native in slice 1", () => {
-    expect(() => getBuildAgentRunner("dpf-native")).toThrow(/not implemented/i);
+  it("resolves the dpf-native runner from the registry (no longer null)", () => {
+    expect(getBuildAgentRunner("dpf-native").id).toBe("dpf-native");
+  });
+
+  it("accepts dpf-native on local Docker (honors LLM_BASE_URL, no callback port)", () => {
+    const dpfNative = getBuildAgentRunner("dpf-native").capabilities();
+    expect(dpfNative.honorsLlmBaseUrl).toBe(true);
+    expect(dpfNative.requiresCallbackPort).toBeUndefined();
+    expect(() => assertAgentProviderCompatibility(dpfNative, localDocker)).not.toThrow();
+  });
+
+  it("allows dpf-native on untrusted-ok providers (CLI agents are rejected there)", () => {
+    const dpfNative = getBuildAgentRunner("dpf-native").capabilities();
+    const untrustedOk: BuildExecutionProviderCapabilities = {
+      ...localDocker,
+      isolation: "managed-job",
+      trustLevel: "untrusted-ok",
+    };
+    expect(() => assertAgentProviderCompatibility(dpfNative, untrustedOk)).not.toThrow();
+    // Contrast: a mode-4 CLI runner (honorsLlmBaseUrl=false) is rejected there.
+    expect(() => assertAgentProviderCompatibility(codexCli, untrustedOk)).toThrow(/untrusted-ok/i);
   });
 });

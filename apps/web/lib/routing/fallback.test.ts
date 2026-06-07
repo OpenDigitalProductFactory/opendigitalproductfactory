@@ -41,6 +41,9 @@ vi.mock("./rate-tracker", () => ({
   recordRequest: vi.fn(),
   learnFromRateLimitResponse: vi.fn(),
   extractRetryAfterMs: vi.fn(),
+  markEndpointUnavailable: vi.fn(),
+  clearEndpointUnavailable: vi.fn(),
+  getEndpointRuntimeState: vi.fn(() => ({ unavailable: false })),
 }));
 
 vi.mock("./rate-recovery", () => ({
@@ -60,7 +63,13 @@ vi.mock("./route-outcome", () => ({
 import { callWithFallbackChain } from "./fallback";
 import { prisma } from "@dpf/db";
 import { callProvider, InferenceError } from "@/lib/ai-inference";
-import { recordRequest, learnFromRateLimitResponse, extractRetryAfterMs } from "./rate-tracker";
+import {
+  recordRequest,
+  learnFromRateLimitResponse,
+  extractRetryAfterMs,
+  markEndpointUnavailable,
+  clearEndpointUnavailable,
+} from "./rate-tracker";
 import { scheduleRecovery } from "./rate-recovery";
 import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
 import { recordRouteOutcome } from "./route-outcome";
@@ -116,6 +125,8 @@ const mockExtractRetryAfterMs = extractRetryAfterMs as ReturnType<typeof vi.fn>;
 const mockScheduleRecovery = scheduleRecovery as ReturnType<typeof vi.fn>;
 const mockAutoDiscoverAndProfile = autoDiscoverAndProfile as ReturnType<typeof vi.fn>;
 const mockRecordRouteOutcome = recordRouteOutcome as ReturnType<typeof vi.fn>;
+const mockMarkEndpointUnavailable = markEndpointUnavailable as ReturnType<typeof vi.fn>;
+const mockClearEndpointUnavailable = clearEndpointUnavailable as ReturnType<typeof vi.fn>;
 
 // ── Setup ────────────────────────────────────────────────────────────────────
 
@@ -167,6 +178,24 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       );
 
       expect(mockRecordRequest).toHaveBeenCalledWith("prov1", "model1", 150);
+    });
+
+    it("closes the runtime circuit (clearEndpointUnavailable) on success", async () => {
+      mockCallProvider.mockResolvedValue({
+        content: "hello",
+        inputTokens: 100,
+        outputTokens: 50,
+        inferenceMs: 200,
+      });
+
+      await callWithFallbackChain(
+        makeDecision("prov1", "model1"),
+        [{ role: "user", content: "hi" }],
+        "system",
+      );
+
+      expect(mockClearEndpointUnavailable).toHaveBeenCalledWith("prov1", "model1");
+      expect(mockMarkEndpointUnavailable).not.toHaveBeenCalled();
     });
 
     it("records route outcomes with coworker attribution from the MCP session", async () => {
@@ -288,6 +317,30 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
 
       // Provider NOT updated
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+    });
+
+    it("opens the runtime circuit (markEndpointUnavailable) with reason rate_limit", async () => {
+      throwRateLimit();
+      mockExtractRetryAfterMs.mockReturnValue(30_000);
+
+      const pending = callWithFallbackChain(
+        makeDecision("prov1", "model1"),
+        [{ role: "user", content: "hi" }],
+        "system",
+      );
+      const rejection = expect(pending).rejects.toThrow();
+      await vi.runAllTimersAsync();
+      await rejection;
+
+      expect(mockMarkEndpointUnavailable).toHaveBeenCalledWith(
+        "prov1",
+        "model1",
+        "rate_limit",
+        expect.any(Number),
+        expect.any(String),
+      );
+      // Circuit opens, but the durable provider lifecycle is untouched (spec D1).
+      expect(mockClearEndpointUnavailable).not.toHaveBeenCalled();
     });
 
     it("triggers scheduleRecovery with providerId and modelId", async () => {

@@ -9,6 +9,7 @@ import type {
   OperationsMapRoutingTimelineMarker,
   OperationsMapRoutingTopology,
 } from "./types";
+import { A2A_INTERACTION_LEGEND } from "./project-a2a-interactions";
 
 export type RoutingCoworkerSourceRow = {
   agentId: string;
@@ -442,9 +443,18 @@ export function projectRoutingTopology(input: RoutingTopologyInput): OperationsM
     coworkers: sortByLabel(coworkers),
     providers,
     routes,
+    // A2A interaction edges are contributed by `projectA2aInteractions` and
+    // merged in `load-map-data.ts`. Default to empty here so the topology
+    // shape is stable when only provider routing is projected.
+    a2aEdges: [],
+    // Deliberation summaries are contributed by `projectDeliberations` and
+    // merged in `load-map-data.ts`; default empty when only provider routing
+    // is projected.
+    deliberations: [],
     markers,
     timeline: timeline.sort((left, right) => Date.parse(left.occurredAt) - Date.parse(right.occurredAt)),
     legend: ROUTING_TOPOLOGY_LEGEND,
+    a2aLegend: A2A_INTERACTION_LEGEND,
   };
 }
 

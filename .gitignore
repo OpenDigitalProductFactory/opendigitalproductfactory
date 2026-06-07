@@ -30,6 +30,7 @@ docker-compose.override.yml
 # Local install runtime state
 .host-profile.json
 .dpf-instance-id
+.dpf-worktree-readiness.json
 .admin-credentials
 .install-mode
 .install-progress

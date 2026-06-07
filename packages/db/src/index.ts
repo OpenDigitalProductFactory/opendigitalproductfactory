@@ -205,6 +205,15 @@ export {
   type PromotionSummary,
 } from "./discovery-promotion";
 export {
+  reconcilePromotedProducts,
+  isInfrastructureProduct,
+  type ReconcileSummary,
+} from "./discovery-reconcile";
+export {
+  isNonProductEntityType,
+  NON_PRODUCT_ENTITY_TYPES,
+} from "./discovery-promotion-policy";
+export {
   TRIAGE_ACTOR_TYPES,
   TRIAGE_OUTCOMES,
   TRIAGE_QUALITY_ISSUE_TYPES,
@@ -242,6 +251,13 @@ export * from "./discovery-fingerprint-types";
 export * from "./discovery-fingerprint-redaction";
 export * from "./discovery-fingerprint-policy";
 export * from "./discovery-fingerprint-rules";
+export * from "./discovery-mac-classification";
+export * from "./discovery-fingerprint-observation";
+export * from "./device-placement";
+export * from "./device-investigation";
+export * from "./device-fingerprint-contribution";
+export * from "./hive-contribution-settings";
+export * from "./device-catalog";
 // `./discovery-fingerprint-catalog` is intentionally NOT re-exported. Its
 // `validateFingerprintCatalog` helper uses dynamic `path.resolve(process.cwd(), ...)`
 // to locate catalog JSON at runtime, which Turbopack flags as an overly broad

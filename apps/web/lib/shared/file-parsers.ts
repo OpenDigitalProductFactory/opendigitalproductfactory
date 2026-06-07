@@ -42,8 +42,10 @@ function stringifySpreadsheetCell(value: unknown): string {
 }
 
 export async function parseXlsx(buffer: Buffer): Promise<ParsedFileContent> {
-  const { readSheet } = await import(/* turbopackIgnore: true */ "read-excel-file/node");
-  const rows = await readSheet(buffer);
+  const { readSheet } = await import(/* turbopackIgnore: true */ "read-excel-file/browser");
+  const input = new ArrayBuffer(buffer.byteLength);
+  new Uint8Array(input).set(buffer);
+  const rows = await readSheet(input);
   if (rows.length === 0) return { type: "spreadsheet", summary: "Empty workbook", columns: [], rowCount: 0 };
 
   const headerRow = rows[0] ?? [];

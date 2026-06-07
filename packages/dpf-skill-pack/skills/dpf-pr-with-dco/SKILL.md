@@ -1,6 +1,6 @@
 ---
 name: dpf-pr-with-dco
-description: "Use when ready to open a DPF pull request. Encodes the full DPF PR contract: branch from origin/main, sign every commit (-s) for DCO, push and let CI evidence accumulate, overlap-sweep against open PRs before push, open the PR only when ready to merge (not as a parking place). Composes with dpf-finishing-a-development-branch as the successor: that skill decides the integration shape; this one operationalizes the DPF-specific PR mechanics."
+description: "Use when ready to open a DPF pull request. Encodes the full DPF PR contract: branch from origin/main, sign every commit (-s) for DCO, push and let CI evidence accumulate, overlap-sweep against open PRs before push, open a regular non-draft PR only when ready to merge (not as a parking place). Composes with dpf-finishing-a-development-branch as the successor: that skill decides the integration shape; this one operationalizes the DPF-specific PR mechanics."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
@@ -31,7 +31,7 @@ enforces:
 
 # DPF Pull Request with DCO
 
-DPF's PR contract is strict and non-negotiable: **every change lands via PR**, **every commit is DCO-signed**, **branches are based on `origin/main`**, **PRs open only when ready to merge** (not as parking places), and **the overlap sweep happens before push** so sibling sessions don't ship the same fix twice. This skill walks the canonical PR opening flow with all DPF gates applied.
+DPF's PR contract is strict and non-negotiable: **every change lands via PR**, **every commit is DCO-signed**, **branches are based on `origin/main`**, **PRs open only when ready to merge** (not as parking places), **PRs are regular ready-for-review PRs, never GitHub draft PRs**, and **the overlap sweep happens before push** so sibling sessions don't ship the same fix twice. This skill walks the canonical PR opening flow with all DPF gates applied.
 
 ## When to use
 
@@ -43,7 +43,7 @@ DPF's PR contract is strict and non-negotiable: **every change lands via PR**, *
 
 - Build gate not green — finish the work first (the build gate must pass; verify functionally per `dpf-systematic-debugging` Phase 4, where a structural pass is not verification).
 - Branch is unsigned mid-stream — fix sign-off via `git commit --amend --no-edit -s` (or for older commits, `git rebase --signoff`) BEFORE running this skill.
-- PR would be a "parking place" for in-flight work — keep the branch pushed but don't open the PR. The "PR creation means ready to merge" rule is explicit in AGENTS.md §4.
+- PR would be a "parking place" for in-flight work — keep the branch pushed but don't open the PR. The "PR creation means ready to merge" rule is explicit in AGENTS.md §4, and draft PRs are not an escape hatch.
 - Concurrent session is already opening a PR for the same fix — coordinate (operator) before pushing.
 
 ## Read first
@@ -106,7 +106,7 @@ DPF's PR contract is strict and non-negotiable: **every change lands via PR**, *
    ```
    `-u origin <branch>` only on the first push.
 
-7. **Open the PR.**
+7. **Open the regular PR.** Do not use `--draft`; a DPF PR is the ready-for-review / ready-to-merge signal.
    ```
    gh pr create --title "<convention>: <imperative summary>" --body "$(cat <<'EOF'
    ## Summary
@@ -128,6 +128,11 @@ DPF's PR contract is strict and non-negotiable: **every change lands via PR**, *
 
    - Title: imperative form, prefixed by repo convention (`docs:`, `fix:`, `feat:`, `chore:`, `spec:`). Under ~72 chars.
    - **PR creation means ready to merge.** If you're not, do NOT open. Push the branch as a recovery/handoff artifact and signal that the PR is pending the next milestone.
+   - Verify the PR is not a draft:
+     ```
+     gh pr view --json isDraft
+     ```
+     Expected: `isDraft` is `false`. If it is `true` and the branch gates are green, run `gh pr ready <number>` immediately; if the gates are not green, close the PR and keep the branch.
 
 8. **Report the PR URL.** With the BI id (if applicable) and the build-gate evidence summary so the operator can ratify without re-running checks.
 
@@ -149,6 +154,7 @@ DPF's PR contract is strict and non-negotiable: **every change lands via PR**, *
 - **Never push to `main` directly.** Branch protection enforces this on the remote, but a force push from a misconfigured local could bypass — don't try.
 - **Never skip `-s`.** `git commit --no-verify` skips the local typecheck hook, but the DCO trailer is the bot's hard gate — there's no way to skip and merge.
 - **Never open a PR as a "draft handoff" or "early visibility marker."** Pushed branches do that job; PRs mean ready to merge per AGENTS.md §4.
+- **Never create GitHub draft PRs for DPF delivery.** Do not pass `--draft`, do not use a connector setting that creates drafts, and verify `isDraft=false` after creation.
 - **Never bundle unrelated changes in one PR.** One concern per branch, one concern per PR. If your branch accidentally accumulated two concerns, split before opening.
 - **Never force-push to main.** And never force-push to a topic branch that's under review without telling the reviewer.
 - **Never use `git add -A` / `git add .` in a worktree where concurrent sessions exist.** Use explicit paths.

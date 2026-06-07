@@ -32,6 +32,14 @@
 **Not folded in (deferred to implementation BI):**
 - Whether `WorkspaceHomeSlotSpec` should grow new optional fields (`explanationPolicy`, `recommendationsConsumed`, `zone`) or whether the audit fields ride on the resolver result only. Implementer to pick after grepping current `WorkspaceHomeSlotSpec` consumers — both options preserve the no-second-substrate constraint.
 
+### Terminology
+
+"**Block**" in this spec is the user-facing name for a *configured slot* — a `WorkspaceHomeSlotSpec` instance bound to a canonical `WorkspaceHomePrimitiveKey`. "Block" ↔ "slot" map 1:1; no `Block` schema, registry, or type family exists. The body uses "block" because that is what workers say at the screen; "slot" and "primitive" are the implementation-layer names. When the spec describes something a worker would point at, it says "block"; when it names a contract, it says "slot" or "primitive".
+
+"**Primitive**" is the reusable widget family (`decision-queue`, `appointment-schedule`, `health-board`, etc.) from the parent primitive-registry spec — the unit of compose-by-binding.
+
+"**Contribution**" is the `WorkspaceHomeContribution` manifest that names an archetype's full slot composition.
+
 ## Problem Statement
 
 The current Workspace route is useful as a platform operator home, but it is still too generic for the businesses DPF is meant to run. A field-service dispatcher, retail owner, restaurant manager, professional-services partner, SaaS founder, and MSP operator should not all land on the same command-center composition. They need the same governed platform underneath, but different first-screen concerns: schedule risk, customer updates, inventory, open decisions, revenue movement, supplier exposure, service health, setup gaps, and coworker handoffs.
@@ -78,7 +86,7 @@ The Decision Perspective Gate already returns governed outcomes (`recommend`, `a
 
 - Reporting and data-display UX should use `apps/web/components/ui/report-kit/`: `StatusBadge`, `StatCard`, `DataTable`, `FilterBar`, `ExportButton`, `Chart`, and the `statusColors` intent registry.
 - Workspace-home code already has a primitive registry concept. This spec should extend that substrate rather than inventing an unrelated "dashboard widget" system.
-- Theme-aware styling is mandatory: block renderers must use `var(--dpf-*)` tokens and report-kit status intent helpers. No raw hex or local status color maps.
+- Theme-aware styling is mandatory: slot renderers must use `var(--dpf-*)` tokens and report-kit status intent helpers. No raw hex or local status color maps.
 
 ### Live backlog and overlap verification
 
@@ -152,7 +160,7 @@ Follow-up sweep after review confirmed the cross-cutting implementation work sho
 3. **Blocks are operational units.** A block answers a daily question, supports a workflow, and has a data contract.
 4. **WWWD explains and prioritizes, it does not secretly lay out the page.** Layout changes from WWWD/coworkers are recommendations with rationale and audit.
 5. **Data gaps are first-class.** Missing integrations, empty canonical records, and unseeded capabilities render setup/action prompts instead of blank charts.
-6. **No second substrate.** Extend workspace-home registry, report-kit, decision perspective, ToolExecution, and corpus primitives before adding schema.
+6. **No second substrate.** Extend the workspace-home contribution + primitive registries, report-kit, `recallWikiContext` corpus retrieval, the projection service, and `ToolExecution`/`CoworkerActionEnvelope` audit substrate before adding schema. The `DecisionPerspectiveProfile` chain is forward-looking and gated on BI-230C9EF7.
 7. **Dense and repeatable.** The screen is for people who use it every day. It should be compact, scannable, and action-oriented.
 8. **Theme-aware and report-kit composed.** Any KPI, status, table, filter, CSV export, or chart uses the shared palette.
 
@@ -162,7 +170,7 @@ The Workspace route remains `/workspace`, but the page should resolve into one o
 
 | Mode | When | First-screen behavior |
 | --- | --- | --- |
-| `archetype-workspace` | Active `StorefrontConfig.archetype` matches exact/category workspace contribution | Render archetype-specific block composition and active coworker briefing. |
+| `archetype-workspace` | Active `StorefrontConfig` includes a `StorefrontArchetype` whose `archetypeId` semantic slug matches an exact or category workspace contribution | Render archetype-specific block composition and active coworker briefing. |
 | `configured-fallback` | Archetype exists but no contribution matches | Render platform home with a compact setup notice and "workspace home not configured for this archetype" telemetry. |
 | `unconfigured` | No storefront/archetype setup | Render setup notice and platform home fallback. |
 
@@ -235,39 +243,20 @@ If a future archetype proves an operating model the existing 11 primitives genui
 
 ### Audit fields layered onto the resolver
 
-The Configuration Layering Model (above) produces an audited resolution. To preserve the canonical resolver shape, the audit fields ride on `WorkspaceHomeResolution` (or a thin typed extension) rather than introducing a parallel resolver union:
+The Configuration Layering Model (above) produces an audited resolution. The audit type is defined once in §"Configuration Layering Model" — see `WorkspaceCompositionAudit` and `AuditedWorkspaceHomeResolution` there.
 
-```ts
-type WorkspaceCompositionAudit = {
-  sourceLayers: WorkspaceConfigurationLayer[];   // which layers contributed to the resolved composition
-  omittedSlots: WorkspaceOmittedSlot[];          // slot definitions that were dropped, with reason
-  explanations: WorkspaceSlotExplanation[];      // per-slot "why this is here" with cited WikiPage / signal refs
-};
-
-type AuditedWorkspaceHomeResolution = WorkspaceHomeResolution & { audit: WorkspaceCompositionAudit };
-```
-
-Implementation MAY put the audit on the existing resolution union; implementation MUST NOT replace `WorkspaceHomeResolution` with a parallel type. Slot priority / zone / explanation-policy fields are either added as optional members of `WorkspaceHomeSlotSpec` (preferred, parent-spec amendment) or ride on the audit (acceptable fallback). The implementation BI picks one after sweeping current `WorkspaceHomeSlotSpec` consumers.
+Implementation MAY put the audit on the existing resolution union; implementation MUST NOT replace `WorkspaceHomeResolution` with a parallel type. Slot priority / zone / explanation-policy fields are either added as optional members of `WorkspaceHomeSlotSpec` (preferred, parent-spec amendment per §"Archetype-to-Block Mapping Strategy") or ride on the audit (acceptable fallback). The implementation BI picks one after sweeping current `WorkspaceHomeSlotSpec` consumers.
 
 ## Archetype-to-Block Mapping Strategy
 
-Archetype mapping is expressed as code-owned contribution manifests — exactly the existing `WorkspaceHomeContribution` shape from parent §5.5 — using semantic archetype slugs and category fallbacks. **Composition matches on `StorefrontArchetype.archetypeId` semantic slug only; the `StorefrontConfig.archetypeId` FK is the read path, never the match key** (parent §5.3, gated on BI-44C34478 normalization). Each contribution still satisfies the mandatory slot covenant (today/now, exceptions/needs-review, coworker-handoffs).
+Archetype mapping uses the canonical `WorkspaceHomeContribution` shape from parent §5.5 directly — no new type. The contribution already carries everything needed: `semanticArchetypeIds`, `archetypeCategories`, `slots[]` with priorities, `setupActivation.requiredCanonicalData` / `requiredSignals` / `missingDataBehavior`. **Composition matches on `StorefrontArchetype.archetypeId` semantic slug only; the `StorefrontConfig.archetypeId` FK is the read path, never the match key** (parent §5.3, gated on BI-44C34478 normalization). Each contribution still satisfies the mandatory slot covenant (today/now, exceptions/needs-review, coworker-handoffs).
 
-```ts
-type ArchetypeWorkspaceProfile = {
-  archetypeIds: string[];
-  categories: string[];
-  primaryOperatingQuestion: string;
-  defaultZones: {
-    criticalStrip: string[];
-    primary: string[];
-    secondary: string[];
-    briefing: string[];
-  };
-  requiredCanonicalData: string[];
-  optionalCanonicalData: string[];
-};
-```
+This spec proposes two parent-spec amendments rather than a parallel shape:
+
+1. **`primaryOperatingQuestion`** — a presentation field naming "what one question the worker arrives asking" (HVAC: "what's on the board today?"; MSP: "what's red on the estate?"). Adds clarity to setup-activation summaries. Lands as an optional field on `WorkspaceHomeContribution` (parent §5.5 amendment).
+2. **`zone`** on `WorkspaceHomeSlotSpec` — presentation grouping above the slot covenant (`critical-strip` / `primary` / `secondary` / `briefing` / `setup`). Lands as an optional field on the existing `WorkspaceHomeSlotSpec` (parent §5.5 amendment). Default zone derives from existing `priority` if absent.
+
+Neither amendment changes the resolver type, the slot covenant, or the primitive registry. Both are filed as edits to the parent spec, not a new shape here.
 
 Recommended category defaults:
 
@@ -299,19 +288,24 @@ Coworkers participate through:
 - "Ask why this matters" explanations that cite block data, corpus material, and decision interactions.
 - Gap detection when archetype-critical blocks have missing canonical data, stale integrations, or low-confidence guidance.
 
-Coworker recommendations are not automatic layout mutations in V1. They render as explainable proposals:
+Coworker recommendations are not automatic layout mutations in V1. They render as explainable proposals derived from `CoworkerActionEnvelope`:
 
 ```ts
-type WorkspaceRecommendation = {
-  id: string;
+// View shape projected from CoworkerActionEnvelope payload + cited references.
+// NOT a new persistence model — persistence lives in CoworkerActionEnvelope.
+// `status` projects the envelope's lifecycle into workspace-friendly states.
+type WorkspaceRecommendationView = {
+  id: string;                       // CoworkerActionEnvelope.id
   kind: "pin-block" | "unpin-block" | "change-threshold" | "setup-source" | "open-decision";
-  rationale: string;
-  citedMaterialIds: string[];
-  citedToolExecutionIds: string[];
+  rationale: string;                // human-readable, drawn from envelope payload
+  citedWikiPageIds: string[];       // recallWikiContext citations (ring-scope: worker)
+  citedToolExecutionIds: string[];  // ToolExecution refs from the envelope's audit trail
   confidence: "low" | "medium" | "high";
-  status: "proposed" | "accepted" | "dismissed" | "expired";
+  status: "proposed" | "accepted" | "dismissed" | "expired";  // projection of envelope lifecycle
 };
 ```
+
+The view is rendered server-side per page load against the envelope rows scoped to the current organization, role, and workspace. No new table.
 
 ## Configurability Rules
 
@@ -431,7 +425,7 @@ Do not add a generic `Dashboard`, `Widget`, or `PageBuilder` table for V1.
 1. **Preference persistence.** No existing general-purpose org/user workspace preference store was found in schema. `CommunicationChannelBinding.preferences` is channel-specific, and `BuildPhaseHandoff.userPreferences` is build-evidence context, not portal UI preference storage. V1 therefore implements no durable user reordering beyond server-rendered defaults. If Slice 7 needs persistence, file a narrow `WorkspacePreference` schema BI after another substrate sweep.
 2. **Accepted coworker recommendations.** Accepted recommendations do not mutate layout directly. They resolve through PAR (`CoworkerActionEnvelope`) into the same admin/org override command path a human would use. Until a durable override store exists, coworker recommendations can open setup tasks or explain gaps, but they cannot create persistent layout changes.
 3. **Next exact archetype after HVAC and MSP.** Retail/ecommerce is the next proving archetype because it stress-tests revenue snapshot, inventory/supplier risk, customer activity, and the likely `kpi-strip` primitive amendment. It should route through existing `BI-3F3B535D` / `BI-E0D7B790` work rather than a new BI.
-4. **Configuration authority.** V1 uses existing grants: `manage_business_models` owns org/archetype workspace composition choices; `manage_platform` owns registry/primitive definitions and platform fallback behavior; `view_storefront` remains read/setup visibility only. A new `manage_workspace_home` grant is deferred until implementation proves the existing split is too coarse.
+4. **Configuration authority.** V1 uses existing grants (verified at `apps/web/lib/govern/permissions.ts` lines 19/38/54/73): `manage_business_models` owns org/archetype workspace composition choices; `manage_platform` owns registry/primitive definitions and platform fallback behavior; `view_storefront` remains read/setup visibility only. A new `manage_workspace_home` grant is deferred until implementation proves the existing split is too coarse.
 5. **Platform fallback visibility.** When an archetype workspace is active, `PlatformWorkspaceHome` is not blended into the worker home. Authorized operators with `view_platform` or `manage_platform` get an explicit operator switch or link to the platform fallback. Ordinary workers stay in the archetype workspace.
 
 ## Remaining Open Questions
@@ -447,8 +441,9 @@ Do not add a generic `Dashboard`, `Widget`, or `PageBuilder` table for V1.
 - At least one exact/category archetype composition renders a prioritized slot set with critical strip, primary slots, coworker-handoffs briefing, and setup-gap surfacing.
 - Missing data renders the primitive's declared empty/setup-action/degraded state per the canonical contract.
 - WWWD/coworker explanations cite `WikiPage` ids retrieved by `recallWikiContext` (ring-scope `worker`) and, where applicable, `WorkspaceHomeSignal.source` from `loadWorkspaceHomeSignals`. Once BI-230C9EF7 lands, profile-chain outcomes are an additional input.
-- Admin/org/user configurability is bounded by the layer model. Coworker recommendations are proposed via `CoworkerActionEnvelope` and never mutate layout without acknowledgement (PAR).
+- Admin/org/user configurability is bounded by the layer model. Coworker recommendations are projected from `CoworkerActionEnvelope` (no new persistence model) and never mutate layout without acknowledgement (PAR).
 - All reporting/data-display UI uses report-kit primitives and DPF tokens. Banned-copy lint passes.
+- All time-bound block content (schedule slots, "running late", "ETA", "today's window") renders through shared `LocalTime` (viewer browser TZ); server components emit UTC only at serialization boundaries.
 - Unit tests cover resolver layering, slot covenant enforcement, missing-data states, ring-scope filtering on wiki recall, banned-copy assertion, and role/capability filtering.
 - UX verification exercises `/workspace` for configured and unconfigured archetype states on the Live portal at `http://localhost:3000/workspace`, desktop AND mobile viewports, with the structured dynamic-analysis report shape (drove X → observed Y → signed off Z).
 - Production build passes before implementation work is considered complete.

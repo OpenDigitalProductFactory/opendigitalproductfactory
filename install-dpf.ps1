@@ -1765,6 +1765,51 @@ if (-not (Test-StepDone "started")) {
             exit 1
         }
     } else {
+        # --- Docker VM memory preflight (customizer source-build only) --------
+        # The Next.js production build needs ~4 GB of Node.js heap
+        # (NODE_OPTIONS=--max-old-space-size=4096); with parallel image builds
+        # and OS overhead the Docker VM needs at least 6 GB. Docker Desktop on
+        # Windows defaults to 2 GB -- catch this early rather than letting the
+        # build OOM silently inside the container. Mirrors the bash preflight
+        # scripts/installer/lib/preflight.sh (dpf_preflight_docker_memory).
+        # Consumer (pull-image) installs do not build, so they skip this.
+        $minMemMb  = if ($env:DPF_DOCKER_MIN_MEM_MB)  { [int]$env:DPF_DOCKER_MIN_MEM_MB }  else { 6144 }  # 6 GB hard floor
+        $warnMemMb = if ($env:DPF_DOCKER_WARN_MEM_MB) { [int]$env:DPF_DOCKER_WARN_MEM_MB } else { 8192 }  # 8 GB soft target
+        $memBytes = 0
+        try { $memBytes = [int64](docker info --format '{{.MemTotal}}' 2>$null) } catch { $memBytes = 0 }
+        $memMb = [int]($memBytes / 1MB)
+        if ($memMb -gt 0 -and $memMb -lt $minMemMb) {
+            if ($env:DPF_FORCE_UNSUPPORTED_HOST -eq "1") {
+                Write-Warn "Docker VM memory is $memMb MB (minimum: $minMemMb MB), but DPF_FORCE_UNSUPPORTED_HOST=1 -- proceeding."
+            } else {
+                Write-Warn "Insufficient Docker memory: the VM has $memMb MB; the Next.js build needs at least $minMemMb MB."
+                Write-Warn "Open Docker Desktop -> Settings -> Resources -> Memory, set it to 8 GB, then re-run."
+                Write-Warn "Override (advanced): set `$env:DPF_FORCE_UNSUPPORTED_HOST = '1' before re-running."
+                exit 1
+            }
+        } elseif ($memMb -ge $warnMemMb) {
+            Write-OK "Docker VM memory: $memMb MB"
+        } elseif ($memMb -gt 0) {
+            Write-Warn "Docker VM memory is $memMb MB. 8 GB+ is recommended for parallel image builds (Settings -> Resources -> Memory)."
+        }
+
+        # --- Stamp the from-source build with real version identity -----------
+        # Mirrors install-dpf.sh:677-686. Without these, the customizer image
+        # falls back to the Dockerfile content-hash + the stale version.json
+        # baseline, so /ops/self-upgrade reports the wrong build identity for
+        # Windows source-builders. Consumer installs pull CI-stamped images and
+        # do not need this.
+        $gitSha = (git -C "$DPF_DIR" rev-parse HEAD 2>$null)
+        if ($LASTEXITCODE -eq 0 -and $gitSha) {
+            $env:DPF_VERSION = $gitSha.Trim()
+            Write-OK "Stamping local build with DPF_VERSION=$($env:DPF_VERSION)"
+        }
+        $gitDesc = (git -C "$DPF_DIR" describe --tags --always 2>$null)
+        if ($LASTEXITCODE -eq 0 -and $gitDesc) {
+            $env:DPF_PLATFORM_VERSION = ($gitDesc.Trim() -replace '^v','')
+            Write-OK "Stamping local build with DPF_PLATFORM_VERSION=$($env:DPF_PLATFORM_VERSION)"
+        }
+
         Write-Action "Building the portal (first time takes 3-5 minutes)..."
         $oldEAP = $ErrorActionPreference
         $ErrorActionPreference = "Continue"

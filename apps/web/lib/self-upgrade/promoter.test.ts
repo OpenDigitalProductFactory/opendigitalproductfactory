@@ -75,4 +75,24 @@ describe("buildPromoterCommand", () => {
     expect(args).toContain("/Users/me/dpf/.env:/install-env/.env:ro");
     expect(args).toContain("PROMOTE_COMPOSE_ENV_FILE=/install-env/.env");
   });
+
+  it("passes the install's recorded compose chain so the wrong-substrate overlay is never force-applied", () => {
+    // Without this the promoter falls back to promote.sh's base-only default;
+    // with it the portal is recreated using the install's OWN platform overlays.
+    const { args } = buildPromoterCommand({
+      ...BASE,
+      composeFiles: ["docker-compose.yml", "docker-compose.linux.yml", "docker-compose.edge.yml"],
+      composeProject: "dpf",
+    });
+    expect(args).toContain(
+      "PROMOTE_COMPOSE_FILES=docker-compose.yml docker-compose.linux.yml docker-compose.edge.yml",
+    );
+    expect(args).toContain("PROMOTE_COMPOSE_PROJECT=dpf");
+  });
+
+  it("omits PROMOTE_COMPOSE_FILES when no chain is recorded (promote.sh base-only fallback)", () => {
+    const joined = buildPromoterCommand(BASE).args.join(" ");
+    expect(joined).not.toContain("PROMOTE_COMPOSE_FILES=");
+    expect(joined).not.toContain("PROMOTE_COMPOSE_PROJECT=");
+  });
 });

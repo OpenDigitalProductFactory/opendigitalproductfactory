@@ -12,21 +12,34 @@ import { prepareUpgradeSource, defaultGitRunner } from "./prepare-source";
 // and the upgrade must succeed anyway because the merge happens elsewhere.
 
 const GIT_AVAILABLE = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
+const REAL_GIT_TEST_TIMEOUT_MS = 30_000;
+
+const GIT_ENV = {
+  ...process.env,
+  GIT_AUTHOR_NAME: "t",
+  GIT_AUTHOR_EMAIL: "t@t",
+  GIT_COMMITTER_NAME: "t",
+  GIT_COMMITTER_EMAIL: "t@t",
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_SYSTEM: "/dev/null",
+};
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", args, {
     cwd,
     encoding: "utf8",
-    env: {
-      ...process.env,
-      GIT_AUTHOR_NAME: "t",
-      GIT_AUTHOR_EMAIL: "t@t",
-      GIT_COMMITTER_NAME: "t",
-      GIT_COMMITTER_EMAIL: "t@t",
-      GIT_CONFIG_GLOBAL: "/dev/null",
-      GIT_CONFIG_SYSTEM: "/dev/null",
-    },
+    env: GIT_ENV,
   }).toString();
+}
+
+function gitExec(args: string[]): void {
+  execFileSync("git", args, { env: GIT_ENV });
+}
+
+function configureRepo(cwd: string): void {
+  git(cwd, "config", "core.autocrlf", "false");
+  git(cwd, "config", "core.eol", "lf");
+  git(cwd, "config", "commit.gpgsign", "false");
 }
 
 function commit(cwd: string, file: string, content: string, msg: string): void {
@@ -50,17 +63,17 @@ function makeWorld(): {
   const upstream = join(root, "upstream");
   const install = join(root, "install");
   const workspace = join(root, "install", ".upgrade-workspace");
-  execFileSync("git", ["init", "-b", "main", upstream]);
-  git(upstream, "config", "commit.gpgsign", "false");
+  gitExec(["init", "-b", "main", upstream]);
+  configureRepo(upstream);
   // Receive-pack would refuse to push to a checked-out main; for the test the
   // upstream is just a source we fetch FROM, not push to. Setting
   // receive.denyCurrentBranch=ignore keeps the upstream simple.
   git(upstream, "config", "receive.denyCurrentBranch", "ignore");
   commit(upstream, "base.txt", "v1\n", "base");
-  execFileSync("git", ["clone", "-q", upstream, install]);
+  gitExec(["-c", "core.autocrlf=false", "-c", "core.eol=lf", "clone", "-q", upstream, install]);
+  configureRepo(install);
   git(install, "config", "user.email", "t@t");
   git(install, "config", "user.name", "t");
-  git(install, "config", "commit.gpgsign", "false");
   // Install clones in dev typically have dpf/install checked out OR a feature
   // branch — receive-pack will refuse pushes to a checked-out branch unless
   // configured otherwise. The fix expects the workspace push to succeed when
@@ -73,7 +86,7 @@ describe.skipIf(!GIT_AVAILABLE)("prepareUpgradeSource — workspace-isolated (BI
   const cleanup: string[] = [];
   beforeAll(() => {
     return () => cleanup.forEach((d) => rmSync(d, { recursive: true, force: true }));
-  });
+  }, REAL_GIT_TEST_TIMEOUT_MS);
 
   it("does the upstream merge in the workspace, NOT in the install clone, even when install is dirty on a feature branch", async () => {
     const { upstream, install, workspace, root } = makeWorld();
@@ -140,7 +153,7 @@ describe.skipIf(!GIT_AVAILABLE)("prepareUpgradeSource — workspace-isolated (BI
     // block this push — dpf/install is not currently checked out.
     const installRefAfter = git(install, "rev-parse", "dpf/install").trim();
     expect(installRefAfter).toBe(wsHead);
-  });
+  }, REAL_GIT_TEST_TIMEOUT_MS);
 
   it("reuses an already-initialised workspace on subsequent runs (no second clone)", async () => {
     const { upstream, install, workspace, root } = makeWorld();
@@ -185,7 +198,7 @@ describe.skipIf(!GIT_AVAILABLE)("prepareUpgradeSource — workspace-isolated (BI
     expect(git(workspace, "rev-parse", "--git-dir").trim()).toBe(wsGitDirInodeBefore);
     expect(existsSync(join(workspace, "u1.txt"))).toBe(true);
     expect(existsSync(join(workspace, "u2.txt"))).toBe(true);
-  });
+  }, REAL_GIT_TEST_TIMEOUT_MS);
 
   it("workspace merge that conflicts aborts cleanly and surfaces conflict files (no install-clone mutation)", async () => {
     const { upstream, install, workspace, root } = makeWorld();
@@ -226,7 +239,7 @@ describe.skipIf(!GIT_AVAILABLE)("prepareUpgradeSource — workspace-isolated (BI
     // Operator's install clone is COMPLETELY untouched.
     expect(git(install, "rev-parse", "--abbrev-ref", "HEAD").trim()).toBe("feat/whatever");
     expect(existsSync(join(install, "dirty.txt"))).toBe(true);
-  });
+  }, REAL_GIT_TEST_TIMEOUT_MS);
 
   it("captures stderr when merge fails with no conflict markers (e.g. unrelated histories) so failureLog is actionable", async () => {
     // Build a world where the install branch and upstream are unrelated
@@ -238,7 +251,7 @@ describe.skipIf(!GIT_AVAILABLE)("prepareUpgradeSource — workspace-isolated (BI
     // Reset the install branch to a freshly orphan-branched tree so it shares
     // NO history with upstream.
     git(install, "checkout", "--orphan", "dpf/install");
-    execFileSync("git", ["-C", install, "rm", "-rf", "--quiet", "."]);
+    git(install, "rm", "-rf", "--quiet", ".");
     commit(install, "alien.txt", "no shared history\n", "orphan install");
 
     const r = await prepareUpgradeSource(
@@ -262,7 +275,7 @@ describe.skipIf(!GIT_AVAILABLE)("prepareUpgradeSource — workspace-isolated (BI
     // is the canonical phrase on this code path.
     expect(r.message).toMatch(/no conflict markers/);
     expect(r.message.length).toBeGreaterThan("merge-conflict:".length);
-  });
+  }, REAL_GIT_TEST_TIMEOUT_MS);
 
   it("first-run with no install-branch on the install clone creates it from upstream tip", async () => {
     const { upstream, install, workspace, root } = makeWorld();
@@ -294,16 +307,16 @@ describe.skipIf(!GIT_AVAILABLE)("prepareUpgradeSource — workspace-isolated (BI
     // Install clone has dpf/install now (push-back created the ref).
     const installRef = git(install, "rev-parse", "dpf/install").trim();
     expect(installRef.length).toBe(40);
-  });
+  }, REAL_GIT_TEST_TIMEOUT_MS);
 
   it("refuses with a clear message when the install clone has no upstream remote", async () => {
     const root = mkdtempSync(join(tmpdir(), "dpf-upg-no-remote-"));
     cleanup.push(root);
     const install = join(root, "install");
-    execFileSync("git", ["init", "-b", "main", install]);
+    gitExec(["init", "-b", "main", install]);
+    configureRepo(install);
     git(install, "config", "user.email", "t@t");
     git(install, "config", "user.name", "t");
-    git(install, "config", "commit.gpgsign", "false");
     commit(install, "x.txt", "x\n", "x");
     const workspace = join(root, "ws");
 
@@ -322,5 +335,5 @@ describe.skipIf(!GIT_AVAILABLE)("prepareUpgradeSource — workspace-isolated (BI
     if (r.ok) return;
     expect(r.reason).toBe("prep-error");
     expect(r.message).toMatch(/no 'origin' remote/);
-  });
+  }, REAL_GIT_TEST_TIMEOUT_MS);
 });

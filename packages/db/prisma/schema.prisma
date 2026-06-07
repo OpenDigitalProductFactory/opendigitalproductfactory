@@ -97,6 +97,10 @@ model User {
   triggeredDecisionInteractions DecisionInteraction[]         @relation("DecisionInteractionTriggeredByUser")
   scheduledAgentTasks           ScheduledAgentTask[]          @relation("ScheduledAgentTaskOwner")
   addedLocalities               City[]                        @relation("CityAddedByUser")
+  workbooksCreated              Workbook[]                    @relation("WorkbookCreatedBy")
+  workbookShares                WorkbookShare[]               @relation("WorkbookShareUser")
+  workbookRowsCreated           WorkbookRow[]                 @relation("WorkbookRowCreatedBy")
+  workbookViewsCreated          WorkbookView[]                @relation("WorkbookViewCreatedBy")
 }
 
 model UserGroup {
@@ -1344,6 +1348,39 @@ model IntegrationCredential {
   updatedAt     DateTime  @updatedAt
 
   @@index([provider, status])
+}
+
+// Browser-driving session binding (EP-BROWSER-DRIVE, spec 2026-06-05 §8.7).
+// A thin, auditable+resumable record of one driven browser session. It is NOT
+// an action log — individual actions live in ToolExecution keyed by sessionId.
+// Identity/credential/delegation refs are plain string semantic ids (matching
+// the CoworkerActionEnvelope convention), so this table does not add back-
+// relations to the heavily-related Principal/User/IntegrationCredential models.
+// Q1 (EP-CTRL convergence): no live ControlSession today, so this owns its own
+// table; field names are chosen to align with a future ControlSession.
+model BrowserSessionBinding {
+  id                String   @id @default(cuid())
+  sessionId         String   @unique
+  means             String // "deterministic" | "plugin" | "delegated"
+  driverRef         String? // adapter/sidecar session handle
+  engine            String // "chromium" | "safari" | "firefox"
+  profileRef        String // /profiles/<principalId>/<siteKey>/ or an operator-live handle
+  profileKind       String // "service-account" | "operator-live"
+  attended          Boolean  @default(false)
+  actingPrincipalId String? // Principal.principalId of the service account; null for operator-live
+  delegatingUserId  String // human on whose behalf the session runs
+  delegationGrantId String? // DelegationGrant.id bounding the run (side-effecting sessions)
+  credentialId      String? // IntegrationCredential.integrationId (browser-session kind)
+  targetDomains     String[] // navigation/act allowlist
+  status            String   @default("active") // active | closed | failed | blocked-on-reauth
+  meansDecisionJson Json? // per-task WWMD means-selector contribution ledger
+  evidenceDir       String? // session-scoped screenshot/evidence directory
+  startedAt         DateTime @default(now())
+  closedAt          DateTime?
+
+  @@index([actingPrincipalId])
+  @@index([delegatingUserId])
+  @@index([status])
 }
 
 // Call-level audit log for every enterprise-integration MCP tool invocation.
@@ -2770,8 +2807,36 @@ model Organization {
   wikiLintFindings              WikiLintFinding[]
   documents                     Document[]
   decisionPerspectiveProfiles   DecisionPerspectiveProfile[]
+  researchProposals             ResearchProposal[]
   integrationCoverageProviders  IntegrationCoverageProvider[]  @relation("OrgToCoverageProviders")
   integrationRoleCoverages      IntegrationRoleCoverage[]      @relation("OrgToCoverageCells")
+  capabilityActivations         OrganizationCapabilityActivation[]
+}
+
+// EP-PARTNER-CHANNEL Phase 1b. Generic per-organization opt-in overlay on top of
+// the axis-derived capability applicability from @dpf/storefront-templates. The
+// derivation answers "is this capability applicable to the business model?"; this
+// row records "did this org turn it on?" — captured at setup (decidedVia="setup-wizard")
+// for capabilities that resolveCapabilityActivation() flags promptAtSetup, and
+// editable later from admin (decidedVia="admin"). Not partner-specific; partner-program
+// is the first consumer. Spec 2026-06-04-partner-reseller-archetype-identity §6.3.
+model OrganizationCapabilityActivation {
+  id             String       @id @default(cuid())
+  organizationId String
+  // Matches a @dpf/storefront-templates CapabilityKey (validated in app code via
+  // isCapabilityKey before write). Stored as String to avoid a DB enum that would
+  // need a migration every time the capability registry grows.
+  capabilityKey  String
+  // CapabilityActivationChoice: "enabled" | "disabled".
+  choice         String
+  // Provenance of the decision: "setup-wizard" | "admin".
+  decidedVia     String
+  decidedAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, capabilityKey])
+  @@index([organizationId])
 }
 
 model BusinessContext {
@@ -4386,6 +4451,10 @@ model ImprovementSignal {
   objectiveImpactHypothesis String?
   graphNodeRefs             String[] @default([])
   graphEdgeRefs             String[] @default([])
+  // EP-INTAKE-UNIFY / BI-B716B387: back-link to the BacklogItem a persistent
+  // signal was projected into (semantic itemId, BI-…). Null until the signal
+  // crosses the recurrence threshold and is filed through the shared front door.
+  backlogItemId             String?
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
   lastSeenAt                DateTime @default(now())
@@ -4395,6 +4464,7 @@ model ImprovementSignal {
   @@index([routeContext, createdAt(sort: Desc)])
   @@index([agentId, createdAt(sort: Desc)])
   @@index([toolName, createdAt(sort: Desc)])
+  @@index([backlogItemId])
 }
 
 model ExternalEvidenceRecord {
@@ -5335,6 +5405,36 @@ model PlatformDevConfig {
   forkVerifiedAt         DateTime?
   backlogTeeUpDailyCap   Int       @default(3)
   governedBacklogEnabled Boolean   @default(false)
+  // Hive Contributions consent (spec §6.1). Device-fingerprint contribution is
+  // opt-in, DEFAULTED ON because outbound fingerprints are PII-free
+  // (redactFingerprintEvidence, fail-closed). The master pause halts ALL
+  // contribution types immediately.
+  deviceFingerprintOptIn   Boolean @default(true)
+  hiveContributionsPaused  Boolean @default(false)
+}
+
+// One ledger for everything that flows to the hive — what was shared, when,
+// its type, and its curation status (spec §6.1: "one contribution ledger").
+model HiveContributionLedger {
+  id               String   @id @default(cuid())
+  // "device_fingerprint" | "source" | "improvement" (extensible).
+  contributionType String
+  // The stable obfuscated contributor pseudonym used across all types.
+  contributor      String
+  // For device-fingerprint contributions: the rule key shared.
+  ruleKey          String?
+  summary          String
+  // Hash of the contributed payload for dedup/audit without storing PII.
+  payloadHash      String?
+  // submitted | curating | accepted | rejected | withdrawn
+  status           String   @default("submitted")
+  redactionStatus  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([contributionType])
+  @@index([status])
+  @@index([contributor])
 }
 
 model EaNotation {
@@ -7062,6 +7162,116 @@ model OutboundPublication {
   @@index([channelId, publishedAt])
 }
 
+// Phase 3: inbound channel message — captures one parsed inbound payload
+// (Postmark inbound webhook today; future: LinkedIn DM, X mentions, etc.).
+// classification populated by the responder agent (qualified-inquiry |
+// support | spam | other). routedEngagementId links a qualified inquiry to
+// the CRM Engagement created on the operator's behalf. metadata holds the
+// per-channel raw payload header keys for forensics — never the full body
+// (the parsed body lives in `body` for audit), and never the message-id
+// when the channel uses one we already capture in externalMessageId.
+model InboundChannelMessage {
+  inboundId            String   @id @default(cuid())
+  organizationId       String
+  domain               String   // "marketing" today
+  channelId            String   // "email-postmark" | ...
+  externalThreadId     String
+  externalMessageId    String?
+  fromAddress          String?
+  fromDisplayName      String?
+  subject              String?
+  body                 String
+  receivedAt           DateTime @default(now())
+  classification       String?  // qualified-inquiry | support | spam | other
+  routedEngagementId   String?
+  draftedReplyId       String?
+  metadata             Json?
+
+  @@index([organizationId, domain, receivedAt])
+  @@index([channelId, externalThreadId])
+  @@index([classification])
+}
+
+// Phase 4: per-channel weekly spend ceiling. The hard backstop for paid
+// channels (LinkedIn Ads first; Google Ads / Meta Ads layer in later). The
+// spend gate sums OutboundPublication.channelMetadata.spendCents for the
+// rolling 7-day window and refuses placements that would cross weeklyCap
+// Cents — even when the operator clicked Place. Ceiling raising is
+// operator-only (manage_provider_connections capability) so the agent
+// can't escalate its own ceiling.
+model MarketingChannelSpendCeiling {
+  ceilingId        String   @id @default(cuid())
+  organizationId   String
+  channelId        String
+  weeklyCapCents   Int
+  notes            String?
+  lastSetByUserId  String
+  lastSetAt        DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([organizationId, channelId])
+  @@index([channelId])
+}
+
+// Phase 5: scheduled outbound action. One row per planned future
+// execution of a Phase 1-4 service (drafter run, publish, or KPI pull).
+// status transitions: pending → fired | failed | cancelled. paused is
+// reachable from pending. Terminal: fired, failed, cancelled.
+//
+// kind values:
+//   draft-marketing-asset      → calls draftMarketingAsset(assetTaskId)
+//   publish-approved-draft     → calls publishApprovedDraft(draftId)
+//   pull-channel-kpis          → calls pullChannelKpis(channelId)
+//
+// targetId carries the kind-specific reference: MarketingAssetTask.taskId
+// for the drafter, OutboundDraft.draftId for publish, channelId string
+// for pull-channel-kpis.
+model ScheduledOutboundAction {
+  scheduleId         String   @id @default(cuid())
+  organizationId     String
+  kind               String
+  targetId           String
+  scheduledFor       DateTime
+  status             String   @default("pending")
+  firedAt            DateTime?
+  lastError          String?
+  autopilotPolicyId  String?
+  scheduledByUserId  String?
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([status, scheduledFor])
+  @@index([organizationId, kind, status])
+  @@index([targetId])
+}
+
+// Phase 5: per-channel bounded autopilot policy. enabled=false acts as
+// a hard pause without losing the configuration. autopilot is NEVER
+// allowed to fire on ad channels (channelId="linkedin-ads") or on
+// inbound-reply drafts (sourceType="inbound-channel-message") — the
+// runtime enforces those exclusions at the autopilot eligibility check
+// regardless of what the policy row says.
+model OutboundAutopilotPolicy {
+  policyId               String   @id @default(cuid())
+  organizationId         String
+  domain                 String   @default("marketing")
+  channelId              String
+  enabled                Boolean  @default(false)
+  autoApproveBelowWords  Int?
+  autoPublishAfterMinutes Int?
+  weeklyCeiling          Int
+  enabledByUserId        String
+  enabledAt              DateTime @default(now())
+  pausedReason           String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@unique([organizationId, channelId])
+  @@index([channelId, enabled])
+}
+
 model StorefrontSection {
   id           String           @id @default(cuid())
   storefrontId String
@@ -7529,9 +7739,12 @@ model AiProviderFinanceProfile {
 model SupplierContract {
   id                     String    @id @default(cuid())
   contractId             String    @unique
-  profileId              String
+  profileId              String?
   supplierId             String
   accountableEmployeeId  String?
+  commitmentKind         String    @default("ai_provider")
+  commitmentSource       String    @default("ai_provider_registry")
+  externalReference      String?   @unique
   status                 String    @default("draft")
   contractType           String    @default("subscription")
   billingCadence         String    @default("monthly")
@@ -7550,7 +7763,7 @@ model SupplierContract {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  profile             AiProviderFinanceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profile             AiProviderFinanceProfile? @relation(fields: [profileId], references: [id], onDelete: Cascade)
   supplier            Supplier                 @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   accountableEmployee EmployeeProfile?         @relation("AiContractOwner", fields: [accountableEmployeeId], references: [id], onDelete: SetNull)
   allowances          ContractAllowance[]
@@ -7560,6 +7773,7 @@ model SupplierContract {
   @@index([profileId])
   @@index([supplierId])
   @@index([status])
+  @@index([commitmentKind, status])
   @@index([accountableEmployeeId])
 }
 
@@ -9819,4 +10033,185 @@ model GearInterface {
   @@index([agentIdForTriple, capabilityName, archetypeContext])
   @@index([shaftSourceType, shaftSourceId])
   @@index([outcomeType, recordedAt])
+}
+
+// EP-CORPUS-BOOTSTRAP BI-8A58C65A: scheduled, approval-gated AI research.
+// A per-org research run that has been PROPOSED (by schedule or gap-detection)
+// and awaits human approval before any web/LLM execution. On approval the
+// execution slice runs runMarketResearch() → enrichOrgCorpus(research→draft).
+// Nothing executes or publishes without human approval + draft review (BI-1378).
+model ResearchProposal {
+  id              String       @id @default(cuid())
+  proposalId      String       @unique @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  topic           String // short topic key, e.g. "competitive-landscape"
+  query           String       @db.Text // the research query/prompt
+  status          String       @default("pending") // pending | approved | declined | executed | failed
+  proposedBy      String       @default("schedule") // schedule | gap-detection | user
+  proposedAt      DateTime     @default(now())
+  decidedByUserId String?
+  decidedAt       DateTime?
+  executedAt      DateTime?
+  resultSummary   String?      @db.Text
+  metadata        Json?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([organizationId, status])
+  @@index([status])
+}
+
+model CoworkerTurnMetric {
+  id              String   @id @default(cuid())
+  threadId        String
+  agentMessageId  String
+  agentId         String?
+  routeContext    String?
+  taskType        String?
+  providerId      String?
+  modelId         String?
+  dispatches      Int      @default(0)
+  nudges          Int      @default(0)
+  toolsAttached   Boolean  @default(false)
+  executedTools   Int      @default(0)
+  totalMs         Int?
+  createdAt       DateTime @default(now())
+
+  @@unique([threadId, agentMessageId])
+  @@index([agentId, routeContext, createdAt])
+  @@index([threadId, createdAt])
+}
+
+// =============================================================================
+// Universal Grid & Workbooks (EP-GRID-WORKBOOKS)
+// Spec: docs/superpowers/specs/2026-03-23-universal-grid-workbooks-design.md
+// Airtable/Smartsheet-style grids for knowledge workers. WorkbookRow/Cell hold
+// user-defined ("custom") table data; platform-data tables are views resolved
+// through adapters at runtime and do not populate WorkbookRow.
+// =============================================================================
+
+model Workbook {
+  id          String          @id @default(cuid())
+  workbookId  String          @unique // format: "WB-<cuid>" — generated by server action
+  name        String
+  description String          @default("")
+  areaSlug    String? // links to shell area (ops, crm, etc.) — null for standalone
+  createdById String
+  createdBy   User            @relation("WorkbookCreatedBy", fields: [createdById], references: [id])
+  tables      WorkbookTable[]
+  shares      WorkbookShare[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([createdById])
+}
+
+model WorkbookShare {
+  id         String   @id @default(cuid())
+  workbookId String
+  workbook   Workbook @relation(fields: [workbookId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation("WorkbookShareUser", fields: [userId], references: [id], onDelete: Cascade)
+  role       String // owner | editor | viewer — validated by Zod enum at server action layer
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([workbookId, userId])
+}
+
+model WorkbookTable {
+  id               String           @id @default(cuid())
+  tableId          String           @unique // format: "TBL-<cuid>"
+  name             String
+  position         Int              @default(0)
+  workbookId       String
+  workbook         Workbook         @relation(fields: [workbookId], references: [id], onDelete: Cascade)
+  dataSource       String           @default("custom")
+  // "custom" = user-defined rows stored in WorkbookRow/Cell
+  // Any other value = view over an existing Prisma model (e.g., "backlog_item")
+  dataSourceFilter Json? // optional pre-filter — see spec "Data Source Filter Schema"
+  columns          WorkbookColumn[]
+  rows             WorkbookRow[] // only populated when dataSource = "custom"
+  views            WorkbookView[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([workbookId, position])
+}
+
+model WorkbookColumn {
+  id           String         @id @default(cuid())
+  columnId     String         @unique // format: "COL-<cuid>"
+  name         String
+  position     Int            @default(0)
+  tableId      String
+  table        WorkbookTable  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  fieldType    String // text | number | date | datetime | checkbox | select | multi_select | reference | url | email
+  fieldConfig  Json? // select options, reference target type, validation rules, etc.
+  sourceField  String? // when dataSource != "custom", maps to the Prisma model field name
+  required     Boolean        @default(false)
+  defaultValue String?
+  width        Int? // pixel width for grid rendering
+  cells        WorkbookCell[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([tableId, position])
+}
+
+model WorkbookRow {
+  id          String         @id @default(cuid())
+  rowId       String         @unique // format: "ROW-<cuid>"
+  position    Int            @default(0)
+  tableId     String
+  table       WorkbookTable  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  createdById String?
+  createdBy   User?          @relation("WorkbookRowCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  cells       WorkbookCell[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([tableId, position])
+}
+
+model WorkbookCell {
+  id               String         @id @default(cuid())
+  rowId            String
+  row              WorkbookRow    @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  columnId         String
+  column           WorkbookColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  textValue        String?
+  numberValue      Float?
+  dateValue        DateTime?
+  boolValue        Boolean?
+  selectValue      String? // stored key from fieldConfig options
+  multiSelectValue String[] // array of selected keys (Postgres array)
+  referenceId      String? // platform entity ID
+  referenceType    String? // entity table: "epic", "customer_contact", etc.
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([rowId, columnId])
+  @@index([referenceType, referenceId])
+  @@index([columnId, textValue])
+  @@index([columnId, numberValue])
+  @@index([columnId, dateValue])
+}
+
+model WorkbookView {
+  id          String        @id @default(cuid())
+  viewId      String        @unique // format: "VW-<cuid>"
+  name        String
+  tableId     String
+  table       WorkbookTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  viewType    String        @default("grid") // grid | kanban
+  config      Json // see spec "View Config Schema"
+  isDefault   Boolean       @default(false)
+  createdById String?
+  createdBy   User?         @relation("WorkbookViewCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([tableId, createdById])
 }

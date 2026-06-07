@@ -3,6 +3,14 @@ import { Inngest } from "inngest";
 export const inngest = new Inngest({ id: "dpf-platform" });
 
 // Event payload types for type-safe event sending
+
+/** BI-8A58C65A: execute an approved research proposal (enqueued from the
+ *  approval seam; handled by research-execute.ts). */
+export interface ResearchExecuteRunEvent {
+  name: "research/execute.run";
+  data: { proposalId: string; organizationId: string; topic: string; query: string };
+}
+
 export interface CwqItemCreatedEvent {
   name: "cwq/item.created";
   data: { workItemId: string; sourceType: string; urgency: string };

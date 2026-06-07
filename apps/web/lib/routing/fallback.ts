@@ -8,7 +8,14 @@ import { prisma } from "@dpf/db";
 import type { RouteDecision } from "./types";
 import type { RoutedExecutionPlan } from "./recipe-types";
 import { resolveDefaultExecutionAdapter } from "./execution-plan";
-import { recordRequest, learnFromRateLimitResponse, extractRetryAfterMs } from "./rate-tracker";
+import {
+  recordRequest,
+  learnFromRateLimitResponse,
+  extractRetryAfterMs,
+  markEndpointUnavailable,
+  clearEndpointUnavailable,
+  type EndpointUnavailableReason,
+} from "./rate-tracker";
 import { scheduleRecovery } from "./rate-recovery";
 import { recordRouteOutcome } from "./route-outcome";
 import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
@@ -73,6 +80,52 @@ export interface FallbackResult {
   downgraded: boolean;
   downgradeMessage: string | null;
   responseId?: string;
+}
+
+/**
+ * Reason-scoped runtime-cooldown durations (ms) for the circuit breaker.
+ * Short for self-clearing conditions (rate_limit/overload/transient/provider
+ * error); long for conditions that need operator remediation (auth/billing).
+ * See spec §4.1 + risk R1.
+ */
+const RUNTIME_COOLDOWN_MS: Record<EndpointUnavailableReason, number> = {
+  rate_limit: 30_000,
+  overloaded: 15_000,
+  transient: 10_000,
+  provider_error: 15_000,
+  auth: 600_000,
+  billing: 600_000,
+};
+
+/**
+ * Map an InferenceError to a runtime-circuit reason + cooldown (with jitter, per
+ * AWS backoff-with-jitter). For rate limits the provider's retry-after header
+ * wins when present (capped at 60s).
+ */
+function runtimeCooldownFor(e: InferenceError): {
+  reason: EndpointUnavailableReason;
+  ms: number;
+} {
+  let reason: EndpointUnavailableReason;
+  switch (e.code) {
+    case "rate_limit":
+    case "overloaded":
+    case "transient":
+    case "auth":
+    case "billing":
+      reason = e.code;
+      break;
+    default:
+      reason = "provider_error";
+      break;
+  }
+  let base = RUNTIME_COOLDOWN_MS[reason];
+  if (reason === "rate_limit") {
+    const retry = extractRetryAfterMs(e.headers);
+    if (retry !== undefined) base = Math.min(retry, 60_000);
+  }
+  const jitter = Math.random() * Math.min(base * 0.1, 1_000);
+  return { reason, ms: base + jitter };
 }
 
 async function markModelDegraded(
@@ -213,6 +266,10 @@ export async function callWithFallbackChain(
       // EP-INF-004: Record successful request for rate tracking
       recordRequest(entry.providerId, entry.modelId,
         (result.inputTokens ?? 0) + (result.outputTokens ?? 0));
+
+      // Routing-resilience Slice A: a success closes any open runtime circuit
+      // for this endpoint — it is demonstrably reachable again.
+      clearEndpointUnavailable(entry.providerId, entry.modelId);
 
       // EP-INF-006: Record route outcome (fire-and-forget)
       recordRouteOutcome({
@@ -383,6 +440,21 @@ export async function callWithFallbackChain(
             );
           }
         }
+
+        // Routing-resilience Slice A: open the runtime circuit for this endpoint.
+        // Reached only when the endpoint is actually failing over (the retry
+        // `continue` paths above exit first), so a single endpoint contributes at
+        // most one wait per turn; subsequent agentic-loop iterations re-run the
+        // routing pipeline, which now skips this cooled-down endpoint (spec D1).
+        // Process-local + auto-expiring; does NOT mutate ModelProvider.status.
+        const cooldown = runtimeCooldownFor(e);
+        markEndpointUnavailable(
+          entry.providerId,
+          entry.modelId,
+          cooldown.reason,
+          cooldown.ms,
+          e.message,
+        );
 
         // EP-INF-006: Record error outcome (fire-and-forget)
         recordRouteOutcome({

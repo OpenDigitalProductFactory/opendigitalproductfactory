@@ -348,8 +348,15 @@ bridge_args=(
 PLAN_TMP="$(mktemp)"
 trap 'rm -f "$PLAN_TMP"' EXIT
 if ! pnpm "${bridge_args[@]}" > "$PLAN_TMP" 2>&1; then
-  fail "compute-plan failed; cannot proceed with bootstrap."
+  warn "compute-plan failed; using standalone skill-pack updater fallback."
   cat "$PLAN_TMP" >&2
+  FALLBACK="$REPO_ROOT/packages/dpf-skill-pack/scripts/update-agent-toolchain.sh"
+  if [ -f "$FALLBACK" ]; then
+    fallback_args=(--mcp-url "$MCP_ENDPOINT")
+    [ "$DRY_RUN" -eq 1 ] && fallback_args+=(--dry-run)
+    exec bash "$FALLBACK" "${fallback_args[@]}"
+  fi
+  fail "Standalone updater missing at $FALLBACK; cannot proceed."
   exit 1
 fi
 if [ ! -s "$PLAN_TMP" ]; then
@@ -367,7 +374,7 @@ mv "${PLAN_TMP}.json" "$PLAN_TMP"
 # Single python pass: parse plan from tempfile, emit shell-safe variables.
 eval "$(PLAN_FILE="$PLAN_TMP" python3 - <<'PY'
 import json, os, shlex
-with open(os.environ["PLAN_FILE"]) as f:
+with open(os.environ["PLAN_FILE"], encoding="utf-8") as f:
     plan = json.load(f)
 
 def shell_var(name, value):
@@ -382,9 +389,24 @@ shell_var("CLAUDE_MODE", claude.get("mode", "skip") if claude else "skip")
 shell_var("CLAUDE_STALE_COUNT", len(claude.get("staleEntriesToReconcile", [])) if claude else 0)
 shell_var("CODEX_WRITES_COUNT", len(codex.get("writes", [])) if codex else 0)
 shell_var("CODEX_PRESERVED_USER_INTENT", "true" if codex.get("preservedUserIntent") else "false")
+# DPF-scoping convergence (generic-client disable + worktree trust), rendered
+# one change per line for the readiness banner (spec S4.5). Newline-joined so a
+# single shell var carries the whole list; the printf loop below splits on it.
+_conv_kind = {
+    "plugin-disabled": "disabled generic plugin",
+    "mcp-server-disabled": "disabled generic MCP server",
+    "project-trusted": "trusted worktree path",
+}
+_conv_lines = [
+    f"Codex: {_conv_kind.get(c.get('kind'), c.get('kind'))} '{c.get('key')}'."
+    for c in (codex.get("convergence", []) if codex else [])
+]
+shell_var("CODEX_CONVERGENCE_COUNT", len(_conv_lines))
+shell_var("CODEX_CONVERGENCE", "\n".join(_conv_lines))
 shell_var("MCP_CLIENT_WRITES_COUNT", len(mcp_client.get("writes", [])))
 shell_var("MEMORY_WRITES_COUNT", len(memory.get("writes", [])))
 shell_var("PREVIEW_STATE", plan.get("preview", {}).get("readinessState", "missing_cli"))
+shell_var("UPSTREAM_DRIFT_ADVISORY", (plan.get("upstreamDrift") or {}).get("advisory") or "")
 PY
 )"
 
@@ -429,6 +451,13 @@ fi
 if [ "$DRY_RUN" -eq 1 ]; then
   if [ "${PLAN_CODEX_WRITES_COUNT:-0}" -gt 0 ]; then
     info "DRY-RUN: write Codex config (1 file)"
+    if [ "${PLAN_CODEX_CONVERGENCE_COUNT:-0}" -gt 0 ] && [ -n "${PLAN_CODEX_CONVERGENCE:-}" ]; then
+      while IFS= read -r _conv_line; do
+        [ -n "$_conv_line" ] && info "DRY-RUN: $_conv_line"
+      done <<EOF
+$PLAN_CODEX_CONVERGENCE
+EOF
+    fi
   fi
   if [ "${PLAN_MCP_CLIENT_WRITES_COUNT:-0}" -gt 0 ]; then
     info "DRY-RUN: write $PLAN_MCP_CLIENT_WRITES_COUNT MCP client config file(s) (.mcp.json / .vscode/mcp.json)"
@@ -439,20 +468,24 @@ if [ "$DRY_RUN" -eq 1 ]; then
 else
   PLAN_FILE="$PLAN_TMP" python3 - <<'PY'
 import json, os
-with open(os.environ["PLAN_FILE"]) as f:
+with open(os.environ["PLAN_FILE"], encoding="utf-8") as f:
     plan = json.load(f)
 
 # Codex writes.
 for w in (plan.get("codex") or {}).get("writes", []):
     os.makedirs(os.path.dirname(w["path"]), exist_ok=True)
-    with open(w["path"], "w") as f:
-        f.write(w["content"])
+    # Binary mode + explicit UTF-8 prevents CRLF translation on Windows,
+    # which would otherwise break Phase 6 content-equality idempotence.
+    with open(w["path"], "wb") as f:
+        f.write(w["content"].encode("utf-8"))
 
 # MCP client config writes (.mcp.json + .vscode/mcp.json — env-backed, no secret).
 for w in (plan.get("mcpClientConfig") or {}).get("writes", []):
     os.makedirs(os.path.dirname(w["path"]), exist_ok=True)
-    with open(w["path"], "w") as f:
-        f.write(w["content"])
+    # Binary mode + explicit UTF-8 prevents CRLF translation on Windows,
+    # which would otherwise break Phase 6 content-equality idempotence.
+    with open(w["path"], "wb") as f:
+        f.write(w["content"].encode("utf-8"))
 
 # Memory writes (excluding preserve-user-edit).
 mem = plan.get("memory") or {}
@@ -460,20 +493,31 @@ for w in mem.get("writes", []):
     if w.get("mode") == "preserve-user-edit":
         continue
     os.makedirs(os.path.dirname(w["path"]), exist_ok=True)
-    with open(w["path"], "w") as f:
-        f.write(w["content"])
+    # Binary mode + explicit UTF-8 prevents CRLF translation on Windows,
+    # which would otherwise break Phase 6 content-equality idempotence.
+    with open(w["path"], "wb") as f:
+        f.write(w["content"].encode("utf-8"))
 
 # Memory index entry.
 idx = mem.get("indexEntry")
 if idx:
     os.makedirs(os.path.dirname(idx["path"]), exist_ok=True)
-    with open(idx["path"], "w") as f:
-        f.write(idx["content"])
+    with open(idx["path"], "wb") as f:
+        f.write(idx["content"].encode("utf-8"))
 PY
 
   if [ "${PLAN_CODEX_WRITES_COUNT:-0}" -gt 0 ]; then
     ok "Codex plugin wired."
     CODEX_WIRED=1
+    # Report DPF-scoping convergence so drift is surfaced, not silently
+    # tolerated (spec S4.5). One [..] line per change.
+    if [ "${PLAN_CODEX_CONVERGENCE_COUNT:-0}" -gt 0 ] && [ -n "${PLAN_CODEX_CONVERGENCE:-}" ]; then
+      while IFS= read -r _conv_line; do
+        [ -n "$_conv_line" ] && info "$_conv_line"
+      done <<EOF
+$PLAN_CODEX_CONVERGENCE
+EOF
+    fi
   elif [ "$CODEX_PRESENT" -eq 1 ]; then
     if [ "$PLAN_CODEX_PRESERVED_USER_INTENT" = "true" ]; then
       skip "Codex plugin manually disabled by user; preserving user intent."
@@ -537,13 +581,13 @@ else
       mv "${PROBE_TMP}.json" "$PROBE_TMP"
       MCP_READINESS="$(PROBE_FILE="$PROBE_TMP" python3 -c '
 import json, os
-with open(os.environ["PROBE_FILE"]) as f:
+with open(os.environ["PROBE_FILE"], encoding="utf-8") as f:
     p = json.load(f)
 print(json.dumps(p["mcpReadiness"]))
 ')"
       SMOKE_TEST="$(PROBE_FILE="$PROBE_TMP" python3 -c '
 import json, os
-with open(os.environ["PROBE_FILE"]) as f:
+with open(os.environ["PROBE_FILE"], encoding="utf-8") as f:
     p = json.load(f)
 print(json.dumps(p["smokeTest"]))
 ')"
@@ -638,6 +682,9 @@ printf '================================================================\n'
 printf '  DPF agent toolchain: %s\n' "$(printf '%s' "$FINAL_STATE" | tr '[:lower:]' '[:upper:]')"
 printf '  %s\n' "$BANNER_MSG"
 printf '  Next: %s\n' "$BANNER_ACTION"
+if [ -n "${PLAN_UPSTREAM_DRIFT_ADVISORY:-}" ]; then
+  printf '  %s\n' "$PLAN_UPSTREAM_DRIFT_ADVISORY"
+fi
 printf '================================================================\n'
 
 if [ "$SHOW_SUBSTRATE" -eq 1 ]; then

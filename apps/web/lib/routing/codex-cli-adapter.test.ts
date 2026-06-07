@@ -95,7 +95,7 @@ vi.mock("@/lib/shared/lazy-node", () => ({
   }),
 }));
 
-import { writeContainerFileViaStdin } from "./codex-cli-adapter";
+import { writeContainerFileViaStdin, looksLikeCliAuthFailure } from "./codex-cli-adapter";
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
 
@@ -289,5 +289,42 @@ describe("codexCliAdapter — E2BIG spawn error classification", () => {
 
   it("classifies ECONNREFUSED as network", async () => {
     expect(await runAndGetSpawnErrorCode("spawn ECONNREFUSED")).toBe("network");
+  });
+});
+
+// ── Auth-vs-rate classification (routing-resilience spec D2) ─────────────────
+// An expired OAuth token must classify as `auth` (→ provider disable + reconnect
+// surfacing) even when the CLI also emits throttle-looking text, so the fallback
+// chain does not loop on a 30s wait against a provider that cannot succeed.
+describe("looksLikeCliAuthFailure", () => {
+  it.each([
+    "Not logged in",
+    "ERROR: unexpected status 401 Unauthorized: Missing bearer",
+    "Re-authentication required. Re-authenticate via Admin > AI Workforce.",
+    "reauthenticate to continue",
+    "Please log in to continue",
+    "session expired",
+    "your token has expired",
+    "not authenticated",
+    "Invalid API key · Fix external API key",
+  ])("classifies %j as an auth failure", (text) => {
+    expect(looksLikeCliAuthFailure(text)).toBe(true);
+  });
+
+  it.each([
+    "Codex CLI rate limited: Reading prompt from stdin...",
+    "429 Too Many Requests",
+    "Reading prompt from stdin...",
+    "model produced an empty response",
+  ])("does NOT classify pure rate-limit/other text %j as auth", (text) => {
+    expect(looksLikeCliAuthFailure(text)).toBe(false);
+  });
+
+  it("treats re-auth text as auth even when throttle words co-occur (D2)", () => {
+    // The dangerous case: token expired, but stderr also mentions 'rate'. Auth
+    // must win so the provider is disabled rather than retried.
+    expect(
+      looksLikeCliAuthFailure("Re-authentication required (rate of failed auth attempts high)"),
+    ).toBe(true);
   });
 });
