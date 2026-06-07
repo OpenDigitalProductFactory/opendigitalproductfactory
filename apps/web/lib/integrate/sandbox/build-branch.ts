@@ -257,6 +257,15 @@ type ClientIdentity = {
   upstreamRemoteUrl: string | null; // Canonical repo URL for fetching origin/main
 };
 
+// Canonical Hive upstream — used when PlatformDevConfig.upstreamRemoteUrl is
+// unset so the sandbox baseline is ALWAYS reset to origin/main (shared history),
+// never a synthetic-root `git init`. Without this, build branches have no
+// merge-base with main and contributions can never form a valid PR (BI-5F288AAA).
+// Mirrors the same default in contribute_to_hive (mcp-tools.ts) and
+// platform-dev-config's UPSTREAM_OWNER_REPO_FALLBACK.
+const DEFAULT_UPSTREAM_REMOTE_URL =
+  "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git";
+
 let _cachedIdentity: ClientIdentity | null = null;
 
 /**
@@ -288,7 +297,11 @@ export async function getClientIdentity(): Promise<ClientIdentity> {
     gitAgentEmail: config.gitAgentEmail,
     gitAuthorName: `dpf-agent-${shortId}`,
     clientBranch: `client/${config.clientId}`,
-    upstreamRemoteUrl: config.upstreamRemoteUrl ?? null,
+    // Default to the canonical Hive upstream when unset so the sandbox baseline
+    // always shares history with origin/main (the keystone for contributions —
+    // BI-5F288AAA). The fetch/reset is wrapped in try/catch downstream, so an
+    // offline/token failure falls back safely to the portal-copy baseline.
+    upstreamRemoteUrl: config.upstreamRemoteUrl ?? DEFAULT_UPSTREAM_REMOTE_URL,
   };
 
   return _cachedIdentity;
