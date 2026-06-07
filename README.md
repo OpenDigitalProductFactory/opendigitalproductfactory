@@ -58,9 +58,9 @@ iwr -UseBasicParsing https://raw.githubusercontent.com/OpenDigitalProductFactory
 powershell -ExecutionPolicy Bypass -File install-dpf.ps1
 ```
 
-### macOS Apple Silicon — Early access · [full guide](docs/install/macos.md)
+### macOS Apple Silicon — **GA** · [full guide](docs/install/macos.md)
 
-The Unix installer sources helper libraries from inside the repo, so you must clone first.
+Validated end-to-end on real Apple Silicon hardware (M-series, macOS 14+). The Unix installer sources helper libraries from inside the repo, so you must clone first.
 
 ```bash
 # Step 1 — clone the repo and enter it
@@ -70,6 +70,8 @@ cd opendigitalproductfactory
 # Step 2 — run the installer
 bash install-dpf.sh
 ```
+
+**Voice works on macOS.** Speech-to-text runs out of the box (bundled `speaches` / faster-whisper service — no GPU needed). For spoken output, Apple Silicon runs a native-host TTS sidecar (Docker can't reach the Neural Engine); enable it once with `bash scripts/tts/setup-chatterbox-tts-macos.sh`. See [Voice (STT + TTS)](docs/install/macos.md#voice-stt--tts).
 
 ### Linux (native Docker) — Early access · [full guide](docs/install/linux.md)
 
