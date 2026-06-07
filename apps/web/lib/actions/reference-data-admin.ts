@@ -4,6 +4,13 @@ import { prisma } from "@dpf/db";
 import { normalizeLocalityName } from "@dpf/db/location-normalize";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
+import {
+  SUPERSEDED_STATUS,
+  planRegionMerge,
+  validateCityMergePair,
+  validateRegionMergePair,
+  type MergeValidationError,
+} from "@/lib/mdm/reference-data-merge";
 import { can } from "@/lib/permissions";
 import type { WorkforceActionResult } from "./workforce";
 
@@ -219,4 +226,173 @@ export async function unlinkWorkLocationAddress(
 
   revalidateAdminPaths();
   return { ok: true, message: "Address unlinked and soft-deleted." };
+}
+
+// ─── Reference-data merge (MDM-5, spec §7 step 5) ────────────────────────────
+
+export type MergePreview = {
+  ok: boolean;
+  message: string;
+  impact?: {
+    citiesRepointed: number;
+    citiesMerged: number;
+    addressesAffected: number;
+  };
+};
+
+function mergeErrorMessage(error: MergeValidationError): string {
+  switch (error) {
+    case "same-record":
+      return "Cannot merge a record into itself.";
+    case "different-country":
+      return "Regions in different countries cannot be merged.";
+    case "different-region":
+      return "Cities in different regions cannot be merged.";
+  }
+}
+
+// ─── Preview / Merge City ────────────────────────────────────────────────────
+
+export async function previewCityMerge(
+  loserId: string,
+  survivorId: string,
+): Promise<MergePreview> {
+  const denied = await requireAdminCapability();
+  if (denied) return denied;
+
+  const [loser, survivor] = await Promise.all([
+    prisma.city.findUnique({ where: { id: loserId }, select: { id: true, regionId: true, name: true } }),
+    prisma.city.findUnique({ where: { id: survivorId }, select: { id: true, regionId: true, name: true } }),
+  ]);
+  if (!loser || !survivor) return { ok: false, message: "City not found." };
+
+  const invalid = validateCityMergePair(loser, survivor);
+  if (invalid) return { ok: false, message: mergeErrorMessage(invalid) };
+
+  const addressesAffected = await prisma.address.count({ where: { cityId: loserId } });
+  return {
+    ok: true,
+    message: `Merging "${loser.name}" → "${survivor.name}" will repoint ${addressesAffected} address(es) and tombstone "${loser.name}".`,
+    impact: { citiesRepointed: 0, citiesMerged: 1, addressesAffected },
+  };
+}
+
+export async function mergeCity(
+  loserId: string,
+  survivorId: string,
+): Promise<WorkforceActionResult> {
+  const denied = await requireAdminCapability();
+  if (denied) return denied;
+
+  const [loser, survivor] = await Promise.all([
+    prisma.city.findUnique({ where: { id: loserId }, select: { id: true, regionId: true, name: true } }),
+    prisma.city.findUnique({ where: { id: survivorId }, select: { id: true, regionId: true } }),
+  ]);
+  if (!loser || !survivor) return { ok: false, message: "City not found." };
+
+  const invalid = validateCityMergePair(loser, survivor);
+  if (invalid) return { ok: false, message: mergeErrorMessage(invalid) };
+
+  await prisma.$transaction(async (tx) => {
+    await tx.address.updateMany({ where: { cityId: loserId }, data: { cityId: survivorId } });
+    await tx.city.update({
+      where: { id: loserId },
+      data: { status: SUPERSEDED_STATUS, mergedIntoId: survivorId },
+    });
+  });
+
+  revalidateAdminPaths();
+  return { ok: true, message: `City "${loser.name}" merged and superseded.` };
+}
+
+// ─── Preview / Merge Region ──────────────────────────────────────────────────
+
+export async function previewRegionMerge(
+  loserId: string,
+  survivorId: string,
+): Promise<MergePreview> {
+  const denied = await requireAdminCapability();
+  if (denied) return denied;
+
+  const [loser, survivor] = await Promise.all([
+    prisma.region.findUnique({ where: { id: loserId }, select: { id: true, countryId: true, name: true } }),
+    prisma.region.findUnique({ where: { id: survivorId }, select: { id: true, countryId: true, name: true } }),
+  ]);
+  if (!loser || !survivor) return { ok: false, message: "Region not found." };
+
+  const invalid = validateRegionMergePair(loser, survivor);
+  if (invalid) return { ok: false, message: mergeErrorMessage(invalid) };
+
+  const [loserCities, survivorCities] = await Promise.all([
+    prisma.city.findMany({ where: { regionId: loserId }, select: { id: true, nameNormalized: true } }),
+    prisma.city.findMany({ where: { regionId: survivorId }, select: { id: true, nameNormalized: true } }),
+  ]);
+  const plan = planRegionMerge(loserCities, survivorCities);
+  const loserCityIds = loserCities.map((c) => c.id);
+  const addressesAffected =
+    loserCityIds.length === 0
+      ? 0
+      : await prisma.address.count({ where: { cityId: { in: loserCityIds } } });
+
+  return {
+    ok: true,
+    message: `Merging "${loser.name}" → "${survivor.name}": ${plan.cityRepoints.length} city(ies) repointed, ${plan.cityMerges.length} merged into same-named cities, ${addressesAffected} address(es) affected.`,
+    impact: {
+      citiesRepointed: plan.cityRepoints.length,
+      citiesMerged: plan.cityMerges.length,
+      addressesAffected,
+    },
+  };
+}
+
+export async function mergeRegion(
+  loserId: string,
+  survivorId: string,
+): Promise<WorkforceActionResult> {
+  const denied = await requireAdminCapability();
+  if (denied) return denied;
+
+  const [loser, survivor] = await Promise.all([
+    prisma.region.findUnique({ where: { id: loserId }, select: { id: true, countryId: true, name: true } }),
+    prisma.region.findUnique({ where: { id: survivorId }, select: { id: true, countryId: true } }),
+  ]);
+  if (!loser || !survivor) return { ok: false, message: "Region not found." };
+
+  const invalid = validateRegionMergePair(loser, survivor);
+  if (invalid) return { ok: false, message: mergeErrorMessage(invalid) };
+
+  const [loserCities, survivorCities] = await Promise.all([
+    prisma.city.findMany({ where: { regionId: loserId }, select: { id: true, nameNormalized: true } }),
+    prisma.city.findMany({ where: { regionId: survivorId }, select: { id: true, nameNormalized: true } }),
+  ]);
+  const plan = planRegionMerge(loserCities, survivorCities);
+
+  await prisma.$transaction(async (tx) => {
+    // Collision cities: repoint their addresses to the survivor city, then tombstone.
+    for (const { loserCityId, survivorCityId } of plan.cityMerges) {
+      await tx.address.updateMany({ where: { cityId: loserCityId }, data: { cityId: survivorCityId } });
+      await tx.city.update({
+        where: { id: loserCityId },
+        data: { status: SUPERSEDED_STATUS, mergedIntoId: survivorCityId },
+      });
+    }
+    // Non-colliding cities: repoint into the survivor region.
+    if (plan.cityRepoints.length > 0) {
+      await tx.city.updateMany({
+        where: { id: { in: plan.cityRepoints } },
+        data: { regionId: survivorId },
+      });
+    }
+    // Tombstone the loser region.
+    await tx.region.update({
+      where: { id: loserId },
+      data: { status: SUPERSEDED_STATUS, mergedIntoId: survivorId },
+    });
+  });
+
+  revalidateAdminPaths();
+  return {
+    ok: true,
+    message: `Region "${loser.name}" merged and superseded (${plan.cityRepoints.length} repointed, ${plan.cityMerges.length} city merges).`,
+  };
 }
