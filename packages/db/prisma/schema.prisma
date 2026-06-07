@@ -10243,3 +10243,16 @@ model WorkbookView {
 
   @@index([tableId, createdById])
 }
+
+model BuildEngine {
+  engineId        String   @id
+  binary          String
+  verifyCommand   String
+  versionRegex    String
+  bakeInDefault   Boolean  @default(false)
+  recipes         Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("build_engine")
+}
