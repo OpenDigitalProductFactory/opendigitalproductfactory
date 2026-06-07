@@ -354,6 +354,11 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   add_provider: ["agent_control_read"],
   update_provider_category: ["agent_control_read"],
   run_endpoint_tests: ["agent_control_read"],
+  // Grok device-code sign-in (EP-GROK-001, #1624). The grant_catalog already
+  // lists these under agent_control_read; #1624 added the catalog entries but
+  // not the TOOL_TO_GRANTS mapping, so INV-1 flagged them as default-deny.
+  grok_signin_start: ["agent_control_read"],
+  grok_signin_status: ["agent_control_read"],
 
   // Employee / HR
   list_departments: ["registry_read"],

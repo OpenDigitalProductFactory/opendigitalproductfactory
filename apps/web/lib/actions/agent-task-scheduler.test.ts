@@ -45,7 +45,14 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
-vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
+vi.mock("@dpf/db", () => ({
+  prisma: mocks.prisma,
+  // executeScheduledAgentTask short-circuits to the deterministic data-model
+  // mirror when task.taskId === DATA_MODEL_MIRROR_TASK_ID (EP-DATA-ARCH, #1618).
+  // The const must be exported from the mock or vitest throws on access; none of
+  // these tests use the mirror task id, so any non-matching value is fine.
+  DATA_MODEL_MIRROR_TASK_ID: "data-model-mirror-nightly",
+}));
 vi.mock("@/lib/tak/agent-routing-server", () => ({
   resolveAgentForRouteWithPrompts: mocks.resolveAgentForRouteWithPrompts,
   resolveAgentByIdWithPrompts: mocks.resolveAgentByIdWithPrompts,
