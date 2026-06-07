@@ -290,6 +290,13 @@ const ENABLED_CONFIG = {
 describe("success path", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Activity precheck default: no in-flight surfaces. mockReset (not just
+    // clearAllMocks, which leaves implementations and one-shot queues intact)
+    // clears any leftover mockResolvedValueOnce — the "force bypasses" test
+    // below queues a once-value that force never consumes, so without this it
+    // leaks into the next test and spuriously skips it with activity-in-flight.
+    mocks.captureActiveSessionBlockers.mockReset();
+    mocks.captureActiveSessionBlockers.mockResolvedValue({ surfaces: [] });
     mocks.getSelfUpgradeConfig.mockResolvedValue(ENABLED_CONFIG);
     mocks.isUpgradeWindowOpen.mockReturnValue(true);
     mocks.getDeployedSha.mockResolvedValue("oldsha1");
