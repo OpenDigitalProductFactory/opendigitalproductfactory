@@ -6,6 +6,7 @@ import {
   reconcileSelfUpgradeRunsOnBoot,
   recoverContradictoryBuildExecStatesOnBoot,
   resumeStrandedBuildsOnBoot,
+  scheduleInitialCodeGraphBootstrap,
   warnIfLegacyHiveTokenEnvSet,
   syncPlatformVersionOnBoot,
 } from "./instrumentation";
@@ -360,5 +361,58 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
     expect(result).toBeNull();
     expect(error).toHaveBeenCalledTimes(1);
     expect(error.mock.calls[0]![0]).toContain("[build-resume]");
+  });
+});
+
+describe("scheduleInitialCodeGraphBootstrap", () => {
+  it("schedules a delayed one-shot initializer", async () => {
+    const ensure = vi.fn().mockResolvedValue(undefined);
+    const log = vi.fn();
+    const error = vi.fn();
+    let callback: (() => void) | null = null;
+    const setTimer = vi.fn((cb: () => void, delayMs: number) => {
+      callback = cb;
+      return undefined;
+    });
+
+    scheduleInitialCodeGraphBootstrap({
+      delayMs: 123,
+      ensure,
+      logger: { log, error },
+      setTimer,
+    });
+
+    expect(setTimer).toHaveBeenCalledWith(expect.any(Function), 123);
+    (callback as (() => void) | null)?.();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(ensure).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith("[code-graph] Initial graph bootstrap complete or already present");
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it("logs initializer failures without throwing", async () => {
+    const boom = new Error("neo4j unavailable");
+    const ensure = vi.fn().mockRejectedValue(boom);
+    const log = vi.fn();
+    const error = vi.fn();
+    let callback: (() => void) | null = null;
+
+    scheduleInitialCodeGraphBootstrap({
+      ensure,
+      logger: { log, error },
+      setTimer(cb) {
+        callback = cb;
+      },
+    });
+
+    (callback as (() => void) | null)?.();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(ensure).toHaveBeenCalledTimes(1);
+    expect(log).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith("[code-graph] Initial graph bootstrap failed:", boom);
   });
 });
