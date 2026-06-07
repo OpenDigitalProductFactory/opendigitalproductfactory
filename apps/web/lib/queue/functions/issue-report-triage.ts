@@ -1,8 +1,14 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
-import { ISSUE_REPORT_STATUS } from "@/lib/quality/issue-report-status";
 import { gateAtEntry } from "../quiescence-gates";
 
+// Safety-net sweep + spike detector. Since EP-INTAKE-UNIFY Phase 4, OPEN reports
+// are projected into the backlog within seconds of creation by the per-report
+// `quality/issue-report.created` event (queue/functions/issue-report-project.ts).
+// This 15-minute cron remains the guarantee — it re-projects anything whose
+// event was dropped or arrived during quiescence — and is the home of spike
+// detection (which needs a historical baseline a single-report event can't see).
+// Both paths share runIssueReportTriage(), so they project identically.
 export const issueReportTriage = inngest.createFunction(
   { id: "quality/issue-report-triage", retries: 2, triggers: [cron("*/15 * * * *")] },
   async ({ step }) => {
@@ -10,110 +16,8 @@ export const issueReportTriage = inngest.createFunction(
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     const result = await step.run("triage-open-reports", async () => {
-      const { prisma } = await import("@dpf/db");
-      const { triageIssueReports } = await import("@/lib/operate/issue-report-triage");
-
-      // Try to get a cheap LLM for enhanced triage — local model preferred.
-      // Falls back to deterministic logic if no model is available.
-      let callLlm: ((messages: Array<{ role: string; content: string }>, systemPrompt: string) => Promise<{ content: string }>) | undefined;
-      try {
-        const { routeAndCall } = await import("@/lib/inference/routed-inference");
-        callLlm = async (messages, systemPrompt) => {
-          const result = await routeAndCall(
-            messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-            systemPrompt,
-            "internal",
-            {
-              taskType: "triage",
-              budgetClass: "minimize_cost",
-              effort: "low",
-              persistDecision: false,
-            },
-          );
-          return { content: result.content };
-        };
-      } catch {
-        // No models available — proceed with deterministic triage
-        console.log("[issue-report-triage] No LLM available, using deterministic triage");
-      }
-
-      return triageIssueReports({
-        getOpenReports: () =>
-          prisma.platformIssueReport.findMany({
-            where: { status: ISSUE_REPORT_STATUS.OPEN },
-            orderBy: { createdAt: "asc" },
-            take: 100,
-            select: {
-              id: true,
-              reportId: true,
-              type: true,
-              severity: true,
-              title: true,
-              description: true,
-              routeContext: true,
-              errorStack: true,
-              source: true,
-            },
-          }),
-
-        getExistingTitles: async () => {
-          // Dedup pool = every bug-class BI regardless of intake origin.
-          // Pre-2026-05-30 BIs carried the legacy mixed source values
-          // (source IN ('bug','process_observer')); the workType backfill
-          // landed them all as workType='bug', so this single predicate
-          // returns the same row set.
-          const items = await prisma.backlogItem.findMany({
-            where: { workType: "bug" },
-            select: { title: true },
-          });
-          return items.map((i) => i.title);
-        },
-
-        createBacklogItem: async (data) => {
-          await prisma.backlogItem.create({ data });
-        },
-
-        incrementOccurrence: async (title) => {
-          const existing = await prisma.backlogItem.findFirst({
-            where: {
-              title: { contains: title, mode: "insensitive" },
-              workType: "bug",
-            },
-          });
-          if (existing) {
-            await prisma.backlogItem.update({
-              where: { id: existing.id },
-              data: {
-                occurrenceCount: { increment: 1 },
-                lastSeenAt: new Date(),
-              },
-            });
-          }
-        },
-
-        acknowledgeReport: async (id) => {
-          await prisma.platformIssueReport.update({
-            where: { id },
-            data: { status: ISSUE_REPORT_STATUS.TRIAGED_LOCAL },
-          });
-        },
-
-        resolveTaxonomyNodeByPath: async (path) => {
-          // Try exact match first, then endsWith for partial paths
-          const node = await prisma.taxonomyNode.findFirst({
-            where: {
-              OR: [
-                { nodeId: path },
-                { nodeId: { endsWith: `/${path.split("/").pop()}` } },
-              ],
-            },
-            select: { id: true },
-          });
-          return node?.id ?? null;
-        },
-
-        callLlm,
-      });
+      const { runIssueReportTriage } = await import("@/lib/operate/issue-report-triage-runner");
+      return runIssueReportTriage();
     });
 
     // Spike detection
