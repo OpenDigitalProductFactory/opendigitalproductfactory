@@ -40,6 +40,31 @@ export function areOptionalStartupTasksEnabled(
   return envFlagEnabled(env, "DPF_OPTIONAL_STARTUP_TASKS_ENABLED");
 }
 
+export function scheduleInitialCodeGraphBootstrap(input: {
+  delayMs?: number;
+  logger?: Pick<Console, "log" | "error">;
+  setTimer?: (callback: () => void, delayMs: number) => unknown;
+  ensure?: () => Promise<void>;
+} = {}): void {
+  const logger = input.logger ?? console;
+  const setTimer = input.setTimer ?? setTimeout;
+
+  setTimer(() => {
+    void (async () => {
+      try {
+        const ensure = input.ensure ?? (async () => {
+          const { ensureCodeGraphInitialized } = await import("@/lib/integrate/code-graph-refresh");
+          await ensureCodeGraphInitialized();
+        });
+        await ensure();
+        logger.log("[code-graph] Initial graph bootstrap complete or already present");
+      } catch (err) {
+        logger.error("[code-graph] Initial graph bootstrap failed:", err);
+      }
+    })();
+  }, input.delayMs ?? 10_000);
+}
+
 /**
  * Enqueue background dimension evals for every active ModelProfile under the
  * given provider. Sends one `ai/eval.run` event per model so Inngest dispatches
@@ -431,6 +456,7 @@ export async function register() {
       registerScheduledJobs().catch((err) =>
         console.error("[instrumentation] Failed to register discovery jobs:", err),
       );
+      scheduleInitialCodeGraphBootstrap();
     }
 
     // Self-sync our function catalog with the Inngest server.

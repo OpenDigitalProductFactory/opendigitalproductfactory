@@ -320,6 +320,7 @@ export async function GET(): Promise<Response> {
 
     const providerLabel = config.provider === "claude" ? "Claude CLI"
       : config.provider === "codex" ? "Codex CLI"
+      : config.provider === "grok" ? "Grok CLI"
       : "Agentic (built-in)";
 
     if (config.provider === "agentic") {
@@ -331,7 +332,11 @@ export async function GET(): Promise<Response> {
     }
 
     // Verify the selected CLI provider has credentials
-    const providerId = config.provider === "claude" ? config.claudeProviderId : config.codexProviderId;
+    const providerId = config.provider === "claude"
+      ? config.claudeProviderId
+      : config.provider === "grok"
+        ? config.grokProviderId
+        : config.codexProviderId;
     if (!providerId) {
       return {
         status: "fail",
@@ -344,7 +349,9 @@ export async function GET(): Promise<Response> {
     const cred = await getDecryptedCredential(providerId);
     const hasAuth = config.provider === "claude"
       ? !!(cred?.cachedToken || cred?.secretRef)
-      : !!cred?.cachedToken;
+      : config.provider === "grok"
+        ? !!cred?.cachedToken
+        : !!cred?.cachedToken;
 
     if (!hasAuth) {
       return {

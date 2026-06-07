@@ -291,6 +291,7 @@
     "providerId": "xai",
     "name": "xAI (Grok)",
     "category": "direct",
+    "cliEngine": "grok",
     "baseUrl": "https://api.x.ai/v1",
     "authMethod": "api_key",
     "supportedAuthMethods": [

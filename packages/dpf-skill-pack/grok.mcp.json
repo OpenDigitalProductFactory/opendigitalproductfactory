@@ -1,0 +1,8 @@
+{
+  "mcp_servers": {
+    "dpf": {
+      "url": "http://127.0.0.1:3000/api/mcp/v1",
+      "bearer_token_env_var": "DPF_MCP_BEARER_TOKEN"
+    }
+  }
+}

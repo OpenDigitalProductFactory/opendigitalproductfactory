@@ -20,6 +20,7 @@ type Props = {
   config: BuildStudioDispatchConfig;
   claudeProviders: ProviderOption[];
   codexProviders: ProviderOption[];
+  grokProviders: ProviderOption[];
   contributorMcpReadiness: ContributorMcpReadiness;
   baseUrl: string;
   canWrite: boolean;
@@ -63,6 +64,7 @@ export function BuildStudioConfigForm({
   config,
   claudeProviders,
   codexProviders,
+  grokProviders,
   contributorMcpReadiness,
   baseUrl,
   canWrite,
@@ -70,14 +72,17 @@ export function BuildStudioConfigForm({
   const [provider, setProvider] = useState(config.provider);
   const [claudeProviderId, setClaudeProviderId] = useState(config.claudeProviderId);
   const [codexProviderId, setCodexProviderId] = useState(config.codexProviderId);
+  const [grokProviderId, setGrokProviderId] = useState(config.grokProviderId);
   const [claudeModel, setClaudeModel] = useState(config.claudeModel);
   const [codexModel, setCodexModel] = useState(config.codexModel);
+  const [grokModel, setGrokModel] = useState(config.grokModel);
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const hasClaudeCreds = claudeProviders.some(p => isConfigured(p.status));
   const hasCodexCreds = codexProviders.some(p => isConfigured(p.status));
+  const hasGrokCreds = grokProviders.some(p => isConfigured(p.status));
 
   function handleSave() {
     setSaved(false);
@@ -88,8 +93,10 @@ export function BuildStudioConfigForm({
           provider,
           claudeProviderId,
           codexProviderId,
+          grokProviderId,
           claudeModel,
           codexModel,
+          grokModel,
         });
         setSaved(true);
         setTimeout(() => setSaved(false), 3000);
@@ -174,6 +181,16 @@ export function BuildStudioConfigForm({
           />
           <ProviderRadio
             name="provider"
+            value="grok"
+            checked={provider === "grok"}
+            onChange={() => setProvider("grok")}
+            disabled={!canWrite || !hasGrokCreds}
+            label="Grok CLI (Preview)"
+            desc="xAI models · headless grok -p"
+            unconfiguredMsg={!hasGrokCreds ? "No xAI credentials found." : undefined}
+          />
+          <ProviderRadio
+            name="provider"
             value="agentic"
             checked={provider === "agentic"}
             onChange={() => setProvider("agentic")}
@@ -208,6 +225,14 @@ export function BuildStudioConfigForm({
             selectedId={codexProviderId}
             onSelect={setCodexProviderId}
             active={provider === "codex"}
+            canWrite={canWrite}
+          />
+          <CredentialCard
+            title="Grok"
+            providers={grokProviders}
+            selectedId={grokProviderId}
+            onSelect={setGrokProviderId}
+            active={provider === "grok"}
             canWrite={canWrite}
           />
         </div>
@@ -274,6 +299,50 @@ export function BuildStudioConfigForm({
                   placeholder="o4-mini"
                   style={{
                     width: 120,
+                    fontSize: 11,
+                    padding: "2px 6px",
+                    border: "1px solid var(--dpf-border)",
+                    borderRadius: 4,
+                    background: "var(--dpf-bg)",
+                    color: "var(--dpf-text)",
+                  }}
+                />
+              </label>
+            </div>
+          )}
+
+          {provider === "grok" && (
+            <div>
+              <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 4 }}>Grok model</p>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dpf-text)", marginBottom: 6 }}>
+                <input
+                  type="radio"
+                  name="grokModel"
+                  value=""
+                  checked={grokModel === ""}
+                  onChange={() => setGrokModel("")}
+                  disabled={!canWrite}
+                />
+                Server default (assigned by xAI)
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dpf-text)" }}>
+                <input
+                  type="radio"
+                  name="grokModel"
+                  value="custom"
+                  checked={grokModel !== ""}
+                  onChange={() => setGrokModel("grok-build-0.1")}
+                  disabled={!canWrite}
+                />
+                Custom:
+                <input
+                  type="text"
+                  value={grokModel}
+                  onChange={e => setGrokModel(e.target.value)}
+                  disabled={!canWrite || grokModel === ""}
+                  placeholder="grok-build-0.1"
+                  style={{
+                    width: 140,
                     fontSize: 11,
                     padding: "2px 6px",
                     border: "1px solid var(--dpf-border)",

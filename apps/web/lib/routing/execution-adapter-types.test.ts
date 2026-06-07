@@ -34,6 +34,8 @@ function describeKind(kind: ExecutionAdapterKind): string {
       return "claude-code-cli";
     case "codex-cli":
       return "codex-cli";
+    case "grok-cli":
+      return "grok-cli";
     case "codex-mcp-server":
       return "codex-mcp-server";
     case "local-runtime":
@@ -55,6 +57,7 @@ describe("ExecutionAdapterKind exhaustiveness", () => {
       "http-generic",
       "claude-code-cli",
       "codex-cli",
+      "grok-cli",
       "codex-mcp-server",
       "local-runtime",
     ];
