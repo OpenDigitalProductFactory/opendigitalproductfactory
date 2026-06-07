@@ -336,7 +336,7 @@ async function autoConfigureBuildStudio(providerId: string): Promise<void> {
   });
   if (!provider?.cliEngine) return; // Not a CLI-dispatchable provider
 
-  const cliEngine = provider.cliEngine as "claude" | "codex";
+  const cliEngine = provider.cliEngine as "claude" | "codex" | "grok";
   const existing = await prisma.platformConfig.findUnique({
     where: { key: "build-studio-dispatch" },
   });
@@ -347,8 +347,10 @@ async function autoConfigureBuildStudio(providerId: string): Promise<void> {
       provider: cliEngine,
       claudeProviderId: cliEngine === "claude" ? providerId : "",
       codexProviderId: cliEngine === "codex" ? providerId : "",
+      grokProviderId: cliEngine === "grok" ? providerId : "",
       claudeModel: "sonnet",
       codexModel: "",
+      grokModel: "",
     };
     await prisma.platformConfig.create({
       data: {
@@ -364,10 +366,10 @@ async function autoConfigureBuildStudio(providerId: string): Promise<void> {
     const config = existing.value as Record<string, unknown>;
     const claudeKey = "claudeProviderId";
     const codexKey = "codexProviderId";
+    const grokKey = "grokProviderId";
 
     if (cliEngine === "claude" && !config[claudeKey]) {
       config[claudeKey] = providerId;
-      // If currently set to agentic/codex with no codex provider, switch to claude
       if (config.provider === "agentic" || (config.provider === "codex" && !config[codexKey])) {
         config.provider = "claude";
       }
@@ -379,6 +381,15 @@ async function autoConfigureBuildStudio(providerId: string): Promise<void> {
       config[codexKey] = providerId;
       if (config.provider === "agentic") {
         config.provider = "codex";
+      }
+      await prisma.platformConfig.update({
+        where: { key: "build-studio-dispatch" },
+        data: { value: config as unknown as Prisma.InputJsonValue },
+      });
+    } else if (cliEngine === "grok" && !config[grokKey]) {
+      config[grokKey] = providerId;
+      if (config.provider === "agentic") {
+        config.provider = "grok";
       }
       await prisma.platformConfig.update({
         where: { key: "build-studio-dispatch" },

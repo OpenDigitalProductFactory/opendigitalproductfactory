@@ -14,7 +14,7 @@ async function requireManageProviders(): Promise<string> {
   return user.id;
 }
 
-const VALID_ENGINES = new Set(["claude", "codex", "agentic"]);
+const VALID_ENGINES = new Set(["claude", "codex", "grok", "agentic"]);
 const VALID_CLAUDE_MODELS = new Set(["haiku", "sonnet", "opus"]);
 
 export async function saveBuildStudioConfig(
@@ -41,6 +41,14 @@ export async function saveBuildStudioConfig(
     });
     if (!codexProvider) {
       throw new Error(`Provider ${config.codexProviderId} is not a Codex-compatible provider`);
+    }
+  }
+  if (config.grokProviderId) {
+    const grokProvider = await prisma.modelProvider.findFirst({
+      where: { providerId: config.grokProviderId, cliEngine: "grok" },
+    });
+    if (!grokProvider) {
+      throw new Error(`Provider ${config.grokProviderId} is not a Grok-compatible provider`);
     }
   }
 

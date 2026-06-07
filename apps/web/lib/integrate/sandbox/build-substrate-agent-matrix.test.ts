@@ -17,4 +17,11 @@ describe("Build substrate x agent matrix", () => {
       getBuildExecutionProvider("local-docker").capabilities(),
     )).not.toThrow();
   });
+
+  it("allows local-docker x grok", () => {
+    expect(() => assertAgentProviderCompatibility(
+      getBuildAgentRunner("grok").capabilities(),
+      getBuildExecutionProvider("local-docker").capabilities(),
+    )).not.toThrow();
+  });
 });

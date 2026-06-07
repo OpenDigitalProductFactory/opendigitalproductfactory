@@ -1,0 +1,26 @@
+{
+  "name": "dpf-platform",
+  "description": "DPF-native agent skills for Grok contributors. Single-source-of-truth contract: superset SKILL.md frontmatter feeds both external Grok users and in-portal coworkers. See README.md.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Digital Product Factory",
+    "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory"
+  },
+  "homepage": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/packages/dpf-skill-pack",
+  "repository": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/packages/dpf-skill-pack",
+  "license": "Apache-2.0",
+  "skills": "../skills/",
+  "mcpConfig": "../grok.mcp.json",
+  "keywords": [
+    "dpf",
+    "digital-product-factory",
+    "agent-skills",
+    "build-studio",
+    "kernel-principles",
+    "backlog",
+    "worktree",
+    "dco",
+    "grok",
+    "xai"
+  ]
+}

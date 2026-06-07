@@ -31,6 +31,7 @@ describe("work capsule enums", () => {
   it("declares source, executor, and activity enums", () => {
     expect(WORK_CAPSULE_SOURCES).toContain("external-adoption");
     expect(WORK_CAPSULE_EXECUTOR_KINDS).toContain("codex-desktop");
+    expect(WORK_CAPSULE_EXECUTOR_KINDS).toContain("grok-desktop");
     expect(WORK_CAPSULE_ACTIVITY_KINDS).toContain("evidence-recorded");
   });
 });

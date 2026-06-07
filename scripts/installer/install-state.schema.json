@@ -118,6 +118,7 @@
         "superpowersVersion",
         "claudeCodeWired",
         "codexWired",
+        "grokWired",
         "memorySeededAt",
         "mcpReadiness",
         "smokeTest",
@@ -129,6 +130,7 @@
         "superpowersVersion": { "type": ["string", "null"] },
         "claudeCodeWired": { "type": "boolean" },
         "codexWired": { "type": "boolean" },
+        "grokWired": { "type": "boolean" },
         "memorySeededAt": { "type": ["string", "null"], "format": "date-time" },
         "mcpReadiness": {
           "oneOf": [

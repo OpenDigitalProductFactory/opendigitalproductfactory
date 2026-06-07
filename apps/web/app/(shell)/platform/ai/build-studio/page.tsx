@@ -55,6 +55,9 @@ export default async function BuildStudioPage() {
   const codexProviders = allProviders.filter(p =>
     (p.provider as Record<string, unknown>).cliEngine === "codex",
   );
+  const grokProviders = allProviders.filter(p =>
+    (p.provider as Record<string, unknown>).cliEngine === "grok",
+  );
 
   return (
     <div>
@@ -85,6 +88,13 @@ export default async function BuildStudioPage() {
           costNotes: p.provider.costPerformanceNotes,
         }))}
         codexProviders={codexProviders.map(p => ({
+          providerId: p.provider.providerId,
+          name: p.provider.name,
+          status: p.credential?.status ?? "unconfigured",
+          billingLabel: p.provider.billingLabel,
+          costNotes: p.provider.costPerformanceNotes,
+        }))}
+        grokProviders={grokProviders.map(p => ({
           providerId: p.provider.providerId,
           name: p.provider.name,
           status: p.credential?.status ?? "unconfigured",
