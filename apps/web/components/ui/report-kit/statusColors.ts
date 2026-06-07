@@ -197,6 +197,15 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     resolved: "success",
     suppressed: "neutral",
   },
+  // Platform domain-readiness matrix (Six-Cs). good/attention/blocked/unknown
+  // map to the shared intent ramp so the readiness surface stops carrying its
+  // own state->color map. See PlatformReadinessMatrix + command-center.ts.
+  readiness: {
+    good: "success",
+    attention: "warning",
+    blocked: "danger",
+    unknown: "neutral",
+  },
   // Generic severity ramp, reusable by any surface that has none of its own.
   severity: {
     info: "info",

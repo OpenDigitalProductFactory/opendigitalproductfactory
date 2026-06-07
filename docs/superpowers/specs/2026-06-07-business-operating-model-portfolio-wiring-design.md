@@ -1,0 +1,360 @@
+# Business Operating Model — Portfolio Wiring Design
+
+| Field | Value |
+|-------|-------|
+| **Status** | Draft — founder review before fan-out |
+| **Date** | 2026-06-07 |
+| **Author** | Claude (Opus 4.8) with founder (Mark Bodman) |
+| **Primary Objective** | Wire each customer company's **top-down business direction** into the two business-critical portfolios — **Products & Services Sold** and **For Employees (→ Workforce)** — so they become populated, operational, and backlog-generating, and so they **ground the immature WWWD decision layer** the way founder principles ground the mature WWMD layer. |
+| **Scope** | The "missing middle" between the decision layer (WWMD/WWWD) and the capability-maturity layer: a structured per-company **Business Operating Model** seeded from archetype, refined by the operator + continuous corpus enrichment, consumed by WWWD decisions, and fanned out into the backlog. |
+| **Non-Goals** | Does not implement schema, routes, or migrations. Does not re-architect WWMD. Does not duplicate the agent-control-plane maturity model. Does not replace external systems of record (QuickBooks, HRIS, ERP) — those remain `boundary_adapter` conduits. |
+| **Primary Inputs** | `docs/Reference/digital_product_portfolio_mgmt.txt` (Open Group G252, DPPM), `docs/founder-kernel/wiki/entities/it4it.md`, `packages/db/data/portfolio_registry.json`, `apps/web/lib/onboarding/seed-org-wwwd-corpus.ts`, `apps/web/lib/onboarding/archetype-business-context.ts`, `docs/superpowers/specs/2026-05-21-four-portfolio-agent-control-plane-maturity-design.md`, `docs/superpowers/specs/2026-05-31-continuous-corpus-enrichment-design.md`, `docs/superpowers/specs/2026-05-31-archetype-aware-workspace-design.md`, `docs/superpowers/plans/2026-05-30-decision-surface-consolidation.md`, EP-AI-WORKFORCE-001 (`docs/superpowers/specs/2026-04-02-ai-workforce-consolidation-design.md`) |
+
+---
+
+## 1. Problem Statement
+
+The platform has matured two layers in parallel:
+
+1. **The decision layer.** **WWMD** ("What Would Mark Do" — the founder/platform kernel) is shipped and live at `apps/web/lib/decision-perspective/build-studio-gate.ts`. It is evidence-gated, ledgered, and actively gating Build Studio plan advancement. It is mature; the work remaining is fine-tuning. **WWWD** ("What Would We Do" — the customer organization's kernel) is *not* mature. It exists as a container (`DecisionPerspectiveProfile kind=organization`) plus four archetype-templated org-overlay WikiPages (`org-mission`, `org-who-we-serve`, `org-how-we-decide`, `org-supply-chain`) seeded by `seedOrgWwwdCorpus`. No decision path resolves a decision by `ownerOrganizationId` yet (blocked on BI-230C9EF7); `resolveProfileMaterial` always enters at `mark-dpf-platform`.
+
+2. **The capability-maturity layer.** The [Four-Portfolio Agent Control Plane Maturity](2026-05-21-four-portfolio-agent-control-plane-maturity-design.md) spec turns the four-portfolio taxonomy into an investment/operations/productization surface — but explicitly for **DPF's own agent control plane** (`installScope = dpf_dogfood`/`canonical`, the recursion). Its design intent table reads the four portfolios as *DPF's* substrate, factory, internal workspace, and market offer.
+
+**The gap is the middle.** Between "how the company decides" (WWWD narrative) and "how mature DPF's platform capabilities are" (maturity scoring), there is no structured representation of **what the customer company actually sells and who/what does its work**. Concretely, verified against the live codebase:
+
+- **WWWD reasons over nothing concrete.** The four WWWD pages are *stance narrative* ("we decide for patient safety first"). They are not grounded in a structured model of the company's actual offerings, workforce, or goals. WWMD matured because it cites concrete, evidence-gated principles; WWWD cannot mature the same way until it has concrete operating-model nouns to reason over.
+- **Products & Services Sold is wired to DPF's products, not the customer's offer.** `DigitalProduct.portfolioId` and the `/portfolio/products/[id]` routes exist, but for a real customer (a clinic, a retailer, an MSP) nothing seeds *their* market offer (appointments/treatments, SKUs, service catalog) into this portfolio from their archetype/business context.
+- **"For Employees" is too narrow and is not wired to the portfolio.** `EmployeeProfile` exists with a full HR surface at `/employee`, but it has **no FK to a portfolio**. The portfolio meaning excludes the AI agent workforce, even though `Agent` already carries `portfolioId`, `valueStream`, `humanSupervisorId`, `toolGrants`, `executionConfig` (token budgets), and `skills` — i.e. the substrate to model what a non-human identity *needs to contribute* already exists, unconnected to the portfolio lens.
+- **Archetype portfolio decomposition is computed but never persisted.** `readActivationProfile()` validates a `foundational | manufactureAndDeliver | forEmployees | productsAndServicesSold` decomposition (absent/minimal/standard/primary) at runtime, but the result is never written to the DB, so the company's own portfolio shape cannot be refined or driven from.
+- **The backlog is not business-driven.** `BacklogItem`/`Epic` are manually authored or sourced from storefront inquiries. Nothing converts business direction → portfolio gaps → backlog. This is precisely Mark's observation: **Build Studio is nearly autonomous on the engineering side; the business side is not, because no signal generates business backlog.**
+
+This is the classic top-down disconnect named in the DPPM paper (Open Group G252 §1.3): *leadership defines the business direction while IT manages infrastructure without line of sight to customers.* The four-portfolio model is the canonical fix — but only if the two business-facing portfolios are actually populated from leadership's direction and made load-bearing.
+
+## 2. Design Intent
+
+Introduce a per-company **Business Operating Model (BOM)** — not a new substrate, but a *wiring discipline* over existing substrate — that makes the two business-critical portfolios the **top-down anchor** of the whole platform:
+
+```text
+Archetype business context (top-down, leadership-defined)
+  → seeds the two business-critical portfolios
+      • Products & Services Sold  (DPPM "Provided Externally" — the market offer, line of sight to customers)
+      • Workforce / For Employees (DPPM "Provided Internally" + the workforce itself: humans + AI agents)
+  → those portfolios decompose down the DPPM dependency chain
+      • Foundational  ◀── depended on by
+      • Manufacturing & Delivery  ◀── delivers
+  → the populated operating model GROUNDS WWWD decisions (concrete nouns, not narrative)
+  → gaps + lifecycle transitions in the operating model FAN OUT into the backlog
+  → Build Studio executes the engineering; the operating model drives the business backlog
+```
+
+The DPPM dependency hierarchy (G252 §4, verified) is the spine: **Provided Externally** and **Provided Internally** both depend on **Foundational**, which is deployed and supported by **Manufacture & Delivery**. Every internal activity must trace *up* to a customer-facing offer. That traceability is what gives "traditional IT" line of sight to the customer — the thing the paper says is missing in most enterprises.
+
+### 2.1 Relationship to the existing maturity spec
+
+This spec and the [Four-Portfolio Maturity](2026-05-21-four-portfolio-agent-control-plane-maturity-design.md) spec are **complementary, not overlapping**:
+
+| | Maturity spec (2026-05-21) | This spec (BOM wiring) |
+|---|---|---|
+| **Subject** | DPF's own agent control plane capabilities | Each customer company's business offer & workforce |
+| **Scope** | `dpf_dogfood` / `canonical` (the recursion) | `customer_overlay` / `canonical` (generalization to all businesses) |
+| **Question** | "How mature is *our* capability vs. a vendor category?" | "What does *this company* sell, who does the work, and what's the gap?" |
+| **Drives** | Investment/operations/productization of the platform | Population of the two business portfolios + business backlog |
+| **Shared substrate** | The four-portfolio taxonomy, `Portfolio`, `EaElement`, evidence ledger, backlog fan-out |
+
+The maturity spec measures DPF's portfolios; this spec **populates every customer's** two business portfolios so they have something to measure. They meet at the portfolio taxonomy and the backlog fan-out model.
+
+## 3. Current-State Verification
+
+Grounded by direct read of the worktree at `1470ea1c` (origin/main, 0 behind):
+
+- **Portfolios:** `packages/db/data/portfolio_registry.json` defines exactly four roots: `foundational`, `manufacturing_and_delivery`, `for_employees`, `products_and_services_sold`. Confirmed anchored to IT4IT §6.1–6.4 and DPPM.
+- **Archetype decomposition:** `packages/storefront-templates/src/activation-profile.ts` `readActivationProfile()` normalizes a `PortfolioDecomposition` with roles `foundational | manufactureAndDeliver | forEmployees | productsAndServicesSold`, scope `absent | minimal | standard | primary`. **Computed at runtime, not persisted.**
+- **Products portfolio:** `DigitalProduct.portfolioId` FK; routes `/portfolio/products/[productId]`; API `apps/web/app/api/v1/portfolio/[id]/products`. `ServiceOffering` relation exists. No archetype→offer seeding for customer offers.
+- **Employees:** `EmployeeProfile` (schema ~269–356) with department/position/manager; `/employee` route. **No portfolio FK.**
+- **AI agents:** `Agent` (schema ~1918–1961) already carries `portfolioId`, `valueStream`, `it4itSections`, `humanSupervisorId`, `hitlTierDefault`, `escalatesTo`, `delegatesTo`, `lifecycleStage`; relations `governanceProfile`, `executionConfig` (model, `dailyTokenLimit`, `perTaskTokenLimit`, memory), `toolGrants` (`AgentToolGrant`), `skills`, `coworkerNeeds` (`CoworkerCapabilityNeed`). Baseline reads via `COWORKER_READ_BASELINE_GRANTS` (`apps/web/lib/tak/agent-grants.ts`).
+- **Identity convergence:** `Principal` + `PrincipalAlias` (schema ~226–267) is the convergence target (`docs/founder-kernel/wiki/principles/principal-convergence.md`). `User` and `Agent` are pre-2026-05-09 parallel tables not yet converged.
+- **WWWD:** `seedOrgWwwdCorpus` seeds 4 pages + an org `DecisionPerspectiveProfile`. Resolver entry blocked on **BI-230C9EF7**. Active enrichment direction: **EP-CORPUS-BOOTSTRAP** (continuous corpus enrichment) and the decision-surface consolidation plan (2026-05-30) which makes the Gate the single door selecting WWWD for business decisions, WWMD for platform decisions.
+- **Backlog:** `BacklogItem` (FKs: `digitalProductId`, `taxonomyNodeId`, `epicId`), `Epic`, `EpicPortfolio` junction. No archetype/business-context generation path.
+
+**Live epic anchors to fan into (prefer over new epics):** `EP-CORPUS-BOOTSTRAP`, `EP-BIZ-CAP` (business capability map, taxonomy, employee work), `EP-WWMD-MCP` (decision-surface consolidation), `EP-AI-WORKFORCE-001` (AI workforce consolidation), plus the portfolio-ops epics.
+
+## 4. The Business Operating Model (BOM)
+
+The BOM is the structured, top-down answer to *"what is this company, operationally?"* It is **not a new table family**; it is the disciplined population + linkage of existing substrate, organized as four operating-model facets that map 1:1 to the four portfolios. The two business-critical facets are the focus of this spec.
+
+### 4.1 Facet A — Products & Services Sold (the market offer; DPPM "Provided Externally")
+
+The line-of-sight anchor. Everything else justifies its existence by tracing up to here. *(Full layered decomposition — abstract/commercial/running split, SBOM graph, unit economics, value-stream lifecycle — in §12.1.)*
+
+**What it contains, per company:** the company's actual revenue-generating offerings — for a clinic, appointment/treatment lines; for retail, product categories/SKU lines; for an MSP, the service catalog; for DPF itself (the recursion), the portal/agent control plane. Each offering is a `DigitalProduct` (or `ServiceOffering`) under `portfolioId = products_and_services_sold`, carrying:
+
+- **IT4IT lifecycle stage** (G252 §2.3): idea → designed → live → retiring → retired. Reuse `Agent.lifecycleStage`'s vocabulary pattern; add to the product record only if an audit shows no existing field carries it.
+- **Consumer domain** (who buys it) — links to the WWWD `who-we-serve` corpus.
+- **Decomposition / SBOM links** (G252 §2.3 "product ontology and SBOM"): which Foundational and Manufacturing & Delivery elements this offer depends on, and which Workforce roles deliver it. This is the dependency edge that gives IT line of sight.
+
+**Seeding (top-down):** the archetype's `PortfolioDecomposition.productsAndServicesSold` scope plus `archetype-business-context.ts` profiles seed *starter offerings* the operator confirms/edits — the same "feels understood on day one, fully editable" discipline already used for the WWWD pages. A `healthcare-wellness` install lands with appointment/treatment offering stubs; `retail-goods` with product-line stubs.
+
+### 4.2 Facet B — Workforce / "For Employees" (humans **and** AI agents; DPPM "Provided Internally" + the workforce itself)
+
+Mark's reframe: "Employees" is too narrow because it excludes the AI agent workforce. *(Full five-block agent record — Identity/NHI, Capability, Management, Governance, Planning — in §12.2.)* This facet has two halves that the current code keeps separate and that this spec unifies under the portfolio lens:
+
+1. **The workforce identities** — *who/what does the work*: humans (`User` → `EmployeeProfile`) **and** non-human identities (`Agent`). The unification target is **Principal convergence**: both resolve to a `Principal` with workforce attributes, so the portfolio can show one workforce spanning both populations.
+
+2. **What the workforce needs to be successful and contribute** — for humans: role, department, manager, tools, access; for AI agents the substrate *already exists* and must be surfaced as first-class portfolio data:
+   - **Tools** → `AgentToolGrant` + `COWORKER_READ_BASELINE_GRANTS` (what it's allowed to do)
+   - **Tokens / budget** → `AgentExecutionConfig.dailyTokenLimit` / `perTaskTokenLimit` / model assignment (what it can spend)
+   - **Skills** → `AgentSkill` (what it knows how to do)
+   - **Supervision & escalation** → `humanSupervisorId`, `escalatesTo`, `hitlTierDefault`, `delegatesTo` (how it's governed)
+   - **Value-stream alignment** → `valueStream`, `it4itSections` (where it fits in the operating model)
+   - **Unmet needs** → `CoworkerCapabilityNeed` (the gap signal — what it's missing to contribute fully)
+
+**The key move:** treat the AI agent workforce exactly like the human workforce in this portfolio — a roster with roles (value streams), needs (tools/tokens/skills), supervisors, and unmet-need gaps. A non-human identity that lacks a grant, a token budget, or a skill it needs for its value stream is a **workforce gap** — and (Facet B → §7) a backlog item, just like an unfilled human role.
+
+**Wiring gaps to close:** (a) link `EmployeeProfile` and `Agent` to `portfolioId = for_employees`; (b) a unified workforce roster view spanning both populations (gated on Principal convergence for the shared identity root, but presentable before convergence via a union projection); (c) surface `CoworkerCapabilityNeed` + human role gaps as the portfolio's "needs" lens.
+
+> **Naming:** the canonical registry key stays `for_employees` (no churn to `portfolio_registry.json`), but the operator-facing label becomes **"Workforce"** (or "Workforce & Internal Enablement"), with a `displayShort` per the maturity spec's §12.4 label-fit invariant. The DPPM "Provided Internally" digital products (the tools the workforce *consumes*) and the workforce *identities themselves* both live here — consumer and contributor in one portfolio.
+
+### 4.3 Facets C & D — Foundational and Manufacturing & Delivery (the dependency floor)
+
+Out of primary scope for this spec, but named because the two business facets **decompose into them** (the DPPM dependency chain). Each offering in Facet A and each workforce capability in Facet B declares what Foundational and Manufacturing & Delivery elements it depends on. This reuses the maturity spec's `dependsOn` DAG discipline (§10.3) at the *business* layer: an offer's effective deliverability is bounded by the maturity of the foundational + delivery elements it rests on.
+
+## 5. Grounding WWWD on the Operating Model
+
+This is how WWWD matures. Today WWWD recall (`recallWikiContext`) returns four narrative stance pages. The maturation path:
+
+1. **Land the org-profile resolver (BI-230C9EF7).** The Gate must resolve by `ownerOrganizationId` so business decisions actually run against the org profile, not fall back to `mark-dpf-platform`. This is the precondition; without it WWWD never governs anything. Aligns with the decision-surface consolidation plan (2026-05-30): one Gate, WWWD for business decisions, WWMD for platform decisions.
+
+2. **Promote operating-model facts into the WWWD corpus as structured material.** Extend `seedOrgWwwdCorpus` / the EP-CORPUS-BOOTSTRAP `enrichOrgCorpus(input)` contract so the populated portfolios become `PerspectiveMaterial`:
+   - the market offer (Facet A) → "what we sell / our offerings" material
+   - the workforce (Facet B) → "who does our work / our capacity & constraints" material
+   - goals/OKRs (captured top-down) → "what we're trying to achieve" material
+   This turns WWWD from *stance text* into *stance text grounded in concrete operating facts*, so a WWWD decision can cite "this offering's lifecycle stage" or "we have no workforce covering this value stream" — concrete, the way WWMD cites concrete principles.
+
+3. **Goals as first-class top-down input.** The WWWD layer "is predicated on knowing the goals of the company" (Mark). Capture company goals/objectives during onboarding + continuous enrichment as a dedicated corpus facet, linked to the portfolios they bear on. Goals are the leadership signal that prioritizes which portfolio gaps become backlog (§7).
+
+## 6. Top-Down Capture: where the business direction comes from
+
+The BOM is seeded and refined from the same multi-source pipeline EP-CORPUS-BOOTSTRAP already defines (`enrichOrgCorpus`), extended to populate portfolios, not just wiki pages:
+
+| Source | Feeds | Trust |
+|--------|-------|-------|
+| Archetype + business-context form (top-down, leadership) | Starter offerings (Facet A), portfolio decomposition scope, mission/goals | High — operator-confirmed |
+| Operator/coworker Q&A | Offering details, workforce roles, goals refinement | High |
+| Uploaded docs (business plan, service catalog, org chart) | Offering extraction, workforce roster, goals | Medium — derived, reviewable |
+| AI-coworker research | Market/offer benchmarking, role benchmarking | Low — human review before authoritative |
+| Connected systems of record (QuickBooks, HRIS, ERP — `boundary_adapter`) | Real offerings (invoiced items), real workforce (HRIS), supply chain | High — first-party, but adapter-attributed |
+| Coverage gaps discovered in usage | Missing offerings, missing workforce, unmet agent needs | Signal → backlog |
+
+All of it lands through the *one governed corpus contract* (EP-CORPUS-BOOTSTRAP §2), with provenance, evidence grading, dedup, freshness, and human review of low-trust material. **No new corpus store.** External systems stay conduits per the *DPF-as-integration-conduit* principle — customer brings their own account/creds; DPF never enrolls as partner.
+
+## 7. Backlog Fan-Out — making the business side autonomous
+
+This is the payoff: the business backlog becomes a *generated* artifact, the way the engineering backlog is. The operating model is the generator.
+
+**The dispatcher is the Business Capability Map (§12.3, `EP-BIZ-CAP`).** Industry convergence (TOGAF, Gartner SPM, SAFe, OKR cascades) makes the capability map the bridge object between strategy and the two portfolios: heat-map each capability (target − current); a gap closeable by hiring/upskilling/configuring-an-agent routes to **Workforce** backlog, a gap closeable by building/buying routes to **Products & Services** backlog. Prioritization composites three top-down scorers — **WSJF** (cost-of-delay × theme-alignment ÷ size), **MoAR** (objective contribution ÷ effort), and **capability-gap magnitude** — drawing against **adaptive funding guardrails per theme/portfolio**, not annual budgets. Generated items are **problems/outcomes, not prescriptive features** (Build Studio owns solution discovery), and are **proposed, never auto-committed** (PAR gate; AI prioritization is 70–85% accurate, so governance-gated by design).
+
+**Generation rules (each produces a *proposed* `BacklogItem` linked to its portfolio + the originating operating-model element):**
+
+| Operating-model condition | Generated backlog |
+|---|---|
+| Offering in Facet A with no delivery path in Manufacturing & Delivery | "Stand up delivery for `<offer>`" |
+| Offering with no Foundational dependency satisfied | "Provision foundational `<dep>` for `<offer>`" (DPPM dependency hole) |
+| Offering lifecycle transition due (idea→designed, live→retiring) | Lifecycle-advancement work |
+| Workforce gap: a value stream an offer needs has no human/agent assigned | "Assign/hire/configure workforce for `<value stream>`" |
+| AI agent `CoworkerCapabilityNeed` unmet (missing grant/token/skill) | "Grant/budget/skill `<agent>` to contribute to `<value stream>`" |
+| Goal with no portfolio activity advancing it | "No initiative serves goal `<goal>`" — the top-down accountability gap |
+| Portfolio concentration skew (one portfolio doing all the work) | Investment signal per maturity spec §12.3 |
+
+**Prioritization is WWWD-governed:** which generated items become active backlog is a *business decision*, run through the Gate against the org profile (WWWD) using the goals facet as the weighting input. This closes the loop Mark named — Build Studio is autonomous on *execution*; the operating model + WWWD make the *what-to-build-for-the-business* autonomous (proposed, governed, then handed to Build Studio).
+
+This reuses the maturity spec's §13 backlog fan-out model and the `propose-acknowledge-reassign` discipline: the platform *proposes* business backlog from operating-model gaps; the operator (or WWWD-arbitrated coworker) acknowledges before it becomes active.
+
+## 8. Phased Plan (fan-out, not one build)
+
+Each phase is an umbrella for BIs filed via the governed path (`dpf-file-backlog-item` → size → triage → link epic). Phases are ordered by dependency; early phases unblock later ones.
+
+**Phase 0 — Foundations & decisions (no user-visible change).**
+- Persist the archetype `PortfolioDecomposition` to the DB (close the "computed but never persisted" gap) so a company's portfolio shape is refinable.
+- Land **BI-230C9EF7** (org-profile resolver) — the WWWD precondition.
+- Audit: does an existing field carry product `lifecycleStage`? Does `EaElement`/`DigitalProduct` carry offering decomposition edges? (verify-substrate-first; greenfield only on a written audit.)
+- Anchor epics: `EP-CORPUS-BOOTSTRAP`, `EP-WWMD-MCP`.
+
+**Phase 1 — Products & Services Sold population (Facet A).**
+- Archetype-seeded starter offerings (editable) under `products_and_services_sold`.
+- Lifecycle stage + consumer-domain + decomposition edges on each offering.
+- Operator surface to confirm/edit the market offer (layer on existing `/portfolio` nav per maturity §12.4, not a new sub-route).
+- Anchor: `EP-BIZ-CAP`.
+
+**Phase 2 — Workforce portfolio (Facet B).**
+- Relabel `for_employees` → "Workforce"; link `EmployeeProfile` + `Agent` to the portfolio.
+- Unified workforce roster (humans + NHIs) union projection; AI-agent "needs" lens surfacing tools/tokens/skills/supervision/unmet-needs.
+- Anchor: `EP-AI-WORKFORCE-001`, `EP-BIZ-CAP`.
+
+**Phase 3 — WWWD grounding (§5).**
+- Promote Facet A + Facet B + goals into the WWWD corpus as `PerspectiveMaterial` via `enrichOrgCorpus`.
+- Verify business decisions now resolve against the org profile and cite operating-model facts.
+- Anchor: `EP-CORPUS-BOOTSTRAP`, `EP-WWMD-MCP`.
+
+**Phase 4 — Business backlog fan-out (§7, §12.3).**
+- Business Capability Map as the dispatcher: heat-map capabilities (target − current); gaps route to the Workforce or Products & Services portfolio.
+- Operating-model gap detectors → proposed `BacklogItem`s (PAR-gated), framed as problems/outcomes, not features.
+- Composite prioritization (WSJF × theme-alignment, MoAR, capability-gap magnitude) against adaptive funding guardrails; WWWD-governed, goal-weighted.
+- Hand-off to Build Studio for execution.
+- Anchor: `EP-BIZ-CAP`, portfolio-ops epics.
+
+**Phase 5 — Identity convergence (enabler, parallelizable).**
+- Converge `User`/`Agent` onto `Principal` so the workforce roster has one identity root (per `principal-convergence`). Presentable before this via union projection; convergence makes analytics/authorization uniform.
+
+## 9. Acceptance Criteria
+
+The design is successful when later implementation can prove:
+
+1. A fresh install's `products_and_services_sold` portfolio is populated with archetype-appropriate, operator-editable offerings — not DPF's software products (unless the install *is* DPF).
+2. The archetype portfolio decomposition is persisted and refinable, not recomputed-and-discarded.
+3. The "For Employees" portfolio renders as **Workforce**, listing both human (`EmployeeProfile`) and non-human (`Agent`) identities, with the AI-agent needs lens (tools/tokens/skills/supervision/unmet-needs) visible.
+4. Business decisions resolve against the **org WWWD profile** (BI-230C9EF7 landed), and WWWD answers cite concrete operating-model facts, not only stance narrative.
+5. Operating-model gaps (offering with no delivery, workforce gap, unmet agent need, unserved goal) generate **proposed** backlog items linked to their portfolio and originating element.
+6. Backlog prioritization for business items runs through the Gate against the org profile, weighted by captured goals.
+7. **No parallel substrate:** every new concept attaches to existing `Portfolio` / `DigitalProduct` / `EmployeeProfile` / `Agent` / `WikiPage` / `PerspectiveMaterial` / `BacklogItem`; any greenfield is justified by a written audit.
+8. **Conduit discipline preserved:** external systems (QuickBooks/HRIS/ERP) feed the model as `boundary_adapter` sources with attribution; DPF never becomes a partner/enrollee.
+9. Traceability: every Foundational / Manufacturing & Delivery element can trace *up* to a Products & Services Sold offering it serves (DPPM line-of-sight), or is flagged as an orphan.
+
+## 10. Risks and Mitigations
+
+| Risk | Mitigation |
+|------|------------|
+| Fabricated starter offerings read as wrong/insulting on day one | Archetype starters are broad, true, **editable** stubs (same discipline as `archetype-business-context.ts`); operator confirms before they're authoritative. |
+| WWWD grounding promotes unreviewed AI-researched claims into doctrine | EP-CORPUS-BOOTSTRAP review gates: low-trust material is human-reviewed before authoritative (§6). |
+| Duplicating the maturity spec / parallel taxonomy | §2.1 boundary: this spec *populates* the two business portfolios; the maturity spec *measures* DPF's capabilities. Shared taxonomy, distinct scope (`customer_overlay` vs `dpf_dogfood`). |
+| Treating every customer as a software factory | DPPM §10.2 / maturity §10.2: customer `Manufacturing & Delivery` reflects *their* delivery, not Build Studio; `installScope` separation. |
+| Backlog spam from naive gap detection | PAR-gated proposals + WWWD/goal-weighted prioritization; nothing auto-activates. |
+| Identity convergence is a large dependency that blocks the workforce view | Workforce roster ships on a union projection *before* convergence; convergence is a parallel enabler (Phase 5), not a blocker. |
+| Relabel churn on `portfolio_registry.json` | Keep canonical key `for_employees`; change only the display label + `displayShort`. |
+| Persisting decomposition conflicts with runtime `readActivationProfile` | Persisted value becomes the source of truth; runtime computation becomes the *seed* on first install, then refinable (seed-is-bootstrap discipline). |
+
+## 11. Open Decisions for the Implementation Plan
+
+1. Does `DigitalProduct` (or `EaElement`/`ServiceOffering`) already carry offering **lifecycle stage** and **decomposition/SBOM edges**, or is a minimal extension required? (Phase 0 audit answers.)
+2. Is the unified workforce roster a DB view, a union projection in a loader, or does it wait for Principal convergence? (Recommend: union projection now, converge later.)
+3. Where do **company goals/OKRs** live — a new `WikiPage` pageKind (`goal`), `PerspectiveMaterial`, or an existing objectives model? (verify-substrate-first.)
+4. Does business-backlog fan-out reuse the maturity spec's gap→backlog mechanism directly, or need a business-specific generator? (Prefer reuse.)
+5. Which `/portfolio` sub-tab anchors the market-offer and workforce surfaces (maturity §12.4 layer-on-existing-nav requires re-use, not a new sub-route)?
+6. How is the persisted portfolio decomposition reconciled with `readActivationProfile()` on re-install/upgrade?
+
+These resolve in the implementation plan after the Phase 0 schema/route audit.
+
+---
+
+## 12. Industry-Grounded Facet Decomposition (2024–2026 research)
+
+This section deepens the two business-critical facets and the strategy→backlog engine with the current external state of the art, so the implementation BIs carry concrete structure rather than re-derive it. Sources are listed in §13 and tagged inline as `[Sn]`. Lineage note: IT4IT's "Digital Product" backbone originates in Open Group White Paper **W205, *The Shift to Digital Product* (Bodman & Warfield, 2020)** `[S3f]` — i.e. this spec builds directly on the founder's own published framework.
+
+### 12.1 Facet A — Products & Services Sold: layered decomposition
+
+The frameworks (IT4IT v3 Digital Product Backbone, TM Forum SID/Open APIs, ServiceNow CSDM 4.0) converge on one rule: **separate the abstract definition, the commercial offer, and the running instance — they have three different lifecycles. Conflating them is the #1 modeling error these standards exist to fix** `[S1a][S1c]`. The IT4IT v3 backbone threads exactly these objects through the seven value streams `[S3b][S3c]`:
+
+| Level | Canonical object (IT4IT v3 / SID) | Owning value stream | Key attributes to persist |
+|-------|-----------------------------------|---------------------|---------------------------|
+| **Strategy** | Strategic Theme → Outcome/OKR (see §12.3) | Evaluate | objective, key result, target, horizon |
+| **Abstract** | **Digital Product** / `ProductSpecification` | Evaluate → Explore | name, category, owner team, lifecycle-state, **recursive parent/child** |
+| **Design** | **Product Design** (conceptual → logical) | Explore | blueprint, target outcome, consumer domain |
+| **Build** | **Product Release** (versioned, buildable) | Integrate → Deploy | version, release notes, SBOM ref (§12.1.2) |
+| **Commercial** | **Service Offer** + `ProductOfferingPrice` + **Service Commitments** | Release | market/eligibility, **price as a separate versioned child** (one-time/recurring/usage/tiered), SLA/commitment terms |
+| **Running** | **Subscription** + **Desired/Actual Product Instance** | Consume/Fulfill → Operate | consumer, entitlement, status, deployment, telemetry |
+
+**12.1.1 Service split (do not skip).** SID's signature insight, echoed by CSDM: split the service layer into **Customer-Facing Service (CFS)** vs **Resource-Facing Service (RFS)** `[S1a]`. The same internal service can back multiple sold offerings; modeling them as one hides cost and reuse. For DPF this is the join between a customer offer (Facet A) and the Foundational/Manufacturing capabilities it rests on (Facets C/D) — the dependency edge that gives "IT" line of sight to the customer.
+
+**12.1.2 Decomposition & SBOM.** A Digital Product decomposes recursively into sub-products/components; granular artifacts (repos, microservices, API endpoints) are themselves managed products `[S1c]`. Adopt the SBOM model the industry standardized on (CycloneDX 1.6/1.7) `[S1d]`:
+- **Typed relationship edges**: `CONTAINS`, `DEPENDS_ON`, `BUILD_TOOL_OF` — a graph, not a flat list.
+- **Internal-vs-external dependency flag** — external deps are the supply-chain risk surface (ties to the WWWD `supply-chain` corpus page already seeded).
+- **Stable component identity**: version + hash + **PURL** (package URL — the cross-ecosystem identifier).
+- SBOM as an attachable artifact per Release/Instance, so the sold portfolio inherits vulnerability/license exposure from its bill of materials.
+
+**12.1.3 Unit economics per offering.** Capture **both sides** so margin is derivable — the single most valuable metric for this portfolio `[S1d]`:
+- **Cost** via the TBM taxonomy (Cost Pools → IT Towers → Products & Services → Consumers), giving product TCO; FinOps supplies real-time cloud consumption inside the Operate stream `[S1d-tbm][S1d-finops]`.
+- **Revenue** via SID `ProductOfferingPrice` attached to the Offer.
+- **Consumer/allocation dimension** with a **showback-vs-chargeback flag** per consumer relationship (internal BU *or* external customer).
+
+**12.1.4 Lifecycle = value streams, not phases.** Evaluate and Operate run **continuously**, not as stages you exit `[S3b]`. Store `last-evaluated` / `last-reviewed` timestamps for the governance loop, plus an explicit **Retire/Sunset** terminal state (IT4IT covers retirement under Evaluate/Operate but names no stream for it `[S1b]`).
+
+### 12.2 Facet B — Workforce: the five-block agent record
+
+2025 was the year **Non-Human Identity (NHI)** became its own security category (OWASP/CSA NHI Top 10, June 2025; PCI DSS 4.0 NHI requirements mandatory March 2025) `[S2a]`. The dominant pattern: model an AI agent's workforce record with **five attribute blocks that mirror a human employee record** `[S2-net]`. DPF's existing `Agent` substrate already carries most of these — the work is surfacing them under the Workforce portfolio lens and filling gaps.
+
+| Block | What it captures (agents) | Standards / vendor pattern | DPF substrate today | Gap |
+|-------|---------------------------|----------------------------|---------------------|-----|
+| **1. Identity (NHI)** | crypto ID bound to a **named human owner at registration**, credential type/issuer/expiry, scoped access, **delegation chain** ("acting on behalf of"), lifecycle state + kill-switch | Entra Agent ID; Okta/Auth0 for AI Agents (token vault); SPIFFE/SPIRE; OAuth Token Exchange (RFC 8693) `[S2a][S2-net]` | `Principal`/`PrincipalAlias`, `humanSupervisorId` | converge `Agent`→`Principal`; persist credential/expiry + delegation |
+| **2. Capability (job + toolkit)** | model assignment (+fallback, **don't hard-pin**), **tools (MCP servers)**, skills, memory store + scope, **token/compute budget**, guardrails | MCP (donated to Linux Foundation / Agentic AI Foundation, Dec 2025) `[S2b]` | `executionConfig` (model, `dailyTokenLimit`, `perTaskTokenLimit`, memory), `toolGrants`, `AgentSkill` | surface as a per-agent **capability manifest** = the job description |
+| **3. Management (org placement)** | supervising human / **"manager of agents"**, team/value-stream, **HITL tier**, escalation path, onboarding status | McKinsey "manager of agents"; Gartner span-of-control `[S2c]` | `valueStream`, `it4itSections`, `hitlTierDefault`, `escalatesTo`, `delegatesTo`, `portfolioId` | place agents in the org chart / value stream alongside humans |
+| **4. Governance (accountability)** | **autonomy level** (observe / act-with-approval / autonomous-within-guardrails), criticality/risk labels, audit hooks, **certification cadence** (last/next review), revocation state, guardian-agent coverage | Gartner "Guardian Agents" (Reviewer/Monitor/Protector); **proportional governance — uniform governance fails** `[S2d]` | `governanceProfile`, evidence ledger, grants | **autonomy-level + criticality is the load-bearing field** — build first; add certification cadence |
+| **5. Planning (capacity)** | worker-type flag (human/agent/hybrid), **shared skill taxonomy** spanning both, capacity unit + cost (token budget = comp), **activity-level task mapping** | Deloitte activity-based blended planning `[S2e]` | `CoworkerCapabilityNeed` (unmet-need gap signal) | a common capability taxonomy + capacity/cost normalization |
+
+**The three things every governance source independently converges on** `[S2-net]` — make these invariants:
+1. **Every agent has a named human owner from registration** (no anonymous/"ghost" identities — the top NHI risk).
+2. **Every agent has an explicit autonomy tier** (proportional governance; Gartner warns 40% of enterprises will demote/decommission autonomous agents by 2027 due to governance gaps `[S2d]`).
+3. **Every agent has a deprovisioning path** (dormant agents retaining access are the #1 NHI failure mode).
+
+**Maturity honesty** `[S2-flags]`: agent *identity/authentication* is real, standardized, buyable now (MCP, SPIFFE, Entra/Okta). Agent *memory* and *authorization* (vs authentication) have **no settled standard yet** — model them but expect churn. The headline counts (150k agents/enterprise by 2028; 40k NHIs/human) are directional vendor projections, not planning-grade.
+
+### 12.3 The Business Capability Map — the bridge that joins both portfolios and dispatches the backlog
+
+The most important cross-cutting finding. Every strategy-to-execution framework (Gartner SPM, OKR cascades, TOGAF, SAFe LPM, Cagan) converges on one object spine, and the **business capability map is the bridge object and the join key between the two portfolios** `[S4-cap][S4-net]`. DPF already has `EP-BIZ-CAP` for exactly this — this research says make it load-bearing.
+
+```text
+Vision (stable, multi-year)
+  └─ Strategy / Strategic Themes      ← refreshed quarterly, OKR-formatted   [Cagan, SAFe, Gartner SPM]
+       └─ Objectives / Key Results                                            [OKR]
+            └─ Business Capabilities  ← THE BRIDGE + portfolio join key       [TOGAF]
+                 ├─ heat-map gap (target − current) → capability increment
+                 └─ routes to →  Products & Services portfolio  OR  Workforce portfolio
+                      └─ Investments / Initiatives (optioned, guardrail-funded) [Gartner SPM]
+                           └─ Epics → Backlog items (problems/outcomes, not features) [Cagan]
+```
+
+**Why this sharpens §7 (backlog fan-out):**
+- **The capability map is the dispatcher.** A capability gap closeable by hiring/upskilling/configuring-an-agent → **Workforce** backlog; closeable by building/buying product → **Products & Services** backlog `[S4-cap]`. This is the precise mechanism that routes operating-model gaps to the right portfolio.
+- **Generation is defensible from gaps, not invented.** Heat-map a capability (target vs current); a red/amber capability auto-*proposes* a candidate increment with gap size as a sizing input `[S4-cap]`. This is the most evidence-grounded *generation* path — it has provenance, satisfying DPF's governance-approves-evidence posture.
+- **Prioritization = a composite of three proven, top-down scorers** `[S4-okr][S4-safe]`, all computable:
+  1. **WSJF** = Cost of Delay ÷ Job Size, where **strategic-theme alignment inflates Cost of Delay** (SAFe) — strategy is a direct multiplier on rank.
+  2. **MoAR** = objective contribution ÷ effort (Dragonboat/OKR) — reorders as KR actuals move.
+  3. **Capability-gap magnitude** = target − current heat-map (TOGAF).
+- **Funding = adaptive guardrails per theme/portfolio, not annual budgets** `[S4-spm][S4-safe]`. Each portfolio gets a funding envelope per strategic theme; the backlog draws against it; reallocation is leadership's main lever. This is the top-down control surface.
+- **Generate problems/outcomes, not prescriptive features** (Cagan) `[S4-pom]` — Build Studio owns solution discovery. Auto-generating feature backlogs recreates the "feature factory" the product operating model rejects; generating outcome/problem backlog keeps the human/WWWD decision where it belongs.
+
+**AI's honest role (aligns exactly with DPF's PAR + governance gates)** `[S4-ai]`: empirical adoption of AI for backlog prioritization is ~7.3% today; AI identifies high-priority items 70–85% correctly — so **propose, never autonomously commit**. Ship the proven layer (multi-signal scoring + strategy-alignment filtering + candidate-generation-from-gaps, all governance-gated); pilot but don't yet trust real-time autonomous re-prioritization. **SAFe Lean Portfolio Management is the closest existing end-to-end blueprint** `[S4-safe]` and worth mining directly for the §7 implementation.
+
+### 12.4 Source-access caveat (G252 / IT4IT normative text)
+
+The Open Group's normative texts — **DPPM Guide G252** and **IT4IT v3.0.1** — sit behind Open Group SSO; the research corroborated the load-bearing facts (seven value-stream names, three→four portfolio evolution, backbone objects, dependency direction) across 3+ independent sources, but the following must be **verified verbatim against the licensed G252 PDF before being quoted as canonical** `[S3-verify]`: (1) the exact name + definition of the fourth portfolio ("Manufacture & Delivery"); (2) the dependency diagram as G252 draws it; (3) per-portfolio governance/financial/value-outcome wording. The DPF copy at `docs/Reference/digital_product_portfolio_mgmt.txt` + `docs/Reference/DigitaProductPortfolioManagement.pdf` is the authoritative local source — Phase 0 should reconcile this section's inferred mapping against it.
+
+## 13. References (industry sources, 2024–2026)
+
+**Facet A — products/services decomposition**
+- `[S1a]` TM Forum SID / GB922 Product v19.5.1 — ProductSpecification / ProductOffering / OfferingPrice / CFS-RFS: https://www.tmforum.org/resources/standard/gb922-product-v19-5/
+- `[S1b]` IT4IT v3 — Introducing Digital Product (Service Catalog demotion; Offer/Subscription): https://digital-portfolio.opengroup.org/it4it-standard/latest/DigitalProduct/introducingdigitalproduct.html
+- `[S1c]` JAVC — Digital Products & Digital Product Instances (recursive decomposition): https://javc.nl/understanding-digital-products-and-digital-product-instances-in-the-it4it-framework/
+- `[S1d]` CycloneDX specification (SBOM: components/services/dependencies, PURL): https://github.com/CycloneDX/specification ; CycloneDX vs SPDX (2026): https://sbomify.com/2026/01/15/sbom-formats-cyclonedx-vs-spdx/
+- `[S1d-tbm]` TBM Council — TBM Model & Taxonomy: https://www.tbmcouncil.org/framework/tbm-model/
+- `[S1d-finops]` FinOps Foundation × TBM Council — coexisting disciplines: https://www.finops.org/wg/finops-tbm-navigating-coexisting-disciplines/
+- ServiceNow CSDM 4.0 — Business vs Application vs Technical Service: https://www.servicenow.com/community/common-service-data-model/stop-confusing-business-applications-with-business-services-a/ta-p/3439110
+
+**Facet B — AI-agent workforce / NHI**
+- `[S2a]` World Economic Forum — Non-Human Identities & AI cybersecurity (OWASP/CSA NHI Top 10, PCI DSS 4.0): https://www.weforum.org/stories/2025/10/non-human-identities-ai-cybersecurity/ ; Microsoft Entra Agent ID: https://learn.microsoft.com/en-us/entra/agent-id/identity-professional/microsoft-entra-agent-identities-for-ai-agents ; Okta for AI Agents (token vault): https://www.okta.com/products/govern-ai-agent-identity/ ; SPIFFE for agentic AI: https://www.hashicorp.com/en/blog/spiffe-securing-the-identity-of-agentic-ai-and-non-human-actors
+- `[S2b]` Model Context Protocol → Linux Foundation / Agentic AI Foundation: https://en.wikipedia.org/wiki/Model_Context_Protocol
+- `[S2c]` McKinsey — The future of work is agentic ("manager of agents"): https://www.mckinsey.com/capabilities/people-and-organizational-performance/our-insights/the-future-of-work-is-agentic ; Gartner agent-sprawl/span-of-control: https://www.gartner.com/en/newsroom/press-releases/2026-04-28-gartner-identifies-six-steps-to-manage-artificial-intelligence-agent-sprawl
+- `[S2d]` Gartner — Guardian Agents: https://www.gartner.com/en/newsroom/press-releases/2025-06-11-gartner-predicts-that-guardian-agents-will-capture-10-15-percent-of-the-agentic-ai-market-by-2030 ; uniform governance fails: https://www.gartner.com/en/newsroom/press-releases/2026-05-26-gartner-says-applying-uniform-governance-across-ai-agents-will-lead-to-enterprise-ai-agent-failure ; SailPoint agent governance: https://www.sailpoint.com/blog/sailpoint-framework-governing-ai-agents
+- `[S2e]` Deloitte — autonomous/blended workforce planning: https://www.deloitte.com/us/en/insights/topics/talent/future-of-workforce-planning/autonomous-workforce-planning.html
+
+**IT4IT v3 / DPPM**
+- `[S3b]` IT4IT v3 — The Seven Value Streams: https://digital-portfolio.opengroup.org/it4it-standard/latest/DigitalManagement/seven-it4it-value-streams.html
+- `[S3c]` IT4IT v3 — Digital Product backbone / functional components & data model: https://digital-portfolio.opengroup.org/it4it-standard/latest/DigitalManagement/functional-components-and-data-model.html
+- `[S3f]` Open Group W205 — *The Shift to Digital Product* (Bodman & Warfield, 2020): https://publications.opengroup.org/white-papers/w205
+- `[S3-verify]` IT4IT v3.0.1 standard: https://pubs.opengroup.org/it4it/3.0.1/standard/ ; local: `docs/Reference/digital_product_portfolio_mgmt.txt`
+
+**Strategy → capability → backlog**
+- `[S4-spm]` Gartner — Strategic Portfolio Management (2025 MQ / Critical Capabilities): https://www.gartner.com/en/documents/5468395
+- `[S4-okr]` Dragonboat — Product OKRs & MoAR: https://dragonboat.io/blog/product-okrs/
+- `[S4-cap]` TOGAF — Business Capability Planning: https://pubs.opengroup.org/togaf-standard/business-architecture/business-capability-planning.html
+- `[S4-pom]` SVPG — The Product Operating Model (*Transformed*, 2024): https://www.svpg.com/the-product-operating-model-an-introduction/
+- `[S4-safe]` SAFe — Lean Portfolio Management & Strategic Themes / WSJF: https://agility-at-scale.com/practices/lean-portfolio-management/
+- `[S4-ai]` "The great divide" — empirical study, AI vs traditional backlog prioritization (2026): https://www.sciencedirect.com/science/article/pii/S2590005626002183

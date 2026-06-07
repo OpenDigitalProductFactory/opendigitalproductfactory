@@ -113,6 +113,48 @@ Respond with ONLY the JSON object, no markdown fences, no explanation.`;
 }
 
 /**
+ * Robustly parse the plan JSON from portal-inference output.
+ *
+ * The model occasionally wraps the JSON in prose/markdown fences, or — on a
+ * large plan — truncates mid-array when it hits its output ceiling. A bare
+ * JSON.parse then fails and (before this) silently stalled the build in `plan`.
+ * Strategy: markdown code-block → first-brace…last-brace slice → raw. Returns
+ * null when no strategy yields a parseable object; the caller then RETRIES the
+ * generation (which recovers truncation — a fresh, complete response).
+ */
+export function parsePlanJson(
+  output: string,
+): { fileStructure?: unknown[]; tasks?: unknown[] } | null {
+  const tryParse = (text: string): { fileStructure?: unknown[]; tasks?: unknown[] } | null => {
+    const t = text.trim();
+    if (!t) return null;
+    try {
+      const parsed = JSON.parse(t);
+      // A plan is a JSON object, never an array or scalar.
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // 1. Markdown code block (```json … ``` or ``` … ```).
+  const fence = output.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) {
+    const r = tryParse(fence[1]!);
+    if (r) return r;
+  }
+  // 2. Bare object: first "{" to last "}" (strips surrounding prose).
+  const first = output.indexOf("{");
+  const last = output.lastIndexOf("}");
+  if (first >= 0 && last > first) {
+    const r = tryParse(output.slice(first, last + 1));
+    if (r) return r;
+  }
+  // 3. Raw.
+  return tryParse(output);
+}
+
+/**
  * Auto-dispatch Plan-phase implementation-plan generation for a build that just
  * advanced from ideate → plan. Designed to be called fire-and-forget from the
  * reviewDesignDoc success path; never throws.
@@ -219,23 +261,35 @@ export async function dispatchPlanForApprovedBuild(params: {
       verifiedPaths,
     });
 
-    const response = await routeAndCall(
-      [{ role: "user" as const, content: prompt }],
-      "You are a senior software engineer creating a precise, actionable implementation plan. Respond with ONLY valid JSON.",
-      "internal",
-      { budgetClass: "quality_first" },
-    );
+    // 4. Generate + parse with a bounded retry. A single bare JSON.parse used to
+    //    silently stall the build in `plan` whenever the model wrapped the JSON
+    //    in prose or truncated a large plan mid-array. parsePlanJson handles the
+    //    wrapping; the retry recovers truncation with a fresh, complete response
+    //    (and an explicit corrective instruction on the second attempt).
+    const PLAN_GEN_MAX_ATTEMPTS = 2;
+    let planObj: { fileStructure?: unknown[]; tasks?: unknown[] } | null = null;
+    for (let attempt = 1; attempt <= PLAN_GEN_MAX_ATTEMPTS && !planObj; attempt++) {
+      const systemPrompt =
+        attempt === 1
+          ? "You are a senior software engineer creating a precise, actionable implementation plan. Respond with ONLY valid JSON."
+          : "Your previous response was not valid JSON — it was likely truncated mid-array or wrapped in prose. Respond with ONLY the COMPLETE, valid JSON object (both the fileStructure and tasks arrays fully closed). No prose, no markdown fences.";
+      const response = await routeAndCall(
+        [{ role: "user" as const, content: prompt }],
+        systemPrompt,
+        "internal",
+        { budgetClass: "quality_first" },
+      );
+      planObj = parsePlanJson(response.content);
+      if (!planObj) {
+        await log(
+          `Plan generation attempt ${attempt}/${PLAN_GEN_MAX_ATTEMPTS} returned unparseable JSON` +
+            (attempt < PLAN_GEN_MAX_ATTEMPTS ? " — retrying" : ""),
+        );
+      }
+    }
 
-    // 4. Parse JSON.
-    const rawContent = response.content.trim();
-    // Strip optional markdown fences.
-    const jsonStr = rawContent.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
-
-    let planObj: { fileStructure?: unknown[]; tasks?: unknown[] };
-    try {
-      planObj = JSON.parse(jsonStr);
-    } catch (parseErr) {
-      const msg = `Plan generation returned unparseable JSON: ${String(parseErr).slice(0, 200)}`;
+    if (!planObj) {
+      const msg = `Plan generation returned unparseable JSON after ${PLAN_GEN_MAX_ATTEMPTS} attempts`;
       await log(msg);
       return { kind: "dispatched-failure", error: msg, durationMs: Date.now() - t0 };
     }

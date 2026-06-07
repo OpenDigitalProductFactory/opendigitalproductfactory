@@ -3,13 +3,15 @@
 import { prisma } from "@dpf/db";
 import { SETUP_STEPS, type SetupStep, type StepStatus, type SetupContext } from "./setup-constants";
 import { seedOrgWwwdCorpus } from "@/lib/onboarding/seed-org-wwwd-corpus";
+import { seedPortfolioDecomposition } from "@/lib/onboarding/seed-portfolio-decomposition";
 import { applyMissionPrompt } from "@/lib/onboarding/apply-mission-prompt";
 
 /**
  * Runs once when initial setup completes: persist the captured mission into
- * the company-mission prompt (visible to every coworker) and seed the per-org
- * WWWD corpus. Fail-open and idempotent — onboarding completion must never
- * block on embedding/seeding errors, and the seed is safe to re-run.
+ * the company-mission prompt (visible to every coworker), seed the per-org
+ * WWWD corpus, and persist the per-org portfolio decomposition (BI-2D452667).
+ * Fail-open and idempotent — onboarding completion must never block on
+ * embedding/seeding errors, and the seeds are safe to re-run.
  */
 async function finalizeSetupCompletion(organizationId: string | null): Promise<void> {
   try {
@@ -26,6 +28,7 @@ async function finalizeSetupCompletion(organizationId: string | null): Promise<v
 
     await applyMissionPrompt({ mission: bc?.mission ?? null });
     await seedOrgWwwdCorpus({ organizationId: orgId });
+    await seedPortfolioDecomposition({ organizationId: orgId });
   } catch (err) {
     console.warn("[setup] mission/WWWD seeding on completion failed (fail-open):", err);
   }
