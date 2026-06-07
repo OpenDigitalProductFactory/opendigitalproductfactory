@@ -153,6 +153,30 @@ export async function runSelfUpgrade(
     }
   }
 
+  // Activity precheck — skip BEFORE any drain (mirrors the promoter precheck
+  // above). This fixes the live periodic bad-state bug (BI-F36E7510): the
+  // coordinator flips the portal to `draining` (refusing every mutation/MCP
+  // action) and THEN waits the full ~5min budget for the in-flight BuildPhaseRun
+  // / coworker loop to quiesce — but Build Studio phases routinely outlast the
+  // budget, so it times out and defers ("quiescence-deferred:
+  // build-studio.phase.plan") having refused work the entire time, then sets a
+  // cooldown and retries, repeating the drain every cycle. Snapshot the active
+  // surfaces FIRST; if anything is in flight, skip cleanly (no drain, no
+  // cooldown) and let the next tick retry once the surfaces are idle. This is the
+  // same snapshot the coordinator drains against, so "empty here" means the drain
+  // would converge immediately. force/dryRun bypass (the operator is asking now).
+  if (!params.dryRun && !params.force) {
+    const { captureActiveSessionBlockers } = await import("@/lib/self-upgrade/quiescence");
+    const snapshot = await captureActiveSessionBlockers();
+    if (snapshot.surfaces.length > 0) {
+      return {
+        skipped: true,
+        reason: "activity-in-flight",
+        surfaces: snapshot.surfaces.map((s) => s.surface),
+      };
+    }
+  }
+
   const gitRun = defaultGitRunner;
   const hostSourcePath =
     config.hostSourceMountPath ??
