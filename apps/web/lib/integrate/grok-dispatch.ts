@@ -84,6 +84,40 @@ async function ensureGrokAuth(providerId: string, containerId: string, taskSlug:
 }
 
 /**
+ * Refresh durability. After an OAuth-mode run, the Grok CLI may have refreshed its access
+ * token (and, if xAI rotates them, its refresh token) and rewritten ~/.grok/auth.json
+ * inside the build sandbox. That sandbox is ephemeral, so read the (possibly-updated)
+ * credential back out and persist it to the stored xAI credential — otherwise the next
+ * build keeps injecting the original token, which eventually goes stale.
+ *
+ * Last-write-wins under concurrent builds (acceptable for non-rotating refresh tokens;
+ * rotating-token concurrency is a known edge — see the device-code OAuth design doc).
+ * Best-effort: never fails the build.
+ */
+async function persistRefreshedGrokOAuth(providerId: string, containerId: string): Promise<void> {
+  const execAsync = lazyUtil().promisify(lazyChildProcess().exec);
+  const read = await execAsync(
+    `docker exec --user node ${containerId} sh -c "cat ~/.grok/auth.json 2>/dev/null || true"`,
+    { timeout: 5_000 },
+  ).catch(() => ({ stdout: "" }));
+  const blob = String((read as { stdout?: string }).stdout ?? "").trim();
+  if (!blob.startsWith("{")) return;
+
+  const current = await getDecryptedCredential(providerId);
+  if (current?.cachedToken && current.cachedToken.trim() === blob) return; // unchanged — no write
+
+  const [{ prisma }, { encryptSecret }] = await Promise.all([
+    import("@dpf/db"),
+    import("@/lib/credential-crypto"),
+  ]);
+  await prisma.credentialEntry.update({
+    where: { providerId },
+    data: { cachedToken: encryptSecret(blob), status: "ok" },
+  });
+  console.log(`[grok-dispatch] persisted refreshed Grok OAuth token for "${providerId}".`);
+}
+
+/**
  * Ensure the sandbox /workspace is writable by the node user (uid 1000) and
  * that git is configured for it. Matches the prep done for Claude Code runs
  * (prevents root-owned file issues when the CLI or subsequent steps write).
@@ -361,6 +395,14 @@ export async function dispatchGrokTask(params: {
         reject(err);
       });
     });
+
+    // Refresh durability: persist any token the CLI refreshed during this run so the
+    // stored credential stays current across ephemeral build sandboxes (best-effort).
+    if (grokAuth.mode === "oauth") {
+      await persistRefreshedGrokOAuth(providerId, containerId).catch((e) => {
+        console.warn(`[grok-dispatch] could not persist refreshed Grok OAuth token: ${(e as Error).message}`);
+      });
+    }
 
     // Best-effort JSON extraction (Grok CLI may add --json later; today mostly text)
     let content: string;

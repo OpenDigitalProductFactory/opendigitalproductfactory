@@ -55,16 +55,17 @@ Verified empirically (grok 0.2.32 in a node:24-alpine + gcompat container):
 - `grok-dispatch.ts`: `ensureGrokAuth` returns a mode; injects `~/.grok/auth.json` for OAuth, `XAI_API_KEY` otherwise; runner script branches.
 - `lib/actions/grok-device-login.ts`: `startGrokDeviceLogin` + `completeGrokDeviceLogin`.
 
-## Remaining phases
-- **Slice 2 — operator UX**: a "Sign in to Grok" affordance on the Build Studio / External
-  Services provider card that calls start → shows the URL+code → polls complete. (Mirror
-  the existing OAuth connect button.)
-- **Slice 3 — AI-Coworker control**: MCP tools wrapping start/complete so the Coworker can
-  drive setup (per the "AI Coworker as conduit" principle). Slots into the Build-Engine
-  Provisioning capability (separate design).
-- **Slice 4 — refresh durability**: the CLI self-refreshes inside ephemeral build
-  sandboxes, but that refreshed token doesn't persist back to the stored credential.
-  Re-capture or persist-on-refresh so the stored refresh token can't go stale long-term.
+## Slices (status)
+- **Slice 2 — operator UX** ✅ (#1622): "Sign in to Grok" card on the xAI provider page —
+  start → shows URL+code → polls complete.
+- **Slice 3 — AI-Coworker control** ✅ (#1624): `grok_signin_start` / `grok_signin_status`
+  MCP tools over the shared auth-free core, so the Coworker can drive setup.
+- **Slice 4 — refresh durability** ✅ (this PR): after an OAuth-mode dispatch run,
+  `grok-dispatch` reads the (possibly CLI-refreshed) `~/.grok/auth.json` back out of the
+  ephemeral build sandbox and persists it to the stored xAI credential, so the next build
+  injects the latest token instead of the original (which would eventually go stale).
+  Last-write-wins under concurrent builds; rotating-refresh-token concurrency is the one
+  remaining edge (acceptable today — non-rotating tokens just refresh again next run).
 
 ## Open items / constraints
 - Requires the grok-equipped sandbox image (#1613).
