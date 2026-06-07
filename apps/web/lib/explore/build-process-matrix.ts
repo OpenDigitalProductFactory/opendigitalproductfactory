@@ -526,26 +526,19 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
       return { allowed: true };
     }
     case "uxVerification-not-blocking": {
+      // ADVISORY (operator decision 2026-06-07): UX verification is recorded for
+      // visibility but does NOT hard-block ship — mirroring the informational
+      // unit-test gate ("test failures are informational"). A CLI-developed,
+      // committed, serving build ships on the CLI's evidence; browser-use UX
+      // results (incl. null = not-run, and failed) are advisory, surfaced in the
+      // Review panel rather than blocking. The QUALITY of the UX check itself
+      // (browser-use agent producing genuine, non-vacuous results) is tracked
+      // separately in BI-4BD81F3B. Only the transient "running" state briefly
+      // defers, since the check is genuinely in-flight at that moment.
       const status = evidence.uxVerificationStatus as
         | "running" | "complete" | "failed" | "skipped" | null | undefined;
-      const hasAcceptance = Array.isArray(evidence.acceptanceCriteria)
-        && (evidence.acceptanceCriteria as unknown[]).length > 0;
       if (status === "running") {
         return { allowed: false, reason: "UX verification is still running. Retry in a moment." };
-      }
-      if ((status === null || status === undefined) && hasAcceptance) {
-        return { allowed: false, reason: "UX verification has not run yet." };
-      }
-      if (evidence.uxTestResults) {
-        const uxResults = evidence.uxTestResults as Array<{ passed?: boolean; step?: string }>;
-        const failed = uxResults.filter((s) => !s.passed);
-        if (failed.length > 0) {
-          const stepNames = failed.map((s) => s.step).filter(Boolean).slice(0, 3).join("; ");
-          return {
-            allowed: false,
-            reason: `UX verification failed: ${stepNames || `${failed.length} step(s)`}. Fix issues before shipping.`,
-          };
-        }
       }
       return { allowed: true };
     }
