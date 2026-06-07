@@ -9,6 +9,9 @@ const prismaMock = vi.hoisted(() => ({
 
 vi.mock("@dpf/db", () => ({ prisma: prismaMock }));
 
+const inngestMock = vi.hoisted(() => ({ send: vi.fn() }));
+vi.mock("@/lib/queue/inngest-client", () => ({ inngest: inngestMock }));
+
 import { createPlatformIssueReport } from "./platform-issue-reports";
 import { ISSUE_REPORT_STATUS } from "./issue-report-status";
 
@@ -18,6 +21,8 @@ beforeEach(() => {
   prismaMock.digitalProduct.findUnique.mockReset();
   prismaMock.platformIssueReport.create.mockResolvedValue({});
   prismaMock.digitalProduct.findUnique.mockResolvedValue({ id: "dp-portal" });
+  inngestMock.send.mockReset();
+  inngestMock.send.mockResolvedValue(undefined);
 });
 
 describe("createPlatformIssueReport", () => {
@@ -193,5 +198,39 @@ describe("createPlatformIssueReport", () => {
       source: "manual",
     });
     expect(result).toEqual({ reportId: expect.stringMatching(/^PIR-/) });
+  });
+
+  // EP-INTAKE-UNIFY Phase 4 (BI-EDFBE081): immediate projection event.
+  it("emits quality/issue-report.created for an OPEN report", async () => {
+    const { reportId } = await createPlatformIssueReport({
+      type: "user_report",
+      title: "Test",
+      source: "manual",
+    });
+    expect(inngestMock.send).toHaveBeenCalledWith({
+      name: "quality/issue-report.created",
+      data: { reportId },
+    });
+  });
+
+  it("does NOT emit for a support-flow report (status != open)", async () => {
+    await createPlatformIssueReport({
+      type: "user_report",
+      title: "Test",
+      source: "manual",
+      supportSessionId: "sess-1",
+      status: ISSUE_REPORT_STATUS.SUPPORT_TRIAGE,
+    });
+    expect(inngestMock.send).not.toHaveBeenCalled();
+  });
+
+  it("is non-fatal when the projection event fails to send", async () => {
+    inngestMock.send.mockRejectedValueOnce(new Error("inngest down"));
+    const result = await createPlatformIssueReport({
+      type: "runtime_error",
+      title: "Test",
+      source: "crash_boundary",
+    });
+    expect(result.reportId).toMatch(/^PIR-/);
   });
 });

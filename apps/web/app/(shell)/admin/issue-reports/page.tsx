@@ -19,7 +19,7 @@ export default async function AdminIssueReportsPage() {
           <Link href="/ops" className="text-[var(--dpf-accent)] hover:underline">
             backlog item
           </Link>
-          {" "}with workType=bug on the next 15-minute triage tick.
+          {" "}with workType=bug immediately on report (a 15-minute sweep is the safety net).
         </p>
       </div>
 
