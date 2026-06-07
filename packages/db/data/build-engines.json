@@ -1,0 +1,50 @@
+{
+  "claude": {
+    "binary": "claude",
+    "verify": {
+      "command": "claude --version",
+      "versionRegex": "claude[- ]cli[/ ]([0-9.]+)"
+    },
+    "bakeInDefault": true,
+    "recipes": [
+      {
+        "method": "agentic",
+        "muslSafe": true,
+        "requiresEgress": true,
+        "priority": 1
+      }
+    ]
+  },
+  "codex": {
+    "binary": "codex",
+    "verify": {
+      "command": "codex --version",
+      "versionRegex": "([0-9.]+)"
+    },
+    "bakeInDefault": false,
+    "recipes": [
+      {
+        "method": "agentic",
+        "muslSafe": true,
+        "requiresEgress": true,
+        "priority": 2
+      }
+    ]
+  },
+  "grok": {
+    "binary": "grok",
+    "verify": {
+      "command": "grok --version",
+      "versionRegex": "([0-9.]+)"
+    },
+    "bakeInDefault": false,
+    "recipes": [
+      {
+        "method": "agentic",
+        "muslSafe": false,
+        "requiresEgress": true,
+        "priority": 3
+      }
+    ]
+  }
+}
