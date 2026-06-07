@@ -11,20 +11,32 @@ export type SixCKey =
 
 export type ReadinessState = "good" | "attention" | "blocked" | "unknown";
 
-export type ReadinessSignalInput = {
-  hasFreshEvidence?: boolean;
-  hasActiveConnection?: boolean;
-  hasActor?: boolean;
-  hasCadence?: boolean;
-  hasContainment?: boolean;
+export type ReadinessAction = {
+  label: string;
+  href: string;
 };
 
 export type ReadinessCell = {
   key: SixCKey;
   state: ReadinessState;
   label: string;
+  /** What this dimension means in general (the column legend). */
   description: string;
+  /** Why this cell is in its current state, with the real numbers behind it. */
+  reason: string;
   href?: string;
+  /** Recommended next step. Present on every non-good cell. */
+  action?: ReadinessAction;
+};
+
+export type ReadinessAttentionItem = {
+  id: string;
+  domain: string;
+  dimension: string;
+  state: Exclude<ReadinessState, "good">;
+  reason: string;
+  href: string;
+  actionLabel?: string;
 };
 
 export type ContainmentSignalInput = {
@@ -185,38 +197,67 @@ const SEVERITY_RANK: Record<CommandSeverity, number> = {
   info: 2,
 };
 
-export function deriveReadinessCell(
-  key: SixCKey,
-  input: ReadinessSignalInput,
-): ReadinessCell {
-  let state: ReadinessState;
+type CellGrade = {
+  state: ReadinessState;
+  reason: string;
+  action?: ReadinessAction;
+};
 
-  switch (key) {
-    case "context":
-    case "confidence":
-      state = input.hasFreshEvidence ? "good" : "attention";
-      break;
-    case "connections":
-      state = input.hasActiveConnection ? "good" : "attention";
-      break;
-    case "capabilities":
-      state = input.hasActor ? "good" : "blocked";
-      break;
-    case "cadence":
-      state = input.hasCadence ? "good" : "unknown";
-      break;
-    case "containment":
-      state = input.hasContainment ? "good" : "blocked";
-      break;
+/** "1 invoice" / "2 invoices" — concrete counts inside cell reasons. */
+function count(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+function good(reason: string): CellGrade {
+  return { state: "good", reason };
+}
+function attention(reason: string, action?: ReadinessAction): CellGrade {
+  return { state: "attention", reason, action };
+}
+function blocked(reason: string, action?: ReadinessAction): CellGrade {
+  return { state: "blocked", reason, action };
+}
+function unknown(reason: string, action?: ReadinessAction): CellGrade {
+  return { state: "unknown", reason, action };
+}
+
+const ATTENTION_RANK: Record<Exclude<ReadinessState, "good">, number> = {
+  blocked: 0,
+  attention: 1,
+  unknown: 2,
+};
+
+/**
+ * Flatten the matrix into an ordered, drill-to-action list of every cell that
+ * is not "good" — the at-a-glance "what do I actually do about this" companion
+ * to the grid. Blocked first, then attention, then unknown; ties broken by
+ * domain name. This is what makes the colored grid mean something.
+ */
+export function selectReadinessAttention(
+  readiness: BusinessDomainReadiness[],
+): ReadinessAttentionItem[] {
+  const items: ReadinessAttentionItem[] = [];
+
+  for (const row of readiness) {
+    for (const cell of row.cells) {
+      if (cell.state === "good") continue;
+      items.push({
+        id: `${row.id}-${cell.key}`,
+        domain: row.label,
+        dimension: cell.label,
+        state: cell.state,
+        reason: cell.reason,
+        href: cell.action?.href ?? cell.href ?? row.href,
+        actionLabel: cell.action?.label,
+      });
+    }
   }
 
-  return {
-    key,
-    label: SIX_C_LABELS[key],
-    description: SIX_C_DESCRIPTIONS[key],
-    state,
-    href: SIX_C_HREFS[key],
-  };
+  return items.sort(
+    (a, b) =>
+      ATTENTION_RANK[a.state] - ATTENTION_RANK[b.state] ||
+      a.domain.localeCompare(b.domain),
+  );
 }
 
 export function deriveContainmentState(input: ContainmentSignalInput): ReadinessState {
@@ -536,55 +577,285 @@ function buildSnapshot(metrics: WorkspaceMetrics): SnapshotItem[] {
   ];
 }
 
+/**
+ * Containment for action-capable AI coworkers. Reuses the graded
+ * `deriveContainmentState` (good/attention/blocked) and attaches an honest
+ * reason + next action to each outcome.
+ */
+function aiContainmentGrade(input: WorkspaceCommandCenterInput): CellGrade {
+  const state = deriveContainmentState({
+    hasSideEffectAction: input.metrics.agentCount > 0,
+    hasApprovalPath: input.pendingActionProposalCount > 0 || input.recentReceiptCount > 0,
+    hasRouteScope: input.metrics.activeProviderCount > 0,
+  });
+
+  if (state === "blocked") {
+    return blocked("Coworkers can act but an approval path or route scope is missing", {
+      label: "Configure authority",
+      href: "/platform/ai/authority",
+    });
+  }
+  if (state === "attention") {
+    return attention("Route scope is unconfirmed for action-capable coworkers", {
+      label: "Review authority",
+      href: "/platform/ai/authority",
+    });
+  }
+  return good(
+    input.pendingActionProposalCount > 0
+      ? `${count(input.pendingActionProposalCount, "action")} awaiting approval — controls active`
+      : "Approvals and route scope in place",
+  );
+}
+
+/**
+ * Build the 6x6 domain-readiness matrix. Each (domain x C) cell derives from a
+ * DISTINCT real signal, uses the full good/attention/blocked/unknown gradient,
+ * and carries a concrete reason plus a recommended next action. Where no real
+ * signal exists for a cell, it renders `unknown` honestly rather than a
+ * fabricated green.
+ */
 function buildReadinessMatrix(input: WorkspaceCommandCenterInput): BusinessDomainReadiness[] {
-  const { metrics } = input;
+  const m = input.metrics;
 
   return [
     readinessRow("ai-workforce", "AI workforce", "/platform/ai/operations-map", {
-      hasFreshEvidence: input.recentReceiptCount > 0 && input.lowConfidenceAssessmentCount === 0,
-      hasActiveConnection: metrics.activeProviderCount > 0 && input.agentsWithBrokenProviders === 0,
-      hasActor: metrics.agentCount > 0,
-      hasCadence: input.activeScheduledTaskCount > 0,
-      hasContainment: deriveContainmentState({
-        hasSideEffectAction: metrics.agentCount > 0,
-        hasApprovalPath: input.pendingActionProposalCount > 0 || input.recentReceiptCount > 0,
-        hasRouteScope: metrics.activeProviderCount > 0,
-      }) !== "blocked",
+      context:
+        m.documentCount > 0 || m.eaViewCount > 0
+          ? good(`${count(m.documentCount, "document")}, ${count(m.eaViewCount, "architecture view")}`)
+          : attention("No operating documents or architecture views recorded", {
+              label: "Add operating knowledge",
+              href: "/wiki",
+            }),
+      connections:
+        m.activeProviderCount === 0
+          ? blocked("No active AI provider — coworkers cannot respond", {
+              label: "Activate an AI provider",
+              href: "/platform/ai/providers",
+            })
+          : input.agentsWithBrokenProviders > 0
+            ? attention(`${count(input.agentsWithBrokenProviders, "coworker")} pinned to an inactive provider`, {
+                label: "Review provider pins",
+                href: "/platform/ai",
+              })
+            : good(`${count(m.activeProviderCount, "active provider")}`),
+      capabilities:
+        m.agentCount === 0
+          ? blocked("No AI coworkers configured", { label: "Add an AI coworker", href: "/platform/ai" })
+          : good(`${count(m.agentCount, "AI coworker")} able to act`),
+      cadence:
+        input.overdueScheduledTaskCount > 0
+          ? attention(`${count(input.overdueScheduledTaskCount, "scheduled cadence", "scheduled cadences")} overdue`, {
+              label: "Clear overdue cadence",
+              href: "/workspace/my-queue",
+            })
+          : input.activeScheduledTaskCount > 0
+            ? good(`${count(input.activeScheduledTaskCount, "scheduled cadence", "scheduled cadences")} active`)
+            : unknown("No scheduled coworker cadence yet", {
+                label: "Schedule recurring work",
+                href: "/workspace/my-queue",
+              }),
+      confidence:
+        input.recentReceiptCount === 0
+          ? attention("No valid execution receipts in the last 7 days", {
+              label: "Review AI operations",
+              href: "/platform/ai/operations-map",
+            })
+          : input.lowConfidenceAssessmentCount > 0
+            ? attention(`${count(input.lowConfidenceAssessmentCount, "low-confidence self-assessment")}`, {
+                label: "Review coworker capability",
+                href: "/platform/ai",
+              })
+            : input.recentFailedToolExecutionCount > 0
+              ? attention(`${count(input.recentFailedToolExecutionCount, "failed tool execution")} in the last 7 days`, {
+                  label: "Review failures",
+                  href: "/platform/ai/operations-map",
+                })
+              : good(`${count(input.recentReceiptCount, "valid receipt")} recently, no low-confidence signals`),
+      containment: aiContainmentGrade(input),
     }),
+
     readinessRow("customers-delivery", "Customers and delivery", "/customer", {
-      hasFreshEvidence: metrics.customerAccountCount > 0 || metrics.buildCount > 0,
-      hasActiveConnection: metrics.customerAccountCount > 0,
-      hasActor: metrics.activeEmployeeCount > 0 || metrics.agentCount > 0,
-      hasCadence: metrics.inProgressBacklogCount > 0 || metrics.buildCount > 0,
-      hasContainment: metrics.userCount > 0,
+      context:
+        m.customerAccountCount > 0 || m.buildCount > 0
+          ? good(`${count(m.customerAccountCount, "customer account")}, ${count(m.buildCount, "build")}`)
+          : attention("No customer accounts or delivery builds yet", { label: "Add a customer", href: "/customer" }),
+      connections:
+        m.customerAccountCount > 0
+          ? good(`${count(m.customerAccountCount, "customer account")} linked`)
+          : attention("No customer systems connected", { label: "Connect a customer", href: "/customer" }),
+      capabilities:
+        m.activeEmployeeCount === 0 && m.agentCount === 0
+          ? blocked("No people or coworkers available to deliver", { label: "Add a team member", href: "/employee" })
+          : good(`${count(m.activeEmployeeCount, "active team member")}, ${count(m.agentCount, "coworker")}`),
+      cadence:
+        m.inProgressBacklogCount > 0 || m.buildCount > 0
+          ? good(`${count(m.inProgressBacklogCount, "item")} in progress`)
+          : unknown("No delivery work in motion", { label: "Plan work", href: "/ops" }),
+      confidence:
+        input.blockedTaskRunCount > 0 || input.recentFailedTaskRunCount > 0
+          ? attention(
+              `${count(input.blockedTaskRunCount + input.recentFailedTaskRunCount, "delivery run")} blocked or failed`,
+              { label: "Review blocked work", href: "/platform/ai/operations-map" },
+            )
+          : good("No blocked or failed delivery runs"),
+      containment:
+        m.userCount === 0
+          ? blocked("No platform users — delivery access is not governed", { label: "Add users", href: "/admin" })
+          : good(`${count(m.userCount, "governed user")}`),
     }),
+
     readinessRow("finance", "Finance", "/finance", {
-      hasFreshEvidence: metrics.financeOutstandingCount > 0 || metrics.financeUnpaidBillCount > 0,
-      hasActiveConnection: true,
-      hasActor: metrics.activeEmployeeCount > 0,
-      hasCadence: metrics.financeOverdueCount === 0,
-      hasContainment: metrics.financeOverdueCount === 0,
+      context:
+        m.financeOutstandingCount > 0 || m.financeUnpaidBillCount > 0
+          ? good(
+              `${count(m.financeOutstandingCount, "outstanding invoice")}, ${count(m.financeUnpaidBillCount, "bill")} due`,
+            )
+          : attention("No invoices or bills recorded yet", { label: "Set up finance", href: "/finance" }),
+      connections:
+        m.financeOutstandingCount > 0 || m.financeUnpaidBillCount > 0
+          ? good("Finance ledger is active")
+          : unknown("No finance activity to confirm connected systems", {
+              label: "Connect accounting / payments",
+              href: "/platform/tools/integrations",
+            }),
+      capabilities:
+        m.activeEmployeeCount === 0
+          ? blocked("No active staff to own finance", { label: "Add finance staff", href: "/employee" })
+          : good(`${count(m.activeEmployeeCount, "active team member")}`),
+      cadence:
+        m.financeOverdueCount > 0
+          ? attention(`${count(m.financeOverdueCount, "overdue invoice")}`, {
+              label: "Chase overdue invoices",
+              href: "/finance",
+            })
+          : good("No overdue invoices"),
+      confidence:
+        m.financeUnpaidBillCount > 0
+          ? attention(`${count(m.financeUnpaidBillCount, "approved bill")} awaiting payment`, {
+              label: "Review payables",
+              href: "/finance",
+            })
+          : good("No payables outstanding"),
+      containment:
+        m.financeOverdueCount > 0
+          ? attention("Overdue receivables are not yet contained", { label: "Review receivables", href: "/finance" })
+          : good("Receivables within terms"),
     }),
+
     readinessRow("compliance", "Compliance", "/compliance", {
-      hasFreshEvidence: metrics.activeObligationCount > 0 || metrics.publishedPolicyCount > 0,
-      hasActiveConnection: metrics.publishedPolicyCount > 0,
-      hasActor: metrics.implementedControlCount > 0 || metrics.agentCount > 0,
-      hasCadence: metrics.overdueActionCount === 0,
-      hasContainment: metrics.implementedControlCount > 0 && metrics.openIncidentCount === 0,
+      context:
+        m.activeObligationCount > 0 || m.publishedPolicyCount > 0
+          ? good(
+              `${count(m.activeObligationCount, "obligation")}, ${count(m.publishedPolicyCount, "published policy", "published policies")}`,
+            )
+          : attention("No obligations or published policies", { label: "Set up compliance", href: "/compliance" }),
+      connections:
+        m.publishedPolicyCount > 0
+          ? good(`${count(m.publishedPolicyCount, "published policy", "published policies")}`)
+          : attention("No published policies", { label: "Publish a policy", href: "/compliance" }),
+      capabilities:
+        m.implementedControlCount === 0 && m.agentCount === 0
+          ? blocked("No controls or coworkers to act", { label: "Implement controls", href: "/compliance" })
+          : good(`${m.implementedControlCount}/${m.totalControlCount} controls implemented`),
+      cadence:
+        m.overdueActionCount > 0
+          ? attention(`${count(m.overdueActionCount, "overdue corrective action")}`, {
+              label: "Clear overdue actions",
+              href: "/compliance",
+            })
+          : good("No overdue corrective actions"),
+      confidence:
+        m.openIncidentCount > 0
+          ? attention(`${count(m.openIncidentCount, "open incident")}`, {
+              label: "Investigate incidents",
+              href: "/compliance",
+            })
+          : m.pendingAlertCount > 0
+            ? attention(`${count(m.pendingAlertCount, "pending regulatory alert")}`, {
+                label: "Review alerts",
+                href: "/compliance",
+              })
+            : good("No open incidents or pending alerts"),
+      containment:
+        m.implementedControlCount === 0
+          ? blocked("No implemented controls", { label: "Implement controls", href: "/compliance" })
+          : m.openIncidentCount > 0
+            ? attention(`${count(m.openIncidentCount, "open incident")} not yet contained`, {
+                label: "Contain incidents",
+                href: "/compliance",
+              })
+            : good("Controls implemented, no open incidents"),
     }),
+
     readinessRow("people", "People", "/employee", {
-      hasFreshEvidence: metrics.employeeCount > 0,
-      hasActiveConnection: metrics.activeEmployeeCount > 0,
-      hasActor: metrics.activeEmployeeCount > 0,
-      hasCadence: input.activeScheduledTaskCount > 0 || metrics.activeEmployeeCount > 0,
-      hasContainment: metrics.userCount > 0,
+      context:
+        m.employeeCount > 0
+          ? good(`${count(m.employeeCount, "employee profile")} on record`)
+          : attention("No employee profiles recorded", { label: "Add people", href: "/employee" }),
+      connections:
+        m.activeEmployeeCount > 0
+          ? good(`${count(m.activeEmployeeCount, "active team member")}`)
+          : attention("No active team members", { label: "Activate team members", href: "/employee" }),
+      capabilities:
+        m.activeEmployeeCount === 0
+          ? blocked("No active people able to act", { label: "Add active staff", href: "/employee" })
+          : good(`${count(m.activeEmployeeCount, "active team member")}`),
+      cadence:
+        m.activeEmployeeCount > 0 || input.activeScheduledTaskCount > 0
+          ? good("Team available for scheduled work")
+          : unknown("No people cadence yet", { label: "Add active staff", href: "/employee" }),
+      confidence:
+        m.employeeCount === 0
+          ? unknown("No people data to assess", { label: "Add people", href: "/employee" })
+          : m.employeeCount > m.activeEmployeeCount
+            ? attention(`${count(m.employeeCount - m.activeEmployeeCount, "inactive profile")}`, {
+                label: "Review staff records",
+                href: "/employee",
+              })
+            : good("All employee profiles active"),
+      containment:
+        m.userCount === 0
+          ? blocked("No governed platform users", { label: "Add users", href: "/admin" })
+          : good(`${count(m.userCount, "governed user")}`),
     }),
+
     readinessRow("platform-delivery", "Platform delivery", "/build", {
-      hasFreshEvidence: metrics.buildCount > 0 || metrics.doneBacklogCount > 0,
-      hasActiveConnection: metrics.activeProviderCount > 0 || metrics.buildCount > 0,
-      hasActor: metrics.agentCount > 0 || metrics.activeEmployeeCount > 0,
-      hasCadence: metrics.inProgressBacklogCount > 0 || input.activeScheduledTaskCount > 0,
-      hasContainment: input.recentFailedToolExecutionCount === 0,
+      context:
+        m.buildCount > 0 || m.doneBacklogCount > 0
+          ? good(`${count(m.buildCount, "build")}, ${count(m.doneBacklogCount, "item")} delivered`)
+          : attention("No builds or delivered work yet", { label: "Start a build", href: "/build" }),
+      connections:
+        m.activeProviderCount > 0 || m.buildCount > 0
+          ? good(`${count(m.activeProviderCount, "active provider")}`)
+          : attention("No build providers or activity", {
+              label: "Activate a provider",
+              href: "/platform/ai/providers",
+            }),
+      capabilities:
+        m.agentCount === 0 && m.activeEmployeeCount === 0
+          ? blocked("No coworkers or staff to build", { label: "Add a coworker", href: "/platform/ai" })
+          : good(`${count(m.agentCount, "coworker")}, ${count(m.activeEmployeeCount, "active staff member")}`),
+      cadence:
+        m.inProgressBacklogCount > 0
+          ? good(`${count(m.inProgressBacklogCount, "item")} in progress`)
+          : input.activeScheduledTaskCount > 0
+            ? good(`${count(input.activeScheduledTaskCount, "scheduled cadence", "scheduled cadences")} active`)
+            : unknown("No delivery work in motion", { label: "Plan work", href: "/ops" }),
+      confidence:
+        input.recentFailedToolExecutionCount > 0 || input.recentFailedTaskRunCount > 0
+          ? attention(
+              `${count(input.recentFailedToolExecutionCount + input.recentFailedTaskRunCount, "failed execution")} in the last 7 days`,
+              { label: "Review failures", href: "/platform/ai/operations-map" },
+            )
+          : good("No recent build or tool failures"),
+      containment:
+        input.blockedTaskRunCount > 0
+          ? blocked(`${count(input.blockedTaskRunCount, "build task")} blocked awaiting input`, {
+              label: "Resolve blockers",
+              href: "/platform/ai/operations-map",
+            })
+          : good("Build runs within guardrails"),
     }),
   ];
 }
@@ -593,13 +864,21 @@ function readinessRow(
   id: string,
   label: string,
   href: string,
-  signals: ReadinessSignalInput,
+  grades: Record<SixCKey, CellGrade>,
 ): BusinessDomainReadiness {
   return {
     id,
     label,
     href,
-    cells: SIX_C_KEYS.map((key) => deriveReadinessCell(key, signals)),
+    cells: SIX_C_KEYS.map((key) => ({
+      key,
+      label: SIX_C_LABELS[key],
+      description: SIX_C_DESCRIPTIONS[key],
+      state: grades[key].state,
+      reason: grades[key].reason,
+      href: SIX_C_HREFS[key],
+      action: grades[key].action,
+    })),
   };
 }
 
