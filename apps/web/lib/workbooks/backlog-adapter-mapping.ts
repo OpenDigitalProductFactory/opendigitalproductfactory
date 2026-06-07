@@ -9,7 +9,6 @@ import {
   BACKLOG_STATUS_VALUES,
   BACKLOG_WORK_TYPE_VALUES,
   BACKLOG_SOURCE_VALUES,
-  type BacklogItemInput,
   type BacklogStatus,
   type BacklogWorkType,
   type BacklogSource,
@@ -83,20 +82,6 @@ export const BACKLOG_COLUMNS: ColumnDefinition[] = [
   { columnId: "updatedAt", name: "Updated", fieldType: "datetime", position: 9, required: false, editable: false, width: 170 },
 ];
 
-/** The subset of BacklogItem fields needed to build a complete update payload. */
-export interface BacklogEditableExisting {
-  title: string;
-  type: string;
-  status: string;
-  workType: string | null;
-  source: string | null;
-  priority: number | null;
-  body: string | null;
-  epicId: string | null;
-  digitalProductId: string | null;
-  taxonomyNodeId: string | null;
-}
-
 /** Map a backlog record (list/detail shape) into a grid row keyed by field name. */
 export function backlogItemToGridRow(item: {
   itemId: string;
@@ -127,54 +112,66 @@ export function backlogItemToGridRow(item: {
   };
 }
 
-function asNumberOrUndef(v: CellValue | undefined): number | undefined {
-  if (typeof v === "number") return v;
-  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
-  return undefined;
+/** Patch of only the backlog fields a grid edit changed. Structurally matches
+ *  BacklogFieldPatch in lib/actions/backlog.ts (kept separate so this stays pure). */
+export interface BacklogPatch {
+  title?: string;
+  status?: BacklogStatus;
+  priority?: number | null;
+  type?: "product" | "portfolio";
+  workType?: BacklogWorkType;
+  source?: BacklogSource;
+  body?: string | null;
 }
 
-function asStringOrUndef(v: CellValue | undefined): string | undefined {
-  return typeof v === "string" && v !== "" ? v : undefined;
+function asNumber(v: CellValue): number | null {
+  if (typeof v === "number") return v;
+  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
+  return null;
+}
+
+function asStr(v: CellValue): string {
+  if (typeof v === "string") return v;
+  return v == null ? "" : String(v);
 }
 
 /**
- * Build a complete BacklogItemInput by overlaying grid changes (keyed by field
- * name) onto the existing record. Throws if a required field would be empty —
- * we never silently invent a workType/type/title.
+ * Build a partial patch from the grid's changed cells (keyed by field name).
+ * Only includes fields actually present in `changes`, and only the changed
+ * fields are touched — untouched required fields (e.g. a null workType on a
+ * legacy item) are left alone, so editing one cell no longer requires the whole
+ * record to be valid. Empty values for the required selects (status/type/
+ * workType/source) are treated as no-ops rather than invalid writes.
  */
-export function buildBacklogInput(
-  existing: BacklogEditableExisting,
-  changes: Record<string, CellValue>,
-): BacklogItemInput {
-  const pick = <T>(field: string, fallback: T): CellValue | T =>
-    field in changes ? changes[field] : fallback;
-
-  const title = String(pick("title", existing.title) ?? "").trim();
-  if (!title) throw new Error("Title cannot be empty");
-
-  const type = String(pick("type", existing.type)) as "product" | "portfolio";
-
-  const workTypeRaw = pick("workType", existing.workType);
-  const workType = (typeof workTypeRaw === "string" ? workTypeRaw : "") as BacklogWorkType;
-  if (!workType) {
-    throw new Error("This item is missing a work type — set it in the backlog form first");
+export function buildBacklogPatch(changes: Record<string, CellValue>): BacklogPatch {
+  const patch: BacklogPatch = {};
+  if ("title" in changes) {
+    const t = asStr(changes.title).trim();
+    if (!t) throw new Error("Title cannot be empty");
+    patch.title = t;
   }
-
-  const status = String(pick("status", existing.status)) as BacklogStatus;
-
-  const sourceRaw = pick("source", existing.source ?? undefined);
-  const source = (asStringOrUndef(sourceRaw) as BacklogSource | undefined) ?? undefined;
-
-  return {
-    title,
-    type,
-    workType,
-    status,
-    source,
-    priority: asNumberOrUndef(pick("priority", existing.priority ?? undefined)),
-    body: asStringOrUndef(pick("body", existing.body ?? undefined)),
-    epicId: existing.epicId ?? undefined,
-    digitalProductId: existing.digitalProductId ?? undefined,
-    taxonomyNodeId: existing.taxonomyNodeId ?? undefined,
-  };
+  if ("status" in changes) {
+    const s = asStr(changes.status);
+    if (s) patch.status = s as BacklogStatus;
+  }
+  if ("type" in changes) {
+    const t = asStr(changes.type);
+    if (t) patch.type = t as "product" | "portfolio";
+  }
+  if ("workType" in changes) {
+    const w = asStr(changes.workType);
+    if (w) patch.workType = w as BacklogWorkType;
+  }
+  if ("source" in changes) {
+    const s = asStr(changes.source);
+    if (s) patch.source = s as BacklogSource;
+  }
+  if ("priority" in changes) {
+    patch.priority = asNumber(changes.priority);
+  }
+  if ("body" in changes) {
+    const b = asStr(changes.body).trim();
+    patch.body = b || null;
+  }
+  return patch;
 }

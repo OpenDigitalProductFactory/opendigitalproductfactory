@@ -2,8 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   BACKLOG_COLUMNS,
   backlogItemToGridRow,
-  buildBacklogInput,
-  type BacklogEditableExisting,
+  buildBacklogPatch,
 } from "./backlog-adapter-mapping";
 
 describe("BACKLOG_COLUMNS", () => {
@@ -54,47 +53,43 @@ describe("backlogItemToGridRow", () => {
   });
 });
 
-describe("buildBacklogInput", () => {
-  const existing: BacklogEditableExisting = {
-    title: "Old title",
-    type: "product",
-    status: "open",
-    workType: "bug",
-    source: "user-request",
-    priority: 2,
-    body: "old body",
-    epicId: "EP-1",
-    digitalProductId: "dp-1",
-    taxonomyNodeId: null,
-  };
-
-  it("overlays a single changed field and preserves the rest", () => {
-    const input = buildBacklogInput(existing, { status: "done" });
-    expect(input.status).toBe("done");
-    expect(input.title).toBe("Old title");
-    expect(input.workType).toBe("bug");
-    expect(input.type).toBe("product");
-    expect(input.digitalProductId).toBe("dp-1");
-    expect(input.epicId).toBe("EP-1");
+describe("buildBacklogPatch", () => {
+  it("includes ONLY the changed field (the core of the partial-edit fix)", () => {
+    const patch = buildBacklogPatch({ priority: 5 });
+    expect(patch).toEqual({ priority: 5 });
   });
 
-  it("coerces a numeric-string priority to a number", () => {
-    const input = buildBacklogInput(existing, { priority: "5" });
-    expect(input.priority).toBe(5);
+  it("does NOT require workType when editing an unrelated field", () => {
+    // This is the regression the fix addresses: a priority edit on an item with
+    // a null workType must NOT mention or require workType.
+    const patch = buildBacklogPatch({ priority: 3 });
+    expect(patch).not.toHaveProperty("workType");
+    expect(patch).not.toHaveProperty("title");
   });
 
-  it("throws when required workType is missing and not supplied", () => {
-    const noWorkType = { ...existing, workType: null };
-    expect(() => buildBacklogInput(noWorkType, { status: "done" })).toThrow(/work type/i);
+  it("coerces a numeric-string priority to a number and empty to null", () => {
+    expect(buildBacklogPatch({ priority: "7" }).priority).toBe(7);
+    expect(buildBacklogPatch({ priority: "" }).priority).toBeNull();
+    expect(buildBacklogPatch({ priority: null }).priority).toBeNull();
   });
 
-  it("accepts a supplied workType for an item that was missing one", () => {
-    const noWorkType = { ...existing, workType: null };
-    const input = buildBacklogInput(noWorkType, { workType: "chore" });
-    expect(input.workType).toBe("chore");
+  it("carries status/type/workType/source when explicitly changed", () => {
+    const patch = buildBacklogPatch({ status: "done", type: "portfolio", workType: "chore", source: "user-request" });
+    expect(patch).toEqual({ status: "done", type: "portfolio", workType: "chore", source: "user-request" });
   });
 
-  it("throws when title is cleared", () => {
-    expect(() => buildBacklogInput(existing, { title: "  " })).toThrow(/title/i);
+  it("treats an emptied required select as a no-op (no invalid write)", () => {
+    expect(buildBacklogPatch({ status: "" })).toEqual({});
+    expect(buildBacklogPatch({ workType: "" })).toEqual({});
+  });
+
+  it("normalizes body: trims, empty -> null", () => {
+    expect(buildBacklogPatch({ body: "  notes " }).body).toBe("notes");
+    expect(buildBacklogPatch({ body: "   " }).body).toBeNull();
+  });
+
+  it("throws only when title is explicitly cleared", () => {
+    expect(() => buildBacklogPatch({ title: "  " })).toThrow(/title/i);
+    expect(buildBacklogPatch({ title: "New" }).title).toBe("New");
   });
 });
