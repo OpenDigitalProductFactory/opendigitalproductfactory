@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { ImprovementRow } from "@/lib/improvement-data";
 import {
@@ -149,10 +150,15 @@ export function ImprovementsClient({ proposals }: Props) {
               </div>
             )}
 
-            {/* Backlog link */}
+            {/* Backlog link — the proposal is evidence; the work lives in the backlog. */}
             {p.backlogItemId && (
-              <div className="text-[11px] text-[var(--dpf-accent)] mb-2">
-                Linked to backlog item {p.backlogItemId}
+              <div className="text-[11px] mb-2">
+                <Link
+                  href={`/ops?itemId=${p.backlogItemId}`}
+                  className="text-[var(--dpf-accent)] hover:underline"
+                >
+                  View backlog item {p.backlogItemId} →
+                </Link>
               </div>
             )}
 

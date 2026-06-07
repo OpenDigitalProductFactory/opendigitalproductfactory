@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { Archive, Bot, CheckCircle2, Filter, ShieldAlert, Wrench } from "lucide-react";
 import { updateIssueReportStatus, sendIssueReportToBuildStudioAsFix } from "@/lib/actions/quality";
@@ -53,10 +54,13 @@ export function IssueReportPanel({
   items: initialItems,
   total,
   stats,
+  backlogLinks,
 }: {
   items: ReportRow[];
   total: number;
   stats: Stats;
+  /** reportId → projected BacklogItem itemId (resolved from the BI body marker). */
+  backlogLinks?: Record<string, string>;
 }) {
   const [items, setItems] = useState(initialItems);
   const [expandedId, setExpandedId] = useState<string | null>(items[0]?.id ?? null);
@@ -224,6 +228,7 @@ export function IssueReportPanel({
               <IssueReportRow
                 key={item.id}
                 report={item}
+                backlogItemId={backlogLinks?.[item.reportId]}
                 expanded={expandedId === item.id}
                 onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)}
                 onAskAdmin={() => handleAskAdmin(item)}
@@ -246,6 +251,7 @@ export function IssueReportPanel({
 
 function IssueReportRow({
   report,
+  backlogItemId,
   expanded,
   onToggle,
   onAskAdmin,
@@ -254,6 +260,7 @@ function IssueReportRow({
   isPending,
 }: {
   report: ReportRow;
+  backlogItemId?: string;
   expanded: boolean;
   onToggle: () => void;
   onAskAdmin: () => void;
@@ -295,6 +302,15 @@ function IssueReportRow({
         </button>
 
         <div className="flex flex-wrap gap-2 lg:justify-end">
+          {backlogItemId && (
+            <Link
+              href={`/ops?itemId=${backlogItemId}`}
+              title="This report is tracked as a backlog item; open it in the backlog"
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--dpf-accent)] hover:border-[var(--dpf-accent)]"
+            >
+              View backlog item
+            </Link>
+          )}
           <button
             type="button"
             onClick={onAskAdmin}

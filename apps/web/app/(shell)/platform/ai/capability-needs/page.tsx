@@ -34,8 +34,9 @@ export default async function CoworkerCapabilityNeedsPage({ searchParams }: Page
           </p>
           <h1 className="mt-1 text-xl font-bold text-[var(--dpf-text)]">Capability Needs</h1>
           <p className="mt-1 max-w-3xl text-sm text-[var(--dpf-muted)]">
-            Review queue for AI coworker self-assessments, capability gaps, and submitted
-            investment needs.
+            Evidence view for AI coworker self-assessments and capability gaps. Each
+            submitted need is auto-filed to the backlog and prioritized there — the
+            backlog is the one place work is tracked.
           </p>
         </div>
         <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-xs text-[var(--dpf-muted)]">
@@ -180,10 +181,13 @@ function NeedRow({ need }: { need: CoworkerCapabilityNeedReviewItem }) {
         {need.routeContext ? <span>Route {need.routeContext}</span> : null}
         {need.duplicateCount > 0 ? <span>{need.duplicateCount} duplicate signals</span> : null}
         {need.linkedBacklogItemId ? (
-          <span>
-            Backlog {need.linkedBacklogItemId}
-            {need.linkedBacklogItemTitle ? ` - ${need.linkedBacklogItemTitle}` : ""}
-          </span>
+          <Link
+            href={`/ops?itemId=${need.linkedBacklogItemId}`}
+            className="text-[var(--dpf-accent)] hover:underline"
+          >
+            View backlog {need.linkedBacklogItemId}
+            {need.linkedBacklogItemTitle ? ` - ${need.linkedBacklogItemTitle}` : ""} →
+          </Link>
         ) : null}
       </div>
 
