@@ -6,7 +6,9 @@ import { usePathname } from "next/navigation";
 
 const TABS = [
   { label: "Overview", href: "/ea" },
-  { label: "Views", href: "/ea/views" },
+  { label: "Capability Map", href: "/ea/capabilities" },
+  { label: "Value Streams", href: "/ea/value-streams" },
+  { label: "Views & Viewpoints", href: "/ea/views" },
   { label: "Reference Models", href: "/ea/models" },
 ];
 
