@@ -259,6 +259,20 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @dpf/db exec prisma generate
 
+      # Restore Next.js's build cache (SWC/webpack compilation artifacts). On a
+      # cache hit, unchanged modules are not recompiled, which is the bulk of a
+      # cold `next build`. Key on the lockfile + all source so any source change
+      # rolls the key; restore-keys fall back to the most recent build for the
+      # same deps so a typical PR still warm-starts. See
+      # https://nextjs.org/docs/app/building-your-application/deploying/ci-build-caching
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/apps/web/.next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**/*.{ts,tsx,js,jsx}') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
       - name: Build web (Next.js production)
         run: pnpm --filter web build
 
