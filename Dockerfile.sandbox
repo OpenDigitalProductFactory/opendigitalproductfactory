@@ -20,11 +20,22 @@ RUN npm install -g @anthropic-ai/claude-code
 # engine (grok-dispatch.ts). xAI ships it as a glibc-linked native binary via a curl
 # installer — there is NO npm package (the previous `@xai/grok-cli` line was a silent
 # no-op: that package does not exist, so provider=grok never actually worked). The binary
-# runs on this Alpine/musl base through the gcompat shim added above. The build-time
-# `grok --version` gate fails the image build loudly if the binary is missing or won't load.
-# Verified end-to-end: grok 0.2.32 installs under gcompat and reaches api.x.ai with XAI_API_KEY.
+# runs on this Alpine/musl base through the gcompat shim added above.
+#
+# The installer downloads the 137MB binary under /root/.grok (root's HOME, mode 0700) and
+# only symlinks /usr/local/bin/grok at it. Build Studio dispatch and the device-login flow
+# run grok as the `node` user (uid 1000), which cannot traverse /root → "grok: Permission
+# denied" at dispatch time even though `grok --version` works as root. So we relocate the
+# real binary into /usr/local/bin (world-traversable) and drop the /root copy.
+#
+# Two build-time gates fail the image loudly: `grok --version` as root AND as the node user
+# — the latter is the one that actually matters, and its absence let the perms bug ship.
 RUN curl -fsSL https://x.ai/cli/install.sh | GROK_BIN_DIR=/usr/local/bin bash \
- && grok --version
+ && install -m 0755 "$(readlink -f /usr/local/bin/grok)" /usr/local/bin/grok.bin \
+ && ln -sf /usr/local/bin/grok.bin /usr/local/bin/grok \
+ && rm -rf /root/.grok \
+ && grok --version \
+ && su -s /bin/sh node -c "grok --version"
 RUN git config --global user.email "sandbox@dpf.local" \
  && git config --global user.name "DPF Sandbox"
 # Codex CLI defaults: bypass internal sandbox (Docker IS the sandbox),
