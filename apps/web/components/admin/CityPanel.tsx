@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import {
   updateCity,
   toggleCityStatus,
+  previewCityMerge,
+  mergeCity,
+  type MergePreview,
 } from "@/lib/actions/reference-data-admin";
 import { forceCreateCity } from "@/lib/actions/reference-data";
 
@@ -50,6 +53,11 @@ export function CityPanel({ cities, countries, regions }: Props) {
   const [addCountryId, setAddCountryId] = useState(countries[0]?.id ?? "");
   const [addRegionId, setAddRegionId] = useState("");
 
+  // Merge state
+  const [mergingId, setMergingId] = useState<string | null>(null);
+  const [survivorId, setSurvivorId] = useState("");
+  const [preview, setPreview] = useState<MergePreview | null>(null);
+
   const activeCount = cities.filter((c) => c.status === "active").length;
 
   // Cascading filter
@@ -90,6 +98,34 @@ export function CityPanel({ cities, countries, regions }: Props) {
   function handleToggle(id: string) {
     startTransition(async () => {
       await toggleCityStatus(id);
+      router.refresh();
+    });
+  }
+
+  function startMerge(c: City) {
+    setMergingId(c.id);
+    setSurvivorId("");
+    setPreview(null);
+  }
+
+  function cancelMerge() {
+    setMergingId(null);
+    setSurvivorId("");
+    setPreview(null);
+  }
+
+  function runPreview(loserId: string) {
+    if (!survivorId) return;
+    startTransition(async () => {
+      setPreview(await previewCityMerge(loserId, survivorId));
+    });
+  }
+
+  function confirmMerge(loserId: string) {
+    if (!survivorId) return;
+    startTransition(async () => {
+      await mergeCity(loserId, survivorId);
+      cancelMerge();
       router.refresh();
     });
   }
@@ -156,10 +192,8 @@ export function CityPanel({ cities, countries, regions }: Props) {
 
           <div className="space-y-1">
             {filtered.map((c) => (
-              <div
-                key={c.id}
-                className="flex items-center justify-between rounded px-3 py-2 text-sm hover:bg-[var(--dpf-surface-2)]"
-              >
+              <div key={c.id}>
+                <div className="flex items-center justify-between rounded px-3 py-2 text-sm hover:bg-[var(--dpf-surface-2)]">
                 {editingId === c.id ? (
                   <div className="flex flex-1 items-center gap-2">
                     <input
@@ -210,26 +244,101 @@ export function CityPanel({ cities, countries, regions }: Props) {
                   </div>
                 )}
 
-                <div className="flex shrink-0 items-center gap-2">
-                  {editingId !== c.id && (
+                  <div className="flex shrink-0 items-center gap-2">
+                    {editingId !== c.id && mergingId !== c.id && (
+                      <button
+                        type="button"
+                        onClick={() => startEdit(c)}
+                        className="text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-accent)]"
+                        title="Edit city"
+                      >
+                        &#9998;
+                      </button>
+                    )}
+                    {editingId !== c.id && mergingId !== c.id && (
+                      <button
+                        type="button"
+                        onClick={() => startMerge(c)}
+                        className="rounded border border-[var(--dpf-border)] px-2 py-1 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-foreground)]"
+                        title="Merge a duplicate city into another"
+                      >
+                        Merge
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => startEdit(c)}
-                      className="text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-accent)]"
-                      title="Edit city"
+                      onClick={() => handleToggle(c.id)}
+                      disabled={isPending}
+                      className="rounded border border-[var(--dpf-border)] px-2 py-1 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-foreground)] disabled:opacity-50"
                     >
-                      &#9998;
+                      {c.status === "active" ? "Deactivate" : "Activate"}
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => handleToggle(c.id)}
-                    disabled={isPending}
-                    className="rounded border border-[var(--dpf-border)] px-2 py-1 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-foreground)] disabled:opacity-50"
-                  >
-                    {c.status === "active" ? "Deactivate" : "Activate"}
-                  </button>
+                  </div>
                 </div>
+
+                {mergingId === c.id && (
+                  <div className="mt-1 flex flex-wrap items-center gap-2 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-sm">
+                    <span className="text-[var(--dpf-muted)]">
+                      Merge &ldquo;{c.name}&rdquo; into:
+                    </span>
+                    <select
+                      value={survivorId}
+                      onChange={(e) => {
+                        setSurvivorId(e.target.value);
+                        setPreview(null);
+                      }}
+                      className="rounded border px-2 py-1 text-sm bg-[var(--dpf-surface-2)] border-[var(--dpf-border)] text-[var(--dpf-foreground)] focus:outline-none focus:ring-1 focus:ring-[var(--dpf-accent)]"
+                    >
+                      <option value="">Select survivor city&hellip;</option>
+                      {cities
+                        .filter(
+                          (o) =>
+                            o.id !== c.id &&
+                            o.region.id === c.region.id &&
+                            o.status === "active",
+                        )
+                        .map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.name}
+                          </option>
+                        ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => runPreview(c.id)}
+                      disabled={isPending || !survivorId}
+                      className="rounded border border-[var(--dpf-border)] px-2 py-1 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-foreground)] disabled:opacity-50"
+                    >
+                      Preview impact
+                    </button>
+                    {preview && (
+                      <span
+                        className={
+                          preview.ok ? "text-[var(--dpf-foreground)]" : "text-red-400"
+                        }
+                      >
+                        {preview.message}
+                      </span>
+                    )}
+                    {preview?.ok && (
+                      <button
+                        type="button"
+                        onClick={() => confirmMerge(c.id)}
+                        disabled={isPending}
+                        className="rounded bg-[var(--dpf-accent)] px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
+                      >
+                        {isPending ? "Merging…" : "Confirm merge"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={cancelMerge}
+                      className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-foreground)]"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
             {filtered.length === 0 && (

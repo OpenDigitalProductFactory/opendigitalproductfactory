@@ -435,19 +435,23 @@ model Country {
 
 /// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
 model Region {
-  id        String   @id @default(cuid())
-  name      String
-  code      String?
-  countryId String
-  status    String   @default("active")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  cities    City[]
-  country   Country  @relation(fields: [countryId], references: [id])
+  id           String   @id @default(cuid())
+  name         String
+  code         String?
+  countryId    String
+  status       String   @default("active")
+  mergedIntoId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  cities       City[]
+  country      Country  @relation(fields: [countryId], references: [id])
+  mergedInto   Region?  @relation("RegionMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom   Region[] @relation("RegionMerge")
 
   @@index([countryId, name])
   @@index([countryId])
   @@index([status])
+  @@index([mergedIntoId])
 }
 
 /// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
@@ -464,16 +468,20 @@ model City {
   disambiguator  String?
   addedByUserId  String?
   status         String    @default("active")
+  mergedIntoId   String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   addedByUser    User?     @relation("CityAddedByUser", fields: [addedByUserId], references: [id])
   addresses      Address[]
   region         Region    @relation(fields: [regionId], references: [id])
+  mergedInto     City?     @relation("CityMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom     City[]    @relation("CityMerge")
 
   @@index([regionId, name])
   @@index([regionId])
   @@index([regionId, nameNormalized])
   @@index([status])
+  @@index([mergedIntoId])
   @@index([source])
   @@index([addedByUserId])
 }
