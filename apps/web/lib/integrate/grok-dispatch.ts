@@ -32,29 +32,55 @@ export type GrokResult = {
   durationMs: number;
 };
 
-/**
- * Inject Grok API key into the sandbox as XAI_API_KEY (per-task file for safety).
- * Simpler than Codex auth.json or Claude's dual OAuth/apikey modes.
- */
-async function ensureGrokAuth(providerId: string, containerId: string, taskSlug: string): Promise<string> {
-  const credential = await getDecryptedCredential(providerId);
-  const apiKey = credential?.secretRef ?? credential?.cachedToken;
+type GrokAuthInjection =
+  | { mode: "oauth" }                    // ~/.grok/auth.json written for the node user; grok reads it
+  | { mode: "apikey"; keyFile: string }; // XAI_API_KEY sourced from this file
 
-  if (!apiKey) {
-    throw new Error(`No xAI API key for provider "${providerId}". Configure via Admin > AI Workforce > External Services.`);
-  }
+/**
+ * Provision Grok auth into the sandbox. Two modes, OAuth preferred:
+ *  - OAuth (subscription "sign in with Google"): the stored credential is the
+ *    `~/.grok/auth.json` blob captured by the device-code login flow
+ *    (lib/actions/grok-device-login.ts). It is written into the node user's
+ *    ~/.grok so the CLI uses it directly and self-refreshes from its embedded
+ *    refresh token — mirrors codex-dispatch's injectCodexAuth (~/.codex/auth.json).
+ *  - API key: the stored credential is a bare xAI key, exported as XAI_API_KEY.
+ */
+async function ensureGrokAuth(providerId: string, containerId: string, taskSlug: string): Promise<GrokAuthInjection> {
+  const credential = await getDecryptedCredential(providerId);
 
   const { exec: execCb } = lazyChildProcess();
   const { promisify } = lazyUtil();
   const execAsync = promisify(execCb);
 
+  // OAuth credential = the whole ~/.grok/auth.json JSON blob, stored in cachedToken.
+  const oauthBlob =
+    credential?.cachedToken && credential.cachedToken.trimStart().startsWith("{")
+      ? credential.cachedToken
+      : null;
+
+  if (oauthBlob) {
+    const authB64 = Buffer.from(oauthBlob).toString("base64");
+    // Write as the `node` user (the same user the dispatch runs grok as) so the
+    // CLI finds it at ~/.grok/auth.json.
+    await execAsync(
+      `docker exec --user node ${containerId} sh -c "mkdir -p ~/.grok && echo '${authB64}' | base64 -d > ~/.grok/auth.json && chmod 600 ~/.grok/auth.json"`,
+      { timeout: 5_000 },
+    );
+    return { mode: "oauth" };
+  }
+
+  // API-key fallback.
+  const apiKey = credential?.secretRef ?? credential?.cachedToken;
+  if (!apiKey) {
+    throw new Error(`No xAI credential for provider "${providerId}". Sign in to Grok (OAuth) or add an API key via Admin > AI Workforce > External Services.`);
+  }
   const keyFile = `/tmp/grok-key-${taskSlug}.txt`;
   const keyB64 = Buffer.from(apiKey).toString("base64");
   await execAsync(
     `docker exec ${containerId} sh -c "echo '${keyB64}' | base64 -d > ${keyFile} && chmod 600 ${keyFile}"`,
     { timeout: 5_000 },
   );
-  return keyFile;
+  return { mode: "apikey", keyFile };
 }
 
 /**
@@ -195,9 +221,9 @@ export async function dispatchGrokTask(params: {
     // Non-fatal; proceed (some sandboxes may already be correct)
   }
 
-  let authKeyFile: string;
+  let grokAuth: GrokAuthInjection;
   try {
-    authKeyFile = await ensureGrokAuth(providerId, containerId, safeRunId);
+    grokAuth = await ensureGrokAuth(providerId, containerId, safeRunId);
   } catch (err) {
     return {
       content: `Auth error: ${(err as Error).message}`,
@@ -250,7 +276,11 @@ export async function dispatchGrokTask(params: {
       `cleanup() { rm -f ${promptFile} ${keyFile} ${runnerScript} 2>/dev/null || true; }`,
       "trap cleanup EXIT INT TERM",
       "cd /workspace",
-      `export XAI_API_KEY=$(cat ${authKeyFile} 2>/dev/null || echo '')`,
+      // OAuth mode: grok reads the ~/.grok/auth.json injected by ensureGrokAuth (no env needed).
+      // API-key mode: export XAI_API_KEY from the per-task key file.
+      grokAuth.mode === "apikey"
+        ? `export XAI_API_KEY=$(cat ${grokAuth.keyFile} 2>/dev/null || echo '')`
+        : `: # OAuth credential injected at ~/.grok/auth.json`,
       // Headless single-turn run, verified against grok 0.2.32:
       //  --prompt-file  : read the prompt from a file. `-p/--single` takes a literal prompt
       //                   ARGUMENT (not stdin), so the old `-p - < file` passed "-" as the

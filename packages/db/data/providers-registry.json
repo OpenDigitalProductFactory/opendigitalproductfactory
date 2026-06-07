@@ -295,7 +295,8 @@
     "baseUrl": "https://api.x.ai/v1",
     "authMethod": "api_key",
     "supportedAuthMethods": [
-      "api_key"
+      "api_key",
+      "oauth2_device"
     ],
     "authHeader": "Authorization",
     "costModel": "token",
