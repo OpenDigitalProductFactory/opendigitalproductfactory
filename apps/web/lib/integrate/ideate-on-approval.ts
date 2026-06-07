@@ -193,9 +193,15 @@ export async function dispatchIdeateForApprovedBuild(params: {
     // saveBuildEvidence audit trail is consistent regardless of which
     // dispatch path produced the designDoc.
     const { executeTool } = await import("@/lib/mcp-tools");
+    // Pass the explicit buildId. Without it, saveBuildEvidence falls back to
+    // resolveActiveBuildId(userId), which resolves to the user's *active* build
+    // — and when several builds are in flight that can be a DIFFERENT build.
+    // The designDoc would then persist to the wrong build while this build's
+    // activity log (correct buildId in scope) records "saved", leaving this
+    // build stuck at the post-ideate gate with no design doc.
     const saveResult = await executeTool(
       "saveBuildEvidence",
-      { field: "designDoc", value: ideateResult.designDoc },
+      { buildId, field: "designDoc", value: ideateResult.designDoc },
       userId,
       {},
     );
@@ -207,6 +213,30 @@ export async function dispatchIdeateForApprovedBuild(params: {
         durationMs,
       };
       await logActivity(`Auto-dispatch saved-evidence step failed after ${(durationMs / 1000).toFixed(1)}s: ${outcome.error.slice(0, 200)}`);
+      return outcome;
+    }
+
+    // Read-after-write: saveBuildEvidence reported success, but verify the
+    // designDoc actually landed on THIS build before logging "saved". Guards
+    // against a silent wrong-build / no-op write reporting success — the
+    // `structural-verification-is-not-functional` principle this file's header
+    // cites, applied to the save itself.
+    const persisted = await prisma.featureBuild.findUnique({
+      where: { buildId },
+      select: { designDoc: true },
+    });
+    const persistedDoc = persisted?.designDoc as { problemStatement?: string } | null;
+    if (
+      !persistedDoc ||
+      typeof persistedDoc.problemStatement !== "string" ||
+      persistedDoc.problemStatement.trim().length === 0
+    ) {
+      const outcome: DispatchOutcome = {
+        kind: "dispatched-failure",
+        error: `saveBuildEvidence reported success but no designDoc is present on ${buildId} after the write (possible active-build mis-resolution).`,
+        durationMs,
+      };
+      await logActivity(`Auto-dispatch saved-evidence VERIFICATION FAILED after ${(durationMs / 1000).toFixed(1)}s: designDoc not present on ${buildId} after save.`);
       return outcome;
     }
 

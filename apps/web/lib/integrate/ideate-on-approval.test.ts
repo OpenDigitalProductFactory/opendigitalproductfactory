@@ -109,12 +109,15 @@ describe("dispatchIdeateForApprovedBuild", () => {
     // 2026-05-24: originatingBacklogItemId is a FK to BacklogItem.id (cuid),
     // not BacklogItem.itemId (BI-XXXXX semantic id). Use a cuid-shaped value
     // here so the lookup matches what production code does.
-    mockPrisma.featureBuild.findUnique.mockResolvedValue({
-      originatingBacklogItemId: "cmpj4gz5605xx01o6lzxt278g",
-      designDoc: null,
-      title: "Fallback Title",
-      description: "Fallback description.",
-    });
+    mockPrisma.featureBuild.findUnique
+      .mockResolvedValueOnce({
+        originatingBacklogItemId: "cmpj4gz5605xx01o6lzxt278g",
+        designDoc: null,
+        title: "Fallback Title",
+        description: "Fallback description.",
+      })
+      // read-after-write verification sees the persisted doc on this build
+      .mockResolvedValueOnce({ designDoc: { problemStatement: "P" } });
     mockPrisma.backlogItem.findUnique.mockResolvedValue({
       title: "BI Title",
       body: "Problem statement and acceptance criteria.",
@@ -153,9 +156,13 @@ describe("dispatchIdeateForApprovedBuild", () => {
         dispatchEngine: "claude",
       }),
     );
+    // Regression guard for the wrong-build write bug: the explicit buildId MUST
+    // be passed so saveBuildEvidence targets THIS build instead of falling back
+    // to resolveActiveBuildId(userId), which mis-resolves when multiple builds
+    // are in flight (live evidence: FB-D48D6429, 2026-06-07).
     expect(mockExecuteTool).toHaveBeenCalledWith(
       "saveBuildEvidence",
-      { field: "designDoc", value: expect.objectContaining({ problemStatement: "P" }) },
+      { buildId: "FB-X", field: "designDoc", value: expect.objectContaining({ problemStatement: "P" }) },
       "u-1",
       expect.any(Object),
     );
@@ -206,6 +213,34 @@ describe("dispatchIdeateForApprovedBuild", () => {
     expect(outcome.kind).toBe("dispatched-failure");
     if (outcome.kind === "dispatched-failure") {
       expect(outcome.error).toContain("saveBuildEvidence");
+    }
+  });
+
+  it("returns dispatched-failure when saveBuildEvidence reports success but the designDoc did not persist to this build", async () => {
+    // Read-after-write guard: simulates the wrong-build mis-resolution — save
+    // reports success, but re-reading THIS build shows no designDoc.
+    mockPrisma.featureBuild.findUnique
+      .mockResolvedValueOnce({
+        originatingBacklogItemId: "BI-1",
+        designDoc: null,
+        title: "T",
+        description: "D",
+      })
+      .mockResolvedValueOnce({ designDoc: null });
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({ title: "BI Title", body: "Body." });
+    mockDispatchIdeateResearch.mockResolvedValue({
+      success: true,
+      designDoc: { problemStatement: "P", proposedApproach: "z".repeat(60) },
+      rawOutput: "",
+      durationMs: 100,
+    });
+    mockExecuteTool.mockResolvedValue({ success: true });
+
+    const outcome = await dispatchIdeateForApprovedBuild({ buildId: "FB-X", userId: "u-1" });
+
+    expect(outcome.kind).toBe("dispatched-failure");
+    if (outcome.kind === "dispatched-failure") {
+      expect(outcome.error).toContain("no designDoc is present");
     }
   });
 
