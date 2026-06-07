@@ -16,15 +16,15 @@ export type ReadinessCopy = {
 
 const COPY: Record<ReadinessState, ReadinessCopy> = {
   ready: {
-    message: "Claude Code, Codex, and Grok are ready for DPF work.",
+    message: "Claude Code and Codex are ready for DPF work.",
     primaryAction: "Open readiness",
   },
   partial: {
-    message: "One or more contributor clients are ready; others need setup.",
+    message: "One contributor client is ready; the other needs setup.",
     primaryAction: "Repair toolchain",
   },
   missing_cli: {
-    message: "Install a supported agent client (Claude Code, Codex, or Grok) to enable contributor sessions.",
+    message: "Install the selected agent client to enable contributor sessions.",
     primaryAction: "Open setup guide",
   },
   missing_token: {
@@ -75,7 +75,11 @@ export function computeReadinessState(
     return "failed_smoke";
   }
 
-  if (!claudeWired || !codexWired || !grokWired) {
+  // Grok is an additive, optional third client: its presence counts toward
+  // "not missing_cli" (above) but readiness is still anchored on the established
+  // Claude + Codex pair so existing installs are never regressed to "partial"
+  // merely because the brand-new Grok beta CLI is absent.
+  if (!claudeWired || !codexWired) {
     return "partial";
   }
 

@@ -49,6 +49,7 @@ function pickProbe(adapterKind: ExecutionAdapterKind): ProbeFn {
     case "http-ollama":
     case "http-generic":
     case "codex-mcp-server":
+    case "grok-cli":
     case "local-runtime":
       throw new Error(
         `No capability probe registered yet for adapter kind: ${adapterKind}`,

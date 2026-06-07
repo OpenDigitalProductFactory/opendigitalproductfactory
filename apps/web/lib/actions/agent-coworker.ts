@@ -1663,7 +1663,6 @@ export async function sendMessage(input: {
       });
       const execState = buildForResearch?.buildExecState as Record<string, unknown> | null;
       if (execState?.ideateResearchRequested) {
-        console.log(`[coworker] Ideate research requested — dispatching to ${config.provider === "claude" ? "Claude" : config.provider === "grok" ? "Grok" : "Codex"} CLI`);
         const { agentEventBus } = await import("@/lib/agent-event-bus");
         agentEventBus.emit(input.threadId, { type: "tool:start", tool: "codebase_research", iteration: 0 });
 
@@ -1671,6 +1670,7 @@ export async function sendMessage(input: {
           const { dispatchIdeateResearch } = await import("@/lib/integrate/ideate-dispatch");
           const { getBuildStudioConfig } = await import("@/lib/integrate/build-studio-config");
           const config = await getBuildStudioConfig();
+          console.log(`[coworker] Ideate research requested — dispatching to ${config.provider === "claude" ? "Claude" : config.provider === "grok" ? "Grok" : "Codex"} CLI`);
 
           // Build context for the research
           const buildCtx = await getFeatureBuildForContext(resolvedBuildId, user.id!);

@@ -36,7 +36,7 @@ export type GrokResult = {
  * Inject Grok API key into the sandbox as XAI_API_KEY (per-task file for safety).
  * Simpler than Codex auth.json or Claude's dual OAuth/apikey modes.
  */
-async function ensureGrokAuth(providerId: string, taskSlug: string): Promise<string> {
+async function ensureGrokAuth(providerId: string, containerId: string, taskSlug: string): Promise<string> {
   const credential = await getDecryptedCredential(providerId);
   const apiKey = credential?.secretRef ?? credential?.cachedToken;
 
@@ -62,7 +62,7 @@ async function ensureGrokAuth(providerId: string, taskSlug: string): Promise<str
  * that git is configured for it. Matches the prep done for Claude Code runs
  * (prevents root-owned file issues when the CLI or subsequent steps write).
  */
-async function ensureSandboxNodeUser(): Promise<void> {
+async function ensureSandboxNodeUser(containerId: string): Promise<void> {
   const { exec: execCb } = lazyChildProcess();
   const { promisify } = lazyUtil();
   const execAsync = promisify(execCb);
@@ -190,14 +190,14 @@ export async function dispatchGrokTask(params: {
   const timeoutMs = role === "data-architect" ? GROK_SCHEMA_TASK_TIMEOUT_MS : GROK_TASK_TIMEOUT_MS;
 
   try {
-    await ensureSandboxNodeUser();
+    await ensureSandboxNodeUser(containerId);
   } catch {
     // Non-fatal; proceed (some sandboxes may already be correct)
   }
 
   let authKeyFile: string;
   try {
-    authKeyFile = await ensureGrokAuth(providerId, taskSlug);
+    authKeyFile = await ensureGrokAuth(providerId, containerId, safeRunId);
   } catch (err) {
     return {
       content: `Auth error: ${(err as Error).message}`,
@@ -265,7 +265,7 @@ export async function dispatchGrokTask(params: {
     // Spawn as node user (parity with Claude) + stream progress from stderr
     const { stdout, durationMs: elapsed } = await new Promise<{ stdout: string; durationMs: number }>((resolve, reject) => {
       const proc = spawnCb("docker", [
-        "exec", "--user", "node", SANDBOX_CONTAINER, runnerScript,
+        "exec", "--user", "node", containerId, runnerScript,
       ]);
 
       let stdout = "";

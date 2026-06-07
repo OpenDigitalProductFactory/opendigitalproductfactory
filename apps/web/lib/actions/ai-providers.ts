@@ -336,7 +336,7 @@ async function autoConfigureBuildStudio(providerId: string): Promise<void> {
   });
   if (!provider?.cliEngine) return; // Not a CLI-dispatchable provider
 
-  const cliEngine = provider.cliEngine as "claude" | "codex";
+  const cliEngine = provider.cliEngine as "claude" | "codex" | "grok";
   const existing = await prisma.platformConfig.findUnique({
     where: { key: "build-studio-dispatch" },
   });
@@ -347,8 +347,10 @@ async function autoConfigureBuildStudio(providerId: string): Promise<void> {
       provider: cliEngine,
       claudeProviderId: cliEngine === "claude" ? providerId : "",
       codexProviderId: cliEngine === "codex" ? providerId : "",
+      grokProviderId: cliEngine === "grok" ? providerId : "",
       claudeModel: "sonnet",
       codexModel: "",
+      grokModel: "",
     };
     await prisma.platformConfig.create({
       data: {
