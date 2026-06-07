@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@dpf/db", () => ({
+  prisma: { platformDevConfig: { findUnique: vi.fn() } },
+}));
 
 import {
   buildSandboxGitAddCommand,
@@ -6,6 +10,7 @@ import {
   buildSandboxGitCleanCommand,
   buildSandboxGitCommitPrunedArtifactsCommand,
   buildSandboxGitPruneTrackedArtifactsCommand,
+  getClientIdentity,
   wrapSandboxGitCommand,
 } from "./build-branch";
 
@@ -96,5 +101,30 @@ describe("buildSandboxGitAddCommand generated-client exclusion", () => {
     // never appear in the diff baseline because a stale sandbox image will
     // produce the wrong types and bloat the patch with conflicts.
     expect(command).toContain("**/generated/client/**");
+  });
+});
+
+// ─── Client identity upstream default (BI-5F288AAA) ──────────────────────────
+
+describe("getClientIdentity upstream default", () => {
+  it("defaults upstreamRemoteUrl to the canonical Hive repo when PlatformDevConfig.upstreamRemoteUrl is null", async () => {
+    const { prisma } = (await import("@dpf/db")) as unknown as {
+      prisma: { platformDevConfig: { findUnique: ReturnType<typeof vi.fn> } };
+    };
+    prisma.platformDevConfig.findUnique.mockResolvedValue({
+      clientId: "client-test",
+      gitAgentEmail: "agent-abc12345@dpf.local",
+      upstreamRemoteUrl: null,
+    });
+
+    const identity = await getClientIdentity();
+
+    // Without this default the sandbox bootstrap skips the origin/main baseline
+    // reset (build-branch.ts ensureGitBaseline) and creates a synthetic-root
+    // repo with no merge-base against origin/main — which blocks every hive
+    // contribution at the source_currency readiness gate (BI-5F288AAA).
+    expect(identity.upstreamRemoteUrl).toBe(
+      "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git",
+    );
   });
 });
