@@ -17,8 +17,9 @@ export interface PaymentRow {
   paymentRef: string;
   method: string;
   direction: string;
-  invoiceId: string | null;
-  invoiceRef: string | null;
+  documentId: string | null;
+  documentRef: string | null;
+  documentType: "invoice" | "bill" | null;
   dateISO: string;
   amount: number;
 }
@@ -51,19 +52,20 @@ export function PaymentsTable({
       sortAccessor: (p) => p.direction,
     },
     {
-      key: "invoice",
-      header: "Invoice",
+      key: "document",
+      header: "Document",
       cell: (p) =>
-        p.invoiceId ? (
+        p.documentId && p.documentType ? (
           <Link
-            href={`/finance/invoices/${p.invoiceId}`}
+            href={p.documentType === "invoice" ? `/finance/invoices/${p.documentId}` : `/finance/bills/${p.documentId}`}
             className="font-mono text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
           >
-            {p.invoiceRef}
+            {p.documentRef}
           </Link>
         ) : (
           <span className="text-[var(--dpf-muted)]">—</span>
         ),
+      sortAccessor: (p) => p.documentRef ?? "",
     },
     {
       key: "date",

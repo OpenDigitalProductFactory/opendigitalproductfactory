@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import {
@@ -7,10 +8,12 @@ import {
   getAiProviderFinanceDetail,
   getAiSpendOverview,
   getAiSupplierFinanceDetail,
+  recordAiProviderSubscriptionPayment,
   seedAiProviderFinanceBridge,
 } from "@/lib/finance/ai-provider-finance";
 import type {
   ActivateAiProviderContractInput,
+  RecordAiProviderSubscriptionPaymentInput,
   SeedAiProviderFinanceBridgeInput,
 } from "@/lib/finance/ai-provider-finance-validation";
 
@@ -30,6 +33,16 @@ export async function seedAiProviderFinanceBridgeAction(input: SeedAiProviderFin
 export async function activateAiProviderContractAction(input: ActivateAiProviderContractInput) {
   await requireManageFinance();
   return activateAiProviderContract(input);
+}
+
+export async function recordAiProviderSubscriptionPaymentAction(input: RecordAiProviderSubscriptionPaymentInput) {
+  await requireManageFinance();
+  const result = await recordAiProviderSubscriptionPayment(input);
+  revalidatePath("/finance/spend/ai");
+  revalidatePath("/finance/bills");
+  revalidatePath("/finance/payments");
+  revalidatePath("/platform/ai/providers");
+  return result;
 }
 
 export async function loadAiSpendOverviewAction() {

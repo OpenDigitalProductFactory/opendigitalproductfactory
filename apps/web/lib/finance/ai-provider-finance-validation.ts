@@ -13,6 +13,14 @@ export const AI_PROVIDER_VALUATION_METHODS = [
   "hybrid",
 ] as const;
 export const AI_PROVIDER_BILLING_CADENCES = ["monthly", "quarterly", "annual"] as const;
+export const AI_PROVIDER_SUBSCRIPTION_PAYMENT_METHODS = [
+  "card",
+  "bank_transfer",
+  "direct_debit",
+  "stripe",
+  "cash",
+  "cheque",
+] as const;
 export const AI_PROVIDER_SNAPSHOT_CONFIDENCE = ["low", "medium", "high"] as const;
 export const AI_PROVIDER_WORK_ITEM_STATUSES = ["open", "in_progress", "done"] as const;
 export const AI_PROVIDER_WORK_ITEM_SEVERITIES = ["low", "medium", "high", "critical"] as const;
@@ -83,7 +91,24 @@ export const createFinanceWorkItemSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
+export const recordAiProviderSubscriptionPaymentSchema = z.object({
+  providerIds: z.array(z.string().min(1)).min(1),
+  supplierName: z.string().min(1),
+  planName: z.string().min(1).optional(),
+  amount: z.number().positive(),
+  currency: z.string().length(3).default("USD"),
+  billingCadence: z.enum(AI_PROVIDER_BILLING_CADENCES).default("monthly"),
+  billingDayOfMonth: z.number().int().min(1).max(31),
+  paidAt: z.string().min(1),
+  paymentMethod: z.enum(AI_PROVIDER_SUBSCRIPTION_PAYMENT_METHODS).default("card"),
+  paymentReference: z.string().optional(),
+  billingUrl: z.string().url().optional(),
+  evidenceUrl: z.string().url().optional(),
+  notes: z.string().optional(),
+});
+
 export type SeedAiProviderFinanceBridgeInput = z.input<typeof seedAiProviderFinanceBridgeSchema>;
 export type ActivateAiProviderContractInput = z.input<typeof activateAiProviderContractSchema>;
 export type CreateContractUsageSnapshotInput = z.input<typeof createContractUsageSnapshotSchema>;
 export type CreateFinanceWorkItemInput = z.input<typeof createFinanceWorkItemSchema>;
+export type RecordAiProviderSubscriptionPaymentInput = z.input<typeof recordAiProviderSubscriptionPaymentSchema>;

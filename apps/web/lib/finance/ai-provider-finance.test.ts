@@ -5,18 +5,23 @@ const mocks = vi.hoisted(() => ({
   supplierCreate: vi.fn(),
   aiProfileUpsert: vi.fn(),
   contractFindFirst: vi.fn(),
+  contractFindMany: vi.fn(),
   contractCreate: vi.fn(),
   contractUpsert: vi.fn(),
   contractUpdate: vi.fn(),
   allowanceDeleteMany: vi.fn(),
   allowanceCreateMany: vi.fn(),
   modelProviderFindMany: vi.fn(),
+  aiProfileFindMany: vi.fn(),
   workItemCreate: vi.fn(),
   workItemFindFirst: vi.fn(),
   workItemUpdateMany: vi.fn(),
   billFindFirst: vi.fn(),
   billCreate: vi.fn(),
   billLineItemCreateMany: vi.fn(),
+  paymentCount: vi.fn(),
+  paymentCreate: vi.fn(),
+  paymentAllocationCreate: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -35,9 +40,11 @@ vi.mock("@dpf/db", () => ({
     },
     aiProviderFinanceProfile: {
       upsert: mocks.aiProfileUpsert,
+      findMany: mocks.aiProfileFindMany,
     },
     supplierContract: {
       findFirst: mocks.contractFindFirst,
+      findMany: mocks.contractFindMany,
       create: mocks.contractCreate,
       upsert: mocks.contractUpsert,
       update: mocks.contractUpdate,
@@ -61,6 +68,13 @@ vi.mock("@dpf/db", () => ({
     billLineItem: {
       createMany: mocks.billLineItemCreateMany,
     },
+    payment: {
+      count: mocks.paymentCount,
+      create: mocks.paymentCreate,
+    },
+    paymentAllocation: {
+      create: mocks.paymentAllocationCreate,
+    },
   },
 }));
 
@@ -69,6 +83,7 @@ import {
   ensureFinanceCommitment,
   evaluateAiProviderUtilization,
   generateDraftBillForAiContract,
+  recordAiProviderSubscriptionPayment,
   reconcileAiProviderFinanceGaps,
   seedAiProviderFinanceBridge,
 } from "./ai-provider-finance";
@@ -80,6 +95,7 @@ describe("seedAiProviderFinanceBridge", () => {
     mocks.supplierCreate.mockResolvedValue({ id: "supplier-row-1", supplierId: "SUP-1" });
     mocks.aiProfileUpsert.mockResolvedValue({ id: "profile-1", supplierId: "supplier-row-1" });
     mocks.contractFindFirst.mockResolvedValue(null);
+    mocks.contractFindMany.mockResolvedValue([]);
     mocks.contractCreate.mockResolvedValue({ id: "contract-1", contractId: "AIC-1" });
     mocks.workItemFindFirst.mockResolvedValue(null);
     mocks.workItemCreate.mockResolvedValue({ id: "work-1", workItemId: "FWI-1" });
@@ -243,6 +259,148 @@ describe("ensureFinanceCommitment", () => {
         supplierId: "supplier-domain",
         contractId: "contract-domain",
         workItemId: "work-domain",
+      }),
+    );
+  });
+});
+
+describe("recordAiProviderSubscriptionPayment", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.contractFindMany.mockResolvedValue([]);
+    mocks.modelProviderFindMany.mockResolvedValue([
+      { providerId: "chatgpt", name: "ChatGPT (OpenAI Subscription)", consoleUrl: "https://chatgpt.com" },
+      { providerId: "codex", name: "OpenAI Codex", consoleUrl: "https://developers.openai.com/codex" },
+    ]);
+    mocks.supplierFindFirst.mockResolvedValue(null);
+    mocks.supplierCreate.mockResolvedValue({ id: "supplier-openai", supplierId: "SUP-OAI" });
+    mocks.aiProfileUpsert
+      .mockResolvedValueOnce({ id: "profile-chatgpt", supplierId: "supplier-openai", providerId: "chatgpt" })
+      .mockResolvedValueOnce({ id: "profile-codex", supplierId: "supplier-openai", providerId: "codex" });
+    mocks.contractUpsert.mockResolvedValue({ id: "contract-openai", contractId: "AIC-OPENAI" });
+    mocks.billFindFirst.mockResolvedValue(null);
+    mocks.billCreate.mockResolvedValue({ id: "bill-openai", billRef: "BILL-2026-OPENAI" });
+    mocks.billLineItemCreateMany.mockResolvedValue({ count: 1 });
+    mocks.paymentCount.mockResolvedValue(18);
+    mocks.paymentCreate.mockResolvedValue({ id: "pay-openai", paymentRef: "PAY-2026-0019" });
+    mocks.paymentAllocationCreate.mockResolvedValue({ id: "alloc-openai" });
+    mocks.workItemUpdateMany.mockResolvedValue({ count: 2 });
+  });
+
+  it("records one paid monthly subscription for multiple AI providers without approval", async () => {
+    const result = await recordAiProviderSubscriptionPayment({
+      providerIds: ["chatgpt", "codex"],
+      supplierName: "OpenAI",
+      planName: "ChatGPT Team",
+      amount: 20,
+      currency: "USD",
+      billingDayOfMonth: 19,
+      paidAt: "2026-06-19",
+      paymentMethod: "card",
+      paymentReference: "VISA-4242",
+    });
+
+    expect(mocks.aiProfileUpsert).toHaveBeenCalledTimes(2);
+    expect(mocks.contractUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          status: "active",
+          billingCadence: "monthly",
+          billingDayOfMonth: 19,
+          paymentMethod: "card",
+          coveredProviderIds: ["chatgpt", "codex"],
+          monthlyCommittedAmount: 20,
+        }),
+        update: expect.objectContaining({
+          status: "active",
+          billingDayOfMonth: 19,
+          paymentMethod: "card",
+          coveredProviderIds: ["chatgpt", "codex"],
+          monthlyCommittedAmount: 20,
+        }),
+      }),
+    );
+    expect(mocks.billCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          supplierContractId: "contract-openai",
+          status: "paid",
+          amountPaid: 20,
+          amountDue: 0,
+        }),
+      }),
+    );
+    expect(mocks.paymentCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          direction: "outbound",
+          method: "card",
+          status: "completed",
+          amount: 20,
+          reference: "VISA-4242",
+        }),
+      }),
+    );
+    expect(mocks.paymentAllocationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          paymentId: "pay-openai",
+          billId: "bill-openai",
+          amount: 20,
+        }),
+      }),
+    );
+    expect(mocks.workItemUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: { in: ["open", "in_progress"] },
+        }),
+        data: expect.objectContaining({ status: "done" }),
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        supplierId: "supplier-openai",
+        contractId: "contract-openai",
+        billId: "bill-openai",
+        paymentId: "pay-openai",
+      }),
+    );
+  });
+
+  it("does not duplicate payment evidence when the same subscription month already has a paid bill", async () => {
+    mocks.billFindFirst.mockResolvedValue({
+      id: "bill-openai",
+      billRef: "BILL-2026-OPENAI",
+      allocations: [
+        {
+          payment: {
+            id: "pay-existing",
+            paymentRef: "PAY-2026-0018",
+          },
+        },
+      ],
+    });
+
+    const result = await recordAiProviderSubscriptionPayment({
+      providerIds: ["chatgpt", "codex"],
+      supplierName: "OpenAI",
+      planName: "ChatGPT Team",
+      amount: 20,
+      currency: "USD",
+      billingDayOfMonth: 19,
+      paidAt: "2026-06-19",
+      paymentMethod: "card",
+      paymentReference: "VISA-4242",
+    });
+
+    expect(mocks.billCreate).not.toHaveBeenCalled();
+    expect(mocks.paymentCreate).not.toHaveBeenCalled();
+    expect(mocks.paymentAllocationCreate).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        billId: "bill-openai",
+        paymentId: "pay-existing",
       }),
     );
   });
