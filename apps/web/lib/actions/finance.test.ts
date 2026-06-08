@@ -5,6 +5,7 @@ vi.mock("@/lib/permissions", () => ({ can: vi.fn() }));
 vi.mock("@dpf/db", () => ({
   prisma: {
     invoice: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn(), count: vi.fn(), findFirst: vi.fn() },
+    bill: { findUnique: vi.fn(), update: vi.fn() },
     payment: { create: vi.fn(), findUnique: vi.fn(), count: vi.fn() },
     paymentAllocation: { create: vi.fn() },
     salesOrder: { findUnique: vi.fn() },
@@ -230,6 +231,55 @@ describe("recordPayment", () => {
     expect(Number(updateCall.data.amountDue)).toBe(0);
     expect(updateCall.data.status).toBe("paid");
     expect(updateCall.data.paidAt).toBeInstanceOf(Date);
+  });
+
+  it("allocates outbound payments to bills and marks owner-entered bills paid", async () => {
+    mockPrisma.payment.count.mockResolvedValue(18);
+    mockPrisma.payment.create.mockResolvedValue({
+      id: "pay-claude",
+      paymentRef: "PAY-2026-0019",
+    });
+    mockPrisma.paymentAllocation.create.mockResolvedValue({ id: "alloc-claude" });
+    mockPrisma.bill.findUnique.mockResolvedValue({
+      id: "bill-claude",
+      totalAmount: 20,
+      amountPaid: 0,
+    });
+    mockPrisma.bill.update.mockResolvedValue({
+      id: "bill-claude",
+      status: "paid",
+      amountDue: 0,
+    });
+
+    await recordPayment({
+      direction: "outbound",
+      method: "card",
+      amount: 20,
+      currency: "USD",
+      billId: "bill-claude",
+      reference: "Claude card charge",
+      receivedAt: "2026-06-19",
+    } as any);
+
+    expect(mockPrisma.paymentAllocation.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          paymentId: "pay-claude",
+          billId: "bill-claude",
+          amount: 20,
+        }),
+      }),
+    );
+    expect(mockPrisma.bill.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "bill-claude" },
+        data: expect.objectContaining({
+          status: "paid",
+          amountPaid: 20,
+          amountDue: 0,
+        }),
+      }),
+    );
   });
 });
 

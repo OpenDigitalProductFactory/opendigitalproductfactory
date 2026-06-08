@@ -240,6 +240,33 @@ describe("submitBillForApproval", () => {
       }),
     );
   });
+
+  it("approves the bill immediately when no approval rules are configured", async () => {
+    authorizedUser();
+
+    const fakeBill = {
+      id: "bill-owner-entered",
+      billRef: "BILL-2026-0019",
+      totalAmount: 20,
+      status: "draft",
+      currency: "USD",
+      supplier: { name: "Anthropic", email: null },
+    };
+
+    mockPrisma.bill.findUnique.mockResolvedValue(fakeBill);
+    mockPrisma.approvalRule.findMany.mockResolvedValue([]);
+    mockPrisma.bill.update.mockResolvedValue({ ...fakeBill, status: "approved" });
+
+    await submitBillForApproval("bill-owner-entered");
+
+    expect(mockPrisma.billApproval.create).not.toHaveBeenCalled();
+    expect(mockPrisma.bill.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "bill-owner-entered" },
+        data: expect.objectContaining({ status: "approved" }),
+      }),
+    );
+  });
 });
 
 describe("respondToBillApproval", () => {

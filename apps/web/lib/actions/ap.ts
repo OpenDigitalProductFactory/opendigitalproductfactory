@@ -246,6 +246,18 @@ export async function submitBillForApproval(billId: string): Promise<void> {
     },
   });
 
+  if (rules.length === 0) {
+    await prisma.bill.update({
+      where: { id: billId },
+      data: { status: "approved" },
+    });
+
+    revalidatePath("/finance/ap");
+    revalidatePath("/finance/ap/bills");
+    revalidatePath("/finance/bills");
+    return;
+  }
+
   // Create a BillApproval record per matching rule. The record (and its
   // in-portal approval queue) is always created; the email is only sent when a
   // real base URL is available so we never mail a dead localhost approve link.
