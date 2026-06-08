@@ -411,6 +411,9 @@ importers:
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       i18n-iso-countries:
         specifier: ^7.14.0
         version: 7.14.0
