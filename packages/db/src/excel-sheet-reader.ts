@@ -1,4 +1,6 @@
+import { readFile } from "fs/promises";
 import readExcelFile, { type Sheet, type SheetData } from "read-excel-file/node";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 
 function stringifyCell(value: unknown): string {
   if (value == null) return "";
@@ -6,8 +8,31 @@ function stringifyCell(value: unknown): string {
   return String(value).trim();
 }
 
+function normalizeEmptyInlineStringCells(xml: string): string {
+  return xml.replace(/<c\b([^>]*)\bt="inlineStr"([^>]*)>\s*<\/c>/g, "<c$1$2></c>");
+}
+
+function normalizeWorkbookBuffer(buffer: Buffer): Buffer {
+  const entries = unzipSync(buffer);
+  let changed = false;
+
+  for (const [path, entry] of Object.entries(entries)) {
+    if (!path.startsWith("xl/worksheets/") || !path.endsWith(".xml")) continue;
+
+    const xml = strFromU8(entry);
+    const normalized = normalizeEmptyInlineStringCells(xml);
+    if (normalized === xml) continue;
+
+    entries[path] = strToU8(normalized);
+    changed = true;
+  }
+
+  return changed ? Buffer.from(zipSync(entries)) : buffer;
+}
+
 export async function readWorkbook(path: string): Promise<Sheet[]> {
-  return readExcelFile(path);
+  const buffer = await readFile(path);
+  return readExcelFile(normalizeWorkbookBuffer(buffer));
 }
 
 export function requireSheetData(workbook: Sheet[], sheetName: string): SheetData {

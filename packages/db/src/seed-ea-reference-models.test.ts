@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "fs";
+import { join } from "path";
 
 const { mockReadWorkbook } = vi.hoisted(() => ({
   mockReadWorkbook: vi.fn(),
@@ -101,5 +103,14 @@ describe("seedEaReferenceModels", () => {
         where: { slug: "it4it_v3_0_1" },
       })
     );
+  });
+
+  it("keeps the routing audit checkout wired to fetch LFS-backed seed workbooks", () => {
+    const workflow = readFileSync(
+      join(__dirname, "..", "..", "..", ".github", "workflows", "audit-routing-invariants.yml"),
+      "utf8"
+    );
+
+    expect(workflow).toMatch(/uses:\s*actions\/checkout@v6\s*\n\s*with:\s*\n(?:\s*#.*\n)*\s*lfs:\s*true/);
   });
 });
