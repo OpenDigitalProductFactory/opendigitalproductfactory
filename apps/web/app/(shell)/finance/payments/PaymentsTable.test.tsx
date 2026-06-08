@@ -9,8 +9,9 @@ const ROWS: PaymentRow[] = [
     paymentRef: "PMT-001",
     method: "card",
     direction: "inbound",
-    invoiceId: "inv1",
-    invoiceRef: "INV-100",
+    documentId: "inv1",
+    documentRef: "INV-100",
+    documentType: "invoice",
     dateISO: "2026-03-28T14:30:00.000Z",
     amount: 1234.5,
   },
@@ -19,8 +20,9 @@ const ROWS: PaymentRow[] = [
     paymentRef: "PMT-002",
     method: "transfer",
     direction: "outbound",
-    invoiceId: null,
-    invoiceRef: null,
+    documentId: "bill1",
+    documentRef: "BILL-200",
+    documentType: "bill",
     dateISO: "2026-03-27T09:00:00.000Z",
     amount: 50,
   },
@@ -35,6 +37,12 @@ describe("PaymentsTable (report-kit migration)", () => {
     expect(html).toContain("INV-100");
   });
 
+  it("renders outbound bill allocations with a bill link", () => {
+    expect(html).toContain("PMT-002");
+    expect(html).toContain('href="/finance/bills/bill1"');
+    expect(html).toContain("BILL-200");
+  });
+
   it("renders direction via token-backed StatusBadge (no raw hex)", () => {
     // inbound → success, outbound → warning
     expect(html).toContain('data-intent="success"');
@@ -47,7 +55,8 @@ describe("PaymentsTable (report-kit migration)", () => {
     expect(html).toContain("£50.00");
   });
 
-  it("renders an em dash when there is no linked invoice", () => {
-    expect(html).toContain("—");
+  it("renders the document column instead of an invoice-only column", () => {
+    expect(html).toContain("Document");
+    expect(html).not.toContain(">Invoice<");
   });
 });

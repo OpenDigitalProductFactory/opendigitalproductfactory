@@ -13,6 +13,7 @@ import {
 } from "./aiFinanceCoworkerAsks";
 import { AiFinanceCoworkerAskButton } from "./AiFinanceCoworkerAskButton";
 import { AiSpendProviderTable, type AiSpendProviderTableRow } from "./AiSpendProviderTable";
+import { AiSubscriptionPaymentForm, type AiSubscriptionPaymentProviderOption } from "./AiSubscriptionPaymentForm";
 
 type Overview = Awaited<ReturnType<typeof getAiSpendOverview>>;
 type Rows = Awaited<ReturnType<typeof listAiProviderFinanceProfiles>>;
@@ -21,14 +22,44 @@ function formatMoney(value: number) {
   return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function formatShortDate(value: Date | string | null | undefined) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+function humanizeValue(value: string | null | undefined) {
+  if (!value) return null;
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function coveredProviderIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.length > 0);
+}
+
 function buildRows(rows: Rows, currencySymbol: string): AiSpendProviderTableRow[] {
   return rows.map((row) => {
     const latestContract = row.supplierContracts[0] ?? null;
     const latestSnapshot = latestContract?.usageSnapshots[0] ?? null;
     const committed = Number(latestContract?.monthlyCommittedAmount ?? 0);
     const metered = row.actualSpendMtd.costUsd;
+    const latestBill = latestContract?.bills[0] ?? null;
+    const latestPayment = latestBill?.allocations[0]?.payment ?? null;
+    const latestPaymentDate = formatShortDate(latestPayment?.receivedAt ?? latestBill?.issueDate);
+    const latestPaymentAmount = Number(latestPayment?.amount ?? latestBill?.totalAmount ?? 0);
+    const coveredCount = coveredProviderIds(latestContract?.coveredProviderIds).length;
+    const billingCadence = humanizeValue(latestContract?.billingCadence) ?? "No cadence";
+    const billingDay = latestContract?.billingDayOfMonth ? `day ${latestContract.billingDayOfMonth}` : "no day";
+    const paymentMethod = humanizeValue(latestContract?.paymentMethod);
     const primaryWorkItem = row.financeWorkItems[0] ?? null;
-    const needsSetup = !latestContract || latestContract.status === "draft" || committed === 0 || row.financeWorkItems.length > 0;
+    const hasPaidEvidence = latestBill?.status === "paid" || latestPayment?.status === "completed";
+    const needsSetup = !latestContract || latestContract.status === "draft" || (committed === 0 && !hasPaidEvidence) || row.financeWorkItems.length > 0;
     const financeStatus = needsSetup ? "needs_setup" : "tracked";
 
     return {
@@ -41,6 +72,18 @@ function buildRows(rows: Rows, currencySymbol: string): AiSpendProviderTableRow[
       financeStatus,
       financeStatusLabel: financeStatus === "tracked" ? "Tracked" : "Needs setup",
       commitmentLabel: committed > 0 ? `${currencySymbol}${formatMoney(committed)}` : "Needs finance input",
+      billingLabel: latestContract
+        ? [billingCadence, billingDay, paymentMethod].filter(Boolean).join(" · ")
+        : "No billing schedule",
+      coverageLabel: coveredCount > 1 ? `Covers ${coveredCount} provider rows` : "Single provider",
+      latestPaymentLabel: latestBill
+        ? [
+            latestBill.status === "paid" || latestPayment?.status === "completed" ? "Paid" : humanizeValue(latestBill.status),
+            latestPaymentDate,
+            latestPaymentAmount > 0 ? `${currencySymbol}${formatMoney(latestPaymentAmount)}` : null,
+          ].filter(Boolean).join(" · ")
+        : "No bill/payment",
+      latestBillId: latestBill?.id ?? null,
       meteredSpendLabel: metered > 0 ? `${currencySymbol}${formatMoney(metered)}` : "No metered spend",
       utilizationLabel: latestSnapshot ? `${latestSnapshot.utilizationPct?.toFixed(1) ?? "0.0"}%` : "No snapshot",
       workItemCount: row.financeWorkItems.length,
@@ -48,6 +91,16 @@ function buildRows(rows: Rows, currencySymbol: string): AiSpendProviderTableRow[
       primaryWorkItemLabel: primaryWorkItem ? humanizeFinanceLabel(primaryWorkItem.type) : "No asks",
     };
   });
+}
+
+function buildProviderOptions(rows: Rows): AiSubscriptionPaymentProviderOption[] {
+  return rows
+    .map((row) => ({
+      providerId: row.provider.providerId,
+      providerName: row.provider.name,
+      supplierName: row.supplier?.name ?? null,
+    }))
+    .sort((a, b) => a.providerName.localeCompare(b.providerName));
 }
 
 export function AiSpendWorkspace({
@@ -67,6 +120,7 @@ export function AiSpendWorkspace({
   const visibleAsks = coworkerAsks.slice(0, 4);
   const remainingAskCount = Math.max(overview.openWorkItems - visibleAsks.length, 0);
   const hasTraceabilityGaps = traceabilityGapCount > 0;
+  const providerOptions = buildProviderOptions(rows);
 
   return (
     <div className="space-y-6">
@@ -188,6 +242,8 @@ export function AiSpendWorkspace({
           ) : null}
         </section>
       )}
+
+      <AiSubscriptionPaymentForm providerOptions={providerOptions} />
 
       <div className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
         <div className="flex items-start justify-between gap-4">

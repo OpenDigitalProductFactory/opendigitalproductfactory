@@ -17,6 +17,23 @@ export function AiProviderFinancePanel({ detail }: { detail: ProviderFinanceDeta
 
   const latestContract = detail.supplierContracts[0] ?? null;
   const latestSnapshot = latestContract?.usageSnapshots[0] ?? null;
+  const latestBill = latestContract?.bills[0] ?? null;
+  const latestPayment = latestBill?.allocations[0]?.payment ?? null;
+  const coveredProviders = providerIdsFromCoverage(latestContract?.coveredProviderIds);
+  const billingParts = latestContract
+    ? [
+        humanizeValue(latestContract.billingCadence),
+        latestContract.billingDayOfMonth ? `day ${latestContract.billingDayOfMonth}` : null,
+        humanizeValue(latestContract.paymentMethod),
+      ].filter(Boolean).join(" · ")
+    : "Not scheduled";
+  const latestPaymentValue = latestBill
+    ? [
+        latestBill.status === "paid" || latestPayment?.status === "completed" ? "Paid" : humanizeValue(latestBill.status),
+        formatShortDate(latestPayment?.receivedAt ?? latestBill.issueDate),
+        formatMoney(Number(latestPayment?.amount ?? latestBill.totalAmount ?? 0), latestPayment?.currency ?? latestBill.currency),
+      ].filter(Boolean).join(" · ")
+    : "No payment evidence";
 
   return (
     <div className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
@@ -41,11 +58,36 @@ export function AiProviderFinancePanel({ detail }: { detail: ProviderFinanceDeta
         <Metric label="Finance status" value={detail.status.replace(/_/g, " ")} />
         <Metric label="Supplier" value={detail.supplier?.name ?? "Not linked"} />
         <Metric label="Contract" value={latestContract?.status.replace(/_/g, " ") ?? "Not created"} />
+        <Metric label="Billing" value={billingParts} />
         <Metric
           label="Open work items"
           value={`${detail.financeWorkItems.filter((item) => item.status !== "done").length}`}
         />
+        <Metric
+          label="Monthly commitment"
+          value={latestContract?.monthlyCommittedAmount
+            ? formatMoney(Number(latestContract.monthlyCommittedAmount), latestContract.currency)
+            : "Not set"}
+        />
+        <Metric label="Latest evidence" value={latestPaymentValue} />
+        <Metric
+          label="Coverage"
+          value={coveredProviders.length > 1 ? `${coveredProviders.length} provider rows` : "Single provider"}
+        />
       </div>
+
+      {latestBill ? (
+        <div className="mt-4 flex flex-wrap gap-3 text-xs">
+          <a href={`/finance/bills/${latestBill.id}`} className="text-[var(--dpf-accent)]">
+            View bill
+          </a>
+          {latestPayment ? (
+            <a href="/finance/payments" className="text-[var(--dpf-accent)]">
+              View payments
+            </a>
+          ) : null}
+        </div>
+      ) : null}
 
       {(detail.billingUrl || detail.usageUrl) && (
         <div className="mt-4 flex flex-wrap gap-3 text-xs">
@@ -73,6 +115,35 @@ export function AiProviderFinancePanel({ detail }: { detail: ProviderFinanceDeta
       )}
     </div>
   );
+}
+
+function humanizeValue(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatMoney(value: number, currency: string): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatShortDate(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+function providerIdsFromCoverage(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.length > 0);
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

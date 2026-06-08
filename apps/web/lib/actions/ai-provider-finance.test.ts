@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   can: vi.fn(),
   seedBridge: vi.fn(),
   activateContract: vi.fn(),
+  recordSubscriptionPayment: vi.fn(),
   getOverview: vi.fn(),
   getProviderDetail: vi.fn(),
   getSupplierDetail: vi.fn(),
@@ -18,9 +19,14 @@ vi.mock("@/lib/permissions", () => ({
   can: mocks.can,
 }));
 
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+}));
+
 vi.mock("@/lib/finance/ai-provider-finance", () => ({
   seedAiProviderFinanceBridge: mocks.seedBridge,
   activateAiProviderContract: mocks.activateContract,
+  recordAiProviderSubscriptionPayment: mocks.recordSubscriptionPayment,
   getAiSpendOverview: mocks.getOverview,
   getAiProviderFinanceDetail: mocks.getProviderDetail,
   getAiSupplierFinanceDetail: mocks.getSupplierDetail,
@@ -31,6 +37,7 @@ import {
   loadAiProviderFinanceDetailAction,
   loadAiSpendOverviewAction,
   loadAiSupplierFinanceDetailAction,
+  recordAiProviderSubscriptionPaymentAction,
   seedAiProviderFinanceBridgeAction,
 } from "./ai-provider-finance";
 
@@ -91,5 +98,35 @@ describe("ai-provider-finance actions", () => {
     });
 
     expect(result).toEqual({ id: "contract-1", status: "active" });
+  });
+
+  it("records an owner-entered AI subscription payment behind manage_finance", async () => {
+    mocks.recordSubscriptionPayment.mockResolvedValue({
+      contractId: "contract-1",
+      billId: "bill-1",
+      paymentId: "payment-1",
+    });
+
+    const result = await recordAiProviderSubscriptionPaymentAction({
+      providerIds: ["chatgpt", "codex"],
+      supplierName: "OpenAI",
+      amount: 20,
+      currency: "USD",
+      billingDayOfMonth: 19,
+      paidAt: "2026-06-19",
+      paymentMethod: "card",
+    });
+
+    expect(mocks.recordSubscriptionPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerIds: ["chatgpt", "codex"],
+        billingDayOfMonth: 19,
+      }),
+    );
+    expect(result).toEqual({
+      contractId: "contract-1",
+      billId: "bill-1",
+      paymentId: "payment-1",
+    });
   });
 });

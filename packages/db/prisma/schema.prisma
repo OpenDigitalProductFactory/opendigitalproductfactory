@@ -7841,12 +7841,16 @@ model SupplierContract {
   status                 String    @default("draft")
   contractType           String    @default("subscription")
   billingCadence         String    @default("monthly")
+  billingDayOfMonth      Int?
   currency               String    @default("USD")
   monthlyCommittedAmount Decimal?
   budgetAmount           Decimal?
   budgetWindow           String    @default("monthly")
   allowsOverage          Boolean   @default(false)
   usageUnit              String?
+  paymentMethod          String?
+  paymentReference       String?
+  coveredProviderIds     Json?
   billingUrl             String?
   usageUrl               String?
   renewalDate            DateTime?
@@ -7862,6 +7866,7 @@ model SupplierContract {
   allowances          ContractAllowance[]
   usageSnapshots      ContractUsageSnapshot[]
   financeWorkItems    FinanceWorkItem[]
+  bills               Bill[]
 
   @@index([profileId])
   @@index([supplierId])
@@ -7955,6 +7960,7 @@ model Bill {
   amountPaid      Decimal  @default(0)
   amountDue       Decimal
   purchaseOrderId String?
+  supplierContractId String?
   approvalToken   String?  @unique
   notes           String?
   createdById     String?
@@ -7963,12 +7969,14 @@ model Bill {
 
   supplier      Supplier            @relation(fields: [supplierId], references: [id])
   purchaseOrder PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id])
+  supplierContract SupplierContract? @relation(fields: [supplierContractId], references: [id], onDelete: SetNull)
   createdBy     User?               @relation("BillCreations", fields: [createdById], references: [id])
   lineItems     BillLineItem[]
   allocations   PaymentAllocation[]
   approvals     BillApproval[]
 
   @@index([supplierId])
+  @@index([supplierContractId])
   @@index([status])
   @@index([dueDate])
 }

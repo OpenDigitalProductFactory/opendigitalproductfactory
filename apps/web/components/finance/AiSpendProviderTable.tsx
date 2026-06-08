@@ -14,6 +14,10 @@ export type AiSpendProviderTableRow = {
   financeStatus: "tracked" | "needs_setup" | "untracked";
   financeStatusLabel: string;
   commitmentLabel: string;
+  billingLabel: string;
+  coverageLabel: string;
+  latestPaymentLabel: string;
+  latestBillId: string | null;
   meteredSpendLabel: string;
   utilizationLabel: string;
   workItemCount: number;
@@ -58,6 +62,30 @@ const columns: Column<AiSpendProviderTableRow>[] = [
     align: "right",
     cell: (row) => row.commitmentLabel,
     sortAccessor: (row) => row.commitmentLabel,
+  },
+  {
+    key: "billing",
+    header: "Billing",
+    cell: (row) => (
+      <div className="space-y-1">
+        <p className="text-sm text-[var(--dpf-text)]">{row.billingLabel}</p>
+        <p className="text-xs text-[var(--dpf-muted)]">{row.coverageLabel}</p>
+      </div>
+    ),
+    sortAccessor: (row) => row.billingLabel,
+  },
+  {
+    key: "evidence",
+    header: "Latest evidence",
+    cell: (row) =>
+      row.latestBillId ? (
+        <Link href={`/finance/bills/${row.latestBillId}`} className="text-[var(--dpf-accent)]">
+          {row.latestPaymentLabel}
+        </Link>
+      ) : (
+        <span className="text-[var(--dpf-muted)]">{row.latestPaymentLabel}</span>
+      ),
+    sortAccessor: (row) => row.latestPaymentLabel,
   },
   {
     key: "metered",

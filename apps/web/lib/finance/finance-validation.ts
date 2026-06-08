@@ -50,6 +50,7 @@ export const recordPaymentSchema = z.object({
   currency: z.string().length(3).default("GBP"),
   reference: z.string().optional(),
   invoiceId: z.string().optional(),
+  billId: z.string().optional(),
   notes: z.string().optional(),
   receivedAt: z.string().optional(),
 });

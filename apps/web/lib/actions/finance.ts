@@ -220,8 +220,42 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{ id: st
     }
   }
 
+  if (input.billId) {
+    await prisma.paymentAllocation.create({
+      data: {
+        paymentId: payment.id,
+        billId: input.billId,
+        amount: input.amount,
+      },
+    });
+
+    const bill = await prisma.bill.findUnique({
+      where: { id: input.billId },
+      select: { totalAmount: true, amountPaid: true },
+    });
+
+    if (bill) {
+      const totalAmount = Number(bill.totalAmount);
+      const prevPaid = Number(bill.amountPaid);
+      const newAmountPaid = round2(prevPaid + input.amount);
+      const newAmountDue = round2(totalAmount - newAmountPaid);
+      const isPaid = newAmountDue <= 0;
+
+      await prisma.bill.update({
+        where: { id: input.billId },
+        data: {
+          amountPaid: newAmountPaid,
+          amountDue: newAmountDue,
+          status: isPaid ? "paid" : "partially_paid",
+        },
+      });
+    }
+  }
+
   revalidatePath("/finance");
   revalidatePath("/finance/invoices");
+  revalidatePath("/finance/bills");
+  revalidatePath("/finance/payments");
 
   return payment;
 }
