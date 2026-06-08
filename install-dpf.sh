@@ -410,7 +410,23 @@ fi
 #    portal-init.
 step "Host hardware profile"
 DPF_SELECTED_MODEL=""
-if DPF_HOST_PROFILE_JSON="$(pnpm --filter @dpf/db exec tsx scripts/detect-hardware-host.ts 2>/dev/null)"; then
+
+# Defensive nvm sourcing for pnpm (mirrors the earlier Node step). On macOS
+# with nvm-managed node (common for contributors and some customer setups),
+# pnpm lives in the nvm bin dir. Without this, the pnpm --filter call below
+# can fail with "command not found" even if the user had a working pnpm in
+# their interactive shell. This is Mac/Linux sh path only; Windows ps1 has
+# its own pnpm + hardware detection logic and is unaffected.
+if ! command -v pnpm >/dev/null 2>&1; then
+  _nvm_sh="${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+  if [ -s "$_nvm_sh" ]; then
+    # shellcheck source=/dev/null
+    . "$_nvm_sh" 2>/dev/null || true
+    nvm use default 2>/dev/null || nvm use node 2>/dev/null || true
+  fi
+fi
+
+if DPF_HOST_PROFILE_JSON="$(pnpm --filter @dpf/db exec -- tsx "$REPO_ROOT/scripts/detect-hardware-host.ts" 2>/dev/null)"; then
   export DPF_HOST_PROFILE="$DPF_HOST_PROFILE_JSON"
   DPF_SELECTED_MODEL="$(printf '%s' "$DPF_HOST_PROFILE_JSON" | sed -nE 's/.*"selectedModel"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
   if [ -n "$DPF_SELECTED_MODEL" ]; then
