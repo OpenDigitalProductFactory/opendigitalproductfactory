@@ -18,6 +18,17 @@ describe("KNOWN_PROVIDER_MODELS", () => {
     expect(chatgpt?.defaultStatus).toBe("active");
   });
 
+  it("keeps xAI/Grok catalog-backed sync available for OAuth-only Build Studio connections", () => {
+    expect(KNOWN_PROVIDER_MODELS.xai.map((model) => model.modelId)).toEqual(
+      expect.arrayContaining(["grok-4.3", "grok-build-0.1"]),
+    );
+
+    const grokBuild = KNOWN_PROVIDER_MODELS.xai.find((model) => model.modelId === "grok-build-0.1");
+    expect(grokBuild?.defaultStatus).toBe("active");
+    expect(grokBuild?.modelClass).toBe("code");
+    expect(grokBuild?.capabilities.toolUse).toBe(true);
+  });
+
   // ── Anthropic subscription models ─────────────────────────────────────────
 
   it("has an anthropic-sub catalog entry", () => {

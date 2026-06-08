@@ -363,6 +363,15 @@ describe("discoverModels", () => {
     expect(result).toEqual(expect.objectContaining({ discovered: 2, newCount: 2, error: undefined }));
     expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("codex");
   });
+
+  it("uses known-model seeding for xAI/Grok so OAuth-only Build Studio sync does not hit /v1/models", async () => {
+    mockAutoDiscoverAndProfile.mockResolvedValue({ discovered: 2, profiled: 2 });
+
+    const result = await discoverModels("xai");
+
+    expect(result).toEqual(expect.objectContaining({ discovered: 2, newCount: 2, error: undefined }));
+    expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("xai");
+  });
 });
 
 describe("configureProvider", () => {
