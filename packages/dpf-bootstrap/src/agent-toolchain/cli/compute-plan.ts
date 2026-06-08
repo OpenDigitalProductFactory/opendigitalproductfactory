@@ -77,6 +77,7 @@ const options: ComputeAgentToolchainPlanOptions = {
   repoRoot: requireArg(values, "repo-root"),
   codexConfigPath: requireArg(values, "codex-config"),
   claudePluginsPath: requireArg(values, "claude-plugins"),
+  grokConfigPath: values["grok-config"] || "",  // optional for now; wired by sh/ps1
   kernelPrinciplesDir: requireArg(values, "kernel-principles"),
   contributorMemoryDir: requireArg(values, "contributor-memory"),
   projectSlug: requireArg(values, "project-slug"),

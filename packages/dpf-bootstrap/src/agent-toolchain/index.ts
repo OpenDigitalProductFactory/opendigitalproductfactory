@@ -68,6 +68,11 @@ export {
 } from "./bridge";
 
 export {
+  planGrokConfig,
+  type GrokConfigPlan,
+} from "./grok-config";
+
+export {
   runMcpReadinessProbe,
   runSmokeProbe,
   type ClientSmokeResult,

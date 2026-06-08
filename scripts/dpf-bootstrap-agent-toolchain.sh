@@ -123,6 +123,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 
 CODEX_CONFIG_PATH="$HOME/.codex/config.toml"
 CLAUDE_PLUGINS_PATH="$HOME/.claude/plugins/installed_plugins.json"
+GROK_CONFIG_PATH="$HOME/.grok/config.toml"
 KERNEL_PRINCIPLES_DIR="$REPO_ROOT/docs/founder-kernel/wiki/principles"
 CONTRIBUTOR_MEMORY_DIR="$HOME/.claude/projects"
 PROJECT_SLUG="$(printf '%s' "$REPO_ROOT" | sed -E 's:[/:]:-:g' | sed -E 's:^-+::')"
@@ -330,6 +331,7 @@ bridge_args=(
   --repo-root             "$REPO_ROOT"
   --codex-config          "$CODEX_CONFIG_PATH"
   --claude-plugins        "$CLAUDE_PLUGINS_PATH"
+  --grok-config           "$GROK_CONFIG_PATH"
   --kernel-principles     "$KERNEL_PRINCIPLES_DIR"
   --contributor-memory    "$CONTRIBUTOR_MEMORY_DIR"
   --project-slug          "$PROJECT_SLUG"
@@ -382,6 +384,7 @@ def shell_var(name, value):
 
 claude = plan.get("claude") or {}
 codex = plan.get("codex") or {}
+grok = plan.get("grok") or {}
 memory = plan.get("memory") or {}
 mcp_client = plan.get("mcpClientConfig") or {}
 
@@ -403,6 +406,7 @@ _conv_lines = [
 ]
 shell_var("CODEX_CONVERGENCE_COUNT", len(_conv_lines))
 shell_var("CODEX_CONVERGENCE", "\n".join(_conv_lines))
+shell_var("GROK_WRITES_COUNT", len((grok.get("config") or {}).get("writes", [])) if grok else 0)
 shell_var("MCP_CLIENT_WRITES_COUNT", len(mcp_client.get("writes", [])))
 shell_var("MEMORY_WRITES_COUNT", len(memory.get("writes", [])))
 shell_var("PREVIEW_STATE", plan.get("preview", {}).get("readinessState", "missing_cli"))
@@ -487,6 +491,14 @@ for w in (plan.get("mcpClientConfig") or {}).get("writes", []):
     with open(w["path"], "wb") as f:
         f.write(w["content"].encode("utf-8"))
 
+# Grok config writes (TOML for ~/.grok/config.toml , from grok config plan).
+for w in (plan.get("grok") or {}).get("config", {}).get("writes", []):
+    if w.get("path"):
+        d = os.path.dirname(w["path"])
+        if d: os.makedirs(d, exist_ok=True)
+        with open(w["path"], "wb") as f:
+            f.write(w["content"].encode("utf-8"))
+
 # Memory writes (excluding preserve-user-edit).
 mem = plan.get("memory") or {}
 for w in mem.get("writes", []):
@@ -529,11 +541,13 @@ EOF
     skip "Codex CLI not installed; skipping plugin wire."
   fi
 
-  # Grok: no dedicated plugin (unlike Claude). Wiring is via generic MCP client config
-  # (already handled) + presence detection. Mirror the ps1 and Node bridge behavior.
-  if [ $GROK_PRESENT -eq 1 ]; then
+  # Grok wiring: config writes applied in the PY block above if PLAN_GROK_WRITES_COUNT >0 .
+  if [ "${PLAN_GROK_WRITES_COUNT:-0}" -gt 0 ]; then
+    ok "Grok config wired."
     GROK_WIRED=1
-    ok "Grok CLI detected (wiring via generic MCP + env token)."
+  elif [ "$GROK_PRESENT" -eq 1 ]; then
+    ok "Grok CLI detected (config already converged)."
+    GROK_WIRED=1
   else
     skip "Grok CLI not installed; skipping (will appear when 'grok' is on PATH)."
   fi
