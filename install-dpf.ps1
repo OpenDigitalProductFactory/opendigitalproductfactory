@@ -2041,16 +2041,55 @@ if (-not (Test-StepDone "model")) {
 
     Write-Action "Pulling AI model $selectedModel via Docker Model Runner, these may be big..."
     Write-Action "This may take several minutes depending on your internet speed, and size of your video card."
+    # Name accuracy: pull with ai/ form; Docker registers under short form (no ai/).
+    # After pull, normalize $selectedModel + the .host-profile.json / .selected-model
+    # files to the runtime name so that portal /v1/models discovery and inference
+    # references match exactly what the model-runner serves (prevents "model not found"
+    # in inference.model-manager even when pull was executed).
+    $pullName = $selectedModel
+    $runtimeModel = $pullName -replace '^ai/',''
+    # Expected size upfront (manifest only) so user with known bandwidth can estimate duration.
+    $sizeMB = 0
+    try {
+        $mani = docker manifest inspect $pullName 2>$null | ConvertFrom-Json -ErrorAction SilentlyContinue
+        $total = 0
+        if ($mani -and $mani.layers) { $mani.layers | ForEach-Object { if ($_.size) { $total += [int64]$_.size } } }
+        if ($mani -and $mani.config -and $mani.config.size) { $total += [int64]$mani.config.size }
+        if ($total -gt 0) { $sizeMB = [int]($total / 1MB) }
+    } catch {}
+    if ($sizeMB -gt 0) {
+        Write-Action "  Expected download size: ~${sizeMB}MB. If you know your internet speed you can estimate how long the pull will take."
+    }
     $oldEAP = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    docker model pull $selectedModel 2>&1
+    docker model pull $pullName 2>&1
     $pullExit = $LASTEXITCODE
     $ErrorActionPreference = $oldEAP
-    if ($pullExit -ne 0) {
-        Write-Warn "Model pull may have failed. Check: docker model list"
-        Write-Warn "You can pull manually later: docker model pull $selectedModel"
-    } else {
+    # Ground truth: re-check docker model list for the runtime name (more reliable
+    # than exit code alone across Docker Desktop versions).
+    $isPresent = $false
+    try {
+        $listed = docker model list 2>&1 | Select-Object -Skip 1 | ForEach-Object { ($_ -split '\s+')[0] } | Where-Object { $_ -eq $runtimeModel }
+        if ($listed) { $isPresent = $true }
+    } catch {}
+    if ($isPresent) {
+        $selectedModel = $runtimeModel
+        # Persist the accurate runtime name for compose env + portal-init host_profile
+        $selectedModel | Set-Content "$DPF_DIR\.selected-model" -ErrorAction SilentlyContinue
+        $hpPath = "$DPF_DIR\.host-profile.json"
+        if (Test-Path $hpPath) {
+            try {
+                $hp = Get-Content $hpPath -Raw | ConvertFrom-Json
+                $hp.selectedModel = $selectedModel
+                $hp | ConvertTo-Json -Compress | Set-Content $hpPath
+            } catch {}
+        }
         Write-OK "AI Coworker is ready ($selectedModel)"
+    } elseif ($pullExit -ne 0) {
+        Write-Warn "Model pull may have failed. Check: docker model list"
+        Write-Warn "You can pull manually later: docker model pull $pullName"
+    } else {
+        Write-Warn "Model pull reported success but $runtimeModel not listed; retry: docker model pull $pullName"
     }
     Save-Progress "model"
 } else {
