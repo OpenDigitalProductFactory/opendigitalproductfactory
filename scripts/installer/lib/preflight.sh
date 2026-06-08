@@ -228,14 +228,40 @@ dpf_preflight_port_conflicts() {
     0) : ;;          # port in use — investigate
   esac
 
-  # In use. Is it our existing stack? If `docker compose -p dpf ps -q`
-  # has output, treat as ours (operator is re-running install over a
-  # working stack, which is supported and idempotent).
+  # In use. Is it our existing stack?
+  # We use multiple strategies because:
+  # - On macOS Docker Desktop the host listener is always owned by
+  #   com.docker.backend (or vpnkit) for *any* published container port.
+  # - `docker compose -p dpf ps -q` can be empty due to cwd, COMPOSE_FILE,
+  #   env, partial restarts, or project metadata quirks even when containers
+  #   are running and publishing the port.
+  # Authoritative signals are the actual containers + their publish + labels.
+  local is_our_stack=0
   if command -v docker >/dev/null 2>&1; then
+    # Original compose project query (fast path when it works)
     if docker compose -p dpf ps -q 2>/dev/null | grep -q .; then
-      info "Port ${primary_port} is bound, but an existing DPF stack is running — re-install will reuse it."
-      return 0
+      is_our_stack=1
     fi
+    # Robust: a dpf-* container is publishing this exact port (covers the
+    # common case where lsof shows com.docker.backend).
+    if [ "$is_our_stack" -eq 0 ]; then
+      if docker ps --filter "publish=${primary_port}" --format '{{.Names}}' 2>/dev/null | grep -qE '^dpf-'; then
+        is_our_stack=1
+      fi
+    fi
+    # Strongest: compose-launched container for project "dpf" publishing it
+    # (label survives even if name filter is odd).
+    if [ "$is_our_stack" -eq 0 ]; then
+      if docker ps --filter "label=com.docker.compose.project=dpf" \
+                    --filter "publish=${primary_port}" -q 2>/dev/null | grep -q .; then
+        is_our_stack=1
+      fi
+    fi
+  fi
+
+  if [ "$is_our_stack" -eq 1 ]; then
+    info "Port ${primary_port} is bound, but an existing DPF stack is running — re-install will reuse it."
+    return 0
   fi
 
   local holder; holder="$(_dpf_port_holder "$primary_port" 2>/dev/null || true)"
@@ -247,7 +273,7 @@ dpf_preflight_port_conflicts() {
   fi
 
   printf '\n%bPort conflict detected.%b\n' "${DPF_RED:-}" "${DPF_NC:-}" >&2
-  printf '  %bReason:%b Port %s is bound by ''%s'' (no DPF stack running).\n' \
+  printf '  %bReason:%b Port %s is bound by ''%s'' (no DPF container publishing it).\n' \
     "${DPF_YELLOW:-}" "${DPF_NC:-}" "$primary_port" "$holder" >&2
   printf '  %bNext:%b   Stop that process, or set DPF_PORTAL_PORT to an unused port before re-running.\n' \
     "${DPF_YELLOW:-}" "${DPF_NC:-}" >&2
