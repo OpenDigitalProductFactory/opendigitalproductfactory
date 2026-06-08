@@ -313,6 +313,33 @@ describe("testProviderAuth", () => {
     });
     expect(mockActivateProvider).not.toHaveBeenCalled();
   });
+
+  it("reports the OAuth connection for a Grok provider connected via device-code (no API key needed)", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({
+      providerId: "xai",
+      name: "xAI (Grok)",
+      baseUrl: "https://api.x.ai/v1",
+      endpoint: null,
+      authMethod: "api_key",
+      authHeader: "Authorization",
+      category: "direct",
+      cliEngine: "grok",
+      families: [],
+      enabledFamilies: [],
+      supportedAuthMethods: ["api_key", "oauth2_device"],
+    });
+    // OAuth dispatch credential = the ~/.grok/auth.json blob stored in cachedToken; no API key.
+    mockGetDecryptedCredential.mockResolvedValue({
+      cachedToken: '{"access_token":"xai-oauth","refresh_token":"r"}',
+      secretRef: null,
+    });
+
+    const result = await testProviderAuth("xai");
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toMatch(/OAuth/i);
+    expect(result.message).not.toMatch(/No API key/i);
+  });
 });
 
 describe("discoverModels", () => {

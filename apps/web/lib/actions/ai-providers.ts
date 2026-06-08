@@ -443,6 +443,22 @@ export async function testProviderAuth(providerId: string): Promise<{ ok: boolea
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) return { ok: false, message: "Provider not found" };
 
+  // Grok can be connected two ways: an API key (for inference/chat) OR device-code
+  // OAuth (the Build Studio "grok" engine, whose ~/.grok/auth.json blob is stored in
+  // cachedToken). When only the OAuth dispatch credential is present, testing the
+  // inference API would misleadingly report "No API key configured" — so report the
+  // OAuth connection the provider actually has.
+  if (provider.cliEngine === "grok" && (provider.supportedAuthMethods as string[]).includes("oauth2_device")) {
+    const oauthCred = await getDecryptedCredential(providerId);
+    const hasOAuth = !!oauthCred?.cachedToken && oauthCred.cachedToken.trimStart().startsWith("{");
+    if (hasOAuth && !oauthCred?.secretRef) {
+      return {
+        ok: true,
+        message: "Connected via your xAI account (OAuth). The Grok build engine is ready — an API key is optional and only needed for chat/inference.",
+      };
+    }
+  }
+
   const providerRow = {
     ...provider,
     families: provider.families as string[],
