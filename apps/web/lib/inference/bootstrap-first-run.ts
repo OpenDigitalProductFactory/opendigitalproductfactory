@@ -71,35 +71,35 @@ export async function seedOnboardingAgent(): Promise<void> {
 }
 
 /**
- * Model tiers ordered largest-first for auto-pull on first run.
- * Each entry specifies the Docker Model Runner tag and the minimum VRAM
- * required to run it at Q4 quantization with ~15% headroom.
+ * Model tiers ordered largest-first for auto-pull on first run (or when
+ * the host hardware profile did not pre-pull a strong model).
+ * Each entry specifies the exact Docker Model Runner tag published under
+ * the `ai/` namespace and the minimum (unified) memory / VRAM required.
  *
- * Sizing estimates use the actual published tag for each tier. Verified
- * against https://hub.docker.com/r/ai/qwen3/tags on 2026-05-23. Tags must
- * be EXACTLY as published — Docker Hub treats the registry path as
- * case-sensitive and `ai/qwen3:14b` (lowercase, no quantization) returns
- * 404, while `ai/qwen3:14B-Q6_K` resolves correctly.
+ * Sizing from the actual published manifests in the ai/ runner catalog.
+ * Tags are case-sensitive and must include the quantization suffix.
  *
- *   - ai/qwen3:30B-A3B-Q4_K_M  (30B MoE, 3B active) → ~17 GB VRAM → 24 GB+ GPU
- *   - ai/qwen3:14B-Q6_K        (14B dense)          → ~12 GB VRAM → 16 GB+ GPU
- *   - ai/qwen3:8B-Q4_K_M       (8B dense)           → ~5  GB VRAM → 8 GB+ GPU
- *   - ai/qwen3:4B-UD-Q4_K_XL   (4B dense)           → ~3  GB VRAM → 4 GB+ GPU / CPU-OK
+ *   - ai/qwen3.6:35B-A3B-UD-Q4_K_M  (Qwen3.6 35B-A3B MoE) → ~22 GB  (high-RAM Apple Silicon "plenty of memory" or 24 GB+ GPU)
+ *   - ai/qwen3:14B-Q6_K             (14B dense)          → ~12 GB
+ *   - ai/qwen3:8B-Q4_K_M            (8B dense)           → ~5  GB
+ *   - ai/qwen3:4B-UD-Q4_K_XL        (4B dense)           → ~3  GB (CPU-OK fallback)
  *
- * Qwen3 is preferred over Gemma: Docker's benchmarks show Qwen3:8B matches
- * Claude Haiku for tool calling (F1 0.93) and Qwen3:14B exceeds it (F1 0.97).
- * Tool calling accuracy is critical for coworker routing.
+ * Qwen (3 / 3.6) is preferred because of strong tool-calling results
+ * (F1 0.93+ at 8B, higher at larger sizes) that the DPF coworker routing
+ * and Build Studio agents depend on. The 35B-A3B MoE (what Docker surfaces
+ * as ai/qwen3.6:latest) is the current top published option for hosts
+ * with plenty of unified RAM — direct successor to the prior 30B-A3B,
+ * with better agentic coding while keeping the same efficient ~3B active
+ * parameter budget.
  *
- * Note on the top tier: Qwen3 has NO 32B dense model. The largest published
- * is `30B-A3B-Q4_K_M` (Mixture-of-Experts with 30B total / 3B active per
- * token). Per-token compute approximates a 7B; total memory footprint is
- * what gates the 24 GB+ VRAM requirement.
+ * We never use bare :latest tags in automated paths. The specific
+ * quant tag gives a known on-disk size and reproducible behaviour.
  */
 const MODEL_TIERS: { model: string; minVramGb: number }[] = [
-  { model: "ai/qwen3:30B-A3B-Q4_K_M", minVramGb: 22 }, // 30B MoE — RTX 4090 24 GB / Apple M4 Max 48 GB+
-  { model: "ai/qwen3:14B-Q6_K",       minVramGb: 12 }, // 14B dense — RTX 4070 Ti 16 GB / Apple M4 Pro 24 GB+
-  { model: "ai/qwen3:8B-Q4_K_M",      minVramGb: 6  }, // 8B dense — RTX 3060 8 GB / most consumer GPUs
-  { model: "ai/qwen3:4B-UD-Q4_K_XL",  minVramGb: 0  }, // 4B dense — CPU-only fallback
+  { model: "ai/qwen3.6:35B-A3B-UD-Q4_K_M", minVramGb: 22 }, // Qwen3.6 35B-A3B MoE — high-RAM Apple (128 GB class) or 24 GB+ discrete
+  { model: "ai/qwen3:14B-Q6_K",            minVramGb: 12 }, // 14B dense
+  { model: "ai/qwen3:8B-Q4_K_M",           minVramGb: 6  }, // 8B dense
+  { model: "ai/qwen3:4B-UD-Q4_K_XL",       minVramGb: 0  }, // 4B dense — CPU fallback
 ];
 
 /**

@@ -1531,21 +1531,17 @@ if (-not (Test-StepDone "hardware")) {
     if ($gpuName) { $hwSummary += ", $gpuName ($gpuVRAM_GB GB VRAM)" }
     Write-OK $hwSummary
 
-    # Select the largest Qwen3 tool-calling model that fits available VRAM.
-    # Mirrors apps/web/lib/inference/bootstrap-first-run.ts MODEL_TIERS so the
-    # installer's pre-portal model pull agrees with the portal's post-boot
-    # bootstrap. Tags are the exact Docker Hub published forms (verified
-    # against https://hub.docker.com/r/ai/qwen3/tags 2026-05-23) -- lowercase
-    # short forms (`ai/qwen3:14b`) 404 against Docker Model Runner.
+    # Select the largest strong tool-calling model that fits available VRAM/RAM.
+    # Mirrors the tiers in bootstrap-first-run.ts + detect-hardware-host.ts.
+    # We now prefer the Qwen3.6 35B-A3B (what the Docker UI calls ai/qwen3.6:latest
+    # when you have plenty of memory) for the top tier. It is the current best
+    # published option in the ai/ runner namespace for agentic work.
     #
-    # Why Qwen3 over Gemma: the platform's Coworkers catalog tiers Qwen3 as
-    # `strong + Tool Use` (F1 0.93 @ 8B, 0.97 @ 14B) while Gemma 3/4 tier as
-    # `adequate`. Default coworkers have `minimumTier: strong` so a Gemma
-    # default fails routing on first install. Capture the rationale here so
-    # this doesn't drift back to Gemma in a later edit.
+    # Pinned specific quant tag (never bare :latest) for size predictability and
+    # reproducibility. The older 30B-A3B remains available for lower tiers.
     if ($gpuVRAM_GB -ge 22) {
-        $selectedModel = "ai/qwen3:30B-A3B-Q4_K_M"
-        $modelReason = "Qwen3 30B (MoE, 3B active) -- near-cloud quality, fits your $gpuVRAM_GB GB VRAM"
+        $selectedModel = "ai/qwen3.6:35B-A3B-UD-Q4_K_M"
+        $modelReason = "Qwen3.6 35B-A3B (MoE) -- current best agentic model, fits your $gpuVRAM_GB GB VRAM"
     } elseif ($gpuVRAM_GB -ge 12) {
         $selectedModel = "ai/qwen3:14B-Q6_K"
         $modelReason = "Qwen3 14B -- top local tool calling (F1 0.97, exceeds Haiku)"
@@ -2041,16 +2037,55 @@ if (-not (Test-StepDone "model")) {
 
     Write-Action "Pulling AI model $selectedModel via Docker Model Runner, these may be big..."
     Write-Action "This may take several minutes depending on your internet speed, and size of your video card."
+    # Name accuracy: pull with ai/ form; Docker registers under short form (no ai/).
+    # After pull, normalize $selectedModel + the .host-profile.json / .selected-model
+    # files to the runtime name so that portal /v1/models discovery and inference
+    # references match exactly what the model-runner serves (prevents "model not found"
+    # in inference.model-manager even when pull was executed).
+    $pullName = $selectedModel
+    $runtimeModel = $pullName -replace '^ai/',''
+    # Expected size upfront (manifest only) so user with known bandwidth can estimate duration.
+    $sizeMB = 0
+    try {
+        $mani = docker manifest inspect $pullName 2>$null | ConvertFrom-Json -ErrorAction SilentlyContinue
+        $total = 0
+        if ($mani -and $mani.layers) { $mani.layers | ForEach-Object { if ($_.size) { $total += [int64]$_.size } } }
+        if ($mani -and $mani.config -and $mani.config.size) { $total += [int64]$mani.config.size }
+        if ($total -gt 0) { $sizeMB = [int]($total / 1MB) }
+    } catch {}
+    if ($sizeMB -gt 0) {
+        Write-Action "  Expected download size: ~${sizeMB}MB. If you know your internet speed you can estimate how long the pull will take."
+    }
     $oldEAP = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    docker model pull $selectedModel 2>&1
+    docker model pull $pullName 2>&1
     $pullExit = $LASTEXITCODE
     $ErrorActionPreference = $oldEAP
-    if ($pullExit -ne 0) {
-        Write-Warn "Model pull may have failed. Check: docker model list"
-        Write-Warn "You can pull manually later: docker model pull $selectedModel"
-    } else {
+    # Ground truth: re-check docker model list for the runtime name (more reliable
+    # than exit code alone across Docker Desktop versions).
+    $isPresent = $false
+    try {
+        $listed = docker model list 2>&1 | Select-Object -Skip 1 | ForEach-Object { ($_ -split '\s+')[0] } | Where-Object { $_ -eq $runtimeModel }
+        if ($listed) { $isPresent = $true }
+    } catch {}
+    if ($isPresent) {
+        $selectedModel = $runtimeModel
+        # Persist the accurate runtime name for compose env + portal-init host_profile
+        $selectedModel | Set-Content "$DPF_DIR\.selected-model" -ErrorAction SilentlyContinue
+        $hpPath = "$DPF_DIR\.host-profile.json"
+        if (Test-Path $hpPath) {
+            try {
+                $hp = Get-Content $hpPath -Raw | ConvertFrom-Json
+                $hp.selectedModel = $selectedModel
+                $hp | ConvertTo-Json -Compress | Set-Content $hpPath
+            } catch {}
+        }
         Write-OK "AI Coworker is ready ($selectedModel)"
+    } elseif ($pullExit -ne 0) {
+        Write-Warn "Model pull may have failed. Check: docker model list"
+        Write-Warn "You can pull manually later: docker model pull $pullName"
+    } else {
+        Write-Warn "Model pull reported success but $runtimeModel not listed; retry: docker model pull $pullName"
     }
     Save-Progress "model"
 } else {

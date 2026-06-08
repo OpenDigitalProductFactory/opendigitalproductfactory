@@ -173,17 +173,23 @@ function detectLinux(): HostProfile {
 // as `adequate`. Default coworkers have `minimumTier: strong`, so a Gemma
 // pick fails routing on first install.
 //
-//   discrete VRAM >= 22GB:  ai/qwen3:30B-A3B-Q4_K_M  (30B MoE)
-//   discrete VRAM >= 12GB:  ai/qwen3:14B-Q6_K        (14B dense)
-//   discrete VRAM >=  6GB:  ai/qwen3:8B-Q4_K_M       (8B dense)
-//   unified RAM   >= 32GB:  ai/qwen3:30B-A3B-Q4_K_M  (Apple Silicon hi-mem)
-//   unified RAM   >= 24GB:  ai/qwen3:14B-Q6_K        (Apple Silicon mid)
-//   unified RAM   >= 16GB:  ai/qwen3:8B-Q4_K_M       (Apple Silicon low-mem)
-//   cpu-only / fallback:    ai/qwen3:4B-UD-Q4_K_XL   (4B dense, CPU-OK)
+//   discrete VRAM >= 22GB:  ai/qwen3:30B-A3B-Q4_K_M           (30B MoE, prior gen)
+//   discrete VRAM >= 12GB:  ai/qwen3:14B-Q6_K                (14B dense)
+//   discrete VRAM >=  6GB:  ai/qwen3:8B-Q4_K_M               (8B dense)
+//   unified RAM   >= 32GB:  ai/qwen3.6:35B-A3B-UD-Q4_K_M    (Qwen3.6 35B-A3B MoE — best for high-RAM Apple Silicon)
+//   unified RAM   >= 24GB:  ai/qwen3:14B-Q6_K                (Apple Silicon mid)
+//   unified RAM   >= 16GB:  ai/qwen3:8B-Q4_K_M               (Apple Silicon low-mem)
+//   cpu-only / fallback:    ai/qwen3:4B-UD-Q4_K_XL           (4B dense, CPU-OK)
 //
-// Tags verified against https://hub.docker.com/r/ai/qwen3/tags 2026-05-23.
-// Tags are case-sensitive: `ai/qwen3:14b` returns 404; `ai/qwen3:14B-Q6_K`
-// resolves. Do not drop the quantization suffix.
+// With plenty of unified memory (e.g. your 128 GB M-series), the model
+// Docker UI surfaces as "ai/qwen3.6:latest" (pinned as
+// ai/qwen3.6:35B-A3B-UD-Q4_K_M) is the right top-tier choice. It is the
+// direct successor to the old 30B-A3B: newer agentic coding / tool use,
+// same efficient MoE design (~3B active params), ~22 GB on-disk.
+// We always pin the specific quant tag (never bare :latest) so the
+// installer has a known size and reproducible result.
+//
+// Tags for the ai/ Docker Model Runner namespace are case-sensitive.
 function selectModel(p: {
   architecture: Architecture;
   totalGB: number;
@@ -195,7 +201,10 @@ function selectModel(p: {
     if (p.gpu.vramGB >= 6) return "ai/qwen3:8B-Q4_K_M";
   }
   if (p.architecture === "unified") {
-    if (p.totalGB >= 32) return "ai/qwen3:30B-A3B-Q4_K_M";
+    // "Plenty of memory" (64 GB+ unified) → current Qwen3.6 35B-A3B MoE.
+    // The 35B total / ~3B active is still very efficient and the strongest
+    // published option for agentic work in the Docker ai/ runner namespace.
+    if (p.totalGB >= 32) return "ai/qwen3.6:35B-A3B-UD-Q4_K_M";
     if (p.totalGB >= 24) return "ai/qwen3:14B-Q6_K";
     if (p.totalGB >= 16) return "ai/qwen3:8B-Q4_K_M";
   }

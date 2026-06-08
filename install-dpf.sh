@@ -410,11 +410,28 @@ fi
 #    portal-init.
 step "Host hardware profile"
 DPF_SELECTED_MODEL=""
-if DPF_HOST_PROFILE_JSON="$(pnpm --filter @dpf/db exec tsx scripts/detect-hardware-host.ts 2>/dev/null)"; then
+
+# Defensive nvm sourcing for pnpm (mirrors the earlier Node step). On macOS
+# with nvm-managed node (common for contributors and some customer setups),
+# pnpm lives in the nvm bin dir. Without this, the pnpm --filter call below
+# can fail with "command not found" even if the user had a working pnpm in
+# their interactive shell. This is Mac/Linux sh path only; Windows ps1 has
+# its own pnpm + hardware detection logic and is unaffected.
+if ! command -v pnpm >/dev/null 2>&1; then
+  _nvm_sh="${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+  if [ -s "$_nvm_sh" ]; then
+    # shellcheck source=/dev/null
+    . "$_nvm_sh" 2>/dev/null || true
+    nvm use default 2>/dev/null || nvm use node 2>/dev/null || true
+  fi
+fi
+
+if DPF_HOST_PROFILE_JSON="$(pnpm --filter @dpf/db exec -- tsx "$REPO_ROOT/scripts/detect-hardware-host.ts" 2>/dev/null)"; then
   export DPF_HOST_PROFILE="$DPF_HOST_PROFILE_JSON"
   DPF_SELECTED_MODEL="$(printf '%s' "$DPF_HOST_PROFILE_JSON" | sed -nE 's/.*"selectedModel"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
   if [ -n "$DPF_SELECTED_MODEL" ]; then
-    ok "Hardware profile detected — selected AI model: $DPF_SELECTED_MODEL"
+    ok "Hardware profile detected — selected AI model (pull form): $DPF_SELECTED_MODEL"
+    info "  (Will register under short form for runtime references; normalized after pull.)"
   else
     ok "Hardware profile detected (will be passed to portal-init via DPF_HOST_PROFILE)"
   fi
@@ -455,17 +472,62 @@ if [ "$DPF_PLATFORM" = "darwin" ] && command -v docker >/dev/null 2>&1; then
       # `docker model list` prints rows like `qwen3:30B-A3B-Q4_K_M` (no
       # `ai/` prefix; tag with quant suffix preserved). Match the full
       # family:tag pair so 8B ≠ 14B ≠ 30B-A3B.
-      _selected_repo_tag="$(printf '%s' "$DPF_SELECTED_MODEL" | sed 's|^ai/||')"
-      if docker model list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$_selected_repo_tag"; then
-        ok "Model $DPF_SELECTED_MODEL already on disk"
+      #
+      # Name accuracy note: we PULL using the `ai/...` form (Docker Hub repo
+      # path), but the model registers under the short form shown by
+      # `docker model list`. We capture the *listed* name and normalize
+      # DPF_HOST_PROFILE.selectedModel (and DPF_SELECTED_MODEL) to it so that
+      # portal discovery, /v1/models, and inference "get model by reference"
+      # calls use the exact string the model-runner knows. This prevents the
+      # "failed to get model: model not found" seen in inference.model-manager
+      # logs even when the pull command itself was issued.
+      _pull_name="$DPF_SELECTED_MODEL"
+      _runtime_model="$(printf '%s' "$_pull_name" | sed 's|^ai/||')"
+      if docker model list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$_runtime_model"; then
+        ok "Model $_runtime_model already on disk"
+        DPF_SELECTED_MODEL="$_runtime_model"
       else
-        info "Pulling AI model $DPF_SELECTED_MODEL via Docker Model Runner..."
-        info "  This may take several minutes depending on your internet speed."
-        if docker model pull "$DPF_SELECTED_MODEL" 2>&1 | grep -v "^Downloaded"; then
-          ok "AI Coworker model ready: $DPF_SELECTED_MODEL"
-        else
-          warn "Model pull may have failed. You can retry later: docker model pull $DPF_SELECTED_MODEL"
+        # Print expected size upfront (user request for time estimation given
+        # internet speed). Uses cheap manifest inspect (no blob download).
+        _size_mb=0
+        if command -v python3 >/dev/null 2>&1; then
+          _size_mb=$(docker manifest inspect "$_pull_name" 2>/dev/null | python3 -c '
+import sys, json
+try:
+  d = json.load(sys.stdin)
+  t = 0
+  for l in d.get("layers", []): t += l.get("size", 0)
+  cfg = d.get("config") or {}
+  t += cfg.get("size", 0)
+  print(int(t / 1024 / 1024))
+except Exception:
+  print(0)
+' 2>/dev/null || echo 0)
         fi
+        if [ "$_size_mb" -gt 0 ]; then
+          info "  Expected download size: ~${_size_mb}MB. If you know your internet speed you can estimate how long the pull will take."
+        fi
+        info "Pulling AI model $_pull_name via Docker Model Runner..."
+        info "  This may take several minutes depending on your internet speed."
+        # Stream (filtered) pull output; || true so a pull hiccup does not
+        # abort the whole installer under set -euo pipefail. Ground truth for
+        # "actually ready" is the post-pull list check, not the pull exit or
+        # the old grep -v pipeline status (which could misclassify).
+        docker model pull "$_pull_name" 2>&1 | grep -v "^Downloaded" || true
+        if docker model list 2>/dev/null | awk 'NR>1{print $1}' | grep -Fxq "$_runtime_model"; then
+          ok "AI Coworker model ready: $_runtime_model"
+          DPF_SELECTED_MODEL="$_runtime_model"
+        else
+          warn "Model pull may have failed. You can retry later: docker model pull $_pull_name"
+        fi
+      fi
+      # Normalize the host profile JSON (passed via compose to portal-init
+      # and saved to PlatformConfig.host_profile) so its selectedModel is the
+      # *runtime* reference the model-runner exposes via /v1/models and
+      # accepts for inference. Using the ai/ form here was the source of
+      # "model not found" on get-by-reference even after pull.
+      if [ -n "${DPF_HOST_PROFILE:-}" ]; then
+        export DPF_HOST_PROFILE=$(printf '%s' "$DPF_HOST_PROFILE" | sed -E 's/("selectedModel"[[:space:]]*:[[:space:]]*")[^"]*"/\1'"$_runtime_model"'"/' )
       fi
     else
       warn "No model selected by hardware detection; skipping chat-model pull."

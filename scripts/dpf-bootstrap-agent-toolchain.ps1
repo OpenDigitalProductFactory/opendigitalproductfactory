@@ -53,6 +53,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
 $CodexConfigPath        = Join-Path $HOME ".codex\config.toml"
 $ClaudePluginsPath      = Join-Path $HOME ".claude\plugins\installed_plugins.json"
+$GrokConfigPath         = Join-Path $HOME ".grok\config.toml"  # platform-specific per README; macOS/Linux ~/.grok/config.toml , Windows %USERPROFILE%\.grok\config.toml or APPDATA\grok
 $KernelPrinciplesDir    = Join-Path $RepoRoot "docs\founder-kernel\wiki\principles"
 $ContributorMemoryDir   = Join-Path $HOME ".claude\projects"
 $ProjectSlug            = ($RepoRoot -replace '[:\\\/]+', '-').TrimStart('-')
@@ -161,6 +162,7 @@ $nodeArgs = @(
     "--repo-root", $RepoRoot,
     "--codex-config", $CodexConfigPath,
     "--claude-plugins", $ClaudePluginsPath,
+    "--grok-config", $GrokConfigPath,
     "--kernel-principles", $KernelPrinciplesDir,
     "--contributor-memory", $ContributorMemoryDir,
     "--project-slug", $ProjectSlug,
@@ -262,14 +264,26 @@ if ($plan.codex -and $plan.codex.writes.Count -gt 0) {
     Write-Skip "Codex CLI not installed; skipping plugin wire."
 }
 
-# 2c. Grok CLI: no dedicated plugin/TOML like the others — wiring is via the generic MCP client config
-# (already handled above via mcpClientConfig) + the bootstrap banner detection.
-# Host OS differences (Windows vs macOS) only affect local binary detection and the
-# exact filesystem location of the user's grok config.toml for *direct* CLI usage.
-# Build Studio Grok dispatch itself is unaffected (runs inside the Linux sandbox container).
-if ($GrokPresent) {
+# 2c. Grok CLI: dedicated config.toml wiring (like Codex) from grok config plan.
+# Writes the mcp_servers.dpf section (from grok.mcp.json) into the Grok TOML.
+# Generic MCP client config (above) covers .mcp.json side; this is the native Grok config.
+if ($plan.grok -and $plan.grok.config -and $plan.grok.config.writes.Count -gt 0) {
+    foreach ($write in $plan.grok.config.writes) {
+        if ($DryRun.IsPresent) {
+            Write-Info "DRY-RUN write Grok config -> $($write.path)"
+        } else {
+            $dir = Split-Path -Parent $write.path
+            if (-not (Test-Path -LiteralPath $dir)) {
+                New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            }
+            [System.IO.File]::WriteAllText($write.path, $write.content, [System.Text.Encoding]::UTF8)
+        }
+    }
+    Write-Ok "Grok config wired."
     $grokWired = $true
-    Write-Ok "Grok CLI detected (wiring via generic MCP + env token)."
+} elseif ($GrokPresent) {
+    $grokWired = $true
+    Write-Ok "Grok CLI detected (config already converged)."
 } else {
     Write-Skip "Grok CLI not installed; skipping (will appear when `grok` is on PATH)."
 }

@@ -42,8 +42,11 @@ describe("assignTierFromModelId", () => {
     it("assigns strong to ai/qwen3:14B-Q6_K (canonical 14B tag)", () => {
       expect(assignTierFromModelId("ai/qwen3:14B-Q6_K")).toBe("strong");
     });
-    it("assigns strong to ai/qwen3:30B-A3B-Q4_K_M (MoE — largest qwen3)", () => {
+    it("assigns strong to ai/qwen3:30B-A3B-Q4_K_M (prior-gen 30B-A3B MoE)", () => {
       expect(assignTierFromModelId("ai/qwen3:30B-A3B-Q4_K_M")).toBe("strong");
+    });
+    it("assigns strong to ai/qwen3.6:35B-A3B-UD-Q4_K_M (current Qwen3.6 high-mem / agentic MoE)", () => {
+      expect(assignTierFromModelId("ai/qwen3.6:35B-A3B-UD-Q4_K_M")).toBe("strong");
     });
     it("assigns adequate to ai/qwen3:4B-UD-Q4_K_XL (canonical 4B tag)", () => {
       // 4B is below the strong threshold per the tier table — but qwen3
