@@ -1711,8 +1711,17 @@ async function seedLocalModels(): Promise<void> {
 
   if (models.length === 0) { console.log("  → No local models found"); return; }
 
-  // Activate provider and grant full sensitivity clearance (local = data never leaves machine)
-  if (provider.status === "unconfigured" || (provider.sensitivityClearance as string[]).length === 0) {
+  // Activate provider and grant full sensitivity clearance (local = data never leaves machine).
+  // The installer guarantees a model pull (or pre-existing model) *before* portal up
+  // for the bundled Docker Model Runner case. If models are visible at seed time,
+  // we treat "disabled" (possible initial seed state or prior manual disable) the same
+  // as "unconfigured" so the provider comes up enabled by default. This avoids the
+  // first-experience "disabled + unknown:unknown" state when the pull succeeded pre-portal.
+  if (
+    provider.status === "unconfigured" ||
+    provider.status === "disabled" ||
+    (provider.sensitivityClearance as string[]).length === 0
+  ) {
     await prisma.modelProvider.update({
       where: { providerId: "local" },
       data: {

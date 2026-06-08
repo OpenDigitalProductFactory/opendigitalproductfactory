@@ -224,6 +224,7 @@
     "name": "Docker Model Runner (local)",
     "category": "direct",
     "baseUrl": "http://model-runner.docker.internal/v1",
+    "status": "unconfigured",
     "authMethod": "none",
     "supportedAuthMethods": [
       "none"

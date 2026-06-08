@@ -81,7 +81,12 @@ export async function checkBundledProviders(): Promise<void> {
     // Timeout or connection error
   }
 
-  if (reachable && provider.status === "unconfigured") {
+  // For the bundled "local" (Docker Model Runner) provider, promote from "disabled"
+  // as well as "unconfigured". This covers the case where the installer pre-pulled
+  // a model before portal-up (the normal customer path) but the provider row landed
+  // in "disabled" (initial seed or prior state). Once the runner is reachable and
+  // models exist, it should be active by default so first experience "just works".
+  if (reachable && (provider.status === "unconfigured" || provider.status === "disabled")) {
     await prisma.modelProvider.update({
       where: { providerId: "local" },
       data: { status: "active" },
