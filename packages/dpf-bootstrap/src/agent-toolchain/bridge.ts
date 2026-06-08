@@ -52,8 +52,10 @@ export type AgentToolchainPlan = {
   grokCliPresent: boolean;
   /** Whether a DPF MCP token was discovered (e.g. via DPF_MCP_BEARER_TOKEN). */
   hasToken: boolean;
-  /** Simple presence note for Grok (main wiring is via the generic mcpClientConfig). */
-  grok: { present: boolean } | null;
+  /** Grok presence + optional dedicated config plan (TOML [mcp_servers.dpf] wiring).
+   * Main MCP client config is still via the generic mcpClientConfig for .mcp.json etc.
+   */
+  grok: { present: boolean; config?: GrokConfigPlan } | null;
   /** TOML upsert plan for the contributor's Codex config (null when Codex CLI absent). */
   codex: CodexConfigPlan | null;
   /** Repo-root .mcp.json + .vscode/mcp.json writes (env-backed, secret-free). */
