@@ -43,6 +43,17 @@ export interface KnownModel {
   };
 }
 
+const GROK_CORE_CAPABILITIES: ModelCardCapabilities = {
+  ...EMPTY_CAPABILITIES,
+  toolUse: true,
+  streaming: true,
+  structuredOutput: true,
+  imageInput: true,
+  thinking: true,
+  promptCaching: true,
+  effortLevels: ["none", "low", "medium", "high"],
+};
+
 export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
   "anthropic-sub": [
     {
@@ -196,6 +207,65 @@ export const KNOWN_PROVIDER_MODELS: Record<string, KnownModel[]> = {
         structuredOutputScore: 52,
         conversational: 55,
         contextRetention: 52,
+      },
+    },
+  ],
+
+  xai: [
+    {
+      modelId: "grok-4.3",
+      friendlyName: "Grok 4.3",
+      summary:
+        "xAI Grok 4.3 - flagship chat and reasoning model with strong tool calling and long-context support",
+      qualityTier: "frontier",
+      capabilities: GROK_CORE_CAPABILITIES,
+      maxContextTokens: 1_000_000,
+      maxOutputTokens: null,
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+      modelClass: "reasoning",
+      modelFamily: "grok-4",
+      capabilityCategory: "advanced",
+      costTier: "$$",
+      bestFor: ["reasoning", "analysis", "long-context tasks", "tool-use"],
+      avoidFor: ["deterministic coding agents where Grok Build is preferred"],
+      defaultStatus: "active",
+      scores: {
+        reasoning: 92,
+        codegen: 86,
+        toolFidelity: 90,
+        instructionFollowingScore: 90,
+        structuredOutputScore: 88,
+        conversational: 90,
+        contextRetention: 94,
+      },
+    },
+    {
+      modelId: "grok-build-0.1",
+      friendlyName: "Grok Build 0.1",
+      summary:
+        "xAI Grok Build 0.1 - fast coding model trained for agentic coding workflows and Build Studio dispatch",
+      qualityTier: "frontier",
+      capabilities: GROK_CORE_CAPABILITIES,
+      maxContextTokens: 256_000,
+      maxOutputTokens: null,
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+      modelClass: "code",
+      modelFamily: "grok-build",
+      capabilityCategory: "advanced",
+      costTier: "$$",
+      bestFor: ["agentic coding", "web development", "Build Studio tasks", "tool-use"],
+      avoidFor: ["general chat when Grok 4.3 is available"],
+      defaultStatus: "active",
+      scores: {
+        reasoning: 88,
+        codegen: 94,
+        toolFidelity: 90,
+        instructionFollowingScore: 88,
+        structuredOutputScore: 88,
+        conversational: 74,
+        contextRetention: 86,
       },
     },
   ],
