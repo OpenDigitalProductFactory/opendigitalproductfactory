@@ -34,6 +34,7 @@ vi.mock("@dpf/db", () => ({
 
 import {
   captureActiveSessionBlockers,
+  isBuildPhaseReapable,
   getQuiescenceConfig,
   invalidateQuiescenceCache,
   isTerminalQuiescenceStatus,
@@ -54,6 +55,30 @@ beforeEach(() => {
   prismaMock.buildPhaseRunFindMany.mockResolvedValue([]);
   prismaMock.buildPhaseRunUpdateMany.mockResolvedValue({ count: 0 });
   prismaMock.toolExecutionFindMany.mockResolvedValue([]);
+});
+
+describe("isBuildPhaseReapable", () => {
+  const now = new Date("2026-06-09T12:00:00Z");
+  const old = new Date(now.getTime() - 20 * 60 * 1000); // 20 min ago
+  const recent = new Date(now.getTime() - 2 * 60 * 1000); // 2 min ago
+  const thresholdMs = 15 * 60 * 1000;
+
+  it("reaps a phase with no heartbeat and an old start (a corpse)", () => {
+    expect(isBuildPhaseReapable({ phaseStartedAt: old, buildLastHeartbeatAt: null, now, thresholdMs })).toBe(true);
+  });
+
+  it("does NOT reap when the build has a recent heartbeat (live work)", () => {
+    expect(isBuildPhaseReapable({ phaseStartedAt: old, buildLastHeartbeatAt: recent, now, thresholdMs })).toBe(false);
+  });
+
+  it("does NOT reap a freshly-started phase even without a heartbeat", () => {
+    expect(isBuildPhaseReapable({ phaseStartedAt: recent, buildLastHeartbeatAt: null, now, thresholdMs })).toBe(false);
+  });
+
+  it("reaps when both the start and the last heartbeat are older than the threshold", () => {
+    const olderHeartbeat = new Date(now.getTime() - 30 * 60 * 1000);
+    expect(isBuildPhaseReapable({ phaseStartedAt: old, buildLastHeartbeatAt: olderHeartbeat, now, thresholdMs })).toBe(true);
+  });
 });
 
 describe("parseQuiescenceConfig", () => {
