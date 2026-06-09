@@ -295,6 +295,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   diagnose_sandbox: ["sandbox_execute", "work_capsule_read"],
   recover_sandbox: ["sandbox_execute"],
   // Build-progress observation tools are read-only work capsule inspection.
+  get_build_engine_readiness: ["work_capsule_read"],
   get_build_progress_visibility: ["work_capsule_read"],
   get_build_sandbox_state: ["work_capsule_read"],
   get_build_dispatch_history: ["work_capsule_read"],
