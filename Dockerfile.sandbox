@@ -33,6 +33,7 @@ RUN npm install -g @anthropic-ai/claude-code
 RUN curl -fsSL https://x.ai/cli/install.sh | GROK_BIN_DIR=/usr/local/bin bash \
  && install -m 0755 "$(readlink -f /usr/local/bin/grok)" /usr/local/bin/grok.bin \
  && ln -sf /usr/local/bin/grok.bin /usr/local/bin/grok \
+ && mkdir -p /opt/dpf-engines && cp /usr/local/bin/grok.bin /opt/dpf-engines/grok \
  && rm -rf /root/.grok \
  && grok --version \
  && su -s /bin/sh node -c "grok --version"

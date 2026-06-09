@@ -216,6 +216,13 @@ export function BuildStudioConfigForm({
             desc="Built-in tool-calling loop"
           />
         </div>
+        {(provider === "claude" || provider === "codex" || provider === "grok") &&
+          engineReadiness?.[provider]?.present === false && (
+            <div role="status" style={{ marginTop: 10, fontSize: 11, color: "var(--dpf-warning)" }}>
+              ⚠ {provider.charAt(0).toUpperCase() + provider.slice(1)} is selected but not installed in the sandbox —
+              builds dispatched to it will fail until you provision it (use the “Provision … in sandbox” button above).
+            </div>
+          )}
       </section>
 
       {/* Section 2: Provider Assignments */}

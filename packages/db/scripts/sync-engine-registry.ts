@@ -33,6 +33,22 @@ type SyncEngineClient = {
   };
 };
 
+type RecipeShape = { muslSafe?: boolean };
+
+/**
+ * Engines whose recipes are ALL non-musl-safe — they cannot be provisioned on
+ * the Alpine/musl sandbox base, so provisionBuildEngine would always return
+ * no-recipe. Pure; surfaced as a sync-time warning (BI-A2F0A608).
+ */
+export function enginesMissingMuslSafeRecipe(engines: Record<string, EngineEntry>): string[] {
+  return Object.entries(engines)
+    .filter(([, e]) => {
+      const recipes = Array.isArray(e.recipes) ? (e.recipes as RecipeShape[]) : [];
+      return recipes.length > 0 && recipes.every((r) => r.muslSafe === false);
+    })
+    .map(([engineId]) => engineId);
+}
+
 export async function syncEngineRegistry(prisma: SyncEngineClient, dataPath: string): Promise<void> {
   const raw = readFileSync(dataPath, 'utf-8');
 
@@ -41,6 +57,13 @@ export async function syncEngineRegistry(prisma: SyncEngineClient, dataPath: str
     engines = JSON.parse(raw) as Record<string, EngineEntry>;
   } catch (e) {
     throw new Error(`Failed to parse ${dataPath}: ${(e as Error).message}`);
+  }
+
+  const unprovisionable = enginesMissingMuslSafeRecipe(engines);
+  if (unprovisionable.length > 0) {
+    console.warn(
+      `[sync-engine-registry] WARNING: no musl-safe recipe for ${unprovisionable.join(", ")} — these engines cannot be provisioned on the Alpine/musl sandbox base.`,
+    );
   }
 
   let created = 0;
