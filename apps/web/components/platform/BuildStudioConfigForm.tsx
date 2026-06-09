@@ -7,6 +7,7 @@ import type { BuildStudioDispatchConfig } from "@/lib/integrate/build-studio-con
 import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
 import { engineReadinessBadgeContent, ENGINE_READINESS_TONE_COLOR } from "./engine-readiness-badge";
+import { ProvisionEngineButton } from "./ProvisionEngineButton";
 import { ContributorMcpReadinessCard } from "./ContributorMcpReadinessCard";
 
 type ProviderOption = {
@@ -179,6 +180,7 @@ export function BuildStudioConfigForm({
             desc="Anthropic models"
             unconfiguredMsg={!hasClaudeCreds ? "No Anthropic credentials found." : undefined}
             readiness={engineReadiness?.claude}
+            canProvision={canWrite}
           />
           <ProviderRadio
             name="provider"
@@ -190,6 +192,7 @@ export function BuildStudioConfigForm({
             desc="OpenAI models"
             unconfiguredMsg={!hasCodexCreds ? "No OpenAI credentials found." : undefined}
             readiness={engineReadiness?.codex}
+            canProvision={canWrite}
           />
           <ProviderRadio
             name="provider"
@@ -201,6 +204,7 @@ export function BuildStudioConfigForm({
             desc="xAI models · headless grok -p"
             unconfiguredMsg={!hasGrokCreds ? "No xAI credentials found." : undefined}
             readiness={engineReadiness?.grok}
+            canProvision={canWrite}
           />
           <ProviderRadio
             name="provider"
@@ -421,7 +425,7 @@ function EngineReadinessBadgeView({ readiness }: { readiness: EngineReadinessBad
   );
 }
 
-function ProviderRadio({ name, value, checked, onChange, disabled, label, desc, unconfiguredMsg, readiness }: {
+function ProviderRadio({ name, value, checked, onChange, disabled, label, desc, unconfiguredMsg, readiness, canProvision }: {
   name: string;
   value: string;
   checked: boolean;
@@ -431,6 +435,7 @@ function ProviderRadio({ name, value, checked, onChange, disabled, label, desc, 
   desc: string;
   unconfiguredMsg?: string;
   readiness?: EngineReadinessBadge;
+  canProvision?: boolean;
 }) {
   return (
     <label style={{
@@ -449,6 +454,9 @@ function ProviderRadio({ name, value, checked, onChange, disabled, label, desc, 
         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--dpf-text)" }}>{label}</div>
         <div style={{ fontSize: 10, color: "var(--dpf-muted)" }}>{desc}</div>
         {readiness && <EngineReadinessBadgeView readiness={readiness} />}
+        {canProvision && readiness?.present === false && (
+          <ProvisionEngineButton engineId={value} label={value.charAt(0).toUpperCase() + value.slice(1)} />
+        )}
         {unconfiguredMsg && (
           <div style={{ fontSize: 10, color: "var(--dpf-warning)", marginTop: 2 }}>
             {unconfiguredMsg}{" "}
