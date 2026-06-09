@@ -1,0 +1,66 @@
+// Grafana Alloy log shipper (EP-FULL-OBS Tier 2).
+// Discovers every container on the local Docker daemon and tails its
+// stdout/stderr into Loki, labeled by compose service. Cross-platform: reads
+// the Docker log API via the socket — NO host-path bind mounts (/proc, /sys,
+// /var/lib/docker), unlike cadvisor/node-exporter. This is why the capture
+// layer can be default-on on macOS/Windows Docker Desktop, where the Mac
+// log-flood incident happened and where cadvisor/node-exporter cannot run.
+//
+// A new container added to docker-compose.yml is tailed automatically on the
+// next 15s discovery refresh — no per-service wiring. (Directly covers the
+// "3 DIFFERENT problems" multiplicity: all services, one config.)
+
+// ── Discover all containers on the host Docker daemon ──────────────────────
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "15s"
+}
+
+// ── Relabel: derive clean labels from compose metadata ─────────────────────
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  // compose service name -> `service` label (e.g. portal, dpf-stt, inngest)
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+  // container name (strip leading slash) -> `container`
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+  // compose project -> `compose_project` (the rules match on this)
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+}
+
+// ── Tail discovered containers ─────────────────────────────────────────────
+loki.source.docker "default" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.containers.output
+  forward_to = [loki.process.level.receiver]
+}
+
+// ── Best-effort severity extraction so LogQL can filter by level ───────────
+// Heuristic, not authoritative: matches ERROR / WARN / level=error /
+// "level":"error" / [error] across the mixed log shapes DPF services emit.
+loki.process "level" {
+  stage.regex {
+    expression = "(?i)(?P<lvl>error|warn|warning|fatal|panic)"
+  }
+  stage.labels {
+    values = { detected_level = "lvl" }
+  }
+  forward_to = [loki.write.default.receiver]
+}
+
+// ── Ship to Loki ───────────────────────────────────────────────────────────
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

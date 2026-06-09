@@ -587,6 +587,49 @@ services:
       retries: 5
       start_period: 15s
 
+  # ─── Log Aggregation (EP-FULL-OBS Tier 2) ─────────────────────────────────
+  # Owning spec: docs/superpowers/specs/2026-06-09-container-log-aggregation-and-proactive-issue-detection-design.md
+  #
+  # Loki (store) + Alloy (shipper). Default-on and CROSS-PLATFORM: Alloy reads
+  # the Docker log API via the socket — no host-path bind mounts — so unlike
+  # cadvisor/node-exporter below this pair runs on macOS/Windows Docker Desktop,
+  # which is exactly where the log-flood incident this spec addresses happened.
+  # Captures EVERY container's stdout/stderr with 14-day retention so errors
+  # stop scrolling out of the ephemeral Docker buffer unseen.
+  loki:
+    image: grafana/loki:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3100:3100"   # localhost-only; portal + grafana reach it via dpf-network DNS
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      # Ruler rules: "fake" is the single-tenant id when auth_enabled: false.
+      - ./monitoring/loki/rules/dpf-log-alerts.yml:/loki/rules-config/fake/dpf-log-alerts.yml:ro
+      - loki_data:/loki
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  alloy:
+    image: grafana/alloy:latest
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # discovers + tails all containers
+      - alloy_data:/var/lib/alloy/data
+    command:
+      - "run"
+      - "--server.http.listen-addr=0.0.0.0:12345"
+      - "--storage.path=/var/lib/alloy/data"
+      - "/etc/alloy/config.alloy"
+    depends_on:
+      loki:
+        condition: service_healthy
+
   # cadvisor + node-exporter bind-mount Linux-only host paths (/proc, /sys,
   # /var/lib/docker, /). They cannot run on macOS or Windows Docker Desktop
   # (the VM has no equivalent). Gated behind the linux-monitoring profile
@@ -816,4 +859,6 @@ volumes:
   dpf_tts_voices:
   prometheus_data:
   grafana_data:
+  loki_data:
+  alloy_data:
   dpf_stt_models:
