@@ -432,6 +432,8 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   admin_run_command:       ["admin_write"],
 
   // Build lifecycle (sandbox-adjacent)
+  // Provisioning a build engine runs an install command inside the sandbox.
+  provision_build_engine:     ["sandbox_execute"],
   check_sandbox:              ["sandbox_execute"],
   start_sandbox:              ["sandbox_execute"],
   start_build:                ["sandbox_execute"],
