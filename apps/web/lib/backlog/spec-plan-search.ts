@@ -24,8 +24,9 @@ const DEFAULT_MATCHES = 10;
 const MAX_MATCHES = 25;
 const SNIPPET_RADIUS = 120;
 
-const path = lazyPath();
+const fsp = lazyFsPromises();
 const fs = lazyFs();
+const path = lazyPath();
 const SPEC_DIR = path.posix.join("docs", "superpowers", "specs");
 const PLAN_DIR = path.posix.join("docs", "superpowers", "plans");
 
@@ -117,7 +118,7 @@ async function loadFile(filePath: string): Promise<CacheEntry | null> {
   // files. The fix is to open() once and use the returned FileHandle
   // for both stat and read: stat-via-fd is atomic against on-disk
   // changes and readFile-via-fd reads the same inode.
-  const { open } = fs;
+  const { open } = fsp;
   let fh;
   try {
     fh = await open(filePath, "r");
@@ -151,7 +152,7 @@ async function loadFile(filePath: string): Promise<CacheEntry | null> {
 async function listMarkdown(absDir: string): Promise<string[]> {
   let entries: string[];
   try {
-    entries = await fs.readdir(absDir);
+    entries = await fsp.readdir(absDir);
   } catch {
     return [];
   }
