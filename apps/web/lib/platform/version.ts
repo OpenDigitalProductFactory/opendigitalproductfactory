@@ -1,6 +1,4 @@
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { getCwd, lazyFs, lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
 
 import {
   readImageBuiltAt,
@@ -56,8 +54,8 @@ const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?
 export async function loadPlatformVersion(): Promise<PlatformVersion> {
   if (!cached) {
     cached = (async () => {
-      const path = resolveVersionJsonPath();
-      const raw = await readFile(path, "utf8");
+      const p = resolveVersionJsonPath();
+      const raw = await lazyFsPromises().readFile(p, "utf8");
       const parsed = parseVersionJson(JSON.parse(raw));
       const [image, buildDate, sourceContentHash, tag] = await Promise.all([
         readImageVersion(),
@@ -122,14 +120,17 @@ function parseVersionJson(raw: unknown): {
 }
 
 function resolveVersionJsonPath(): string {
+  const cwd = getCwd();
+  const path = lazyPath();
+  const fs = lazyFs();
   const candidates = [
     process.env.DPF_VERSION_FILE,
-    resolve(process.cwd(), "version.json"),
-    resolve(process.cwd(), "../../version.json"),
+    path.resolve(cwd, "version.json"),
+    path.resolve(cwd, "../../version.json"),
     "/app/version.json",
   ].filter((value): value is string => Boolean(value));
 
-  const found = candidates.find((candidate) => existsSync(candidate));
+  const found = candidates.find((candidate) => fs.existsSync(candidate));
   if (!found) {
     throw new Error(`version.json not found; checked ${candidates.join(", ")}`);
   }

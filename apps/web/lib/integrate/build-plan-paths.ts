@@ -1,5 +1,5 @@
 import type { BuildPlanDoc } from "@/lib/explore/feature-build-types";
-import { lazyFs, lazyPath } from "@/lib/shared/lazy-node";
+import { lazyFs, lazyPath, getCwd } from "@/lib/shared/lazy-node";
 
 type FileEntry = BuildPlanDoc["fileStructure"][number];
 type ExistsFn = (absolutePath: string) => boolean;
@@ -40,7 +40,7 @@ function candidateAbsolutePaths(relativePath: string): string[] {
   const path = lazyPath();
   const normalized = normalizeRelativePath(relativePath);
   const appRelative = normalized.startsWith("apps/web/") ? normalized.slice("apps/web/".length) : null;
-  const cwd = process.cwd();
+  const cwd = getCwd();
 
   return Array.from(new Set([
     path.resolve(cwd, normalized),

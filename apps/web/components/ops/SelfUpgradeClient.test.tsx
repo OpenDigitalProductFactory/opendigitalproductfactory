@@ -15,6 +15,11 @@ vi.mock("react", async () => {
       if (initial === null) {
         return [shared.triggerResult as T, vi.fn()] as const;
       }
+      if (typeof initial === "function") {
+        // Handle lazy initializers (useState(() => ...)) so we don't return the initializer fn
+        // as state value (which can cause "Functions are not valid as a React child" when rendered).
+        return [initial(), vi.fn()] as const;
+      }
       return [initial, vi.fn()] as const;
     },
   };

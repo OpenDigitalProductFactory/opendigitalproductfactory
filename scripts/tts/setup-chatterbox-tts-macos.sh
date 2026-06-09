@@ -113,10 +113,54 @@ export DPF_CB_SPEED="${DPF_CB_SPEED}"
 # path that escapes it (path-injection guard). Matches the portal's value.
 export DPF_TTS_REFERENCE_HOST_ROOT="${DATA_ROOT}"
 cd "${CB_HOME}"
-exec "${VENV_DIR}/bin/python" -m uvicorn chatterbox_server:app --host 127.0.0.1 --port ${PORT}
+# Bind to 0.0.0.0 (not 127.0.0.1) so the portal container (running in Docker Desktop's
+# VM) can reach the sidecar via host.docker.internal:8771. Localhost-only bind
+# works for host `curl` but breaks the Docker -> host path that the installer and
+# docker-compose.macos.yml are wired for. 0.0.0.0 is safe here (TTS is local-only traffic).
+exec "${VENV_DIR}/bin/python" -m uvicorn chatterbox_server:app --host 0.0.0.0 --port ${PORT}
 EOF
 chmod +x "$LAUNCH_SCRIPT"
 log "launch script: ${LAUNCH_SCRIPT}"
+
+# --- Install platform founder seed voice clip (for the "voice profile in the build") ---
+# The seed (seedPlatformVoice) creates the VoiceProfile row + consent for
+# mark-dpf-platform, but the actual reference .webm must be at the *host-visible*
+# DATA_ROOT that the sidecar (and the portal's DPF_TTS_REFERENCE_HOST_ROOT) will
+# use. We copy it here explicitly from the source tree the installer is running
+# from. This is what made the live voice "work but not mine" (a placeholder had
+# been written instead of the real bundled founder recording).
+SEED_VOICE_SRC=""
+for cand in \
+  "${REPO_ROOT}/packages/db/data/seed-voices/mark-dpf-platform/reference.webm" \
+  "${SCRIPT_DIR}/../../packages/db/data/seed-voices/mark-dpf-platform/reference.webm" \
+  "${SCRIPT_DIR}/../../../packages/db/data/seed-voices/mark-dpf-platform/reference.webm"; do
+  if [ -f "$cand" ] && [ -s "$cand" ]; then SEED_VOICE_SRC="$cand"; break; fi
+done
+SEED_VOICE_DEST_DIR="${DATA_ROOT}/voices/mark-dpf-platform"
+SEED_VOICE_DEST="${SEED_VOICE_DEST_DIR}/reference.webm"
+if [ -n "$SEED_VOICE_SRC" ]; then
+  mkdir -p "$SEED_VOICE_DEST_DIR"
+  # Force-copy if missing, or if the existing file is suspiciously small
+  # (placeholder generated during earlier debugging/fixes) vs the real bundled clip.
+  do_copy=0
+  if [ ! -f "$SEED_VOICE_DEST" ]; then
+    do_copy=1
+  else
+    src_sz=$(wc -c < "$SEED_VOICE_SRC" 2>/dev/null || echo 0)
+    dst_sz=$(wc -c < "$SEED_VOICE_DEST" 2>/dev/null || echo 0)
+    if [ "$dst_sz" -lt 20000 ] && [ "$src_sz" -gt 20000 ]; then
+      do_copy=1
+    fi
+  fi
+  if [ "$do_copy" -eq 1 ]; then
+    cp -f "$SEED_VOICE_SRC" "$SEED_VOICE_DEST"
+    log "installed platform founder voice clip (from build seed-voices) -> ${SEED_VOICE_DEST}"
+  else
+    log "platform founder voice clip already present at ${SEED_VOICE_DEST}"
+  fi
+else
+  log "WARN: bundled seed voice clip not found under packages/db/data/seed-voices in source tree; mark-dpf-platform voice will be silent/generic until a real reference is placed at ${SEED_VOICE_DEST}"
+fi
 
 # --- Install + (re)load LaunchAgent ------------------------------------------
 if [ "$INSTALL_LAUNCHD" -eq 1 ]; then
@@ -125,8 +169,18 @@ if [ "$INSTALL_LAUNCHD" -eq 1 ]; then
   sed -e "s|@@DPF_CB_LAUNCH_SCRIPT@@|${LAUNCH_SCRIPT}|g" \
       -e "s|@@DPF_CB_LOG_DIR@@|${LOG_DIR}|g" \
       "$PLIST_TMPL" > "$PLIST_DEST"
+  # Strip macOS provenance/quarantine xattrs (and ensure perms) — these are a
+  # frequent cause of "launchctl bootstrap ... Input/output error" (errno 5)
+  # when the heredoc-generated files are first written by the installer or
+  # setup script. Without this, the LaunchAgent fails to load even though the
+  # plist and script are otherwise valid. Do it for both the executable run
+  # script and the plist.
+  xattr -c "$LAUNCH_SCRIPT" "$PLIST_DEST" 2>/dev/null || true
+  chmod +x "$LAUNCH_SCRIPT" 2>/dev/null || true
+  chmod 644 "$PLIST_DEST" 2>/dev/null || true
   launchctl bootout "gui/$(id -u)/${PLIST_LABEL}" 2>/dev/null || true
-  launchctl bootstrap "gui/$(id -u)" "$PLIST_DEST"
+  launchctl bootstrap "gui/$(id -u)" "$PLIST_DEST" 2>/dev/null || \
+    launchctl load -w "$PLIST_DEST" 2>/dev/null || true
   launchctl kickstart -k "gui/$(id -u)/${PLIST_LABEL}" 2>/dev/null || true
   log "LaunchAgent loaded: ${PLIST_DEST}"
 else
@@ -152,9 +206,17 @@ cat <<EOF
    TTS_PROVIDER=mlx
    DPF_TTS_URL=http://host.docker.internal:${PORT}
    DPF_TTS_REFERENCE_HOST_ROOT=${DATA_ROOT}
+   UPLOAD_STORAGE_PATH=${DATA_ROOT}
 
  (TTS_PROVIDER=mlx reuses the OpenAI-compatible adapter; it points at whichever
-  host sidecar DPF_TTS_URL targets — Chatterbox here.)
+  host sidecar DPF_TTS_URL targets — Chatterbox here. UPLOAD_STORAGE_PATH keeps
+  the DB seed (seedPlatformVoice) and portal in sync with the host sidecar root
+  so the "voice profile in the build" — the real founder clip for the
+  mark-dpf-platform VoiceProfile — is usable immediately.)
+
+ The platform founder seed voice clip (from packages/db/data/seed-voices) has
+ been copied into ${DATA_ROOT}/voices/mark-dpf-platform/reference.webm by this
+ setup (repairing any placeholder from prior runs).
 
  Manage the sidecar:
    tail -f ${LOG_DIR}/chatterbox.err.log               # logs

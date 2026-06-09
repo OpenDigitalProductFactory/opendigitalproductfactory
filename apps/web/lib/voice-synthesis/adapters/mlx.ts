@@ -27,7 +27,27 @@ import { VoiceSynthesisError, type RawSynthesisResult } from "./cartesia"
 function getTtsUrl(): string {
   // Default to Chatterbox on :8771 (provisioned by setup-chatterbox-tts-macos.sh).
   // Use :8770 for the legacy CSM/mlx-audio sidecar (setup-mlx-tts-macos.sh).
-  return process.env.DPF_TTS_URL ?? "http://host.docker.internal:8771"
+  let url = process.env.DPF_TTS_URL ?? "http://host.docker.internal:8771"
+  // On Docker Desktop (especially Mac), host.docker.internal can resolve to IPv6
+  // or have flaky forwarding for custom host services started via launchd.
+  // Compute the Docker gateway IP (the "host" from inside the container) as a
+  // reliable fallback. This makes the sidecar fetch succeed from the portal
+  // container when the native TTS is listening on 0.0.0.0:8771 on the Mac host.
+  if (process.platform === "darwin" || process.platform === "linux") {
+    try {
+      const { execSync } = require("node:child_process")
+      // ip route gives the default gateway, which is the host from the container's view.
+      const ip = execSync("ip route | awk '/default/ {print $3; exit}'", {
+        encoding: "utf8",
+      }).trim()
+      if (ip && ip !== "host.docker.internal") {
+        url = url.replace("host.docker.internal", ip)
+      }
+    } catch {
+      // fall back; host.docker.internal usually works
+    }
+  }
+  return url
 }
 
 function getModel(): string {

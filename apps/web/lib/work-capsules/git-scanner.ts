@@ -1,6 +1,7 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 
+const { execFile } = lazyChildProcess();
+const { promisify } = lazyUtil();
 const execFileAsync = promisify(execFile);
 const RECENT_BRANCH_DAYS = 45;
 

@@ -1,4 +1,4 @@
-import { lazyExec, lazyPath } from "@/lib/shared/lazy-node";
+import { lazyExec, lazyPath, getCwd } from "@/lib/shared/lazy-node";
 
 import {
   buildListTrackedFilesCommand,
@@ -12,7 +12,7 @@ export function getGitRoot(): string {
   const { resolve } = lazyPath();
   return process.env.PROJECT_ROOT
     ? resolve(process.env.PROJECT_ROOT)
-    : resolve(process.cwd(), "..", "..");
+    : resolve(getCwd(), "..", "..");
 }
 
 /**

@@ -1,16 +1,19 @@
 // Ship the founder's recorded seed voice (BI-2535D6F4).
 //
-// The mark-dpf-platform reference clip the founder recorded lives only in this
-// install's gitignored uploads dir, so a fresh install gets no default voice.
-// This bundles the clip (packages/db/data/seed-voices/...) and seeds it on
-// install: a founder consent record + a ready chatterbox VoiceProfile on the
-// mark-dpf-platform DecisionPerspectiveProfile, and copies the clip into the
-// runtime voice storage root so synthesis can use it immediately.
+// This bundles the real founder recording from packages/db/data/seed-voices/...
+// and, on install / seed, creates the consent record + a ready VoiceProfile for
+// the mark-dpf-platform DecisionPerspectiveProfile (the "voice profile in the
+// build"). The clip is copied into the final runtime uploads root
+// (UPLOAD_STORAGE_PATH or equivalent) so the TTS sidecar (especially the
+// Apple-Silicon host sidecar on Mac) can use it for zero-shot cloning out of
+// the box. The Mac installer TTS setup script also forces the copy into the
+// host-visible DPF_TTS_REFERENCE_HOST_ROOT to guarantee the file is present
+// even if seed timing / placeholder files from prior runs would have skipped it.
 //
 // Chatterbox is zero-shot: the reference clip IS the voice clone (no training).
 // Idempotent — safe to re-run on every seed.
 
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { PrismaClient } from "../generated/client/client";
 
@@ -44,12 +47,27 @@ function storageDestPath(): string {
   return join(root, "voices", "mark-dpf-platform", "reference.webm");
 }
 
-/** Copy the bundled clip into the storage root if absent. Returns whether it
- *  copied. Best-effort: a copy failure must not fail the seed. */
+/** Copy the bundled clip into the storage root if absent (or if the existing
+ *  file is a tiny placeholder). Returns whether it copied. Best-effort.
+ *  This is what guarantees the "voice profile in the build" (the real founder
+ *  recording for mark-dpf-platform) is present for the seeded VoiceProfile. */
 function defaultCopyClip(): boolean {
   const dest = storageDestPath();
   const src = bundledClipPath();
-  if (existsSync(dest) || !existsSync(src)) return false;
+  if (!existsSync(src)) return false;
+
+  const srcSz = ((): number => {
+    try { return statSync(src).size; } catch { return 0; }
+  })();
+  const needCopy = !existsSync(dest) || (() => {
+    try {
+      const dstSz = statSync(dest).size;
+      return dstSz < 20000 && srcSz > 20000; // placeholder vs real recording
+    } catch { return true; }
+  })();
+
+  if (!needCopy) return false;
+
   try {
     mkdirSync(dirname(dest), { recursive: true });
     copyFileSync(src, dest);

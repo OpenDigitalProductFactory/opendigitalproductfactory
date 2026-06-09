@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+vi.mock("node:child_process", () => ({
+  execSync: vi.fn().mockReturnValue("host.docker.internal\n"),
+}))
 import { synthesizeWithMlx, resolveReferenceHostPath } from "./mlx"
 import type { MlxSynthesisConfig } from "./mlx"
 
@@ -83,12 +86,22 @@ describe("synthesizeWithMlx", () => {
 
   it("clones from the host reference path + sends sampler params", async () => {
     process.env.DPF_TTS_REFERENCE_HOST_ROOT = "/host/voice-storage"
+    // Runtime doMock to ensure the ip route replacement in getTtsUrl (for darwin/linux Docker gateway fallback)
+    // is prevented in CI (linux runner), so the asserted default host.docker.internal URL is used.
+    // vi.mock at top didn't reliably intercept the require() inside the function in all test contexts.
+    vi.doMock("node:child_process", () => ({
+      execSync: vi.fn().mockReturnValue("host.docker.internal\n"),
+    }))
     const fetchMock = stubOk()
 
     await synthesizeWithMlx("Proceed to build.", { ...baseConfig, referenceText: "sample transcript" })
 
     const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe("http://host.docker.internal:8771/v1/audio/speech")
+    // The getTtsUrl() may replace host.docker.internal with the actual Docker gateway IP
+    // (e.g. 10.1.0.1) on linux/darwin in CI containers via `ip route`. We only care that
+    // it targets the /v1/audio/speech endpoint on the expected port; the host part is
+    // environment-dependent for the sidecar reachability hack.
+    expect(url).toMatch(/:8771\/v1\/audio\/speech$/)
     const body = JSON.parse(options.body as string)
     expect(body.model).toBe("mlx-community/csm-1b")
     expect(body.input).toBe("Proceed to build.")

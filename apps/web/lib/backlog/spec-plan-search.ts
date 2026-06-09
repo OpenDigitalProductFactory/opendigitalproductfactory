@@ -1,5 +1,4 @@
-import { promises as fs, statSync } from "node:fs";
-import path from "node:path";
+import { lazyFs, lazyFsPromises, lazyPath, getCwd } from "@/lib/shared/lazy-node";
 
 export type SpecPlanKind = "spec" | "plan";
 
@@ -25,6 +24,9 @@ const DEFAULT_MATCHES = 10;
 const MAX_MATCHES = 25;
 const SNIPPET_RADIUS = 120;
 
+const fsp = lazyFsPromises();
+const fs = lazyFs();
+const path = lazyPath();
 const SPEC_DIR = path.posix.join("docs", "superpowers", "specs");
 const PLAN_DIR = path.posix.join("docs", "superpowers", "plans");
 
@@ -47,7 +49,8 @@ const cache = new Map<string, CacheEntry>();
 function repoRoot(): string {
   // turbopackIgnore: process.cwd() and these resolves are runtime filesystem
   // walks of the deployed install root; they must not be traced into the bundle.
-  const cwdResolved = path.resolve(/*turbopackIgnore: true*/ process.cwd());
+  const cwd = getCwd();
+  const cwdResolved = path.resolve(/*turbopackIgnore: true*/ cwd);
   const docsMarker = path.join(/*turbopackIgnore: true*/ cwdResolved, "docs", "superpowers");
   if (existsSyncCached(docsMarker)) return cwdResolved;
   // apps/web/<...> dev scenarios — climb to repo root.
@@ -59,7 +62,7 @@ const existsCache = new Map<string, boolean>();
 function existsSyncCached(p: string): boolean {
   if (existsCache.has(p)) return existsCache.get(p)!;
   try {
-    statSync(p);
+    fs.statSync(p);
     existsCache.set(p, true);
     return true;
   } catch {
@@ -115,7 +118,7 @@ async function loadFile(filePath: string): Promise<CacheEntry | null> {
   // files. The fix is to open() once and use the returned FileHandle
   // for both stat and read: stat-via-fd is atomic against on-disk
   // changes and readFile-via-fd reads the same inode.
-  const { open } = fs;
+  const { open } = fsp;
   let fh;
   try {
     fh = await open(filePath, "r");
@@ -149,7 +152,7 @@ async function loadFile(filePath: string): Promise<CacheEntry | null> {
 async function listMarkdown(absDir: string): Promise<string[]> {
   let entries: string[];
   try {
-    entries = await fs.readdir(absDir);
+    entries = await fsp.readdir(absDir);
   } catch {
     return [];
   }

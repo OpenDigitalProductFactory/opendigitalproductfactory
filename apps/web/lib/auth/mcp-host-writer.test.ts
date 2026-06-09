@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Must mock 'fs' before importing the module under test
+// Must mock 'fs' before importing the module under test.
+// Also mock "node:fs" because the implementation now uses the lazy wrappers
+// (which import "node:fs" internally) to keep the source tree clean for
+// sandbox Edge analysis / next install.
 vi.mock("fs");
+vi.mock("node:fs");
 
 import fs from "fs";
 import { writeMcpJsonToHost } from "./mcp-host-writer";

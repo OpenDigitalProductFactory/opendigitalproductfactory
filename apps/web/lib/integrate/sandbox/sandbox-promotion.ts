@@ -2,7 +2,7 @@
 // Sandbox → production promotion: backup production DB, scan for destructive ops,
 // extract and categorize diffs, apply promotion patches.
 
-import { lazyExec, lazyPath, lazyFsPromises } from "@/lib/shared/lazy-node";
+import { lazyExec, lazyPath, lazyFsPromises, getCwd } from "@/lib/shared/lazy-node";
 import * as os from "os";
 import { prisma } from "@dpf/db";
 import { extractDiff } from "@/lib/sandbox";
@@ -389,7 +389,7 @@ export async function backupProductionDb(
   productionDbContainerName: string = DEFAULT_PRODUCTION_DB_CONTAINER,
 ): Promise<{ id: string; filePath: string; sizeBytes: number }> {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupsDir = lazyPath().join(process.cwd(), "backups");
+  const backupsDir = lazyPath().join(getCwd(), "backups");
   const fileName = `backup-${buildId}-${timestamp}.sql`;
   const filePath = lazyPath().join(backupsDir, fileName);
 
