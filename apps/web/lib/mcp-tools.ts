@@ -2321,6 +2321,23 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "get_build_engine_readiness",
+    description: "Report whether each build-dispatch engine (claude, codex, grok) is present and healthy in the build sandbox. Returns per-engine { present, version, lastProbedAt, bakeInDefault } from the last probe (BuildEngineState). Pass refresh:true to live re-probe each engine (docker exec <verifyCommand>) and persist the fresh result. Use this to see engine readiness before selecting a build dispatch engine — e.g. an engine that is selectable but shows present:false would fail at runtime with 'not found'.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        refresh: {
+          type: "boolean",
+          description: "When true, live re-probe each engine in the sandbox and persist the result before returning. Default false (return last known state).",
+        },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review"],
+  },
+  {
     name: "check_sandbox",
     description: "Check whether the sandbox container (dpf-sandbox-1) is running. Returns status: 'running', 'stopped', or 'not_found'. If the result is not_found or detached, call diagnose_sandbox for governed recovery guidance.",
     inputSchema: { type: "object", properties: {} },
@@ -8955,6 +8972,78 @@ export async function executeTool(
         available?: unknown;
         summary?: unknown;
       });
+    }
+
+    case "get_build_engine_readiness": {
+      const refresh = params["refresh"] === true;
+      const engines = await prisma.buildEngine.findMany({
+        select: {
+          engineId: true,
+          binary: true,
+          verifyCommand: true,
+          versionRegex: true,
+          bakeInDefault: true,
+          state: { select: { present: true, version: true, lastProbedAt: true } },
+        },
+        orderBy: { engineId: "asc" },
+      });
+
+      type EngineReadinessRow = {
+        engineId: string;
+        binary: string;
+        bakeInDefault: boolean;
+        present: boolean | null;
+        version: string | null;
+        lastProbedAt: string | null;
+      };
+
+      let readiness: EngineReadinessRow[] = engines.map((e) => ({
+        engineId: e.engineId,
+        binary: e.binary,
+        bakeInDefault: e.bakeInDefault,
+        present: e.state?.present ?? null,
+        version: e.state?.version ?? null,
+        lastProbedAt: e.state?.lastProbedAt ? e.state.lastProbedAt.toISOString() : null,
+      }));
+
+      if (refresh) {
+        const { probeEngineReadiness } = await import(
+          "@/lib/routing/capability-probes/probe-engine-readiness"
+        );
+        const { persistEngineReadiness } = await import("@/lib/routing/persist-engine-readiness");
+        readiness = await Promise.all(
+          engines.map(async (e): Promise<EngineReadinessRow> => {
+            const r = await probeEngineReadiness({
+              engineId: e.engineId,
+              binary: e.binary,
+              verifyCommand: e.verifyCommand,
+              versionRegex: e.versionRegex,
+            });
+            await persistEngineReadiness(r).catch(() => undefined);
+            return {
+              engineId: e.engineId,
+              binary: e.binary,
+              bakeInDefault: e.bakeInDefault,
+              present: r.present,
+              version: r.version,
+              lastProbedAt: r.probedAt,
+            };
+          }),
+        );
+      }
+
+      const present = readiness.filter((r) => r.present === true).map((r) => r.engineId);
+      const absent = readiness.filter((r) => r.present === false).map((r) => r.engineId);
+      const unknown = readiness.filter((r) => r.present === null).map((r) => r.engineId);
+
+      return {
+        success: true,
+        message:
+          engines.length === 0
+            ? "No build engines registered yet. Run sync-engine-registry to populate the BuildEngine catalog from build-engines.json."
+            : `Build engines — present: ${present.join(", ") || "none"}; not installed: ${absent.join(", ") || "none"}; never probed: ${unknown.join(", ") || "none"}.${refresh ? " (live re-probe)" : " (last known state — pass refresh:true to re-probe)"}`,
+        data: { engines: readiness, refreshed: refresh },
+      };
     }
 
     case "diagnose_sandbox": {

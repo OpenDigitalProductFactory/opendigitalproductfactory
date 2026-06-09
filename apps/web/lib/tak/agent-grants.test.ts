@@ -61,6 +61,7 @@ describe("TOOL_TO_GRANTS — Build / Sandbox entries", () => {
 
   it("Build Studio observer tools require read-only work capsule access", () => {
     const tools = [
+      "get_build_engine_readiness",
       "get_build_progress_visibility",
       "get_build_sandbox_state",
       "get_build_dispatch_history",
