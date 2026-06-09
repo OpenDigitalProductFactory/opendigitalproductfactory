@@ -7,12 +7,39 @@ import { decryptSecret } from "../govern/credential-crypto";
 
 const PROMETHEUS_POLL_INTERVAL_MS = 60 * 60_000;
 const FULL_SWEEP_INTERVAL_MS = 60 * 60_000;
+const ISSUE_TRIAGE_INTERVAL_MS = 15 * 60_000;
+const BACKLOG_TRIAGE_DRAIN_INTERVAL_MS = 60 * 60_000;
 const PROMETHEUS_URL = process.env.PROMETHEUS_URL ?? "http://prometheus:9090";
 
-const JOB_PROMETHEUS_POLL = "discovery-prometheus-poll";
-const JOB_FULL_SWEEP      = "discovery-full-sweep";
-const JOB_ISSUE_TRIAGE    = "issue-report-triage";
-const ISSUE_TRIAGE_INTERVAL_MS = 15 * 60_000;
+const JOB_PROMETHEUS_POLL       = "discovery-prometheus-poll";
+const JOB_FULL_SWEEP            = "discovery-full-sweep";
+const JOB_ISSUE_TRIAGE          = "issue-report-triage";
+const JOB_BACKLOG_TRIAGE_DRAIN  = "backlog-triage-drain";
+
+/**
+ * Single source of truth for the ScheduledJob rows this module owns.
+ *
+ * Both registerScheduledJobs() (startup) and recordJobRun() (after each run)
+ * read from this registry, so a job can never be wired into one path but not
+ * the other. That drift was the cause of the recurring P2025 log-spam: the
+ * backlog-triage-drain cron called recordJobRun() for a jobId that
+ * registerScheduledJobs() never upserted, so the update() hit a missing row.
+ *
+ * model-discovery + code-graph self-register elsewhere (own schedules), so they
+ * are intentionally not listed here.
+ */
+type ManagedJob = { jobId: string; name: string; schedule: string; intervalMs: number };
+
+const MANAGED_JOBS: ManagedJob[] = [
+  { jobId: JOB_PROMETHEUS_POLL,      name: "Discovery: Prometheus target poll",      schedule: "hourly",     intervalMs: PROMETHEUS_POLL_INTERVAL_MS },
+  { jobId: JOB_FULL_SWEEP,           name: "Discovery: full infrastructure sweep",   schedule: "hourly",     intervalMs: FULL_SWEEP_INTERVAL_MS },
+  { jobId: JOB_ISSUE_TRIAGE,         name: "Quality: issue report triage",           schedule: "every-15m",  intervalMs: ISSUE_TRIAGE_INTERVAL_MS },
+  { jobId: JOB_BACKLOG_TRIAGE_DRAIN, name: "Operate: backlog triage drain",          schedule: "hourly",     intervalMs: BACKLOG_TRIAGE_DRAIN_INTERVAL_MS },
+];
+
+const MANAGED_JOBS_BY_ID: Record<string, ManagedJob> = Object.fromEntries(
+  MANAGED_JOBS.map((job) => [job.jobId, job]),
+);
 
 /** Upsert ScheduledJob rows so calendar-data.ts can project discovery events. */
 export async function registerScheduledJobs(): Promise<void> {
@@ -20,68 +47,53 @@ export async function registerScheduledJobs(): Promise<void> {
   const { registerModelDiscoveryJob } = await import("../inference/model-discovery-scheduler");
   const { registerCodeGraphScheduledJob } = await import("../integrate/code-graph-refresh");
   await Promise.all([
-    prisma.scheduledJob.upsert({
-      where:  { jobId: JOB_PROMETHEUS_POLL },
-      create: {
-        jobId: JOB_PROMETHEUS_POLL,
-        name:  "Discovery: Prometheus target poll",
-        schedule: "hourly",
-        nextRunAt: new Date(now.getTime() + PROMETHEUS_POLL_INTERVAL_MS),
-      },
-      update: {
-        schedule: "hourly",
-        nextRunAt: new Date(now.getTime() + PROMETHEUS_POLL_INTERVAL_MS),
-      },
-    }),
-    prisma.scheduledJob.upsert({
-      where:  { jobId: JOB_FULL_SWEEP },
-      create: {
-        jobId: JOB_FULL_SWEEP,
-        name:  "Discovery: full infrastructure sweep",
-        schedule: "hourly",
-        nextRunAt: new Date(now.getTime() + FULL_SWEEP_INTERVAL_MS),
-      },
-      update: {
-        schedule: "hourly",
-        nextRunAt: new Date(now.getTime() + FULL_SWEEP_INTERVAL_MS),
-      },
-    }),
-    prisma.scheduledJob.upsert({
-      where:  { jobId: JOB_ISSUE_TRIAGE },
-      create: {
-        jobId: JOB_ISSUE_TRIAGE,
-        name:  "Quality: issue report triage",
-        schedule: "every-15m",
-        nextRunAt: new Date(now.getTime() + ISSUE_TRIAGE_INTERVAL_MS),
-      },
-      update: {
-        schedule: "every-15m",
-        nextRunAt: new Date(now.getTime() + ISSUE_TRIAGE_INTERVAL_MS),
-      },
-    }),
+    ...MANAGED_JOBS.map((job) =>
+      prisma.scheduledJob.upsert({
+        where:  { jobId: job.jobId },
+        create: {
+          jobId: job.jobId,
+          name:  job.name,
+          schedule: job.schedule,
+          nextRunAt: new Date(now.getTime() + job.intervalMs),
+        },
+        update: {
+          schedule: job.schedule,
+          nextRunAt: new Date(now.getTime() + job.intervalMs),
+        },
+      }),
+    ),
     registerModelDiscoveryJob(),
     registerCodeGraphScheduledJob(),
   ]);
 }
 
-const JOB_INTERVALS: Record<string, number> = {
-  [JOB_PROMETHEUS_POLL]: PROMETHEUS_POLL_INTERVAL_MS,
-  [JOB_FULL_SWEEP]:      FULL_SWEEP_INTERVAL_MS,
-  [JOB_ISSUE_TRIAGE]:    ISSUE_TRIAGE_INTERVAL_MS,
-};
-
-/** Update a ScheduledJob after a run completes. */
+/**
+ * Record a ScheduledJob run.
+ *
+ * Uses upsert (not update) so a missing registration self-heals — materializing
+ * the row from the managed registry — instead of throwing P2025 and spamming
+ * the logs on every run. Unknown jobIds fall back to a generic name/schedule so
+ * the row still appears on the calendar rather than vanishing silently.
+ */
 export async function recordJobRun(jobId: string, status: string, error?: string): Promise<void> {
-  const intervalMs = JOB_INTERVALS[jobId] ?? FULL_SWEEP_INTERVAL_MS;
+  const job = MANAGED_JOBS_BY_ID[jobId];
+  const intervalMs = job?.intervalMs ?? FULL_SWEEP_INTERVAL_MS;
   const now = new Date();
-  await prisma.scheduledJob.update({
+  const runData = {
+    lastRunAt:  now,
+    lastStatus: status,
+    lastError:  error ?? null,
+    nextRunAt:  new Date(now.getTime() + intervalMs),
+  };
+  await prisma.scheduledJob.upsert({
     where: { jobId },
-    data: {
-      lastRunAt:  now,
-      lastStatus: status,
-      lastError:  error ?? null,
-      nextRunAt:  new Date(now.getTime() + intervalMs),
+    create: {
+      jobId,
+      name: job?.name ?? jobId,
+      schedule: job?.schedule ?? "hourly",
+      ...runData,
     },
+    update: runData,
   }).catch((err) => console.error(`[discovery-scheduler] Failed to update job ${jobId}:`, err));
 }
 
