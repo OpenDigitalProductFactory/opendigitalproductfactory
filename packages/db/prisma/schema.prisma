@@ -10326,6 +10326,21 @@ model BuildEngine {
   recipes         Json
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  state           BuildEngineState?
 
   @@map("build_engine")
+}
+
+model BuildEngineState {
+  engineId          String      @id
+  engine            BuildEngine @relation(fields: [engineId], references: [engineId], onDelete: Cascade)
+  present           Boolean     @default(false)
+  version           String?
+  lastProbedAt      DateTime?
+  lastProvisionedAt DateTime?
+  recipeApplied     String?
+  desired           String      @default("present")
+  provisionedBy     String?
+
+  @@map("build_engine_state")
 }
