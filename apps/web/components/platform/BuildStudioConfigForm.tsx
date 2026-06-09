@@ -6,6 +6,7 @@ import { saveBuildStudioConfig } from "@/lib/actions/build-studio";
 import type { BuildStudioDispatchConfig } from "@/lib/integrate/build-studio-config";
 import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
+import { engineReadinessBadgeContent, ENGINE_READINESS_TONE_COLOR } from "./engine-readiness-badge";
 import { ContributorMcpReadinessCard } from "./ContributorMcpReadinessCard";
 
 type ProviderOption = {
@@ -16,12 +17,20 @@ type ProviderOption = {
   costNotes: string | null;
 };
 
+type EngineReadinessBadge = {
+  present: boolean | null;
+  version: string | null;
+  lastProbedAt: string | null;
+};
+
 type Props = {
   config: BuildStudioDispatchConfig;
   claudeProviders: ProviderOption[];
   codexProviders: ProviderOption[];
   grokProviders: ProviderOption[];
   contributorMcpReadiness: ContributorMcpReadiness;
+  /** Per-engine sandbox readiness (engineId → last probe), keyed "claude"|"codex"|"grok". */
+  engineReadiness?: Record<string, EngineReadinessBadge>;
   baseUrl: string;
   canWrite: boolean;
 };
@@ -66,6 +75,7 @@ export function BuildStudioConfigForm({
   codexProviders,
   grokProviders,
   contributorMcpReadiness,
+  engineReadiness,
   baseUrl,
   canWrite,
 }: Props) {
@@ -168,6 +178,7 @@ export function BuildStudioConfigForm({
             label="Claude Code CLI"
             desc="Anthropic models"
             unconfiguredMsg={!hasClaudeCreds ? "No Anthropic credentials found." : undefined}
+            readiness={engineReadiness?.claude}
           />
           <ProviderRadio
             name="provider"
@@ -178,6 +189,7 @@ export function BuildStudioConfigForm({
             label="Codex CLI"
             desc="OpenAI models"
             unconfiguredMsg={!hasCodexCreds ? "No OpenAI credentials found." : undefined}
+            readiness={engineReadiness?.codex}
           />
           <ProviderRadio
             name="provider"
@@ -188,6 +200,7 @@ export function BuildStudioConfigForm({
             label="Grok CLI (Preview)"
             desc="xAI models · headless grok -p"
             unconfiguredMsg={!hasGrokCreds ? "No xAI credentials found." : undefined}
+            readiness={engineReadiness?.grok}
           />
           <ProviderRadio
             name="provider"
@@ -387,7 +400,28 @@ export function BuildStudioConfigForm({
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function ProviderRadio({ name, value, checked, onChange, disabled, label, desc, unconfiguredMsg }: {
+function EngineReadinessBadgeView({ readiness }: { readiness: EngineReadinessBadge }) {
+  const { icon, text, tone } = engineReadinessBadgeContent(readiness.present, readiness.version);
+  return (
+    <div
+      role="status"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        marginTop: 3,
+        fontSize: 10,
+        fontWeight: 600,
+        color: ENGINE_READINESS_TONE_COLOR[tone],
+      }}
+    >
+      <span aria-hidden="true">{icon}</span>
+      <span>{text}</span>
+    </div>
+  );
+}
+
+function ProviderRadio({ name, value, checked, onChange, disabled, label, desc, unconfiguredMsg, readiness }: {
   name: string;
   value: string;
   checked: boolean;
@@ -396,6 +430,7 @@ function ProviderRadio({ name, value, checked, onChange, disabled, label, desc, 
   label: string;
   desc: string;
   unconfiguredMsg?: string;
+  readiness?: EngineReadinessBadge;
 }) {
   return (
     <label style={{
@@ -413,6 +448,7 @@ function ProviderRadio({ name, value, checked, onChange, disabled, label, desc, 
       <div>
         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--dpf-text)" }}>{label}</div>
         <div style={{ fontSize: 10, color: "var(--dpf-muted)" }}>{desc}</div>
+        {readiness && <EngineReadinessBadgeView readiness={readiness} />}
         {unconfiguredMsg && (
           <div style={{ fontSize: 10, color: "var(--dpf-warning)", marginTop: 2 }}>
             {unconfiguredMsg}{" "}
