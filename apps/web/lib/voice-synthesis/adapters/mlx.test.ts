@@ -86,6 +86,12 @@ describe("synthesizeWithMlx", () => {
 
   it("clones from the host reference path + sends sampler params", async () => {
     process.env.DPF_TTS_REFERENCE_HOST_ROOT = "/host/voice-storage"
+    // Runtime doMock to ensure the ip route replacement in getTtsUrl (for darwin/linux Docker gateway fallback)
+    // is prevented in CI (linux runner), so the asserted default host.docker.internal URL is used.
+    // vi.mock at top didn't reliably intercept the require() inside the function in all test contexts.
+    vi.doMock("node:child_process", () => ({
+      execSync: vi.fn().mockReturnValue("host.docker.internal\n"),
+    }))
     const fetchMock = stubOk()
 
     await synthesizeWithMlx("Proceed to build.", { ...baseConfig, referenceText: "sample transcript" })
