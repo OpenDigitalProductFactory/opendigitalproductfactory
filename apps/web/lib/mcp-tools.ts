@@ -2321,6 +2321,23 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "reconcile_build_engines",
+    description: "Re-provision build engines that were provisioned on demand and are now missing from the sandbox (e.g. after a sandbox rebuild). Idempotent and narrow: only restores engines with desired=present AND a prior successful provision that a fresh probe reports absent — a no-op for fresh or baked-only sandboxes. Side-effecting (may run installs). Also fires automatically when start_sandbox brings a recreated sandbox to ready. Returns { checked, restored[], skipped }.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        offline: {
+          type: "boolean",
+          description: "When true, only use no-egress (prestaged-binary) recipes. Default false.",
+        },
+      },
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ideate", "plan", "build", "review"],
+  },
+  {
     name: "provision_build_engine",
     description: "Install a build-dispatch engine (claude, codex, grok) into the running sandbox from its registry recipe, then verify by re-probing. Idempotent — a no-op if the engine is already present. Side-effecting: runs the install command (e.g. `npm install -g`, or the grok curl-installer) inside the sandbox, so it requires sandbox_execute. Pass offline:true to use only no-egress (prestaged-binary) recipes for air-gapped installs. Returns { kind, version, recipe }.",
     inputSchema: {
@@ -8993,6 +9010,22 @@ export async function executeTool(
       });
     }
 
+    case "reconcile_build_engines": {
+      const offline = params["offline"] === true;
+      const { reconcileBuildEngines } = await import("@/lib/integrate/build-engine-reconcile");
+      const summary = await reconcileBuildEngines({ offline, actorUserId: userId });
+      return {
+        success: true,
+        message:
+          summary.restored.length === 0
+            ? `No engines needed restoring (checked ${summary.checked}, skipped ${summary.skipped}).`
+            : `Restored ${summary.restored.length} engine(s): ${summary.restored
+                .map((r) => `${r.engineId} (${r.outcome})`)
+                .join(", ")}.`,
+        data: summary,
+      };
+    }
+
     case "provision_build_engine": {
       const engineId = optionalString(params["engineId"]);
       if (!engineId) {
@@ -9201,6 +9234,13 @@ export async function executeTool(
           try {
             const { stdout } = await execAsync(`docker inspect -f "{{.State.Status}}" ${sandboxId}`, { timeout: 3_000 });
             if (stdout.trim() === "running") {
+              // Auto-replay (EP-2D477458 Phase 3): a freshly (re)started sandbox
+              // may have lost any on-demand-provisioned engine. Restore desired,
+              // previously-provisioned, now-absent engines in the background —
+              // a no-op for fresh or baked-only sandboxes.
+              void import("@/lib/integrate/build-engine-reconcile")
+                .then((m) => m.reconcileBuildEngines({ actorUserId: userId }))
+                .catch(() => undefined);
               return { success: true, message: `Sandbox (${sandboxId}) started successfully and is ready.`, data: { status: "running" } };
             }
           } catch { /* keep waiting */ }
