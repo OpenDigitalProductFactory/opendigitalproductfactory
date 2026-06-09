@@ -1,0 +1,14 @@
+# Auto-provision Loki as a Grafana datasource (EP-FULL-OBS Tier 2).
+# Lives next to the existing Prometheus datasource provisioning so the same
+# operator login that views metrics can Explore logs. Non-default (Prometheus
+# stays the default datasource).
+apiVersion: 1
+datasources:
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+    editable: false
+    jsonData:
+      maxLines: 1000
