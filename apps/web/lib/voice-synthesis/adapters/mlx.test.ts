@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+vi.mock("node:child_process", () => ({
+  execSync: vi.fn().mockReturnValue("host.docker.internal\n"),
+}))
 import { synthesizeWithMlx, resolveReferenceHostPath } from "./mlx"
 import type { MlxSynthesisConfig } from "./mlx"
 
