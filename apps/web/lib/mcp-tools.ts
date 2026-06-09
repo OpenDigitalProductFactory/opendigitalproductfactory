@@ -8,7 +8,7 @@ import { loadEnforceablePrinciples } from "@/lib/kernel/load-enforceable-princip
 import { detectSessionClass } from "@/lib/kernel/session-class";
 import { kernelGateDecisionsTotal } from "@/lib/operate/metrics";
 import * as crypto from "crypto";
-import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
+import { lazyFs, lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil, getCwd } from "@/lib/shared/lazy-node";
 import { mergeHappyPathStateIntoPlan, generateBuildId } from "@/lib/feature-build-types";
 import { BACKLOG_SOURCE_VALUES, BACKLOG_STATUS_VALUES, BACKLOG_WORK_TYPE_VALUES, EPIC_STATUSES } from "@/lib/explore/backlog";
 import {
@@ -9628,7 +9628,7 @@ export async function executeTool(
           const { readFile } = lazyFsPromises();
           const root = process.env.PROJECT_ROOT
             ? resolve(process.env.PROJECT_ROOT)
-            : resolve(process.cwd(), "..", "..");
+            : resolve(getCwd(), "..", "..");
           return await readFile(resolve(root, "packages/db/prisma/schema.prisma"), "utf-8");
         } catch {
           return null;
@@ -12951,7 +12951,7 @@ export async function executeTool(
           const fs = await import(fsId);
           const pathId = "path";
           const path = await import(pathId);
-          const manifestPath = path.join(process.cwd(), "docs", "founder-kernel", "manifest.json");
+          const manifestPath = path.join(getCwd(), "docs", "founder-kernel", "manifest.json");
           const raw = await fs.readFile(manifestPath, "utf8");
           return (JSON.parse(raw) as { kernelVersion?: string }).kernelVersion ?? "0.0.0";
         } catch {
@@ -13069,7 +13069,7 @@ export async function executeTool(
           const pathId = "path";
           const path = await import(pathId);
           const manifestPath = path.join(
-            process.cwd(),
+            getCwd(),
             "docs",
             "founder-kernel",
             "manifest.json",
@@ -14960,7 +14960,7 @@ export async function executeTool(
       if (!filePath) return { success: false, error: "path is required.", message: "Provide a file path." };
       const { resolve, join } = lazyPath();
       const { readFile } = lazyFsPromises();
-      const root = process.env.PROJECT_ROOT ? resolve(process.env.PROJECT_ROOT) : resolve(process.cwd(), "..", "..");
+      const root = process.env.PROJECT_ROOT ? resolve(process.env.PROJECT_ROOT) : resolve(getCwd(), "..", "..");
       const resolved = resolve(join(root, filePath));
       if (!resolved.startsWith(root)) {
         await logAdminActivity(userId, "admin_read_file", { path: filePath }, "blocked", 1, "Path traversal");

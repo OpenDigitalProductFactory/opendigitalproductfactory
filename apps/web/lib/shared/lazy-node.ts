@@ -9,6 +9,7 @@ import * as fs from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import * as path from "node:path";
 import * as util from "node:util";
+import * as os from "node:os";
 
 export function lazyFs(): typeof import("fs") {
   return fs;
@@ -32,6 +33,10 @@ export function lazyChildProcess(): typeof import("child_process") {
 
 export function lazyUtil(): typeof import("util") {
   return util;
+}
+
+export function lazyOs(): typeof import("os") {
+  return os;
 }
 
 /** Pre-built promisified exec that always returns strings (encoding: utf-8). */

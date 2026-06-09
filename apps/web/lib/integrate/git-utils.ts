@@ -1,10 +1,7 @@
 // apps/web/lib/git-utils.ts
 // Async git operations for the development lifecycle pipeline.
 
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { lazyPath, lazyFsPromises, lazyExec, getCwd } from "@/lib/shared/lazy-node";
+import { lazyPath, lazyFsPromises, lazyExec, lazyOs, getCwd } from "@/lib/shared/lazy-node";
 import { isPathAllowedSync as isPathAllowed, isDevInstance } from "@/lib/codebase-tools";
 
 const exec = lazyExec();
