@@ -502,7 +502,7 @@ function extractColorCandidates(html: string): string[] {
  * Keyword catalog: maps archetype slug → display name + keywords to match in page text/title/description.
  * Ordered so more specific archetypes appear before generic ones.
  */
-const ARCHETYPE_CATALOG: Array<{ id: string; name: string; keywords: string[] }> = [
+const ARCHETYPE_CATALOG: Array<{ id: string; name: string; keywords: string[]; category?: string }> = [
   { id: "dental-practice", name: "Dental Practice", keywords: ["dentist", "dental", "orthodont", "teeth whitening", "oral health", "cosmetic dentistry"] },
   { id: "optician", name: "Optician", keywords: ["optician", "optometry", "optometrist", "eyewear", "glasses", "contact lens", "vision care", "spectacles"] },
   { id: "physiotherapy-clinic", name: "Physiotherapy Clinic", keywords: ["physiotherapy", "physiotherapist", "physical therapy", "rehab clinic", "rehabilitation"] },
@@ -541,12 +541,14 @@ const ARCHETYPE_CATALOG: Array<{ id: string; name: string; keywords: string[] }>
   { id: "retail-homeware", name: "Retail — Homeware", keywords: ["homeware", "home furnishings", "furniture store", "kitchenware", "home decor shop"] },
   { id: "ecommerce-general", name: "E-commerce", keywords: ["shop now", "add to cart", "add to basket", "free delivery", "free shipping", "buy online", "online store", "online shop"] },
   { id: "nonprofit", name: "Non-Profit / Charity", keywords: ["charity", "nonprofit", "non-profit", "donation", "fundraising", "volunteer", "community interest"] },
+  { id: "plumber", name: "Plumber", keywords: ["plumber", "plumbing", "pipe", "drain", "leak repair", "water heater", "boiler", "toilet", "bathroom fitting"], category: "trades-maintenance" },
+  { id: "electrician", name: "Electrician", keywords: ["electrician", "electrical", "wiring", "fuse box", "circuit", "ev charging", "rewire", "lighting installation"], category: "trades-maintenance" },
 ];
 
 type ArchetypeMatch = { id: string; name: string; score: number };
 
 /** Detect business archetype from concatenated page text using keyword scoring. */
-function detectArchetype(text: string): { id: string; name: string; confidence: "high" | "medium" } | null {
+export function detectArchetype(text: string): { id: string; name: string; confidence: "high" | "medium" } | null {
   const lower = text.toLowerCase();
   const scored: ArchetypeMatch[] = [];
 
