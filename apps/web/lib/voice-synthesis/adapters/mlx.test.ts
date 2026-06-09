@@ -97,7 +97,11 @@ describe("synthesizeWithMlx", () => {
     await synthesizeWithMlx("Proceed to build.", { ...baseConfig, referenceText: "sample transcript" })
 
     const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe("http://host.docker.internal:8771/v1/audio/speech")
+    // The getTtsUrl() may replace host.docker.internal with the actual Docker gateway IP
+    // (e.g. 10.1.0.1) on linux/darwin in CI containers via `ip route`. We only care that
+    // it targets the /v1/audio/speech endpoint on the expected port; the host part is
+    // environment-dependent for the sidecar reachability hack.
+    expect(url).toMatch(/:8771\/v1\/audio\/speech$/)
     const body = JSON.parse(options.body as string)
     expect(body.model).toBe("mlx-community/csm-1b")
     expect(body.input).toBe("Proceed to build.")
