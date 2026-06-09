@@ -3,7 +3,25 @@ import { vi, describe, it, expect } from 'vitest';
 import path from 'path';
 import { writeFileSync, mkdtempSync } from 'fs';
 import os from 'os';
-import { syncEngineRegistry } from './sync-engine-registry';
+import { syncEngineRegistry, enginesMissingMuslSafeRecipe } from './sync-engine-registry';
+
+describe("enginesMissingMuslSafeRecipe", () => {
+  it("flags only engines whose recipes are ALL non-musl-safe", () => {
+    const mk = (recipes: Array<{ muslSafe?: boolean }>) => ({
+      binary: "x",
+      verify: { command: "", versionRegex: "" },
+      bakeInDefault: false,
+      recipes,
+    });
+    const engines = {
+      ok: mk([{ muslSafe: true }]),
+      bad: mk([{ muslSafe: false }]),
+      mixed: mk([{ muslSafe: false }, { muslSafe: true }]),
+      none: mk([]),
+    };
+    expect(enginesMissingMuslSafeRecipe(engines as never)).toEqual(["bad"]);
+  });
+});
 
 const dataPath = path.join(__dirname, '../data/build-engines.json');
 
