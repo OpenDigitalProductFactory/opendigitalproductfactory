@@ -12,7 +12,7 @@
 // The registry caches resolved pattern lists for 60s to match prompt-loader
 // cadence. Call invalidateDeliberationRegistryCache() on admin edits.
 
-import { readFileSync } from "node:fs";
+import { lazyFs } from "@/lib/shared/lazy-node";
 import { prisma } from "@dpf/db";
 import {
   discoverDeliberationFiles,
@@ -206,7 +206,7 @@ async function loadFromFiles(): Promise<ResolvedDeliberationPattern[]> {
   for (const { slug, filePath } of files) {
     let raw: string;
     try {
-      raw = readFileSync(filePath, "utf-8");
+      raw = lazyFs().readFileSync(filePath, "utf-8");
     } catch {
       continue;
     }

@@ -1,5 +1,4 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
 import type { Prisma } from "@dpf/db";
 import { generateCycloneDxBom } from "./cyclonedx-generator";
 import { persistGeneratedBom } from "./bom-persistence";
@@ -57,8 +56,8 @@ export interface GenerateAndPersistBuildBomInput {
   queueScan?: (input: { buildId: string; requestedByUserId: string }) => Promise<unknown>;
 }
 
-async function defaultReadTextFile(path: string): Promise<string> {
-  return readFile(path, "utf8");
+async function defaultReadTextFile(p: string): Promise<string> {
+  return lazyFsPromises().readFile(p, "utf8");
 }
 
 function requirePersistenceDb(db: BomJobDb) {
@@ -96,9 +95,10 @@ export async function generateAndPersistBuildBom(input: GenerateAndPersistBuildB
 
   const db = requirePersistenceDb(input.db);
   const readTextFile = input.readTextFile ?? defaultReadTextFile;
+  const p = lazyPath();
   const [packageJson, lockText, modelProfiles] = await Promise.all([
-    readTextFile(join(input.projectRoot, "apps/web/package.json")),
-    readTextFile(join(input.projectRoot, "pnpm-lock.yaml")),
+    readTextFile(p.join(input.projectRoot, "apps/web/package.json")),
+    readTextFile(p.join(input.projectRoot, "pnpm-lock.yaml")),
     input.db.modelProfile?.findMany({
       where: { modelStatus: "active" },
       select: { providerId: true, modelId: true, modelStatus: true },
