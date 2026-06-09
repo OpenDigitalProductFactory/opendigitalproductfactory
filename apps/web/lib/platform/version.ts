@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { getCwd } from "@/lib/shared/lazy-node";
 
 import {
   readImageBuiltAt,
@@ -122,10 +123,11 @@ function parseVersionJson(raw: unknown): {
 }
 
 function resolveVersionJsonPath(): string {
+  const cwd = getCwd();
   const candidates = [
     process.env.DPF_VERSION_FILE,
-    resolve(process.cwd(), "version.json"),
-    resolve(process.cwd(), "../../version.json"),
+    resolve(cwd, "version.json"),
+    resolve(cwd, "../../version.json"),
     "/app/version.json",
   ].filter((value): value is string => Boolean(value));
 

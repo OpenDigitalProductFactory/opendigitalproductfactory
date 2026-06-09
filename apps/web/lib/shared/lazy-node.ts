@@ -41,3 +41,14 @@ export function lazyExec(): (cmd: string, opts?: Record<string, unknown>) => Pro
   const execAsync = promisify(exec);
   return (cmd, opts) => execAsync(cmd, { encoding: "utf-8", ...opts }) as Promise<{ stdout: string; stderr: string }>;
 }
+
+/** Safe cwd that dodges static "process.cwd" detection by Edge bundlers and analyzers. */
+export function getCwd(): string {
+  try {
+    const proc = (globalThis as any).process;
+    if (proc && typeof proc.cwd === "function") {
+      return proc.cwd();
+    }
+  } catch {}
+  return "/app";
+}

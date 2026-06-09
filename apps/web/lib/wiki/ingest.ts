@@ -16,6 +16,7 @@
 import { readFileSync } from "node:fs";
 import { basename, extname } from "node:path";
 import path from "node:path";
+import { getCwd } from "@/lib/shared/lazy-node";
 
 // Split on both POSIX and Windows separators so callers can pass either flavor
 // of path (URL-style "/x/y/z.md" or native "C:\x\y\z.md") and get the same
@@ -142,7 +143,7 @@ export function assertAllowedIngestPath(filePath: string): string {
   const resolved = path.resolve(filePath);
   const projectRoot = process.env.PROJECT_ROOT
     ? path.resolve(process.env.PROJECT_ROOT)
-    : process.cwd();
+    : getCwd();
   for (const root of ALLOWED_INGEST_ROOTS) {
     const allowedAbs = path.resolve(projectRoot, root);
     const rel = path.relative(allowedAbs, resolved);

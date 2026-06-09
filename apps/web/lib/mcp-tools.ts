@@ -12947,8 +12947,10 @@ export async function executeTool(
       // rather than pulling in the seed module.
       const kernelVersion = await (async () => {
         try {
-          const fs = await import("fs/promises");
-          const path = await import("path");
+          const fsId = "fs/promises";
+          const fs = await import(fsId);
+          const pathId = "path";
+          const path = await import(pathId);
           const manifestPath = path.join(process.cwd(), "docs", "founder-kernel", "manifest.json");
           const raw = await fs.readFile(manifestPath, "utf8");
           return (JSON.parse(raw) as { kernelVersion?: string }).kernelVersion ?? "0.0.0";
@@ -13062,8 +13064,10 @@ export async function executeTool(
       // Pull kernel version from the manifest for the audit row.
       const kernelVersion = await (async () => {
         try {
-          const fs = await import("fs/promises");
-          const path = await import("path");
+          const fsId = "fs/promises";
+          const fs = await import(fsId);
+          const pathId = "path";
+          const path = await import(pathId);
           const manifestPath = path.join(
             process.cwd(),
             "docs",

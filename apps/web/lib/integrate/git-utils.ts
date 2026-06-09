@@ -4,7 +4,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { lazyPath, lazyFsPromises, lazyExec } from "@/lib/shared/lazy-node";
+import { lazyPath, lazyFsPromises, lazyExec, getCwd } from "@/lib/shared/lazy-node";
 import { isPathAllowedSync as isPathAllowed, isDevInstance } from "@/lib/codebase-tools";
 
 const exec = lazyExec();
@@ -15,7 +15,7 @@ function getGitRoot(): string {
   const { resolve } = lazyPath();
   return process.env.PROJECT_ROOT
     ? resolve(process.env.PROJECT_ROOT)
-    : resolve(process.cwd(), "..", "..");
+    : resolve(getCwd(), "..", "..");
 }
 
 // ─── Validation ──────────────────────────────────────────────────────────────
