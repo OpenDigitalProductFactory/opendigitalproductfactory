@@ -352,6 +352,38 @@ step "Workspace dependencies"
 pnpm install
 ok "Dependencies installed"
 
+# Ensure the bundled "voice profile in the build" (founder seed voice for
+# mark-dpf-platform) is materialized in the final data/uploads tree *before*
+# we do docker compose up (which triggers the platform DB seed that creates
+# the VoiceProfile row + consent). The seedPlatformVoice does a best-effort
+# copy, but during install the path resolution or prior placeholder files can
+# cause it to skip. We force the real clip here (idempotent, best-effort).
+# This is the Unix equivalent of what the Mac TTS setup script also does for
+# the host sidecar. Windows uses its own .ps1 flow (untouched) + the seed.
+CLIP_SRC=""
+for cand in \
+  "$REPO_ROOT/packages/db/data/seed-voices/mark-dpf-platform/reference.webm" \
+  "$REPO_ROOT/packages/db/data/seed-voices/mark-dpf-platform/reference.webm"; do
+  if [ -f "$cand" ] && [ -s "$cand" ]; then CLIP_SRC="$cand"; break; fi
+done
+UPLOADS_DIR="$REPO_ROOT/data/uploads"
+if [ -n "$CLIP_SRC" ]; then
+  mkdir -p "$UPLOADS_DIR/voices/mark-dpf-platform"
+  dst="$UPLOADS_DIR/voices/mark-dpf-platform/reference.webm"
+  do_copy=0
+  if [ ! -f "$dst" ]; then
+    do_copy=1
+  else
+    src_sz=$(wc -c < "$CLIP_SRC" 2>/dev/null || echo 0)
+    dst_sz=$(wc -c < "$dst" 2>/dev/null || echo 0)
+    if [ "$dst_sz" -lt 20000 ] && [ "$src_sz" -gt 20000 ]; then do_copy=1; fi
+  fi
+  if [ "$do_copy" -eq 1 ]; then
+    cp -f "$CLIP_SRC" "$dst" || true
+    info "Platform founder voice clip placed in $dst (from build)"
+  fi
+fi
+
 # Contributor git hooks (contributor mode only). Mirrors scripts/setup.sh:
 # enables the in-repo .githooks/ (Prisma migration guard + secret scan).
 # Idempotent; customer installs skip it (they don't author commits here).
@@ -936,6 +968,14 @@ if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
       printf 'TTS_PROVIDER=mlx\n' >> .env
       printf 'DPF_TTS_URL=http://host.docker.internal:8771\n' >> .env
       printf 'DPF_TTS_REFERENCE_HOST_ROOT=%s/data/uploads\n' "$REPO_ROOT" >> .env
+      # Keep UPLOAD_STORAGE_PATH in sync so the DB seed (seedPlatformVoice) and
+      # portal resolve the same final host-visible uploads root that the TTS
+      # sidecar was provisioned against. This ensures the "voice profile in the
+      # build" (the bundled founder clip for mark-dpf-platform) lands in the
+      # exact location the sidecar will read via DPF_TTS_REFERENCE_HOST_ROOT.
+      if ! grep -qE "^UPLOAD_STORAGE_PATH=" .env 2>/dev/null; then
+        printf 'UPLOAD_STORAGE_PATH=%s/data/uploads\n' "$REPO_ROOT" >> .env
+      fi
     fi
     ok "Voice TTS sidecar provisioned — spoken output works out of the box (port 8771)"
   else
