@@ -2321,6 +2321,25 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: "provision_build_engine",
+    description: "Install a build-dispatch engine (claude, codex, grok) into the running sandbox from its registry recipe, then verify by re-probing. Idempotent — a no-op if the engine is already present. Side-effecting: runs the install command (e.g. `npm install -g`, or the grok curl-installer) inside the sandbox, so it requires sandbox_execute. Pass offline:true to use only no-egress (prestaged-binary) recipes for air-gapped installs. Returns { kind, version, recipe }.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        engineId: { type: "string", description: "Engine to provision: 'claude' | 'codex' | 'grok'." },
+        offline: {
+          type: "boolean",
+          description: "When true, only run no-egress (prestaged-binary) recipes (air-gapped install). Default false.",
+        },
+      },
+      required: ["engineId"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    buildPhases: ["ideate", "plan", "build", "review"],
+  },
+  {
     name: "get_build_engine_readiness",
     description: "Report whether each build-dispatch engine (claude, codex, grok) is present and healthy in the build sandbox. Returns per-engine { present, version, lastProbedAt, bakeInDefault } from the last probe (BuildEngineState). Pass refresh:true to live re-probe each engine (docker exec <verifyCommand>) and persist the fresh result. Use this to see engine readiness before selecting a build dispatch engine — e.g. an engine that is selectable but shows present:false would fail at runtime with 'not found'.",
     inputSchema: {
@@ -8972,6 +8991,32 @@ export async function executeTool(
         available?: unknown;
         summary?: unknown;
       });
+    }
+
+    case "provision_build_engine": {
+      const engineId = optionalString(params["engineId"]);
+      if (!engineId) {
+        return {
+          success: false,
+          error: "engineId is required.",
+          message: "Provide engineId — one of 'claude', 'codex', 'grok'.",
+        };
+      }
+      const offline = params["offline"] === true;
+      const { provisionBuildEngine } = await import("@/lib/integrate/build-engine-provision");
+      const outcome = await provisionBuildEngine(engineId, { offline, actorUserId: userId });
+      const ok = outcome.kind === "provisioned" || outcome.kind === "already-present";
+      const message =
+        outcome.kind === "provisioned"
+          ? `Provisioned ${engineId}${outcome.version ? ` v${outcome.version}` : ""} via ${outcome.recipe}; verified present in the sandbox.`
+          : outcome.kind === "already-present"
+            ? `${engineId} is already installed in the sandbox${outcome.version ? ` (v${outcome.version})` : ""}.`
+            : outcome.kind === "no-recipe"
+              ? `Cannot provision ${engineId}: ${outcome.reason}.`
+              : outcome.kind === "verify-failed"
+                ? `Ran the ${outcome.recipe} recipe for ${engineId} but it is still not present: ${outcome.error}`
+                : `Failed to provision ${engineId}: ${outcome.error}`;
+      return { success: ok, message, data: outcome };
     }
 
     case "get_build_engine_readiness": {
