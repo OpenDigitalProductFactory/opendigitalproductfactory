@@ -16,6 +16,7 @@ const LIMITS = {
   userAgent: 500,
   triggerKind: 100,
   supportSessionId: 191,
+  dedupeKey: 191,
 } as const;
 
 // Same route → portfolio slug map used today by reportQualityIssue().
@@ -68,6 +69,8 @@ export interface CreatePlatformIssueReportInput {
   userAgent?: string | null;
   triggerKind?: string | null;
   supportSessionId?: string | null;
+  // BI-5FE8656F: stable idempotency key for automated producers (log scanner).
+  dedupeKey?: string | null;
 
   // Identity / linkage
   reportedById?: string | null;
@@ -145,6 +148,7 @@ export async function createPlatformIssueReport(
       userAgent: trimTo(input.userAgent ?? null, LIMITS.userAgent),
       triggerKind: trimTo(input.triggerKind ?? null, LIMITS.triggerKind),
       supportSessionId: trimTo(input.supportSessionId ?? null, LIMITS.supportSessionId),
+      dedupeKey: trimTo(input.dedupeKey ?? null, LIMITS.dedupeKey),
       reportedById: input.reportedById ?? null,
       threadId: input.threadId ?? null,
       agentId: input.agentId ?? null,

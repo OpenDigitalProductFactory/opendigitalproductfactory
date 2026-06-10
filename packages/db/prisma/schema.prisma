@@ -4453,6 +4453,12 @@ model PlatformIssueReport {
   triggerKind         String?
   supportSessionId    String?
   source              String        @default("manual")
+  // BI-5FE8656F (EP-FULL-OBS Tier 2): stable idempotency key for automated
+  // producers (the log-signature scanner files `log-sig:<service>:<sigId>`).
+  // A partial UNIQUE index — open rows only — lives in the migration (Prisma
+  // can't express partial-unique predicates); it lets a resolved signature
+  // re-file when the problem recurs while preventing duplicate open reports.
+  dedupeKey           String?
   // Governed Hermes learning Slice 1: link runtime issues to the thread/run
   // that produced them so reflection can avoid route/time-window heuristics.
   threadId            String?
@@ -4470,6 +4476,8 @@ model PlatformIssueReport {
   @@index([taskRunId])
   // BI-B4F401B3: digest lookup powers cross-route incident dedup at triage time.
   @@index([errorDigest])
+  // BI-5FE8656F: dedupeKey lookup powers the scanner's idempotency check.
+  @@index([dedupeKey])
   @@unique([reportedById, supportSessionId])
   @@index([reportedById, supportSessionId, createdAt(sort: Desc)])
 }
