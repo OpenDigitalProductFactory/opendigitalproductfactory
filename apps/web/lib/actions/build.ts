@@ -733,6 +733,32 @@ export async function advanceBuildPhase(
  * invokes it for rows it has already confirmed are resumable in-flight builds).
  */
 export async function autoExecuteBuild(buildId: string): Promise<void> {
+  // BI-89030C9B Phase 1 — durable path. When the flag is on, hand the run to
+  // the Inngest function (build/execute.run) instead of executing in-process:
+  // the engine's journal then owns crash recovery, so a portal recycle no
+  // longer strands the build. The send carries a deterministic idempotency id
+  // so the four call sites (and their retries) collapse duplicate dispatches
+  // of the same logical attempt into one durable run.
+  const { isBuildDurableExecutionEnabled, buildExecuteSendId } = await import(
+    "@/lib/integrate/build-execute-helpers"
+  );
+  if (isBuildDurableExecutionEnabled()) {
+    const current = await prisma.featureBuild.findUnique({
+      where: { buildId },
+      select: { buildExecState: true },
+    });
+    const { inngest } = await import("@/lib/queue/inngest-client");
+    await inngest.send({
+      name: "build/execute.run",
+      data: { buildId },
+      id: buildExecuteSendId(
+        buildId,
+        current?.buildExecState as import("@/lib/build-exec-types").BuildExecutionState | null,
+      ),
+    });
+    return;
+  }
+
   const { agentEventBus } = await import("@/lib/agent-event-bus");
   const { runBuildPipeline } = await import("@/lib/build-pipeline");
 
