@@ -1,0 +1,1896 @@
+{
+ "standard": "BIAN Service Landscape",
+ "version": "14.0.0",
+ "view": "Value Chain View (canonical; Matrix layout is deprecated by BIAN)",
+ "retrieved": "2026-06-09",
+ "sources": {
+  "valueChainView": "https://bian.org/servicelandscape-14-0-0/views/view_54486.html",
+  "semanticApis": "https://github.com/bian-official/public/tree/main/release14.0.0/semantic-apis",
+  "portal": "https://portal.bian.org"
+ },
+ "counts": {
+  "businessAreas": 8,
+  "businessDomains": 43,
+  "serviceDomains": 341,
+  "serviceDomainsWithSemanticApi": 258
+ },
+ "businessAreas": [
+  {
+   "name": "Business Management",
+   "businessDomains": [
+    {
+     "name": "Business Direction",
+     "serviceDomains": [
+      {
+       "name": "Organization Direction",
+       "semanticApi": false
+      },
+      {
+       "name": "Products and Services Direction",
+       "semanticApi": false
+      },
+      {
+       "name": "Corporate Strategy",
+       "semanticApi": false
+      },
+      {
+       "name": "Corporate Policies",
+       "semanticApi": false
+      },
+      {
+       "name": "Human Resources Direction",
+       "semanticApi": false
+      },
+      {
+       "name": "IT Systems Direction",
+       "semanticApi": false
+      },
+      {
+       "name": "Asset And Liability Management",
+       "description": "The unit overseeing the  banks asset & liability policies and position",
+       "semanticApi": true
+      },
+      {
+       "name": "Property Portfolio",
+       "semanticApi": false
+      }
+     ]
+    },
+    {
+     "name": "Corporate Relations",
+     "serviceDomains": [
+      {
+       "name": "Investor Relations",
+       "semanticApi": false
+      },
+      {
+       "name": "Corporate Relationship",
+       "semanticApi": false
+      },
+      {
+       "name": "Corporate Alliance and Stake Holder",
+       "semanticApi": false
+      },
+      {
+       "name": "Corporate Communications",
+       "semanticApi": false
+      }
+     ]
+    },
+    {
+     "name": "Corporate Services",
+     "serviceDomains": [
+      {
+       "name": "Legal Compliance",
+       "description": "'Provide specialist legal advice, assess for legal compliance and resolve legal cases as they occur'",
+       "semanticApi": true
+      },
+      {
+       "name": "Internal Audit",
+       "description": "Maintain and portfolio of internal audit checks. Select and execute a meaningful sample of checks and identify and resolve non-compliance",
+       "semanticApi": true
+      },
+      {
+       "name": "Security Advisory",
+       "semanticApi": false
+      },
+      {
+       "name": "Security Assurance",
+       "semanticApi": false
+      },
+      {
+       "name": "Continuity Planning",
+       "semanticApi": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Resource Management",
+   "businessDomains": [
+    {
+     "name": "Unit Management",
+     "serviceDomains": [
+      {
+       "name": "Business Unit Direction",
+       "semanticApi": false
+      },
+      {
+       "name": "Business Unit Financial Operations",
+       "semanticApi": false
+      },
+      {
+       "name": "Business Unit Management",
+       "description": "Track and report on business unit activity and financial performance",
+       "semanticApi": true
+      },
+      {
+       "name": "Business Unit Accounting",
+       "semanticApi": false
+      },
+      {
+       "name": "Business Unit Financial Analysis",
+       "semanticApi": false
+      }
+     ]
+    },
+    {
+     "name": "Buildings And Equipment",
+     "serviceDomains": [
+      {
+       "name": "Fixed Asset Register",
+       "semanticApi": false
+      },
+      {
+       "name": "Procurement",
+       "semanticApi": false
+      },
+      {
+       "name": "Equipment Administration",
+       "semanticApi": false
+      },
+      {
+       "name": "Equipment Maintenance",
+       "semanticApi": false
+      },
+      {
+       "name": "Utilities Administration",
+       "semanticApi": false
+      },
+      {
+       "name": "Site Operations",
+       "semanticApi": false
+      },
+      {
+       "name": "Site Administration",
+       "semanticApi": false
+      },
+      {
+       "name": "Building Maintenance",
+       "semanticApi": false
+      }
+     ]
+    },
+    {
+     "name": "Human Resources",
+     "serviceDomains": [
+      {
+       "name": "Recruitment",
+       "semanticApi": false
+      },
+      {
+       "name": "Employee Assignment",
+       "semanticApi": false
+      },
+      {
+       "name": "Employee Evaluation",
+       "semanticApi": false
+      },
+      {
+       "name": "Employee Certification",
+       "semanticApi": false
+      },
+      {
+       "name": "Employee and Contractor Contract",
+       "semanticApi": false
+      },
+      {
+       "name": "Employee Data Management",
+       "semanticApi": false
+      },
+      {
+       "name": "Employee Payroll And Incentives",
+       "semanticApi": false
+      },
+      {
+       "name": "Employee Benefits",
+       "semanticApi": false
+      },
+      {
+       "name": "Workforce Training",
+       "semanticApi": false
+      },
+      {
+       "name": "Travel and Expenses",
+       "semanticApi": false
+      },
+      {
+       "name": "Employee Access",
+       "semanticApi": false
+      }
+     ]
+    },
+    {
+     "name": "Platform Operations",
+     "serviceDomains": [
+      {
+       "name": "Systems Assurance",
+       "semanticApi": false
+      },
+      {
+       "name": "System Deployment",
+       "semanticApi": false
+      },
+      {
+       "name": "Systems Operations",
+       "semanticApi": false
+      },
+      {
+       "name": "Internal Network Operation",
+       "semanticApi": false
+      },
+      {
+       "name": "Systems Help Desk",
+       "semanticApi": false
+      },
+      {
+       "name": "Platform Operations",
+       "semanticApi": false
+      },
+      {
+       "name": "Operational Gateway",
+       "description": "'This Service Domain operates production information exchanges with external parties for non-financial messages/transactions. It may employ a broad range of channels, media and technologies as needed to support the different requirements of any particular third party interface'",
+       "semanticApi": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Finance And Risk Management",
+   "businessDomains": [
+    {
+     "name": "Market Risk",
+     "serviceDomains": [
+      {
+       "name": "Credit and Margin Management",
+       "semanticApi": false
+      },
+      {
+       "name": "Gap Analysis",
+       "semanticApi": false
+      },
+      {
+       "name": "Limit and Exposure Management",
+       "semanticApi": false
+      },
+      {
+       "name": "Position Management",
+       "description": "The Service Domain tracks the bank's consolidated financial positions for major customers and complex market conditions",
+       "semanticApi": true
+      },
+      {
+       "name": "Economic Capital",
+       "semanticApi": false
+      }
+     ]
+    },
+    {
+     "name": "Compliance",
+     "serviceDomains": [
+      {
+       "name": "Regulatory And Legal Authority",
+       "description": "'Maintain effective relations with regulators, accounting and government agencies. Oversee interactions and reporting as necessary'",
+       "semanticApi": true
+      },
+      {
+       "name": "Regulatory Compliance",
+       "description": "'This service domain provides a service to interpret regulatory requirements, provide guidance and define and implement a portfolio of regulatory compliance tests across all appropriate bank activities'",
+       "semanticApi": true
+      },
+      {
+       "name": "Regulatory Reporting",
+       "description": "This service domain administers and orchestrates the tasks required to meet the bank's regulatory reporting obligations",
+       "semanticApi": true
+      },
+      {
+       "name": "Guideline Compliance",
+       "description": "'This service domain develops and applies a portfolio of guideline compliance tests to confirm adherence to bank and regulator imposed internal procedures. Tests may be made on complete transaction data or a meaningful samples as appropriate to mitigate exposure to non-compliant behaviors. Compliance checks may be in response to a schedule, a specific request as part of normal processing or may be initiated randomly as an oversight activity'",
+       "semanticApi": true
+      },
+      {
+       "name": "Compliance Reporting",
+       "description": "This service domain administers and orchestrates the tasks required to apply and report on internal audit control and reporting activity",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Financial Control",
+     "serviceDomains": [
+      {
+       "name": "Financial Control",
+       "semanticApi": false
+      },
+      {
+       "name": "Financial Statements",
+       "semanticApi": false
+      },
+      {
+       "name": "Company Billing and Payments",
+       "semanticApi": false
+      },
+      {
+       "name": "Approved Supplier Directory",
+       "semanticApi": false
+      },
+      {
+       "name": "Enterprise Tax Administration",
+       "semanticApi": false
+      },
+      {
+       "name": "Financial Compliance",
+       "semanticApi": false
+      }
+     ]
+    },
+    {
+     "name": "Credit Risk",
+     "serviceDomains": [
+      {
+       "name": "Credit Management",
+       "description": "This service domain provides a bank-wide/oversight function to qualify credit pricing for offered products and services to reflect the bank's appetite to write the business. This decision can override the standard product pricing procedure",
+       "semanticApi": true
+      },
+      {
+       "name": "Counterparty Risk",
+       "semanticApi": false
+      },
+      {
+       "name": "Fraud Resolution",
+       "description": "This service domain sets up and processes a fraud case resulting from fraud behavior that has been detected during production processing",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Operational Risk",
+     "serviceDomains": [
+      {
+       "name": "Business Risk Models",
+       "semanticApi": false
+      },
+      {
+       "name": "Operational Risk Models",
+       "semanticApi": false
+      },
+      {
+       "name": "Production Risk Models",
+       "semanticApi": false
+      }
+     ]
+    },
+    {
+     "name": "Group Treasury",
+     "serviceDomains": [
+      {
+       "name": "Corporate Treasury",
+       "description": "This service domain orchestrates the consolidation and presentation of summary transaction details in order to assemble a timely and accurate view of the overall treasury position of the Bank at any one time. It is also responsible for determining the different interest and exchange rates applied to different products and services within the bank",
+       "semanticApi": true
+      },
+      {
+       "name": "Corporate Treasury Analysis",
+       "semanticApi": false
+      },
+      {
+       "name": "Bank Portfolio Administration",
+       "semanticApi": false
+      },
+      {
+       "name": "Bank Portfolio Analysis",
+       "semanticApi": false
+      },
+      {
+       "name": "Asset Securitization",
+       "description": "Determine and select assets for securitization as needed to maintain and optimize the Bank's portfolio. Administer the securitization process",
+       "semanticApi": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Operations",
+   "businessDomains": [
+    {
+     "name": "External Agency",
+     "serviceDomains": [
+      {
+       "name": "Interbank Relationship Management",
+       "description": "'Manage the bank''s relationship with other banks, covering any specific agreements that may be in place and overseeing operational issues.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Correspondent Bank Relationship Management",
+       "description": "'This Service Domain manages correspondent bank relations, ensuring reciprocity and developing business where possible'",
+       "semanticApi": true
+      },
+      {
+       "name": "Syndicate Management",
+       "description": "This Service Domain manages syndicate membership and compliance",
+       "semanticApi": true
+      },
+      {
+       "name": "Product Service Agency",
+       "description": "This Service Domain establishes and maintains contractual arrangements with product and service agencies",
+       "semanticApi": true
+      },
+      {
+       "name": "Partner Agreement",
+       "description": "'This service domain captures and maintains comprehensive terms and conditions govering Partner relationships. '",
+       "semanticApi": true
+      },
+      {
+       "name": "Sub Custodian Agreement",
+       "description": "This Service Domain establishes and maintains the terms governing sub custodian relationship",
+       "semanticApi": true
+      },
+      {
+       "name": "Commission Agreement",
+       "description": "Maintain and administer the terms and transactions for employee and broker commissions",
+       "semanticApi": true
+      },
+      {
+       "name": "Contractor and Supplier Agreement",
+       "description": "This Service Domain maintains appropriate supplier agreements/contracts",
+       "semanticApi": true
+      },
+      {
+       "name": "Service Provider Operations",
+       "description": "This Service Domain handles the range of operational actions used in production interactions with an external service provider.",
+       "semanticApi": true
+      },
+      {
+       "name": "Partner Management",
+       "description": "'This service domain handles strategic management of collaborative partners including partner development, performance and relationship tracking.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Operations Log",
+       "description": "This service domain handle the day-to-day operations of a collaborative partner related services.",
+       "semanticApi": true
+      },
+      {
+       "name": "Partner Administration",
+       "description": "This service domain handle the day-to-day operations of a collaborative partner related services.",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Operational Services",
+     "serviceDomains": [
+      {
+       "name": "Customer Billing",
+       "description": "'This service domains provides a central service to compose, issue and track customer billing and invoices'",
+       "semanticApi": true
+      },
+      {
+       "name": "Disbursement",
+       "description": "This service domain handles the disbursement of funds to newly established loans/facilities as necessary",
+       "semanticApi": true
+      },
+      {
+       "name": "Open Item Management",
+       "description": "This service domain provides a service for handling the resolution of open items against accounts (such as overdue loan payments)",
+       "semanticApi": true
+      },
+      {
+       "name": "Delinquent Account Handling",
+       "description": "This service domain handles delinquent accounts (typically for active credit/charge cards) for follow-up of payments due through periodic review and contacts. This process ends when the account is cancelled and is transferred to Collections",
+       "semanticApi": true
+      },
+      {
+       "name": "Card Collections",
+       "description": "This service domain administers the recovery of outstanding amounts from cancelled card accounts through internal or external collection agencies.  This may involve negotiating payment terms and/or interest write-downs.",
+       "semanticApi": true
+      },
+      {
+       "name": "Product Combination",
+       "description": "Product Combination supports bundled products applying necessary constraints on embedded product fulfillment and ensuring product performance analysis takes correct account of embedded products' contribution",
+       "semanticApi": true
+      },
+      {
+       "name": "Reward Points Awards And Redemption",
+       "description": "Handle the allocation and redemption of rewards points for customer transaction activity",
+       "semanticApi": true
+      },
+      {
+       "name": "Issued Device Administration",
+       "description": "'This service domain administers the issuance of authentication tokens to customers and third party service providers. Tokens here include physical devices such as cards, fobs, readers and intangible ''devices'' such as passwords and secret questions. Administration includes version tracking, replacement and duration/frequency limits. Specific product/service access permissions may be associated with an issued token when appropriate'",
+       "semanticApi": true
+      },
+      {
+       "name": "Issued Device Tracking",
+       "description": "'This service domain handles operational access to issued device tracking services. Services report on the status of devices such as cards, fobs, etc. that have been issued to customers. Service notifications include fraud warnings/alerts and device cancellation.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Card Transaction Switch",
+       "description": "'This service domain orchestrates the switching and routing of Card Authorization and Financial transactions received through the Card POS Network, Card E-Commerce Gateway, or the ATM Network from the Acquirer to the Issuer through the Card Networks.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Internal Bank Account",
+       "description": "This Service Domain manages the banking-related accounts that are not owned by customers. These are not general ledger accounts. Typical examples are holding accounts and mirror accounts.",
+       "semanticApi": true
+      },
+      {
+       "name": "Term Deposit Framework Agreement",
+       "description": "A Term Deposit Framework Agreement is an agreement between a customer and the bank under which individual term deposits can be opened. It specifies standard conditions that will apply to each underlying term deposit.",
+       "semanticApi": true
+      },
+      {
+       "name": "Incentive Program Directory",
+       "description": "This service domain maintains specifications of the various Incentive Programs that are on offerr to customers.",
+       "semanticApi": true
+      },
+      {
+       "name": "Incentive Account",
+       "description": "'This service domain orchestrates the scheduled maintenance and transactional activities associated with Incentive Program fulfillment, including enrollment, accrual and redemption. '",
+       "semanticApi": true
+      },
+      {
+       "name": "Rewards Menu",
+       "description": "'The service domain presents a set of eligible rewards a customer can select from. '",
+       "semanticApi": true
+      },
+      {
+       "name": "Rewards Inventory",
+       "description": "The service domain handles the allocation of rewards from available inventory.",
+       "semanticApi": true
+      },
+      {
+       "name": "Rewards Delivery",
+       "description": "The service domain orchestrates the entire end-to-end  process for delivering a redeemed reward.",
+       "semanticApi": true
+      },
+      {
+       "name": "Issued Certificate Directory",
+       "description": "This service domain faciliatates the issuance of Rewards Certificates and their redemption.",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Custody, Collateral And Documents",
+     "serviceDomains": [
+      {
+       "name": "Account Recovery",
+       "description": "This service domain handles the restructuring of a distressed account (loan) after standard recovery procedures have been exhausted",
+       "semanticApi": true
+      },
+      {
+       "name": "Archive Services",
+       "description": "'The Archive Services Service Domain enables the bank to retain, maintain and access significant documents that are no longer actively accessed but that might be required in the future'",
+       "semanticApi": true
+      },
+      {
+       "name": "Custody Administration",
+       "description": "A service to provide safe custody services for marketable securities for bank customers",
+       "semanticApi": true
+      },
+      {
+       "name": "Collateral Allocation Management",
+       "description": "The Service Domain manages the allocation of party owned assets to bank issued lending and other asset products.",
+       "semanticApi": true
+      },
+      {
+       "name": "Collections",
+       "description": "Handles the liquidation of assets to offset the losses for problem accounts",
+       "semanticApi": true
+      },
+      {
+       "name": "Document Directory",
+       "description": "This Service Domain provides a directory based categorization and storage mechanism for documents created and referenced by the bank",
+       "semanticApi": true
+      },
+      {
+       "name": "Investment Account",
+       "description": "'This service domain handles the non-cash holdings positions for a customer, covering multiple instruments as necessary'",
+       "semanticApi": true
+      },
+      {
+       "name": "Document Services",
+       "description": "The Document Services Service Domain manages the creation and maintenance of documents throughout the bank.",
+       "semanticApi": true
+      },
+      {
+       "name": "Party Asset Directory",
+       "description": "'This directory maintains reference details of assets held by a party, usually a customer of the bank. In most case, the bank''s interest in the asset is because it may be pledged to the bank as collateral.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Collateral Asset Administration",
+       "description": "'This service domain maintains the status of a customers collateral assets, including scheduled and ad-hoc valuations and confirmation of the correct completion of scheduled maintenance tasks.'",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Clearing And Settlement",
+     "serviceDomains": [
+      {
+       "name": "Counterparty Administration",
+       "description": "This Service Domain maintains key counterparty reference information used in the clearing and settlement of wholesale trading",
+       "semanticApi": true
+      },
+      {
+       "name": "Cheque Processing",
+       "description": "'Handle the processing of paper cheques, generating financial transactions for processing'",
+       "semanticApi": true
+      },
+      {
+       "name": "Card Financial Settlement",
+       "description": "This service domain orchestrates the settlement of the transactions between the Issuers and the Acquirers through the Card Networks.",
+       "semanticApi": true
+      },
+      {
+       "name": "Order Allocation",
+       "description": "This Service Domain allocates partially fulfilled market trades",
+       "semanticApi": true
+      },
+      {
+       "name": "Card Clearing",
+       "description": "'This service domain orchestrates the capture and consolidation of card financial transactions originating from various sources, such as POS Network, E-Commerce Gateway, ATM Network, or Card Case Management. It also handles the clearing of the transactions from the Acquirers to the Issuers through the Card Networks'",
+       "semanticApi": true
+      },
+      {
+       "name": "Transaction Engine",
+       "description": "Orchestrate a schedule of payment transaction and reporting activities for the fulfillment of certain long term instruments or structured facilities",
+       "semanticApi": true
+      },
+      {
+       "name": "Correspondent Bank Directory",
+       "description": "This service domain maintains correspondent bank reference details. This includes correspondent bank payment parameters in particular bank limits and capturing transaction activity to track reciprocity",
+       "semanticApi": true
+      },
+      {
+       "name": "Card eCommerce Gateway",
+       "description": "'This service domain orchestrates the processing of e-commerce transactions for authentication, authorization and capture of the financial transactions.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Payment Rail",
+       "description": "'This Service Domain handles the operational interface with payment service providers, formatting outbound transactions and onward routing inbound transactions during scheduled operating sessions. It also links to holding account facilities for net payment handling'",
+       "semanticApi": true
+      },
+      {
+       "name": "Payment Settlement",
+       "semanticApi": false
+      },
+      {
+       "name": "Payment Confirmation",
+       "semanticApi": false
+      },
+      {
+       "name": "Payment Orchestration",
+       "semanticApi": false
+      }
+     ]
+    },
+    {
+     "name": "Accounting Services",
+     "serviceDomains": [
+      {
+       "name": "Position Keeping",
+       "description": "This service domain maintains a log of monetary or value transactions and entitlements log posted to product facilities. Reconciled financial transactions are subsequently used for posting to the accounting systems.",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Position",
+       "description": "'This service domain maintains a consolidated financial position for a customer, combining details from all products and services in use. The position can cover available funds, credit, collateral, tax exposure and other financial measures as necessary'",
+       "semanticApi": true
+      },
+      {
+       "name": "Accounts Receivable",
+       "description": "This service domain handles accounts receivable for invoices issue by the bank to customers and partners. It includes follow-up and resolution activity for delayed/missed payments",
+       "semanticApi": true
+      },
+      {
+       "name": "Financial Accounting",
+       "description": "'The Financial Accounting Service Domain takes in financial facts and based on these, creates accounting instructions that will update the general ledger and sub ledger accounts'",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Tax Handling",
+       "description": "This service domain handles consumer tax reporting obligations including the consolidation and reporting of customer tax related financial activity",
+       "semanticApi": true
+      },
+      {
+       "name": "Commissions",
+       "description": "The service domain processes commissions for transactions for eligible employees",
+       "semanticApi": true
+      },
+      {
+       "name": "Fraud Evaluation",
+       "description": "The service domain executes fraud behavioral pattern tests to detect possible fraudulent transactions/activity",
+       "semanticApi": true
+      },
+      {
+       "name": "Account Reconciliation",
+       "description": "This Service Domain handles account reconciliation tasks",
+       "semanticApi": true
+      },
+      {
+       "name": "Securities Position Keeping",
+       "description": "This service domain maintains a securities transaction log to support securities investment activity",
+       "semanticApi": true
+      },
+      {
+       "name": "Fraud Diagnosis",
+       "description": "This service domain handles the evaluation of detected possible fraud to support an appropriate response to contain the exposure",
+       "semanticApi": true
+      },
+      {
+       "name": "Reward Points Account",
+       "description": "Administer the booking and remittance of rewards points",
+       "semanticApi": true
+      },
+      {
+       "name": "Financial Statement Assessment",
+       "description": "'This Service Domain supports a range of financial analyses that can be used to extract specific insights (e.g. valuations, liquidity, risk, market sensitivities) from an entity''s financial statements'",
+       "semanticApi": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Products",
+   "businessDomains": [
+    {
+     "name": "Market Operations",
+     "serviceDomains": [
+      {
+       "name": "Trading Book Oversight",
+       "description": "This Service Domain oversees the bank's trading book (a type of account ledger that records details of frequently traded securities held by the bank) to manage the banks market risk",
+       "semanticApi": true
+      },
+      {
+       "name": "Trade Confirmation Matching",
+       "description": "This Service Domain supports the bank's interface to a central market matching and confirmation service whether the bank acts as broker dealer or institutional investor",
+       "semanticApi": true
+      },
+      {
+       "name": "Trade and Price Reporting",
+       "description": "This Service Domain operates an automated facility that reports executed market trades to the market place as required by the rules of market participation",
+       "semanticApi": true
+      },
+      {
+       "name": "Credit Risk Operations",
+       "description": "This Service Domain monitors counterparty credit limits in the trading unit",
+       "semanticApi": true
+      },
+      {
+       "name": "Securities Fails Processing",
+       "description": "This Service Domain handles the resolution of clerical and processing errors that lead to failures in the securities trade clearing and settlement processes",
+       "semanticApi": true
+      },
+      {
+       "name": "Financial Instrument Valuation",
+       "description": "'This Service Domain provides a range of financial asset valuation services  '",
+       "semanticApi": true
+      },
+      {
+       "name": "Corporate Action",
+       "description": "This Service Domain supports the various custodial tasks associated with processing associated corporate actions for customer's with securities held at the bank",
+       "semanticApi": true
+      },
+      {
+       "name": "Trade Clearing",
+       "description": "This Service Domain handles the back office processes that confirm and notify interested parties that securities and funds are available as traded in anticipation of settlement processing",
+       "semanticApi": true
+      },
+      {
+       "name": "Trade Settlement",
+       "description": "'This Service Domain handles the final movement of cash and securities between depositories as previously confirmed in the clearing process, in order to settle a market trade'",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Consumer Banking",
+     "serviceDomains": [
+      {
+       "name": "Current Account",
+       "description": "'This service domain orchestrates a consumer checking/demand deposit account. The typical range of services and fees covers payments and deposits, standing orders, sweeps, liens, check and debit card access.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Brokered Product Proxy",
+       "description": "This Service Domain oversees all activities associated with the coordinated delivery of 3rd party products and services",
+       "semanticApi": true
+      },
+      {
+       "name": "Sales Product",
+       "description": "'A representation of a product as sold to a customer, covering the operational fulfillment requirements'",
+       "semanticApi": true
+      },
+      {
+       "name": "Trust Services",
+       "description": "This Service Domain support a range of trust management services offered to high value customers",
+       "semanticApi": true
+      },
+      {
+       "name": "Payment Order Initiation",
+       "description": "This service domain provides a customer payment service. It captures the payer and payee details and other key properties of the payment and initiates the orchestration of the transaction. It provides support for repeating/scheduled payments.",
+       "semanticApi": true
+      },
+      {
+       "name": "Currency Exchange",
+       "description": "Service Domain supports over the counter currency exchange",
+       "semanticApi": true
+      },
+      {
+       "name": "Funeral Policy",
+       "description": "'The Funeral Policy Service Domain handles the general product maintenance, premium payments and initiates claims processing.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Claim Assessment",
+       "description": "The Claim Assessment Service Domain runs through the required tests to confirm the veracity of a claim made under an insurance policy.",
+       "semanticApi": true
+      },
+      {
+       "name": "Claim Administration",
+       "description": "The claim administration Service Domain implements the payment and support obligations of the policy in respect to a verified claim",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Advisory Services",
+     "serviceDomains": [
+      {
+       "name": "Mergers and Acquisitions Advisory",
+       "description": "'This Service Domain handles mergers and acquisition, IPO, MBO and LBO projects with the bank acting in the lead and/or subordinate role'",
+       "semanticApi": true
+      },
+      {
+       "name": "Corporate Finance",
+       "description": "This Service Domain handles the provision of a broad range of financial advisory services to corporate clients",
+       "semanticApi": true
+      },
+      {
+       "name": "Corporate Tax Advisory",
+       "description": "'A fee or commission based product providing tax specific assessments, advice and guidance for corporate customers'",
+       "semanticApi": true
+      },
+      {
+       "name": "Consumer Advisory Services",
+       "description": "'Offer financial advisory services to consumer customers, possibly for a fee'",
+       "semanticApi": true
+      },
+      {
+       "name": "Legal Advisory",
+       "description": "'The role of the Service Domain is to provide customers and bank employees with advice on legal aspects of product sales and servicing as well as on planned and executed transactions. '",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Market Trading",
+     "serviceDomains": [
+      {
+       "name": "Trader Position Operations",
+       "description": "This Service Domain supports the activities of individual traders working within a trading book group",
+       "semanticApi": true
+      },
+      {
+       "name": "Market Order",
+       "description": "Market Order records an instruction from a customer or his or her representative to buy or sell securities. It follows the order during its lifetime and reports back to the requestor on the execution.",
+       "semanticApi": true
+      },
+      {
+       "name": "Market Order Execution",
+       "description": "'The Market Order Execution Service Domain is responsible for the booking of securities transactions (e.g. resulting from market orders or some types of corporate actions) on investment accounts, so in terms of security name plus quantity.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Dealer Desk",
+       "description": "The Dealer Workbench represents the bank's dealing desk facility supporting one or more trading lines of activity for both agency and principal trading in all chosen market instruments. It also supports sales and market risk trading desk functions",
+       "semanticApi": true
+      },
+      {
+       "name": "Suitability Checking",
+       "description": "Confirm that all involved counterparties are suitable for a proposed market trade.",
+       "semanticApi": true
+      },
+      {
+       "name": "Quote Management",
+       "description": "'This service domain handles the procedure used by traders to obtain and selecting quotes from market makers '",
+       "semanticApi": true
+      },
+      {
+       "name": "Market Making",
+       "description": "This Service Domain enables the bank to fulfill its market making function typically in collaboration with a trading exchange. The bank maintains a buy/sell quote for the securities it supports as a market maker and accepts buy/sell orders on request",
+       "semanticApi": true
+      },
+      {
+       "name": "Program Trading",
+       "description": "This Service Domain supports a program trading capability where the trading decisions are made based on predefined/programmed rules and policies. Manual oversight and monitoring capabilities are supported as appropriate",
+       "semanticApi": true
+      },
+      {
+       "name": "Stock Lending and Repos",
+       "description": "This Service Domain supports the bank offering tri-party repo transactions made between its customers to support their short term capital management requirements",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Corporate Banking",
+     "serviceDomains": [
+      {
+       "name": "Corporate Current Account",
+       "description": "'This service domain orchestrates a corporate checking/demand deposit account. The typical range of services and fees covers payments and deposits, standing orders, sweeps, liens, check and debit card access.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Direct Debit Mandate",
+       "description": "This service domains manages the customer mandates associated with direct debit processing for a corporate client",
+       "semanticApi": true
+      },
+      {
+       "name": "Cash Management And Account Services",
+       "description": "This service domain orchestrates a cash management and accounting services facility typically used by corporations to support additional cash management features over and above the standard facilities of current and savings accounts",
+       "semanticApi": true
+      },
+      {
+       "name": "Corporate Trust Services",
+       "description": "This Service Domain provides corporate trust services centered on the handling of debt instruments and escrow account support",
+       "semanticApi": true
+      },
+      {
+       "name": "Credit Facility",
+       "description": "The Credit Facility Service Domain manages the Credit Facilities that a Corporate Customer has with the bank. A Credit Facility is an agreement between the bank and a (corporate) customer to allow the customer to acquire asset products from the bank up to the limit of the credit facility without the need for a full due diligence and underwriting for each of these products.",
+       "semanticApi": true
+      },
+      {
+       "name": "Direct Debit",
+       "description": "Fulfils a direct debit agreement.  Handles the creditor side of direct debits.",
+       "semanticApi": true
+      },
+      {
+       "name": "Cheque Lock Box",
+       "description": "This Service Domain support paper cheque processing services offered to corporate customers",
+       "semanticApi": true
+      },
+      {
+       "name": "Factoring",
+       "description": "This Service Domain supports a factoring service for corporate customers enabling them to convert accounts receivable into immediate funds at a discount",
+       "semanticApi": true
+      },
+      {
+       "name": "Cash Concentration",
+       "description": "'Cash Concentration is a cash management service aimed at moving a balance, or part of a balance of an account to a different account to meet various requirements.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Corporate Payroll Services",
+       "description": "The Corporate Payroll Services Service Domain handles payroll payment processing for the employees of a corporate customer.",
+       "semanticApi": true
+      },
+      {
+       "name": "Project Finance",
+       "description": "This Service Domain fulfills project financing by which major (government) projects can attract privet sector financing",
+       "semanticApi": true
+      },
+      {
+       "name": "Notional Pooling",
+       "description": "'Notional pooling allows corporate customer with multiple active accounts to pool credit and debit balances to provide a single centralized liquidity position and to minimize interest expense, simplify cash management and retain a degree of local autonomy to the accounts'",
+       "semanticApi": true
+      },
+      {
+       "name": "Virtual Account",
+       "description": "'A Virtual Account is a bank account that is defined on an underlying real account. It can receive and send payments for the underlying account while behaving towards the outside as a separate account. '",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Cards",
+     "serviceDomains": [
+      {
+       "name": "Credit Card",
+       "description": "This service domain orchestrates the scheduled maintenance and transactional activities associated with credit card product fulfillment",
+       "semanticApi": true
+      },
+      {
+       "name": "Card Authorization",
+       "description": "This service domain is responsible for the real time card authorization decisions for credit/charge cards.",
+       "semanticApi": true
+      },
+      {
+       "name": "Card Transaction Capture",
+       "description": "A distributed facility to capture card transactions at the point of sale",
+       "semanticApi": true
+      },
+      {
+       "name": "Merchant Relations",
+       "description": "This service domain maintains the terms and conditions agreed with merchants for cards related activity",
+       "semanticApi": true
+      },
+      {
+       "name": "Card Network Participant Facility",
+       "description": "'This service domain orchestrates the activities related to the inclusion of new Acquirers and Issuers in the Card Network, their terms and conditions and their status.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Merchant Acquiring Facility",
+       "description": "'This service domain orchestrates the activities related to Merchant fulfillment, Merchant Account maintenance, Merchant transactional activities and settlement, including the billing of merchant fees and charges.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Card Transaction Tracking",
+       "description": "'Maintain a log of credit card bookings and authorizations for operational and management information, tracking and reconciliation purposes.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Corporate Card Service",
+       "semanticApi": false
+      }
+     ]
+    },
+    {
+     "name": "Trade Banking",
+     "serviceDomains": [
+      {
+       "name": "Letter of Credit",
+       "description": "This Service Domain handles the pricing and issuance of letters of credit to its corporate customers in support of their international trading requirements",
+       "semanticApi": true
+      },
+      {
+       "name": "Bank Guarantee",
+       "description": "This Service Domain handles the pricing and issuance of a broad range of bank guarantee instruments",
+       "semanticApi": true
+      },
+      {
+       "name": "Bank Drafts",
+       "description": "This Service Domain support bank guaranteed payment transactions such as bank drafts",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Corporate Finance",
+     "serviceDomains": [
+      {
+       "name": "ECM And DCM",
+       "description": "'Supports the specification, pricing and issuance of equity and debt (bond) primary capital market products for corporate financing services'",
+       "semanticApi": true
+      },
+      {
+       "name": "Private Placement",
+       "description": "This Service Domain provides the complete range of functions involved in providing private placement services to corporate customers.",
+       "semanticApi": true
+      },
+      {
+       "name": "Public Offering",
+       "description": "'This Service Domain supports a broad range of complex financial, accounting and regulatory actions involved in providing advice and practical support to companies going public and/or raising additional capital through the issuance of publicly traded securities'",
+       "semanticApi": true
+      },
+      {
+       "name": "Unit Trust Administration",
+       "description": "This Service Domain handles the implementation and fulfillment of unit investment trusts",
+       "semanticApi": true
+      },
+      {
+       "name": "Hedge Fund Administration",
+       "description": "The Hedge Fund Administration Service Domain handles all aspects of the set-up and operation of a hedge fund that is offered to accredited investors within the bank's customer base",
+       "semanticApi": true
+      },
+      {
+       "name": "Mutual Fund Administration",
+       "description": "The Mutual Fund Administration Service Domain handles all aspects of the set-up and operation of mutual funds that can be offered to the bank's general (non-accredited) customers",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Loans and Deposits",
+     "serviceDomains": [
+      {
+       "name": "Loan",
+       "description": "This service domain handles the fulfillment of a general loan product. This includes the initial set-up of the loan facility and the completion of scheduled and ad-hoc product processing tasks",
+       "semanticApi": true
+      },
+      {
+       "name": "Consumer Loan",
+       "description": "This service domain handles the fulfillment of a consumer loan product. This includes the initial set-up of the loan facility and the completion of scheduled and ad-hoc product processing tasks",
+       "semanticApi": true
+      },
+      {
+       "name": "Mortgage Loan",
+       "description": "Fulfillment of a loan product for  the purpose of property purchase. Note different servicing patterns can be applied to interest calculations and principle and interest repayments",
+       "semanticApi": true
+      },
+      {
+       "name": "Corporate Loan",
+       "description": "This service domain handles the fulfillment of a corporate loan product. This includes the initial set-up of the loan facility and the completion of scheduled and ad-hoc product processing tasks",
+       "semanticApi": true
+      },
+      {
+       "name": "Corporate Lease",
+       "description": "The Corporate Lease product provides corporate customers with loans to support leasing activity for property and equipment under an umbrella leasing arrangement",
+       "semanticApi": true
+      },
+      {
+       "name": "Merchandising Loan",
+       "description": "Fulfillment of loan product used in the purchase of a larger merchandise item such as a car or boat. The purchased item is typically treated as collateral for the loan",
+       "semanticApi": true
+      },
+      {
+       "name": "Leasing Item Administration",
+       "description": "Track the status of the assets underlying leasing agreements as they represent collateral items that could be accessed in the event of account recovery",
+       "semanticApi": true
+      },
+      {
+       "name": "Syndicated Loan",
+       "description": "Handle the processing of syndicated loans with the bank playing the lead coordination role with other syndicate bank members. Note some initial preparation may have been made through prior customer offer processing.",
+       "semanticApi": true
+      },
+      {
+       "name": "Fiduciary Agreement",
+       "description": "An agreement where the bank agrees to act on behalf of the customer in a financial matter and in accordance with the agreement terms",
+       "semanticApi": true
+      },
+      {
+       "name": "Underwriting",
+       "description": "This service domain manages the underwriting decision process for products as appropriate (including many loan types and some insurance products)",
+       "semanticApi": true
+      },
+      {
+       "name": "Leasing",
+       "description": "The leasing products enables customers to finance equipment purchases using the leased item as collateral when necessary",
+       "semanticApi": true
+      },
+      {
+       "name": "Savings Account",
+       "description": "'This service domain orchestrates a consumer savings account. The typical range of services and fees covers payments from and scheduled and ad-hoc deposits to the account, standing orders, sweeps, and liens.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Term Deposit",
+       "description": "'A Term Deposit is an interest bearing account into which a customer can place a fixed amount of funds for a fixed amount of time. The Service Domain handles the opening, servicing and maturity processing of a Term Deposit.     '",
+       "semanticApi": true
+      },
+      {
+       "name": "Standing Order",
+       "description": "'Customers can issue standing orders to the bank. In most cases this is for the execution of a periodical payment, but there are other standing instructions like, sweeping balances at end of month, topping off excess funds for a current account, etc. '",
+       "semanticApi": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Customers",
+   "businessDomains": [
+    {
+     "name": "Sales",
+     "serviceDomains": [
+      {
+       "name": "Customer Campaign Execution",
+       "description": "Execute a customer campaign (version) and track and respond to impact",
+       "semanticApi": true
+      },
+      {
+       "name": "Product Expert Sales Support",
+       "description": "Administer the availability and allocation of product specialists to support sales activity",
+       "semanticApi": true
+      },
+      {
+       "name": "Product Matching",
+       "description": "'Capability used to match eligible product and product combinations to a customer based on prevailing conditions such as customer type, product interest, solicitation/retention, campaign alignment'",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Offer",
+       "description": "'This service domain orchestrates the processing of a product offer for a new or established  customer. The offer process is defined specifically for the product or service being considered and can include actions such as document checks, collateral allocation, credit assessments, underwriting decisions, regulatory and procedural checks, eligibility checks, the use of internal and external specialist services (such as evaluations and legal advice).'",
+       "semanticApi": true
+      },
+      {
+       "name": "Special Pricing Conditions",
+       "description": "Maintain a pricing list or conditions (with ranges and optional terms) categorized by various dimensions to impose exceptional product pricing conditions that override standard pricing terms (for special events/situations)",
+       "semanticApi": true
+      },
+      {
+       "name": "Party Lifecycle Management",
+       "description": "This service domain tracks the state of a party relationship with the bank from the initial checks made during the establishment of a new party connection and subsequently maintained as necessary over the duration of the relationship. The checks and the maintenance requirements will vary by party type and jurisdiction. The checks cover bank specific and legal and regulatory considerations and may be updated based on a standard schedule or by request in specific circumstances.",
+       "semanticApi": true
+      },
+      {
+       "name": "Prospect Campaign Execution",
+       "description": "Execute a prospect campaign (version) and track and respond to impact",
+       "semanticApi": true
+      },
+      {
+       "name": "Lead and Opportunity Management",
+       "description": "'This service domain captures, classifies and track sales lead/opportunities with established clients for additional products or services. It handles the processing of the opportunity through to the point of formal offer processing.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Product Sales Support",
+       "description": "This Service Domain administers customer access to product specialists",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Relationship Management",
+     "serviceDomains": [
+      {
+       "name": "Customer Relationship Management",
+       "description": "'This service domain develops and executes a customer plan to maintain and build a customer relationship. Activities include ongoing customer contact, tracking internal and external events and activity of interest and relevance, product and service matching and sales, processing ad-hoc queries, trouble shooting and issue resolution including the initial phases of troubled account recovery'",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Behavior Insights",
+       "description": "This service domain applies behavioral analysis to customer event history to maintain a range of customer ratings/scores (such as 'propensity to buy') and to detect life events or trends",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Credit Rating",
+       "description": "This service domain maintains and administers the bank's credit assessment for customers based on consolidated internal data and optionally by referencing external credit agency reports",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Agreement",
+       "description": "This service domain maintains the master customer agreement/legal contract. Note that a customer can be a complex corporate entity with many subsidiaries operating in different geopolitical areas. The customer agreement is linked to as many Sales Product Agreements as needed for all in-force products",
+       "semanticApi": true
+      },
+      {
+       "name": "Sales Product Agreement",
+       "description": "This service domain maintains a structured legal agreement defining the contractual terms and conditions for an in-force product for a customer. It is subordinate to the customer's master agreement that is maintained by the Customer Agreement service domain",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Product And Service Eligibility",
+       "description": "This Service Domain maintains a list of products and services for which a customer is eligible.",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Proposition",
+       "description": "This Service Domain maintains bank and customer defined requirements spanning all products and services",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Event History",
+       "description": "'This service domain captures, classifies and stores relationship, servicing and product fulfillment related customer events. In addition to servicing and product transaction details, the log can capture life/relationship events that are revealed during customer exchanges'",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Product and Service Directory",
+       "description": "This Service Domain maintains the most important details of all the products and services that a customer has acquired from the bank.",
+       "semanticApi": true
+      },
+      {
+       "name": "Loan Syndication",
+       "description": "\"Loan Syndication is a Service Domain that supports orgination, set-up and servicing of syndicated loans. It provides services that are used in lead banks, agents and banks providing administrative support.\\nIt handles the orchestration of origination and servicing processes for syndicated loans.\"",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Financial Insights",
+       "description": "This service domain applies behavioral analysis to the customer financial history to develop financial insights that can highlight business development opportunities or detect possible concerns with a customer's financial wellfare",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Consent",
+       "semanticApi": false
+      }
+     ]
+    },
+    {
+     "name": "Customer Care",
+     "serviceDomains": [
+      {
+       "name": "Servicing Mandate",
+       "description": "This service domain maintains the allowed customer servicing arrangements for a service provider covering general access to the bank's products and services and optionally customer specific arrangements",
+       "semanticApi": true
+      },
+      {
+       "name": "Servicing Order",
+       "description": "This service domain handles the processing of a customer servicing request as a predefined procedure. A range of standard servicing requests can be supported. The process can include a check of permissions when the request is made by a third party/service provider",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Case Management",
+       "description": "Track and assess case load and resolution activity - allocate resources as necessary to optimize case resolution performance",
+       "semanticApi": true
+      },
+      {
+       "name": "Card Case",
+       "description": "'This service domain handles the processing of a customer card case, typically a disputed charge'",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Case",
+       "description": "'This service domain handles the initiation, tracking, resolution and reporting on customer cases (issues that typically require corrective response to some financial transaction)'",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Party Reference",
+     "serviceDomains": [
+      {
+       "name": "Legal Entity Directory",
+       "description": "This service domain maintains details of the legal entity structure of the party including dependents and associations for individuals and ownership/subsidiary structures for corporations. Some financial indicators and product coverage/activity details can be included where this defines the nature of the legal entity relationship in particular for corporate entities",
+       "semanticApi": true
+      },
+      {
+       "name": "Location Data Management",
+       "description": "This service domain maintain details of the use and state of locations of interest to the bank. This can include both physical and virtual addresses. It is used to check for valid use and for sales/marketing activities",
+       "semanticApi": true
+      },
+      {
+       "name": "Party Reference Data Directory",
+       "description": "'This service domain maintains a range of party reference information covering aspects including general reference details, contacts and associations and demographic information'",
+       "semanticApi": true
+      },
+      {
+       "name": "Payee Management",
+       "semanticApi": false
+      }
+     ]
+    },
+    {
+     "name": "Investment Services",
+     "serviceDomains": [
+      {
+       "name": "Consumer Investments",
+       "description": "Handle the consumer front-end trading requests. These will typically be blocked/netted for market execution",
+       "semanticApi": true
+      },
+      {
+       "name": "Investment Portfolio Management",
+       "description": "'Manage an investment portfolio, initiating trading to leverage market opportunities, remaining within portfolio trading policies'",
+       "semanticApi": true
+      },
+      {
+       "name": "Investment Portfolio Analysis",
+       "description": "'Assess and report on investment portfolio make-up, valuation and performance'",
+       "semanticApi": true
+      },
+      {
+       "name": "Investment Portfolio Planning",
+       "description": "Agree the policies and required make-up of an investment portfolio and ensure all required bank and regulatory terms and conditions are addressed",
+       "semanticApi": true
+      },
+      {
+       "name": "eTrading Workbench",
+       "description": "This Service Domain supports consumer securities trading of their investment portfolio through the bank",
+       "semanticApi": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Channels",
+   "businessDomains": [
+    {
+     "name": "Information Providers",
+     "serviceDomains": [
+      {
+       "name": "Public Reference Data Management",
+       "description": "'Provide structured access to standard ''global'' reference data and definitions associated with market activity such as currency, country and segment identifiers.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Financial Instrument Reference Data Management",
+       "description": "This Service Domain maintains a directory of financial instrument reference data",
+       "semanticApi": true
+      },
+      {
+       "name": "Financial Market Research",
+       "description": "The service domain consolidates external financial market research",
+       "semanticApi": true
+      },
+      {
+       "name": "Financial Market Analysis",
+       "description": "Provide different types of financial market analysis using available financial market information and research",
+       "semanticApi": true
+      },
+      {
+       "name": "Market Information Management",
+       "description": "Market information management consolidates and improves market information from multiple sources in order to build up a bank knowledge base in targeted areas",
+       "semanticApi": true
+      },
+      {
+       "name": "Market Data Switch Operation",
+       "description": "This service domain operates the internal information distribution facility/switch in compliance with administered external subscription information feed service access rights. Note the content is retrieved by the Market Feed Operation service domain from the various external feed services. Internal information can also be published over the switch from various bank sources (such as bank rates provided by treasury).",
+       "semanticApi": true
+      },
+      {
+       "name": "Information Provider Operation",
+       "description": "''",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Cross Channel",
+     "serviceDomains": [
+      {
+       "name": "Customer Workbench",
+       "description": "This service domain represents customer side devices. Most commonly providing a customer access portal to the banks products and services through any suitable channel and device",
+       "semanticApi": true
+      },
+      {
+       "name": "Contact Handler",
+       "description": "This service domain handles a customer's interactive contact with the bank. This will typically involve launching of one or more channel/device specific dialogue sessions as necessary within the customer contact",
+       "semanticApi": true
+      },
+      {
+       "name": "Contact Routing",
+       "description": "'The Contact Routing service domain tracks servicing resource availability and uses any known details about the customer contact (e.g. identity, indicated purpose of call, status of the relationship) to make an optimal routing decision. The routing selection may include matching the required product knowledge/skills to the available servicing resources.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Session Dialogue",
+       "description": "'This service domain handles/structures the customer narrative during an interactive session. It consolidates and presents pertinent customer information and provides servicing guidelines with standard dialogue/scripting as appropriate. It can include the capability to provoke questions to capture key relationship and sales triggers. It also ensures the correct sequencing, dialogue content and actions are performed/initiated during the customer interaction. It may further leverage the session by passing on customer notifications, status updates and triggering sales/marketing efforts.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Party Routing Profile",
+       "description": "'This service domain maintains a small profile of key indicators for a customer that is referenced during customer interactions to facilitate routing, servicing and product/service fulfillment decisions. This can include status (such as account in arrears), ratings (such as high value customer) and alerts (such possible fraud activity detected)'",
+       "semanticApi": true
+      },
+      {
+       "name": "Transaction Authorization",
+       "description": "'This service domain handles risk based authorization for interactive customer transactions. This combines the context (channel) transaction, customer details and recent activity analysis as appropriate. The authorization may require a specific level of party/customer authentication to get approval.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Access Entitlement",
+       "description": "This service domain maintains the details of the allowed channel/device based access to products and services that the customer has in place.  This profile is referenced in servicing and fulfillment activity and may include customer preferences and access limits/constraints that span multiple products.",
+       "semanticApi": true
+      },
+      {
+       "name": "Channel Activity History",
+       "description": "This service domains consolidates and captures customer channel usage activity to support channel activity analysis and also can be referenced for customer access authorization and routing decisions",
+       "semanticApi": true
+      },
+      {
+       "name": "Processing Order",
+       "description": "'The Processing Order Service Domain handles the processing of a service request that comes in via a secure channel from a known requestor, which is typically an automated process itself and not a customer.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Party Authentication",
+       "description": "This service domain provides a customer identify authentication service covering all channels and devices to support access to the banks products and services",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Channel Specific",
+     "serviceDomains": [
+      {
+       "name": "ATM Network Operations",
+       "description": "'Handling the automated operation of the ATM network and linked devices, including tracing physical cash and document movements'",
+       "semanticApi": true
+      },
+      {
+       "name": "Branch Location Operations",
+       "description": "'The day to day administration of branch activity, including teller assignment and cash handling oversight'",
+       "semanticApi": true
+      },
+      {
+       "name": "Advanced Voice Services Operations",
+       "description": "'This service domain operates the telephone channel infrastructure, including the IVR and any other automated devices as appropriate. This includes handling default routing rules and intra-day/session adjustments to deal with peak load or other operational variations'",
+       "semanticApi": true
+      },
+      {
+       "name": "eBranch Operations",
+       "description": "This service domain operates the bank's on-line web based electronic branch capabilities - controlling access and load balancing across available communications and processing resources to optimize performance/availability",
+       "semanticApi": true
+      },
+      {
+       "name": "Financial Gateway",
+       "description": "'This service domain operates automated message interfaces to secure networks such as SWIFT, TELEX, ACH and Financial Market/Exchange reporting services'",
+       "semanticApi": true
+      },
+      {
+       "name": "Card Terminal Administration",
+       "description": "'This service domain administers the POS Network including the inventory, terminal characteristics, deployment and status of the POS devices.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Card Terminal Operation",
+       "description": "'This service domain handle POS operations including processing, capture and tracking of the transactions originating at the Point of Sale devices.'",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Distribution",
+     "serviceDomains": [
+      {
+       "name": "Product Inventory Distribution",
+       "description": "Administer the provisioning and distribution of product inventory across the branch network and/or distribute direct to customers (e.g. mail) where appropriate",
+       "semanticApi": true
+      },
+      {
+       "name": "Branch Currency Distribution",
+       "description": "Schedule and coordinate the secure distribution of cash inventory across the branch and ATM networks.",
+       "semanticApi": true
+      },
+      {
+       "name": "Correspondence",
+       "description": "This service domain orchestrates the production of pre-formatted correspondence and batches of correspondence (e.g. mail shots).",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Servicing",
+     "serviceDomains": [
+      {
+       "name": "Contact Center Operations",
+       "description": "Administer the day to day activity in the contact center - allocate positions and track staff availability and performance",
+       "semanticApi": true
+      },
+      {
+       "name": "Point of Service",
+       "description": "'This service domain operates servicing positions within the bank. It administers all media connections, inventory holdings (e.g. cash), provides access to support utilities and tracks servicing activity -e.g. time spent, activity logs, capturing servicing events including commission and training related actions. In cases servicing positions can be automated'",
+       "semanticApi": true
+      },
+      {
+       "name": "Interactive Help",
+       "description": "Operate the automated facility that provides interactive context sensitive servicing guidance to employees and self-serve customers",
+       "semanticApi": true
+      },
+      {
+       "name": "Servicing Issue",
+       "description": "This Service Domain handles production customer servicing issues detected in the customer servicing environment",
+       "semanticApi": true
+      },
+      {
+       "name": "Servicing Event History",
+       "description": "'This service domain captures, classifies and stores servicing activity and events to support root cause analysis'",
+       "semanticApi": true
+      },
+      {
+       "name": "Service Directory",
+       "description": "'This Service Domain presents a structured set of services that the customer can select from '",
+       "semanticApi": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Business Development",
+   "businessDomains": [
+    {
+     "name": "Marketing And Development",
+     "serviceDomains": [
+      {
+       "name": "Business Development",
+       "description": "'Define, implement, track and assess the new business development plans'",
+       "semanticApi": true
+      },
+      {
+       "name": "Market Research",
+       "description": "'This service domain handles the capture of market research from multiple external sources. This can include live feeds, analysis and reports in any form. The information is classified/catalogued and stored for retrieval.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Market Analysis",
+       "description": "This service domain analyzes internal and external market information sources as necessary to develop specific market insights. It may maintain a collection of predefined market analyses and may also offer specific ad-hoc analysis on request",
+       "semanticApi": true
+      },
+      {
+       "name": "Competitor Analysis",
+       "description": "'Solicit, consolidate and analyze competitor specific public domain data to develop competitor insights and comparisons'",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Campaign Management",
+       "description": "Assess the coverage and impact of internal/customer campaigns and redirect campaign development and execution activity accordingly",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Campaign Design",
+       "description": "Design and refine customer campaign specifications based on their impact",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Portfolio",
+       "description": "Maintain a portfolio of analytical views of the customer base to support customer segment profitability and performance analysis",
+       "semanticApi": true
+      },
+      {
+       "name": "Advertising",
+       "description": "'Develop the plan for and oversee advertising campaign activity, including budget and resource management'",
+       "semanticApi": true
+      },
+      {
+       "name": "Promotional Events",
+       "description": "'Develop the plan for and oversee promotional event activity, including budget and resource management'",
+       "semanticApi": true
+      },
+      {
+       "name": "Sales Planning",
+       "semanticApi": false
+      },
+      {
+       "name": "Contribution Analysis",
+       "semanticApi": false
+      },
+      {
+       "name": "Brand Management",
+       "description": "Respond to events that potentially damage the brand or provide an opportunity to strengthen/leverage brand awareness",
+       "semanticApi": true
+      },
+      {
+       "name": "Segment Direction",
+       "description": "Define market segments and develop and assess performance against the segment plan's performance goals",
+       "semanticApi": true
+      },
+      {
+       "name": "Prospect Campaign Design",
+       "description": "Design and refine prospect campaign specifications based on their impact",
+       "semanticApi": true
+      },
+      {
+       "name": "Customer Surveys",
+       "description": "Define and execute and analyze customer surveys",
+       "semanticApi": true
+      },
+      {
+       "name": "Prospect Campaign Management",
+       "description": "Assess the coverage and impact of external/prospect campaigns and redirect campaign development and execution activity accordingly",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Product Management",
+     "serviceDomains": [
+      {
+       "name": "Product Portfolio",
+       "description": "Maintain a portfolio of analytical views of the product portfolio to support product profitability and performance analysis",
+       "semanticApi": true
+      },
+      {
+       "name": "Product Design",
+       "description": "Develop/refine product designs and supporting specification details",
+       "semanticApi": true
+      },
+      {
+       "name": "Production Release",
+       "description": "Maintain and apply production release tests for new and updated systems",
+       "semanticApi": true
+      },
+      {
+       "name": "Product Deployment",
+       "description": "Plan and administer the production deployment new and updated products and services",
+       "semanticApi": true
+      },
+      {
+       "name": "Product Quality Assurance",
+       "description": "Maintain and execute a portfolio of product quality assurance tests and certifications that can be applied to evaluate any aspect of production activity for quality assurance",
+       "semanticApi": true
+      },
+      {
+       "name": "Product Training",
+       "description": "'Develop and provide product specific training across the workforce. This includes all media and training mechanisms (on-line, self taught, classroom etc.)'",
+       "semanticApi": true
+      },
+      {
+       "name": "Case Root Cause Analysis",
+       "description": "Root cause analysis business function reviews case reports to identify possible improvements to eliminate/mitigate servicing issues",
+       "semanticApi": true
+      },
+      {
+       "name": "Product Directory",
+       "description": "'This service domain maintains a comprehensive directory of the bank''s products and services. It can be referenced to obtain product details used to support activities including product selection, sales and marketing, on-boarding, servicing and product fulfillment.'",
+       "semanticApi": true
+      },
+      {
+       "name": "Discount Pricing",
+       "semanticApi": false
+      }
+     ]
+    },
+    {
+     "name": "Solution Development",
+     "serviceDomains": [
+      {
+       "name": "IT Standards And Guidelines",
+       "description": "'Define and apply comprehensive IT architectures, policies and standards as appropriate. Also define the IT usage guidelines and procedures governing systems use across the enterprise'",
+       "semanticApi": true
+      },
+      {
+       "name": "Systems Administration",
+       "description": "'Administer the configuration, maintenance, assignment and track usage and status of all IT assets deployed in development and production across the enterprise'",
+       "semanticApi": true
+      },
+      {
+       "name": "Development Environment",
+       "semanticApi": false
+      },
+      {
+       "name": "System Development",
+       "description": "'Develop new, enhance existing applications and integrate package based systems solutions'",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Channel Management",
+     "serviceDomains": [
+      {
+       "name": "Channel Portfolio",
+       "semanticApi": false
+      },
+      {
+       "name": "Branch Portfolio",
+       "semanticApi": false
+      },
+      {
+       "name": "Contact Center Management",
+       "description": "Oversee the assignment and operation of the customer contact center",
+       "semanticApi": true
+      },
+      {
+       "name": "Servicing Activity Analysis",
+       "description": "This service domain analyzes servicing activity to support continual service improvement",
+       "semanticApi": true
+      },
+      {
+       "name": "Financial Message Analysis",
+       "semanticApi": false
+      },
+      {
+       "name": "Channel Activity Analysis",
+       "description": "'This service domain tracks and analyzes channel activity to support relationship development, to detect unwanted behavior, possible fraud, and to constrain channel use as necessary (for example tracking usage frequency and cumulative transaction amounts within a period)'",
+       "semanticApi": true
+      },
+      {
+       "name": "Information Provider Administration",
+       "semanticApi": false
+      },
+      {
+       "name": "Market Data Switch Administration",
+       "semanticApi": false
+      },
+      {
+       "name": "Branch Location Management",
+       "description": "'Manage and oversee branch activity, assign resources to optimize branch performance'",
+       "semanticApi": true
+      },
+      {
+       "name": "ATM Network Management",
+       "semanticApi": false
+      },
+      {
+       "name": "Branch Network Management",
+       "semanticApi": false
+      },
+      {
+       "name": "Advanced Voice Services Management",
+       "description": "Oversee the configuration and operation of the voice channel facilities",
+       "semanticApi": true
+      },
+      {
+       "name": "eBranch Management",
+       "description": "Oversee the configuration and operation of the e-branch channel facilities",
+       "semanticApi": true
+      },
+      {
+       "name": "Product Inventory Item Management",
+       "description": "Maintain and distribute product inventory",
+       "semanticApi": true
+      },
+      {
+       "name": "Central Cash Handling",
+       "description": "'Track cash inventory, project demand and allocate inventory across the branch/ATM network'",
+       "semanticApi": true
+      },
+      {
+       "name": "Branch Currency Management",
+       "description": "'Track cash inventory, project demand and ensure all cash is accounted for within the branch'",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Intelectual Property And Knowledge",
+     "serviceDomains": [
+      {
+       "name": "Intellectual Property Portfolio",
+       "description": "Administer the bank's intellectual property assets",
+       "semanticApi": true
+      },
+      {
+       "name": "Management Manual",
+       "description": "'Develop, maintain and promulgate the management manual of required procedures and guidelines. Provide support in its reference and interpretation as appropriate'",
+       "semanticApi": true
+      },
+      {
+       "name": "Enterprise Architecture",
+       "description": "Define and maintain comprehensive business architectural definitions/blueprints to help organize/direct the business",
+       "semanticApi": true
+      },
+      {
+       "name": "Knowledge Exchange",
+       "description": "'Consolidate, classify and provide structured access to consolidated market intelligence, product and procedural knowledge gained from the workforce in the execution of business to inform business activity and support continual improvement'",
+       "semanticApi": true
+      }
+     ]
+    },
+    {
+     "name": "Models And Analytics",
+     "serviceDomains": [
+      {
+       "name": "Contribution Models",
+       "semanticApi": false
+      },
+      {
+       "name": "Customer Behavior Models",
+       "description": "'This service domain handles the design and maintenance of a portfolio of customer behavior models that might be used in all aspects of customer relationship development, sales, servicing and product fulfillment'",
+       "semanticApi": true
+      },
+      {
+       "name": "Credit Risk Models",
+       "description": "This service domain handles the design and maintenance of a portfolio of credit models that are used in all aspects of customer credit assessments",
+       "semanticApi": true
+      },
+      {
+       "name": "Fraud Model",
+       "description": "'This service domain handles the design and maintenance of a portfolio of fraud models used across all production activity to detect potential fraud on the part of customers, merchants and other involved parties'",
+       "semanticApi": true
+      },
+      {
+       "name": "Quant Model",
+       "semanticApi": false
+      },
+      {
+       "name": "Trading Models",
+       "semanticApi": false
+      },
+      {
+       "name": "Financial Instrument Valuation Models",
+       "semanticApi": false
+      },
+      {
+       "name": "Liquidity Risk Models",
+       "semanticApi": false
+      },
+      {
+       "name": "Market Risk Models",
+       "semanticApi": false
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
