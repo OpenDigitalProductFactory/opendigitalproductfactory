@@ -40,6 +40,30 @@ const CATEGORY_PLAYBOOKS: Record<string, MarketingPlaybook> = {
     agentSkills: ["Draft community announcement", "Prepare assessment notice", "Summarise maintenance requests", "Board meeting agenda"],
   },
 
+  "banking-financial-services": {
+    primaryGoal: "Deepen customer and member relationships through trust, financial education, and product awareness — within regulated-communication boundaries",
+    stakeholders: "Customers/members, local businesses, community organizations, regulators",
+    campaignTypes: [
+      "Rate and product announcements (APY/APR figures must match current published rates — Reg DD / Reg Z accuracy)",
+      "Financial education series (budgeting, fraud awareness, first-home buying)",
+      "Branch and service updates (hours, new services, appointment availability)",
+      "Community involvement and local sponsorship stories",
+      "New account and membership onboarding sequences",
+      "Security and fraud-alert notices",
+      "Required-disclosure-bearing product promotions (Member FDIC / NCUA insurance, Equal Housing)",
+    ],
+    contentTone: "Trustworthy, clear, factual, community-anchored — never urgency-pressure or unverifiable claims",
+    keyMetrics: [
+      "New account / membership applications",
+      "Appointment bookings with bankers or advisors",
+      "Product inquiry conversion rate",
+      "Financial education engagement",
+      "Customer/member retention rate",
+    ],
+    ctaLanguage: ["Open an account", "Apply now", "Check today's rates", "Meet with a banker", "Become a member"],
+    agentSkills: ["Draft rate announcement", "Financial education article", "Branch notice", "Fraud awareness alert"],
+  },
+
   "public-sector": {
     primaryGoal: "Resident awareness, participation, and trust through transparent civic communication",
     stakeholders: "Residents, council members, town staff, local businesses, neighboring jurisdictions",

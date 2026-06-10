@@ -46,6 +46,9 @@ vi.mock("@dpf/db", () => ({
     principalAlias: {
       findMany: vi.fn(),
     },
+    storefrontConfig: {
+      findFirst: vi.fn(),
+    },
     employeeProfile: {
       findUnique: vi.fn(),
     },
@@ -112,8 +115,21 @@ describe("getLicensingWorkspace", () => {
         authorityName: "Nevada State Contractors Board",
         requirementType: "license",
         scopeLevel: "organization",
+        archetypeCategories: ["trades-maintenance"],
+      },
+      {
+        id: "req-2",
+        requirementRefId: "LIC-REQ-US-NCUA-CREDIT-UNION",
+        jurisdictionLabel: "United States",
+        authorityName: "National Credit Union Administration (NCUA)",
+        requirementType: "license_directory",
+        scopeLevel: "organization",
+        archetypeCategories: ["banking-financial-services"],
       },
     ] as never);
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
+      archetype: { category: "banking-financial-services" },
+    } as never);
     vi.mocked(prisma.organizationLicenseRecord.findMany).mockResolvedValue([
       {
         id: "org-license-1",
@@ -148,8 +164,69 @@ describe("getLicensingWorkspace", () => {
     expect(workspace.summary.unsatisfiedDisplayCount).toBe(1);
     expect(workspace.summary.pendingFeeCount).toBe(1);
     expect(workspace.summary.openIssueCount).toBe(1);
-    expect(workspace.requirementOptions[0]?.authorityName).toBe("Nevada State Contractors Board");
+    // Archetype-matched entries sort first and carry the flag (BI-5D9DCDE6 §9.2);
+    // the org has a license record, so posture is not flagged incomplete.
+    expect(workspace.requirementOptions[0]?.authorityName).toBe(
+      "National Credit Union Administration (NCUA)",
+    );
+    expect(workspace.requirementOptions[0]?.matchesArchetype).toBe(true);
+    expect(workspace.requirementOptions[1]?.matchesArchetype).toBe(false);
+    expect(workspace.archetype).toEqual({
+      category: "banking-financial-services",
+      requiredPostureIncomplete: false,
+    });
     expect(workspace.holderOptions[0]?.displayName).toBe("Jamie Rivera");
+  });
+
+  it("flags incomplete regulatory posture for a banking install with no credential rows (D5)", async () => {
+    vi.mocked(prisma.organizationLicenseProfile.findFirst).mockResolvedValue({
+      id: "profile-1",
+      organizationId: "org-1",
+      setupStatus: "draft",
+      investigationMode: "unknown",
+      homeCountryCode: null,
+      primaryRegionCode: null,
+      operatingFootprintSummary: null,
+      legalActivityConfidence: "medium",
+      researchCoverageStatus: "draft",
+      notes: null,
+    } as never);
+    vi.mocked(prisma.licenseRequirementReference.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.organizationLicenseRecord.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.personLicenseRecord.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.licenseReadinessIssue.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.principalAlias.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
+      archetype: { category: "banking-financial-services" },
+    } as never);
+
+    const workspace = await getLicensingWorkspace();
+
+    expect(workspace.archetype.requiredPostureIncomplete).toBe(true);
+  });
+
+  it("does not flag posture for non-regulated categories", async () => {
+    vi.mocked(prisma.organizationLicenseProfile.findFirst).mockResolvedValue({
+      id: "profile-1",
+      organizationId: "org-1",
+      setupStatus: "draft",
+      investigationMode: "unknown",
+      legalActivityConfidence: "medium",
+      researchCoverageStatus: "draft",
+      notes: null,
+    } as never);
+    vi.mocked(prisma.licenseRequirementReference.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.organizationLicenseRecord.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.personLicenseRecord.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.licenseReadinessIssue.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.principalAlias.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
+      archetype: { category: "beauty-personal-care" },
+    } as never);
+
+    const workspace = await getLicensingWorkspace();
+
+    expect(workspace.archetype.requiredPostureIncomplete).toBe(false);
   });
 });
 

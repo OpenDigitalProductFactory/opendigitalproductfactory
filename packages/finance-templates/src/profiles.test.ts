@@ -18,13 +18,14 @@ const EXPECTED_SLUGS = [
   "beauty_personal",
   "pet_services",
   "hoa_property_management",
+  "banking_financial_services",
   "fund_accounting",
 ];
 
 describe("financial profile catalog", () => {
-  it("has all 12 profiles", () => {
+  it("has all 13 profiles", () => {
     const all = getAllProfiles();
-    expect(all).toHaveLength(12);
+    expect(all).toHaveLength(13);
     const slugs = all.map((p) => p.slug);
     for (const expected of EXPECTED_SLUGS) {
       expect(slugs, `missing profile: ${expected}`).toContain(expected);
@@ -106,6 +107,25 @@ describe("financial profile catalog", () => {
     }
   });
 
+  it("banking profile carries interest/fee accounting and gentle collections posture (BI-5D9DCDE6)", () => {
+    const profile = getFinancialProfile("banking_financial_services");
+    expect(profile).not.toBeNull();
+    expect(profile!.archetypeCategory).toBe("banking-financial-services");
+    expect(profile!.defaultCurrency).toBe("USD");
+    // A regulated depository institution does not dun its own customers the
+    // way a trade business chases invoices — fees post to accounts.
+    expect(profile!.dunningEnabled).toBe(false);
+    expect(profile!.billingPatternProfile.invoiceExecutionMode).toBe("prepared-not-prescribed");
+    // Composes the canonical financial-institution ledger fragment — the
+    // interest-margin P&L shape; the core banking system stays authoritative.
+    expect(profile!.ledgerModel).toBe("financial-institution");
+    expect(profile!.chartOfAccountsSeed).toEqual(LEDGER_COA_FRAGMENTS["financial-institution"]);
+    const accountNames = profile!.chartOfAccountsSeed.map((a) => a.name);
+    expect(accountNames).toContain("Interest Income — Loans");
+    expect(accountNames).toContain("Deposits / Member Shares");
+    expect(accountNames).toContain("Provision for Credit Losses");
+  });
+
   it("nonprofit has dunning disabled", () => {
     const profile = getFinancialProfile("nonprofit");
     expect(profile).not.toBeNull();
@@ -148,6 +168,8 @@ describe("financial profile catalog", () => {
     for (const profile of getAllProfiles()) {
       if (profile.slug === "fund_accounting") {
         expect(profile.ledgerModel).toBe("fund-accounting");
+      } else if (profile.slug === "banking_financial_services") {
+        expect(profile.ledgerModel).toBe("financial-institution");
       } else {
         expect(profile.ledgerModel, `${profile.slug} should default to commercial`).toBe("commercial");
       }

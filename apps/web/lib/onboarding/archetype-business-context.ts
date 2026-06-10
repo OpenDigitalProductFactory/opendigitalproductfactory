@@ -134,6 +134,18 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
     supplyChain:
       "Our 'supply chain' is mostly trusted contractors and service vendors — landscaping, plumbing, electrical, pool service — plus consumables for common areas. We keep a vetted bench so urgent jobs do not become emergency markups.",
   },
+  "banking-financial-services": {
+    missionTheme:
+      "safeguard our customers' money and help them reach their financial goals",
+    businessModel:
+      "Deposit, lending, and card relationships sustained over years; interest margin and account fees fund the institution, and trust is the product.",
+    whoWeServe:
+      "We serve the people and businesses of our community who trust us with their deposits and their borrowing. Many relationships span decades and generations — every interaction either builds or spends that trust.",
+    howWeDecide:
+      "Safety and soundness come first: regulatory compliance and our customers' trust outrank growth and speed, and we never trade examination posture for short-term revenue. Rate and term claims must always match what we actually offer, and required disclosures stay attached to the products they describe. Within that frame we decide for long-term relationships over transactional wins.",
+    supplyChain:
+      "Our operating backbone is a small set of critical vendors: the core processing platform, card networks and processors, the deposit-insurance regime, credit bureaus, and loan-document and appraisal services. Vendor changes are regulated events, so we manage these as long-term, examined relationships.",
+  },
   "education-training": {
     missionTheme:
       "help our learners grow, in a safe and supportive environment",

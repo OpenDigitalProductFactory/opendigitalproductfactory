@@ -124,6 +124,524 @@
       ]
     },
     {
+      "requirementRefId": "LIC-REQ-US-OCC-NATIONAL-BANK",
+      "countryCode": "US",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "United States",
+      "authorityName": "Office of the Comptroller of the Currency (OCC)",
+      "authorityType": "federal_regulator",
+      "requirementType": "license_directory",
+      "scopeLevel": "organization",
+      "archetypeCategories": [
+        "banking-financial-services"
+      ],
+      "activityTags": [
+        "bank-charter",
+        "national-bank",
+        "supervision"
+      ],
+      "summary": "Primary regulator and chartering authority for national banks and federal savings associations. Research entrypoint for charter status, supervision, and licensing filings.",
+      "officialWebsiteUrl": "https://www.occ.gov/",
+      "applicationUrl": "https://www.occ.gov/topics/charters-and-licensing/index-charters-and-licensing.html",
+      "renewalUrl": null,
+      "helpUrl": "https://www.helpwithmybank.gov/",
+      "displayRuleSummary": null,
+      "renewalCadenceHint": null,
+      "sourceUrls": [
+        "https://www.occ.gov/topics/charters-and-licensing/index-charters-and-licensing.html"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 120,
+      "tags": [
+        "us",
+        "banking",
+        "bootstrap",
+        "directory"
+      ]
+    },
+    {
+      "requirementRefId": "LIC-REQ-US-FRB-STATE-MEMBER-BANK",
+      "countryCode": "US",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "United States",
+      "authorityName": "Federal Reserve Board",
+      "authorityType": "federal_regulator",
+      "requirementType": "license_directory",
+      "scopeLevel": "organization",
+      "archetypeCategories": [
+        "banking-financial-services"
+      ],
+      "activityTags": [
+        "bank-charter",
+        "state-member-bank",
+        "supervision"
+      ],
+      "summary": "Federal supervisor for state-chartered banks that are members of the Federal Reserve System, and for bank holding companies.",
+      "officialWebsiteUrl": "https://www.federalreserve.gov/supervisionreg.htm",
+      "applicationUrl": "https://www.federalreserve.gov/supervisionreg/afi.htm",
+      "renewalUrl": null,
+      "helpUrl": "https://www.federalreserveconsumerhelp.gov/",
+      "displayRuleSummary": null,
+      "renewalCadenceHint": null,
+      "sourceUrls": [
+        "https://www.federalreserve.gov/supervisionreg.htm"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 120,
+      "tags": [
+        "us",
+        "banking",
+        "bootstrap",
+        "directory"
+      ]
+    },
+    {
+      "requirementRefId": "LIC-REQ-US-FDIC-INSURANCE",
+      "countryCode": "US",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "United States",
+      "authorityName": "Federal Deposit Insurance Corporation (FDIC)",
+      "authorityType": "federal_regulator",
+      "requirementType": "registration",
+      "scopeLevel": "organization",
+      "archetypeCategories": [
+        "banking-financial-services"
+      ],
+      "activityTags": [
+        "deposit-insurance",
+        "state-nonmember-bank",
+        "display-obligation"
+      ],
+      "summary": "Deposit insurer for insured banks and federal supervisor for state nonmember banks. Insured institutions carry the FDIC certificate number and Part 328 display obligations.",
+      "officialWebsiteUrl": "https://www.fdic.gov/",
+      "applicationUrl": "https://www.fdic.gov/resources/bankers/applications/",
+      "renewalUrl": null,
+      "helpUrl": "https://banks.data.fdic.gov/bankfind-suite/bankfind",
+      "displayRuleSummary": "FDIC Part 328: display the official FDIC sign and use the official advertising statement ('Member FDIC') in advertisements for deposit products, including digital channels.",
+      "renewalCadenceHint": null,
+      "sourceUrls": [
+        "https://www.fdic.gov/resources/regulations/federal-register-publications/2023/2023-final-rule-fdic-official-signs-advertising.html",
+        "https://www.fdic.gov/"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 120,
+      "tags": [
+        "us",
+        "banking",
+        "display",
+        "insurance"
+      ]
+    },
+    {
+      "requirementRefId": "LIC-REQ-US-NCUA-CREDIT-UNION",
+      "countryCode": "US",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "United States",
+      "authorityName": "National Credit Union Administration (NCUA)",
+      "authorityType": "federal_regulator",
+      "requirementType": "license_directory",
+      "scopeLevel": "organization",
+      "archetypeCategories": [
+        "banking-financial-services"
+      ],
+      "activityTags": [
+        "credit-union-charter",
+        "share-insurance",
+        "display-obligation"
+      ],
+      "summary": "Chartering authority and supervisor for federal credit unions, and administrator of the National Credit Union Share Insurance Fund (NCUSIF) for federally insured credit unions including most state charters.",
+      "officialWebsiteUrl": "https://ncua.gov/",
+      "applicationUrl": "https://ncua.gov/support-services/credit-union-resources-expansion/charters",
+      "renewalUrl": null,
+      "helpUrl": "https://mapping.ncua.gov/ResearchCreditUnion",
+      "displayRuleSummary": "Federally insured credit unions display the official NCUA insurance sign in branches and on digital deposit-taking pages and use the official insurance statement in advertising.",
+      "renewalCadenceHint": null,
+      "sourceUrls": [
+        "https://ncua.gov/support-services/credit-union-resources-expansion/charters"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 120,
+      "tags": [
+        "us",
+        "credit-union",
+        "display",
+        "insurance"
+      ]
+    },
+    {
+      "requirementRefId": "LIC-REQ-US-CFPB-CONSUMER-PROTECTION",
+      "countryCode": "US",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "United States",
+      "authorityName": "Consumer Financial Protection Bureau (CFPB)",
+      "authorityType": "federal_regulator",
+      "requirementType": "legality_gate",
+      "scopeLevel": "organization",
+      "archetypeCategories": [
+        "banking-financial-services"
+      ],
+      "activityTags": [
+        "consumer-protection",
+        "udaap",
+        "advertising-rules"
+      ],
+      "summary": "Federal consumer-protection supervisor for consumer financial products: Truth in Savings (Reg DD), Truth in Lending (Reg Z), RESPA, and UDAAP standards that govern rate advertising and disclosures.",
+      "officialWebsiteUrl": "https://www.consumerfinance.gov/",
+      "applicationUrl": null,
+      "renewalUrl": null,
+      "helpUrl": "https://www.consumerfinance.gov/compliance/",
+      "displayRuleSummary": "Advertising accuracy: APY claims follow Reg DD; loan-rate trigger terms follow Reg Z; mortgage servicing/origination disclosures follow RESPA/TILA.",
+      "renewalCadenceHint": null,
+      "sourceUrls": [
+        "https://www.consumerfinance.gov/compliance/"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 120,
+      "tags": [
+        "us",
+        "banking",
+        "consumer-protection"
+      ]
+    },
+    {
+      "requirementRefId": "LIC-REQ-US-FINCEN-BSA-AML",
+      "countryCode": "US",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "United States",
+      "authorityName": "Financial Crimes Enforcement Network (FinCEN)",
+      "authorityType": "federal_regulator",
+      "requirementType": "legality_gate",
+      "scopeLevel": "organization",
+      "archetypeCategories": [
+        "banking-financial-services"
+      ],
+      "activityTags": [
+        "bsa-aml",
+        "kyc",
+        "program-obligation"
+      ],
+      "summary": "Bank Secrecy Act administrator. Financial institutions maintain a BSA/AML compliance program including customer identification (KYC/CIP), suspicious activity reporting, and currency transaction reporting.",
+      "officialWebsiteUrl": "https://www.fincen.gov/",
+      "applicationUrl": null,
+      "renewalUrl": null,
+      "helpUrl": "https://www.fincen.gov/resources/statutes-and-regulations",
+      "displayRuleSummary": null,
+      "renewalCadenceHint": null,
+      "sourceUrls": [
+        "https://www.fincen.gov/resources/statutes-and-regulations"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 120,
+      "tags": [
+        "us",
+        "banking",
+        "aml",
+        "kyc"
+      ]
+    },
+    {
+      "requirementRefId": "LIC-REQ-US-NMLS-ORG",
+      "countryCode": "US",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "United States",
+      "authorityName": "Nationwide Multistate Licensing System (NMLS)",
+      "authorityType": "licensing_system",
+      "requirementType": "license",
+      "scopeLevel": "organization",
+      "archetypeCategories": [
+        "banking-financial-services"
+      ],
+      "activityTags": [
+        "mortgage-licensing",
+        "state-licensing",
+        "display-obligation"
+      ],
+      "summary": "State licensing system of record for mortgage companies (lenders, brokers, servicers). The institution's NMLS Unique Identifier anchors state license status across jurisdictions.",
+      "officialWebsiteUrl": "https://nationwidelicensingsystem.org/",
+      "applicationUrl": "https://nationwidelicensingsystem.org/slr/Pages/default.aspx",
+      "renewalUrl": "https://nationwidelicensingsystem.org/licensees/renewals/Pages/default.aspx",
+      "helpUrl": "https://www.nmlsconsumeraccess.org/",
+      "displayRuleSummary": "SAFE Act / state rules: display the company NMLS Unique Identifier on consumer-facing websites and loan documents.",
+      "renewalCadenceHint": "annual",
+      "sourceUrls": [
+        "https://nationwidelicensingsystem.org/",
+        "https://www.nmlsconsumeraccess.org/"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 120,
+      "tags": [
+        "us",
+        "mortgage",
+        "display",
+        "licensing"
+      ]
+    },
+    {
+      "requirementRefId": "LIC-REQ-US-NMLS-MLO",
+      "countryCode": "US",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "United States",
+      "authorityName": "Nationwide Multistate Licensing System (NMLS)",
+      "authorityType": "licensing_system",
+      "requirementType": "license",
+      "scopeLevel": "person",
+      "archetypeCategories": [
+        "banking-financial-services"
+      ],
+      "activityTags": [
+        "mortgage-loan-originator",
+        "safe-act",
+        "professional-license"
+      ],
+      "summary": "Individual mortgage loan originators (MLOs) hold a personal NMLS license/registration under the SAFE Act, with per-state licensing, continuing education, and an individual NMLS Unique Identifier.",
+      "officialWebsiteUrl": "https://nationwidelicensingsystem.org/",
+      "applicationUrl": "https://nationwidelicensingsystem.org/profreq/Pages/default.aspx",
+      "renewalUrl": "https://nationwidelicensingsystem.org/licensees/renewals/Pages/default.aspx",
+      "helpUrl": "https://www.nmlsconsumeraccess.org/",
+      "displayRuleSummary": "Individual MLO NMLS IDs appear on loan applications, websites, and marketing that names the originator.",
+      "renewalCadenceHint": "annual",
+      "sourceUrls": [
+        "https://nationwidelicensingsystem.org/profreq/Pages/default.aspx"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 120,
+      "tags": [
+        "us",
+        "mortgage",
+        "individual",
+        "licensing"
+      ]
+    },
+    {
+      "requirementRefId": "LIC-REQ-US-CSBS-STATE-BANKING",
+      "countryCode": "US",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "United States",
+      "authorityName": "Conference of State Bank Supervisors (CSBS)",
+      "authorityType": "state_directory",
+      "requirementType": "license_directory",
+      "scopeLevel": "organization",
+      "archetypeCategories": [
+        "banking-financial-services"
+      ],
+      "activityTags": [
+        "state-regulator",
+        "state-charter",
+        "licensing-research"
+      ],
+      "summary": "Directory of state banking departments — the chartering authority and primary regulator for state-chartered banks and many credit unions and mortgage licensees. Per-state research entrypoint.",
+      "officialWebsiteUrl": "https://www.csbs.org/",
+      "applicationUrl": "https://www.csbs.org/about/what-we-do/directory",
+      "renewalUrl": null,
+      "helpUrl": null,
+      "displayRuleSummary": null,
+      "renewalCadenceHint": null,
+      "sourceUrls": [
+        "https://www.csbs.org/about/what-we-do/directory"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 120,
+      "tags": [
+        "us",
+        "banking",
+        "state",
+        "directory"
+      ]
+    },
+    {
+      "requirementRefId": "LIC-REQ-US-EQUAL-HOUSING",
+      "countryCode": "US",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "United States",
+      "authorityName": "U.S. Department of Housing and Urban Development (HUD) / FDIC / NCUA",
+      "authorityType": "federal_regulator",
+      "requirementType": "display_rule",
+      "scopeLevel": "organization",
+      "archetypeCategories": [
+        "banking-financial-services"
+      ],
+      "activityTags": [
+        "fair-lending",
+        "display-obligation",
+        "advertising-rules"
+      ],
+      "summary": "Fair-lending display obligations: home-lending institutions display the Equal Housing Lender (FDIC-supervised) or Equal Housing Opportunity (HUD) logo and statement in lobbies and lending advertisements.",
+      "officialWebsiteUrl": "https://www.hud.gov/program_offices/fair_housing_equal_opp",
+      "applicationUrl": null,
+      "renewalUrl": null,
+      "helpUrl": null,
+      "displayRuleSummary": "Display the Equal Housing Lender / Equal Housing Opportunity logo and legend on home-lending advertising and branch lobbies.",
+      "renewalCadenceHint": null,
+      "sourceUrls": [
+        "https://www.hud.gov/program_offices/fair_housing_equal_opp"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 120,
+      "tags": [
+        "us",
+        "banking",
+        "display",
+        "fair-lending"
+      ]
+    },
+    {
+      "requirementRefId": "LIC-REQ-GB-FCA-PRA",
+      "countryCode": "GB",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "United Kingdom",
+      "authorityName": "Financial Conduct Authority (FCA) / Prudential Regulation Authority (PRA)",
+      "authorityType": "national_regulator",
+      "requirementType": "license_directory",
+      "scopeLevel": "organization",
+      "archetypeCategories": [
+        "banking-financial-services"
+      ],
+      "activityTags": [
+        "authorisation",
+        "banking-licence",
+        "display-obligation"
+      ],
+      "summary": "UK financial-services authorisation: deposit-takers are dual-regulated (PRA prudential + FCA conduct); other firms are FCA-authorised. The FCA Financial Services Register is the public record.",
+      "officialWebsiteUrl": "https://www.fca.org.uk/firms/authorisation",
+      "applicationUrl": "https://www.fca.org.uk/firms/authorisation/apply",
+      "renewalUrl": null,
+      "helpUrl": "https://register.fca.org.uk/",
+      "displayRuleSummary": "Authorised firms disclose their authorisation status and FCA Firm Reference Number (FRN) in required communications.",
+      "renewalCadenceHint": null,
+      "sourceUrls": [
+        "https://www.fca.org.uk/firms/authorisation",
+        "https://register.fca.org.uk/"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 120,
+      "tags": [
+        "gb",
+        "banking",
+        "directory"
+      ]
+    },
+    {
+      "requirementRefId": "LIC-REQ-EU-EBA-NCA",
+      "countryCode": "EU",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "European Union",
+      "authorityName": "European Banking Authority (EBA) / national competent authorities",
+      "authorityType": "supranational_directory",
+      "requirementType": "license_directory",
+      "scopeLevel": "organization",
+      "archetypeCategories": [
+        "banking-financial-services"
+      ],
+      "activityTags": [
+        "authorisation",
+        "banking-licence",
+        "licensing-research"
+      ],
+      "summary": "EU credit-institution authorisation is country-specific via national competent authorities (significant institutions supervised by the ECB SSM). The EBA registers list authorised credit and payment institutions.",
+      "officialWebsiteUrl": "https://www.eba.europa.eu/",
+      "applicationUrl": null,
+      "renewalUrl": null,
+      "helpUrl": "https://euclid.eba.europa.eu/register/",
+      "displayRuleSummary": null,
+      "renewalCadenceHint": null,
+      "sourceUrls": [
+        "https://euclid.eba.europa.eu/register/",
+        "https://www.bankingsupervision.europa.eu/"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 120,
+      "tags": [
+        "eu",
+        "banking",
+        "directory"
+      ]
+    },
+    {
+      "requirementRefId": "LIC-REQ-CA-OSFI",
+      "countryCode": "CA",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "Canada",
+      "authorityName": "Office of the Superintendent of Financial Institutions (OSFI)",
+      "authorityType": "national_regulator",
+      "requirementType": "license_directory",
+      "scopeLevel": "organization",
+      "archetypeCategories": [
+        "banking-financial-services"
+      ],
+      "activityTags": [
+        "banking-licence",
+        "supervision",
+        "licensing-research"
+      ],
+      "summary": "Federal prudential regulator for Canadian banks, trust and loan companies; provincially regulated credit unions fall under provincial authorities. Research entrypoint for federally regulated financial institutions.",
+      "officialWebsiteUrl": "https://www.osfi-bsif.gc.ca/",
+      "applicationUrl": null,
+      "renewalUrl": null,
+      "helpUrl": "https://www.osfi-bsif.gc.ca/en/supervision/financial-institutions",
+      "displayRuleSummary": null,
+      "renewalCadenceHint": null,
+      "sourceUrls": [
+        "https://www.osfi-bsif.gc.ca/"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 120,
+      "tags": [
+        "ca",
+        "banking",
+        "directory"
+      ]
+    },
+    {
+      "requirementRefId": "LIC-REQ-AU-APRA-ASIC",
+      "countryCode": "AU",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "Australia",
+      "authorityName": "Australian Prudential Regulation Authority (APRA) / Australian Securities and Investments Commission (ASIC)",
+      "authorityType": "national_regulator",
+      "requirementType": "license_directory",
+      "scopeLevel": "organization",
+      "archetypeCategories": [
+        "banking-financial-services"
+      ],
+      "activityTags": [
+        "adi-licence",
+        "credit-licence",
+        "licensing-research"
+      ],
+      "summary": "Australian deposit-taking requires APRA authorisation as an ADI; consumer lending requires an ASIC Australian Credit Licence. Research entrypoints for both regimes.",
+      "officialWebsiteUrl": "https://www.apra.gov.au/",
+      "applicationUrl": "https://www.apra.gov.au/new-entrants",
+      "renewalUrl": null,
+      "helpUrl": "https://asic.gov.au/for-finance-professionals/credit-licensees/",
+      "displayRuleSummary": null,
+      "renewalCadenceHint": null,
+      "sourceUrls": [
+        "https://www.apra.gov.au/new-entrants",
+        "https://asic.gov.au/for-finance-professionals/credit-licensees/"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 120,
+      "tags": [
+        "au",
+        "banking",
+        "directory"
+      ]
+    },
+    {
       "requirementRefId": "LIC-REQ-US-MUNICIPAL-CHARTER",
       "countryCode": "US",
       "stateProvinceCode": null,

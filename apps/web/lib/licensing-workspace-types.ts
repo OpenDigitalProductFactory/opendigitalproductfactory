@@ -9,6 +9,8 @@ export type LicensingRequirementOption = {
   authorityName: string;
   requirementType: string;
   scopeLevel: string;
+  /** True when the entry's archetypeCategories include the org's archetype category (spec §9.2). */
+  matchesArchetype: boolean;
 };
 
 export type LicensingHolderOption = {
@@ -93,6 +95,15 @@ export type LicensingWorkspace = {
   organization: {
     name: string;
     slug: string;
+  };
+  /**
+   * Archetype posture context (BI-5D9DCDE6 spec §9.2/D5). For regulated
+   * categories, `requiredPostureIncomplete` drives the visible
+   * "regulatory posture incomplete" state — required but never hard-blocking.
+   */
+  archetype: {
+    category: string | null;
+    requiredPostureIncomplete: boolean;
   };
   profile: {
     setupStatus: string;
