@@ -133,6 +133,8 @@ export type ShellNavItem = {
   description: string;
   sectionKey: PortalShellSectionKey;
   capabilityKey: CapabilityKey | null;
+  /** Archetype-capability gate — see PortalNavRecord.orgCapabilityKey. */
+  orgCapabilityKey: string | null;
 };
 
 export type SectionNavItem = {
@@ -207,6 +209,7 @@ const SHELL_ITEMS: ShellNavItem[] = getShellNavEntries().map((entry) => ({
   description: entry.description,
   sectionKey: entry.sectionKey,
   capabilityKey: entry.capabilityKey,
+  orgCapabilityKey: entry.orgCapabilityKey,
 }));
 
 const WORKSPACE_SECTION_BLUEPRINTS: Array<{
@@ -259,10 +262,28 @@ export function getWorkspaceTiles(user: UserContext): WorkspaceTile[] {
   return ALL_TILES.filter((t) => can(user, t.capabilityKey));
 }
 
-export function getShellNavSections(user: UserContext): ShellNavSection[] {
+export function getShellNavSections(
+  user: UserContext,
+  options?: {
+    /**
+     * Effectively-active archetype capability keys for the org (from
+     * getActiveOrgCapabilities). Nav items carrying an orgCapabilityKey render
+     * only when that key is in the set; when the set is not provided they stay
+     * hidden — the safe default for callers without org context.
+     */
+    activeOrgCapabilities?: ReadonlySet<string>;
+  },
+): ShellNavSection[] {
+  const activeOrgCapabilities = options?.activeOrgCapabilities;
   return SHELL_SECTIONS.map((section) => ({
     ...section,
-    items: SHELL_ITEMS.filter((item) => item.sectionKey === section.key && isAllowed(user, item.capabilityKey)),
+    items: SHELL_ITEMS.filter(
+      (item) =>
+        item.sectionKey === section.key &&
+        isAllowed(user, item.capabilityKey) &&
+        (item.orgCapabilityKey === null ||
+          (activeOrgCapabilities?.has(item.orgCapabilityKey) ?? false)),
+    ),
   })).filter((section) => section.items.length > 0);
 }
 
