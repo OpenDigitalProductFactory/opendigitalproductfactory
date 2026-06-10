@@ -12,8 +12,8 @@
 // always use. A queued "Upgrade now" then never sits behind the build flood.
 //
 // Config-gated and OFF by default: with DPF_BUILD_PIPELINE_CONCURRENCY unset,
-// buildPipelineLane() returns [] and every enrolled function keeps EXACTLY its
-// current concurrency — zero behavior change. An operator sizes the cap to
+// buildPipelineConcurrency(base) returns just [base] and every enrolled function
+// keeps EXACTLY its current concurrency — zero behavior change. An operator sizes the cap to
 // their instance (below the account limit, reserving headroom) and load-tests
 // it deliberately under real concurrent load (spec §6), never blind-shipped.
 
