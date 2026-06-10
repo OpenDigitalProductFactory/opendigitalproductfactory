@@ -628,12 +628,12 @@ services:
       - ./monitoring/loki/rules/dpf-log-alerts.yml:/loki/rules-config/fake/dpf-log-alerts.yml:ro
       - loki_data:/loki
     command: ["-config.file=/etc/loki/local-config.yaml"]
-    healthcheck:
-      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:3100/ready"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
+    # No container healthcheck: grafana/loki 3.x is distroless — no shell,
+    # busybox, wget, or curl exists in the image, so every CMD/CMD-SHELL
+    # probe fails with "executable file not found" and the container sits
+    # permanently unhealthy, which blocked the whole install (alloy gates
+    # on it). Loki readiness is observed externally instead: Prometheus
+    # scrapes it and the portal's log-issues panel talks to its API.
 
   alloy:
     image: grafana/alloy:latest
@@ -649,7 +649,11 @@ services:
       - "/etc/alloy/config.alloy"
     depends_on:
       loki:
-        condition: service_healthy
+        # service_started, not service_healthy: the loki image is distroless
+        # and cannot host a healthcheck (see loki service above). Alloy
+        # buffers and retries its Loki pushes internally, so it only needs
+        # the container up, not a readiness gate.
+        condition: service_started
 
   # cadvisor + node-exporter bind-mount Linux-only host paths (/proc, /sys,
   # /var/lib/docker, /). They cannot run on macOS or Windows Docker Desktop
@@ -720,12 +724,10 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9121/metrics"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+    # No container healthcheck: oliver006/redis_exporter is built FROM
+    # scratch — the exporter binary is the only file in the image, so no
+    # probe command can run. Nothing gates on this service; Prometheus
+    # scraping /metrics is the effective health signal.
 
   inngest:
     image: inngest/inngest:latest
