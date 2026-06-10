@@ -3,13 +3,43 @@ import { SETUP_STEPS } from "../actions/setup-constants";
 import { prisma } from "@dpf/db";
 import { MODEL_ROUTING_ENDPOINT_TYPES } from "@/lib/routing/provider-eligibility";
 
-const COO_BASE_PROMPT = `You are the platform's Chief Operating Officer — the user's second-in-command.
+/**
+ * Human-facing name of the local AI model the onboarding COO actually runs on.
+ *
+ * BI-0CED314D: this line used to hardcode "Ollama" (and elsewhere "Gemma") —
+ * but Ollama is a model *runtime*, not a model, and a hardcoded family name
+ * goes stale the moment the bundled local model changes (it now ships Qwen3).
+ * Resolve it from the configured local provider so the COO never misstates it.
+ * Returns null when no local model is configured (caller uses a generic phrase).
+ */
+export async function resolveLocalModelLabel(): Promise<string | null> {
+  const local = await prisma.modelProvider.findFirst({
+    where: { providerId: "local" },
+    select: { families: true, enabledFamilies: true },
+  });
+  if (!local) return null;
+  const asStrings = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((f): f is string => typeof f === "string") : [];
+  const enabled = asStrings(local.enabledFamilies);
+  const families = asStrings(local.families);
+  // Prefer a general conversational model — skip code-specialist and embedding
+  // families so the COO names the model it actually converses with.
+  const pool = (enabled.length ? enabled : families).filter(
+    (f) => !/coder|embed/i.test(f),
+  );
+  const raw = pool[0] ?? enabled[0] ?? families[0];
+  if (!raw) return null;
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function cooBasePrompt(localModelLine: string): string {
+  return `You are the platform's Chief Operating Officer — the user's second-in-command.
 You are guiding a new platform owner through initial setup.
 
 This is a CONVERSATION request. You have no tools. Do not attempt to call functions, execute actions, or generate structured output.
 
 IMPORTANT CONSTRAINTS:
-- You are running on a local AI model (Ollama). Be honest about this.
+${localModelLine}
 - Do not attempt complex reasoning, multi-step analysis, or tool orchestration.
 - Your job is guided conversation: explain, recommend, and acknowledge.
 - If the user asks something beyond your capability, say so clearly and note that a cloud AI provider would handle it better.
@@ -24,6 +54,7 @@ AT EVERY STEP BOUNDARY, offer three options:
 1. Continue to the next step
 2. Skip this step for now
 3. Pause and come back later`;
+}
 
 /**
  * Assemble the full COO system prompt for the onboarding agent,
@@ -36,6 +67,13 @@ export async function buildOnboardingPrompt(
 ): Promise<string> {
   const completedSteps = SETUP_STEPS.filter((s) => steps[s] === "completed");
   const skippedSteps = SETUP_STEPS.filter((s) => steps[s] === "skipped");
+
+  // Name the actual local model so the COO is honest about what it runs on
+  // (BI-0CED314D), rather than a stale hardcoded "Ollama"/"Gemma".
+  const localModel = await resolveLocalModelLabel();
+  const localModelLine = localModel
+    ? `- You are running on a small local AI model (${localModel}) on the user's own hardware. Be honest about this.`
+    : `- You are running on a small local AI model on the user's own hardware. Be honest about this.`;
 
   // Load provider pricing for cost explanations
   let costSummary = "";
@@ -62,7 +100,7 @@ export async function buildOnboardingPrompt(
     }
   }
 
-  return `${COO_BASE_PROMPT}
+  return `${cooBasePrompt(localModelLine)}
 
 CURRENT STATE:
 - Step: ${currentStep}
