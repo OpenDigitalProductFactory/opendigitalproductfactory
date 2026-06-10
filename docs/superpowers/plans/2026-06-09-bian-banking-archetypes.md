@@ -21,7 +21,9 @@ JSON `counts` field (8 / 43 / 341 / 258).
 ## Phase 1 — Archetype definitions (`packages/storefront-templates`)
 
 **Files:**
-- `src/types.ts` — add `"banking-financial-services"` to `ArchetypeCategory`.
+- `src/types.ts` — add `"banking-financial-services"` to `ArchetypeCategory`,
+  `"disclosures"` to `SectionType` (spec §9.3), and optional
+  `vocabulary?: Partial<ArchetypeVocabulary>` on `ArchetypeDefinition` (spec §7.4).
 - `src/archetypes/banking-financial-services.ts` *(new)* — `community-bank`,
   `credit-union`, `mortgage-lending` per spec §7: shared axes (`account-with-kyc`,
   `account-based-fees`, multi-channel), item templates named from BIAN *Loans and
@@ -50,12 +52,41 @@ JSON `counts` field (8 / 43 / 341 / 258).
   key-uniqueness and parentKey-integrity invariants over the new definitions.
 - `src/seed-storefront-archetypes.ts` — `MARKETING_SKILL_RULES["banking-financial-services"]`
   regulated-communication reframes per spec §7.5 (mirror the `healthcare-wellness` entry
-  shape).
+  shape); upsert writes each leaf's `vocabulary` override into
+  `StorefrontArchetype.customVocabulary` (spec §7.4 — credit-union "Members" labels), with
+  a seed test asserting the override lands.
 
 **Verification:** `pnpm --filter @dpf/db exec vitest run` green. Seed-count assertion:
 seeding logs `upserting N storefront archetypes` with N increased by exactly 3 and zero
 silently-skipped rows (guard against the silent-seed-skip failure class — assert in test,
 don't eyeball logs).
+
+## Phase 2b — Regulatory & jurisdictional governance (spec §9)
+
+**Files:**
+- `packages/db/data/license_requirement_reference.json` — banking authority entries per
+  spec §9.1 (`archetypeCategories: ["banking-financial-services"]`; US OCC/FRB/FDIC/NCUA/
+  CFPB/FinCEN/NMLS-org/NMLS-MLO/CSBS-state/Equal-Housing; GB FCA+PRA; EU EBA; CA OSFI;
+  AU APRA — official source URLs only, directory doctrine, `displayRuleSummary` carries
+  the Member-FDIC / NCUA-sign / NMLS-ID / Equal-Housing display obligations).
+- `packages/db/src/seed-license-requirements.ts` test — count assertion that the banking
+  rows upsert (silent-seed-skip guard).
+- Onboarding flow — **required** jurisdiction/charter capture step for this category per
+  spec §9.2: jurisdiction (default from org location), charter type per leaf, derived
+  regulator + insurance-regime suggestion with §9.1 entries attached, credential ids
+  (FDIC cert / NCUA charter / NMLS ID) stored as licensing-substrate credential rows.
+  Wiring point (verified): extend `apps/web/components/compliance/OnboardingWizard.tsx`
+  (`/compliance/onboard`, `OnboardingDraft` persistence) and persist to
+  `OrganizationLicenseProfile` / `OrganizationLicenseRecord` / `PersonLicenseRecord` /
+  `LicenseDisplayObligation` — reuse `EP-LIC-C64FC2` domain model; do not invent a
+  parallel store. Per spec D5 the step never hard-blocks activation.
+- Leaf `sectionTemplates` — add the "Disclosures" section using the new first-class
+  `disclosures` SectionType (spec §9.3); render the case in
+  `apps/web/components/storefront/SectionRenderer.tsx` from `LicenseDisplayObligation`
+  rows, with the D5 neutral-placeholder state when posture is uncaptured.
+
+**Verification:** `pnpm --filter @dpf/db exec vitest run` green including the new
+count assertion; onboarding-context tests cover the banking profile (§9.5).
 
 ## Phase 3 — Finance profile (`packages/finance-templates`)
 
@@ -92,21 +123,28 @@ worktree; targeted vitest for the touched libs.
 Per `structural-verification-is-not-functional` and the `dpf-verify-on-live-install`
 skill (step zero: `pnpm verify:preflight`, honor the BLOCKED stop-rule):
 
-1. Fresh-seed or re-seed the leased sandbox; confirm 3 new archetypes in the picker.
-2. Onboard as **Credit Union** → items surface shows member vocabulary ("Share Savings",
-   inbox "Applications"), capability page shows BIAN-sourced perspective composed with the
-   common baseline.
-3. Drive a storefront inquiry end-to-end on a share-certificate item; confirm intake lands.
-4. Record evidence via the MCP evidence tools against BI-5D9DCDE6 (dynamic-analysis prose
+1. Fresh-seed or re-seed the leased sandbox; confirm 3 new archetypes in the picker and
+   the banking license-requirement rows seeded (count query, not log eyeballing).
+2. Onboard as **Credit Union** → the required jurisdiction/charter step captures
+   "US / federal credit union" and derives NCUA + NCUSIF posture with the right reference
+   entries attached; items surface shows member vocabulary ("Share Savings", inbox
+   "Applications"); capability page shows BIAN-sourced perspective composed with the
+   common baseline, with regulatory posture attached to the Compliance-domain capabilities.
+3. Confirm the storefront Disclosures section renders the NCUA official sign + Equal
+   Housing content from the captured posture.
+4. Drive a storefront inquiry end-to-end on a share-certificate item; confirm intake lands.
+5. Record evidence via the MCP evidence tools against BI-5D9DCDE6 (dynamic-analysis prose
    report, not screenshots).
 
 ## Risks & rollback
 
 - **Vocabulary is category-keyed; credit-union wants "Members" while banks want
-  "Customers".** v1 compromise per spec §7.4 ("Customers & Members") unless leaf-level
-  vocabulary override already exists — check `resolveVocabularyKey` before choosing.
-  Risk: mid-build scope temptation to add leaf-level vocabulary; resist — file a follow-up
-  BI if needed.
+  "Customers".** Decided per spec §7.4 (EA review pass): seed the leaf's
+  `vocabulary` override into `StorefrontArchetype.customVocabulary` — the column and the
+  `getVocabulary()` read path already exist; no blended "Customers & Members" label.
+  Scope is one optional `ArchetypeDefinition` field + seed write + test; anything beyond
+  that (per-leaf static maps, new resolution layers) is out of scope — file a follow-up
+  BI if tempted.
 - **Silent seed skips** (known DPF failure class): a typo'd category or FK mismatch can
   upsert 0 rows without erroring. Mitigation: Phase 2's count assertion in tests.
 - **Enum sweep completeness:** a missed category switch (e.g. a hardcoded
@@ -114,6 +152,16 @@ skill (step zero: `pnpm verify:preflight`, honor the BLOCKED stop-rule):
   failure mode; fix every site the compiler names.
 - **LFS on CI:** if a CI job lacks `git lfs`, the PDF checks out as a pointer file —
   harmless for build jobs (nothing imports it); verify no doc-lint job reads PDF bytes.
+- **Regulatory display correctness:** disclosure content (Member FDIC wording, NCUA sign,
+  NMLS ID placement) must follow the official sources named in the reference entries —
+  never paraphrase a regulated statement. The entries are directories, not legal advice;
+  the operator's compliance officer owns final wording. Mitigation: render
+  operator-confirmed posture only; never auto-assert insurance membership.
+- **Onboarding-step coupling:** the required jurisdiction step depends on the licensing
+  substrate's credential model (`EP-LIC-C64FC2`). If the coworker investigation flow
+  (BI-LIC-3621D8) hasn't landed, implement the capture step against the existing domain
+  tables directly and leave the investigation handoff as the follow-up — do not block the
+  archetype on the licensing epic's full scope.
 - **Rollback:** all changes are additive seed/template/wiring code on one branch — revert
   the PR. Seeded archetype rows are soft-deletable (`isActive: false`); re-seed does not
   resurrect operator-deactivated archetypes (existing invariant).
