@@ -17,12 +17,13 @@ const EXPECTED_SLUGS = [
   "beauty_personal",
   "pet_services",
   "hoa_property_management",
+  "banking_financial_services",
 ];
 
 describe("financial profile catalog", () => {
-  it("has all 11 profiles", () => {
+  it("has all 12 profiles", () => {
     const all = getAllProfiles();
-    expect(all).toHaveLength(11);
+    expect(all).toHaveLength(12);
     const slugs = all.map((p) => p.slug);
     for (const expected of EXPECTED_SLUGS) {
       expect(slugs, `missing profile: ${expected}`).toContain(expected);
@@ -102,6 +103,22 @@ describe("financial profile catalog", () => {
         expect(cat, `${profile.slug} expenseCategory must be a non-empty string`).toBeTruthy();
       }
     }
+  });
+
+  it("banking profile carries interest/fee accounting and gentle collections posture (BI-5D9DCDE6)", () => {
+    const profile = getFinancialProfile("banking_financial_services");
+    expect(profile).not.toBeNull();
+    expect(profile!.archetypeCategory).toBe("banking-financial-services");
+    expect(profile!.defaultCurrency).toBe("USD");
+    // A regulated depository institution does not dun its own customers the
+    // way a trade business chases invoices — fees post to accounts.
+    expect(profile!.dunningEnabled).toBe(false);
+    expect(profile!.billingPatternProfile.invoiceExecutionMode).toBe("prepared-not-prescribed");
+    const accountNames = profile!.chartOfAccountsSeed.map((a) => a.name);
+    expect(accountNames).toContain("Interest Income — Loans");
+    expect(accountNames).toContain("Service Charges & Account Fees");
+    expect(accountNames).toContain("Interest Expense — Deposits");
+    expect(accountNames).toContain("Provision for Loan Losses");
   });
 
   it("nonprofit has dunning disabled", () => {

@@ -130,7 +130,7 @@
       "jurisdictionLabel": "United States",
       "authorityName": "Office of the Comptroller of the Currency (OCC)",
       "authorityType": "federal_regulator",
-      "requirementType": "charter_directory",
+      "requirementType": "license_directory",
       "scopeLevel": "organization",
       "archetypeCategories": [
         "banking-financial-services"
@@ -167,7 +167,7 @@
       "jurisdictionLabel": "United States",
       "authorityName": "Federal Reserve Board",
       "authorityType": "federal_regulator",
-      "requirementType": "charter_directory",
+      "requirementType": "license_directory",
       "scopeLevel": "organization",
       "archetypeCategories": [
         "banking-financial-services"
@@ -204,7 +204,7 @@
       "jurisdictionLabel": "United States",
       "authorityName": "Federal Deposit Insurance Corporation (FDIC)",
       "authorityType": "federal_regulator",
-      "requirementType": "insurance_membership",
+      "requirementType": "registration",
       "scopeLevel": "organization",
       "archetypeCategories": [
         "banking-financial-services"
@@ -242,7 +242,7 @@
       "jurisdictionLabel": "United States",
       "authorityName": "National Credit Union Administration (NCUA)",
       "authorityType": "federal_regulator",
-      "requirementType": "charter_directory",
+      "requirementType": "license_directory",
       "scopeLevel": "organization",
       "archetypeCategories": [
         "banking-financial-services"
@@ -279,7 +279,7 @@
       "jurisdictionLabel": "United States",
       "authorityName": "Consumer Financial Protection Bureau (CFPB)",
       "authorityType": "federal_regulator",
-      "requirementType": "supervision_directory",
+      "requirementType": "legality_gate",
       "scopeLevel": "organization",
       "archetypeCategories": [
         "banking-financial-services"
@@ -315,7 +315,7 @@
       "jurisdictionLabel": "United States",
       "authorityName": "Financial Crimes Enforcement Network (FinCEN)",
       "authorityType": "federal_regulator",
-      "requirementType": "program_obligation",
+      "requirementType": "legality_gate",
       "scopeLevel": "organization",
       "archetypeCategories": [
         "banking-financial-services"
@@ -352,7 +352,7 @@
       "jurisdictionLabel": "United States",
       "authorityName": "Nationwide Multistate Licensing System (NMLS)",
       "authorityType": "licensing_system",
-      "requirementType": "license_registry",
+      "requirementType": "license",
       "scopeLevel": "organization",
       "archetypeCategories": [
         "banking-financial-services"
@@ -390,8 +390,8 @@
       "jurisdictionLabel": "United States",
       "authorityName": "Nationwide Multistate Licensing System (NMLS)",
       "authorityType": "licensing_system",
-      "requirementType": "professional_license",
-      "scopeLevel": "individual",
+      "requirementType": "license",
+      "scopeLevel": "person",
       "archetypeCategories": [
         "banking-financial-services"
       ],
@@ -427,7 +427,7 @@
       "jurisdictionLabel": "United States",
       "authorityName": "Conference of State Bank Supervisors (CSBS)",
       "authorityType": "state_directory",
-      "requirementType": "regulator_directory",
+      "requirementType": "license_directory",
       "scopeLevel": "organization",
       "archetypeCategories": [
         "banking-financial-services"
@@ -464,7 +464,7 @@
       "jurisdictionLabel": "United States",
       "authorityName": "U.S. Department of Housing and Urban Development (HUD) / FDIC / NCUA",
       "authorityType": "federal_regulator",
-      "requirementType": "display_obligation",
+      "requirementType": "display_rule",
       "scopeLevel": "organization",
       "archetypeCategories": [
         "banking-financial-services"
@@ -501,7 +501,7 @@
       "jurisdictionLabel": "United Kingdom",
       "authorityName": "Financial Conduct Authority (FCA) / Prudential Regulation Authority (PRA)",
       "authorityType": "national_regulator",
-      "requirementType": "authorisation_directory",
+      "requirementType": "license_directory",
       "scopeLevel": "organization",
       "archetypeCategories": [
         "banking-financial-services"
@@ -538,7 +538,7 @@
       "jurisdictionLabel": "European Union",
       "authorityName": "European Banking Authority (EBA) / national competent authorities",
       "authorityType": "supranational_directory",
-      "requirementType": "authorisation_directory",
+      "requirementType": "license_directory",
       "scopeLevel": "organization",
       "archetypeCategories": [
         "banking-financial-services"
@@ -575,7 +575,7 @@
       "jurisdictionLabel": "Canada",
       "authorityName": "Office of the Superintendent of Financial Institutions (OSFI)",
       "authorityType": "national_regulator",
-      "requirementType": "authorisation_directory",
+      "requirementType": "license_directory",
       "scopeLevel": "organization",
       "archetypeCategories": [
         "banking-financial-services"
@@ -611,7 +611,7 @@
       "jurisdictionLabel": "Australia",
       "authorityName": "Australian Prudential Regulation Authority (APRA) / Australian Securities and Investments Commission (ASIC)",
       "authorityType": "national_regulator",
-      "requirementType": "authorisation_directory",
+      "requirementType": "license_directory",
       "scopeLevel": "organization",
       "archetypeCategories": [
         "banking-financial-services"

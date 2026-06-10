@@ -16,6 +16,8 @@ type RequirementOption = {
   authorityName: string;
   requirementType: string;
   scopeLevel: string;
+  /** Entry applies to the org's archetype category — listed first (spec §9.2). */
+  matchesArchetype?: boolean;
 };
 
 type Props = {
@@ -84,6 +86,7 @@ export function CreateOrganizationLicenseRecordForm({ requirementOptions }: Prop
                 .filter((option) => option.scopeLevel === "organization" || option.scopeLevel === "activity" || option.scopeLevel === "premises")
                 .map((option) => (
                   <option key={option.id} value={option.id}>
+                    {option.matchesArchetype ? "★ " : ""}
                     {option.authorityName} · {option.jurisdictionLabel}
                   </option>
                 ))}

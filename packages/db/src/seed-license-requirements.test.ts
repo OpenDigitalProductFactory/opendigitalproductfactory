@@ -47,11 +47,19 @@ describe("licensing requirement seed defaults", () => {
     );
 
     // Doctrine invariants: official sources only, directories not legal
-    // conclusions (confidence stays medium, staleness bounded).
+    // conclusions (confidence stays medium, staleness bounded), and the
+    // closed licensing enums from apps/web/lib/licensing.ts are respected.
+    const REQUIREMENT_TYPES = [
+      "license", "permit", "registration", "certification", "endorsement",
+      "inspection", "display_rule", "legality_gate", "license_directory", "licence_directory",
+    ];
+    const SCOPE_LEVELS = ["organization", "person", "premises", "activity", "vehicle", "equipment"];
     for (const entry of banking) {
       expect(entry.sourceKind, entry.requirementRefId).toBe("official");
       expect(entry.sourceUrls.length, entry.requirementRefId).toBeGreaterThan(0);
       expect(entry.staleAfterDays, entry.requirementRefId).toBeGreaterThan(0);
+      expect(REQUIREMENT_TYPES, `${entry.requirementRefId} requirementType ${entry.requirementType}`).toContain(entry.requirementType);
+      expect(SCOPE_LEVELS, `${entry.requirementRefId} scopeLevel ${entry.scopeLevel}`).toContain(entry.scopeLevel);
     }
 
     // Display obligations captured where the regulator imposes one (spec §9.3).
@@ -61,7 +69,7 @@ describe("licensing requirement seed defaults", () => {
     expect(byId.get("LIC-REQ-US-NMLS-ORG")?.displayRuleSummary).toContain("NMLS Unique Identifier");
     expect(byId.get("LIC-REQ-US-EQUAL-HOUSING")?.displayRuleSummary).toContain("Equal Housing");
 
-    // Individual-scope professional licensing exists for mortgage originators.
-    expect(byId.get("LIC-REQ-US-NMLS-MLO")?.scopeLevel).toBe("individual");
+    // Person-scope professional licensing exists for mortgage loan originators.
+    expect(byId.get("LIC-REQ-US-NMLS-MLO")?.scopeLevel).toBe("person");
   });
 });

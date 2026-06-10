@@ -526,7 +526,14 @@ export function SetupWizard({
           } catch {
             // Best-effort.
           }
-          window.location.href = "/storefront";
+          // Regulated categories (BI-5D9DCDE6 spec §9.2): land the operator on
+          // the licensing workspace where the jurisdiction/charter capture step
+          // and archetype-matched regulators are waiting. Required but never
+          // blocking (D5) — everything else is already set up.
+          window.location.href =
+            selected?.category === "banking-financial-services"
+              ? "/compliance/licensing"
+              : "/storefront";
         }}
       />
     );
