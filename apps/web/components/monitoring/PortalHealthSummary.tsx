@@ -6,7 +6,9 @@ import {
   TONE_COLOR,
   deriveMonitoringSummary,
   derivePlatformSummary,
+  deriveReleaseSummary,
   type HealthSummary,
+  type ReleaseHealthCardData,
   type Tone,
 } from "./health-summary";
 import { useAlertQuery } from "./useAlertQuery";
@@ -16,9 +18,13 @@ import { useMonitoringStatus } from "./MonitoringContext";
 type Props = {
   openBacklogItems: number;
   backlogHref: string;
+  // BI-3630773C — latest release stamp state; null when never stamped or
+  // never polled. The card always renders so a silent red release can't
+  // hide by omission.
+  releaseHealth?: ReleaseHealthCardData | null;
 };
 
-export function PortalHealthSummary({ openBacklogItems, backlogHref }: Props) {
+export function PortalHealthSummary({ openBacklogItems, backlogHref, releaseHealth }: Props) {
   const { checked, online } = useMonitoringStatus();
   const { data: upTargets, loading: upTargetsLoading } = useMetricQuery("up");
   const { alerts } = useAlertQuery();
@@ -42,8 +48,10 @@ export function PortalHealthSummary({ openBacklogItems, backlogHref }: Props) {
   const hasBacklog = openBacklogItems > 0;
   const backlogTone: Tone = hasBacklog ? "warning" : "success";
 
+  const release = deriveReleaseSummary(releaseHealth ?? null);
+
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <HealthCard label="Platform Status" summary={platform} />
       <HealthCard
         label="Open Backlog Items"
@@ -58,6 +66,11 @@ export function PortalHealthSummary({ openBacklogItems, backlogHref }: Props) {
         href={hasBacklog ? backlogHref : undefined}
       />
       <HealthCard label="Health Monitoring" summary={monitoring} />
+      <HealthCard
+        label="Latest Release"
+        summary={release}
+        href={releaseHealth?.runUrl}
+      />
     </div>
   );
 }
@@ -85,6 +98,15 @@ function HealthCard({
   );
 
   if (href) {
+    // External targets (e.g. the GitHub Actions run behind the Latest
+    // Release card) open in a new tab; internal routes stay client-side.
+    if (href.startsWith("http")) {
+      return (
+        <a href={href} target="_blank" rel="noreferrer" className="block">
+          {body}
+        </a>
+      );
+    }
     return (
       <Link href={href} className="block">
         {body}
