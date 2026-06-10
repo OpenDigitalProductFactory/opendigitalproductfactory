@@ -480,6 +480,63 @@ export async function abortQuiescence(runId: string, operatorUserId: string): Pr
 }
 
 /**
+ * BI-4F3B2FA9 — mid-flight emergency escalation. Promotes an ALREADY-RUNNING
+ * drain to forced mode: records who/when on the QuiescenceRun and appends an
+ * audit entry to forcedSurfaces. The coordinator's wait loop re-reads
+ * shipForceEscalatedAt every tick (see isShipForceEscalated) and treats a
+ * non-null value as shipForce, so a stuck drain proceeds to ready-to-swap
+ * within one polling interval — without restarting the run.
+ *
+ * Idempotent (a second call on an already-escalated run is a no-op success).
+ * Refuses terminal runs — there is nothing to force once a drain has ended.
+ */
+export async function escalateQuiescenceToForced(
+  runId: string,
+  operatorUserId: string,
+  now: Date = new Date(),
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const row = await prisma.quiescenceRun.findUnique({
+    where: { runId },
+    select: { status: true, shipForceEscalatedAt: true, forcedSurfaces: true },
+  });
+  if (!row) return { ok: false, reason: "run not found" };
+  if (isTerminalQuiescenceStatus(row.status)) {
+    return { ok: false, reason: `run already ${row.status}` };
+  }
+  if (row.shipForceEscalatedAt) return { ok: true }; // already escalated — no-op
+
+  const prior = Array.isArray(row.forcedSurfaces) ? (row.forcedSurfaces as unknown[]) : [];
+  await prisma.quiescenceRun.update({
+    where: { runId },
+    data: {
+      shipForceEscalatedAt: now,
+      shipForceEscalatedBy: operatorUserId,
+      forcedSurfaces: [
+        ...prior,
+        {
+          surface: "mid-flight-escalation",
+          reason: `operator ${operatorUserId} forced an in-flight drain`,
+          forcedAt: now.toISOString(),
+        },
+      ] as unknown as object,
+    },
+  });
+  return { ok: true };
+}
+
+/**
+ * BI-4F3B2FA9 — hot read of the mid-flight escalation flag, polled by the
+ * coordinator each wait tick. True once an operator has clicked "Force Now".
+ */
+export async function isShipForceEscalated(runId: string): Promise<boolean> {
+  const row = await prisma.quiescenceRun.findUnique({
+    where: { runId },
+    select: { shipForceEscalatedAt: true },
+  });
+  return !!row?.shipForceEscalatedAt;
+}
+
+/**
  * Called from app boot (BI-QUIESCE-010 integration). Scans for QuiescenceRun
  * rows that were in flight when the previous bundle died. If the running
  * bundle's version matches `targetVersion`, marks as completed via

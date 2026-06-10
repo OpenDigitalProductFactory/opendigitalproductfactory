@@ -5279,6 +5279,15 @@ model QuiescenceRun {
   completionSource String?
   outcomeNotes     String? @db.Text
 
+  // BI-4F3B2FA9: mid-flight emergency escalation. When an operator clicks
+  // "Force Now" on an ALREADY-RUNNING drain, these record when/who promoted it
+  // to forced mode. The coordinator re-reads shipForceEscalatedAt every wait
+  // tick and treats a non-null value as shipForce, so a stuck drain can be
+  // forced through without restarting the run. Null when started forced or
+  // never escalated; an audit entry is also appended to forcedSurfaces.
+  shipForceEscalatedAt DateTime?
+  shipForceEscalatedBy String?
+
   @@index([trigger, startedAt])
   // Stuck-coordinator query: status NOT IN (terminal) AND lastHeartbeatAt < cutoff.
   @@index([status, lastHeartbeatAt])

@@ -15,6 +15,8 @@ const prismaMock = vi.hoisted(() => ({
   buildPhaseRunFindMany: vi.fn(),
   buildPhaseRunUpdateMany: vi.fn(),
   toolExecutionFindMany: vi.fn(),
+  quiescenceRunFindUnique: vi.fn(),
+  quiescenceRunUpdate: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -29,12 +31,18 @@ vi.mock("@dpf/db", () => ({
     toolExecution: {
       findMany: (...args: unknown[]) => prismaMock.toolExecutionFindMany(...args),
     },
+    quiescenceRun: {
+      findUnique: (...args: unknown[]) => prismaMock.quiescenceRunFindUnique(...args),
+      update: (...args: unknown[]) => prismaMock.quiescenceRunUpdate(...args),
+    },
   },
 }));
 
 import {
   captureActiveSessionBlockers,
+  escalateQuiescenceToForced,
   isBuildPhaseReapable,
+  isShipForceEscalated,
   getQuiescenceConfig,
   invalidateQuiescenceCache,
   isTerminalQuiescenceStatus,
@@ -55,6 +63,80 @@ beforeEach(() => {
   prismaMock.buildPhaseRunFindMany.mockResolvedValue([]);
   prismaMock.buildPhaseRunUpdateMany.mockResolvedValue({ count: 0 });
   prismaMock.toolExecutionFindMany.mockResolvedValue([]);
+  prismaMock.quiescenceRunFindUnique.mockResolvedValue(null);
+  prismaMock.quiescenceRunUpdate.mockResolvedValue({});
+});
+
+describe("escalateQuiescenceToForced (BI-4F3B2FA9)", () => {
+  const NOW = new Date("2026-06-10T02:00:00.000Z");
+
+  it("sets shipForceEscalatedAt/By and appends a mid-flight-escalation audit entry", async () => {
+    prismaMock.quiescenceRunFindUnique.mockResolvedValue({
+      status: "draining",
+      shipForceEscalatedAt: null,
+      forcedSurfaces: [],
+    });
+    const r = await escalateQuiescenceToForced("QR-1", "user-9", NOW);
+    expect(r).toEqual({ ok: true });
+    const update = prismaMock.quiescenceRunUpdate.mock.calls[0]?.[0];
+    expect(update.where).toEqual({ runId: "QR-1" });
+    expect(update.data.shipForceEscalatedAt).toBe(NOW);
+    expect(update.data.shipForceEscalatedBy).toBe("user-9");
+    expect(update.data.forcedSurfaces).toEqual([
+      { surface: "mid-flight-escalation", reason: expect.stringContaining("user-9"), forcedAt: NOW.toISOString() },
+    ]);
+  });
+
+  it("preserves prior forcedSurfaces entries when appending", async () => {
+    prismaMock.quiescenceRunFindUnique.mockResolvedValue({
+      status: "draining",
+      shipForceEscalatedAt: null,
+      forcedSurfaces: [{ surface: "ship-force-flag", reason: "x", forcedAt: "t" }],
+    });
+    await escalateQuiescenceToForced("QR-1", "user-9", NOW);
+    const update = prismaMock.quiescenceRunUpdate.mock.calls[0]?.[0];
+    expect(update.data.forcedSurfaces).toHaveLength(2);
+    expect(update.data.forcedSurfaces[0].surface).toBe("ship-force-flag");
+  });
+
+  it("is idempotent — a no-op success when already escalated", async () => {
+    prismaMock.quiescenceRunFindUnique.mockResolvedValue({
+      status: "draining",
+      shipForceEscalatedAt: new Date(),
+      forcedSurfaces: [],
+    });
+    const r = await escalateQuiescenceToForced("QR-1", "user-9", NOW);
+    expect(r).toEqual({ ok: true });
+    expect(prismaMock.quiescenceRunUpdate).not.toHaveBeenCalled();
+  });
+
+  it("refuses a terminal run", async () => {
+    prismaMock.quiescenceRunFindUnique.mockResolvedValue({
+      status: "completed",
+      shipForceEscalatedAt: null,
+      forcedSurfaces: [],
+    });
+    const r = await escalateQuiescenceToForced("QR-1", "user-9", NOW);
+    expect(r).toEqual({ ok: false, reason: "run already completed" });
+    expect(prismaMock.quiescenceRunUpdate).not.toHaveBeenCalled();
+  });
+
+  it("returns not-found when the run is missing", async () => {
+    prismaMock.quiescenceRunFindUnique.mockResolvedValue(null);
+    const r = await escalateQuiescenceToForced("QR-missing", "user-9", NOW);
+    expect(r).toEqual({ ok: false, reason: "run not found" });
+  });
+});
+
+describe("isShipForceEscalated (BI-4F3B2FA9)", () => {
+  it("is true when shipForceEscalatedAt is set, false otherwise", async () => {
+    prismaMock.quiescenceRunFindUnique.mockResolvedValueOnce({ shipForceEscalatedAt: new Date() });
+    expect(await isShipForceEscalated("QR-1")).toBe(true);
+    prismaMock.quiescenceRunFindUnique.mockResolvedValueOnce({ shipForceEscalatedAt: null });
+    expect(await isShipForceEscalated("QR-1")).toBe(false);
+    prismaMock.quiescenceRunFindUnique.mockResolvedValueOnce(null);
+    expect(await isShipForceEscalated("QR-missing")).toBe(false);
+  });
 });
 
 describe("isBuildPhaseReapable", () => {

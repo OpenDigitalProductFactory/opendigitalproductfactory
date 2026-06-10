@@ -308,11 +308,42 @@ describe("SelfUpgradeClient – trigger control", () => {
     expect(html).not.toContain('disabled=""');
   });
 
-  it("button is disabled when latest run is currently running", () => {
+  // BI-4F3B2FA9: a running upgrade no longer leaves a dead-end disabled button.
+  it("shows an in-flight indicator (not a disabled trigger) when a run is running", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient {...baseStatus} latestRun={makeRun("running")} />,
     );
-    expect(html).toContain('disabled=""');
+    expect(html).toContain("Upgrade in progress…");
+    expect(html).not.toContain('aria-label="Upgrade now"');
+  });
+
+  it("surfaces Force now / Abort controls when the portal is draining (BI-4F3B2FA9)", () => {
+    const quiescence = {
+      level: "draining" as const,
+      runId: "QR-2026-06-10-test",
+      enteredAt: "2026-06-10T02:00:00.000Z",
+      run: {
+        runId: "QR-2026-06-10-test",
+        status: "draining",
+        trigger: "self-upgrade",
+        targetVersion: null,
+        targetBundleHash: null,
+        deferSurface: null,
+        deferReason: null,
+        budgetMs: 300000,
+        drainStartedAt: "2026-06-10T02:00:00.000Z",
+        lastHeartbeatAt: null,
+      },
+      blockersCapturedAt: null,
+      blockers: [],
+    };
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient {...baseStatus} latestRun={makeRun("running")} quiescence={quiescence} />,
+    );
+    expect(html).toContain("Force now");
+    expect(html).toContain("Abort");
+    // Descriptive aria-label names the run; not a dead-end disabled trigger.
+    expect(html).toContain("Force upgrade run QR-2026-06-10-test now");
   });
 });
 

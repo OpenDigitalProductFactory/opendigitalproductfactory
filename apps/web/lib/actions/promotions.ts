@@ -18,7 +18,11 @@ import {
 } from "@/lib/self-upgrade/window";
 import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
-import { getQuiescenceActivity } from "@/lib/self-upgrade/quiescence";
+import {
+  getQuiescenceActivity,
+  abortQuiescence,
+  escalateQuiescenceToForced,
+} from "@/lib/self-upgrade/quiescence";
 import { getCooldownUntil } from "@/lib/self-upgrade/cooldown";
 import { loadPlatformVersion } from "@/lib/platform/version";
 import { inngest } from "@/lib/queue/inngest-client";
@@ -741,6 +745,38 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: bool
     },
   });
   return { queued: true } as const;
+}
+
+/**
+ * BI-4F3B2FA9 — emergency "Force Now" on an ALREADY-RUNNING drain. Promotes the
+ * active QuiescenceRun to forced mode so the coordinator bypasses all hard
+ * blockers on its next tick (within ~5s) and proceeds to swap — no restart.
+ * The operator and timestamp are audit-recorded on the run's forcedSurfaces.
+ */
+export async function forceActiveRun(
+  runId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await requireOpsAccess();
+  const result = await escalateQuiescenceToForced(runId, userId);
+  if (!result.ok) return { ok: false, error: result.reason };
+  return { ok: true };
+}
+
+/**
+ * BI-4F3B2FA9 — abort an in-flight drain. Delegates to abortQuiescence, which
+ * sends the swap-complete event with outcome=aborted; the coordinator flips the
+ * level back to normal and the operator can immediately start a fresh run.
+ */
+export async function abortActiveRun(
+  runId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await requireOpsAccess();
+  try {
+    await abortQuiescence(runId, userId);
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "abort failed" };
+  }
+  return { ok: true };
 }
 
 export async function rollbackSelfUpgrade(
