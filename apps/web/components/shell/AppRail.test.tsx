@@ -39,6 +39,7 @@ const sections: ShellNavSection[] = [
         description: "See what needs attention next.",
         sectionKey: "workspace",
         capabilityKey: null,
+        orgCapabilityKey: null,
       },
     ],
   },
@@ -54,6 +55,7 @@ const sections: ShellNavSection[] = [
         description: "Cashflow, receivables, payables, and close.",
         sectionKey: "business",
         capabilityKey: "view_finance",
+        orgCapabilityKey: null,
       },
       {
         key: "compliance",
@@ -62,6 +64,7 @@ const sections: ShellNavSection[] = [
         description: "Controls, risk, obligations, and posture.",
         sectionKey: "business",
         capabilityKey: "view_compliance",
+        orgCapabilityKey: null,
       },
     ],
   },
