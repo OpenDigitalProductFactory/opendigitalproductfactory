@@ -226,8 +226,12 @@ export async function runBuildPipeline(params: {
  *
  * workspace_initialized comes BEFORE db_ready because prisma migrate deploy
  * needs the prisma/ directory to exist inside the container.
+ *
+ * Exported for the durable execution path (BI-89030C9B Phase 1) — the
+ * Inngest function runs each step as its own journaled step.run via
+ * build-execute-helpers.runPipelineStepDurable.
  */
-async function executeStep(
+export async function executeStep(
   step: BuildExecStep,
   buildId: string,
   state: BuildExecutionState,
