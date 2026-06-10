@@ -17,4 +17,21 @@ describe("licensing requirement seed defaults", () => {
     expect(byId.get("LIC-REQ-AU-ABLIS")?.staleAfterDays).toBeGreaterThan(0);
     expect(byId.get("LIC-REQ-US-BUSINESS-LICENSE")?.archetypeCategories.length).toBeGreaterThan(0);
   });
+
+  it("covers public-sector orgs with charter and state-auditor filing directories (BI-8D477188)", () => {
+    const seed = buildDefaultLicenseRequirementSeed();
+    const publicSector = seed.filter((entry) =>
+      entry.archetypeCategories.includes("public-sector"),
+    );
+
+    // Silent-seed-skip guard: the two civic directory entries must be present.
+    expect(publicSector.map((entry) => entry.requirementRefId).sort()).toEqual([
+      "LIC-REQ-US-MUNICIPAL-CHARTER",
+      "LIC-REQ-US-STATE-AUDITOR-FILING",
+    ]);
+    for (const entry of publicSector) {
+      expect(entry.sourceUrls.length).toBeGreaterThan(0);
+      expect(entry.sourceKind).toBe("official");
+    }
+  });
 });
