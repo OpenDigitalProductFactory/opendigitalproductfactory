@@ -73,6 +73,52 @@ export const getPublicStorefront = cache(async function getPublicStorefront(
 
   const org = config.organization;
 
+  // Confirmed regulatory display obligations for the "disclosures" section
+  // (BI-5D9DCDE6 spec §9.3). D5 honesty rule: only obligations whose parent
+  // credential record is ACTIVE are exposed — uncaptured posture must render
+  // a neutral placeholder, never a fabricated "Member FDIC"/NCUA claim.
+  // Loaded only when the storefront actually has a disclosures section, so
+  // every other archetype skips the extra query.
+  const hasDisclosuresSection = config.sections.some(
+    (section) => section.type === "disclosures",
+  );
+  const displayObligations = hasDisclosuresSection
+    ? (
+        await prisma.licenseDisplayObligation.findMany({
+          where: {
+            organizationLicenseRecord: {
+              status: "active",
+              organizationLicenseProfile: { organization: { slug } },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+          select: {
+            displayObligationId: true,
+            displayType: true,
+            notes: true,
+            organizationLicenseRecord: {
+              select: {
+                licenseNumber: true,
+                requirementReference: {
+                  select: { authorityName: true, displayRuleSummary: true },
+                },
+              },
+            },
+          },
+        })
+      ).map((obligation) => ({
+        displayObligationId: obligation.displayObligationId,
+        displayType: obligation.displayType,
+        text:
+          obligation.notes ??
+          obligation.organizationLicenseRecord?.requirementReference?.displayRuleSummary ??
+          null,
+        authorityName:
+          obligation.organizationLicenseRecord?.requirementReference?.authorityName ?? null,
+        licenseNumber: obligation.organizationLicenseRecord?.licenseNumber ?? null,
+      }))
+    : [];
+
   return {
     tagline: config.tagline,
     description: config.description,
@@ -94,6 +140,7 @@ export const getPublicStorefront = cache(async function getPublicStorefront(
       priceAmount: item.priceAmount?.toString() ?? null,
       bookingConfig: item.bookingConfig as Record<string, unknown> | null,
     })),
+    displayObligations,
   };
 });
 

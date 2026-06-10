@@ -456,6 +456,38 @@ const PROFILES: Record<string, FinancialProfileSeed> = {
       { code: "5030", name: "Vehicle & Travel", type: "expense" },
     ],
   },
+  banking_financial_services: {
+    archetypeCategory: "banking-financial-services",
+    displayName: "Banking & Financial Services",
+    defaultPaymentTerms: "Due on receipt",
+    defaultCurrency: "USD",
+    vatRegistered: false,
+    defaultTaxRate: 0,
+    dunningEnabled: false,
+    dunningStyle: "gentle",
+    recurringBillingEnabled: true,
+    // Interest-margin P&L shape; the institution's core banking system stays
+    // authoritative (BI-5D9DCDE6 spec D3 — DPF is the engagement layer).
+    ledgerModel: "financial-institution",
+    invoiceTemplateStyle: "professional",
+    expenseCategories: [
+      "Interest Expense",
+      "Provision for Loan Losses",
+      "Deposit Insurance Premiums",
+      "Regulatory & Examination Fees",
+      "Core Processing & Technology",
+      "Branch Premises & Security",
+      "Professional & Legal Fees",
+    ],
+    purchaseOrdersEnabled: false,
+    chartOfAccountsSeed: LEDGER_FRAGMENTS_INTERNAL["financial-institution"],
+    billingPatternProfile: {
+      primaryPaymentPattern: "recurring-agreement",
+      supportedPaymentPatterns: ["recurring-agreement", "ad-hoc-invoice"],
+      invoiceExecutionMode: "prepared-not-prescribed",
+      recurringBillingApplicability: "recommended",
+    },
+  },
 
   fund_accounting: {
     archetypeCategory: "public-sector",

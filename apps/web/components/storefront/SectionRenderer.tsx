@@ -9,6 +9,7 @@ import { TestimonialsSection } from "./sections/TestimonialsSection";
 import { DonationSection } from "./sections/DonationSection";
 import { AnimalsSection } from "./sections/AnimalsSection";
 import { CustomSection } from "./sections/CustomSection";
+import { DisclosuresSection } from "./sections/DisclosuresSection";
 
 export function SectionRenderer({
   section,
@@ -40,6 +41,13 @@ export function SectionRenderer({
       return <DonationSection content={content} orgSlug={orgSlug} />;
     case "animals-available":
       return <AnimalsSection content={content} />;
+    case "disclosures":
+      return (
+        <DisclosuresSection
+          title={section.title}
+          obligations={storefront.displayObligations}
+        />
+      );
     case "custom":
       return <CustomSection content={content} />;
     default:

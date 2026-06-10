@@ -93,6 +93,27 @@ export function LicensingWorkspacePanel({ workspace }: Props) {
 
   return (
     <div className="space-y-6">
+      {workspace.archetype.requiredPostureIncomplete && (
+        <div
+          data-testid="regulatory-posture-incomplete"
+          className="rounded-lg border p-4"
+          style={{
+            borderColor: "color-mix(in srgb, var(--dpf-warning) 40%, var(--dpf-border))",
+            background: "color-mix(in srgb, var(--dpf-warning) 8%, var(--dpf-surface-1))",
+          }}
+        >
+          <p className="text-sm font-semibold text-[var(--dpf-text)]">
+            Regulatory posture incomplete
+          </p>
+          <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+            Your business archetype is a regulated financial institution. Capture your
+            jurisdiction, charter type, and credential records (for example FDIC certificate,
+            NCUA charter, or NMLS ID) below — the matching regulators for your archetype are
+            listed first in the authority picker. This step is required for your storefront
+            disclosures to render, but it never blocks the rest of your setup.
+          </p>
+        </div>
+      )}
       <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
         <div className="flex items-start justify-between gap-4">
           <div>

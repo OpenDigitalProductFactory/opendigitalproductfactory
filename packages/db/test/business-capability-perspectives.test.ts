@@ -101,6 +101,76 @@ describe("business capability perspectives", () => {
     expect(keys).not.toContain("msp-managed-customer-estate");
   });
 
+  it("adds the BIAN v14 banking overlay for the banking-financial-services category (BI-5D9DCDE6)", () => {
+    const creditUnion = resolveBusinessCapabilityPerspective({
+      archetypeId: "credit-union",
+      category: "banking-financial-services",
+    });
+
+    expect(creditUnion.sourcePerspectiveIds).toEqual(["common-small-business", "bian-banking-v14"]);
+    expect(creditUnion.sources.map((source) => source.label)).toEqual([
+      "Common Small Business",
+      "Banking (BIAN v14)",
+    ]);
+    // Source string cites the canonical reference data, not prose.
+    expect(creditUnion.sources[1].source).toContain("bian-v14-service-landscape.json");
+
+    const byKey = new Map(creditUnion.capabilities.map((c) => [c.key, c]));
+    // L1 Business Area → L2 Business Domain → L3 Service Domain chain intact.
+    expect(byKey.get("bian-customers")?.level).toBe(1);
+    expect(byKey.get("bian-relationship-management")).toMatchObject({ level: 2, parentKey: "bian-customers" });
+    expect(byKey.get("bian-customer-credit-rating")).toMatchObject({ level: 3, parentKey: "bian-relationship-management" });
+    // Service Domain placement follows the reference JSON: Current Account
+    // lives under Consumer Banking, not Loans and Deposits.
+    expect(byKey.get("bian-current-account")?.parentKey).toBe("bian-consumer-banking");
+    // Regulatory governance anchors (spec §9.4).
+    expect(byKey.get("bian-regulatory-compliance")?.parentKey).toBe("bian-compliance");
+    expect(byKey.get("bian-guideline-compliance")?.parentKey).toBe("bian-compliance");
+    // Composes with, not replaces, the common baseline.
+    expect(byKey.has("finance")).toBe(true);
+    // Every parentKey resolves within the resolved set (projection precondition).
+    for (const capability of creditUnion.capabilities) {
+      if (capability.parentKey) {
+        expect(byKey.has(capability.parentKey), `${capability.key} parent ${capability.parentKey}`).toBe(true);
+      }
+    }
+    // Keys are unique across the composed perspectives.
+    expect(byKey.size).toBe(creditUnion.capabilities.length);
+
+    // Other categories do not get the banking overlay.
+    const salon = resolveBusinessCapabilityPerspective({ archetypeId: "hair-salon", category: "beauty-personal-care" });
+    expect(salon.capabilities.some((c) => c.key.startsWith("bian-"))).toBe(false);
+  });
+
+  it("projects the three-level BIAN chain with correct parent links", async () => {
+    const upsert = vi.fn(async (args) => ({
+      id: `db-${args.where.capabilityId}`,
+      capabilityId: args.where.capabilityId,
+    }));
+    const client = {
+      businessCapability: {
+        findMany: vi.fn(async () => []),
+        upsert,
+        updateMany: vi.fn(async () => ({ count: 0 })),
+      },
+    };
+
+    await applyBusinessCapabilityPerspective(client, {
+      archetypeId: "community-bank",
+      category: "banking-financial-services",
+    });
+
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { capabilityId: `${BUSINESS_CAPABILITY_SEED_PREFIX}bian-customer-credit-rating` },
+        create: expect.objectContaining({
+          parentId: `db-${BUSINESS_CAPABILITY_SEED_PREFIX}bian-relationship-management`,
+          level: 3,
+        }),
+      }),
+    );
+  });
+
   it("projects capabilities with deterministic seed IDs and parent links", async () => {
     const upsert = vi.fn(async (args) => ({
       id: `db-${args.where.capabilityId}`,

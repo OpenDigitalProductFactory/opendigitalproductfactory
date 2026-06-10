@@ -84,6 +84,15 @@ const VOCABULARY: Record<string, ArchetypeVocabulary> = {
     portalLabel: "Community Portal", stakeholderLabel: "Homeowners",
     teamLabel: "Board & Contractors", inboxLabel: "Requests", agentName: "Community Manager",
   },
+  // BIAN-grounded banking category (BI-5D9DCDE6). Credit-union "Members" and
+  // mortgage "Borrowers" arrive as leaf-level customVocabulary overrides seeded
+  // from the archetype definition and merged by getVocabulary below.
+  "banking-financial-services": {
+    itemsLabel: "Products & Rates", singleItemLabel: "Product", addButtonLabel: "Add product",
+    categoryLabel: "Product Family", priceLabel: "Rate / Fee",
+    portalLabel: "Banking Portal", stakeholderLabel: "Customers",
+    teamLabel: "Bankers", inboxLabel: "Applications", agentName: "Relationship Manager",
+  },
   // Towns, municipal utilities, law enforcement. Leaf overrides (Ratepayers /
   // Community) ship with each archetype via customVocabulary; civic spec §8.
   "public-sector": {
@@ -190,6 +199,12 @@ const CATEGORY_SUGGESTIONS: Record<string, string[]> = {
 
   // HOA
   "hoa-management": ["Assessments", "Maintenance", "Amenities"],
+
+  // Banking & Financial Services — product families per BIAN Loans and
+  // Deposits / Cards Business Domains
+  "community-bank": ["Checking", "Savings", "Certificates", "Loans", "Cards", "Business Banking"],
+  "credit-union": ["Share Accounts", "Certificates", "Auto Loans", "Home Loans", "Cards", "Membership"],
+  "mortgage-lending": ["Purchase", "Refinance", "HELOC", "Pre-Approval"],
 
   // Public sector
   "small-town-municipality": ["Permits & Licenses", "Public Works", "Parks & Recreation", "Clerk's Office", "Code Enforcement"],

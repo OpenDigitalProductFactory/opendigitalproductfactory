@@ -296,6 +296,62 @@ const TRADES_MAINTENANCE: BusinessCapabilityPerspective = {
   ],
 };
 
+const BIAN_BANKING_V14: BusinessCapabilityPerspective = {
+  perspectiveId: "bian-banking-v14",
+  label: "Banking (BIAN v14)",
+  source:
+    "BIAN Service Landscape v14.0 Value Chain View — docs/Reference/bian/bian-v14-service-landscape.json (curated SMB engagement-layer subset; L1=Business Area, L2=Business Domain, L3=Service Domain per the BIAN/CSDM v7.6 projection pattern)",
+  capabilities: [
+    // ── L1: BIAN Business Area "Customers" ─────────────────────────────────
+    l1("bian-customers", "Customers", 200, "BIAN Business Area: acquire, know, serve, and grow customer relationships.", ["consume", "operate"]),
+    l2("bian-relationship-management", "bian-customers", "Relationship Management", 10, "BIAN Business Domain: develop and maintain customer relationships, insight, and credit standing.", ["consume", "operate"]),
+    l3("bian-customer-relationship-management", "bian-relationship-management", "Customer Relationship Management", 10, "Develops and executes a customer plan to maintain and build a customer relationship.", ["consume", "operate"]),
+    l3("bian-customer-credit-rating", "bian-relationship-management", "Customer Credit Rating", 20, "Maintains and administers the bank's credit assessment for customers based on consolidated internal data and optionally external credit agency reports.", ["operate"]),
+    l3("bian-customer-behavior-insights", "bian-relationship-management", "Customer Behavior Insights", 30, "Applies behavioral analysis to customer event history to maintain a range of customer ratings/scores.", ["explore"]),
+    l2("bian-customer-care", "bian-customers", "Customer Care", 20, "BIAN Business Domain: handle customer servicing requests, cases, and contact.", ["consume", "operate"]),
+    l3("bian-customer-case", "bian-customer-care", "Customer Case", 10, "Handles the initiation, tracking, resolution and reporting on customer cases.", ["operate"]),
+    l3("bian-servicing-order", "bian-customer-care", "Servicing Order", 20, "Handles the processing of a customer servicing request as a predefined procedure.", ["operate"]),
+    l2("bian-sales", "bian-customers", "Sales", 30, "BIAN Business Domain: offers, campaigns, leads, and party onboarding.", ["explore", "consume"]),
+    l3("bian-customer-offer", "bian-sales", "Customer Offer", 10, "Orchestrates the processing of a product offer for a new or established customer.", ["consume"]),
+    l3("bian-lead-opportunity-management", "bian-sales", "Lead and Opportunity Management", 20, "Captures, classifies and tracks sales leads/opportunities with established clients.", ["explore"]),
+    l3("bian-party-lifecycle-management", "bian-sales", "Party Lifecycle Management", 30, "Tracks the state of a party relationship with the bank from the initial checks made during establishment — the membership/onboarding anchor.", ["consume", "operate"]),
+    l2("bian-party-reference", "bian-customers", "Party Reference", 40, "BIAN Business Domain: canonical party and location reference data.", ["operate"]),
+    l3("bian-party-reference-data-directory", "bian-party-reference", "Party Reference Data Directory", 10, "Maintains party reference information covering general reference details for customers and counterparties.", ["operate"]),
+
+    // ── L1: BIAN Business Area "Products" ──────────────────────────────────
+    l1("bian-products", "Products", 210, "BIAN Business Area: the deposit, lending, and card products the institution offers.", ["consume", "operate"]),
+    l2("bian-loans-and-deposits", "bian-products", "Loans and Deposits", 10, "BIAN Business Domain: deposit and lending product fulfillment.", ["consume", "operate"]),
+    l3("bian-savings-account", "bian-loans-and-deposits", "Savings Account", 10, "Orchestrates a consumer savings account including payments, deposits, interest, and fees.", ["operate"]),
+    l3("bian-term-deposit", "bian-loans-and-deposits", "Term Deposit", 20, "An interest bearing account into which a customer places a fixed amount of funds for a fixed term — certificates of deposit / share certificates.", ["operate"]),
+    l3("bian-consumer-loan", "bian-loans-and-deposits", "Consumer Loan", 30, "Handles the fulfillment of a consumer loan product including set-up and scheduled processing.", ["operate"]),
+    l3("bian-mortgage-loan", "bian-loans-and-deposits", "Mortgage Loan", 40, "Fulfillment of a loan product for the purpose of property purchase.", ["operate"]),
+    l3("bian-corporate-loan", "bian-loans-and-deposits", "Corporate Loan", 50, "Handles the fulfillment of a corporate loan product for business customers.", ["operate"]),
+    l3("bian-underwriting", "bian-loans-and-deposits", "Underwriting", 60, "Manages the underwriting decision process for products as appropriate, including many loan types.", ["operate"]),
+    l2("bian-consumer-banking", "bian-products", "Consumer Banking", 20, "BIAN Business Domain: everyday consumer banking facilities.", ["consume", "operate"]),
+    l3("bian-current-account", "bian-consumer-banking", "Current Account", 10, "Orchestrates a consumer checking/demand deposit account with its range of services and fees.", ["operate"]),
+    l3("bian-payment-order-initiation", "bian-consumer-banking", "Payment Order Initiation", 20, "Provides a customer payment service capturing payer and payee details and key payment properties.", ["consume"]),
+    l2("bian-cards", "bian-products", "Cards", 30, "BIAN Business Domain: card products and servicing.", ["consume", "operate"]),
+    l3("bian-credit-card", "bian-cards", "Credit Card", 10, "Orchestrates the scheduled maintenance and transactional activities associated with credit card products.", ["operate"]),
+
+    // ── L1: BIAN Business Area "Operations" ────────────────────────────────
+    l1("bian-operations", "Operations", 220, "BIAN Business Area: product and account back-office operations.", ["operate"]),
+    l2("bian-accounting-services", "bian-operations", "Accounting Services", 10, "BIAN Business Domain: position keeping, customer positions, and reconciliation.", ["operate"]),
+    l3("bian-position-keeping", "bian-accounting-services", "Position Keeping", 10, "Maintains a log of monetary or value transactions and entitlements posted to product facilities.", ["operate"]),
+    l3("bian-customer-position", "bian-accounting-services", "Customer Position", 20, "Maintains a consolidated financial position for a customer, combining details from all products.", ["operate"]),
+    l3("bian-account-reconciliation", "bian-accounting-services", "Account Reconciliation", 30, "Handles account reconciliation tasks.", ["operate"]),
+
+    // ── L1: BIAN Business Area "Finance And Risk Management" ───────────────
+    l1("bian-finance-risk", "Finance And Risk Management", 230, "BIAN Business Area: regulatory compliance and credit/fraud risk posture — where jurisdiction-specific regulatory governance attaches (spec §9.4).", ["operate"]),
+    l2("bian-compliance", "bian-finance-risk", "Compliance", 10, "BIAN Business Domain: interpret regulatory requirements, test adherence, and report — anchors the install's jurisdiction/charter posture.", ["operate"]),
+    l3("bian-regulatory-compliance", "bian-compliance", "Regulatory Compliance", 10, "Interprets regulatory requirements, provides guidance, and defines and implements compliance processes.", ["operate"]),
+    l3("bian-guideline-compliance", "bian-compliance", "Guideline Compliance", 20, "Develops and applies a portfolio of guideline compliance tests to confirm adherence to bank and regulatory guidelines.", ["operate"]),
+    l3("bian-regulatory-reporting", "bian-compliance", "Regulatory Reporting", 30, "Administers and orchestrates the tasks required to meet the institution's regulatory reporting obligations.", ["operate"]),
+    l2("bian-credit-risk", "bian-finance-risk", "Credit Risk", 20, "BIAN Business Domain: credit qualification and fraud response.", ["operate"]),
+    l3("bian-credit-management", "bian-credit-risk", "Credit Management", 10, "Provides a bank-wide oversight function to qualify credit pricing for offered products and services.", ["operate"]),
+    l3("bian-fraud-resolution", "bian-credit-risk", "Fraud Resolution", 20, "Sets up and processes a fraud case resulting from fraud behavior detected during production.", ["operate"]),
+  ],
+};
+
 function l1(
   key: string,
   name: string,
@@ -336,6 +392,27 @@ function l2(
   };
 }
 
+function l3(
+  key: string,
+  parentKey: string,
+  name: string,
+  sortOrder: number,
+  description: string,
+  it4itValueStreams: string[],
+): BusinessCapabilitySeedDefinition {
+  return {
+    key,
+    parentKey,
+    name,
+    description,
+    level: 3,
+    sortOrder,
+    currentMaturity: 1,
+    targetMaturity: 3,
+    it4itValueStreams,
+  };
+}
+
 export function capabilityIdForSeedKey(key: string): string {
   return `${BUSINESS_CAPABILITY_SEED_PREFIX}${key}`;
 }
@@ -355,6 +432,10 @@ export function resolveBusinessCapabilityPerspective(
 
   if (input.category === "trades-maintenance") {
     perspectives.push(TRADES_MAINTENANCE);
+  }
+
+  if (input.category === "banking-financial-services") {
+    perspectives.push(BIAN_BANKING_V14);
   }
 
   return {

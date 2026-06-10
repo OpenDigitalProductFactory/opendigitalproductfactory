@@ -7,7 +7,7 @@ export type PriceType =
 export type SectionType =
   | "hero" | "about" | "items" | "team" | "gallery"
   | "contact" | "testimonials" | "donate"
-  | "animals-available" | "custom";
+  | "animals-available" | "disclosures" | "custom";
 
 export type ArchetypeCategory =
   | "healthcare-wellness"
@@ -22,6 +22,7 @@ export type ArchetypeCategory =
   | "fitness-recreation"
   | "nonprofit-community"
   | "hoa-property-management"
+  | "banking-financial-services"
   | "public-sector";
 
 export interface FormField {
@@ -393,6 +394,26 @@ export interface ActivationProfile {
   seededChargeModels?: SeededChargeModel[];
 }
 
+/**
+ * Leaf-level vocabulary override, seeded into `StorefrontArchetype.customVocabulary`
+ * and merged over the category vocabulary by `applyCustomVocabulary`
+ * (apps/web/lib/storefront/archetype-vocabulary.ts). Lets one leaf diverge from
+ * its category's labels — e.g. credit-union "Members" over the banking
+ * category's "Customers" — without a parallel resolution path.
+ */
+export interface ArchetypeVocabularyOverride {
+  itemsLabel?: string;
+  singleItemLabel?: string;
+  addButtonLabel?: string;
+  categoryLabel?: string;
+  priceLabel?: string;
+  portalLabel?: string;
+  stakeholderLabel?: string;
+  teamLabel?: string;
+  inboxLabel?: string;
+  agentName?: string;
+}
+
 export interface ArchetypeDefinition {
   archetypeId: string;
   name: string;
@@ -409,8 +430,8 @@ export interface ArchetypeDefinition {
    * `StorefrontArchetype.customVocabulary` and read by `getVocabulary()` —
    * the mechanism the BIAN banking spec §7.4 decided (credit-union "Members"
    * vs bank "Customers"); civic spec §8 uses it for Ratepayers/Community.
-   * Keys are the `ArchetypeVocabulary` fields; unknown keys are ignored by
-   * the field-by-field merge in `getVocabulary`.
+   * Typed against the `ArchetypeVocabulary` fields so a misspelled key fails
+   * typecheck instead of being silently ignored at merge time.
    */
-  vocabulary?: Record<string, string>;
+  vocabulary?: ArchetypeVocabularyOverride;
 }

@@ -11,6 +11,7 @@ export const INDUSTRY_OPTIONS = [
   { value: "fitness-recreation", label: "Fitness & Recreation" },
   { value: "nonprofit-community", label: "Nonprofit & Community" },
   { value: "hoa-property-management", label: "HOA & Property Management" },
+  { value: "banking-financial-services", label: "Banking & Financial Services" },
   { value: "public-sector", label: "Public Sector & Local Government" },
 ] as const;
 
