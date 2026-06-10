@@ -7,7 +7,7 @@ export type PriceType =
 export type SectionType =
   | "hero" | "about" | "items" | "team" | "gallery"
   | "contact" | "testimonials" | "donate"
-  | "animals-available" | "custom";
+  | "animals-available" | "disclosures" | "custom";
 
 export type ArchetypeCategory =
   | "healthcare-wellness"
@@ -21,7 +21,8 @@ export type ArchetypeCategory =
   | "retail-goods"
   | "fitness-recreation"
   | "nonprofit-community"
-  | "hoa-property-management";
+  | "hoa-property-management"
+  | "banking-financial-services";
 
 export interface FormField {
   name: string;
@@ -370,6 +371,26 @@ export interface ActivationProfile {
   seededChargeModels?: SeededChargeModel[];
 }
 
+/**
+ * Leaf-level vocabulary override, seeded into `StorefrontArchetype.customVocabulary`
+ * and merged over the category vocabulary by `applyCustomVocabulary`
+ * (apps/web/lib/storefront/archetype-vocabulary.ts). Lets one leaf diverge from
+ * its category's labels — e.g. credit-union "Members" over the banking
+ * category's "Customers" — without a parallel resolution path.
+ */
+export interface ArchetypeVocabularyOverride {
+  itemsLabel?: string;
+  singleItemLabel?: string;
+  addButtonLabel?: string;
+  categoryLabel?: string;
+  priceLabel?: string;
+  portalLabel?: string;
+  stakeholderLabel?: string;
+  teamLabel?: string;
+  inboxLabel?: string;
+  agentName?: string;
+}
+
 export interface ArchetypeDefinition {
   archetypeId: string;
   name: string;
@@ -381,4 +402,5 @@ export interface ArchetypeDefinition {
   tags: string[];
   schedulingDefaults?: SchedulingDefaults;
   activationProfile?: ActivationProfile;
+  vocabulary?: ArchetypeVocabularyOverride;
 }

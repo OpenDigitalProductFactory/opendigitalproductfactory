@@ -124,6 +124,44 @@ describe("archetype catalog", () => {
     expect(getCapabilityApplicability(mspProfile, "partner-program")).toBe("recommended");
   });
 
+  it("ships BIAN-grounded banking archetypes with KYC provisioning and disclosures (BI-5D9DCDE6)", () => {
+    const banking = ALL_ARCHETYPES.filter((a) => a.category === "banking-financial-services");
+    expect(banking.map((a) => a.archetypeId).sort()).toEqual([
+      "community-bank",
+      "credit-union",
+      "mortgage-lending",
+    ]);
+
+    for (const a of banking) {
+      // Engagement-layer posture: KYC-gated provisioning, account-based fees,
+      // billing prepared-not-prescribed (spec §7).
+      expect(a.activationProfile?.axes?.provisioning, `${a.archetypeId} provisioning`).toBe("account-with-kyc");
+      expect(a.activationProfile?.axes?.commercialModel, `${a.archetypeId} commercialModel`).toBe("account-based-fees");
+      expect(a.activationProfile?.billingReadinessMode, `${a.archetypeId} billing`).toBe("prepared-not-prescribed");
+      // Regulated-industry display obligations render through the disclosures section (spec §9.3).
+      expect(
+        a.sectionTemplates.some((s) => s.type === "disclosures"),
+        `${a.archetypeId} needs a disclosures section`,
+      ).toBe(true);
+      // Service categories are kebab-case BIAN Business Domain names.
+      expect(a.activationProfile?.seededServiceCategories).toContain("loans-and-deposits");
+      expect(a.activationProfile?.seededServiceCategories).toContain("compliance");
+      // Branch appointments are bookable even though the archetype CTA is inquiry.
+      expect(
+        a.itemTemplates.some((i) => i.ctaType === "booking" && (i.bookingDurationMinutes ?? 0) > 0),
+        `${a.archetypeId} needs a bookable appointment item`,
+      ).toBe(true);
+      expect(a.schedulingDefaults, `${a.archetypeId} needs schedulingDefaults for its booking items`).toBeDefined();
+    }
+
+    // Credit-union member vocabulary is a leaf-level override (spec §7.4).
+    const cu = banking.find((a) => a.archetypeId === "credit-union");
+    expect(cu?.vocabulary?.stakeholderLabel).toBe("Members");
+    // Banks keep the category default — no override needed.
+    const bank = banking.find((a) => a.archetypeId === "community-bank");
+    expect(bank?.vocabulary).toBeUndefined();
+  });
+
   it("does not derive a partner program for direct-to-consumer archetypes", () => {
     const salon = ALL_ARCHETYPES.find((a) => a.archetypeId === "hair-salon");
     const salonProfile = readActivationProfile(salon?.activationProfile);
