@@ -33,6 +33,14 @@ const MARKETING_SKILL_RULES: Record<string, Record<string, unknown>> = {
       reframe: "Focus on term launches, open day invitations, student success stories, and enrolment drives. Tone is encouraging and achievement-focused.",
     },
   },
+  "public-sector": {
+    "seo-content-optimizer": { visible: false },
+    "competitive-analysis": { visible: false },
+    "email-campaign-builder": {
+      label: "Public Notice Builder",
+      reframe: "Focus on official civic communications: meeting notices, public hearings, service disruptions, budget and levy communications, permit deadlines, and emergency notifications. Tone is official, plain-language, and neutral — public bodies inform every resident equally; they do not market or persuade.",
+    },
+  },
   "nonprofit-community": {
     "seo-content-optimizer": {
       label: "Cause Visibility Advisor",

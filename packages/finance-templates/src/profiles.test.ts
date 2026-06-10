@@ -18,12 +18,13 @@ const EXPECTED_SLUGS = [
   "beauty_personal",
   "pet_services",
   "hoa_property_management",
+  "fund_accounting",
 ];
 
 describe("financial profile catalog", () => {
-  it("has all 11 profiles", () => {
+  it("has all 12 profiles", () => {
     const all = getAllProfiles();
-    expect(all).toHaveLength(11);
+    expect(all).toHaveLength(12);
     const slugs = all.map((p) => p.slug);
     for (const expected of EXPECTED_SLUGS) {
       expect(slugs, `missing profile: ${expected}`).toContain(expected);
@@ -143,10 +144,25 @@ describe("financial profile catalog", () => {
     );
   });
 
-  it("every existing profile resolves ledgerModel to commercial", () => {
+  it("every profile resolves a ledgerModel, defaulting to commercial", () => {
     for (const profile of getAllProfiles()) {
-      expect(profile.ledgerModel, `${profile.slug} should default to commercial`).toBe("commercial");
+      if (profile.slug === "fund_accounting") {
+        expect(profile.ledgerModel).toBe("fund-accounting");
+      } else {
+        expect(profile.ledgerModel, `${profile.slug} should default to commercial`).toBe("commercial");
+      }
     }
+  });
+
+  it("the fund_accounting profile composes the fund-accounting COA fragment with statutory billing", () => {
+    const profile = getFinancialProfile("fund_accounting");
+    expect(profile?.archetypeCategory).toBe("public-sector");
+    expect(profile?.chartOfAccountsSeed).toEqual(LEDGER_COA_FRAGMENTS["fund-accounting"]);
+    expect(profile?.billingPatternProfile).toMatchObject({
+      primaryPaymentPattern: "ad-hoc-invoice",
+      invoiceExecutionMode: "prepared-not-prescribed",
+      recurringBillingApplicability: "optional",
+    });
   });
 });
 

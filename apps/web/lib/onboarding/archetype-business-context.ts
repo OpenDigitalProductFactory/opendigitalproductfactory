@@ -110,6 +110,18 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
     supplyChain:
       "Our physical supply chain is intentionally light — most of what we consume is software, research databases, and professional subscriptions. The discipline is in vendor selection and renewal review: a stale tool can cost more than its licence.",
   },
+  "public-sector": {
+    missionTheme:
+      "serve every resident of our community fairly, openly, and well with the public services they rely on",
+    businessModel:
+      "We are funded by levies, fees, and grants set in public session — not by sales. The measure of the operation is budget-to-actual stewardship and resident trust, not profit.",
+    whoWeServe:
+      "We serve the residents of our jurisdiction — everyone within it, by right, not by contract. Residents are simultaneously the people we serve, the taxpayers who fund us, and the voters we answer to.",
+    howWeDecide:
+      "We decide in public: open meetings, published agendas and minutes, and records anyone can request. Equal treatment and due process are non-negotiable — we cannot pick our customers, so fairness and transparency lead every call.",
+    supplyChain:
+      "Purchasing follows public procurement rules — quotes and sealed bids above statutory thresholds, with an audit trail. We rely on local contractors for streets, parks, and facilities work, and intergovernmental agreements for what we cannot staff ourselves.",
+  },
   "hoa-property-management": {
     missionTheme:
       "care for the properties and communities entrusted to us so owners and residents can thrive",
