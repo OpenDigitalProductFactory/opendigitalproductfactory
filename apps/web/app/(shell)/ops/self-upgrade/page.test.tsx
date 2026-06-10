@@ -82,6 +82,13 @@ const baseStatus = {
     blockersCapturedAt: null,
     blockers: [],
   },
+  admission: {
+    lane: { enabled: false, limit: null, key: "dpf-build-pipeline" },
+    buildHolders: 0,
+    totalHolders: 0,
+    summary:
+      "Build-pipeline lane uncapped — set DPF_BUILD_PIPELINE_CONCURRENCY to reserve self-upgrade headroom; nothing holding capacity.",
+  },
   cooldownUntil: null,
   platformVersion: {
     version: "1.0.0",
