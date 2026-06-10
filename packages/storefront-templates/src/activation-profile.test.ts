@@ -249,4 +249,23 @@ describe("existing archetype regression (governance axis is inert)", () => {
     expect(getCapabilityApplicability(profile, "member-governance")).toBe("not-applicable");
     expect(profile?.billingProfile.primaryPaymentPattern).toBe("ad-hoc-invoice");
   });
+
+  it("the municipal utility derives the public-body set with usage-based billing and a ratepayer vocabulary skin", () => {
+    const utility = ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === "municipal-utility");
+    expect(utility?.activationProfile).toBeDefined();
+
+    const profile = readActivationProfile(utility?.activationProfile);
+    expect(profile?.axes.governance).toBe("public-body");
+    expect(profile?.axes.commercialModel).toBe("usage-based");
+    expect(getCapabilityApplicability(profile, "public-body-governance")).toBe("required");
+    expect(getCapabilityApplicability(profile, "records-request")).toBe("required");
+    expect(getCapabilityApplicability(profile, "service-request-311")).toBe("required");
+    expect(profile?.billingProfile.primaryPaymentPattern).toBe("usage-based");
+    expect(profile?.billingProfile.recurringBillingApplicability).toBe("recommended");
+
+    expect(utility?.vocabulary).toMatchObject({
+      stakeholderLabel: "Ratepayers",
+      inboxLabel: "Service Orders",
+    });
+  });
 });

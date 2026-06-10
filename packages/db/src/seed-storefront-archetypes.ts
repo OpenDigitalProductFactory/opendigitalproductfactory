@@ -73,6 +73,7 @@ export async function seedStorefrontArchetypes(prisma: PrismaClient): Promise<vo
         formSchema: json(archetype.formSchema),
         tags: archetype.tags,
         activationProfile: json(archetype.activationProfile ?? null),
+        customVocabulary: json(archetype.vocabulary ?? null),
         marketingSkillRules: json(MARKETING_SKILL_RULES[archetype.category] ?? {}),
         isActive: true,
       },
@@ -87,6 +88,7 @@ export async function seedStorefrontArchetypes(prisma: PrismaClient): Promise<vo
         formSchema: json(archetype.formSchema),
         tags: archetype.tags,
         activationProfile: json(archetype.activationProfile ?? null),
+        customVocabulary: json(archetype.vocabulary ?? null),
         marketingSkillRules: json(MARKETING_SKILL_RULES[archetype.category] ?? {}),
       },
     });
