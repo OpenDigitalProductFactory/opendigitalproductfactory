@@ -138,3 +138,46 @@ The experience-layer redesign is `BI-BC8F667E` (separate). But this migration mo
 ## Sequencing & ownership
 
 Phases are strictly ordered (0 → 1 → 2 → 3 → 4); Phase 1 is the first shippable PR. Each phase is one PR (Phase 3 possibly two: deletions vs. cost instrumentation). Operator reviews every PR; functional verification evidence (the kill tests) is attached to the PR description per `structural-verification-is-not-functional`. The experience-layer BI (`BI-BC8F667E`) consumes the journal as truth source starting Phase 3 but is planned separately.
+
+---
+
+## Phase 0 findings — dated addendum (2026-06-10, live install)
+
+Both empirical unknowns answered. Method, raw evidence, and design consequences recorded per the Phase-0 verification contract. Operator approved the protocol ("go", 2026-06-10); Part 2 ran against the live portal (second restart, same approved action class, same idle window) instead of the contributor preview, to avoid the known dev-portal node_modules pollution risk.
+
+### F1 — The in-sandbox CLI process SURVIVES portal death (Part 1: answered, decisively)
+
+**Method.** Replicated the exact dispatch topology from `claude-dispatch.ts`: runner script base64-written into `dpf-sandbox-1`, launched as `docker exec --user node dpf-sandbox-1 /tmp/spike-run.sh` held open from inside the portal container — the same process tree as `spawn("docker", ["exec", "--user", "node", SANDBOX_CONTAINER, runnerScript])`. The script ticked a marker file every 5s for 5 minutes. The portal container was restarted **twice** during the run (epochs 1781061376–378 and 1781061579).
+
+**Result.** 60/60 ticks, **zero gaps through both restarts** (ticks 5→6 spanned restart #1 at 5s spacing; ticks 47→48 spanned restart #2 likewise). The portal-side `docker exec` client died with the portal both times; the sandbox process never noticed. (The final `survived-to-end` sentinel was not captured before cleanup — the cat raced the loop exit — but 60/60 gap-free ticks through both restarts is the complete evidence.)
+
+**Design consequences.**
+- **Phase 2's "detached job" pattern simplifies to output-redirection + re-attach.** The process layer is *already* portal-independent; what dies is only the portal-held stdout stream. The runner script should redirect output to `/tmp/<taskId>.out` inside the sandbox; re-attach = read the file + check process state by taskId. No new detach machinery, no completion-event network dependency — the poll-loop default in the plan is confirmed as the right shape.
+- **NEW finding beyond plan assumptions — today's task timeout is a no-op against the CLI.** `claude-dispatch.ts` enforces its timeout via `proc.kill("SIGTERM")` on the docker-exec *client* (line ~270). By the same mechanism that produced F1, that signal never reaches the in-sandbox CLI: a timed-out specialist run almost certainly **keeps running (and burning tokens) in the sandbox** after the portal gives up on it. The Phase-2 per-task circuit breaker must kill by in-sandbox PID/job id (`docker exec dpf-sandbox-1 kill <pid>`), not by client signal. This is a live cost/correctness bug in the *current* path, discovered by the spike.
+
+### F2 — Self-hosted Inngest re-delivers after function-server death; step re-runs, ~37s kill→re-invocation (Part 2: answered)
+
+**Method.** Fired `ops/postgres-backup.requested` (event `01KTQRNQTBD07C7ZQM04NWRDH9`, sent from inside the portal so no key left the container), then restarted the portal 4s into the single-step function (`postgresBackupRequested`, `retries: 2`).
+
+**Result.** Two `BackupRun` rows tell the whole story:
+
+| row | status | startedAt | finishedAt |
+|---|---|---|---|
+| `cmq7i2qj2…` (attempt 1) | `running` — **orphaned** | 03:19:34.862 | *never* |
+| `cmq7i3m9y…` (engine retry) | `ok` | 03:20:16.007 | 03:20:21.124 |
+
+The engine detected the dead invocation and re-invoked against the rebooted portal **~37 seconds after the kill, with no human intervention and no boot hook** — the spec §3.1 mechanism confirmed on our pinned image. The step **re-ran** (at-least-once), it did not resume mid-dump: attempt 1's `running` row is stranded forever.
+
+**Design consequences.**
+- The orphaned `running` row is the **live specimen** of why every Phase-2 side-effecting step needs check-then-attach idempotency keyed by `taskId` — a re-invoked dispatch step without the guard would double-launch a specialist exactly like this. Row left in place deliberately (visible in the Backups admin) as dogfooding evidence.
+- Kill→re-invocation latency (~37s: portal boot + engine retry) is the recovery-time floor to expect for Phase-1 step boundaries.
+
+### F3 — Step memoization: deferred to Phase 1, as planned
+
+No manually-triggerable multi-step function exists to prove "completed steps return memoized" without new code (the manual backup functions are single-step; the 4-step daily function is cron-only). Engine documentation + the deliberation-runner's skip-completed-branches behavior in production stand as indirect evidence; **direct proof lands with Phase 1's flagged `build/execute` function**, whose verification already requires observing memoized steps in the run trace.
+
+### Environment notes (recorded for reproducibility)
+
+Quiescence level was `normal` throughout (checked in `PlatformConfig` `portal.quiescence`); the stale `ready-to-swap`/`deferred` `QuiescenceRun` rows from prior upgrades are inert audit rows, not active state. No build was in flight (one build parked in `ideate` since 01:45Z — the operator-reported Build Studio misbehavior, untouched by this spike and still to be diagnosed separately). Zero `working` TaskRuns before, during, and after. Spike files removed from the sandbox; the only residue is the orphaned `BackupRun` row retained as evidence.
+
+**Phase-0 exit: both unknowns answered; Phase 1 is unblocked and its design inputs are confirmed (poll/re-attach, in-sandbox kill for timeouts, idempotent start steps).**
