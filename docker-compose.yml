@@ -209,6 +209,11 @@ services:
       # for installed runtimes. Without this, first-run installs have no
       # code-graph job row and status surfaces report missing background work.
       DPF_OPTIONAL_STARTUP_TASKS_ENABLED: ${DPF_OPTIONAL_STARTUP_TASKS_ENABLED:-1}
+      # BI-89030C9B Phase 1 — durable build execution. When on, autoExecuteBuild
+      # hands the run to the build/execute Inngest function (journaled per-step,
+      # resumes across portal recycles) instead of the legacy in-process loop.
+      # Default OFF during the burn-in window; flip per-install via host .env.
+      DPF_BUILD_DURABLE_EXECUTION_ENABLED: ${DPF_BUILD_DURABLE_EXECUTION_ENABLED:-0}
       # Tell Inngest's serve() the externally-reachable URL for this app so
       # sync registrations announce the Docker-DNS hostname (not the Host
       # header of the /api/inngest PUT, which would be "localhost:3000"
