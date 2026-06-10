@@ -64,6 +64,31 @@ const CATEGORY_PLAYBOOKS: Record<string, MarketingPlaybook> = {
     agentSkills: ["Draft rate announcement", "Financial education article", "Branch notice", "Fraud awareness alert"],
   },
 
+  "public-sector": {
+    primaryGoal: "Resident awareness, participation, and trust through transparent civic communication",
+    stakeholders: "Residents, council members, town staff, local businesses, neighboring jurisdictions",
+    campaignTypes: [
+      "Council and board meeting notices with agenda previews",
+      "Public hearing and comment-period announcements",
+      "Service disruption and road work notices",
+      "Seasonal reminders (leaf pickup, snow routes, hydrant flushing)",
+      "Budget season and levy communications with plain-language summaries",
+      "Permit and licensing deadline reminders",
+      "Community event and parks programming announcements",
+      "Emergency notifications (weather, water, public safety)",
+    ],
+    contentTone: "Official, plain-language, neutral, accessible to every resident",
+    keyMetrics: [
+      "Meeting attendance and public-comment participation",
+      "Service request response time",
+      "Records request on-time completion rate",
+      "Notice reach (open/read rate)",
+      "Resident satisfaction",
+    ],
+    ctaLanguage: ["Report an issue", "View the agenda", "Request records", "Apply for a permit"],
+    agentSkills: ["Draft meeting notice", "Plain-language budget summary", "Service disruption notice", "Public hearing announcement"],
+  },
+
   "professional-services": {
     primaryGoal: "Build authority pipeline through expertise demonstration and client nurture",
     stakeholders: "Clients, prospects, referral partners, industry contacts",

@@ -22,7 +22,8 @@ export type ArchetypeCategory =
   | "fitness-recreation"
   | "nonprofit-community"
   | "hoa-property-management"
-  | "banking-financial-services";
+  | "banking-financial-services"
+  | "public-sector";
 
 export interface FormField {
   name: string;
@@ -87,7 +88,11 @@ export type PrimaryConsumer =
   | "business"
   | "patient-and-payer"
   | "channel-partner"
-  | "internal";
+  | "internal"
+  /** Owner-patron with governance rights (credit union, cooperative). */
+  | "member"
+  /** Served party defined by jurisdiction with statutory rights and a universal-service obligation (town, utility, police). */
+  | "resident";
 
 export type ConsumptionChannel =
   | "physical"
@@ -108,6 +113,8 @@ export type CommercialModel =
   | "encounter-based"
   | "appointment-checkout"
   | "point-of-sale"
+  /** Revenue arrives by levy/assessment/fee schedule set by ordinance or statute, not by sale. */
+  | "statutory-fees-and-levies"
   | "hybrid";
 
 export type ProvisioningModel =
@@ -120,6 +127,16 @@ export type ProvisioningModel =
 
 export type PlatformEcosystem = "no" | "yes-marketplace" | "yes-developer";
 
+/**
+ * How the organization is governed — orthogonal to {@link PrimaryConsumer}
+ * (a community bank is investor-owned serving individuals/businesses; an
+ * electric co-op is member-owned serving member ratepayers; a municipal
+ * utility is a public body serving resident ratepayers). Gates the
+ * member-governance and public-body-governance capabilities; see
+ * docs/superpowers/specs/2026-06-09-civic-and-member-governed-archetypes-design.md §6.1.
+ */
+export type GovernanceModel = "investor-owned" | "member-owned" | "public-body";
+
 export interface OperatingModelAxes {
   form: OperatingModelForm;
   delivery: OperatingModelDelivery;
@@ -128,6 +145,12 @@ export interface OperatingModelAxes {
   commercialModel: CommercialModel;
   provisioning: ProvisioningModel;
   platform: PlatformEcosystem;
+  /**
+   * Optional so the 45+ existing archetype literals stay valid; the
+   * normalizer defaults absent values to "investor-owned"
+   * (readActivationProfile survival rule — consumers never branch on absence).
+   */
+  governance?: GovernanceModel;
 }
 
 export type PortfolioRole =
@@ -402,5 +425,13 @@ export interface ArchetypeDefinition {
   tags: string[];
   schedulingDefaults?: SchedulingDefaults;
   activationProfile?: ActivationProfile;
+  /**
+   * Per-leaf vocabulary overrides, seeded into
+   * `StorefrontArchetype.customVocabulary` and read by `getVocabulary()` —
+   * the mechanism the BIAN banking spec §7.4 decided (credit-union "Members"
+   * vs bank "Customers"); civic spec §8 uses it for Ratepayers/Community.
+   * Typed against the `ArchetypeVocabulary` fields so a misspelled key fails
+   * typecheck instead of being silently ignored at merge time.
+   */
   vocabulary?: ArchetypeVocabularyOverride;
 }

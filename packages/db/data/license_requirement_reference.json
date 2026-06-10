@@ -640,6 +640,80 @@
         "banking",
         "directory"
       ]
+    },
+    {
+      "requirementRefId": "LIC-REQ-US-MUNICIPAL-CHARTER",
+      "countryCode": "US",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "United States",
+      "authorityName": "State municipal incorporation authority (via USAGov local government directory)",
+      "authorityType": "state_directory",
+      "requirementType": "charter_directory",
+      "scopeLevel": "organization",
+      "archetypeCategories": [
+        "public-sector"
+      ],
+      "activityTags": [
+        "municipal-incorporation",
+        "charter",
+        "state-municipal-code"
+      ],
+      "summary": "Bootstrap directory for locating the state authority governing municipal incorporation, charters, and the state municipal code that defines a town's powers and obligations. The organization's charter/incorporation posture is captured against the state named at onboarding.",
+      "officialWebsiteUrl": "https://www.usa.gov/local-governments",
+      "applicationUrl": null,
+      "renewalUrl": null,
+      "helpUrl": "https://www.usa.gov/local-governments",
+      "displayRuleSummary": null,
+      "renewalCadenceHint": null,
+      "sourceUrls": [
+        "https://www.usa.gov/local-governments"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 180,
+      "tags": [
+        "us",
+        "bootstrap",
+        "directory",
+        "public-sector"
+      ]
+    },
+    {
+      "requirementRefId": "LIC-REQ-US-STATE-AUDITOR-FILING",
+      "countryCode": "US",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "United States",
+      "authorityName": "State auditor / comptroller office (via USAGov state government directory)",
+      "authorityType": "state_directory",
+      "requirementType": "filing_directory",
+      "scopeLevel": "organization",
+      "archetypeCategories": [
+        "public-sector"
+      ],
+      "activityTags": [
+        "annual-financial-report",
+        "state-audit",
+        "municipal-filing"
+      ],
+      "summary": "Bootstrap directory for locating the state auditor or comptroller office where local governments file their annual or biennial financial reports and audits. Filing cadence varies by state and population; the recurring obligation itself is tracked on the compliance substrate (REG-US-STATE-MUNI-FINANCE).",
+      "officialWebsiteUrl": "https://www.usa.gov/state-governments",
+      "applicationUrl": null,
+      "renewalUrl": null,
+      "helpUrl": "https://www.usa.gov/state-governments",
+      "displayRuleSummary": null,
+      "renewalCadenceHint": "annual-or-biennial-by-state",
+      "sourceUrls": [
+        "https://www.usa.gov/state-governments"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 180,
+      "tags": [
+        "us",
+        "bootstrap",
+        "directory",
+        "public-sector"
+      ]
     }
   ]
 }

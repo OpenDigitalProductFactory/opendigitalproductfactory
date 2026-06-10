@@ -170,7 +170,13 @@ export const bankingFinancialServicesArchetypes: ArchetypeDefinition[] = [
       ...BANKING_ACTIVATION_BASE,
       axes: {
         ...BANKING_ACTIVATION_BASE.axes,
-        primaryConsumer: "household" as const,
+        // Member-owned cooperative — uses the civic substrate's `member`
+        // consumer and `member-owned` governance (BI-938D1B71), which derive
+        // member-governance, membership-eligibility, and member-equity
+        // capabilities. Field-of-membership eligibility is the defining
+        // credit-union intake gate (NCUA charter posture, spec §3.4).
+        primaryConsumer: "member" as const,
+        governance: "member-owned" as const,
       },
       seededServiceCategories: [
         "loans-and-deposits",

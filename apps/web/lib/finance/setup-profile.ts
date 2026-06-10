@@ -13,6 +13,7 @@ const FINANCE_PROFILE_BY_ARCHETYPE_CATEGORY: Record<string, string> = {
   "nonprofit-community": "nonprofit",
   "hoa-property-management": "hoa_property_management",
   "banking-financial-services": "banking_financial_services",
+  "public-sector": "fund_accounting",
 };
 
 export function financeProfileSlugFromCategory(category: string | null | undefined): string {

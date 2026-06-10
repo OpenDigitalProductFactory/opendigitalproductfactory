@@ -125,6 +125,11 @@ COPY --from=init /app/deliberation ./deliberation
 COPY --from=init /app/docs/Reference ./docs/Reference
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
+# BI-5322D025: the portal self-migrates on boot (see script header). Absolute
+# path so it is invoked directly, not shadowed by the Node base image's
+# /usr/local/bin/docker-entrypoint.sh passthrough.
+COPY scripts/portal-migrate-boot.sh /usr/local/bin/portal-migrate-boot.sh
+RUN chmod +x /usr/local/bin/portal-migrate-boot.sh
 
 # Source for Build Studio — copied to -src paths to avoid collision with standalone output
 # Note: /app/apps/web/ and /app/packages/ are occupied by the standalone NFT output.
@@ -205,4 +210,9 @@ EXPOSE 3000
 # content hash); seed DEPLOYED_SHA from that baked file whenever the env is unset
 # so the runtime always reports the identity of its own bytes regardless of how
 # it was started. An explicit DEPLOYED_SHA from the deploy pipeline still wins.
-CMD ["sh", "-c", "if [ -z \"$DEPLOYED_SHA\" ] && [ -s /app/.dpf-image-version ]; then DEPLOYED_SHA=\"$(tr -d '[:space:]' < /app/.dpf-image-version)\"; export DEPLOYED_SHA; fi; exec node apps/web/server.js"]
+# BI-5322D025: portal-migrate-boot.sh applies pending migrations from THIS
+# image's bytes before exec'ing the server, so a self-upgrade swap (or any
+# restart) can never leave the DB drifted. It is fail-closed: if migrations
+# can't apply, the portal does not start. portal-init is unaffected — it
+# overrides CMD with /docker-entrypoint.sh.
+CMD ["/usr/local/bin/portal-migrate-boot.sh", "sh", "-c", "if [ -z \"$DEPLOYED_SHA\" ] && [ -s /app/.dpf-image-version ]; then DEPLOYED_SHA=\"$(tr -d '[:space:]' < /app/.dpf-image-version)\"; export DEPLOYED_SHA; fi; exec node apps/web/server.js"]

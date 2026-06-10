@@ -93,6 +93,14 @@ const VOCABULARY: Record<string, ArchetypeVocabulary> = {
     portalLabel: "Banking Portal", stakeholderLabel: "Customers",
     teamLabel: "Bankers", inboxLabel: "Applications", agentName: "Relationship Manager",
   },
+  // Towns, municipal utilities, law enforcement. Leaf overrides (Ratepayers /
+  // Community) ship with each archetype via customVocabulary; civic spec §8.
+  "public-sector": {
+    itemsLabel: "Services & Programs", singleItemLabel: "Service", addButtonLabel: "Add service",
+    categoryLabel: "Department", priceLabel: "Fee",
+    portalLabel: "Resident Portal", stakeholderLabel: "Residents",
+    teamLabel: "Staff", inboxLabel: "Service Requests", agentName: "Resident Services",
+  },
 };
 
 const DEFAULT_VOCABULARY: ArchetypeVocabulary = {
@@ -197,6 +205,10 @@ const CATEGORY_SUGGESTIONS: Record<string, string[]> = {
   "community-bank": ["Checking", "Savings", "Certificates", "Loans", "Cards", "Business Banking"],
   "credit-union": ["Share Accounts", "Certificates", "Auto Loans", "Home Loans", "Cards", "Membership"],
   "mortgage-lending": ["Purchase", "Refinance", "HELOC", "Pre-Approval"],
+
+  // Public sector
+  "small-town-municipality": ["Permits & Licenses", "Public Works", "Parks & Recreation", "Clerk's Office", "Code Enforcement"],
+  "municipal-utility": ["Residential", "Commercial", "Irrigation", "Connection Fees", "Service Orders"],
 };
 
 export function getCategorySuggestions(archetypeId: string | null | undefined): string[] {

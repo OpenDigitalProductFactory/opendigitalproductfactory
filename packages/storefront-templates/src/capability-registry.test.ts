@@ -26,6 +26,12 @@ describe("capability registry", () => {
       "lifecycle-review-queues",
       "remote-support",
       "partner-program",
+      "member-governance",
+      "membership-eligibility",
+      "member-equity",
+      "public-body-governance",
+      "records-request",
+      "service-request-311",
     ]);
   });
 

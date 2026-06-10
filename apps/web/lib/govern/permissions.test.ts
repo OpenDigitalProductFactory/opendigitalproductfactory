@@ -105,6 +105,28 @@ describe("getShellNavSections()", () => {
     ]);
     expect(sections.find((section) => section.key === "platform")).toBeUndefined();
   });
+
+  it("hides archetype-gated entries unless the org capability is active", () => {
+    const businessItems = (sections: ReturnType<typeof getShellNavSections>) =>
+      sections.find((section) => section.key === "business")?.items.map((item) => item.key) ?? [];
+
+    // No org context → civic entries hidden (safe default), permission entries unaffected.
+    const withoutOrg = getShellNavSections(hr000);
+    expect(businessItems(withoutOrg)).not.toContain("governance");
+    expect(businessItems(withoutOrg)).not.toContain("service-requests");
+    expect(businessItems(withoutOrg)).toContain("compliance");
+
+    // Public-body org → civic entries render for a permitted user.
+    const withCivicOrg = getShellNavSections(hr000, {
+      activeOrgCapabilities: new Set(["public-body-governance", "service-request-311"]),
+    });
+    expect(businessItems(withCivicOrg)).toContain("governance");
+    expect(businessItems(withCivicOrg)).toContain("service-requests");
+
+    // Commercial org (empty set) → still hidden.
+    const withCommercialOrg = getShellNavSections(hr000, { activeOrgCapabilities: new Set() });
+    expect(businessItems(withCommercialOrg)).not.toContain("governance");
+  });
 });
 
 describe("getAccessibleSectionNavEntries()", () => {

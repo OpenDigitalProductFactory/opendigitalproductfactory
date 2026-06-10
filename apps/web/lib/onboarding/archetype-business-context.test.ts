@@ -56,6 +56,7 @@ describe("resolveBusinessProfile", () => {
       "education-training",
       "retail-goods",
       "nonprofit-community",
+      "public-sector",
     ];
 
     it("populates a non-empty supplyChain on every industry profile", () => {

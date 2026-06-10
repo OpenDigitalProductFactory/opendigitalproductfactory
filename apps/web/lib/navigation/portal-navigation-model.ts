@@ -36,6 +36,14 @@ export type PortalNavRecord = {
   audienceModes: readonly PortalAudienceMode[];
   destinationKind: PortalDestinationKind;
   capabilityKey?: CapabilityKey | null;
+  /**
+   * Archetype-capability gate (capability registry key from
+   * @dpf/storefront-templates, e.g. "public-body-governance"). Entries carrying
+   * this key render only when the org's effective capability activation has it
+   * active — capability-driven surfaces per the civic archetypes spec §12, on
+   * top of (not instead of) the user-permission capabilityKey.
+   */
+  orgCapabilityKey?: string | null;
   primaryOrder?: number;
   sectionNavLabel?: string;
   shellNav?: {
@@ -51,6 +59,7 @@ export type PortalNavEntry = Pick<
   "key" | "label" | "path" | "parentPath" | "domain" | "destinationKind"
 > & {
   capabilityKey: CapabilityKey | null;
+  orgCapabilityKey: string | null;
   audienceModes: readonly PortalAudienceMode[];
 };
 
@@ -242,6 +251,52 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     shellNav: {
       sectionKey: "business",
       description: "Controls, risk, obligations, and posture.",
+    },
+  },
+  {
+    // Civic archetypes (BI-8D477188 Phase 3): public-body governance workflow.
+    // Renders only when the org's archetype derives public-body-governance
+    // active (towns, utilities, law enforcement — and member-owned boards
+    // reuse the same surface via member-governance in a later slice).
+    key: "governance",
+    label: "Governance",
+    path: "/governance",
+    parentPath: "/governance",
+    domain: "business",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "domain-home",
+    capabilityKey: "view_compliance",
+    orgCapabilityKey: "public-body-governance",
+    shellNav: {
+      sectionKey: "business",
+      description: "Meetings, agendas, minutes, and records requests.",
+    },
+    sectionSiblings: ["/governance", "/governance/records-requests"],
+  },
+  {
+    key: "governance-records-requests",
+    label: "Records Requests",
+    path: "/governance/records-requests",
+    parentPath: "/governance",
+    domain: "business",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "section-page",
+    capabilityKey: "view_compliance",
+    orgCapabilityKey: "records-request",
+  },
+  {
+    key: "service-requests",
+    label: "Service Requests",
+    path: "/service-requests",
+    parentPath: "/service-requests",
+    domain: "business",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "domain-home",
+    capabilityKey: "view_storefront",
+    orgCapabilityKey: "service-request-311",
+    shellNav: {
+      sectionKey: "business",
+      description: "Resident service requests routed to departments.",
     },
   },
   {
@@ -803,6 +858,7 @@ function toEntry(route: PortalNavRecord): PortalNavEntry {
     audienceModes: route.audienceModes,
     destinationKind: route.destinationKind,
     capabilityKey: route.capabilityKey ?? null,
+    orgCapabilityKey: route.orgCapabilityKey ?? null,
   };
 }
 

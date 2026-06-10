@@ -153,6 +153,57 @@ export const CAPABILITY_REGISTRY = {
         "Turns on a partner portal, deal registration, and partner tiers for resellers, distributors, or referral partners. You can add this later.",
     },
   },
+  // Civic & member-governed capabilities — gated by the governance axis and the
+  // member/resident primaryConsumer values (spec: 2026-06-09 civic archetypes §6.1).
+  "member-governance": {
+    label: "Member Governance",
+    portfolio: "forEmployees",
+    defaultOwnershipScope: "organization",
+    defaultIsolation: "organization-scope",
+    surfaces: ["governance", "meetings"],
+  },
+  "membership-eligibility": {
+    label: "Membership Eligibility",
+    portfolio: "productsAndServicesSold",
+    defaultOwnershipScope: "organization",
+    defaultIsolation: "organization-scope",
+    surfaces: ["customers", "membership"],
+  },
+  "member-equity": {
+    label: "Member Equity & Patronage",
+    portfolio: "productsAndServicesSold",
+    defaultOwnershipScope: "customer-account",
+    defaultIsolation: "organization-scope",
+    surfaces: ["finance", "membership"],
+    setupPrompt: {
+      question: "Do members hold equity or receive patronage allocations?",
+      helpText:
+        "Turns on per-member equity records, year-end patronage allocation, and equity retirement schedules. Common for cooperatives; you can add this later.",
+    },
+  },
+  "public-body-governance": {
+    label: "Public-Body Governance",
+    portfolio: "forEmployees",
+    defaultOwnershipScope: "organization",
+    defaultIsolation: "organization-scope",
+    surfaces: ["governance", "meetings"],
+  },
+  "records-request": {
+    label: "Records Requests",
+    portfolio: "manufactureAndDeliver",
+    it4itStage: "request-to-fulfill",
+    defaultOwnershipScope: "organization",
+    defaultIsolation: "organization-scope",
+    surfaces: ["records-requests"],
+  },
+  "service-request-311": {
+    label: "Service Requests (311)",
+    portfolio: "manufactureAndDeliver",
+    it4itStage: "request-to-fulfill",
+    defaultOwnershipScope: "organization",
+    defaultIsolation: "organization-scope",
+    surfaces: ["service-requests"],
+  },
 } as const satisfies Record<string, CapabilityRegistryEntry>;
 
 export type CapabilityKey = keyof typeof CAPABILITY_REGISTRY;

@@ -33,6 +33,14 @@ const MARKETING_SKILL_RULES: Record<string, Record<string, unknown>> = {
       reframe: "Focus on term launches, open day invitations, student success stories, and enrolment drives. Tone is encouraging and achievement-focused.",
     },
   },
+  "public-sector": {
+    "seo-content-optimizer": { visible: false },
+    "competitive-analysis": { visible: false },
+    "email-campaign-builder": {
+      label: "Public Notice Builder",
+      reframe: "Focus on official civic communications: meeting notices, public hearings, service disruptions, budget and levy communications, permit deadlines, and emergency notifications. Tone is official, plain-language, and neutral — public bodies inform every resident equally; they do not market or persuade.",
+    },
+  },
   "nonprofit-community": {
     "seo-content-optimizer": {
       label: "Cause Visibility Advisor",
@@ -90,10 +98,12 @@ export async function seedStorefrontArchetypes(prisma: PrismaClient): Promise<vo
         formSchema: json(archetype.formSchema),
         tags: archetype.tags,
         activationProfile: json(archetype.activationProfile ?? null),
-        // Leaf-level vocabulary override (e.g. credit-union "Members") — merged
-        // over the category vocabulary by applyCustomVocabulary at render time.
-        // Definitions without an override write null, preserving operator edits
-        // only where the template itself never carried vocabulary.
+        // Leaf-level vocabulary override (e.g. credit-union "Members",
+        // municipal-utility "Ratepayers") — merged over the category vocabulary
+        // by applyCustomVocabulary at render time. Conditional on the update
+        // path so re-seeding never clobbers operator label edits (the portal
+        // rename tool also writes customVocabulary) for templates that carry
+        // no override of their own.
         ...(archetype.vocabulary ? { customVocabulary: json(archetype.vocabulary) } : {}),
         marketingSkillRules: json(MARKETING_SKILL_RULES[archetype.category] ?? {}),
       },
