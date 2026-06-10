@@ -15090,7 +15090,7 @@ export async function executeTool(
         return { success: true, message: `Last ${lines} lines from ${service}:`, data: { service, output: stdout.slice(0, 30000) } };
       } catch (err) {
         const msg = (err as Error).message?.slice(0, 500) ?? "Failed";
-        await logAdminActivity(userId, "admin_view_logs", { service, lines }, "success", 1, msg);
+        await logAdminActivity(userId, "admin_view_logs", { service, lines }, "error", 1, msg);
         return { success: true, message: `Logs from ${service}:`, data: { service, output: msg } };
       }
     }
@@ -15124,7 +15124,7 @@ export async function executeTool(
         return { success: true, message: `Query returned ${result.length} row(s).`, data: { sql, rows: result, rowCount: result.length } };
       } catch (err) {
         const msg = (err as Error).message?.slice(0, 500) ?? "Query failed";
-        await logAdminActivity(userId, "admin_query_db", { sql }, "success", 1, msg);
+        await logAdminActivity(userId, "admin_query_db", { sql }, "error", 1, msg);
         return { success: false, error: msg, message: `Query failed: ${msg}` };
       }
     }
