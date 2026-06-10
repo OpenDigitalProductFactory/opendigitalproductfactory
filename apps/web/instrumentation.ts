@@ -305,7 +305,7 @@ export async function recoverContradictoryBuildExecStatesOnBoot(
 export async function resumeStrandedBuildsOnBoot(
   opts: { staleAfterMs?: number; dispatch?: (buildId: string) => void } = {},
   logger: Pick<Console, "log" | "error"> = console,
-): Promise<{ resumed: number } | null> {
+): Promise<{ resumed: number; flagged: number } | null> {
   const staleAfterMs = opts.staleAfterMs ?? 5 * 60 * 1000;
   try {
     const { prisma } = await import("@dpf/db");
@@ -314,9 +314,18 @@ export async function resumeStrandedBuildsOnBoot(
     );
     type ExecStateLike = import("@/lib/integrate/build-exec-types").ExecStateLike;
     const cutoff = new Date(Date.now() - staleAfterMs);
+    // BI-17377D05: cover ALL non-terminal pre-ship phases, not just `build`.
+    // Only the `build` phase has a resumable step-machine (buildExecState) that
+    // autoExecuteBuild can re-dispatch; ideate/plan/review are dispatch-driven
+    // with no resume, so a swap (or a dead dispatch) used to strand them
+    // SILENTLY. We still auto-resume `build`; for the pre-build phases we surface
+    // the strand as recoverable so it stops being a silent orphan.
     const candidates = await prisma.featureBuild.findMany({
-      where: { phase: "build", updatedAt: { lt: cutoff } },
-      select: { buildId: true, buildExecState: true, verificationOut: true },
+      where: {
+        phase: { in: ["ideate", "plan", "build", "review"] },
+        updatedAt: { lt: cutoff },
+      },
+      select: { buildId: true, phase: true, buildExecState: true, verificationOut: true },
     });
 
     // Default dispatcher lazy-imports the system executor to avoid pulling the
@@ -338,7 +347,30 @@ export async function resumeStrandedBuildsOnBoot(
       });
 
     let resumed = 0;
+    let flagged = 0;
     for (const build of candidates) {
+      // ── Pre-build phases (ideate/plan/review): no resumable step-machine.
+      // Surface as recoverable instead of auto-re-dispatching the fragile,
+      // unverified pre-build flow. Full auto-resume of these phases is the
+      // remaining BI-17377D05 / EP-BUILD-4DB1C0 work.
+      if (build.phase !== "build") {
+        logger.log(
+          `[build-resume] ${build.buildId} stranded in ${build.phase} phase after restart — flagged for recovery (pre-build phases have no auto-resume)`,
+        );
+        await prisma.buildActivity
+          .create({
+            data: {
+              buildId: build.buildId,
+              tool: "resumeStrandedBuildsOnBoot",
+              summary: `Stranded in ${build.phase} phase after a restart/swap — flagged for operator recovery; pre-build phases have no auto-resume yet (BI-17377D05).`,
+            },
+          })
+          .catch(() => {});
+        flagged++;
+        continue;
+      }
+
+      // ── Build phase: proven step-machine resume (unchanged behavior). ──
       const state = build.buildExecState as ExecStateLike | null;
       // Skip contradictory shapes — the contradictory-recovery reconciler owns
       // those. Skip null/terminal steps — nothing to resume.
@@ -364,7 +396,10 @@ export async function resumeStrandedBuildsOnBoot(
     if (resumed > 0) {
       logger.log(`[build-resume] re-dispatched ${resumed} stranded build(s)`);
     }
-    return { resumed };
+    if (flagged > 0) {
+      logger.log(`[build-resume] flagged ${flagged} pre-build-phase strand(s) for recovery`);
+    }
+    return { resumed, flagged };
   } catch (err) {
     logger.error("[build-resume] failed (non-fatal):", err);
     return null;
