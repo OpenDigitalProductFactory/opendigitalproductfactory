@@ -26,6 +26,8 @@ import {
 import { getCooldownUntil } from "@/lib/self-upgrade/cooldown";
 import { loadPlatformVersion } from "@/lib/platform/version";
 import { inngest } from "@/lib/queue/inngest-client";
+import { readBuildPipelineLimit } from "@/lib/queue/admission";
+import { buildAdmissionSnapshot } from "@/lib/queue/admission-observability";
 import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -705,6 +707,9 @@ export async function getSelfUpgradeStatus() {
     isFresh,
     latestRun,
     quiescence,
+    // §4.5 admission observability — derived from the lane config + the
+    // quiescence blockers already captured above (no extra query).
+    admission: buildAdmissionSnapshot(readBuildPipelineLimit(), quiescence.blockers),
     cooldownUntil: cooldownUntil?.toISOString() ?? null,
     platformVersion: {
       version: platformVersion.version,
