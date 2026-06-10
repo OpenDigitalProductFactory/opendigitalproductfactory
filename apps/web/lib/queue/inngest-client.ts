@@ -125,6 +125,18 @@ export interface BuildGitUpdateReceivedEvent {
   };
 }
 
+/** BI-89030C9B Phase 1 — durable build execution. Sent by autoExecuteBuild
+ *  when DPF_BUILD_DURABLE_EXECUTION_ENABLED is on; handled by
+ *  queue/functions/build-execute.ts. Sends carry a deterministic idempotency
+ *  id (buildExecuteSendId) so duplicate dispatches of the same logical
+ *  attempt collapse to one run. */
+export interface BuildExecuteRunEvent {
+  name: "build/execute.run";
+  data: {
+    buildId: string;
+  };
+}
+
 export interface AssuranceBomGenerateEvent {
   name: "assurance/bom.generate";
   data: {

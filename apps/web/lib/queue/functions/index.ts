@@ -17,6 +17,7 @@ import { materialFreshnessDecay } from "./material-freshness-decay";
 import { researchExecute } from "./research-execute";
 import { researchScheduleScan } from "./research-schedule";
 import { buildReviewVerification } from "./build-review-verification";
+import { buildExecute } from "./build-execute";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
 import { deliberationRun } from "./deliberation-run";
@@ -85,6 +86,7 @@ export const eventFunctions = [
   brandExtract,
   researchExecute,
   buildReviewVerification,
+  buildExecute,
   assuranceBomGenerate,
   assuranceScanRun,
   deliberationRun,
