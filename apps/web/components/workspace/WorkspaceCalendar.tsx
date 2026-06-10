@@ -45,6 +45,7 @@ const ARCHETYPE_DEFAULT_HIDDEN: Record<string, string[]> = {
   "professional-services":   ["providers"],
   "nonprofit-community":     ["bookings", "providers"],
   "trades-maintenance":      ["providers"],
+  "public-sector":           ["bookings", "providers", "crm"],
 };
 
 type Props = {

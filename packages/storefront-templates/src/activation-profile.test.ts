@@ -211,13 +211,15 @@ describe("existing archetype regression (governance axis is inert)", () => {
     "service-request-311",
   ] as const;
 
-  it("every seeded archetype normalizes to investor-owned with all civic capabilities not-applicable", () => {
-    const archetypesWithProfiles = ALL_ARCHETYPES.filter(
-      (archetype) => archetype.activationProfile !== undefined,
+  it("every archetype without a governance declaration normalizes to investor-owned with all civic capabilities not-applicable", () => {
+    const legacyArchetypes = ALL_ARCHETYPES.filter(
+      (archetype) =>
+        archetype.activationProfile !== undefined &&
+        archetype.activationProfile.axes?.governance === undefined,
     );
-    expect(archetypesWithProfiles.length).toBeGreaterThan(0);
+    expect(legacyArchetypes.length).toBeGreaterThan(0);
 
-    for (const archetype of archetypesWithProfiles) {
+    for (const archetype of legacyArchetypes) {
       const profile = readActivationProfile(archetype.activationProfile);
       expect(profile, `profile for ${archetype.archetypeId} should normalize`).not.toBeNull();
       expect(
@@ -232,5 +234,19 @@ describe("existing archetype regression (governance axis is inert)", () => {
         ).toBe("not-applicable");
       }
     }
+  });
+
+  it("the small-town municipality archetype derives the public-body capability set from its declared axes", () => {
+    const town = ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === "small-town-municipality");
+    expect(town?.activationProfile).toBeDefined();
+
+    const profile = readActivationProfile(town?.activationProfile);
+    expect(profile?.axes.governance).toBe("public-body");
+    expect(profile?.axes.primaryConsumer).toBe("resident");
+    expect(getCapabilityApplicability(profile, "public-body-governance")).toBe("required");
+    expect(getCapabilityApplicability(profile, "records-request")).toBe("required");
+    expect(getCapabilityApplicability(profile, "service-request-311")).toBe("required");
+    expect(getCapabilityApplicability(profile, "member-governance")).toBe("not-applicable");
+    expect(profile?.billingProfile.primaryPaymentPattern).toBe("ad-hoc-invoice");
   });
 });

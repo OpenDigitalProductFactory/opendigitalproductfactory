@@ -10,6 +10,7 @@ import { retailGoodsArchetypes } from "./retail-goods";
 import { fitnessRecreationArchetypes } from "./fitness-recreation";
 import { nonprofitCommunityArchetypes } from "./nonprofit-community";
 import { hoaPropertyManagementArchetypes } from "./hoa-property-management";
+import { publicSectorArchetypes } from "./public-sector";
 
 export const ALL_ARCHETYPES = [
   ...healthcareWellnessArchetypes,
@@ -24,4 +25,5 @@ export const ALL_ARCHETYPES = [
   ...fitnessRecreationArchetypes,
   ...nonprofitCommunityArchetypes,
   ...hoaPropertyManagementArchetypes,
+  ...publicSectorArchetypes,
 ];

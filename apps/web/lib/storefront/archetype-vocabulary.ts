@@ -190,6 +190,9 @@ const CATEGORY_SUGGESTIONS: Record<string, string[]> = {
 
   // HOA
   "hoa-management": ["Assessments", "Maintenance", "Amenities"],
+
+  // Public sector
+  "small-town-municipality": ["Permits & Licenses", "Public Works", "Parks & Recreation", "Clerk's Office", "Code Enforcement"],
 };
 
 export function getCategorySuggestions(archetypeId: string | null | undefined): string[] {
