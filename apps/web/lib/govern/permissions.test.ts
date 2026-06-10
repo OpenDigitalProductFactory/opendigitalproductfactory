@@ -127,6 +127,28 @@ describe("getShellNavSections()", () => {
     const withCommercialOrg = getShellNavSections(hr000, { activeOrgCapabilities: new Set() });
     expect(businessItems(withCommercialOrg)).not.toContain("governance");
   });
+
+  it("renders the shared /governance entry for either governance flavor via the any-of gate", () => {
+    const governanceItems = (capabilities: Set<string>) =>
+      getShellNavSections(hr000, { activeOrgCapabilities: capabilities })
+        .find((section) => section.key === "business")
+        ?.items.filter((item) => item.href === "/governance") ?? [];
+
+    // Member-owned org: governance via the any-of gate, plus member equity.
+    const memberOwned = getShellNavSections(hr000, {
+      activeOrgCapabilities: new Set(["member-governance", "member-equity"]),
+    });
+    expect(governanceItems(new Set(["member-governance", "member-equity"]))).toHaveLength(1);
+    expect(
+      memberOwned.find((section) => section.key === "business")?.items.map((item) => item.key),
+    ).toContain("member-equity");
+
+    // Public body: same single entry.
+    expect(governanceItems(new Set(["public-body-governance"]))).toHaveLength(1);
+
+    // Commercial: none.
+    expect(governanceItems(new Set())).toHaveLength(0);
+  });
 });
 
 describe("getAccessibleSectionNavEntries()", () => {

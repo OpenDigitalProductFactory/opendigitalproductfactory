@@ -1,14 +1,19 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
-import { hasActiveOrgCapability } from "@/lib/storefront/civic-surfaces.server";
+import { getActiveOrgCapabilities } from "@/lib/storefront/civic-surfaces.server";
 import { CivicMeetingsPanel, type MeetingRow } from "@/components/civic/CivicMeetingsPanel";
 
-// Public-body governance workbench (BI-8D477188 Phase 3). Capability-gated:
-// reachable only when the org's archetype derives public-body-governance active
-// (civic spec §12 — surfaces fall out of capabilities, not archetype ids).
+// Governance workbench (BI-8D477188 Phase 3; member-owned flavor BI-AFC178F3).
+// Capability-gated: public bodies (council/committee, open-meetings law) and
+// member-owned organizations (board/annual meeting) share this surface — the
+// GovernanceMeeting bodyType carries the distinction (civic spec §12).
 export default async function GovernancePage() {
-  if (!(await hasActiveOrgCapability("public-body-governance"))) notFound();
+  const activeCapabilities = await getActiveOrgCapabilities();
+  const isPublicBody = activeCapabilities.has("public-body-governance");
+  const isMemberGoverned = activeCapabilities.has("member-governance");
+  if (!isPublicBody && !isMemberGoverned) notFound();
+  const showRecordsRequests = activeCapabilities.has("records-request");
 
   const meetings = await prisma.governanceMeeting.findMany({
     orderBy: { scheduledAt: "desc" },
@@ -27,9 +32,11 @@ export default async function GovernancePage() {
     minutesRecordedAt: m.minutesRecordedAt?.toISOString() ?? null,
   }));
 
-  const openRequests = await prisma.recordsRequest.count({
-    where: { status: { in: ["submitted", "in-progress"] } },
-  });
+  const openRequests = showRecordsRequests
+    ? await prisma.recordsRequest.count({
+        where: { status: { in: ["submitted", "in-progress"] } },
+      })
+    : 0;
 
   return (
     <div>
@@ -40,12 +47,14 @@ export default async function GovernancePage() {
             Meetings, agendas, and minutes · {rows.length} meetings
           </p>
         </div>
-        <Link
-          href="/governance/records-requests"
-          className="rounded border border-[var(--dpf-border)] px-3 py-1.5 text-xs text-[var(--dpf-text)] hover:border-[var(--dpf-accent)]"
-        >
-          Records Requests {openRequests > 0 ? `(${openRequests} open)` : ""}
-        </Link>
+        {showRecordsRequests && (
+          <Link
+            href="/governance/records-requests"
+            className="rounded border border-[var(--dpf-border)] px-3 py-1.5 text-xs text-[var(--dpf-text)] hover:border-[var(--dpf-accent)]"
+          >
+            Records Requests {openRequests > 0 ? `(${openRequests} open)` : ""}
+          </Link>
+        )}
       </div>
       <CivicMeetingsPanel meetings={rows} />
     </div>

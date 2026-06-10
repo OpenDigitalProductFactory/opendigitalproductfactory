@@ -37,13 +37,15 @@ export type PortalNavRecord = {
   destinationKind: PortalDestinationKind;
   capabilityKey?: CapabilityKey | null;
   /**
-   * Archetype-capability gate (capability registry key from
+   * Archetype-capability gate (capability registry key(s) from
    * @dpf/storefront-templates, e.g. "public-body-governance"). Entries carrying
-   * this key render only when the org's effective capability activation has it
-   * active — capability-driven surfaces per the civic archetypes spec §12, on
-   * top of (not instead of) the user-permission capabilityKey.
+   * this render only when the org's effective capability activation has AT
+   * LEAST ONE of the keys active (any-of) — capability-driven surfaces per the
+   * civic archetypes spec §12, on top of (not instead of) the user-permission
+   * capabilityKey. An array expresses shared surfaces like /governance, which
+   * serves both public-body and member-owned governance.
    */
-  orgCapabilityKey?: string | null;
+  orgCapabilityKey?: string | readonly string[] | null;
   primaryOrder?: number;
   sectionNavLabel?: string;
   shellNav?: {
@@ -59,7 +61,7 @@ export type PortalNavEntry = Pick<
   "key" | "label" | "path" | "parentPath" | "domain" | "destinationKind"
 > & {
   capabilityKey: CapabilityKey | null;
-  orgCapabilityKey: string | null;
+  orgCapabilityKey: string | readonly string[] | null;
   audienceModes: readonly PortalAudienceMode[];
 };
 
@@ -266,12 +268,32 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     audienceModes: ["worker", "operator"],
     destinationKind: "domain-home",
     capabilityKey: "view_compliance",
-    orgCapabilityKey: "public-body-governance",
+    // Any-of: the surface serves council/open-meetings governance (public
+    // bodies) AND board/annual-meeting governance (member-owned orgs,
+    // BI-AFC178F3); the page adapts via the same capability activations.
+    orgCapabilityKey: ["public-body-governance", "member-governance"],
     shellNav: {
       sectionKey: "business",
-      description: "Meetings, agendas, minutes, and records requests.",
+      description: "Meetings, agendas, minutes — council or board.",
     },
     sectionSiblings: ["/governance", "/governance/records-requests"],
+  },
+  {
+    // Member equity & patronage ledger (BI-AFC178F3) — co-ops and, later,
+    // member-owned utilities (capital credits).
+    key: "member-equity",
+    label: "Member Equity",
+    path: "/member-equity",
+    parentPath: "/member-equity",
+    domain: "business",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "domain-home",
+    capabilityKey: "view_finance",
+    orgCapabilityKey: "member-equity",
+    shellNav: {
+      sectionKey: "business",
+      description: "Per-member equity, patronage allocations, and retirements.",
+    },
   },
   {
     key: "governance-records-requests",

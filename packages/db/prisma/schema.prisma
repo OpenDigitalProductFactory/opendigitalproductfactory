@@ -2312,6 +2312,7 @@ model CustomerAccount {
 
   @@index([status])
   @@index([parentAccountId])
+  memberEquityEntries MemberEquityEntry[]
 }
 
 model CustomerSite {
@@ -2839,6 +2840,7 @@ model Organization {
   governanceMeetings            GovernanceMeeting[]
   recordsRequests               RecordsRequest[]
   fundBudgetLines               FundBudgetLine[]
+  memberEquityEntries           MemberEquityEntry[]
 }
 
 // EP-PARTNER-CHANNEL Phase 1b. Generic per-organization opt-in overlay on top of
@@ -10452,5 +10454,34 @@ model FundBudgetLine {
   updatedAt DateTime @updatedAt
 
   @@unique([organizationId, fiscalYear, fund, accountCode])
+  @@index([organizationId, fiscalYear])
+}
+
+// Member equity & patronage ledger (BI-AFC178F3 — civic spec §7 cooperative).
+// One row per allocation/retirement/retain event; a member's equity balance is
+// the sum of amounts (retirements are negative). Serves co-ops first and
+// member-owned utilities (capital credits) later.
+model MemberEquityEntry {
+  id              String          @id @default(cuid())
+  entryId         String          @unique
+  organizationId  String
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  memberAccountId String
+  memberAccount   CustomerAccount @relation(fields: [memberAccountId], references: [id], onDelete: Cascade)
+
+  fiscalYear  Int
+  // patronage-allocation | equity-retirement | per-unit-retain | adjustment
+  kind        String
+  // Negative for retirements.
+  amount      Decimal  @db.Decimal(14, 2)
+  // Qualified written notice of allocation (Subchapter T) — drives the >=20% cash rule.
+  qualified   Boolean  @default(false)
+  cashPortion Decimal? @db.Decimal(14, 2)
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, memberAccountId])
   @@index([organizationId, fiscalYear])
 }
