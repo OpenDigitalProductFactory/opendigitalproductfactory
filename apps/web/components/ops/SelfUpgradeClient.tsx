@@ -61,6 +61,14 @@ type QuiescenceActivity = {
   blockers: QuiescenceBlockerLine[];
 };
 
+// §4.5 admission observability projection (apps/web/lib/queue/admission-observability.ts).
+type AdmissionSnapshot = {
+  lane: { enabled: boolean; limit: number | null; key: string };
+  buildHolders: number;
+  totalHolders: number;
+  summary: string;
+};
+
 type Props = {
   enabled: boolean;
   channel: string;
@@ -74,6 +82,7 @@ type Props = {
   isFresh: boolean;
   latestRun: LatestRun | null;
   quiescence?: QuiescenceActivity | null;
+  admission?: AdmissionSnapshot | null;
   cooldownUntil?: string | null;
   history?: LatestRun[];
   historyNextCursor?: string | null;
@@ -189,6 +198,7 @@ export default function SelfUpgradeClient({
   isFresh,
   latestRun,
   quiescence,
+  admission,
   cooldownUntil,
   history,
   historyNextCursor,
@@ -525,6 +535,13 @@ export default function SelfUpgradeClient({
               <span className="font-mono">
                 {shortSha(quiescence.run.targetBundleHash)}
               </span>
+            </div>
+          )}
+
+          {admission && (
+            <div className="text-xs text-[var(--dpf-muted)]" data-admission-summary>
+              <span className="font-medium text-[var(--dpf-text)]">Instance admission:</span>{" "}
+              {admission.summary}
             </div>
           )}
 

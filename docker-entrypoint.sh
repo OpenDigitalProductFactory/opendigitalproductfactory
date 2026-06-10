@@ -28,6 +28,10 @@ cd /app
 pnpm --filter @dpf/db exec tsx scripts/sync-provider-registry.ts || echo "  ⚠️  PROVIDER SYNC FAILED — provider catalog (new providers, auth methods, cliEngine) was NOT reconciled into the DB on this start. The portal will run, but provider/Build-Studio catalog updates from this release may be missing. See the error above."
 echo "  OK Provider registry synced"
 
+echo "[2b/5] Syncing build-engine registry..."
+pnpm --filter @dpf/db exec tsx scripts/sync-engine-registry.ts || echo "  ⚠️  ENGINE SYNC FAILED — the build-engine catalog (claude/codex/grok) was NOT reconciled into the DB on this start. Build Studio dispatch still works, but engine readiness/provisioning may not reflect this release. See the error above."
+echo "  OK Build-engine registry synced"
+
 echo "[3/5] Seeding reference data..."
 cd /app
 pnpm --filter @dpf/db exec tsx src/seed.ts || echo "  ⚠️  SEED INCOMPLETE — one or more reconcile steps failed (see the 'SEED INCOMPLETE' summary above). The portal will start; catalog/reference updates from this release may be partial."
