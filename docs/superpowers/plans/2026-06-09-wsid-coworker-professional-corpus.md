@@ -39,41 +39,61 @@ No structural migration anywhere in this plan — by design (spec §6).
 **Verification:** `pnpm --filter web exec vitest run lib/decision-perspective` green;
 `pnpm --filter web typecheck` green. No UX change to verify (registry-only).
 
-## Phase 1 — Profession profiles + role resolver
+## Phase 1 — Profession Source Registry + all family profiles + role resolver
 
-**Deliverable:** three seeded profession profiles and a resolver from coworker role →
-profile; unbound roles resolve to null (existing behavior preserved).
+**Deliverable:** the full-roster coverage contract (spec §4.11) made concrete — the
+governed registry, a profession profile for **every family** (~18 families covering all
+63 registry agents + ~24 route personas), and the resolver; unbound identifiers resolve
+to null (existing behavior preserved).
 
-- `packages/db/src/seed-decision-perspective.ts`: seed `WSID-DATA-ARCHITECT`,
-  `WSID-FINANCE`, `WSID-MARKETING` (kind `profession`, scope per spec §4.2,
-  `fallbackProfileId` → the org/platform profile, initial version row). Role bindings
-  use registry `agent_name` keys + prompt-slug aliases (spec §4.3):
-  `build-data-architect`+`data-architect`, `finance-agent`, `marketing-specialist`.
-  Idempotent upsert; loud skip-logging (silent-seed-skips audit).
+- New `docs/professions/registry.json` (spec §4.12 #1): every `professionKey` → bound
+  roles (registry `agent_name` keys + persona/prompt-slug aliases per spec §4.3),
+  context slugs, candidate source list with **license class**
+  (`open`/`licensed`/`org-supplied`), and an SFIA/O*NET-derived coverage checklist per
+  family. Coverage lint: every active registry agent and route persona appears in
+  exactly one family — an unmapped role fails CI (spec §4.11 rule 1).
+- `packages/db/src/seed-decision-perspective.ts`: seed one profile per registry family
+  (kind `profession`, scope per spec §4.2, `fallbackProfileId` → the org/platform
+  profile, initial version row). Families without a built corpus still get profiles —
+  their `defer`s are the demand signal that prioritizes corpus rollout (spec §4.11
+  rule 2). Idempotent upsert; loud skip-logging (silent-seed-skips audit).
 - New `apps/web/lib/decision-perspective/resolve-profession-profile.ts`:
   `resolveProfessionProfile({ agentId | roleSlug })` resolving agentId → registry entry
   → `agent_name` (or alias) → profile via `scope.roles`. Mirror the landed
   `resolveProfileMaterialForOrg` client-injection pattern so tests use a structural
   fake.
-- Tests: resolver hit, miss (null), and fallback-chain shape.
+- Tests: resolver hit, alias hit, miss (null), fallback-chain shape, and the
+  registry-coverage lint (a synthetic unmapped agent fails).
 
 **Verification:** unit tests; then seed against a disposable shadow Postgres
-(`source-only worktree verification` pattern) and assert 3 profile rows + version rows +
-chain wiring via a seed invariant check. Runtime-bound seed verification routes through
-the local-CI convergence sandbox lease, not the worktree.
+(`source-only worktree verification` pattern) and assert one profile row per registry
+family + version rows + chain wiring via a seed invariant check. Runtime-bound seed
+verification routes through the local-CI convergence sandbox lease, not the worktree.
 
-## Phase 2 — Data-architect starter corpus (first user-visible value)
+## Phase 2 — Research-ingest pipeline + data-architect corpus through it
 
-**Deliverable:** the first real corpus — DMBOK/ANSI-SQL/OWASP distillations — installed,
-embedded, and retrievable.
+**Deliverable:** the §4.12 research pipeline working end-to-end, proven by producing the
+first real corpus — DMBOK/ANSI-SQL/OWASP — **from fetched sources, not model memory**.
 
-- Corpus content: DPF-authored distillation pages (markdown, founder-kernel wiki layout)
-  under a new `docs/professions/data-architect/wiki/` tree — `principle`, `heuristic`,
-  `entity`, `summary` kinds; frontmatter carries `principleConsumerArchetype: specialist`,
-  `principleConsumerContexts: [data-model]` (+ `data-security` slug if authoring needs
-  it — slugs are open kebab-case, no schema change), `principleRingScope: ring-1-coworker`.
-  Commandment-in-context for the safety rules (parameterized SQL, least-privilege DB
-  access). **Copyright-clean: citations via RawSource, no reproduced licensed text.**
+- Research run first (spec §4.12 #2–3): execute the data-architect research pass with
+  the existing research-execution harness (`apps/web/lib/wiki/research-execution.ts`,
+  `market-research.ts` precedent) against the registry's `open`-class sources (OWASP
+  Top 10/ASVS/Query Parameterization Cheat Sheet, NIST/ISO public abstracts, DAMA
+  public knowledge-area structure). Every fetch lands as a `RawSource` with locator,
+  `retrievedAt`, content fingerprint, license class. `licensed`-class sources (DMBOK2
+  text, ISO/IEC 9075 text) stay checklist-only or await `org-supplied` upload — the
+  conduit rule (spec §7.7).
+- Corpus content: distillation pages proposed **from the fetched source text** via
+  `proposeWikiDiff` (markdown, founder-kernel wiki layout) under
+  `docs/professions/data-architect/wiki/` — `principle`, `heuristic`, `entity`,
+  `summary` kinds; frontmatter carries `principleConsumerArchetype: specialist`,
+  `principleConsumerContexts: [data-model]` (+ `data-security` slug — open kebab-case,
+  no schema change), `principleRingScope: ring-1-coworker`. Commandment-in-context for
+  the safety rules (parameterized SQL, least-privilege DB access). **Copyright-clean:
+  citations via RawSource, no reproduced licensed text.**
+- Provenance invariant lint (spec §4.12 #4): every corpus page must carry ≥1 source
+  reference resolving to a fetched RawSource; every material's `sourceRef` must trace.
+  Wire into `wiki_lint`/CI so unsourced content cannot publish or promote.
 - New `packages/db/src/seed-profession-corpus.ts`: **generalize the `seed-wiki-kernel.ts`
   machinery** (frontmatter parse, `deriveSlug`, RawSource ingest, embeddings sidecar)
   over a `docs/professions/<role>/` tree — parameterize the kernel loader, don't fork a
@@ -137,13 +157,17 @@ default, idempotent source-key); org-path regression suite green; functional: en
 researched note into the data-architect corpus on the sandbox, see it as draft in the
 review inbox.
 
-## Phase 5 — Finance + marketing corpora, MCP exposure, docs
+## Phase 5 — Finance + marketing corpora (via the pipeline), MCP exposure, docs
 
-**Deliverable:** the remaining starter corpora and the external surface.
+**Deliverable:** the remaining pilot corpora — each through its own dedicated research
+run — and the external surface.
 
-- `docs/professions/finance/wiki/` (GAAP/ASC distillations, double-entry invariants,
-  SoD/SOX concepts) and `docs/professions/marketing/wiki/` (AMA ethics, STP/4Ps,
-  consent-compliance commandments) + seed wiring in `seed-profession-corpus.ts`.
+- Dedicated research passes per profession (spec §4.12 — own effort, own sources):
+  finance against FASB ASC public guidance, SOX/PCAOB public materials, double-entry
+  invariants; marketing against AMA public definitions/ethics, deliverability/consent
+  regulations (CAN-SPAM, GDPR). Then `docs/professions/finance/wiki/` and
+  `docs/professions/marketing/wiki/` produced from the fetched text + seed wiring in
+  `seed-profession-corpus.ts`. The provenance lint from Phase 2 gates both.
 - MCP (conditional on EP-WWMD-MCP): the `wwmd_evaluate`/`wwmd_decide`/
   `wwmd_record_outcome` tools are not yet registered in `mcp-tools.ts` — if they have
   landed by this phase, verify profession profile ids are accepted as `profileId` under
@@ -155,9 +179,30 @@ review inbox.
   `profession` and the WSID naming; AGENTS.md §16 WWMD-vs-WWWD note gains the WSID line.
 
 **Verification:** the BI's acceptance criteria run end-to-end on the canonical install:
-craft question per role → cited recommend; unbound role → unchanged; fresh install seeds
-all three corpora; org overlay wins for that org. Full build gate (§5 AGENTS.md) before
-each PR.
+craft question per pilot role → cited recommend; unbound identifier → unchanged; fresh
+install seeds all family profiles + three pilot corpora; org overlay wins for that org.
+Full build gate (§5 AGENTS.md) before each PR.
+
+## Phase 6 — Roster-wide corpus rollout (demand-prioritized waves)
+
+**Deliverable:** the remaining ~15 profession families get corpora, in waves, ordered by
+observed demand — not by guess.
+
+- Prioritization signal: per-family `defer` counts from the gate ledger (spec §4.11
+  rule 2 / §8.6) — the families whose coworkers most often hit craft questions their
+  profile can't answer go first. Query surfaces from the existing `DecisionInteraction`
+  ledger; no new telemetry.
+- Per wave (batch of 2–4 families): dedicated research run against the family's
+  registry source list → pipeline-produced corpus tree under
+  `docs/professions/<family>/wiki/` → seed wiring → provenance lint → review → promote.
+  Each wave is a Build-Studio-sized child BI under EP-WSID.
+- Registry hygiene per wave: research passes confirm or supersede the candidate anchor
+  standards recorded in Phase 1's registry; update `registry.json` in the same PR.
+
+**Verification:** per wave — same functional gate as Phase 2 (craft question →
+recommend with cited fetched sources, on the canonical install or sandbox lease).
+Roster-coverage acceptance (spec §8.2) re-asserted after each wave: every active role
+resolves; defer-queue trend for covered families decreases.
 
 ## Risks & rollback
 
@@ -168,11 +213,15 @@ each PR.
 | Seed bloat / silent skips on fresh install | Idempotent upserts + loud skip logging + seed invariant check (Phase 1/2); the silent-seed-skips audit pattern applies. |
 | Copyright exposure from BoK content | Distillation-only policy + RawSource citations + quotation-length lint (spec §7); content reviewed at PR time. |
 | Profession doctrine overriding org business judgment | Authority boundary is explicit evaluator-input shaping (Phase 3) with arbitrate/escalate rules from spec §4.5; the non-inherit boundary is untouched. |
+| Training-data authoring sneaks in (research pass skipped under time pressure) | The provenance invariant is mechanical (Phase 2 lint/CI): unsourced pages can't publish, unsourced materials can't promote — the shortcut fails the gate, not a review judgment call. |
+| Key sources unavailable or licensed (DMBOK text, ISO standards) | License-class field in the registry decides the path up front: `open` fetched, `licensed` checklist-only, `org-supplied` via document upload (conduit rule, spec §7.7); a thin-but-honest corpus beats a rich fabricated one. |
+| Roster drift (new coworkers added without a family mapping) | Coverage lint (Phase 1) fails CI on any active agent/persona missing from `registry.json` — drift is caught at the PR that introduces the role. |
 
 ## Sequencing notes
 
 - Phase 0 ships independently and unblocks everything; Phases 1→2→3 are strictly ordered;
-  Phase 4 depends on 1 (profiles) but not 3; Phase 5 depends on 2's content pattern.
+  Phase 4 depends on 1 (profiles) but not 3; Phase 5 depends on 2's pipeline; Phase 6
+  repeats Phase 5's shape per wave and runs as long as the defer queue says it should.
 - Each phase is a Build Studio-sized slice: file child BIs under EP-WSID at promotion
   time (umbrella BI-48B3CEC4 stays the parent, EP-WWMD-MCP umbrella pattern).
 - BI-230C9EF7 (org profile resolution) **has landed** (verified 2026-06-09 —

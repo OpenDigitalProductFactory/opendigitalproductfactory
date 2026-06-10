@@ -302,14 +302,90 @@ recommended X, citing *Parameterize all SQL* (OWASP ASVS v5, grade B, current)".
 review queue wording for profession profiles uses owner/operator language (per the
 explainability spec's WWMD-vs-WWWD wording rule).
 
+### 4.11 Coverage contract — every coworker, mapped to a profession family
+
+WSID covers the **whole roster**: all 63 `agent_registry.json` agents and all ~24
+`prompts/route-persona/*` personas. Many coworkers share a craft, so coverage is by
+**profession family** — one profile, one corpus, N bound roles. The working family map
+(maintained as the Profession Source Registry, §4.12; candidate anchor standards subject
+to each family's research pass):
+
+| Profession family (`professionKey`) | Bound roles (registry `agent_name` / persona) | Candidate anchor standards |
+|---|---|---|
+| `data-management` | build-data-architect/data-architect, data-governance-agent | DAMA-DMBOK2, ISO/IEC 9075, ISO 11179, OWASP |
+| `finance-accounting` | finance-agent, investment-analysis-agent | US GAAP (FASB ASC), SOX 404, FP&A practice |
+| `marketing` | marketing-specialist | AMA BoK, STP/4Ps, CAN-SPAM/GDPR consent |
+| `software-engineering` | software-engineer, frontend-engineer, platform-engineer, iac-execution-agent | SWEBOK v4, OWASP, 12-factor, IaC practice |
+| `software-quality` | qa-engineer, release-acceptance-agent | ISTQB CTFL, ISO/IEC 25010 |
+| `security-compliance` | security-auditor-agent, policy-enforcement-agent, policy-specialist | ISO/IEC 27001, NIST CSF 2.0, CIS Controls |
+| `enterprise-architecture` | ea-architect, architecture-agent, architecture-definition-agent, architecture-guardrail-agent, governance-orchestrator | TOGAF 10, IT4IT 3.0, ArchiMate 3.2 |
+| `portfolio-management` | portfolio-advisor, portfolio-backlog-agent/-specialist, portfolio-rationalization-agent, gap-analysis-agent, strategy-alignment-agent | PMI Std for Portfolio Mgmt, IT4IT S2P |
+| `product-management` | product-backlog-specialist, product-backlog-prioritization-agent, roadmap-assembly-agent, scope-agreement-agent | PDMA BoK, discovery/prioritization practice |
+| `service-management-sre` | operate-orchestrator, ops-coordinator, monitoring-agent, incident-detection-agent, incident-resolution-agent, service-support-agent | ITIL 4, Google SRE, ISO/IEC 20000 |
+| `release-engineering` | integrate/deploy/release-orchestrators, release-planning-agent, deployment-planning-agent, sbom-management-agent, resource-reservation-agent | DORA, SLSA, NTIA SBOM / CycloneDX |
+| `customer-service` | consume-orchestrator, customer-advisor, consumer-onboarding-agent, order-fulfillment-agent, subscription-management-agent | service blueprinting, CX practice (CXPA) |
+| `service-catalog-licensing` | catalog-publication-agent, service-offer-definition-agent, licensing-specialist | ITIL service catalog, ISO/IEC 19770 (ITAM/SAM) |
+| `asset-estate-management` | inventory-specialist, estate-specialist | ISO 55000, IAITAM ITAM |
+| `human-resources` | hr-specialist | SHRM BASK, employment-compliance basics |
+| `technical-communication` | documentation-specialist | tech-writing practice, structured authoring |
+| `ux-accessibility` | ux-accessibility | WCAG 2.2, ISO 9241, heuristic evaluation |
+| `general-management` | coo, onboarding-coo, admin-assistant, evaluate/explore-orchestrators, remaining cross-cutting reviewers | management practice; mostly WWWD-governed |
+
+Rules:
+
+1. **Every active coworker role resolves** — to its family profile, or explicitly to
+   `general-management` as the typed generalist bucket. An unmapped role is a lint
+   failure in the registry, not a silent fallthrough.
+2. **Profiles ship for all families from V1; corpora roll out in waves.** A profile
+   whose corpus isn't built yet still participates in the gate — its `defer` outcomes
+   are the gap signal, and per-family defer counts are the **prioritization queue** for
+   which corpus gets researched next (demand-driven, not guessed).
+3. Platform-internal pipeline agents (hive-scout reviewers, discovery-triage) are
+   governed by the engineering-flow/WWMD platform doctrine they already have; they map
+   to families only where a real external profession exists.
+
+### 4.12 Research-sourced corpus pipeline — no training-data authoring
+
+The corpus is only as trustworthy as its sources. **A model writing "DMBOK says X" from
+its own training-data memory is the exact ungoverned state WSID exists to replace** —
+so the pipeline makes that impossible to pass review:
+
+1. **Profession Source Registry** (governed artifact, `docs/professions/registry.json`,
+   PR-reviewed): per `professionKey` — bound roles, context slugs, the source list
+   (locator, publisher, edition/version, **license class**: `open` / `licensed` /
+   `org-supplied`), and a coverage checklist of knowledge areas (SFIA 9 / O*NET-derived)
+   the corpus must span. This registry is the per-profession research mandate Mark's
+   directive requires: each family gets its own research effort and its own sources.
+2. **Fetch & capture**: a per-profession research run (the existing research-execution
+   harness — `apps/web/lib/wiki/research-execution.ts`, `market-research.ts` precedent —
+   plus deep-research style multi-source sweeps) retrieves each open source. Every fetch
+   is stored as a `RawSource` with verifiable provenance: locator (URL/citation),
+   `retrievedAt`, content fingerprint, license class. Licensed works enter only via the
+   `document` origin (org-supplied upload under the customer's own license — DPF is a
+   conduit, never the licensee) or stay checklist-only (knowledge-area names and
+   structure are facts; licensed prose is not ingested).
+3. **Distill from retrieved text only**: page proposals run through the existing
+   `proposeWikiDiff` adapters **with the fetched source text as input**. The model's job
+   is distillation and structure-mapping of text in front of it, never recall.
+4. **Provenance invariant (lint + CI gate)**: every WSID corpus `WikiPage` has ≥1
+   `WikiPageSource` link to a `RawSource` carrying retrieval metadata; every
+   `PerspectiveMaterial.sourceRef` traces to those RawSources. A page with no fetched
+   source cannot reach `published`; a material with no traceable source cannot reach
+   `promoted`. This is mechanical, not honor-system.
+5. **Freshness loop**: `scheduled-refresh` origin re-validates sources (standards get
+   new editions; OWASP Top 10 rotates), updating `lastValidatedAt` and flagging
+   `stale`/`superseded` materials through the existing freshness states.
+
 ## 5. Seeding (bootstrap) vs runtime (calibration)
 
 Per `seed-is-bootstrap-calibration-is-runtime` and `fix-the-seed-not-the-runtime`:
 
-- **Seed** installs: 3 profession profiles, their starter WikiPages + RawSources +
-  PerspectiveMaterials (platform-authored distillations, published status, promoted
-  materials — they are reviewed at PR time like kernel pages), and the role bindings.
-  Idempotent, FK-safe, loud on skip (silent-seed-skips audit applies). Seed-time
+- **Seed** installs: profession profiles **for every family in the registry** (§4.11)
+  with full role bindings, plus the pilot corpora — WikiPages + RawSources +
+  PerspectiveMaterials that were **produced by the §4.12 research pipeline** (run at
+  authoring time, provenance recorded in the committed content, PR-reviewed like kernel
+  pages — never hand-authored from model memory). Idempotent, FK-safe, loud on skip
+  (silent-seed-skips audit applies). Seed-time
   embeddings follow the founder-kernel precedent (`seed-wiki-kernel.ts`): a precomputed
   `embeddings.jsonl` sidecar per corpus tree, because a fresh install has no embedding
   provider configured at seed time (`zero-click-provider-setup`); runtime enrichment
@@ -327,6 +403,7 @@ Per `seed-is-bootstrap-calibration-is-runtime` and `fix-the-seed-not-the-runtime
 | `scope.professionKey` / `scope.roles` | Json contract + type | No |
 | `EnrichCorpusTarget` discriminator | `enrich-org-corpus.ts` generalization | No |
 | `"data-security"` in `PRINCIPLE_CONSUMER_CONTEXT_EXAMPLES` | `packages/db/src/wiki-taxonomy.ts` examples registry | No (contexts are open kebab-case) |
+| Profession Source Registry | `docs/professions/registry.json` (governed artifact + lint) | No (file + seed) |
 | Profession seed module | `packages/db/src/seed-*` (generalizes `seed-wiki-kernel.ts` machinery) | Seed only |
 
 Zero structural migrations is a deliberate outcome of the schema-audit-before-features
@@ -337,28 +414,42 @@ pass (§4.1): the 2026-05 decision-perspective models were built profile-kind-ge
 1. **Copyright-clean**: corpus pages are DPF-authored distillations citing standards;
    never reproduced licensed text. RawSource rows carry the citation; lint can flag pages
    exceeding a quotation-length budget per source.
-2. **Draft-by-default enrichment** (unchanged from org corpus): trust sets grade/weight,
+2. **No training-data authoring**: corpus content is distilled from *fetched* source
+   text with recorded retrieval provenance (§4.12). The provenance invariant is a CI/lint
+   gate — unsourced pages cannot publish, unsourced materials cannot promote.
+3. **Draft-by-default enrichment** (unchanged from org corpus): trust sets grade/weight,
    not review state.
-3. **Evidence grades**: platform distillations B; org first-party overrides A; researched
+4. **Evidence grades**: platform distillations B; org first-party overrides A; researched
    additions C — the existing ladder.
-4. **Security doctrine is commandment-in-context**: injection prevention, secrets
+5. **Security doctrine is commandment-in-context**: injection prevention, secrets
    handling, consent/compliance rules seed at `principleTier: commandment` scoped to
    their contexts, so they win conflict resolution inside the role without leaking
    platform-wide.
-5. **Non-inherit boundary preserved**: profession doctrine is craft authority, not
+6. **Non-inherit boundary preserved**: profession doctrine is craft authority, not
    business authority; the customer's WWWD remains the business voice (§4.5).
+7. **Licensed bodies of knowledge follow the conduit rule**: DPF never enrolls as a
+   licensee of DMBOK/ISO/SFIA content. Where a standard is licensed, the customer brings
+   their own copy (`org-supplied` document origin) or the corpus covers the open
+   knowledge-area structure only.
 
 ## 8. Acceptance (V1)
 
 1. Data-architect coworker, craft question ("is this query injection-safe / how should
    this table be normalized") → `recommend` citing WSID materials with standard-traced
    provenance; `DecisionInteraction` records the profession profile + version.
-2. Role without a WSID profile → unchanged behavior, ledger shows org/platform chain level.
-3. Fresh install seeds all three corpora; `pnpm verify` seed invariants pass; no silent
-   skips.
-4. Org overlay: an org-scoped override page/material wins over the platform baseline for
+2. **Every active coworker role resolves to a profession profile** via the registry
+   family map (§4.11) — an unmapped role is a lint failure. Families without a built
+   corpus participate via `defer` + gap capture (the demand queue for the next corpus).
+3. **Provenance invariant holds mechanically**: 100% of published corpus pages link to a
+   fetched `RawSource` with retrieval metadata; 100% of promoted materials trace to
+   those sources. The lint/CI gate rejects violations — no training-data-only content
+   can ship.
+4. Fresh install seeds all family profiles + the three pilot corpora; `pnpm verify` seed
+   invariants pass; no silent skips.
+5. Org overlay: an org-scoped override page/material wins over the platform baseline for
    that org without mutating it.
-5. `defer` on a craft question lands in the review inbox under the profession lane.
+6. `defer` on a craft question lands in the review inbox under the profession lane, and
+   per-family defer counts are queryable as the corpus-rollout prioritization signal.
 
 ## 9. Open questions (tracked, non-blocking)
 
