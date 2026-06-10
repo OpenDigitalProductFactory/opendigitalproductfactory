@@ -305,6 +305,31 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # The full release stack no longer fits in the ~14 GB a stock
+      # ubuntu-latest runner leaves free: v6.0.0 and v6.1.0 both died
+      # mid-install with the runner worker itself crashing on "No space
+      # left on device" (v5.6.0 was the last release that still fit).
+      # Reclaim the ~25 GB of preinstalled toolchains this job never
+      # touches. Inline rm rather than a third-party action to keep the
+      # supply-chain surface at zero.
+      - name: Free runner disk space
+        run: |
+          echo "Disk before reclaim:"
+          df -h /
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/share/swift \
+            /usr/local/share/powershell \
+            /usr/local/share/chromium \
+            /usr/local/lib/node_modules
+          sudo docker image prune --all --force
+          echo "Disk after reclaim:"
+          df -h /
+
       - name: Show docker context
         run: |
           docker --version
