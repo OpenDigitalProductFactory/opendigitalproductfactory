@@ -9,14 +9,16 @@ import {
 // catch the same class at review time.
 
 describe("public-sector compliance pack data", () => {
-  it("ships the three state-law families with the expected obligation counts", () => {
+  it("ships the civic regulation families with the expected obligation counts", () => {
     expect(PUBLIC_SECTOR_REGULATIONS.map((r) => r.regulationId).sort()).toEqual([
+      "REG-US-EPA-NPDES",
+      "REG-US-EPA-SDWA",
       "REG-US-STATE-MUNI-FINANCE",
       "REG-US-STATE-OPEN-MEETINGS",
       "REG-US-STATE-PUBLIC-RECORDS",
     ]);
     const total = PUBLIC_SECTOR_REGULATIONS.reduce((n, r) => n + r.obligations.length, 0);
-    expect(total).toBe(11);
+    expect(total).toBe(18);
     for (const reg of PUBLIC_SECTOR_REGULATIONS) {
       expect(reg.industry).toBe("public-sector");
       expect(reg.obligations.length).toBeGreaterThan(0);
@@ -45,7 +47,7 @@ describe("public-sector compliance pack data", () => {
       for (const obl of reg.obligations) {
         expect(obl.title.length).toBeGreaterThan(10);
         expect(obl.description.length).toBeGreaterThan(40);
-        expect(["governance", "records", "finance", "procurement"]).toContain(obl.category);
+        expect(["governance", "records", "finance", "procurement", "environmental", "operational"]).toContain(obl.category);
         expect(["event-driven", "continuous", "annual", "monthly"]).toContain(obl.frequency);
       }
     }

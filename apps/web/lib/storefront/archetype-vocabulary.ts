@@ -193,6 +193,7 @@ const CATEGORY_SUGGESTIONS: Record<string, string[]> = {
 
   // Public sector
   "small-town-municipality": ["Permits & Licenses", "Public Works", "Parks & Recreation", "Clerk's Office", "Code Enforcement"],
+  "municipal-utility": ["Residential", "Commercial", "Irrigation", "Connection Fees", "Service Orders"],
 };
 
 export function getCategorySuggestions(archetypeId: string | null | undefined): string[] {

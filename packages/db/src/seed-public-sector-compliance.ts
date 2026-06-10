@@ -205,6 +205,117 @@ export const PUBLIC_SECTOR_REGULATIONS: RegulationSeed[] = [
         applicability: "All local governments",
         penaltySummary: "Bid-splitting and threshold evasion are common audit findings with personal liability in some states.",
       },
+      {
+        title: "Rate-covenant debt-service coverage monitoring",
+        reference: "muni-finance/rate-covenant",
+        description:
+          "Monitor enterprise-fund net revenues against the debt-service coverage ratio promised in " +
+          "bond rate covenants (commonly 1.10x–1.25x). Surface coverage shortfall to the governing " +
+          "body early — the remedy is a rate adjustment set in public session, which takes months.",
+        category: "finance",
+        frequency: "monthly",
+        applicability: "Local governments and districts with revenue-bond-financed utilities",
+        penaltySummary: "Covenant breach can trigger default provisions, rate-increase mandates, and rating downgrades.",
+      },
+    ],
+  },
+  {
+    regulationId: "REG-US-EPA-SDWA",
+    name: "Safe Drinking Water Act (via state primacy agency)",
+    shortName: "SDWA",
+    jurisdiction: "US-federal",
+    industry: "public-sector",
+    sourceType: "external",
+    notes:
+      "EPA's Safe Drinking Water Act applies to community water systems through state primacy " +
+      "agencies: sampling schedules against maximum contaminant levels, annual Consumer Confidence " +
+      "Reports, certified operators, and service-line inventories (Lead and Copper Rule " +
+      "Improvements). Sampling frequencies depend on system size and source water — configure the " +
+      "calendar from the primacy agency's monitoring schedule.",
+    obligations: [
+      {
+        title: "Sampling schedule adherence (state monitoring schedule)",
+        reference: "sdwa/sampling-schedule",
+        description:
+          "Collect and submit compliance samples (bacteriological, disinfection byproducts, lead/copper, " +
+          "chemical) on the monitoring schedule issued by the state primacy agency. A missed sample is a " +
+          "monitoring violation with public-notice consequences even when water quality is fine.",
+        category: "environmental",
+        frequency: "monthly",
+        applicability: "Community water systems (frequency varies by system size and source)",
+        penaltySummary: "Monitoring/reporting violations require public notice; persistent violations escalate to enforcement.",
+      },
+      {
+        title: "Consumer Confidence Report — annual delivery",
+        reference: "sdwa/ccr",
+        description:
+          "Prepare and deliver the annual Consumer Confidence Report (water quality report) to all " +
+          "customers by July 1, covering the prior calendar year's detections, violations, and source " +
+          "information; certify delivery to the primacy agency.",
+        category: "environmental",
+        frequency: "annual",
+        applicability: "Community water systems",
+        penaltySummary: null,
+      },
+      {
+        title: "Certified operator of record",
+        reference: "sdwa/operator-certification",
+        description:
+          "Maintain a state-certified operator of record at the grade required for the system's " +
+          "classification, with continuing-education renewal tracked before expiry.",
+        category: "operational",
+        frequency: "continuous",
+        applicability: "All public water systems",
+        penaltySummary: "Operating without a certified operator is an enforceable violation in every state.",
+      },
+      {
+        title: "Lead service line inventory maintenance",
+        reference: "sdwa/service-line-inventory",
+        description:
+          "Maintain and update the service-line material inventory required by the Lead and Copper " +
+          "Rule Improvements, including customer notification for known or unknown lead lines and " +
+          "replacement-plan progress reporting.",
+        category: "environmental",
+        frequency: "annual",
+        applicability: "Community water systems",
+        penaltySummary: null,
+      },
+    ],
+  },
+  {
+    regulationId: "REG-US-EPA-NPDES",
+    name: "Clean Water Act — NPDES Discharge Permits",
+    shortName: "NPDES",
+    jurisdiction: "US-federal",
+    industry: "public-sector",
+    sourceType: "external",
+    notes:
+      "Wastewater systems discharge under National Pollutant Discharge Elimination System permits " +
+      "(EPA or authorized state). The operating loop is the discharge monitoring report cadence and " +
+      "permit renewal lead time.",
+    obligations: [
+      {
+        title: "Discharge monitoring reports (DMRs)",
+        reference: "npdes/dmr",
+        description:
+          "Sample effluent and submit discharge monitoring reports on the permit's schedule " +
+          "(typically monthly via NetDMR). Report exceedances with the corrective narrative.",
+        category: "environmental",
+        frequency: "monthly",
+        applicability: "Systems holding an NPDES permit",
+        penaltySummary: "Late or missing DMRs and effluent exceedances carry per-day civil penalties.",
+      },
+      {
+        title: "NPDES permit renewal tracking",
+        reference: "npdes/permit-renewal",
+        description:
+          "Track the five-year permit term and file the renewal application at least 180 days before " +
+          "expiry to preserve administrative continuance.",
+        category: "environmental",
+        frequency: "event-driven",
+        applicability: "Systems holding an NPDES permit",
+        penaltySummary: null,
+      },
     ],
   },
 ];
@@ -256,6 +367,30 @@ export const PUBLIC_SECTOR_CONTROLS: ControlSeed[] = [
       "Backed by the FundBudgetLine fund view.",
     controlType: "detective",
     obligationRefs: ["muni-finance/budget-to-actual", "muni-finance/budget-adoption"],
+  },
+  {
+    title: "Compliance Sampling Calendar",
+    description:
+      "Sampling and reporting deadlines from the state monitoring schedule maintained on the compliance " +
+      "calendar with owner assignment — a missed sample is a violation regardless of water quality.",
+    controlType: "preventive",
+    obligationRefs: ["sdwa/sampling-schedule", "sdwa/ccr"],
+  },
+  {
+    title: "DMR Filing Procedure",
+    description:
+      "Monthly effluent sampling → lab results → NetDMR submission workflow with exceedance-narrative " +
+      "capture and deadline tracking.",
+    controlType: "preventive",
+    obligationRefs: ["npdes/dmr", "npdes/permit-renewal"],
+  },
+  {
+    title: "Rate-Covenant Coverage Check",
+    description:
+      "Monthly enterprise-fund net-revenue vs debt-service coverage computation against bond covenants, " +
+      "backed by the Funds budget-to-actual view.",
+    controlType: "detective",
+    obligationRefs: ["muni-finance/rate-covenant"],
   },
 ];
 

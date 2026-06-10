@@ -404,4 +404,13 @@ export interface ArchetypeDefinition {
   tags: string[];
   schedulingDefaults?: SchedulingDefaults;
   activationProfile?: ActivationProfile;
+  /**
+   * Per-leaf vocabulary overrides, seeded into
+   * `StorefrontArchetype.customVocabulary` and read by `getVocabulary()` —
+   * the mechanism the BIAN banking spec §7.4 decided (credit-union "Members"
+   * vs bank "Customers"); civic spec §8 uses it for Ratepayers/Community.
+   * Keys are the `ArchetypeVocabulary` fields; unknown keys are ignored by
+   * the field-by-field merge in `getVocabulary`.
+   */
+  vocabulary?: Record<string, string>;
 }
