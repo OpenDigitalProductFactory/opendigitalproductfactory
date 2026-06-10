@@ -33,6 +33,7 @@ import {
   flipActiveTaskRunsToQuiescing,
   heartbeatQuiescenceRun,
   invalidateQuiescenceCache,
+  isShipForceEscalated,
   pickPrimaryBlocker,
   setQuiescenceLevel,
   transitionState,
@@ -116,10 +117,22 @@ export const quiescenceRun = inngest.createFunction(
     // even with a sane deadline.
     const maxTicks = Math.ceil(budgetMs / WAIT_TICK_MS) + 5;
 
+    // BI-4F3B2FA9: a drain started non-forced can be promoted to forced
+    // MID-FLIGHT when an operator clicks "Force Now" (escalateQuiescenceToForced
+    // writes shipForceEscalatedAt). Re-read that flag each tick — once set, the
+    // effective shipForce sticks and the next blocker check returns 0, so the
+    // drain reaches ready-to-swap within one tick without restarting the run.
+    let effectiveShipForce = shipForce;
+
     for (let tick = 0; tick < maxTicks; tick++) {
+      if (!effectiveShipForce) {
+        effectiveShipForce = (await step.run(`check-escalation-${tick}`, () =>
+          isShipForceEscalated(runId),
+        )) as boolean;
+      }
       // Re-check the hard-blocker count from the prior snapshot before
       // sleeping. Lets the first tick exit fast in the no-blockers case.
-      const hardBlockers = countEffectiveHardBlockers(lastSnapshot, shipForce);
+      const hardBlockers = countEffectiveHardBlockers(lastSnapshot, effectiveShipForce);
       if (hardBlockers === 0) break;
       if (Date.now() >= deadline) break;
 
@@ -132,7 +145,12 @@ export const quiescenceRun = inngest.createFunction(
       await step.run(`heartbeat-${tick}`, () => heartbeatQuiescenceRun(runId));
     }
 
-    const finalHardBlockers = countEffectiveHardBlockers(lastSnapshot, shipForce);
+    if (!effectiveShipForce) {
+      effectiveShipForce = (await step.run("check-escalation-final", () =>
+        isShipForceEscalated(runId),
+      )) as boolean;
+    }
+    const finalHardBlockers = countEffectiveHardBlockers(lastSnapshot, effectiveShipForce);
     const actualWaitMs = Date.now() - drainStart;
 
     // ─── Step 4a: defer path ─────────────────────────────────────────────
