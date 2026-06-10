@@ -133,8 +133,8 @@ export type ShellNavItem = {
   description: string;
   sectionKey: PortalShellSectionKey;
   capabilityKey: CapabilityKey | null;
-  /** Archetype-capability gate — see PortalNavRecord.orgCapabilityKey. */
-  orgCapabilityKey: string | null;
+  /** Archetype-capability gate (any-of when array) — see PortalNavRecord.orgCapabilityKey. */
+  orgCapabilityKey: string | readonly string[] | null;
 };
 
 export type SectionNavItem = {
@@ -275,14 +275,19 @@ export function getShellNavSections(
   },
 ): ShellNavSection[] {
   const activeOrgCapabilities = options?.activeOrgCapabilities;
+  const orgGateOpen = (gate: string | readonly string[] | null): boolean => {
+    if (gate === null) return true;
+    if (!activeOrgCapabilities) return false;
+    const keys = typeof gate === "string" ? [gate] : gate;
+    return keys.some((key) => activeOrgCapabilities.has(key));
+  };
   return SHELL_SECTIONS.map((section) => ({
     ...section,
     items: SHELL_ITEMS.filter(
       (item) =>
         item.sectionKey === section.key &&
         isAllowed(user, item.capabilityKey) &&
-        (item.orgCapabilityKey === null ||
-          (activeOrgCapabilities?.has(item.orgCapabilityKey) ?? false)),
+        orgGateOpen(item.orgCapabilityKey),
     ),
   })).filter((section) => section.items.length > 0);
 }

@@ -208,6 +208,9 @@ const CATEGORY_SUGGESTIONS: Record<string, string[]> = {
 
   // Public sector
   "small-town-municipality": ["Permits & Licenses", "Public Works", "Parks & Recreation", "Clerk's Office", "Code Enforcement"],
+
+  // Cooperative (nonprofit-community)
+  "cooperative": ["Membership", "Member Services", "Patronage & Equity", "Governance"],
   "municipal-utility": ["Residential", "Commercial", "Irrigation", "Connection Fees", "Service Orders"],
 };
 
