@@ -144,3 +144,17 @@ groups:
           severity: critical
         annotations:
           summary: "Semantic memory store/recall failing -- AI Coworker context degraded"
+
+      # ─── Log Aggregation (EP-FULL-OBS Tier 2) ──────────────────
+      # Loki drops lines when a container floods stdout past the per-stream
+      # rate cap (disk-safety). A throttle is itself a strong "something is
+      # very wrong" signal. Keys on Loki's own Prometheus metric (scraped via
+      # the loki job), so it lives here -- NOT in the LogQL ruler, where a
+      # PromQL expression is a parse error that fails the whole rule group.
+      - alert: LogIngestionThrottled
+        expr: sum(rate(loki_discarded_samples_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Loki is dropping logs -- a container is flooding stdout past the rate cap"
