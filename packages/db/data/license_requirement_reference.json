@@ -10,8 +10,18 @@
       "authorityType": "federal_directory",
       "requirementType": "license_directory",
       "scopeLevel": "organization",
-      "archetypeCategories": ["professional-services", "home-services", "healthcare-wellness", "retail-goods", "software-platform"],
-      "activityTags": ["business-setup", "federal-state-local", "licensing-research"],
+      "archetypeCategories": [
+        "professional-services",
+        "home-services",
+        "healthcare-wellness",
+        "retail-goods",
+        "software-platform"
+      ],
+      "activityTags": [
+        "business-setup",
+        "federal-state-local",
+        "licensing-research"
+      ],
       "summary": "Bootstrap directory for federal, state, and local business license and permit research in the United States.",
       "officialWebsiteUrl": "https://www.sba.gov/business-guide/launch-your-business/apply-licenses-permits",
       "applicationUrl": "https://www.sba.gov/business-guide/launch-your-business/apply-licenses-permits",
@@ -25,7 +35,11 @@
       "sourceKind": "official",
       "confidence": "medium",
       "staleAfterDays": 120,
-      "tags": ["us", "bootstrap", "directory"]
+      "tags": [
+        "us",
+        "bootstrap",
+        "directory"
+      ]
     },
     {
       "requirementRefId": "LIC-REQ-GB-LICENCE-FINDER",
@@ -36,8 +50,18 @@
       "authorityType": "national_directory",
       "requirementType": "licence_directory",
       "scopeLevel": "activity",
-      "archetypeCategories": ["professional-services", "home-services", "healthcare-wellness", "food-hospitality", "software-platform"],
-      "activityTags": ["licensing-research", "regulated-professions", "permit-finder"],
+      "archetypeCategories": [
+        "professional-services",
+        "home-services",
+        "healthcare-wellness",
+        "food-hospitality",
+        "software-platform"
+      ],
+      "activityTags": [
+        "licensing-research",
+        "regulated-professions",
+        "permit-finder"
+      ],
       "summary": "Bootstrap licence finder and regulated-professions research entrypoint for UK business activities and professional work.",
       "officialWebsiteUrl": "https://www.gov.uk/find-licences",
       "applicationUrl": "https://www.gov.uk/find-licences",
@@ -52,7 +76,11 @@
       "sourceKind": "official",
       "confidence": "medium",
       "staleAfterDays": 120,
-      "tags": ["uk", "bootstrap", "directory"]
+      "tags": [
+        "uk",
+        "bootstrap",
+        "directory"
+      ]
     },
     {
       "requirementRefId": "LIC-REQ-AU-ABLIS",
@@ -63,8 +91,18 @@
       "authorityType": "national_directory",
       "requirementType": "license_directory",
       "scopeLevel": "organization",
-      "archetypeCategories": ["professional-services", "home-services", "healthcare-wellness", "retail-goods", "software-platform"],
-      "activityTags": ["licensing-research", "federal-state-local", "permit-finder"],
+      "archetypeCategories": [
+        "professional-services",
+        "home-services",
+        "healthcare-wellness",
+        "retail-goods",
+        "software-platform"
+      ],
+      "activityTags": [
+        "licensing-research",
+        "federal-state-local",
+        "permit-finder"
+      ],
       "summary": "Bootstrap multi-government business licence information source for Australian federal, state, territory, and local licensing research.",
       "officialWebsiteUrl": "https://ablis.business.gov.au/about",
       "applicationUrl": "https://ablis.business.gov.au/",
@@ -79,7 +117,85 @@
       "sourceKind": "official",
       "confidence": "medium",
       "staleAfterDays": 120,
-      "tags": ["au", "bootstrap", "directory"]
+      "tags": [
+        "au",
+        "bootstrap",
+        "directory"
+      ]
+    },
+    {
+      "requirementRefId": "LIC-REQ-US-MUNICIPAL-CHARTER",
+      "countryCode": "US",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "United States",
+      "authorityName": "State municipal incorporation authority (via USAGov local government directory)",
+      "authorityType": "state_directory",
+      "requirementType": "charter_directory",
+      "scopeLevel": "organization",
+      "archetypeCategories": [
+        "public-sector"
+      ],
+      "activityTags": [
+        "municipal-incorporation",
+        "charter",
+        "state-municipal-code"
+      ],
+      "summary": "Bootstrap directory for locating the state authority governing municipal incorporation, charters, and the state municipal code that defines a town's powers and obligations. The organization's charter/incorporation posture is captured against the state named at onboarding.",
+      "officialWebsiteUrl": "https://www.usa.gov/local-governments",
+      "applicationUrl": null,
+      "renewalUrl": null,
+      "helpUrl": "https://www.usa.gov/local-governments",
+      "displayRuleSummary": null,
+      "renewalCadenceHint": null,
+      "sourceUrls": [
+        "https://www.usa.gov/local-governments"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 180,
+      "tags": [
+        "us",
+        "bootstrap",
+        "directory",
+        "public-sector"
+      ]
+    },
+    {
+      "requirementRefId": "LIC-REQ-US-STATE-AUDITOR-FILING",
+      "countryCode": "US",
+      "stateProvinceCode": null,
+      "jurisdictionLabel": "United States",
+      "authorityName": "State auditor / comptroller office (via USAGov state government directory)",
+      "authorityType": "state_directory",
+      "requirementType": "filing_directory",
+      "scopeLevel": "organization",
+      "archetypeCategories": [
+        "public-sector"
+      ],
+      "activityTags": [
+        "annual-financial-report",
+        "state-audit",
+        "municipal-filing"
+      ],
+      "summary": "Bootstrap directory for locating the state auditor or comptroller office where local governments file their annual or biennial financial reports and audits. Filing cadence varies by state and population; the recurring obligation itself is tracked on the compliance substrate (REG-US-STATE-MUNI-FINANCE).",
+      "officialWebsiteUrl": "https://www.usa.gov/state-governments",
+      "applicationUrl": null,
+      "renewalUrl": null,
+      "helpUrl": "https://www.usa.gov/state-governments",
+      "displayRuleSummary": null,
+      "renewalCadenceHint": "annual-or-biennial-by-state",
+      "sourceUrls": [
+        "https://www.usa.gov/state-governments"
+      ],
+      "sourceKind": "official",
+      "confidence": "medium",
+      "staleAfterDays": 180,
+      "tags": [
+        "us",
+        "bootstrap",
+        "directory",
+        "public-sector"
+      ]
     }
   ]
 }
