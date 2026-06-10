@@ -493,6 +493,10 @@ export async function runSelfUpgrade(
   };
 }
 
+// Self-upgrade is the PRIORITY LANE (admission-control spec §4.3): deliberately
+// NOT enrolled in the dpf-build-pipeline lane (apps/web/lib/queue/admission.ts),
+// so when an operator caps that lane it always has account-concurrency headroom
+// below the build/agent flood — a queued "Upgrade now" never sits behind builds.
 export const selfUpgradeScheduled = inngest.createFunction(
   {
     id: SELF_UPGRADE_FUNCTION_ID_SCHEDULED,

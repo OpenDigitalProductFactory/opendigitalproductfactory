@@ -1,10 +1,11 @@
 import { inngest } from "../inngest-client";
+import { buildPipelineLane } from "../admission";
 
 export const assuranceScanRun = inngest.createFunction(
   {
     id: "assurance/scan-run",
     retries: 1,
-    concurrency: [{ limit: 2 }],
+    concurrency: [{ limit: 2 }, ...buildPipelineLane()],
     triggers: [{ event: "assurance/scan.run" }],
   },
   async ({ event, step }) => {
