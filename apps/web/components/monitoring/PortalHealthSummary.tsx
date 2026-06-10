@@ -39,7 +39,8 @@ export function PortalHealthSummary({ openBacklogItems, backlogHref }: Props) {
     alerts,
   });
 
-  const backlogTone: Tone = openBacklogItems > 0 ? "warning" : "success";
+  const hasBacklog = openBacklogItems > 0;
+  const backlogTone: Tone = hasBacklog ? "warning" : "success";
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -49,9 +50,12 @@ export function PortalHealthSummary({ openBacklogItems, backlogHref }: Props) {
         summary={{
           value: String(openBacklogItems),
           tone: backlogTone,
-          detail: openBacklogItems > 0 ? "View list" : "No open backlog items",
+          detail: hasBacklog ? "View list" : "No open backlog items",
         }}
-        href={backlogHref}
+        // Only link (and render the "->" affordance) when there's actually a
+        // backlog to view — at zero, the arrow misleadingly implies a
+        // navigable list (BI-FDE4A056).
+        href={hasBacklog ? backlogHref : undefined}
       />
       <HealthCard label="Health Monitoring" summary={monitoring} />
     </div>
