@@ -1,7 +1,7 @@
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";
 import { gateAtEntry } from "../quiescence-gates";
-import { buildPipelineLane } from "../admission";
+import { buildPipelineConcurrency } from "../admission";
 
 /**
  * Polls ScheduledAgentTask every 5 minutes and dispatches due tasks.
@@ -11,7 +11,7 @@ export const agentTaskDispatch = inngest.createFunction(
   {
     id: "agent/task-dispatch",
     retries: 1,
-    concurrency: [{ limit: 1, scope: "fn" }, ...buildPipelineLane()],
+    concurrency: buildPipelineConcurrency({ limit: 1, scope: "fn" }),
     triggers: [cron("*/5 * * * *")],
   },
   async ({ step }) => {

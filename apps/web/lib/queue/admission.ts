@@ -49,18 +49,23 @@ export function readBuildPipelineLimit(): number | null {
 }
 
 /**
- * The shared-lane constraint to spread into an enrolled function's
- * `concurrency` array, e.g. `concurrency: [{ limit: 2 }, ...buildPipelineLane()]`.
+ * Build the full `concurrency` value for an enrolled function:
+ *   - lane unset → `[base]` (the function keeps exactly its prior concurrency —
+ *     zero behavior change), or
+ *   - lane set   → `[base, sharedLane]` so every enrolled function shares one
+ *     aggregate `limit` across the account via the constant CEL key.
  *
- * Returns [] when the lane is unset (the function then keeps exactly its prior
- * concurrency — zero behavior change). When set, every enrolled function shares
- * one aggregate `limit` across the account via the constant CEL key.
+ * Returns a FIXED-length tuple (not an open array) so it matches Inngest's
+ * `concurrency` type: `[ConcurrencyOption] | [ConcurrencyOption, ConcurrencyOption]`.
+ *
+ * Usage: `concurrency: buildPipelineConcurrency({ limit: 2 })`.
  */
-export function buildPipelineLane(
+export function buildPipelineConcurrency(
+  base: ConcurrencyConstraint,
   limit: number | null = readBuildPipelineLimit(),
-): ConcurrencyConstraint[] {
-  if (limit == null) return [];
+): [ConcurrencyConstraint] | [ConcurrencyConstraint, ConcurrencyConstraint] {
+  if (limit == null) return [base];
   // Constant CEL string literal → all enrolled functions map to one virtual
   // queue, so `limit` bounds their AGGREGATE in-flight count, not per-function.
-  return [{ scope: "account", key: `'${BUILD_PIPELINE_LANE_KEY}'`, limit }];
+  return [base, { scope: "account", key: `'${BUILD_PIPELINE_LANE_KEY}'`, limit }];
 }

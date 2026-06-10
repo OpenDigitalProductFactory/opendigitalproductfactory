@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parseBuildPipelineLimit,
-  buildPipelineLane,
+  buildPipelineConcurrency,
   BUILD_PIPELINE_LANE_KEY,
 } from "./admission";
 
@@ -25,17 +25,20 @@ describe("parseBuildPipelineLimit", () => {
   });
 });
 
-describe("buildPipelineLane", () => {
-  it("is empty when the lane is disabled — zero behavior change", () => {
-    expect(buildPipelineLane(null)).toEqual([]);
+describe("buildPipelineConcurrency", () => {
+  const base = { limit: 2 } as const;
+
+  it("returns just the base when the lane is disabled — zero behavior change", () => {
+    expect(buildPipelineConcurrency(base, null)).toEqual([base]);
   });
 
-  it("emits one shared account-scoped constraint with the constant key when set", () => {
-    const lane = buildPipelineLane(4);
-    expect(lane).toHaveLength(1);
-    expect(lane[0].scope).toBe("account");
-    expect(lane[0].limit).toBe(4);
+  it("appends one shared account-scoped constraint with the constant key when set", () => {
+    const conc = buildPipelineConcurrency(base, 4);
+    expect(conc).toHaveLength(2);
+    expect(conc[0]).toEqual(base);
+    expect(conc[1]?.scope).toBe("account");
+    expect(conc[1]?.limit).toBe(4);
     // Constant CEL string literal so all enrolled functions share one queue.
-    expect(lane[0].key).toBe(`'${BUILD_PIPELINE_LANE_KEY}'`);
+    expect(conc[1]?.key).toBe(`'${BUILD_PIPELINE_LANE_KEY}'`);
   });
 });
