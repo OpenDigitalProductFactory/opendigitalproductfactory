@@ -5,6 +5,7 @@ import {
   getCapabilityApplicability,
   readActivationProfile,
 } from "./activation-profile";
+import { ALL_ARCHETYPES } from "./archetypes";
 
 describe("readActivationProfile", () => {
   it("normalizes legacy MSP modules into operating axes and derived capabilities", () => {
@@ -105,5 +106,131 @@ describe("readActivationProfile", () => {
         ],
       }),
     ).toBeNull();
+  });
+
+  it("defaults governance to investor-owned for legacy and axis-shaped profiles, and rejects invalid values", () => {
+    const legacy = readActivationProfile({
+      profileType: "standard",
+      modules: ["integrations"],
+      billingReadinessMode: "none",
+      customerGraph: "none",
+      estateSeparation: "shared",
+    });
+    expect(legacy?.axes.governance).toBe("investor-owned");
+
+    const axisShapedWithoutGovernance = readActivationProfile({
+      profileType: "standard",
+      modules: ["integrations"],
+      billingReadinessMode: "none",
+      customerGraph: "none",
+      estateSeparation: "shared",
+      axes: {
+        form: "services",
+        delivery: "physical",
+        primaryConsumer: "individual",
+        consumptionChannel: "physical",
+        commercialModel: "appointment-checkout",
+        provisioning: "account-with-billing",
+        platform: "no",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: { scope: "minimal" },
+        forEmployees: { scope: "minimal" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+    });
+    expect(axisShapedWithoutGovernance?.axes.governance).toBe("investor-owned");
+
+    expect(
+      readActivationProfile({
+        profileType: "standard",
+        modules: ["integrations"],
+        billingReadinessMode: "none",
+        customerGraph: "none",
+        estateSeparation: "shared",
+        axes: {
+          form: "services",
+          delivery: "physical",
+          primaryConsumer: "individual",
+          consumptionChannel: "physical",
+          commercialModel: "appointment-checkout",
+          provisioning: "account-with-billing",
+          platform: "no",
+          governance: "shareholder",
+        },
+        portfolios: {
+          foundational: { scope: "minimal" },
+          manufactureAndDeliver: { scope: "minimal" },
+          forEmployees: { scope: "minimal" },
+          productsAndServicesSold: { scope: "primary" },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("normalizes member-owned axis profiles with the civic capability set derived", () => {
+    const profile = readActivationProfile({
+      profileType: "standard",
+      modules: ["integrations"],
+      billingReadinessMode: "prepared-not-prescribed",
+      customerGraph: "none",
+      estateSeparation: "shared",
+      axes: {
+        form: "services",
+        delivery: "hybrid",
+        primaryConsumer: "member",
+        consumptionChannel: "multi-channel",
+        commercialModel: "account-based-fees",
+        provisioning: "account-with-kyc",
+        platform: "no",
+        governance: "member-owned",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: { scope: "standard" },
+        forEmployees: { scope: "standard" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+    });
+
+    expect(profile?.axes.governance).toBe("member-owned");
+    expect(getCapabilityApplicability(profile, "member-governance")).toBe("required");
+    expect(getCapabilityApplicability(profile, "membership-eligibility")).toBe("required");
+    expect(activationHasCapability(profile, "member-equity")).toBe(true);
+  });
+});
+
+describe("existing archetype regression (governance axis is inert)", () => {
+  const CIVIC_CAPABILITY_KEYS = [
+    "member-governance",
+    "membership-eligibility",
+    "member-equity",
+    "public-body-governance",
+    "records-request",
+    "service-request-311",
+  ] as const;
+
+  it("every seeded archetype normalizes to investor-owned with all civic capabilities not-applicable", () => {
+    const archetypesWithProfiles = ALL_ARCHETYPES.filter(
+      (archetype) => archetype.activationProfile !== undefined,
+    );
+    expect(archetypesWithProfiles.length).toBeGreaterThan(0);
+
+    for (const archetype of archetypesWithProfiles) {
+      const profile = readActivationProfile(archetype.activationProfile);
+      expect(profile, `profile for ${archetype.archetypeId} should normalize`).not.toBeNull();
+      expect(
+        profile?.axes.governance,
+        `${archetype.archetypeId} should default to investor-owned`,
+      ).toBe("investor-owned");
+
+      for (const key of CIVIC_CAPABILITY_KEYS) {
+        expect(
+          getCapabilityApplicability(profile, key),
+          `${archetype.archetypeId} should not activate ${key}`,
+        ).toBe("not-applicable");
+      }
+    }
   });
 });

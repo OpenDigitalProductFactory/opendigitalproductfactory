@@ -1,4 +1,4 @@
-import type { BillingPatternProfile, FinancialProfile } from "./types";
+import type { BillingPatternProfile, FinancialProfile, LedgerModel } from "./types";
 
 // ─── Profile catalog ──────────────────────────────────────────────────────────
 
@@ -431,6 +431,7 @@ function normalizeFinancialProfile(slug: string, profile: FinancialProfileSeed):
     ...profile,
     billingPatternProfile,
     recurringBillingEnabled: deriveRecurringBillingEnabled(billingPatternProfile),
+    ledgerModel: profile.ledgerModel ?? "commercial",
   };
 }
 
@@ -445,3 +446,57 @@ export function getAllProfiles(): Array<{ slug: string } & FinancialProfile> {
     ...normalizeFinancialProfile(slug, profile),
   }));
 }
+
+// ─── Ledger-model chart-of-accounts fragments ─────────────────────────────────
+// Named template fragments consumed by archetype financial profiles that declare
+// a non-commercial ledgerModel (civic archetypes spec §6.2). They are seeds for
+// the management view; the org's core/accounting system stays authoritative.
+
+type ChartOfAccountsSeed = FinancialProfile["chartOfAccountsSeed"];
+
+export const LEDGER_COA_FRAGMENTS: Record<Exclude<LedgerModel, "commercial">, ChartOfAccountsSeed> = {
+  "fund-accounting": [
+    { code: "1000", name: "General Fund Cash", type: "asset" },
+    { code: "3000", name: "Fund Balance — Unassigned", type: "equity" },
+    { code: "3010", name: "Fund Balance — Restricted", type: "equity" },
+    { code: "4000", name: "Property Tax & Levy Revenue", type: "revenue" },
+    { code: "4010", name: "Intergovernmental Revenue & Grants", type: "revenue" },
+    { code: "4020", name: "Charges for Services", type: "revenue" },
+    { code: "4030", name: "Fines, Fees & Permits", type: "revenue" },
+    { code: "4100", name: "Special Revenue Fund Revenue", type: "revenue" },
+    { code: "4200", name: "Enterprise Fund Charges", type: "revenue" },
+    { code: "5000", name: "General Government Expenditures", type: "expense" },
+    { code: "5010", name: "Public Safety Expenditures", type: "expense" },
+    { code: "5020", name: "Public Works Expenditures", type: "expense" },
+    { code: "5030", name: "Culture & Recreation Expenditures", type: "expense" },
+    { code: "5100", name: "Capital Outlay", type: "expense" },
+    { code: "5200", name: "Debt Service — Principal & Interest", type: "expense" },
+  ],
+  "financial-institution": [
+    { code: "1000", name: "Loans Receivable", type: "asset" },
+    { code: "1010", name: "Allowance for Credit Losses (contra)", type: "asset" },
+    { code: "1100", name: "Investment Portfolio", type: "asset" },
+    { code: "2000", name: "Deposits / Member Shares", type: "liability" },
+    { code: "3000", name: "Retained / Undivided Earnings", type: "equity" },
+    { code: "3010", name: "Regular Reserves", type: "equity" },
+    { code: "4000", name: "Interest Income — Loans", type: "revenue" },
+    { code: "4010", name: "Interest Income — Investments", type: "revenue" },
+    { code: "4020", name: "Fee & Service Charge Income", type: "revenue" },
+    { code: "5000", name: "Interest / Dividend Expense", type: "expense" },
+    { code: "5010", name: "Provision for Credit Losses", type: "expense" },
+    { code: "5020", name: "Personnel Expense", type: "expense" },
+    { code: "5030", name: "Occupancy & Operations Expense", type: "expense" },
+    { code: "5040", name: "Exam & Compliance Costs", type: "expense" },
+  ],
+  "cooperative-equity": [
+    { code: "2000", name: "Patronage Dividends Payable", type: "liability" },
+    { code: "2010", name: "Equity Retirement Payable", type: "liability" },
+    { code: "3000", name: "Allocated Member Equity", type: "equity" },
+    { code: "3010", name: "Unallocated Retained Earnings", type: "equity" },
+    { code: "3020", name: "Per-Unit Retains", type: "equity" },
+    { code: "4000", name: "Member Sales Revenue", type: "revenue" },
+    { code: "4010", name: "Non-Member Revenue", type: "revenue" },
+    { code: "5000", name: "Cost of Goods & Services", type: "expense" },
+    { code: "5010", name: "Operating Expenses", type: "expense" },
+  ],
+};

@@ -3,6 +3,7 @@ import {
   deriveRecurringBillingEnabled,
   getFinancialProfile,
   getAllProfiles,
+  LEDGER_COA_FRAGMENTS,
 } from "./profiles";
 
 const EXPECTED_SLUGS = [
@@ -140,5 +141,48 @@ describe("financial profile catalog", () => {
     expect(profile?.billingPatternProfile.supportedPaymentPatterns).toEqual(
       expect.arrayContaining(["appointment-checkout", "point-of-sale", "optional-package"]),
     );
+  });
+
+  it("every existing profile resolves ledgerModel to commercial", () => {
+    for (const profile of getAllProfiles()) {
+      expect(profile.ledgerModel, `${profile.slug} should default to commercial`).toBe("commercial");
+    }
+  });
+});
+
+describe("ledger-model chart-of-accounts fragments", () => {
+  it("ships fund-accounting, financial-institution, and cooperative-equity fragments", () => {
+    expect(Object.keys(LEDGER_COA_FRAGMENTS).sort()).toEqual([
+      "cooperative-equity",
+      "financial-institution",
+      "fund-accounting",
+    ]);
+  });
+
+  it("every fragment has unique codes and valid account types", () => {
+    for (const [model, fragment] of Object.entries(LEDGER_COA_FRAGMENTS)) {
+      expect(fragment.length, `${model} fragment must not be empty`).toBeGreaterThan(0);
+      const codes = fragment.map((account) => account.code);
+      expect(new Set(codes).size, `${model} fragment has duplicate codes`).toBe(codes.length);
+      for (const account of fragment) {
+        expect(account.name, `${model} account ${account.code} missing name`).toBeTruthy();
+        expect(
+          ["revenue", "expense", "asset", "liability", "equity"],
+          `${model} account ${account.code} has invalid type`,
+        ).toContain(account.type);
+      }
+    }
+  });
+
+  it("captures each model's defining accounts", () => {
+    const names = (model: keyof typeof LEDGER_COA_FRAGMENTS) =>
+      LEDGER_COA_FRAGMENTS[model].map((account) => account.name).join("; ");
+
+    expect(names("fund-accounting")).toContain("Fund Balance");
+    expect(names("fund-accounting")).toContain("Debt Service");
+    expect(names("financial-institution")).toContain("Allowance for Credit Losses");
+    expect(names("financial-institution")).toContain("Provision for Credit Losses");
+    expect(names("cooperative-equity")).toContain("Allocated Member Equity");
+    expect(names("cooperative-equity")).toContain("Patronage Dividends Payable");
   });
 });
