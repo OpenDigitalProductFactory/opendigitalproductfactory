@@ -57,7 +57,13 @@ export const buildExecute = inngest.createFunction(
       const { prisma } = await import("@dpf/db");
       await prisma.taskRun
         .updateMany({
-          where: { buildId, source: "build", status: "working" },
+          // Any non-terminal run for this build fails — covers both the
+          // working state and a run that died before its first transition.
+          where: {
+            buildId,
+            source: "build",
+            status: { notIn: ["completed", "failed", "canceled", "rejected", "archived"] },
+          },
           data: { status: "failed", completedAt: new Date() },
         })
         .catch(() => {});

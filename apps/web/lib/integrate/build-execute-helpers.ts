@@ -89,6 +89,9 @@ export async function ensureBuildTaskRun(buildId: string): Promise<string> {
   if (!build) throw new Error(`ensureBuildTaskRun: unknown build ${JSON.stringify(buildId)}`);
 
   const taskRunId = `build-${buildId}-${Date.now().toString(36)}`;
+  // Created in the schema-default "submitted" state, then transitioned via
+  // the canonical markTaskRunWorking helper so status + lastHeartbeatAt move
+  // atomically (BI-4ab6be39 stall-detection write guard).
   await prisma.taskRun.create({
     data: {
       taskRunId,
@@ -99,10 +102,10 @@ export async function ensureBuildTaskRun(buildId: string): Promise<string> {
       title: `Build: ${build.title}`,
       objective: `Durable build execution for ${buildId} (BI-89030C9B Phase 1)`,
       source: "build",
-      status: "working",
-      lastHeartbeatAt: new Date(),
     },
   });
+  const { markTaskRunWorking } = await import("@/lib/observability/heartbeat");
+  await markTaskRunWorking(taskRunId);
   return taskRunId;
 }
 
