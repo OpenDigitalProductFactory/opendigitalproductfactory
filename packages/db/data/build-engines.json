@@ -8,10 +8,11 @@
     "bakeInDefault": true,
     "recipes": [
       {
-        "method": "agentic",
+        "method": "npm-global",
+        "package": "@anthropic-ai/claude-code",
         "muslSafe": true,
         "requiresEgress": true,
-        "priority": 1
+        "priority": 10
       }
     ]
   },
@@ -21,13 +22,14 @@
       "command": "codex --version",
       "versionRegex": "([0-9.]+)"
     },
-    "bakeInDefault": false,
+    "bakeInDefault": true,
     "recipes": [
       {
-        "method": "agentic",
+        "method": "npm-global",
+        "package": "@openai/codex",
         "muslSafe": true,
         "requiresEgress": true,
-        "priority": 2
+        "priority": 10
       }
     ]
   },
@@ -40,10 +42,18 @@
     "bakeInDefault": false,
     "recipes": [
       {
-        "method": "agentic",
-        "muslSafe": false,
+        "method": "curl-installer",
+        "command": "curl -fsSL https://x.ai/cli/install.sh | GROK_BIN_DIR=/usr/local/bin bash && install -m 0755 \"$(readlink -f /usr/local/bin/grok)\" /usr/local/bin/grok.bin && ln -sf /usr/local/bin/grok.bin /usr/local/bin/grok && rm -rf /root/.grok",
+        "muslSafe": true,
         "requiresEgress": true,
-        "priority": 3
+        "priority": 10
+      },
+      {
+        "method": "prestaged-binary",
+        "stagedPath": "/opt/dpf-engines/grok",
+        "muslSafe": true,
+        "requiresEgress": false,
+        "priority": 20
       }
     ]
   }

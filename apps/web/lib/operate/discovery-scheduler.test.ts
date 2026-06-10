@@ -19,20 +19,59 @@ vi.mock("../integrate/code-graph-refresh", () => ({
 }));
 
 // Must import after mock setup
-import { runPrometheusTargetCheck, runFullDiscoverySweep, registerScheduledJobs } from "./discovery-scheduler";
+import { runPrometheusTargetCheck, runFullDiscoverySweep, registerScheduledJobs, recordJobRun } from "./discovery-scheduler";
 import { registerModelDiscoveryJob } from "../inference/model-discovery-scheduler";
 import { registerCodeGraphScheduledJob } from "../integrate/code-graph-refresh";
 
 describe("registerScheduledJobs", () => {
-  it("upserts both ScheduledJob rows", async () => {
+  it("upserts every managed ScheduledJob row", async () => {
     const { prisma } = await import("@dpf/db");
     const upsert = prisma.scheduledJob.upsert as ReturnType<typeof vi.fn>;
     upsert.mockClear();
 
     await registerScheduledJobs();
-    expect(upsert).toHaveBeenCalledTimes(3);
+    expect(upsert).toHaveBeenCalledTimes(4);
     expect(registerModelDiscoveryJob).toHaveBeenCalledTimes(1);
     expect(registerCodeGraphScheduledJob).toHaveBeenCalledTimes(1);
+  });
+
+  // Regression: backlog-triage-drain called recordJobRun() for a jobId that was
+  // never registered, so the row was missing and recordJobRun's update() threw
+  // P2025 ~once an hour. Registration must cover every recordJobRun() caller.
+  it("registers the backlog-triage-drain job that recordJobRun() writes back to", async () => {
+    const { prisma } = await import("@dpf/db");
+    const upsert = prisma.scheduledJob.upsert as ReturnType<typeof vi.fn>;
+    upsert.mockClear();
+
+    await registerScheduledJobs();
+    const registeredJobIds = upsert.mock.calls.map((c) => c[0].where.jobId);
+    expect(registeredJobIds).toContain("backlog-triage-drain");
+  });
+});
+
+describe("recordJobRun", () => {
+  it("upserts (self-heals) so a missing ScheduledJob row never throws P2025", async () => {
+    const { prisma } = await import("@dpf/db");
+    const upsert = prisma.scheduledJob.upsert as ReturnType<typeof vi.fn>;
+    const update = prisma.scheduledJob.update as ReturnType<typeof vi.fn>;
+    upsert.mockClear();
+    update.mockClear();
+
+    await recordJobRun("backlog-triage-drain", "ok");
+
+    // Must upsert, never bare update() — update() is what threw P2025.
+    expect(update).not.toHaveBeenCalled();
+    expect(upsert).toHaveBeenCalledTimes(1);
+    const call = upsert.mock.calls[0][0];
+    expect(call.where).toEqual({ jobId: "backlog-triage-drain" });
+    // create branch carries name + schedule so the row can materialize.
+    expect(call.create).toMatchObject({
+      jobId: "backlog-triage-drain",
+      name: expect.any(String),
+      schedule: expect.any(String),
+      lastStatus: "ok",
+    });
+    expect(call.update).toMatchObject({ lastStatus: "ok" });
   });
 });
 

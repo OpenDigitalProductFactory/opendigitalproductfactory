@@ -547,6 +547,45 @@ const EDGE_AGENT_PREFIX = "edge-node:";
 const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
 
 /**
+ * Liveness threshold for dead-phase reaping (admission-control spec §4.4 /
+ * BI-17377D05): a non-terminal BuildPhaseRun with completedAt=null whose build
+ * shows no active-TaskRun heartbeat AND whose own start is older than this is a
+ * corpse — it must not hold the self-upgrade drain open. 15 min with no
+ * observable signal.
+ */
+const DEAD_PHASE_LIVENESS_MS = 15 * 60 * 1000;
+
+/**
+ * Flag-gate (default OFF). This changes the self-upgrade DRAIN decision (what
+ * counts as "in flight"), so per the spec §6 it is enabled + load-tested
+ * deliberately, never blind-shipped to the deploy path. Operator sets
+ * QUIESCENCE_REAP_DEAD_PHASES=1 to exercise it under real concurrent load.
+ */
+function reapDeadPhasesEnabled(): boolean {
+  return process.env.QUIESCENCE_REAP_DEAD_PHASES === "1";
+}
+
+/**
+ * True when an in-flight build phase is a corpse: the most recent observable
+ * signal — the build's latest active-TaskRun heartbeat, or the phase's own
+ * start if newer — is older than `thresholdMs`. Pure; unit-tested. A live
+ * build (recent heartbeat) or a freshly-started phase is never reapable.
+ */
+export function isBuildPhaseReapable(args: {
+  phaseStartedAt: Date;
+  buildLastHeartbeatAt: Date | null;
+  now: Date;
+  thresholdMs: number;
+}): boolean {
+  const { phaseStartedAt, buildLastHeartbeatAt, now, thresholdMs } = args;
+  const lastSignal =
+    buildLastHeartbeatAt && buildLastHeartbeatAt.getTime() > phaseStartedAt.getTime()
+      ? buildLastHeartbeatAt
+      : phaseStartedAt;
+  return now.getTime() - lastSignal.getTime() > thresholdMs;
+}
+
+/**
  * Repair stale phase-run rows from terminal builds before blocker capture.
  * Abandon/fail paths that predate BI-2CC024DB can leave completedAt null, which
  * otherwise makes quiescence defer forever on work that is no longer active.
@@ -629,7 +668,35 @@ export async function captureActiveSessionBlockers(opts?: {
     select: { buildId: true, phase: true, startedAt: true },
     take: 25,
   });
+  // Dead-phase reaping (flag-gated, default OFF): build a buildId → latest
+  // active-TaskRun heartbeat map from the TaskRuns already fetched above (no
+  // extra query), so a corpse phase (no heartbeat + old start) can be dropped
+  // from the blockers instead of holding the drain open for the full budget.
+  const reapDeadPhases = reapDeadPhasesEnabled();
+  const buildLastHeartbeat = new Map<string, Date>();
+  if (reapDeadPhases) {
+    for (const tr of activeTaskRuns) {
+      if (!tr.buildId || !tr.lastHeartbeatAt) continue;
+      const prev = buildLastHeartbeat.get(tr.buildId);
+      if (!prev || tr.lastHeartbeatAt.getTime() > prev.getTime()) {
+        buildLastHeartbeat.set(tr.buildId, tr.lastHeartbeatAt);
+      }
+    }
+  }
+  let reapedPhaseCount = 0;
   for (const row of inFlightPhases) {
+    if (
+      reapDeadPhases &&
+      isBuildPhaseReapable({
+        phaseStartedAt: row.startedAt,
+        buildLastHeartbeatAt: buildLastHeartbeat.get(row.buildId) ?? null,
+        now,
+        thresholdMs: DEAD_PHASE_LIVENESS_MS,
+      })
+    ) {
+      reapedPhaseCount++;
+      continue; // corpse — does not block the drain
+    }
     const isShipPhase = row.phase === "ship";
     surfaces.push({
       surface: `build-studio.phase.${row.phase}`,
@@ -650,6 +717,11 @@ export async function captureActiveSessionBlockers(opts?: {
         shipPhaseShipForceRequired: isShipPhase,
       },
     });
+  }
+  if (reapedPhaseCount > 0) {
+    console.warn(
+      `[quiescence] reaped ${reapedPhaseCount} dead build phase(s) from the drain (no active heartbeat, started > ${DEAD_PHASE_LIVENESS_MS / 60000} min ago).`,
+    );
   }
 
   // B-class: ToolExecution recency — the existing stopgap signal.

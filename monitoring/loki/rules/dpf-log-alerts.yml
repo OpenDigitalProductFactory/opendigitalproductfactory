@@ -1,0 +1,51 @@
+# Loki ruler alert rules (EP-FULL-OBS Tier 2) — error-RATE detection.
+# Mounted into Loki at /loki/rules-config/fake/dpf-log-alerts.yml ("fake" =
+# the default single-tenant id when auth_enabled: false). Firing alerts route
+# through the same Alertmanager/webhook path Tier 1 uses to create
+# PortfolioQualityIssue rows, so log alerts land in the operator's existing
+# inbox — no new alert plumbing.
+#
+# Thresholds are seed DEFAULTS, operator-tunable (no hard pins — the
+# no-provider-pinning doctrine applied to alert config).
+
+groups:
+  - name: dpf_log_rate
+    rules:
+      # The Mac-incident detector: a service emitting error/warn lines at a
+      # sustained elevated rate. >5/min for 10m = "hundreds accumulating".
+      # (Live precedent: dpf-portal-1 threw 128 identical timeout lines in 2h.)
+      - alert: ContainerErrorLogSpike
+        expr: |
+          sum by (service) (
+            rate({compose_project=~".+"} |~ "(?i)(error|fatal|panic|exception|traceback)" [5m])
+          ) * 60 > 5
+        for: 10m
+        labels:
+          severity: warning
+          source: log-rate
+        annotations:
+          summary: "{{ $labels.service }} emitting >5 error lines/min for 10m"
+          description: "Sustained error-log rate on {{ $labels.service }}. Open the System Health -> Log Issues panel for sample lines and a Loki drill-down."
+
+      - alert: ContainerErrorLogStorm
+        expr: |
+          sum by (service) (
+            rate({compose_project=~".+"} |~ "(?i)(error|fatal|panic|exception|traceback)" [5m])
+          ) * 60 > 60
+        for: 3m
+        labels:
+          severity: critical
+          source: log-rate
+        annotations:
+          summary: "{{ $labels.service }} log error storm (>60/min)"
+          description: "{{ $labels.service }} is flooding stderr with errors. Likely a tight failure loop (e.g. a dependency timing out on every request)."
+
+# NOTE: ingestion-throttle detection ("Loki is dropping logs because a
+# container is flooding stdout") is NOT a LogQL rule — it keys on Loki's own
+# Prometheus metric `loki_discarded_samples_total`, which Prometheus scrapes
+# from loki:3100/metrics. It therefore lives in
+# monitoring/prometheus/alerts.yml (a LogIngestionThrottled rule in the
+# dpf_application group), NOT in this Loki ruler file. A PromQL expression here
+# is a parse error that fails the WHOLE rule group — verified live: the first
+# ruler load rejected the mis-placed rule and silenced the spike/storm rules
+# with it (structural-verification-is-not-functional).

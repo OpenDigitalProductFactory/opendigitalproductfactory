@@ -1,11 +1,21 @@
 // ARP Scan Discovery Collector
-// Discovers all live hosts on a subnet by sending TCP SYN probes.
+// Discovers all live hosts on a subnet by populating the ARP table (via nmap
+// ping-scan, or a ping sweep fallback) and reading neighbours back.
 // Works without managed switches or SNMP — just needs IP connectivity.
-// Runs inside the portal container; reaches the host network via
-// host.docker.internal or the Docker gateway.
+//
+// Runs inside the portal container, ON THE SAME Node event loop that serves
+// HTTP. Therefore every external command MUST be async and time-bounded, and
+// the ping sweep MUST be bounded-parallel. A previous implementation used
+// `spawnSync` to ping all 254 hosts of a /24 sequentially; each dead host
+// waited its full timeout, freezing the entire portal for ~250s per scan
+// (no page, not even /favicon.ico, would respond — CPU sat near 0 because the
+// thread was blocked waiting, not computing). See BI-4CA890B7.
 
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { CollectorContext, CollectorOutput } from "../discovery-types";
+
+const execFileAsync = promisify(execFile);
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -14,17 +24,69 @@ export type ArpScanTarget = {
 };
 
 export type ArpScanDeps = {
-  execCommand: (cmd: string, args: string[]) => string;
+  /**
+   * Run an external command and resolve its stdout. MUST be async (never
+   * block the event loop) and MUST resolve to "" on any failure/timeout
+   * rather than rejecting — callers treat empty output as "tool unavailable".
+   */
+  execCommand: (cmd: string, args: string[], timeoutMs?: number) => Promise<string>;
 };
 
-function defaultExecCommand(cmd: string, args: string[]): string {
-  const result = spawnSync(cmd, args, { encoding: "utf8", timeout: 30_000 });
-  return result.status === 0 ? result.stdout : "";
+async function defaultExecCommand(
+  cmd: string,
+  args: string[],
+  timeoutMs = 10_000,
+): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync(cmd, args, {
+      encoding: "utf8",
+      timeout: timeoutMs,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    return stdout;
+  } catch {
+    // Non-zero exit, timeout (SIGTERM), or missing binary → treat as no output.
+    return "";
+  }
 }
 
 const defaultDeps: ArpScanDeps = {
   execCommand: defaultExecCommand,
 };
+
+// Max simultaneous pings during the fallback sweep. High enough that a /24
+// completes in ~(254/limit) seconds of wall time, low enough not to exhaust
+// file descriptors / subprocess slots. The work is I/O-bound (waiting on ICMP
+// replies), so concurrency is cheap.
+const PING_CONCURRENCY = 32;
+
+/**
+ * Run `worker` over every item with at most `limit` in flight at once.
+ * Cooperative and fully async — yields the event loop between each await so
+ * HTTP serving is never starved. Never rejects: a worker that throws is
+ * swallowed (best-effort discovery).
+ */
+async function runWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  let cursor = 0;
+  const lanes = Array.from(
+    { length: Math.max(1, Math.min(limit, items.length)) },
+    async () => {
+      while (cursor < items.length) {
+        const item = items[cursor++]!;
+        try {
+          await worker(item);
+        } catch {
+          /* best-effort: a single failed ping must not abort the sweep */
+        }
+      }
+    },
+  );
+  await Promise.all(lanes);
+}
 
 // ─── Collector ──────────────────────────────────────────────────────────────
 
@@ -116,26 +178,37 @@ async function scanSubnet(
   subnet: string,
   deps: ArpScanDeps,
 ): Promise<DiscoveredHost[]> {
-  // Try nmap first (most thorough)
-  const nmapHosts = tryNmapScan(subnet, deps);
+  // Try nmap first (fast + thorough when bundled in the image).
+  const nmapHosts = await tryNmapScan(subnet, deps);
   if (nmapHosts.length > 0) return nmapHosts;
 
-  // Fall back to ping sweep + ARP table read
+  // Fall back to bounded-parallel ping sweep + ARP table read.
   return pingAndArp(subnet, deps);
 }
 
-function tryNmapScan(subnet: string, deps: ArpScanDeps): DiscoveredHost[] {
-  // nmap -sn (ping scan, no port scan) with ARP detection
-  const output = deps.execCommand("nmap", ["-sn", "-oG", "-", subnet]);
+async function tryNmapScan(
+  subnet: string,
+  deps: ArpScanDeps,
+): Promise<DiscoveredHost[]> {
+  // -sn  ping scan, no port scan
+  // -n   DO NOT resolve DNS. Critical: reverse-DNS on a /24 can take ~45s and
+  //      blow the command timeout, forcing the slow ping fallback. We don't
+  //      need names here. (BI-4CA890B7)
+  // -T4  aggressive timing — a /24 completes in a few seconds.
+  const output = await deps.execCommand(
+    "nmap",
+    ["-sn", "-n", "-T4", "-oG", "-", subnet],
+    60_000,
+  );
   if (!output) return [];
 
   const hosts: DiscoveredHost[] = [];
   for (const line of output.split(/\r?\n/)) {
-    // Grepable output: Host: 192.168.0.1 (gateway.local) Status: Up
+    // Grepable output. With -n the parens are empty: "Host: 192.168.0.1 () Status: Up"
     const match = line.match(/^Host:\s+(\d+\.\d+\.\d+\.\d+)\s+\(([^)]*)\)\s+Status:\s+Up/i);
     if (match) {
       hosts.push({
-        ip: match[1],
+        ip: match[1]!,
         hostname: match[2] || undefined,
       });
     }
@@ -143,18 +216,22 @@ function tryNmapScan(subnet: string, deps: ArpScanDeps): DiscoveredHost[] {
   return hosts;
 }
 
-function pingAndArp(subnet: string, deps: ArpScanDeps): DiscoveredHost[] {
-  // Generate IPs in the subnet and ping them to populate ARP table
+async function pingAndArp(
+  subnet: string,
+  deps: ArpScanDeps,
+): Promise<DiscoveredHost[]> {
+  // Generate IPs in the subnet and ping them to populate the ARP table.
   const ips = generateSubnetIPs(subnet, 254);
 
-  // Quick parallel ping (best effort — some won't respond)
-  for (const ip of ips) {
-    // Non-blocking ping with 1 packet, 500ms timeout
-    deps.execCommand("ping", ["-c", "1", "-W", "1", ip]);
-  }
+  // Bounded-parallel ping (best effort — some won't respond). Each ping is
+  // async and time-bounded, so this never blocks the event loop. One packet,
+  // 1s reply timeout; the 2s command timeout is a hard backstop.
+  await runWithConcurrency(ips, PING_CONCURRENCY, async (ip) => {
+    await deps.execCommand("ping", ["-c", "1", "-W", "1", ip], 2_000);
+  });
 
-  // Now read the ARP table
-  let output = deps.execCommand("ip", ["neigh"]);
+  // Now read the ARP table that the sweep populated.
+  let output = await deps.execCommand("ip", ["neigh"], 5_000);
   if (output) {
     return output
       .split(/\r?\n/)
@@ -167,7 +244,7 @@ function pingAndArp(subnet: string, deps: ArpScanDeps): DiscoveredHost[] {
   }
 
   // Windows/macOS fallback
-  output = deps.execCommand("arp", ["-a"]);
+  output = await deps.execCommand("arp", ["-a"], 5_000);
   if (output) {
     return output
       .split(/\r?\n/)
@@ -188,8 +265,8 @@ function generateSubnetIPs(subnet: string, maxHosts: number): string[] {
   const cidr = Number(cidrStr) || 24;
   if (cidr < 16) return []; // Don't scan anything larger than /16
 
-  const parts = networkStr.split(".").map(Number);
-  const networkNum = ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;
+  const parts = networkStr!.split(".").map(Number);
+  const networkNum = ((parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!) >>> 0;
   const hostBits = 32 - cidr;
   const numHosts = Math.min(maxHosts, (1 << hostBits) - 2); // Exclude network and broadcast
 

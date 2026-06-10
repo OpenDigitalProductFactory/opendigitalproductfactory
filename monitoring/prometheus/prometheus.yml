@@ -86,6 +86,21 @@ scrape_configs:
         labels:
           instance: "windows-host"
 
+  # ─── Log Aggregation (EP-FULL-OBS Tier 2) ───────────────────
+  # Loki + Alloy expose their own /metrics. Scraping Loki lets the
+  # LogIngestionThrottled alert (alerts.yml) fire when a flooding container
+  # makes Loki drop lines (loki_discarded_samples_total) — the disk-safety
+  # signal that does NOT belong in the LogQL ruler.
+  - job_name: "loki"
+    static_configs:
+      - targets: ["loki:3100"]
+    metrics_path: /metrics
+
+  - job_name: "alloy"
+    static_configs:
+      - targets: ["alloy:12345"]
+    metrics_path: /metrics
+
   # ─── Self-monitoring ────────────────────────────────────────
   - job_name: "prometheus"
     scrape_interval: 30s

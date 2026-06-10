@@ -37,6 +37,18 @@ describe("TOOL_TO_GRANTS — Build / Sandbox entries", () => {
     expect(isToolAllowedByGrants("start_sandbox", [])).toBe(false);
   });
 
+  it("provision_build_engine (runs an install in the sandbox) requires sandbox_execute", () => {
+    expect(isToolAllowedByGrants("provision_build_engine", ["sandbox_execute"])).toBe(true);
+    expect(isToolAllowedByGrants("provision_build_engine", ["work_capsule_read"])).toBe(false);
+    expect(isToolAllowedByGrants("provision_build_engine", [])).toBe(false);
+  });
+
+  it("reconcile_build_engines (may run installs in the sandbox) requires sandbox_execute", () => {
+    expect(isToolAllowedByGrants("reconcile_build_engines", ["sandbox_execute"])).toBe(true);
+    expect(isToolAllowedByGrants("reconcile_build_engines", ["work_capsule_read"])).toBe(false);
+    expect(isToolAllowedByGrants("reconcile_build_engines", [])).toBe(false);
+  });
+
   it("start_build requires sandbox_execute", () => {
     expect(isToolAllowedByGrants("start_build", ["sandbox_execute"])).toBe(true);
     expect(isToolAllowedByGrants("start_build", ["file_read"])).toBe(false);
@@ -61,6 +73,7 @@ describe("TOOL_TO_GRANTS — Build / Sandbox entries", () => {
 
   it("Build Studio observer tools require read-only work capsule access", () => {
     const tools = [
+      "get_build_engine_readiness",
       "get_build_progress_visibility",
       "get_build_sandbox_state",
       "get_build_dispatch_history",

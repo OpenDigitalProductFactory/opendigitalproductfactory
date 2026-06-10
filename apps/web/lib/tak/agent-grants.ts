@@ -295,6 +295,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   diagnose_sandbox: ["sandbox_execute", "work_capsule_read"],
   recover_sandbox: ["sandbox_execute"],
   // Build-progress observation tools are read-only work capsule inspection.
+  get_build_engine_readiness: ["work_capsule_read"],
   get_build_progress_visibility: ["work_capsule_read"],
   get_build_sandbox_state: ["work_capsule_read"],
   get_build_dispatch_history: ["work_capsule_read"],
@@ -431,6 +432,9 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   admin_run_command:       ["admin_write"],
 
   // Build lifecycle (sandbox-adjacent)
+  // Provisioning a build engine runs an install command inside the sandbox.
+  provision_build_engine:     ["sandbox_execute"],
+  reconcile_build_engines:    ["sandbox_execute"],
   check_sandbox:              ["sandbox_execute"],
   start_sandbox:              ["sandbox_execute"],
   start_build:                ["sandbox_execute"],

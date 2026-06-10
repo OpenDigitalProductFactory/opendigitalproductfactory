@@ -2,8 +2,9 @@
 //
 // Phase A5: Capability probe for the codex CLI adapter.
 //
-// Shells out to `docker exec <sandbox> codex --version` to capture the
-// installed version, then returns a populated AdapterCapabilityProfile shape.
+// Delegates the docker-exec + version parse to the shared probeEngineReadiness
+// (Build-Engine Provisioning slice B) so all engines share one detection path,
+// then THROWS when the binary is missing.
 //
 // Capabilities are observed from codex-cli-adapter.ts and the JSONL audit at
 // docs/superpowers/audits/evidence/2026-04-29-codex-jsonl-probe.md.
@@ -11,44 +12,28 @@
 // `knownDegradations` carries the two documented silent-failure modes:
 //   - openai/codex#15451: --json events silently dropped when MCP active
 //   - openai/codex#4776: schema rename (item_type→type, assistant_message→agent_message)
-//
-// These let A6's capability-aware fallback reason about Codex limitations
-// honestly instead of trusting an aspirational booleans table.
 
-import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
+import { probeEngineReadiness } from "./probe-engine-readiness";
 import type { CapabilityProbeResult } from "../capability-probe-types";
 
-const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
-const PROBE_TIMEOUT_MS = 10_000;
-const VERSION_REGEX = /(\d+\.\d+\.\d+)/;
+const CODEX_ENGINE = {
+  engineId: "codex",
+  binary: "codex",
+  verifyCommand: "codex --version",
+  versionRegex: /(\d+\.\d+\.\d+)/,
+};
 
 export async function probeCodexCli(): Promise<CapabilityProbeResult> {
-  const execAsync = lazyUtil().promisify(lazyChildProcess().exec);
-
-  let stdout: string;
-  try {
-    const result = (await execAsync(
-      `docker exec ${SANDBOX_CONTAINER} codex --version`,
-      { timeout: PROBE_TIMEOUT_MS },
-    )) as { stdout: string; stderr: string };
-    stdout = result.stdout ?? "";
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+  const readiness = await probeEngineReadiness(CODEX_ENGINE);
+  if (!readiness.present || !readiness.version) {
     throw new Error(
-      `probeCodexCli: failed to invoke 'codex --version' in sandbox '${SANDBOX_CONTAINER}': ${message}`,
-    );
-  }
-
-  const match = VERSION_REGEX.exec(stdout);
-  if (!match) {
-    throw new Error(
-      `probeCodexCli: could not parse codex version from stdout: ${JSON.stringify(stdout)}`,
+      `probeCodexCli: codex CLI not available in sandbox: ${readiness.error ?? "unknown error"}`,
     );
   }
 
   return {
     adapterKind: "codex-cli",
-    adapterVersion: `codex-cli/${match[1]}`,
+    adapterVersion: `codex-cli/${readiness.version}`,
 
     // Per audit Q1 + JSONL probe evidence:
     supportsStreamingEvents: true, // --json

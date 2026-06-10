@@ -1,5 +1,30 @@
 name: ${COMPOSE_PROJECT_NAME:-dpf}
 
+# Dev-profile workspace mount (BI-9C557535). The dev services bind-mount the
+# whole repo at /workspace, then overlay every node_modules directory with a
+# named volume. Overlaying ONLY the root node_modules is not enough: pnpm also
+# materialises package-local node_modules (symlink farms) under apps/* and
+# packages/*, which would be written straight onto the host bind mount —
+# polluting host worktrees with container-owned, Linux-style reparse points
+# that Windows/BuildKit cannot open. Named (not anonymous) volumes are required
+# so dev-init's install is visible to dev-portal at runtime.
+x-dev-workspace-volumes: &dev-workspace-volumes
+  - .:/workspace
+  - dev_node_modules:/workspace/node_modules
+  - dev_nm_apps_web:/workspace/apps/web/node_modules
+  - dev_nm_apps_mobile:/workspace/apps/mobile/node_modules
+  - dev_nm_api_client:/workspace/packages/api-client/node_modules
+  - dev_nm_db:/workspace/packages/db/node_modules
+  - dev_nm_dpf_bootstrap:/workspace/packages/dpf-bootstrap/node_modules
+  - dev_nm_finance_templates:/workspace/packages/finance-templates/node_modules
+  - dev_nm_integration_shared:/workspace/packages/integration-shared/node_modules
+  - dev_nm_storefront_templates:/workspace/packages/storefront-templates/node_modules
+  - dev_nm_types:/workspace/packages/types/node_modules
+  - dev_nm_validators:/workspace/packages/validators/node_modules
+  - dev_nm_svc_adp:/workspace/services/adp/node_modules
+  - dev_nm_svc_edge_node:/workspace/services/edge-node/node_modules
+  - dev_nm_svc_integration_test_harness:/workspace/services/integration-test-harness/node_modules
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -495,9 +520,7 @@ services:
       NEO4J_PASSWORD: dpf_dev_password
       PRODUCTION_NEO4J_URI: bolt://neo4j:7687
       DPF_ENVIRONMENT: dev
-    volumes:
-      - .:/workspace
-      - dev_node_modules:/workspace/node_modules
+    volumes: *dev-workspace-volumes
     depends_on:
       dev-postgres:
         condition: service_healthy
@@ -518,9 +541,7 @@ services:
     profiles: ["dev"]
     ports:
       - "3001:3000"
-    volumes:
-      - .:/workspace
-      - dev_node_modules:/workspace/node_modules
+    volumes: *dev-workspace-volumes
     environment:
       DATABASE_URL: postgresql://dpf:dpf_dev@dev-postgres:5432/dpf
       NEO4J_URI: bolt://dev-neo4j:7687
@@ -586,6 +607,49 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+
+  # ─── Log Aggregation (EP-FULL-OBS Tier 2) ─────────────────────────────────
+  # Owning spec: docs/superpowers/specs/2026-06-09-container-log-aggregation-and-proactive-issue-detection-design.md
+  #
+  # Loki (store) + Alloy (shipper). Default-on and CROSS-PLATFORM: Alloy reads
+  # the Docker log API via the socket — no host-path bind mounts — so unlike
+  # cadvisor/node-exporter below this pair runs on macOS/Windows Docker Desktop,
+  # which is exactly where the log-flood incident this spec addresses happened.
+  # Captures EVERY container's stdout/stderr with 14-day retention so errors
+  # stop scrolling out of the ephemeral Docker buffer unseen.
+  loki:
+    image: grafana/loki:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3100:3100"   # localhost-only; portal + grafana reach it via dpf-network DNS
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      # Ruler rules: "fake" is the single-tenant id when auth_enabled: false.
+      - ./monitoring/loki/rules/dpf-log-alerts.yml:/loki/rules-config/fake/dpf-log-alerts.yml:ro
+      - loki_data:/loki
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  alloy:
+    image: grafana/alloy:latest
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # discovers + tails all containers
+      - alloy_data:/var/lib/alloy/data
+    command:
+      - "run"
+      - "--server.http.listen-addr=0.0.0.0:12345"
+      - "--storage.path=/var/lib/alloy/data"
+      - "/etc/alloy/config.alloy"
+    depends_on:
+      loki:
+        condition: service_healthy
 
   # cadvisor + node-exporter bind-mount Linux-only host paths (/proc, /sys,
   # /var/lib/docker, /). They cannot run on macOS or Windows Docker Desktop
@@ -811,9 +875,26 @@ volumes:
   dev_neo4jdata:
   dev_qdrant_data:
   dev_node_modules:
+  # Package-local node_modules overlays (BI-9C557535) — keep pnpm's per-package
+  # symlink farms off the host bind mount. One per workspace package.
+  dev_nm_apps_web:
+  dev_nm_apps_mobile:
+  dev_nm_api_client:
+  dev_nm_db:
+  dev_nm_dpf_bootstrap:
+  dev_nm_finance_templates:
+  dev_nm_integration_shared:
+  dev_nm_storefront_templates:
+  dev_nm_types:
+  dev_nm_validators:
+  dev_nm_svc_adp:
+  dev_nm_svc_edge_node:
+  dev_nm_svc_integration_test_harness:
   sandbox_pgdata:
   sandbox_workspace:
   dpf_tts_voices:
   prometheus_data:
   grafana_data:
+  loki_data:
+  alloy_data:
   dpf_stt_models:

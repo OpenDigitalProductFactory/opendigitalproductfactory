@@ -85,7 +85,10 @@ LABEL org.opencontainers.image.description="Self-developing digital product mana
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.source="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory"
 WORKDIR /app
-RUN apk add --no-cache docker-cli docker-cli-compose postgresql16-client git curl
+# nmap powers the fast path of the arp_scan discovery collector. Without it the
+# collector falls back to a 254-host ping sweep; with it a /24 scans in seconds.
+# (See packages/db/src/discovery-collectors/arp-scan.ts — BI-4CA890B7.)
+RUN apk add --no-cache docker-cli docker-cli-compose postgresql16-client git curl nmap
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
