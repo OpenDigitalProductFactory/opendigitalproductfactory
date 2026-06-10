@@ -12,8 +12,11 @@
 | Profile kinds are a TS registry over an open DB string | `apps/web/lib/decision-perspective/types.ts:1` (`DECISION_PROFILE_KINDS`), `schema.prisma` `DecisionPerspectiveProfile.kind String` |
 | Fallback chains exist | `DecisionPerspectiveProfile.fallbackProfileId` self-relation (schema.prisma ~9383) |
 | Profile selection point | `apps/web/lib/decision-perspective/build-studio-gate.ts:155-170` via `resolveProfileMaterial` |
-| Org-scoped resolution precedent | `resolveProfileMaterialForOrg` in `apps/web/lib/decision-perspective/material.ts` (+ BI-230C9EF7 entry-point work in EP-WWMD-MCP) |
+| Org-scoped resolution **landed** (BI-230C9EF7) | `resolveProfileMaterialForOrg` at `apps/web/lib/decision-perspective/material.ts:363`; tests at `material.test.ts:155` — compose, don't rebuild |
 | Profile seeding home | `packages/db/src/seed-decision-perspective.ts` |
+| Kernel wiki seed machinery to generalize | `packages/db/src/seed-wiki-kernel.ts` — frontmatter parse, `deriveSlug`, RawSource ingest, precomputed `embeddings.jsonl` sidecar |
+| wwmd MCP tools **not yet shipped** | specced in `2026-05-19-wwmd-mcp-exposure-design.md`; no registration in `apps/web/lib/mcp-tools.ts` — Phase 5's MCP item is conditional on EP-WWMD-MCP |
+| Role identifiers in agent registry | `agent_registry.json` has no `role` field; canonical key is `agent_name` (`build-data-architect` / `finance-agent` / `marketing-specialist`); `prompts/specialist/*` slugs are a separate namespace (spec §4.3) |
 | Enrichment facade to generalize | `apps/web/lib/wiki/enrich-org-corpus.ts` (`EnrichOrgCorpusInput`, `TRUST_TO_MATERIAL`, draft-by-default per BI-1378) |
 | Retrieval scoping axes exist | `packages/db/src/wiki-taxonomy.ts` (`specialist` archetype, `finance`/`marketing`/`data-model` context slugs, `ring-1-coworker`) |
 | Coworker role slugs | `packages/db/data/agent_registry.json` + `prompts/specialist/*.prompt.md` (e.g. `data-architect`) |
@@ -43,12 +46,15 @@ profile; unbound roles resolve to null (existing behavior preserved).
 
 - `packages/db/src/seed-decision-perspective.ts`: seed `WSID-DATA-ARCHITECT`,
   `WSID-FINANCE`, `WSID-MARKETING` (kind `profession`, scope per spec §4.2,
-  `fallbackProfileId` → the org/platform profile, initial version row). Idempotent
-  upsert; loud skip-logging (silent-seed-skips audit).
+  `fallbackProfileId` → the org/platform profile, initial version row). Role bindings
+  use registry `agent_name` keys + prompt-slug aliases (spec §4.3):
+  `build-data-architect`+`data-architect`, `finance-agent`, `marketing-specialist`.
+  Idempotent upsert; loud skip-logging (silent-seed-skips audit).
 - New `apps/web/lib/decision-perspective/resolve-profession-profile.ts`:
-  `resolveProfessionProfile({ agentId | roleSlug })` mapping agent registry role slug →
-  profile via `scope.roles`. Mirror the `resolveProfileMaterialForOrg` client-injection
-  pattern so tests use a structural fake.
+  `resolveProfessionProfile({ agentId | roleSlug })` resolving agentId → registry entry
+  → `agent_name` (or alias) → profile via `scope.roles`. Mirror the landed
+  `resolveProfileMaterialForOrg` client-injection pattern so tests use a structural
+  fake.
 - Tests: resolver hit, miss (null), and fallback-chain shape.
 
 **Verification:** unit tests; then seed against a disposable shadow Postgres
@@ -68,18 +74,24 @@ embedded, and retrievable.
   it — slugs are open kebab-case, no schema change), `principleRingScope: ring-1-coworker`.
   Commandment-in-context for the safety rules (parameterized SQL, least-privilege DB
   access). **Copyright-clean: citations via RawSource, no reproduced licensed text.**
-- New `packages/db/src/seed-profession-corpus.ts`: seed RawSources (DMBOK2, ISO/IEC 9075,
-  OWASP ASVS/Top 10 citations), WikiPages + WikiPageSource links + WikiPageLink
-  neighborhood, PerspectiveMaterials on `WSID-DATA-ARCHITECT` (grade B / derived /
-  promoted — PR-reviewed like kernel pages), embeddings via the existing `storeWikiPage`
-  path.
+- New `packages/db/src/seed-profession-corpus.ts`: **generalize the `seed-wiki-kernel.ts`
+  machinery** (frontmatter parse, `deriveSlug`, RawSource ingest, embeddings sidecar)
+  over a `docs/professions/<role>/` tree — parameterize the kernel loader, don't fork a
+  parallel parser. Seeds RawSources (DMBOK2, ISO/IEC 9075, OWASP ASVS/Top 10 citations),
+  WikiPages + WikiPageSource links + WikiPageLink neighborhood, PerspectiveMaterials on
+  `WSID-DATA-ARCHITECT` (grade B / derived / promoted — PR-reviewed like kernel pages).
+  Seed-time embeddings via a precomputed `embeddings.jsonl` sidecar (kernel precedent —
+  a fresh install has no embedding provider configured at seed time); runtime
+  enrichment embeds via `storeWikiPage`.
 - `pnpm wiki:lint` (or the existing lint entry) passes on the new pages.
 
 **Verification:** fresh-seed run shows pages + materials + zero silent skips;
 `resolveProfileMaterial` for `WSID-DATA-ARCHITECT` returns promoted materials; a Qdrant
 recall for "SQL injection" surfaces the OWASP-derived page. Functional, not structural:
-run one `wwmd_evaluate` against the profile with a craft question and confirm a
-`recommend` citing the seeded material (sandbox lease).
+run one evaluation against the profile with a craft question through the in-portal gate
+path (`evaluateDecisionPerspective` via the decision-perspective server action — the
+`wwmd_evaluate` MCP tool is not yet shipped) and confirm a `recommend` citing the
+seeded material (sandbox lease).
 
 ## Phase 3 — Role-aware gate resolution
 
@@ -91,7 +103,7 @@ profile, with the chain recorded in the ledger.
   action at implementation time; `build-studio-gate.ts` is the template): when the caller
   is an agent with a bound role and the question's domain is `professional-practice` (or
   the profile scopes the domain), select the profession profile; else current behavior.
-  Compose with BI-230C9EF7 (org profile resolution) — same entry-point, two resolvers.
+  Compose with the landed BI-230C9EF7 org resolution — same entry-point, two resolvers.
 - Authority boundary (spec §4.5): craft-vs-business conflict arbitrates org-over-
   profession; profession commandments escalate instead of yielding. This is evaluator
   *input* shaping (which profile is primary, which is fallback), not evaluator changes.
@@ -111,7 +123,8 @@ profile behaves exactly as before (regression check on an unbound coworker).
 - `apps/web/lib/wiki/enrich-org-corpus.ts`: generalize input with the
   `EnrichCorpusTarget` discriminator (spec §4.7); `profession` targets write
   platform-scoped pages/materials onto the profession profile; source-key
-  `profession/${professionKey}/${origin}/${fingerprint}`. **Org path behavior is frozen
+  `enrich:profession:${professionKey}:${sourceType}:${fingerprint}` (extends the
+  shipped `deriveSourceKey` colon scheme). **Org path behavior is frozen
   by existing tests (`enrich-org-corpus.test.ts`) — they must stay green untouched.**
 - Review-inbox lane: profession-profile gaps group under owner/operator wording
   (explainability spec's generic projection — verify, extend only if the projection
@@ -131,9 +144,12 @@ review inbox.
 - `docs/professions/finance/wiki/` (GAAP/ASC distillations, double-entry invariants,
   SoD/SOX concepts) and `docs/professions/marketing/wiki/` (AMA ethics, STP/4Ps,
   consent-compliance commandments) + seed wiring in `seed-profession-corpus.ts`.
-- MCP: profession profile ids accepted by `wwmd_evaluate`/`wwmd_decide`/
-  `wwmd_record_outcome` `profileId` param under existing scopes; agent→profile resolution
-  exposed through the BI-230C9EF7 entry-point rather than a new tool.
+- MCP (conditional on EP-WWMD-MCP): the `wwmd_evaluate`/`wwmd_decide`/
+  `wwmd_record_outcome` tools are not yet registered in `mcp-tools.ts` — if they have
+  landed by this phase, verify profession profile ids are accepted as `profileId` under
+  existing scopes (should be free if the tools are kind-generic); if not, record the
+  requirement on EP-WWMD-MCP and ship this phase without the MCP claim. Agent→profile
+  resolution composes with the landed BI-230C9EF7 entry-point rather than a new tool.
 - Operator docs (doc-at-ship): extend
   `docs/user-guide/ai-workforce/decision-perspective.md` profile-kind table with
   `profession` and the WSID naming; AGENTS.md §16 WWMD-vs-WWWD note gains the WSID line.
@@ -159,6 +175,8 @@ each PR.
   Phase 4 depends on 1 (profiles) but not 3; Phase 5 depends on 2's content pattern.
 - Each phase is a Build Studio-sized slice: file child BIs under EP-WSID at promotion
   time (umbrella BI-48B3CEC4 stays the parent, EP-WWMD-MCP umbrella pattern).
-- Composition risk with EP-WWMD-MCP: BI-230C9EF7 (org profile resolution) touches the
-  same entry-point as Phase 3 — overlap-sweep before that slice starts; if it has landed,
-  compose; if not, Phase 3 builds the entry-point and BI-230C9EF7 shrinks.
+- BI-230C9EF7 (org profile resolution) **has landed** (verified 2026-06-09 —
+  `resolveProfileMaterialForOrg` in `material.ts` with tests): Phase 3 composes with it —
+  same entry-point, two resolvers. Still overlap-sweep before each slice; EP-WWMD-MCP
+  remains active on adjacent surfaces (the wwmd MCP tools themselves are unshipped, see
+  Phase 5).

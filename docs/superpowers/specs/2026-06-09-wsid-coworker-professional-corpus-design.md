@@ -44,16 +44,26 @@ point, inside the governed gate — not as prompt folklore.
 
 1. A third `DecisionPerspectiveProfile` scope — the **profession profile** — one per
    coworker role family (`WSID-DATA-ARCHITECT`, `WSID-FINANCE`, `WSID-MARKETING`, …).
-2. A per-role **professional corpus** on the existing substrate: `WikiPage` pages with
+2. **Full-roster coverage contract**: WSID scopes **every AI Coworker on the platform**,
+   not a handpicked few — all 63 registry agents (48 specialists, 9 orchestrators,
+   6 cross-cutting; counted 2026-06-09) plus the ~24 route personas, collapsed into
+   profession *families* (§4.11). Data architect / finance / marketing are the **pilot
+   three**, chosen to prove the pipeline — they are not the scope.
+3. A per-role **professional corpus** on the existing substrate: `WikiPage` pages with
    `RawSource` provenance for the body of knowledge, `PerspectiveMaterial` rows for
    decision-bearing doctrine, Qdrant embeddings for recall.
-3. **Role-aware gate resolution**: when a coworker hits a craft question, the Decision
+4. **Research-sourced content — never training-data authoring**: every corpus page is
+   produced by the research-ingest pipeline from *fetched, verifiable sources* (§4.12).
+   The LLM distills retrieved source text; it never writes doctrine from its own
+   training-data memory. Each profession gets **its own research effort and its own
+   source list**, governed by the Profession Source Registry.
+5. **Role-aware gate resolution**: when a coworker hits a craft question, the Decision
    Perspective Gate evaluates against its profession profile, falling back through the
    existing chain (role → org WWWD → DPF doctrine advisory → defer-with-gap-capture).
-4. **Seed = bootstrap, enrichment = runtime**: starter corpora for the first three roles
-   install on a fresh portal; ongoing growth flows through the (role-scoped) enrichment
-   pipeline with draft-by-default review.
-5. **Org overridability**: an organization can extend or override a profession profile
+6. **Seed = bootstrap, enrichment = runtime**: pilot corpora install on a fresh portal
+   (themselves pipeline-produced with recorded provenance, §5); ongoing growth flows
+   through the (role-scoped) enrichment pipeline with draft-by-default review.
+7. **Org overridability**: an organization can extend or override a profession profile
    without mutating the platform-seeded baseline (existing kernel-page overlay pattern).
 
 **Non-goals (V1)**
@@ -83,8 +93,11 @@ point, inside the governed gate — not as prompt folklore.
 
 ### Professional bodies of knowledge (the corpus contents)
 
-The standards each starter role's corpus distills, per the platform's
-`research-and-use-standards` principle (cite sources; deviate only with reason):
+Candidate anchor standards for the **pilot three**, per the platform's
+`research-and-use-standards` principle (cite sources; deviate only with reason). These
+lists are *starting hypotheses* — each profession's dedicated research pass (§4.12)
+confirms, extends, and supersedes them with fetched sources; the full-roster family map
+is in §4.11:
 
 - **Data architect:** DAMA-DMBOK2 (11 knowledge areas — governance, modeling, storage,
   security, MDM, metadata, quality…), ISO/IEC 9075 (ANSI SQL), OWASP Top 10 + ASVS +
@@ -144,9 +157,9 @@ WSID   profile kind "profession"    — role professional doctrine       (this s
 
 ```jsonc
 {
-  "domains": ["data-model", "data-security"],     // existing scope axis
+  "domains": ["data-model", "data-security"],      // existing scope axis
   "professionKey": "data-architect",               // NEW, kebab-case role-family slug
-  "roles": ["data-architect"]                      // coworker role slugs this profile serves
+  "roles": ["build-data-architect", "data-architect"] // registry agent_name + prompt-slug alias (§4.3)
 }
 ```
 
@@ -161,10 +174,18 @@ A small resolver, mirroring the org-profile resolution entry-point (BI-230C9EF7)
 resolveProfessionProfile({ agentId | roleSlug }) → DecisionPerspectiveProfile | null
 ```
 
-- Source of the role slug: the coworker's registry entry (`agent_registry.json` /
-  `Agent` model) already names specialist roles (`data-architect`, etc. — the
-  `prompts/specialist/*.prompt.md` slugs). The resolver maps agent → role slug →
-  profession profile whose `scope.roles` contains it.
+- **Role-slug source of truth** (verified 2026-06-09): `agent_registry.json` has no
+  `role` field — its identifiers are `agent_id` / `agent_name`
+  (`AGT-BUILD-DA` / `build-data-architect`, `AGT-900` / `finance-agent`,
+  `AGT-WS-MARKETING` / `marketing-specialist`). The `prompts/specialist/*.prompt.md`
+  slugs (`data-architect`, …) are a *separate namespace* that only sometimes coincides.
+  `scope.roles` therefore binds to the registry **`agent_name`** as the canonical key,
+  with the specialist-prompt slug listed as an alias when it differs, so the resolver
+  accepts whichever identifier the gate call site carries:
+  agentId → registry entry → `agent_name` (or prompt-slug alias) → profile.
+- Seed bindings: `WSID-DATA-ARCHITECT` ← `build-data-architect` (alias
+  `data-architect`); `WSID-FINANCE` ← `finance-agent`; `WSID-MARKETING` ←
+  `marketing-specialist`.
 - Null result = no WSID profile for this role → gate proceeds with the org/platform chain
   exactly as today (additive, zero behavior change for unbound roles).
 
@@ -215,7 +236,9 @@ Per-role corpus on the existing wiki substrate:
 - **Principle taxonomy scoping** (existing axes, no additions):
   `principleConsumerArchetype: "specialist"`,
   `principleConsumerContexts: ["data-model"] | ["finance"] | ["marketing"]` (slugs already
-  in `PRINCIPLE_CONSUMER_CONTEXT_EXAMPLES`), `principleRingScope: "ring-1-coworker"`.
+  in `PRINCIPLE_CONSUMER_CONTEXT_EXAMPLES`; `data-security` is a new governed slug —
+  contexts are open kebab-case, but append it to the examples registry so docs and lint
+  stay honest), `principleRingScope: "ring-1-coworker"`.
   `recallPrincipleContext`'s strict context filter then keeps finance doctrine out of
   marketing prompts for free.
 - **Knowledge graph**: `WikiPageLink` neighborhoods (existing), projected through the
@@ -234,8 +257,11 @@ type EnrichCorpusTarget =
   | { kind: "profession"; professionKey: string };            // NEW
 ```
 
-- Source-key contract extends the existing scheme:
-  `profession/${professionKey}/${origin}/${stableSourceFingerprint}`.
+- Source-key contract extends the shipped `deriveSourceKey` scheme
+  (`enrich:${organizationId}:${sourceType}:${fingerprint}` — colon-delimited, not
+  path-style): `enrich:profession:${professionKey}:${sourceType}:${fingerprint}`.
+  Keeping the `enrich:` prefix preserves existing prefix-scoped queries and the
+  idempotent-upsert semantics keyed on `RawSource.sourceKey`.
 - Same dispositions, same **draft-by-default** review routing (BI-1378 precedent), same
   `WikiIngestEvent` audit. Review-inbox grouping gains the profession as an owner lane
   (the explainability spec's review inbox is already gap-reason generic).
@@ -255,13 +281,18 @@ type EnrichCorpusTarget =
 
 ### 4.9 MCP exposure
 
-No new tool family. `wwmd_evaluate` / `wwmd_decide` / `wwmd_record_outcome` already accept
-`profileId`; WSID adds:
+No new tool family. The `wwmd_evaluate` / `wwmd_decide` / `wwmd_record_outcome` surface
+is specced (`2026-05-19-wwmd-mcp-exposure-design.md`, EP-WWMD-MCP) but **not yet
+registered** in `apps/web/lib/mcp-tools.ts` (verified 2026-06-09) — until it lands, the
+in-portal gate is WSID's only decision surface. WSID's MCP requirement is purely
+additive to that epic:
 
-- profession profile ids as valid targets under the same scopes/grants;
-- a `resolveProfileForAgent` convenience (so an external client can ask "which profile
-  governs the finance coworker?") — read-only, exposed via the existing profile-resolution
-  entry-point work (BI-230C9EF7) rather than a parallel tool.
+- when the wwmd tools land, profession profile ids are valid `profileId` targets under
+  the same scopes/grants — no WSID-specific tool work;
+- agent→profile resolution (so an external client can ask "which profile governs the
+  finance coworker?") rides the **landed** BI-230C9EF7 entry-point
+  (`resolveProfileMaterialForOrg`, `apps/web/lib/decision-perspective/material.ts`)
+  extended with the §4.3 resolver — read-only, no parallel tool.
 
 ### 4.10 Explainability
 
@@ -278,7 +309,11 @@ Per `seed-is-bootstrap-calibration-is-runtime` and `fix-the-seed-not-the-runtime
 - **Seed** installs: 3 profession profiles, their starter WikiPages + RawSources +
   PerspectiveMaterials (platform-authored distillations, published status, promoted
   materials — they are reviewed at PR time like kernel pages), and the role bindings.
-  Idempotent, FK-safe, loud on skip (silent-seed-skips audit applies).
+  Idempotent, FK-safe, loud on skip (silent-seed-skips audit applies). Seed-time
+  embeddings follow the founder-kernel precedent (`seed-wiki-kernel.ts`): a precomputed
+  `embeddings.jsonl` sidecar per corpus tree, because a fresh install has no embedding
+  provider configured at seed time (`zero-click-provider-setup`); runtime enrichment
+  embeds through the live `storeWikiPage` path.
 - **Runtime** owns growth: enrichment pipeline (§4.7), gap capture from `defer`s,
   org overlays. Seed content is never the long-term source of truth for routing
   decisions — the corpus lives in the DB and evolves there.
@@ -291,7 +326,8 @@ Per `seed-is-bootstrap-calibration-is-runtime` and `fix-the-seed-not-the-runtime
 | `"professional-practice"` in `DECISION_DOMAIN_CLASSES` | TS registry | No |
 | `scope.professionKey` / `scope.roles` | Json contract + type | No |
 | `EnrichCorpusTarget` discriminator | `enrich-org-corpus.ts` generalization | No |
-| Profession seed module | `packages/db/src/seed-*` | Seed only |
+| `"data-security"` in `PRINCIPLE_CONSUMER_CONTEXT_EXAMPLES` | `packages/db/src/wiki-taxonomy.ts` examples registry | No (contexts are open kebab-case) |
+| Profession seed module | `packages/db/src/seed-*` (generalizes `seed-wiki-kernel.ts` machinery) | Seed only |
 
 Zero structural migrations is a deliberate outcome of the schema-audit-before-features
 pass (§4.1): the 2026-05 decision-perspective models were built profile-kind-generic.
