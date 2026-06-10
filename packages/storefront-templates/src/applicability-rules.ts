@@ -384,6 +384,107 @@ const RULES: ApplicabilityRule[] = [
     },
   },
   {
+    // governance is optional on raw axes (normalizer defaults it to
+    // "investor-owned"); strict equality means absent === no civic machinery.
+    name: "member-owned-governance",
+    evaluate: (axes) => {
+      if (axes.governance !== "member-owned") return [];
+
+      return [
+        {
+          key: "member-governance",
+          applicability: "required",
+          reason: "Member-owned organizations run an elected board, committees, and an annual meeting.",
+          ownershipScopes: ["organization"],
+          isolation: "organization-scope",
+        },
+        {
+          key: "membership-eligibility",
+          applicability: "required",
+          reason: "Member-owned organizations admit members through an eligibility step before account creation.",
+          ownershipScopes: ["organization"],
+          isolation: "organization-scope",
+        },
+        {
+          key: "member-equity",
+          applicability: "recommended",
+          reason: "Member-owned organizations commonly allocate patronage or member equity; cooperatives require it.",
+          ownershipScopes: ["customer-account"],
+          isolation: "organization-scope",
+        },
+      ];
+    },
+  },
+  {
+    name: "public-body-governance",
+    evaluate: (axes) => {
+      if (axes.governance !== "public-body") return [];
+
+      return [
+        {
+          key: "public-body-governance",
+          applicability: "required",
+          reason: "Public bodies operate under open-meetings law: agendas, meetings, minutes, publication.",
+          ownershipScopes: ["organization"],
+          isolation: "organization-scope",
+        },
+        {
+          key: "records-request",
+          applicability: "required",
+          reason: "Public bodies answer statutory records requests with deadline tracking.",
+          ownershipScopes: ["organization"],
+          isolation: "organization-scope",
+        },
+      ];
+    },
+  },
+  {
+    name: "resident-service-obligation",
+    evaluate: (axes) => {
+      if (axes.primaryConsumer !== "resident") return [];
+
+      return [
+        {
+          key: "service-request-311",
+          applicability: "required",
+          reason: "Residents file service requests the jurisdiction must route and answer for everyone equally.",
+          ownershipScopes: ["organization"],
+          isolation: "organization-scope",
+        },
+        {
+          key: "customer-accounts",
+          applicability: "required",
+          reason: "Residents and ratepayers need account records; the relationship is jurisdictional, not contractual.",
+          ownershipScopes: ["customer-account"],
+          isolation: "organization-scope",
+        },
+      ];
+    },
+  },
+  {
+    name: "member-eligibility-before-account",
+    evaluate: (axes) => {
+      if (axes.primaryConsumer !== "member") return [];
+
+      return [
+        {
+          key: "customer-accounts",
+          applicability: "required",
+          reason: "Members need account records bound to their membership.",
+          ownershipScopes: ["customer-account"],
+          isolation: "organization-scope",
+        },
+        {
+          key: "membership-eligibility",
+          applicability: "required",
+          reason: "Membership eligibility is checked before a member account is created.",
+          ownershipScopes: ["organization"],
+          isolation: "organization-scope",
+        },
+      ];
+    },
+  },
+  {
     name: "partner-channel-from-axes",
     evaluate: (axes, portfolios) => {
       const program = derivePartnerProgramProfile(axes, portfolios);
@@ -500,6 +601,15 @@ function supportedPatternsForCommercialModel(commercialModel: CommercialModel): 
         primaryPaymentPattern: "ad-hoc-invoice",
         supportedPaymentPatterns: ["ad-hoc-invoice"],
         invoiceExecutionMode: "manual",
+        recurringBillingApplicability: "optional",
+      };
+    case "statutory-fees-and-levies":
+      // A levy/assessment is an obligation-driven invoice on a published fee
+      // schedule — no new PaymentPattern value (civic archetypes spec §7 note 1).
+      return {
+        primaryPaymentPattern: "ad-hoc-invoice",
+        supportedPaymentPatterns: ["ad-hoc-invoice", "recurring-agreement"],
+        invoiceExecutionMode: "prepared-not-prescribed",
         recurringBillingApplicability: "optional",
       };
     case "hybrid":

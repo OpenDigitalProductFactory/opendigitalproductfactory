@@ -84,6 +84,14 @@ const VOCABULARY: Record<string, ArchetypeVocabulary> = {
     portalLabel: "Community Portal", stakeholderLabel: "Homeowners",
     teamLabel: "Board & Contractors", inboxLabel: "Requests", agentName: "Community Manager",
   },
+  // Towns, municipal utilities, law enforcement. Leaf overrides (Ratepayers /
+  // Community) ship with each archetype via customVocabulary; civic spec §8.
+  "public-sector": {
+    itemsLabel: "Services & Programs", singleItemLabel: "Service", addButtonLabel: "Add service",
+    categoryLabel: "Department", priceLabel: "Fee",
+    portalLabel: "Resident Portal", stakeholderLabel: "Residents",
+    teamLabel: "Staff", inboxLabel: "Service Requests", agentName: "Resident Services",
+  },
 };
 
 const DEFAULT_VOCABULARY: ArchetypeVocabulary = {
