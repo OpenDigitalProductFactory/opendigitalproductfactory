@@ -9,6 +9,7 @@ import { MetricStat } from "./MetricStat";
 import { MetricTable } from "./MetricTable";
 import { ContainerResourceTable } from "./ContainerResourceTable";
 import { AiCoworkerHealthPanel } from "./AiCoworkerHealthPanel";
+import { LogIssuesPanel } from "./LogIssuesPanel";
 import { RecentAlertsPanel } from "./RecentAlertsPanel";
 import { HOST_RESOURCE_QUERIES, isHostTelemetryConfigured } from "./health-summary";
 import { useMetricQuery } from "./useMetricQuery";
@@ -157,6 +158,10 @@ function SystemHealthContent() {
           />
         </div>
       </section>
+
+      {/* Log issues — signatures the log scanner filed from container logs
+          (EP-FULL-OBS Tier 2). Surfaces hidden log problems without Docker Desktop. */}
+      <LogIssuesPanel />
 
       {/* Recent alerts history */}
       <RecentAlertsPanel />

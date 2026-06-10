@@ -40,15 +40,12 @@ groups:
           summary: "{{ $labels.service }} log error storm (>60/min)"
           description: "{{ $labels.service }} is flooding stderr with errors. Likely a tight failure loop (e.g. a dependency timing out on every request)."
 
-      - alert: LogIngestionThrottled
-        # loki_discarded_samples_total rises when per_stream_rate_limit drops
-        # lines — i.e. a container is flooding logs faster than the cap. A
-        # throttle is itself a strong "something is very wrong" signal.
-        expr: sum(rate(loki_discarded_samples_total[5m])) > 0
-        for: 5m
-        labels:
-          severity: warning
-          source: log-ingest
-        annotations:
-          summary: "Loki is dropping logs — a container is flooding stdout"
-          description: "Ingestion throttling active. A service is logging past the per-stream cap; inspect the loudest stream in Loki."
+# NOTE: ingestion-throttle detection ("Loki is dropping logs because a
+# container is flooding stdout") is NOT a LogQL rule — it keys on Loki's own
+# Prometheus metric `loki_discarded_samples_total`, which Prometheus scrapes
+# from loki:3100/metrics. It therefore lives in
+# monitoring/prometheus/alerts.yml (a LogIngestionThrottled rule in the
+# dpf_application group), NOT in this Loki ruler file. A PromQL expression here
+# is a parse error that fails the WHOLE rule group — verified live: the first
+# ruler load rejected the mis-placed rule and silenced the spike/storm rules
+# with it (structural-verification-is-not-functional).
