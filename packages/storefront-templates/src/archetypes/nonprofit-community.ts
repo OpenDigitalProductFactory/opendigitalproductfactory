@@ -131,4 +131,76 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
       { name: "position", label: "Playing position / role (if applicable)", type: "text" as const, required: false },
     ],
   },
+  {
+    // First member-owned activation (civic spec §6.4/§7): cooperative-ness lives in
+    // the governance axis, so one general-purpose archetype covers ag / electric /
+    // consumer-food / housing / worker co-ops; sub-type template tuning is a
+    // documented follow-up, like the utility's ownership question.
+    archetypeId: "cooperative",
+    name: "Cooperative (Member-Owned)",
+    category: "nonprofit-community",
+    ctaType: "inquiry",
+    tags: ["cooperative", "co-op", "member-owned", "patronage", "worker-coop", "food-coop", "housing-coop", "agricultural"],
+    itemTemplates: [
+      { name: "Membership Share", description: "Purchase a membership share to become a member-owner of the cooperative", priceType: "fixed", ctaType: "purchase" },
+      { name: "Membership Application", description: "Apply to join the cooperative as a member-owner", priceType: "free", ctaType: "inquiry" },
+      { name: "Member Account Question", description: "Ask about your member account, statements, or services", priceType: "free", ctaType: "inquiry" },
+      { name: "Patronage & Equity Inquiry", description: "Ask about your patronage allocation, capital credits, or equity retirement", priceType: "free", ctaType: "inquiry" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "about", title: "About Our Co-op", sortOrder: 1 },
+      { type: "items", title: "Products & Services", sortOrder: 2 },
+      { type: "team", title: "Board & Committees", sortOrder: 3 },
+      { type: "contact", title: "Contact Us", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...CONTACT_FIELDS,
+      { name: "requestType", label: "Request type", type: "select" as const, required: true, options: ["Membership", "Member account", "Patronage / equity", "Board & governance", "Other"] },
+    ],
+    // Member-owner skin over the nonprofit-community category vocabulary (civic spec §8).
+    vocabulary: {
+      itemsLabel: "Products & Services",
+      portalLabel: "Member Portal",
+      stakeholderLabel: "Member-Owners",
+      inboxLabel: "Member Requests",
+      agentName: "Member Services",
+    },
+    activationProfile: {
+      profileType: "standard",
+      modules: ["service-operations", "projects"],
+      billingReadinessMode: "prepared-not-prescribed",
+      customerGraph: "none",
+      estateSeparation: "shared",
+      axes: {
+        form: "services",
+        delivery: "physical",
+        primaryConsumer: "member",
+        consumptionChannel: "onsite-plus-portal",
+        commercialModel: "transactional",
+        provisioning: "account-with-billing",
+        platform: "no",
+        governance: "member-owned",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: { scope: "standard", it4itStages: ["request-to-fulfill"] },
+        forEmployees: { scope: "standard" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+      capabilityOverrides: [
+        {
+          capabilityKey: "member-equity",
+          applicability: "required",
+          reason: "Cooperatives allocate patronage and retire member equity by statute (Subchapter T) — not optional for this archetype.",
+        },
+      ],
+      seededServiceCategories: [
+        "Membership",
+        "Member Services",
+        "Patronage & Equity",
+        "Governance",
+      ],
+    },
+  },
 ];
