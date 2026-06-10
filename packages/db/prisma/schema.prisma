@@ -2836,6 +2836,9 @@ model Organization {
   integrationCoverageProviders  IntegrationCoverageProvider[]  @relation("OrgToCoverageProviders")
   integrationRoleCoverages      IntegrationRoleCoverage[]      @relation("OrgToCoverageCells")
   capabilityActivations         OrganizationCapabilityActivation[]
+  governanceMeetings            GovernanceMeeting[]
+  recordsRequests               RecordsRequest[]
+  fundBudgetLines               FundBudgetLine[]
 }
 
 // EP-PARTNER-CHANNEL Phase 1b. Generic per-organization opt-in overlay on top of
@@ -2885,6 +2888,10 @@ model BusinessContext {
   companyStage    String?
   companySize     String?
   geographicScope String?
+  // US state/province code driving statutory defaults (records-request response
+  // deadlines, retention schedules) for public-sector archetypes. Org-level
+  // configuration on seeded obligations — not 50 seed variants (civic spec $10).
+  stateCode       String?
 
   // Derived from archetype (auto-populated)
   industry    String?
@@ -10360,4 +10367,90 @@ model BuildEngineState {
   provisionedBy     String?
 
   @@map("build_engine_state")
+}
+
+// ─── Civic & member-governed archetype models (BI-8D477188 Phase 2) ──────────
+// Spec: docs/superpowers/specs/2026-06-09-civic-and-member-governed-archetypes-design.md §7
+// Plan: docs/superpowers/plans/2026-06-09-small-town-municipality-archetype.md
+// GovernanceMeeting serves BOTH public-body governance (council/committee, gated
+// by governance=public-body) and member governance (board/annual meeting, gated
+// by governance=member-owned) — bodyType carries the distinction so the
+// credit-union and cooperative archetypes reuse the same workflow table.
+
+model GovernanceMeeting {
+  id             String       @id @default(cuid())
+  meetingId      String       @unique
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  bodyType    String // council | board | committee | annual-meeting
+  title       String
+  scheduledAt DateTime
+  location    String?
+  // scheduled → agenda-published → held → minutes-recorded → minutes-approved | cancelled
+  status      String   @default("scheduled")
+
+  agendaContent     String?
+  agendaPublishedAt DateTime?
+  minutesContent    String?
+  minutesRecordedAt DateTime?
+  minutesApprovedAt DateTime?
+  attendees         Json?
+  decisions         Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, scheduledAt])
+  @@index([organizationId, status])
+}
+
+model RecordsRequest {
+  id             String       @id @default(cuid())
+  requestId      String       @unique
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  requesterName    String
+  requesterEmail   String?
+  requesterPhone   String?
+  description      String
+  requestedRecords Json?
+
+  receivedAt    DateTime @default(now())
+  // Statutory response deadline — computed from the org-configured response-days
+  // (state-dependent; BusinessContext.stateCode sets the default).
+  responseDueAt DateTime
+  // submitted → in-progress → fulfilled | partially-fulfilled | denied | withdrawn
+  status        String   @default("submitted")
+
+  responseSummary String?
+  denialReason    String?
+  exemptionsCited Json?
+  respondedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, status])
+  @@index([organizationId, responseDueAt])
+}
+
+model FundBudgetLine {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  fiscalYear     Int
+  // general | special-revenue | enterprise | capital-projects | debt-service
+  fund           String
+  accountCode    String
+  budgetedAmount Decimal @db.Decimal(14, 2)
+  notes          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, fiscalYear, fund, accountCode])
+  @@index([organizationId, fiscalYear])
 }

@@ -14,6 +14,7 @@ import { seedEaStructureRules } from "./seed-ea-structure-rules.js";
 import { seedGovernanceReferenceData } from "./governance-seed.js";
 import { seedWorkforceReferenceData } from "./workforce-seed.js";
 import { seedStorefrontArchetypes } from "./seed-storefront-archetypes.js";
+import { seedPublicSectorCompliance } from "./seed-public-sector-compliance.js";
 import { seedBusinessCapabilityPerspective } from "./business-capability-perspectives.js";
 import { seedGeographicData } from "./seed-geographic-data.js";
 import { seedTaxJurisdictions } from "./seed-tax-jurisdictions.js";
@@ -2532,6 +2533,7 @@ async function main(): Promise<void> {
   await step("clientIdentity", () => seedClientIdentity());
   await step("hiveContributionCredential", () => seedHiveContributionCredential());
   await step("storefrontArchetypes", () => seedStorefrontArchetypes(prisma));
+  await step("publicSectorCompliance", () => seedPublicSectorCompliance(prisma));
   await step("businessCapabilityPerspective", async () => {
     const capabilityPerspectiveSeed = await seedBusinessCapabilityPerspective(prisma);
     console.log(
