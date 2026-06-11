@@ -124,7 +124,7 @@ function walkMarkdownFiles(dir: string): string[] {
 /**
  * Derive a wiki slug for a profession corpus page.
  *   docs/professions/data-architect/wiki/parameterized-queries-commandment.md
- *   → professions/data-architect/parameterized-queries-commandment
+ *   -> professions/data-architect/parameterized-queries-commandment
  *
  * Strips the `wiki/` path segment and prefixes with `professions/` so
  * profession corpus pages are distinguishable from kernel pages by
@@ -257,9 +257,10 @@ export async function seedProfessionCorpus(
   }
 
   if (orphanLinks.length > 0) {
+    const linkPairs = orphanLinks.map((l) => l.from + " -> " + l.to).join(", ");
     console.warn(
       `[seedProfessionCorpus] ${orphanLinks.length} orphan wiki-link(s) — ` +
-        `target page not yet seeded: ${orphanLinks.map((l) => `${l.from} → ${l.to}`).join(", ")}`,
+        "target page not yet seeded: " + linkPairs,
     );
   }
 
