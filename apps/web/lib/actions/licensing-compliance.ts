@@ -193,7 +193,7 @@ export async function getLicensingWorkspace() {
   const organization = await requireOrganization();
   const profile = await getOrCreateLicenseProfile(organization.id);
 
-  const [requirementOptions, organizationLicenses, personCredentials, openIssues, holderOptions] =
+  const [rawRequirementOptions, organizationLicenses, personCredentials, openIssues, holderOptions, storefront] =
     await Promise.all([
       prisma.licenseRequirementReference.findMany({
         orderBy: [
@@ -208,6 +208,7 @@ export async function getLicensingWorkspace() {
           authorityName: true,
           requirementType: true,
           scopeLevel: true,
+          archetypeCategories: true,
         },
       }),
       prisma.organizationLicenseRecord.findMany({
@@ -259,7 +260,33 @@ export async function getLicensingWorkspace() {
           principal: { select: { displayName: true } },
         },
       }),
+      prisma.storefrontConfig.findFirst({
+        where: { organizationId: organization.id },
+        select: { archetype: { select: { category: true } } },
+      }),
     ]);
+
+  // Archetype-aware requirement prioritization (BI-5D9DCDE6 spec §9.2): the
+  // org's archetype category marks which bootstrap authority entries apply to
+  // this business, so regulated categories (banking) see their regulators
+  // grouped first instead of buried in the global directory list.
+  const archetypeCategory = storefront?.archetype?.category ?? null;
+  const requirementOptions = rawRequirementOptions
+    .map(({ archetypeCategories, ...option }) => ({
+      ...option,
+      matchesArchetype:
+        archetypeCategory !== null && (archetypeCategories ?? []).includes(archetypeCategory),
+    }))
+    .sort((a, b) => Number(b.matchesArchetype) - Number(a.matchesArchetype));
+
+  // D5 (required-but-not-blocking): a regulated-category install with no
+  // captured credential rows carries a visible "posture incomplete" state in
+  // the workspace — never a hard gate on archetype activation.
+  const REGULATED_POSTURE_CATEGORIES = new Set(["banking-financial-services"]);
+  const requiredPostureIncomplete =
+    archetypeCategory !== null &&
+    REGULATED_POSTURE_CATEGORIES.has(archetypeCategory) &&
+    organizationLicenses.length === 0;
 
   const displayObligations = [
     ...organizationLicenses.flatMap((record) =>
@@ -298,6 +325,10 @@ export async function getLicensingWorkspace() {
   return {
     organization,
     profile,
+    archetype: {
+      category: archetypeCategory,
+      requiredPostureIncomplete,
+    },
     requirementOptions,
     holderOptions: holderOptions.map((holder) => ({
       id: holder.id,

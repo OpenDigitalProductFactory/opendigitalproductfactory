@@ -4,6 +4,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 
 const TABS = [
   { label: "Directory", value: "directory" },
+  { label: "Workforce", value: "workforce" },
   { label: "Org Chart", value: "orgchart" },
   { label: "Timesheets", value: "timesheets" },
   { label: "My Policies", value: "mypolicies" },

@@ -40,6 +40,55 @@ const CATEGORY_PLAYBOOKS: Record<string, MarketingPlaybook> = {
     agentSkills: ["Draft community announcement", "Prepare assessment notice", "Summarise maintenance requests", "Board meeting agenda"],
   },
 
+  "banking-financial-services": {
+    primaryGoal: "Deepen customer and member relationships through trust, financial education, and product awareness — within regulated-communication boundaries",
+    stakeholders: "Customers/members, local businesses, community organizations, regulators",
+    campaignTypes: [
+      "Rate and product announcements (APY/APR figures must match current published rates — Reg DD / Reg Z accuracy)",
+      "Financial education series (budgeting, fraud awareness, first-home buying)",
+      "Branch and service updates (hours, new services, appointment availability)",
+      "Community involvement and local sponsorship stories",
+      "New account and membership onboarding sequences",
+      "Security and fraud-alert notices",
+      "Required-disclosure-bearing product promotions (Member FDIC / NCUA insurance, Equal Housing)",
+    ],
+    contentTone: "Trustworthy, clear, factual, community-anchored — never urgency-pressure or unverifiable claims",
+    keyMetrics: [
+      "New account / membership applications",
+      "Appointment bookings with bankers or advisors",
+      "Product inquiry conversion rate",
+      "Financial education engagement",
+      "Customer/member retention rate",
+    ],
+    ctaLanguage: ["Open an account", "Apply now", "Check today's rates", "Meet with a banker", "Become a member"],
+    agentSkills: ["Draft rate announcement", "Financial education article", "Branch notice", "Fraud awareness alert"],
+  },
+
+  "public-sector": {
+    primaryGoal: "Resident awareness, participation, and trust through transparent civic communication",
+    stakeholders: "Residents, council members, town staff, local businesses, neighboring jurisdictions",
+    campaignTypes: [
+      "Council and board meeting notices with agenda previews",
+      "Public hearing and comment-period announcements",
+      "Service disruption and road work notices",
+      "Seasonal reminders (leaf pickup, snow routes, hydrant flushing)",
+      "Budget season and levy communications with plain-language summaries",
+      "Permit and licensing deadline reminders",
+      "Community event and parks programming announcements",
+      "Emergency notifications (weather, water, public safety)",
+    ],
+    contentTone: "Official, plain-language, neutral, accessible to every resident",
+    keyMetrics: [
+      "Meeting attendance and public-comment participation",
+      "Service request response time",
+      "Records request on-time completion rate",
+      "Notice reach (open/read rate)",
+      "Resident satisfaction",
+    ],
+    ctaLanguage: ["Report an issue", "View the agenda", "Request records", "Apply for a permit"],
+    agentSkills: ["Draft meeting notice", "Plain-language budget summary", "Service disruption notice", "Public hearing announcement"],
+  },
+
   "professional-services": {
     primaryGoal: "Build authority pipeline through expertise demonstration and client nurture",
     stakeholders: "Clients, prospects, referral partners, industry contacts",

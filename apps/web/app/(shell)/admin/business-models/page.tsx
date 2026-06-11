@@ -15,6 +15,7 @@ const INDUSTRY_TO_MODELS: Record<string, string[]> = {
   "fitness-recreation": ["bm-saas", "bm-services"],
   "nonprofit-community": ["bm-services"],
   "hoa-property-management": ["bm-services"],
+  "banking-financial-services": ["bm-services"],
 };
 
 export default async function AdminBusinessModelsPage() {

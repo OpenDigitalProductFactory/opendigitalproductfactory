@@ -310,13 +310,13 @@ describe("recoverContradictoryBuildExecStatesOnBoot (FIX 1)", () => {
 describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
   it("re-dispatches a stranded, internally-consistent mid-step build", async () => {
     featureBuildFindManyMock.mockResolvedValueOnce([
-      { buildId: "BLD-STRANDED", buildExecState: { step: "deps_installed" }, verificationOut: null },
+      { buildId: "BLD-STRANDED", phase: "build", buildExecState: { step: "deps_installed" }, verificationOut: null },
     ]);
     const dispatch = vi.fn();
 
     const result = await resumeStrandedBuildsOnBoot({ dispatch }, { log: vi.fn(), error: vi.fn() });
 
-    expect(result).toEqual({ resumed: 1 });
+    expect(result).toEqual({ resumed: 1, flagged: 0 });
     expect(dispatch).toHaveBeenCalledWith("BLD-STRANDED");
     expect(buildActivityCreateMock).toHaveBeenCalledTimes(1);
   });
@@ -324,31 +324,48 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
   it("skips contradictory shapes (owned by FIX 1) and terminal/null steps", async () => {
     featureBuildFindManyMock.mockResolvedValueOnce([
       // contradictory: error-without-fail
-      { buildId: "BLD-CONTRA", buildExecState: { step: "complete", error: "x" }, verificationOut: null },
+      { buildId: "BLD-CONTRA", phase: "build", buildExecState: { step: "complete", error: "x" }, verificationOut: null },
       // terminal
-      { buildId: "BLD-COMPLETE", buildExecState: { step: "complete" }, verificationOut: { typecheckPassed: true } },
-      { buildId: "BLD-FAILED", buildExecState: { step: "failed", failedAt: "db_ready", error: "x" }, verificationOut: null },
+      { buildId: "BLD-COMPLETE", phase: "build", buildExecState: { step: "complete" }, verificationOut: { typecheckPassed: true } },
+      { buildId: "BLD-FAILED", phase: "build", buildExecState: { step: "failed", failedAt: "db_ready", error: "x" }, verificationOut: null },
       // missing step (contradictory)
-      { buildId: "BLD-NOSTEP", buildExecState: { sourceCurrency: { a: 1 } }, verificationOut: null },
+      { buildId: "BLD-NOSTEP", phase: "build", buildExecState: { sourceCurrency: { a: 1 } }, verificationOut: null },
     ]);
     const dispatch = vi.fn();
 
     const result = await resumeStrandedBuildsOnBoot({ dispatch }, { log: vi.fn(), error: vi.fn() });
 
-    expect(result).toEqual({ resumed: 0 });
+    expect(result).toEqual({ resumed: 0, flagged: 0 });
     expect(dispatch).not.toHaveBeenCalled();
   });
 
-  it("passes a staleAfter cutoff to the query so live builds are excluded", async () => {
+  // BI-17377D05: pre-build phases have no resumable step-machine; surface them
+  // as recoverable instead of auto-re-dispatching the fragile pre-build flow.
+  it("flags ideate/plan/review strands for recovery without auto-dispatch", async () => {
+    featureBuildFindManyMock.mockResolvedValueOnce([
+      { buildId: "BLD-IDEATE", phase: "ideate", buildExecState: null, verificationOut: null },
+      { buildId: "BLD-PLAN", phase: "plan", buildExecState: { step: "deps_installed" }, verificationOut: null },
+      { buildId: "BLD-REVIEW", phase: "review", buildExecState: null, verificationOut: null },
+    ]);
+    const dispatch = vi.fn();
+
+    const result = await resumeStrandedBuildsOnBoot({ dispatch }, { log: vi.fn(), error: vi.fn() });
+
+    expect(result).toEqual({ resumed: 0, flagged: 3 });
+    expect(dispatch).not.toHaveBeenCalled(); // never auto-dispatches pre-build phases
+    expect(buildActivityCreateMock).toHaveBeenCalledTimes(3); // one recovery signal each
+  });
+
+  it("queries all non-terminal pre-ship phases with a staleAfter cutoff", async () => {
     featureBuildFindManyMock.mockResolvedValueOnce([]);
     const dispatch = vi.fn();
 
     await resumeStrandedBuildsOnBoot({ staleAfterMs: 60_000, dispatch }, { log: vi.fn(), error: vi.fn() });
 
     const where = (featureBuildFindManyMock.mock.calls[0]![0] as {
-      where: { phase: string; updatedAt: { lt: Date } };
+      where: { phase: { in: string[] }; updatedAt: { lt: Date } };
     }).where;
-    expect(where.phase).toBe("build");
+    expect(where.phase).toEqual({ in: ["ideate", "plan", "build", "review"] });
     expect(where.updatedAt.lt).toBeInstanceOf(Date);
   });
 

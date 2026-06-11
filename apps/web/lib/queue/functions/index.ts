@@ -17,6 +17,7 @@ import { materialFreshnessDecay } from "./material-freshness-decay";
 import { researchExecute } from "./research-execute";
 import { researchScheduleScan } from "./research-schedule";
 import { buildReviewVerification } from "./build-review-verification";
+import { buildExecute } from "./build-execute";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
 import { deliberationRun } from "./deliberation-run";
@@ -44,6 +45,8 @@ import {
   qdrantBackupRequested,
 } from "./postgres-daily-backup";
 import { runtimeTargetJanitor } from "./runtime-target-janitor";
+import { logSignatureScanner } from "./log-signature-scanner";
+import { releaseHealthCheck } from "./release-health-check";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 export const scheduledFunctions = [
@@ -69,6 +72,8 @@ export const scheduledFunctions = [
   postgresDailyBackupScheduled,
   selfUpgradeScheduled,
   runtimeTargetJanitor,  // BI-AD949172: RT heartbeat sweep + lease expiry, hourly
+  logSignatureScanner,   // BI-5FE8656F: EP-FULL-OBS Tier 2 novel-signature log scan, every 15m
+  releaseHealthCheck,    // BI-3630773C: EP-FULL-OBS release stamp verify-gate watch, every 15m
 ];
 
 export const eventFunctions = [
@@ -81,6 +86,7 @@ export const eventFunctions = [
   brandExtract,
   researchExecute,
   buildReviewVerification,
+  buildExecute,
   assuranceBomGenerate,
   assuranceScanRun,
   deliberationRun,

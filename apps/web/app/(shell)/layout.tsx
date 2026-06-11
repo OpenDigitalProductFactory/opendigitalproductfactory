@@ -16,6 +16,7 @@ import { ShellBannerOverlay } from "@/components/shell/ShellBannerOverlay";
 import { ModelWarmup } from "@/components/shell/ModelWarmup";
 import { SetupOverlay } from "@/components/setup/SetupOverlay";
 import { getShellNavSections } from "@/lib/permissions";
+import { getActiveOrgCapabilities } from "@/lib/storefront/civic-surfaces.server";
 import { AppRail } from "@/components/shell/AppRail";
 import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { resolveHomePhoneCountry } from "@/lib/phone-country.server";
@@ -39,25 +40,37 @@ export default async function ShellLayout({ children }: { children: React.ReactN
 
   const user = session.user;
 
-  const [latestDiscoveryRun, activeBranding, organization, useUnifiedCoworker, phoneCountry] =
-    await Promise.all([
-      prisma.discoveryRun.findFirst({
-        orderBy: { startedAt: "desc" },
-        select: { id: true },
-      }),
-      prisma.brandingConfig.findUnique({
-        where: { scope: "organization" },
-        select: {
-          logoUrlLight: true,
-          tokens: true,
-        },
-      }),
-      prisma.organization.findFirst({
-        select: { name: true, logoUrl: true },
-      }),
-      isUnifiedCoworkerEnabled(),
-      resolveHomePhoneCountry(),
-    ]);
+  const [
+    latestDiscoveryRun,
+    activeBranding,
+    organization,
+    useUnifiedCoworker,
+    phoneCountry,
+    activeOrgCapabilities,
+  ] = await Promise.all([
+    prisma.discoveryRun.findFirst({
+      orderBy: { startedAt: "desc" },
+      select: { id: true },
+    }),
+    prisma.brandingConfig.findUnique({
+      where: { scope: "organization" },
+      select: {
+        logoUrlLight: true,
+        tokens: true,
+      },
+    }),
+    prisma.organization.findFirst({
+      select: { name: true, logoUrl: true },
+    }),
+    isUnifiedCoworkerEnabled(),
+    resolveHomePhoneCountry(),
+    getActiveOrgCapabilities().catch((error: unknown) => {
+      // Nav must render even if capability resolution fails — archetype-gated
+      // entries just stay hidden.
+      console.error("[shell-nav] active-capability resolution failed", error);
+      return new Set<string>() as ReadonlySet<string>;
+    }),
+  ]);
 
   if (!latestDiscoveryRun) {
     await executeBootstrapDiscovery(prisma as never, {
@@ -123,11 +136,14 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   const brandingCss = buildBrandingStyleTag(activeBranding?.tokens ?? null);
   const shellNavSections = activeSetup
     ? []
-    : getShellNavSections({
-        userId: user.id,
-        platformRole: user.platformRole,
-        isSuperuser: user.isSuperuser,
-      });
+    : getShellNavSections(
+        {
+          userId: user.id,
+          platformRole: user.platformRole,
+          isSuperuser: user.isSuperuser,
+        },
+        { activeOrgCapabilities },
+      );
 
   return (
     <PhoneCountryProvider country={phoneCountry}>

@@ -1,4 +1,5 @@
 import { join } from "path";
+import { readFileSync } from "fs";
 import { prisma } from "./client.js";
 import type { Prisma } from "../generated/client/client";
 import {
@@ -110,6 +111,111 @@ async function upsertElement(args: {
   return record.id;
 }
 
+interface BianServiceDomain {
+  name: string;
+  description?: string;
+  semanticApi: boolean;
+}
+
+interface BianBusinessDomain {
+  name: string;
+  description?: string;
+  serviceDomains: BianServiceDomain[];
+}
+
+interface BianBusinessArea {
+  name: string;
+  businessDomains: BianBusinessDomain[];
+}
+
+interface BianServiceLandscape {
+  standard: string;
+  version: string;
+  businessAreas: BianBusinessArea[];
+}
+
+// Maps BIAN Service Domain name (as it appears in bian-v14-service-landscape.json) to the
+// DPF capability key from BIAN_BANKING_V14 (business-capability-perspectives.ts). Only
+// service domains in the DPF standard banking perspective are listed. Two names diverge
+// from the perspective label: "Term Deposit Framework Agreement" vs "Term Deposit", and
+// "Customer Case Management" vs "Customer Case" — verified against the JSON hierarchy.
+const BIAN_SD_TO_CAPABILITY_KEY: Readonly<Record<string, string>> = {
+  "Current Account": "bian-current-account",
+  "Savings Account": "bian-savings-account",
+  "Term Deposit Framework Agreement": "bian-term-deposit",
+  "Consumer Loan": "bian-consumer-loan",
+  "Mortgage Loan": "bian-mortgage-loan",
+  "Corporate Loan": "bian-corporate-loan",
+  "Underwriting": "bian-underwriting",
+  "Payment Order Initiation": "bian-payment-order-initiation",
+  "Credit Card": "bian-credit-card",
+  "Customer Relationship Management": "bian-customer-relationship-management",
+  "Customer Credit Rating": "bian-customer-credit-rating",
+  "Customer Behavior Insights": "bian-customer-behavior-insights",
+  "Customer Case Management": "bian-customer-case",
+  "Servicing Order": "bian-servicing-order",
+  "Customer Offer": "bian-customer-offer",
+  "Lead and Opportunity Management": "bian-lead-opportunity-management",
+  "Party Lifecycle Management": "bian-party-lifecycle-management",
+  "Party Reference Data Directory": "bian-party-reference-data-directory",
+  "Position Keeping": "bian-position-keeping",
+  "Customer Position": "bian-customer-position",
+  "Account Reconciliation": "bian-account-reconciliation",
+  "Regulatory Compliance": "bian-regulatory-compliance",
+  "Guideline Compliance": "bian-guideline-compliance",
+  "Regulatory Reporting": "bian-regulatory-reporting",
+  "Credit Management": "bian-credit-management",
+  "Fraud Resolution": "bian-fraud-resolution",
+};
+
+async function seedBianReferenceModel(modelId: string): Promise<void> {
+  const BIAN_JSON_PATH = join(REFERENCE_ROOT, "bian", "bian-v14-service-landscape.json");
+
+  let landscape: BianServiceLandscape;
+  try {
+    landscape = JSON.parse(readFileSync(BIAN_JSON_PATH, "utf-8")) as BianServiceLandscape;
+  } catch {
+    console.warn("[seed] BIAN JSON not found at", BIAN_JSON_PATH, "— skipping BIAN element hierarchy");
+    return;
+  }
+
+  for (const area of landscape.businessAreas) {
+    const areaId = await upsertElement({
+      modelId,
+      kind: "business_area",
+      slug: buildElementSlug("business_area", area.name),
+      name: area.name,
+    });
+
+    for (const domain of area.businessDomains) {
+      const domainId = await upsertElement({
+        modelId,
+        parentId: areaId,
+        kind: "business_domain",
+        slug: buildElementSlug("business_domain", area.name, domain.name),
+        name: domain.name,
+        description: domain.description ?? null,
+      });
+
+      for (const sd of domain.serviceDomains) {
+        const dpfCapabilityKey = BIAN_SD_TO_CAPABILITY_KEY[sd.name] ?? null;
+        await upsertElement({
+          modelId,
+          parentId: domainId,
+          kind: "service_domain",
+          slug: buildElementSlug("service_domain", area.name, domain.name, sd.name),
+          name: sd.name,
+          description: sd.description ?? null,
+          properties: {
+            semanticApi: sd.semanticApi,
+            ...(dpfCapabilityKey ? { dpfCapabilityKey } : {}),
+          },
+        });
+      }
+    }
+  }
+}
+
 export async function seedEaReferenceModels(): Promise<void> {
   const portfolios = await prisma.portfolio.findMany({
     select: { slug: true, name: true, description: true },
@@ -139,6 +245,7 @@ export async function seedEaReferenceModels(): Promise<void> {
     });
   }
 
+  // ── IT4IT v3.0.1 ─────────────────────────────────────────────────────────
   const modelSlug = slugifyReferenceModelName("IT4IT", "3.0.1");
   const model = await prisma.eaReferenceModel.upsert({
     where: { slug: modelSlug },
@@ -294,4 +401,70 @@ export async function seedEaReferenceModels(): Promise<void> {
       sourceReference: row.referenceSection,
     });
   }
+
+  // ── BIAN Service Landscape v14.0.0 ────────────────────────────────────────
+  const bianSlug = slugifyReferenceModelName("BIAN Service Landscape", "14.0.0");
+  const bianModel = await prisma.eaReferenceModel.upsert({
+    where: { slug: bianSlug },
+    update: {
+      name: "BIAN Service Landscape",
+      version: "14.0.0",
+      authorityType: "standard",
+      status: "active",
+      primaryIndustry: "banking-financial-services",
+      description:
+        "Banking Industry Architecture Network (BIAN) Service Landscape v14.0 — 8 Business Areas, 43 Business Domains, 341 Service Domains. Value Chain View (canonical; Matrix layout is deprecated). 258 of 341 Service Domains have published Semantic APIs.",
+      sourceSummary:
+        "Hierarchy extracted from the BIAN Value Chain View and stored in docs/Reference/bian/bian-v14-service-landscape.json. Source: bian.org/servicelandscape-14-0-0.",
+    },
+    create: {
+      slug: bianSlug,
+      name: "BIAN Service Landscape",
+      version: "14.0.0",
+      authorityType: "standard",
+      status: "active",
+      primaryIndustry: "banking-financial-services",
+      description:
+        "Banking Industry Architecture Network (BIAN) Service Landscape v14.0 — 8 Business Areas, 43 Business Domains, 341 Service Domains. Value Chain View (canonical; Matrix layout is deprecated). 258 of 341 Service Domains have published Semantic APIs.",
+      sourceSummary:
+        "Hierarchy extracted from the BIAN Value Chain View and stored in docs/Reference/bian/bian-v14-service-landscape.json. Source: bian.org/servicelandscape-14-0-0.",
+    },
+    select: { id: true },
+  });
+
+  await prisma.eaReferenceModelArtifact.upsert({
+    where: {
+      modelId_path: {
+        modelId: bianModel.id,
+        path: "docs/Reference/bian/bian-v14-service-landscape.json",
+      },
+    },
+    update: { kind: "json", authority: "authoritative", importedAt: new Date() },
+    create: {
+      modelId: bianModel.id,
+      kind: "json",
+      path: "docs/Reference/bian/bian-v14-service-landscape.json",
+      authority: "authoritative",
+      importedAt: new Date(),
+    },
+  });
+
+  await prisma.eaReferenceModelArtifact.upsert({
+    where: {
+      modelId_path: {
+        modelId: bianModel.id,
+        path: "docs/Reference/bian/README.md",
+      },
+    },
+    update: { kind: "md", authority: "supporting", importedAt: new Date() },
+    create: {
+      modelId: bianModel.id,
+      kind: "md",
+      path: "docs/Reference/bian/README.md",
+      authority: "supporting",
+      importedAt: new Date(),
+    },
+  });
+
+  await seedBianReferenceModel(bianModel.id);
 }

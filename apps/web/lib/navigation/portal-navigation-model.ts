@@ -36,6 +36,16 @@ export type PortalNavRecord = {
   audienceModes: readonly PortalAudienceMode[];
   destinationKind: PortalDestinationKind;
   capabilityKey?: CapabilityKey | null;
+  /**
+   * Archetype-capability gate (capability registry key(s) from
+   * @dpf/storefront-templates, e.g. "public-body-governance"). Entries carrying
+   * this render only when the org's effective capability activation has AT
+   * LEAST ONE of the keys active (any-of) — capability-driven surfaces per the
+   * civic archetypes spec §12, on top of (not instead of) the user-permission
+   * capabilityKey. An array expresses shared surfaces like /governance, which
+   * serves both public-body and member-owned governance.
+   */
+  orgCapabilityKey?: string | readonly string[] | null;
   primaryOrder?: number;
   sectionNavLabel?: string;
   shellNav?: {
@@ -51,6 +61,7 @@ export type PortalNavEntry = Pick<
   "key" | "label" | "path" | "parentPath" | "domain" | "destinationKind"
 > & {
   capabilityKey: CapabilityKey | null;
+  orgCapabilityKey: string | readonly string[] | null;
   audienceModes: readonly PortalAudienceMode[];
 };
 
@@ -242,6 +253,72 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     shellNav: {
       sectionKey: "business",
       description: "Controls, risk, obligations, and posture.",
+    },
+  },
+  {
+    // Civic archetypes (BI-8D477188 Phase 3): public-body governance workflow.
+    // Renders only when the org's archetype derives public-body-governance
+    // active (towns, utilities, law enforcement — and member-owned boards
+    // reuse the same surface via member-governance in a later slice).
+    key: "governance",
+    label: "Governance",
+    path: "/governance",
+    parentPath: "/governance",
+    domain: "business",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "domain-home",
+    capabilityKey: "view_compliance",
+    // Any-of: the surface serves council/open-meetings governance (public
+    // bodies) AND board/annual-meeting governance (member-owned orgs,
+    // BI-AFC178F3); the page adapts via the same capability activations.
+    orgCapabilityKey: ["public-body-governance", "member-governance"],
+    shellNav: {
+      sectionKey: "business",
+      description: "Meetings, agendas, minutes — council or board.",
+    },
+    sectionSiblings: ["/governance", "/governance/records-requests"],
+  },
+  {
+    // Member equity & patronage ledger (BI-AFC178F3) — co-ops and, later,
+    // member-owned utilities (capital credits).
+    key: "member-equity",
+    label: "Member Equity",
+    path: "/member-equity",
+    parentPath: "/member-equity",
+    domain: "business",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "domain-home",
+    capabilityKey: "view_finance",
+    orgCapabilityKey: "member-equity",
+    shellNav: {
+      sectionKey: "business",
+      description: "Per-member equity, patronage allocations, and retirements.",
+    },
+  },
+  {
+    key: "governance-records-requests",
+    label: "Records Requests",
+    path: "/governance/records-requests",
+    parentPath: "/governance",
+    domain: "business",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "section-page",
+    capabilityKey: "view_compliance",
+    orgCapabilityKey: "records-request",
+  },
+  {
+    key: "service-requests",
+    label: "Service Requests",
+    path: "/service-requests",
+    parentPath: "/service-requests",
+    domain: "business",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "domain-home",
+    capabilityKey: "view_storefront",
+    orgCapabilityKey: "service-request-311",
+    shellNav: {
+      sectionKey: "business",
+      description: "Resident service requests routed to departments.",
     },
   },
   {
@@ -803,6 +880,7 @@ function toEntry(route: PortalNavRecord): PortalNavEntry {
     audienceModes: route.audienceModes,
     destinationKind: route.destinationKind,
     capabilityKey: route.capabilityKey ?? null,
+    orgCapabilityKey: route.orgCapabilityKey ?? null,
   };
 }
 

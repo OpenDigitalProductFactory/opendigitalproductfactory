@@ -29,6 +29,53 @@ export type HealthSummary = {
   detail: string;
 };
 
+// BI-3630773C — serializable shape the health page server component derives
+// from lib/release-health state and hands to the client summary cards.
+export type ReleaseHealthCardData = {
+  tag: string;
+  status: "in-progress" | "verified" | "verify-failed" | "publish-failed";
+  runUrl: string;
+  checkedAt: string;
+};
+
+export function deriveReleaseSummary(
+  data: ReleaseHealthCardData | null,
+): HealthSummary {
+  if (!data) {
+    return {
+      value: "—",
+      tone: "neutral",
+      detail: "No release stamps observed yet",
+    };
+  }
+  switch (data.status) {
+    case "verified":
+      return {
+        value: data.tag,
+        tone: "success",
+        detail: "Stamp verified end-to-end",
+      };
+    case "in-progress":
+      return {
+        value: data.tag,
+        tone: "neutral",
+        detail: "Stamp in progress",
+      };
+    case "verify-failed":
+      return {
+        value: data.tag,
+        tone: "critical",
+        detail: "Published but install verification FAILED — view run",
+      };
+    case "publish-failed":
+      return {
+        value: data.tag,
+        tone: "warning",
+        detail: "Stamp failed before publish completed — view run",
+      };
+  }
+}
+
 export type ServiceDefinition = {
   name: string;
   job?: string;

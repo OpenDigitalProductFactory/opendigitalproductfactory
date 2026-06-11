@@ -20,12 +20,13 @@
  */
 
 import { inngest } from "../inngest-client";
+import { buildPipelineConcurrency } from "../admission";
 
 export const buildReviewVerification = inngest.createFunction(
   {
     id: "build/review-verification",
     retries: 1,
-    concurrency: [{ limit: 2 }],
+    concurrency: buildPipelineConcurrency({ limit: 2 }),
     triggers: [{ event: "build/review.verify" }],
   },
   async ({ event, step }) => {

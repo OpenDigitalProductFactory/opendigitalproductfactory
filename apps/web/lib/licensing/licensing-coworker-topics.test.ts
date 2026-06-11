@@ -18,6 +18,10 @@ const workspace: LicensingWorkspace = {
     researchCoverageStatus: "partial",
     notes: "Need county-level permit verification.",
   },
+  archetype: {
+    category: "trades-maintenance",
+    requiredPostureIncomplete: false,
+  },
   requirementOptions: [],
   holderOptions: [],
   organizationLicenses: [],

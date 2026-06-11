@@ -2,7 +2,12 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { rollbackSelfUpgrade, triggerSelfUpgrade } from "@/lib/actions/promotions";
+import {
+  rollbackSelfUpgrade,
+  triggerSelfUpgrade,
+  forceActiveRun,
+  abortActiveRun,
+} from "@/lib/actions/promotions";
 import { LocalTime } from "@/components/ui/LocalTime";
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
 
@@ -56,6 +61,14 @@ type QuiescenceActivity = {
   blockers: QuiescenceBlockerLine[];
 };
 
+// §4.5 admission observability projection (apps/web/lib/queue/admission-observability.ts).
+type AdmissionSnapshot = {
+  lane: { enabled: boolean; limit: number | null; key: string };
+  buildHolders: number;
+  totalHolders: number;
+  summary: string;
+};
+
 type Props = {
   enabled: boolean;
   channel: string;
@@ -69,6 +82,7 @@ type Props = {
   isFresh: boolean;
   latestRun: LatestRun | null;
   quiescence?: QuiescenceActivity | null;
+  admission?: AdmissionSnapshot | null;
   cooldownUntil?: string | null;
   history?: LatestRun[];
   historyNextCursor?: string | null;
@@ -184,6 +198,7 @@ export default function SelfUpgradeClient({
   isFresh,
   latestRun,
   quiescence,
+  admission,
   cooldownUntil,
   history,
   historyNextCursor,
@@ -195,6 +210,10 @@ export default function SelfUpgradeClient({
   const [override, setOverride] = useState(false);
   const [justQueued, setJustQueued] = useState(false);
   const [triggerResult, setTriggerResult] = useState<{ queued: boolean; reason?: string } | null>(null);
+  // BI-4F3B2FA9: mid-flight Force Now / Abort controls for a running drain.
+  const [forceConfirm, setForceConfirm] = useState(false);
+  const [abortConfirm, setAbortConfirm] = useState(false);
+  const [inFlightError, setInFlightError] = useState<string | null>(null);
   const [rollbackConfirmation, setRollbackConfirmation] = useState("");
   const [rollbackResult, setRollbackResult] = useState<{
     status: "idle" | "ok" | "error";
@@ -257,6 +276,34 @@ export default function SelfUpgradeClient({
     });
   }
 
+  // BI-4F3B2FA9: escalate the active drain to forced — coordinator bypasses
+  // all blockers on its next tick (~5s) and swaps, without restarting the run.
+  function handleForceNow() {
+    const runId = quiescence?.run?.runId;
+    if (!runId) return;
+    setInFlightError(null);
+    startTransition(async () => {
+      const r = await forceActiveRun(runId);
+      setForceConfirm(false);
+      if (!r.ok) setInFlightError(r.error ?? "Force failed");
+      router.refresh();
+    });
+  }
+
+  // BI-4F3B2FA9: abort the active drain — level returns to normal so the
+  // operator can immediately start a fresh run.
+  function handleAbortRun() {
+    const runId = quiescence?.run?.runId;
+    if (!runId) return;
+    setInFlightError(null);
+    startTransition(async () => {
+      const r = await abortActiveRun(runId);
+      setAbortConfirm(false);
+      if (!r.ok) setInFlightError(r.error ?? "Abort failed");
+      router.refresh();
+    });
+  }
+
   function handleRollback(runId: string) {
     setRollbackResult({ status: "idle", message: "" });
     startRollbackTransition(async () => {
@@ -296,34 +343,121 @@ export default function SelfUpgradeClient({
 
         {enabled && (
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-1.5 text-xs text-[var(--dpf-muted)] cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={override}
-                onChange={(e) => setOverride(e.target.checked)}
-                aria-label="Emergency override: bypass the safety drain"
-                title="Bypass the quiescence safety drain. Only for emergencies — it can interrupt in-flight work."
-                className="accent-[var(--dpf-warning)]"
-              />
-              Emergency override
-            </label>
-            <button
-              type="button"
-              onClick={handleTrigger}
-              disabled={triggerBusy || latestRun?.status === "running"}
-              aria-busy={triggerBusy}
-              aria-label="Upgrade now"
-              data-override={override ? "true" : "false"}
-              className="px-3 py-1.5 text-xs rounded-lg bg-[var(--dpf-accent)]/20 text-[var(--dpf-accent)] border border-[var(--dpf-accent)]/40 hover:bg-[var(--dpf-accent)]/30 transition-colors disabled:opacity-50"
-            >
-              {isPending
-                ? "Upgrading..."
-                : justQueued
-                  ? "Starting…"
-                  : override
-                    ? "Force upgrade now"
-                    : "Upgrade now"}
-            </button>
+            {upgradeInFlight ? (
+              // BI-4F3B2FA9: a run is in flight. Never a dead-end disabled
+              // button — when the portal is draining, surface Force Now / Abort
+              // so the operator's emergency lever actually works mid-flight.
+              draining && quiescence?.run?.runId ? (
+                <div className="flex items-center gap-2" role="group" aria-label="In-flight upgrade controls">
+                  {inFlightError && (
+                    <span className="text-xs text-[var(--dpf-warning)]" role="status" aria-live="polite">
+                      {inFlightError}
+                    </span>
+                  )}
+                  {forceConfirm ? (
+                    <div role="alertdialog" aria-describedby="force-now-warning" className="flex items-center gap-2">
+                      <span id="force-now-warning" className="text-xs text-[var(--dpf-warning)]">
+                        ⚠ Bypass all in-flight work and swap now?
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleForceNow}
+                        disabled={isPending}
+                        className="px-2 py-1 text-xs rounded-lg bg-[var(--dpf-warning)]/20 text-[var(--dpf-warning)] border border-[var(--dpf-warning)]/40 disabled:opacity-50"
+                      >
+                        Confirm force
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setForceConfirm(false)}
+                        className="px-2 py-1 text-xs rounded-lg border border-[var(--dpf-border)] text-[var(--dpf-muted)]"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : abortConfirm ? (
+                    <div role="alertdialog" aria-describedby="abort-warning" className="flex items-center gap-2">
+                      <span id="abort-warning" className="text-xs text-[var(--dpf-muted)]">
+                        Abort this drain?
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleAbortRun}
+                        disabled={isPending}
+                        className="px-2 py-1 text-xs rounded-lg bg-[var(--dpf-warning)]/20 text-[var(--dpf-warning)] border border-[var(--dpf-warning)]/40 disabled:opacity-50"
+                      >
+                        Confirm abort
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAbortConfirm(false)}
+                        className="px-2 py-1 text-xs rounded-lg border border-[var(--dpf-border)] text-[var(--dpf-muted)]"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => { setAbortConfirm(false); setForceConfirm(true); }}
+                        aria-label={`Force upgrade run ${quiescence.run.runId} now`}
+                        className="px-3 py-1.5 text-xs rounded-lg bg-[var(--dpf-warning)]/20 text-[var(--dpf-warning)] border border-[var(--dpf-warning)]/40 hover:bg-[var(--dpf-warning)]/30 transition-colors"
+                      >
+                        ⚡ Force now
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setForceConfirm(false); setAbortConfirm(true); }}
+                        aria-label={`Abort upgrade run ${quiescence.run.runId}`}
+                        className="px-3 py-1.5 text-xs rounded-lg border border-[var(--dpf-border)] text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] transition-colors"
+                      >
+                        Abort
+                      </button>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <span
+                  className="text-xs text-[var(--dpf-muted)]"
+                  aria-live="polite"
+                  data-upgrade-inflight="true"
+                >
+                  Upgrade in progress…
+                </span>
+              )
+            ) : (
+              <>
+                <label className="flex items-center gap-1.5 text-xs text-[var(--dpf-muted)] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={override}
+                    onChange={(e) => setOverride(e.target.checked)}
+                    aria-label="Emergency override: bypass the safety drain"
+                    title="Bypass the quiescence safety drain. Only for emergencies — it can interrupt in-flight work."
+                    className="accent-[var(--dpf-warning)]"
+                  />
+                  Emergency override
+                </label>
+                <button
+                  type="button"
+                  onClick={handleTrigger}
+                  disabled={triggerBusy}
+                  aria-busy={triggerBusy}
+                  aria-label="Upgrade now"
+                  data-override={override ? "true" : "false"}
+                  className="px-3 py-1.5 text-xs rounded-lg bg-[var(--dpf-accent)]/20 text-[var(--dpf-accent)] border border-[var(--dpf-accent)]/40 hover:bg-[var(--dpf-accent)]/30 transition-colors disabled:opacity-50"
+                >
+                  {isPending
+                    ? "Upgrading..."
+                    : justQueued
+                      ? "Starting…"
+                      : override
+                        ? "Force upgrade now"
+                        : "Upgrade now"}
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -401,6 +535,13 @@ export default function SelfUpgradeClient({
               <span className="font-mono">
                 {shortSha(quiescence.run.targetBundleHash)}
               </span>
+            </div>
+          )}
+
+          {admission && (
+            <div className="text-xs text-[var(--dpf-muted)]" data-admission-summary>
+              <span className="font-medium text-[var(--dpf-text)]">Instance admission:</span>{" "}
+              {admission.summary}
             </div>
           )}
 

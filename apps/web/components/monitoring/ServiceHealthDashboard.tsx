@@ -23,9 +23,12 @@ import {
 import { useAlertQuery } from "./useAlertQuery";
 import { useMetricQuery } from "./useMetricQuery";
 
+import type { ReleaseHealthCardData } from "./health-summary";
+
 type ServiceHealthDashboardProps = {
   openBacklogItems?: number;
   backlogHref?: string;
+  releaseHealth?: ReleaseHealthCardData | null;
 };
 
 export function ServiceHealthDashboard(props: ServiceHealthDashboardProps = {}) {
@@ -39,6 +42,7 @@ export function ServiceHealthDashboard(props: ServiceHealthDashboardProps = {}) 
 function ServiceHealthContent({
   openBacklogItems,
   backlogHref,
+  releaseHealth,
 }: ServiceHealthDashboardProps) {
   const { online, checked } = useMonitoringStatus();
   const { data: upTargets, loading: upTargetsLoading } = useMetricQuery("up");
@@ -82,7 +86,11 @@ function ServiceHealthContent({
   return (
     <div className="space-y-6">
       {openBacklogItems !== undefined && backlogHref && (
-        <PortalHealthSummary openBacklogItems={openBacklogItems} backlogHref={backlogHref} />
+        <PortalHealthSummary
+          openBacklogItems={openBacklogItems}
+          backlogHref={backlogHref}
+          releaseHealth={releaseHealth}
+        />
       )}
 
       {/* Active alerts (deduped against the Platform Status StatCard above) */}

@@ -45,7 +45,7 @@ export type GithubReaderDeps = {
 };
 
 /** Resolved repo coordinates `{owner}/{repo}`. */
-type RepoIdentity = { owner: string; name: string };
+export type RepoIdentity = { owner: string; name: string };
 
 /**
  * Production GitHub PR reader. Returns the rows for the open-PR list,
@@ -113,12 +113,15 @@ export async function readGithubPullRequests(
 
 import type { prisma } from "@dpf/db";
 
-type PrismaLike = Pick<
+export type PrismaLike = Pick<
   typeof prisma,
   "credentialEntry" | "platformDevConfig" | "scheduledJob"
 >;
 
-async function resolveGithubToken(prisma: PrismaLike): Promise<string | null> {
+// Exported for reuse by release-health (BI-3630773C) — same optional
+// "github-pr-sync" credential; callers that can read public repos treat a
+// null return as "proceed unauthenticated", not an error.
+export async function resolveGithubToken(prisma: PrismaLike): Promise<string | null> {
   const cred = await prisma.credentialEntry.findUnique({
     where: { providerId: GITHUB_PR_CREDENTIAL_PROVIDER_ID },
     select: { secretRef: true, status: true },
@@ -137,7 +140,8 @@ async function resolveGithubToken(prisma: PrismaLike): Promise<string | null> {
   }
 }
 
-async function resolveRepoIdentity(prisma: PrismaLike): Promise<RepoIdentity> {
+// Exported for reuse by release-health (BI-3630773C).
+export async function resolveRepoIdentity(prisma: PrismaLike): Promise<RepoIdentity> {
   const cfg = await prisma.platformDevConfig.findUnique({
     where: { id: "singleton" },
     select: { upstreamRemoteUrl: true },

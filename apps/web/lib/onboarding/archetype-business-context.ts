@@ -110,6 +110,18 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
     supplyChain:
       "Our physical supply chain is intentionally light — most of what we consume is software, research databases, and professional subscriptions. The discipline is in vendor selection and renewal review: a stale tool can cost more than its licence.",
   },
+  "public-sector": {
+    missionTheme:
+      "serve every resident of our community fairly, openly, and well with the public services they rely on",
+    businessModel:
+      "We are funded by levies, fees, and grants set in public session — not by sales. The measure of the operation is budget-to-actual stewardship and resident trust, not profit.",
+    whoWeServe:
+      "We serve the residents of our jurisdiction — everyone within it, by right, not by contract. Residents are simultaneously the people we serve, the taxpayers who fund us, and the voters we answer to.",
+    howWeDecide:
+      "We decide in public: open meetings, published agendas and minutes, and records anyone can request. Equal treatment and due process are non-negotiable — we cannot pick our customers, so fairness and transparency lead every call.",
+    supplyChain:
+      "Purchasing follows public procurement rules — quotes and sealed bids above statutory thresholds, with an audit trail. We rely on local contractors for streets, parks, and facilities work, and intergovernmental agreements for what we cannot staff ourselves.",
+  },
   "hoa-property-management": {
     missionTheme:
       "care for the properties and communities entrusted to us so owners and residents can thrive",
@@ -121,6 +133,18 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
       "We decide to protect the asset, treat residents fairly, and respond quickly when something needs attention. We are transparent about costs and decisions, and we hold the long-term health of the property above any short-term convenience.",
     supplyChain:
       "Our 'supply chain' is mostly trusted contractors and service vendors — landscaping, plumbing, electrical, pool service — plus consumables for common areas. We keep a vetted bench so urgent jobs do not become emergency markups.",
+  },
+  "banking-financial-services": {
+    missionTheme:
+      "safeguard our customers' money and help them reach their financial goals",
+    businessModel:
+      "Deposit, lending, and card relationships sustained over years; interest margin and account fees fund the institution, and trust is the product.",
+    whoWeServe:
+      "We serve the people and businesses of our community who trust us with their deposits and their borrowing. Many relationships span decades and generations — every interaction either builds or spends that trust.",
+    howWeDecide:
+      "Safety and soundness come first: regulatory compliance and our customers' trust outrank growth and speed, and we never trade examination posture for short-term revenue. Rate and term claims must always match what we actually offer, and required disclosures stay attached to the products they describe. Within that frame we decide for long-term relationships over transactional wins.",
+    supplyChain:
+      "Our operating backbone is a small set of critical vendors: the core processing platform, card networks and processors, the deposit-insurance regime, credit bureaus, and loan-document and appraisal services. Vendor changes are regulated events, so we manage these as long-term, examined relationships.",
   },
   "education-training": {
     missionTheme:

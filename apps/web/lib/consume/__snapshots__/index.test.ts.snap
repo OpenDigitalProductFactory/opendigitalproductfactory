@@ -13,6 +13,7 @@ exports[`consume barrel export > exports all public symbols 1`] = `
   "getNeedsReviewEntities",
   "getOpenPortfolioQualityIssues",
   "getTasksForEmployee",
+  "resolveLocalModelLabel",
   "summarizeDiscoveryHealth",
 ]
 `;

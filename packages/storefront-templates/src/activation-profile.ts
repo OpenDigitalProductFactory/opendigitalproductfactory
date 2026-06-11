@@ -18,6 +18,7 @@ import type {
   ConsumptionChannel,
   CustomerGraphMode,
   EstateSeparationMode,
+  GovernanceModel,
   It4ItStage,
   OperatingModelAxes,
   OperatingModelDelivery,
@@ -56,6 +57,8 @@ const PRIMARY_CONSUMER_VALUES = new Set<PrimaryConsumer>([
   "patient-and-payer",
   "channel-partner",
   "internal",
+  "member",
+  "resident",
 ]);
 const CHANNEL_VALUES = new Set<ConsumptionChannel>([
   "physical",
@@ -76,7 +79,13 @@ const COMMERCIAL_MODEL_VALUES = new Set<CommercialModel>([
   "encounter-based",
   "appointment-checkout",
   "point-of-sale",
+  "statutory-fees-and-levies",
   "hybrid",
+]);
+const GOVERNANCE_VALUES = new Set<GovernanceModel>([
+  "investor-owned",
+  "member-owned",
+  "public-body",
 ]);
 const PROVISIONING_VALUES = new Set<ProvisioningModel>([
   "none",
@@ -103,8 +112,17 @@ const APPLICABILITY_VALUES = new Set<CapabilityApplicability>([
   "not-applicable",
 ]);
 
+/**
+ * Axes after normalization: `governance` is always resolved (absent legacy
+ * values default to "investor-owned"), so downstream consumers never branch
+ * on its presence.
+ */
+export type NormalizedOperatingModelAxes = OperatingModelAxes & {
+  governance: GovernanceModel;
+};
+
 export interface NormalizedActivationProfile extends ActivationProfile {
-  axes: OperatingModelAxes;
+  axes: NormalizedOperatingModelAxes;
   portfolios: PortfolioDecomposition;
   capabilityOverrides: CapabilityOverride[];
   billingProfile: BillingPatternProfile;
@@ -120,7 +138,7 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-function readAxes(raw: unknown): OperatingModelAxes | null {
+function readAxes(raw: unknown): NormalizedOperatingModelAxes | null {
   if (!isRecord(raw)) return null;
 
   const axes = raw as Partial<OperatingModelAxes>;
@@ -136,6 +154,10 @@ function readAxes(raw: unknown): OperatingModelAxes | null {
     return null;
   }
 
+  if (axes.governance !== undefined && !GOVERNANCE_VALUES.has(axes.governance as GovernanceModel)) {
+    return null;
+  }
+
   return {
     form: axes.form as OperatingModelForm,
     delivery: axes.delivery as OperatingModelDelivery,
@@ -144,6 +166,7 @@ function readAxes(raw: unknown): OperatingModelAxes | null {
     commercialModel: axes.commercialModel as CommercialModel,
     provisioning: axes.provisioning as ProvisioningModel,
     platform: axes.platform as PlatformEcosystem,
+    governance: (axes.governance as GovernanceModel | undefined) ?? "investor-owned",
   };
 }
 
@@ -231,7 +254,7 @@ function isManagedServiceProviderLegacyProfile(input: Pick<ActivationProfile, "p
   );
 }
 
-function inferLegacyAxes(input: Pick<ActivationProfile, "profileType" | "modules" | "customerGraph" | "estateSeparation" | "billingReadinessMode">): OperatingModelAxes {
+function inferLegacyAxes(input: Pick<ActivationProfile, "profileType" | "modules" | "customerGraph" | "estateSeparation" | "billingReadinessMode">): NormalizedOperatingModelAxes {
   if (isManagedServiceProviderLegacyProfile(input)) {
     return {
       form: "services",
@@ -244,6 +267,7 @@ function inferLegacyAxes(input: Pick<ActivationProfile, "profileType" | "modules
           : "transactional",
       provisioning: "account-and-entitlement",
       platform: "no",
+      governance: "investor-owned",
     };
   }
 
@@ -255,6 +279,7 @@ function inferLegacyAxes(input: Pick<ActivationProfile, "profileType" | "modules
     commercialModel: "transactional",
     provisioning: "none",
     platform: "no",
+    governance: "investor-owned",
   };
 }
 
