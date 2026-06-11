@@ -1,0 +1,725 @@
+{
+  "version": "1.0.0",
+  "description": "Profession Source Registry — maps every active AI Coworker and route persona to exactly one profession family. Each family lists bound roles (agent_name keys + prompt-slug aliases), context slugs for principle retrieval, candidate knowledge sources with license class, and a SFIA/O*NET-derived coverage checklist. Provenance rule: open-class sources are fetched; licensed-class sources are checklist-only or org-supplied uploads (conduit rule, WSID spec §7.7).",
+  "families": [
+    {
+      "professionKey": "data-architect",
+      "label": "Data Architect",
+      "roles": ["build-data-architect", "data-architect"],
+      "contextSlugs": ["data-model", "data-security"],
+      "sources": [
+        {
+          "name": "DAMA DMBOK2 — knowledge area overview (public)",
+          "url": "https://www.dama.org/cpages/body-of-knowledge",
+          "licenseClass": "licensed"
+        },
+        {
+          "name": "OWASP SQL Injection Prevention Cheat Sheet",
+          "url": "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html",
+          "licenseClass": "open"
+        },
+        {
+          "name": "OWASP Top 10",
+          "url": "https://owasp.org/www-project-top-ten/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "OWASP Query Parameterization Cheat Sheet",
+          "url": "https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html",
+          "licenseClass": "open"
+        },
+        {
+          "name": "ISO/IEC 9075 SQL Standard — public abstracts",
+          "url": "https://www.iso.org/standard/76583.html",
+          "licenseClass": "licensed"
+        },
+        {
+          "name": "NIST SP 800-53 Data Security Controls",
+          "url": "https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "data-modelling-concepts",
+        "normalisation-and-denormalisation",
+        "sql-standards",
+        "data-security-sql-injection",
+        "data-governance-principles",
+        "schema-migration-practices"
+      ]
+    },
+    {
+      "professionKey": "software-engineer",
+      "label": "Software Engineer",
+      "roles": ["build-software-engineer", "software-engineer"],
+      "contextSlugs": ["engineering-flow"],
+      "sources": [
+        {
+          "name": "OWASP Application Security Verification Standard (ASVS)",
+          "url": "https://owasp.org/www-project-application-security-verification-standard/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "OWASP Top 10",
+          "url": "https://owasp.org/www-project-top-ten/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "Semantic Versioning Specification",
+          "url": "https://semver.org/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "Conventional Commits Specification",
+          "url": "https://www.conventionalcommits.org/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "REST API Design Best Practices (IETF RFC 9110)",
+          "url": "https://www.rfc-editor.org/rfc/rfc9110",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "secure-coding-practices",
+        "api-design-principles",
+        "testing-and-verification",
+        "dependency-management",
+        "code-review-standards",
+        "error-handling-and-logging"
+      ]
+    },
+    {
+      "professionKey": "frontend-engineer",
+      "label": "Frontend Engineer",
+      "roles": ["build-frontend-engineer", "frontend-engineer"],
+      "contextSlugs": ["ui"],
+      "sources": [
+        {
+          "name": "WCAG 2.2 — Web Content Accessibility Guidelines",
+          "url": "https://www.w3.org/TR/WCAG22/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "WAI-ARIA Authoring Practices",
+          "url": "https://www.w3.org/WAI/ARIA/apg/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "MDN Web Docs — CSS, HTML, JS references",
+          "url": "https://developer.mozilla.org/",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "wcag-2-2-aa-compliance",
+        "semantic-html",
+        "responsive-design",
+        "design-token-adherence",
+        "keyboard-navigation",
+        "performance-budgets"
+      ]
+    },
+    {
+      "professionKey": "qa-engineer",
+      "label": "QA Engineer",
+      "roles": ["build-qa-engineer", "qa-engineer"],
+      "contextSlugs": ["engineering-flow"],
+      "sources": [
+        {
+          "name": "ISTQB Glossary (public)",
+          "url": "https://glossary.istqb.org/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "OWASP Testing Guide",
+          "url": "https://owasp.org/www-project-web-security-testing-guide/",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "test-planning",
+        "unit-and-integration-testing",
+        "regression-testing",
+        "security-testing-basics",
+        "defect-lifecycle",
+        "test-reporting"
+      ]
+    },
+    {
+      "professionKey": "product-manager",
+      "label": "Product Manager",
+      "roles": [
+        "inventory-specialist",
+        "product-backlog-prioritization-agent",
+        "product-backlog-specialist",
+        "roadmap-assembly-agent",
+        "explore-orchestrator",
+        "discovery-triage-reviewer"
+      ],
+      "contextSlugs": ["discovery"],
+      "sources": [
+        {
+          "name": "Agile Alliance — Agile Manifesto and principles",
+          "url": "https://agilemanifesto.org/principles.html",
+          "licenseClass": "open"
+        },
+        {
+          "name": "BABOK Guide overview (public excerpt)",
+          "url": "https://www.iiba.org/career-resources/a-business-analysis-body-of-knowledge/babok/",
+          "licenseClass": "licensed"
+        }
+      ],
+      "coverageChecklist": [
+        "product-vision-and-roadmap",
+        "backlog-prioritisation-wsjf",
+        "user-story-authoring",
+        "stakeholder-management",
+        "product-metrics",
+        "discovery-and-research"
+      ]
+    },
+    {
+      "professionKey": "scrum-master",
+      "label": "Scrum Master / Delivery Lead",
+      "roles": ["ops-coordinator", "release-planning-agent"],
+      "contextSlugs": ["engineering-flow"],
+      "sources": [
+        {
+          "name": "Scrum Guide 2020",
+          "url": "https://scrumguides.org/scrum-guide.html",
+          "licenseClass": "open"
+        },
+        {
+          "name": "Scaled Agile Framework (SAFe) public principles",
+          "url": "https://scaledagileframework.com/safe-principles/",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "sprint-ceremonies",
+        "wip-limits-and-flow",
+        "impediment-removal",
+        "velocity-and-forecasting",
+        "team-health-and-retrospectives"
+      ]
+    },
+    {
+      "professionKey": "finance",
+      "label": "Finance",
+      "roles": ["finance-agent", "investment-analysis-agent", "portfolio-rationalization-agent"],
+      "contextSlugs": ["finance"],
+      "sources": [
+        {
+          "name": "FASB Accounting Standards Codification — public summaries",
+          "url": "https://asc.fasb.org/",
+          "licenseClass": "licensed"
+        },
+        {
+          "name": "IFRS Standards — public summaries",
+          "url": "https://www.ifrs.org/issued-standards/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "SOX Section 302/404 — public SEC guidance",
+          "url": "https://www.sec.gov/spotlight/sarbanes-oxley.htm",
+          "licenseClass": "open"
+        },
+        {
+          "name": "PCAOB Auditing Standards (public)",
+          "url": "https://pcaobus.org/Standards/Auditing",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "gaap-and-ifrs-fundamentals",
+        "budget-cap-enforcement",
+        "chargeback-and-cost-attribution",
+        "financial-reporting",
+        "sox-compliance-basics",
+        "investment-scoring"
+      ]
+    },
+    {
+      "professionKey": "portfolio-management",
+      "label": "Portfolio Manager",
+      "roles": [
+        "portfolio-backlog-agent",
+        "portfolio-backlog-specialist",
+        "portfolio-advisor",
+        "evaluate-orchestrator",
+        "gap-analysis-agent",
+        "scope-agreement-agent"
+      ],
+      "contextSlugs": ["portfolio"],
+      "sources": [
+        {
+          "name": "PMI Portfolio Management Standard (public overview)",
+          "url": "https://www.pmi.org/pmbok-guide-standards/foundational/standard-for-portfolio-management",
+          "licenseClass": "licensed"
+        },
+        {
+          "name": "WSJF prioritisation — SAFe public",
+          "url": "https://scaledagileframework.com/wsjf/",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "portfolio-lifecycle-management",
+        "investment-prioritisation-wsjf",
+        "gap-and-rationalization-analysis",
+        "scope-agreement-authoring",
+        "portfolio-health-metrics"
+      ]
+    },
+    {
+      "professionKey": "marketing",
+      "label": "Marketing Strategist",
+      "roles": ["marketing-specialist"],
+      "contextSlugs": ["marketing"],
+      "sources": [
+        {
+          "name": "AMA — American Marketing Association definitions",
+          "url": "https://www.ama.org/the-definition-of-marketing-what-is-marketing/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "AMA Code of Ethics",
+          "url": "https://www.ama.org/ama-statement-of-ethics/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "CAN-SPAM Act guidance (FTC public)",
+          "url": "https://www.ftc.gov/tips-advice/business-center/guidance/can-spam-act-compliance-guide-business",
+          "licenseClass": "open"
+        },
+        {
+          "name": "GDPR email consent guidance (EU public)",
+          "url": "https://edpb.europa.eu/our-work-tools/our-documents/guidelines/guidelines-052021-interplay-between-article-6_en",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "acquisition-strategy",
+        "campaign-planning",
+        "funnel-analysis",
+        "email-deliverability-and-consent",
+        "marketing-ethics",
+        "brand-strategy"
+      ]
+    },
+    {
+      "professionKey": "hr-people-ops",
+      "label": "HR / People Operations",
+      "roles": ["hr-specialist"],
+      "contextSlugs": ["compliance"],
+      "sources": [
+        {
+          "name": "SHRM Body of Competency and Knowledge (public outline)",
+          "url": "https://www.shrm.org/credentials/certification/pages/shrm-bock.aspx",
+          "licenseClass": "licensed"
+        },
+        {
+          "name": "EEOC Guidance (US public)",
+          "url": "https://www.eeoc.gov/laws/guidance",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "capability-mapping",
+        "delegation-and-accountability",
+        "compliance-and-eeoc",
+        "succession-planning",
+        "workforce-development"
+      ]
+    },
+    {
+      "professionKey": "legal-compliance",
+      "label": "Legal & Compliance",
+      "roles": ["licensing-specialist", "policy-specialist", "policy-enforcement-agent"],
+      "contextSlugs": ["compliance"],
+      "sources": [
+        {
+          "name": "SPDX License List (open)",
+          "url": "https://spdx.org/licenses/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "EU AI Act — public text",
+          "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32024R1689",
+          "licenseClass": "open"
+        },
+        {
+          "name": "GDPR — official public text",
+          "url": "https://gdpr-info.eu/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "ISO 42001 AI Management System — public abstract",
+          "url": "https://www.iso.org/standard/81230.html",
+          "licenseClass": "licensed"
+        }
+      ],
+      "coverageChecklist": [
+        "software-licensing-spdx",
+        "ai-regulatory-compliance",
+        "data-privacy-gdpr",
+        "policy-lifecycle-management",
+        "jurisdiction-layered-analysis"
+      ]
+    },
+    {
+      "professionKey": "security",
+      "label": "Security Engineer / Data Governance",
+      "roles": ["security-auditor-agent", "data-governance-agent"],
+      "contextSlugs": ["data-security", "compliance"],
+      "sources": [
+        {
+          "name": "CoSAI 12-category AI threat model (public)",
+          "url": "https://www.coalitionforsecureai.org/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "OWASP Top 10",
+          "url": "https://owasp.org/www-project-top-ten/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "NIST Cybersecurity Framework (public)",
+          "url": "https://www.nist.gov/cyberframework",
+          "licenseClass": "open"
+        },
+        {
+          "name": "CVE / NVD — NIST National Vulnerability Database",
+          "url": "https://nvd.nist.gov/",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "threat-modelling-cosai",
+        "cve-and-sbom-auditing",
+        "supply-chain-security",
+        "data-residency-and-retention",
+        "credential-detection",
+        "attack-surface-analysis"
+      ]
+    },
+    {
+      "professionKey": "devops-platform",
+      "label": "DevOps / Platform Engineer",
+      "roles": [
+        "iac-execution-agent",
+        "deployment-planning-agent",
+        "resource-reservation-agent",
+        "deploy-orchestrator",
+        "platform-engineer"
+      ],
+      "contextSlugs": ["engineering-flow", "release"],
+      "sources": [
+        {
+          "name": "DORA DevOps Research — public reports",
+          "url": "https://dora.dev/research/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "OpenTelemetry Specification",
+          "url": "https://opentelemetry.io/docs/specs/otel/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "CycloneDX SBOM Specification",
+          "url": "https://cyclonedx.org/specification/overview/",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "iac-and-gitops",
+        "deployment-pipeline-design",
+        "dora-metrics",
+        "resource-capacity-planning",
+        "rollback-and-recovery",
+        "observability-and-alerting"
+      ]
+    },
+    {
+      "professionKey": "operations",
+      "label": "IT Operations",
+      "roles": [
+        "operate-orchestrator",
+        "monitoring-agent",
+        "incident-detection-agent",
+        "incident-resolution-agent",
+        "service-support-agent"
+      ],
+      "contextSlugs": ["engineering-flow"],
+      "sources": [
+        {
+          "name": "ITIL 4 Foundation — public overview",
+          "url": "https://www.axelos.com/certifications/itil-service-management/itil-4-foundation",
+          "licenseClass": "licensed"
+        },
+        {
+          "name": "OpenTelemetry Specification",
+          "url": "https://opentelemetry.io/docs/specs/otel/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "NIST SP 800-61 Computer Security Incident Handling Guide",
+          "url": "https://csrc.nist.gov/publications/detail/sp/800-61/rev-2/final",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "incident-severity-classification",
+        "sla-compliance",
+        "runbook-driven-resolution",
+        "post-incident-review",
+        "monitoring-and-alerting-design"
+      ]
+    },
+    {
+      "professionKey": "enterprise-architecture",
+      "label": "Enterprise Architect",
+      "roles": [
+        "architecture-agent",
+        "architecture-definition-agent",
+        "architecture-guardrail-agent",
+        "ea-architect",
+        "governance-orchestrator",
+        "constraint-validation-agent",
+        "evidence-chain-agent"
+      ],
+      "contextSlugs": ["engineering-flow"],
+      "sources": [
+        {
+          "name": "ArchiMate 4 Specification (public)",
+          "url": "https://pubs.opengroup.org/architecture/archimate3-doc/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "TOGAF Standard overview (public)",
+          "url": "https://www.opengroup.org/togaf",
+          "licenseClass": "licensed"
+        },
+        {
+          "name": "IT4IT Reference Architecture overview",
+          "url": "https://www.opengroup.org/it4it",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "archimate-notation",
+        "togaf-adm-phases",
+        "it4it-value-streams",
+        "conways-law-alignment",
+        "architecture-decision-records",
+        "guardrail-and-constraint-enforcement"
+      ]
+    },
+    {
+      "professionKey": "customer-success",
+      "label": "Customer Success",
+      "roles": [
+        "customer-advisor",
+        "consumer-onboarding-agent",
+        "order-fulfillment-agent",
+        "estate-specialist"
+      ],
+      "contextSlugs": ["storefront"],
+      "sources": [
+        {
+          "name": "Customer Success Association — body of knowledge overview",
+          "url": "https://www.customersuccessassociation.com/library/the-customer-success-manifesto/",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "customer-journey-mapping",
+        "onboarding-and-activation",
+        "adoption-and-friction-analysis",
+        "service-level-monitoring",
+        "escalation-and-handoff"
+      ]
+    },
+    {
+      "professionKey": "strategy-executive",
+      "label": "Strategy & Executive",
+      "roles": ["coo-orchestrator", "strategy-alignment-agent", "coo"],
+      "contextSlugs": ["portfolio"],
+      "sources": [
+        {
+          "name": "Balanced Scorecard Institute — public overview",
+          "url": "https://balancedscorecard.org/bsc-basics/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "OKR framework — public methodology",
+          "url": "https://www.whatmatters.com/faqs/okr-meaning-definition-example",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "strategic-theme-management",
+        "okr-and-kpi-alignment",
+        "cross-orchestrator-coordination",
+        "constitutional-governance",
+        "budget-authority-delegation"
+      ]
+    },
+    {
+      "professionKey": "release-service-management",
+      "label": "Release & Service Management",
+      "roles": [
+        "sbom-management-agent",
+        "release-acceptance-agent",
+        "release-orchestrator",
+        "catalog-publication-agent",
+        "service-offer-definition-agent",
+        "subscription-management-agent",
+        "integrate-orchestrator",
+        "consume-orchestrator"
+      ],
+      "contextSlugs": ["release"],
+      "sources": [
+        {
+          "name": "CycloneDX SBOM Specification",
+          "url": "https://cyclonedx.org/specification/overview/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "SPDX License Specification",
+          "url": "https://spdx.github.io/spdx-spec/v2.3/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "ITIL 4 Release Management — public overview",
+          "url": "https://www.axelos.com/certifications/itil-service-management/itil-4-foundation",
+          "licenseClass": "licensed"
+        }
+      ],
+      "coverageChecklist": [
+        "sbom-composition-cyclonedx",
+        "release-gate-package",
+        "service-catalog-management",
+        "subscription-lifecycle",
+        "release-acceptance-criteria"
+      ]
+    },
+    {
+      "professionKey": "ux-design",
+      "label": "UX / Accessibility Designer",
+      "roles": ["ux-accessibility-agent", "ux-accessibility"],
+      "contextSlugs": ["ui"],
+      "sources": [
+        {
+          "name": "WCAG 2.2 — Web Content Accessibility Guidelines",
+          "url": "https://www.w3.org/TR/WCAG22/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "WAI-ARIA Authoring Practices",
+          "url": "https://www.w3.org/WAI/ARIA/apg/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "Nielsen Norman Group UX research (public articles)",
+          "url": "https://www.nngroup.com/articles/",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "wcag-2-2-aa-audit",
+        "colour-contrast-and-dark-theme",
+        "keyboard-and-focus-management",
+        "semantic-html-and-aria",
+        "usability-heuristics",
+        "design-system-adherence"
+      ]
+    },
+    {
+      "professionKey": "documentation-content",
+      "label": "Documentation & Content",
+      "roles": ["documentation-specialist"],
+      "contextSlugs": ["engineering-flow"],
+      "sources": [
+        {
+          "name": "Diátaxis documentation framework",
+          "url": "https://diataxis.fr/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "Mermaid diagramming documentation",
+          "url": "https://mermaid.js.org/intro/",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "diataxis-documentation-types",
+        "mermaid-diagram-authoring",
+        "cross-reference-integrity",
+        "it4it-alignment-in-docs"
+      ]
+    },
+    {
+      "professionKey": "build-studio",
+      "label": "Build Studio Specialist",
+      "roles": ["build-specialist", "hive-scout-ambiguity-reviewer"],
+      "contextSlugs": ["build-studio"],
+      "sources": [
+        {
+          "name": "DPF AGENTS.md — public platform rules",
+          "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/AGENTS.md",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "build-phase-lifecycle",
+        "design-review-gates",
+        "ideate-plan-build-review-ship",
+        "scope-containment"
+      ]
+    },
+    {
+      "professionKey": "admin-operations",
+      "label": "Platform Administration",
+      "roles": ["admin-assistant", "onboarding-coo"],
+      "contextSlugs": ["engineering-flow"],
+      "sources": [
+        {
+          "name": "DPF platform documentation (public)",
+          "url": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/tree/main/docs/user-guide",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "platform-configuration",
+        "access-control",
+        "seed-and-migration-management",
+        "first-run-onboarding"
+      ]
+    },
+    {
+      "professionKey": "external-intelligence",
+      "label": "External Intelligence & Scouting",
+      "roles": ["external-catalog-scout"],
+      "contextSlugs": ["discovery"],
+      "sources": [
+        {
+          "name": "Smithery MCP Registry (public)",
+          "url": "https://smithery.ai/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "npm registry public API",
+          "url": "https://registry.npmjs.org/",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "external-agent-catalog-reconnaissance",
+        "gap-detection",
+        "governed-backlog-suggestion"
+      ]
+    }
+  ]
+}
