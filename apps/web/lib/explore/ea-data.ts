@@ -4,6 +4,7 @@ import type { SerializedViewElement, SerializedEdge, CanvasState } from "./ea-ty
 import type {
   CoverageStatus,
   ReferenceModelDetail,
+  ReferenceModelElementNode,
   ReferenceModelPortfolioRollup,
   ReferenceModelPortfolioRollupRow,
   ReferenceModelSummary,
@@ -289,6 +290,38 @@ export const getReferenceModelPortfolioRollup = cache(
       model,
       rows: Array.from(rowsByScope.values()),
     };
+  }
+);
+
+export const getReferenceModelElements = cache(
+  async (slug: string): Promise<ReferenceModelElementNode[]> => {
+    const model = await prisma.eaReferenceModel.findUnique({
+      where: { slug },
+      select: { id: true },
+    });
+    if (!model) return [];
+
+    const rows = await prisma.eaReferenceModelElement.findMany({
+      where: { modelId: model.id },
+      select: {
+        id: true,
+        parentId: true,
+        kind: true,
+        name: true,
+        description: true,
+        properties: true,
+      },
+      orderBy: [{ kind: "asc" }, { name: "asc" }],
+    });
+
+    return rows.map((r) => ({
+      id: r.id,
+      parentId: r.parentId,
+      kind: r.kind,
+      name: r.name,
+      description: r.description,
+      properties: (r.properties as Record<string, unknown>) ?? {},
+    }));
   }
 );
 
