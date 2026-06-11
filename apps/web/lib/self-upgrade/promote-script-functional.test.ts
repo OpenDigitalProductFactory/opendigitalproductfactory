@@ -230,6 +230,8 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       // BI-D9BAB4FA: migrations run from the freshly-built image, before the swap.
       expect(log).toContain("run --rm -T --no-deps --entrypoint sh portal -c cd /app && pnpm --filter @dpf/db exec prisma migrate deploy");
       expect(log).toContain("up -d --no-deps --force-recreate portal");
+      // BI-86FC0336: seed runs the full entrypoint from the freshly swapped image, after the swap.
+      expect(log).toContain("run --rm -T --no-deps --entrypoint /docker-entrypoint.sh portal");
       expect(log).toContain("exec -T portal cat /app/.dpf-source-content-hash");
     } finally {
       rmSync(root, { recursive: true, force: true });
