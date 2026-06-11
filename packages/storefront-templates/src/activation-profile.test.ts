@@ -251,6 +251,22 @@ describe("existing archetype regression (governance axis is inert)", () => {
     expect(getCapabilityApplicability(profile, "records-request")).toBe("not-applicable");
   });
 
+  it("the law-enforcement archetype derives public-body governance (with records requests) and no member machinery", () => {
+    const police = ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === "law-enforcement-agency");
+    expect(police?.activationProfile).toBeDefined();
+
+    const profile = readActivationProfile(police?.activationProfile);
+    expect(profile?.axes.governance).toBe("public-body");
+    expect(profile?.axes.primaryConsumer).toBe("resident");
+    expect(getCapabilityApplicability(profile, "public-body-governance")).toBe("required");
+    // Police DO answer public records requests (unlike a co-op).
+    expect(getCapabilityApplicability(profile, "records-request")).toBe("required");
+    expect(getCapabilityApplicability(profile, "service-request-311")).toBe("required");
+    // No member-owned machinery.
+    expect(getCapabilityApplicability(profile, "member-governance")).toBe("not-applicable");
+    expect(getCapabilityApplicability(profile, "member-equity")).toBe("not-applicable");
+  });
+
   it("the small-town municipality archetype derives the public-body capability set from its declared axes", () => {
     const town = ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === "small-town-municipality");
     expect(town?.activationProfile).toBeDefined();
