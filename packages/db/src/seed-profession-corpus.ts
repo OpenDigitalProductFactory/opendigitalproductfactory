@@ -149,14 +149,14 @@ export type SeedProfessionCorpusResult = {
 };
 
 /**
- * Seed profession corpus wiki pages from `docs/professions/*/wiki/`.
+ * Seed profession corpus wiki pages from the docs/professions directory.
  *
- * Idempotent — re-running advances the revision chain only when body
+ * Idempotent - re-running advances the revision chain only when body
  * content has changed; never duplicates RawSource rows, WikiPage rows,
  * link edges, or source citations.
  *
- * If `docs/professions/` is absent or contains no `*/wiki/*.md` files,
- * returns `{ emptyCorpus: true }` without error.
+ * If docs/professions/ is absent or contains no wiki pages under any
+ * profession-family subdirectory, returns { emptyCorpus: true } without error.
  */
 export async function seedProfessionCorpus(
   prisma: PrismaClient,
