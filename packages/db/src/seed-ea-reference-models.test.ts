@@ -2,6 +2,50 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
 
+const MINIMAL_BIAN_JSON = JSON.stringify({
+  standard: "BIAN Service Landscape",
+  version: "14.0.0",
+  view: "Value Chain View (canonical)",
+  businessAreas: [
+    {
+      name: "Business Management",
+      businessDomains: [
+        {
+          name: "Business Direction",
+          serviceDomains: [
+            { name: "Corporate Strategy", semanticApi: false },
+            { name: "Asset And Liability Management", description: "ALM", semanticApi: true },
+          ],
+        },
+      ],
+    },
+    {
+      name: "Sales and Service",
+      businessDomains: [
+        {
+          name: "Customer Offer",
+          serviceDomains: [
+            { name: "Product Directory", semanticApi: true },
+          ],
+        },
+      ],
+    },
+  ],
+});
+
+vi.mock("fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("fs")>();
+  return {
+    ...actual,
+    readFileSync: vi.fn((path: unknown, enc?: unknown) => {
+      if (typeof path === "string" && path.includes("bian-v14-service-landscape.json")) {
+        return MINIMAL_BIAN_JSON;
+      }
+      return (actual.readFileSync as (p: unknown, e?: unknown) => unknown)(path, enc);
+    }),
+  };
+});
+
 const { mockReadWorkbook } = vi.hoisted(() => ({
   mockReadWorkbook: vi.fn(),
 }));
@@ -103,6 +147,54 @@ describe("seedEaReferenceModels", () => {
         where: { slug: "it4it_v3_0_1" },
       })
     );
+  });
+
+  it("seeds the BIAN Service Landscape reference model", async () => {
+    await seedEaReferenceModels();
+
+    expect(mockPrisma.eaReferenceModel.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { slug: "bian_service_landscape_v14_0_0" },
+        create: expect.objectContaining({
+          name: "BIAN Service Landscape",
+          version: "14.0.0",
+          authorityType: "standard",
+          primaryIndustry: "banking-financial-services",
+        }),
+      })
+    );
+  });
+
+  it("seeds BIAN Business Areas, Business Domains, and Service Domains from the JSON", async () => {
+    await seedEaReferenceModels();
+
+    const elementCalls = mockPrisma.eaReferenceModelElement.upsert.mock.calls as Array<[{ create: { kind: string; name: string; properties?: Record<string, unknown> } }]>;
+
+    const kinds = elementCalls.map(([args]) => args.create.kind);
+    expect(kinds).toContain("business_area");
+    expect(kinds).toContain("business_domain");
+    expect(kinds).toContain("service_domain");
+
+    const sdCalls = elementCalls.filter(([args]) => args.create.kind === "service_domain");
+    const sdWithApi = sdCalls.find(([args]) => args.create.name === "Asset And Liability Management");
+    expect(sdWithApi?.[0].create.properties).toEqual(expect.objectContaining({ semanticApi: true }));
+
+    const sdWithoutApi = sdCalls.find(([args]) => args.create.name === "Corporate Strategy");
+    expect(sdWithoutApi?.[0].create.properties).toEqual(expect.objectContaining({ semanticApi: false }));
+  });
+
+  it("stamps dpfCapabilityKey on BIAN SDs that are in the DPF banking capability map", async () => {
+    // The minimal BIAN fixture has: Corporate Strategy, Asset And Liability Management,
+    // Product Directory — none of which are in the DPF banking capability map, so no
+    // dpfCapabilityKey should be stamped on any element.
+    await seedEaReferenceModels();
+
+    const elementCalls = mockPrisma.eaReferenceModelElement.upsert.mock.calls as Array<[{ create: { kind: string; name: string; properties?: Record<string, unknown> } }]>;
+    const sdCalls = elementCalls.filter(([args]) => args.create.kind === "service_domain");
+
+    for (const [args] of sdCalls) {
+      expect(args.create.properties).not.toHaveProperty("dpfCapabilityKey");
+    }
   });
 
   it("keeps the routing audit checkout wired to fetch LFS-backed seed workbooks", () => {
