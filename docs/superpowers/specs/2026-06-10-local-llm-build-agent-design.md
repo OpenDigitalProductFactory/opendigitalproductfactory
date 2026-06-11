@@ -59,24 +59,26 @@ Patterns adopted: one-shot CLI dispatch shape (Claude/Codex parity), OpenAI-comp
 
 ### Decision: OpenCode runner first, `dpf-native` as the governed end-state
 
+**Naming:** the agent id is **`opencode`**, not `local`. Every existing `BuildAgentId` names the agent (`claude`, `codex`, `grok`, `dpf-native`), and locality is already carried by `honorsLlmBaseUrl` + the resolved provider row. Naming the id by locality would leave no id-space for the contemplated second local engine (Aider, Phase 4 of the plan). "Local model" remains the user-facing label in the admin UI; `opencode` is the substrate id everywhere (`BuildAgentId`, `cliEngine`, dispatch `provider` union, env overrides).
+
 Two complementary paths, not competitors:
 
-1. **`local` agent runner (this spec):** install **OpenCode (pinned)** into `Dockerfile.sandbox` beside the Claude/Codex/Grok CLIs. It is a thin adapter behind the existing `BuildAgentRunner` contract (AGENTS.md §17: thin adapters behind a stable contract). The agent loop runs *inside the sandbox*, like the other vendor CLIs, but inference goes to the install's own endpoint — no credential, no egress.
+1. **`opencode` agent runner (this spec):** install **OpenCode (pinned)** into `Dockerfile.sandbox` beside the Claude/Codex/Grok CLIs. It is a thin adapter behind the existing `BuildAgentRunner` contract (AGENTS.md §17: thin adapters behind a stable contract). The agent loop runs *inside the sandbox*, like the other vendor CLIs, but inference goes to the install's own endpoint — no credential, no egress.
 2. **`dpf-native` runner (already landed, Phase-1):** the portal-side governed loop with `honorsLlmBaseUrl: true` already unlocks local inference with full `ToolExecution` audit. It stays the strategic path for untrusted-substrate and fully-audited builds; this spec does not change it. When `dpf-native` reaches multi-turn parity, the two options coexist in the dispatch config like Claude and Codex do today.
 
 ### Integration points (all substrate exists)
 
 | Surface | File | Change |
 |---|---|---|
-| Agent id | `apps/web/lib/integrate/sandbox/agent-runner-types.ts` | `BuildAgentId` += `"local"` |
-| Runner | `apps/web/lib/integrate/sandbox/agents/local-agent-runner.ts` (new) | `prepare()` no-op (no credential); `run()` execs `opencode run` in `/workspace` with `OPENAI_BASE_URL`/`OPENAI_API_KEY=dpf-local` env pointing at the resolved local endpoint; `capabilities()` → `tier: "preview"`, `requiresCredential: false`, `requiresPersistentSession: false`, `honorsLlmBaseUrl: true` |
+| Agent id | `apps/web/lib/integrate/sandbox/agent-runner-types.ts` | `BuildAgentId` += `"opencode"` |
+| Runner | `apps/web/lib/integrate/sandbox/agents/opencode-agent-runner.ts` (new) | `prepare()` takes no credential; it writes the OpenCode provider config (resolved endpoint + model) into the sandbox and curl-preflights the endpoint *from inside the container*; `run()` execs `opencode run` in `/workspace` with `OPENAI_BASE_URL`/`OPENAI_API_KEY=dpf-local` env; `capabilities()` → `tier: "preview"`, `requiresCredential: false`, `requiresPersistentSession: false`, `honorsLlmBaseUrl: true` |
 | Registry | `apps/web/lib/integrate/sandbox/agents/index.ts` | register runner |
-| Dispatch config | `apps/web/lib/integrate/build-studio-config.ts` | `provider` union += `"local"`; `localProviderId` / `localModel` fields; auto-detect via `findConfiguredProvider("local")`; env overrides `LOCAL_AGENT_PROVIDER_ID` / `LOCAL_AGENT_MODEL`; `CLI_DISPATCH_PROVIDER=local` |
-| Endpoint resolution | reuse `getOllamaBaseUrl()` (`apps/web/lib/inference/ollama-url.ts`) | honors `LLM_BASE_URL` → `OLLAMA_INTERNAL_URL` → provider row → Docker Model Runner default. Sandbox-reachable URL must be rewritten host-relative (e.g. `host.docker.internal`) — the sandbox container is not on the model-runner network by default. |
-| Orchestrator | `apps/web/lib/integrate/build-orchestrator.ts` | include `"local"` in the CLI-dispatch branch |
-| Sandbox image | `Dockerfile.sandbox` | `npm install -g opencode-ai@<pinned>`; no auth file needed |
-| Provider seed | `packages/db/src/seed.ts` | local provider row gains `cliEngine: "local"` (fix the seed, not the runtime) |
-| Admin UI | Build Studio dispatch config surface | add "Local model (OpenCode)" option; show resolved endpoint + model; surface the preview-tier banner |
+| Dispatch config | `apps/web/lib/integrate/build-studio-config.ts` | `provider` union += `"opencode"`; `opencodeProviderId` / `opencodeModel` fields; auto-detect via `findConfiguredProvider("opencode")`; env overrides `OPENCODE_PROVIDER_ID` / `OPENCODE_MODEL`; `CLI_DISPATCH_PROVIDER=opencode`. **Auto-detect order: claude → codex → grok → opencode → agentic** — a credential-free install with a healthy local provider auto-selects the multi-turn local runner over single-turn `dpf-native` (zero-click-provider-setup); frontier CLIs still win when configured. |
+| Endpoint resolution | reuse `getOllamaBaseUrl()` (`apps/web/lib/inference/ollama-url.ts`) | honors `LLM_BASE_URL` → `OLLAMA_INTERNAL_URL` → provider row → Docker Model Runner default. Sandbox-reachable URL must be rewritten host-relative (e.g. `host.docker.internal`) — the sandbox container is not on the model-runner network by default — and must carry the `/v1` path the OpenAI-compatible surface is served under. |
+| Orchestrator | `apps/web/lib/integrate/build-orchestrator.ts` | include `"opencode"` in the CLI-dispatch branch |
+| Sandbox image | `Dockerfile.sandbox` | `npm install -g opencode-ai@<pinned>`; no auth file needed. The image is **Alpine/musl** and the npm package fetches a platform binary — apply the grok lesson already encoded in this Dockerfile: two loud build-time gates, `opencode --version` as root **and** as the `node` user, so a musl-incompatible or root-homed binary fails the image build instead of failing silently at dispatch. |
+| Provider seed | `packages/db/src/seed.ts` | local provider row gains `cliEngine: "opencode"` (fix the seed, not the runtime). Same PR updates the stale `cliEngine` comment in `schema.prisma` (currently lists only `"claude" \| "codex"` — `"grok"` is already missing) so the implied enum registry stays single-source. |
+| Admin UI | Build Studio dispatch config surface | add "Local model (OpenCode)" option; show resolved endpoint + model **with an inline endpoint health/context preflight result** (operator sees "unreachable" or "context < floor" at config time, not first at dispatch); surface the preview-tier banner and a "no credential required" note |
 
 ### Capability tier & promotion (governance)
 
@@ -85,8 +87,9 @@ The runner is admitted at `tier: "preview"` per the existing onboarding doctrine
 ### Outcome classification & guardrails
 
 - `classifyOutcome()` already maps CLI output to `DONE / DONE_WITH_CONCERNS / BLOCKED / NEEDS_CONTEXT`; weak local models will land in `NEEDS_CONTEXT`/`BLOCKED` more often — that is the desired honest signal, not a failure of the integration.
-- Context-length preflight: before dispatch, the runner queries the provider's `/v1/models` (or provider row metadata) and refuses dispatch with a clear `BLOCKED` message if the serving context is below 22k tokens.
-- Timeout: local inference is slower; default task timeout rises to 30 min for the `local` runner (configurable), with `onProgress` heartbeats from the CLI's streamed output so the orchestrator's stall detection doesn't false-positive.
+- Context-length preflight: before dispatch, the runner queries the provider's `/v1/models` (or provider row metadata) and refuses dispatch with a clear `BLOCKED` message if the serving context is below the floor. The floor is a named, env-overridable constant (`OPENCODE_MIN_CONTEXT_TOKENS`, default `22_000` — source: OpenHands local-model guidance + observed 39k–156k real-run consumption above), not a magic number in the runner.
+- Timeout: local inference is slower; default task timeout rises to 30 min for the `opencode` runner (configurable), with `onProgress` heartbeats from the CLI's streamed output so the orchestrator's stall detection doesn't false-positive.
+- Trust posture (explicit, not accidental): `honorsLlmBaseUrl: true` means `assertAgentProviderCompatibility` admits this runner on `untrusted-ok` execution providers — intentional, because there is no vendor credential to leak and inference goes to the install-controlled endpoint. The caveat is reachability, not secrecy: the host-relative endpoint rewrite assumes host-local substrate, so the in-container preflight curl in `prepare()` is the guard that fails fast on remote/untrusted providers where the endpoint can't resolve.
 - Tool-evaluation pipeline (AGENTS.md §9): OpenCode enters `packages/db/data/approved_tools_registry.json` version-pinned via `/project:tool-evaluation` before the Dockerfile change merges.
 
 ## Out of scope
