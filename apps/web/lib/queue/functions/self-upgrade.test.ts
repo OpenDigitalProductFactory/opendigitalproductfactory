@@ -388,7 +388,7 @@ describe("success path", () => {
     // instead of flipping the portal to draining and burning the full budget
     // waiting for a BuildPhaseRun that outlasts it (the periodic bad-state bug).
     mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
-      surfaces: [{ surface: "build-studio.phase.plan" }],
+      surfaces: [{ surface: "build-studio.phase.plan", kind: "hard" }],
     });
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
     expect(result).toMatchObject({ skipped: true, reason: "activity-in-flight" });
@@ -399,10 +399,48 @@ describe("success path", () => {
 
   it("force bypasses the activity precheck and proceeds to drain", async () => {
     mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
-      surfaces: [{ surface: "build-studio.phase.plan" }],
+      surfaces: [{ surface: "build-studio.phase.plan", kind: "hard" }],
     });
     await runSelfUpgrade({ triggeredBy: "ops", force: true });
     expect(mocks.startQuiescence).toHaveBeenCalled();
+  });
+
+  // BI-CC82B9A8 — a manual operator "Upgrade now" must not silently no-op on the
+  // operator's OWN session. Soft blockers (e.g. request.recent-tool-execution,
+  // which fires on the very clicks that drove this trigger) must NOT early-skip a
+  // manual trigger; it proceeds into the drain, which converges when no hard work
+  // is running. Without this, a routine deploy is un-runnable without Emergency
+  // override while the operator is driving the portal.
+  it("manual trigger does NOT early-skip on a soft blocker — proceeds to drain (BI-CC82B9A8)", async () => {
+    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
+      surfaces: [{ surface: "request.recent-tool-execution", kind: "soft" }],
+    });
+    const result = await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(result).not.toMatchObject({ reason: "activity-in-flight" });
+    expect(mocks.startQuiescence).toHaveBeenCalled();
+  });
+
+  it("manual trigger STILL early-skips on a hard blocker (BI-F36E7510 preserved)", async () => {
+    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
+      surfaces: [
+        { surface: "coworker.reasoning-loop", kind: "hard" },
+        { surface: "request.recent-tool-execution", kind: "soft" },
+      ],
+    });
+    const result = await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(result).toMatchObject({ skipped: true, reason: "activity-in-flight" });
+    // Only the hard surface is reported as the blocker; the soft one is filtered.
+    expect(result).toMatchObject({ surfaces: ["coworker.reasoning-loop"] });
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
+  });
+
+  it("scheduled poll keeps the conservative 'any surface skips' behavior on a soft blocker (BI-F36E7510)", async () => {
+    mocks.captureActiveSessionBlockers.mockResolvedValueOnce({
+      surfaces: [{ surface: "request.recent-tool-execution", kind: "soft" }],
+    });
+    const result = await runSelfUpgrade({ triggeredBy: "cron", scheduled: true });
+    expect(result).toMatchObject({ skipped: true, reason: "activity-in-flight" });
+    expect(mocks.startQuiescence).not.toHaveBeenCalled();
   });
 
   it("runs the promoter with the host install path, backup, image, and health paths", async () => {
