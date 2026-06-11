@@ -168,11 +168,27 @@ export async function runSelfUpgrade(
   if (!params.dryRun && !params.force) {
     const { captureActiveSessionBlockers } = await import("@/lib/self-upgrade/quiescence");
     const snapshot = await captureActiveSessionBlockers();
-    if (snapshot.surfaces.length > 0) {
+    // A manual operator "Upgrade now" must not silently no-op on the operator's
+    // OWN session. The B-class soft blocker `request.recent-tool-execution`
+    // fires on the very clicks / MCP calls that drove this trigger, so counting
+    // soft surfaces here makes a manual upgrade un-runnable while the operator is
+    // driving the portal — forcing Emergency override for a routine deploy
+    // (BI-CC82B9A8). Only genuine in-flight work (hard blockers: coworker
+    // reasoning loops, build-studio phases) early-skips a MANUAL trigger;
+    // otherwise it proceeds into the quiescence drain, which converges
+    // immediately when no hard work is running (a forced run reaches
+    // ready-to-swap at once with only soft activity present) and otherwise
+    // defers with a real run + reason rather than a silent skip. The unattended
+    // scheduled poll keeps the conservative "any surface skips" behavior — it
+    // must never start a drain while ANY work is in flight (BI-F36E7510).
+    const blocking = params.scheduled
+      ? snapshot.surfaces
+      : snapshot.surfaces.filter((s) => s.kind === "hard");
+    if (blocking.length > 0) {
       return {
         skipped: true,
         reason: "activity-in-flight",
-        surfaces: snapshot.surfaces.map((s) => s.surface),
+        surfaces: blocking.map((s) => s.surface),
       };
     }
   }
