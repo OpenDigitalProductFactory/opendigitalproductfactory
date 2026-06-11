@@ -236,6 +236,21 @@ describe("existing archetype regression (governance axis is inert)", () => {
     }
   });
 
+  it("the cooperative archetype derives the member-owned set, with member-equity required via override", () => {
+    const coop = ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === "cooperative");
+    expect(coop?.activationProfile).toBeDefined();
+
+    const profile = readActivationProfile(coop?.activationProfile);
+    expect(profile?.axes.governance).toBe("member-owned");
+    expect(profile?.axes.primaryConsumer).toBe("member");
+    expect(getCapabilityApplicability(profile, "member-governance")).toBe("required");
+    expect(getCapabilityApplicability(profile, "membership-eligibility")).toBe("required");
+    // The rules derive member-equity as recommended; the archetype override promotes it.
+    expect(getCapabilityApplicability(profile, "member-equity")).toBe("required");
+    expect(getCapabilityApplicability(profile, "public-body-governance")).toBe("not-applicable");
+    expect(getCapabilityApplicability(profile, "records-request")).toBe("not-applicable");
+  });
+
   it("the small-town municipality archetype derives the public-body capability set from its declared axes", () => {
     const town = ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === "small-town-municipality");
     expect(town?.activationProfile).toBeDefined();

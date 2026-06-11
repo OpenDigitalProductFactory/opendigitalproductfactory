@@ -8,6 +8,8 @@ import { LifecycleEventPanel } from "@/components/employee/LifecycleEventPanel";
 import { NewEmployeeButton } from "@/components/employee/NewEmployeeButton";
 import { OrgAssignmentPanel } from "@/components/employee/OrgAssignmentPanel";
 import { OrgChartView } from "@/components/employee/OrgChartView";
+import { WorkforceRosterPanel } from "@/components/employee/WorkforceRosterPanel";
+import { loadWorkforceRoster } from "@/lib/workforce/workforce-roster";
 import { TimesheetGrid } from "@/components/employee/TimesheetGrid";
 import { TimesheetApprovalPanel } from "@/components/employee/TimesheetApprovalPanel";
 import { MyPoliciesView } from "@/components/employee/MyPoliciesView";
@@ -90,6 +92,7 @@ export default async function EmployeePage({ searchParams }: Props) {
   const pendingTimesheets = view === "timesheets" && currentUserProfile
     ? await getPendingTimesheetsForManager(currentUserProfile.id)
     : [];
+  const workforceRoster = view === "workforce" ? await loadWorkforceRoster() : null;
 
   return (
     <div>
@@ -170,7 +173,9 @@ export default async function EmployeePage({ searchParams }: Props) {
       <div className="mt-8">
         <EmployeeTabNav />
 
-        {view === "timesheets" ? (
+        {view === "workforce" && workforceRoster ? (
+          <WorkforceRosterPanel roster={workforceRoster} />
+        ) : view === "timesheets" ? (
           <div className="space-y-4">
             {pendingTimesheets.length > 0 && (
               <TimesheetApprovalPanel pendingTimesheets={pendingTimesheets} />
