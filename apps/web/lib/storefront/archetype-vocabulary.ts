@@ -212,6 +212,7 @@ const CATEGORY_SUGGESTIONS: Record<string, string[]> = {
   // Cooperative (nonprofit-community)
   "cooperative": ["Membership", "Member Services", "Patronage & Equity", "Governance"],
   "municipal-utility": ["Residential", "Commercial", "Irrigation", "Connection Fees", "Service Orders"],
+  "law-enforcement-agency": ["Records", "Permits", "Community Programs", "Professional Standards"],
 };
 
 export function getCategorySuggestions(archetypeId: string | null | undefined): string[] {

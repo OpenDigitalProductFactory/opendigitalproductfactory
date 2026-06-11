@@ -131,4 +131,71 @@ export const publicSectorArchetypes: ArchetypeDefinition[] = [
       ],
     },
   },
+  {
+    // Phase 1 is NO-CJI by design (civic spec §4.6/§13.6): agency operations
+    // around the incumbent RMS — POST training, policy attestation, equipment,
+    // and non-CJI citizen intake. Anything touching case/incident data is a
+    // separate future spec gated on CJIS Security Policy posture.
+    archetypeId: "law-enforcement-agency",
+    name: "Law Enforcement Agency (Police / Sheriff)",
+    category: "public-sector",
+    ctaType: "inquiry",
+    tags: ["police", "sheriff", "law-enforcement", "public-safety", "community", "no-cji", "public-sector"],
+    itemTemplates: [
+      { name: "Request a Records Copy", description: "Request a copy of a crash report, incident report, or other releasable public record (subject to law-enforcement exemptions)", priceType: "free", ctaType: "inquiry" },
+      { name: "File a Compliment or Complaint", description: "Submit a compliment or a complaint about an officer or service interaction", priceType: "free", ctaType: "inquiry" },
+      { name: "Alarm Permit Application", description: "Apply for or renew a residential or commercial alarm permit", priceType: "fixed", ctaType: "inquiry" },
+      { name: "Public Records Request", description: "Request agency records under the state public records law", priceType: "free", ctaType: "inquiry" },
+      { name: "Community Concern", description: "Report a non-emergency community concern or request extra patrol", priceType: "free", ctaType: "inquiry" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "about", title: "About the Department", sortOrder: 1 },
+      { type: "items", title: "Services & Programs", sortOrder: 2 },
+      { type: "team", title: "Command & Staff", sortOrder: 3 },
+      { type: "contact", title: "Contact Us", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...RESIDENT_CONTACT_FIELDS,
+      { name: "requestType", label: "Request type", type: "select" as const, required: true, options: ["Records copy", "Compliment", "Complaint", "Alarm permit", "Community concern", "Other"] },
+      { name: "notes", label: "Details", type: "textarea" as const, required: true },
+    ],
+    // Community skin over the public-sector category vocabulary (civic spec §8).
+    vocabulary: {
+      itemsLabel: "Services & Programs",
+      portalLabel: "Community Portal",
+      stakeholderLabel: "Community",
+      inboxLabel: "Requests & Reports",
+      agentName: "Community Liaison",
+    },
+    activationProfile: {
+      profileType: "standard",
+      modules: ["service-operations", "projects"],
+      billingReadinessMode: "prepared-not-prescribed",
+      customerGraph: "none",
+      estateSeparation: "shared",
+      axes: {
+        form: "services",
+        delivery: "physical",
+        primaryConsumer: "resident",
+        consumptionChannel: "onsite-plus-portal",
+        commercialModel: "statutory-fees-and-levies",
+        provisioning: "none",
+        platform: "no",
+        governance: "public-body",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: { scope: "standard", it4itStages: ["request-to-fulfill"] },
+        forEmployees: { scope: "standard" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+      seededServiceCategories: [
+        "Records",
+        "Permits",
+        "Community Programs",
+        "Professional Standards",
+      ],
+    },
+  },
 ];
