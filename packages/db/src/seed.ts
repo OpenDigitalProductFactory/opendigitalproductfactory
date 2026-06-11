@@ -24,7 +24,8 @@ import { seedLicenseRequirements } from "./seed-license-requirements.js";
 import { seedPromptTemplates } from "./seed-prompt-templates.js";
 import { seedSkills } from "./seed-skills.js";
 import { seedWikiKernel } from "./seed-wiki-kernel.js";
-import { seedDecisionPerspective } from "./seed-decision-perspective.js";
+import { seedDecisionPerspective, seedProfessionProfiles } from "./seed-decision-perspective.js";
+import { seedProfessionCorpus } from "./seed-profession-corpus.js";
 import { seedPlatformVoice } from "./seed-platform-voice.js";
 import {
   SPEACHES_PROVIDER_ID,
@@ -2570,6 +2571,21 @@ async function main(): Promise<void> {
       `  decision-perspective: profile=${decisionPerspectiveSeed.profileId} ` +
         `version=${decisionPerspectiveSeed.versionId} materials=${decisionPerspectiveSeed.materialCount}`,
     );
+  });
+  await step("professionProfiles", async () => {
+    const result = await seedProfessionProfiles(prisma);
+    console.log(`  profession-profiles: seeded=${result.seeded} skipped=${result.skipped}`);
+  });
+  await step("professionCorpus", async () => {
+    const result = await seedProfessionCorpus(prisma);
+    if (result.emptyCorpus) {
+      console.log("  profession-corpus: empty (no docs/professions/*/wiki/ content yet)");
+    } else {
+      console.log(
+        `  profession-corpus: sources=${result.sourceCount} pages=${result.pageCount} ` +
+          `orphan-links=${result.orphanLinks.length}`,
+      );
+    }
   });
   // BI-2535D6F4: ship the founder's recorded seed voice on the platform profile.
   await step("platformVoice", async () => {
