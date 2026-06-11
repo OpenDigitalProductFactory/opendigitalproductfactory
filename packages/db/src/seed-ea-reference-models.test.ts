@@ -183,6 +183,20 @@ describe("seedEaReferenceModels", () => {
     expect(sdWithoutApi?.[0].create.properties).toEqual(expect.objectContaining({ semanticApi: false }));
   });
 
+  it("stamps dpfCapabilityKey on BIAN SDs that are in the DPF banking capability map", async () => {
+    // The minimal BIAN fixture has: Corporate Strategy, Asset And Liability Management,
+    // Product Directory — none of which are in the DPF banking capability map, so no
+    // dpfCapabilityKey should be stamped on any element.
+    await seedEaReferenceModels();
+
+    const elementCalls = mockPrisma.eaReferenceModelElement.upsert.mock.calls as Array<[{ create: { kind: string; name: string; properties?: Record<string, unknown> } }]>;
+    const sdCalls = elementCalls.filter(([args]) => args.create.kind === "service_domain");
+
+    for (const [args] of sdCalls) {
+      expect(args.create.properties).not.toHaveProperty("dpfCapabilityKey");
+    }
+  });
+
   it("keeps the routing audit checkout wired to fetch LFS-backed seed workbooks", () => {
     const workflow = readFileSync(
       join(__dirname, "..", "..", "..", ".github", "workflows", "audit-routing-invariants.yml"),

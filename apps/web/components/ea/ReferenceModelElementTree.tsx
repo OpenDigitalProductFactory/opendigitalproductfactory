@@ -26,7 +26,9 @@ function buildTree(elements: ReferenceModelElementNode[]) {
 }
 
 function ServiceDomainRow({ sd }: { sd: ReferenceModelElementNode }) {
-  const hasApi = (sd.properties as Record<string, unknown>)?.semanticApi === true;
+  const props = sd.properties as Record<string, unknown>;
+  const hasApi = props?.semanticApi === true;
+  const dpfCapabilityKey = typeof props?.dpfCapabilityKey === "string" ? props.dpfCapabilityKey : null;
 
   return (
     <div className="flex items-start gap-2 py-1.5 pl-4 border-l border-[var(--dpf-border)]">
@@ -34,8 +36,18 @@ function ServiceDomainRow({ sd }: { sd: ReferenceModelElementNode }) {
         title={hasApi ? "Published Semantic API" : "No Semantic API yet"}
         className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${hasApi ? "bg-green-500" : "bg-[var(--dpf-border)]"}`}
       />
-      <div className="min-w-0">
-        <p className="text-xs text-[var(--dpf-text)] leading-snug">{sd.name}</p>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <p className="text-xs text-[var(--dpf-text)] leading-snug">{sd.name}</p>
+          {dpfCapabilityKey && (
+            <span
+              title={`In DPF banking capability map (${dpfCapabilityKey})`}
+              className="inline-flex items-center rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-[var(--dpf-accent-subtle,#1e3a5f)] text-[var(--dpf-accent,#60a5fa)] leading-none"
+            >
+              DPF
+            </span>
+          )}
+        </div>
         {sd.description && (
           <p className="text-[11px] text-[var(--dpf-muted)] leading-snug mt-0.5 line-clamp-2">
             {sd.description}
@@ -57,6 +69,9 @@ function BusinessDomainSection({
   const apiCount = serviceDomains.filter(
     (sd) => (sd.properties as Record<string, unknown>)?.semanticApi === true
   ).length;
+  const dpfCount = serviceDomains.filter(
+    (sd) => typeof (sd.properties as Record<string, unknown>)?.dpfCapabilityKey === "string"
+  ).length;
 
   return (
     <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
@@ -67,7 +82,9 @@ function BusinessDomainSection({
       >
         <span className="text-xs font-medium text-[var(--dpf-text)]">{domain.name}</span>
         <span className="flex-shrink-0 text-[10px] text-[var(--dpf-muted)]">
-          {serviceDomains.length} SD{serviceDomains.length !== 1 ? "s" : ""} · {apiCount} with API
+          {serviceDomains.length} SD{serviceDomains.length !== 1 ? "s" : ""}
+          {apiCount > 0 && ` · ${apiCount} with API`}
+          {dpfCount > 0 && ` · ${dpfCount} in DPF`}
           <span className="ml-1.5">{open ? "▲" : "▼"}</span>
         </span>
       </button>
@@ -158,7 +175,10 @@ export function ReferenceModelElementTree({ elements }: Props) {
         ))}
       </div>
       <p className="mt-3 text-[11px] text-[var(--dpf-muted)]">
-        Source: BIAN Service Landscape v14.0 — Value Chain View (bian.org). Green dot = published Semantic API.
+        Source: BIAN Service Landscape v14.0 — Value Chain View (bian.org).{" "}
+        <span className="inline-block h-2 w-2 rounded-full bg-green-500 align-middle" /> = published Semantic API.{" "}
+        <span className="inline-flex items-center rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-[var(--dpf-accent-subtle,#1e3a5f)] text-[var(--dpf-accent,#60a5fa)] leading-none align-middle">DPF</span>
+        {" "}= in DPF banking capability map (active when a banking archetype is selected).
       </p>
     </section>
   );
