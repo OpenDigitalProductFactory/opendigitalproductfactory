@@ -137,6 +137,8 @@ describe("evaluateGate — pure decision", () => {
       expect(d.response.headers.get("x-bundle-hash")).toBe("abc123");
       expect(d.response.headers.get("x-quiescence-level")).toBe("draining");
       expect(d.response.headers.get("x-quiescence-run-id")).toBe("QR-2026-05-24-abc12345");
+      // 503 drain response must close the socket (BI-79676285)
+      expect(d.response.headers.get("connection")).toBe("close");
     }
   });
 
@@ -194,6 +196,24 @@ describe("attachVersionHeaders", () => {
     expect(result.headers.get("x-quiescence-level")).toBeNull();
     // But version + bundle headers ARE still set even on unknown
     expect(result.headers.get("x-platform-version")).toBe("1.0.0");
+  });
+
+  it("sets Connection: close during draining (BI-79676285)", () => {
+    const res = NextResponse.next();
+    const result = attachVersionHeaders(res, drainingState);
+    expect(result.headers.get("connection")).toBe("close");
+  });
+
+  it("sets Connection: close during swapping (BI-79676285)", () => {
+    const res = NextResponse.next();
+    const result = attachVersionHeaders(res, swappingState);
+    expect(result.headers.get("connection")).toBe("close");
+  });
+
+  it("does NOT set Connection: close during normal (keep-alive preserved)", () => {
+    const res = NextResponse.next();
+    const result = attachVersionHeaders(res, normalState);
+    expect(result.headers.get("connection")).toBeNull();
   });
 });
 

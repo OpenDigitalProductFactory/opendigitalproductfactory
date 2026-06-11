@@ -257,6 +257,7 @@ function build503(state: ProxyQuiescenceState, swapping: boolean): NextResponse 
     "X-Quiescence-Level": state.level,
   });
   if (state.runId) headers.set("X-Quiescence-Run-Id", state.runId);
+  headers.set("Connection", "close");
   const body = JSON.stringify({
     error: "portal_quiescing",
     message: swapping
@@ -287,6 +288,15 @@ export function attachVersionHeaders(
   // mid-drain. Cheap, no PII.
   if (state.level !== "unknown") {
     response.headers.set("X-Quiescence-Level", state.level);
+  }
+  // During drain/swap the container is about to be recycled. Signal browsers
+  // to close their keep-alive sockets now so the connection pool is empty by
+  // the time the container stops. Without this, wslrelay (Windows/WSL2) and
+  // equivalent relay layers absorb the TCP RST from the dying container and
+  // never propagate it to the browser — leaving Chrome's 6-socket pool wedged
+  // on dead connections indefinitely (BI-79676285).
+  if (state.level === "draining" || state.level === "swapping") {
+    response.headers.set("Connection", "close");
   }
   return response;
 }
