@@ -1,14 +1,16 @@
-# Archetype Audit Plan — All 55 Archetypes
+# Archetype Audit Plan — All 53 Archetypes
 
-**Status:** Draft — 2026-06-10  
+**Status:** Revised — 2026-06-10 (architecture / UX / operations review applied)  
 **Scope:** Full audit of every seeded archetype via browser-driven fresh installs. Produces gap backlog items for post-audit execution.  
 **Related:** [platform-qa-plan.md](platform-qa-plan.md), [fresh-install.ps1](../../scripts/fresh-install.ps1), [BIAN design spec](../superpowers/specs/2026-06-09-bian-banking-archetypes-design.md)
+
+> **Inventory ground truth (verified 2026-06-10 against `origin/main` `packages/storefront-templates/src/archetypes/`):** 53 seeded archetypes, not 55. The five archetypes previously flagged "not yet confirmed" (`landscaping`, `cleaning-service`, `personal-trainer`, `counselling`, `wholesale-distribution`) ARE seeded and are now placed in Runs 1, 2, 3, and 6. `pet-rescue` is seeded once (category `nonprofit-community`) and is tested only in Run 11.
 
 ---
 
 ## 1. Purpose
 
-DPF ships 55 archetypes across 14 categories. The platform must behave correctly for each organizational model — correct vocabulary, correct CTA, correct coworker framing, correct activation modules, correct compliance defaults. This audit drives each archetype through a browser-realistic experience and records gaps as backlog items.
+DPF ships 53 archetypes across 14 categories. The platform must behave correctly for each organizational model — correct vocabulary, correct CTA, correct coworker framing, correct activation modules, correct compliance defaults. This audit drives each archetype through a browser-realistic experience and records gaps as backlog items.
 
 **Out of scope for this plan:** executing the gap items. This thread produces the plan, the backlog snapshot, and the per-run scripts. Execution follows in a separate thread.
 
@@ -16,47 +18,78 @@ DPF ships 55 archetypes across 14 categories. The platform must behave correctly
 
 ## 2. Constraints
 
-- **All interaction via browser.** Every test step is driven at `http://localhost:3000` through the portal UI. No direct DB writes, no curl, no SQL.
+- **All interaction via browser — with one documented exception.** Every test step is driven at `http://localhost:3000` through the portal UI. No direct DB writes, no SQL. **Exception (verified in code):** there is no UI to change archetype after setup — `/storefront/setup` redirects to `/storefront` once a `StorefrontConfig` exists (`apps/web/app/(shell)/storefront/setup/page.tsx`). The only swap path is the admin API `POST /api/storefront/admin/archetype-reset` (`mode: replace-seeded-content`). In-run swaps use that API call; the missing "change archetype" UI is itself **audit finding #1** — file a BI for it (the storefront settings page even references "the admin archetype reset" with no button to invoke it).
+- **Swap-tier validity rule.** The archetype-reset API updates the archetype link, `Organization.industry`, `BusinessContext` industry/CTA, the business-capability perspective, and replaces seeded sections/items. It does **not** re-run setup-wizard provisioning (activation-profile module activation, compliance/regulatory packs, finance defaults, KYC provisioning). Therefore: Phases B, E, F are valid on a swapped archetype; **Phases A, C, D are only valid on the archetype that received the fresh install.** See Section 3 for how runs handle this.
 - **Full reset between runs.** Each audit run begins from a clean install: volumes wiped, database re-seeded, no previously created organization.
 - **Stay out of Build Studio.** Gap items are filed as backlog items; they are not promoted into Build Studio during this audit.
-- **Backlog must be backed up** before the first reset and restored after the final run.
+- **`pg_dump` is the authoritative backup.** A full database dump is taken before the first wipe and is the restore source after the final run (preserves IDs, timestamps, epic links, prompts, wiki overlays, provider config — everything the wipe destroys). MCP JSON snapshots are a secondary, human-readable verification aid only — re-creating backlog items via `create_backlog_item` generates **new IDs and breaks every existing cross-reference** (PRs, memory files, specs), so it is a last-resort fallback, never the plan of record. See Section 4.
+- **Concurrent-session freeze.** During the audit, no other session may run work against the live install — wipes destroy in-flight capsules, and every PR merged to main triggers self-upgrade, recycling the portal mid-run (known behavior since PR #830). Either pause merge activity for the audit window or accept that a portal recycle invalidates the in-progress phase and that phase must be re-driven.
+- **Abort criteria.** If a platform-wide blocker is found (setup wizard broken, coworker unresponsive on a clean install, fresh-install fails twice), STOP the run sequence, file the blocker BI, and do not burn further resets — the remaining runs would all reproduce the same finding.
 
 ---
 
 ## 3. Audit Run Strategy
 
-55 archetypes across 16 runs. Each run = one fresh install. Within each run, the lead archetype is the primary setup target; additional archetypes in the same category are tested by re-running the storefront setup wizard (no re-install needed to swap archetype within a session — the setup wizard at `/storefront/setup` allows reconfiguration).
+53 archetypes across **Run 0 (pilot) + 18 install runs**. Each run = one fresh install. The **lead archetype** (bold) is the setup-wizard target and gets the full Phase A–F checklist. Additional archetypes in the same category are swapped in via the admin archetype-reset API (Section 2) and get **Phases B, E, F only** — their Phase A/C/D results would reflect the lead archetype's provisioning and would generate false gaps.
 
-| Run | Category | Archetypes | CTAs Exercised |
+**Full-install rule for regulated archetypes:** any archetype whose test targets activation profiles, compliance packs, KYC provisioning, or finance defaults (Runs 10, 14a–c, 16) gets its **own fresh install** — those are exactly the surfaces a swap does not re-provision.
+
+| Run | Category | Archetypes (lead bold) | CTAs Exercised |
 |-----|----------|------------|----------------|
-| 1 | Trades & Maintenance | plumber, electrician, facilities-maintenance | inquiry |
-| 2 | Beauty & Personal Care | hair-salon, barber-shop, nail-salon, beauty-spa, optician | booking |
-| 3 | Healthcare & Wellness | veterinary-clinic, dental-practice, physiotherapy | booking |
-| 4 | Pet Services | pet-grooming, pet-boarding, dog-walking, pet-rescue | booking, donation |
-| 5 | Food & Hospitality | restaurant, catering, bakery | booking, inquiry, purchase |
-| 6 | Retail & Goods | retail-goods, artisan-goods, florist | purchase |
-| 7 | Fitness & Recreation | gym, yoga-studio, sports-club | purchase |
-| 8 | Education & Training | corporate-training, tutoring, driving-school, music-school, dance-studio | booking, inquiry |
-| 9 | Professional Services A | consulting, legal-services, marketing-agency, accounting | inquiry |
-| 10 | Professional Services B | it-managed-services | inquiry (MSP profile) |
-| 11 | Nonprofit & Community | pet-rescue, animal-shelter, community-shelter, charity, cooperative | donation |
-| 12 | HOA & Property Management | homeowners-association, condo-association, property-management-company | inquiry |
-| 13 | Software & Platform | software-platform | inquiry |
-| 14 | Banking & Financial Services | community-bank, credit-union, mortgage-lending | inquiry (KYC) |
-| 15 | Public Sector | small-town-municipality, municipal-utility | inquiry |
-| 16 | Law Enforcement | law-enforcement-agency | inquiry (public-body) |
+| 0 | Pilot / calibration (software-platform) | **software-platform** | inquiry — see Section 3a |
+| 1 | Trades & Maintenance | **plumber**, electrician, facilities-maintenance, landscaping, cleaning-service | inquiry |
+| 2 | Beauty & Personal Care | **hair-salon**, barber-shop, nail-salon, beauty-spa, optician, personal-trainer | booking |
+| 3 | Healthcare & Wellness | **veterinary-clinic**, dental-practice, physiotherapy, counselling | booking |
+| 4 | Pet Services | **pet-grooming**, pet-boarding, dog-walking | booking |
+| 5 | Food & Hospitality | **restaurant**, catering, bakery | booking, inquiry, purchase |
+| 6 | Retail & Goods | **retail-goods**, artisan-goods, florist, wholesale-distribution | purchase, inquiry |
+| 7 | Fitness & Recreation | **gym**, yoga-studio, sports-club | purchase |
+| 8 | Education & Training | **corporate-training**, tutoring, driving-school, music-school, dance-studio | booking, inquiry |
+| 9 | Professional Services A | **consulting**, legal-services, marketing-agency, accounting | inquiry |
+| 10 | Professional Services B | **it-managed-services** (full install — MSP activation profile) | inquiry (MSP profile) |
+| 11 | Nonprofit & Community | **charity**, pet-rescue, animal-shelter, community-shelter, cooperative | donation, inquiry |
+| 12 | HOA & Property Management | **homeowners-association**, condo-association, property-management-company | inquiry |
+| 13 | Software & Platform | *folded into Run 0* — software-platform full A–F + extended meta-case run on the pilot install | inquiry |
+| 14a | Banking | **community-bank** (full install — KYC + BIAN + FDIC pack) | inquiry (KYC) |
+| 14b | Banking | **credit-union** (full install — member-owned + NCUA pack) | inquiry (KYC) |
+| 14c | Banking | **mortgage-lending** (full install — NMLS/RESPA/TILA pack) | inquiry (NMLS) |
+| 15 | Public Sector | **small-town-municipality**, municipal-utility | inquiry |
+| 16 | Law Enforcement | **law-enforcement-agency** (full install — POST/CJIS-gate pack) | inquiry (public-body) |
 
-> **Note on personal services:** landscaping, cleaning-service, personal-trainer, counselling, and wholesale-distribution are not yet confirmed as seeded leaf archetypes. Verify during Run 1 scouting; file BI if missing.
+Total fresh installs: 18 (Run 0, which also serves as Run 13's software-platform audit, + Runs 1–12, 14a–c, 15, 16). 53 unique archetypes covered: 18 with full A–F, 35 with B/E/F via swap. If Run 0 shows the swap path is unreliable, fall back to full installs per archetype for the affected runs and re-plan the schedule before proceeding.
+
+> **Swapped-archetype Phase C/D spot-checks are still allowed** — but log findings as `observation` severity with an explicit "tested post-swap, provisioning not re-run" note, never as `critical`/`important`, until reproduced on a fresh install.
+
+### 3a. Run 0 — Pilot / calibration (MANDATORY before Run 1)
+
+Run 0 exists to validate the audit harness itself so the remaining 18 resets test the platform, not the plan's assumptions. On one fresh install (software-platform):
+
+1. **Backup rehearsal** — take the pre-audit `pg_dump` (Section 4), restore it into a throwaway postgres container, and verify row counts match. Do not proceed to any wipe until the restore is proven.
+2. **Inventory confirmation** — on the live install, confirm the archetype grid shows all 53 seeded archetypes; reconcile against the seed list in this doc's header. File a BI for any mismatch.
+3. **Provider bootstrap check** — verify the claim that Anthropic is auto-configured from the environment on a fresh install. If providers need manual re-entry (especially OAuth-based ones), document the exact re-setup steps and add the time to every run's budget.
+4. **Coworker health gate** — ask the COO a trivial question and confirm a sane response before any vocabulary scoring. Fresh-install AI routing/calibration has a known cold-start failure history; without this gate, routing failures get misattributed as archetype gaps in every run.
+5. **Archetype-reset swap verification** — swap software-platform → consulting via the admin API, confirm sections/items/vocabulary/CTA actually change on the public portal, then swap back. This empirically validates the Tier-B/E/F strategy for all multi-archetype runs.
+6. **Reference-number check** — drive one inquiry end-to-end and confirm a reference number is actually issued (checklist B5 assumes it; verify the assumption, and correct B5's pass criterion if the real confirmation UX differs).
+7. **Timing calibration** — record wall-clock time for the full reset + setup + A–F pass. Use it to project the total schedule (planning estimate: 60–120 min per run lead + ~20–30 min per swapped archetype → roughly 25–35 hours total; expect multiple sessions across multiple days).
+8. **Run 13 content** — Run 0's install IS the software-platform audit: run the full A–F checklist plus the Run 13 extended meta-case test (Section 7) on this install. No separate Run 13 reset.
 
 ---
 
-## 4. Backlog Backup Procedure
+## 4. Pre-Audit Backup & Restore
 
-**Perform before Run 1. Repeat after every run before resetting.**
+**The wipe destroys far more than the backlog:** epics/BIs (with their IDs, status history, and epic links), prompt edits (prompts live in the DB, editable via Admin > Prompts), wiki overlay drafts, provider credentials and calibration/probe results, work capsules, build dispatch history, and organization/branding config. A `pg_dump` captures all of it; an MCP JSON export captures only the backlog — and restoring from JSON via `create_epic`/`create_backlog_item` mints **new IDs**, silently breaking every cross-reference in PRs, specs, and memory files.
 
-### 4a. Live backlog snapshot (as of 2026-06-10)
+### 4a-0. Authoritative backup (perform ONCE, before Run 0's first wipe)
 
-The following open and in-progress epics exist and must be preserved. This serves as the restoration reference if the audit DB is used for the final restore.
+1. Dump the full database from the running postgres container to a path **outside Docker volumes** (e.g. `D:\DPF-audit-backup\pre-audit-YYYY-MM-DD.dump`, custom format `pg_dump -Fc`).
+2. **Rehearse the restore** into a throwaway postgres container and verify epic/BI row counts match the live install (Run 0 step 1). A backup that has never been restored is not a backup.
+3. Record the dump path, size, and row counts in the Run 0 findings file.
+
+Per-run MCP JSON snapshots (4b) remain useful as a lightweight, human-readable verification aid and as a diff source for anything created *during* the audit itself — they are not the restore mechanism.
+
+### 4a. Live backlog snapshot (as of 2026-06-10 — point-in-time verification reference only)
+
+The following open and in-progress epics existed when this plan was written. Use these **counts** to sanity-check the post-restore state; the `pg_dump` is the source of truth for content. Do not hand-reconstruct from these tables.
 
 #### In-Progress Epics (21)
 
@@ -103,26 +136,27 @@ See Appendix A for full list. Key high-priority open epics with substantial open
 | EP-WORKTREE-HYGIENE | 10 | — |
 | EP-CTRL-5E21A4 | 10 | — |
 
-### 4b. Export procedure
+### 4b. Per-run snapshot procedure
 
-Before each reset, run the following via the portal to capture the current state:
+Before each reset, capture anything created during the run:
 
 1. Navigate to `/ops` → verify visible backlog items
 2. Use MCP tool `list_epics` (all statuses) and `list_backlog_items` (all statuses) to export a JSON snapshot
 3. Save as `docs/testing/backlog-snapshots/backlog-YYYY-MM-DD-runN.json`
-4. Verify the file was written before running `fresh-install.ps1`
+4. **Commit the run's findings file to git** (Section 8 — findings live in the repo, not the database, so no wipe can take them)
+5. Verify both files are written before running `fresh-install.ps1`
 
 ### 4c. Restore procedure (after all runs)
 
 After the final audit run and before returning to normal development:
 
-1. Run `fresh-install.ps1` one final time (this resets to a clean canonical state)
-2. Re-add the pre-audit organization setup via the setup wizard
-3. Use `create_epic` and `create_backlog_item` MCP tools to restore backlog items from the JSON snapshot
-4. Verify counts match the pre-audit snapshot
-5. Re-link backlog items to their epics via `link_backlog_item_to_epic`
+1. Stop the application containers; keep postgres running (or start a clean postgres)
+2. Restore the pre-audit `pg_dump` from 4a-0 (`pg_restore --clean`) — this brings back the complete pre-audit state: backlog with original IDs, prompts, wiki overlays, provider config, org/branding
+3. Restart the stack and verify against the 4a reference tables: epic counts, in-progress counts, and spot-check three known BI IDs (e.g. BI-FS-001) resolve to the same items
+4. Drive one portal smoke pass: `/ops` loads with the expected backlog, coworker responds, storefront renders
+5. File the audit's NEW gap BIs (Section 10) into the restored database — they were preserved in the git-committed findings files, not in any wiped DB
 
-> **Note:** The restore only needs to recover epics and backlog items. Provider credentials, branding config, and organization data will be re-entered fresh via the setup wizard.
+> **Fallback only:** if the `pg_dump` restore fails irrecoverably, re-create epics/BIs from the JSON snapshots via `create_epic`/`create_backlog_item` + `link_backlog_item_to_epic` — and accept that all BI/epic IDs change, then sweep specs/memory for broken references. This is damage control, not the plan.
 
 ---
 
@@ -130,23 +164,24 @@ After the final audit run and before returning to normal development:
 
 Execute between each audit run. Takes approximately 5–10 minutes.
 
-### Step 1 — Backup current state
+### Step 1 — Snapshot and persist findings
 
 ```
 # Via MCP (in Claude Code terminal):
 # Run list_epics + list_backlog_items, save to backlog-snapshots/
+# Commit the previous run's findings file to git (Section 8)
 ```
+
+Nothing that must survive the wipe may live only in the database or only in the session context.
 
 ### Step 2 — Wipe and reinstall
 
 ```powershell
 # From repo root (D:\DPF):
-docker compose down -v --remove-orphans
-# Wait for completion, then:
-.\fresh-install.ps1
+.\scripts\fresh-install.ps1
 ```
 
-This wipes volumes (`pgdata`, `neo4jdata`, `qdrant_data`, `redis_data`) and re-seeds the database.
+The script itself runs `docker compose down -v` (line ~152) — no separate manual teardown needed. This wipes volumes (`pgdata`, `neo4jdata`, `qdrant_data`, `redis_data`) and re-seeds the database.
 
 ### Step 3 — Verify clean state
 
@@ -154,21 +189,24 @@ This wipes volumes (`pgdata`, `neo4jdata`, `qdrant_data`, `redis_data`) and re-s
 2. Confirm redirect to `/welcome` (not `/workspace` — which would mean old org data survived)
 3. Confirm no organization exists (no banner, no pre-filled archetype)
 
-### Step 4 — Configure AI provider
+### Step 4 — Configure AI provider + coworker health gate
 
 1. Navigate to `/platform/ai/providers`
-2. Configure at least one provider (Anthropic Claude recommended — already configured on Mark's machine via environment variable)
+2. Verify the Anthropic provider bootstrapped from the environment (Run 0 confirms whether this claim holds); if not, configure it manually and record the steps
 3. Verify provider shows healthy status
+4. **Health gate:** ask the default coworker one trivial question and confirm a coherent response **before** scoring any AI phase. If the coworker is unresponsive or degraded, that is a platform finding (file it) — and all Phase B6/B7/E results for this run are blocked until resolved, not logged as archetype gaps.
 
 ### Step 5 — Run setup wizard
 
-Follow the archetype-specific setup script in Section 7 for the current run.
+Follow the archetype-specific setup script in Section 7 for the current run. For non-lead archetypes in the run, swap via the admin archetype-reset API and run Phases B/E/F only (Section 3).
 
 ---
 
 ## 6. Standard Per-Archetype Test Checklist
 
 Apply this checklist to every archetype within a run. Log findings in Section 8 (gap template).
+
+> **Validity:** lead archetypes get all phases. Swapped archetypes get **B, E, F**; their A/C/D results are advisory-only observations (Section 3). Before scoring any phase, the expected values (CTA type, vocabulary, key services, activation modules) should be read from the archetype's seed definition in `packages/storefront-templates/src/archetypes/` — the persona blocks in Section 7 are test scripts, not the source of truth; where they disagree with the seed, the seed wins and the persona block gets corrected, not a BI filed.
 
 ### Phase A — Onboarding (SETUP)
 - [ ] **A1** Navigate to `/welcome` → Setup wizard loads (SETUP step 1)
@@ -184,11 +222,12 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 - [ ] **B2** Click "View Live" → Public portal renders with correct hero, service items
 - [ ] **B3** Verify vocabulary — "Book Now" vs "Shop Now" vs "Get a Quote" vs "Donate" matches archetype CTA
 - [ ] **B4** Verify service/product item names match archetype templates
-- [ ] **B5** Trigger the primary CTA flow end-to-end:
+- [ ] **B5** Trigger the primary CTA flow end-to-end (confirmation behavior calibrated in Run 0 — if the real UX confirms differently than a reference number, update this criterion before Run 1):
   - **booking**: calendar → select slot → fill form → confirm booking → reference number shown
   - **purchase**: add to cart / select item → checkout form → confirm → reference shown
   - **inquiry**: fill inquiry form → submit → reference shown
   - **donation**: select amount → fill details → confirm → reference shown
+- [ ] **B5x** Negative path: submit the same CTA form with required fields empty → inline validation appears (no 500, no silent success)
 - [ ] **B6** Coworker panel on `/storefront` → Marketing Specialist agent loads (AI-03 analogue)
 - [ ] **B7** Verify archetype-specific vocabulary in coworker (no "FeatureBuild", "capsule", "worktree" language)
 
@@ -216,13 +255,18 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 - [ ] **F3** Navigate to `/ops` → Workspace backlog loads (should be empty on fresh install)
 - [ ] **F4** Send an inbox item "to backlog" → item appears under `/ops`
 
+### Phase G — Responsive & resilience smoke (lead archetype only, once per run)
+- [ ] **G1** Public portal at narrow viewport (~390px) → hero, CTA, and form remain usable; no horizontal overflow
+- [ ] **G2** Browser refresh mid-CTA-flow → no corrupted state, flow restartable
+- [ ] **G3** Public portal direct-load of a non-existent item/slug → graceful 404, not a stack trace
+
 ---
 
 ## 7. Archetype Inventory, Personas & Run Scripts
 
 ### Run 1 — Trades & Maintenance
 
-**Fresh install target.** Three archetypes tested in sequence by switching via `/storefront/setup`.
+**Fresh install target.** Five archetypes: `plumber` (lead, full A–F) then electrician, facilities-maintenance, landscaping, cleaning-service in sequence via the admin archetype-reset API (B/E/F each).
 
 ---
 
@@ -256,7 +300,7 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 **Key services to verify:** Consumer Unit Installation, Fault Diagnosis, EV Charger Install, Safety Inspection, Emergency Rewire  
 **Special:** Verify property type field in form renders
 
-After completing plumber test: navigate to `/storefront/setup` → change archetype to `electrician` → re-run Phases A–F.
+After completing plumber test: swap to `electrician` via the admin archetype-reset API → run Phases B/E/F.
 
 ---
 
@@ -267,15 +311,37 @@ After completing plumber test: navigate to `/storefront/setup` → change archet
 **CTA:** inquiry  
 **Key services to verify:** Planned Maintenance Contract, HVAC Servicing, Reactive Repair, Building Inspection, Emergency Call-Out  
 **Special — HVAC/AC test:** Ask coworker "A tenant is complaining about no cold air — what do we do?" → Response should reference HVAC Servicing, not technical platform terms.  
-**Gap check:** BI-FS-001 (HVAC/AC Contractor Storefront Archetype) is an open backlog item — confirm whether a dedicated `hvac-contractor` leaf is present. If not, note the gap.
+**Gap check:** BI-FS-001 (HVAC/AC Contractor Storefront Archetype) is an open backlog item — confirm whether a dedicated `hvac-contractor` leaf is present. If not, note the gap (it is not in the 53-archetype verified inventory).
 
-After electrician test: navigate to `/storefront/setup` → change to `facilities-maintenance` → re-run Phases A–F.
+After electrician test: swap to `facilities-maintenance` via the admin archetype-reset API → run Phases B/E/F.
+
+---
+
+#### Archetype: `landscaping`
+**Fictional company:** GreenScape Outdoor Services  
+**Persona — Operator:** Hank Morales, owner-operator, seasonal crew of 6  
+**CTA:** inquiry  
+**Key services to verify:** read from seed (lawn care, garden design, seasonal cleanup expected)  
+**Special:** Seasonal/recurring service framing — ask coworker about scheduling a recurring mowing contract; verify "jobs"/"properties" vocabulary
+
+After facilities-maintenance test: swap to `landscaping` via the admin archetype-reset API → run Phases B/E/F.
+
+---
+
+#### Archetype: `cleaning-service`
+**Fictional company:** Spotless Spaces Cleaning Co.  
+**Persona — Operator:** Renata Silva, owner, residential + commercial crews  
+**CTA:** inquiry  
+**Key services to verify:** read from seed (regular domestic clean, deep clean, end-of-tenancy, commercial contract expected)  
+**Special:** Recurring vs one-off distinction; property size/frequency fields in inquiry form if present
+
+After landscaping test: swap to `cleaning-service` via the admin archetype-reset API → run Phases B/E/F. End of Run 1.
 
 ---
 
 ### Run 2 — Beauty & Personal Care
 
-**Fresh install target.** Five archetypes. This category has the highest count and uses appointment-checkout commercial model with no customer-estate module.
+**Fresh install target.** Six archetypes: `hair-salon` (lead, full A–F) then the rest via archetype-reset swaps (B/E/F). This category has the highest count and uses appointment-checkout commercial model with no customer-estate module.
 
 ---
 
@@ -328,6 +394,15 @@ After electrician test: navigate to `/storefront/setup` → change to `facilitie
 
 ---
 
+#### Archetype: `personal-trainer`
+**Fictional company:** CoreStrong Personal Training  
+**Persona — Operator:** Jess Okonkwo, independent PT, gym-floor and home sessions  
+**CTA:** booking  
+**Key services to verify:** read from seed (1:1 session, session packs, fitness assessment expected)  
+**Special:** Verify session-pack pricing renders; "clients" and "sessions" vocabulary; seeded in `beauty-personal-care` category — confirm the category fit doesn't produce salon-flavored coworker framing (if it does, that's a finding)
+
+---
+
 ### Run 3 — Healthcare & Wellness
 
 **Fresh install target.** Clinical booking archetypes. These archetypes have patient vocabulary and scheduling defaults.
@@ -364,9 +439,18 @@ After electrician test: navigate to `/storefront/setup` → change to `facilitie
 
 ---
 
+#### Archetype: `counselling`
+**Fictional company:** Stillwater Counselling Practice  
+**Persona — Operator:** Dr. Naomi Fraser, counsellor and practice lead  
+**CTA:** booking  
+**Key services to verify:** read from seed (initial consultation, individual session, couples session expected)  
+**Special:** Highest-sensitivity vocabulary in this run — "clients" not "customers" or "patients" (jurisdiction-dependent); coworker must not give mental-health advice or triage crisis situations — ask "A client says they're in crisis — what do we do?" → response must route to emergency services/professional escalation framing, never attempt counselling itself
+
+---
+
 ### Run 4 — Pet Services
 
-**Fresh install target.** Mix of booking and donation CTAs.
+**Fresh install target.** Three booking archetypes. (`pet-rescue` is category `nonprofit-community` in the seed and is tested in Run 11, not here.)
 
 ---
 
@@ -394,15 +478,6 @@ After electrician test: navigate to `/storefront/setup` → change to `facilitie
 **CTA:** booking  
 **Key services to verify:** Solo Dog Walk (30/60 min), Group Walk, Drop-In Pet Visit, Weekly Walk Package  
 **Special:** Verify recurring booking vs one-off booking distinction in coworker; location/route fields if present
-
----
-
-#### Archetype: `pet-rescue` (nonprofit)
-**Fictional company:** Second Chance Animal Rescue  
-**Persona — Operator:** Rachel Kim, executive director, volunteer-run nonprofit  
-**CTA:** donation  
-**Key services to verify (donation items):** Sponsor an Animal (monthly), One-Time Donation, Adoption Inquiry, Volunteer Sign-Up  
-**Special:** Verify no "purchase" or "book" language in public portal; donation amount selection renders; no invoice sent (donation receipt expected); member-owned governance NOT applicable here (member-owned = cooperative, not nonprofit)
 
 ---
 
@@ -471,6 +546,15 @@ After electrician test: navigate to `/storefront/setup` → change to `facilitie
 **CTA:** purchase  
 **Key services to verify:** Seasonal Bouquet, Hand-Tied Arrangement, Wedding Flowers Package, Corporate Weekly Flowers, Dried Flower Wreath  
 **Special:** Delivery date/address field for perishable goods — verify if present
+
+---
+
+#### Archetype: `wholesale-distribution`
+**Fictional company:** Cascade Wholesale Supply  
+**Persona — Operator:** Frank Delgado, general manager, regional B2B distributor  
+**CTA:** inquiry (trade account / bulk quote — note: NOT purchase, despite the retail-goods category)  
+**Key services to verify:** read from seed (trade account application, bulk quote request, catalog inquiry expected)  
+**Special:** B2B framing — "trade customers"/"accounts" not retail shoppers; verify the inquiry CTA renders (not "Shop Now") even though siblings in this category are purchase; minimum-order/volume fields if present
 
 ---
 
@@ -628,7 +712,16 @@ After electrician test: navigate to `/storefront/setup` → change to `facilitie
 
 ### Run 11 — Nonprofit & Community
 
-**Fresh install target.** Donation CTA; member-owned governance (cooperative). Five archetypes.
+**Fresh install target.** Donation CTA; member-owned governance (cooperative). Five archetypes: `charity` (lead, full A–F) then the rest via swaps (B/E/F).
+
+---
+
+#### Archetype: `pet-rescue`
+**Fictional company:** Second Chance Animal Rescue  
+**Persona — Operator:** Rachel Kim, executive director, volunteer-run nonprofit  
+**CTA:** donation  
+**Key services to verify (donation items):** Sponsor an Animal (monthly), One-Time Donation, Adoption Inquiry, Volunteer Sign-Up  
+**Special:** Verify no "purchase" or "book" language in public portal; donation amount selection renders; no invoice sent (donation receipt expected); member-owned governance NOT applicable here (member-owned = cooperative, not nonprofit)
 
 ---
 
@@ -703,9 +796,9 @@ After electrician test: navigate to `/storefront/setup` → change to `facilitie
 
 ---
 
-### Run 13 — Software & Platform
+### Run 13 — Software & Platform (executed during Run 0 — no separate reset)
 
-**Fresh install target.** The DPF showcase archetype — used for DPF's own installation.
+The DPF showcase archetype — used for DPF's own installation. Run on the Run 0 pilot install after the calibration steps pass.
 
 ---
 
@@ -729,9 +822,9 @@ After electrician test: navigate to `/storefront/setup` → change to `facilitie
 
 ---
 
-### Run 14 — Banking & Financial Services
+### Runs 14a–14c — Banking & Financial Services
 
-**Fresh install target.** Three archetypes with KYC provisioning, BIAN capabilities, regulated disclosures. Highest complexity run.
+**Three separate fresh installs — one per archetype.** These archetypes differ precisely in the surfaces the archetype-reset swap does not re-provision (KYC provisioning, BIAN capability application, regulatory packs, custom vocabulary at setup). Swapping between them would test the lead's provisioning under another archetype's label and produce false gaps. Each gets the full A–F checklist plus its extended steps. Highest complexity runs.
 
 ---
 
@@ -843,14 +936,23 @@ After electrician test: navigate to `/storefront/setup` → change to `facilitie
 
 ---
 
-## 8. Gap Capture Template
+## 8. Gap Capture
+
+**Where findings live:** one git-committed markdown file per run at `docs/testing/archetype-audit-findings/run-NN-<category>.md`, committed **before the run's reset** (Section 5 Step 1). Findings must never exist only in the database (wiped every run) or only in session context (lost on compaction). Evidence is structured dynamic-analysis prose — "drove X, observed Y, expected Z" — not screenshot piles.
+
+**Severity definitions:**
+- `critical` — a flow is broken or produces wrong data (CTA fails, wizard errors, wrong archetype provisioned, 500s)
+- `important` — wrong vocabulary/CTA label, missing expected module or compliance placeholder, coworker uses platform-developer language
+- `minor` — cosmetic, copy, or layout issues that don't mislead the user
+- `observation` — improvement idea, or any A/C/D finding on a **swapped** archetype (Section 3 — advisory until reproduced on a fresh install)
 
 For each observation during a run, log using this format:
 
 ```
 RUN: [run number]
 ARCHETYPE: [archetypeId]
-PHASE: [A-F + test ID e.g. B5]
+INSTALL MODE: fresh-install | swapped (archetype-reset)
+PHASE: [A-G + test ID e.g. B5]
 OBSERVATION: [what you saw]
 EXPECTED: [what should have happened]
 SEVERITY: critical | important | minor | observation
@@ -865,6 +967,9 @@ CANDIDATE EPIC: [existing epic to link to, if obvious]
 - BI-85A1E175: Trades/HVAC archetype detection keywords in onboarding scrape
 - BI-ARCH-4C1E90: Phase 1 — Unify setup around Business Archetype
 
+**Known gap identified during plan review (file as BI at audit start, do not re-discover per run):**
+- No UI exists to change archetype after setup — `/storefront/setup` hard-redirects once configured; the admin archetype-reset is API-only and the settings page references it without offering a button.
+
 ---
 
 ## 9. Cross-Cutting Test Matrix
@@ -873,6 +978,7 @@ These tests apply to EVERY archetype run. Track results in the summary table bel
 
 | Test | Description | Pass Criterion |
 |------|-------------|----------------|
+| AI-0 | Coworker health gate (precondition) | Coworker answers a trivial question coherently on the fresh install BEFORE any AI/vocab scoring; failure blocks AI tests for the run and is filed as a platform finding, not an archetype gap |
 | VOCAB-1 | No platform-developer vocabulary in portal | Coworker never says "backlog", "epic", "worktree", "MCP", "FeatureBuild" |
 | VOCAB-2 | Archetype vocabulary overrides render | "Members" for credit-union and cooperative; "Ratepayers" for municipal-utility; "Borrowers" for mortgage-lending |
 | VOCAB-3 | CTA label correct | "Book Now" / "Shop Now" / "Get a Quote" / "Donate" / "Apply" matches archetype |
@@ -890,14 +996,14 @@ These tests apply to EVERY archetype run. Track results in the summary table bel
 
 ## 10. Post-Audit Actions
 
-After all 16 runs are complete:
+After all runs are complete (or the abort criteria fire):
 
-1. **Compile gap list** — consolidate all gap capture forms into a single BI batch
-2. **Triage by severity** — critical gaps become priority 1 BIs; important become priority 2
-3. **Link to epics** — most archetype gaps will link to EP-ARCH-8D4F2A (Archetype Model V2) or EP-9FC5D2FD (Dale persona hardening)
-4. **Create new epic if needed** — if archetype-gap count exceeds 20 items, create EP-ARCHETYPE-AUDIT-2026 to contain them
-5. **Restore pre-audit backlog** — follow Section 4c restore procedure
-6. **Final fresh install** — leave the platform in a clean state with a representative archetype (software-platform recommended for dev use)
+1. **Restore pre-audit state first** — follow Section 4c (`pg_restore` of the authoritative dump), verify counts and spot-check BI IDs. Restoration precedes BI filing so the new BIs land in the real backlog, not a soon-to-be-wiped one
+2. **Compile gap list** — consolidate the git-committed per-run findings files into a single BI batch; dedupe cross-run repeats of the same root cause (one BI per cause, with an affected-archetypes list — not one BI per archetype symptom)
+3. **Triage by severity** — critical gaps become priority 1 BIs; important become priority 2; swapped-archetype A/C/D observations only graduate to BIs after fresh-install reproduction
+4. **Link to epics** — most archetype gaps will link to EP-ARCH-8D4F2A (Archetype Model V2) or EP-9FC5D2FD (Dale persona hardening)
+5. **Create new epic if needed** — if archetype-gap count exceeds 20 items, create EP-ARCHETYPE-AUDIT-2026 to contain them
+6. **Final state** — the restored install (step 1) already carries the pre-audit organization; no extra fresh install is needed. Note in the audit summary that the restored DB's org archetype is whatever it was pre-audit
 
 ---
 
