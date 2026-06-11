@@ -173,6 +173,9 @@ fi
 # against a consistent DB rather than a new image landing on an un-migrated one.
 # DPF migrations are additive (expand), so applying them while the old portal is
 # still running is safe — it simply ignores the new columns until it is replaced.
+# NOTE: step 4b (seed) re-runs the full /docker-entrypoint.sh AFTER the swap,
+# which includes migrations as part of its retry loop — safe because migrate
+# deploy is idempotent. Step 3b is still needed as the pre-swap schema guard.
 emit_step migrate
 if [[ $_dry_run -eq 0 ]]; then
   docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
@@ -190,6 +193,33 @@ if [[ $_dry_run -eq 0 ]]; then
   docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
     "${_f_args[@]}" up -d --no-deps --force-recreate portal
 fi  # DPF_PLATFORM_VERSION stays exported from above so any rebuild keeps the stamp
+
+# --- Step 4b: seed ---
+# Re-run /docker-entrypoint.sh from the freshly swapped portal image so that
+# any new reference data (archetypes, regulatory entries, EA reference models,
+# capability perspectives, provider registries, catalog reconciliation) ships
+# atomically with the code that expects it.
+#
+# promote.sh step 4 uses --no-deps, so portal-init (the one-shot service that
+# normally runs the full entrypoint at install time) never runs. The running
+# portal's CMD is the app server, not /docker-entrypoint.sh. Without this step
+# a self-upgrade that ships new seed rows leaves the live DB at the previous
+# seed state — features that depend on the new rows silently degrade or throw
+# missing-row errors. This was the root cause of the banking archetype
+# post-upgrade invisibility that required a manual seed recovery (BI-86FC0336).
+#
+# All seed operations use upsert, so re-running is IDEMPOTENT. This step is
+# FAIL-CLOSED: set -e aborts the upgrade here if the seed fails, keeping the
+# stale-data failure visible rather than letting it silently pass health checks.
+# The seed runs in a one-shot sibling container (--rm) that talks directly to
+# postgres; the portal is already started and the two containers run concurrently,
+# which is safe because all seed writes are additive. The -T flag drops the
+# pseudo-tty so structured log output reaches the promoter's stdout cleanly.
+emit_step seed
+if [[ $_dry_run -eq 0 ]]; then
+  docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+    "${_f_args[@]}" run --rm -T --no-deps --entrypoint /docker-entrypoint.sh portal
+fi
 
 # --- Step 5: health ---
 # Wait for the recreated portal to report healthy (it takes time to boot).
