@@ -1,4 +1,6 @@
 import { createHash } from "crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Prisma, PrismaClient } from "../generated/client/client";
 
 export const MARK_DPF_PLATFORM_PROFILE_ID = "mark-dpf-platform";
@@ -153,6 +155,112 @@ export function buildDecisionPerspectiveSeed(): DecisionPerspectiveSeed {
     },
     materials,
   };
+}
+
+// ─── Profession profile seeding (WSID Phase 1 — BI-3AC81394) ────────────────
+
+type ProfessionFamilyEntry = {
+  professionKey: string;
+  label: string;
+  roles: string[];
+  contextSlugs: string[];
+};
+
+function loadProfessionFamilies(): ProfessionFamilyEntry[] {
+  const registryPath = join(__dirname, "../../../docs/professions/registry.json");
+  const raw = readFileSync(registryPath, "utf-8");
+  const data = JSON.parse(raw) as { families: ProfessionFamilyEntry[] };
+  return data.families;
+}
+
+/**
+ * Seed one empty DecisionPerspectiveProfile per registered profession family
+ * (kind="profession"). Profiles without corpus still get a row so their
+ * `defer` counts function as the demand signal for Phase 6 rollout order.
+ * Idempotent upsert; loud skip-logging per the silent-seed-skips audit pattern.
+ */
+export async function seedProfessionProfiles(
+  db: DecisionPerspectiveSeedClient,
+): Promise<{ seeded: number; skipped: number }> {
+  const families = loadProfessionFamilies();
+  let seeded = 0;
+  let skipped = 0;
+
+  for (const family of families) {
+    const profileId = `wsid-${family.professionKey}`;
+    const versionId = `wsid-${family.professionKey}-v1`;
+
+    try {
+      await db.decisionPerspectiveProfile.upsert({
+        where: { profileId },
+        update: {
+          name: family.label,
+          kind: "profession",
+          scope: {
+            domains: ["professional-practice"],
+            professionKey: family.professionKey,
+            roles: family.roles,
+          },
+          fallbackProfileId: MARK_DPF_PLATFORM_PROFILE_ID,
+          status: "active",
+        },
+        create: {
+          profileId,
+          name: family.label,
+          kind: "profession",
+          scope: {
+            domains: ["professional-practice"],
+            professionKey: family.professionKey,
+            roles: family.roles,
+          },
+          fallbackProfileId: MARK_DPF_PLATFORM_PROFILE_ID,
+          defaultResolver: { type: "build-studio-owner" },
+          autonomyPolicy: {
+            allowRecommendation: true,
+            allowArbitration: false,
+            maxRiskForArbitration: "low",
+            minimumConfidenceForRecommendation: 0.55,
+            minimumConfidenceForArbitration: 0.9,
+          },
+          status: "active",
+        },
+      });
+
+      await db.decisionPerspectiveProfileVersion.upsert({
+        where: { versionId },
+        update: { changeSummary: `Empty profession profile for ${family.label}.` },
+        create: {
+          versionId,
+          profileId,
+          versionNumber: 1,
+          materialFingerprint: createHash("sha256")
+            .update(`${profileId}-v1-empty`)
+            .digest("hex"),
+          changeSummary: `Empty profession profile for ${family.label}.`,
+        },
+      });
+
+      await db.decisionPerspectiveProfile.update({
+        where: { profileId },
+        data: { currentVersionId: versionId },
+      });
+
+      seeded++;
+    } catch (err) {
+      console.warn(
+        `[seed-profession-profiles] SKIP ${profileId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      skipped++;
+    }
+  }
+
+  if (skipped > 0) {
+    console.warn(
+      `[seed-profession-profiles] ${skipped} profile(s) skipped — check warnings above.`,
+    );
+  }
+
+  return { seeded, skipped };
 }
 
 export async function seedDecisionPerspective(db: DecisionPerspectiveSeedClient): Promise<{
