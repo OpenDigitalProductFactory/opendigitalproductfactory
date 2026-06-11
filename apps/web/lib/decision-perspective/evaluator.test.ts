@@ -12,7 +12,7 @@ import type {
   DecisionPerspectiveProfile,
   PerspectiveMaterial,
 } from "./types";
-import { PLAN_READINESS_DOMAIN_CLASS } from "./types";
+import { DECISION_DOMAIN_CLASSES, PLAN_READINESS_DOMAIN_CLASS } from "./types";
 
 const DOMAIN = PLAN_READINESS_DOMAIN_CLASS;
 
@@ -294,5 +294,27 @@ describe("evaluateDecisionPerspective", () => {
       }),
     );
     expect(result.outcomeType).toBeDefined();
+  });
+
+  it("accepts profession kind without throwing", () => {
+    const result = evaluateDecisionPerspective(
+      baseInput({
+        profile: profile({ kind: "profession" }),
+        riskTier: "medium",
+        materials: [material({ confidenceWeight: 1 })],
+      }),
+    );
+    expect(result.outcomeType).toBeDefined();
+  });
+
+  it("professional-practice is a registered domain class", () => {
+    expect(DECISION_DOMAIN_CLASSES).toContain("professional-practice");
+    const result = evaluateDecisionPerspective(
+      baseInput({
+        questionDomain: "professional-practice",
+        materials: [material({ confidenceWeight: 1 })],
+      }),
+    );
+    expect(result.domainClass).toBe("professional-practice");
   });
 });
