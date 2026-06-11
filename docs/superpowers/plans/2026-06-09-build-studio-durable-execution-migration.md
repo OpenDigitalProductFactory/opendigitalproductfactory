@@ -181,3 +181,26 @@ No manually-triggerable multi-step function exists to prove "completed steps ret
 Quiescence level was `normal` throughout (checked in `PlatformConfig` `portal.quiescence`); the stale `ready-to-swap`/`deferred` `QuiescenceRun` rows from prior upgrades are inert audit rows, not active state. No build was in flight (one build parked in `ideate` since 01:45Z — the operator-reported Build Studio misbehavior, untouched by this spike and still to be diagnosed separately). Zero `working` TaskRuns before, during, and after. Spike files removed from the sandbox; the only residue is the orphaned `BackupRun` row retained as evidence.
 
 **Phase-0 exit: both unknowns answered; Phase 1 is unblocked and its design inputs are confirmed (poll/re-attach, in-sandbox kill for timeouts, idempotent start steps).**
+
+---
+
+## Phase 1 acceptance — dated addendum (2026-06-10/11, live install)
+
+**Verdict: the Phase-1 acceptance gate is MET.** Functional kill-tests on the live install (deployed bundle `8b7d5868`, flag `DPF_BUILD_DURABLE_EXECUTION_ENABLED=1` via the compose-plumbed host `.env`), on a clearly-labeled contained fixture build (`bld-durable-p1-accept`, created directly because the governed intake path is the component under repair; all fixture rows removed after evidence collection).
+
+### Run 1 — failure path + kill (2026-06-10 20:07–20:09Z)
+
+Portal killed at 20:08:29Z mid-`pipeline:db_ready` (dependency install in flight). **One single Inngest run spanned the kill** (started 20:07:21, ended 20:09:27 — the run did not die with the portal). The engine re-invoked against the rebooted portal; the install step re-ran and failed deterministically (see environmental finding below); the function produced a **journaled terminal `failed` state with the real error preserved**, finalize ran (TaskRun → `failed`, sandbox slot released, audit row written). Memoization/idempotency evidence: exactly one TaskRun row, `containerId`/`hostPort`/`startedAt` stable across the kill, no second sandbox. Under the legacy path this identical kill produces a stranded build requiring boot-hook rescue; the durable path produced a clean operator-visible terminal state with zero boot-hook involvement.
+
+### Run 2 — happy path + kill (2026-06-11 00:10–00:17Z)
+
+Fresh state, clean sandbox store. Portal killed at 00:11:18Z during the db-init/deps stretch. **One single Inngest run spanned the kill** (00:10:30 → 00:17:38); resume continued through `deps_installed → code_generated → tests_run → complete`; activity row "Durable build pipeline completed successfully"; TaskRun → `completed`; **boot hooks silent for this build across both reboots** (log-verified). Resume-across-restart is therefore proven on both the failure and happy paths — two kills, two recoveries, zero human intervention, zero boot-hook involvement.
+
+### Environmental findings surfaced by the kill-tests (orthogonal to the migration; all pre-existing on the legacy path)
+
+1. **Run 1's install failure was stale sandbox state, not the migration and not main:** `/workspace/node_modules` virtual store dated 2026-06-07 vs the current lockfile → `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY`. Same tree's lockfile passes `--frozen-lockfile` on a clean store in 34s. Plausibly the cause of the historical stuck-at-`deps_installed` builds. **Follow-up:** the deps step should self-heal (clean `node_modules` + retry once on this error class).
+2. **CRITICAL, pre-existing, now precisely diagnosed — the agentic-loop CLI dispatch executes zero tools.** Run 2's `code_generated` loop (build-architect, Haiku via `anthropic-sub`, cli-adapter `native-mcp`, 49 scopes attached) logged `toolCalls=0 executedTools=0` on every iteration; the model reported the sandbox tools "are not present in this environment", **hallucinated "Done — file created"**, then admitted Blocked — and the pipeline advanced to `complete` with an empty diff because nothing verifies the artifact. The acceptance marker file was never created. Identical loop runs on the legacy path; this is the prime suspect for the operator-reported "Build Studio isn't working" (including builds parked in `ideate`, which run the same loop). Needs its own BI — arguably the most urgent on the board.
+3. **Retry semantics gap for Phase 2:** `ensureBuildTaskRun` finds-and-returns a prior `failed` TaskRun (status filter excludes only archived/canceled); a retried build should get a fresh run identity or an explicit resume semantic.
+4. **Cost-capture placement note:** the `$/build` capture instruments the specialist dispatch path (`claude-dispatch.ts`), which the pipeline's single-loop `code_generated` does not exercise — the capture is correct for orchestrator builds but was not demonstrated by this fixture.
+
+**Phase-1 exit:** machinery proven (resume ×2, memoization, journaled failure, finalize/cleanup, watchdog-covered TaskRun identity, flag plumbing end-to-end incl. compose). Phase 2 (per-task durability + detached/re-attach dispatch) is unblocked; the burn-in gate before Phase 3 deletions remains.
