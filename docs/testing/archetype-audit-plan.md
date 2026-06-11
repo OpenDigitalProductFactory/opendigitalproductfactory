@@ -160,45 +160,111 @@ After the final audit run and before returning to normal development:
 
 ---
 
-## 5. Fresh Install Reset Procedure (Per Run)
+## 5. Reset Procedure (Per Run)
 
-Execute between each audit run. Takes approximately 5–10 minutes.
+Two reset tiers based on what is actually changing between runs.
 
-### Step 1 — Snapshot and persist findings
+### What each tier touches
 
-```
-# Via MCP (in Claude Code terminal):
-# Run list_epics + list_backlog_items, save to backlog-snapshots/
-# Commit the previous run's findings file to git (Section 8)
-```
+| Component | Full install (Run 0 only) | DB-only reset (Runs 1–16) |
+|-----------|--------------------------|--------------------------|
+| PostgreSQL data | wiped + re-seeded | wiped + re-seeded |
+| Neo4j, Qdrant, Redis | wiped | **kept** — empty anyway |
+| Docker containers | torn down and recreated | **kept running** |
+| Docker images | used as-is (no rebuild) | **kept** — unchanged |
+| pnpm / node_modules | re-installed | **kept** — unchanged |
+| `.env` / secrets | regenerated if absent | **kept** — unchanged |
+| Edge Node bootstrap | re-issued | **skipped** |
+| Agent toolchain | re-bootstrapped | **skipped** |
 
-Nothing that must survive the wipe may live only in the database or only in the session context.
+Only PostgreSQL holds the organization, archetype selection, and setup wizard state. Everything else is either empty or irrelevant to archetype testing. Between Runs 1–16, tearing down Docker is pure waste (~5–8 min saved per run, ~80–130 min across 16 runs).
 
-### Step 2 — Wipe and reinstall
+---
+
+### Tier 1 — Full install (Run 0 only)
+
+Run once before Run 0. Sets up Docker from scratch, generates secrets, builds images, bootstraps edge node.
 
 ```powershell
-# From repo root (D:\DPF):
+# From D:\DPF (repo root):
 .\scripts\fresh-install.ps1
 ```
 
-The script itself runs `docker compose down -v` (line ~152) — no separate manual teardown needed. This wipes volumes (`pgdata`, `neo4jdata`, `qdrant_data`, `redis_data`) and re-seeds the database.
+Takes ~10–15 minutes. Validates that Docker Desktop is healthy and images are built and cached for all subsequent runs.
 
-### Step 3 — Verify clean state
+---
+
+### Tier 2 — DB-only reset (Runs 1–16, between every run)
+
+Keeps all containers running. Drops and recreates only the PostgreSQL database, re-runs migrations and seed. Takes ~90 seconds.
+
+**Step 1 — Snapshot and persist findings**
+
+Before every reset, git-commit the previous run's findings file (Section 8) so nothing is lost to the wipe.
+
+**Step 2 — Drop and reseed the database**
+
+```powershell
+# Drop the dpf database inside the running postgres container,
+# recreate it, then re-run migrations and seed from the host.
+# Run from D:\DPF (repo root):
+
+docker compose exec postgres psql -U dpf -d postgres -c "DROP DATABASE dpf WITH (FORCE);"
+docker compose exec postgres psql -U dpf -d postgres -c "CREATE DATABASE dpf;"
+pnpm --filter @dpf/db exec prisma migrate deploy
+pnpm --filter @dpf/db seed
+```
+
+**Step 3 — Restart portal to flush in-memory state**
+
+Next.js caches some state in memory between requests. Restart the portal container so it picks up the fresh DB.
+
+```powershell
+docker compose restart portal portal-init
+```
+
+Wait ~30 seconds for `portal-init` to complete its startup seed pass, then poll for health:
+
+```powershell
+# Poll until healthy (max 2 minutes):
+$deadline = (Get-Date).AddSeconds(120)
+while ((Get-Date) -lt $deadline) {
+    try {
+        $r = Invoke-WebRequest -Uri "http://localhost:3000/api/health" -UseBasicParsing -TimeoutSec 3 -ErrorAction SilentlyContinue
+        if ($r.StatusCode -eq 200) { Write-Host "Portal ready"; break }
+    } catch {}
+    Start-Sleep -Seconds 5
+}
+```
+
+**Step 4 — Verify clean state**
 
 1. Navigate to `http://localhost:3000`
-2. Confirm redirect to `/welcome` (not `/workspace` — which would mean old org data survived)
-3. Confirm no organization exists (no banner, no pre-filled archetype)
+2. Confirm redirect to `/welcome` (no organization exists)
+3. Confirm archetype grid renders with all 53 archetypes visible
 
-### Step 4 — Configure AI provider + coworker health gate
+**Step 5 — Verify provider + coworker health gate**
 
-1. Navigate to `/platform/ai/providers`
-2. Verify the Anthropic provider bootstrapped from the environment (Run 0 confirms whether this claim holds); if not, configure it manually and record the steps
-3. Verify provider shows healthy status
-4. **Health gate:** ask the default coworker one trivial question and confirm a coherent response **before** scoring any AI phase. If the coworker is unresponsive or degraded, that is a platform finding (file it) — and all Phase B6/B7/E results for this run are blocked until resolved, not logged as archetype gaps.
+Provider credentials live in the database — they are wiped on every DB reset and must be re-entered. Run 0 establishes the exact re-entry steps and time budget.
 
-### Step 5 — Run setup wizard
+1. Navigate to `/platform/ai/providers` → re-configure the Anthropic provider (or whichever provider Run 0 confirmed as the standard)
+2. Verify healthy status
+3. **Health gate:** ask the default coworker one trivial question and confirm a coherent response before scoring any AI phase in this run. An unresponsive coworker after re-entry is a platform finding, not an archetype gap.
+
+**Step 6 — Run setup wizard**
 
 Follow the archetype-specific setup script in Section 7 for the current run. For non-lead archetypes in the run, swap via the admin archetype-reset API and run Phases B/E/F only (Section 3).
+
+---
+
+### When to fall back to a full install mid-audit
+
+Use Tier 1 (full install) mid-audit only if:
+- The DB-only reset leaves containers in an unhealthy state after two attempts
+- A previous run triggered a self-upgrade that recycled the portal and left the container in a broken state
+- Docker Desktop reports a volume or container error that `docker compose restart` cannot clear
+
+In these cases: `docker compose down -v` + `.\scripts\fresh-install.ps1`, then pick up the run from Step 4. This is a recovery action, not the normal path.
 
 ---
 
