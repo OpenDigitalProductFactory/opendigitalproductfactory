@@ -28,6 +28,64 @@ DPF ships 53 archetypes across 14 categories. The platform must behave correctly
 
 ---
 
+## 2a. Common vs. Archetype-Specific Test Coverage
+
+Not everything needs to be tested 18 times. The audit evaluates two distinct dimensions:
+
+### Common platform mechanics — test once, deeply, in Run 0
+
+These are shared UI surfaces that behave the same regardless of archetype. Run 0 is the only run that **evaluates** them (pass/fail, finds bugs). Runs 1–16 **use** them as setup tools without re-evaluating the mechanics.
+
+Checklist items tagged `[C]` below fall in this category. In Runs 1–16, execute the step, but do not log a finding if the mechanics work correctly — you have already proved they do. Only log if the step **fails** in a run where it worked in Run 0 (that would indicate a regression, not an archetype gap).
+
+| Surface | What Run 0 proves |
+|---------|------------------|
+| Brand URL scrape engine | Returns meaningful suggestions; handles `.co`, `.co.uk`, `.com` variants |
+| Setup wizard step mechanics | Each step saves, next/back navigation works, financial step pre-fills correctly |
+| Archetype grid | All 53 archetypes visible; grid navigable; card renders name + category + CTA type |
+| `/storefront/team` CRUD | Add/edit/delete provider; availability day-of-week grid saves and syncs |
+| `/storefront/settings/operations` | Operating hours editor: all 7 days toggleable, open/close time pickers, timezone selector, save triggers ProviderAvailability sync |
+| `/storefront/items` CRUD | Add/edit/delete/reorder items; priceAmount field accepts decimal; ctaType selector works |
+| Cart + checkout flow mechanics | Add item → cart badge increments → checkout form: name, email, phone, address; submit issues reference number |
+| `/customer` CRUD | Create account → add contact → add ConfigurationItem (ciType, name, description); all three forms save and link |
+| `/finance/suppliers` | Add supplier: name, contact saves correctly |
+| `/finance/bills/new` | Add supplier, add line items (description, qty, unit price), totals calculate, save to draft |
+| `/finance/invoices/new` | Link customer account, add line items, totals calculate, save to draft |
+| `/finance/reports/profit-loss` | Report loads; bill expenses appear; invoice revenue appears; net is calculated |
+| `/storefront/inbox` mechanics | Submitted CTAs appear; can open, assign to staff member, send to backlog |
+| Form validation (all surfaces) | Required fields reject empty submission; invalid email rejected; no 500 on malformed input |
+| Navigation structure | All primary shell routes load without 500; 404 path returns graceful error page |
+| Responsive baseline | Public portal at 390px: hero, CTA form usable; no horizontal overflow |
+
+### Archetype-specific dimensions — evaluated on every archetype
+
+These are the reasons we run 53 evaluations. If they are wrong they indicate an archetype gap, not a platform mechanics bug.
+
+| Dimension | What changes per archetype |
+|-----------|---------------------------|
+| CTA type and label | "Book Now" / "Shop Now" / "Get a Quote" / "Donate" / "Apply" |
+| Public portal vocabulary | Service names, persona terms (clients/patients/members/residents), section headings |
+| Domain-specific form fields | Pet info for vet; party size for restaurant; urgency + property type for trades; guest count for catering |
+| Coworker framing | Agent identity, archetype services in responses, vocabulary never crosses into platform-dev terms |
+| Activation modules | Which modules are active for this archetype's activation profile |
+| Compliance section content | Regulatory placeholders present for licensed/regulated archetypes |
+| Finance framing | Commercial model language (subscription vs. appointment-checkout vs. account-based) |
+| Custom vocabulary overrides | Members / Ratepayers / Borrowers / Residents / Patients rendered on portal |
+| Setup wizard suggestion accuracy | Brand URL scrape suggests the correct archetype |
+
+### Operator persona accessibility — a UX fit dimension, not a pass/fail gate
+
+The auditor is technical. The operator personas (Sandra Hooper the plumber, Chloe Martinez the salon owner, Sam Nguyen the baker) are not. During Phase P and Phase B steps, make a note whenever a step requires knowledge that a non-technical business owner would not have, or when the navigation is non-obvious. Log these as **`minor` findings** (they are UX improvement opportunities, not functional failures). Examples of what to watch for:
+
+- Phase P staff setup: is it obvious to a salon owner that "Configuration Items" is where they add a pet record?
+- Phase P item pricing: is it clear where the price field is and what currency it expects?
+- Phase B5 booking calendar: would a first-time user understand how to navigate the slot picker?
+- Phase G invoice creation: does a non-accountant know the difference between a bill and an invoice?
+
+Any step where the auditor had to think "a real operator would struggle here" → log a minor UX finding with the specific friction point. These become EP-9FC5D2FD (Dale persona hardening) candidates.
+
+---
+
 ## 3. Audit Run Strategy
 
 53 archetypes across **Run 0 (pilot) + 18 install runs**. Each run = one fresh install. The **lead archetype** (bold) is the setup-wizard target and gets the full Phase A–F checklist. Additional archetypes in the same category are swapped in via the admin archetype-reset API (Section 2) and get **Phases B, E, F only** — their Phase A/C/D results would reflect the lead archetype's provisioning and would generate false gaps.
@@ -60,18 +118,66 @@ Total fresh installs: 18 (Run 0, which also serves as Run 13's software-platform
 
 > **Swapped-archetype Phase C/D spot-checks are still allowed** — but log findings as `observation` severity with an explicit "tested post-swap, provisioning not re-run" note, never as `critical`/`important`, until reproduced on a fresh install.
 
-### 3a. Run 0 — Pilot / calibration (MANDATORY before Run 1)
+### 3a. Run 0 — Pilot / calibration + Platform Core Mechanics (MANDATORY before Run 1)
 
-Run 0 exists to validate the audit harness itself so the remaining 18 resets test the platform, not the plan's assumptions. On one fresh install (software-platform):
+Run 0 serves two goals: (a) validate the audit harness so the remaining 18 resets test the platform rather than the plan's assumptions; (b) prove all common platform mechanics (Section 2a) once so Runs 1–16 can treat them as reliable setup tools rather than evaluation subjects. Every item in the Section 2a common-mechanics table must be exercised and confirmed in Run 0.
+
+**Harness validation steps:**
 
 1. **Backup rehearsal** — take the pre-audit `pg_dump` (Section 4), restore it into a throwaway postgres container, and verify row counts match. Do not proceed to any wipe until the restore is proven.
 2. **Inventory confirmation** — on the live install, confirm the archetype grid shows all 53 seeded archetypes; reconcile against the seed list in this doc's header. File a BI for any mismatch.
-3. **Provider bootstrap check** — verify the claim that Anthropic is auto-configured from the environment on a fresh install. If providers need manual re-entry (especially OAuth-based ones), document the exact re-setup steps and add the time to every run's budget.
-4. **Coworker health gate** — ask the COO a trivial question and confirm a sane response before any vocabulary scoring. Fresh-install AI routing/calibration has a known cold-start failure history; without this gate, routing failures get misattributed as archetype gaps in every run.
-5. **Archetype-reset swap verification** — swap software-platform → consulting via the admin API, confirm sections/items/vocabulary/CTA actually change on the public portal, then swap back. This empirically validates the Tier-B/E/F strategy for all multi-archetype runs.
-6. **Reference-number check** — drive one inquiry end-to-end and confirm a reference number is actually issued (checklist B5 assumes it; verify the assumption, and correct B5's pass criterion if the real confirmation UX differs).
-7. **Timing calibration** — record wall-clock time for the full reset + setup + A–F pass. Use it to project the total schedule (planning estimate: 60–120 min per run lead + ~20–30 min per swapped archetype → roughly 25–35 hours total; expect multiple sessions across multiple days).
-8. **Run 13 content** — Run 0's install IS the software-platform audit: run the full A–F checklist plus the Run 13 extended meta-case test (Section 7) on this install. No separate Run 13 reset.
+3. **Provider bootstrap check** — verify Anthropic is auto-configured from the environment on a fresh install. If providers need manual re-entry, document the exact re-setup steps and time; add that time to every run's budget.
+4. **Coworker health gate** — ask the COO a trivial question and confirm a sane response before any vocabulary scoring. Routing failures get misattributed as archetype gaps in every run if this gate is skipped.
+5. **Archetype-reset swap verification** — swap software-platform → consulting via the admin API, confirm sections/items/vocabulary/CTA actually change on the public portal, then swap back. Empirically validates the Tier-B/E/F strategy for all multi-archetype runs.
+6. **Reference-number check** — drive one inquiry end-to-end and confirm a reference number is actually issued; correct B5's pass criterion if the real confirmation UX differs.
+7. **Timing calibration** — record wall-clock time for the full reset + setup + A–F pass plus all Platform Core Mechanics steps below. Use to project the total schedule.
+8. **Run 13 content** — Run 0's install IS the software-platform audit: run the full A–F checklist plus the Run 13 extended meta-case test (Section 7). No separate Run 13 reset.
+
+**Platform Core Mechanics pass (Run 0 only — exhaustive; subsequent runs use these surfaces as tools, not evaluation subjects):**
+
+*Staff & availability:*
+- [ ] **RC1** `/storefront/team` → Add a provider (name, role, email). Confirm saved.
+- [ ] **RC2** Edit the provider → open availability editor → enable Mon–Fri, set 09:00–17:00, disable Sat–Sun → Save. Confirm ProviderAvailability syncs: provider appears as selectable on the booking calendar for Mon–Fri slots, not Sat–Sun.
+- [ ] **RC3** Add a **second** provider with different hours (e.g. Tue–Sat). Confirm both appear as distinct options in the booking calendar. Verify that a Tue slot shows both providers; a Mon slot shows only the Mon–Fri provider.
+- [ ] **RC4** Delete the second provider. Confirm they no longer appear in the team list or calendar.
+
+*Items:*
+- [ ] **RC5** `/storefront/items` → Add an item with name, description, price £15.00, ctaType booking. Confirm it appears on the public portal.
+- [ ] **RC6** Edit the item → change price to £20.00 → confirm public portal reflects the new price.
+- [ ] **RC7** Reorder items (drag or move-up/move-down) → confirm order changes on public portal.
+- [ ] **RC8** Delete the item → confirm it no longer appears on public portal.
+
+*Operating hours:*
+- [ ] **RC9** `/storefront/settings/operations` → Enable Mon–Fri 09:00–17:00, disable Sat–Sun. Save. Confirm booking calendar only shows slots within those hours.
+- [ ] **RC10** Edit hours → change Mon to 10:00–16:00 → Save. Confirm Mon slots start at 10:00 in the booking calendar.
+- [ ] **RC11** Attempt to set close time ≤ open time (e.g. open 17:00 close 09:00) → confirm validation error, not a silent save.
+
+*Customer + Configuration Item:*
+- [ ] **RC12** `/customer` → Add account (name, industry). Add contact (first, last, email, phone). Confirm contact is linked to account.
+- [ ] **RC13** On the account record → add a Configuration Item: ciType "pet", name "TestPet", description "Species: Dog | Breed: Beagle". Confirm CI appears under the account.
+- [ ] **RC14** Edit the CI description → save → confirm update is reflected on the account record.
+
+*Finance module:*
+- [ ] **RC15** `/finance/suppliers` → Add supplier "Run 0 Test Supplier". Confirm it appears in the suppliers list.
+- [ ] **RC16** `/finance/bills/new` → Select "Run 0 Test Supplier". Add two line items: "Item A" qty 2 £10.00 each, "Item B" qty 1 £25.00. Confirm subtotal shows £45.00. Save to draft.
+- [ ] **RC17** `/finance/invoices/new` → Link to the account created in RC12. Add one line item: "Test Service" qty 1 £60.00. Save to draft.
+- [ ] **RC18** `/finance/reports/profit-loss` → Report loads. Confirm the RC16 bill (£45 expense) and RC17 invoice (£60 revenue) appear. Net = +£15.00.
+- [ ] **RC19** Navigate to `/finance` → Dashboard shows at least one metric reflecting the RC16/RC17 entries.
+
+*Inbox mechanics:*
+- [ ] **RC20** Submit a public portal CTA → navigate to `/storefront/inbox` → confirm the submission appears with submitter name and service.
+- [ ] **RC21** Open the inbox item → assign to a staff member → confirm assignment is saved.
+- [ ] **RC22** Send the inbox item "to backlog" → confirm a backlog item appears at `/ops`.
+
+*Form validation and error handling:*
+- [ ] **RC23** On the public portal CTA form → submit with all required fields empty → confirm inline validation errors appear on each required field; no 500 error; page does not navigate.
+- [ ] **RC24** Enter an invalid email format → confirm email field shows an error on submit.
+- [ ] **RC25** Navigate to a non-existent URL (e.g. `/storefront/nonexistent-slug-12345`) → confirm graceful 404 page, no stack trace.
+
+*Navigation structure:*
+- [ ] **RC26** Load the following routes in sequence and confirm each returns 200 (no 500 or blank page): `/workspace`, `/storefront`, `/storefront/team`, `/storefront/items`, `/storefront/settings/operations`, `/customer`, `/finance`, `/finance/suppliers`, `/finance/bills`, `/finance/invoices`, `/finance/reports/profit-loss`, `/ops`, `/compliance`.
+
+**Finding threshold for RC items:** any RC item that fails is a platform-wide gap (not an archetype gap) — file it as a `critical` BI immediately using the GitHub Issues channel (Section 8) and do not proceed to Run 1 until it is resolved or explicitly deferred as a known limitation that won't affect the archetype-specific evaluation.
 
 ---
 
@@ -273,6 +379,8 @@ In these cases: `docker compose down -v` + `.\scripts\fresh-install.ps1`, then p
 Apply this checklist to every archetype within a run. Log findings in Section 8 (gap template).
 
 > **Validity:** lead archetypes get all phases. Swapped archetypes get **B, E, F**; their A/C/D results are advisory-only observations (Section 3). Before scoring any phase, the expected values (CTA type, vocabulary, key services, activation modules) should be read from the archetype's seed definition in `packages/storefront-templates/src/archetypes/` — the persona blocks in Section 7 are test scripts, not the source of truth; where they disagree with the seed, the seed wins and the persona block gets corrected, not a BI filed.
+>
+> **`[C]` = Common — mechanics proven in Run 0.** In Runs 1–16, execute these steps as setup tools. Only log a finding if the step **fails** (which would be a platform regression, not an archetype gap — see Section 8d). **`[A]` = Archetype-specific — evaluate on every archetype; these are why we run 53 iterations.**
 
 ### Phase A — Onboarding (SETUP)
 - [ ] **A1** Navigate to `/welcome` → Setup wizard loads (SETUP step 1)
@@ -286,41 +394,45 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 ### Phase P — Catalog & Data Prerequisites
 
 > Run after Phase A, before Phase B. These steps seed real staff, items, operating hours, and a test customer so Phase B5 exercises a live business scenario, not an empty shell. For swapped (non-lead) archetypes running only B/E/F, run the applicable P sub-section below before Phase B.
+>
+> **`[C]` mechanics vs. `[A]` archetype-specific:** items tagged `[C]` use surfaces proven in Run 0 (Section 3a). In Runs 1–16, execute them as setup steps; do not score them as findings unless they outright fail. Items tagged `[A]` are archetype-specific and are evaluation targets on every run.
+>
+> **Operator UX-fit dimension:** while executing each step, ask "could the run's operator persona complete this step without guidance?" (Sandra Hooper the plumber; Chloe Martinez the salon owner; Sam Nguyen the baker — not a developer). Flag non-obvious navigation or terminology as a `minor` UX finding. Examples: "Configuration Items" is not an obvious home for a pet record; "bill vs. invoice" distinction may confuse a non-accountant. These feed EP-9FC5D2FD (Dale/operator persona hardening).
 
 #### P-BOOKING — booking CTA archetypes (hair-salon, barber-shop, nail-salon, beauty-spa, optician, personal-trainer, veterinary-clinic, dental-practice, physiotherapy, counselling, pet-grooming, pet-boarding, dog-walking, restaurant, tutoring, driving-school, music-school, dance-studio)
 
-- [ ] **P1** Navigate to `/storefront/team` → Add the lead staff member from the run script (name, role title, email address). Save. Confirm the provider appears in the team list.
-- [ ] **P2** On the team record just created → open availability settings → set Mon–Fri 09:00–17:00 (adjust to archetype-specific hours if noted in the run script). Confirm the provider now appears as selectable in the booking calendar.
-- [ ] **P3** Navigate to `/storefront/settings/operations` → Set operating hours: at minimum Mon–Fri open 09:00, close 17:00 (adjust per run script). Save. Confirm the page returns a saved/confirmed state.
-- [ ] **P4** Navigate to `/storefront/items` → Confirm at least 3 seeded service items are visible with names and prices. Add one new service item manually using the run script's "audit item" name and price, ctaType booking. Save and confirm the new item appears in the list.
-- [ ] **P5-PET** *(veterinary-clinic, pet-grooming, pet-boarding, dog-walking only)* Navigate to `/customer` → Create a customer account using the run script's test owner name (e.g., "Robert Chen"). Add a contact with email and phone. On the account record, navigate to Configuration Items → add a new CI: ciType "pet", name from the run script (e.g., "Max"), description: species, breed, approximate DOB (e.g., "Species: Dog | Breed: Labrador Retriever | DOB: 2020-03-15"). Save. Confirm the CI appears under the account.
-- [ ] **P5-DENTAL** *(dental-practice, physiotherapy, counselling only)* Navigate to `/customer` → Create an account for the run script's test patient (full name, email, phone). Add a contact record. Log the account name for use in Phase B5 and Phase G.
-- [ ] **P5-RESTAURANT** *(restaurant only)* Confirm seeded table-type items represent service slots (Table for 2, Table for 6+, Private Dining). If seeded prices are £0/$0, confirm this is intentional (pay on day). Set operating hours to cover a dinner window (18:00–22:00) at minimum; if lunch and dinner are two separate windows and the UI only supports one, set dinner and log single-window limitation as a minor gap.
+- [ ] **P1** `[C]` Navigate to `/storefront/team` → Add the lead staff member from the run script (name, role title, email address). Save. Confirm the provider appears in the team list. *(UX-fit: would the operator persona know to go here to add a staff member?)*
+- [ ] **P2** `[C]` On the team record just created → open availability settings → set Mon–Fri 09:00–17:00 (adjust to archetype-specific hours if noted in the run script). Confirm the provider now appears as selectable in the booking calendar. *(UX-fit: is the availability day/time editor self-explanatory?)*
+- [ ] **P3** `[C]` Navigate to `/storefront/settings/operations` → Set operating hours: at minimum Mon–Fri open 09:00, close 17:00 (adjust per run script). Save. Confirm the page returns a saved/confirmed state.
+- [ ] **P4** `[C/A]` Navigate to `/storefront/items` → `[C]` Confirm items CRUD works (seeded items visible). `[A]` Confirm at least 3 seeded service items match the archetype's expected services. Add one new service item manually using the run script's "audit item" name, price, and ctaType. Save and confirm the new item appears in the list.
+- [ ] **P5-PET** `[A]` *(veterinary-clinic, pet-grooming, pet-boarding, dog-walking only)* Navigate to `/customer` → Create a customer account using the run script's test owner name (e.g., "Robert Chen"). Add a contact with email and phone. On the account record, navigate to Configuration Items → add a new CI: ciType "pet", name from the run script (e.g., "Max"), description: species, breed, approximate DOB (e.g., "Species: Dog | Breed: Labrador Retriever | DOB: 2020-03-15"). Save. Confirm the CI appears under the account. *(UX-fit: would a vet receptionist know that "Configuration Items" is where they add a pet? Log this friction specifically.)*
+- [ ] **P5-DENTAL** `[A]` *(dental-practice, physiotherapy, counselling only)* Navigate to `/customer` → Create an account for the run script's test patient (full name, email, phone). Add a contact record. Log the account name for use in Phase B5 and Phase G.
+- [ ] **P5-RESTAURANT** `[A]` *(restaurant only)* Confirm seeded table-type items represent service slots (Table for 2, Table for 6+, Private Dining). If seeded prices are £0/$0, confirm this is intentional (pay on day). Set operating hours to cover a dinner window (18:00–22:00) at minimum; if lunch and dinner are two separate windows and the UI only supports one, set dinner and log single-window limitation as a minor gap.
 
 #### P-PURCHASE — purchase CTA archetypes (bakery, retail-goods, artisan-goods, florist, gym, yoga-studio, sports-club)
 
-- [ ] **P1** Navigate to `/storefront/items` → Confirm seeded product items are visible with names and descriptions. Edit at least 3 items to set realistic non-zero prices (see run script for archetype-appropriate amounts). Save.
-- [ ] **P2** Add one new product item manually using the run script's "audit item" name and price (e.g., "Audit Run Loaf — Seeded Rye" £5.50 for bakery; "Audit Run Day Pass" £12 for gym), ctaType purchase. Save and confirm the item appears on the public portal storefront.
-- [ ] **P3** Navigate to `/customer` → Add a test customer account using the run script's buyer name (e.g., "Test Buyer R5") with a contact email. This account will be linked to the Phase B5 order and used in Phase G for the invoice.
-- [ ] **P4** Navigate to `/storefront/settings/operations` → Set archetype-appropriate hours (retail/bakery Mon–Sat 08:00–18:00; gym/yoga/sports Mon–Sun 06:00–21:00). Save.
+- [ ] **P1** `[C/A]` Navigate to `/storefront/items` → `[C]` Confirm items CRUD works. `[A]` Confirm seeded product items match the archetype's expected catalog with names and descriptions. Edit at least 3 items to set realistic non-zero prices (see run script for archetype-appropriate amounts). Save.
+- [ ] **P2** `[A]` Add one new product item manually using the run script's "audit item" name and price (e.g., "Audit Run Loaf — Seeded Rye" £5.50 for bakery; "Audit Run Day Pass" £12 for gym), ctaType purchase. Save and confirm the item appears on the public portal storefront. *(UX-fit: is adding a new product self-explanatory from the items management screen?)*
+- [ ] **P3** `[C]` Navigate to `/customer` → Add a test customer account using the run script's buyer name (e.g., "Test Buyer R5") with a contact email. This account will be linked to the Phase B5 order and used in Phase G for the invoice.
+- [ ] **P4** `[C]` Navigate to `/storefront/settings/operations` → Set archetype-appropriate hours (retail/bakery Mon–Sat 08:00–18:00; gym/yoga/sports Mon–Sun 06:00–21:00). Save.
 
 #### P-INQUIRY — inquiry CTA archetypes (all trades, catering, consulting, legal, marketing, accounting, IT MSP, landscaping, cleaning-service, wholesale-distribution, HOA, property management, public sector, banking/mortgage)
 
-- [ ] **P1** Navigate to `/storefront/items` → Confirm seeded service items are visible with names on the public portal (inquiry items don't require prices, but blank names must be corrected). Edit any blank item names.
-- [ ] **P2** Navigate to `/storefront/settings/operations` → Set archetype-appropriate hours (trades Mon–Fri 07:00–18:00; professional services Mon–Fri 09:00–17:30; public sector Mon–Fri 08:30–16:30). Save.
+- [ ] **P1** `[C/A]` Navigate to `/storefront/items` → `[C]` Confirm items are visible. `[A]` Confirm seeded service item names match the archetype's expected services (inquiry items don't require prices, but blank names must be corrected as a minor finding).
+- [ ] **P2** `[C]` Navigate to `/storefront/settings/operations` → Set archetype-appropriate hours (trades Mon–Fri 07:00–18:00; professional services Mon–Fri 09:00–17:30; public sector Mon–Fri 08:30–16:30). Save.
 
 #### P-DONATION — donation CTA archetypes (charity, pet-rescue, animal-shelter, community-shelter, cooperative)
 
-- [ ] **P1** Navigate to `/storefront/items` → Confirm donation tier items are present. Edit at least one item to have a meaningful amount (e.g., "Sponsor an Animal — £10/month"). If all amounts are £0/$0, log as an important finding.
-- [ ] **P2** Operating hours are optional for nonprofit public portals — skip unless the portal UI requires operating hours before the donation CTA renders.
+- [ ] **P1** `[C/A]` Navigate to `/storefront/items` → `[C]` Confirm items are visible. `[A]` Confirm donation tier items are present with meaningful amounts (e.g., "Sponsor an Animal — £10/month"). If all amounts are £0/$0, log as an important finding.
+- [ ] **P2** `[C]` Operating hours are optional for nonprofit public portals — skip unless the portal UI requires operating hours before the donation CTA renders.
 
 ---
 
 ### Phase B — Storefront (STORE)
-- [ ] **B1** Navigate to `/storefront` → Workspace loads with correct archetype name
-- [ ] **B2** Click "View Live" → Public portal renders with correct hero, service items
-- [ ] **B3** Verify vocabulary — "Book Now" vs "Shop Now" vs "Get a Quote" vs "Donate" matches archetype CTA
-- [ ] **B4** Verify service/product item names match archetype templates (including the P4/P2 audit item added in Phase P)
+- [ ] **B1** `[C]` Navigate to `/storefront` → Workspace loads with correct archetype name
+- [ ] **B2** `[C]` Click "View Live" → Public portal renders with correct hero, service items
+- [ ] **B3** `[A]` Verify vocabulary — "Book Now" vs "Shop Now" vs "Get a Quote" vs "Donate" matches archetype CTA
+- [ ] **B4** `[A]` Verify service/product item names match archetype templates (including the P4/P2 audit item added in Phase P)
 - [ ] **B5** Pre-condition: Phase P complete for this CTA type. Drive the primary CTA end-to-end using the actual data entered in Phase P. Specific steps by CTA type:
 
   **Booking** (hair-salon, barber-shop, nail-salon, beauty-spa, optician, personal-trainer, vet, dental, physio, counselling, pet-grooming, pet-boarding, dog-walking, restaurant, tutoring, driving-school, music-school, dance-studio):
@@ -368,9 +480,9 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
   5. Verify NO invoice or billing account is auto-created — this is a donation receipt, not a purchase transaction; if an invoice is generated, log as an important finding
   6. Navigate to `/storefront/inbox` → donation record appears
 
-- [ ] **B5x** Negative path: submit the same CTA form with all required fields empty → inline validation errors appear on each required field (no 500 error, no silent success, no page navigation)
-- [ ] **B6** Coworker panel on `/storefront` → Marketing Specialist agent loads (AI-03 analogue)
-- [ ] **B7** Verify archetype-specific vocabulary in coworker (no "FeatureBuild", "capsule", "worktree" language)
+- [ ] **B5x** `[C]` Negative path: submit the same CTA form with all required fields empty → inline validation errors appear on each required field (no 500 error, no silent success, no page navigation)
+- [ ] **B6** `[C]` Coworker panel on `/storefront` → Marketing Specialist agent loads (AI-03 analogue)
+- [ ] **B7** `[A]` Verify archetype-specific vocabulary in coworker (no "FeatureBuild", "capsule", "worktree" language)
 
 ### Phase C — Business Context & Compliance (GRC)
 - [ ] **C1** Navigate to `/storefront/settings/business` → Business context form loads
@@ -400,12 +512,12 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 
 > Run after Phase F for all revenue-generating archetypes (booking, purchase, donation). For inquiry-only archetypes, run G1–G2 only (record an expected expense, verify the P&L loads and shows it). Uses the accounts and suppliers created in Phase P.
 
-- [ ] **G1** Navigate to `/finance/suppliers` → Add an archetype-relevant supplier (see run script for name; e.g., vet: "Veterinary Supplies Co.", salon: "Professional Hair Products Ltd", bakery: "Flour & Grain Wholesale", gym: "Fitness Equipment Leasing Co.", trades: "Wholesale Tools & Spares", inquiry-only: any supplier appropriate to the profession). Save and confirm the supplier appears in the supplier list.
-- [ ] **G2** Navigate to `/finance/bills/new` → Create a supplier bill. Set Supplier = G1. Add one archetype-relevant line item (see run script for item name and amount; e.g., vet: "Examination gloves — box 200" qty 1 $28.00; salon: "Color developer 1L" qty 3 £12.00 each; bakery: "Strong bread flour 25kg" qty 2 £18.50 each). Set issue date = today. Save. Confirm the bill appears in the bills list with the correct total.
-- [ ] **G3** *(booking and purchase archetypes only)* Navigate to `/finance/invoices/new` → Create a customer invoice for the Phase B5 CTA. Set Customer = the account created in P5-PET/P5-DENTAL (booking) or P3 (purchase). Add one line item matching the service or product used in Phase B5 with the same price (see run script). Set issue date = today. Save. Verify the invoice appears in the invoice list.
-- [ ] **G4** Navigate to `/finance/reports/profit-loss` → P&L report loads without error. Verify: the G2 bill total appears as an expense entry. For booking/purchase archetypes: the G3 invoice total appears as a revenue/income entry. The net figure = revenue minus expenses (positive or negative — the arithmetic correctness is what matters, not the sign).
-- [ ] **G5** If the P&L report loads empty despite G2/G3 entries being saved: log as an important finding (gap: finance entries not reflected in P&L report).
-- [ ] **G6** Navigate to `/finance` → Finance dashboard loads. Confirm at least one summary metric (revenue, expenses, or net balance) reflects the G2 and G3 entries.
+- [ ] **G1** `[C/A]` Navigate to `/finance/suppliers` → `[C]` Supplier create works. `[A]` Add an archetype-relevant supplier (see run script for name; e.g., vet: "Veterinary Supplies Co.", salon: "Professional Hair Products Ltd", bakery: "Flour & Grain Wholesale", gym: "Fitness Equipment Leasing Co.", trades: "Wholesale Tools & Spares"). Save and confirm the supplier appears in the list. *(UX-fit: does the operator persona understand the bill/invoice distinction?)*
+- [ ] **G2** `[C/A]` Navigate to `/finance/bills/new` → `[C]` Bill creation and line-item totals work. `[A]` Add one archetype-relevant line item (see run script; e.g., vet: "Examination gloves — box 200" qty 1 $28.00; salon: "Color developer 1L" qty 3 £12.00 each; bakery: "Strong bread flour 25kg" qty 2 £18.50 each). Set issue date = today. Save. Confirm the bill total is correct.
+- [ ] **G3** `[C/A]` *(booking and purchase archetypes only)* Navigate to `/finance/invoices/new` → `[C]` Invoice creation and customer link work. `[A]` Create invoice for the Phase B5 CTA: Customer = account from P5-PET/P5-DENTAL (booking) or P3 (purchase); line item = service/product from Phase B5 at the run-script price. Save. Confirm invoice appears in the list.
+- [ ] **G4** `[C]` Navigate to `/finance/reports/profit-loss` → P&L report loads. `[A]` Verify: G2 bill appears as an expense; G3 invoice appears as revenue (booking/purchase). Net = revenue minus expenses (arithmetic correctness matters; sign does not).
+- [ ] **G5** `[A]` If P&L loads empty despite G2/G3 entries: log as an important finding.
+- [ ] **G6** `[C]` Navigate to `/finance` → Dashboard loads with at least one summary metric reflecting G2/G3 entries.
 
 ---
 
@@ -1286,37 +1398,76 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 
 ## 8. Gap Capture
 
-**Where findings live:** one git-committed markdown file per run at `docs/testing/archetype-audit-findings/run-NN-<category>.md`, committed **before the run's reset** (Section 5 Step 1). Findings must never exist only in the database (wiped every run) or only in session context (lost on compaction). Evidence is structured dynamic-analysis prose — "drove X, observed Y, expected Z" — not screenshot piles.
+### 8a. The fundamental constraint: every DB reset wipes portal state
 
-**Severity definitions:**
-- `critical` — a flow is broken or produces wrong data (CTA fails, wizard errors, wrong archetype provisioned, 500s)
-- `important` — wrong vocabulary/CTA label, missing expected module or compliance placeholder, coworker uses platform-developer language
-- `minor` — cosmetic, copy, or layout issues that don't mislead the user
-- `observation` — improvement idea, or any A/C/D finding on a **swapped** archetype (Section 3 — advisory until reproduced on a fresh install)
+**Portal backlog items and epics do not survive a DB reset.** Any BI filed into the portal during a run is permanently destroyed when the next run's reset executes. This creates a hard workflow rule:
 
-For each observation during a run, log using this format:
+> **Never file portal backlog items during audit runs.** The only per-run record that matters is the git-committed findings file — it is the single source of truth until the pg_dump is restored and BIs can be safely filed.
+
+### 8b. Two-channel findings workflow
+
+#### Channel 1 — Git findings file (authoritative, required)
+
+One markdown file per run at `docs/testing/archetype-audit-findings/run-NN-<category>.md`. **Committed to git before the run's reset** (Section 5 Step 1). Survives every wipe. The post-audit BI batch is generated from this file.
+
+For each finding, use:
 
 ```
 RUN: [run number]
 ARCHETYPE: [archetypeId]
 INSTALL MODE: fresh-install | swapped (archetype-reset)
 PHASE: [P, A–H + test ID e.g. B5, G3, P5-PET]
-OBSERVATION: [what you saw]
-EXPECTED: [what should have happened]
+OBSERVATION: [what you saw — "drove X, observed Y"]
+EXPECTED: [what should have happened — "expected Z"]
 SEVERITY: critical | important | minor | observation
 CANDIDATE BI TITLE: [proposed backlog item title]
 CANDIDATE EPIC: [existing epic to link to, if obvious]
+UX FIT: [operator persona impact if applicable — "Sandra Hooper would not know..."]
 ```
 
-**Known pre-existing gaps (from live backlog — do not refile):**
-- BI-FS-001: HVAC/AC Contractor Storefront Archetype (Run 1 — facilities-maintenance)
-- BI-FS-002: WorkItem Field-Service Lifecycle
-- BI-FS-003: Customer Notification Preference Fields
-- BI-85A1E175: Trades/HVAC archetype detection keywords in onboarding scrape
-- BI-ARCH-4C1E90: Phase 1 — Unify setup around Business Archetype
+#### Channel 2 — GitHub Issues (optional, for real-time team visibility)
 
-**Known gap identified during plan review (file as BI at audit start, do not re-discover per run):**
-- No UI exists to change archetype after setup — `/storefront/setup` hard-redirects once configured; the admin archetype-reset is API-only and the settings page references it without offering a button.
+Portal BIs are destroyed by resets; GitHub Issues are not. For any `critical` or `important` finding where the team should know immediately (without waiting for the full audit to complete):
+
+```bash
+gh issue create \
+  --title "[Audit Run N] <BI candidate title>" \
+  --label "archetype-audit,severity-critical" \
+  --body "**Archetype:** <id>  **Phase:** <phase>  **Observation:** <what>  **Expected:** <what>  **Install mode:** fresh-install|swapped"
+```
+
+These issues are visible to the team immediately and survive all resets. After the pg_dump restore, they serve as the batch queue for portal BI filing. **Do not close or resolve these issues during the audit** — they are the durable cross-reference that links the GitHub issue to its eventual portal BI ID after restore.
+
+`minor` and `observation` severity findings do **not** need GitHub issues — the git findings file is sufficient.
+
+#### After restore: filing portal BIs
+
+1. Restore the pg_dump (Section 4c)
+2. Consolidate all per-run git findings files into a single audit findings summary (Section 10)
+3. Dedupe findings where multiple runs hit the same root cause — one BI per cause, with an affected-archetypes list
+4. For each deduplicated finding, use `create_backlog_item` MCP → set title, severity, epic link
+5. Update the corresponding GitHub Issue (Channel 2) with the new portal BI ID → close the issue
+6. Confirm: all `critical` and `important` GitHub issues have a linked portal BI before declaring the audit complete
+
+### 8c. Severity definitions
+
+- `critical` — a flow is broken or produces wrong data (CTA fails, wizard errors, wrong archetype provisioned, 500s, reference number not issued)
+- `important` — wrong vocabulary/CTA label, missing domain-specific form field (e.g. no pet fields on vet booking), missing activation module, coworker uses platform-developer language, missing compliance placeholder for regulated archetype
+- `minor` — cosmetic, copy, or layout issues that don't mislead the user; UX friction (navigation non-obvious to operator persona)
+- `observation` — improvement idea; any A/C/D finding on a **swapped** archetype (advisory only — not `critical`/`important` until reproduced on a fresh install)
+
+### 8d. Common mechanics failures are platform findings, not archetype gaps
+
+If a `[C]`-marked step (Section 2a / Phase P) fails in Runs 1–16 and it passed in Run 0, that is a **regression** — log with severity `critical` and the note "regression vs. Run 0" and open a GitHub issue immediately. Do not continue the current run until the regression is triaged (it will affect all remaining runs if it is a platform-wide failure).
+
+### 8e. Known pre-existing gaps (do not refile)
+
+- **BI-FS-001**: HVAC/AC Contractor Storefront Archetype (Run 1 — facilities-maintenance)
+- **BI-FS-002**: WorkItem Field-Service Lifecycle
+- **BI-FS-003**: Customer Notification Preference Fields
+- **BI-85A1E175**: Trades/HVAC archetype detection keywords in onboarding scrape
+- **BI-ARCH-4C1E90**: Phase 1 — Unify setup around Business Archetype
+- **Audit finding #1** (identified during plan review): No UI exists to change archetype after setup — `/storefront/setup` hard-redirects once configured; the admin archetype-reset is API-only. File as a BI at audit start; do not re-discover per run.
 
 ---
 
@@ -1349,12 +1500,15 @@ These tests apply to EVERY archetype run. Track results in the summary table bel
 
 After all runs are complete (or the abort criteria fire):
 
-1. **Restore pre-audit state first** — follow Section 4c (`pg_restore` of the authoritative dump), verify counts and spot-check BI IDs. Restoration precedes BI filing so the new BIs land in the real backlog, not a soon-to-be-wiped one
-2. **Compile gap list** — consolidate the git-committed per-run findings files into a single BI batch; dedupe cross-run repeats of the same root cause (one BI per cause, with an affected-archetypes list — not one BI per archetype symptom)
-3. **Triage by severity** — critical gaps become priority 1 BIs; important become priority 2; swapped-archetype A/C/D observations only graduate to BIs after fresh-install reproduction
-4. **Link to epics** — most archetype gaps will link to EP-ARCH-8D4F2A (Archetype Model V2) or EP-9FC5D2FD (Dale persona hardening)
-5. **Create new epic if needed** — if archetype-gap count exceeds 20 items, create EP-ARCHETYPE-AUDIT-2026 to contain them
-6. **Final state** — the restored install (step 1) already carries the pre-audit organization; no extra fresh install is needed. Note in the audit summary that the restored DB's org archetype is whatever it was pre-audit
+1. **Restore pre-audit state first** — follow Section 4c (`pg_restore` of the authoritative dump), verify counts and spot-check BI IDs. Restoration precedes BI filing so the new BIs land in the real backlog, not a soon-to-be-wiped one.
+2. **Compile gap list** — consolidate the git-committed per-run findings files (`docs/testing/archetype-audit-findings/run-NN-<category>.md`) into a single summary. Dedupe cross-run repeats of the same root cause: one BI per root cause with an affected-archetypes list, not one BI per archetype symptom.
+3. **Close GitHub Issues → file portal BIs** — for every GitHub issue opened during the audit (Section 8b Channel 2): create the portal BI via `create_backlog_item` MCP, record the new portal BI ID in the GitHub issue body, then close the issue. This closes the loop between real-time team visibility and the permanent backlog record.
+4. **Triage by severity** — `critical` gaps → priority 1 BIs; `important` → priority 2; swapped-archetype `observation`-tier A/C/D findings only graduate to BIs after fresh-install reproduction confirms them.
+5. **Separate platform regressions from archetype gaps** — any `[C]`-marked finding that failed in Runs 1–16 (mechanics already proven in Run 0) is a platform regression BI, not an archetype BI. Link regressions to the appropriate platform epic; link archetype gaps to EP-ARCH-8D4F2A or EP-9FC5D2FD.
+6. **Operator UX-fit batch** — collect all `minor` UX-fit findings from Phase P and Phase B5 steps across all runs. These are operator persona accessibility gaps; link them to EP-9FC5D2FD (Dale persona hardening).
+7. **Link to epics** — archetype vocabulary/CTA/coworker gaps → EP-ARCH-8D4F2A. Operator UX-fit → EP-9FC5D2FD. Platform mechanics regressions → appropriate existing platform epic.
+8. **Create new epic if needed** — if total archetype-gap BI count exceeds 20 items, create EP-ARCHETYPE-AUDIT-2026 to contain them.
+9. **Final state** — the restored install already carries the pre-audit organization; no extra fresh install is needed. Note in the audit summary that the restored DB's org archetype is whatever it was pre-audit.
 
 ---
 
