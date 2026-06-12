@@ -178,6 +178,18 @@ export const bankingFinancialServicesArchetypes: ArchetypeDefinition[] = [
         primaryConsumer: "member" as const,
         governance: "member-owned" as const,
       },
+      // member-owned derives member-equity as recommended, but a credit union
+      // distributes dividends and holds member shares through the core banking
+      // system — it does NOT run patronage-equity allocation/retirement (a co-op
+      // concept). Suppress the /member-equity surface so it doesn't mislead
+      // (BI-D9ACE184; civic spec §9 row "Member equity / patronage" = n/a for CUs).
+      capabilityOverrides: [
+        {
+          capabilityKey: "member-equity",
+          applicability: "not-applicable" as const,
+          reason: "Credit unions distribute dividends and hold member shares via the core banking system, not patronage-equity allocation/retirement.",
+        },
+      ],
       seededServiceCategories: [
         "loans-and-deposits",
         "cards",
