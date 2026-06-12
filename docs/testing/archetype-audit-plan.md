@@ -44,9 +44,9 @@ These are not blockers for individual archetype verdicts but should be captured 
 
 ## 2. Constraints
 
-- **All interaction via browser — with one documented exception.** Every test step is driven at `http://localhost:3000` through the portal UI. No direct DB writes, no SQL. **Exception (verified in code):** there is no UI to change archetype after setup — `/storefront/setup` redirects to `/storefront` once a `StorefrontConfig` exists (`apps/web/app/(shell)/storefront/setup/page.tsx`). The only swap path is the admin API `POST /api/storefront/admin/archetype-reset` (`mode: replace-seeded-content`). In-run swaps use that API call; the missing "change archetype" UI is itself **audit finding #1** — file a BI for it (the storefront settings page even references "the admin archetype reset" with no button to invoke it).
-- **Swap-tier validity rule.** The archetype-reset API updates the archetype link, `Organization.industry`, `BusinessContext` industry/CTA, the business-capability perspective, and replaces seeded sections/items. It does **not** re-run setup-wizard provisioning (activation-profile module activation, compliance/regulatory packs, finance defaults, KYC provisioning). Therefore: Phases B, E, F are valid on a swapped archetype; **Phases A, C, D are only valid on the archetype that received the fresh install.** See Section 3 for how runs handle this.
-- **Full reset between runs.** Each audit run begins from a clean install: volumes wiped, database re-seeded, no previously created organization.
+- **All interaction via browser.** Every test step is driven at `http://localhost:3000` through the portal UI. No direct DB writes, no SQL. No use of the admin archetype-reset API (`POST /api/storefront/admin/archetype-reset`) as a test mechanism — that API simulates a mid-life archetype change, not a first-time install. The missing "change archetype" UI remains **audit finding #1** and should be filed as a BI, but it does not affect audit methodology.
+- **Fresh install per archetype.** Every archetype — lead and non-lead alike — begins from a clean DB state with no previously created organization. The archetype-reset API is **not** used as a substitute for a fresh install; doing so leaves prior company identity (name, slug, hero copy, inbox history) in place and generates false findings. See Section 5 for the per-archetype reset procedure (DB-only reset + golden dump restore, ~90 seconds).
+- **Full reset between every archetype.** Each archetype install begins from a clean DB state: organization wiped, setup wizard not yet run, provider credentials intact (restored from golden dump — see Section 5).
 - **Stay out of Build Studio.** Gap items are filed as backlog items; they are not promoted into Build Studio during this audit.
 - **`pg_dump` is the authoritative backup.** A full database dump is taken before the first wipe and is the restore source after the final run (preserves IDs, timestamps, epic links, prompts, wiki overlays, provider config — everything the wipe destroys). MCP JSON snapshots are a secondary, human-readable verification aid only — re-creating backlog items via `create_backlog_item` generates **new IDs and breaks every existing cross-reference** (PRs, memory files, specs), so it is a last-resort fallback, never the plan of record. See Section 4.
 - **Concurrent-session freeze.** During the audit, no other session may run work against the live install — wipes destroy in-flight capsules, and every PR merged to main triggers self-upgrade, recycling the portal mid-run (known behavior since PR #830). Either pause merge activity for the audit window or accept that a portal recycle invalidates the in-progress phase and that phase must be re-driven.
@@ -116,35 +116,33 @@ Any step where the auditor had to think "a real operator would struggle here" �
 
 ## 3. Audit Run Strategy
 
-53 archetypes across **Run 0 (pilot) + 18 install runs**. Each run = one fresh install. The **lead archetype** (bold) is the setup-wizard target and gets the full Phase A–F checklist. Additional archetypes in the same category are swapped in via the admin archetype-reset API (Section 2) and get **Phases B, E, F only** — their Phase A/C/D results would reflect the lead archetype's provisioning and would generate false gaps.
+53 archetypes across **Run 0 (pilot) + grouped install runs**. **Every archetype gets its own fresh install** and the full Phase A–F checklist. Archetypes are grouped into runs by category only for scheduling and findings organization — each archetype in a run still begins from a clean DB state (DB-only reset from golden dump, see Section 5).
 
-**Full-install rule for regulated archetypes:** any archetype whose test targets activation profiles, compliance packs, KYC provisioning, or finance defaults (Runs 10, 14a–c, 16) gets its **own fresh install** — those are exactly the surfaces a swap does not re-provision.
+> **Why full installs, not API swaps:** using `archetype-reset` to swap between archetypes leaves prior company identity (name, slug, hero copy, inbox history) in place. A real operator always installs fresh; an audit that swaps via API tests a different — and rarer — path. Run 1 swap testing (2026-06-12) confirmed this: all swap archetypes presented as the lead archetype's business identity to customers. Per-archetype fresh installs eliminate this class of false and misleading findings.
 
-| Run | Category | Archetypes (lead bold) | CTAs Exercised |
+| Run | Category | Archetypes (each gets full fresh install + Phase A–F) | CTAs Exercised |
 |-----|----------|------------|----------------|
-| 0 | Pilot / calibration (software-platform) | **software-platform** | inquiry — see Section 3a |
-| 1 | Trades & Maintenance | **plumber**, electrician, facilities-maintenance, landscaping, cleaning-service | inquiry |
-| 2 | Beauty & Personal Care | **hair-salon**, barber-shop, nail-salon, beauty-spa, optician, personal-trainer | booking |
-| 3 | Healthcare & Wellness | **veterinary-clinic**, dental-practice, physiotherapy, counselling | booking |
-| 4 | Pet Services | **pet-grooming**, pet-boarding, dog-walking | booking |
-| 5 | Food & Hospitality | **restaurant**, catering, bakery | booking, inquiry, purchase |
-| 6 | Retail & Goods | **retail-goods**, artisan-goods, florist, wholesale-distribution | purchase, inquiry |
-| 7 | Fitness & Recreation | **gym**, yoga-studio, sports-club | purchase |
-| 8 | Education & Training | **corporate-training**, tutoring, driving-school, music-school, dance-studio | booking, inquiry |
-| 9 | Professional Services A | **consulting**, legal-services, marketing-agency, accounting | inquiry |
-| 10 | Professional Services B | **it-managed-services** (full install — MSP activation profile) | inquiry (MSP profile) |
-| 11 | Nonprofit & Community | **charity**, pet-rescue, animal-shelter, community-shelter, cooperative | donation, inquiry |
-| 12 | HOA & Property Management | **homeowners-association**, condo-association, property-management-company | inquiry |
+| 0 | Pilot / calibration (software-platform) | software-platform | inquiry — see Section 3a |
+| 1 | Trades & Maintenance | plumber, electrician, facilities-maintenance, landscaping, cleaning-service | inquiry |
+| 2 | Beauty & Personal Care | hair-salon, barber-shop, nail-salon, beauty-spa, optician, personal-trainer | booking |
+| 3 | Healthcare & Wellness | veterinary-clinic, dental-practice, physiotherapy, counselling | booking |
+| 4 | Pet Services | pet-grooming, pet-boarding, dog-walking | booking |
+| 5 | Food & Hospitality | restaurant, catering, bakery | booking, inquiry, purchase |
+| 6 | Retail & Goods | retail-goods, artisan-goods, florist, wholesale-distribution | purchase, inquiry |
+| 7 | Fitness & Recreation | gym, yoga-studio, sports-club | purchase |
+| 8 | Education & Training | corporate-training, tutoring, driving-school, music-school, dance-studio | booking, inquiry |
+| 9 | Professional Services A | consulting, legal-services, marketing-agency, accounting | inquiry |
+| 10 | Professional Services B | it-managed-services (MSP activation profile) | inquiry (MSP profile) |
+| 11 | Nonprofit & Community | charity, pet-rescue, animal-shelter, community-shelter, cooperative | donation, inquiry |
+| 12 | HOA & Property Management | homeowners-association, condo-association, property-management-company | inquiry |
 | 13 | Software & Platform | *folded into Run 0* — software-platform full A–F + extended meta-case run on the pilot install | inquiry |
-| 14a | Banking | **community-bank** (full install — KYC + BIAN + FDIC pack) | inquiry (KYC) |
-| 14b | Banking | **credit-union** (full install — member-owned + NCUA pack) | inquiry (KYC) |
-| 14c | Banking | **mortgage-lending** (full install — NMLS/RESPA/TILA pack) | inquiry (NMLS) |
-| 15 | Public Sector | **small-town-municipality**, municipal-utility | inquiry |
-| 16 | Law Enforcement | **law-enforcement-agency** (full install — POST/CJIS-gate pack) | inquiry (public-body) |
+| 14a | Banking | community-bank (KYC + BIAN + FDIC pack) | inquiry (KYC) |
+| 14b | Banking | credit-union (member-owned + NCUA pack) | inquiry (KYC) |
+| 14c | Banking | mortgage-lending (NMLS/RESPA/TILA pack) | inquiry (NMLS) |
+| 15 | Public Sector | small-town-municipality, municipal-utility | inquiry |
+| 16 | Law Enforcement | law-enforcement-agency (POST/CJIS-gate pack) | inquiry (public-body) |
 
-Total fresh installs: 18 (Run 0, which also serves as Run 13's software-platform audit, + Runs 1–12, 14a–c, 15, 16). 53 unique archetypes covered: 18 with full A–F, 35 with B/E/F via swap. If Run 0 shows the swap path is unreliable, fall back to full installs per archetype for the affected runs and re-plan the schedule before proceeding.
-
-> **Swapped-archetype Phase C/D spot-checks are still allowed** — but log findings as `observation` severity with an explicit "tested post-swap, provisioning not re-run" note, never as `critical`/`important`, until reproduced on a fresh install.
+Total fresh installs: 53 (one per archetype). Run 0/13 is the software-platform pilot; the golden dump (Section 5) is created after Run 0's provider setup so all subsequent installs restore from it in ~90 seconds without re-entering provider credentials.
 
 ### 3b. Representative Quality Bar (12 archetypes — must all Pass before audit is considered representative)
 
@@ -317,24 +315,25 @@ After the final audit run and before returning to normal development:
 
 ---
 
-## 5. Reset Procedure (Per Run)
+## 5. Reset Procedure (Per Archetype)
 
-Two reset tiers based on what is actually changing between runs.
+Every archetype begins from a clean DB state. Two reset tiers based on what is actually changing.
 
 ### What each tier touches
 
-| Component | Full install (Run 0 only) | DB-only reset (Runs 1–16) |
+| Component | Full install (Run 0 only) | DB-only reset (every archetype after Run 0) |
 |-----------|--------------------------|--------------------------|
-| PostgreSQL data | wiped + re-seeded | wiped + re-seeded |
+| PostgreSQL data | wiped + re-seeded | **restored from golden dump** (provider-configured, no org) |
 | Neo4j, Qdrant, Redis | wiped | **kept** — empty anyway |
 | Docker containers | torn down and recreated | **kept running** |
 | Docker images | used as-is (no rebuild) | **kept** — unchanged |
+| LLM model weights | used as-is | **kept** — never re-downloaded |
 | pnpm / node_modules | re-installed | **kept** — unchanged |
 | `.env` / secrets | regenerated if absent | **kept** — unchanged |
 | Edge Node bootstrap | re-issued | **skipped** |
 | Agent toolchain | re-bootstrapped | **skipped** |
 
-Only PostgreSQL holds the organization, archetype selection, and setup wizard state. Everything else is either empty or irrelevant to archetype testing. Between Runs 1–16, tearing down Docker is pure waste (~5–8 min saved per run, ~80–130 min across 16 runs).
+Only PostgreSQL holds the organization, archetype selection, and setup wizard state. Everything else is either stateless or irrelevant to archetype testing. Docker teardown between archetypes is pure waste — the DB-only reset (restore from golden dump) takes ~90 seconds, not 5–8 minutes.
 
 ---
 
@@ -351,30 +350,45 @@ Takes ~10–15 minutes. Validates that Docker Desktop is healthy and images are 
 
 ---
 
-### Tier 2 — DB-only reset (Runs 1–16, between every run)
+### Tier 2 — DB-only reset (between every archetype after Run 0)
 
-Keeps all containers running. Drops and recreates only the PostgreSQL database, re-runs migrations and seed. Takes ~90 seconds.
+Keeps all containers running. Restores the PostgreSQL database from the golden dump (provider-configured, no org). Takes ~90 seconds. **Provider credentials are preserved** — no re-entry required.
+
+**Step 0 — Create the golden dump (one-time, after Run 0's provider setup)**
+
+This step runs exactly once: immediately after Run 0's AI provider credentials are configured and verified healthy, **before** the Run 0 setup wizard creates any organization.
+
+```powershell
+# From D:\DPF (repo root) — run ONCE after provider setup, BEFORE any wizard:
+$timestamp = Get-Date -Format "yyyy-MM-dd"
+docker compose exec postgres pg_dump -U dpf -Fc dpf `
+  | Out-File -Encoding byte "D:\DPF-audit-backup\golden-provider-configured-$timestamp.dump"
+```
+
+Store the dump path. Every subsequent reset restores from this file, not from a fresh seed.
 
 **Step 1 — Snapshot and persist findings**
 
-Before every reset, git-commit the previous run's findings file (Section 8) so nothing is lost to the wipe.
+Before every reset, git-commit the previous archetype's findings file (Section 8) so nothing is lost to the wipe.
 
-**Step 2 — Drop and reseed the database**
+**Step 2 — Restore from golden dump**
 
 ```powershell
-# Drop the dpf database inside the running postgres container,
-# recreate it, then re-run migrations and seed from the host.
+# Restore provider-configured, no-org state from the golden dump.
 # Run from D:\DPF (repo root):
+$goldenDump = "D:\DPF-audit-backup\golden-provider-configured-<date>.dump"
 
 docker compose exec postgres psql -U dpf -d postgres -c "DROP DATABASE dpf WITH (FORCE);"
 docker compose exec postgres psql -U dpf -d postgres -c "CREATE DATABASE dpf;"
-pnpm --filter @dpf/db exec prisma migrate deploy
-pnpm --filter @dpf/db seed
+Get-Content $goldenDump -AsByteStream | `
+  docker compose exec -T postgres pg_restore -U dpf -d dpf --no-owner --no-privileges
 ```
+
+> **Fallback if no golden dump yet (first archetype after Run 0):** drop + reseed + re-enter providers, then immediately create the golden dump before running the wizard.
 
 **Step 3 — Restart portal to flush in-memory state**
 
-Next.js caches some state in memory between requests. Restart the portal container so it picks up the fresh DB.
+Next.js caches some state in memory between requests. Restart the portal container so it picks up the restored DB.
 
 ```powershell
 docker compose restart portal portal-init
@@ -399,18 +413,15 @@ while ((Get-Date) -lt $deadline) {
 1. Navigate to `http://localhost:3000`
 2. Confirm redirect to `/welcome` (no organization exists)
 3. Confirm archetype grid renders with all 53 archetypes visible
+4. Navigate to `/platform/ai/providers` → confirm providers show healthy status (restored from golden dump — no re-entry needed)
 
-**Step 5 — Verify provider + coworker health gate**
+**Step 5 — Coworker health gate**
 
-Provider credentials live in the database — they are wiped on every DB reset and must be re-entered. Run 0 establishes the exact re-entry steps and time budget.
-
-1. Navigate to `/platform/ai/providers` → re-configure the Anthropic provider (or whichever provider Run 0 confirmed as the standard)
-2. Verify healthy status
-3. **Health gate:** ask the default coworker one trivial question and confirm a coherent response before scoring any AI phase in this run. An unresponsive coworker after re-entry is a platform finding, not an archetype gap.
+Ask the default coworker one trivial question and confirm a coherent response before scoring any AI phase. An unresponsive coworker is a platform finding, not an archetype gap.
 
 **Step 6 — Run setup wizard**
 
-Follow the archetype-specific setup script in Section 7 for the current run. For non-lead archetypes in the run, swap via the admin archetype-reset API and run Phases B/E/F only (Section 3).
+Follow the archetype-specific setup script in Section 7 for this archetype. Every archetype runs the full Phase A setup wizard — there are no "swap-only" archetypes.
 
 ---
 
@@ -429,7 +440,7 @@ In these cases: `docker compose down -v` + `.\scripts\fresh-install.ps1`, then p
 
 Apply this checklist to every archetype within a run. Log findings in Section 8 (gap template).
 
-> **Validity:** lead archetypes get all phases. Swapped archetypes get **B, E, F**; their A/C/D results are advisory-only observations (Section 3). Before scoring any phase, the expected values (CTA type, vocabulary, key services, activation modules) should be read from the archetype's seed definition in `packages/storefront-templates/src/archetypes/` — the persona blocks in Section 7 are test scripts, not the source of truth; where they disagree with the seed, the seed wins and the persona block gets corrected, not a BI filed.
+> **Validity:** every archetype gets a fresh install and all phases. There are no "swap-only" or "partial" archetypes. Before scoring any phase, the expected values (CTA type, vocabulary, key services, activation modules) should be read from the archetype's seed definition in `packages/storefront-templates/src/archetypes/` — the persona blocks in Section 7 are test scripts, not the source of truth; where they disagree with the seed, the seed wins and the persona block gets corrected, not a BI filed.
 >
 > **`[C]` = Common — mechanics proven in Run 0.** In Runs 1–16, execute these steps as setup tools. Only log a finding if the step **fails** (which would be a platform regression, not an archetype gap — see Section 8d). **`[A]` = Archetype-specific — evaluate on every archetype; these are why we run 53 iterations.**
 
@@ -618,14 +629,14 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 
 ---
 
-### Phase H — Responsive & Resilience Smoke (lead archetype only, once per run)
+### Phase H — Responsive & Resilience Smoke (once per category — run on the first archetype in each group)
 - [ ] **H1** Public portal at narrow viewport (~390px) → hero, CTA, and form remain usable; no horizontal overflow
 - [ ] **H2** Browser refresh mid-CTA-flow → no corrupted state, flow restartable
 - [ ] **H3** Public portal direct-load of a non-existent item/slug → graceful 404, not a stack trace
 
 ---
 
-### Phase O — AI Coworker Operating Intelligence (lead archetypes only)
+### Phase O — AI Coworker Operating Intelligence (every archetype)
 
 > Run after Phase F. Tests whether the AI coworkers actually help the operator **run the business** — not just configure the platform. Distinct from Phase E (vocabulary fit): Phase E tests the coworker knows the right words; Phase O tests it knows the right answers to real operational questions.
 >
@@ -654,7 +665,7 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 
 ---
 
-### Phase K — Operator Day-to-Day Experience (lead archetypes only)
+### Phase K — Operator Day-to-Day Experience (every archetype)
 
 > Run after Phase O. Tests whether the operator can actually run their business using the platform beyond initial setup — the operational surfaces that make a business owner's day easier or harder. Most Phase K items will surface gaps on Run 1. **A complete Phase K gap list from Run 1 is one of the highest-value outputs of this audit cycle.**
 
@@ -754,9 +765,9 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 **Key services to verify:** Consumer Unit Installation, Fault Diagnosis, EV Charger Install, Safety Inspection, Emergency Rewire  
 **Special:** Verify property type field in form renders
 
-After completing plumber test: swap to `electrician` via the admin archetype-reset API → run Phases B/E/F.
+**Before starting electrician:** execute Tier 2 DB-only reset (Section 5, restore from golden dump). Verify `/welcome` redirect. Then run Phase A setup wizard with the following values: company name "Bright Wire Electric", select `electrician` archetype, owner name "Mike Voltz", currency USD. Branding URL optional (leave blank or use fictional URL). Operating hours Mon–Fri 07:00–18:00, Sat 08:00–14:00.
 
-**Run-1 Phase P setup (`electrician` — swap):**
+**Run-1 Phase P setup (`electrician`):**
 - P-INQUIRY P1: `/storefront/items` → Confirm seeded: Consumer Unit Installation, Fault Diagnosis, EV Charger Install, Safety Inspection, Emergency Rewire. Edit any with blank names.
 - P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 07:00–18:00, Sat 08:00–14:00. Save.
 
@@ -787,9 +798,9 @@ After completing plumber test: swap to `electrician` via the admin archetype-res
 **Special — HVAC/AC test:** Ask coworker "A tenant is complaining about no cold air — what do we do?" → Response should reference HVAC Servicing, not technical platform terms.  
 **Gap check:** BI-FS-001 (HVAC/AC Contractor Storefront Archetype) is an open backlog item — confirm whether a dedicated `hvac-contractor` leaf is present. If not, note the gap (it is not in the 53-archetype verified inventory).
 
-After electrician test: swap to `facilities-maintenance` via the admin archetype-reset API → run Phases B/E/F.
+**Before starting facilities-maintenance:** execute Tier 2 DB-only reset (Section 5, restore from golden dump). Verify `/welcome` redirect. Then run Phase A setup wizard with: company name "ProSite Facilities Group", select `facilities-maintenance` archetype, owner name "Jamie Chen", currency USD. Operating hours Mon–Fri 07:00–18:00.
 
-**Run-1 Phase P setup (`facilities-maintenance` — swap):**
+**Run-1 Phase P setup (`facilities-maintenance`):**
 - P-INQUIRY P1: `/storefront/items` → Confirm seeded: Planned Maintenance Contract, HVAC Servicing, Reactive Repair, Building Inspection, Emergency Call-Out. Edit any with blank names.
 - P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 07:00–18:00. Save.
 
@@ -818,9 +829,9 @@ After electrician test: swap to `facilities-maintenance` via the admin archetype
 **Key services to verify:** read from seed (lawn care, garden design, seasonal cleanup expected)  
 **Special:** Seasonal/recurring service framing — ask coworker about scheduling a recurring mowing contract; verify "jobs"/"properties" vocabulary
 
-After facilities-maintenance test: swap to `landscaping` via the admin archetype-reset API → run Phases B/E/F.
+**Before starting landscaping:** execute Tier 2 DB-only reset (Section 5, restore from golden dump). Verify `/welcome` redirect. Then run Phase A setup wizard with: company name "GreenScape Outdoor Services", select `landscaping` archetype, owner name "Hank Morales", currency USD. Operating hours Mon–Fri 07:00–17:00, Sat 08:00–14:00.
 
-**Run-1 Phase P setup (`landscaping` — swap):**
+**Run-1 Phase P setup (`landscaping`):**
 - P-INQUIRY P1: `/storefront/items` → Confirm seeded items (lawn care, garden design, seasonal cleanup expected). Edit any with blank names.
 - P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 07:00–17:00, Sat 08:00–14:00. Save.
 
@@ -849,9 +860,9 @@ After facilities-maintenance test: swap to `landscaping` via the admin archetype
 **Key services to verify:** read from seed (regular domestic clean, deep clean, end-of-tenancy, commercial contract expected)  
 **Special:** Recurring vs one-off distinction; property size/frequency fields in inquiry form if present
 
-After landscaping test: swap to `cleaning-service` via the admin archetype-reset API → run Phases B/E/F.
+**Before starting cleaning-service:** execute Tier 2 DB-only reset (Section 5, restore from golden dump). Verify `/welcome` redirect. Then run Phase A setup wizard with: company name "Spotless Spaces Cleaning Co.", select `cleaning-service` archetype, owner name "Renata Silva", currency USD. Operating hours Mon–Sat 08:00–18:00.
 
-**Run-1 Phase P setup (`cleaning-service` — swap):**
+**Run-1 Phase P setup (`cleaning-service`):**
 - P-INQUIRY P1: `/storefront/items` → Confirm seeded items (regular domestic clean, deep clean, end-of-tenancy, commercial contract expected). Edit any with blank names.
 - P-INQUIRY P2: `/storefront/settings/operations` → Mon–Sat 08:00–18:00. Save.
 
@@ -2869,7 +2880,7 @@ INTEGRATION RESULT: [C7 summary — anchors present / partially present / absent
 STOREFRONT RESULT: [B3/B5 summary — correct CTA, domain fields present, reference issued]
 FINANCE RESULT: [G4 summary — P&L loaded / entries appeared / empty]
 
-COWORKER OPERATING INTELLIGENCE (Phase O — lead archetypes only):
+COWORKER OPERATING INTELLIGENCE (Phase O — every archetype):
   O1 Tax setup: Level [0–4] — [brief observation]
   O2 Expense categories: Level [0–4] — [brief observation]
   O3 Market context: Level [0–4] — [brief observation]
@@ -2879,7 +2890,7 @@ COWORKER OPERATING INTELLIGENCE (Phase O — lead archetypes only):
   O7 Cross-coworker coherence: Level [0–4] — [brief observation]
   Overall O maturity: [dominant level; e.g. "mostly Level 1–2, O5 Level 0"]
 
-OPERATOR DAY-TO-DAY (Phase K — lead archetypes only):
+OPERATOR DAY-TO-DAY (Phase K — every archetype):
   K1 Customer communications: [present/absent/partial — note]
   K2 Schedule/operational view: [present/absent/partial — note]
   K3 Payment surface: [present/absent/partial — note]
