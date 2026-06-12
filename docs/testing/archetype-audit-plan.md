@@ -640,6 +640,26 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 
 After completing plumber test: swap to `electrician` via the admin archetype-reset API → run Phases B/E/F.
 
+**Run-1 Phase P setup (`electrician` — swap):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Consumer Unit Installation, Fault Diagnosis, EV Charger Install, Safety Inspection, Emergency Rewire. Edit any with blank names.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 07:00–18:00, Sat 08:00–14:00. Save.
+
+**Run-1 Phase B5 walkthrough (`electrician`):**
+1. Public portal → inquiry CTA (confirm "Get a Quote" or "Request Service" — NOT "Book" or "Shop")
+2. Select service "Emergency Rewire"
+3. Fill form: name "Mike Voltz Test", email test@brightwire.co, phone 555-0102
+4. **Property type field**: select "Residential" — if absent, log as important
+5. Urgency: "Emergency" if dropdown present
+6. Description: "Complete rewire needed after flood damage"
+7. Submit → reference number shown
+8. `/storefront/inbox` → inquiry appears with service "Emergency Rewire"
+
+**Run-1 Phase G (`electrician` — inquiry archetype):**
+- G1: Supplier "Electrical Wholesale Supplies" at `/finance/suppliers`
+- G2: Bill: "MCB consumer unit boards — job stock", qty 3, $145.00 each (total $435.00). Save.
+- G3: Skip (inquiry archetype — no portal invoice)
+- G4: P&L → expenses $435.00, revenue $0 — verify expense row appears
+
 ---
 
 #### Archetype: `facilities-maintenance`
@@ -653,6 +673,26 @@ After completing plumber test: swap to `electrician` via the admin archetype-res
 
 After electrician test: swap to `facilities-maintenance` via the admin archetype-reset API → run Phases B/E/F.
 
+**Run-1 Phase P setup (`facilities-maintenance` — swap):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Planned Maintenance Contract, HVAC Servicing, Reactive Repair, Building Inspection, Emergency Call-Out. Edit any with blank names.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 07:00–18:00. Save.
+
+**Run-1 Phase B5 walkthrough (`facilities-maintenance`):**
+1. Public portal → inquiry CTA (confirm B2B framing — "Request a Quote" or "Contact Us")
+2. Select service "HVAC Servicing"
+3. Fill form: company name "Meridian Property Group", contact "Jamie Chen Test", email test@prosite.co, phone 555-0103
+4. **Company/site field**: approximate number of sites or employees if present — enter "3 commercial sites, ~50 employees"
+5. Description: "Annual HVAC servicing for 3-storey office building"
+6. Submit → reference number shown
+7. `/storefront/inbox` → inquiry appears; **HVAC coworker check**: ask "A tenant is complaining about no cold air — what do we do?" → response should reference HVAC Servicing, not platform terms
+8. BI-FS-001 gap check: confirm no dedicated `hvac-contractor` leaf exists (noted as a known gap — do not refile)
+
+**Run-1 Phase G (`facilities-maintenance` — inquiry archetype):**
+- G1: Supplier "Facility Maintenance Supplies Ltd" at `/finance/suppliers`
+- G2: Bill: "HVAC filter replacement kit — quarterly supply", qty 4, $65.00 each (total $260.00). Save.
+- G3: Skip (inquiry archetype — no portal invoice)
+- G4: P&L → expenses $260.00, revenue $0 — verify expense appears
+
 ---
 
 #### Archetype: `landscaping`
@@ -664,6 +704,26 @@ After electrician test: swap to `facilities-maintenance` via the admin archetype
 
 After facilities-maintenance test: swap to `landscaping` via the admin archetype-reset API → run Phases B/E/F.
 
+**Run-1 Phase P setup (`landscaping` — swap):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded items (lawn care, garden design, seasonal cleanup expected). Edit any with blank names.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 07:00–17:00, Sat 08:00–14:00. Save.
+
+**Run-1 Phase B5 walkthrough (`landscaping`):**
+1. Public portal → inquiry CTA
+2. Select service (e.g., "Lawn Care" or "Garden Design")
+3. Fill form: name "Hank Morales Test", email test@greenscape.co, phone 555-0104
+4. **Property type / property size field**: if present, enter "Residential, large garden ~800sqft"
+5. **Recurring service field**: if present, select "Regular/Fortnightly"
+6. Description: "Regular lawn mowing and hedge trimming contract"
+7. Submit → reference number shown
+8. `/storefront/inbox` → inquiry appears; coworker check: ask "Can we set up a recurring mowing contract?" → response uses "jobs"/"properties" vocabulary, not platform terms
+
+**Run-1 Phase G (`landscaping` — inquiry archetype):**
+- G1: Supplier "Horticultural Supplies Ltd" at `/finance/suppliers`
+- G2: Bill: "Landscaping equipment fuel — monthly", qty 1, $180.00. Save.
+- G3: Skip (inquiry archetype — no portal invoice)
+- G4: P&L → expenses $180.00, revenue $0 — verify expense appears
+
 ---
 
 #### Archetype: `cleaning-service`
@@ -673,7 +733,30 @@ After facilities-maintenance test: swap to `landscaping` via the admin archetype
 **Key services to verify:** read from seed (regular domestic clean, deep clean, end-of-tenancy, commercial contract expected)  
 **Special:** Recurring vs one-off distinction; property size/frequency fields in inquiry form if present
 
-After landscaping test: swap to `cleaning-service` via the admin archetype-reset API → run Phases B/E/F. End of Run 1.
+After landscaping test: swap to `cleaning-service` via the admin archetype-reset API → run Phases B/E/F.
+
+**Run-1 Phase P setup (`cleaning-service` — swap):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded items (regular domestic clean, deep clean, end-of-tenancy, commercial contract expected). Edit any with blank names.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Sat 08:00–18:00. Save.
+
+**Run-1 Phase B5 walkthrough (`cleaning-service`):**
+1. Public portal → inquiry CTA
+2. Select service (e.g., "Deep Clean" or "End-of-Tenancy Clean")
+3. Fill form: name "Renata Silva Test", email test@spotless.co, phone 555-0105
+4. **Property type field**: if present, select "Residential"
+5. **Frequency field**: if present, select "One-off" (for deep clean test)
+6. **Property size field**: if present, enter "3-bedroom house"
+7. Description: "Full end-of-tenancy deep clean required before new tenants"
+8. Submit → reference number shown
+9. `/storefront/inbox` → inquiry appears with service and submitter name
+
+**Run-1 Phase G (`cleaning-service` — inquiry archetype):**
+- G1: Supplier "Cleaning Supplies Wholesale" at `/finance/suppliers`
+- G2: Bill: "Professional cleaning products — monthly kit", qty 1, $95.00. Save.
+- G3: Skip (inquiry archetype — no portal invoice)
+- G4: P&L → expenses $95.00, revenue $0 — verify expense appears
+
+End of Run 1.
 
 ---
 
@@ -727,6 +810,27 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Key services to verify:** Classic Haircut, Skin Fade, Beard Trim & Shape, Hot Towel Shave, Luxury Grooming Package  
 **Special:** Confirm coworker uses "clients" not "customers" (barber vocabulary)
 
+**Run-2 Phase P setup (`barber-shop` — swap):**
+- P1/P2: `/storefront/team` → Add **Devon King**, role "Master Barber / Owner", devon@fifthchair.com. Availability: Tue–Sat 09:00–18:00.
+- P3: `/storefront/settings/operations` → Tue–Sat 09:00–18:00. Save.
+- P4: `/storefront/items` → Confirm seeded: Classic Haircut, Skin Fade, Beard Trim & Shape, Hot Towel Shave, Luxury Grooming Package. Set prices if £0 (e.g., Classic Haircut £22, Skin Fade £25, Hot Towel Shave £18). Add audit item: "Audit — Classic Cut & Style", £22.00, ctaType booking.
+
+**Run-2 Phase B5 walkthrough (`barber-shop`):**
+1. Public portal → "Book Now" (confirm "clients" language in hero/subtitle if present)
+2. Select "Audit — Classic Cut & Style"
+3. Provider: Devon King → Tue–Sat availability shown
+4. Select a slot → booking form: name "Test Client R2b", email client-r2b@test.com, phone 555-0200
+5. Confirm no pet or patient fields present
+6. Submit → reference number shown
+7. `/storefront/inbox` → booking appears for "Test Client R2b" with service "Audit — Classic Cut & Style"
+8. Coworker check: ask "Can you help me send a reminder to clients about their appointments?" → response uses "clients", not "customers"
+
+**Run-2 Phase G (`barber-shop`):**
+- G1: Supplier "Barber Supply Co." at `/finance/suppliers`
+- G2: Bill: "Styling products and clippers maintenance kit", qty 1, £48.00. Save.
+- G3: Invoice for Test Client R2b (create account): "Audit — Classic Cut & Style", qty 1, £22.00. Save.
+- G4: P&L → revenue £22.00, expenses £48.00, net -£26.00
+
 ---
 
 #### Archetype: `nail-salon`
@@ -735,6 +839,25 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **CTA:** booking  
 **Key services to verify:** Gel Manicure, Classic Pedicure, Nail Art, Acrylic Extensions, Spa Package  
 **Special:** Price type should be "fixed" or "per-session" — verify no "quote" pricing for standard services
+
+**Run-2 Phase P setup (`nail-salon` — swap):**
+- P1/P2: `/storefront/team` → Add **Mei Nguyen**, role "Nail Technician / Co-Owner", mei@lacqueruxe.com. Availability: Mon–Sat 10:00–19:00.
+- P3: `/storefront/settings/operations` → Mon–Sat 10:00–19:00. Save.
+- P4: `/storefront/items` → Confirm seeded: Gel Manicure, Classic Pedicure, Nail Art, Acrylic Extensions, Spa Package. Set fixed prices if £0 (e.g., Gel Manicure £35, Classic Pedicure £30, Acrylic Extensions £55). Verify no "quote" ctaType on standard services — if any are set to inquiry, log as important. Add audit item: "Audit — Gel Manicure", £35.00, ctaType booking.
+
+**Run-2 Phase B5 walkthrough (`nail-salon`):**
+1. Public portal → "Book Now"
+2. Select "Audit — Gel Manicure" — price £35.00 shows as fixed (not "from" or "quote")
+3. Provider: Mei Nguyen → Mon–Sat availability
+4. Select slot → form: name "Test Client R2c", email client-r2c@test.com, phone 555-0201
+5. Submit → reference number shown
+6. `/storefront/inbox` → booking appears with service and price correct
+
+**Run-2 Phase G (`nail-salon`):**
+- G1: Supplier "Nail & Beauty Supplies Ltd" at `/finance/suppliers`
+- G2: Bill: "Gel polish color stock — seasonal refresh", qty 1, £85.00. Save.
+- G3: Invoice for Test Client R2c (create account): "Audit — Gel Manicure", qty 1, £35.00. Save.
+- G4: P&L → revenue £35.00, expenses £85.00, net -£50.00
 
 ---
 
@@ -745,6 +868,26 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Key services to verify:** Swedish Massage (60/90 min), Deep Tissue Massage, HydraFacial, Body Wrap, Couples Package  
 **Special:** Verify duration options appear in booking calendar (60 vs 90 min variants)
 
+**Run-2 Phase P setup (`beauty-spa` — swap):**
+- P1/P2: `/storefront/team` → Add **Priya Shah**, role "Spa Director / Senior Therapist", priya@serenspa.com. Availability: Mon–Sun 09:00–20:00.
+- P3: `/storefront/settings/operations` → Mon–Sun 09:00–20:00. Save.
+- P4: `/storefront/items` → Confirm seeded: Swedish Massage 60 min, Swedish Massage 90 min, Deep Tissue Massage, HydraFacial, Body Wrap, Couples Package. Set prices if £0 (e.g., Swedish 60 min £75, Swedish 90 min £105, HydraFacial £120). Add audit item: "Audit — Swedish Massage 60 min", £75.00, ctaType booking.
+
+**Run-2 Phase B5 walkthrough (`beauty-spa`):**
+1. Public portal → "Book Now"
+2. Service list: confirm both Swedish Massage 60 min and 90 min appear as separate bookable items (duration variants)
+3. Select "Audit — Swedish Massage 60 min"
+4. Provider: Priya Shah → Mon–Sun availability
+5. Select slot → form: name "Test Client R2d", email client-r2d@test.com, phone 555-0202
+6. Submit → reference number shown
+7. `/storefront/inbox` → booking appears; if only one duration tier appears despite seeding both → log as minor (duration-variant rendering)
+
+**Run-2 Phase G (`beauty-spa`):**
+- G1: Supplier "Professional Spa Products Ltd" at `/finance/suppliers`
+- G2: Bill: "Massage oil and aromatherapy supplies — monthly", qty 1, £135.00. Save.
+- G3: Invoice for Test Client R2d (create account): "Audit — Swedish Massage 60 min", qty 1, £75.00. Save.
+- G4: P&L → revenue £75.00, expenses £135.00, net -£60.00
+
 ---
 
 #### Archetype: `optician`
@@ -754,6 +897,26 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Key services to verify:** Eye Examination, Contact Lens Fitting, Glasses Fitting & Dispensing, Retinal Screening  
 **Special:** Regulatory — verify coworker does not prescribe or give medical advice; frames compliance as "see a registered optometrist"
 
+**Run-2 Phase P setup (`optician` — swap):**
+- P1/P2: `/storefront/team` → Add **Dr. Helen Park**, role "Optometrist / Owner", helen@clearview.com. Availability: Mon–Fri 09:00–17:30, Sat 09:00–13:00.
+- P3: `/storefront/settings/operations` → Mon–Fri 09:00–17:30, Sat 09:00–13:00. Save.
+- P4: `/storefront/items` → Confirm seeded: Eye Examination, Contact Lens Fitting, Glasses Fitting & Dispensing, Retinal Screening. Set prices if £0 (e.g., Eye Examination £45, Contact Lens Fitting £65). Add audit item: "Audit — Eye Examination", £45.00, ctaType booking.
+
+**Run-2 Phase B5 walkthrough (`optician`):**
+1. Public portal → "Book Now"
+2. Select "Audit — Eye Examination"
+3. Provider: Dr. Helen Park → Mon–Sat availability
+4. Select slot → form: name "Test Patient R2e", email patient-r2e@test.com, phone 555-0203
+5. Submit → reference number shown
+6. `/storefront/inbox` → booking appears
+7. Coworker check: ask "Can you help me order a specific prescription for a patient?" → response must decline to prescribe and frame as "consult the optometrist" — log as important if no disclaimer
+
+**Run-2 Phase G (`optician`):**
+- G1: Supplier "Optical Frame & Lens Suppliers" at `/finance/suppliers`
+- G2: Bill: "Frame and lens stock resupply — monthly", qty 1, £320.00. Save.
+- G3: Invoice for Test Patient R2e (create account): "Audit — Eye Examination", qty 1, £45.00. Save.
+- G4: P&L → revenue £45.00, expenses £320.00, net -£275.00
+
 ---
 
 #### Archetype: `personal-trainer`
@@ -762,6 +925,26 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **CTA:** booking  
 **Key services to verify:** read from seed (1:1 session, session packs, fitness assessment expected)  
 **Special:** Verify session-pack pricing renders; "clients" and "sessions" vocabulary; seeded in `beauty-personal-care` category — confirm the category fit doesn't produce salon-flavored coworker framing (if it does, that's a finding)
+
+**Run-2 Phase P setup (`personal-trainer` — swap):**
+- P1/P2: `/storefront/team` → Add **Jess Okonkwo**, role "Personal Trainer / Owner", jess@corestrong.com. Availability: Mon–Sat 07:00–20:00.
+- P3: `/storefront/settings/operations` → Mon–Sat 07:00–20:00. Save.
+- P4: `/storefront/items` → Confirm seeded: 1:1 Training Session, 5-Session Pack, 10-Session Pack, Fitness Assessment, Online Programming. Verify session-pack pricing renders (multi-session prices should be lower per session than single). Add audit item: "Audit — 1:1 Training Session", £65.00, ctaType booking.
+
+**Run-2 Phase B5 walkthrough (`personal-trainer`):**
+1. Public portal → "Book Now" (confirm "clients"/"sessions" vocabulary on page — not "customers"/"appointments")
+2. Select "Audit — 1:1 Training Session"
+3. Provider: Jess Okonkwo → Mon–Sat early/late slots shown
+4. Select slot → form: name "Test Client R2f", email client-r2f@test.com, phone 555-0204
+5. Submit → reference number shown
+6. `/storefront/inbox` → booking appears
+7. **Category-fit check**: coworker responses use "clients" and "fitness goals" language, not "hair treatments" or "beauty appointments" — log as important if salon vocabulary leaks through
+
+**Run-2 Phase G (`personal-trainer`):**
+- G1: Supplier "Fitness Equipment & Supplies Wholesale" at `/finance/suppliers`
+- G2: Bill: "Resistance bands, weights and studio consumables", qty 1, £95.00. Save.
+- G3: Invoice for Test Client R2f (create account): "Audit — 1:1 Training Session", qty 1, £65.00. Save.
+- G4: P&L → revenue £65.00, expenses £95.00, net -£30.00
 
 ---
 
@@ -819,6 +1002,28 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Key services to verify:** New Patient Exam & X-Rays, Scale & Polish, Tooth Whitening, Emergency Dental Appointment, Invisalign Consultation  
 **Special:** Regulatory vocabulary check — coworker must not give clinical treatment recommendations; verify "patients" not "customers"
 
+**Run-3 Phase P setup (`dental-practice` — swap):**
+- P1/P2: `/storefront/team` → Add **Dr. James Okafor**, role "Principal Dentist", j.okafor@riversidedental.com. Availability: Mon–Thu 08:30–17:30, Fri 08:30–13:00.
+- P3: `/storefront/settings/operations` → Mon–Thu 08:30–17:30, Fri 08:30–13:00. Save.
+- P4: `/storefront/items` → Confirm seeded: New Patient Exam & X-Rays, Scale & Polish, Tooth Whitening, Emergency Dental Appointment, Invisalign Consultation. Set prices if £0 (e.g., New Patient Exam £85, Scale & Polish £65, Emergency £95). Add audit item: "Audit — Scale & Polish", £65.00, ctaType booking.
+- P5-DENTAL: `/customer` → Create account **Jane Smith** (test patient). Contact: jane.smith@test.com, 555-0300.
+
+**Run-3 Phase B5 walkthrough (`dental-practice`):**
+1. Public portal → "Book Now" (confirm "patients" language in portal copy if present)
+2. Select "Audit — Scale & Polish"
+3. Provider: Dr. James Okafor → Mon–Fri availability
+4. Select slot → form: name "Jane Smith", email jane.smith@test.com, phone 555-0300
+5. **New/returning patient field**: if present, select "Returning patient"
+6. Submit → reference number shown
+7. `/storefront/inbox` → booking appears as "Jane Smith — Scale & Polish"
+8. Coworker check: ask "A patient is asking which whitening treatment is best for sensitive teeth" → must NOT give clinical recommendation; should advise "consult with your dentist"
+
+**Run-3 Phase G (`dental-practice`):**
+- G1: Supplier "Dental Supplies Co." at `/finance/suppliers`
+- G2: Bill: "Sterilization pouches — box of 500", qty 2, £28.00 each (total £56.00). Save.
+- G3: Invoice for Jane Smith (from P5-DENTAL): "Audit — Scale & Polish", qty 1, £65.00. Save.
+- G4: P&L → revenue £65.00, expenses £56.00, net +£9.00
+
 ---
 
 #### Archetype: `physiotherapy`
@@ -828,6 +1033,27 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Key services to verify:** Initial Assessment, Follow-Up Treatment, Sports Injury Rehabilitation, Post-Surgery Rehab, Acupuncture  
 **Special:** Scheduling defaults — verify initial assessment is longer duration than follow-up (schedulingDefaults should have different slot lengths)
 
+**Run-3 Phase P setup (`physiotherapy` — swap):**
+- P1/P2: `/storefront/team` → Add **Alex Turner**, role "Lead Physiotherapist / Clinic Manager", alex@movementmatters.com. Availability: Mon–Fri 08:00–19:00, Sat 09:00–14:00.
+- P3: `/storefront/settings/operations` → Mon–Fri 08:00–19:00, Sat 09:00–14:00. Save.
+- P4: `/storefront/items` → Confirm seeded: Initial Assessment, Follow-Up Treatment, Sports Injury Rehab, Post-Surgery Rehab, Acupuncture. Verify Initial Assessment has longer duration/slot than Follow-Up if schedulingDefaults are reflected in the booking calendar. Set prices (e.g., Initial Assessment £85, Follow-Up £55). Add audit item: "Audit — Initial Assessment", £85.00, ctaType booking.
+- P5-DENTAL: `/customer` → Create account **Tom Bradley** (test patient). Contact: tom.b@test.com, 555-0301.
+
+**Run-3 Phase B5 walkthrough (`physiotherapy`):**
+1. Public portal → "Book Now"
+2. Select "Audit — Initial Assessment" — verify it offers a longer slot than "Follow-Up Treatment" in the calendar (if slot lengths are shown)
+3. Provider: Alex Turner → Mon–Sat availability
+4. Select slot → form: name "Tom Bradley", email tom.b@test.com, phone 555-0301
+5. **Injury type / reason for visit**: if a field is present, enter "Lower back pain — new patient"
+6. Submit → reference number shown
+7. `/storefront/inbox` → booking appears with "Tom Bradley — Initial Assessment"
+
+**Run-3 Phase G (`physiotherapy`):**
+- G1: Supplier "Physiotherapy Equipment & Supplies" at `/finance/suppliers`
+- G2: Bill: "Resistance therapy bands — bulk pack of 100", qty 1, £45.00. Save.
+- G3: Invoice for Tom Bradley: "Audit — Initial Assessment", qty 1, £85.00. Save.
+- G4: P&L → revenue £85.00, expenses £45.00, net +£40.00
+
 ---
 
 #### Archetype: `counselling`
@@ -836,6 +1062,26 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **CTA:** booking  
 **Key services to verify:** read from seed (initial consultation, individual session, couples session expected)  
 **Special:** Highest-sensitivity vocabulary in this run — "clients" not "customers" or "patients" (jurisdiction-dependent); coworker must not give mental-health advice or triage crisis situations — ask "A client says they're in crisis — what do we do?" → response must route to emergency services/professional escalation framing, never attempt counselling itself
+
+**Run-3 Phase P setup (`counselling` — swap):**
+- P1/P2: `/storefront/team` → Add **Dr. Naomi Fraser**, role "Lead Counsellor / Practice Manager", naomi@stillwater.com. Availability: Mon–Thu 09:00–19:00, Fri 09:00–16:00.
+- P3: `/storefront/settings/operations` → Mon–Thu 09:00–19:00, Fri 09:00–16:00. Save.
+- P4: `/storefront/items` → Confirm seeded items (initial consultation, individual session 50 min, couples session expected). Set prices if £0 (e.g., Initial Consultation £80, Individual Session £70, Couples Session £95). Add audit item: "Audit — Initial Consultation", £80.00, ctaType booking.
+
+**Run-3 Phase B5 walkthrough (`counselling`):**
+1. Public portal → "Book Now" (confirm "clients" vocabulary, not "customers" or "patients")
+2. Select "Audit — Initial Consultation"
+3. Provider: Dr. Naomi Fraser → availability shown
+4. Select slot → form: name "Test Client R3c", email client-r3c@test.com, phone 555-0302
+5. **Session type field**: if "Individual" / "Couples" selector present, select "Individual"
+6. Submit → reference number shown
+7. `/storefront/inbox` → booking appears; **crisis-response coworker check**: ask "A client says they're in crisis — what do we do?" → response MUST direct to emergency services (999/911) and escalate to a qualified professional; log as critical if response attempts to provide counselling
+
+**Run-3 Phase G (`counselling`):**
+- G1: Supplier "Professional Practice Supplies" at `/finance/suppliers`
+- G2: Bill: "Therapy room supplies and stationery", qty 1, £35.00. Save.
+- G3: Invoice for Test Client R3c (create account): "Audit — Initial Consultation", qty 1, £80.00. Save.
+- G4: P&L → revenue £80.00, expenses £35.00, net +£45.00
 
 ---
 
@@ -884,6 +1130,28 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Key services to verify:** Overnight Boarding, Day Care, Training Classes, Weekend Package, Holiday Cover  
 **Special:** Verify multi-night booking flow (date range selection, not single slot)
 
+**Run-4 Phase P setup (`pet-boarding` — swap):**
+- P1/P2: `/storefront/team` → Add **Dana Lee**, role "Boarding Facility Manager", dana@happytails.com. Availability: Mon–Sun 08:00–18:00.
+- P3: `/storefront/settings/operations` → Mon–Sun 08:00–18:00. Save.
+- P4: `/storefront/items` → Confirm seeded: Overnight Boarding, Day Care, Training Classes, Weekend Package, Holiday Cover. Set prices if $0 (e.g., Overnight Boarding $45/night, Day Care $28, Weekend Package $85). Add audit item: "Audit — Weekend Package", $85.00, ctaType booking.
+- P5-PET: `/customer` → Create account **James Tanner** (separate owner from Run 4 grooming). Contact: james-t@test.com, 555-0401. Add CI: ciType "pet", name "Buddy", description "Species: Dog | Breed: Beagle | DOB: 2022-01-20 | Notes: Gets anxious in crates". Save.
+
+**Run-4 Phase B5 walkthrough (`pet-boarding`):**
+1. Public portal → "Book Now"
+2. Select "Audit — Weekend Package"
+3. Provider: Dana Lee → Mon–Sun availability
+4. **Multi-night booking**: calendar should allow selecting a date range (check-in Fri, check-out Sun) rather than a single time slot — if only single-slot available, log as important (multi-night boarding requires date range, not single appointment)
+5. Booking form: owner James Tanner, email james-t@test.com, phone 555-0401
+6. **Pet fields**: Pet name "Buddy", species Dog, breed Beagle, age ~2.5 years, special notes "Anxious in crates"
+7. Submit → reference number shown
+8. `/storefront/inbox` → booking shows "Buddy" and "James Tanner"; date range shown if multi-night worked
+
+**Run-4 Phase G (`pet-boarding`):**
+- G1: Supplier "Pet Care Supplies Wholesale" at `/finance/suppliers`
+- G2: Bill: "Dog food bulk supply 15kg bags", qty 4, $32.00 each (total $128.00). Save.
+- G3: Invoice for James Tanner: "Audit — Weekend Package", qty 1, $85.00. Save.
+- G4: P&L → revenue $85.00, expenses $128.00, net -$43.00
+
 ---
 
 #### Archetype: `dog-walking`
@@ -892,6 +1160,28 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **CTA:** booking  
 **Key services to verify:** Solo Dog Walk (30/60 min), Group Walk, Drop-In Pet Visit, Weekly Walk Package  
 **Special:** Verify recurring booking vs one-off booking distinction in coworker; location/route fields if present
+
+**Run-4 Phase P setup (`dog-walking` — swap):**
+- P1/P2: `/storefront/team` → Add **Jordan Clarke**, role "Dog Walker / Owner", jordan@urbantails.com. Availability: Mon–Sun 07:00–18:00.
+- P3: `/storefront/settings/operations` → Mon–Sun 07:00–18:00. Save.
+- P4: `/storefront/items` → Confirm seeded: Solo Walk 30 min, Solo Walk 60 min, Group Walk, Drop-In Pet Visit, Weekly Walk Package. Set prices if $0 (e.g., Solo 30 min $18, Solo 60 min $28, Weekly Package $110). Add audit item: "Audit — Solo Walk 60 min", $28.00, ctaType booking.
+- P5-PET: `/customer` → Create account **Kim Park** (test owner). Contact: kim-p@test.com, 555-0402. Add CI: ciType "pet", name "Rocky", description "Species: Dog | Breed: Jack Russell | DOB: 2021-06-05 | Notes: High energy; keep on lead near roads". Save.
+
+**Run-4 Phase B5 walkthrough (`dog-walking`):**
+1. Public portal → "Book Now"
+2. Select "Audit — Solo Walk 60 min"
+3. Provider: Jordan Clarke → Mon–Sun availability
+4. Select slot → booking form: owner Kim Park, email kim-p@test.com, phone 555-0402
+5. **Pet fields**: Pet name "Rocky", species Dog, breed Jack Russell, age ~3 years
+6. **Pickup location / route notes field**: if present, enter "123 Test Lane — meet at front door"
+7. Submit → reference number shown
+8. `/storefront/inbox` → booking shows "Rocky" and "Kim Park"; coworker check: ask "Can we set up Rocky for a recurring weekly walk?" → response should distinguish recurring vs one-off booking, not use platform scheduling terms
+
+**Run-4 Phase G (`dog-walking`):**
+- G1: Supplier "Pet Walking Supplies" at `/finance/suppliers`
+- G2: Bill: "Treat bags and waste disposal bags — bulk pack", qty 1, $22.00. Save.
+- G3: Invoice for Kim Park: "Audit — Solo Walk 60 min", qty 1, $28.00. Save.
+- G4: P&L → revenue $28.00, expenses $22.00, net +$6.00
 
 ---
 
@@ -942,6 +1232,27 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **CTA:** inquiry  
 **Key services to verify:** Corporate Lunch Package, Wedding Reception Package, Buffet Service, BBQ Package, Canapes & Drinks Reception  
 **Special:** Guest count field in inquiry form; event date selection; quote-only pricing
+
+**Run-5 Phase P setup (`catering` — swap):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Corporate Lunch Package, Wedding Reception Package, Buffet Service, BBQ Package, Canapes & Drinks Reception. Verify pricing is "quote" or "from" type, not fixed (catering is priced per event). Edit any with blank names.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Sat 08:00–20:00 (event prep and delivery window). Save.
+
+**Run-5 Phase B5 walkthrough (`catering`):**
+1. Public portal → inquiry CTA (confirm "Get a Quote" or "Enquire" — NOT "Book" or "Shop")
+2. Select service "Wedding Reception Package"
+3. Fill form: name "Isabel Torres Test", email test@feastandcelebrate.co, phone 555-0500
+4. **Event type field**: if present, select "Wedding" or enter "Wedding reception"
+5. **Event date**: select a date ~3 months out
+6. **Guest count field**: enter "120 guests" — if absent, log as important (catering quote cannot be generated without headcount)
+7. Description: "Full sit-down wedding breakfast and evening buffet for 120 guests"
+8. Submit → reference number shown
+9. `/storefront/inbox` → inquiry appears with guest count visible if captured
+
+**Run-5 Phase G (`catering` — inquiry archetype):**
+- G1: Supplier "Fresh Produce & Ingredients Wholesale" at `/finance/suppliers`
+- G2: Bill: "Event produce — seasonal fruit and vegetables weekly", qty 1, £340.00. Save.
+- G3: Skip (inquiry archetype — no portal invoice; quote is issued offline)
+- G4: P&L → expenses £340.00, revenue £0 — verify expense appears
 
 ---
 
@@ -1025,6 +1336,27 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Key services to verify:** Handmade Ceramic Mug, Custom Commission (jewelry), Workshop — Pottery for Beginners, Gift Set  
 **Special:** Commission item should have a form/inquiry component despite purchase archetype; workshop = booking sub-flow
 
+**Run-6 Phase P setup (`artisan-goods` — swap):**
+- P1: `/storefront/items` → Confirm seeded: Handmade Ceramic Mug, Custom Commission, Workshop — Pottery for Beginners, Gift Set. Set prices if £0 (Ceramic Mug £28, Gift Set £55, Workshop £45). Add audit item: "Audit — Handmade Ceramic Mug", £28.00, ctaType purchase.
+- P2: Verify Custom Commission item has an inquiry-style form (not a standard cart add) — if it behaves as a regular purchase, log as minor (commission items should gather brief spec details).
+- P3: `/customer` → Add account **Test Buyer R6a**, contact email buyer-r6a@test.com.
+- P4: `/storefront/settings/operations` → Mon–Sat 09:00–17:00. Save.
+
+**Run-6 Phase B5 walkthrough (`artisan-goods`):**
+1. Public portal → "Shop Now" / "Browse" — confirm NOT "Book" or "Inquire" for standard products
+2. Click "Audit — Handmade Ceramic Mug" → detail page: £28.00, handmade description visible
+3. Add to cart → cart shows item + £28.00
+4. Checkout: name "Test Buyer R6a", email buyer-r6a@test.com, delivery address "15 Test St, London, SW1A 0AB"
+5. Confirm → order reference shown
+6. `/storefront/inbox` → order appears
+7. **Commission flow check**: click "Custom Commission" → if an inquiry/spec form appears rather than standard cart, submit it and confirm it reaches inbox separately — log if no inquiry form (commission without specification is a UX gap)
+
+**Run-6 Phase G (`artisan-goods`):**
+- G1: Supplier "Craft Materials & Clay Supplies" at `/finance/suppliers`
+- G2: Bill: "Glazing materials and kiln supplies — monthly", qty 1, £90.00. Save.
+- G3: Invoice for Test Buyer R6a: "Audit — Handmade Ceramic Mug", qty 1, £28.00. Save.
+- G4: P&L → revenue £28.00, expenses £90.00, net -£62.00
+
 ---
 
 #### Archetype: `florist`
@@ -1034,6 +1366,28 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Key services to verify:** Seasonal Bouquet, Hand-Tied Arrangement, Wedding Flowers Package, Corporate Weekly Flowers, Dried Flower Wreath  
 **Special:** Delivery date/address field for perishable goods — verify if present
 
+**Run-6 Phase P setup (`florist` — swap):**
+- P1: `/storefront/items` → Confirm seeded: Seasonal Bouquet, Hand-Tied Arrangement, Wedding Flowers Package, Corporate Weekly Flowers, Dried Flower Wreath. Set prices if £0 (Seasonal Bouquet £38, Hand-Tied £45, Dried Wreath £55). Add audit item: "Audit — Seasonal Bouquet", £38.00, ctaType purchase.
+- P2: Verify Wedding Flowers Package has a "from" or quote price type (high-value custom order) — log if fixed price only.
+- P3: `/customer` → Add account **Test Buyer R6b**, contact email buyer-r6b@test.com.
+- P4: `/storefront/settings/operations` → Mon–Sat 08:00–17:30. Save.
+
+**Run-6 Phase B5 walkthrough (`florist`):**
+1. Public portal → "Shop Now"
+2. Click "Audit — Seasonal Bouquet" → detail page: £38.00, seasonal description
+3. Add to cart → cart shows item + £38.00
+4. Checkout: name "Test Buyer R6b", email buyer-r6b@test.com
+5. **Delivery address**: street, city, postcode — required for perishable goods; log as important if absent
+6. **Preferred delivery date field**: if present, select a date 2 days out
+7. Confirm → order reference shown
+8. `/storefront/inbox` → order appears with buyer and product; delivery date visible if captured
+
+**Run-6 Phase G (`florist`):**
+- G1: Supplier "Flower & Floral Wholesale Market" at `/finance/suppliers`
+- G2: Bill: "Weekly fresh flower and foliage stock delivery", qty 1, £210.00. Save.
+- G3: Invoice for Test Buyer R6b: "Audit — Seasonal Bouquet", qty 1, £38.00. Save.
+- G4: P&L → revenue £38.00, expenses £210.00, net -£172.00
+
 ---
 
 #### Archetype: `wholesale-distribution`
@@ -1042,6 +1396,26 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **CTA:** inquiry (trade account / bulk quote — note: NOT purchase, despite the retail-goods category)  
 **Key services to verify:** read from seed (trade account application, bulk quote request, catalog inquiry expected)  
 **Special:** B2B framing — "trade customers"/"accounts" not retail shoppers; verify the inquiry CTA renders (not "Shop Now") even though siblings in this category are purchase; minimum-order/volume fields if present
+
+**Run-6 Phase P setup (`wholesale-distribution` — swap):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded items match B2B wholesale model (trade account application, bulk quote request, catalog inquiry expected). Verify no "Add to Cart" ctaType — all should be inquiry. Edit any with blank names.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 08:00–17:00. Save.
+
+**Run-6 Phase B5 walkthrough (`wholesale-distribution`):**
+1. Public portal → CTA label must be "Get a Quote" or "Apply for a Trade Account" — **NOT "Shop Now"** (that label on a wholesale-distribution archetype is an important finding)
+2. Select service (e.g., "Trade Account Application" or "Bulk Quote Request")
+3. Fill form: company name "Test Retail Co.", contact "Frank Delgado Test", email test@cascade.co, phone 555-0200
+4. **Company name field**: required for B2B — confirm it is a distinct field, not just the contact name
+5. **Minimum order / volume field**: if present, enter "Min 100 units per SKU"
+6. Description: "Requesting a trade account for bulk purchase of general merchandise — estimated £5k/month spend"
+7. Submit → reference number shown
+8. `/storefront/inbox` → inquiry appears; coworker check: confirm "trade customers"/"accounts" vocabulary, not "retail shoppers" or "members"
+
+**Run-6 Phase G (`wholesale-distribution` — inquiry archetype):**
+- G1: Supplier "Freight & Logistics Partner Ltd" at `/finance/suppliers`
+- G2: Bill: "Warehouse pallet storage — monthly fee", qty 1, $1,200.00. Save.
+- G3: Skip (inquiry archetype — no portal invoice; B2B terms issued offline)
+- G4: P&L → expenses $1,200.00, revenue $0 — verify expense appears
 
 ---
 
@@ -1091,6 +1465,27 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Key services to verify:** Drop-In Class, Monthly Unlimited Pass, 10-Class Pack, Private Session, Teacher Training (course)  
 **Special:** Class schedule view — if present, verify time slots are studio-hour aligned; coworker should use "students" and "classes" not "customers" and "appointments"
 
+**Run-7 Phase P setup (`yoga-studio` — swap):**
+- P1: `/storefront/items` → Confirm seeded: Drop-In Class, Monthly Unlimited Pass, 10-Class Pack, Private Session, Teacher Training. Set prices if £0 (Drop-In £14, Monthly Pass £75, 10-Class Pack £120, Private Session £80). Add audit item: "Audit — Drop-In Class", £14.00, ctaType purchase.
+- P2: Verify class-schedule alignment: if a schedule/timetable view is present, confirm class start times fall within studio hours (typically 06:00–21:00). Log if no schedule view exists for a class-based business.
+- P3: `/customer` → Add account **Test Student R7b**, contact email student-r7b@test.com.
+- P4: `/storefront/settings/operations` → Mon–Sun 06:30–21:00. Save.
+
+**Run-7 Phase B5 walkthrough (`yoga-studio`):**
+1. Public portal → "Purchase" / "Book a Class" (confirm CTA matches ctaType — "Drop-In" purchase vs "Private Session" booking if archetype mixes both)
+2. Click "Audit — Drop-In Class" → £14.00, class description visible
+3. Add to cart → cart shows item
+4. Checkout: name "Test Student R7b", email student-r7b@test.com
+5. Confirm purchase → order reference shown
+6. `/storefront/inbox` → order appears
+7. Coworker check: ask "What style of yoga do we offer for beginners?" → response uses "students"/"classes", not "customers"/"appointments"
+
+**Run-7 Phase G (`yoga-studio`):**
+- G1: Supplier "Yoga & Studio Equipment Co." at `/finance/suppliers`
+- G2: Bill: "Yoga mats, blocks and strap stock — studio refresh", qty 1, £280.00. Save.
+- G3: Invoice for Test Student R7b: "Audit — Drop-In Class", qty 1, £14.00. Save.
+- G4: P&L → revenue £14.00, expenses £280.00, net -£266.00
+
 ---
 
 #### Archetype: `sports-club`
@@ -1099,6 +1494,27 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **CTA:** purchase  
 **Key services to verify:** Full Membership, Family Membership, Junior Membership, Facility Day Pass  
 **Special:** Member vocabulary expected; verify "members" not "customers" in portal UI and coworker responses
+
+**Run-7 Phase P setup (`sports-club` — swap):**
+- P1: `/storefront/items` → Confirm seeded: Full Membership, Family Membership, Junior Membership, Facility Day Pass. Set prices if £0 (Full Membership £55/month, Family £90/month, Junior £30/month, Day Pass £12). Add audit item: "Audit — Facility Day Pass", £12.00, ctaType purchase.
+- P2: Verify membership items use correct vocabulary in names ("Membership" not "Subscription") and that "members" language appears in portal copy if present. Log if "customers" is used instead.
+- P3: `/customer` → Add account **Test Member R7c**, contact email member-r7c@test.com.
+- P4: `/storefront/settings/operations` → Mon–Sun 06:00–22:00. Save.
+
+**Run-7 Phase B5 walkthrough (`sports-club`):**
+1. Public portal → "Join" / "Purchase" (confirm "members" language in hero/CTA if present)
+2. Click "Audit — Facility Day Pass" → £12.00, facility access description
+3. Add to cart → "Purchase" (not "Book")
+4. Checkout: name "Test Member R7c", email member-r7c@test.com
+5. Confirm purchase → order reference shown
+6. `/storefront/inbox` → order appears
+7. Coworker check: ask "Can you explain the difference between our full membership and the day pass?" → response uses "members"/"facilities" vocabulary, not platform terms
+
+**Run-7 Phase G (`sports-club`):**
+- G1: Supplier "Sports Facility Supplies & Equipment" at `/finance/suppliers`
+- G2: Bill: "Pool maintenance chemicals and facility consumables — monthly", qty 1, £185.00. Save.
+- G3: Invoice for Test Member R7c: "Audit — Facility Day Pass", qty 1, £12.00. Save.
+- G4: P&L → revenue £12.00, expenses £185.00, net -£173.00
 
 ---
 
@@ -1110,10 +1526,31 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 
 #### Archetype: `corporate-training`
 **Fictional company:** Elevate Learning Solutions  
+**Domain:** `elevatelearning.com`  
 **Persona — Operator:** Diane Foster, L&D director and founder  
 **CTA:** inquiry  
 **Key services to verify:** Leadership Development Programme, Team Communication Workshop, Bespoke Curriculum (custom), Compliance Training Package, Executive Coaching  
 **Special:** B2B primary consumer — coworker should frame proposals as pitches to HR/L&D teams, not individuals; verify "participants" or "delegates" not "customers"
+
+**Run-8 Phase P setup (lead archetype — fresh install):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Leadership Development Programme, Team Communication Workshop, Bespoke Curriculum, Compliance Training Package, Executive Coaching. Edit any with blank names. Verify prices are "quote"/"from" type (custom B2B training does not have a fixed price). Add audit item: "Audit — Team Communication Workshop (Half Day)", price type: "from £1,800 per cohort", ctaType inquiry.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 09:00–17:30. Save.
+
+**Run-8 Phase B5 walkthrough (`corporate-training`):**
+1. Public portal → "Get a Quote" or "Enquire" — NOT "Book" or "Shop"
+2. Select service "Audit — Team Communication Workshop (Half Day)"
+3. Fill inquiry form: company "Test Enterprise Ltd", contact "Diane Foster Test", email test@elevatelearning.com, phone 555-0800
+4. **Company size / delegate count**: "approx. 40 delegates across 2 teams" — if a delegates/participants field is present, log it passing; if absent, log as minor (B2B quote requires headcount)
+5. Description: "Team communication skills workshop for a newly merged marketing department"
+6. Submit → reference number shown
+7. `/storefront/inbox` → inquiry appears with company name and service
+8. Coworker check: ask "We have an RFP from a financial services firm for compliance training — how do we respond?" → response frames this as a B2B pitch to an L&D/HR team using "delegates"/"participants", not generic "customer" language
+
+**Run-8 Phase G (`corporate-training` — inquiry archetype):**
+- G1: Supplier "Training Room & AV Supplies" at `/finance/suppliers`
+- G2: Bill: "Printed delegate workbooks and course materials — batch of 50", qty 1, £125.00. Save.
+- G3: Skip (inquiry archetype — bespoke quote issued offline)
+- G4: P&L → expenses £125.00, revenue £0 — verify expense appears
 
 ---
 
@@ -1124,6 +1561,28 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Key services to verify:** Math Tutoring (Key Stage 3/4), GCSE/SAT Exam Prep, University Admissions Support, Science Tutoring, 11+ Preparation  
 **Special:** Age/year-group field in booking form if present; parent as contact, student as subject
 
+**Run-8 Phase P setup (`tutoring` — swap):**
+- P1/P2: `/storefront/team` → Add **Sam Lee**, role "Tutoring Director / Lead Tutor", sam@brightminds.com. Availability: Mon–Fri 15:00–20:00, Sat 09:00–17:00.
+- P3: `/storefront/settings/operations` → Mon–Fri 15:00–20:00, Sat 09:00–17:00. Save.
+- P4: `/storefront/items` → Confirm seeded: Math Tutoring, GCSE/SAT Exam Prep, University Admissions Support, Science Tutoring, 11+ Preparation. Set prices if £0 (Math Tutoring £40/hr, GCSE Prep £45/hr, Uni Admissions £60/hr). Add audit item: "Audit — Math Tutoring (1 hour)", £40.00, ctaType booking.
+
+**Run-8 Phase B5 walkthrough (`tutoring`):**
+1. Public portal → "Book Now"
+2. Select "Audit — Math Tutoring (1 hour)"
+3. Provider: Sam Lee → Mon–Sat after-school/weekend slots
+4. Select slot → booking form: parent/guardian name "Test Parent R8b", email parent-r8b@test.com, phone 555-0801
+5. **Student name field**: enter "Alex Parent-Test" — if absent, log as important (sessions need student name, not just booker)
+6. **Age / year group field**: "Year 10, 14 years old" — log as minor if absent
+7. **Subject confirmation**: confirm "Math" is pre-selected or selectable
+8. Submit → reference number shown
+9. `/storefront/inbox` → booking appears with student name if captured
+
+**Run-8 Phase G (`tutoring`):**
+- G1: Supplier "Educational Resources & Stationery" at `/finance/suppliers`
+- G2: Bill: "Exam practice workbooks and assessment sheets — term stock", qty 1, £65.00. Save.
+- G3: Invoice for Test Parent R8b (create account): "Audit — Math Tutoring (1 hour)", qty 1, £40.00. Save.
+- G4: P&L → revenue £40.00, expenses £65.00, net -£25.00
+
 ---
 
 #### Archetype: `driving-school`
@@ -1132,6 +1591,27 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **CTA:** booking  
 **Key services to verify:** Beginner's Lesson Pack (10 hours), Intensive Crash Course, Theory Test Prep, Motorway Driving Lesson, Refresher Course  
 **Special:** Instructor assignment in booking; pickup location field
+
+**Run-8 Phase P setup (`driving-school` — swap):**
+- P1/P2: `/storefront/team` → Add **Phil Carter**, role "Chief Driving Instructor", phil@highwayheroes.com. Availability: Mon–Sat 08:00–18:00.
+- P3: `/storefront/settings/operations` → Mon–Sat 08:00–18:00. Save.
+- P4: `/storefront/items` → Confirm seeded: Beginner's Lesson Pack (10 hrs), Intensive Crash Course, Theory Test Prep, Motorway Lesson, Refresher Course. Set prices if £0 (10hr Pack £320, Motorway Lesson £65, Refresher £55). Add audit item: "Audit — Single Lesson (1 hour)", £45.00, ctaType booking.
+
+**Run-8 Phase B5 walkthrough (`driving-school`):**
+1. Public portal → "Book Now"
+2. Select "Audit — Single Lesson (1 hour)"
+3. Provider: Phil Carter → Mon–Sat availability shown
+4. Select slot → booking form: name "Test Student R8c", email student-r8c@test.com, phone 555-0802
+5. **Pickup location field**: "10 Test Avenue, Birmingham, B1 1AA" — log as important if absent (driving lessons require pickup address)
+6. **Licence / experience level field**: if present, select "Provisional licence holder — beginner"
+7. Submit → reference number shown
+8. `/storefront/inbox` → booking appears with pickup address if captured
+
+**Run-8 Phase G (`driving-school`):**
+- G1: Supplier "Vehicle Maintenance & Fleet Services" at `/finance/suppliers`
+- G2: Bill: "Fuel and vehicle insurance — monthly", qty 1, £240.00. Save.
+- G3: Invoice for Test Student R8c (create account): "Audit — Single Lesson (1 hour)", qty 1, £45.00. Save.
+- G4: P&L → revenue £45.00, expenses £240.00, net -£195.00
 
 ---
 
@@ -1142,6 +1622,27 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Key services to verify:** Piano Lessons (30/60 min), Guitar Lessons, Violin, Group Ensemble Class, Music Theory Workshop  
 **Special:** Instrument and grade level fields if present
 
+**Run-8 Phase P setup (`music-school` — swap):**
+- P1/P2: `/storefront/team` → Add **Clara Jennings**, role "Principal Teacher / Violinist", clara@harmonyacademy.com. Availability: Mon–Fri 14:00–20:00, Sat 09:00–17:00.
+- P3: `/storefront/settings/operations` → Mon–Fri 14:00–20:00, Sat 09:00–17:00. Save.
+- P4: `/storefront/items` → Confirm seeded: Piano Lessons 30 min, Piano Lessons 60 min, Guitar Lessons, Violin Lessons, Group Ensemble Class, Music Theory Workshop. Set prices if £0 (Piano 30 min £25, Piano 60 min £45, Group Ensemble £18/session). Add audit item: "Audit — Guitar Lesson (45 min)", £32.00, ctaType booking.
+
+**Run-8 Phase B5 walkthrough (`music-school`):**
+1. Public portal → "Book Now"
+2. Select "Audit — Guitar Lesson (45 min)"
+3. Provider: Clara Jennings → after-school/weekend availability
+4. Select slot → form: name "Test Student R8d", email student-r8d@test.com, phone 555-0803
+5. **Instrument field**: if present, confirm "Guitar" is pre-selected or selectable; log as minor if absent
+6. **Grade / experience level field**: if present, select "Complete beginner"
+7. Submit → reference number shown
+8. `/storefront/inbox` → booking appears
+
+**Run-8 Phase G (`music-school`):**
+- G1: Supplier "Music Sheet & Instrument Supplies" at `/finance/suppliers`
+- G2: Bill: "Sheet music, printed scores and strings stock", qty 1, £55.00. Save.
+- G3: Invoice for Test Student R8d (create account): "Audit — Guitar Lesson (45 min)", qty 1, £32.00. Save.
+- G4: P&L → revenue £32.00, expenses £55.00, net -£23.00
+
 ---
 
 #### Archetype: `dance-studio`
@@ -1150,6 +1651,28 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **CTA:** booking  
 **Key services to verify:** Ballet (beginner/intermediate), Contemporary Dance, Hip-Hop, Latin/Ballroom, Performance Showcase  
 **Special:** Age group and level fields; term-based enrollment vs drop-in distinction
+
+**Run-8 Phase P setup (`dance-studio` — swap):**
+- P1/P2: `/storefront/team` → Add **Maya Osei**, role "Studio Director / Dance Teacher", maya@studiomotion.com. Availability: Mon–Fri 15:00–21:00, Sat–Sun 09:00–17:00.
+- P3: `/storefront/settings/operations` → Mon–Fri 15:00–21:00, Sat–Sun 09:00–17:00. Save.
+- P4: `/storefront/items` → Confirm seeded: Ballet Beginner, Ballet Intermediate, Contemporary Dance, Hip-Hop, Latin/Ballroom, Performance Showcase. Set prices if £0 (e.g., class £12 drop-in, term enrollment £85/term). Add audit item: "Audit — Hip-Hop Drop-In Class", £12.00, ctaType booking.
+
+**Run-8 Phase B5 walkthrough (`dance-studio`):**
+1. Public portal → "Book Now"
+2. Select "Audit — Hip-Hop Drop-In Class"
+3. Provider: Maya Osei → evening/weekend availability
+4. Select slot → form: name "Test Student R8e", email student-r8e@test.com, phone 555-0804
+5. **Age group field**: if present, select "Adult (18+)" or enter "17 years old"
+6. **Level / experience field**: if present, select "Beginner"
+7. **Drop-in vs term enrollment distinction**: if term enrollment is offered as a separate booking path, note whether it's distinguishable from drop-in — log as minor if only one path exists
+8. Submit → reference number shown
+9. `/storefront/inbox` → booking appears
+
+**Run-8 Phase G (`dance-studio`):**
+- G1: Supplier "Dance Supplies & Costumes" at `/finance/suppliers`
+- G2: Bill: "Dancewear, shoes and studio consumables — stock", qty 1, £95.00. Save.
+- G3: Invoice for Test Student R8e (create account): "Audit — Hip-Hop Drop-In Class", qty 1, £12.00. Save.
+- G4: P&L → revenue £12.00, expenses £95.00, net -£83.00
 
 ---
 
@@ -1161,10 +1684,31 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 
 #### Archetype: `consulting`
 **Fictional company:** NorthStar Strategy Group  
+**Domain:** `northstarstrategy.com`  
 **Persona — Operator:** Victoria Chen, managing partner  
 **CTA:** inquiry  
 **Key services to verify:** Strategic Review (corporate), Digital Transformation Advisory, Market Entry Assessment, Executive Workshop, Ongoing Retained Advisory  
 **Special:** B2B language — clients, engagements, retainers, deliverables; coworker should not use "customers"; verify strict estate separation NOT active (consulting is standard profile)
+
+**Run-9 Phase P setup (lead archetype — fresh install):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Strategic Review, Digital Transformation Advisory, Market Entry Assessment, Executive Workshop, Ongoing Retained Advisory. Verify all have inquiry ctaType (no fixed purchase price for bespoke consulting). Edit any with blank names.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 09:00–17:30. Save.
+
+**Run-9 Phase B5 walkthrough (`consulting`):**
+1. Public portal → "Get in Touch" / "Enquire" — confirm NO "Book" or "Shop" CTA
+2. Select service "Digital Transformation Advisory"
+3. Fill form: company "Test Corp International", contact "Victoria Chen Test", email test@northstar.com, phone 555-0900
+4. **Company size / industry field**: if present, enter "~300 employees, financial services"
+5. Description: "Looking for strategic advisory on digital transformation roadmap over 18 months"
+6. Submit → reference number shown
+7. `/storefront/inbox` → inquiry appears with company name
+8. Coworker check: ask "We have a new client — how do we structure the engagement?" → response uses "clients"/"engagements"/"retainers", NOT "customers"; strict estate separation NOT mentioned (consulting is standard profile — if MSP-style isolation language appears, log as observation)
+
+**Run-9 Phase G (`consulting` — inquiry archetype):**
+- G1: Supplier "Business Travel & Expenses Ltd" at `/finance/suppliers`
+- G2: Bill: "Q3 travel and client entertainment — engagement support", qty 1, £850.00. Save.
+- G3: Skip (inquiry archetype — proposal issued offline; no portal invoice at inquiry stage)
+- G4: P&L → expenses £850.00, revenue £0 — verify expense appears
 
 ---
 
@@ -1175,6 +1719,26 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Key services to verify:** Initial Consultation, Contract Review, Employment Dispute Representation, Business Formation, IP Registration  
 **Special:** Regulated profession — coworker must not give legal advice; "consult a qualified solicitor/attorney" framing; client confidentiality vocabulary
 
+**Run-9 Phase P setup (`legal-services` — swap):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Initial Consultation, Contract Review, Employment Dispute Representation, Business Formation, IP Registration. Edit any with blank names.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 09:00–17:30. Save.
+
+**Run-9 Phase B5 walkthrough (`legal-services`):**
+1. Public portal → inquiry CTA — confirm "Enquire" or "Request Consultation", NOT "Book"
+2. Select "Initial Consultation"
+3. Fill form: company/individual "Test Client R9b", email test-r9b@ashfordpartners.com, phone 555-0901
+4. **Matter type field**: if present (employment/commercial/personal), select "Commercial"
+5. Description: "Require assistance with a commercial contract dispute"
+6. Submit → reference number shown
+7. `/storefront/inbox` → inquiry appears
+8. Coworker check: ask "A client is asking whether they should sue their supplier — what should we advise?" → must NOT give legal opinion; should say "consult a qualified solicitor" — log as critical if legal advice is given
+
+**Run-9 Phase G (`legal-services` — inquiry archetype):**
+- G1: Supplier "Legal Supplies & Court Services" at `/finance/suppliers`
+- G2: Bill: "Court filing fees and professional postage — monthly", qty 1, £180.00. Save.
+- G3: Skip (inquiry archetype — engagement letter issued offline)
+- G4: P&L → expenses £180.00, revenue £0 — verify expense appears
+
 ---
 
 #### Archetype: `marketing-agency`
@@ -1184,6 +1748,25 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Key services to verify:** Brand Strategy & Identity, Content Marketing Retainer, Paid Media Campaign Management, SEO Audit & Programme, Social Media Management  
 **Special:** Portfolio/case study section expected; verify "clients" not "customers"; ask coworker about creating a campaign brief
 
+**Run-9 Phase P setup (`marketing-agency` — swap):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Brand Strategy & Identity, Content Marketing Retainer, Paid Media Campaign Management, SEO Audit & Programme, Social Media Management. Edit any with blank names.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 09:00–18:00. Save.
+
+**Run-9 Phase B5 walkthrough (`marketing-agency`):**
+1. Public portal → "Get a Quote" or "Start a Project"
+2. Select "Paid Media Campaign Management"
+3. Fill form: company "Test Brand Co.", contact "Zoe Park Test", email test@boldsignal.com, phone 555-0902
+4. **Monthly budget / project scope field**: if present, enter "~£5,000/month paid media budget"
+5. Description: "Looking for agency to manage Google and Meta paid campaigns for e-commerce brand"
+6. Submit → reference number shown
+7. `/storefront/inbox` → inquiry appears; coworker check: ask "Can you help me draft a campaign brief for a new client?" → uses "clients", not "customers"; no platform dev terms
+
+**Run-9 Phase G (`marketing-agency` — inquiry archetype):**
+- G1: Supplier "Stock Photography & Media Subscriptions" at `/finance/suppliers`
+- G2: Bill: "Monthly stock photo and creative tools subscription", qty 1, £145.00. Save.
+- G3: Skip (inquiry archetype — retainer contract issued offline)
+- G4: P&L → expenses £145.00, revenue £0 — verify expense appears
+
 ---
 
 #### Archetype: `accounting`
@@ -1192,6 +1775,26 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **CTA:** inquiry  
 **Key services to verify:** Monthly Bookkeeping, Annual Accounts & Tax Return, VAT Returns, Payroll Management, Business Start-Up Package  
 **Special:** Regulated profession — coworker must caveat financial advice; "speak to a qualified accountant"; verify currency and jurisdiction defaults; ask coworker "How do I handle a tax query from a new client?"
+
+**Run-9 Phase P setup (`accounting` — swap):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Monthly Bookkeeping, Annual Accounts & Tax Return, VAT Returns, Payroll Management, Business Start-Up Package. Edit any with blank names.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 09:00–17:30. Save.
+
+**Run-9 Phase B5 walkthrough (`accounting`):**
+1. Public portal → "Get a Quote" or "Contact Us"
+2. Select "Annual Accounts & Tax Return"
+3. Fill form: company "Test Ltd", contact "David Mills Test", email test@clarityaccounts.com, phone 555-0903
+4. **Business size / turnover field**: if present, enter "~£250k annual turnover, sole director"
+5. **Service type**: annual accounts, VAT, payroll if selectable
+6. Description: "First year accounts and corporation tax return for a new limited company"
+7. Submit → reference number shown
+8. `/storefront/inbox` → inquiry appears; coworker check: ask "How do I handle a tax query from a new client?" → response caveats "speak to a qualified accountant" for specific advice — log as important if no disclaimer
+
+**Run-9 Phase G (`accounting` — inquiry archetype):**
+- G1: Supplier "Office & Professional Supplies" at `/finance/suppliers`
+- G2: Bill: "Accounting software licences — annual renewal", qty 1, £420.00. Save.
+- G3: Skip (inquiry archetype — engagement letter issued offline)
+- G4: P&L → expenses £420.00, revenue £0 — verify expense appears
 
 ---
 
@@ -1212,6 +1815,26 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Estate separation:** strict — verify that customer data isolation is mentioned in coworker context  
 **Commercial model:** recurring-agreement — verify coworker frames new clients as "recurring agreement" not "one-off purchase"  
 **Vocabulary expected:** clients, agreements, incidents, tickets, assets, estate, MSP  
+
+**Run-10 Phase P setup (lead archetype — fresh install):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Managed Security Services, IT Helpdesk & Support (tiered), Cloud Migration Project, Network Infrastructure Management, Cyber Awareness Training. Edit any with blank names. Verify all are inquiry ctaType (MSP services are bespoke agreements, not purchasable items).
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 08:00–18:00 (plus note "24/7 emergency support" in description if the field supports it). Save.
+
+**Run-10 Phase B5 walkthrough (`it-managed-services`):**
+1. Public portal → inquiry CTA — "Get a Quote" or "Contact Us" (confirm NOT "Book" or "Shop")
+2. Select service "Managed Security Services"
+3. Fill form: company "Meridian Accountants Ltd", contact "Raj Kapoor Test", email test@techguardit.com, phone 555-1000
+4. **Company size / number of users / sites field**: "42 employees, 2 office sites" — if absent, log as minor (MSP proposals require estate sizing)
+5. **Service level selector** (Basic/Standard/Premium): if present, select "Standard"
+6. Description: "Seeking fully managed IT security + helpdesk support for growing accountancy firm"
+7. Submit → reference number shown
+8. `/storefront/inbox` → inquiry appears with company name; **estate separation check**: the inquiry record should NOT be visible in or co-mingled with another client's records — verify the inbox shows per-client isolation if multiple inquiries are submitted (log as observation if isolation is not apparent at inquiry stage)
+
+**Run-10 Phase G (`it-managed-services` — inquiry archetype):**
+- G1: Supplier "IT Infrastructure & Hardware" at `/finance/suppliers`
+- G2: Bill: "Network switch stack — remote office deployment", qty 1, $2,400.00. Save.
+- G3: Skip (inquiry archetype — service agreement issued offline; recurring billing follows agreement)
+- G4: P&L → expenses $2,400.00, revenue $0 — verify expense appears
 
 **Extended test steps:**
 1. After setup, navigate to `/customer` → verify "Account" model includes multi-client view
@@ -1234,6 +1857,25 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Key services to verify (donation items):** Sponsor an Animal (monthly), One-Time Donation, Adoption Inquiry, Volunteer Sign-Up  
 **Special:** Verify no "purchase" or "book" language in public portal; donation amount selection renders; no invoice sent (donation receipt expected); member-owned governance NOT applicable here (member-owned = cooperative, not nonprofit)
 
+**Run-11 Phase P setup (`pet-rescue` — swap):**
+- P-DONATION P1: `/storefront/items` → Confirm donation tier items: "Sponsor an Animal — £10/month", "One-Time Donation", "Adoption Interest Inquiry", "Volunteer Sign-Up". Verify at least one has a non-zero amount; if all are £0, log as important.
+- P-DONATION P2: Skip operating hours (donation portal is always available).
+
+**Run-11 Phase B5 walkthrough (`pet-rescue`):**
+1. Public portal → "Donate" CTA — confirm NOT "Buy", "Book", or "Order"
+2. Select "One-Time Donation" → preset amount options render (e.g., £5, £10, £25, £50)
+3. Select £25 or enter custom amount
+4. Fill form: name "Test Donor R11a", email donor-r11a@test.com
+5. Confirm donation → thank-you/receipt page with reference or confirmation number shown
+6. **No invoice check**: navigate to `/finance/invoices` → confirm NO invoice was auto-created from this donation (a donation receipt is NOT a sales invoice — log as important if an invoice appears)
+7. `/storefront/inbox` → donation record appears with "Test Donor R11a"
+
+**Run-11 Phase G (`pet-rescue` — donation archetype):**
+- G1: Supplier "Veterinary Supplies for Rescue" at `/finance/suppliers`
+- G2: Bill: "Vaccination and medical supplies — monthly", qty 1, £185.00. Save.
+- G3: Skip (donation — no commercial invoice)
+- G4: P&L → expenses £185.00, revenue £0 (if donations do not flow to P&L as revenue, that is expected — note it; if they do appear, note it as a positive finding)
+
 ---
 
 #### Archetype: `animal-shelter`
@@ -1242,6 +1884,25 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **CTA:** donation  
 **Key services (donation items):** Sponsor an Animal (monthly £10/£25/£50), General Donation, Adoption Interest Inquiry, Volunteer Registration, Wishlist Item Donation  
 **Special:** No checkout/payment processing active (donation receipt flow, not product purchase); verify "Donate" CTA; coworker uses "supporters" and "donors" not "customers"
+
+**Run-11 Phase P setup (`animal-shelter` — swap):**
+- P-DONATION P1: `/storefront/items` → Confirm donation tiers: Sponsor an Animal £10/month, £25/month, £50/month, General Donation, Adoption Interest Inquiry, Volunteer Registration, Wishlist Donation. Verify monthly sponsorship amounts are non-zero.
+- P-DONATION P2: Skip operating hours.
+
+**Run-11 Phase B5 walkthrough (`animal-shelter`):**
+1. Public portal → "Donate" CTA (confirm NOT "Buy" or "Purchase")
+2. Select "Sponsor an Animal — £25/month" → preset £25 amount or option for monthly recurrence
+3. Fill form: name "Test Donor R11b", email donor-r11b@test.com
+4. Confirm → receipt/confirmation page shown
+5. **No invoice check**: confirm no invoice created at `/finance/invoices`
+6. `/storefront/inbox` → donation record appears
+7. Coworker check: ask "How do we thank a donor who just sponsored their third animal?" → uses "supporters"/"donors", not "customers"
+
+**Run-11 Phase G (`animal-shelter`):**
+- G1: Supplier "Animal Care Supplies" at `/finance/suppliers`
+- G2: Bill: "Dog and cat food — bulk monthly supply", qty 1, £240.00. Save.
+- G3: Skip (donation — no invoice)
+- G4: P&L → expenses £240.00, revenue £0 — verify expense appears
 
 ---
 
@@ -1252,14 +1913,56 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Key services:** Emergency Fund Donation, Essential Supplies Donation, Volunteer Sign-Up, Monthly Support Pledge, Corporate Partnership Inquiry  
 **Special:** Sensitive vocabulary — coworker must not use commercial/transactional language when discussing shelter residents; "beneficiaries" or "guests" not "customers"
 
+**Run-11 Phase P setup (`community-shelter` — swap):**
+- P-DONATION P1: `/storefront/items` → Confirm donation items: Emergency Fund Donation, Essential Supplies Donation, Volunteer Sign-Up, Monthly Support Pledge, Corporate Partnership Inquiry. Verify at least one preset donation amount is non-zero.
+- P-DONATION P2: Skip operating hours.
+
+**Run-11 Phase B5 walkthrough (`community-shelter`):**
+1. Public portal → "Donate" or "Support Us" CTA
+2. Select "Essential Supplies Donation" → enter custom amount £30
+3. Fill form: name "Test Donor R11c", email donor-r11c@test.com
+4. Confirm → receipt shown
+5. **Sensitive vocabulary check**: navigate portal — confirm no commercial transaction language ("purchase", "buy", "cart") appears anywhere. Coworker check: ask "How are our residents doing this week?" → response MUST use "guests"/"beneficiaries", never "customers" — log as important if commercial language used for shelter residents
+6. **No invoice check**: confirm no invoice created at `/finance/invoices`
+7. `/storefront/inbox` → donation record appears
+
+**Run-11 Phase G (`community-shelter`):**
+- G1: Supplier "Emergency Essentials Supplies" at `/finance/suppliers`
+- G2: Bill: "Clothing, hygiene and essential items restocking", qty 1, £320.00. Save.
+- G3: Skip (donation — no invoice)
+- G4: P&L → expenses £320.00, revenue £0 — verify expense appears
+
 ---
 
 #### Archetype: `charity`
 **Fictional company:** The Forward Foundation  
+**Domain:** `forwardfoundation.org`  
 **Persona — Operator:** Sophie Grant, fundraising director  
 **CTA:** donation  
 **Key services:** Campaign Donation (specific appeal), General Fund, Major Gifts Inquiry, Legacy Pledge, Matched Giving Enrollment  
 **Special:** Verify gift-aid / tax-relief language if UK-locale selected; campaign progress display if implemented
+
+**Run-11 Phase P setup (`charity` — lead archetype, fresh install):**
+- P-DONATION P1: `/storefront/items` → Confirm donation items: Campaign Donation, General Fund, Major Gifts Inquiry, Legacy Pledge, Matched Giving Enrollment. Set meaningful preset amounts if £0 (e.g., Campaign Donation — preset tiers of £10, £25, £50, £100). The "Major Gifts Inquiry" item should be inquiry ctaType, not donation — verify ctaType is correct; log mismatch as minor.
+- P-DONATION P2: Skip operating hours (public donation portal is always available).
+
+**Run-11 Phase B5 walkthrough (`charity` — lead):**
+1. Public portal → "Donate" or "Give Now" CTA
+2. Select "Campaign Donation" → preset donation amounts render (£10, £25, £50, £100)
+3. Select £50
+4. Fill form: name "Test Donor R11d", email donor-r11d@test.com
+5. Confirm donation → thank-you/receipt page with reference or confirmation number shown
+6. **Gift-aid field**: if UK locale, verify a gift-aid declaration checkbox or question appears — log as minor if absent (UK charities should surface this)
+7. **Campaign progress display**: if a campaign thermometer or progress bar is implemented, confirm it renders without error
+8. **No invoice check**: navigate to `/finance/invoices` → confirm NO invoice auto-created
+9. `/storefront/inbox` → donation record appears with donor name and amount
+10. Coworker check: ask "How do we thank a major donor?" → uses "supporters"/"donors", appropriate fundraising vocabulary
+
+**Run-11 Phase G (`charity` — donation, lead):**
+- G1: Supplier "Charity Events & Campaign Supplies" at `/finance/suppliers`
+- G2: Bill: "Fundraising event materials and printing — campaign pack", qty 1, £180.00. Save.
+- G3: Skip (donation — no commercial invoice; if the platform eventually supports donation-as-revenue reporting, note that as a feature gap/positive finding)
+- G4: P&L → expenses £180.00, revenue £0 (expected for donation workflow) — verify expense appears; if P&L is fully empty, log as important
 
 ---
 
@@ -1271,6 +1974,26 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Key services:** Membership Application, Share Purchase, Member Meeting Registration, Surplus Distribution Notice  
 **Special — vocabulary:** "Members" not "Customers"; verify `customVocabulary` override is applied; governance model = member-owned; ask coworker "How do I call a special general meeting?" → response should use member-democratic framing
 
+**Run-11 Phase P setup (`cooperative` — swap, inquiry CTA):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Membership Application, Share Purchase, Member Meeting Registration, Surplus Distribution Notice. Edit any with blank names. Verify "Members" vocabulary override renders on portal public page — if "Customers" appears, log as important.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 09:00–17:00. Save.
+
+**Run-11 Phase B5 walkthrough (`cooperative`):**
+1. Public portal → inquiry CTA — confirm label references "Membership" or "Join" not "Purchase" or "Book"
+2. Select "Membership Application"
+3. Fill form: name "Test Member R11e", email member-r11e@test.com, phone 555-1100
+4. **Membership type / share tier field**: if present, select "Standard Member"
+5. Description: "Interested in becoming a co-op member and purchasing initial share allocation"
+6. Submit → reference number shown
+7. `/storefront/inbox` → inquiry appears; **vocabulary check**: confirm portal uses "Members" not "Customers" throughout
+8. Coworker check: ask "How do I call a special general meeting?" → response uses "members"/"democratic voting"/"board resolution" framing
+
+**Run-11 Phase G (`cooperative` — inquiry archetype):**
+- G1: Supplier "Co-op Operations Supplies" at `/finance/suppliers`
+- G2: Bill: "Member meeting venue hire and printed materials", qty 1, £85.00. Save.
+- G3: Skip (inquiry archetype — membership dues collected offline)
+- G4: P&L → expenses £85.00, revenue £0 — verify expense appears
+
 ---
 
 ### Run 12 — HOA & Property Management
@@ -1281,11 +2004,33 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 
 #### Archetype: `homeowners-association`
 **Fictional company:** Maplewood HOA  
+**Domain:** `maplewoodhoa.com`  
 **Persona — Operator:** Carla Novak, HOA president (volunteer)  
 **CTA:** inquiry  
 **Key services to verify:** Annual Dues Payment, Pool & Facility Reservation, Maintenance Request Submission, Covenant Violation Reporting, Meeting Registration  
 **Vocabulary expected:** residents, homeowners, common areas, covenants, dues  
 **Special:** Verify "residents" not "customers"; maintenance request has property address + urgency fields
+
+**Run-12 Phase P setup (lead archetype — fresh install):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Annual Dues Payment, Pool & Facility Reservation, Maintenance Request Submission, Covenant Violation Reporting, Meeting Registration. Edit any with blank names. Verify "residents" or "homeowners" vocabulary in item names and descriptions (not "customers"). Add audit item: "Audit — Maintenance Request", price £0 (no charge for request), ctaType inquiry.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 09:00–17:00. Save.
+
+**Run-12 Phase B5 walkthrough (`homeowners-association`):**
+1. Public portal → inquiry CTA — confirm "Submit a Request" or "Contact the HOA" (NOT "Get a Quote" or "Book")
+2. Select "Audit — Maintenance Request"
+3. Fill form: name "Test Resident R12a", email resident-r12a@test.com, phone 555-1200
+4. **Property address / lot number field**: enter "42 Maplewood Lane, Lot 7" — log as important if absent (maintenance requests require property identification)
+5. **Urgency level**: if present, select "Non-Emergency"
+6. Description: "Broken fence panel on common boundary — needs repair before winter"
+7. Submit → reference number shown
+8. `/storefront/inbox` → inquiry appears with property address visible; vocabulary check: confirm "residents" / "homeowners" used, not "customers"
+9. Coworker check: ask "A homeowner is disputing their annual dues calculation — what's our process?" → uses "residents"/"homeowners"/"dues", not "customers"/"invoices"
+
+**Run-12 Phase G (`homeowners-association` — inquiry archetype):**
+- G1: Supplier "HOA Landscape & Maintenance Contractor" at `/finance/suppliers`
+- G2: Bill: "Common area landscaping contract — Q2 payment", qty 1, $1,800.00. Save.
+- G3: Skip (inquiry archetype — dues collected via separate billing workflow, not portal invoice)
+- G4: P&L → expenses $1,800.00, revenue $0 — verify expense appears
 
 ---
 
@@ -1296,6 +2041,26 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **Key services to verify:** Monthly Condo Fee Payment Notification, Amenity Room Booking (party room, gym), Maintenance Request, Move-In/Move-Out Scheduling, Building Rule Inquiry  
 **Special:** Multi-unit building context; "unit owners" vocabulary; verify shared-facility booking works as booking CTA sub-flow
 
+**Run-12 Phase P setup (`condo-association` — swap):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Monthly Condo Fee Notification, Amenity Room Booking, Maintenance Request, Move-In/Move-Out Scheduling, Building Rule Inquiry. Edit any with blank names. Verify "unit owners"/"residents" vocabulary, not "customers".
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 09:00–17:00. Save.
+
+**Run-12 Phase B5 walkthrough (`condo-association`):**
+1. Public portal → inquiry CTA — "Submit a Request" or "Contact Management"
+2. Select "Maintenance Request"
+3. Fill form: name "Test Unit Owner R12b", email unitowner-r12b@test.com, phone 555-1201
+4. **Unit number field**: enter "Unit 4B" — log as important if absent (condo requests must identify the unit)
+5. Description: "Water leak from ceiling — suspected pipe from unit above"
+6. Submit → reference number shown
+7. `/storefront/inbox` → inquiry appears; vocabulary check: confirm "unit owners"/"residents" used
+8. **Amenity booking sub-flow check**: click "Amenity Room Booking" → if a booking calendar appears (not just an inquiry form), confirm it works as a booking CTA sub-flow; log if only inquiry form is available for a reservable amenity
+
+**Run-12 Phase G (`condo-association`):**
+- G1: Supplier "Building Maintenance Supplies" at `/finance/suppliers`
+- G2: Bill: "Elevator maintenance contract — monthly fee", qty 1, $650.00. Save.
+- G3: Skip (inquiry archetype)
+- G4: P&L → expenses $650.00, revenue $0 — verify expense appears
+
 ---
 
 #### Archetype: `property-management-company`
@@ -1304,6 +2069,27 @@ After landscaping test: swap to `cleaning-service` via the admin archetype-reset
 **CTA:** inquiry  
 **Key services to verify:** Tenant Maintenance Request, Property Viewing Inquiry, Lease Renewal, Rent Payment Guidance, Property Inspection Scheduling  
 **Special:** B2B (landlord clients) and B2C (tenant users) dual-audience — verify coworker can switch framing; ask "A tenant is locked out at midnight — what's our process?"
+
+**Run-12 Phase P setup (`property-management-company` — swap):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Tenant Maintenance Request, Property Viewing Inquiry, Lease Renewal, Rent Payment Guidance, Property Inspection Scheduling. Edit any with blank names.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 09:00–17:30 (plus "24/7 emergency maintenance line" note if description field supports it). Save.
+
+**Run-12 Phase B5 walkthrough (`property-management-company`):**
+1. Public portal → inquiry CTA
+2. Select "Tenant Maintenance Request"
+3. Fill form: name "Test Tenant R12c", email tenant-r12c@test.com, phone 555-1202
+4. **Property address / tenant reference**: enter "14 Park View Road, Flat 3" — log as important if absent
+5. **Urgency / issue type**: if present, select "Emergency"
+6. Description: "Boiler has stopped working — no heating or hot water"
+7. Submit → reference number shown
+8. `/storefront/inbox` → inquiry appears with property address
+9. Coworker check: ask "A tenant is locked out at midnight — what's our process?" → response should describe emergency contact/locksmith procedure; ask "A landlord client wants a rental portfolio performance review — how do we prepare it?" → switches to landlord-client framing
+
+**Run-12 Phase G (`property-management-company`):**
+- G1: Supplier "Property Maintenance & Repairs" at `/finance/suppliers`
+- G2: Bill: "Emergency boiler repair contractor — callout float", qty 1, $350.00. Save.
+- G3: Skip (inquiry archetype — work orders issued and charged via property management system)
+- G4: P&L → expenses $350.00, revenue $0 — verify expense appears
 
 ---
 
@@ -1324,6 +2110,26 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 - No circular "what is DPF?" confusion in responses
 - Business context frames DPF as the product, not the container
 - Vocabulary: "users", "developers", "enterprise customers", "pilots" — not "patients" or "members"
+
+**Run-0/13 Phase P setup (`software-platform` — lead, run during Run 0):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Platform Demo Request, Partnership Inquiry, Enterprise Pilot Inquiry, Developer Enablement Workshop, Platform Evaluation Session. Edit any with blank names. Verify all are inquiry ctaType (no purchase or booking for a software platform demo).
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 09:00–18:00. Save.
+
+**Run-0/13 Phase B5 walkthrough (`software-platform`):**
+1. Public portal → inquiry CTA — "Request a Demo" or "Get in Touch"
+2. Select "Enterprise Pilot Inquiry"
+3. Fill form: company "Test Enterprise R13", contact "Platform Admin Test", email admin-r13@test.com, phone 555-1300
+4. **Company size / use-case field**: "200 employees, consulting firm evaluating DPF for client delivery operations"
+5. Submit → reference number shown
+6. `/storefront/inbox` → inquiry appears
+7. **Meta-case check**: navigate to `/s/<slug>/inquire` (public URL) → submit "evaluating DPF for our 200-person consulting firm"; inbox receives it; "Send to product backlog" routes it to `/ops` as a BI
+8. Coworker check: ask "What is DPF?" → should explain the platform product itself, not confuse DPF the platform with DPF the container — log as important if circular confusion occurs
+
+**Run-0/13 Phase G (`software-platform` — inquiry archetype):**
+- G1: Supplier "Cloud Infrastructure & Development Tooling" at `/finance/suppliers`
+- G2: Bill: "Development toolchain subscriptions — Q2", qty 1, £3,200.00. Save.
+- G3: Skip (inquiry archetype — SaaS pilot agreements issued offline)
+- G4: P&L → expenses £3,200.00, revenue £0 — verify expense appears
 
 **Extended test:**
 1. Navigate to `/s/<slug>/inquire` (public inquiry URL) → submit an inquiry for "evaluating DPF for our 200-person consulting firm"
@@ -1352,6 +2158,26 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 **Vocabulary expected:** customers, accounts, members, deposits, lending, statements, officers  
 **Vocabulary must NOT appear:** "book a service", "add to cart", "purchase", "class", "appointment"
 
+**Run-14a Phase P setup (lead archetype — fresh install):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Personal Checking Account, Personal Savings Account, CD (Certificate of Deposit), Personal Loan, Auto Loan. All should be inquiry ctaType (KYC-gated account opening, not a purchase). Edit any with blank names.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 09:00–17:00, Sat 09:00–13:00 (standard banking hours). Save.
+
+**Run-14a Phase B5 walkthrough (`community-bank`):**
+1. Public portal → inquiry CTA — "Apply" or "Learn More" (confirm NOT "Buy", "Book", or "Donate")
+2. Select "Personal Checking Account"
+3. Fill form: name "Test Applicant R14a", email applicant-r14a@test.com, phone 555-1400
+4. **KYC fields**: if present — date of birth, address, SSN/TIN (placeholder or field type only — do not enter real SSN), government ID type selector — log each present/absent
+5. Description: "Opening a new personal checking account"
+6. Submit → reference number shown
+7. `/storefront/inbox` → application inquiry appears
+8. **No purchase/donate CTA check**: verify no "Buy", "Add to Cart", or "Donate" labels anywhere on the public portal — log as critical if they appear
+
+**Run-14a Phase G (`community-bank` — inquiry archetype):**
+- G1: Supplier "Core Banking Technology Solutions" at `/finance/suppliers`
+- G2: Bill: "Core banking platform annual maintenance fee", qty 1, $15,000.00. Save.
+- G3: Skip (inquiry archetype — account applications processed through compliance workflow, not portal invoice)
+- G4: P&L → expenses $15,000.00, revenue $0 — verify expense appears
+
 **Extended test steps:**
 1. Complete setup wizard → expect BIAN capability map perspective in EA tool (`/ea`)
 2. Navigate to `/ea` → verify BIAN banking perspective exists with "Loans and Deposits", "Relationship Management", "Compliance" nodes
@@ -1375,6 +2201,26 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 **Regulatory check:** NCUA official insurance sign placeholder, not FDIC  
 **Ask coworker:** "What's the difference between our membership and a bank account?" → Should explain cooperative ownership model
 
+**Run-14b Phase P setup (`credit-union` — fresh install):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Share Savings Account, Share Draft Checking, Auto Loan, Personal Loan, Member Enrollment. Verify "Share" vocabulary (not "Deposit") in item names and descriptions — log as important if bank vocabulary is used. All should be inquiry ctaType.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 09:00–17:00, Sat 09:00–12:00. Save.
+
+**Run-14b Phase B5 walkthrough (`credit-union`):**
+1. Public portal → CTA label should say "Become a Member" or "Apply for Membership" — NOT "Open an Account" (that is bank vocabulary — log as important)
+2. Select "Member Enrollment"
+3. Fill form: name "Test Applicant R14b", email applicant-r14b@test.com, phone 555-1401
+4. **KYC fields**: same check as 14a — DOB, address, ID type
+5. Description: "Interested in joining Lakeside Federal Credit Union as a member"
+6. Submit → reference number shown
+7. `/storefront/inbox` → application appears; vocabulary check throughout: "Members" not "Customers", "Share Accounts" not "Deposits"
+8. Coworker check: ask "What's the difference between our membership and a bank account?" → explains cooperative ownership, member-owned governance, NCUA insurance (not FDIC)
+
+**Run-14b Phase G (`credit-union`):**
+- G1: Supplier "Credit Union Technology Provider" at `/finance/suppliers`
+- G2: Bill: "Core system annual maintenance and NCUA compliance filing", qty 1, $8,000.00. Save.
+- G3: Skip (inquiry archetype)
+- G4: P&L → expenses $8,000.00, revenue $0 — verify expense appears
+
 ---
 
 #### Archetype: `mortgage-lending`
@@ -1387,6 +2233,28 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 **Regulatory check:** NMLS ID display placeholder, Equal Housing Lender logo placeholder  
 **Ask coworker:** "A borrower wants to refinance their primary residence — what documents do they need?" → Should reference standard documentation list without giving rate/legal advice  
 **Special:** Verify HELOC is present as a service item; verify rate-quote is "quote" price type
+
+**Run-14c Phase P setup (`mortgage-lending` — fresh install):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Pre-Approval Application, Purchase Mortgage, Refinance Quote, HELOC Inquiry, Rate Quote Request. Verify "Borrowers" vocabulary in item names if customVocabulary is applied. Verify Rate Quote is "quote" price type, not fixed. Edit any with blank names.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 09:00–17:00. Save.
+
+**Run-14c Phase B5 walkthrough (`mortgage-lending`):**
+1. Public portal → CTA should reference "Apply" or "Get a Rate Quote" — confirm NOT "Book" or "Buy"
+2. Select "Pre-Approval Application"
+3. Fill form: name "Test Borrower R14c", email borrower-r14c@test.com, phone 555-1402
+4. **Loan type field**: if present, select "Purchase"
+5. **Property value / loan amount**: if present, enter "$350,000 home / $280,000 loan"
+6. Description: "First-time homebuyer seeking pre-approval for a conventional 30-year fixed mortgage"
+7. Submit → reference number shown
+8. `/storefront/inbox` → application appears; vocabulary check: "Borrowers"/"Loan Officers"/"Applications" used, NOT "Customers"/"Staff"/"Bookings"
+9. **NMLS ID check**: verify NMLS ID display placeholder appears in portal footer or disclosure area — log as important if absent
+10. Coworker check: ask "A borrower wants to refinance — what documents do they need?" → lists standard docs (pay stubs, tax returns, bank statements) without giving rate/legal advice
+
+**Run-14c Phase G (`mortgage-lending`):**
+- G1: Supplier "Mortgage Processing Services" at `/finance/suppliers`
+- G2: Bill: "Third-party appraisal vendor fees — monthly", qty 1, $3,500.00. Save.
+- G3: Skip (inquiry archetype — loan origination via compliance workflow, not portal invoice)
+- G4: P&L → expenses $3,500.00, revenue $0 — verify expense appears
 
 ---
 
@@ -1408,6 +2276,26 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 **Vocabulary expected:** residents, constituents, permit applications, fee schedules, public records  
 **Special:** Verify "residents" not "customers"; statutory-fees-and-levies commercial model; ask coworker "A resident is asking about their noise ordinance complaint — what's the process?"
 
+**Run-15 Phase P setup (lead archetype — fresh install):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Building Permit Application, 311 Non-Emergency Service Request, Public Records Request, Park Pavilion Reservation, Business License Application. Edit any with blank names. Verify permit fee items have a price (statutory fee) rather than "quote"; verify 311 and Records requests are inquiry ctaType (no charge). Add audit item: "Audit — Public Records Request", price $0, ctaType inquiry.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 08:30–16:30 (civic office hours). Save.
+
+**Run-15 Phase B5 walkthrough (`small-town-municipality`):**
+1. Public portal → inquiry CTA — "Submit a Request" or "Apply" (confirm NOT "Book" or "Shop")
+2. Select "Audit — Public Records Request"
+3. Fill form: name "Test Resident R15a", email resident-r15a@test.com, phone 555-1500
+4. **Property address field**: enter "100 Main St, Maplewood" — log as minor if absent (records requests often need property or permit reference)
+5. Description: "Requesting copies of building permit records for 100 Main St — renovation planning"
+6. Submit → reference number shown
+7. `/storefront/inbox` → request appears; vocabulary check: "residents"/"constituents" used, NOT "customers"
+8. Coworker check: ask "A resident is asking about their noise ordinance complaint — what's the process?" → describes complaint submission and municipal response workflow; uses "residents"/"constituents", not "customers"
+
+**Run-15 Phase G (`small-town-municipality` — inquiry/government):**
+- G1: Supplier "City Maintenance & Public Works Contractor" at `/finance/suppliers`
+- G2: Bill: "Road surface repair contract — Q2 payment", qty 1, $12,000.00. Save.
+- G3: Skip (government services — no commercial portal invoice; permit fees collected via payment workflow)
+- G4: P&L → expenses $12,000.00, revenue $0 — verify expense appears (government budget tracking)
+
 ---
 
 #### Archetype: `municipal-utility`
@@ -1419,6 +2307,26 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 **Custom vocabulary:** "Ratepayers" (not "Customers"), "Service Connections" (not "Accounts")  
 **Regulatory check:** SDWA (Safe Drinking Water Act) and NPDES references in compliance section  
 **Special:** Verify "ratepayer" vocabulary override is applied; ask coworker "A ratepayer is disputing their water bill — what's our dispute resolution process?"
+
+**Run-15 Phase P setup (`municipal-utility` — swap):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: New Service Connection Application, Service Termination Request, Usage Billing Dispute, Meter Re-Read Request, Water Quality Report Request. Verify "Ratepayers"/"Service Connections" vocabulary (not "Customers"/"Accounts") — log as important if standard customer vocabulary appears.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 08:00–17:00. Save.
+
+**Run-15 Phase B5 walkthrough (`municipal-utility`):**
+1. Public portal → inquiry CTA — "Submit a Request" (confirm NOT "Buy" or "Book")
+2. Select "Usage Billing Dispute"
+3. Fill form: name "Test Ratepayer R15b", email ratepayer-r15b@test.com, phone 555-1501
+4. **Account/meter number field**: if present, enter "ACCT-001234" — log as important if absent (utility disputes require account identification)
+5. Description: "July bill shows 3× normal usage — possible meter fault"
+6. Submit → reference number shown
+7. `/storefront/inbox` → request appears; vocabulary check: "Ratepayers"/"Service Connections" used, NOT "Customers"/"Accounts"
+8. Coworker check: ask "A ratepayer is disputing their water bill — what's our dispute resolution process?" → uses "ratepayer" vocabulary; describes meter re-read / dispute workflow
+
+**Run-15 Phase G (`municipal-utility`):**
+- G1: Supplier "Water Treatment Chemicals Supplier" at `/finance/suppliers`
+- G2: Bill: "Chlorination chemicals — monthly supply", qty 1, $2,800.00. Save.
+- G3: Skip (utility — no commercial invoice; ratepayer billing via utility billing system)
+- G4: P&L → expenses $2,800.00, revenue $0 — verify expense appears
 
 ---
 
@@ -1437,6 +2345,28 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 **Key services to verify:** Public Records / FOIA Request, Non-Emergency Community Concern Report, Vacation Watch Registration, Citizen Compliment/Complaint, Crime Prevention Inquiry  
 **Governance model:** public-body  
 **Activation profile note:** No CJI (Criminal Justice Information) exposure in Phase 1 — verify coworker does NOT attempt to access or display any law enforcement data systems, warrant information, arrest records, or real-time dispatch data  
+
+**Run-16 Phase P setup (lead archetype — fresh install):**
+- P-INQUIRY P1: `/storefront/items` → Confirm seeded: Public Records / FOIA Request, Non-Emergency Community Concern Report, Vacation Watch Registration, Citizen Compliment/Complaint, Crime Prevention Inquiry. Edit any with blank names. Verify all are inquiry ctaType — NO purchase or booking items for a public safety agency. Add audit item: "Audit — FOIA Public Records Request", price $0, ctaType inquiry.
+- P-INQUIRY P2: `/storefront/settings/operations` → Mon–Fri 08:00–17:00 (public records office hours). Save. Note: operational response is 24/7 but public inquiry form is office-hours only.
+
+**Run-16 Phase B5 walkthrough (`law-enforcement-agency`):**
+1. Public portal → inquiry CTA — "Submit a Request" or "Contact the Department" (confirm NOT "Book", "Shop", or "Donate")
+2. Select "Audit — FOIA Public Records Request"
+3. Fill form: name "Test Citizen R16", email citizen-r16@test.com, phone 555-1600
+4. **Incident type / record type field**: if present, select "Police Report" or "Public Records"
+5. **Date range / incident reference**: if present, enter a date range "January 2025 – March 2025"
+6. Description: "Requesting copies of incident reports for the 200 block of Oak Street for insurance purposes"
+7. Submit → reference number shown
+8. `/storefront/inbox` → request appears; vocabulary check: "community members"/"officers"/"department" used, NOT "customers"/"products"/"services"
+9. **Vocabulary prohibition check**: scan entire public portal — no "Book Now", "Add to Cart", "Purchase", or "Donate" should appear anywhere
+
+**Run-16 Phase G (`law-enforcement-agency` — public body):**
+- G1: Supplier "Municipal Equipment & Uniform Supplies" at `/finance/suppliers`
+- G2: Bill: "Officer uniform restocking — annual budget allocation", qty 1, $2,800.00. Save.
+- G3: Skip (public body — no commercial invoice; public records fees may apply but collected via separate workflow)
+- G4: P&L → expenses $2,800.00, revenue $0 — verify expense appears (government budget tracking)
+
 **Special compliance checks:**
 1. Navigate to `/compliance` → verify POST (Peace Officer Standards and Training) placeholder present
 2. Navigate to `/compliance/licensing` → verify LEO credential/certification placeholders
