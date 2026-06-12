@@ -3,7 +3,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-const applyFinancialProfile = vi.fn(async () => ({ applied: true as const, profileName: "Trades" }));
+const { applyFinancialProfile } = vi.hoisted(() => ({
+  applyFinancialProfile: vi.fn(async () => ({ applied: true as const, profileName: "Trades" })),
+}));
 vi.mock("@/lib/actions/financial-setup", () => ({ applyFinancialProfile }));
 
 import { FinancialSetupStep } from "./FinancialSetupStep";
