@@ -44,7 +44,10 @@ export async function resolveInquiryFormSchema(
   });
   const schema = archetype?.formSchema;
   if (Array.isArray(schema)) {
-    const fields = schema.filter(isFormField);
+    // Cast through unknown[] so the isFormField type guard narrows to
+    // FormField[]; Prisma's JsonValue does not satisfy the filter overload's
+    // `S extends T` constraint directly.
+    const fields = (schema as unknown[]).filter(isFormField);
     if (fields.length > 0) return fields;
   }
   return DEFAULT_INQUIRY_SCHEMA;
