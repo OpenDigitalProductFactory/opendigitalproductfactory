@@ -32,6 +32,9 @@ describe("capability registry", () => {
       "public-body-governance",
       "records-request",
       "service-request-311",
+      "rental-fleet",
+      "rental-agreements",
+      "asset-pool",
     ]);
   });
 

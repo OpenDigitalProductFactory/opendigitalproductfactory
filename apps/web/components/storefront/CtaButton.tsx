@@ -5,6 +5,7 @@ const DEFAULT_LABELS: Record<string, string> = {
   purchase: "Buy",
   inquiry: "Enquire",
   donation: "Donate",
+  rental: "Reserve",
 };
 
 export function CtaButton({

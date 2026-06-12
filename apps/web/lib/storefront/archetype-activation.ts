@@ -34,6 +34,7 @@ export function deriveRevenueModelFromActivationProfile(
     purchase: "Product/service sales",
     inquiry: "Quote-based services",
     donation: "Donor-funded",
+    rental: "Asset rental for a period (reserve → use → return → re-pool)",
   };
 
   return ctaRevenueModels[ctaType] ?? null;
