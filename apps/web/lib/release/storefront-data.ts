@@ -1,10 +1,54 @@
 import { cache } from "react";
 import { prisma } from "@dpf/db";
+import type { FormField } from "@dpf/storefront-templates";
 import type {
   PublicStorefrontConfig,
   PublicItem,
   PublicSection,
 } from "./storefront-types";
+
+// Generic fallback used when an archetype defines no form schema (or for custom
+// archetypes that were created without one).
+export const DEFAULT_INQUIRY_SCHEMA: FormField[] = [
+  { name: "name", label: "Your name", type: "text", required: true },
+  { name: "email", label: "Email address", type: "email", required: true },
+  { name: "phone", label: "Phone number", type: "tel", required: false },
+  { name: "message", label: "Message", type: "textarea", required: false },
+];
+
+function isFormField(value: unknown): value is FormField {
+  if (typeof value !== "object" || value === null) return false;
+  const f = value as Record<string, unknown>;
+  return (
+    typeof f.name === "string" &&
+    typeof f.label === "string" &&
+    typeof f.type === "string" &&
+    typeof f.required === "boolean"
+  );
+}
+
+/**
+ * Resolve the inquiry form schema for a storefront's archetype. The schema is
+ * seeded onto StorefrontArchetype.formSchema from the storefront-templates
+ * definitions; without this, every archetype rendered the same generic
+ * name/email/phone/message form. Falls back to DEFAULT_INQUIRY_SCHEMA when the
+ * archetype is missing or has no (valid) schema.
+ */
+export async function resolveInquiryFormSchema(
+  archetypeId: string,
+): Promise<FormField[]> {
+  if (!archetypeId) return DEFAULT_INQUIRY_SCHEMA;
+  const archetype = await prisma.storefrontArchetype.findUnique({
+    where: { archetypeId },
+    select: { formSchema: true },
+  });
+  const schema = archetype?.formSchema;
+  if (Array.isArray(schema)) {
+    const fields = schema.filter(isFormField);
+    if (fields.length > 0) return fields;
+  }
+  return DEFAULT_INQUIRY_SCHEMA;
+}
 
 export const getPublicStorefront = cache(async function getPublicStorefront(
   slug: string,

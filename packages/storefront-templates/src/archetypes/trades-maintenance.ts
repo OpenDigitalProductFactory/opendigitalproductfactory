@@ -14,6 +14,18 @@ const TRADES_FORM_FIELDS = [
   { name: "notes", label: "Additional details", type: "textarea" as const, required: false },
 ];
 
+// Facilities maintenance is B2B-primary: who is asking and how many sites are in
+// scope drive the quote, so the form captures company name and site count.
+const FACILITIES_FORM_FIELDS = [
+  ...INQUIRY_BASE_FIELDS,
+  { name: "companyName", label: "Company name", type: "text" as const, required: true },
+  { name: "siteCount", label: "Number of sites", type: "select" as const, required: true, options: ["1", "2–5", "6–20", "21–50", "50+"] },
+  { name: "jobType", label: "Service required", type: "text" as const, required: true },
+  { name: "urgency", label: "Urgency", type: "select" as const, required: true, options: ["Emergency", "Routine", "Planned"] },
+  { name: "propertyType", label: "Property type", type: "select" as const, required: true, options: ["Residential", "Commercial", "Industrial"] },
+  { name: "notes", label: "Additional details", type: "textarea" as const, required: false },
+];
+
 export const tradesMaintenanceArchetypes: ArchetypeDefinition[] = [
   {
     archetypeId: "facilities-maintenance",
@@ -36,7 +48,7 @@ export const tradesMaintenanceArchetypes: ArchetypeDefinition[] = [
       { type: "testimonials", title: "Client Feedback", sortOrder: 3 },
       { type: "contact", title: "Request a Quote", sortOrder: 4 },
     ],
-    formSchema: TRADES_FORM_FIELDS,
+    formSchema: FACILITIES_FORM_FIELDS,
   },
   {
     archetypeId: "plumber",
@@ -108,6 +120,7 @@ export const tradesMaintenanceArchetypes: ArchetypeDefinition[] = [
       ...INQUIRY_BASE_FIELDS,
       { name: "jobType", label: "Type of clean", type: "select" as const, required: true, options: ["Regular domestic", "One-off deep clean", "End of tenancy", "Office", "Carpet cleaning", "Window cleaning"] },
       { name: "propertyType", label: "Property type", type: "select" as const, required: true, options: ["Residential", "Commercial", "Industrial"] },
+      { name: "propertySize", label: "Property size", type: "select" as const, required: true, options: ["Studio / 1 bed", "2 bed", "3 bed", "4+ bed", "Commercial premises"] },
       { name: "frequency", label: "Frequency", type: "select" as const, required: false, options: ["One-off", "Weekly", "Fortnightly", "Monthly"] },
       { name: "notes", label: "Additional details", type: "textarea" as const, required: false },
     ],
@@ -138,7 +151,8 @@ export const tradesMaintenanceArchetypes: ArchetypeDefinition[] = [
       { name: "jobType", label: "Type of work", type: "text" as const, required: true },
       { name: "urgency", label: "Urgency", type: "select" as const, required: true, options: ["Emergency", "Routine", "Planned"] },
       { name: "propertyType", label: "Property type", type: "select" as const, required: true, options: ["Residential", "Commercial", "Industrial"] },
-      { name: "gardenSize", label: "Garden size", type: "select" as const, required: false, options: ["Small (under 50m²)", "Medium (50–200m²)", "Large (200m²+)"] },
+      { name: "gardenSize", label: "Property / garden size", type: "select" as const, required: true, options: ["Small (under 50m²)", "Medium (50–200m²)", "Large (200m²+)"] },
+      { name: "frequency", label: "Frequency", type: "select" as const, required: false, options: ["One-off", "Weekly", "Fortnightly", "Monthly", "Seasonal"] },
       { name: "notes", label: "Additional details", type: "textarea" as const, required: false },
     ],
   },
