@@ -16,6 +16,32 @@ DPF ships 53 archetypes across 14 categories. The platform must behave correctly
 
 ---
 
+### 1a. Audit Perspective & First-Run Expectations
+
+This audit is executed **from the perspective of the operator persona** — Sandra Hooper the plumber, Chloe Martinez the salon owner, Sam Nguyen the baker. These are real business owners, not developers. They are evaluating DPF as a product they would pay for and use to run their business every day.
+
+This is the **first systematic evaluation of DPF from a customer-of-DPF standpoint.** Prior work has focused on platform infrastructure: routing, build pipeline, coworker runtime, seed integrity. This audit shifts the frame: does the platform deliver value to the business owner who has just set it up?
+
+**Expected finding on Run 1:** AI coworker operating intelligence (Phase O) will be mostly Level 1–2 across the board. The coworkers will know they are in a plumbing business, but they will not reliably know the tax structure for a sole-trader plumber in the UK, the typical TAM for a residential plumbing operation in a mid-size city, or the compliance requirements for working with gas fittings. This is not a failure of platform infrastructure — it is accurate discovery of where the product is on the operator-value curve.
+
+**The gap list from this audit IS the build backlog for the next cycle.** Each Level 0–2 coworker finding, each missing communication flow, each absent payment surface names a piece of work. The point is to make those gaps visible and prioritized, not to confirm the platform is finished.
+
+**Two perspectives run simultaneously in every phase:**
+- *Technical correctness:* does the feature work? (Pass / Warn / Fail verdict)
+- *Operator value:* does the feature deliver something useful to a non-technical business owner? (Phase O maturity score 0–4; Phase K operator experience notes)
+
+A feature can technically pass and still score Level 1 on operator value. Both are tracked separately.
+
+**Regulated archetypes and Phase O:** businesses in regulated industries (dental, legal, financial, trades with Gas Safe/NICEIC, food, childcare) have significant licensing and compliance requirements that operators routinely get wrong. Phase O's compliance check (O5) and setup intelligence check (O6) are specifically calibrated to surface whether DPF helps or stays silent on these obligations. Silence on a mandatory license = Level 0.
+
+**Locale and tax jurisdiction gap (known, first run):** the current audit runs primarily in USD/GBP on `.com`/`.co` domains. Two specific gaps to note as recurring findings across runs:
+- No EUR run (no `Europe/Berlin` or `€` currency path exercised)
+- No `.co.uk` domain run (brand scraper's GBP path may differ)
+- No VAT/GST jurisdiction variation (UK threshold, US state-by-state, AU GST)
+These are not blockers for individual archetype verdicts but should be captured as a single cross-run gap item at the end of the audit.
+
+---
+
 ## 2. Constraints
 
 - **All interaction via browser — with one documented exception.** Every test step is driven at `http://localhost:3000` through the portal UI. No direct DB writes, no SQL. **Exception (verified in code):** there is no UI to change archetype after setup — `/storefront/setup` redirects to `/storefront` once a `StorefrontConfig` exists (`apps/web/app/(shell)/storefront/setup/page.tsx`). The only swap path is the admin API `POST /api/storefront/admin/archetype-reset` (`mode: replace-seeded-content`). In-run swaps use that API call; the missing "change archetype" UI is itself **audit finding #1** — file a BI for it (the storefront settings page even references "the admin archetype reset" with no button to invoke it).
@@ -72,6 +98,8 @@ These are the reasons we run 53 evaluations. If they are wrong they indicate an 
 | Finance framing | Commercial model language (subscription vs. appointment-checkout vs. account-based) |
 | Custom vocabulary overrides | Members / Ratepayers / Borrowers / Residents / Patients rendered on portal |
 | Setup wizard suggestion accuracy | Brand URL scrape suggests the correct archetype |
+| AI coworker operating intelligence | Finance coworker tax/expense guidance, marketing coworker TAM/channel strategy, compliance/licensing guidance, setup intelligence proactivity — scored 0–4 per Phase O maturity scale |
+| Operator day-to-day experience | Customer communication flows, schedule/calendar usability, payment processing surface, business health KPIs, staff management, digital presence guidance, onboarding completeness — per Phase K |
 
 ### Operator persona accessibility — a UX fit dimension, not a pass/fail gate
 
@@ -511,7 +539,18 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 - [ ] **C1** `[C]` Navigate to `/storefront/settings/business` → Business context form loads
 - [ ] **C2** `[A]` Verify industry classification matches archetype category
 - [ ] **C3** `[C]` Navigate to `/compliance` → Dashboard loads
-- [ ] **C4** `[A]` For regulated archetypes (banking, healthcare, legal, law enforcement): verify licensing section shows correct jurisdiction placeholders
+- [ ] **C4** `[A]` **Licensing & regulatory placeholders** — verify the compliance/licensing section surfaces jurisdiction-relevant placeholders for each archetype below. Absence of any required placeholder = `important` finding (operator will miss a mandatory obligation). Archetypes and their required licensing anchors:
+  - **Trades with certification:** `plumber` (Gas Safe if gas work — UK mandatory; WRAS for water fittings), `electrician` (Part P / NICEIC / NAPIT — UK notifiable work; state license — US), `facilities-maintenance` (HVAC/F-Gas certification for refrigerant work)
+  - **Healthcare:** `veterinary-clinic` (RCVS registration — UK; state veterinary license — US), `dental-practice` (GDC registration — UK; state dental board — US), `physiotherapy` (HCPC registration — UK), `counselling` (BACP/UKCP membership — UK best practice; state license — US), `optician` (GOC registration — UK)
+  - **Food service:** `restaurant` (food hygiene certificate Level 2/3, premises license if alcohol served — UK; food handler permit — US), `bakery` (food business registration, food hygiene), `catering` (food hygiene, personal license for any alcohol service)
+  - **Financial and legal:** `accounting` (ICAEW/ACCA/CIMA membership — UK; CPA license — US), `legal-services` (SRA/Law Society — UK; state bar — US), `mortgage-lending` (FCA authorization — UK; NMLS license — US), `community-bank` (FCA/PRA — UK; OCC/FDIC — US), `credit-union` (FCA/PRA — UK; NCUA — US)
+  - **Education with minors:** `driving-school` (DVSA ADI registration — UK; state DMV approval — US), `tutoring` (DBS Enhanced check if working with under-18s — UK), `music-school` (DBS Enhanced check if under-18s — UK), `dance-studio` (DBS Enhanced check if under-18s — UK)
+  - **Animal services:** `pet-boarding` (Animal Boarding Establishments Act license / DEFRA-approved inspector — UK; state/county animal welfare license — US), `veterinary-clinic` (see healthcare above)
+  - **Property:** `property-management-company` (ARLA/NAEA membership — UK best practice; state real estate license — US, varies by state)
+  - **Nonprofit:** `charity` (Charity Commission registration if income > £5k — UK; 501(c)(3) IRS determination letter — US)
+  - **Public/law enforcement:** `law-enforcement-agency` (POST certification, CJIS access agreement — US; NPCC/Home Office — UK)
+  - **Fitness with minors or hazardous equipment:** `gym` (insurance required; if under-16s or physiotherapy equipment: additional obligation)
+  - **For all archetypes not listed:** verify compliance section is not empty and shows at minimum a generic placeholder for public liability insurance and data protection (GDPR/CCPA)
 - [ ] **C5** `[A]` Navigate to `/portfolio/architecture` (Business Capability Map) → Page is **not empty**. The capability tree covers day-to-day work for this archetype at minimum: finance/billing, customer/sales, operations/service-delivery, and compliance/risk nodes must be present. An empty capability page = `critical` — it is the primary EA surface and empty means zero value.
 - [ ] **C6** `[A]` Confirm the capability perspective reflects the selected archetype, not just the generic baseline. Examples by archetype type:
   - IT MSP: `customer-estate` and `service-agreements` capability nodes visible
@@ -532,6 +571,13 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 - [ ] **D1** Navigate to `/finance` → Dashboard loads
 - [ ] **D2** Verify currency default matches expected (USD unless locale suggested otherwise)
 - [ ] **D3** For banking archetypes: verify BIAN capability perspective is accessible
+- [ ] **D4** `[A]` **Tax jurisdiction awareness:** Navigate to `/finance` or `/finance/settings`. Check whether the finance configuration surface acknowledges the archetype's tax obligations:
+  - **UK archetypes:** VAT registration threshold awareness (£85,000 annual turnover — many small businesses don't know when they must register); if finance coworker or setup surface mentions VAT threshold, score as Level 3 in Phase O1
+  - **US archetypes:** sales tax is state-by-state; does the platform surface this complexity, or assume one rate?
+  - **EU/international archetypes (future locale runs):** VAT inclusive vs. exclusive pricing distinction
+  - **Nonprofit/charity:** Gift Aid eligibility surface (UK Gift Aid = 25p per £1 donated — significant for charity revenue); 501(c)(3) tax-exempt status display (US)
+  - If the finance configuration surface is completely tax-unaware (no mention of VAT, sales tax, or tax-exempt status) → `important` for all archetypes; log as a single cross-run finding rather than one per archetype
+- [ ] **D5** `[A]` **Donation receipt framing** *(charity, pet-rescue, animal-shelter, community-shelter, cooperative only):* Verify the donation flow generates a receipt that includes: organization name, donation amount, date, and a statement suitable for Gift Aid / tax deduction claims. If the receipt is missing these fields → `important` (donor cannot claim tax relief without a valid receipt)
 
 ### Phase E — Coworker Fit & Employee Work View (AI + UX)
 - [ ] **E1** `[C]` Navigate to `/workspace` → COO agent shown
@@ -579,6 +625,57 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 
 ---
 
+### Phase O — AI Coworker Operating Intelligence (lead archetypes only)
+
+> Run after Phase F. Tests whether the AI coworkers actually help the operator **run the business** — not just configure the platform. Distinct from Phase E (vocabulary fit): Phase E tests the coworker knows the right words; Phase O tests it knows the right answers to real operational questions.
+>
+> **Maturity scale — score each coworker response separately:**
+> - **Level 0** — No relevant coworker available, or coworker refuses / is unable to engage on the topic
+> - **Level 1** — Generic response applicable to any small business; no archetype-specific knowledge
+> - **Level 2** — Archetype-aware; knows the business type but not the specific context (e.g. "plumbers need insurance" but not which type or threshold)
+> - **Level 3** — Functionally helpful; specific, actionable guidance the operator of this archetype can use immediately
+> - **Level 4** — Proactively intelligent; surfaces guidance the operator didn't ask for but obviously needed; cross-references related topics without prompting
+>
+> Record the maturity level in every Phase O finding. **Level 1–2 across all archetypes on Run 1 is expected** — this is customer-of-DPF discovery. The gap list IS the build backlog.
+
+- [ ] **O1** `[A]` **Finance coworker — tax setup:** Ask: *"What taxes do I need to set up for my business?"* See run script for the archetype-specific expected answer (tax structure, relevant registration threshold, any special regime such as CIS, Gift Aid, or tax-exempt status). Score 0–4. Expected on first run: Level 1–2.
+
+- [ ] **O2** `[A]` **Finance coworker — expense categories:** Ask: *"What are the typical expenses I should be tracking for this type of business?"* See run script for archetype-specific expected expense list. A Level 3 answer names categories specific to the archetype (e.g. Gas Safe fee for plumber; product waste for salon; food spoilage for restaurant). A Level 1 answer says "supplies and equipment." Score 0–4. Expected: Level 1–2.
+
+- [ ] **O3** `[A]` **Marketing coworker — market context:** Ask: *"How big is the market for my type of business, and who are my typical customers?"* See run script for archetype-specific expected answer (TAM range, customer profile, seasonality if applicable). Score 0–4. Expected on first run: Level 1.
+
+- [ ] **O4** `[A]` **Marketing coworker — channel strategy:** Ask: *"Where should I be marketing my business?"* Check: does it recommend archetype-appropriate primary channels? Does it avoid recommending clearly inappropriate channels (e.g. Instagram for law enforcement; cold email for a charity)? See run script for channel expectations. Score 0–4. Expected: Level 1–2.
+
+- [ ] **O5** `[A]` **COO or compliance coworker — licenses and insurance:** Ask: *"What licenses and insurance do I need to operate?"* See run script for the specific licensing body and minimum insurance type for this archetype. A Level 0 response = "Please consult a professional" with nothing specific. A Level 3 response names the licensing body (e.g. Gas Safe, RCVS, SRA) and the insurance type (public liability, professional indemnity, employer's liability). Score 0–4. Expected: Level 1–2.
+
+- [ ] **O6** `[A]` **COO — setup intelligence / proactive gaps:** After completing Phases A–F, ask: *"Have we missed anything important in setting up the business?"* Record: does it identify specific gaps (e.g. "Your Gas Safe registration number isn't on your profile — customers check for this")? Does it suggest next steps outside DPF (regulatory registrations, certifications, insurance quotes)? Does it understand this is a real operating entity, not a DPF configuration exercise? Score 0–4. Expected on first run: Level 0–1.
+
+- [ ] **O7** `[A]` **Cross-coworker coherence:** Ask the COO the archetype-specific operating question from the run script (typically a question that spans finance data and market context — e.g. for plumber: "Am I making more money on emergency callouts or planned maintenance jobs?"). Record: does the COO bridge finance context and service-mix context? Is the answer specific enough to be actionable? If it hands off to a specialist coworker, is the handoff helpful and does the specialist pick up the context? Score 0–4. Expected: Level 0–1.
+
+---
+
+### Phase K — Operator Day-to-Day Experience (lead archetypes only)
+
+> Run after Phase O. Tests whether the operator can actually run their business using the platform beyond initial setup — the operational surfaces that make a business owner's day easier or harder. Most Phase K items will surface gaps on Run 1. **A complete Phase K gap list from Run 1 is one of the highest-value outputs of this audit cycle.**
+
+- [ ] **K1** `[A]` **Customer communications:** After Phase B5 (inbox record exists), open the submission. Is there a "Reply" or "Send message" action? If yes — attempt to compose a short reply ("Thank you for your enquiry, we'll be in touch to confirm"). Does it send? If no reply capability → `important` (operator has no way to close the loop from within the platform). Bonus: ask the COO "Help me reply to this customer inquiry" — does it know the context of the submission?
+
+- [ ] **K2** `[A]` **Schedule / operational view:** Check for a day/week view of bookings (booking archetypes) or active jobs (inquiry/trades). Navigate to `/workspace`, `/storefront/team`, or any calendar surface. Confirm: can the operator see who is booked, for what service, with which staff member, and at what time? Can they block time off (holiday, training)? If no schedule view exists at all → `important` for booking archetypes. For inquiry/trades: a job-board view (open inquiries by status) would be the equivalent — note its presence or absence.
+
+- [ ] **K3** `[A]` **Payment processing surface:** Navigate to `/storefront/settings` or `/integrations`. Is Stripe visible as a payment integration anchor? Is there a clear "connect" path? For booking archetypes: is pre-payment at checkout possible, or is the flow booking-only with offline payment? If Stripe is entirely absent → `important` for revenue-generating archetypes. Do **not** attempt to process a live payment — surface check only.
+
+- [ ] **K4** `[A]` **Business health / KPIs dashboard:** Navigate to `/finance` or `/workspace`. Check for: a revenue trend (week-over-week or month-over-month); booking count / occupancy rate (booking archetypes); units sold / top products (goods archetypes); total donations this period (nonprofits); outstanding invoices (service/B2B archetypes). If only empty states or no KPIs → `important`. Score language accessibility separately: 1 = technical accounting jargon; 2 = plain language but generic; 3 = plain language and archetype-appropriate terminology.
+
+- [ ] **K5** `[A]` **Staff management beyond availability:** For archetypes with employees (salon, restaurant, dental, gym, corporate training, property management, IT MSP, charity, HOA — check run script): navigate to `/storefront/team`. Is there anything beyond name and availability? (hours worked, role, payroll link, HR surface). Ask the HR or Operations coworker: *"I need to hire a new [archetype-appropriate role from run script]"* — is the response specific to this archetype? If no staff management surface for a staff-heavy archetype → `important`; for solo-operator archetypes → skip.
+
+- [ ] **K6** `[A]` **Digital presence guidance:** Ask the marketing coworker: *"How do I get my business found on Google?"* Navigate to `/integrations` — is Google Business Profile surfaced as an anchor? For social-first archetypes (salon, florist, bakery, artisan-goods): does Instagram/Facebook appear as a relevant anchor in the integration catalog? Missing Google Business Profile anchor for a local-service archetype → `important`.
+
+- [ ] **K7** `[A]` **Onboarding completeness — "what next" path:** After completing Phases A–F, navigate to `/workspace`. Does the platform communicate what the operator should do next? Is there a setup checklist or "getting started" guide? Is the first screen oriented toward "running the business" or "configuring the platform"? If the post-setup workspace looks identical to a blank admin dashboard with no contextual guidance → `important` for all archetypes.
+
+- [ ] **K8** `[A]` **Language accessibility for the operator persona:** While navigating, count terminology the run's persona (Sandra Hooper the plumber; Chloe Martinez the salon owner; etc.) would need to Google. Examples of inaccessible terms: "Configuration Items", "Storefront Config", "Activation Profile", "Business Context", "Capability Perspective", "Work Capsule", "Storefront Archetype". Examples of accessible equivalents: "My Team", "Services & Prices", "Customer Enquiries", "Business Hours", "My Accounts". Each encounter = a `minor` UX finding. Five or more in one run → escalate the batch as a single `important` language accessibility gap item.
+
+---
+
 ## 7. Archetype Inventory, Personas & Run Scripts
 
 ### Run 1 — Trades & Maintenance
@@ -618,6 +715,25 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 - G3: Skip (inquiry archetype — no portal invoice; run only G1–G2 and verify G4 shows the expense)
 - G4: P&L → expenses $85.00, revenue $0 (correct for inquiry-only; verify the expense appears)
 - G5: Log if P&L is empty despite G2 entry
+
+**Run-1 Phase O (AI coworker operating intelligence — plumber):**
+- **O1 Tax setup:** Ask finance coworker "What taxes do I need to set up for my plumbing business?" Expected Level 3: sole-trader self-assessment income tax (UK) or Schedule C sole-proprietor (US); VAT registration threshold awareness (£85k UK); CIS (Construction Industry Scheme) if doing subcontract work in UK. Level 1 response = "You should speak to an accountant" with nothing specific.
+- **O2 Expenses:** Expected Level 3: van lease/fuel, tools and equipment, materials per job (copper fittings, sealant, etc.), public liability insurance premium, Gas Safe registration fee (UK), workwear/PPE, telephone. Level 1 = generic "supplies and equipment."
+- **O3 Market context:** Expected Level 3: UK residential plumbing market is large and fragmented (dominated by sole traders); customers are primarily homeowners, landlords, and letting agents within a ~10-mile service radius; emergency work commands higher rates. Level 1 = "The plumbing industry is competitive."
+- **O4 Marketing channels:** Expected Level 3: Google Business Profile primary (emergency search is intent-driven and location-targeted); Checkatrade/Rated People/MyBuilder for lead generation in UK; word-of-mouth referrals from landlords and estate agents; door drops in new housing developments. Instagram/TikTok are low priority for emergency trades. Level 1 = "Use social media and Google."
+- **O5 Compliance:** Expected Level 3: Gas Safe registration required for any gas work in UK (mandatory, annual fee); NAPIT or Part P certification for notifiable electrical work; public liability insurance minimum £1M (most domestic customers expect £2M); employer's liability required if any employed staff. Level 1 = "You may need various licenses and insurance."
+- **O6 Setup gaps:** Watch for whether it flags: Gas Safe number not shown on profile; no service area/radius defined; no emergency call-out surcharge noted; no 24/7 vs. office-hours distinction.
+- **O7 Cross-coworker:** Ask "Am I making more money on emergency callouts or planned maintenance jobs?" → Level 3 response: discusses margin difference (emergency = higher rate but unpredictable materials cost; planned = lower rate but predictable); suggests tracking job type in finance to compare. Level 1 = "Both are important revenue streams."
+
+**Run-1 Phase K (operator day-to-day — plumber):**
+- **K1 Communications:** Critical for trades — customer expects a quote response within hours. Can Sandra reply to the inquiry from the inbox? Does the reply reach the customer?
+- **K2 Schedule:** A job board (open jobs by status: pending/assigned/complete) is more useful for Sandra than a booking calendar. Note which view (if any) the platform offers. If only a calendar → note as a trades-model gap.
+- **K3 Payment:** Plumbing typically invoices after job completion; Stripe anchor for card payment on invoice is the relevant surface. Also check for deposit payment capability (bathroom fitting jobs often require 30–50% upfront).
+- **K4 KPIs:** Revenue per job type; outstanding invoices; average job value. Language should use "jobs" and "call-outs," not "appointments" or "orders."
+- **K5 Staff:** Sandra is a 2-truck operation. Check whether she can track which technician is assigned to which job — this is an operational need, not just availability.
+- **K6 Digital presence:** Google Business Profile is the critical anchor. Checkatrade/Rated People integration (if present) is a Level 4 bonus.
+- **K7 Next steps:** Post-setup, does the platform guide Sandra to add her Gas Safe number, set her service radius, or define her emergency call-out policy?
+- **K8 Language:** Flag specifically: "Configuration Items" (no plumber would use this term); "Storefront" (she calls it her "website"); "CTA" anywhere user-facing; "inbox" vs. "enquiries."
 
 **Run-1 setup steps:**
 1. Reset → fresh install
@@ -800,6 +916,25 @@ End of Run 1.
 - G3: Invoice for Lisa Jordan (create account first if appointment-checkout didn't auto-create one): "Audit — Blow Dry & Style" qty 1, £35.00
 - G4: P&L → revenue £35.00, expenses £36.00, net -£1.00
 - **Appointment-checkout verification**: ask coworker "Do clients have an account balance with us?" → should confirm no running account/balance, payment is at time of service only
+
+**Run-2 Phase O (AI coworker operating intelligence — hair-salon):**
+- **O1 Tax setup:** Ask finance coworker "What taxes do I need to set up for my salon?" Expected Level 3: sole-trader self-assessment or Ltd company corporation tax; VAT applies to hair salon services in UK above the £85k threshold (a common misconception that haircuts are exempt — they are not); tips from clients are taxable income; if stylists are booth-renters they are self-employed and Chloe does not deduct PAYE for them. Level 1 = "Consult a tax advisor."
+- **O2 Expenses:** Expected Level 3: professional hair products (Wella, Goldwell), salon consumables, chair rental cost (if applicable), CPD/training courses, uniforms, product waste allowance, equipment depreciation (dryers, chairs, backwash units), business rates, public liability. Level 1 = "Supplies and equipment."
+- **O3 Market context:** Expected Level 3: UK hair salon market ~£4.5bn; highly local catchment (~2-mile radius); strong client loyalty (clients follow their stylist, not the salon); seasonal peaks (Christmas, prom season April–June, wedding season May–Sept). Level 1 = "Hair salons are a competitive market."
+- **O4 Marketing channels:** Expected Level 3: Instagram primary (visual proof of work — before/after photos); Google Business Profile for local search; Treatwell/Fresha for discovery and online booking; referral incentive schemes ("bring a friend, get £10 off"); SMS/email rebooking reminders are high-ROI. Level 1 = "Use social media."
+- **O5 Compliance:** Expected Level 3: No UK cosmetology license required for cutting hair (unlike the US where a cosmetology license is mandatory in every state — flag this for US persona variant); chemical treatments require COSHH risk assessment and PPE; public liability insurance essential; employer's liability if Chloe has any employed staff; GDPR applies to client appointment records. Level 1 = "Check local regulations."
+- **O6 Setup gaps:** Watch for whether it flags: no Instagram link on profile; prices not displayed on portal; no rebooking/reminder flow described; no deposit policy for longer services (Bridal Package £200+).
+- **O7 Cross-coworker:** Ask "Am I making more profit from colour treatments or from haircuts?" → Level 3 response: discusses cost-per-service (colour has high product cost + longer chair time; cut has low material cost); suggests tracking service type in finance records to compare margin.
+
+**Run-2 Phase K (operator day-to-day — hair-salon):**
+- **K1 Communications:** Appointment confirmation email and SMS reminder are standard client expectations. Does the platform send automated reminders? Can Chloe send a manual message to a booked client from the inbox?
+- **K2 Schedule:** Side-by-side stylist appointment book is the core operational view. Does the platform show a day view with multiple stylists in parallel columns? This is the most critical K item for Run 2.
+- **K3 Payment:** Stripe for pre-payment or deposit on longer services (Bridal, Keratin). Card-present terminal integration for walk-in checkout is a bonus.
+- **K4 KPIs:** Revenue per stylist; occupancy rate (% of available slots booked); average spend per client visit; client rebooking rate. Language: "stylists" and "clients."
+- **K5 Staff:** Commission structure vs. employed vs. booth-renter matters. Does the platform let Chloe track stylist revenue or hours? Ask: "I need to hire a new junior stylist" — does the HR coworker mention salon-specific roles, probation, chair allocation?
+- **K6 Digital presence:** Instagram and Treatwell/Fresha are the primary discovery channels for salons. Google Business Profile secondary but needed. Are any of these surfaced as integration anchors?
+- **K7 Next steps:** After setup, does the platform tell Chloe how to get her first online booking and how to promote her page?
+- **K8 Language:** "Configuration Items" for a salon owner; "Storefront Config" vs. "your salon page"; "inbox" vs. "booking requests."
 
 ---
 
@@ -993,6 +1128,25 @@ End of Run 1.
 - G4: P&L → revenue $85.00, expenses $28.00, net +$57.00
 - Verify Robert Chen's account at `/customer` shows the invoice under their record
 
+**Run-3 Phase O (AI coworker operating intelligence — veterinary-clinic):**
+- **O1 Tax setup:** Ask "What taxes do I need to set up for my veterinary practice?" Expected Level 3: professional partnership or Ltd company structure common for multi-vet practices; VAT applies to some vet services in UK (routine vaccinations/medications are VAT-exempt; elective procedures may be VATable — ask the coworker to clarify); in US — sales tax on medications varies by state. Level 1 = "Consult your accountant."
+- **O2 Expenses:** Expected Level 3: pharmaceutical and vaccine stock, consumables (gloves, syringes, sterilization pouches), equipment maintenance (autoclave, anaesthetic machine), professional indemnity insurance (mandatory for RCVS registration), RCVS annual renewal fee, lab fees for external pathology. Level 1 = "Supplies and equipment."
+- **O3 Market context:** Expected Level 3: UK veterinary services market ~£5bn and growing (pet ownership spike post-2020); typical clients are pet owners within a 5-mile catchment; emergency out-of-hours is a separate revenue stream often outsourced to Vets Now/Medivet-type services. Level 1 = "Pet ownership is increasing."
+- **O4 Marketing channels:** Expected Level 3: Google Business Profile (pet owners search "vet near me" when their pet is ill); Facebook community groups for local presence; referral from rescue centres and groomers; pet insurance partnerships for referrals. Instagram useful for "puppy first visit" content. Level 1 = "Use social media."
+- **O5 Compliance:** Expected Level 3: RCVS registration required for all practising vets (UK); Practice Standards Scheme (PSS) accreditation for the premises; medicines storage and dispensing regulations (VMR); Veterinary Medicines Regulations — any prescription medications require a valid Veterinary Prescription. Level 1 = "Vets require professional registration."
+- **O6 Setup gaps:** Watch for whether it flags: RCVS practice number not on profile; no out-of-hours emergency referral partner listed; no pet weight/age field in booking form (clinical need).
+- **O7 Cross-coworker:** Ask "Should we expand to offer out-of-hours emergency cover or outsource it?" → Level 3 response: discusses margin (own out-of-hours is high cost — night staff, equipment); compares outsource model (Vets Now partnership) vs. retained referral income; suggests checking local emergency vet coverage gap.
+
+**Run-3 Phase K (operator day-to-day — veterinary-clinic):**
+- **K1 Communications:** Post-visit care instructions and vaccine reminder emails are standard. Can the vet team send a follow-up message from the booking record?
+- **K2 Schedule:** Vet appointment book must show animal name + owner name + visit reason per slot. Does the platform show enough context per booking? A slot showing "Robert Chen" is not enough — it needs to show "Max (Labrador — Annual Booster)."
+- **K3 Payment:** Most vet practices take payment at checkout (same-day). Pet insurance claim submission support would be Level 4 bonus. Stripe or card-reader integration surface check.
+- **K4 KPIs:** Appointments per day; revenue per consultation type; outstanding invoices (for insured/account customers); vaccine reminder conversion rate. Language: "patients" and "consultations."
+- **K5 Staff:** Multiple vets, vet nurses, and receptionists. Does the team view differentiate roles? Does the schedule show which vet is on which consultation?
+- **K6 Digital presence:** Google Business Profile critical. Facebook community presence. Nextdoor/local community apps for neighbourhood presence.
+- **K7 Next steps:** Does the platform guide the practice to set up their RCVS practice number, define their out-of-hours policy, and connect their booking calendar to external channels?
+- **K8 Language:** "Configuration Items" for a vet nurse; "storefront" vs. "practice website"; "items" vs. "services/consultations."
+
 ---
 
 #### Archetype: `dental-practice`
@@ -1121,6 +1275,25 @@ End of Run 1.
 - G3: Invoice for Sarah Tanner (account from P5-PET): "Bath & Brush — Bella", qty 1, $45.00
 - G4: P&L → revenue $45.00, expenses $56.00, net -$11.00
 
+**Run-4 Phase O (AI coworker operating intelligence — pet-grooming):**
+- **O1 Tax setup:** Ask "What taxes does my grooming studio need to set up?" Expected Level 3: sole-trader income tax self-assessment (UK) or Schedule C (US); most grooming services are NOT VAT-exempt (they are taxable above £85k UK threshold, unlike some animal welfare services); tip income is taxable. Level 1 = "Consult your accountant."
+- **O2 Expenses:** Expected Level 3: professional shampoos and conditioners, clippers and blade maintenance/replacement, grooming table consumables, drying equipment maintenance, PPE (grooming gloves, aprons), public liability insurance, professional groomer insurance (bite/scratch incidents). Level 1 = "Supplies and equipment."
+- **O3 Market context:** Expected Level 3: UK pet grooming market growing with pet ownership spike; typical clients are dog owners within 3–5 mile radius (cats are also a market but smaller); premium/mobile grooming is a growing premium segment; repeat-booking loyalty is high (every 6–8 weeks for most dog breeds). Level 1 = "Pet ownership is growing."
+- **O4 Marketing channels:** Expected Level 3: Google Business Profile (local search "dog groomer near me"); Instagram (before/after transformation photos — extremely high engagement for this niche); word-of-mouth from vets, dog walkers, pet shops; Nextdoor/local community groups; loyalty discount for regular bookings. Level 1 = "Social media and Google."
+- **O5 Compliance:** Expected Level 3: England/Wales — no mandatory grooming license (unlike some US states where a license is required); however, local authority animal welfare inspections may apply; public liability insurance essential (bite or injury during grooming); if offering sedation-assisted grooming — vet must be involved. Level 1 = "Check local regulations."
+- **O6 Setup gaps:** Watch for: no breed-specific pricing noted; no "anxious or reactive dog" flag in booking form; no pet vaccination requirement noted (some groomers require Bordetella proof).
+- **O7 Cross-coworker:** Ask "Which breeds are booked most often and are they the most profitable?" → Level 3 response: notes that large breeds take longer (lower hourly rate) but charge more per appointment; suggests tracking by size tier in finance records.
+
+**Run-4 Phase K (operator day-to-day — pet-grooming):**
+- **K1 Communications:** Post-groom notification to owner ("Bella is ready for pickup!") is a standard expectation. Can Tina send this from the inbox record?
+- **K2 Schedule:** Tina's 2-table operation needs to see both tables' bookings in a side-by-side view. The most valuable K2 check for this run.
+- **K3 Payment:** Pay-on-collection is typical for grooming. Does the platform support that model, or is it pre-payment only?
+- **K4 KPIs:** Bookings per week; revenue per appointment size tier (small/medium/large); rebooking rate. Language: "pets" and "grooms."
+- **K5 Staff:** 2 tables implies possibly 2 groomers. Scheduling per groomer table is the critical staff management need.
+- **K6 Digital presence:** Instagram (before/after photos) is the primary growth channel for a grooming studio. Is it surfaced?
+- **K7 Next steps:** Does the platform guide Tina to add breed-specific pricing, set up her Instagram profile, and define her terms for anxious/reactive dogs?
+- **K8 Language:** "Configuration Items" for pet CIs is especially confusing in this context — a groomer would say "pet profile" or "client pet record."
+
 ---
 
 #### Archetype: `pet-boarding`
@@ -1224,6 +1397,25 @@ End of Run 1.
 - G3: Invoice for Test Diner R5 (create account manually since walk-in pay-on-day model): "Dinner for 2 — 3-course set menu", qty 1, £75.00
 - G4: P&L → revenue £75.00, expenses £180.00, net -£105.00
 
+**Run-5 Phase O (AI coworker operating intelligence — restaurant):**
+- **O1 Tax setup:** Ask "What taxes does my restaurant need to set up?" Expected Level 3: income tax on profits; VAT at 20% on food and non-alcoholic drinks served in the restaurant (UK — eat-in food is VAT-able; cold takeaway food is exempt at 0%); premises license for alcohol service; tips handling — service charges are usually VAT-able and taxable income; tronc schemes for distributing tips. Level 1 = "Speak to an accountant."
+- **O2 Expenses:** Expected Level 3: food and beverage COGS (typically 28–35% of revenue for a viable restaurant), kitchen equipment maintenance, staff wages (National Living Wage + tips), premises lease, premises license fees, food waste management, insurance (public liability, employer's liability, business interruption, loss of licence). Level 1 = "Ingredients and staff."
+- **O3 Market context:** Expected Level 3: UK restaurant market ~£90bn but highly competitive; average restaurant has a 1-in-5 failure rate in year one; local catchment for a neighbourhood restaurant is typically 2–5 miles; occasion dining (birthday, anniversary) and regular local trade are the two main segments. Level 1 = "Restaurants are a competitive market."
+- **O4 Marketing channels:** Expected Level 3: Google Business Profile (local "restaurant near me" searches); OpenTable/Resy/Reserve with Google for online booking exposure; Instagram and TikTok (food photography and behind-the-kitchen content); local food bloggers and press for launches; Deliveroo/Uber Eats if delivery intended (note: high commission costs). Level 1 = "Social media and Google."
+- **O5 Compliance:** Expected Level 3: Food business registration with the local authority (mandatory in UK, no fee but required before trading); Food Hygiene Rating Scheme (EHO inspection, 0–5 rating publicly displayed); Premises License for alcohol if applicable; Personal Licence holder on premises when alcohol is served; Fire risk assessment; HACCP food safety management plan. Level 1 = "Check local health and safety regulations."
+- **O6 Setup gaps:** Watch for: no food hygiene rating mentioned; no alcohol licence surface; no allergy information prompts (mandatory in UK since Natasha's Law 2021); no cover/capacity field defined.
+- **O7 Cross-coworker:** Ask "Is our dinner service more profitable than lunch?" → Level 3: discusses average covers, average spend, and staffing cost differences between services; suggests tracking separately in finance by service type.
+
+**Run-5 Phase K (operator day-to-day — restaurant):**
+- **K1 Communications:** Table confirmation email after booking, reminder day-before, post-visit "thank you" with feedback request. Can Marco send these from the inbox?
+- **K2 Schedule:** Table plan / reservation view by time of day. Does the platform show covers tonight, table availability, and walk-in vs. reservation split? This is the core operational view for a restaurant.
+- **K3 Payment:** Pay at table is the standard. Card terminal integration (not Stripe online checkout) is the practical need. Online pre-payment for deposits on large parties/private dining is secondary.
+- **K4 KPIs:** Covers per service; average spend per cover; food cost as % of revenue; table turn time. Language: "covers," "service," "tables" — not "orders" or "appointments."
+- **K5 Staff:** Kitchen and front-of-house separation. Roster management (who works which shift). Tronc/tips distribution. Ask: "I need to hire a sous-chef — what should I pay them?" → expects UK chef salary benchmarks.
+- **K6 Digital presence:** Google Business Profile critical for local discovery. OpenTable/Resy integration for broader booking reach. TripAdvisor reviews surface.
+- **K7 Next steps:** Does the platform guide Marco on getting his EHO food hygiene inspection, registering the premises, and listing on OpenTable?
+- **K8 Language:** "Storefront" vs. "restaurant page"; "items" vs. "dishes/menu items"; "inbox" vs. "reservations/bookings."
+
 ---
 
 #### Archetype: `catering`
@@ -1326,6 +1518,25 @@ End of Run 1.
 - G2: Bill: "Quarterly stock replenishment — mixed goods", qty 1, $250.00
 - G3: Invoice for Test Buyer R6: "Audit Run Widget — Test SKU R6", qty 1, $19.99
 - G4: P&L → revenue $19.99, expenses $250.00, net -$230.01
+
+**Run-6 Phase O (AI coworker operating intelligence — retail-goods):**
+- **O1 Tax setup:** Ask "What taxes does my retail store need?" Expected Level 3: income/corporation tax on profits; sales tax in US (state-by-state — Pat Sullivan's store location determines which states require collection, especially with online sales nexus rules post-South Dakota v. Wayfair); or UK VAT at 20% for most physical goods (some items zero-rated: children's clothing, books). Level 1 = "Consult a tax accountant."
+- **O2 Expenses:** Expected Level 3: Cost of goods sold (COGS) — the primary expense; lease/rates; staff wages; shrinkage/theft allowance; packaging and shipping costs; merchant services fees (typically 1.5–2.5% of card transactions); business rates for the premises. Level 1 = "Stock and wages."
+- **O3 Market context:** Expected Level 3: US retail market is enormous but online competition (Amazon) has compressed margins for generalist retailers; specialty/gift shops survive through curation, local loyalty, and experiential retail; e-commerce is now expected even for physical stores. Level 1 = "Retail is competitive."
+- **O4 Marketing channels:** Expected Level 3: Google Shopping ads for online sales; Google Business Profile for physical store traffic; Instagram for product lifestyle photography; email marketing to existing customer list (high ROI for repeat purchases); local press and community events for physical store. Level 1 = "Use social media and a website."
+- **O5 Compliance:** Expected Level 3: business license required in most US jurisdictions; seller's permit for sales tax collection; consumer protection laws (return/refund policy must be displayed); fire safety and accessibility for physical premises; product safety regulations (relevant if selling children's toys or electrical items). Level 1 = "Check local business license requirements."
+- **O6 Setup gaps:** Watch for: no stock level tracking mentioned; no reorder point suggested; no returns policy on the portal.
+- **O7 Cross-coworker:** Ask "Which products have the best margin and should I be promoting them more?" → Level 3: bridges finance COGS data with marketing channel recommendations; suggests identifying hero products and featuring them prominently.
+
+**Run-6 Phase K (operator day-to-day — retail-goods):**
+- **K1 Communications:** Order confirmation email and dispatch notification are essential for online retail. Can Pat send these from the inbox?
+- **K2 Schedule:** For a retail store, the "schedule" is more about staffing rota and stock delivery schedule. Check if any operational calendar view exists.
+- **K3 Payment:** Stripe for online checkout is essential; in-store card reader integration for physical retail. Is both surface visible?
+- **K4 KPIs:** Revenue by product; top-selling items; stock turn rate; average order value; cart abandonment rate. Language: "products," "orders," "stock" — not "appointments."
+- **K5 Staff:** If Pat has shop floor staff, shift scheduling and sales targets matter. Ask: "I need to hire a part-time retail assistant."
+- **K6 Digital presence:** Google Shopping, Instagram product catalog, physical store Google Business Profile listing.
+- **K7 Next steps:** Does the platform guide Pat to set up online checkout, connect a card reader, and list products on Google Shopping?
+- **K8 Language:** "Storefront" is actually sensible for retail; "items" works for products. Note what doesn't.
 
 ---
 
@@ -1456,6 +1667,25 @@ End of Run 1.
 - G3: Invoice for Test Member R7: "Audit — Monthly Membership (Test R7)", qty 1, $49.00
 - G4: P&L → revenue $49.00, expenses $150.00, net -$101.00
 
+**Run-7 Phase O (AI coworker operating intelligence — gym):**
+- **O1 Tax setup:** Ask "What taxes does my gym need?" Expected Level 3: company/LLC structure common for a gym (liability protection from member injuries); membership subscription income is taxable; VAT applies to gym memberships in UK (standard rated at 20%); US — sales tax on fitness memberships varies by state (some exempt, some taxable). Level 1 = "Get an accountant."
+- **O2 Expenses:** Expected Level 3: equipment lease/maintenance contracts (treadmills, free weights, machines); building lease and rates; staff wages (personal trainers may be employed or self-employed contractors); insurance (public liability, employer's liability, professional indemnity for PT sessions); utilities (very high for a gym — HVAC, showers, laundry). Level 1 = "Equipment and staff."
+- **O3 Market context:** Expected Level 3: US gym and fitness market ~$35bn; highly seasonal (January surge — 12% of annual new memberships in first 2 weeks); member churn is the key challenge (average gym loses 50% of new members by 6 months); competition from budget chains (Planet Fitness, Pure Gym) on price vs. boutique gyms on experience; PT sessions drive premium revenue. Level 1 = "Fitness is a growing market."
+- **O4 Marketing channels:** Expected Level 3: Google Business Profile for local search; Facebook/Instagram for before-and-after transformation content and class schedules; referral programme (member-gets-member discount); January/New Year campaign timing; local employer wellness partnerships for corporate memberships. Level 1 = "Social media and a website."
+- **O5 Compliance:** Expected Level 3: Public liability insurance essential; Employers' Liability if any employed staff; fitness instructor qualifications for staff (Level 2 Gym Instructor, Level 3 PT — UK); PAR-Q forms for new members (physical activity readiness questionnaire — legal protection); AED (defibrillator) requirement for gyms above certain size; accessibility requirements for the premises. Level 1 = "Check health and safety regulations."
+- **O6 Setup gaps:** Watch for: no PAR-Q/health screening workflow mentioned; no AED/first aid requirement; no member freeze/pause mechanism for the subscription model.
+- **O7 Cross-coworker:** Ask "How many members do I need to cover my costs, and what's a realistic ramp-up timeline?" → Level 3: calculates break-even member count from known expenses; models 3-month and 6-month ramp scenarios for a new gym launch.
+
+**Run-7 Phase K (operator day-to-day — gym):**
+- **K1 Communications:** Failed recurring payment notification to member is a critical communication. New member welcome email. Class schedule updates. Can Brad send these from the platform?
+- **K2 Schedule:** Class timetable view (instructor, class type, capacity, current bookings) plus gym floor occupancy at peak hours. Does the platform provide either?
+- **K3 Payment:** Recurring subscription billing (monthly direct debit/card) is the core payment model. Stripe recurring billing surface is the critical check. Does the platform support subscription management (pause, cancel, failed payment retry)?
+- **K4 KPIs:** Active members; churn rate (cancellations per month); new sign-ups vs. cancellations; revenue per member; PT session attachment rate. Language: "members," "memberships" — not "orders" or "appointments."
+- **K5 Staff:** PT contractor management — are they employed or self-employed? Does the platform help with this distinction? Ask: "I need to hire a new personal trainer — should they be employed or self-employed?"
+- **K6 Digital presence:** Google Business Profile for local discovery. Instagram for class content. Employer wellness programme outreach through LinkedIn.
+- **K7 Next steps:** Does the platform guide Brad to configure recurring billing, set up the class schedule, and define the member onboarding flow (PAR-Q, induction session)?
+- **K8 Language:** "Storefront" vs. "gym website/member portal"; "items" vs. "memberships and sessions"; "inbox" vs. "member enquiries."
+
 ---
 
 #### Archetype: `yoga-studio`
@@ -1551,6 +1781,25 @@ End of Run 1.
 - G2: Bill: "Printed delegate workbooks and course materials — batch of 50", qty 1, £125.00. Save.
 - G3: Skip (inquiry archetype — bespoke quote issued offline)
 - G4: P&L → expenses £125.00, revenue £0 — verify expense appears
+
+**Run-8 Phase O (AI coworker operating intelligence — corporate-training):**
+- **O1 Tax setup:** Ask "What taxes does a training company need to manage?" Expected Level 3: corporation tax on profit (Ltd company structure typical for B2B); VAT at 20% on training services in UK (note: some training is VAT-exempt if it leads to a nationally-recognised qualification — HMRC rules are complex); IR35 considerations if using associate trainers who are limited companies. Level 1 = "Consult an accountant."
+- **O2 Expenses:** Expected Level 3: associate trainer day rates, venue hire, AV equipment, printed materials per delegate, travel and accommodation, CRM/LMS software subscriptions, L&D accreditation fees (ILM, CMI, CPD). Level 1 = "Supplies and trainer costs."
+- **O3 Market context:** Expected Level 3: UK L&D market ~£5bn; B2B buyers are HR/L&D managers and line managers; procurement cycle is typically Q4 (L&D budgets set for following year); compliance training (health & safety, data protection, diversity) is non-discretionary spend; leadership and management development is the largest segment. Level 1 = "Training is a growing market."
+- **O4 Marketing channels:** Expected Level 3: LinkedIn (primary channel — HR and L&D decision-makers); email marketing to HR community lists; CPD accreditation body directories (CIPD, CMI); referral and framework procurement (Crown Commercial Service in UK); industry conference presence. Cold calling to HR departments is still used. Level 1 = "LinkedIn and professional networks."
+- **O5 Compliance:** Expected Level 3: if delivering safeguarding or working-with-minors training → own DBS certification required; if ISO training or food safety — trainer qualification standards matter; Health and Safety at Work Act compliance for physical training environments; GDPR for delegate records and assessment data. Level 1 = "Check insurance and qualification requirements."
+- **O6 Setup gaps:** Watch for: no CPD/ILM accreditation number on profile; no associate trainer contract management mentioned; no delegate cap per course noted.
+- **O7 Cross-coworker:** Ask "We have a £20k RFP for 18 months of leadership development. Is it worth bidding?" → Level 3: estimates profit margin on RFP (revenue vs. associate costs, materials, management time); flags IR35/associate classification risk; suggests checking framework compliance status.
+
+**Run-8 Phase K (operator day-to-day — corporate-training):**
+- **K1 Communications:** Quote/proposal response to an RFP inquiry is the primary communication need. Can the operator compose and send a proposal from the inbox? Or at minimum reply to the enquiry?
+- **K2 Schedule:** Training calendar view (upcoming courses, delegate counts, room/venue allocation). Does any schedule surface exist beyond the inquiry inbox?
+- **K3 Payment:** B2B invoicing (30-day terms after delivery) is standard. Stripe for deposit or prepayment on public courses. Invoice management surface is the key check.
+- **K4 KPIs:** Revenue per course/programme; delegate count pipeline; proposal win rate; repeat client rate. Language: "clients," "programmes," "delegates" — not "bookings" or "orders."
+- **K5 Staff:** Associate trainer roster management. Ask: "I need to find an associate trainer for a finance skills workshop" — does the coworker help scope the brief?
+- **K6 Digital presence:** LinkedIn is the primary channel. CPD accreditation directory listing. Does the platform surface either?
+- **K7 Next steps:** Does the platform guide the company to set up their CPD accreditation profile, add associate trainer contracts, and configure their course catalogue?
+- **K8 Language:** "Storefront" vs. "training catalogue page"; "items" vs. "courses/programmes"; "inbox" vs. "enquiries/RFPs."
 
 ---
 
@@ -1710,6 +1959,25 @@ End of Run 1.
 - G3: Skip (inquiry archetype — proposal issued offline; no portal invoice at inquiry stage)
 - G4: P&L → expenses £850.00, revenue £0 — verify expense appears
 
+**Run-9 Phase O (AI coworker operating intelligence — consulting):**
+- **O1 Tax setup:** Ask "What taxes does a consulting firm need to manage?" Expected Level 3: corporation tax (Ltd company typical); VAT at 20% on consulting services (UK — must register once above £85k threshold); IR35 assessment for engagements via intermediary structures; expenses and allowables (entertaining clients is only 50% tax-deductible; home office claim if applicable). Level 1 = "Consult your accountant."
+- **O2 Expenses:** Expected Level 3: professional indemnity insurance (essential — clients will require minimum cover in contract), travel and accommodation, subcontractor/associate fees, SaaS tools (CRM, project management, research databases), CPD/conference costs, office or hot-desk costs. Level 1 = "Travel and subcontractors."
+- **O3 Market context:** Expected Level 3: UK management consulting market ~£12bn (McKinsey/BCG lead but SME consultancies serve the mid-market); typical engagements are 3–18 months; buyer is typically a C-suite or senior director; procurement process often involves SOW, NDA, and MSA before any work begins; day rates vary widely by specialization (£600–£2,000+/day in London for senior). Level 1 = "Consulting is a large and competitive market."
+- **O4 Marketing channels:** Expected Level 3: LinkedIn for thought leadership and direct outreach; referral network is the primary source (70%+ of consulting revenue for most boutique firms); speaking at industry conferences; content marketing (white papers, case studies). Cold outreach has low conversion but is used. Level 1 = "LinkedIn and networking."
+- **O5 Compliance:** Expected Level 3: Professional indemnity insurance required (and typically contractually demanded by clients); IR35 compliance for contractor roles; GDPR for client data handling; depending on specialization — FCA, CQC, or sector-specific regulatory compliance may apply. Level 1 = "Professional indemnity insurance and various regulations."
+- **O6 Setup gaps:** Watch for: no professional indemnity insurance limit stated on profile; no NDA/MSA template mentioned; no specialization or sector focus defined on portal.
+- **O7 Cross-coworker:** Ask "One client is making up 60% of our revenue — is that a problem?" → Level 3 response: identifies client concentration risk; advises on diversification target (typically no more than 30–40% from one client); suggests proactive pipeline development.
+
+**Run-9 Phase K (operator day-to-day — consulting):**
+- **K1 Communications:** Sending a proposal or engagement letter to a prospective client is the primary post-inquiry communication. Can the consultant compose this from the inbox?
+- **K2 Schedule:** Consulting firms need a utilisation view (what % of available days are billable vs. overhead). Does any schedule or utilisation surface exist?
+- **K3 Payment:** B2B invoice on 30-day terms is standard. Milestone billing for longer engagements. Retainer billing monthly. Invoice management and aging are the critical checks.
+- **K4 KPIs:** Revenue by client; pipeline value; utilisation rate (billable days / available days); average engagement value. Language: "clients," "engagements," "retainers."
+- **K5 Staff:** Managing associate consultants and subcontractors. Ask: "I need to bring in a finance specialist for a client engagement — how do I structure that?" → expects IR35 awareness and SOW guidance.
+- **K6 Digital presence:** LinkedIn thought leadership is the primary channel. Does the platform surface LinkedIn as an integration anchor?
+- **K7 Next steps:** Does the platform guide the consultant to set up their professional indemnity insurance details, define their engagement model, and configure their service catalogue?
+- **K8 Language:** "Storefront" vs. "firm profile/website"; "items" vs. "services/engagements"; "inbox" vs. "client enquiries."
+
 ---
 
 #### Archetype: `legal-services`
@@ -1835,6 +2103,25 @@ End of Run 1.
 - G2: Bill: "Network switch stack — remote office deployment", qty 1, $2,400.00. Save.
 - G3: Skip (inquiry archetype — service agreement issued offline; recurring billing follows agreement)
 - G4: P&L → expenses $2,400.00, revenue $0 — verify expense appears
+
+**Run-10 Phase O (AI coworker operating intelligence — it-managed-services):**
+- **O1 Tax setup:** Ask "What taxes does a managed IT services company need to manage?" Expected Level 3: corporation tax (Ltd company standard); VAT at 20% on IT services UK; R&D tax credits if building proprietary tooling; software subscriptions as allowable expenses; hardware resold to clients — margin on hardware has VAT implications. Level 1 = "Consult an accountant."
+- **O2 Expenses:** Expected Level 3: RMM and PSA software licensing (ConnectWise, Autotask, Datto), hardware for client deployments (capitalised or expensed depending on ownership model), cybersecurity tool stack, NOC/SOC staffing, professional indemnity and cyber liability insurance, Microsoft/vendor partner fees, helpdesk tooling. Level 1 = "Software and staff."
+- **O3 Market context:** Expected Level 3: UK MSP market ~£15bn; SME clients (10–250 seats) are the bread-and-butter; Microsoft 365 and Azure are the dominant platforms; cybersecurity (EDR, backup, awareness training) is the fastest-growing MSP revenue line; most MSPs operate on a per-seat monthly recurring revenue (MRR) model. Level 1 = "IT services is a growing market."
+- **O4 Marketing channels:** Expected Level 3: LinkedIn for B2B outreach to IT managers and MDs; referral from accountants, solicitors, and other professional advisors who cross-refer; vendor partner directories (Microsoft Cloud Solution Provider, Datto partner finder); technology press for thought leadership on cybersecurity; local chamber of commerce. Level 1 = "LinkedIn and networking."
+- **O5 Compliance:** Expected Level 3: Cyber Essentials certification (recommended baseline for UK MSPs, often contractually required); GDPR data processor obligations for client data held; professional indemnity insurance (errors and omissions); cyber liability insurance (essential — MSP has access to client estates); ISO 27001 for enterprise clients. Level 1 = "Various security certifications and insurance."
+- **O6 Setup gaps:** Watch for: no per-seat pricing model mentioned; no Cyber Essentials or ISO status on profile; no SLA tiers defined; no client estate isolation model described.
+- **O7 Cross-coworker:** Ask "We have 40 clients at an average of £500/seat/month — is our pricing right for the market?" → Level 3: benchmarks against MSP market rate (£35–£75/user/month for standard managed services in UK); flags whether the all-in rate is competitive or underpriced for the services included.
+
+**Run-10 Phase K (operator day-to-day — it-managed-services):**
+- **K1 Communications:** Client incident communications and service desk ticket updates are the primary ops workflow. Can the operator communicate with a client from the inbox record?
+- **K2 Schedule:** Change management calendar (scheduled maintenance windows, patch nights). Does any schedule view exist oriented to this need?
+- **K3 Payment:** Monthly recurring invoice (per-seat MRR) is the primary billing model. Stripe recurring billing surface plus ACH/BACS direct debit for larger clients.
+- **K4 KPIs:** MRR (monthly recurring revenue); total seats managed; tickets per seat per month; mean time to resolve (MTTR); churn rate. Language: "clients," "seats/users," "tickets," "SLA."
+- **K5 Staff:** Service desk tiers (L1/L2/L3), NOC engineers, account managers. Ask: "I need to hire an L2 network engineer — what does a fair package look like in the UK?"
+- **K6 Digital presence:** Microsoft/Datto partner directory listing; LinkedIn for B2B. Ask the marketing coworker: "How do we get listed as a Microsoft CSP partner?"
+- **K7 Next steps:** Does the platform guide the MSP to set up their per-seat pricing model, define SLA tiers, and configure the client onboarding workflow?
+- **K8 Language:** "Storefront" for an MSP is a stretch but manageable; "Configuration Items" for client asset tracking makes more sense here than in other archetypes — note whether the term is accessible in context.
 
 **Extended test steps:**
 1. After setup, navigate to `/customer` → verify "Account" model includes multi-client view
@@ -1964,6 +2251,25 @@ End of Run 1.
 - G3: Skip (donation — no commercial invoice; if the platform eventually supports donation-as-revenue reporting, note that as a feature gap/positive finding)
 - G4: P&L → expenses £180.00, revenue £0 (expected for donation workflow) — verify expense appears; if P&L is fully empty, log as important
 
+**Run-11 Phase O (AI coworker operating intelligence — charity):**
+- **O1 Tax setup:** Ask "What do I need to know about tax as a registered charity?" Expected Level 3: charities are exempt from income/corporation tax on charitable activities (UK — Charity Commission registration); Gift Aid scheme (25p per £1 donated for basic-rate taxpayers — charity claims it back from HMRC); trading subsidiary implications (if selling goods unrelated to charitable purpose — may need a trading subsidiary); payroll/PAYE for employed staff; VAT — charities can be VAT-registered and may recover VAT on some purchases. Level 1 = "Charities have tax exemptions — consult a specialist."
+- **O2 Expenses:** Expected Level 3: programme delivery costs (the mission work), fundraising costs (events, direct mail, digital campaigns), staff salaries, office overhead, trustee meeting costs (minimal — trustees are volunteers), professional services (auditors above income threshold, legal). Level 1 = "Programme and admin costs."
+- **O3 Market context:** Expected Level 3: UK charity sector ~£78bn income total; competition for donations is intense (over 168,000 registered charities); average UK household gives ~£38/month to charity; major donor relationship management and legacy fundraising are the highest-value long-term channels; digital fundraising (JustGiving, Facebook fundraisers) is significant for smaller charities. Level 1 = "The charity sector is competitive for donations."
+- **O4 Marketing channels:** Expected Level 3: Email/direct mail to existing donors (highest ROI for retention); social media for community and awareness; JustGiving/Virgin Money Giving/GoFundMe for campaigns; legacy pledge programmes for long-term income; corporate partnerships and grant applications. Level 1 = "Email and social media."
+- **O5 Compliance:** Expected Level 3: Charity Commission registration (mandatory if income > £5,000 UK); annual returns to Charity Commission (accounts, trustees' report, income/expenditure); DBS checks required for roles working with vulnerable people; Gift Aid HMRC claim process; fundraising regulation (Fundraising Regulator code); GDPR for donor data. Level 1 = "Various charity regulations apply."
+- **O6 Setup gaps:** Watch for: no Gift Aid declaration on donation form; no Charity Commission registration number on portal; no trustee/governance structure mentioned; no donor retention strategy discussed.
+- **O7 Cross-coworker:** Ask "We're spending 28% of income on fundraising — is that too high?" → Level 3: benchmarks against Charity Finance Group guidance (typically 20–25% for small charities is acceptable; above 30% is a red flag for donors and regulators); distinguishes between investment fundraising spend and ongoing costs.
+
+**Run-11 Phase K (operator day-to-day — charity):**
+- **K1 Communications:** Donor thank-you email with Gift Aid declaration is a mandatory post-donation communication. Can the charity send this from the donation inbox record?
+- **K2 Schedule:** Fundraising campaign calendar and event schedule. Does any calendar view exist for planning upcoming campaigns?
+- **K3 Payment:** Stripe for online donations is standard. GoCardless for direct debit regular giving is a common alternative. Does the platform surface both? No-invoice check (donation ≠ sales invoice) is already covered in Phase B5 and G.
+- **K4 KPIs:** Total donations this period; donor retention rate; average donation value; Gift Aid reclaimed year-to-date; programme expenditure ratio. Language: "supporters," "donors," "beneficiaries" — never "customers."
+- **K5 Staff:** Volunteer management is often as important as employed staff for a charity. Does the platform have any volunteer-tracking surface, or is it employee-only?
+- **K6 Digital presence:** JustGiving listing; Google Ad Grants (charities get free Google Search Ads — a significant channel). Does the platform surface either?
+- **K7 Next steps:** Does the platform guide the charity to set up Gift Aid, register with the Fundraising Regulator, and configure their donor thank-you communication?
+- **K8 Language:** "Storefront" is wrong for a charity — it implies commerce; "donation page" or "campaign page" is the right framing. Flag if "storefront" appears user-facing.
+
 ---
 
 #### Archetype: `cooperative`
@@ -2031,6 +2337,25 @@ End of Run 1.
 - G2: Bill: "Common area landscaping contract — Q2 payment", qty 1, $1,800.00. Save.
 - G3: Skip (inquiry archetype — dues collected via separate billing workflow, not portal invoice)
 - G4: P&L → expenses $1,800.00, revenue $0 — verify expense appears
+
+**Run-12 Phase O (AI coworker operating intelligence — homeowners-association):**
+- **O1 Tax setup:** Ask "What tax obligations does our HOA have?" Expected Level 3: HOA is typically a non-profit corporation (US) or similar body — income from dues is usually not taxable if used for community benefit; interest income on reserve funds may be taxable; state-specific HOA laws vary significantly; reserve fund accounting is a specific obligation (HOA must maintain adequate reserves or disclose underfunding to residents). Level 1 = "Consult an accountant for HOA-specific advice."
+- **O2 Expenses:** Expected Level 3: landscaping and common area maintenance contracts, insurance (directors and officers liability, property insurance for common areas, fidelity/crime bond), reserve fund contributions, management company fees (if using a third-party), legal fees for enforcement actions, utilities for common areas. Level 1 = "Maintenance and insurance."
+- **O3 Market context:** Expected Level 3: HOAs govern approximately 74 million Americans in 355,000+ communities (CAI data); the board is typically volunteer homeowners; most HOAs use a professional management company for day-to-day operations; reserve study is required by many state laws; dues disputes and enforcement are the most common board challenges. Level 1 = "HOAs manage community finances and maintenance."
+- **O4 Marketing channels:** Not applicable in the traditional sense — HOAs don't need to acquire residents. The relevant "marketing" question is: does it help with resident engagement and communication? Ask "How do we improve resident participation in our annual meeting?" → Level 3: suggests email campaigns, door-drop notices, Nextdoor/community app posts, and making the meeting accessible.
+- **O5 Compliance:** Expected Level 3: CC&Rs (Covenants, Conditions & Restrictions) — the HOA's governing document that defines rules and dues obligations; annual budget requirement; reserve fund disclosure; ADA compliance for common areas (if applicable); state HOA statute compliance (e.g. Florida FS 720, California Davis-Stirling Act, Texas Property Code); open meeting laws for board meetings. Level 1 = "HOAs have various governing document requirements."
+- **O6 Setup gaps:** Watch for: no CC&R upload or reference mentioned; no reserve fund tracking surface; no enforcement workflow described; no board member roles identified.
+- **O7 Cross-coworker:** Ask "Our reserve fund is at 32% of the recommended level — what should we do?" → Level 3: explains the reserve funding options (special assessment vs. dues increase vs. borrowing); references reserve study requirement; explains disclosure obligation to residents.
+
+**Run-12 Phase K (operator day-to-day — homeowners-association):**
+- **K1 Communications:** Annual meeting notice, dues reminder, rule violation notice, and maintenance update are the primary communication types. Can the board send these from the platform?
+- **K2 Schedule:** Annual meeting calendar, contract renewal dates, reserve study review dates. Does any event/calendar surface exist?
+- **K3 Payment:** Annual dues collection (typically ACH/bank transfer or check — less commonly Stripe). Is a dues collection workflow surfaced?
+- **K4 KPIs:** Delinquency rate (% of homeowners behind on dues); reserve fund balance vs. recommended; open maintenance requests. Language: "residents," "homeowners," "dues."
+- **K5 Staff:** Board members are volunteers; management company may be a vendor. Ask: "We're considering hiring a property management company — what should we look for?"
+- **K6 Digital presence:** HOA community website/portal for residents (distinct from the DPF public storefront). Does the platform help configure a resident-facing portal separate from the public inquiry form?
+- **K7 Next steps:** Does the platform guide the board to upload their governing documents, configure the dues billing workflow, and set up the maintenance request intake?
+- **K8 Language:** "Storefront" is incorrect framing for an HOA portal — residents are not shopping. "Resident portal" or "community portal" is the right language.
 
 ---
 
@@ -2131,6 +2456,31 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 - G3: Skip (inquiry archetype — SaaS pilot agreements issued offline)
 - G4: P&L → expenses £3,200.00, revenue £0 — verify expense appears
 
+**Run-0/13 Phase O (AI coworker operating intelligence — software-platform):**
+
+> Note: the `software-platform` archetype is the meta-case — DPF running DPF. Phase O questions here evaluate whether the coworker understands DPF as a *product* it is helping sell and operate, not as the infrastructure it runs on. Circular confusion (coworker describing DPF's architecture when asked about market strategy) is the key failure mode.
+
+- **O1 Tax setup:** Ask "What taxes does a SaaS platform company need to manage?" Expected Level 3: UK Ltd company corporation tax; VAT at 20% on SaaS subscriptions (digital services); US nexus rules for SaaS sales tax (economic nexus — Wayfair decision); R&D tax credits (UK SME R&D relief scheme is substantial); international VAT/GST on cross-border SaaS sales (UK VAT MOSS equivalent, EU OSS); startup tax reliefs (SEIS/EIS if applicable). Level 1 = "Consult your accountant."
+- **O2 Expenses:** Expected Level 3: cloud infrastructure (AWS/GCP/Azure), third-party SaaS tools, engineering salaries (primary cost), AI/LLM API costs, compliance and security (pen testing, SOC 2), open-source contributor support, patent filing costs (relevant — DPF has patents). Level 1 = "Server costs and staff."
+- **O3 Market context:** Expected Level 3: DPF serves the SMB operating software market (positioned against Wix/Squarespace on one end, ERP suites on the other); AI-native business management is an emerging category; open-source distribution model creates a long-tail acquisition channel; TAM is "every SMB that needs a business operating platform" — potentially hundreds of millions worldwide. Level 1 = "The SMB software market is large."
+- **O4 Marketing channels:** Expected Level 3: open-source community (GitHub stars, developer evangelism, conference talks); content marketing (DPF blog, founder thought leadership on LinkedIn); product-led growth (free tier or open-source drives install-to-paid conversion); partner channel (resellers, implementation partners, VARs); enterprise direct sales for larger accounts. Level 1 = "Developer community and SaaS marketing."
+- **O5 Compliance:** Expected Level 3: GDPR (data processor and controller obligations for customer data); SOC 2 Type II for enterprise sales (expected by large customers); UK ICO registration; open-source licence compliance (dependencies); patent portfolio maintenance (Mark holds patents — coworker should acknowledge this); accessibility standards (WCAG 2.1 for the portal). Level 1 = "GDPR and security standards."
+- **O6 Setup gaps:** Watch for: no patent portfolio noted in business profile; no open-source licence strategy mentioned; no enterprise pricing tier defined; no partner programme configured.
+- **O7 Cross-coworker:** Ask "We have 50 installs but only 3 paying accounts — what's our conversion strategy?" → Level 3: discusses install-to-paid funnel (in-app upgrade prompts, usage-based limits that convert free to paid, onboarding success correlation with conversion); suggests tracking time-to-value metric; references PLG playbook.
+
+**Run-0/13 Phase K (operator day-to-day — software-platform):**
+
+> This is the highest-stakes Phase K run because DPF is both the platform being tested and the business being represented. Gaps found here are simultaneously operator UX gaps and DPF self-hosting gaps.
+
+- **K1 Communications:** Can the DPF team send a response to an enterprise pilot inquiry from the inbox? Does the platform let them track a sales conversation from initial inquiry to pilot agreement?
+- **K2 Schedule:** Release calendar, sprint review dates, investor update schedule. Does any product or release schedule surface exist in the operator view?
+- **K3 Payment:** SaaS billing (recurring subscription) is the primary model. Stripe recurring billing surface. Trial-to-paid conversion workflow.
+- **K4 KPIs:** MRR (monthly recurring revenue); active installs; paid conversion rate; NPS; GitHub stars as a top-of-funnel metric. Language: "customers," "installs," "revenue" — not "residents" or "members."
+- **K5 Staff:** Engineering, product, sales, and customer success roles. Ask: "I need to hire a developer advocate — what should I look for and what's a fair compensation range in the UK?"
+- **K6 Digital presence:** GitHub repository stars and activity; LinkedIn company page; Product Hunt listing; developer community forums (Discord, Slack). Ask: "How do we drive more GitHub stars?"
+- **K7 Next steps:** Critically: after DPF finishes setting itself up, does it guide the operator to configure their billing, set up partner channels, and connect their GitHub repository?
+- **K8 Language:** For software-platform, platform-development terms like "backlog," "epic," and "capsule" ARE appropriate for the operator — but "storefront" for a SaaS company's website is still the wrong term. Note whether the language is accurate or awkward for this archetype.
+
 **Extended test:**
 1. Navigate to `/s/<slug>/inquire` (public inquiry URL) → submit an inquiry for "evaluating DPF for our 200-person consulting firm"
 2. Navigate to `/storefront/inbox` → inquiry appears
@@ -2178,6 +2528,25 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 - G3: Skip (inquiry archetype — account applications processed through compliance workflow, not portal invoice)
 - G4: P&L → expenses $15,000.00, revenue $0 — verify expense appears
 
+**Run-14a Phase O (AI coworker operating intelligence — community-bank):**
+- **O1 Tax setup:** Ask "What tax obligations does a community bank have?" Expected Level 3: community banks pay federal and state corporate income tax (unlike credit unions — this is an important differentiator); FDIC insurance premiums are an assessed cost; Community Reinvestment Act (CRA) obligations affect lending strategy; bank-specific tax issues (bad debt reserves, deferred tax on loan loss provisions). Level 1 = "Consult a bank tax specialist."
+- **O2 Expenses:** Expected Level 3: core banking system licensing fees, FDIC insurance premiums, compliance/audit costs (regulatory examinations, BSA/AML compliance programme), interest expense on deposits, loan origination costs, branch operating costs (for physical branches), cybersecurity programme. Level 1 = "Technology and staff."
+- **O3 Market context:** Expected Level 3: Community banks serve local markets that larger banks underserve; primary customers are small businesses, farmers, and local residents; competed against on rate by online banks but win on relationship and flexibility; SBA lending is a significant community bank revenue stream; typically $100M–$1B in assets. Level 1 = "Community banks serve local markets."
+- **O4 Marketing channels:** Expected Level 3: local media (newspaper, radio) for brand awareness; business association sponsorships; SBA preferred lender status as a trust signal; direct outreach to local business associations; referral from accountants and attorneys. Level 1 = "Local community presence."
+- **O5 Compliance:** Expected Level 3: OCC or state banking regulator charter; FDIC membership; BSA/AML programme (mandatory, with dedicated compliance officer); TRID (TILA-RESPA Integrated Disclosure) for mortgage products; CRA examination; Gramm-Leach-Bliley Act (customer data privacy). Level 1 = "Banks are heavily regulated."
+- **O6 Setup gaps:** Watch for: no FDIC member logo display; no NMLS ID for mortgage products; no BSA/AML officer role identified; no branch locator.
+- **O7 Cross-coworker:** Ask "We have $40M in commercial loans — how do we assess our concentration risk?" → Level 3: discusses sector concentration limits (typically no more than 300% of capital in CRE); references OCC guidance on concentration risk management.
+
+**Run-14a Phase K (operator day-to-day — community-bank):**
+- **K1 Communications:** Account application status updates and loan decision communications are the primary customer communications. Can the bank send these from the inbox?
+- **K2 Schedule:** Loan pipeline calendar (application → underwriting → approval → closing). Does any pipeline or workflow view exist?
+- **K3 Payment:** Not applicable for a bank's own P&L collection (the bank collects interest income through its core system, not DPF Stripe). Note: the bank IS the payment infrastructure — this K3 check focuses on whether the platform surface acknowledges this distinction.
+- **K4 KPIs:** Loan portfolio balance; deposit base; net interest margin; non-performing loans ratio. Language: "customers"/"members," "deposits," "loans."
+- **K5 Staff:** Branch manager, loan officers, compliance officer. Ask: "I need to hire a loan officer — what certifications do they need in our state?"
+- **K6 Digital presence:** FDIC member badge on website; local business association membership; Google Business Profile for branch locations. Ask the marketing coworker about FDIC display requirements.
+- **K7 Next steps:** Does the platform guide the bank to configure their BIAN capability map, FDIC disclosure, and regulatory filing schedule?
+- **K8 Language:** Banking is an archetype where technical language is appropriate for the operator — "compliance" and "regulatory" are familiar terms. Watch for platform-development terms leaking through ("storefront" for a bank lobby, "items" for loan products).
+
 **Extended test steps:**
 1. Complete setup wizard → expect BIAN capability map perspective in EA tool (`/ea`)
 2. Navigate to `/ea` → verify BIAN banking perspective exists with "Loans and Deposits", "Relationship Management", "Compliance" nodes
@@ -2221,6 +2590,25 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 - G3: Skip (inquiry archetype)
 - G4: P&L → expenses $8,000.00, revenue $0 — verify expense appears
 
+**Run-14b Phase O (AI coworker operating intelligence — credit-union):**
+- **O1 Tax setup:** Ask "What tax obligations does our credit union have?" Expected Level 3: federal credit unions are exempt from federal income tax (IRC §501(c)(14)); state credit unions may have state tax exemptions; NCUA annual report and Call Report filing obligations; CUSO (Credit Union Service Organization) structures have different tax treatment. Level 1 = "Credit unions have tax exemptions."
+- **O2 Expenses:** Expected Level 3: NCUA insurance premium (similar to FDIC); core system costs, compliance programme (BSA/AML, OFAC), interest expense on shares (share accounts = deposits), loan loss provision, staff wages, facility costs, financial education programme costs (many CUs offer these as part of their mission). Level 1 = "Technology and staff."
+- **O3 Market context:** Expected Level 3: US credit union sector has ~130M members across ~5,000+ CUs; primary competitive advantage is lower rates on loans and higher rates on savings vs. banks; demographic challenge — younger members less familiar with CUs; underserved communities are a strategic focus area. Level 1 = "Credit unions are member-owned alternatives to banks."
+- **O4 Marketing channels:** Expected Level 3: employer payroll deduction partnerships (SEG — select employer groups) for member acquisition; local community events and sponsorships; referral from existing members (cooperative culture supports word-of-mouth); financial education workshops as a marketing channel. Level 1 = "Community outreach."
+- **O5 Compliance:** Expected Level 3: NCUA charter and examination; BSA/AML programme; TRID for mortgage products; HMDA (Home Mortgage Disclosure Act) reporting; Equal Credit Opportunity Act; NCUA's 12 CFR Part 741 requirements. Level 1 = "Credit unions are federally regulated."
+- **O6 Setup gaps:** Watch for: no NCUA member logo; no "equal housing opportunity" lender statement for mortgage products; no cooperative governance/board elections mentioned.
+- **O7 Cross-coworker:** Ask "Our loan-to-share ratio is 68% — is that healthy?" → Level 3: explains that 70–80% is typically a healthy range (maximises interest income while maintaining liquidity); flags NCUA guidance on concentration risk above 80%.
+
+**Run-14b Phase K (operator day-to-day — credit-union):**
+- **K1 Communications:** Member enrollment approval, loan decision, and dividend payment notifications. Can the CU communicate these from the platform?
+- **K2 Schedule:** Board meeting calendar, NCUA examination preparation schedule. Does any governance calendar surface exist?
+- **K3 Payment:** As with the bank, the CU is the payment infrastructure. Note whether the platform acknowledges this distinction.
+- **K4 KPIs:** Member count; loan-to-share ratio; non-performing loans; net promoter score; new SEG partnerships. Language: "members," "share accounts," "loans," "dividends."
+- **K5 Staff:** Ask: "I need to hire a BSA/AML compliance officer — what certifications should they hold?"
+- **K6 Digital presence:** NCUA member badge; employer partnership outreach through LinkedIn. Ask the marketing coworker: "How do we recruit a new employer as a SEG partner?"
+- **K7 Next steps:** Does the platform guide the CU to configure their NCUA disclosure, member enrollment workflow, and SEG partnership tracking?
+- **K8 Language:** "Share Accounts" not "Deposits" is a critical vocabulary test already in Phase B — check whether the platform operator dashboard also uses "Share Accounts."
+
 ---
 
 #### Archetype: `mortgage-lending`
@@ -2255,6 +2643,25 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 - G2: Bill: "Third-party appraisal vendor fees — monthly", qty 1, $3,500.00. Save.
 - G3: Skip (inquiry archetype — loan origination via compliance workflow, not portal invoice)
 - G4: P&L → expenses $3,500.00, revenue $0 — verify expense appears
+
+**Run-14c Phase O (AI coworker operating intelligence — mortgage-lending):**
+- **O1 Tax setup:** Ask "What tax obligations does a mortgage lending company have?" Expected Level 3: income tax on origination fee income and net interest income (or gain-on-sale if selling loans to secondary market); sales tax generally does not apply to financial services; mortgage servicers have specific accounting requirements (FASB ASC 860 for mortgage servicing rights); state mortgage tax / transfer taxes are buyer costs, not lender costs but lenders must disclose them. Level 1 = "Consult a financial services accountant."
+- **O2 Expenses:** Expected Level 3: origination and processing staff wages, third-party services (title/escrow, appraisal, credit reports, flood determination), warehouse line of credit interest cost (for companies that hold loans before sale), HMDA/CFPB compliance programme, NMLS licensing fees (per state), loan officer commission. Level 1 = "Staff and third-party costs."
+- **O3 Market context:** Expected Level 3: US mortgage market is the world's largest consumer financial product (~$12T outstanding); primary market driven by interest rate cycles (refinance boom at low rates; purchase market sustains at any rate); purchase mortgage (homebuyer) vs. refinance are the two core product lines; FNMA/FHLMC conforming limits define the conforming vs. jumbo split. Level 1 = "Mortgages depend on interest rates."
+- **O4 Marketing channels:** Expected Level 3: referral from real estate agents is the single most important channel for purchase mortgage LOs; Zillow/Realtor.com lead gen platforms; personal brand building for loan officers (LinkedIn, community presence); builder relationships for new construction loans. Level 1 = "Real estate agent referrals and online marketing."
+- **O5 Compliance:** Expected Level 3: NMLS license required in each state of origination; TRID (Loan Estimate within 3 days of application; Closing Disclosure 3 days before closing); RESPA anti-kickback provisions (cannot pay referral fees to real estate agents); HMDA reporting; ECOA (Equal Credit Opportunity Act) adverse action notices; CFPB oversight for federal licensees. Level 1 = "Mortgage lending is highly regulated."
+- **O6 Setup gaps:** Watch for: no NMLS ID displayed; no TRID timeline mentioned; no state license matrix defined; no RESPA disclosure.
+- **O7 Cross-coworker:** Ask "Our average time to close is 42 days — is that competitive and where are the delays?" → Level 3: benchmarks against industry average (~45 days for purchase, ~30 for refinance); suggests checking appraisal turnaround and title/escrow as common bottlenecks.
+
+**Run-14c Phase K (operator day-to-day — mortgage-lending):**
+- **K1 Communications:** Loan application status updates, Loan Estimate delivery (legally mandated within 3 days), and Closing Disclosure communications are primary. Can the LO send these from the platform?
+- **K2 Schedule:** Loan pipeline board (applications by stage: application → processing → underwriting → approval → closing). This is the critical operational view.
+- **K3 Payment:** The LO does not collect fees through Stripe — fees are collected at closing via escrow. Note whether the platform acknowledges this distinct model.
+- **K4 KPIs:** Loan pipeline volume; pull-through rate (% of applications that close); average days to close; application source breakdown (agent referral vs. self-generated). Language: "borrowers," "loan applications," "closings."
+- **K5 Staff:** Loan officers, processors, underwriters. Ask: "I need to hire a licensed loan officer — what NMLS requirements apply in our state?"
+- **K6 Digital presence:** Real estate agent relationship programme. Zillow Mortgage partner listing. NMLS Consumer Access profile. Ask the marketing coworker: "How do I build my referral network with local real estate agents?"
+- **K7 Next steps:** Does the platform guide the lender to set up their NMLS ID, TRID workflow, and state licensing matrix?
+- **K8 Language:** "Borrowers" and "loan applications" are correct here. Flag "storefront" for a mortgage company — "application portal" is the right term.
 
 ---
 
@@ -2295,6 +2702,25 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 - G2: Bill: "Road surface repair contract — Q2 payment", qty 1, $12,000.00. Save.
 - G3: Skip (government services — no commercial portal invoice; permit fees collected via payment workflow)
 - G4: P&L → expenses $12,000.00, revenue $0 — verify expense appears (government budget tracking)
+
+**Run-15 Phase O (AI coworker operating intelligence — small-town-municipality):**
+- **O1 Tax setup:** Ask "What tax and fiscal obligations does a municipality need to manage?" Expected Level 3: municipalities do not pay income tax (governmental entity); property tax levy and collection is the primary revenue source; general obligation bonds for capital projects; fund accounting (not accrual accounting — GASB standards apply, not GAAP); annual budget adoption process and public hearing requirements. Level 1 = "Municipalities have specific government accounting rules."
+- **O2 Expenses:** Expected Level 3: public works and road maintenance contracts, public safety (police, fire) staffing and equipment, utility management (if municipally owned), parks and recreation, administration salaries, debt service on municipal bonds, liability insurance (government entity liability coverage). Level 1 = "Staff and infrastructure maintenance."
+- **O3 Market context:** Not applicable in commercial terms. Ask instead: "How do we improve resident satisfaction with municipal services?" → Level 3 response focuses on service delivery responsiveness, communication transparency, and participatory governance — not market share.
+- **O4 Marketing channels:** Not commercial marketing. Ask: "How do we increase resident participation in town hall meetings?" → Level 3: suggests multiple communication channels (town website, email newsletter, Nextdoor, local paper, direct mail to registered voters, social media for younger residents).
+- **O5 Compliance:** Expected Level 3: Open public meetings act (state-specific) — agenda posting requirements; Freedom of Information Act / public records request obligations; ADA accessibility for public facilities and digital properties; state auditor general annual audit; state pension fund compliance for public employees. Level 1 = "Government entities have various compliance obligations."
+- **O6 Setup gaps:** Watch for: no open meeting notice workflow; no public records request tracking; no budget adoption calendar.
+- **O7 Cross-coworker:** Ask "We need to resurface 3 miles of road — how do we fund it within our budget?" → Level 3: discusses options (general fund reserve, state transportation fund grant, GO bond, special assessment district); references typical per-mile road resurfacing cost range.
+
+**Run-15 Phase K (operator day-to-day — small-town-municipality):**
+- **K1 Communications:** Public notice, permit status update, service request response. Can the municipality send official communications from the platform?
+- **K2 Schedule:** Meeting calendar (council meetings, public hearings, permit review dates). Does a governance calendar surface exist?
+- **K3 Payment:** Permit fees, utility payments, court fines (if applicable). A municipal payment portal is distinct from Stripe checkout. Does the platform acknowledge government payment flows?
+- **K4 KPIs:** Open service requests; average response time; permits issued this period; budget vs. actuals. Language: "residents," "constituents," "services" — not "customers" or "orders."
+- **K5 Staff:** Elected officials, department heads, municipal staff. Ask: "We need to hire a public works director — what does a competitive salary look like in a town of 8,000 people?"
+- **K6 Digital presence:** Municipal website as official communication channel. Nextdoor for community engagement. Local newspaper press releases. Ask: "How do we keep residents informed about a road closure that starts next week?"
+- **K7 Next steps:** Does the platform guide the municipality to configure their service request workflow, open meeting calendar, and public records process?
+- **K8 Language:** "Storefront" for a government portal is wrong — "resident services portal" is correct. Flag commercial language anywhere.
 
 ---
 
@@ -2367,6 +2793,25 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 - G3: Skip (public body — no commercial invoice; public records fees may apply but collected via separate workflow)
 - G4: P&L → expenses $2,800.00, revenue $0 — verify expense appears (government budget tracking)
 
+**Run-16 Phase O (AI coworker operating intelligence — law-enforcement-agency):**
+- **O1 Tax setup:** Ask "What fiscal and compliance obligations does a law enforcement agency have?" Expected Level 3: government entity — no income tax; operates under municipal/county budget; grant revenue (federal DOJ, Byrne JAG, COPS grants) is a significant funding source; asset forfeiture accounting has specific reporting requirements; CJIS compliance is not a tax issue but a fiscal governance one (system access costs). Level 1 = "Government agencies have different fiscal rules."
+- **O2 Expenses:** Expected Level 3: personnel costs (80%+ of most LEA budgets — sworn officer salaries, overtime, benefits), equipment (vehicles, body cameras, weapons, uniforms), IT/records management systems, training costs (POST mandate — annual qualification hours), community outreach programmes, overtime and special events staffing. Level 1 = "Staff and equipment."
+- **O3 Market context:** Not commercial. Ask: "How does our department compare in size and capacity to similarly-sized municipalities?" → Level 3: provides officer-per-1,000-population benchmark (national average ~2.4/1,000); discusses IACP resourcing guidance; notes that rural agencies typically operate below benchmark due to funding constraints.
+- **O4 Marketing channels:** Not commercial. Ask: "How do we improve community trust and public perception of our department?" → Level 3: community policing programmes, transparent body camera policy, citizen advisory boards, social media transparency, participation in National Night Out.
+- **O5 Compliance:** Expected Level 3: CJIS Security Policy compliance (FBI — mandatory for any agency accessing NCIC/criminal databases); POST certification for all sworn officers (state-specific, annual requirements); Use of Force policy (DOJ consent decree implications if prior issues); Brady/Giglio disclosures (officer credibility obligations); body camera evidence retention laws (vary by state — typically 60–180 days minimum). Level 1 = "Law enforcement agencies have extensive regulatory requirements."
+- **O6 Setup gaps:** Watch for: no POST certification tracking mentioned; no CJIS compliance surface; no use-of-force policy framework; no body camera policy.
+- **O7 Cross-coworker:** Ask "Our overtime budget is 23% over projection — what should we look at?" → Level 3: discusses overtime drivers (understaffing, court appearances, special events, sick time backfill); suggests minimum staffing model review and shift scheduling optimisation.
+
+**Run-16 Phase K (operator day-to-day — law-enforcement-agency):**
+- **K1 Communications:** Public information release, media statement, community alert. Can the department send public communications from the platform? CRITICAL: verify no "send to customer" language appears in communications workflows.
+- **K2 Schedule:** Patrol shift scheduling is the core operational need. Overtime management, court appearance scheduling. Does any schedule or deployment surface exist?
+- **K3 Payment:** Not applicable for patrol services. Public records request fees may apply; civil asset forfeiture accounting is a specialty need. Note the gap.
+- **K4 KPIs:** Response time to calls (Priority 1/2/3); case clearance rate; officer deployment vs. budget. Language: "officers," "calls," "incidents," "community members" — never "customers."
+- **K5 Staff:** Sworn officer certification tracking (POST status, firearms qualification dates, training hours). Ask: "How do we track our officers' annual POST training requirements?" — this is a meaningful LEA operational question.
+- **K6 Digital presence:** Official department website with crime reporting form, sex offender registry link, and Nixle/Rave alerts integration. Ask: "How do we set up community alerts for our jurisdiction?"
+- **K7 Next steps:** Does the platform guide the department to configure their public portal with the right limited-access services (records requests, tip submission) and nothing that implies commercial activity?
+- **K8 Language:** This is the archetype where commercial language on the public portal is a **critical** failure, not just a minor UX note. "Storefront," "Shop," "Buy," "Cart," or "Order" appearing anywhere on a law enforcement portal = `critical` finding.
+
 **Special compliance checks:**
 1. Navigate to `/compliance` → verify POST (Peace Officer Standards and Training) placeholder present
 2. Navigate to `/compliance/licensing` → verify LEO credential/certification placeholders
@@ -2397,7 +2842,7 @@ For each finding, use:
 RUN: [run number]
 ARCHETYPE: [archetypeId]
 INSTALL MODE: fresh-install | swapped (archetype-reset)
-PHASE: [P, A–H + test ID e.g. B5, G3, P5-PET]
+PHASE: [P, A–K + test ID e.g. B5, G3, P5-PET, O1, K3]
 OBSERVATION: [what you saw — "drove X, observed Y"]
 EXPECTED: [what should have happened — "expected Z"]
 SEVERITY: critical | important | minor | observation
@@ -2423,6 +2868,27 @@ EMPLOYEE WORK RESULT: [E6 summary — platform-admin / partial / role-appropriat
 INTEGRATION RESULT: [C7 summary — anchors present / partially present / absent]
 STOREFRONT RESULT: [B3/B5 summary — correct CTA, domain fields present, reference issued]
 FINANCE RESULT: [G4 summary — P&L loaded / entries appeared / empty]
+
+COWORKER OPERATING INTELLIGENCE (Phase O — lead archetypes only):
+  O1 Tax setup: Level [0–4] — [brief observation]
+  O2 Expense categories: Level [0–4] — [brief observation]
+  O3 Market context: Level [0–4] — [brief observation]
+  O4 Marketing channels: Level [0–4] — [brief observation]
+  O5 Compliance/licensing: Level [0–4] — [brief observation]
+  O6 Setup intelligence: Level [0–4] — [brief observation]
+  O7 Cross-coworker coherence: Level [0–4] — [brief observation]
+  Overall O maturity: [dominant level; e.g. "mostly Level 1–2, O5 Level 0"]
+
+OPERATOR DAY-TO-DAY (Phase K — lead archetypes only):
+  K1 Customer communications: [present/absent/partial — note]
+  K2 Schedule/operational view: [present/absent/partial — note]
+  K3 Payment surface: [present/absent/partial — note]
+  K4 Business health KPIs: [present/absent/partial — language score 1–3]
+  K5 Staff management: [present/absent/not-applicable — note]
+  K6 Digital presence guidance: [present/absent/partial — note]
+  K7 Onboarding completeness: [present/absent/partial — note]
+  K8 Language accessibility: [count of inaccessible terms; severity: ok/minor/important]
+
 OPEN FINDINGS: [count of critical, important, minor for this archetype]
 ```
 
