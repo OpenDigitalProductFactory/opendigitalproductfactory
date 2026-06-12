@@ -555,9 +555,12 @@ const PROFILES: Record<string, FinancialProfileSeed> = {
 function defaultBillingPatternForSlug(slug: string): BillingPatternProfile {
   switch (slug) {
     case "professional_services":
-    case "trades_construction":
     case "hoa_property_management":
       return RECURRING_AGREEMENT_PATTERN;
+    // Trades & construction work is predominantly ad-hoc / per-job invoicing
+    // (electrician, landscaping, cleaning). Recurring agreements are still a
+    // supported pattern, but per-job invoicing is the correct zero-touch
+    // default — falls through to AD_HOC_INVOICE_PATTERN below.
     case "retail":
     case "food_hospitality":
       return POINT_OF_SALE_PATTERN;
