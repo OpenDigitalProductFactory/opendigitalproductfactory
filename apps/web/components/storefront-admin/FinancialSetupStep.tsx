@@ -28,15 +28,26 @@ function getLocaleFallbackCurrency(): string {
   return "USD";
 }
 
+// VAT/GST is a UK/EU concept. On a USD (or other non-VAT) install we should not
+// pre-select "VAT registered" even when the business-type profile commonly is in
+// the UK — that is what drove the 20% UK VAT default on US installs.
+const VAT_REGION_CURRENCIES = new Set(["GBP", "EUR"]);
+
 // ─── FinancialSetupStep ────────────────────────────────────────────────────────
 
 export function FinancialSetupStep({ archetypeSlug, archetypeName, suggestedCurrency, onComplete }: Props) {
   // Load profile defaults (client-safe: pure function, no DB call)
   const profile = getFinancialProfile(archetypeSlug);
 
-  const [vatRegistered, setVatRegistered] = useState<boolean>(profile?.vatRegistered ?? false);
-  const [baseCurrency, setBaseCurrency] = useState<string>(
-    suggestedCurrency ?? profile?.defaultCurrency ?? getLocaleFallbackCurrency(),
+  // Currency: prefer a location-detected suggestion, then the operator's browser
+  // locale, before any UK-biased profile default. Without this, every fresh
+  // install pre-filled GBP regardless of where the operator actually is.
+  const initialCurrency = suggestedCurrency ?? getLocaleFallbackCurrency();
+  const [baseCurrency, setBaseCurrency] = useState<string>(initialCurrency);
+  // Only pre-select "VAT registered" when both the business-type profile expects
+  // it AND the resolved currency is in a VAT region.
+  const [vatRegistered, setVatRegistered] = useState<boolean>(
+    (profile?.vatRegistered ?? false) && VAT_REGION_CURRENCIES.has(initialCurrency),
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);

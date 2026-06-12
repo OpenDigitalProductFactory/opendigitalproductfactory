@@ -35,7 +35,10 @@ export function InquiryForm({
     const email = fd.get("email") as string;
     const name = fd.get("name") as string;
     const phone = (fd.get("phone") as string | null) ?? undefined;
-    const message = (fd.get("message") as string | null) ?? undefined;
+    // Archetype schemas use a "notes" textarea for free-text; the generic schema
+    // uses "message". Treat either as the inquiry message.
+    const message =
+      ((fd.get("message") ?? fd.get("notes")) as string | null) ?? undefined;
 
     const formData: Record<string, unknown> = {};
     for (const field of formSchema) {

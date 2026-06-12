@@ -66,7 +66,7 @@ beforeEach(() => {
   mockBacklogItem.create.mockResolvedValue({
     id: "backlog_1",
     itemId: "BI-SFI-INQ0001",
-    title: "Customer-zero product inquiry INQ-0001",
+    title: "Inquiry from Jane Prospect (INQ-0001)",
     status: "triaging",
   });
 });
@@ -114,7 +114,7 @@ describe("POST /api/storefront/admin/inquiries/[id]/product-backlog", () => {
     mockBacklogItem.findUnique.mockResolvedValue({
       id: "backlog_1",
       itemId: "BI-SFI-INQ0001",
-      title: "Customer-zero product inquiry INQ-0001",
+      title: "Inquiry from Jane Prospect (INQ-0001)",
       status: "triaging",
     });
 

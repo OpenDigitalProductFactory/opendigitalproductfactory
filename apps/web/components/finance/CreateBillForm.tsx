@@ -39,6 +39,8 @@ interface Props {
   purchaseOrders: PurchaseOrder[];
   defaultSupplierId?: string;
   defaultCurrency?: string;
+  /** Org default line-item tax rate (%). 0 unless the org is VAT/GST registered. */
+  defaultTaxRate?: number;
 }
 
 function round2(n: number): number {
@@ -55,7 +57,7 @@ function getDefaultDueDate(): string {
   return d.toISOString().split("T")[0]!;
 }
 
-export function CreateBillForm({ suppliers, purchaseOrders, defaultSupplierId, defaultCurrency }: Props) {
+export function CreateBillForm({ suppliers, purchaseOrders, defaultSupplierId, defaultCurrency, defaultTaxRate = 0 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,11 +66,11 @@ export function CreateBillForm({ suppliers, purchaseOrders, defaultSupplierId, d
   const [invoiceRef, setInvoiceRef] = useState("");
   const [issueDate, setIssueDate] = useState(getToday());
   const [dueDate, setDueDate] = useState(getDefaultDueDate());
-  const [currency, setCurrency] = useState(defaultCurrency ?? "GBP");
+  const [currency, setCurrency] = useState(defaultCurrency ?? "USD");
   const [selectedPoId, setSelectedPoId] = useState("");
   const [notes, setNotes] = useState("");
   const [lineItems, setLineItems] = useState<LineItem[]>([
-    { description: "", quantity: 1, unitPrice: 0, taxRate: 20 },
+    { description: "", quantity: 1, unitPrice: 0, taxRate: defaultTaxRate },
   ]);
 
   // When supplier changes, update currency default
@@ -107,7 +109,7 @@ export function CreateBillForm({ suppliers, purchaseOrders, defaultSupplierId, d
   const addLineItem = () => {
     setLineItems((prev) => [
       ...prev,
-      { description: "", quantity: 1, unitPrice: 0, taxRate: 20 },
+      { description: "", quantity: 1, unitPrice: 0, taxRate: defaultTaxRate },
     ]);
   };
 
