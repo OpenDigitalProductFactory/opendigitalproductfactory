@@ -138,6 +138,7 @@ model CustomerContact {
   engagements      Engagement[]
   opportunities    Opportunity[]
   activities       Activity[]
+  rentalAgreements RentalAgreement[]
 
   @@index([lastName])
   @@index([phone])
@@ -7017,6 +7018,8 @@ model StorefrontConfig {
   providers           ServiceProvider[]
   bookingHolds        BookingHold[]
   marketingStrategies MarketingStrategy[]
+  rentableUnits       RentableUnit[]
+  rentalAgreements    RentalAgreement[]
 }
 
 model MarketingStrategy {
@@ -7391,6 +7394,8 @@ model StorefrontItem {
   storefront       StorefrontConfig  @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
   providerServices ProviderService[]
   bookingHolds     BookingHold[]
+  rentableUnits    RentableUnit[]
+  rentalAgreements RentalAgreement[]
 
   @@index([storefrontId, isActive, sortOrder])
 }
@@ -7520,6 +7525,94 @@ model StorefrontOrder {
 
   @@index([storefrontId, status])
   @@index([customerEmail])
+}
+
+// ── Rental / shared-asset value stream (EP-ARCH-8D4F2A, BI-EEA24A34) ──────────
+// Models the reserve → checkout → return & inspect → re-pool lifecycle for
+// stocked, returnable assets. StorefrontItem remains the rate-card *class*
+// ("Compact SUV", "Scaffold Tower", "10x10 Unit"); RentableUnit is an
+// individual stocked asset (optional — a class can be a quantity-pool with
+// stockQuantity and zero units); RentalAgreement is the rental analog of
+// StorefrontBooking. BookingHold (reused) carries reservation concurrency.
+// String-enum columns are registered in apps/web/lib/storefront/rental.ts.
+
+model RentableUnit {
+  id               String   @id @default(cuid())
+  unitId           String   @unique
+  storefrontId     String
+  storefrontItemId String
+  unitRef          String? // plate / VIN / serial
+  label            String
+  status           String   @default("available") // available|reserved|out|returned|maintenance|retired
+  meterReading     Decimal? // mileage / hours
+  attributes       Json?
+  acquiredAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  storefront StorefrontConfig  @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  item       StorefrontItem    @relation(fields: [storefrontItemId], references: [id], onDelete: Cascade)
+  agreements RentalAgreement[]
+
+  @@index([storefrontId, status])
+  @@index([storefrontItemId, status])
+}
+
+model RentalAgreement {
+  id                  String    @id @default(cuid())
+  agreementRef        String    @unique
+  storefrontId        String
+  storefrontItemId    String
+  rentableUnitId      String? // null for quantity-pool classes
+  customerContactId   String?
+  customerEmail       String
+  customerName        String
+  customerPhone       String?
+  periodStart         DateTime
+  periodEnd           DateTime
+  pricingModel        String    @default("per-day") // per-day|per-week|usage-based|fixed
+  rateAmount          Decimal?
+  depositAmount       Decimal?
+  currency            String    @default("GBP")
+  status              String    @default("reserved") // reserved|verified|active|returned|closed|cancelled
+  verificationStatus  String    @default("not-required") // not-required|pending|verified|failed
+  checkoutConditionId String?   @unique
+  returnConditionId   String?   @unique
+  cancellationReason  String?
+  cancelledAt         DateTime?
+  idempotencyKey      String?   @unique
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  storefront        StorefrontConfig        @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  item              StorefrontItem          @relation(fields: [storefrontItemId], references: [id], onDelete: Cascade)
+  rentableUnit      RentableUnit?           @relation(fields: [rentableUnitId], references: [id])
+  customerContact   CustomerContact?        @relation(fields: [customerContactId], references: [id])
+  checkoutCondition RentalConditionRecord?  @relation("CheckoutCondition", fields: [checkoutConditionId], references: [id])
+  returnCondition   RentalConditionRecord?  @relation("ReturnCondition", fields: [returnConditionId], references: [id])
+  conditionRecords  RentalConditionRecord[] @relation("AgreementConditions")
+
+  @@index([storefrontId, status])
+  @@index([rentableUnitId, status])
+  @@index([periodStart, periodEnd])
+  @@index([customerEmail])
+}
+
+model RentalConditionRecord {
+  id           String   @id @default(cuid())
+  agreementId  String
+  phase        String // checkout|return
+  meterReading Decimal?
+  notes        String?
+  mediaRefs    Json?
+  recordedById String?
+  recordedAt   DateTime @default(now())
+
+  agreement            RentalAgreement  @relation("AgreementConditions", fields: [agreementId], references: [id], onDelete: Cascade)
+  checkoutForAgreement RentalAgreement? @relation("CheckoutCondition")
+  returnForAgreement   RentalAgreement? @relation("ReturnCondition")
+
+  @@index([agreementId, phase])
 }
 
 model StorefrontInquiry {
