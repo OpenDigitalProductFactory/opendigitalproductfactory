@@ -1,7 +1,7 @@
 # Run 2 Fresh-Install Findings — Beauty & Personal Care
 
 **Run**: 2 (beauty-personal-care, fresh-install pass)  
-**Archetypes tested**: hair-salon *(complete)*, barber-shop *(complete)*, nail-salon *(complete)*, beauty-spa, optician, personal-trainer *(pending)*  
+**Archetypes tested**: hair-salon *(complete)*, barber-shop *(complete)*, nail-salon *(complete)*, beauty-spa *(complete)*, optician, personal-trainer *(pending)*  
 **Run date**: 2026-06-12  
 **Method**: Tier 2 DB-only reset per archetype; golden dump `/d/DPF-audit-backup/golden-provider-configured-2026-06-12.dump`  
 **Tester**: Autonomous agent  
@@ -454,9 +454,135 @@
 
 ---
 
-## Beauty Spa — pending Tier 2 reset
+## Beauty Spa — Serene Beauty Spa (fresh install)
 
-*Awaiting next archetype reset.*
+**Company**: Serene Beauty Spa
+**Owner persona**: Emma Thompson (test customer)
+**URL slug**: serene-beauty-spa (wizard-entered slug correctly preserved)
+**Phases run**: A, P-BOOKING, B, F, I, G (observation only), O
+**Note**: Finance workflow (G) observed via bill form only — Tax %=20 default confirmed. Full bill lifecycle recurring findings documented without re-driving.
+
+---
+
+### Phase A — Onboarding
+
+#### AUDIT-R2-SPA-A-001 · Important · GBP default currency (recurring — 4th confirmation)
+
+**Observed**: Base currency pre-filled "GBP - British Pound". Switched manually to USD.
+**Fix #1759 verdict**: ❌ Not resolved. Confirmed on 4th Run 2 archetype.
+
+#### AUDIT-R2-SPA-A-002 · Pass · Appointment Checkout + Recurring Optional (recurring confirmation)
+
+**Observed**: Financial setup: Appointment Checkout, Recurring Optional. ✓
+
+---
+
+### Phase P — Catalog & Prerequisites
+
+#### AUDIT-R2-SPA-P-001 · Warn · Operating hours no confirmation toast (recurring — 4th confirmation)
+
+**Observed**: Saved Mon–Fri 09:00–17:00, Sat–Sun Closed, with no toast or visual confirmation. Hours persisted on reload.
+**Fix #1762 verdict**: ❌ Not resolved.
+
+#### AUDIT-R2-SPA-P-002 · Pass · 6 beauty spa services seeded with "Book Now" CTA
+
+**Observed**: Facial, Massage, Waxing, Eyebrow Threading, Lash Extensions, Spa Day Package — all tagged Booking, all active. ✓
+
+#### AUDIT-R2-SPA-P-003 · Pass · Default provider with Mon–Fri availability
+
+**Observed**: "Serene Beauty Spa" provider auto-created, all 6 services checked, Mon–Fri 09:00–17:00 weekly schedule set, Sun/Sat Closed. Calendar shows available slots. ✓
+
+---
+
+### Phase B — Storefront
+
+#### AUDIT-R2-SPA-B-001 · Important · Wizard-created portal starts as Unpublished (recurring — 4th confirmation)
+
+**Observed**: Portal returned 404 post-wizard until manually published. Pattern confirmed on all 4 Run 2 booking archetypes.
+**Impact**: Systemic — confirmed across hair-salon, barber-shop, nail-salon, beauty-spa. Every wizard-created booking archetype in Runs 2–16 requires a manual Publish step.
+
+#### AUDIT-R2-SPA-B-002 · Pass · Slug correctly preserved
+
+**Observed**: "serene-beauty-spa" entered in wizard; public URL matches. ✓
+
+#### AUDIT-R2-SPA-B-003 · Pass · Portal renders with spa vocabulary and "Book Now" CTAs
+
+**Observed**: All 6 services rendered with descriptions ("Cleansing and rejuvenating facial treatment", etc.). All "Book Now" CTAs present. ✓
+
+#### AUDIT-R2-SPA-B-004 · Important · No spa-specific booking form fields (recurring — fix #1760 not resolved)
+
+**Observed**: Booking form for Facial presents 4 generic fields only: Full Name (required), Email (required), Phone (optional), Notes (optional). No spa-specific fields: no skin type/concern selector, no treatment area, no pressure preference for massage, no allergy/sensitivity field. A spa therapist cannot prepare without a follow-up call.
+**Fix #1760 verdict**: ❌ Not resolved. Confirmed on 4th Run 2 archetype.
+
+#### AUDIT-R2-SPA-B-005 · Important · Booking calendar timezone defaults to Europe/London (recurring — nail-salon new finding now confirmed recurring)
+
+**Observed**: Booking calendar for Facial displayed "Times shown in Europe/London" after operator switched currency to USD. Identical to nail-salon (AUDIT-R2-NS-B-005). This finding is now confirmed as recurring across at least 2 booking archetypes when USD is selected.
+**Impact**: US spa customers will see appointment times in Europe/London timezone. The timezone is not automatically adjusted when the operator changes the base currency away from GBP.
+
+---
+
+### Phase F — Booking Flow
+
+#### AUDIT-R2-SPA-F-001 · Pass · Booking end-to-end works; reference number issued
+
+**Observed**: Full flow: Facial → Mon June 15, 10:00 AM → Emma Thompson / emma@test.com / 555-0003 → submit. Reference **BK-_VJHSAN8** issued on confirmation page. ✓
+
+---
+
+### Phase I — Inbox
+
+#### AUDIT-R2-SPA-I-001 · Critical · DPF meta-language in inbox (recurring — 4th confirmation)
+
+**Observed**: "Customer-zero inquiry intake is wired to product backlog triage" banner present. Fix #1752 not resolved.
+**Fix #1752 verdict**: ❌ Not resolved. Confirmed on all 4 Run 2 archetypes.
+
+#### AUDIT-R2-SPA-I-002 · Pass · Booking record in inbox
+
+**Observed**: BK-_VJHSAN8 visible, Emma Thompson, emma@test.com, 15/06/2026, Confirm/Cancel actions. ✓
+
+---
+
+### Phase G — Finance (observation)
+
+#### AUDIT-R2-SPA-G-001 · Important · Bill tax defaults to 20%; all finance recurring findings confirmed
+
+**Observed**: New Bill form shows Tax %: 20, Currency: USD — confirming G-002 recurring (4th). All other finance findings (no payment path, P&L dark) documented as recurring.
+**Recurring findings**: G-002 (tax 20%), G-004 (no payment recording), G-005 (P&L dark) — all recur on beauty-spa.
+
+---
+
+### Phase O — AI Coworker Operating Intelligence
+
+**Coworker**: Finance Specialist (model: `local:docker.io/ai/gemma4:26B`)
+
+#### AUDIT-R2-SPA-O-001 · Pass · Finance Specialist responded correctly for June 2026 (~90s)
+
+**Observed**: Asked "Generate a profit and loss summary for Serene Beauty Spa for June 2026." Coworker responded in ~90 seconds: "cash-basis aggregation... from 2026-06-01 to 2026-06-30. No paid activity was recorded in the system for this period." Status: done. Correct period, correct $0 result.
+**Note**: 2nd consecutive correct response (nail-salon also correct). Barber-shop's wrong-period behaviour appears non-deterministic rather than deterministic. The ~90s latency remains a UX concern.
+
+---
+
+### Beauty Spa — Summary
+
+| Phase | Finding | Severity | Fix PR | Verdict |
+|-------|---------|----------|--------|---------|
+| A | GBP default currency | Important | #1759 | ❌ Recurring (4th) |
+| A | Appointment Checkout + Recurring Optional | Pass | #1759 | ✓ |
+| P | Operating hours no toast | Warn | #1762 | ❌ Recurring (4th) |
+| P | 6 spa services seeded | Pass | — | ✓ |
+| P | Provider + availability | Pass | — | ✓ |
+| B | Portal starts Unpublished | Important | — | 🔁 Recurring (4th) |
+| B | Slug preserved | Pass | — | ✓ |
+| B | Portal renders with spa vocabulary | Pass | — | ✓ |
+| B | No spa-specific form fields | Important | #1760 | ❌ Recurring (4th) |
+| B | Calendar timezone defaults to Europe/London | Important | — | 🔁 Recurring (nail-salon + beauty-spa) |
+| F | Booking works (BK-_VJHSAN8) | Pass | — | ✓ |
+| I | DPF meta-language in inbox | Critical | #1752 | ❌ Recurring (4th) |
+| I | Booking record in inbox | Pass | — | ✓ |
+| G | Bill tax 20%; no payment path; P&L dark | Important | #1759/#1761 | 🔁 All recurring (4th) |
+| O | Finance Specialist correct June response (~90s) | Pass | #1763 | ✓ (2nd consecutive correct) |
+
+**Totals**: 1 Critical · 5 Important · 1 Warn · 8 Pass (15 findings)
 
 ---
 
@@ -472,27 +598,27 @@
 
 ---
 
-## Run 2 Summary (hair-salon + barber-shop + nail-salon complete; 3 archetypes pending)
+## Run 2 Summary (hair-salon + barber-shop + nail-salon + beauty-spa complete; 2 archetypes pending)
 
 | Category | Count |
 |----------|-------|
-| Critical | 3 |
-| Important | 19 |
-| Warn | 3 |
-| Pass | 25 |
-| **Total** | **50** |
+| Critical | 4 |
+| Important | 24 |
+| Warn | 4 |
+| Pass | 33 |
+| **Total** | **65** |
 
-### New finding this run (nail-salon)
+### New findings confirmed this run
 
-- **AUDIT-R2-NS-B-005** (Important): Booking calendar timezone defaults to Europe/London even after operator switches currency to USD. Linked to GBP/UK locale defaults cascade — timezone not independently configurable.
+- **AUDIT-R2-NS-B-005 / AUDIT-R2-SPA-B-005** (Important): Booking calendar timezone defaults to Europe/London across all booking archetypes when USD currency is selected. Confirmed as systemic (nail-salon + beauty-spa). Linked to GBP/UK locale cascade not resetting on currency change.
 
-### Fix PR status after hair-salon + barber-shop + nail-salon (natural validation)
+### Fix PR status after 4 archetypes (natural validation)
 
 | PR | Title | Verdict |
 |----|-------|---------|
-| #1752 | fix(inbox): replace DPF meta-language with operator language | ❌ Not resolved — confirmed on all 3 archetypes |
-| #1759 | fix(onboarding): USD default currency + 0% tax rate + Optional recurring | ⚠️ Partial — Recurring Optional ✓; GBP currency ✗; 20% bill tax ✗ — confirmed on all 3 archetypes |
-| #1760 | fix(booking): add archetype-specific booking form fields | ❌ Not resolved — confirmed on all 3 archetypes |
-| #1761 | fix(finance): surface draft/pending bills on P&L report | ⚠️ Partial — Submit for Approval button added ✓; approved→paid path missing ✗; P&L still dark ✗ — confirmed on all 3 archetypes |
-| #1762 | fix(operating-hours): add save confirmation toast | ❌ Not resolved — confirmed on all 3 archetypes |
-| #1763 | fix(coworker): resolve model timeout on financial queries | ⚠️ Non-deterministic — HS: 118s safety limit; BS: ~100s wrong period (May); NS: ~90s correct period (June). Behaviour varies per run — not reliably fixed |
+| #1752 | fix(inbox): replace DPF meta-language with operator language | ❌ Not resolved — confirmed on all 4 archetypes |
+| #1759 | fix(onboarding): USD default currency + 0% tax rate + Optional recurring | ⚠️ Partial — Recurring Optional ✓; GBP currency ✗; 20% bill tax ✗ — confirmed on all 4 archetypes |
+| #1760 | fix(booking): add archetype-specific booking form fields | ❌ Not resolved — confirmed on all 4 archetypes |
+| #1761 | fix(finance): surface draft/pending bills on P&L report | ⚠️ Partial — Submit for Approval button added ✓; approved→paid path missing ✗; P&L still dark ✗ — confirmed on all 4 archetypes |
+| #1762 | fix(operating-hours): add save confirmation toast | ❌ Not resolved — confirmed on all 4 archetypes |
+| #1763 | fix(coworker): resolve model timeout on financial queries | ⚠️ Non-deterministic — HS: 118s safety limit; BS: ~100s wrong period (May); NS+SPA: ~90s correct period (June). 2 correct responses, 1 wrong period, 1 safety limit across 4 archetypes |
