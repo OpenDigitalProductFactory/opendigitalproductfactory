@@ -2,8 +2,8 @@
 title: "Decision Perspective & Persona Voice"
 area: ai-workforce
 order: 5
-lastUpdated: 2026-05-31
-updatedBy: Codex
+lastUpdated: 2026-06-11
+updatedBy: Claude
 ---
 
 ## What This Covers
@@ -14,6 +14,8 @@ This page documents two adjacent capabilities that ship together:
 - **Persona Voice Layer** — an optional audio modality. Speech-to-text (STT) is on by default for voice input; text-to-speech (TTS) is opt-in per profile and narrates decision rationales in the persona's voice.
 
 The naming: **WWMD** is "What Would Mark Do" — the first profile, seeded for the DPF platform itself. **WWTD** is "What Would They Do" — the generalized model that lets a customer organization encode an executive, a domain expert, or an organizational archetype as its own profile. **WWWD** is the customer-organization variant of WWMD; in this DPF portal instance, WWMD and WWWD point at the same profile because the business and the product are the same thing.
+
+There is a third scope in the same family. **WSID** is "What Should I Do" — the *profession* profile. Where WWMD encodes founder/platform doctrine and WWWD encodes organization doctrine, WSID encodes what a competent professional in a given role should do. Each coworker role family gets its own profile (`WSID-DATA-ARCHITECT`, `WSID-FINANCE`, `WSID-MARKETING`, …) backed by a source-traced professional corpus, reusing the same profile + corpus + retrieval + gate architecture. See [The Profession Scope (WSID)](#the-profession-scope-wsid) below.
 
 The full design lives in three specs:
 
@@ -46,10 +48,11 @@ Confidence rises slowly through repeated evidence-backed alignment — a recomme
 
 When the active profile can't answer a question, the gate falls back through a fixed chain:
 
-1. Active profile (WWWD or customer-specific)
-2. DPF product doctrine (general platform principles)
-3. DPF organizational principles (TAK / GAID governance layer)
-4. `defer` — insufficient coverage even for a framing recommendation; capture as a profile gap
+1. Profession profile (WSID) — when the question is a craft question for a coworker with a role profile
+2. Active profile (WWWD or customer-specific)
+3. DPF product doctrine (general platform principles)
+4. DPF organizational principles (TAK / GAID governance layer)
+5. `defer` — insufficient coverage even for a framing recommendation; capture as a profile gap
 
 The chain is wired into the data model from day one so the fallback path is auditable: every interaction row records which level in the chain produced the answer.
 
@@ -61,12 +64,35 @@ The `DecisionPerspectiveProfile` model supports several profile kinds today. Eac
 |------|-------------|---------|--------|
 | `platform` | DPF platform doctrine (Mark / DPF Platform). The first profile, seeded with the founder's writings and approved decisions. | Mark / DPF Platform | **Shipped** — the WWMD kernel for this portal instance |
 | `organization` | Customer organization's operating principles (the WWWD profile). | Acme Corp Operating Principles | **Shipped surface, deferred content** — points at the platform profile in this instance because product and business are the same |
+| `profession` | A coworker role family's professional doctrine (the WSID profile), backed by a source-traced corpus distilled from professional bodies of knowledge. | `WSID-DATA-ARCHITECT`, `WSID-FINANCE`, `WSID-MARKETING` | **Early access** — profile kind, source registry, and 23 family profiles seeded; data-architect corpus shipped; finance and marketing are the pilot completion work |
 | `customer` | Future customer-instance profile, isolated from the platform's product-origin guidance. | Customer org doctrine | **Deferred** — not in V1 |
 | `persona-real` | A real person who has given explicit documented consent. The voice layer can use their voice clone. | An executive at a customer org | **Shipped surface, consent-gated** |
 | `persona-fictional` | A persona not derived from any real person — useful as an archetype profile. | "The Pragmatic Founder" | **Shipped** |
 | `persona-synthetic` | An AI-synthesized persona built from curated training data with no real-person basis. | Industry archetype seeded by DPF | **Shipped** |
 
 The non-negotiable boundary: a customer profile **must not** inherit platform-specific business judgment as authority by default. DPF product doctrine can be advisory product guidance for any profile; the customer's own WWWD profile becomes authoritative for its business context once that profile exists.
+
+## The Profession Scope (WSID)
+
+WWMD answers "what would the founder/platform do?" and WWWD answers "what would this organization do?" — but a coworker doing a specialist's job has no governed source for **what a competent professional in that role should do**. The data-architect coworker has no DAMA-DMBOK grounding; the finance coworker has no GAAP doctrine; the marketing specialist has no marketing body of knowledge. Without WSID, that professional judgment is whatever the underlying LLM happens to produce — ungoverned, unauditable, and inconsistent across model routings.
+
+WSID is the third scope, and it deliberately reuses the architecture the platform already proved twice: **a versioned profile + a source-traced corpus + weighted retrieval + an audited gate**, scoped to the profession instead of the founder or the org. No new vector DB, graph DB, or parallel table family — the corpus lives as `WikiPage` pages with `RawSource` provenance, `PerspectiveMaterial` rows for decision-bearing doctrine, and Qdrant embeddings for recall.
+
+Key properties:
+
+- **Full-roster coverage contract.** WSID is designed to scope *every* coworker on the platform — all 63 registry agents plus the route personas, collapsed into profession *families*. Data architect, finance, and marketing are the **pilot three** chosen to prove the pipeline; they are not the scope.
+- **Research-sourced, never training-data authored.** Every corpus page is produced by the research-ingest pipeline from fetched, verifiable sources. The LLM distills retrieved source text; it never writes doctrine from its own training memory. Each profession gets its own research effort and its own source list, governed by the Profession Source Registry.
+- **Role-aware gate resolution.** When a coworker hits a craft question, the gate evaluates against its profession profile first, then falls back through the existing chain (role → org WWWD → DPF doctrine advisory → defer-with-gap-capture).
+- **Seed = bootstrap, enrichment = runtime.** Pilot corpora install on a fresh portal (themselves pipeline-produced with recorded provenance); ongoing growth flows through the role-scoped enrichment pipeline with draft-by-default review.
+- **Org overridability.** An organization can extend or override a profession profile without mutating the platform-seeded baseline, via the existing kernel-page overlay pattern.
+
+Candidate anchor standards for the pilot three (each profession's research pass confirms, extends, and supersedes them with fetched sources):
+
+- **Data architect** — DAMA-DMBOK2, ISO/IEC 9075 (ANSI SQL), OWASP Top 10 + ASVS + Query Parameterization Cheat Sheet, ISO 11179 (metadata registries), Data Mesh as contextual material.
+- **Finance** — US GAAP (FASB ASC) presentation and recognition, double-entry invariants, month-end close discipline, segregation-of-duties / SOX 404 control concepts, IFRS divergences as context.
+- **Marketing** — AMA definitions and ethics statement, classic frameworks (4Ps/7Ps, STP, funnel/AARRR), brand-consistency doctrine, CAN-SPAM / GDPR consent as commandment-tier contextual rules.
+
+SFIA 9 and O*NET/ESCO inform which knowledge areas each role profile must cover — used as a completeness checklist, not ingested as text. WSID does **not** include verbatim ingestion of licensed/copyrighted texts, per the corpus content policy.
 
 ## Calling the Gate
 
@@ -104,15 +130,19 @@ The mic button is wired into the coworker chat surface; transcripts feed the exi
 
 TTS narrates decision rationales returned by the gate. Synthesis runs **asynchronously** after the gate writes the `DecisionInteraction` row — a TTS provider outage cannot block plan advancement, because audio is always enrichment and text is always the primary output.
 
-Provider options:
+The TTS provider is selected with the `TTS_PROVIDER` env var; the default is **self-hosted Chatterbox**, so voice stays on your hardware like the rest of the AI workforce. The right backend is **operating-system-dependent**, because Docker Desktop on macOS has no GPU passthrough — a cloning-grade model can't be GPU-accelerated inside a Mac container, so Apple Silicon runs a native-host sidecar instead (the same pattern local LLM inference already uses via Docker Model Runner).
 
-| Tier | Provider | GPU required | Notes |
-|------|----------|--------------|-------|
-| **Cloud (default)** | Cartesia Sonic 3 | None | Lowest first-audio latency (~90ms), 3-second minimum sample for voice cloning, streaming-native, professional voice clones without contacting sales. |
-| **Quality / self-hosted** | Fish Audio S2 | 1× RTX 4090 (24GB VRAM) | Highest measured naturalness, enterprise RBAC built in, self-hostable via the open-source repo for customers with data-residency requirements. |
-| **Fallback** | ElevenLabs / XTTS v2 (Coqui) | None (ElevenLabs) / 1× RTX 4090 (XTTS) | Stability fallback for non-real-time pre-rendering, or fully self-hosted budget option. |
+| Tier | Provider | Host path | GPU | Notes |
+|------|----------|-----------|-----|-------|
+| **Self-hosted default (Linux / Windows)** | Chatterbox (`dpf-tts` container, `travisvn/chatterbox-tts-api`) | amd64 container | NVIDIA / CUDA | Zero-shot voice cloning. The code default (`defaultProvider()` falls back to `chatterbox`). |
+| **Self-hosted default (Apple Silicon / non-NVIDIA)** | `mlx-audio` (Kokoro fast path + CSM cloning) | native macOS host process, reached via `host.docker.internal` | Apple MLX / Metal | The macOS path, because Docker Desktop has no GPU passthrough. Mirrors host-native Docker Model Runner. `TTS_PROVIDER=mlx`. |
+| **Cloud (optional)** | Cartesia Sonic 3 | API-only | None | Lowest first-audio latency (~90ms), streaming-native, no GPU. For installs that don't want to self-host. |
+| **Cloud / quality** | Fish Audio S2 | API or self-host | None (API) / RTX 4090 (self-host) | High naturalness, enterprise RBAC, self-hostable for data-residency needs. |
+| **Fallback** | ElevenLabs / XTTS v2 (Coqui) | API / self-host | None (ElevenLabs) / RTX 4090 (XTTS) | Stability fallback for pre-rendering, or fully self-hosted budget option. |
 
-The default deployment path adds zero hardware cost beyond the existing platform — cloud TTS is API-only. GPU is only relevant when a customer specifically requires on-premises voice synthesis.
+The default deployment path keeps audio on the host. Cloud TTS is the API-only opt-in for installs that prefer not to self-host or lack a suitable GPU.
+
+> The OS-dependent backend split is detailed in `docs/superpowers/specs/2026-05-28-tts-apple-silicon-local-design.md` (native-host MLX sidecar), which amends `docs/superpowers/specs/2026-05-21-chatterbox-tts-self-hosted.md` (the Linux/NVIDIA default).
 
 ### Voice Profile Admin
 
@@ -161,8 +191,9 @@ Three constraints are non-negotiable:
 
 ## What's In Progress
 
-Tracked under EP-WWMD and EP-VOICE-LAYER:
+Tracked under EP-WWMD, EP-VOICE-LAYER, and EP-WSID:
 
+- **WSID pilot completion** — the profession profile kind, Profession Source Registry, 23 family profiles, role resolver, and the data-architect corpus (with provenance lint) are merged; the finance and marketing corpora and deeper gate-resolution wiring complete the pilot three before the full-roster rollout
 - **Customer WWWD profiles** — the surface exists; the data and onboarding flow that lets a customer organization seed its own profile is the next deliverable
 - **Real-time voice conversation** — live back-and-forth using streaming TTS in a sub-400ms loop fed by the existing STT pipeline. V2 target
 - **Voice in coworker thread messages** — narrating coworker replies beyond gate rationale audio. V2
@@ -185,3 +216,6 @@ Tracked under EP-WWMD and EP-VOICE-LAYER:
 - `docs/superpowers/specs/2026-05-19-persona-voice-layer-wwtd-design.md` — voice layer + WWTD profile kinds
 - `docs/superpowers/specs/2026-05-16-voice-input-and-transcription-design.md` — STT design
 - `docs/superpowers/specs/2026-05-17-voice-input-slice-1-5-default-on-cpu.md` — CPU-default STT + the 3-tier hardware ladder
+- `docs/superpowers/specs/2026-05-21-chatterbox-tts-self-hosted.md` — self-hosted Chatterbox TTS (Linux/NVIDIA default)
+- `docs/superpowers/specs/2026-05-28-tts-apple-silicon-local-design.md` — native-host MLX TTS sidecar for Apple Silicon (the OS-dependent path)
+- `docs/superpowers/specs/2026-06-09-wsid-coworker-professional-corpus-design.md` — the WSID profession scope (third decision perspective)
