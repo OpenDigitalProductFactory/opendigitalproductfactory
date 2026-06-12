@@ -23,6 +23,7 @@ export function OperatingHoursEditor({ defaultSchedule, timezone, onSave, saving
   const [schedule, setSchedule] = useState<WeeklySchedule>(defaultSchedule);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
 
   const busy = externalSaving || isPending;
 
@@ -32,6 +33,7 @@ export function OperatingHoursEditor({ defaultSchedule, timezone, onSave, saving
       [day]: { ...prev[day as keyof WeeklySchedule], ...patch },
     }));
     setError(null);
+    setSaved(false);
   }
 
   function handleSave() {
@@ -49,10 +51,12 @@ export function OperatingHoursEditor({ defaultSchedule, timezone, onSave, saving
       }
     }
 
+    setSaved(false);
     startTransition(async () => {
       try {
         await onSave(schedule);
         setError(null);
+        setSaved(true);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to save");
       }
@@ -128,18 +132,29 @@ export function OperatingHoursEditor({ defaultSchedule, timezone, onSave, saving
         <div className="text-xs text-[var(--dpf-destructive)]">{error}</div>
       )}
 
-      <button
-        onClick={handleSave}
-        disabled={busy}
-        className="px-4 py-2 text-sm rounded-lg border transition-colors disabled:opacity-50"
-        style={{
-          color: "var(--dpf-accent)",
-          borderColor: "var(--dpf-accent)",
-          backgroundColor: "color-mix(in srgb, var(--dpf-accent) 15%, transparent)",
-        }}
-      >
-        {busy ? "Saving..." : "Save Operating Hours"}
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleSave}
+          disabled={busy}
+          className="px-4 py-2 text-sm rounded-lg border transition-colors disabled:opacity-50"
+          style={{
+            color: "var(--dpf-accent)",
+            borderColor: "var(--dpf-accent)",
+            backgroundColor: "color-mix(in srgb, var(--dpf-accent) 15%, transparent)",
+          }}
+        >
+          {busy ? "Saving..." : "Save Operating Hours"}
+        </button>
+        {saved && !busy && (
+          <span
+            className="text-xs font-medium"
+            style={{ color: "var(--dpf-success, #22c55e)" }}
+            role="status"
+          >
+            ✓ Saved
+          </span>
+        )}
+      </div>
     </div>
   );
 }
