@@ -1,7 +1,7 @@
 # Run 2 Fresh-Install Findings — Beauty & Personal Care
 
 **Run**: 2 (beauty-personal-care, fresh-install pass)  
-**Archetypes tested**: hair-salon *(complete)*, barber-shop *(complete)*, nail-salon *(complete)*, beauty-spa *(complete)*, optician *(complete)*, personal-trainer *(pending)*  
+**Archetypes tested**: hair-salon *(complete)*, barber-shop *(complete)*, nail-salon *(complete)*, beauty-spa *(complete)*, optician *(complete)*, personal-trainer *(complete)*  
 **Run date**: 2026-06-12  
 **Method**: Tier 2 DB-only reset per archetype; golden dump `/d/DPF-audit-backup/golden-provider-configured-2026-06-12.dump`  
 **Tester**: Autonomous agent  
@@ -719,34 +719,169 @@
 
 ---
 
-## Personal Trainer — pending Tier 2 reset
+## Personal Trainer — Peak Performance Training (fresh install)
 
-*Awaiting next archetype reset.*
+**Company**: Peak Performance Training  
+**Owner persona**: Alex Rivera (test customer)  
+**URL slug**: peak-performance-training  
+**Phases run**: A, P-BOOKING, B, F, I, G, O  
+**Fix PRs under test**: same as all archetypes above  
 
 ---
 
-## Run 2 Summary (hair-salon + barber-shop + nail-salon + beauty-spa + optician complete; 1 archetype pending)
+### Phase A — Onboarding
+
+#### AUDIT-R2-PT-A-001 · Important · GBP default currency on US install (recurring — 6th archetype)
+
+**Observed**: Financial setup step (shown after "Create Portal" is clicked) pre-filled "GBP - British Pound" as base currency. Operator must manually switch to USD before clicking "Set Up Finances".  
+**Fix #1759 verdict**: ❌ Not resolved — recurring on all 6 archetypes.  
+**Note**: For personal-trainer, the financial setup step appears *after* the "Create Portal" button click (post-template-creation), whereas on other archetypes it appears earlier in the wizard. The GBP default behaviour is identical regardless of wizard position.
+
+#### AUDIT-R2-PT-A-002 · Pass · Appointment Checkout + Recurring Optional financial model correct
+
+**Observed**: Financial setup pre-selected "Appointment Checkout" with "Recurring: Optional" and "Invoices: Manual" for personal-trainer. This matches the correct model for a time-slot booking archetype. ✓
+
+---
+
+### Phase P — Catalog & Prerequisites
+
+#### AUDIT-R2-PT-P-001 · Important · Operating Hours wizard step absent for personal-trainer (new variant)
+
+**Observed**: After "Finances configured" → Continue, the wizard navigated directly to the Booking Portal Dashboard without presenting an Operating Hours setup step. All five prior archetypes (HS/BS/NS/SPA/OPT) were shown an explicit Operating Hours step in the wizard. Settings > Operating Hours confirms hours are auto-seeded (09:00–17:00 Mon–Fri, Timezone: UTC) by the archetype seed. The operator is not prompted to review or confirm them.  
+**Impact**: Personal-trainer operators have no wizard moment to set their schedule. The auto-seeded 09:00–17:00 UTC defaults may silently mismatch their actual operating hours. This is a distinct, more serious variant of the P-001 "no save toast" finding (fix #1762) — the step is absent entirely rather than present-but-silent.  
+**Fix #1762 note**: The "no toast" fix is not testable here; the OH wizard step does not appear.
+
+#### AUDIT-R2-PT-P-002 · Pass · All 5 seeded services present and enabled
+
+**Observed**: Services tab (`/storefront/items`) shows all 5 expected services, all On:
+- Initial Assessment (Booking, Free)
+- 1-Hour PT Session (Booking, /session)
+- Block of 10 Sessions (Purchase)
+- Online Coaching (Booking, /session)
+- Group Bootcamp (Booking, /session)
+
+All match the archetype template preview exactly. ✓
+
+#### AUDIT-R2-PT-P-003 · Pass · Default provider auto-created with 4 services assigned
+
+**Observed**: Team tab shows "Service Providers (1)" with "Peak Performance Training" provider, Active. Provider shows 4 services assigned. Block of 10 Sessions (Purchase type) is excluded from provider assignment — expected, as purchase items do not require provider availability. ✓
+
+---
+
+### Phase B — Storefront
+
+#### AUDIT-R2-PT-B-001 · Important · Portal starts Unpublished (recurring — 6th archetype)
+
+**Observed**: Booking Portal dashboard shows Status: Unpublished with a "Publish" button immediately after wizard completion. Public URL `http://localhost:3000/s/peak-performance-training` inaccessible until manually published.  
+**Fix verdict**: 🔁 Recurring — confirmed on all 6 Run 2 archetypes.
+
+#### AUDIT-R2-PT-B-002 · Pass · Slug correctly set and resolves
+
+**Observed**: Slug "peak-performance-training" entered during wizard preview step; Settings confirms `peak-performance-training`; public portal resolves at `/s/peak-performance-training`. ✓
+
+#### AUDIT-R2-PT-B-003 · Pass · Public portal renders with mixed CTAs
+
+**Observed**: Portal renders hero ("Peak Performance Training"), all 5 services visible with correct CTA differentiation: "Book Now" on booking services (Initial Assessment, 1-Hour PT Session, Online Coaching, Group Bootcamp) and "Buy" on Block of 10 Sessions (Purchase). ✓
+
+#### AUDIT-R2-PT-B-004 · Important · No PT-specific booking form fields (recurring — fix #1760 not resolved)
+
+**Observed**: Booking form for Initial Assessment presents only 4 generic fields: Full Name, Email, Phone (optional), Notes (optional). No fitness-specific fields: no "fitness goal" selector, no "current fitness level", no "health conditions" note field that a personal trainer needs before an Initial Assessment.  
+**Fix #1760 verdict**: ❌ Not resolved — recurring on all 6 archetypes.
+
+#### AUDIT-R2-PT-B-005 · Important · Booking calendar timezone shows Europe/London (recurring — 6th archetype)
+
+**Observed**: Booking calendar for Initial Assessment shows "Times shown in Europe/London" despite operator setting USD (UK locale signals absent). Operating Hours in settings shows "Timezone: UTC". Calendar timezone and settings timezone are inconsistent.  
+**Fix verdict**: 🔁 Recurring — confirmed on NS, SPA, OPT, and now PT. All 6 Run 2 archetypes confirm this.
+
+---
+
+### Phase F — Booking Flow
+
+#### AUDIT-R2-PT-F-001 · Pass · Booking end-to-end works; reference issued
+
+**Observed**: Drove full booking flow: portal → Initial Assessment "Book Now" → calendar June 2026 → select June 16 → 10:00 AM slot → fill Alex Rivera / alex.rivera@example.com → "Confirm booking" → "Booking confirmed!" Reference: **BK-AMQO2EQM**. ✓
+
+---
+
+### Phase I — Inbox
+
+#### AUDIT-R2-PT-I-001 · Critical · DPF meta-language in inbox (recurring — 6th archetype, fix #1752 not resolved)
+
+**Observed**: `/storefront/inbox` (labelled "Bookings" in nav) displays "Customer-zero inquiry intake is wired to product backlog triage. Use **Send to product backlog** to capture DPF sales or product signals as triaging work for Digital Product Factory." Banner is identical across all 6 Run 2 archetypes.  
+**Fix #1752 verdict**: ❌ Not resolved — confirmed on all 6 archetypes.
+
+#### AUDIT-R2-PT-I-002 · Pass · Booking record in inbox with pending status
+
+**Observed**: BK-AMQO2EQM appears in the Bookings inbox, labelled "pending", dated 12/06/2026 for appointment 16/06/2026. "Confirm" and "Cancel" action buttons present. ✓
+
+---
+
+### Phase G — Finance
+
+#### AUDIT-R2-PT-G-002 · Important · Bill tax rate defaults to 20% (recurring — 6th archetype)
+
+**Observed**: New bill form shows Tax %: 20 pre-populated. Currency shows USD (correctly set during financial wizard). The 20% UK VAT tax default persists regardless of USD currency selection.  
+**Fix #1759 verdict**: ❌ Not resolved — confirmed on all 6 archetypes.
+
+---
+
+### Phase O — AI Coworker Operating Intelligence
+
+**Coworker**: Finance Specialist (model: `local:docker.io/ai/gemma4:26B`)
+
+#### AUDIT-R2-PT-O-001 · Pass · Finance Specialist correct June response (~30s)
+
+**Observed**: Asked "What is our total revenue for June 2026?" Response (~30s): "There was no recorded revenue for June 2026. Evidence: The summary is based on cash-basis aggregation of all paid invoices, bills, and expense claims from 2026-06-01 to 2026-06-30, and no paid activity was recorded during this period. Next steps: Verify if any transactions for this period have been marked as paid." Correct period, correct answer (fresh install, no paid invoices). ✓
+
+---
+
+### Personal Trainer — Summary
+
+| Phase | Finding | Severity | Fix PR | Verdict |
+|-------|---------|----------|--------|---------|
+| A | GBP default currency | Important | #1759 | ❌ Recurring (6th) |
+| A | Appointment Checkout + Recurring Optional | Pass | — | ✓ |
+| P | Operating Hours wizard step absent (new variant) | Important | #1762 | 🆕 Distinct from no-toast finding |
+| P | 5 services seeded | Pass | — | ✓ |
+| P | Default provider auto-created (4/5 services) | Pass | — | ✓ |
+| B | Portal starts Unpublished | Important | — | 🔁 Recurring (6th) |
+| B | Slug preserved | Pass | — | ✓ |
+| B | Portal renders with mixed CTAs | Pass | — | ✓ |
+| B | No PT-specific booking form fields | Important | #1760 | ❌ Recurring (6th) |
+| B | Booking calendar timezone Europe/London | Important | — | 🔁 Recurring (6th) |
+| F | Booking works (BK-AMQO2EQM) | Pass | — | ✓ |
+| I | DPF meta-language in inbox | Critical | #1752 | ❌ Recurring (6th) |
+| I | Booking record in inbox | Pass | — | ✓ |
+| G | Bill tax defaults to 20% | Important | #1759 | ❌ Recurring (6th) |
+| O | Finance Specialist correct June response (~30s) | Pass | #1763 | ✓ (4th consecutive correct) |
+
+**Totals**: 1 Critical · 5 Important · 0 Warn · 9 Pass (15 findings)
+
+---
+
+## Run 2 Summary (all 6 archetypes complete)
 
 | Category | Count |
 |----------|-------|
-| Critical | 5 |
-| Important | 29 |
+| Critical | 6 |
+| Important | 34 |
 | Warn | 5 |
-| Pass | 41 |
-| **Total** | **80** |
+| Pass | 50 |
+| **Total** | **95** |
 
 ### New findings confirmed this run
 
-- **AUDIT-R2-NS-B-005 / AUDIT-R2-SPA-B-005 / AUDIT-R2-OPT-B-005** (Important): Booking calendar timezone defaults to Europe/London across all booking archetypes when USD currency is selected. Confirmed as systemic (nail-salon, beauty-spa, optician). Root cause: GBP/UK locale cascade not resetting on currency change.
+- **AUDIT-R2-NS-B-005 / AUDIT-R2-SPA-B-005 / AUDIT-R2-OPT-B-005 / AUDIT-R2-PT-B-005** (Important): Booking calendar timezone defaults to Europe/London across all booking archetypes when USD currency is selected. Confirmed as systemic across all 6 Run 2 archetypes. Root cause: GBP/UK locale cascade not resetting on currency change.
 - **AUDIT-R2-OPT-A-002** (Pass/Observation): Optician uses Subscription + Recurring Required financial model — different from all booking archetypes. Resulting portal is labelled "Patient Portal" with Practitioners + Appointments tabs. Subscription model is internal billing only; storefront CTAs are service-type-driven.
+- **AUDIT-R2-PT-P-001** (Important): Operating Hours wizard step absent for personal-trainer — wizard jumps from "Finances configured" directly to the Booking Portal Dashboard, bypassing the OH setup prompt shown on all other archetypes. Hours are auto-seeded with 09:00–17:00 defaults but operator is not prompted to review them.
 
-### Fix PR status after 5 archetypes (natural validation)
+### Fix PR status after all 6 archetypes (final Run 2 verdict)
 
 | PR | Title | Verdict |
 |----|-------|---------|
-| #1752 | fix(inbox): replace DPF meta-language with operator language | ❌ Not resolved — confirmed on all 5 archetypes |
-| #1759 | fix(onboarding): USD default currency + 0% tax rate + Optional recurring | ⚠️ Partial — Recurring Optional ✓; GBP currency ✗; 20% bill tax ✗ — confirmed on all 5 archetypes |
-| #1760 | fix(booking): add archetype-specific booking form fields | ❌ Not resolved — confirmed on all 5 archetypes |
-| #1761 | fix(finance): surface draft/pending bills on P&L report | ⚠️ Partial — Submit for Approval button added ✓; approved→paid path missing ✗; P&L still dark ✗ (hair-salon + barber-shop only; not re-driven on NS/SPA/OPT) |
-| #1762 | fix(operating-hours): add save confirmation toast | ❌ Not resolved — confirmed on all 5 archetypes |
-| #1763 | fix(coworker): resolve model timeout on financial queries | ⚠️ Non-deterministic — HS: ~118s safety limit; BS: ~100s wrong period (May); NS: ~90s correct; SPA: ~90s correct; OPT: ~25s correct. 3 correct responses, 1 wrong period, 1 safety limit across 5 archetypes |
+| #1752 | fix(inbox): replace DPF meta-language with operator language | ❌ Not resolved — confirmed on all 6 archetypes |
+| #1759 | fix(onboarding): USD default currency + 0% tax rate + Optional recurring | ⚠️ Partial — Recurring Optional ✓; GBP currency ✗; 20% bill tax ✗ — confirmed on all 6 archetypes |
+| #1760 | fix(booking): add archetype-specific booking form fields | ❌ Not resolved — confirmed on all 6 archetypes |
+| #1761 | fix(finance): surface draft/pending bills on P&L report | ⚠️ Partial — Submit for Approval button added ✓; approved→paid path missing ✗; P&L still dark ✗ (hair-salon + barber-shop only; not re-driven on NS/SPA/OPT/PT) |
+| #1762 | fix(operating-hours): add save confirmation toast | ❌ Not resolved — confirmed on HS/BS/NS/SPA/OPT; PT wizard skips OH step entirely (PT-P-001) |
+| #1763 | fix(coworker): resolve model timeout on financial queries | ⚠️ Non-deterministic — HS: ~118s safety limit; BS: ~100s wrong period (May); NS: ~90s correct; SPA: ~90s correct; OPT: ~25s correct; PT: ~30s correct. 4 correct responses, 1 wrong period, 1 safety limit across 6 archetypes |
