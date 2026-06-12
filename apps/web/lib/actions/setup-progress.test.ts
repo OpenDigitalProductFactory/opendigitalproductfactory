@@ -12,6 +12,9 @@ vi.mock("@dpf/db", () => ({
       count: vi.fn(),
       findFirst: vi.fn(),
     },
+    storefrontConfig: {
+      findFirst: vi.fn(),
+    },
   },
 }));
 
@@ -104,6 +107,44 @@ describe("setup-progress", () => {
         data: expect.objectContaining({
           currentStep: "ai-providers",
         }),
+      });
+    });
+
+    it("blocks advancing past the storefront step until a StorefrontConfig exists", async () => {
+      const mockProgress = {
+        id: "test-id",
+        currentStep: "storefront",
+        steps: Object.fromEntries(SETUP_STEPS.map((s) => [s, "pending"])),
+        context: {},
+      };
+      (prisma.platformSetupProgress.findUniqueOrThrow as any).mockResolvedValue(mockProgress);
+      (prisma.storefrontConfig.findFirst as any).mockResolvedValue(null);
+
+      const result = await advanceStep("test-id");
+
+      expect((result as { blocked?: string }).blocked).toBe("storefront-required");
+      expect(prisma.platformSetupProgress.update).not.toHaveBeenCalled();
+    });
+
+    it("advances past the storefront step once a StorefrontConfig exists", async () => {
+      const mockProgress = {
+        id: "test-id",
+        currentStep: "storefront",
+        steps: Object.fromEntries(SETUP_STEPS.map((s) => [s, "pending"])),
+        context: {},
+      };
+      (prisma.platformSetupProgress.findUniqueOrThrow as any).mockResolvedValue(mockProgress);
+      (prisma.storefrontConfig.findFirst as any).mockResolvedValue({ id: "sf-1" });
+      (prisma.platformSetupProgress.update as any).mockResolvedValue({
+        ...mockProgress,
+        currentStep: "platform-development",
+      });
+
+      await advanceStep("test-id");
+
+      expect(prisma.platformSetupProgress.update).toHaveBeenCalledWith({
+        where: { id: "test-id" },
+        data: expect.objectContaining({ currentStep: "platform-development" }),
       });
     });
   });

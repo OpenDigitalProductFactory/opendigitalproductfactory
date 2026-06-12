@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { SetupProgressBar } from "./SetupProgressBar";
 import {
@@ -78,6 +78,7 @@ export function SetupOverlay({ progressId, currentStep, steps, setupContext, tri
   const router = useRouter();
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
+  const [blockedMsg, setBlockedMsg] = useState<string | null>(null);
 
   // Auto-open the coworker panel and trigger a live COO response for this step.
   // Uses autoMessage so the LLM generates personalised guidance from the setup
@@ -123,6 +124,17 @@ export function SetupOverlay({ progressId, currentStep, steps, setupContext, tri
   const handleContinue = () => {
     startTransition(async () => {
       const updated = await advanceStep(progressId);
+      if ("blocked" in updated && updated.blocked === "storefront-required") {
+        // The storefront hasn't been created yet — keep the operator on the
+        // storefront setup so they finish the wizard before moving on.
+        setBlockedMsg(
+          "Finish creating your storefront below before continuing — it hasn't been set up yet.",
+        );
+        const route = STEP_ROUTES["storefront"] ?? "/storefront";
+        if (!pathname.startsWith(route)) router.push(route);
+        return;
+      }
+      setBlockedMsg(null);
       navigateToStep(updated.currentStep, !!updated.completedAt);
     });
   };
@@ -186,6 +198,28 @@ export function SetupOverlay({ progressId, currentStep, steps, setupContext, tri
         steps={steps}
         onStepClick={handleStepClick}
       />
+      {blockedMsg && (
+        <div
+          role="alert"
+          style={{
+            position: "fixed",
+            top: 56,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 60,
+            maxWidth: 520,
+            padding: "10px 16px",
+            borderRadius: 8,
+            border: "1px solid var(--dpf-border)",
+            background: "var(--dpf-surface-2)",
+            color: "var(--dpf-text)",
+            fontSize: 13,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
+          }}
+        >
+          {blockedMsg}
+        </div>
+      )}
     </>
   );
 }
