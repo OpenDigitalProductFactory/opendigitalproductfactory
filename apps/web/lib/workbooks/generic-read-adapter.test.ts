@@ -1,0 +1,71 @@
+import { describe, it, expect } from "vitest";
+import {
+  toCell,
+  genericRowToGridRow,
+  genericColumnDefs,
+  type GenericTableConfig,
+} from "./generic-read-adapter";
+
+const config: GenericTableConfig = {
+  entityType: "epic",
+  prismaModel: "epic",
+  idField: "epicId",
+  columns: [
+    { field: "epicId", name: "ID", fieldType: "text" },
+    { field: "title", name: "Title", fieldType: "text" },
+    { field: "status", name: "Status", fieldType: "select", groupable: true, options: [{ key: "open", label: "Open" }] },
+    { field: "priority", name: "Priority", fieldType: "number" },
+    { field: "updatedAt", name: "Updated", fieldType: "datetime" },
+  ],
+};
+
+describe("toCell", () => {
+  it("coerces by declared field type", () => {
+    expect(toCell("number", 5)).toBe(5);
+    expect(toCell("number", null)).toBeNull();
+    expect(toCell("datetime", new Date("2026-06-07T00:00:00.000Z"))).toBe("2026-06-07T00:00:00.000Z");
+    expect(toCell("checkbox", 1)).toBe(true);
+    expect(toCell("text", 42)).toBe("42");
+    expect(toCell("multi_select", null)).toEqual([]);
+  });
+});
+
+describe("genericRowToGridRow", () => {
+  it("maps a Prisma record to a grid row keyed by field, rowId from idField", () => {
+    const row = genericRowToGridRow(config, {
+      epicId: "EP-1",
+      title: "Universal Grid",
+      status: "open",
+      priority: 2,
+      updatedAt: new Date("2026-06-07T10:00:00.000Z"),
+    });
+    expect(row.rowId).toBe("EP-1");
+    expect(row.cells.title).toBe("Universal Grid");
+    expect(row.cells.status).toBe("open");
+    expect(row.cells.priority).toBe(2);
+    expect(row.cells.updatedAt).toBe("2026-06-07T10:00:00.000Z");
+  });
+
+  it("does not include unconfigured fields (allow-list only)", () => {
+    const row = genericRowToGridRow(config, {
+      epicId: "EP-2",
+      title: "x",
+      status: "open",
+      priority: 1,
+      updatedAt: new Date(),
+      secretField: "should-not-leak",
+    });
+    expect(row.cells).not.toHaveProperty("secretField");
+  });
+});
+
+describe("genericColumnDefs", () => {
+  it("produces read-only column definitions in config order", () => {
+    const cols = genericColumnDefs(config);
+    expect(cols.map((c) => c.columnId)).toEqual(["epicId", "title", "status", "priority", "updatedAt"]);
+    expect(cols.every((c) => c.editable === false)).toBe(true);
+    const status = cols.find((c) => c.columnId === "status");
+    expect(status?.groupable).toBe(true);
+    expect(status?.config?.options?.[0].key).toBe("open");
+  });
+});

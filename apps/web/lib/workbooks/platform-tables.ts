@@ -12,6 +12,7 @@ import { gridRegistry, type AdapterContext } from "./adapter";
 import "./backlog-adapter"; // self-register the backlog adapter
 import "./invoice-adapter"; // self-register the invoice adapter
 import "./risk-adapter"; // self-register the risk-assessment adapter
+import { registerGenericReadTable, type GenericTableConfig } from "./generic-read-adapter";
 import {
   type ColumnDefinition,
   type GridRow,
@@ -53,6 +54,66 @@ export interface PlatformTableDef {
   homeSurface: PlatformTableHomeSurface;
 }
 
+// ── Generic read-only grids (Phase 2) ──────────────────────────────────────
+// Any Prisma model becomes a sortable/filterable/board grid via config — no
+// bespoke adapter class. Read-only by design; editable models keep their own
+// validated adapters. Field lists are explicit allow-lists (no sensitive fields).
+const EPIC_TABLE: GenericTableConfig = {
+  entityType: "epic",
+  prismaModel: "epic",
+  idField: "epicId",
+  orderBy: { field: "updatedAt", dir: "desc" },
+  columns: [
+    { field: "epicId", name: "ID", fieldType: "text", width: 160 },
+    { field: "title", name: "Title", fieldType: "text", width: 360 },
+    {
+      field: "status",
+      name: "Status",
+      fieldType: "select",
+      width: 130,
+      groupable: true,
+      options: [
+        { key: "open", label: "Open" },
+        { key: "in-progress", label: "In Progress" },
+        { key: "done", label: "Done" },
+      ],
+    },
+    { field: "priority", name: "Priority", fieldType: "number", width: 90 },
+    { field: "description", name: "Description", fieldType: "text", width: 400 },
+    { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
+  ],
+};
+
+const DIGITAL_PRODUCT_TABLE: GenericTableConfig = {
+  entityType: "digital_product",
+  prismaModel: "digitalProduct",
+  idField: "productId",
+  orderBy: { field: "updatedAt", dir: "desc" },
+  columns: [
+    { field: "productId", name: "ID", fieldType: "text", width: 140 },
+    { field: "name", name: "Name", fieldType: "text", width: 280 },
+    {
+      field: "lifecycleStage",
+      name: "Lifecycle",
+      fieldType: "select",
+      width: 140,
+      groupable: true,
+      options: [
+        { key: "plan", label: "Plan" },
+        { key: "build", label: "Build" },
+        { key: "run", label: "Run" },
+        { key: "retire", label: "Retire" },
+      ],
+    },
+    { field: "version", name: "Version", fieldType: "text", width: 100 },
+    { field: "description", name: "Description", fieldType: "text", width: 360 },
+    { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
+  ],
+};
+
+registerGenericReadTable(EPIC_TABLE);
+registerGenericReadTable(DIGITAL_PRODUCT_TABLE);
+
 /** The registry of platform datasets available as grids. Add a row per adapter. */
 export const PLATFORM_TABLES: PlatformTableDef[] = [
   {
@@ -78,6 +139,22 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     viewCapability: "view_compliance",
     manageCapability: "manage_compliance",
     homeSurface: { path: "/compliance/risks", label: "Risk assessments", board: true },
+  },
+  {
+    entityType: "epic",
+    label: "Epics",
+    description: "Every epic as a read-only grid — sort, filter, and board by status.",
+    viewCapability: "view_operations",
+    manageCapability: "view_operations", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/ops", label: "Operations", board: true },
+  },
+  {
+    entityType: "digital_product",
+    label: "Digital products",
+    description: "The product portfolio as a read-only grid — sort, filter, and board by lifecycle.",
+    viewCapability: "view_portfolio",
+    manageCapability: "view_portfolio", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/portfolio", label: "Portfolio", board: true },
   },
 ];
 
