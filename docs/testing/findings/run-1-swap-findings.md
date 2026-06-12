@@ -3,19 +3,21 @@
 **Run**: 1 (trades-maintenance swap archetypes)
 **Archetypes tested**: electrician, facilities-maintenance, landscaping, cleaning-service
 **Run date**: 2026-06-12
-**Method**: archetype-reset API swap from plumber lead; Phases B5/G per archetype
+**Method**: archetype-reset API swap from plumber lead; Phases B5/G per archetype *(superseded — see methodology note below)*
 **Tester**: Autonomous agent
+
+> **Methodology note**: These findings were produced using the now-superseded API-swap approach. The audit plan has been revised (2026-06-12) to require a fresh DB install per archetype (Tier 2 golden-dump restore). Findings marked "Methodology artifact" below are consequences of the swap approach and are not reproducible on a fresh install. All other findings remain valid and should be reproduced on the next fresh-install pass of these archetypes.
 
 ---
 
 ## Cross-Archetype (recurring across all 4 swaps)
 
-### AUDIT-R1S-001 · Critical · Archetype-reset does not update company name, slug, or hero copy
+### AUDIT-R1S-001 · Methodology artifact · Archetype-reset does not update company name, slug, or hero copy
 
-**Observed**: After each archetype-reset call, the public portal continues to show "Riverside Plumbing Solutions" as the company name, "/s/riverside-plumbing-solutions" as the URL slug, and "Fast, reliable plumbing for homes and businesses in Riverside" as the hero tagline. Only the service items swap.
-**Expected**: A full archetype swap should update the portal hero copy and slug to match the new archetype, or at minimum prompt the operator to update them.
-**Impact**: All 4 swap archetypes (electrician, facilities-maintenance, landscaping, cleaning-service) presented as a plumbing company to customers. Every inquiry submitted through the portal shows the wrong business identity on the confirmation page.
-**Affected**: All swap archetypes in all runs.
+> **Methodology artifact**: This finding is a direct consequence of the API-swap approach. A fresh install has no prior company identity to persist. This is not a bug on the standard operator path. It is only relevant as a "mid-life archetype change" use case, which is tracked separately under audit finding #1 (missing "change archetype" UI). GitHub Issue [#1748](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/1748) updated to reflect this scope.
+
+**Observed**: After each archetype-reset call, the portal continued showing "Riverside Plumbing Solutions" name, slug, and hero copy. Only service items swapped.
+**Valid scope**: Post-go-live archetype change via admin API only — not first-time install path.
 
 ### AUDIT-R1S-002 · Important · Inquiry form has no archetype-specific fields on any swap archetype
 
@@ -37,11 +39,12 @@
 **Observed**: Coworker panel at `/storefront/settings/operations` showed "Status: blocked, cannot proceed with operations until we have organizational structure defined" on electrician swap — same wording as Run 1 plumber. HVAC coworker response on facilities-maintenance also returned "Status: Blocked (Awaiting tenant details)".
 **Impact**: Systematic false-blocker pattern across the trades-maintenance category. The coworker context prompt queries org for departments and returns "blocked" when none exist.
 
-### AUDIT-R1S-005 · Important · All swap-archetype inquiries accumulate in the same inbox with no archetype separation
+### AUDIT-R1S-005 · Methodology artifact · All swap-archetype inquiries accumulated in shared inbox
 
-**Observed**: `/storefront/inbox` showed all 5 inquiries (INQ-XL2LVBEM plumber, INQ-AJVUB--Q electrician, INQ-EIH8L1OO facilities-maintenance, INQ-2NSAWLCL landscaping, INQ-WXL37VHM cleaning-service) in a single undifferentiated list.
-**Expected**: When operating as a single archetype after a swap, only that archetype's inquiries (or at minimum a filtered view) should be shown.
-**Impact**: In a real swap scenario, the operator would see an inbox polluted with enquiries from a previous business identity.
+> **Methodology artifact**: Under the fresh-install approach, each archetype begins with an empty DB. Cross-archetype inbox pollution cannot occur. This finding is not reproducible on a fresh install and is not a platform bug.
+
+**Observed**: `/storefront/inbox` showed all 5 inquiries from all swap archetypes in one list (plumber through cleaning-service). This was a consequence of all archetypes sharing the same database in the API-swap approach.
+**Valid scope**: None — obsoleted by the fresh-install methodology revision.
 
 ### AUDIT-R1S-006 · Important · Bill line-item fields require direct coordinate click; ref-based typing fails
 
