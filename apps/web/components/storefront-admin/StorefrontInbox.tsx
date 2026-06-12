@@ -116,11 +116,10 @@ export function StorefrontInbox({
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 700, color: "var(--dpf-text)" }}>
-            Customer-zero inquiry intake is wired to product backlog triage
+            Inquiries from your storefront
           </div>
           <div style={{ marginTop: 4, fontSize: 12, color: "var(--dpf-muted)" }}>
-            Use <strong>Send to product backlog</strong> to capture DPF sales or product signals as triaging work for{" "}
-            {defaultDigitalProduct.name}.
+            Use <strong>Send to backlog</strong> to turn an inquiry into tracked work you can follow up on.
           </div>
         </div>
       ) : (
@@ -197,7 +196,7 @@ export function StorefrontInbox({
                     color: "var(--dpf-accent)",
                   }}
                 >
-                  Customer-zero signal
+                  New lead
                 </span>
               )}
               <span style={{ fontSize: 12, fontFamily: "monospace" }}>{e.ref}</span>
@@ -229,7 +228,7 @@ export function StorefrontInbox({
                     opacity: !defaultDigitalProduct || pendingInquiryId === e.id ? 0.6 : 1,
                   }}
                 >
-                  {pendingInquiryId === e.id ? "Sending..." : "Send to product backlog"}
+                  {pendingInquiryId === e.id ? "Sending..." : "Send to backlog"}
                 </button>
                 {e.backlogItemId && (
                   <span style={{ fontSize: 12, color: "var(--dpf-success, #22c55e)" }}>
