@@ -65,9 +65,12 @@ const COMPLETION_CLAIM_PATTERN =
  * fix config that is already correct:
  *
  *  - REQUEST_TOO_LARGE  → context overflow; start a new thread.
- *  - local bypassed for tool count + paid providers down → the bundled local
- *    model can't drive this coworker's large tool set and paid providers are
- *    briefly unavailable (usually a short rate-limit). Nothing is misconfigured.
+ *  - No credential for ANY non-local provider → permanent config gap; point to setup.
+ *    MUST be checked before the threshold branch: a threshold skip layered on top of
+ *    a credential gap matches the threshold pattern but the real fix is "connect a
+ *    provider", not "wait for a rate-limit to clear" (BI-AUDIT-003).
+ *  - local bypassed for tool count + paid providers transiently down → rate-limit;
+ *    nothing is misconfigured.
  *  - genuinely no tool-capable endpoint active → point to the REAL surface.
  *  - other endpoint failures → transient; retry shortly.
  */
@@ -79,6 +82,19 @@ export function describeToolRouteFailure(
 
   if (msg.startsWith("REQUEST_TOO_LARGE:")) {
     return "Your conversation is too long for this AI provider. Please start a new thread to continue.";
+  }
+
+  // Permanent configuration gap: a non-local provider is in the chain but has no
+  // credential row. This is NOT transient — the operator must connect a provider.
+  // Check this BEFORE the threshold branch: when codex has no credential AND local
+  // is threshold-blocked, the threshold pattern matches but the user needs to
+  // configure a provider, not wait for a rate-limit.
+  if (/No credential for/i.test(msg)) {
+    return (
+      "No AI provider credentials are configured for this feature. " +
+      "Open Platform › AI Operations › Providers & Routing, connect a cloud provider " +
+      "(Claude, OpenAI, Google, or similar), then try again."
+    );
   }
 
   // Most common real cause: the bundled local model was bypassed because this

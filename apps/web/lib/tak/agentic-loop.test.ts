@@ -489,6 +489,30 @@ describe("runAgenticLoop", () => {
     expect(result.modelId).toBe("unknown");
   });
 
+  it("tells operator to configure a provider when codex has no credential (not 'wait for rate-limit')", async () => {
+    // This is the fresh-install scenario: codex has no credential row, local is
+    // blocked by the 80-tool threshold. The old classifier hit the threshold branch
+    // first and said "nothing is misconfigured / wait a minute" — wrong (BI-AUDIT-003).
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute.mockRejectedValueOnce(new Error(
+      'All endpoints failed for onboarding. Attempts: [{"endpointId":"codex","error":"No credential for \\"codex\\". Configure via Admin > AI Workforce > External Services."},{"endpointId":"local","error":"skipped local fallback: 80 tools exceeds threshold for small local models"}]',
+    ));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      routeContext: "/platform/ai/providers",
+      agentId: "platform-engineer",
+    });
+
+    expect(result.content).toContain("No AI provider credentials are configured");
+    expect(result.content).toContain("Providers & Routing");
+    expect(result.content).not.toContain("Nothing is misconfigured");
+    expect(result.content).not.toContain("briefly unavailable");
+    expect(result.content).not.toContain("wait a moment");
+    expect(result.providerId).toBe("unknown");
+    expect(result.modelId).toBe("unknown");
+  });
+
   it("treats a generic all-endpoints-failed as a transient retry, not a config error", async () => {
     const mockRoute = vi.mocked(routeAndCall);
     mockRoute.mockRejectedValueOnce(new Error(
