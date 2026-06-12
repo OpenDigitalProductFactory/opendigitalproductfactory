@@ -62,6 +62,7 @@ const EPIC_TABLE: GenericTableConfig = {
   entityType: "epic",
   prismaModel: "epic",
   idField: "epicId",
+  labelField: "title",
   orderBy: { field: "updatedAt", dir: "desc" },
   columns: [
     { field: "epicId", name: "ID", fieldType: "text", width: 160 },
@@ -88,6 +89,7 @@ const DIGITAL_PRODUCT_TABLE: GenericTableConfig = {
   entityType: "digital_product",
   prismaModel: "digitalProduct",
   idField: "productId",
+  labelField: "name",
   orderBy: { field: "updatedAt", dir: "desc" },
   columns: [
     { field: "productId", name: "ID", fieldType: "text", width: 140 },
@@ -246,4 +248,55 @@ export async function updatePlatformCells(
     userId: user.id,
     canManage: true,
   });
+}
+
+// ── Reference columns (Phase 2) ─────────────────────────────────────────────
+// A reference column on any workbook table points at a platform entity. The set
+// of valid targets is exactly the platform tables whose adapter implements
+// searchReferences, filtered to those the user may view (no leak of targets the
+// viewer cannot see). Search/resolve re-check the target's view capability.
+
+export interface ReferenceTarget {
+  entityType: string;
+  label: string;
+}
+
+/** Platform entities the user may reference from a workbook column. */
+export function listReferenceTargets(user: PlatformUser): ReferenceTarget[] {
+  const seen = new Set<string>();
+  const targets: ReferenceTarget[] = [];
+  for (const t of PLATFORM_TABLES) {
+    if (seen.has(t.entityType)) continue;
+    const adapter = gridRegistry.get(t.entityType);
+    if (!adapter || typeof adapter.searchReferences !== "function") continue;
+    if (!can(userCtx(user), t.viewCapability)) continue;
+    seen.add(t.entityType);
+    targets.push({ entityType: t.entityType, label: t.label });
+  }
+  return targets;
+}
+
+export async function searchPlatformReferences(
+  user: PlatformUser,
+  entityType: string,
+  query: string,
+): Promise<{ id: string; label: string }[]> {
+  requireTable(user, entityType); // 404 unknown / 403 no view capability — no leak
+  const adapter = gridRegistry.require(entityType);
+  if (!adapter.searchReferences) {
+    throw new WorkbookError("This data source cannot be referenced", 400);
+  }
+  return adapter.searchReferences(entityType, query);
+}
+
+export async function resolvePlatformReference(
+  user: PlatformUser,
+  entityType: string,
+  referenceId: string,
+): Promise<{ id: string; label: string } | null> {
+  requireTable(user, entityType);
+  const adapter = gridRegistry.require(entityType);
+  if (!adapter.resolveReference) return null;
+  const res = await adapter.resolveReference(entityType, referenceId);
+  return res ? { id: referenceId, label: res.label } : null;
 }

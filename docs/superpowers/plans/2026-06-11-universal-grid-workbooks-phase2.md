@@ -1,0 +1,115 @@
+# Universal Grid & Workbooks — Phase 2 implementation plan (relational + provenance core)
+
+**Epic**: EP-GRID-WORKBOOKS
+**Spec**: [2026-06-07-workbooks-hybrid-systems-of-record-reporting-lifecycle-design.md](../specs/2026-06-07-workbooks-hybrid-systems-of-record-reporting-lifecycle-design.md) (Phase 2 row of the phased build order)
+**Date**: 2026-06-11
+**Status**: Active — slice 1 in progress
+
+Phase 2 = the relational + provenance core: reference columns over real platform
+entities, rollups/lookups over those references (v1 function set), `provenanceKind`
+first-class with progressive disclosure, generic Prisma adapter (shipped #1722), and
+multi-step undo/redo. This plan decomposes Phase 2 into single-concern PRs grounded
+in the current substrate, ordered by leverage and dependency.
+
+## Backlog items
+
+| BI | Concern | Slice(s) |
+|---|---|---|
+| BI-1F70A9AC | Reference columns + rollups/lookups (relational core) | 1, 2 |
+| BI-B8549363 | `provenanceKind` + progressive disclosure | 3 |
+| BI-BA57AB71 | Grid multi-step undo/redo | 4 |
+| BI-29E1F452 | More read-only generic grids (customers, employees-safe, suppliers) | 5 |
+
+## Substrate already in place (do not rebuild)
+
+- `reference` is already a `FieldType` and `ReferenceValue` is already a `CellValue`
+  member (`lib/workbooks/types.ts`). `FieldConfig.referenceType` already exists.
+- The adapter interface already declares optional `searchReferences(referenceType, query)`
+  and `resolveReference(referenceType, referenceId)` (`lib/workbooks/adapter.ts:64-72`) —
+  **no adapter implements them yet**.
+- `ReferenceTypeahead` is a finished standalone component (`components/ui/ReferenceTypeahead.tsx`,
+  floating-UI, 300ms debounce, keyboard nav, async `onSearch`) — **not yet wired into the grid**.
+- Reference cells already render read-only via `renderReferenceCell` (`components/workbooks/cell-editors.tsx:187`);
+  `Grid.tsx` assigns no `renderEditCell` for `reference` (comment: "Phase 1: read-only until platform adapters land").
+- `cell-validation.ts` already validates `ReferenceValue`.
+- Add-column picker (`components/workbooks/AddColumnButton.tsx`) offers 8 types; explicitly
+  excludes `reference`/`multi_select` ("reference needs platform adapters").
+- `WorkbookColumn` Prisma model (`packages/db/prisma/schema.prisma`) has `fieldType` +
+  `fieldConfig Json?`; **no `provenanceKind`/`lifecycleState` columns yet**.
+- Formula/rollup infra is **greenfield** — no formula library in any `package.json`.
+
+## Slice 1 — Reference columns wired to platform entities (this PR)
+
+Goal: a user can add a `reference` column to a custom workbook table, pick which platform
+entity it points at, and pick/resolve real records in the cell — end to end, read + write,
+through the existing validated write path. This is the relational foundation slice 2 builds on.
+
+1. **Reference-target registry** (`lib/workbooks/platform-tables.ts` or a small
+   `reference-targets.ts`): expose the list of registered adapters that can be referenced
+   (entityType + human label + the entity's display field), derived from the existing
+   `PLATFORM_TABLES`/`gridRegistry` so adding a target stays one row. Read-only generic
+   adapters (epic, digital_product) and the editable ones (backlog_item, invoice,
+   risk_assessment) are all valid targets.
+2. **Adapter `searchReferences` + `resolveReference`**: implement once in
+   `generic-read-adapter.ts` (it already holds the Prisma model + label-field config — search
+   by `contains` on the label field, resolve by id→label). Add thin implementations to
+   `backlog-adapter.ts` and `invoice-adapter.ts`/`risk-adapter.ts` reusing the same helper, OR
+   register them through the generic mechanism so one implementation covers all. Prefer the
+   single shared helper to avoid per-adapter drift.
+3. **Server action proxy** (`lib/actions/workbooks.ts`): `searchReferencesAction(referenceType,
+   query)` and `resolveReferenceAction(referenceType, id)` → `gridRegistry.get(referenceType)?.…`,
+   gated by the same session auth as the grid (and the target's own view capability — a
+   reference search must not leak rows the viewer cannot see; capability check before query).
+4. **Add-column UI** (`AddColumnButton.tsx`): add `reference` to the offered types; when chosen,
+   show a target-entity `<select>` populated from the reference-target registry; persist
+   `fieldConfig.referenceType`.
+5. **Grid edit wiring** (`Grid.tsx` + `cell-editors.tsx`): add `makeReferenceEditor` that mounts
+   `ReferenceTypeahead`, wiring `onSearch` → `searchReferencesAction`; on select, persist a
+   `ReferenceValue { referenceId, referenceType, label }` through the existing `persistCell`
+   path (custom-table-adapter write + optimistic revert on error from #1634).
+6. **Label resolution on read**: when `queryRows` returns reference cells, resolve labels (store
+   label in the cell value on write so reads are cheap; fall back to `resolveReference` if absent).
+
+**Acceptance (functional, per structural≠functional)**: add a reference column on a custom
+table pointing at Epics; the cell typeahead searches live epics; selecting one persists and the
+grid shows the epic's title; reload still shows the label; a viewer lacking the target's view
+capability gets no results (no leak). Validate by driving it on the live install after deploy.
+
+**Tests**: unit-test the reference-target registry derivation, `searchReferences`/`resolveReference`
+on the generic adapter (against a seeded model), and the action's capability gate; component-level
+test that the add-column picker persists `referenceType` and the grid mounts the editor for
+`reference` columns.
+
+## Slice 2 — Rollups / lookups over references (v1 function set) — follow-up PR
+
+Greenfield formula layer. **Library decision required** (research before implementing):
+evaluate HyperFormula (GPL/commercial — license-check against AGENTS.md), formulajs (MIT,
+Excel-function library, no parser), or a scoped custom evaluator. Recommendation to confirm in
+that PR: formulajs (MIT) for the function implementations + a small safe expression parser, OR a
+purpose-built rollup/lookup evaluator for v1 (REF/LOOKUP/XLOOKUP/SUMIFS family) without a full
+Excel grammar. Derived columns compute over reference-joined rows; **write a lineage edge for every
+derived column (fail-closed)** per the spec invariant. Out of scope for slice 1.
+
+## Slice 3 — `provenanceKind` + progressive disclosure — separate PR (BI-B8549363)
+
+Additive migration: `WorkbookColumn.provenanceKind` (`system|source|derived|manual`). Platform-adapter
+columns report `system`; custom columns default `manual`; slice-2 derived columns are `derived`.
+Progressive disclosure: labels hidden until hover/advanced toggle (Dale review). One migration +
+seed-safe default + adapter `getColumns` populates it + a hover label in the grid header.
+
+## Slice 4 — Multi-step undo/redo — separate PR (BI-BA57AB71)
+
+Undo/redo stack in the `<Grid>` contract; each undo replays the inverse edit through the same
+validated dispatch (never raw write); reject + show error + leave cell unchanged when the inverse
+is invalid (parity with #1634 optimistic revert). Cell-value edits in scope; row add/delete deferred.
+
+## Slice 5 — More read-only generic grids — separate PR (BI-29E1F452)
+
+~15-line config rows on the #1722 generic adapter for customers, employees (safe-fields allow-list
+only — no PII/comp), suppliers. Each behind its domain view capability.
+
+## Ordering rationale
+
+References (1) are the relational substrate rollups/lookups (2) require. `provenanceKind` (3) is
+cheap and clarifies tiers but does not block 1–2. Undo/redo (4) is independent. Generic grids (5)
+are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.

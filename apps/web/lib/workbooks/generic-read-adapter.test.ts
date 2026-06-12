@@ -3,6 +3,8 @@ import {
   toCell,
   genericRowToGridRow,
   genericColumnDefs,
+  referenceLabelField,
+  buildReferenceSearchArgs,
   type GenericTableConfig,
 } from "./generic-read-adapter";
 
@@ -56,6 +58,45 @@ describe("genericRowToGridRow", () => {
       secretField: "should-not-leak",
     });
     expect(row.cells).not.toHaveProperty("secretField");
+  });
+});
+
+describe("referenceLabelField", () => {
+  it("prefers an explicit labelField", () => {
+    expect(referenceLabelField({ ...config, labelField: "status" })).toBe("status");
+  });
+
+  it("defaults to the first text column after the id field", () => {
+    expect(referenceLabelField(config)).toBe("title");
+  });
+
+  it("falls back to the id field when no other text column exists", () => {
+    const idOnly: GenericTableConfig = {
+      entityType: "thing",
+      prismaModel: "thing",
+      idField: "thingId",
+      columns: [
+        { field: "thingId", name: "ID", fieldType: "text" },
+        { field: "count", name: "Count", fieldType: "number" },
+      ],
+    };
+    expect(referenceLabelField(idOnly)).toBe("thingId");
+  });
+});
+
+describe("buildReferenceSearchArgs", () => {
+  it("filters by a case-insensitive contains on the label field and caps results", () => {
+    const args = buildReferenceSearchArgs(config, "  grid  ");
+    expect(args.where).toEqual({ title: { contains: "grid", mode: "insensitive" } });
+    expect(args.select).toEqual({ epicId: true, title: true });
+    expect(args.orderBy).toEqual({ title: "asc" });
+    expect(args.take).toBe(20);
+  });
+
+  it("returns an unfiltered (capped) query for a blank search", () => {
+    const args = buildReferenceSearchArgs(config, "   ");
+    expect(args.where).toEqual({});
+    expect(args.take).toBe(20);
   });
 });
 

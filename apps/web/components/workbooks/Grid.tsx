@@ -35,6 +35,7 @@ import {
   renderEmailCell,
   renderDateCell,
   renderReferenceCell,
+  makeReferenceEditor,
 } from "./cell-editors";
 import {
   createRowAction,
@@ -116,9 +117,16 @@ function buildColumn(
     case "multi_select":
       // Phase 1: rendered read-only in the grid; edit via API/MCP.
       return { ...base, renderCell: makeMultiSelectRenderer(options) };
-    case "reference":
-      // Phase 1: rendered read-only until platform adapters land.
-      return { ...base, renderCell: renderReferenceCell };
+    case "reference": {
+      // Phase 2: editable in-cell typeahead over a live platform entity.
+      const referenceType = col.config?.referenceType;
+      return {
+        ...base,
+        renderCell: renderReferenceCell,
+        renderEditCell:
+          editable && referenceType ? makeReferenceEditor(referenceType) : undefined,
+      };
+    }
     default:
       return base;
   }

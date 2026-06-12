@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { addColumnAction } from "@/lib/actions/workbooks";
-import type { FieldType, SelectOption } from "@/lib/workbooks/types";
+import { addColumnAction, listReferenceTargetsAction } from "@/lib/actions/workbooks";
+import type { ReferenceTarget } from "@/lib/workbooks/platform-tables";
+import type { FieldType, SelectOption, FieldConfig } from "@/lib/workbooks/types";
 
-// Field types with a fully-functional in-grid editor in Phase 1.
-// multi_select and reference exist in the data model but are not offered here
-// yet (reference needs platform adapters; tracked under EP-GRID-WORKBOOKS).
+// Field types with a fully-functional in-grid editor.
+// multi_select exists in the data model but is not offered here yet (rendered
+// read-only; tracked under EP-GRID-WORKBOOKS).
 const OFFERED_TYPES: { value: FieldType; label: string }[] = [
   { value: "text", label: "Text" },
   { value: "number", label: "Number" },
@@ -15,6 +16,7 @@ const OFFERED_TYPES: { value: FieldType; label: string }[] = [
   { value: "datetime", label: "Date & time" },
   { value: "checkbox", label: "Checkbox" },
   { value: "select", label: "Single select" },
+  { value: "reference", label: "Reference" },
   { value: "url", label: "URL" },
   { value: "email", label: "Email" },
 ];
@@ -43,18 +45,41 @@ export function AddColumnButton({
   const [name, setName] = useState("");
   const [fieldType, setFieldType] = useState<FieldType>("text");
   const [optionsRaw, setOptionsRaw] = useState("");
+  const [referenceType, setReferenceType] = useState("");
+  const [referenceTargets, setReferenceTargets] = useState<ReferenceTarget[]>([]);
   const [required, setRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // Load the available reference targets once the picker is opened.
+  useEffect(() => {
+    if (!open || referenceTargets.length > 0) return;
+    let active = true;
+    void listReferenceTargetsAction().then((res) => {
+      if (active && res.ok) setReferenceTargets(res.data);
+    });
+    return () => {
+      active = false;
+    };
+  }, [open, referenceTargets.length]);
 
   function reset() {
     setOpen(false);
     setName("");
     setFieldType("text");
     setOptionsRaw("");
+    setReferenceType("");
     setRequired(false);
     setError(null);
   }
+
+  function buildConfig(): FieldConfig | undefined {
+    if (fieldType === "select") return { options: parseOptions(optionsRaw) };
+    if (fieldType === "reference") return { referenceType };
+    return undefined;
+  }
+
+  const missingReferenceTarget = fieldType === "reference" && !referenceType;
 
   function submit() {
     setError(null);
@@ -63,7 +88,7 @@ export function AddColumnButton({
         name: name.trim(),
         fieldType,
         required,
-        config: fieldType === "select" ? { options: parseOptions(optionsRaw) } : undefined,
+        config: buildConfig(),
       });
       if (!res.ok) {
         setError(res.error);
@@ -114,6 +139,26 @@ export function AddColumnButton({
           className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
         />
       )}
+      {fieldType === "reference" && (
+        <select
+          value={referenceType}
+          onChange={(e) => setReferenceType(e.target.value)}
+          className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
+        >
+          <option value="" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
+            {referenceTargets.length === 0 ? "No reference targets available" : "Select what to reference…"}
+          </option>
+          {referenceTargets.map((t) => (
+            <option
+              key={t.entityType}
+              value={t.entityType}
+              className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
+            >
+              {t.label}
+            </option>
+          ))}
+        </select>
+      )}
       <label className="flex items-center gap-1 text-sm text-[var(--dpf-muted)]">
         <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
         Required
@@ -121,7 +166,7 @@ export function AddColumnButton({
       <button
         type="button"
         onClick={submit}
-        disabled={pending || !name.trim()}
+        disabled={pending || !name.trim() || missingReferenceTarget}
         className="rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-sm text-white disabled:opacity-50"
       >
         Add

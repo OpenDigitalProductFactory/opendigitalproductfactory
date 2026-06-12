@@ -13,6 +13,7 @@ import {
   gridRegistry,
   type DataSourceAdapter,
   type AdapterContext,
+  type ReferenceResolution,
 } from "./adapter";
 import {
   type ColumnDefinition,
@@ -48,9 +49,37 @@ export interface GenericTableConfig {
   orderBy?: { field: string; dir: "asc" | "desc" };
   /** Hard cap on rows loaded (push-down pagination is a Phase-4 follow-up). */
   maxRows?: number;
+  /**
+   * Scalar field shown as the human label when this model is the target of a
+   * reference column (Phase 2). Defaults to the first text column after the id
+   * field, falling back to the id field itself.
+   */
+  labelField?: string;
 }
 
 const DEFAULT_CAP = 500;
+const REFERENCE_SEARCH_LIMIT = 20;
+
+/** The field used as the reference display label — explicit, else first non-id text column, else the id. */
+export function referenceLabelField(config: GenericTableConfig): string {
+  if (config.labelField) return config.labelField;
+  const firstText = config.columns.find(
+    (c) => c.fieldType === "text" && c.field !== config.idField,
+  );
+  return firstText?.field ?? config.idField;
+}
+
+/** Pure builder for the reference-typeahead findMany args (testable without Prisma). */
+export function buildReferenceSearchArgs(config: GenericTableConfig, query: string) {
+  const labelField = referenceLabelField(config);
+  const trimmed = query.trim();
+  return {
+    where: trimmed ? { [labelField]: { contains: trimmed, mode: "insensitive" } } : {},
+    select: { [config.idField]: true, [labelField]: true },
+    orderBy: { [labelField]: "asc" as const },
+    take: REFERENCE_SEARCH_LIMIT,
+  };
+}
 
 /** Convert a Prisma scalar into the grid's CellValue based on the declared field type. */
 export function toCell(fieldType: FieldType, v: unknown): CellValue {
@@ -151,6 +180,33 @@ class GenericReadAdapter implements DataSourceAdapter {
       select: this.select(),
     });
     return r ? genericRowToGridRow(this.cfg, r) : null;
+  }
+
+  async searchReferences(
+    _referenceType: string,
+    query: string,
+  ): Promise<{ id: string; label: string }[]> {
+    const labelField = referenceLabelField(this.cfg);
+    const records = await delegate(this.cfg.prismaModel).findMany(
+      buildReferenceSearchArgs(this.cfg, query),
+    );
+    return records.map((r) => ({
+      id: String(r[this.cfg.idField]),
+      label: String(r[labelField] ?? r[this.cfg.idField]),
+    }));
+  }
+
+  async resolveReference(
+    _referenceType: string,
+    referenceId: string,
+  ): Promise<ReferenceResolution | null> {
+    const labelField = referenceLabelField(this.cfg);
+    const r = await delegate(this.cfg.prismaModel).findUnique({
+      where: { [this.cfg.idField]: referenceId },
+      select: { [this.cfg.idField]: true, [labelField]: true },
+    });
+    if (!r) return null;
+    return { label: String(r[labelField] ?? r[this.cfg.idField]) };
   }
 
   getCapabilities(_ctx: AdapterContext): GridCapabilities {

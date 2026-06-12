@@ -28,6 +28,7 @@ type ReferenceTypeaheadProps = {
   addNewLabel?: string;
   value: RefItem | null;
   disabled?: boolean;
+  autoFocus?: boolean;
 };
 
 export function ReferenceTypeahead({
@@ -39,6 +40,7 @@ export function ReferenceTypeahead({
   addNewLabel = "item",
   value,
   disabled = false,
+  autoFocus = false,
 }: ReferenceTypeaheadProps) {
   const [query, setQuery] = useState(value?.label ?? "");
   const [results, setResults] = useState<RefItem[]>([]);
@@ -181,6 +183,7 @@ export function ReferenceTypeahead({
         id={inputId}
         type="text"
         role="combobox"
+        autoFocus={autoFocus}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-autocomplete="list"
