@@ -3,8 +3,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-const recordPayment = vi.fn(async () => ({ id: "pay-1", paymentRef: "PAY-1" }));
-const refresh = vi.fn();
+const { recordPayment, refresh } = vi.hoisted(() => ({
+  recordPayment: vi.fn(async () => ({ id: "pay-1", paymentRef: "PAY-1" })),
+  refresh: vi.fn(),
+}));
 
 vi.mock("@/lib/actions/finance", () => ({ recordPayment }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
@@ -23,7 +25,9 @@ describe("RecordBillPaymentButton", () => {
 
     fireEvent.click(screen.getByText("Record Payment"));
 
-    const amount = screen.getByLabelText(/amount/i) as HTMLInputElement;
+    // The amount field is the only number input (role spinbutton); the label is
+    // visual-only so query by role rather than label association.
+    const amount = screen.getByRole("spinbutton") as HTMLInputElement;
     expect(amount.value).toBe("85");
 
     fireEvent.click(screen.getByText("Confirm payment"));
