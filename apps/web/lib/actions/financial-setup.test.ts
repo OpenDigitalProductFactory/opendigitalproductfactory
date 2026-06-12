@@ -10,6 +10,12 @@ vi.mock("@dpf/db", () => ({
     dunningSequence: {
       findFirst: vi.fn(),
     },
+    organization: {
+      findFirst: vi.fn(),
+    },
+    organizationTaxProfile: {
+      upsert: vi.fn(),
+    },
   },
 }));
 
@@ -30,6 +36,12 @@ const mockPrisma = prisma as unknown as {
   dunningSequence: {
     findFirst: ReturnType<typeof vi.fn>;
   };
+  organization: {
+    findFirst: ReturnType<typeof vi.fn>;
+  };
+  organizationTaxProfile: {
+    upsert: ReturnType<typeof vi.fn>;
+  };
 };
 const mockSeedDunning = vi.mocked(seedDefaultDunningSequence);
 
@@ -42,11 +54,13 @@ const makeSettings = (overrides: Partial<{
   autoFetchRates: boolean;
   createdAt: Date;
   updatedAt: Date;
+  appliedProfileSlug: string | null;
 }> = {}) => ({
   id: "settings-1",
   baseCurrency: "USD",
   autoFetchRates: true,
   lastRateFetchAt: null,
+  appliedProfileSlug: null,
   createdAt: earlier,
   updatedAt: now,
   ...overrides,
@@ -55,6 +69,9 @@ const makeSettings = (overrides: Partial<{
 beforeEach(() => {
   vi.clearAllMocks();
   mockSeedDunning.mockResolvedValue({ id: "seq-1" });
+  // Default: no org row → OrganizationTaxProfile upsert is skipped
+  mockPrisma.organization.findFirst.mockResolvedValue(null);
+  mockPrisma.organizationTaxProfile.upsert.mockResolvedValue({});
 });
 
 // ─── applyFinancialProfile ─────────────────────────────────────────────────
@@ -144,9 +161,9 @@ describe("getFinancialSetupStatus", () => {
     expect(result.dunningActive).toBe(false);
   });
 
-  it("returns isConfigured=true when updatedAt > createdAt", async () => {
+  it("returns isConfigured=true when appliedProfileSlug is set", async () => {
     mockPrisma.orgSettings.findFirst.mockResolvedValue(
-      makeSettings({ createdAt: earlier, updatedAt: now }),
+      makeSettings({ appliedProfileSlug: "healthcare_wellness" }),
     );
     mockPrisma.dunningSequence.findFirst.mockResolvedValue({ id: "seq-1" });
 
@@ -156,10 +173,9 @@ describe("getFinancialSetupStatus", () => {
     expect(result.dunningActive).toBe(true);
   });
 
-  it("returns isConfigured=false when updatedAt equals createdAt (freshly created)", async () => {
-    const sameTime = new Date("2026-01-01T12:00:00Z");
+  it("returns isConfigured=false when appliedProfileSlug is null (freshly created)", async () => {
     mockPrisma.orgSettings.findFirst.mockResolvedValue(
-      makeSettings({ createdAt: sameTime, updatedAt: sameTime }),
+      makeSettings({ appliedProfileSlug: null }),
     );
     mockPrisma.dunningSequence.findFirst.mockResolvedValue(null);
 
