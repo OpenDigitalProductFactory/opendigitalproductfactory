@@ -608,7 +608,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
       <div class="pillar">
         <div class="tag">Archetypes</div>
         <strong>Pick a market archetype &mdash; the platform reshapes itself.</strong>
-        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Twelve market categories and 46 leaf archetype templates ship with the platform &mdash; including a B2B wholesale-distribution archetype that derives a partner/reseller program from its operating-model axes. Choosing one bootstraps the customer portal, vocabulary, booking and form rules, finance assumptions, marketing posture, and internal worker-home direction. The archetype is the single source of truth for industry; downstream surfaces read from it rather than from a separately editable string.</p>
+        <p style="color:var(--fg-muted); margin:6px 0 0; font-size:14px;">Fifteen market categories and 56 leaf archetype templates ship with the platform &mdash; spanning small-business services through banking and credit unions, civic bodies (municipalities, utilities, law enforcement), and rental/shared-asset operators, plus a B2B wholesale-distribution archetype that derives a partner/reseller program from its operating-model axes. Choosing one bootstraps the customer portal, vocabulary, booking and form rules, finance assumptions, marketing posture, and internal worker-home direction. The archetype is the single source of truth for industry; downstream surfaces read from it rather than from a separately editable string.</p>
       </div>
       <div class="pillar">
         <div class="tag">Common Skills</div>
@@ -624,7 +624,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
   </section>
 
   <section id="archetypes">
-    <h2>Twelve market categories, 46 leaf archetypes</h2>
+    <h2>Fifteen market categories, 56 leaf archetypes</h2>
     <p class="sub">
       Archetypes are the bootstrap mechanism that turns a fresh install into a working business setup. Each one carries storefront design, vocabulary, role emphasis, process defaults, finance assumptions, and marketing posture. The same archetype now also drives <strong>internal workspace homes</strong> &mdash; dispatch boards for trades, appointment-readiness boards for clinics, merchandising boards for retail, and equivalent daily boards for other categories. The workspace-home substrate (registry, resolver, projection service) has landed; the HVAC dispatcher board is the first vertical being implemented against it. <strong>Detailed guide:</strong> <a href="/user-guide/market-archetypes">market-archetypes</a>.
     </p>
@@ -641,6 +641,9 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
       <div class="card"><h3>Fitness &amp; Recreation</h3><p>Gyms, studios, leagues; memberships, classes, attendance.</p></div>
       <div class="card"><h3>Nonprofit &amp; Community</h3><p>Charities, associations, community groups; donations, programs, volunteers.</p></div>
       <div class="card"><h3>HOA &amp; Property Management</h3><p>Homeowners associations and property managers; residents, dues, violations.</p></div>
+      <div class="card"><h3>Banking &amp; Financial Services</h3><p>Community banks, credit unions, mortgage lending; BIAN-grounded, with jurisdiction-specific regulatory governance and member-equity for credit unions.</p></div>
+      <div class="card"><h3>Public Sector &amp; Civic</h3><p>Small-town municipalities, municipal utilities (water/electric), law enforcement; resident and ratepayer skins, open-meetings governance, records requests, and 311 service routing.</p></div>
+      <div class="card"><h3>Rental &amp; Shared Assets</h3><p>Equipment and tool rental, self-storage, and agricultural shared-machinery co-ops; the reserve &rarr; use &rarr; return &amp; inspect &rarr; re-pool value stream over a pooled asset.</p></div>
     </div>
   </section>
 
@@ -1438,7 +1441,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
           <td>Default-deny grants, route-scoped agent identity, immutable directive injection, audit log all live.</td>
         </tr>
         <tr>
-          <td>Archetypes (12 categories, 46 leaf templates)</td>
+          <td>Archetypes (15 categories, 56 leaf templates)</td>
           <td><strong>Production</strong></td>
           <td>Bootstrap on storefront setup; sections, vocabulary, finance profile, design system, marketing posture, and workspace-home direction seeded.</td>
         </tr>
@@ -1692,7 +1695,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
         </tr>
         <tr>
           <td><strong>IT service provider (MSP) archetype</strong></td>
-          <td>Adds a thirteenth archetype for managed-service providers &mdash; a frequent customer profile that doesn&rsquo;t fit the existing twelve cleanly.</td>
+          <td>Adds an archetype for managed-service providers &mdash; a frequent customer profile that doesn&rsquo;t fit the core service categories cleanly.</td>
         </tr>
         <tr>
           <td><strong>Local-LLM grading (incremental)</strong></td>
@@ -1771,7 +1774,7 @@ powershell -ExecutionPolicy Bypass -File install-dpf.ps1</code></pre>
       </div>
       <div class="card">
         <h3>What does the install include?</h3>
-        <p>Portal, init container, Postgres, Neo4j, Qdrant, Inngest, Redis, the local model runner, and on-demand sandbox containers. Twelve market categories, 46 leaf archetype templates, purposed coworkers, the skill registry, and a seeded role hierarchy come pre-loaded.</p>
+        <p>Portal, init container, Postgres, Neo4j, Qdrant, Inngest, Redis, the local model runner, and on-demand sandbox containers. Fifteen market categories, 56 leaf archetype templates, purposed coworkers, the skill registry, and a seeded role hierarchy come pre-loaded.</p>
       </div>
       <div class="card">
         <h3>How do I uninstall?</h3>
