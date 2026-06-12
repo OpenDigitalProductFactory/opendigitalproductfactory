@@ -19,6 +19,9 @@ vi.mock("@dpf/db", () => ({
     organization: {
       findFirst: vi.fn(),
     },
+    businessProfile: {
+      findFirst: vi.fn(),
+    },
   },
 }));
 
@@ -112,5 +115,29 @@ describe("getPublicStorefront", () => {
     expect(result?.archetypeId).toBe("software-platform");
     expect(result?.items[0]?.ctaType).toBe("inquiry");
     expect(result?.items[0]?.name).toBe("Open Digital Product Factory");
+  });
+
+  it("resolves the display timezone from the operator's Operating Hours setting", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
+      ...mockStorefront,
+      timezone: "Europe/London", // stale config default — must be ignored
+    } as never);
+    vi.mocked(prisma.businessProfile.findFirst).mockResolvedValue({
+      timezone: "America/New_York",
+    } as never);
+
+    const result = await getPublicStorefront("acme-vet");
+    expect(result?.timezone).toBe("America/New_York");
+  });
+
+  it("never falls back to Europe/London when no Operating Hours timezone is set", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
+      ...mockStorefront,
+      timezone: "Europe/London",
+    } as never);
+    vi.mocked(prisma.businessProfile.findFirst).mockResolvedValue(null as never);
+
+    const result = await getPublicStorefront("acme-vet");
+    expect(result?.timezone).toBe("America/Chicago");
   });
 });
