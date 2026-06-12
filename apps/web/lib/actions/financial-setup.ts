@@ -30,6 +30,25 @@ export async function applyFinancialProfile(
     });
   }
 
+  // Write OrganizationTaxProfile — single-org install, take first org
+  const org = await prisma.organization.findFirst({ select: { id: true } });
+  if (org) {
+    await prisma.organizationTaxProfile.upsert({
+      where: { organizationId: org.id },
+      create: {
+        organizationId: org.id,
+        setupMode: "wizard",
+        setupStatus: "draft",
+        taxModel: overrides?.vatRegistered ? "vat" : "none",
+      },
+      update: {
+        setupMode: "wizard",
+        setupStatus: "draft",
+        taxModel: overrides?.vatRegistered ? "vat" : "none",
+      },
+    });
+  }
+
   // Seed dunning sequence if the profile enables it
   if (profile.dunningEnabled) {
     await seedDefaultDunningSequence();
@@ -50,7 +69,7 @@ export async function getFinancialSetupStatus(): Promise<{
     return { isConfigured: false, baseCurrency: "USD", dunningActive: false };
   }
 
-  const isConfigured = settings.updatedAt > settings.createdAt;
+  const isConfigured = !!settings.appliedProfileSlug;
 
   const dunningSequence = await prisma.dunningSequence.findFirst({
     where: { isDefault: true, isActive: true },

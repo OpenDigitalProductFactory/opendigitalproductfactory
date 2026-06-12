@@ -514,6 +514,40 @@ const PROFILES: Record<string, FinancialProfileSeed> = {
     purchaseOrdersEnabled: true,
     chartOfAccountsSeed: LEDGER_FRAGMENTS_INTERNAL["fund-accounting"],
   },
+
+  software_platform: {
+    archetypeCategory: "software-platform",
+    displayName: "Software Platform (SaaS)",
+    defaultPaymentTerms: "Net 30",
+    defaultCurrency: "USD",
+    vatRegistered: false,
+    defaultTaxRate: 0,
+    dunningEnabled: true,
+    dunningStyle: "standard",
+    recurringBillingEnabled: true,
+    billingPatternProfile: SUBSCRIPTION_PATTERN,
+    invoiceTemplateStyle: "professional",
+    expenseCategories: [
+      "Cloud Infrastructure & Hosting",
+      "Software Subscriptions & SaaS Tools",
+      "R&D Salaries & Contractors",
+      "Customer Acquisition",
+      "Security & Compliance",
+      "Legal & Professional Fees",
+      "General & Administrative",
+    ],
+    purchaseOrdersEnabled: false,
+    chartOfAccountsSeed: [
+      { code: "4000", name: "Subscription Revenue (MRR)", type: "revenue" },
+      { code: "4010", name: "Usage-Based Revenue", type: "revenue" },
+      { code: "4020", name: "Professional Services Revenue", type: "revenue" },
+      { code: "4030", name: "Deferred Revenue", type: "liability" },
+      { code: "5000", name: "Cloud Infrastructure (COGS)", type: "expense" },
+      { code: "5010", name: "R&D Expenses", type: "expense" },
+      { code: "5020", name: "Sales & Marketing", type: "expense" },
+      { code: "5030", name: "General & Administrative", type: "expense" },
+    ],
+  },
 };
 
 // ─── Exported functions ───────────────────────────────────────────────────────

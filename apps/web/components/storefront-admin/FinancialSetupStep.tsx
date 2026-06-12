@@ -13,6 +13,21 @@ type Props = {
   onComplete: () => void;
 };
 
+// ─── Locale-aware currency default ───────────────────────────────────────────
+
+function getLocaleFallbackCurrency(): string {
+  if (typeof navigator === "undefined") return "USD";
+  const lang = (navigator.language ?? "").toLowerCase();
+  if (lang.startsWith("en-gb") || lang.startsWith("en-ie")) return "GBP";
+  if (lang.startsWith("en-au") || lang.startsWith("en-nz")) return "AUD";
+  if (lang.startsWith("en-ca")) return "CAD";
+  if (
+    lang.startsWith("de") || lang.startsWith("fr") || lang.startsWith("it") ||
+    lang.startsWith("nl") || lang.startsWith("es-es") || lang.startsWith("pt-pt")
+  ) return "EUR";
+  return "USD";
+}
+
 // ─── FinancialSetupStep ────────────────────────────────────────────────────────
 
 export function FinancialSetupStep({ archetypeSlug, archetypeName, suggestedCurrency, onComplete }: Props) {
@@ -20,7 +35,9 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, suggestedCurr
   const profile = getFinancialProfile(archetypeSlug);
 
   const [vatRegistered, setVatRegistered] = useState<boolean>(profile?.vatRegistered ?? false);
-  const [baseCurrency, setBaseCurrency] = useState<string>(suggestedCurrency ?? profile?.defaultCurrency ?? "GBP");
+  const [baseCurrency, setBaseCurrency] = useState<string>(
+    suggestedCurrency ?? profile?.defaultCurrency ?? getLocaleFallbackCurrency(),
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
