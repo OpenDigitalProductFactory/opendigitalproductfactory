@@ -28,14 +28,15 @@ COPY pnpm-workspace.yaml tsconfig.base.json .gitignore ./
 COPY scripts/set-hooks-path.mjs ./scripts/
 COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
+COPY docs/professions/ ./docs/professions/
 COPY docker-entrypoint.sh ./
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @dpf/db exec prisma generate
-# Node 24 Alpine + Turbopack can fail Linux image builds with duplicate asset
-# emission while the same source builds cleanly on the host. Use Next's
-# framework-supported webpack builder in the image until that Turbopack path is
-# stable again.
-RUN NODE_OPTIONS="--max-old-space-size=4096" NEXT_TELEMETRY_DISABLED=1 pnpm --filter web exec next build --webpack
+# Next.js 16.2.7 minify-webpack-plugin crashes with "_webpack.WebpackError is
+# not a constructor" when --webpack is forced. Use the default builder (Turbopack
+# in Next 16, gated in next.config.mjs) which does not trigger the broken plugin.
+# Re-evaluate --webpack on next version bump.
+RUN NODE_OPTIONS="--max-old-space-size=4096" NEXT_TELEMETRY_DISABLED=1 pnpm --filter web exec next build
 
 # ─── Stage 4: init (build source for migrations, seed, Prisma client) ─────────
 FROM deps AS init
@@ -69,6 +70,10 @@ COPY docs/user-guide/ ./docs/user-guide/
 # Trailing slash + glob-friendly path matches the founder-kernel layout
 # (docs/founder-kernel/{manifest.json,wiki/,raw-sources/,embeddings.jsonl,…}).
 COPY docs/founder-kernel/ ./docs/founder-kernel/
+# Profession registry — JSON data consumed at build time by
+# lib/decision-perspective/resolve-profession-profile.ts (WSID/EP-WSID corpus).
+# Without this COPY the Next.js build fails: "Cannot find module docs/professions/registry.json".
+COPY docs/professions/ ./docs/professions/
 # IT4IT functional criteria workbook is read at seed time by
 # seed-ea-reference-models.ts. The rest of docs/Reference/ is large
 # binary content not needed in the image.

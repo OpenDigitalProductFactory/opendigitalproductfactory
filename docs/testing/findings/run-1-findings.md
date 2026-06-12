@@ -200,7 +200,8 @@ Each inquiry is badged "Customer-zero signal".
 | Minor | 5 | R1-001, R1-P-001, R1-P-002, R1-B-003, R1-B-004, R1-K-002 |
 | Pass / Positive | 5 | R1-002, R1-B-005, R1-G-002, R1-K-003, R1-K-004 |
 
-**Top 3 fix targets for plumber archetype:**
+**Top fix targets for plumber archetype:**
 1. **GBP default currency** (R1-005) — every US plumber starts with the wrong currency; one-line profile fix
 2. **DPF meta-language in job requests inbox** (R1-F-001) — confuses non-technical operators; must be suppressed for non-platform archetypes
 3. **Self-upgrade terminal fallback** (R1-U-001) — non-technical operators cannot upgrade; server action must handle the no-stamp case without CLI
+4. **New enquiry invisible on workspace home** (R1-K-001) — operators miss incoming customer work; needs a notification/attention feed hook on inquiry creation
