@@ -179,16 +179,29 @@ Each inquiry is badged "Customer-zero signal".
 
 ---
 
+## Phase U — Self-Upgrade (inter-run, discovered 2026-06-12)
+
+### AUDIT-R1-U-001 · Critical · Self-upgrade surfaces terminal command as only resolution path for non-technical operators
+
+**Observed**: Self-Upgrade page shows warning: "This image wasn't stamped with a git commit, so it can't be compared to the upgrade target. Published releases are stamped automatically by CI; for a local build, rebuild with `scripts/build-images.sh` (`build-images.ps1` on Windows)."  
+**Expected**: The "Upgrade now" button should detect the missing commit stamp and trigger a server-side image rebuild automatically — no terminal, no operator awareness of Docker.  
+**Root cause**: The self-upgrade system compares embedded git commit hashes in Docker images. Local builds don't stamp this hash via CI. The UI falls back to surfacing the manual CLI fix instead of handling it server-side.  
+**Impact**: Any non-technical operator running a local install who tries to upgrade via the UI will see a terminal command they cannot execute. This blocks upgrades entirely for the target operator persona.  
+**Fix direction**: `/ops/self-upgrade` server action should detect the no-stamp case and invoke the equivalent of `build-images.ps1` as a server-side background job. The UI should show a progress indicator, not a terminal instruction.
+
+---
+
 ## Summary — Run 1 (Plumber / Riverside Plumbing Solutions)
 
 | Severity | Count | IDs |
 |---|---|---|
-| Critical | 2 | R1-005, R1-F-001 |
+| Critical | 3 | R1-005, R1-F-001, R1-U-001 |
 | Important | 8 | R1-003, R1-004, R1-006, R1-007, R1-K7-001, R1-B-001, R1-B-002, R1-F-002, R1-F-003, R1-G-001, R1-K-001 |
-| Minor | 5 | R1-001, R1-003, R1-P-001, R1-P-002, R1-B-003, R1-B-004, R1-K-002 |
+| Minor | 5 | R1-001, R1-P-001, R1-P-002, R1-B-003, R1-B-004, R1-K-002 |
 | Pass / Positive | 5 | R1-002, R1-B-005, R1-G-002, R1-K-003, R1-K-004 |
 
-**Top 3 fix targets for plumber archetype:**
+**Top fix targets for plumber archetype:**
 1. **GBP default currency** (R1-005) — every US plumber starts with the wrong currency; one-line profile fix
 2. **DPF meta-language in job requests inbox** (R1-F-001) — confuses non-technical operators; must be suppressed for non-platform archetypes
-3. **New enquiry invisible on workspace home** (R1-K-001) — operators miss incoming customer work; needs a notification/attention feed hook on inquiry creation
+3. **Self-upgrade terminal fallback** (R1-U-001) — non-technical operators cannot upgrade; server action must handle the no-stamp case without CLI
+4. **New enquiry invisible on workspace home** (R1-K-001) — operators miss incoming customer work; needs a notification/attention feed hook on inquiry creation
