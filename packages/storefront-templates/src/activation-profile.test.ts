@@ -283,6 +283,36 @@ describe("existing archetype regression (governance axis is inert)", () => {
     }
   });
 
+  it("the equipment-rental and self-storage archetypes derive the rental capability set from reservation-and-return", () => {
+    for (const id of ["equipment-rental", "self-storage"]) {
+      const archetype = ALL_ARCHETYPES.find((a) => a.archetypeId === id);
+      expect(archetype?.activationProfile, id).toBeDefined();
+      const profile = readActivationProfile(archetype?.activationProfile);
+      expect(profile?.axes.provisioning, id).toBe("reservation-and-return");
+      expect(getCapabilityApplicability(profile, "rental-fleet"), id).toBe("required");
+      expect(getCapabilityApplicability(profile, "rental-agreements"), id).toBe("required");
+      expect(getCapabilityApplicability(profile, "asset-pool"), id).toBe("required");
+      // Commercial rental — no member machinery.
+      expect(getCapabilityApplicability(profile, "member-governance"), id).toBe("not-applicable");
+    }
+  });
+
+  it("the agricultural cooperative derives BOTH the member-owned set and the rental set (the §10.1 intersection)", () => {
+    const coop = ALL_ARCHETYPES.find((a) => a.archetypeId === "agricultural-cooperative");
+    expect(coop?.activationProfile).toBeDefined();
+    const profile = readActivationProfile(coop?.activationProfile);
+
+    expect(profile?.axes.governance).toBe("member-owned");
+    expect(profile?.axes.provisioning).toBe("reservation-and-return");
+    // member-owned machinery
+    expect(getCapabilityApplicability(profile, "member-governance")).toBe("required");
+    expect(getCapabilityApplicability(profile, "membership-eligibility")).toBe("required");
+    expect(activationHasCapability(profile, "member-equity")).toBe(true);
+    // rental machinery
+    expect(getCapabilityApplicability(profile, "rental-fleet")).toBe("required");
+    expect(getCapabilityApplicability(profile, "asset-pool")).toBe("required");
+  });
+
   it("the law-enforcement archetype derives public-body governance (with records requests) and no member machinery", () => {
     const police = ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === "law-enforcement-agency");
     expect(police?.activationProfile).toBeDefined();

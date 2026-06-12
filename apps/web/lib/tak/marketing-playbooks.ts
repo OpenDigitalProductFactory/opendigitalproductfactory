@@ -64,6 +64,30 @@ const CATEGORY_PLAYBOOKS: Record<string, MarketingPlaybook> = {
     agentSkills: ["Draft rate announcement", "Financial education article", "Branch notice", "Fraud awareness alert"],
   },
 
+  "asset-rental": {
+    primaryGoal: "Keep the rentable pool utilized — drive reservations, fill off-peak, and recover repeat renters",
+    stakeholders: "Renters (contractors, event organizers, households), members (co-op), local trade networks",
+    campaignTypes: [
+      "Seasonal availability pushes (event season, harvest, moving season)",
+      "Off-peak / midweek promotions to lift utilization",
+      "New-equipment-in-the-pool announcements",
+      "Reservation reminders and return-due nudges",
+      "Deposit/damage-policy and how-it-works explainers",
+      "Repeat-renter loyalty and membership offers",
+      "Last-minute availability alerts for high-demand items",
+    ],
+    contentTone: "Practical, availability-forward, trustworthy about condition and deposits",
+    keyMetrics: [
+      "Asset-utilization %",
+      "Reservation conversion rate",
+      "Turnaround time between rentals",
+      "Overdue-return rate",
+      "Repeat-renter rate",
+    ],
+    ctaLanguage: ["Reserve now", "Check availability", "Book your dates", "Join the waitlist"],
+    agentSkills: ["Draft availability push", "Off-peak promotion", "Return-due reminder", "New-equipment announcement"],
+  },
+
   "public-sector": {
     primaryGoal: "Resident awareness, participation, and trust through transparent civic communication",
     stakeholders: "Residents, council members, town staff, local businesses, neighboring jurisdictions",
