@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { WeeklySchedule, DaySchedule } from "@/lib/operating-hours-types";
 
 const DAY_ORDER = [
@@ -26,6 +26,13 @@ export function OperatingHoursEditor({ defaultSchedule, timezone, onSave, saving
   const [saved, setSaved] = useState(false);
 
   const busy = externalSaving || isPending;
+
+  // Auto-dismiss the success toast a few seconds after a save.
+  useEffect(() => {
+    if (!saved) return;
+    const t = setTimeout(() => setSaved(false), 3000);
+    return () => clearTimeout(t);
+  }, [saved]);
 
   function updateDay(day: string, patch: Partial<DaySchedule>) {
     setSchedule((prev) => ({
@@ -145,16 +152,35 @@ export function OperatingHoursEditor({ defaultSchedule, timezone, onSave, saving
         >
           {busy ? "Saving..." : "Save Operating Hours"}
         </button>
-        {saved && !busy && (
-          <span
-            className="text-xs font-medium"
-            style={{ color: "var(--dpf-success, #22c55e)" }}
-            role="status"
-          >
-            ✓ Saved
-          </span>
-        )}
       </div>
+
+      {/* Success toast — auto-dismissing confirmation that the save persisted. */}
+      {saved && !busy && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: "fixed",
+            right: 24,
+            bottom: 24,
+            zIndex: 60,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "10px 16px",
+            borderRadius: 8,
+            border: "1px solid var(--dpf-border)",
+            background: "var(--dpf-surface-2)",
+            color: "var(--dpf-text)",
+            fontSize: 13,
+            fontWeight: 600,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
+          }}
+        >
+          <span style={{ color: "var(--dpf-success, #22c55e)" }}>✓</span>
+          Operating hours saved
+        </div>
+      )}
     </div>
   );
 }

@@ -26,6 +26,22 @@ describe("archetype catalog", () => {
     expect(unique.size).toBe(ids.length);
   });
 
+  it("personal-trainer shares the scheduling/operating-hours setup of the other beauty booking archetypes", () => {
+    // AUDIT-R2-PT-P-001 alleged the personal-trainer wizard skips the Operating
+    // Hours step. That step is driven by the shared scheduling/activation config,
+    // not archetype-specific code; this guards against personal-trainer silently
+    // diverging from its siblings.
+    const beautyBooking = ALL_ARCHETYPES.filter(
+      (a) => a.category === "beauty-personal-care" && a.ctaType === "booking",
+    );
+    expect(beautyBooking.length).toBeGreaterThan(1);
+    const pt = beautyBooking.find((a) => a.archetypeId === "personal-trainer");
+    expect(pt, "personal-trainer should be a beauty-personal-care booking archetype").toBeTruthy();
+    const reference = beautyBooking.find((a) => a.archetypeId !== "personal-trainer")!;
+    expect(pt!.schedulingDefaults).toEqual(reference.schedulingDefaults);
+    expect(pt!.activationProfile).toEqual(reference.activationProfile);
+  });
+
   it("hero section always comes first", () => {
     for (const a of ALL_ARCHETYPES) {
       const sorted = [...a.sectionTemplates].sort((x, y) => x.sortOrder - y.sortOrder);
