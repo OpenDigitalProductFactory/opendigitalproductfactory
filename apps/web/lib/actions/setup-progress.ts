@@ -104,6 +104,19 @@ export async function advanceStep(
   const context = { ...(progress.context as SetupContext), ...contextUpdate };
   const currentIdx = SETUP_STEPS.indexOf(progress.currentStep as SetupStep);
 
+  // The storefront step is only "complete" once the storefront actually exists.
+  // The setup overlay's Continue must not advance past it (to operating-hours /
+  // platform-development / ...) while StorefrontConfig is still null — otherwise
+  // the operator finishes onboarding with no portal (R1-CS-A-003). Completing the
+  // embedded SetupWizard creates the config; until then, Continue is a no-op that
+  // keeps the user on the storefront setup.
+  if (progress.currentStep === "storefront") {
+    const storefront = await prisma.storefrontConfig.findFirst({ select: { id: true } });
+    if (!storefront) {
+      return { ...progress, blocked: "storefront-required" as const };
+    }
+  }
+
   steps[progress.currentStep] = "completed";
 
   const nextIdx = currentIdx + 1;
