@@ -9,6 +9,12 @@ vi.mock("@dpf/db", () => {
         count: vi.fn(() => 0),
         findFirst: vi.fn(() => null),
       },
+      // The storefront step guard (advanceStep) checks that a StorefrontConfig
+      // exists before advancing. This integration walk simulates a completed
+      // storefront setup, so the config is present and the sequence proceeds.
+      storefrontConfig: {
+        findFirst: vi.fn(() => ({ id: "sf-1" })),
+      },
       platformSetupProgress: {
         findFirst: vi.fn(() => null),
         findUniqueOrThrow: vi.fn((args: any) => {
