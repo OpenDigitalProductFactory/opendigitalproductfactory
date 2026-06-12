@@ -1,7 +1,13 @@
 import { prisma } from "@dpf/db";
 
+// Bill statuses that represent a committed cost not yet paid. Surfaced on the
+// P&L as a clearly-labelled "draft / pending" figure so a draft bill is never
+// silently invisible (it stays out of the realised net-profit number, which
+// remains paid-only and accounting-correct).
+const PENDING_BILL_STATUSES = ["draft", "awaiting_approval", "approved", "partially_paid"];
+
 export async function getProfitAndLoss(startDate: Date, endDate: Date) {
-  const [revenueResult, costResult, expenseResult] = await Promise.all([
+  const [revenueResult, costResult, expenseResult, pendingBillResult] = await Promise.all([
     // Revenue: sum of totalAmount from paid invoices in period
     prisma.invoice.aggregate({
       where: { status: "paid", paidAt: { gte: startDate, lte: endDate } },
@@ -17,6 +23,13 @@ export async function getProfitAndLoss(startDate: Date, endDate: Date) {
     // Expenses: sum of totalAmount from paid expense claims in period
     prisma.expenseClaim.aggregate({
       where: { status: "paid", paidAt: { gte: startDate, lte: endDate } },
+      _sum: { totalAmount: true },
+      _count: true,
+    }),
+    // Draft / pending bills in period (by issue date): visible but NOT included
+    // in realised net profit.
+    prisma.bill.aggregate({
+      where: { status: { in: PENDING_BILL_STATUSES }, issueDate: { gte: startDate, lte: endDate } },
       _sum: { totalAmount: true },
       _count: true,
     }),
@@ -37,6 +50,8 @@ export async function getProfitAndLoss(startDate: Date, endDate: Date) {
     invoiceCount: revenueResult._count,
     billCount: costResult._count,
     expenseCount: expenseResult._count,
+    pendingBillTotal: Number(pendingBillResult._sum.totalAmount ?? 0),
+    pendingBillCount: pendingBillResult._count,
   };
 }
 
