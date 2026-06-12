@@ -2927,6 +2927,25 @@ These issues are visible to the team immediately and survive all resets. After t
 
 If a `[C]`-marked step (Section 2a / Phase P) fails in Runs 1–16 and it passed in Run 0, that is a **regression** — log with severity `critical` and the note "regression vs. Run 0" and open a GitHub issue immediately. Do not continue the current run until the regression is triaged (it will affect all remaining runs if it is a platform-wide failure).
 
+### 8f. Closing GitHub Issues when a fix PR merges
+
+The "do not close during audit" rule in Section 8b applies only while the audit is in progress and issues are waiting for a pg_dump restore + portal BI filing. Once a fix PR merges to `main`, the corresponding GitHub Issue **must be closed in the same session** — do not let resolved issues accumulate as false open signal.
+
+**Closing process (applies whenever a fix PR merges):**
+
+1. For each finding resolved by the PR, close the GitHub Issue with a comment:
+   ```
+   Fixed in #<PR number>: <one-line description of what changed>.
+   ```
+2. If the fix requires a portal rebuild to take effect (e.g. Dockerfile change, seed data change), add a note:
+   ```
+   Requires local image rebuild to appear on a running install — pending AUDIT-R1-U-001 resolution.
+   ```
+3. If a finding was a process issue (not a code bug), close it with a note describing which process change addressed it.
+4. After closing, verify `gh issue list --state open` shows only issues that are genuinely unresolved.
+
+**Who does this:** the session that merges or reviews the fix PR. Not deferred — stale open issues mislead future sessions about what is actually broken.
+
 ### 8e. Known pre-existing gaps (do not refile)
 
 - **BI-FS-001**: HVAC/AC Contractor Storefront Archetype (Run 1 — facilities-maintenance)
