@@ -27,6 +27,13 @@ import {
   deleteRow as svcDeleteRow,
   getTableGridData as svcGetTableGridData,
 } from "@/lib/workbooks/workbook-service";
+import {
+  type PlatformUser,
+  type ReferenceTarget,
+  listReferenceTargets,
+  searchPlatformReferences,
+  resolvePlatformReference,
+} from "@/lib/workbooks/platform-tables";
 import type { CellValue, ColumnDefinition, FieldType, FieldConfig } from "@/lib/workbooks/types";
 
 export type ActionResult<T = void> =
@@ -190,6 +197,54 @@ export async function getTableGridDataAction(tableId: string): Promise<
   try {
     const user = await requireUser("view_workbooks");
     return { ok: true, data: await svcGetTableGridData(user, tableId) };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// ── Reference columns (Phase 2) ─────────────────────────────────────────────
+// A reference column points a workbook cell at a live platform entity. These
+// actions back the add-column target picker and the in-cell typeahead. Auth
+// requires view_workbooks; each target re-checks its own view capability.
+
+async function requirePlatformUser(): Promise<PlatformUser> {
+  const session = await auth();
+  const user = session?.user;
+  if (!user?.id) throw new WorkbookError("Not authenticated", 401);
+  if (!can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "view_workbooks")) {
+    throw new WorkbookError("You do not have permission to use Workbooks", 403);
+  }
+  return { id: user.id, platformRole: user.platformRole, isSuperuser: user.isSuperuser };
+}
+
+export async function listReferenceTargetsAction(): Promise<ActionResult<ReferenceTarget[]>> {
+  try {
+    const user = await requirePlatformUser();
+    return { ok: true, data: listReferenceTargets(user) };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function searchReferencesAction(
+  referenceType: string,
+  query: string,
+): Promise<ActionResult<{ id: string; label: string }[]>> {
+  try {
+    const user = await requirePlatformUser();
+    return { ok: true, data: await searchPlatformReferences(user, referenceType, query) };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function resolveReferenceAction(
+  referenceType: string,
+  referenceId: string,
+): Promise<ActionResult<{ id: string; label: string } | null>> {
+  try {
+    const user = await requirePlatformUser();
+    return { ok: true, data: await resolvePlatformReference(user, referenceType, referenceId) };
   } catch (e) {
     return fail(e);
   }

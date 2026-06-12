@@ -7,6 +7,8 @@
 import type { ReactNode } from "react";
 import type { RenderEditCellProps, RenderCellProps } from "react-data-grid";
 import type { CellValue, SelectOption, ReferenceValue } from "@/lib/workbooks/types";
+import { ReferenceTypeahead } from "@/components/ui/ReferenceTypeahead";
+import { searchReferencesAction } from "@/lib/actions/workbooks";
 
 /** Flat row shape react-data-grid consumes: rowId + a value per columnId. */
 export type GridRowData = { rowId: string } & Record<string, CellValue>;
@@ -99,6 +101,49 @@ export function makeSelectEditor(options: SelectOption[]) {
           </option>
         ))}
       </select>
+    );
+  };
+}
+
+/**
+ * Reference editor: an in-cell typeahead over a live platform entity. Searching
+ * proxies through searchReferencesAction (capability-gated server-side); selecting
+ * commits a ReferenceValue and closes the editor. The dropdown renders inside the
+ * editor's DOM subtree, so react-data-grid does not treat a result click as an
+ * outside-click that cancels the edit.
+ */
+export function makeReferenceEditor(referenceType: string) {
+  return function ReferenceEditor({
+    row,
+    column,
+    onRowChange,
+  }: RenderEditCellProps<GridRowData>): ReactNode {
+    const current = row[column.key];
+    const value =
+      current && typeof current === "object" && !Array.isArray(current) && "referenceId" in current
+        ? {
+            id: (current as ReferenceValue).referenceId,
+            label: (current as ReferenceValue).label ?? (current as ReferenceValue).referenceId,
+          }
+        : null;
+    return (
+      <div className="dpf-grid-editor-reference">
+        <ReferenceTypeahead
+          autoFocus
+          placeholder="Search…"
+          value={value}
+          onSearch={async (q) => {
+            const res = await searchReferencesAction(referenceType, q);
+            return res.ok ? res.data : [];
+          }}
+          onSelect={(item) => {
+            onRowChange(
+              { ...row, [column.key]: { referenceId: item.id, referenceType, label: item.label } },
+              true,
+            );
+          }}
+        />
+      </div>
     );
   };
 }

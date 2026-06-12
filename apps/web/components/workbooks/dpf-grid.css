@@ -62,3 +62,17 @@
   outline-offset: -2px;
   box-sizing: border-box;
 }
+
+/* Reference typeahead editor: fill the cell; let the floating result list overflow. */
+.dpf-grid-editor-reference {
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.dpf-grid-editor-reference input {
+  block-size: 100%;
+  border: none;
+  border-radius: 0;
+  outline: 2px solid var(--dpf-accent);
+  outline-offset: -2px;
+}

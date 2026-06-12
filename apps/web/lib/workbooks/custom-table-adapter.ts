@@ -18,6 +18,7 @@ import {
   type CellValue,
   type FieldType,
   type FieldConfig,
+  type ReferenceValue,
   type DataSourceFilter,
   type SortSpec,
   type Pagination,
@@ -30,7 +31,38 @@ import {
   type CellStorage,
 } from "./cell-validation";
 import { applyFilters, applySort, paginate } from "./grid-query";
+import { resolveReferenceLabels, referenceKey } from "./reference-resolver";
 import { genSemanticId } from "./ids";
+
+function asReference(value: CellValue): ReferenceValue | null {
+  if (value && typeof value === "object" && !Array.isArray(value) && "referenceId" in value) {
+    return value as ReferenceValue;
+  }
+  return null;
+}
+
+/** Hydrate live display labels for every reference cell (labels are not persisted). */
+async function hydrateReferenceLabels(rows: GridRow[]): Promise<void> {
+  const refs: { referenceType: string; referenceId: string }[] = [];
+  for (const row of rows) {
+    for (const value of Object.values(row.cells)) {
+      const ref = asReference(value);
+      if (ref?.referenceId && ref.referenceType) {
+        refs.push({ referenceType: ref.referenceType, referenceId: ref.referenceId });
+      }
+    }
+  }
+  if (refs.length === 0) return;
+  const labels = await resolveReferenceLabels(refs);
+  for (const row of rows) {
+    for (const [colId, value] of Object.entries(row.cells)) {
+      const ref = asReference(value);
+      if (!ref?.referenceId || !ref.referenceType) continue;
+      const label = labels.get(referenceKey(ref.referenceType, ref.referenceId));
+      if (label) row.cells[colId] = { ...ref, label };
+    }
+  }
+}
 
 interface ColumnMeta {
   internalId: string;
@@ -116,7 +148,7 @@ class CustomTableAdapter implements DataSourceAdapter {
       orderBy: { position: "asc" },
       include: { cells: true },
     });
-    return rows.map((row) => {
+    const gridRows = rows.map((row) => {
       const cells: Record<string, CellValue> = {};
       // default every column to null so the grid renders empty cells
       for (const m of metas) cells[m.columnId] = m.fieldType === "multi_select" ? [] : null;
@@ -127,6 +159,8 @@ class CustomTableAdapter implements DataSourceAdapter {
       }
       return { rowId: row.rowId, cells };
     });
+    await hydrateReferenceLabels(gridRows);
+    return gridRows;
   }
 
   async queryRows(
