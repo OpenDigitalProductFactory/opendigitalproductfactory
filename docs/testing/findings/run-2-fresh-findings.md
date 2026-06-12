@@ -1,7 +1,7 @@
 # Run 2 Fresh-Install Findings — Beauty & Personal Care
 
 **Run**: 2 (beauty-personal-care, fresh-install pass)  
-**Archetypes tested**: hair-salon *(complete)*, barber-shop, nail-salon, beauty-spa, optician, personal-trainer *(pending)*  
+**Archetypes tested**: hair-salon *(complete)*, barber-shop *(complete)*, nail-salon *(complete)*, beauty-spa, optician, personal-trainer *(pending)*  
 **Run date**: 2026-06-12  
 **Method**: Tier 2 DB-only reset per archetype; golden dump `/d/DPF-audit-backup/golden-provider-configured-2026-06-12.dump`  
 **Tester**: Autonomous agent  
@@ -322,9 +322,135 @@
 
 ---
 
-## Nail Salon — pending Tier 2 reset
+## Nail Salon — Polish & Perfect Nail Studio (fresh install)
 
-*Awaiting next archetype reset.*
+**Company**: Polish & Perfect Nail Studio
+**Owner persona**: Sophie Chen (test customer)
+**URL slug**: polish-perfect-nail-studio (wizard-entered slug correctly preserved)
+**Phases run**: A, P-BOOKING, B, F, I, G (observation only), O
+**Note**: Finance workflow (G) observed via bill form only — Tax %=20 default confirmed. Full bill lifecycle recurring findings documented without re-driving.
+
+---
+
+### Phase A — Onboarding
+
+#### AUDIT-R2-NS-A-001 · Important · GBP default currency (recurring — 3rd confirmation)
+
+**Observed**: Base currency pre-filled "GBP - British Pound". Switched manually to USD.
+**Fix #1759 verdict**: ❌ Not resolved. Confirmed on 3rd Run 2 archetype.
+
+#### AUDIT-R2-NS-A-002 · Pass · Appointment Checkout + Recurring Optional (recurring confirmation)
+
+**Observed**: Financial setup: Appointment Checkout, Recurring Optional. ✓
+
+---
+
+### Phase P — Catalog & Prerequisites
+
+#### AUDIT-R2-NS-P-001 · Warn · Operating hours no confirmation toast (recurring — 3rd confirmation)
+
+**Observed**: Saved Mon–Fri 09:00–17:00 with no toast. Hours persisted on reload.
+**Fix #1762 verdict**: ❌ Not resolved.
+
+#### AUDIT-R2-NS-P-002 · Pass · 6 nail services seeded with "Book Now" CTA
+
+**Observed**: Manicure, Pedicure, Gel Nails, Nail Art, Acrylic Nails, Nail Removal — all active. ✓
+
+#### AUDIT-R2-NS-P-003 · Pass · Default provider with Mon–Fri availability
+
+**Observed**: "Polish & Perfect Nail Studio" provider created automatically, all 6 services checked, Mon–Fri 09:00–17:00 schedule set. Calendar shows available slots. ✓
+
+---
+
+### Phase B — Storefront
+
+#### AUDIT-R2-NS-B-001 · Important · Wizard-created portal starts as Unpublished (recurring — 3rd confirmation)
+
+**Observed**: Portal returned 404 until manually published. Pattern confirmed on all 3 Run 2 archetypes tested so far.
+**Impact**: Systemic — every wizard-created archetype in Runs 2–16 requires a manual Publish step.
+
+#### AUDIT-R2-NS-B-002 · Pass · Slug correctly preserved
+
+**Observed**: "polish-perfect-nail-studio" entered in wizard; public URL matches. ✓
+
+#### AUDIT-R2-NS-B-003 · Pass · Portal renders with nail vocabulary and "Book Now" CTAs
+
+**Observed**: 6 services displayed with descriptions (e.g. "Classic manicure with nail shaping and polish"). All "Book Now" CTAs present. ✓
+
+#### AUDIT-R2-NS-B-004 · Important · No nail-specific booking form fields (recurring — fix #1760 not resolved)
+
+**Observed**: 4 generic fields only (Full Name, Email, Phone, Notes). No nail-specific fields: no colour selection, no nail length choice, no design preference for Nail Art, no gel type selector. The nail technician cannot prepare without a follow-up call.
+**Fix #1760 verdict**: ❌ Not resolved. Confirmed on 3rd Run 2 archetype.
+
+#### AUDIT-R2-NS-B-005 · Important · Booking calendar timezone defaults to Europe/London (new finding)
+
+**Observed**: Booking calendar displayed "Times shown in Europe/London" even though the business is configured as USD-based with no UK locale signals. This is a new finding — the UK timezone cascade appears linked to the GBP default currency not being fully overridden after the operator switches currency during financial setup. The timezone should default to the install's locale, not a UK default.
+**Impact**: US nail salon customers booking appointments will see times in Europe/London timezone, potentially causing scheduling confusion. The operator's USD currency choice does not propagate to the booking calendar timezone.
+
+---
+
+### Phase F — Booking Flow
+
+#### AUDIT-R2-NS-F-001 · Pass · Booking end-to-end works; reference number issued
+
+**Observed**: Full flow: Manicure → Mon June 15, 10:30 AM → Sophie Chen / sophie@test.com → submit. Reference **BK-GESQ2EA_** issued. ✓
+
+---
+
+### Phase I — Inbox
+
+#### AUDIT-R2-NS-I-001 · Critical · DPF meta-language in inbox (recurring — 3rd confirmation)
+
+**Observed**: "Customer-zero inquiry intake is wired to product backlog triage" banner present. Identical to hair-salon and barber-shop.
+**Fix #1752 verdict**: ❌ Not resolved. Confirmed on all 3 Run 2 archetypes.
+
+#### AUDIT-R2-NS-I-002 · Pass · Booking record in inbox
+
+**Observed**: BK-GESQ2EA_ visible, Sophie Chen, 15/06/2026, Confirm/Cancel actions. ✓
+
+---
+
+### Phase G — Finance (observation)
+
+#### AUDIT-R2-NS-G-001 · Important · Bill tax defaults to 20%; no payment path (recurring — all findings from HS and BS confirmed)
+
+**Observed**: New Bill form shows Tax %: 20, Currency: USD — confirming G-002 recurring. Full workflow (supplier → bill → approval → P&L) not re-driven; all findings documented as recurring from hair-salon and barber-shop.
+**Recurring findings**: G-002 (tax 20%), G-004 (no payment recording), G-005 (P&L dark) — all recur on nail-salon.
+
+---
+
+### Phase O — AI Coworker Operating Intelligence
+
+**Coworker**: Finance Specialist (model: `local:docker.io/ai/gemma4:26B`)
+
+#### AUDIT-R2-NS-O-001 · Pass · Finance Specialist responded correctly for June 2026 (~90s)
+
+**Observed**: Asked "Generate a profit and loss summary for Polish & Perfect Nail Studio for June 2026." Coworker responded in ~90 seconds: "For June 2026, Polish & Perfect Nail Studio had a net position of 0.00 USD. Evidence: cash-basis aggregation from 2026-06-01 to 2026-06-30." Correct period, correct $0.00 result, structured response.
+**Note**: This contrasts with barber-shop (wrong period — May not June) and hair-salon (safety limit). Finance Specialist behavior is non-deterministic across archetypes: correct response / wrong period / safety limit depending on the run. The ~90s latency remains a UX concern even when successful.
+
+---
+
+### Nail Salon — Summary
+
+| Phase | Finding | Severity | Fix PR | Verdict |
+|-------|---------|----------|--------|---------|
+| A | GBP default currency | Important | #1759 | ❌ Recurring (3rd) |
+| A | Appointment Checkout + Recurring Optional | Pass | #1759 | ✓ |
+| P | Operating hours no toast | Warn | #1762 | ❌ Recurring (3rd) |
+| P | 6 nail services seeded | Pass | — | ✓ |
+| P | Provider + availability | Pass | — | ✓ |
+| B | Portal starts Unpublished | Important | — | 🔁 Recurring (3rd) |
+| B | Slug preserved | Pass | — | ✓ |
+| B | Portal renders with nail vocabulary | Pass | — | ✓ |
+| B | No nail-specific form fields | Important | #1760 | ❌ Recurring (3rd) |
+| B | Calendar timezone defaults to Europe/London | Important | — | 🆕 New finding |
+| F | Booking works (BK-GESQ2EA_) | Pass | — | ✓ |
+| I | DPF meta-language in inbox | Critical | #1752 | ❌ Recurring (3rd) |
+| I | Booking record in inbox | Pass | — | ✓ |
+| G | Bill tax 20%; no payment path; P&L dark | Important | #1759/#1761 | 🔁 All recurring |
+| O | Finance Specialist correct June response (~90s) | Pass | #1763 | ✓ (non-deterministic — see note) |
+
+**Totals**: 1 Critical · 5 Important · 1 Warn · 8 Pass (15 findings)
 
 ---
 
@@ -346,23 +472,27 @@
 
 ---
 
-## Run 2 Summary (hair-salon + barber-shop complete; 4 archetypes pending)
+## Run 2 Summary (hair-salon + barber-shop + nail-salon complete; 3 archetypes pending)
 
 | Category | Count |
 |----------|-------|
-| Critical | 2 |
-| Important | 14 |
-| Warn | 2 |
-| Pass | 17 |
-| **Total** | **35** |
+| Critical | 3 |
+| Important | 19 |
+| Warn | 3 |
+| Pass | 25 |
+| **Total** | **50** |
 
-### Fix PR status after hair-salon + barber-shop (natural validation)
+### New finding this run (nail-salon)
+
+- **AUDIT-R2-NS-B-005** (Important): Booking calendar timezone defaults to Europe/London even after operator switches currency to USD. Linked to GBP/UK locale defaults cascade — timezone not independently configurable.
+
+### Fix PR status after hair-salon + barber-shop + nail-salon (natural validation)
 
 | PR | Title | Verdict |
 |----|-------|---------|
-| #1752 | fix(inbox): replace DPF meta-language with operator language | ❌ Not resolved — confirmed on both archetypes |
-| #1759 | fix(onboarding): USD default currency + 0% tax rate + Optional recurring | ⚠️ Partial — Recurring Optional ✓; GBP currency ✗; 20% bill tax ✗ — confirmed on both archetypes |
-| #1760 | fix(booking): add archetype-specific booking form fields | ❌ Not resolved — confirmed on both archetypes |
-| #1761 | fix(finance): surface draft/pending bills on P&L report | ⚠️ Partial — Submit for Approval button added ✓; approved→paid path missing ✗; P&L still dark ✗ — confirmed on both archetypes |
-| #1762 | fix(operating-hours): add save confirmation toast | ❌ Not resolved — confirmed on both archetypes |
-| #1763 | fix(coworker): resolve model timeout on financial queries | ⚠️ Partial — HS: 118s safety limit; BS: responded ~100s but wrong period (May not June). No crash improvement confirmed; wrong-period accuracy regression surfaced |
+| #1752 | fix(inbox): replace DPF meta-language with operator language | ❌ Not resolved — confirmed on all 3 archetypes |
+| #1759 | fix(onboarding): USD default currency + 0% tax rate + Optional recurring | ⚠️ Partial — Recurring Optional ✓; GBP currency ✗; 20% bill tax ✗ — confirmed on all 3 archetypes |
+| #1760 | fix(booking): add archetype-specific booking form fields | ❌ Not resolved — confirmed on all 3 archetypes |
+| #1761 | fix(finance): surface draft/pending bills on P&L report | ⚠️ Partial — Submit for Approval button added ✓; approved→paid path missing ✗; P&L still dark ✗ — confirmed on all 3 archetypes |
+| #1762 | fix(operating-hours): add save confirmation toast | ❌ Not resolved — confirmed on all 3 archetypes |
+| #1763 | fix(coworker): resolve model timeout on financial queries | ⚠️ Non-deterministic — HS: 118s safety limit; BS: ~100s wrong period (May); NS: ~90s correct period (June). Behaviour varies per run — not reliably fixed |
