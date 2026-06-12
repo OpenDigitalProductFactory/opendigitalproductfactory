@@ -485,6 +485,40 @@ const RULES: ApplicabilityRule[] = [
     },
   },
   {
+    // Rental / shared-asset operating model (asset-rental archetypes + the
+    // agricultural shared-machinery co-op). The reservation-and-return
+    // provisioning value is the axis signal — distinct from usage-based billing
+    // alone (a municipal utility is usage-based but not a rental pool).
+    name: "reservation-and-return-rental",
+    evaluate: (axes) => {
+      if (axes.provisioning !== "reservation-and-return") return [];
+
+      return [
+        {
+          key: "rental-fleet",
+          applicability: "required",
+          reason: "Rental operators manage a pool of reusable assets with live state and availability.",
+          ownershipScopes: ["organization"],
+          isolation: "organization-scope",
+        },
+        {
+          key: "rental-agreements",
+          applicability: "required",
+          reason: "Rentals run a reserve → checkout → return & inspect → re-pool lifecycle with deposits.",
+          ownershipScopes: ["organization"],
+          isolation: "organization-scope",
+        },
+        {
+          key: "asset-pool",
+          applicability: "required",
+          reason: "Asset-utilization %, turnaround, reservation conflicts, and overdue returns are the load-bearing KPIs.",
+          ownershipScopes: ["organization"],
+          isolation: "organization-scope",
+        },
+      ];
+    },
+  },
+  {
     name: "partner-channel-from-axes",
     evaluate: (axes, portfolios) => {
       const program = derivePartnerProgramProfile(axes, portfolios);

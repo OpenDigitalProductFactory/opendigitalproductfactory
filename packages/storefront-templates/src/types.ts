@@ -1,4 +1,4 @@
-export type CtaType = "booking" | "purchase" | "inquiry" | "donation";
+export type CtaType = "booking" | "purchase" | "inquiry" | "donation" | "rental";
 
 export type PriceType =
   | "fixed" | "from" | "per-hour" | "per-session"
@@ -23,7 +23,13 @@ export type ArchetypeCategory =
   | "nonprofit-community"
   | "hoa-property-management"
   | "banking-financial-services"
-  | "public-sector";
+  | "public-sector"
+  /** Rental of a reusable pooled asset — equipment/tool hire and self-storage.
+   *  The defining value stream is reserve → hand out → use → return → inspect →
+   *  re-pool (the S4b Return & Inspect stage); see
+   *  docs/architecture/archetype-business-value-streams.md §10.1 and
+   *  docs/superpowers/specs/2026-05-29-vehicle-equipment-rental-archetype-design.md. */
+  | "asset-rental";
 
 export interface FormField {
   name: string;
@@ -66,7 +72,9 @@ export type ArchetypeModule =
   | "service-operations"
   | "projects"
   | "lifecycle-signals"
-  | "integrations";
+  | "integrations"
+  | "rental-fleet"
+  | "rental-agreements";
 
 export type ArchetypeProfileType = "standard" | "managed-service-provider";
 
@@ -123,7 +131,12 @@ export type ProvisioningModel =
   | "account-and-entitlement"
   | "account-with-kyc"
   | "device-bound"
-  | "episode-of-care";
+  | "episode-of-care"
+  /** The served party gets access by reserving a pooled asset, receiving it,
+   *  and returning it — the rental/shared-asset entitlement model. Distinct from
+   *  account-with-billing: the asset is re-pooled, not consumed. Gates the
+   *  rental-fleet / rental-agreements / asset-pool capabilities. */
+  | "reservation-and-return";
 
 export type PlatformEcosystem = "no" | "yes-marketplace" | "yes-developer";
 

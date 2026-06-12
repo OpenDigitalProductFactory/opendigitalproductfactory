@@ -13,6 +13,7 @@ export const INDUSTRY_OPTIONS = [
   { value: "hoa-property-management", label: "HOA & Property Management" },
   { value: "banking-financial-services", label: "Banking & Financial Services" },
   { value: "public-sector", label: "Public Sector & Local Government" },
+  { value: "asset-rental", label: "Rental & Shared Assets" },
 ] as const;
 
 export type IndustrySlug = (typeof INDUSTRY_OPTIONS)[number]["value"];

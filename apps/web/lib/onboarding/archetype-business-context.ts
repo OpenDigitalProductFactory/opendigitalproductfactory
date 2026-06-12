@@ -110,6 +110,18 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
     supplyChain:
       "Our physical supply chain is intentionally light — most of what we consume is software, research databases, and professional subscriptions. The discipline is in vendor selection and renewal review: a stale tool can cost more than its licence.",
   },
+  "asset-rental": {
+    missionTheme:
+      "keep a well-maintained pool of equipment available and turning so customers get what they need, when they need it",
+    businessModel:
+      "We earn by renting reusable assets for a period — reserved, handed out, used, returned, inspected, and re-pooled. Utilization, fast turnaround, and avoiding double-bookings are how the business makes money.",
+    whoWeServe:
+      "We serve renters who need an asset for a window of time, not to own it — contractors, event organizers, households, or (for a co-op) member-owners sharing a pool. The asset comes back and serves the next customer.",
+    howWeDecide:
+      "We decide for asset availability and condition: keep the pool maintained and ready, prevent reservation conflicts, recover overdue returns promptly, and protect against damage with deposits. A unit sitting idle or stuck out is lost revenue.",
+    supplyChain:
+      "Our 'inventory' is the rentable pool itself plus maintenance parts and consumables; the operational discipline is turnaround time, condition tracking, and keeping high-demand items available through peak season.",
+  },
   "public-sector": {
     missionTheme:
       "serve every resident of our community fairly, openly, and well with the public services they rely on",

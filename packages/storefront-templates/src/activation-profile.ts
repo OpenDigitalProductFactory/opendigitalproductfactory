@@ -41,6 +41,8 @@ const MODULES = new Set<ArchetypeModule>([
   "projects",
   "lifecycle-signals",
   "integrations",
+  "rental-fleet",
+  "rental-agreements",
 ]);
 
 const PROFILE_TYPES = new Set(["standard", "managed-service-provider"] as const);
@@ -94,6 +96,7 @@ const PROVISIONING_VALUES = new Set<ProvisioningModel>([
   "account-with-kyc",
   "device-bound",
   "episode-of-care",
+  "reservation-and-return",
 ]);
 const PLATFORM_VALUES = new Set<PlatformEcosystem>(["no", "yes-marketplace", "yes-developer"]);
 const PORTFOLIO_SCOPES = new Set<PortfolioScope>(["absent", "minimal", "standard", "primary"]);
