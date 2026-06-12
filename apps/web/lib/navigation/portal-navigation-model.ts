@@ -337,6 +337,26 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     },
   },
   {
+    // Rental / shared-asset value stream (BI-EEA24A34 Phase 4): the operator
+    // daily board for the reserve → checkout → return & inspect → re-pool
+    // lifecycle. Renders only for rental archetypes (equipment rental,
+    // self-storage, agricultural shared-machinery co-op) whose archetype
+    // derives the rental capabilities — any-of fleet/agreements.
+    key: "rental",
+    label: "Rental Desk",
+    path: "/rental",
+    parentPath: "/rental",
+    domain: "business",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "domain-home",
+    capabilityKey: "view_storefront",
+    orgCapabilityKey: ["rental-fleet", "rental-agreements"],
+    shellNav: {
+      sectionKey: "business",
+      description: "Reservations, checkouts, and returns for your asset pool.",
+    },
+  },
+  {
     key: "portfolio",
     label: "Portfolio",
     path: "/portfolio",
