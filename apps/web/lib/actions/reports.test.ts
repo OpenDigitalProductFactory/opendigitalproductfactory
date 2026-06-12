@@ -58,6 +58,22 @@ describe("getProfitAndLoss", () => {
     expect(result.grossProfit).toBe(0);
     expect(result.netProfit).toBe(0);
   });
+
+  it("surfaces draft/pending bills separately without affecting net profit", async () => {
+    mockPrisma.invoice.aggregate.mockResolvedValue({ _sum: { totalAmount: "1000.00" }, _count: 5 });
+    // First bill.aggregate = paid bills; second = draft/pending bills.
+    mockPrisma.bill.aggregate
+      .mockResolvedValueOnce({ _sum: { totalAmount: "0.00" }, _count: 0 })
+      .mockResolvedValueOnce({ _sum: { totalAmount: "130.00" }, _count: 1 });
+    mockPrisma.expenseClaim.aggregate.mockResolvedValue({ _sum: { totalAmount: null }, _count: 0 });
+
+    const result = await getProfitAndLoss(startDate, endDate);
+
+    // Net profit reflects only realised (paid) figures — draft bill excluded.
+    expect(result.netProfit).toBe(1000);
+    expect(result.pendingBillTotal).toBe(130);
+    expect(result.pendingBillCount).toBe(1);
+  });
 });
 
 describe("getCashFlowReport", () => {

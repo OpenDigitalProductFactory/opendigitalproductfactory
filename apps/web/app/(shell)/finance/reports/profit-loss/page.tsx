@@ -181,6 +181,33 @@ export default async function ProfitAndLossPage({
         {data.expenseCount !== 1 ? "s" : ""}.
       </p>
 
+      {/* Draft / pending bills — visible but not yet counted in net profit */}
+      {data.pendingBillCount > 0 && (
+        <div className="mb-4 p-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-sm text-[var(--dpf-text)]">
+              <span
+                className="inline-block text-[10px] uppercase tracking-widest mr-2 px-1.5 py-0.5 rounded align-middle"
+                style={{ background: "color-mix(in srgb, var(--dpf-warning, #f59e0b) 18%, transparent)", color: "var(--dpf-warning, #f59e0b)" }}
+              >
+                Draft
+              </span>
+              {formatMoney(data.pendingBillTotal)} across {data.pendingBillCount} bill
+              {data.pendingBillCount !== 1 ? "s" : ""} not yet paid
+            </p>
+            <p className="text-xs text-[var(--dpf-muted)] mt-1">
+              These expenses are not in the net profit above until each bill is approved and paid.
+            </p>
+          </div>
+          <Link
+            href="/finance/bills?status=draft"
+            className="text-xs px-3 py-1.5 rounded bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity whitespace-nowrap"
+          >
+            Review &amp; approve bills
+          </Link>
+        </div>
+      )}
+
       {/* Export */}
       <Link
         href={`/api/v1/finance/reports/profit-loss?start=${startStr}&end=${endStr}&format=csv`}
