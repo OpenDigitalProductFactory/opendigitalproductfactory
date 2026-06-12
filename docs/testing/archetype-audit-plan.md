@@ -118,6 +118,29 @@ Total fresh installs: 18 (Run 0, which also serves as Run 13's software-platform
 
 > **Swapped-archetype Phase C/D spot-checks are still allowed** — but log findings as `observation` severity with an explicit "tested post-swap, provisioning not re-run" note, never as `critical`/`important`, until reproduced on a fresh install.
 
+### 3b. Representative Quality Bar (12 archetypes — must all Pass before audit is considered representative)
+
+A related acceptance test plan (`docs/superpowers/plans/2026-06-06-archetype-acceptance-test-plan.md` in the nifty-chatterjee-211928 worktree) identifies a representative 12-archetype batch that covers every operating model type. These 12 are the **minimum viable quality bar** — if any of them `Fail` (Section 8 verdict system), the platform is not ready for broader rollout regardless of the remaining 41 archetypes.
+
+Treat these as priority-1 within their runs. If time or resets run short, these 12 are non-negotiable:
+
+| Archetype | Run | Why priority-1 |
+|-----------|-----|----------------|
+| `software-platform` | 0/13 | Platform/operator baseline; meta-case |
+| `it-managed-services` | 10 | Richest activation profile; all modules active |
+| `hair-salon` or `beauty-spa` | 2 | Appointment-checkout; most common booking model |
+| `wholesale-distribution` | 6 | B2B goods; exposed roster drift |
+| `plumber` or `electrician` | 1 | Field-service; dispatch-style inquiry CTA |
+| `restaurant` | 5 | Party-size form field; food/hospitality vocabulary |
+| `dental-practice` | 3 | Healthcare compliance posture; patient vocabulary |
+| `property-management-company` | 12 | Dual-audience (landlord + tenant) |
+| `charity` or `animal-shelter` | 11 | Donation CTA; no-purchase receipt verification |
+| `tutoring` | 8 | Booking with student/parent dependent fields |
+| `gym` or `yoga-studio` | 7 | Subscription membership purchase |
+| `pet-grooming` or `pet-boarding` | 4 | Pet CI creation; size-based pricing |
+
+---
+
 ### 3a. Run 0 — Pilot / calibration + Platform Core Mechanics (MANDATORY before Run 1)
 
 Run 0 serves two goals: (a) validate the audit harness so the remaining 18 resets test the platform rather than the plan's assumptions; (b) prove all common platform mechanics (Section 2a) once so Runs 1–16 can treat them as reliable setup tools rather than evaluation subjects. Every item in the Section 2a common-mechanics table must be exercised and confirmed in Run 0.
@@ -484,23 +507,51 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 - [ ] **B6** `[C]` Coworker panel on `/storefront` → Marketing Specialist agent loads (AI-03 analogue)
 - [ ] **B7** `[A]` Verify archetype-specific vocabulary in coworker (no "FeatureBuild", "capsule", "worktree" language)
 
-### Phase C — Business Context & Compliance (GRC)
-- [ ] **C1** Navigate to `/storefront/settings/business` → Business context form loads
-- [ ] **C2** Verify industry classification matches archetype category
-- [ ] **C3** Navigate to `/compliance` → Dashboard loads
-- [ ] **C4** For regulated archetypes (banking, healthcare, legal, law enforcement): verify licensing section shows correct jurisdiction placeholders
+### Phase C — Business Context, Capabilities & Compliance (GRC)
+- [ ] **C1** `[C]` Navigate to `/storefront/settings/business` → Business context form loads
+- [ ] **C2** `[A]` Verify industry classification matches archetype category
+- [ ] **C3** `[C]` Navigate to `/compliance` → Dashboard loads
+- [ ] **C4** `[A]` For regulated archetypes (banking, healthcare, legal, law enforcement): verify licensing section shows correct jurisdiction placeholders
+- [ ] **C5** `[A]` Navigate to `/portfolio/architecture` (Business Capability Map) → Page is **not empty**. The capability tree covers day-to-day work for this archetype at minimum: finance/billing, customer/sales, operations/service-delivery, and compliance/risk nodes must be present. An empty capability page = `critical` — it is the primary EA surface and empty means zero value.
+- [ ] **C6** `[A]` Confirm the capability perspective reflects the selected archetype, not just the generic baseline. Examples by archetype type:
+  - IT MSP: `customer-estate` and `service-agreements` capability nodes visible
+  - Banking: BIAN-aligned nodes visible (Loans & Deposits, Relationship Management, Compliance)
+  - Nonprofit/charity: donation management, volunteer coordination in the capability tree
+  - Retail/goods: inventory and procurement capabilities present
+  - Trades/field service: work order and dispatch capabilities present
+  - If only generic capabilities are shown for an archetype with a known specific profile → `important` (archetype overlay not applied)
+- [ ] **C7** `[A]` Navigate to the integration catalog (wherever surfaced — check `/integrations`, the capability map's integration anchors, or `/storefront/settings/integrations`). Confirm the archetype's primary integration anchors are visible with a recognizable role description:
+  - Service businesses (salon, vet, physio, restaurant, trades, gym): QuickBooks + Stripe + Google Business Profile
+  - Goods/retail: QuickBooks + Stripe + inventory/POS integration
+  - Professional services (consulting, legal, IT MSP): QuickBooks + CRM (HubSpot or Pipedrive) + Microsoft 365
+  - Nonprofit: donation processing + CRM/mailing list + communications
+  - Banking: compliance/regulatory display only (no live API integration in Phase 1)
+  - Missing a business-critical integration anchor for the archetype (e.g., no QuickBooks anchor for a service business) = `important`
 
 ### Phase D — Finance Defaults (FIN)
 - [ ] **D1** Navigate to `/finance` → Dashboard loads
 - [ ] **D2** Verify currency default matches expected (USD unless locale suggested otherwise)
 - [ ] **D3** For banking archetypes: verify BIAN capability perspective is accessible
 
-### Phase E — Coworker Fit (AI)
-- [ ] **E1** Navigate to `/workspace` → COO agent shown
-- [ ] **E2** Ask COO: "What business are we in?" → Response uses archetype vocabulary (not generic)
-- [ ] **E3** Ask COO: "What services do we offer?" → Lists archetype service items
-- [ ] **E4** Verify coworker does NOT use platform-developer vocabulary (no "backlog", "epic", "build studio", "worktree", "MCP")
-- [ ] **E5** Ask: "Help me prepare for a [archetype-specific scenario]" → Response is contextually relevant
+### Phase E — Coworker Fit & Employee Work View (AI + UX)
+- [ ] **E1** `[C]` Navigate to `/workspace` → COO agent shown
+- [ ] **E2** `[A]` Ask COO: "What business are we in?" → Response uses archetype vocabulary (not generic)
+- [ ] **E3** `[A]` Ask COO: "What services do we offer?" → Lists archetype service items
+- [ ] **E4** `[A]` Verify coworker does NOT use platform-developer vocabulary (no "backlog", "epic", "build studio", "worktree", "MCP")
+- [ ] **E5** `[A]` Ask: "Help me prepare for a [archetype-specific scenario from the run script]" → Response is contextually relevant and uses archetype vocabulary throughout
+- [ ] **E6** `[A]` **Employee work view:** navigate to `/workspace` (or the workspace home if a role-based view is surfaced). Confirm the first screen shows work cues relevant to the archetype's actual employees — **not** platform administration or build-system noise. Examples of passing/failing by archetype:
+  - Hair salon: "Today's appointments", "Client messages", "Booking requests" → pass; "Run Build", "Active capsules", "Sprint backlog" → fail
+  - Vet clinic: "Appointment schedule", "Patient records", "Today's consultations" → pass
+  - Retail: "Today's orders", "Low stock alerts", "Customer inquiries" → pass
+  - Trades: "Open jobs", "Quote requests", "Technician schedule" → pass
+  - If the workspace home is identical platform-admin tooling regardless of archetype → `important` finding (the role-specific home is absent or not wired to the archetype)
+- [ ] **E7** `[A]` Confirm at least the following employee roles are implied or surfaced by the workspace for the archetype type:
+  - All archetypes: owner/operator role, customer support role
+  - Service/booking archetypes: service delivery / scheduler role (stylist, vet tech, physio, driver)
+  - Goods/retail: inventory/procurement role
+  - Professional services: service coordinator / account manager role
+  - Finance-heavy (accounting, banking): bookkeeper/accountant role surfaced
+  - If no role differentiation is visible at all (single undifferentiated workspace) → `minor` finding (role-specific work queues not yet implemented for this category)
 
 ### Phase F — Inbox & Operations (OPS)
 - [ ] **F1** Complete a public storefront CTA submission (Phase B5)
@@ -1423,6 +1474,26 @@ SEVERITY: critical | important | minor | observation
 CANDIDATE BI TITLE: [proposed backlog item title]
 CANDIDATE EPIC: [existing epic to link to, if obvious]
 UX FIT: [operator persona impact if applicable — "Sandra Hooper would not know..."]
+```
+
+Additionally, at the **end of each archetype** (before moving to the next swap or the next run), record one per-archetype verdict summary:
+
+```
+ARCHETYPE: [archetypeId]
+RUN: [run number]
+INSTALL MODE: fresh-install | swapped
+VERDICT: Pass | Warn | Fail | Blocked
+  Pass = coherent setup, correct CTA/vocab, useful capabilities, sensible customer flow, relevant integration context
+  Warn = works but relies on generic fallback, thin copy, missing workspace-home role, or incomplete integration depth
+  Fail = empty capabilities, wrong CTA, broken setup, platform vocabulary leaking into worker UX, critical finding
+  Blocked = app unavailable, auth broken, or environment prevents the walkthrough
+
+CAPABILITY RESULT: [C5/C6 summary — empty/generic/archetype-specific]
+EMPLOYEE WORK RESULT: [E6 summary — platform-admin / partial / role-appropriate]
+INTEGRATION RESULT: [C7 summary — anchors present / partially present / absent]
+STOREFRONT RESULT: [B3/B5 summary — correct CTA, domain fields present, reference issued]
+FINANCE RESULT: [G4 summary — P&L loaded / entries appeared / empty]
+OPEN FINDINGS: [count of critical, important, minor for this archetype]
 ```
 
 #### Channel 2 — GitHub Issues (optional, for real-time team visibility)
