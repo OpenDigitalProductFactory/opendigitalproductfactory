@@ -251,6 +251,38 @@ describe("existing archetype regression (governance axis is inert)", () => {
     expect(getCapabilityApplicability(profile, "records-request")).toBe("not-applicable");
   });
 
+  it("the credit-union leaf derives member governance + eligibility, with member-equity suppressed via override (BI-D9ACE184)", () => {
+    const cu = ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === "credit-union");
+    expect(cu?.activationProfile).toBeDefined();
+
+    const profile = readActivationProfile(cu?.activationProfile);
+    expect(profile?.axes.governance).toBe("member-owned");
+    expect(profile?.axes.primaryConsumer).toBe("member");
+    expect(getCapabilityApplicability(profile, "member-governance")).toBe("required");
+    expect(getCapabilityApplicability(profile, "membership-eligibility")).toBe("required");
+    // Credit unions don't run patronage equity — the override suppresses the surface.
+    expect(getCapabilityApplicability(profile, "member-equity")).toBe("not-applicable");
+    expect(getCapabilityApplicability(profile, "public-body-governance")).toBe("not-applicable");
+  });
+
+  it("the community-bank leaf is investor-owned and derives no member or public-body machinery (BI-E677F250)", () => {
+    const bank = ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === "community-bank");
+    expect(bank?.activationProfile).toBeDefined();
+
+    const profile = readActivationProfile(bank?.activationProfile);
+    expect(profile?.axes.governance).toBe("investor-owned");
+    for (const key of [
+      "member-governance",
+      "membership-eligibility",
+      "member-equity",
+      "public-body-governance",
+      "records-request",
+      "service-request-311",
+    ] as const) {
+      expect(getCapabilityApplicability(profile, key)).toBe("not-applicable");
+    }
+  });
+
   it("the law-enforcement archetype derives public-body governance (with records requests) and no member machinery", () => {
     const police = ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === "law-enforcement-agency");
     expect(police?.activationProfile).toBeDefined();
