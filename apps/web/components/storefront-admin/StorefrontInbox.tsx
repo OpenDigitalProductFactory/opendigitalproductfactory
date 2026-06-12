@@ -116,10 +116,10 @@ export function StorefrontInbox({
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 700, color: "var(--dpf-text)" }}>
-            Inquiries from your storefront
+            Requests from your storefront
           </div>
           <div style={{ marginTop: 4, fontSize: 12, color: "var(--dpf-muted)" }}>
-            Use <strong>Send to backlog</strong> to turn an inquiry into tracked work you can follow up on.
+            Use <strong>Send to backlog</strong> to track a customer request as work you can follow up on.
           </div>
         </div>
       ) : (
@@ -134,7 +134,7 @@ export function StorefrontInbox({
             fontSize: 12,
           }}
         >
-          No digital product is configured yet, so storefront inquiries cannot be routed into the product backlog.
+          Sending storefront requests to your backlog isn&apos;t available yet.
         </div>
       )}
 
