@@ -203,4 +203,78 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
       ],
     },
   },
+  {
+    // Agricultural shared-machinery cooperative — the intersection of member-owned
+    // governance and the reservation-and-return rental value stream (value-stream
+    // doc §10.1). Members jointly own a pooled machinery fleet; demand is the
+    // sharpest synchronized-contention case (everyone needs the combine in the
+    // same harvest fortnight), so it must ration EQUITABLY among member-owners,
+    // not clear by price. Retires one of the cooperative archetype's documented
+    // unbuilt sub-types (the comment on `cooperative` flags ag as a follow-up).
+    archetypeId: "agricultural-cooperative",
+    name: "Agricultural Cooperative (Shared Machinery)",
+    category: "nonprofit-community",
+    ctaType: "rental",
+    tags: ["cooperative", "agricultural", "shared-machinery", "member-owned", "asset-pool", "patronage", "reservation"],
+    itemTemplates: [
+      { name: "Combine Harvester", description: "Reserve the shared combine for your harvest window — allocated equitably among members", priceType: "from", ctaType: "rental", ctaLabel: "Request booking" },
+      { name: "Grain Drill / Planter", description: "Shared planter — reserve for your planting window", priceType: "from", ctaType: "rental", ctaLabel: "Request booking" },
+      { name: "Sprayer", description: "Self-propelled sprayer — member usage rate", priceType: "from", ctaType: "rental", ctaLabel: "Request booking" },
+      { name: "Become a Member", description: "Join the cooperative to access the shared machinery pool", priceType: "free", ctaType: "inquiry", ctaLabel: "Join" },
+      { name: "Patronage & Equity Inquiry", description: "Ask about your usage-based patronage allocation or capital credits", priceType: "free", ctaType: "inquiry" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "about", title: "About Our Co-op", sortOrder: 1 },
+      { type: "items", title: "Shared Machinery", sortOrder: 2 },
+      { type: "team", title: "Board & Committees", sortOrder: 3 },
+      { type: "contact", title: "Contact Us", sortOrder: 4 },
+    ],
+    formSchema: [
+      ...CONTACT_FIELDS,
+      { name: "requestType", label: "Request type", type: "select" as const, required: true, options: ["Machinery booking", "Membership", "Patronage / equity", "Board & governance", "Other"] },
+    ],
+    vocabulary: {
+      itemsLabel: "Shared Machinery",
+      portalLabel: "Member Portal",
+      stakeholderLabel: "Member-Owners",
+      inboxLabel: "Booking Requests",
+      agentName: "Co-op Coordinator",
+    },
+    activationProfile: {
+      profileType: "standard",
+      modules: ["rental-fleet", "rental-agreements", "billing-readiness", "lifecycle-signals"],
+      billingReadinessMode: "prepared-not-prescribed",
+      customerGraph: "none",
+      estateSeparation: "shared",
+      axes: {
+        form: "services",
+        delivery: "physical",
+        primaryConsumer: "member",
+        consumptionChannel: "onsite-plus-portal",
+        commercialModel: "usage-based",
+        // The intersection: a reservation-and-return pool (rental capabilities)
+        // governed member-owned (member-governance/eligibility/equity). The
+        // equitable-rationing layer over conflicting reservations is the
+        // genuinely new build (BI-D7FCD029, Phase 4).
+        provisioning: "reservation-and-return",
+        platform: "no",
+        governance: "member-owned",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: { scope: "primary", it4itStages: ["request-to-fulfill", "detect-to-correct"] },
+        forEmployees: { scope: "standard" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+      // No member-equity override here (unlike the credit union): ag co-ops DO
+      // allocate usage-based patronage, so member-equity stays derived.
+      seededServiceCategories: [
+        "Harvest Equipment",
+        "Planting Equipment",
+        "Application Equipment",
+        "Membership & Patronage",
+      ],
+    },
+  },
 ];

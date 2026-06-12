@@ -101,6 +101,14 @@ const VOCABULARY: Record<string, ArchetypeVocabulary> = {
     portalLabel: "Resident Portal", stakeholderLabel: "Residents",
     teamLabel: "Staff", inboxLabel: "Service Requests", agentName: "Resident Services",
   },
+  // Rental / shared assets. Per-leaf overrides (Tenants / Storage for self-storage)
+  // ship with the archetype via customVocabulary; this is the category default.
+  "asset-rental": {
+    itemsLabel: "Equipment & Rates", singleItemLabel: "Item", addButtonLabel: "Add item",
+    categoryLabel: "Category", priceLabel: "Rate",
+    portalLabel: "Rental Portal", stakeholderLabel: "Renters",
+    teamLabel: "Team", inboxLabel: "Reservations", agentName: "Rental Desk",
+  },
 };
 
 const DEFAULT_VOCABULARY: ArchetypeVocabulary = {
@@ -213,6 +221,11 @@ const CATEGORY_SUGGESTIONS: Record<string, string[]> = {
   "cooperative": ["Membership", "Member Services", "Patronage & Equity", "Governance"],
   "municipal-utility": ["Residential", "Commercial", "Irrigation", "Connection Fees", "Service Orders"],
   "law-enforcement-agency": ["Records", "Permits", "Community Programs", "Professional Standards"],
+  "agricultural-cooperative": ["Harvest Equipment", "Planting Equipment", "Application Equipment", "Membership & Patronage"],
+
+  // Rental & shared assets
+  "equipment-rental": ["Earthmoving", "Access & Lifting", "Power & Site", "Cleaning", "Events"],
+  "self-storage": ["Small Units", "Medium Units", "Large Units", "Climate-Controlled"],
 };
 
 export function getCategorySuggestions(archetypeId: string | null | undefined): string[] {

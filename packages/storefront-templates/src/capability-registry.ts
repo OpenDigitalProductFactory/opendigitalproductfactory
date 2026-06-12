@@ -204,6 +204,31 @@ export const CAPABILITY_REGISTRY = {
     defaultIsolation: "organization-scope",
     surfaces: ["service-requests"],
   },
+  // Rental / shared-asset capabilities — gated by the reservation-and-return
+  // provisioning model (asset-rental archetypes; value-stream doc §10.1).
+  "rental-fleet": {
+    label: "Rental Fleet & Asset Pool",
+    portfolio: "productsAndServicesSold",
+    defaultOwnershipScope: "organization",
+    defaultIsolation: "organization-scope",
+    surfaces: ["rental", "fleet"],
+  },
+  "rental-agreements": {
+    label: "Rental Agreements & Returns",
+    portfolio: "manufactureAndDeliver",
+    it4itStage: "request-to-fulfill",
+    defaultOwnershipScope: "organization",
+    defaultIsolation: "organization-scope",
+    surfaces: ["rental", "agreements"],
+  },
+  "asset-pool": {
+    label: "Asset-Pool Capacity & Utilization",
+    portfolio: "manufactureAndDeliver",
+    it4itStage: "detect-to-correct",
+    defaultOwnershipScope: "organization",
+    defaultIsolation: "organization-scope",
+    surfaces: ["rental", "utilization"],
+  },
 } as const satisfies Record<string, CapabilityRegistryEntry>;
 
 export type CapabilityKey = keyof typeof CAPABILITY_REGISTRY;

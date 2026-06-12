@@ -354,6 +354,35 @@ describe("civic & member-governed capability derivation", () => {
   });
 });
 
+const rentalAxes: OperatingModelAxes = {
+  form: "services",
+  delivery: "physical",
+  primaryConsumer: "business",
+  consumptionChannel: "onsite-plus-portal",
+  commercialModel: "usage-based",
+  provisioning: "reservation-and-return",
+  platform: "no",
+};
+
+describe("rental / shared-asset capability derivation", () => {
+  it("derives the rental-fleet / rental-agreements / asset-pool set from reservation-and-return provisioning", () => {
+    const capabilities = deriveCapabilityApplicability(rentalAxes, salonPortfolios);
+
+    expect(getCapability(capabilities, "rental-fleet").applicability).toBe("required");
+    expect(getCapability(capabilities, "rental-agreements").applicability).toBe("required");
+    expect(getCapability(capabilities, "asset-pool").applicability).toBe("required");
+  });
+
+  it("does not derive rental capabilities for a usage-based archetype that is not reservation-and-return (e.g. a utility)", () => {
+    const utilityLikeAxes: OperatingModelAxes = { ...rentalAxes, provisioning: "account-with-billing", primaryConsumer: "resident", governance: "public-body" };
+    const capabilities = deriveCapabilityApplicability(utilityLikeAxes, salonPortfolios);
+
+    expect(getCapability(capabilities, "rental-fleet").applicability).toBe("not-applicable");
+    expect(getCapability(capabilities, "rental-agreements").applicability).toBe("not-applicable");
+    expect(getCapability(capabilities, "asset-pool").applicability).toBe("not-applicable");
+  });
+});
+
 describe("statutory and usage-based billing derivation", () => {
   it("derives obligation-driven invoicing for statutory fees and levies", () => {
     expect(deriveBillingPatternProfile(townAxes)).toMatchObject({
