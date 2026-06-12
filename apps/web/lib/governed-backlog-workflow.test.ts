@@ -85,7 +85,7 @@ describe("deriveLifecycleLabel", () => {
     ).toBe("In Progress");
   });
 
-  it("maps a storefront inquiry into customer-zero governed backlog intake metadata", () => {
+  it("maps a storefront inquiry into governed backlog intake metadata with business-facing copy", () => {
     expect(
       createStorefrontInquiryBacklogDraft({
         inquiryId: "inquiry_1",
@@ -94,11 +94,11 @@ describe("deriveLifecycleLabel", () => {
         customerEmail: "jane@example.com",
         message: "We want to run our own digital product operation on DPF.",
         storefrontLabel: "Open Digital Product Factory",
-        itemLabel: "Open Digital Product Factory",
+        itemLabel: "Emergency Call-Out",
       }),
     ).toMatchObject({
       itemId: "BI-SFI-INQ1001",
-      title: "Customer-zero product inquiry INQ-1001",
+      title: "Emergency Call-Out inquiry from Jane Prospect (INQ-1001)",
       type: "product",
       status: "triaging",
       source: "user-request",

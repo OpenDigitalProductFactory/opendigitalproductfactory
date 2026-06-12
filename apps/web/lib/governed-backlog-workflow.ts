@@ -97,10 +97,13 @@ export function createStorefrontInquiryBacklogDraft(
   const messageLine = inquiry.message?.trim()
     ? `Inquiry detail:\n${inquiry.message.trim()}`
     : "Inquiry detail:\nNo additional message provided.";
+  const customerLabel = inquiry.customerName?.trim() || "a customer";
+  const itemSubject = inquiry.itemLabel?.trim();
+  const titleSubject = itemSubject ? `${itemSubject} inquiry` : "Inquiry";
 
   return {
     itemId: `BI-SFI-${normalizedRef}`,
-    title: `Customer-zero product inquiry ${inquiry.inquiryRef}`,
+    title: `${titleSubject} from ${customerLabel} (${inquiry.inquiryRef})`,
     type: "product",
     status: "triaging",
     source: "user-request",
@@ -111,14 +114,14 @@ export function createStorefrontInquiryBacklogDraft(
     recommendedTriageOutcome: "build",
     signalLabel: "customer-zero",
     body: [
-      "Customer-zero intake captured from the storefront inquiry flow.",
+      "Inquiry captured from your storefront.",
       `Inquiry ref: ${inquiry.inquiryRef}`,
       `Inquiry row: ${inquiry.inquiryId}`,
-      `Prospect: ${inquiry.customerName?.trim() || "Unknown contact"} <${inquiry.customerEmail}>`,
+      `Customer: ${inquiry.customerName?.trim() || "Unknown contact"} <${inquiry.customerEmail}>`,
       storefrontLine,
       itemLine,
       messageLine,
-      "Recommended next step: triage as product work and decide whether it should become a governed Build Studio effort.",
+      "Recommended next step: triage this inquiry and decide how to follow up.",
     ]
       .filter(Boolean)
       .join("\n\n"),
