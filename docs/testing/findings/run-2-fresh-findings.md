@@ -1,7 +1,7 @@
 # Run 2 Fresh-Install Findings — Beauty & Personal Care
 
 **Run**: 2 (beauty-personal-care, fresh-install pass)  
-**Archetypes tested**: hair-salon *(complete)*, barber-shop *(complete)*, nail-salon *(complete)*, beauty-spa *(complete)*, optician, personal-trainer *(pending)*  
+**Archetypes tested**: hair-salon *(complete)*, barber-shop *(complete)*, nail-salon *(complete)*, beauty-spa *(complete)*, optician *(complete)*, personal-trainer *(pending)*  
 **Run date**: 2026-06-12  
 **Method**: Tier 2 DB-only reset per archetype; golden dump `/d/DPF-audit-backup/golden-provider-configured-2026-06-12.dump`  
 **Tester**: Autonomous agent  
@@ -586,9 +586,136 @@
 
 ---
 
-## Optician — pending Tier 2 reset
+## Optician — Clear Vision Opticians (fresh install)
 
-*Awaiting next archetype reset.*
+**Company**: Clear Vision Opticians
+**Owner persona**: James Wilson (test customer)
+**URL slug**: clear-vision-opticians (wizard-entered slug correctly preserved)
+**Archetype category**: HEALTHCARE WELLNESS (not BEAUTY PERSONAL CARE)
+**Phases run**: A, P, B, F, I, G (observation only), O
+**Note**: Optician uses a different financial model (Subscription + Recurring Required) from all booking archetypes — resulting in a "Patient Portal" UI with Practitioners and Appointments tabs rather than a Booking Portal.
+
+---
+
+### Phase A — Onboarding
+
+#### AUDIT-R2-OPT-A-001 · Important · GBP default currency (recurring — 5th confirmation)
+
+**Observed**: Base currency pre-filled "GBP - British Pound". Switched manually to USD.
+**Fix #1759 verdict**: ❌ Not resolved. Confirmed on all 5 Run 2 archetypes.
+
+#### AUDIT-R2-OPT-A-002 · Pass · Subscription + Recurring Required financial model (correct for optician)
+
+**Observed**: Financial setup: Payment model = "Subscription", Recurring = "Required". This is the correct model for subscription-based eye care plans and distinguishes optician from all 4 booking archetypes (Appointment Checkout + Optional). The resulting internal interface is labelled "Patient Portal" with Practitioners and Appointments tabs. Subscription model is internal billing only — storefront CTAs are determined by service type (Book Now or Buy), not the billing model.
+
+---
+
+### Phase P — Catalog & Prerequisites
+
+#### AUDIT-R2-OPT-P-001 · Warn · Operating hours no confirmation toast (recurring — 5th confirmation)
+
+**Observed**: Saved Mon–Fri 09:00–17:00, Sat–Sun Closed with no toast or visual confirmation. Hours persisted on reload.
+**Fix #1762 verdict**: ❌ Not resolved. Confirmed on all 5 Run 2 archetypes.
+
+#### AUDIT-R2-OPT-P-002 · Pass · 5 optician services seeded with mixed Booking + Purchase CTAs
+
+**Observed**: Eye Test (Booking), Contact Lens Consultation (Booking), Glasses Frames (Purchase, From…), Prescription Lenses (Purchase, From…), Children's Eye Test (Booking, Free). Mixed service types appropriate for optician. ✓
+
+#### AUDIT-R2-OPT-P-003 · Pass · Default provider with Mon–Fri availability
+
+**Observed**: "Clear Vision Opticians" provider auto-created, Active, 3 services. Calendar shows available Mon–Fri slots. ✓
+
+---
+
+### Phase B — Storefront
+
+#### AUDIT-R2-OPT-B-001 · Important · Wizard-created portal starts as Unpublished (recurring — 5th confirmation)
+
+**Observed**: Portal returned 404 until manually published. Pattern confirmed on all 5 Run 2 archetypes.
+**Impact**: Systemic — every wizard-created archetype in Runs 2–16 requires a manual Publish step.
+
+#### AUDIT-R2-OPT-B-002 · Pass · Slug correctly preserved
+
+**Observed**: "clear-vision-opticians" entered in wizard; public URL `http://localhost:3000/s/clear-vision-opticians` resolves correctly. ✓
+
+#### AUDIT-R2-OPT-B-003 · Pass · Mixed CTAs rendered correctly on storefront
+
+**Observed**: Eye Test, Contact Lens Consultation, Children's Eye Test show "Book Now"; Glasses Frames and Prescription Lenses show "Buy". No "Subscribe" CTA visible despite Subscription billing model — subscription is an internal billing mechanism only. Public-facing CTAs correctly reflect service type. ✓
+
+#### AUDIT-R2-OPT-B-004 · Important · No optician-specific booking form fields (recurring — fix #1760 not resolved)
+
+**Observed**: Booking form for Eye Test presents 4 generic fields only: Full Name (required), Email (required), Phone (optional), Notes (optional). No optician-specific fields: no NHS number, no prescription details, no date of last eye test, no age bracket field for Children's Eye Test. The practitioner cannot prepare the appointment without a follow-up call.
+**Fix #1760 verdict**: ❌ Not resolved. Confirmed on 5th Run 2 archetype.
+
+#### AUDIT-R2-OPT-B-005 · Important · Booking calendar timezone defaults to Europe/London (recurring — 3rd confirmation, 5th archetype)
+
+**Observed**: Eye Test booking calendar displayed "Times shown in Europe/London" even after operator switched currency to USD. Operating Hours settings show Timezone: UTC. Identical to nail-salon and beauty-spa.
+**Impact**: Systemic finding confirmed across 3 booking archetypes. Root cause: GBP/UK locale default not fully reset when operator switches base currency.
+
+---
+
+### Phase F — Booking Flow
+
+#### AUDIT-R2-OPT-F-001 · Pass · Booking end-to-end works; reference number issued
+
+**Observed**: Full flow: Eye Test → Mon June 15, 10:00–10:30 AM → James Wilson / james.wilson@test.com → submit. Reference **BK-WHFHTKX1** issued on confirmation page. ✓
+
+---
+
+### Phase I — Inbox
+
+#### AUDIT-R2-OPT-I-001 · Critical · DPF meta-language in inbox (recurring — 5th confirmation)
+
+**Observed**: "Customer-zero inquiry intake is wired to product backlog triage" banner present. Identical to all 4 previous Run 2 archetypes.
+**Fix #1752 verdict**: ❌ Not resolved. Confirmed on all 5 Run 2 archetypes.
+
+#### AUDIT-R2-OPT-I-002 · Pass · Booking record in Appointments inbox
+
+**Observed**: BK-WHFHTKX1 visible, James Wilson, james.wilson@test.com, 15/06/2026, status "pending". Confirm/Cancel actions present. Note: "Appointments" tab in Patient Portal navigates to `/storefront/inbox` — same inbox surface as booking archetypes. ✓
+
+---
+
+### Phase G — Finance (observation)
+
+#### AUDIT-R2-OPT-G-001 · Important · Bill tax defaults to 20% (recurring — 5th confirmation)
+
+**Observed**: New Bill form shows Tax %: 20, Currency: USD — confirming G-002 recurring on all 5 Run 2 archetypes.
+**Fix #1759 verdict**: ❌ Not resolved.
+
+---
+
+### Phase O — AI Coworker Operating Intelligence
+
+**Coworker**: Finance Specialist (model: `local:docker.io/ai/gemma4:26B`)
+
+#### AUDIT-R2-OPT-O-001 · Pass · Finance Specialist responded correctly for June 2026 (~25s)
+
+**Observed**: Asked "What is the revenue summary for June 2026?" Coworker responded in ~25 seconds: "For June 2026, there was no recorded paid activity, resulting in a net position of 0.00 USD. Evidence: get_finance_period_summary output for 2026-06-01 to 2026-06-30. No transactions were recorded as paid during this period." Status: done. Correct period, correct USD, correct $0.00 result. ~25s is the fastest response of all Run 2 archetypes.
+**Note**: 3rd consecutive correct response (nail-salon, beauty-spa, optician). Barber-shop's wrong-period behaviour continues to appear as an isolated non-deterministic event. Finance Specialist response time varies: HS ~118s safety limit → BS ~100s wrong period → NS ~90s correct → SPA ~90s correct → OPT ~25s correct.
+
+---
+
+### Optician — Summary
+
+| Phase | Finding | Severity | Fix PR | Verdict |
+|-------|---------|----------|--------|---------|
+| A | GBP default currency | Important | #1759 | ❌ Recurring (5th) |
+| A | Subscription + Recurring Required (correct for optician) | Pass | — | ✓ |
+| P | Operating hours no toast | Warn | #1762 | ❌ Recurring (5th) |
+| P | 5 optician services seeded (Booking + Purchase) | Pass | — | ✓ |
+| P | Default provider with availability | Pass | — | ✓ |
+| B | Portal starts Unpublished | Important | — | 🔁 Recurring (5th) |
+| B | Slug preserved | Pass | — | ✓ |
+| B | Mixed CTAs (Book Now + Buy) rendered correctly | Pass | — | ✓ |
+| B | No optician-specific booking form fields | Important | #1760 | ❌ Recurring (5th) |
+| B | Booking calendar timezone defaults to Europe/London | Important | — | 🔁 Recurring (3rd, confirmed 5th archetype) |
+| F | Booking works (BK-WHFHTKX1) | Pass | — | ✓ |
+| I | DPF meta-language in inbox | Critical | #1752 | ❌ Recurring (5th) |
+| I | Booking record in inbox | Pass | — | ✓ |
+| G | Bill tax defaults to 20% | Important | #1759 | ❌ Recurring (5th) |
+| O | Finance Specialist correct June response (~25s) | Pass | #1763 | ✓ (fastest — 3rd consecutive correct) |
+
+**Totals**: 1 Critical · 5 Important · 1 Warn · 8 Pass (15 findings)
 
 ---
 
@@ -598,27 +725,28 @@
 
 ---
 
-## Run 2 Summary (hair-salon + barber-shop + nail-salon + beauty-spa complete; 2 archetypes pending)
+## Run 2 Summary (hair-salon + barber-shop + nail-salon + beauty-spa + optician complete; 1 archetype pending)
 
 | Category | Count |
 |----------|-------|
-| Critical | 4 |
-| Important | 24 |
-| Warn | 4 |
-| Pass | 33 |
-| **Total** | **65** |
+| Critical | 5 |
+| Important | 29 |
+| Warn | 5 |
+| Pass | 41 |
+| **Total** | **80** |
 
 ### New findings confirmed this run
 
-- **AUDIT-R2-NS-B-005 / AUDIT-R2-SPA-B-005** (Important): Booking calendar timezone defaults to Europe/London across all booking archetypes when USD currency is selected. Confirmed as systemic (nail-salon + beauty-spa). Linked to GBP/UK locale cascade not resetting on currency change.
+- **AUDIT-R2-NS-B-005 / AUDIT-R2-SPA-B-005 / AUDIT-R2-OPT-B-005** (Important): Booking calendar timezone defaults to Europe/London across all booking archetypes when USD currency is selected. Confirmed as systemic (nail-salon, beauty-spa, optician). Root cause: GBP/UK locale cascade not resetting on currency change.
+- **AUDIT-R2-OPT-A-002** (Pass/Observation): Optician uses Subscription + Recurring Required financial model — different from all booking archetypes. Resulting portal is labelled "Patient Portal" with Practitioners + Appointments tabs. Subscription model is internal billing only; storefront CTAs are service-type-driven.
 
-### Fix PR status after 4 archetypes (natural validation)
+### Fix PR status after 5 archetypes (natural validation)
 
 | PR | Title | Verdict |
 |----|-------|---------|
-| #1752 | fix(inbox): replace DPF meta-language with operator language | ❌ Not resolved — confirmed on all 4 archetypes |
-| #1759 | fix(onboarding): USD default currency + 0% tax rate + Optional recurring | ⚠️ Partial — Recurring Optional ✓; GBP currency ✗; 20% bill tax ✗ — confirmed on all 4 archetypes |
-| #1760 | fix(booking): add archetype-specific booking form fields | ❌ Not resolved — confirmed on all 4 archetypes |
-| #1761 | fix(finance): surface draft/pending bills on P&L report | ⚠️ Partial — Submit for Approval button added ✓; approved→paid path missing ✗; P&L still dark ✗ — confirmed on all 4 archetypes |
-| #1762 | fix(operating-hours): add save confirmation toast | ❌ Not resolved — confirmed on all 4 archetypes |
-| #1763 | fix(coworker): resolve model timeout on financial queries | ⚠️ Non-deterministic — HS: 118s safety limit; BS: ~100s wrong period (May); NS+SPA: ~90s correct period (June). 2 correct responses, 1 wrong period, 1 safety limit across 4 archetypes |
+| #1752 | fix(inbox): replace DPF meta-language with operator language | ❌ Not resolved — confirmed on all 5 archetypes |
+| #1759 | fix(onboarding): USD default currency + 0% tax rate + Optional recurring | ⚠️ Partial — Recurring Optional ✓; GBP currency ✗; 20% bill tax ✗ — confirmed on all 5 archetypes |
+| #1760 | fix(booking): add archetype-specific booking form fields | ❌ Not resolved — confirmed on all 5 archetypes |
+| #1761 | fix(finance): surface draft/pending bills on P&L report | ⚠️ Partial — Submit for Approval button added ✓; approved→paid path missing ✗; P&L still dark ✗ (hair-salon + barber-shop only; not re-driven on NS/SPA/OPT) |
+| #1762 | fix(operating-hours): add save confirmation toast | ❌ Not resolved — confirmed on all 5 archetypes |
+| #1763 | fix(coworker): resolve model timeout on financial queries | ⚠️ Non-deterministic — HS: ~118s safety limit; BS: ~100s wrong period (May); NS: ~90s correct; SPA: ~90s correct; OPT: ~25s correct. 3 correct responses, 1 wrong period, 1 safety limit across 5 archetypes |
