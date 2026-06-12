@@ -141,6 +141,12 @@ describe("financial profile catalog", () => {
     expect(profile!.dunningStyle).toBe("aggressive");
   });
 
+  it("trades_construction defaults to ad-hoc per-job invoicing, not a recurring agreement", () => {
+    const profile = getFinancialProfile("trades_construction");
+    expect(profile?.billingPatternProfile.primaryPaymentPattern).toBe("ad-hoc-invoice");
+    expect(profile?.billingPatternProfile.recurringBillingApplicability).toBe("optional");
+  });
+
   it("professional services supports recurring agreements without prescribing invoice execution", () => {
     const profile = getFinancialProfile("professional_services");
     expect(profile?.billingPatternProfile).toMatchObject({
