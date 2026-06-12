@@ -13,20 +13,11 @@ type Props = {
   onComplete: () => void;
 };
 
-// ─── Locale-aware currency default ───────────────────────────────────────────
-
-function getLocaleFallbackCurrency(): string {
-  if (typeof navigator === "undefined") return "USD";
-  const lang = (navigator.language ?? "").toLowerCase();
-  if (lang.startsWith("en-gb") || lang.startsWith("en-ie")) return "GBP";
-  if (lang.startsWith("en-au") || lang.startsWith("en-nz")) return "AUD";
-  if (lang.startsWith("en-ca")) return "CAD";
-  if (
-    lang.startsWith("de") || lang.startsWith("fr") || lang.startsWith("it") ||
-    lang.startsWith("nl") || lang.startsWith("es-es") || lang.startsWith("pt-pt")
-  ) return "EUR";
-  return "USD";
-}
+// ─── Currency default ─────────────────────────────────────────────────────────
+// Fixed USD default (not derived from the browser locale at runtime): a US
+// install must pre-fill USD, and an en-GB test browser must not flip it to GBP.
+// A real location signal (suggestedCurrency, from website import) still wins.
+const DEFAULT_BASE_CURRENCY = "USD";
 
 // VAT/GST is a UK/EU concept. On a USD (or other non-VAT) install we should not
 // pre-select "VAT registered" even when the business-type profile commonly is in
@@ -39,10 +30,9 @@ export function FinancialSetupStep({ archetypeSlug, archetypeName, suggestedCurr
   // Load profile defaults (client-safe: pure function, no DB call)
   const profile = getFinancialProfile(archetypeSlug);
 
-  // Currency: prefer a location-detected suggestion, then the operator's browser
-  // locale, before any UK-biased profile default. Without this, every fresh
-  // install pre-filled GBP regardless of where the operator actually is.
-  const initialCurrency = suggestedCurrency ?? getLocaleFallbackCurrency();
+  // Currency: a real location-detected suggestion wins; otherwise default to USD
+  // (never the UK-biased profile default or a browser-locale guess).
+  const initialCurrency = suggestedCurrency ?? DEFAULT_BASE_CURRENCY;
   const [baseCurrency, setBaseCurrency] = useState<string>(initialCurrency);
   // Only pre-select "VAT registered" when both the business-type profile expects
   // it AND the resolved currency is in a VAT region.

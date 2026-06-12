@@ -1,6 +1,4 @@
 // apps/web/app/(shell)/finance/bills/new/page.tsx
-import { prisma } from "@dpf/db";
-import { getFinancialProfile } from "@dpf/finance-templates";
 import { listSuppliers, listPurchaseOrders } from "@/lib/actions/ap";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { CreateBillForm } from "@/components/finance/CreateBillForm";
@@ -8,17 +6,9 @@ import Link from "next/link";
 
 type Props = { searchParams: Promise<{ supplierId?: string }> };
 
-// Default line-item tax rate: 0 unless the org configured a VAT/GST tax model at
-// setup. Avoids the legacy hardcoded 20% UK VAT default on US (and other
-// non-VAT) installs.
-async function getDefaultBillTaxRate(appliedProfileSlug: string | null): Promise<number> {
-  const taxProfile = await prisma.organizationTaxProfile.findFirst({
-    select: { taxModel: true },
-  });
-  if (taxProfile?.taxModel !== "vat") return 0;
-  const profile = appliedProfileSlug ? getFinancialProfile(appliedProfileSlug) : null;
-  return profile?.defaultTaxRate ?? 0;
-}
+// New bill line items default to 0% tax. US installs do not charge UK VAT; an
+// operator who needs tax sets it per line. Fixed default, not derived at runtime.
+const DEFAULT_BILL_TAX_RATE = 0;
 
 export default async function NewBillPage({ searchParams }: Props) {
   const { supplierId } = await searchParams;
@@ -28,7 +18,6 @@ export default async function NewBillPage({ searchParams }: Props) {
     listPurchaseOrders(),
     getOrgSettings(),
   ]);
-  const defaultTaxRate = await getDefaultBillTaxRate(orgSettings.appliedProfileSlug ?? null);
 
   return (
     <div>
@@ -68,7 +57,7 @@ export default async function NewBillPage({ searchParams }: Props) {
           }))}
           {...(supplierId ? { defaultSupplierId: supplierId } : {})}
           defaultCurrency={orgSettings.baseCurrency}
-          defaultTaxRate={defaultTaxRate}
+          defaultTaxRate={DEFAULT_BILL_TAX_RATE}
         />
       </div>
     </div>
