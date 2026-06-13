@@ -110,3 +110,24 @@
   outline: 2px solid var(--dpf-accent);
   outline-offset: -2px;
 }
+
+/* Conditional formatting — row tints (subtle, theme-token based). */
+.dpf-cf-red .rdg-cell {
+  background-color: color-mix(in srgb, var(--dpf-error) 16%, transparent);
+}
+.dpf-cf-amber .rdg-cell {
+  background-color: color-mix(in srgb, var(--dpf-warning, #b8860b) 18%, transparent);
+}
+.dpf-cf-green .rdg-cell {
+  background-color: color-mix(in srgb, var(--dpf-success, #2e7d32) 16%, transparent);
+}
+.dpf-cf-blue .rdg-cell {
+  background-color: color-mix(in srgb, var(--dpf-accent) 16%, transparent);
+}
+.dpf-cf-swatch {
+  display: inline-block;
+  inline-size: 1rem;
+  block-size: 1rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--dpf-border);
+}
