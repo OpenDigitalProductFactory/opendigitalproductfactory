@@ -5,4 +5,5 @@ export * from "./activation-profile";
 export * from "./capability-activation";
 export * from "./archetypes/index";
 export * from "./media-profile";
+export * from "./operational-value-stream";
 export * from "./sections/schemas";
