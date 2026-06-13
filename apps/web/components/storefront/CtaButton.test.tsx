@@ -1,5 +1,8 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { cleanup, render as renderDom, screen } from "@testing-library/react";
 
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => (
@@ -29,8 +32,22 @@ function hrefFor(ctaType: string, priceAmount: string | null = "10.00") {
   return render({ ctaType, priceAmount }).match(/href="([^"]+)"/)?.[1] ?? null;
 }
 
-function labelFor(html: string) {
-  return html.replace(/<[^>]+>/g, "").trim();
+function labelFor(props: {
+  ctaType: string;
+  ctaLabel?: string | null;
+  priceAmount?: string | null;
+}) {
+  cleanup();
+  renderDom(
+    <CtaButton
+      ctaType={props.ctaType}
+      ctaLabel={props.ctaLabel ?? null}
+      orgSlug="acme"
+      itemId="item-1"
+      priceAmount={props.priceAmount}
+    />,
+  );
+  return screen.getByRole("link").textContent?.trim() ?? "";
 }
 
 describe("CtaButton routing", () => {
@@ -52,18 +69,18 @@ describe("CtaButton price-less purchase guard (AUDIT-R3/R4)", () => {
   });
 
   it("labels a priceless purchase item 'Enquire', not 'Buy'", () => {
-    expect(labelFor(render({ ctaType: "purchase", priceAmount: null }))).toBe("Enquire");
+    expect(labelFor({ ctaType: "purchase", priceAmount: null })).toBe("Enquire");
   });
 
   it("drops a stale 'Buy'-style custom label when downgrading to inquiry", () => {
-    expect(labelFor(render({ ctaType: "purchase", ctaLabel: "Buy now", priceAmount: null }))).toBe(
+    expect(labelFor({ ctaType: "purchase", ctaLabel: "Buy now", priceAmount: null })).toBe(
       "Enquire",
     );
   });
 
   it("keeps the Buy flow once the item carries a price", () => {
     expect(hrefFor("purchase", "25.00")).toBe("/s/acme/order/item-1");
-    expect(labelFor(render({ ctaType: "purchase", priceAmount: "25.00" }))).toBe("Buy");
+    expect(labelFor({ ctaType: "purchase", priceAmount: "25.00" })).toBe("Buy");
   });
 
   it("does not downgrade booking/inquiry/donation items that legitimately have no price", () => {
