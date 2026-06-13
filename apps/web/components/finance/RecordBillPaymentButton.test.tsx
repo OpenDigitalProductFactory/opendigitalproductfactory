@@ -43,4 +43,40 @@ describe("RecordBillPaymentButton", () => {
     });
     expect(refresh).toHaveBeenCalled();
   });
+
+  it("passes the operator-entered reference note through to the action", async () => {
+    render(<RecordBillPaymentButton billId="bill-2" amountDue={50} currency="USD" />);
+
+    fireEvent.click(screen.getByText("Record Payment"));
+
+    const reference = screen.getByPlaceholderText(
+      "e.g. cheque no. or transfer ID",
+    ) as HTMLInputElement;
+    fireEvent.change(reference, { target: { value: "CHQ-00123" } });
+
+    fireEvent.click(screen.getByText("Confirm payment"));
+
+    await waitFor(() => {
+      expect(recordBillPayment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          billId: "bill-2",
+          amount: 50,
+          reference: "CHQ-00123",
+        }),
+      );
+    });
+  });
+
+  it("omits the reference when left blank", async () => {
+    render(<RecordBillPaymentButton billId="bill-3" amountDue={50} currency="USD" />);
+
+    fireEvent.click(screen.getByText("Record Payment"));
+    fireEvent.click(screen.getByText("Confirm payment"));
+
+    await waitFor(() => {
+      expect(recordBillPayment).toHaveBeenCalledWith(
+        expect.objectContaining({ billId: "bill-3", reference: undefined }),
+      );
+    });
+  });
 });
