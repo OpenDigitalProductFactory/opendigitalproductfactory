@@ -80,6 +80,10 @@ export const SUPPLIER_TABLE: GenericTableConfig = {
   idField: "supplierId",
   labelField: "name",
   orderBy: { field: "updatedAt", dir: "desc" },
+  // Validated raw-write tier (no bespoke Supplier domain action exists). Editable
+  // safe fields only — taxId/bankDetails/address are excluded by omission and so
+  // can never be written here either. Each write still goes through validateCell.
+  editableFields: ["name", "contactName", "email", "phone", "paymentTerms", "defaultCurrency", "status"],
   // Excludes taxId, bankDetails, address (sensitive) by omission.
   columns: [
     { field: "supplierId", name: "ID", fieldType: "text", width: 140 },

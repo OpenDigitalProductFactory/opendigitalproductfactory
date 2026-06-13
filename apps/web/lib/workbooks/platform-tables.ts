@@ -181,9 +181,9 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
   {
     entityType: "supplier",
     label: "Suppliers",
-    description: "Suppliers as a read-only grid — sort, filter, and board by status.",
+    description: "Suppliers as an editable spreadsheet — edit safe fields inline; tax/bank details stay out.",
     viewCapability: "view_finance",
-    manageCapability: "view_finance", // read-only grid; adapter performs no writes
+    manageCapability: "manage_finance", // validated raw-write tier (editableFields allow-list)
     homeSurface: { path: "/finance", label: "Finance", board: true },
   },
 ];

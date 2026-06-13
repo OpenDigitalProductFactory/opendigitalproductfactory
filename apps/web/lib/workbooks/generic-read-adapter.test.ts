@@ -5,6 +5,8 @@ import {
   genericColumnDefs,
   referenceLabelField,
   buildReferenceSearchArgs,
+  genericUpdateData,
+  makeGenericReadAdapter,
   type GenericTableConfig,
 } from "./generic-read-adapter";
 import { customColumnProvenance } from "./types";
@@ -114,6 +116,78 @@ describe("genericColumnDefs", () => {
   it("marks every generic (platform) column as system provenance", () => {
     const cols = genericColumnDefs(config);
     expect(cols.every((c) => c.provenanceKind === "system")).toBe(true);
+  });
+});
+
+const editableConfig: GenericTableConfig = {
+  entityType: "supplier",
+  prismaModel: "supplier",
+  idField: "supplierId",
+  labelField: "name",
+  editableFields: ["name", "status"],
+  columns: [
+    { field: "supplierId", name: "ID", fieldType: "text" },
+    { field: "name", name: "Name", fieldType: "text" },
+    {
+      field: "status",
+      name: "Status",
+      fieldType: "select",
+      options: [
+        { key: "active", label: "Active" },
+        { key: "inactive", label: "Inactive" },
+      ],
+    },
+    { field: "taxId", name: "Tax ID", fieldType: "text" },
+  ],
+};
+
+describe("genericColumnDefs — editability", () => {
+  it("marks only editableFields editable, never the id field", () => {
+    const cols = genericColumnDefs(editableConfig);
+    const byId = Object.fromEntries(cols.map((c) => [c.columnId, c.editable]));
+    expect(byId.name).toBe(true);
+    expect(byId.status).toBe(true);
+    expect(byId.taxId).toBe(false);
+    expect(byId.supplierId).toBe(false);
+  });
+
+  it("read-only config (no editableFields) marks nothing editable", () => {
+    expect(genericColumnDefs(config).every((c) => c.editable === false)).toBe(true);
+  });
+});
+
+describe("genericUpdateData — validated raw-write tier", () => {
+  it("builds a validated data object for allow-listed fields", () => {
+    expect(genericUpdateData(editableConfig, { name: "Acme", status: "active" })).toEqual({
+      name: "Acme",
+      status: "active",
+    });
+  });
+
+  it("rejects editing the id field", () => {
+    expect(() => genericUpdateData(editableConfig, { supplierId: "X" })).toThrow(/cannot be edited/i);
+  });
+
+  it("rejects a non-allow-listed field (fail-closed)", () => {
+    expect(() => genericUpdateData(editableConfig, { taxId: "123" })).toThrow(/not editable/i);
+  });
+
+  it("rejects an invalid select option", () => {
+    expect(() => genericUpdateData(editableConfig, { status: "bogus" })).toThrow(/unknown option/i);
+  });
+
+  it("allows clearing a field to null", () => {
+    expect(genericUpdateData(editableConfig, { name: null })).toEqual({ name: null });
+  });
+});
+
+describe("generic adapter getCapabilities", () => {
+  it("is editable only with canManage AND editableFields", () => {
+    const editable = makeGenericReadAdapter(editableConfig);
+    expect(editable.getCapabilities({ userId: "u", canManage: true }).canEditCell).toBe(true);
+    expect(editable.getCapabilities({ userId: "u", canManage: false }).canEditCell).toBe(false);
+    const readonly = makeGenericReadAdapter(config);
+    expect(readonly.getCapabilities({ userId: "u", canManage: true }).canEditCell).toBe(false);
   });
 });
 
