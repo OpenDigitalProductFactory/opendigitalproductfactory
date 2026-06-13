@@ -8,11 +8,12 @@
 // references it, so it stays swappable.
 
 /**
- * Field types. `formula` and `lookup` (Phase 2) are *computed* — read-only,
- * never user-written, derived on read. `image` stores an uploaded MediaAsset URL;
+ * Field types. `formula`, `lookup`, and `rollup` are *computed* — read-only, never
+ * user-written, derived on read. `image` stores an uploaded MediaAsset URL;
  * `attachment` stores an uploaded file's URL plus its display name/size (any file
- * type) — both content-addressed via /api/v1/upload. `rollup`, currency remain out
- * of scope.
+ * type) — both content-addressed via /api/v1/upload. `rollup` aggregates the
+ * records that reference this row (reverse-FK count/sum/avg/min/max; reporting
+ * phase, platform grids first). `currency` remains out of scope.
  */
 export const FIELD_TYPES = [
   "text",
@@ -29,12 +30,13 @@ export const FIELD_TYPES = [
   "attachment",
   "formula",
   "lookup",
+  "rollup",
 ] as const;
 
 export type FieldType = (typeof FIELD_TYPES)[number];
 
 /** Field types whose value is computed on read, not stored or user-edited. */
-export const COMPUTED_FIELD_TYPES: readonly FieldType[] = ["formula", "lookup"];
+export const COMPUTED_FIELD_TYPES: readonly FieldType[] = ["formula", "lookup", "rollup"];
 
 export function isComputedFieldType(fieldType: FieldType): boolean {
   return COMPUTED_FIELD_TYPES.includes(fieldType);
