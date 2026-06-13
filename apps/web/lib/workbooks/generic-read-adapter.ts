@@ -1,12 +1,17 @@
-// Universal Grid & Workbooks — generic read-only adapter (EP-GRID-WORKBOOKS, Phase 2)
+// Universal Grid & Workbooks — generic adapter (EP-GRID-WORKBOOKS, Phase 2/3)
 //
 // "Every model is a grid": a config-driven DataSourceAdapter that exposes any
-// Prisma model as a read-only grid/board without a bespoke adapter class. v1 is
-// READ-ONLY by design and config-driven (an explicit field allow-list, not schema
-// introspection) so it can never expose sensitive fields (passwordHash, tokens)
-// and never performs a generic write. Models that need editing keep their
-// bespoke, validated adapters (backlog/invoice/risk). Edit-capable generic
-// adapters + DMMF introspection (with a steward denylist) are a later increment.
+// Prisma model as a grid/board without a bespoke adapter class. Config-driven via
+// an explicit field allow-list (not schema introspection) so it can never expose
+// sensitive fields (passwordHash, tokens).
+//
+// READ is the default. WRITE is opt-in per config via `editableFields` — the
+// "validated raw-write tier" (operator-approved 2026-06-12): for models without a
+// bespoke domain action, the generic adapter writes via Prisma, but only to
+// allow-listed fields and only after the SAME `validateCell` the rest of the
+// platform uses (so a write is still typed + validated, just not routed through a
+// hand-written domain action). Models that have real domain logic keep their
+// bespoke validated adapters (backlog/invoice/risk).
 
 import { prisma } from "@dpf/db";
 import {
@@ -27,6 +32,7 @@ import {
   type PagedRows,
   type GridCapabilities,
 } from "./types";
+import { validateCell, type CellStorage } from "./cell-validation";
 import { applyFilters, applySort, paginate } from "./grid-query";
 
 export interface GenericColumn {
@@ -55,6 +61,12 @@ export interface GenericTableConfig {
    * field, falling back to the id field itself.
    */
   labelField?: string;
+  /**
+   * Opt-in writable fields (validated raw-write tier). A subset of `columns`
+   * field names; the id field and any non-listed field stay read-only. Omit for a
+   * read-only grid. Each write goes through `validateCell` before Prisma.
+   */
+  editableFields?: string[];
 }
 
 const DEFAULT_CAP = 500;
@@ -109,13 +121,15 @@ export function genericRowToGridRow(
 }
 
 export function genericColumnDefs(config: GenericTableConfig): ColumnDefinition[] {
+  const editable = new Set(config.editableFields ?? []);
   return config.columns.map((c, i) => ({
     columnId: c.field,
     name: c.name,
     fieldType: c.fieldType,
     position: i,
     required: false,
-    editable: false, // generic v1 is read-only
+    // editable only if opt-in via editableFields (and never the id field)
+    editable: editable.has(c.field) && c.field !== config.idField,
     width: c.width,
     groupable: c.groupable ?? c.fieldType === "select",
     config: c.options ? { options: c.options } : undefined,
@@ -123,9 +137,65 @@ export function genericColumnDefs(config: GenericTableConfig): ColumnDefinition[
   }));
 }
 
+/** Pull the validated scalar for a Prisma write from a CellStorage by field type. */
+function prismaValueFromStorage(fieldType: FieldType, storage: CellStorage): unknown {
+  switch (fieldType) {
+    case "text":
+    case "url":
+    case "email":
+      return storage.textValue;
+    case "number":
+      return storage.numberValue;
+    case "date":
+    case "datetime":
+      return storage.dateValue;
+    case "checkbox":
+      return storage.boolValue;
+    case "select":
+      return storage.selectValue;
+    case "multi_select":
+      return storage.multiSelectValue;
+    default:
+      throw new Error(`Field type "${fieldType}" cannot be edited in a generic grid`);
+  }
+}
+
+/**
+ * Build a validated Prisma `data` object for a generic edit. Throws if a change
+ * targets the id field, a non-allow-listed field, an unknown field, or fails
+ * validation — fail-closed, no silent drops. Pure (no DB), so it is unit-testable.
+ */
+export function genericUpdateData(
+  config: GenericTableConfig,
+  changes: Record<string, CellValue>,
+): Record<string, unknown> {
+  const editable = new Set(config.editableFields ?? []);
+  const byField = new Map(config.columns.map((c) => [c.field, c]));
+  const data: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(changes)) {
+    if (field === config.idField) throw new Error(`The id field "${field}" cannot be edited`);
+    if (!editable.has(field)) throw new Error(`Field "${field}" is not editable`);
+    const col = byField.get(field);
+    if (!col) throw new Error(`Unknown field: ${field}`);
+    const result = validateCell(
+      {
+        name: col.name,
+        fieldType: col.fieldType,
+        required: false,
+        config: col.options ? { options: col.options } : undefined,
+      },
+      value,
+    );
+    if (!result.ok) throw new Error(result.error);
+    data[field] = prismaValueFromStorage(col.fieldType, result.storage);
+  }
+  return data;
+}
+
 type ReadDelegate = {
   findMany(args: unknown): Promise<Record<string, unknown>[]>;
   findUnique(args: unknown): Promise<Record<string, unknown> | null>;
+  update(args: unknown): Promise<Record<string, unknown>>;
 };
 
 function delegate(model: string): ReadDelegate {
@@ -210,8 +280,31 @@ class GenericReadAdapter implements DataSourceAdapter {
     return { label: String(r[labelField] ?? r[this.cfg.idField]) };
   }
 
-  getCapabilities(_ctx: AdapterContext): GridCapabilities {
-    return { canAddRow: false, canAddColumn: false, canEditCell: false, canDeleteRow: false };
+  async updateCells(
+    entityType: string,
+    rowId: string,
+    changes: Record<string, CellValue>,
+    ctx: AdapterContext,
+  ): Promise<GridRow> {
+    if ((this.cfg.editableFields?.length ?? 0) === 0) {
+      throw new Error("This data source is read-only");
+    }
+    if (!ctx.canManage) {
+      throw new Error("You do not have permission to edit this data");
+    }
+    const data = genericUpdateData(this.cfg, changes); // validates; throws fail-closed
+    await delegate(this.cfg.prismaModel).update({
+      where: { [this.cfg.idField]: rowId },
+      data,
+    });
+    const row = await this.getRow(entityType, rowId);
+    if (!row) throw new Error("Row updated but could not be read back");
+    return row;
+  }
+
+  getCapabilities(ctx: AdapterContext): GridCapabilities {
+    const canEdit = !!ctx.canManage && (this.cfg.editableFields?.length ?? 0) > 0;
+    return { canAddRow: false, canAddColumn: false, canEditCell: canEdit, canDeleteRow: false };
   }
 }
 

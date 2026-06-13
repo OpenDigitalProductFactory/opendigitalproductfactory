@@ -160,9 +160,14 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
 
 ## Remaining toward full Smartsheet + Supabase parity (tracked, not built)
 
-- **Supabase tier:** an *editable* generic adapter (any allow-listed Prisma model writable) — needs
-  a design call (raw validated writes for models without a domain action, as an explicit lower tier,
-  vs. always requiring a bespoke validated action). The biggest remaining Supabase-defining feature.
+- **Supabase tier — SHIPPED (slice 8).** Editable generic adapter (validated raw-write tier,
+  operator-approved 2026-06-12): a config opts in via `editableFields` (allow-list); the generic
+  adapter writes via Prisma but only to those fields and only after the same `validateCell` the rest
+  of the platform uses (`genericUpdateData`, pure + unit-tested, fail-closed on id/non-allow-listed/
+  invalid). Capability-gated; the existing `updatePlatformCellsAction` path wires it in with no new
+  UI. Proven on `supplier` (safe fields editable; tax/bank/address excluded by omission so
+  unwritable). Customer/employee stay read-only (no manage_* capability exists yet). Adding more
+  editable models is one `editableFields` line + a real `manageCapability`.
 - **Reporting (Phase 4):** group-by/pivots, charts/dashboards via report-kit, drill-through,
   scheduled refresh, RLS pre-aggregation, push-down/materialization, cross-row aggregation functions.
 - **Semantic layer (Phase 4):** `WorkbookMetric` (unique/owned/versioned, lineage-required).
