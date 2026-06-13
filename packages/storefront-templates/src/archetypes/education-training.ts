@@ -129,5 +129,11 @@ export const educationTrainingArchetypes: ArchetypeDefinition[] = [
       { name: "experience", label: "Driving experience", type: "select" as const, required: true, options: ["Complete beginner", "Some lessons previously", "Returning after a break", "Refresher course"] },
       { name: "transmission", label: "Transmission preference", type: "select" as const, required: false, options: ["Manual", "Automatic", "Either"] },
     ],
+    // Driving lessons are 1:1 slot bookings like tutoring/music-school, so reuse
+    // EDUCATION_SCHEDULING. The archetype's top-level ctaType is "purchase"
+    // (course/package sales), but its lesson items are ctaType:"booking" — without
+    // schedulingDefaults the setup route seeds no provider and the booking
+    // calendar ships empty (AUDIT-R3-DRV-F-001).
+    schedulingDefaults: EDUCATION_SCHEDULING,
   },
 ];
