@@ -186,7 +186,7 @@ export async function checkoutAgreement(
     if (agreement.verificationStatus === "pending") {
       return { ok: false, message: "Verify the renter before checkout (deposit pending)" };
     }
-    await prisma.$transaction(async (tx) => {
+    const conditionRecordId = await prisma.$transaction(async (tx) => {
       const record = await tx.rentalConditionRecord.create({
         data: {
           agreementId: id,
@@ -208,9 +208,12 @@ export async function checkoutAgreement(
           },
         });
       }
+      return record.id;
     });
     revalidatePath("/rental");
-    return { ok: true, message: "Checked out — asset is now out" };
+    // The record id lets the desk attach checkout inspection photos
+    // (ownerType=RentalConditionRecord, role=inspection-checkout).
+    return { ok: true, message: "Checked out — asset is now out", id: conditionRecordId };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Failed to check out" };
   }
@@ -229,7 +232,7 @@ export async function returnAgreement(
       select: { id: true, rentableUnitId: true, depositAmount: true },
     });
     if (!agreement) return { ok: false, message: "Agreement not found" };
-    await prisma.$transaction(async (tx) => {
+    const conditionRecordId = await prisma.$transaction(async (tx) => {
       const record = await tx.rentalConditionRecord.create({
         data: {
           agreementId: id,
@@ -252,6 +255,7 @@ export async function returnAgreement(
           },
         });
       }
+      return record.id;
     });
     revalidatePath("/rental");
     const depositNote =
@@ -260,7 +264,7 @@ export async function returnAgreement(
           ? " Deposit held pending damage assessment."
           : " Deposit cleared for release."
         : "";
-    return { ok: true, message: `Returned and re-pooled.${depositNote}` };
+    return { ok: true, message: `Returned and re-pooled.${depositNote}`, id: conditionRecordId };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Failed to record return" };
   }
