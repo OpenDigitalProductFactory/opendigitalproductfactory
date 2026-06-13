@@ -16,6 +16,13 @@ export default defineConfig({
     root: webDir,
     environment: "node",
     globals: false,
+    // The first test in any file that imports the ~12k-line lib/mcp-tools.ts is
+    // charged that module's full cold transform/compile cost. Under the parallel
+    // 4-shard CI run (forks pool — each file is its own worker, so the transform
+    // is paid per file), that first import intermittently exceeds the 5000ms
+    // default and times out (~5.3s observed across mcp-tools-*.test.ts). Raise
+    // the per-test budget so the cold import has headroom; real hangs still fail.
+    testTimeout: 15_000,
     include: ["**/*.test.{ts,tsx}"],
     exclude: ["node_modules", ".next"],
     // Each test file gets its own worker process. Without forks, React 18's
