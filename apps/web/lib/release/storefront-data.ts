@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { prisma } from "@dpf/db";
 import type { FormField } from "@dpf/storefront-templates";
+import { resolveOperatingHoursTimezone } from "@/lib/operating-hours-types";
 import type {
   PublicStorefrontConfig,
   PublicItem,
@@ -124,14 +125,14 @@ export const getPublicStorefront = cache(async function getPublicStorefront(
   // setting (BusinessProfile.timezone). StorefrontConfig.timezone carries a stale
   // Europe/London default that is never re-synced when the operator sets hours,
   // which is why US salons saw "Times shown in Europe/London" (AUDIT-R2-NS-B-005).
+  // Resolve through the same helper the Operating Hours settings page uses so the
+  // calendar label always matches what the operator sees there (UTC on a fresh
+  // install), never the stale config default.
   const businessProfile = await prisma.businessProfile.findFirst({
     where: { isActive: true },
     select: { timezone: true },
   });
-  const resolvedTimezone =
-    businessProfile?.timezone?.trim() ||
-    (config.timezone && config.timezone !== "Europe/London" ? config.timezone : null) ||
-    "America/Chicago";
+  const resolvedTimezone = resolveOperatingHoursTimezone(businessProfile?.timezone);
 
   // Confirmed regulatory display obligations for the "disclosures" section
   // (BI-5D9DCDE6 spec §9.3). D5 honesty rule: only obligations whose parent

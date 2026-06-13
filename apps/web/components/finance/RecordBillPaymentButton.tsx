@@ -35,6 +35,7 @@ export function RecordBillPaymentButton({ billId, amountDue, currency }: Props) 
   const [amount, setAmount] = useState(amountDue > 0 ? String(amountDue) : "");
   const [method, setMethod] = useState<string>("bank_transfer");
   const [receivedAt, setReceivedAt] = useState(getToday());
+  const [reference, setReference] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -53,6 +54,7 @@ export function RecordBillPaymentButton({ billId, amountDue, currency }: Props) 
         method: method as (typeof PAYMENT_METHODS)[number],
         amount: value,
         receivedAt,
+        reference: reference.trim() || undefined,
       });
       setOpen(false);
       router.refresh();
@@ -117,6 +119,16 @@ export function RecordBillPaymentButton({ billId, amountDue, currency }: Props) 
           value={receivedAt}
           onChange={(e) => setReceivedAt(e.target.value)}
           required
+          className={inputClasses + " w-full"}
+        />
+      </div>
+      <div>
+        <label className={labelClasses}>Reference (optional)</label>
+        <input
+          type="text"
+          value={reference}
+          onChange={(e) => setReference(e.target.value)}
+          placeholder="e.g. cheque no. or transfer ID"
           className={inputClasses + " w-full"}
         />
       </div>
