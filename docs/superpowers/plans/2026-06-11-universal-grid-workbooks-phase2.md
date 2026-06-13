@@ -106,26 +106,91 @@ columns (fail-closed)** are NOT yet written — tracked for the governance/lifec
 v1 computed columns are local-derivation only, no SoR mutation, so the fail-closed lineage invariant
 (which guards *promotion*) is not yet engaged.
 
-## Slice 3 — `provenanceKind` + progressive disclosure — separate PR (BI-B8549363)
+## Slice 3 — `provenanceKind` + progressive disclosure — SHIPPED (BI-B8549363)
 
-Additive migration: `WorkbookColumn.provenanceKind` (`system|source|derived|manual`). Platform-adapter
-columns report `system`; custom columns default `manual`; slice-2 derived columns are `derived`.
-Progressive disclosure: labels hidden until hover/advanced toggle (Dale review). One migration +
-seed-safe default + adapter `getColumns` populates it + a hover label in the grid header.
+**No migration** — provenance is *derived*, not stored: platform/generic adapters report `system`;
+custom columns are `derived` (formula/lookup) or `manual` (everything else) via
+`customColumnProvenance`. Avoids the deploy-gap entirely and is the correct source of truth (a
+column's tier follows from what it is, not a stored flag that could drift).
 
-## Slice 4 — Multi-step undo/redo — separate PR (BI-BA57AB71)
+- `ColumnDefinition.provenanceKind` + `PROVENANCE_KINDS`/`PROVENANCE_LABELS` (end-user wording:
+  Official / Live source / Calculated / Your note).
+- Every adapter's `getColumns` tags provenance (backlog/invoice/risk/generic = system; custom = derived/manual).
+- **Progressive disclosure (Dale review):** the grid reads as an ordinary spreadsheet; a "Show data
+  sources" toggle reveals a small per-column provenance label in the header. Hidden by default.
 
-Undo/redo stack in the `<Grid>` contract; each undo replays the inverse edit through the same
-validated dispatch (never raw write); reject + show error + leave cell unchanged when the inverse
-is invalid (parity with #1634 optimistic revert). Cell-value edits in scope; row add/delete deferred.
+`source` (live external feeds) stays unused until Phase 6 integrations land.
 
-## Slice 5 — More read-only generic grids — separate PR (BI-29E1F452)
+## Slice 4 — Multi-step undo/redo — SHIPPED (BI-BA57AB71)
 
-~15-line config rows on the #1722 generic adapter for customers, employees (safe-fields allow-list
-only — no PII/comp), suppliers. Each behind its domain view capability.
+Undo/redo for cell edits in the `<Grid>`. Each inverse replays through the **same validated
+dispatch** as a normal edit (never a raw write); a rejected inverse shows the error and leaves the
+cell unchanged (persistCell's optimistic revert, parity with #1634). Ctrl-Z / Ctrl-Y (+ Ctrl-Shift-Z)
+and toolbar Undo/Redo buttons; the keyboard handler yields to a cell editor's own text-undo. Stack
+transitions extracted to a pure, unit-tested `grid-history.ts` (record clears the redo branch;
+commitUndo/commitRedo move entries; LIFO). Cell-value edits in scope; row add/delete deferred.
+
+## Slice 5 — More read-only generic grids — SHIPPED (BI-29E1F452)
+
+Customers (`customer_account`, view_customer), people (`employee_profile`, view_employee — safe
+org-directory fields only), suppliers (`supplier`, view_finance) as read-only generic grids +
+boards. Allow-lists live in `people-supplier-configs.ts` (a light, type-only-import module) and are
+**unit-tested for safe omission**: the employee grid asserts no legal-name-parts/personal-contact/
+comp/PII/addresses/termination; supplier omits tax/bank/address; customer omits revenue/notes/source.
+They also become reference targets automatically (slice 1). Each behind its domain view capability.
 
 ## Ordering rationale
 
 References (1) are the relational substrate rollups/lookups (2) require. `provenanceKind` (3) is
 cheap and clarifies tiers but does not block 1–2. Undo/redo (4) is independent. Generic grids (5)
 are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
+
+## Phase 3 — Spreadsheet-on-data UX (toward Smartsheet parity)
+
+- **Slice 6 — grid quick filter — SHIPPED.** A client-side, case-insensitive substring filter
+  across all columns (pure, unit-tested `grid-filter.ts`; matches reference labels too), with a
+  toolbar search box + "N of M" count.
+- **Slice 7 — per-column filters — SHIPPED.** A toggleable filter panel with one control per column
+  (select → option dropdown, checkbox → checked/unchecked, else text), AND-combined with the quick
+  filter (`applyColumnFilters`, unit-tested), with an active-count badge + Clear. Client-side over
+  loaded rows; precise number/date operators + saved views are follow-ups.
+- **Slice 9 — CSV export — SHIPPED.** An "Export CSV" toolbar button downloads the current view
+  (filtered + sorted) as RFC-4180-ish CSV (pure, unit-tested `grid-csv.ts`; reuses `cellSearchText`
+  so exported values match what's shown, including reference labels). Works for every grid.
+- **Slice 10 — conditional formatting — SHIPPED.** A "Format" panel of rules (column + operator
+  [equals/contains/gt/lt/empty/…] + value + colour); the first matching rule tints the row.
+  Pure, unit-tested `grid-conditional-format.ts` (`ruleMatches`/`rowColor`); applied via
+  react-data-grid `rowClass`. Session-scoped for now; persisting rules to `WorkbookView` is a follow-up.
+- **Slice 11 — group-by summary — SHIPPED.** A "Summary" panel groups the (filtered) rows by a
+  chosen column and shows count + numeric aggregates (sum/avg/min/max) of a chosen value column per
+  group. Pure, unit-tested `grid-summary.ts` (`summarize`/`toSummaryNumber`). Over loaded rows; full
+  pivots (multi-dimension, subtotals, %) + SQL push-down are later Phase-4 work.
+- **Slice 13 — summary chart — SHIPPED.** A Table/Chart toggle in the Summary panel renders a CSS
+  bar chart of the grouped metric (count, or the value column's sum), scaled to the largest bar.
+  Pure, unit-tested `summaryChartBars`. Richer chart types (pie/line via recharts) are a follow-up.
+- **Slice 14 — persistent grid views — SHIPPED.** The per-grid view (quick filter, column filters,
+  sort, conditional-format rules, provenance toggle) is saved per tableId and restored on reload.
+  Client-side localStorage (works for every grid, no migration); pure, unit-tested `grid-view-state.ts`
+  with defensive parsing (malformed/old payloads ignored field-by-field). Named/shareable server-side
+  views (WorkbookView) are a follow-up.
+- **Slice 15 — gallery (card) view — SHIPPED.** A Grid/Gallery toggle on the WorkbookGrid renders
+  rows as cards (one card per row, each column as a label/value pair), honoring the active filters,
+  sort, and conditional-format colour (a left-border accent). No new dependency, like the kanban board.
+- **Remaining (not built):** named/shareable views; calendar view (fullcalendar — needs a date
+  column); full pivots + richer charts; metrics/semantic layer; operationalization lifecycle.
+
+## Remaining toward full Smartsheet + Supabase parity (tracked, not built)
+
+- **Supabase tier — SHIPPED (slice 8).** Editable generic adapter (validated raw-write tier,
+  operator-approved 2026-06-12): a config opts in via `editableFields` (allow-list); the generic
+  adapter writes via Prisma but only to those fields and only after the same `validateCell` the rest
+  of the platform uses (`genericUpdateData`, pure + unit-tested, fail-closed on id/non-allow-listed/
+  invalid). Capability-gated; the existing `updatePlatformCellsAction` path wires it in with no new
+  UI. Proven on `supplier` (safe fields editable; tax/bank/address excluded by omission so
+  unwritable). Customer/employee stay read-only (no manage_* capability exists yet). Adding more
+  editable models is one `editableFields` line + a real `manageCapability`.
+- **Reporting (Phase 4):** group-by/pivots, charts/dashboards via report-kit, drill-through,
+  scheduled refresh, RLS pre-aggregation, push-down/materialization, cross-row aggregation functions.
+- **Semantic layer (Phase 4):** `WorkbookMetric` (unique/owned/versioned, lineage-required).
+- **Operationalization lifecycle (Phase 5):** promote column → metric → schema field / page-visual,
+  with gates + blast-radius + governed retirement; derived-column lineage edges (fail-closed).

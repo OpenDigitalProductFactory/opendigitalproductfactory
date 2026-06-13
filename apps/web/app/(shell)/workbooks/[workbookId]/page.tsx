@@ -12,6 +12,7 @@ import {
 import { WorkbookGrid } from "@/components/workbooks/Grid";
 import { CreateTableButton } from "@/components/workbooks/CreateTableButton";
 import { AddColumnButton } from "@/components/workbooks/AddColumnButton";
+import { ImportSheetButton } from "@/components/workbooks/ImportSheetButton";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +90,7 @@ export default async function WorkbookDetailPage({ params, searchParams }: Props
           );
         })}
         {canManage && <CreateTableButton workbookId={workbookId} />}
+        {canManage && <ImportSheetButton workbookId={workbookId} />}
       </div>
 
       {!grid ? (

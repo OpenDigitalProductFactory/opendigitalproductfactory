@@ -56,7 +56,7 @@ class BacklogItemAdapter implements DataSourceAdapter {
   readonly entityType = BACKLOG_ENTITY_TYPE;
 
   async getColumns(): Promise<ColumnDefinition[]> {
-    return BACKLOG_COLUMNS;
+    return BACKLOG_COLUMNS.map((c) => ({ ...c, provenanceKind: "system" as const }));
   }
 
   async queryRows(

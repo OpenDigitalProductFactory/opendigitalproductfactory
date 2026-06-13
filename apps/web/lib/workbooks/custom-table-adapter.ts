@@ -25,6 +25,7 @@ import {
   type PagedRows,
   type GridCapabilities,
   isComputedFieldType,
+  customColumnProvenance,
 } from "./types";
 import {
   validateCell,
@@ -101,6 +102,7 @@ function toColumnDefinition(meta: ColumnMeta, position: number, width: number | 
     config: meta.config,
     editable: !isComputedFieldType(meta.fieldType),
     groupable: meta.fieldType === "select",
+    provenanceKind: customColumnProvenance(meta.fieldType),
   };
 }
 
