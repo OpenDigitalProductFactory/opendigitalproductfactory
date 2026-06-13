@@ -161,8 +161,13 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   [equals/contains/gt/lt/empty/…] + value + colour); the first matching rule tints the row.
   Pure, unit-tested `grid-conditional-format.ts` (`ruleMatches`/`rowColor`); applied via
   react-data-grid `rowClass`. Session-scoped for now; persisting rules to `WorkbookView` is a follow-up.
+- **Slice 11 — group-by summary — SHIPPED.** A "Summary" panel groups the (filtered) rows by a
+  chosen column and shows count + numeric aggregates (sum/avg/min/max) of a chosen value column per
+  group. Pure, unit-tested `grid-summary.ts` (`summarize`/`toSummaryNumber`). Over loaded rows; full
+  pivots (multi-dimension, subtotals, %) + SQL push-down are later Phase-4 work.
 - **Remaining (not built):** saved views (persist filters/sort/format to the existing `WorkbookView`);
-  calendar + gallery views; `.xlsx` import; group-by summary.
+  calendar + gallery views; `.xlsx` import; full pivots + charts/dashboards; metrics/semantic layer;
+  operationalization lifecycle.
 
 ## Remaining toward full Smartsheet + Supabase parity (tracked, not built)
 
