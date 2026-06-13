@@ -9,8 +9,10 @@
 
 /**
  * Field types. `formula` and `lookup` (Phase 2) are *computed* — read-only,
- * never user-written, derived on read. `image` stores an uploaded MediaAsset URL
- * (content-addressed via /api/v1/upload). `rollup`, currency remain out of scope.
+ * never user-written, derived on read. `image` stores an uploaded MediaAsset URL;
+ * `attachment` stores an uploaded file's URL plus its display name/size (any file
+ * type) — both content-addressed via /api/v1/upload. `rollup`, currency remain out
+ * of scope.
  */
 export const FIELD_TYPES = [
   "text",
@@ -24,6 +26,7 @@ export const FIELD_TYPES = [
   "url",
   "email",
   "image",
+  "attachment",
   "formula",
   "lookup",
 ] as const;
@@ -120,6 +123,17 @@ export interface ReferenceValue {
   label?: string;
 }
 
+/**
+ * An attachment cell value: an uploaded file's retrieval URL plus display
+ * metadata. The bytes live in content-addressed media storage (/api/v1/upload);
+ * the cell only carries the URL and the original filename/size for display.
+ */
+export interface AttachmentValue {
+  url: string;
+  name?: string;
+  size?: number;
+}
+
 /** The union of values a single cell can hold, keyed by field type at runtime. */
 export type CellValue =
   | string
@@ -127,6 +141,7 @@ export type CellValue =
   | boolean
   | string[]
   | ReferenceValue
+  | AttachmentValue
   | null;
 
 /** One row as the grid consumes it: a map of columnId -> value, plus the row id. */
