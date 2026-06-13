@@ -1,0 +1,558 @@
+# Archetype Business Value Streams
+
+**Status:** Draft — 2026-06-12 (enterprise architecture / usability / business-analysis review applied)
+**Kind:** Planning artefact (architecture + testing + archetype documentation)
+**Owner surface:** Architecture feature (`/ea`), archetype documentation, and the archetype audit.
+**Consumed by:** [archetype-audit-plan.md](../testing/archetype-audit-plan.md) · the EA / architecture feature · per-archetype documentation.
+**Implemented by:** [2026-06-12-value-stream-architecture-platform-design.md](../superpowers/specs/2026-06-12-value-stream-architecture-platform-design.md) — platform design that captures these value streams as architecture, measures/optimizes each archetype's business model, and drives coworker facilitation + proactivity (the *how*).
+**Grounded in:** `packages/storefront-templates/src/archetypes/` (53 seeded archetypes) and `packages/storefront-templates/src/types.ts` (operating-model axes, commercial models, activation profiles).
+**Decision authority:** Defines value-stream interpretation, audit severity rationale, EA rendering semantics, and archetype documentation language. It does **not** override seed data, create new runtime tables, or authorize WWMD/WWWD perspective blending.
+
+---
+
+## 0. Why this document exists
+
+The archetype audit drives 53 seeded archetypes through a browser-realistic experience and records gaps. The risk it names in its own Section 1 — *"The platform must behave correctly for each organizational model"* — is that **testing becomes arbitrary**: we click through phases A–H because the checklist says so, not because each click defends something the business actually depends on.
+
+This artefact removes the arbitrariness. It states, for every archetype, **the operational value stream the business runs in the real world** — the end-to-end sequence of value-adding stages that turns a stranger into a served, paid, retained customer. Every test phase then exists to validate a *named stage of a real value stream*, and every finding can be tied to *the stage of the business it threatens*. A vet booking form that drops the pet fields is not "an important finding because the checklist says pet fields" — it is a **break in the Capture-Demand → Deliver-Care handoff** that makes the clinic's core value stream non-functional.
+
+Four consumers, one source of truth:
+
+1. **Testing & validation** — the audit phases map to value-stream stages (Section 4). A finding cites the stage it breaks; severity follows from how load-bearing that stage is for the archetype.
+2. **Architecture feature** — the value streams render against the substrate the platform already carries (`OperatingModelAxes`, `ActivationProfile`, `It4ItStage`, `PortfolioDecomposition`) and export to ArchiMate (Section 8).
+3. **Archetype documentation** — each archetype's "how this business actually works" narrative (Section 6) is the human-readable answer to *why* its storefront, vocabulary, scheduling, finance, and compliance defaults are shaped the way they are.
+4. **Business-context decision substrate (WWWD)** — the value-stream architecture and its concerns are foundational input to the org's own *"What Would We Do"* decision perspective: the governed profile of how *this business* operates and decides. See Section 8.8 for the WWWD-vs-WWMD context separation.
+
+**Reader contract.** This document is deliberately both architectural and operational. Architects use it to bind value stages to capabilities and export semantics. Testers use it to justify severity. UX designers use it to decide what the operator should see first. Business analysts use it to turn a vague gap ("booking feels wrong") into a stage-specific requirement with acceptance evidence ("S3 Schedule ignores provider capacity for an appointment-checkout business").
+
+---
+
+## 1. Two senses of "value stream" — keep them distinct
+
+The platform already has a canonical [Value Stream entity](../founder-kernel/wiki/entities/value-stream.md). It means the **IT4IT v3 seven cross-cutting flows** — Evaluate, Explore, Integrate, Deploy, Release, Operate, Consume — i.e. *how DPF itself builds and runs digital products*. That is the **producer/platform** value stream and it is unchanged by this document.
+
+This document is about the other sense: the **operational value stream of the customer's business** — *how a salon, a bank, or a town creates and delivers value to its own end customers*. The two relate cleanly:
+
+| | IT4IT value streams (kernel entity) | Operational value streams (this doc) |
+|---|---|---|
+| Whose flow | DPF building/running the platform | The archetype business serving its customers |
+| Canonical slugs | `evaluate … consume` | `attract · capture · qualify · deliver · settle · retain` (Section 3) |
+| Example | "Voice STT slice moves Explore→Integrate→Deploy" | "A vet clinic moves a pet from booking → exam → invoice → recall" |
+| Standard | The Open Group IT4IT v3 | Business Architecture Guild BIZBOK® · TOGAF/ArchiMate value-stream element |
+
+> **Standard used (research-and-use-standards):** ArchiMate defines a value stream as a sequence of activities that creates an overall result for a customer, stakeholder, or end user ([Open Group ArchiMate 3.2 reference card](https://www.opengroup.org/sites/default/files/docs/downloads/n221p.pdf)). The Business Architecture Guild frames business architecture value streams around customer and stakeholder value, with stages that realize value items and cross-map to capabilities ([Guild white paper, 2019](https://cdn.ymaws.com/www.businessarchitectureguild.org/resource/resmgr/public_resources/bpm_paper_final_dec2019.pdf)). DPF uses those standards together: stages describe stakeholder value accrual; capabilities describe what the platform must provide to enable each stage.
+
+This distinction matters. A value stream is not a click path, process map, or implementation workflow. A value-stream stage may be realized by multiple UI flows and processes, and one UI flow may touch multiple stages. The stage names therefore stay stable even when the portal design changes.
+
+The bridge: the customer's operational value stream lives almost entirely in IT4IT's **Consume** stream (request → fulfilment → customer-facing experience). DPF's job is to make a non-technical operator run their whole operational value stream *through* the platform's Consume surface. So this document is the detailed expansion of "Consume" for each of the 53 businesses we ship.
+
+---
+
+## 2. The universal small-business value stream
+
+Across all 53 archetypes, the same backbone recurs. Differences are not *which* stages exist — every business attracts, captures, delivers, settles, and retains — but **which stage is load-bearing, what "value delivered" means, and which trust gate governs it.** The backbone:
+
+```
+                 ┌─────────────────── TRUST & COMPLIANCE (cross-cutting) ───────────────────┐
+                 │                                                                            │
+  S1 ATTRACT  →  S2 CAPTURE  →  S3 QUALIFY  →  S4 DELIVER  →  S5 SETTLE  →  S6 RETAIN
+  & Discover     Demand          & Schedule     the Value      & Account     & Grow
+                 │                                                                            │
+                 └────────────────── OPERATE & IMPROVE (cross-cutting) ──────────────────────┘
+```
+
+**Primary stages**
+
+| Stage | The value increment | What the operator must be able to do |
+|-------|---------------------|--------------------------------------|
+| **S1 Attract & Discover** | The business is *found* and its offer is *legible* to the right person. | Publish a public portal with correct hero, services/products, vocabulary, and CTA label that matches the business. |
+| **S2 Capture Demand** | Intent is *captured without friction* — the moment money or commitment becomes possible. | Drive the archetype's primary CTA (book / quote / buy / donate / apply) end-to-end and issue a reference. |
+| **S3 Qualify & Schedule** | Demand is *triaged, assigned, and slotted* against real capacity. | Route the inbox item, assign staff, place it on a calendar that reflects real availability and hours. |
+| **S4 Deliver the Value** | The core thing the customer actually pays for *happens* (the cut, the exam, the loaf, the loan decision, the permit). | Hold the records the delivery needs — customer/account, pet/asset/unit, the service item — so delivery is informed, not improvised. |
+| **S5 Settle & Account** | Money is *recognised correctly* — invoice, receipt, bill, P&L — even when DPF never moves the money. | Record the bill/invoice/donation receipt; see revenue and expense land truthfully in the P&L. |
+| **S6 Retain & Grow** | The relationship *persists* — repeat, recall, renewal, membership, feedback. | Keep the customer estate, surface the next interaction, let the coworker reason about the relationship. |
+
+**Cross-cutting concerns** (govern every stage; failures here are not optional polish):
+
+- **Trust & Compliance** — the right vocabulary (patients, members, ratepayers, borrowers), the right disclosures (FDIC, NMLS, gift-aid), and the *refusals* a regulated business needs (no clinical/legal/financial advice; no CJI access). For licensed archetypes this is **load-bearing in S1–S2 already** — the offer is not legible if it is not compliant.
+- **Operate & Improve** — the coworker and the ops backlog: the always-on operator's assistant that must speak the *business's* language, never the platform-developer's, and convert demand into operational work.
+
+> **Reading guide:** a stage is *load-bearing* for an archetype when a defect there makes the business non-functional, not merely inconvenient. The per-category profiles (Section 6) name the load-bearing stage(s) for each archetype. Audit severity should track this: a defect in a load-bearing stage is `critical`/`important`; the same class of defect in a non-load-bearing stage is `minor`.
+
+---
+
+## 3. The commercial model decides the value-stream shape
+
+The single axis that most changes the shape of the stream is `OperatingModelAxes.commercialModel` (see `types.ts`). It determines what S2/S5 look like and where the load-bearing stage sits. The eight shapes we actually ship:
+
+| Commercial model | Archetype families | S2 Capture is… | S5 Settle is… | Load-bearing stage |
+|------------------|--------------------|----------------|---------------|--------------------|
+| **appointment-checkout** | beauty & personal care | book + pay at service; no running account | per-visit, no estate | **S3 Schedule** (the calendar *is* the product) |
+| **encounter-based** | healthcare, veterinary | book an episode of care; estate carries patient/pet | per-encounter invoice against the record | **S4 Deliver** (the record must inform the encounter) |
+| **transactional / point-of-sale** | retail, bakery, florist, artisan | add-to-cart → checkout → order ref | order-linked invoice | **S2 Capture** (catalog → cart → checkout must not drop) |
+| **subscription** | gym, yoga, sports-club | join → recurring membership | recurring, not one-off | **S6 Retain** (the renewal, not the first sale) |
+| **recurring-agreement** | IT MSP, facilities, cleaning contracts | inquiry → agreement; strict estate isolation | per-agreement, per-period | **S4 Deliver** under **strict estate separation** |
+| **account-based-fees (+ KYC)** | banking, credit union, mortgage | inquiry/apply → KYC-gated relationship | fee schedule, prepared-not-prescribed | **Trust gate before S3** (KYC/disclosure precede everything) |
+| **statutory-fees-and-levies** | municipality, utility, law enforcement | request a statutory service; no sale | fee schedule by ordinance | **Trust & universal-service obligation** (must serve every resident) |
+| **donation** | charity, shelters, rescue, co-op | give; no invoice, receipt only | donation receipt, **no billing account** | **S2 Capture** + the *absence* of a purchase artefact |
+| **quote / inquiry-to-engagement** | trades, professional services, catering, wholesale, HOA | capture a qualified lead → quote | ad-hoc invoice after delivery | **S2 Capture quality** (urgency/property/scope fields) |
+
+This table is the *why* behind the audit's CTA-by-CTA Phase B5 scripts and the Phase G financial variants. It also explains the audit's three "full fresh install" rules (banking, MSP, public sector / law enforcement): those are exactly the models whose **trust gate precedes the value stream**, and a swap does not re-provision the gate.
+
+---
+
+## 4. The bridge — value-stream stage → platform surface → audit phase
+
+This is the table the audit refers to when executing. It makes every phase non-arbitrary: each one defends a named stage. (`[A]` = archetype-specific evaluation target; `[C]` = common mechanic proven once in Run 0.)
+
+| Value-stream stage | Platform surface (capability) | Audit phase(s) | What a failure here means for the business |
+|--------------------|-------------------------------|----------------|--------------------------------------------|
+| **S1 Attract & Discover** | Public portal: hero, sections, items, CTA label, vocabulary | A2–A4 (suggest), B1–B4, B6–B7 `[A]` | The business is invisible or mislabelled — the customer bounces before intent forms. |
+| **S2 Capture Demand** | Primary CTA flow + reference number; domain form fields | B5, B5x `[A]` | Demand is lost at the exact moment of commitment — the worst possible failure. |
+| **S3 Qualify & Schedule** | Team/availability, operating hours, booking calendar, inbox routing | P1–P3, B5 steps 3–4, F1–F4 `[C/A]` | Capacity is mismodelled — double-bookings, no-show economics, wrong staff. |
+| **S4 Deliver the Value** | Customer estate, ConfigurationItem (pet/asset/unit), service item, scheduling defaults | P4–P5, B5 record-verify, E5 `[A]` | Delivery is uninformed — the wrong record, missing pet/asset/patient context. |
+| **S5 Settle & Account** | Suppliers, bills, invoices, P&L, donation-receipt rule | G1–G6 `[C/A]` | Money is recognised wrongly or not at all — the operator cannot trust their own books. |
+| **S6 Retain & Grow** | Customer account linkage, coworker memory, ops backlog | B5 step 7 (account link), E2–E5, F4 `[A]` | One-shot transactions; no recall/renewal/membership — the business cannot compound. |
+| **Trust & Compliance** (X-cut) | Vocabulary overrides, disclosures/licensing, coworker refusals | C1–C4, E4, AI-3, VOCAB-1/2/3, GRC-1 `[A]` | Regulatory exposure, wrong persona language, advice a licensed body must not give. |
+| **Operate & Improve** (X-cut) | Coworker routing/identity, inbox→backlog | AI-0/1/2, B6, F4 `[C/A]` | The operator's assistant speaks platform-dev language or cannot turn demand into work. |
+
+> **Severity derivation rule for the audit:** locate the finding's stage in Section 6's per-archetype "load-bearing stages." A defect in a load-bearing stage → `critical` (flow broken / wrong data) or `important` (missing field/label/module). The same defect in a non-load-bearing stage → `minor`. This replaces ad-hoc severity calls with a stated rationale.
+
+---
+
+## 5. The value-stream stages map onto substrate the platform already carries
+
+Nothing here invents a new table. The stages bind to existing fields, which is what lets the architecture feature render them (Section 8) and the audit read expected values from seed rather than from prose.
+
+| Stage | Bound to (existing substrate in `types.ts` / archetype seed) |
+|-------|--------------------------------------------------------------|
+| S1 Attract | `sectionTemplates`, `ctaType`, `vocabulary` override, category vocabulary |
+| S2 Capture | `formSchema`, `ItemTemplate.ctaType/ctaLabel`, `CtaType` |
+| S3 Schedule | `SchedulingDefaults` (pattern/assignment/hours/buffers/notice) |
+| S4 Deliver | `ActivationProfile.modules` (`customer-estate`, `service-operations`, `projects`), `SeededConfigurationItemType`, `estateSeparation`, `customerGraph` |
+| S5 Settle | `BillingPatternProfile` (`primaryPaymentPattern`, `invoiceExecutionMode`, `recurringBillingApplicability`), `billingReadinessMode` |
+| S6 Retain | `ActivationProfile.modules` (`service-agreements`, `lifecycle-signals`), `PartnerProgramProfile` |
+| Trust & Compliance | `GovernanceModel`, `ProvisioningModel` (`account-with-kyc`/`episode-of-care`), `seededServiceCategories` (e.g. BIAN `compliance`), `disclosures` section type |
+| Operate & Improve | coworker identity (`vocabulary.agentName`), `PortfolioDecomposition` with `It4ItStage` per role |
+
+The `PortfolioDecomposition` already tags each portfolio role with `It4ItStage[]` — that is the formal seam where the *operational* value stream (this doc) plugs into the *platform* value stream (the kernel entity). An archetype's `productsAndServicesSold` portfolio carrying `it4itStages: ["request-to-fulfill"]` is the machine-readable assertion that this business's S2–S5 live in Consume.
+
+### 5.1 Architecture and usability invariants
+
+These invariants keep this artefact useful to architecture, UX, testing, and business analysis without turning it into a parallel product model:
+
+| Invariant | Why it matters | Enforcement signal |
+|-----------|----------------|--------------------|
+| **Seed data remains executable truth.** | Prevents prose drift from becoming a hidden source of product behavior. | If this doc and `packages/storefront-templates/src/archetypes/` disagree, fix the seed or fix this doc; do not special-case the runtime. |
+| **Stages are projections, not tables.** | The platform can render and audit value streams without adding a second business-process data model. | EA rendering derives from `ActivationProfile`, `SchedulingDefaults`, `BillingPatternProfile`, `PortfolioDecomposition`, and vocabulary. |
+| **Operators see business language first.** | A non-technical user should understand "booking capacity" or "donor receipt" before "S3" or "S5". | UI labels use archetype vocabulary; stage codes appear only as secondary admin/architecture metadata. |
+| **Load-bearing stages drive attention.** | The first viewport, audit severity, and coworker prompts must focus where business failure is most expensive. | EA and audit views highlight load-bearing stages; non-load-bearing stages remain visible but quieter. |
+| **Trust gates are first-class constraints.** | Regulated, licensed, public-body, and member-owned archetypes fail if trust is treated as footer copy. | Disclosures, refusals, KYC/statutory obligations, and governance constraints attach to the stage they govern. |
+| **Evidence must round-trip.** | A gap should move cleanly from observation to requirement to verification. | Every finding names stage, capability, user impact, seed/source expectation, and acceptance evidence. |
+
+**Usability consequence.** The EA surface should not present a dense architecture diagram as the first experience for an operator. The default view should be a short stage ribbon with the load-bearing stage, trust gate, and next operational action visible. Capability bindings, IT4IT joins, and ArchiMate details are drill-down material for architects and admins.
+
+---
+
+## 6. Per-category value-stream profiles (all 53 archetypes)
+
+Each profile gives: the **value the end customer receives** (job-to-be-done), the **commercial model** (Section 3 shape), the **load-bearing stage(s)**, the **distinctive stage** that the audit must scrutinise, and the **trust gate**. Per-archetype rows name only what diverges from the category. Service names and CTA labels are *expected from seed* — where prose and seed disagree, seed wins.
+
+---
+
+### 6.1 Trades & Maintenance (Run 1) — `plumber`, `electrician`, `facilities-maintenance`, `landscaping`, `cleaning-service`
+
+- **Value delivered:** a property problem is *fixed* or kept-from-breaking — competently, on time, often urgently.
+- **Commercial model:** quote / inquiry-to-engagement (`facilities-maintenance` and `cleaning-service` add recurring-agreement for planned contracts).
+- **Load-bearing stage:** **S2 Capture** — the inquiry must capture *enough to quote and triage* (`jobType`, `urgency` Emergency/Routine/Planned, `propertyType`). A leak at midnight that lands as a content-free "contact us" is a lost job.
+- **Distinctive stage:** S3 Qualify — urgency drives dispatch order; emergency vs planned is the whole economics of trades.
+- **Trust gate:** licensed trades (electrician — EICR/NICEIC; gas) must frame certification correctly; coworker must not improvise safety/compliance advice.
+- **Value-stream-critical assertions:** TRADES_FORM_FIELDS (`urgency`, `propertyType`) render and submit; inbox shows urgency so dispatch can prioritise; coworker says "jobs/call-outs/quotes/technicians," never "appointments/products."
+
+| Archetype | Diverges from category by |
+|-----------|---------------------------|
+| `plumber` | Emergency call-out is the headline S2 path; boiler service is the recurring hook into S6. |
+| `electrician` | Stronger Trust gate (safety certification); EV-charger/consumer-unit are planned (S3) not emergency. |
+| `facilities-maintenance` | B2B; **recurring-agreement** planned-maintenance contract makes **S6 Retain** co-load-bearing; HVAC servicing is the AC-repair scenario. Known gap: no dedicated `hvac-contractor` leaf (BI-FS-001). |
+| `landscaping` | Seasonal/recurring framing; gallery section feeds S1; `gardenSize` qualifies the quote. |
+| `cleaning-service` | `frequency` (one-off/weekly/…) is the S6 recurring signal captured at S2; residential vs commercial splits the stream. |
+
+---
+
+### 6.2 Beauty & Personal Care (Run 2) — `hair-salon`, `barber-shop`, `nail-salon`, `beauty-spa`, `optician`, `personal-trainer`
+
+- **Value delivered:** a personal-care service performed by a *specific practitioner* in a *specific slot*.
+- **Commercial model:** **appointment-checkout** — book and pay at service; **no running account/estate**.
+- **Load-bearing stage:** **S3 Schedule** — the calendar *is* the product. Practitioner availability, operating hours, slot length, and no-show buffers are the business. A booking that ignores the stylist's real hours is a broken business.
+- **Distinctive stage:** S2 → S3 handoff: provider selection must show *that provider's* slots, not generic ones.
+- **Trust gate:** `optician` is clinical-adjacent — coworker frames "see a registered optometrist," does not advise on prescriptions.
+- **Value-stream-critical assertions:** `customer-estate` module is **NOT** active (appointment-checkout); coworker confirms "no account balance — pay at time of service"; duration variants render (spa 60/90 min); vocabulary "clients/appointments/stylists," not "patients/members."
+
+| Archetype | Diverges from category by |
+|-----------|---------------------------|
+| `hair-salon` | Canonical appointment-checkout reference; bridal package is a higher-value S2 variant. |
+| `barber-shop` | "clients" vocabulary; walk-in culture means S3 must tolerate same-day. |
+| `nail-salon` | Fixed/per-session pricing — no "quote" path; high-frequency rebooking loads S6 lightly. |
+| `beauty-spa` | Duration options (60/90) are first-class in S3; couples package = multi-resource slot. |
+| `optician` | Clinical Trust gate; the "fitting/screening" services straddle care and retail. |
+| `personal-trainer` | Session-pack pricing pulls a little S6 (pack depletion) into an otherwise appointment-checkout stream; category fit must not produce salon-flavoured coworker framing. |
+
+---
+
+### 6.3 Healthcare & Wellness (Run 3) — `veterinary-clinic`, `dental-practice`, `physiotherapy`, `counselling`
+
+- **Value delivered:** an *episode of care* for a patient (or pet) whose history must inform the encounter.
+- **Commercial model:** **encounter-based**; provisioning `episode-of-care`.
+- **Load-bearing stage:** **S4 Deliver** — the encounter is only safe/useful if the **record** (patient/pet, history, reason for visit) is present. This is why `customer-estate` + `ConfigurationItem` (pet) are the spine.
+- **Distinctive stage:** S2 must capture the *clinical subject* — pet fields for vet, patient identity for dental/physio. A vet booking with no pet fields breaks the whole stream (audit logs this `critical`).
+- **Trust gate:** highest in the consumer set — coworker stays in scheduling/operational territory, **never diagnoses or triages clinical/mental-health crises**; counselling crisis → route to emergency services.
+- **Value-stream-critical assertions:** pet/patient fields render on the booking form *and* surface on the inbox record; "patients/owners/appointments" vocabulary; initial-assessment slot longer than follow-up (physio scheduling defaults); invoice ties to the patient record (S5↔S4).
+
+| Archetype | Diverges from category by |
+|-----------|---------------------------|
+| `veterinary-clinic` | Pet `ConfigurationItem` is mandatory S4 substrate; emergency appointment is the urgent S2 path. |
+| `dental-practice` | "new or returning patient?" qualifier; regulated vocabulary, no clinical recommendations. |
+| `physiotherapy` | Differential slot lengths (assessment vs follow-up) are load-bearing in S3; rehab packages touch S6. |
+| `counselling` | Most sensitive vocabulary ("clients," jurisdiction-dependent); crisis-routing refusal is a hard Trust-gate test. |
+
+---
+
+### 6.4 Pet Services (Run 4) — `pet-grooming`, `pet-boarding`, `dog-walking`
+
+- **Value delivered:** care for a *named pet* whose details (size, breed, temperament) shape the service.
+- **Commercial model:** appointment-checkout with an encounter-like estate (the pet record).
+- **Load-bearing stage:** **S4 Deliver** informed by the pet record + **S3 Schedule** (multi-night for boarding, recurring for walking).
+- **Distinctive stage:** S3 varies sharply — grooming is a slot, boarding is a **date range**, dog-walking is a **recurring** booking.
+- **Trust gate:** low; operational only.
+- **Value-stream-critical assertions:** pet `ConfigurationItem` carries to the inbox booking; size-based "from" pricing renders (grooming); multi-night date-range flow (boarding); recurring vs one-off distinction the coworker understands (walking).
+
+---
+
+### 6.5 Food & Hospitality (Run 5) — `restaurant`, `catering`, `bakery`
+
+- **Value delivered:** food — *reserved* (restaurant), *commissioned for an event* (catering), or *bought* (bakery). Three different streams in one category.
+- **Commercial model:** booking (restaurant), quote/inquiry (catering), transactional/point-of-sale (bakery).
+- **Load-bearing stage:** restaurant **S3** (table/party-size/meal-service slot); catering **S2** (event type/date/guest-count quote); bakery **S2** (catalog → cart → checkout).
+- **Distinctive stage:** the *mixed CTA* — the category proves the platform can host booking, inquiry, and purchase side by side; bakery's custom-cake commission is an inquiry-style sub-flow *inside* a purchase archetype.
+- **Trust gate:** allergen/dietary capture is a duty-of-care surface (restaurant/catering).
+- **Value-stream-critical assertions:** party-size field (restaurant) renders and reaches inbox; single vs dual operating window (lunch/dinner) — log single-window as a minor S3 gap; "Shop/Order" not "Book" (bakery); commission sub-flow submits to inbox.
+
+---
+
+### 6.6 Retail & Goods (Run 6) — `retail-goods`, `artisan-goods`, `florist`, `wholesale-distribution`
+
+- **Value delivered:** a physical good acquired (retail/artisan/florist) or a *trade supply relationship* opened (wholesale).
+- **Commercial model:** transactional/point-of-sale — **except `wholesale-distribution`, which is inquiry** (trade-account/bulk-quote), the deliberate B2B exception in a retail category.
+- **Load-bearing stage:** **S2 Capture** — catalog → product detail → cart → checkout → order reference must not drop a link; **S6** the customer/account linkage that turns a buyer into a repeat customer.
+- **Distinctive stage:** delivery logistics enter S4/S5 — florist needs delivery date/address for perishables; artisan commission and workshop are sub-flows (inquiry + booking) inside purchase.
+- **Trust gate:** low (consumer goods); wholesale adds trade-account verification.
+- **Value-stream-critical assertions:** "Shop Now" label; image placeholders not broken tags; order links to the customer account (S2→S6); wholesale renders **inquiry** ("trade customers/accounts"), not "Shop Now."
+
+---
+
+### 6.7 Fitness & Recreation (Run 7) — `gym`, `yoga-studio`, `sports-club`
+
+- **Value delivered:** ongoing access to facilities/classes via *membership*.
+- **Commercial model:** **subscription** — recurring, not one-off.
+- **Load-bearing stage:** **S6 Retain** — the renewal and the membership lifecycle are the business, not the first join. Day passes are the transactional on-ramp.
+- **Distinctive stage:** S5 must express *recurring* billing language, not a single purchase; class schedules (yoga) are a class-pattern S3 sub-surface.
+- **Trust gate:** age/DOB and emergency-contact capture for membership; low regulatory.
+- **Value-stream-critical assertions:** coworker frames subscription/auto-renew, never "appointment-checkout"; "members/students" vocabulary (sports-club/yoga); membership tiers render with recurring price language.
+
+---
+
+### 6.8 Education & Training (Run 8) — `corporate-training`, `tutoring`, `driving-school`, `music-school`, `dance-studio`
+
+- **Value delivered:** a learner gains a skill — delivered 1:1, in cohorts, or as a B2B programme.
+- **Commercial model:** booking (tutoring/driving/music/dance), inquiry (corporate-training, B2B).
+- **Load-bearing stage:** **S3 Schedule** for the 1:1/cohort bookings (instructor assignment, term enrolment); **S2** for B2B programme inquiries.
+- **Distinctive stage:** the *subject is a third party* — parent books, **student** is delivered to (age/year-group/instrument/level fields). Term-based enrolment vs drop-in is an S3/S6 distinction.
+- **Trust gate:** safeguarding tone for minors; B2B (corporate) frames to L&D/HR with "delegates/participants," not "customers."
+- **Value-stream-critical assertions:** learner-vs-payer fields render; instructor/pickup-location captured (driving); B2B framing for corporate-training.
+
+---
+
+### 6.9 Professional Services A (Run 9) — `consulting`, `legal-services`, `marketing-agency`, `accounting`
+
+- **Value delivered:** expertise applied to a client's problem under an engagement/retainer.
+- **Commercial model:** quote/inquiry-to-engagement; retainer/project-milestone billing in S5.
+- **Load-bearing stage:** **S2 Capture quality** then **S6 Retain** (retained advisory, ongoing engagements compound the relationship).
+- **Distinctive stage:** S5 is retainer/milestone, not point-of-sale; B2B vocabulary throughout ("clients/engagements/retainers/deliverables").
+- **Trust gate:** `legal-services` and `accounting` are **regulated** — coworker must not give legal/financial advice; "consult a qualified solicitor/accountant" framing.
+- **Value-stream-critical assertions:** "clients" not "customers"; regulated disclaimers; portfolio/case-study section (marketing); strict estate separation **not** active (standard profile).
+
+---
+
+### 6.10 Professional Services B — IT MSP (Run 10) — `it-managed-services`
+
+- **Value delivered:** a client's IT estate is *kept running and secure* under a recurring agreement, with each client's data isolated.
+- **Commercial model:** **recurring-agreement**; `profileType: managed-service-provider`; channel-partner delivery.
+- **Load-bearing stage:** **S4 Deliver under strict estate separation** + **S6** the agreement lifecycle. The whole archetype exists to prove **multi-client isolation**.
+- **Distinctive stage:** every stage is per-client-scoped; the customer graph is a `separate-customer-projection`; modules `customer-estate`, `service-agreements`, `service-operations`, `projects`, `lifecycle-signals`, `integrations` are all active.
+- **Trust gate:** estate-isolation correctness *is* the trust gate (one client must never see another's assets/tickets).
+- **Value-stream-critical assertions:** onboarding a new client invokes service-agreement + estate-isolation + asset-discovery framing, not "add a customer"; an access-issue report triggers incident/helpdesk framing; vocabulary "clients/agreements/incidents/tickets/assets/estate."
+
+---
+
+### 6.11 Nonprofit & Community (Run 11) — `charity`, `pet-rescue`, `animal-shelter`, `community-shelter`, `cooperative`
+
+- **Value delivered:** a cause is *advanced* by a supporter's gift — or, for `cooperative`, member-owners govern a shared enterprise.
+- **Commercial model:** **donation** (the four nonprofits) / inquiry-membership with **member-owned governance** (cooperative).
+- **Load-bearing stage:** **S2 Capture** *plus the deliberate absence of S5-as-purchase* — a donation issues a **receipt, never an invoice/billing account**. An auto-created invoice is a stream defect (`important`).
+- **Distinctive stage:** the value stream intentionally *omits* commerce artefacts; cooperative adds a governance value stream (member meetings, surplus distribution, share purchase).
+- **Trust gate:** sensitive vocabulary — "supporters/donors/beneficiaries/guests," never "customers"; gift-aid/tax-relief language (UK); cooperative uses member-democratic framing.
+- **Value-stream-critical assertions:** "Donate" CTA; amount selection renders; **no invoice generated**; cooperative `customVocabulary` "Members" renders and governance framing answers "how do I call a special general meeting?"
+
+---
+
+### 6.12 HOA & Property Management (Run 12) — `homeowners-association`, `condo-association`, `property-management-company`
+
+- **Value delivered:** a community/property is *governed and maintained* on behalf of residents/owners.
+- **Commercial model:** inquiry (dues, maintenance requests, reservations); HOA dues are levy-like.
+- **Load-bearing stage:** **S2 Capture** of maintenance/violation/reservation requests with property/unit context + **S3** routing to the right party.
+- **Distinctive stage:** dual audience — `property-management-company` serves landlord *clients* (B2B) and tenant *users* (B2C) in one stream; coworker must switch framing.
+- **Trust gate:** "residents/homeowners/unit owners," not "customers"; covenant/dues language.
+- **Value-stream-critical assertions:** "residents" vocabulary; maintenance request carries property address + urgency; shared-facility booking works as a booking sub-flow (condo amenity room); dual landlord/tenant framing (property-management).
+
+---
+
+### 6.13 Software & Platform (Run 13 / folded into Run 0) — `software-platform`
+
+- **Value delivered:** an enterprise evaluates and adopts the platform — DPF's own dogfood meta-case.
+- **Commercial model:** inquiry (demo/pilot/partnership); platform ecosystem.
+- **Load-bearing stage:** **S2 Capture** (inquiry → backlog) and the **Operate & Improve** loop — inquiry "Send to product backlog" creates a BI linked to the digital product.
+- **Distinctive stage:** the meta-case — the coworker must frame DPF as *the product*, not the container; no circular "what is DPF?" confusion.
+- **Trust gate:** vocabulary "users/developers/enterprise customers/pilots," not "patients/members."
+- **Value-stream-critical assertions:** inquiry → inbox → backlog → BI linked to the digital product; no recursion confusion.
+
+---
+
+### 6.14 Banking & Financial Services (Runs 14a–c) — `community-bank`, `credit-union`, `mortgage-lending`
+
+- **Value delivered:** a financial relationship is *opened and serviced* — deposits/lending (bank), member share accounts (CU), loan origination (mortgage).
+- **Commercial model:** **account-based-fees**, provisioning **account-with-kyc**, `billingReadinessMode: prepared-not-prescribed` (DPF records fee obligations, **never moves money** — engagement layer only; core banking stays with the institution).
+- **Load-bearing stage:** the **Trust gate *before* S3** — KYC, disclosures (FDIC/NCUA/NMLS), and BIAN-anchored capability map gate the whole stream. This is why each gets a full fresh install (a swap doesn't re-provision the gate).
+- **Distinctive stage:** S1/S2 carry mandatory disclosure sections; the EA tool exposes the **BIAN capability perspective** (Loans and Deposits, Relationship Management, Compliance); strict estate separation + separate customer projection.
+- **Trust gate:** the entire archetype. Coworker cites specific regulation (FDIC Part 328), references KYC steps, gives **no** rate/legal advice.
+- **Value-stream-critical assertions:** BIAN perspective in `/ea`; correct regulatory pack (FDIC vs NCUA vs NMLS/RESPA/TILA); `customVocabulary` renders ("Become a Member"/"Borrowers"/"Share Accounts"); **no Donate/Book/Cart** anywhere; "Apply" CTA on lending items.
+
+| Archetype | Diverges by |
+|-----------|-------------|
+| `community-bank` | Investor-owned; FDIC + OCC pack; "customers/accounts/deposits/lending." |
+| `credit-union` | **member-owned** governance; NCUA not FDIC; "Members/Share Accounts/Dividends"; "Become a Member" CTA. |
+| `mortgage-lending` | Origination/brokerage; NMLS/RESPA/TILA; "Borrowers/Loan Officers/Applications"; HELOC present; rate-quote is a quote price type. |
+
+---
+
+### 6.15 Public Sector & Law Enforcement (Runs 15–16) — `small-town-municipality`, `municipal-utility`, `law-enforcement-agency`
+
+- **Value delivered:** a statutory service is *rendered to a resident* under a universal-service obligation — no profit motive.
+- **Commercial model:** **statutory-fees-and-levies**; `GovernanceModel: public-body`; primary consumer `resident`.
+- **Load-bearing stage:** the **Trust & universal-service obligation** cross-cut — the service must be available to *every* resident, fee schedules are set by ordinance/statute, and (law enforcement) sensitive-data refusals are absolute.
+- **Distinctive stage:** S2 is a *civic request* (permit, records/FOIA, 311 service, service connection) not a sale; S5 is a statutory fee schedule, not a market price.
+- **Trust gate:** "residents/constituents/ratepayers," not "customers"; correct regulatory references (SDWA/NPDES for utility; POST/CJIS for police); **law enforcement: no CJI access in Phase 1** — coworker firmly declines to look up arrest/warrant/dispatch data.
+- **Value-stream-critical assertions:** resident/ratepayer `customVocabulary` renders; statutory-fee framing; SDWA/NPDES (utility) and POST/CJIS (police) compliance placeholders; police coworker declines CJI lookups and routes complaints to the intake flow without legal opinion.
+
+| Archetype | Diverges by |
+|-----------|-------------|
+| `small-town-municipality` | Mixed inquiry/permit-fee CTAs; "residents/constituents/permit applications/fee schedules." |
+| `municipal-utility` | "Ratepayers/Service Connections"; SDWA + NPDES; service initiation/termination + billing-dispute stream. |
+| `law-enforcement-agency` | Highest governance sensitivity; public-inquiry intake only; POST/CJIS-gate; absolute CJI refusal; "officers/community members/incidents/public records." |
+
+---
+
+## 7. Demand–capacity dynamics at the load-bearing stage
+
+The load-bearing stage (Section 6) is not only where the main transaction interface between stakeholders sits — it is also **where demand meets finite capacity.** That is not a coincidence: a stage is load-bearing precisely because the business lives or dies on its ability to match demand against a scarce resource there. Managing that match — *neither starving demand nor paying for idle capacity* — is the operator's hardest recurring decision, and it is where a typical operator most needs the platform's help.
+
+This section characterises those dynamics per archetype so the platform can later carry adequate functionality to manage them. It is therefore also a **requirements input**: every "platform lever" named below is a candidate capability the platform must eventually provide (forecasting, advance-booking windows, waitlists, deposits/no-show protection, demand-based pricing, reorder points, seasonal staff flex, utilization dashboards).
+
+### 7.1 The model: capacity unit × demand signature × two-sided risk
+
+**Capacity is not one thing.** The scarce resource differs by archetype, and its *type* dictates which lever works:
+
+| Capacity-unit type | What is scarce | Can it flex up fast? | Examples |
+|--------------------|----------------|----------------------|----------|
+| **Time-slot capacity** | practitioner-hours in bookable slots | only by hiring/rostering | salon chairs, vet/dental/physio appointments, tutoring, driving lessons |
+| **Physical-unit capacity (hard cap)** | a fixed number of physical places | barely — building-limited | kennels, restaurant tables, gym floor/class mats, shelter beds, condo amenity rooms |
+| **Perishable inventory** | stock that spoils if unsold | yes, but spoils → asymmetric loss | flowers, fresh bakery, restaurant produce |
+| **Durable inventory** | stock/parts that hold value | yes, but ties up cash | retail goods, plumbing/HVAC parts, wholesale stock |
+| **Throughput / processing capacity** | how many cases can be worked per period | slowly (skilled labour) | loan underwriting, permit/inspection processing, accounting returns, MSP tickets |
+| **Mobile labour + route capacity** | technician-hours × drive-time geography | seasonally (temp crews) | trades, landscaping, dog-walking, field service |
+
+**Demand has a signature.** The shape of the peak dictates how far ahead the operator must plan:
+
+- **Weekly cycle** — evening/weekend peaks (salon, barber, restaurant, gym classes).
+- **Annual season** — temperature- or daylight-driven (HVAC, landscaping, utility usage).
+- **Calendar-event spike** — fixed dates (florist V-Day/Mother's Day, pet boarding at Thanksgiving/Christmas, restaurant NYE).
+- **Fiscal / regulatory cycle** — deadline-driven (accounting tax season, corporate-training budget cycles, HOA dues, year-end insurance-benefit use).
+- **Economic / rate cycle** — exogenous (mortgage refi waves; consulting tied to client fiscal planning).
+- **Unpredictable / emergency** — must hold reserve capacity (plumbing burst, vet emergency, property-management lockout, charity disaster appeal).
+- **Statutory baseline (must-serve)** — demand cannot be turned away or fully smoothed (municipality, utility, law enforcement).
+
+**The risk is two-sided.** This is the crux the operator needs help with, and the cost asymmetry decides the right buffer:
+
+- **Under-capacity** → demand is *turned away*: lost revenue, lost customer, reputational damage, and (for must-serve archetypes) statutory failure. Rover data show **39% of pet owners struggle to secure care during peak periods** — that is demand walking to a competitor. ([MoeGo](https://www.moego.pet/blog/holiday-survival-guide-for-pet-boarding-and-daycare-businesses))
+- **Over-capacity** → resource sits *idle or spoils*: paid-for staff with no clients, dead stock tying up cash, and — worst — **perishables with zero salvage value.** A florist who over-orders for Valentine's is left "not with inventory that can be discounted later, but with organic matter that has zero value within days"; even a **10% overestimate can wipe out the margin**, against a baseline **5–10% spoilage rate**. ([ProfitableVenture](https://www.profitableventure.com/flower-shop-inventory-management-tips/)) A salon below **70% chair utilization is paying for too much idle time**; above **85% it needs to hire**. ([FinancialModelsLab](https://financialmodelslab.com/blogs/kpi-metrics/hair-salon))
+
+The buffer the operator should hold is a function of that asymmetry: where turn-away is cheap and idle is expensive (perishables, idle labour), run lean and use waitlists; where turn-away is catastrophic and reserve is cheap (emergencies, must-serve), hold slack. **The platform's job is to make that trade-off visible and adjustable, not to leave it to the operator's gut.**
+
+### 7.2 Per-archetype demand–capacity matrix
+
+Severity note for the audit: a capacity/demand surface (calendar, inventory, roster, lead-time, waitlist) that is *missing or wrong on a load-bearing-stage archetype* is at least `important` — it means the platform cannot run that business's hardest decision.
+
+| Archetype(s) | Constrained capacity unit | Peak demand signature | Over-capacity / waste failure mode | Primary platform lever implied |
+|--------------|---------------------------|------------------------|------------------------------------|--------------------------------|
+| `plumber`, `electrician` | technician-hours + **replacement-parts stock** (fittings, boilers) | winter burst/freeze; emergency-unpredictable; boiler service pre-winter | idle techs in shoulder seasons; cash tied in slow-moving parts | emergency-reserve slots; van-stock reorder points; planned-work backfill of troughs |
+| `facilities-maintenance` (HVAC) | technician-hours + HVAC parts | **AC repair +266% winter→summer; true peak October** (cooling→heating flip); emergency reserve needed | summer/winter overwhelmed, spring/fall idle | **shift planned maintenance into Feb–Apr troughs to flatten the curve**; block ~20% daily capacity for emergencies; seasonal temp techs ([Samsara](https://www.samsara.com/blog/peak-season-for-hvac), [BDR](https://www.bdrco.com/blog/hvac-maintenance-scheduling/)) |
+| `landscaping` | seasonal crew + equipment + daylight | spring/summer growth peak; deep winter trough | **off-season crew with no billable work** (classic overstaffing trap) | seasonal rostering; winter service lines (clearance/gritting); recurring contracts to smooth |
+| `cleaning-service` | cleaner-hours | end-of-tenancy at month/term end; commercial contracts smooth | idle one-off capacity between spikes | recurring-frequency capture (weekly/fortnightly) to convert spikes into baseline load |
+| `hair-salon`, `barber-shop`, `nail-salon`, `beauty-spa` | **chair/practitioner slot-hours** | weekly (Thu–Sat, evenings); pre-holiday (Dec busiest); wedding/prom; **Jan–Feb −15–25%** | **<70% utilization = paying for idle chairs**; no-shows waste prime slots (10% no-show ≈ $30–60k/yr) | utilization target band (75–85%); **card-on-file + reminders cut no-shows 50–70%**; fill dead weekday mornings with promos ([FinancialModelsLab](https://financialmodelslab.com/blogs/kpi-metrics/hair-salon), [QuarkBooker](https://www.quarkbooker.com/blog/salon-capacity-problem-empty-chairs)) |
+| `optician`, `personal-trainer` | practitioner slot-hours | benefit-year resets, back-to-school (optician); Jan + pre-summer (PT) | idle clinical/coaching hours off-peak | same slot-utilization levers; package/pre-pay to pull demand forward |
+| `veterinary-clinic`, `dental-practice`, `physiotherapy` | vet/dentist/physio slot-hours + room | seasonal (parasite/allergy spring, sports-injury, **year-end insurance-benefit surge** for dental); emergency reserve (vet) | empty rooms and idle clinicians; over-long default slots waste throughput | differential slot lengths (assessment vs follow-up); recall/recare scheduling; emergency reserve |
+| `counselling` | counsellor-hours (emotionally finite) | winter/Jan stress peak | burnout if over-booked; idle if under | conservative caseload caps; waitlist rather than overbook |
+| `pet-boarding` | **kennels — physical hard cap** | **Thanksgiving / Christmas / NYE / spring break / summer**; deep off-peak troughs | **peak demand exceeds supply (39% of owners can't secure care)**; off-peak kennels empty | far-advance booking windows + deposits; **holiday surcharge ($5–15/night)**; off-peak daycare/promotions to lift trough occupancy ([MoeGo](https://www.moego.pet/blog/holiday-survival-guide-for-pet-boarding-and-daycare-businesses)) |
+| `pet-grooming` | groomer-table slot-hours | pre-holiday; spring shedding | idle tables midweek/off-season | slot utilization; size-based duration so the calendar reflects true capacity |
+| `dog-walking` | walker-hours × **route geography** | weekday daytime (owners at work); recurring | gaps between geographically scattered one-offs | recurring-booking capture; route/zone clustering to raise walks-per-hour |
+| `restaurant` | **tables × turns × covers** (hard cap) + kitchen throughput | Fri–Sat dinner; **V-Day, Mother's Day, NYE**; patio season | empty covers (each lost turn = lost revenue; +0.5 turn ≈ +25% revenue); over-prep → food waste | reservation slots sized to turn-time; **slight overbooking against ~10% no-show + waitlist**; deposit for large/peak bookings ([RestaurantBookingSystem](https://restaurantbookingsystem.com/academy/table-turnover-rate/)) |
+| `catering` | kitchen + event-staff + equipment | wedding season (summer), Q4 corporate parties; long lead time | committed staff/stock for cancelled events | lead-time + deposit at S2; event-date capacity calendar to avoid double-commit |
+| `bakery` | oven + baker-hours + **perishable stock** | daily AM; weekend; holiday custom-cake (Christmas/Easter) | **unsold fresh goods spoil same-day**; sold-out by noon = lost demand | par-bake forecasting; pre-order/commission capture to pre-sell perishables |
+| `retail-goods`, `artisan-goods` | **durable inventory** + checkout/maker-hours | Q4 holiday surge (Black Friday→Christmas); gift seasons; commission lead time | dead stock ties up cash; stockout = lost sale | reorder points / safety stock; pre-order for commissions/workshops |
+| `florist` | **perishable flower stock (no salvage)** + arrangement labour | **V-Day +200–300% (≈30% of annual revenue in one week)**, Mother's Day, weddings; funerals unpredictable | **over-order = total loss** (10% overestimate wipes margin; 5–10% baseline spoilage); wholesale +20–40% at peak | pre-order/cut-off windows to pre-commit demand before buying stock; FIFO inventory; per-event capacity caps ([ProfitableVenture](https://www.profitableventure.com/flower-shop-inventory-management-tips/), [Fresh-o-Fair](https://www.fresh-o-fair.com/blog/mothervsvalentines/)) |
+| `wholesale-distribution` | warehouse stock + logistics throughput | downstream-seasonal; bulk lead times | overstock in slow lines; under-stock breaks trade accounts' supply | trade-account demand signals; min-order + lead-time capture; reorder thresholds |
+| `gym`, `yoga-studio`, `sports-club` | floor/class-mat **physical cap**; trainer-hours | **January +25–30% sign-ups (~12% of annual)**; Sept restart | **67% of memberships go unused** — the breakage that funds selling beyond physical capacity, but real classes still cap out | sell memberships beyond floor cap on breakage math, but **cap and waitlist classes**; dynamic class pricing; Jan-cohort retention (14% churn by Feb) ([Gymdesk](https://gymdesk.com/blog/gym-membership-statistics)) |
+| `corporate-training` | trainer-days | client budget cycles (year-end, Q1); B2B lead time | booked trainers idle if pipeline gaps | pipeline-based capacity forecasting; lead-time booking |
+| `tutoring`, `driving-school`, `music-school`, `dance-studio` | tutor/instructor/studio slot-hours | exam season (spring), back-to-school (Sept), term start; recital/test windows | idle instructors out of term; studio empty off-peak | term-enrolment capture; instructor rostering to academic calendar; pickup/route capacity (driving) |
+| `consulting`, `legal-services`, `marketing-agency` | **billable fee-earner hours (utilization)** | project/matter-driven; client fiscal cycles; retainers smooth | under-utilization burns margin directly; over-commit risks delivery | utilization tracking; retainer/pipeline smoothing; engagement-capacity visibility |
+| `accounting` | accountant-hours (skilled, slow to flex) | **brutal Jan–Apr 15 tax peak + Oct 15 extension; 60–80h weeks** | over-hired permanent staff idle May–Dec | **hire/outsource 4–6 months ahead, flex down off-season**; treat busy season "as a capacity exercise, not a crisis" ([Infinity Globus](https://www.infinity-globus.com/blog/tax-season-staffing-strategy-for-accounting-firms/)) |
+| `it-managed-services` | engineer-hours per tier + on-call | recurring agreements smooth; reactive incident spikes; planned project waves | over-provisioned seats vs actual ticket load; SLA breach if under | per-client SLA-aware capacity; incident reserve; agreement-seat vs utilization tracking |
+| `charity`, `pet-rescue`, `animal-shelter`, `community-shelter` | volunteer/staff processing; **shelter beds / foster capacity (hard cap)** | **year-end giving (Nov–Dec, Giving Tuesday)**, disaster spikes; intake "kitten season" + post-holiday surrenders; winter shelter demand | volunteer over-mobilised off-peak; **beds full → animals/people turned away** (the hardest cap) | campaign/seasonal volunteer scheduling; intake-vs-capacity tracking; foster overflow network |
+| `cooperative` | governance/volunteer cycle | AGM season, surplus-distribution cycle | n/a (governance, not throughput) | member-meeting + governance-cycle calendar |
+| `homeowners-association`, `condo-association` | board-volunteer time + contractor scheduling; **amenity rooms (cap)** | dues cycle; seasonal maintenance (pool summer, snow winter); AGM | contractor over-booked at seasonal peak; amenity double-booking | maintenance-season scheduling; amenity booking with hard caps; dues-cycle calendar |
+| `property-management-company` | PM staff + contractor pool | tenant-turnover season (summer/academic moves); reactive maintenance + emergencies | idle between turnovers; emergency under-coverage | turnover-season capacity; contractor pool + emergency reserve |
+| `community-bank`, `credit-union` | banker/officer appointment slots + loan-processing throughput | spring home-buying; year-end; rate-sensitive lending | idle officers in slow lending periods | appointment slots + underwriting throughput visibility |
+| `mortgage-lending` | **loan-officer + underwriting throughput** | **spring purchase season; refi waves when rates drop (exogenous, violent)**; Jan rate-trough/volume-slump | classic **boom-bust**: over-hire in a refi boom, lay off in the bust | throughput-aware pipeline caps; eClosing to lift processing capacity; flex staffing to the rate cycle ([HousingWire](https://www.housingwire.com/articles/understanding-the-seasonal-patterns-of-mortgage-rates/)) |
+| `small-town-municipality` | clerk + inspector throughput | permit/construction season (spring–summer); tax/budget deadlines; **statutory must-serve baseline** | over-staffed off-season vs statutory obligation to serve all | seasonal permit-throughput planning; cannot turn away — must size to obligation |
+| `municipal-utility` | meter/field crews | **usage-seasonal (summer water, winter heating)**; service connections in moving season; must-serve | crews idle off-peak vs universal-service obligation | seasonal crew planning; service-connection queue; must-serve sizing |
+| `law-enforcement-agency` | records/admin throughput | records/FOIA steady; community-concern event-driven; must-serve | n/a commercial; under-capacity = statutory delay | records-request queue/throughput; no commercial capacity lever |
+
+### 7.3 What this means for platform functionality (requirements implication)
+
+The matrix collapses to a small set of capabilities the platform must eventually carry to manage demand-vs-capacity for *any* archetype — parameterised by the capacity-unit type, not hand-built per business:
+
+1. **A capacity model per archetype** — bind the constrained unit (Section 7.1 type) to the load-bearing stage so the platform knows *what* is scarce (slot-hours vs hard-cap units vs perishable/durable stock vs throughput).
+2. **Demand-signature awareness** — seasonal/weekly/event/fiscal/rate/emergency tags so forecasting and prompts are tuned to the right cycle, not a generic average.
+3. **Booking-side levers** — advance-booking windows, lead-times, deposits/no-show protection, waitlists, and overbooking-against-no-show — sized by the cost asymmetry (Section 7.1).
+4. **Inventory-side levers** — reorder points / safety stock (durable) and pre-order/cut-off + FIFO (perishable), because over-ordering perishables is the highest-asymmetry loss in the whole set.
+5. **Workforce-side levers** — roster-to-forecast, seasonal/temp flex, emergency-reserve blocking, and utilization-band targets (under = idle cost, over = need to hire).
+6. **A utilization/occupancy dashboard** — the single surface that makes the two-sided risk visible, so the operator manages the trade-off by data rather than by gut.
+
+These are recorded here as the value-stream-derived requirement set; turning them into backlog items is a separate step (they map naturally onto the scheduling, finance/billing, customer-estate, and inventory surfaces the audit already exercises).
+
+**Business-analysis acceptance frame.** When any of the capabilities above becomes delivery work, the backlog item should carry this minimum evidence:
+
+| Requirement family | User story frame | Acceptance evidence |
+|--------------------|------------------|---------------------|
+| Capacity model | As an operator, I need the platform to know what constrains my business so I can avoid overpromising or underusing resources. | Archetype row identifies constrained unit; load-bearing stage renders it; booking/order/inbox flow preserves it. |
+| Demand signature | As an operator, I need seasonal or event-driven demand to be explicit so forecasts and coworker advice are not generic. | Archetype demand signature appears in EA/admin context and coworker reasoning; audit can cite it in severity. |
+| Booking levers | As an operator, I need lead times, deposits, waitlists, and no-show protection tuned to the cost asymmetry of my business. | CTA flow enforces the relevant lever and records the reason in the booking/order reference. |
+| Inventory levers | As an operator, I need stock rules that match perishability and lead time, not a generic product list. | Perishable and durable inventory surfaces expose different control points and reporting signals. |
+| Workforce levers | As an operator, I need staffing and emergency reserve decisions tied to utilization, not just calendar availability. | Schedule/inbox/admin views show utilization band, reserved capacity, and overload/idle indicators. |
+| Utilization dashboard | As an operator, I need one place to see over-capacity and under-capacity risk. | Report-kit-based view shows capacity, demand, utilization/occupancy, and stage impact without hardcoded colors or one-off tables. |
+
+---
+
+## 8. How the architecture feature consumes this
+
+The value streams are not free-text — they bind to substrate the EA surface already holds, so the architecture feature can render them per-archetype without new data:
+
+1. **Stage backbone as a value-stream lane.** Render the six primary stages + two cross-cuts (Section 2) as a value-stream element for the active archetype, in line with the canonical [Value Stream entity](../founder-kernel/wiki/entities/value-stream.md) and the `it4it-is-substrate` stance — but labelled as the *operational* stream (Consume expansion), distinct from the platform's seven flows.
+2. **Stage → capability binding from Section 5.** Each stage lights up the `ActivationProfile.modules`, `SchedulingDefaults`, and `BillingPatternProfile` that enable it, so the operator sees *which platform capability carries which stage of their business*.
+3. **IT4IT seam via `PortfolioDecomposition`.** The `It4ItStage[]` already attached per `PortfolioRole` is the join key: the operational stream's S2–S5 map to the `productsAndServicesSold` portfolio's `request-to-fulfill` (Consume) stage. The EA tool can therefore show both senses of value stream on one canvas without conflating them.
+4. **ArchiMate export.** `export_archimate` should emit each operational stage as an ArchiMate **Value Stream** element with **serving** relationships to the capabilities (modules) from Section 5 — making the operational stream a first-class, exportable architecture object, not a doc-only diagram.
+5. **Banking already shows the pattern.** The BIAN `seededServiceCategories` (Loans and Deposits, Relationship Management, Compliance) are exactly an operational-value-stream decomposition anchored to an industry standard — the model to generalise to the other 50 archetypes.
+6. **Demand–capacity overlay (Section 7).** Render the constrained capacity unit and demand signature on the load-bearing stage so the EA canvas shows not just *which* stage carries the business but *where it is capacity-constrained* — the join point to future capacity-management capabilities.
+
+### 8.7 EA usability presentation contract
+
+The architecture feature has two audiences: operators who need to run the business, and architects/admins who need to understand the substrate. The same model should serve both without exposing the wrong level first.
+
+| View | Primary user question | Required presentation |
+|------|-----------------------|-----------------------|
+| **Operator summary** | "What part of my business does DPF think is load-bearing, and what do I need to watch today?" | Stage ribbon; load-bearing stage highlighted; trust gate and capacity signal visible; stage labels in business vocabulary. |
+| **Capability map** | "Which platform modules carry this stage?" | Stage-to-capability list from Section 5; missing/optional modules called out as capability applicability, not hidden. |
+| **Audit / evidence view** | "Why is this defect important?" | Finding grouped by stage, capability, user impact, and severity rationale. |
+| **Architecture export view** | "How does this map to standards?" | ArchiMate value-stream elements, serving relationships to capabilities, and IT4IT Consume seam. |
+
+Do not make the first viewport a wall of EA terminology. The load-bearing stage, trust gate, and next operational risk are the first-viewport signals; standards mapping is a drill-down.
+
+### 8.8 Decision substrate — feeds WWWD (business context), not WWMD (platform)
+
+This artefact is **business-context** substrate, and the platform keeps two decision perspectives strictly separate by context. Routing the value-stream architecture to the wrong one would have a coworker reason about a salon using the platform's own build-prioritization stance — exactly the conflation to avoid.
+
+| | **WWWD — "What Would *We* Do"** | **WWMD — "What Would Mark Do"** |
+|---|---|---|
+| Context | The **customer org's business** — how *this* salon / bank / town operates and decides | The **DPF platform itself** — portal/product build, technical & architectural operation |
+| Scope of decisions | Operate the business: serve customers, manage demand vs capacity, honour the trust gate | Prioritize the backlog, what architecture to trust, when to push vs escalate a build |
+| Profile source | The org's own leadership decisions, principles, corrections (compounds per-install) | Mark's seed profile (`build-studio-gate.ts`), the founder kernel |
+| What this artefact feeds | **Yes — foundational.** The value-stream model, load-bearing stage, demand–capacity concerns, and trust gates are core inputs to the org's WWWD profile | Only indirectly — WWMD governs *how the platform decides to build* the archetype features, not the archetype's business decisions |
+
+**How it feeds WWWD.** The per-archetype value-stream architecture gives a new install a *starting* WWWD perspective grounded in how its kind of business actually works — before the org has accumulated its own decision history. A coworker asking "what would we do here?" for a veterinary clinic should land on: *encounter-based, load-bearing stage is Deliver, capacity is vet slot-hours against seasonal+emergency demand, trust gate forbids clinical advice* — and weight its recommendation accordingly. As the org accumulates its own decisions, its WWWD overlay compounds on top of this archetype-seeded baseline (mirroring how the founder kernel notes an org evolves "from what would Mark do toward what would *we* do").
+
+The separation is the rule: **business-of-the-customer decisions → WWWD (seeded by this artefact); portal/platform/build/architecture decisions → WWMD.** A coworker must select the perspective by context, never blend them.
+
+---
+
+## 9. How the audit consumes this (and the back-reference)
+
+- **Before a run:** read the archetype's Section 6 profile to know its **load-bearing stage(s)** and **trust gate**. These set where to scrutinise hardest and how to grade severity (Section 4 severity-derivation rule).
+- **During a run:** when logging a finding, name the **value-stream stage it breaks** in the OBSERVATION/EXPECTED, and let the load-bearing status drive severity. "Pet fields missing on vet booking" → *breaks S2→S4 handoff of an encounter-based, S4-load-bearing archetype* → `critical`, with the rationale stated rather than asserted.
+- **After a run:** the post-audit BI consolidation (test plan Section 10) can group findings **by value-stream stage across archetypes** — e.g. "S3 Schedule defects" or "Trust-gate disclosure gaps" — which is a more actionable dedup axis than per-archetype symptoms.
+
+- **Capacity-aware testing:** read the archetype's Section 7 row before driving Phase P/B/G. A booking calendar that ignores real availability, an inventory surface with no reorder concept, or a finance flow blind to recurring/seasonal revenue is a defect against the *load-bearing demand–capacity decision*, not a cosmetic gap — grade it accordingly.
+
+The archetype audit plan carries a back-reference to this document in its **Related** line and a pointer in its Section 1 so any execution thread reaches the value-stream rationale before driving phases.
+
+---
+
+## 10. Recognized gaps — value-stream patterns not yet covered by a seeded archetype
+
+This section records value-stream *patterns* beyond the original six-stage backbone. One — the rental / shared-asset loop — was identified here as a gap and has since been **built upstream**; it is retained as the canonical description of that pattern (now realized) plus the platform-capability work that remains.
+
+### 10.1 The rental / shared-asset utilization loop (now modelled upstream — `asset-rental` + `agricultural-cooperative`)
+
+**Businesses:** equipment & tool rental, vehicle/trailer rental, party & event rental (tents, chairs, AV), **self-storage**, and the **agricultural co-op that shares machinery among member-farmers**.
+
+**Substrate check (re-verified 2026-06-12 against `origin/main`):** these are **now seeded** (per design spec `2026-05-29-vehicle-equipment-rental-archetype-design.md`). A new `asset-rental` category carries `equipment-rental` and `self-storage`; the `cooperative`'s `agricultural`/`shared-machinery` sub-type was promoted to a dedicated `agricultural-cooperative` leaf (category `nonprofit-community`, `member-owned`) whose items reserve a shared combine "allocated equitably among members." A new `rental` value is in the `CtaType` enum, and `rental-fleet` / `rental-agreements` / `asset-pool` capability types plus a rental/shared-asset entitlement model are in `types.ts`. Seed count is now **56**. (This is a worked example of *sweep-main-before-trusting-worktree-specs*: the gap recorded here on 2026-06-11 was already in flight and merged by 2026-06-12.)
+
+**Why it's a genuinely new pattern — not just a missing name.** Every commercial model in Section 3 assumes the offered thing either *leaves* (sale, donation) or is *consumed in a slot* (appointment, encounter). A rental asset does neither: it is **reserved → handed out → used for a period → returned → inspected → re-pooled.** That utilization loop is a value-stream shape the current six-stage backbone only partially fits:
+
+```
+  S1 Attract → S2 Reserve a specific asset for a window → S3 Agreement/Deposit/ID
+            → S4 Hand-out & Use period → S4b RETURN & INSPECT → S5 Settle (+ damage/late fees) → S6 Re-pool & Retain
+```
+
+The new element is **S4b Return & Inspect** and the re-pool — there is no "return" stage anywhere in the sale/booking/donation streams.
+
+**The capacity dynamic it adds (refines Section 7.1).** The capacity unit is neither a perishable nor a static hard cap — it is a **reusable pooled asset**, and its KPIs are *asset-utilization %, turnaround time between rentals, reservation conflicts/overbooking, deposit & damage exposure, and overdue returns.* The demand signature is the sharpest **synchronized-contention** case in the whole set:
+
+- **Ag-equipment co-op:** every member-farmer needs the combine/baler in the *same* harvest window — peak demand is not just seasonal, it is simultaneous against a shared pool that cannot scale for one fortnight a year.
+- **Equipment/vehicle/party rental:** month-end and weekend moving trucks; wedding/graduation-season event kit; spring/summer tool demand.
+- **Self-storage:** a *physical hard cap* (like kennels) rented on a **subscription/occupancy** basis — its KPI is occupancy %, its peak is the moving season, and its over-capacity failure is the empty unit.
+
+**The co-op wrinkle the commercial renter doesn't have:** when a shared member-owned pool cannot meet simultaneous demand, it must **ration equitably among member-owners** (fair scheduling / allocation), not simply clear the queue by price. That is a member-governance capability (allocation fairness) layered on the rental loop — exactly the seam the existing `member-owned` `GovernanceModel` exists to gate.
+
+**What is built vs. what remains.** Built (2026-06-12): the three archetype leaves, the `rental` CTA, the reservation-with-return form fields (pickup/return dates, unit size, waitlist), and the `rental-fleet`/`rental-agreements`/`asset-pool` capability *types*. **Remaining** is the cross-archetype **asset-pool capacity *engine*** — the running surfaces that make the **S4b Return & Inspect** loop and the reusable-pooled-asset KPIs real: reservation-conflict/overbooking checks, turnaround/utilization tracking, deposit & damage exposure, overdue-return handling, and (for the co-op) the equitable-allocation rationing layer over conflicting member reservations. That engine is the rental-family instance of this design's deferred **capacity-management requirement set** (Section 7.3 / the implementation design §7.3, §10) — not a per-archetype template but a first-class platform capability.
+
+**Disposition:** archetypes — **done** (`equipment-rental`, `self-storage`, `agricultural-cooperative`). The **rental/shared-asset value-stream pattern** and its **reusable-pooled-asset** capacity unit are now a recognized part of the model (this section is their canonical description). The asset-pool capacity engine is tracked as capacity-management work, not new-archetype work.
+
+---
+
+## 11. Changelog
+
+- **2026-06-12** — Added **Implemented by** link to the platform implementation design (`2026-06-12-value-stream-architecture-platform-design.md`) and the WWWD consumer/§8.8 reference. Corrected §10.1: the rental / shared-asset gap was **built upstream** (asset-rental category + `equipment-rental`/`self-storage`/`agricultural-cooperative`, `rental` CTA, asset-pool capability types; seed now 56) — flipped from "not modelled" to "now modelled," retaining the pattern as canonical and narrowing the remaining work to the asset-pool capacity engine. (Sweep-main caught a worktree-stale gap claim.)
+- **2026-06-12** — Enterprise architecture / usability / business-analysis review: clarified decision authority, added reader contract, corrected the standards grounding so ArchiMate and Business Architecture Guild usage are aligned rather than conflated, added architecture/usability invariants, added BA acceptance evidence for demand-capacity capabilities, and split EA consumption into operator, evidence, and architecture/export presentation views.
+- **2026-06-11** — Initial draft. Derived from `archetype-audit-plan.md` (53 archetypes, 14 categories), the archetype seed (`packages/storefront-templates/src/archetypes/`), and the operating-model substrate (`types.ts`). Defined the universal six-stage operational value stream, the commercial-model variant table, the stage→surface→phase bridge, the substrate binding, and per-category profiles for all 53 archetypes.
+- **2026-06-11** — Added Section 7 (Demand–capacity dynamics at the load-bearing stage): capacity-unit taxonomy, demand-signature taxonomy, two-sided over/under-capacity risk model, a per-archetype demand–capacity matrix for all 53 archetypes (researched seasonality/capacity grounding cited inline), and the derived platform-functionality requirement set. Renumbered subsequent sections (8 architecture, 9 audit, changelog).
+- **2026-06-11** — Added the WWWD decision-substrate consumer (§0 item 4) and Section 8.8 (WWWD-vs-WWMD context separation): this artefact is **business-context** substrate that seeds the org's *"What Would We Do"* perspective; **WWMD** ("What Would Mark Do") stays scoped to platform/portal/build/architecture decisions. Decisions must select the perspective by context, never blend them.
+- **2026-06-11** — Added Section 10 (Recognized gaps): documented the **rental / shared-asset utilization loop** — equipment/vehicle/party rental, self-storage, and the agricultural shared-machinery co-op — as a value-stream + capacity pattern none of the 8 commercial models expresses (new S4b Return & Inspect stage; reusable-pooled-asset capacity unit; synchronized-contention demand; co-op equitable-allocation wrinkle). Verified against the seed that no such leaf exists and that `cooperative` is modelled as a consumer/membership co-op. Changelog renumbered to 11.
