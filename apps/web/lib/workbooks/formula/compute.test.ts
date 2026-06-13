@@ -48,6 +48,27 @@ describe("computeDerivedCells — formulas", () => {
     await computeDerivedCells(columns, rows);
     expect(rows[0].cells.c_a).toBe(1);
   });
+
+  it("resolves a cross-row SUMIF over the whole table on every row", async () => {
+    const columns: DerivableColumn[] = [
+      { columnId: "c_status", name: "Status", fieldType: "select" },
+      { columnId: "c_hours", name: "Hours", fieldType: "number" },
+      {
+        columnId: "c_done",
+        name: "DoneHours",
+        fieldType: "formula",
+        config: { formula: '=SUMIF([Status],"done",[Hours])', resultType: "number" },
+      },
+    ];
+    const rows: GridRow[] = [
+      { rowId: "r1", cells: { c_status: "done", c_hours: 3, c_done: null } },
+      { rowId: "r2", cells: { c_status: "open", c_hours: 5, c_done: null } },
+      { rowId: "r3", cells: { c_status: "done", c_hours: 2, c_done: null } },
+    ];
+    await computeDerivedCells(columns, rows);
+    // Same dataset-wide total on every row (3 + 2 = 5).
+    expect(rows.map((r) => r.cells.c_done)).toEqual([5, 5, 5]);
+  });
 });
 
 describe("computeDerivedCells — lookups", () => {
@@ -84,6 +105,41 @@ describe("computeDerivedCells — lookups", () => {
     await computeDerivedCells(columns, rows);
     expect(rows[0].cells.c_epicstatus).toBe("open");
     expect(rows[1].cells.c_epicstatus).toBeNull();
+  });
+
+  it("resolves LOOKUP() inside a formula via the referenced record", async () => {
+    const adapter = {
+      entityType: "fake_formula_acct",
+      getColumns: async () => [],
+      queryRows: async () => ({ data: [], nextCursor: null }),
+      getRow: async (_t: string, id: string) =>
+        id === "A-1" ? { rowId: "A-1", cells: { tier: "gold", mrr: 1200 } } : null,
+      getCapabilities: () => ({ canAddRow: false, canAddColumn: false, canEditCell: false, canDeleteRow: false }),
+    } as unknown as DataSourceAdapter;
+    gridRegistry.register(adapter);
+
+    const columns: DerivableColumn[] = [
+      { columnId: "c_acct", name: "Account", fieldType: "reference", config: { referenceType: "fake_formula_acct" } },
+      {
+        columnId: "c_arr",
+        name: "ARR",
+        fieldType: "formula",
+        config: { formula: '=LOOKUP([Account],"mrr") * 12', resultType: "number" },
+      },
+    ];
+    const rows: GridRow[] = [
+      {
+        rowId: "r1",
+        cells: {
+          c_acct: { referenceId: "A-1", referenceType: "fake_formula_acct", label: "Acme" },
+          c_arr: null,
+        },
+      },
+      { rowId: "r2", cells: { c_acct: null, c_arr: null } },
+    ];
+    await computeDerivedCells(columns, rows);
+    expect(rows[0].cells.c_arr).toBe(14400);
+    expect(rows[1].cells.c_arr).toBe(0); // empty reference → LOOKUP null → 0 * 12
   });
 
   it("makes a lookup value available to a downstream formula", async () => {

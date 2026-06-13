@@ -7,7 +7,9 @@ import {
   buildReferenceSearchArgs,
   genericUpdateData,
   makeGenericReadAdapter,
+  resolveRollups,
   type GenericTableConfig,
+  type GroupByRunner,
 } from "./generic-read-adapter";
 import { customColumnProvenance } from "./types";
 
@@ -188,6 +190,104 @@ describe("generic adapter getCapabilities", () => {
     expect(editable.getCapabilities({ userId: "u", canManage: false }).canEditCell).toBe(false);
     const readonly = makeGenericReadAdapter(config);
     expect(readonly.getCapabilities({ userId: "u", canManage: true }).canEditCell).toBe(false);
+  });
+});
+
+const rollupConfig: GenericTableConfig = {
+  entityType: "epic",
+  prismaModel: "epic",
+  idField: "epicId",
+  columns: [
+    { field: "epicId", name: "ID", fieldType: "text" },
+    { field: "title", name: "Title", fieldType: "text" },
+  ],
+  rollups: [
+    {
+      field: "itemCount",
+      name: "Backlog items",
+      targetModel: "backlogItem",
+      foreignKeyField: "epicId",
+      anchorField: "id", // FK targets the cuid PK, not the semantic epicId
+      op: "count",
+    },
+    {
+      field: "totalPoints",
+      name: "Total points",
+      targetModel: "backlogItem",
+      foreignKeyField: "epicId",
+      anchorField: "id",
+      op: "sum",
+      valueField: "points",
+    },
+  ],
+};
+
+describe("genericColumnDefs — rollups", () => {
+  it("appends read-only rollup columns with derived provenance", () => {
+    const cols = genericColumnDefs(rollupConfig);
+    expect(cols.map((c) => c.columnId)).toEqual(["epicId", "title", "itemCount", "totalPoints"]);
+    const rollup = cols.find((c) => c.columnId === "itemCount");
+    expect(rollup?.fieldType).toBe("rollup");
+    expect(rollup?.editable).toBe(false);
+    expect(rollup?.provenanceKind).toBe("derived");
+  });
+});
+
+describe("resolveRollups", () => {
+  // Two epics; the records carry the cuid PK (`id`) the FK points at.
+  const records = [
+    { epicId: "EP-1", id: "cuid-1", title: "Alpha" },
+    { epicId: "EP-2", id: "cuid-2", title: "Beta" },
+  ];
+
+  it("counts referencing rows per anchor via a single grouped query, joining on the cuid PK", async () => {
+    const calls: { model: string; args: unknown }[] = [];
+    const runGroupBy: GroupByRunner = async (model, args) => {
+      calls.push({ model, args });
+      return [
+        { epicId: "cuid-1", _count: { _all: 3 } },
+        { epicId: "cuid-2", _count: { _all: 1 } },
+      ];
+    };
+    const maps = await resolveRollups({ ...rollupConfig, rollups: [rollupConfig.rollups![0]] }, records, runGroupBy);
+    expect(maps.get("itemCount")?.get("cuid-1")).toBe(3);
+    expect(maps.get("itemCount")?.get("cuid-2")).toBe(1);
+    // one grouped query, scoped to the anchor cuids (not the semantic epicIds)
+    expect(calls).toHaveLength(1);
+    expect(calls[0].model).toBe("backlogItem");
+    expect((calls[0].args as { where: { epicId: { in: string[] } } }).where.epicId.in).toEqual([
+      "cuid-1",
+      "cuid-2",
+    ]);
+  });
+
+  it("sums a value field for a sum rollup", async () => {
+    const runGroupBy: GroupByRunner = async () => [
+      { epicId: "cuid-1", _sum: { points: 13 } },
+      { epicId: "cuid-2", _sum: { points: null } },
+    ];
+    const maps = await resolveRollups({ ...rollupConfig, rollups: [rollupConfig.rollups![1]] }, records, runGroupBy);
+    expect(maps.get("totalPoints")?.get("cuid-1")).toBe(13);
+    expect(maps.get("totalPoints")?.get("cuid-2")).toBe(0);
+  });
+
+  it("skips the query and yields an empty map when there are no rows", async () => {
+    let called = false;
+    const runGroupBy: GroupByRunner = async () => {
+      called = true;
+      return [];
+    };
+    const maps = await resolveRollups(rollupConfig, [], runGroupBy);
+    expect(called).toBe(false);
+    expect(maps.get("itemCount")?.size).toBe(0);
+  });
+
+  it("throws when a sum rollup has no valueField (fail-closed)", async () => {
+    const bad: GenericTableConfig = {
+      ...rollupConfig,
+      rollups: [{ field: "x", name: "X", targetModel: "backlogItem", foreignKeyField: "epicId", op: "sum" }],
+    };
+    await expect(resolveRollups(bad, records, async () => [])).rejects.toThrow(/valueField/i);
   });
 });
 

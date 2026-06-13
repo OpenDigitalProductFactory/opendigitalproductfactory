@@ -250,7 +250,8 @@ export function validateCell(
     }
 
     case "formula":
-    case "lookup": {
+    case "lookup":
+    case "rollup": {
       // Computed columns are derived on read and never user-written.
       return { ok: false, error: `${column.name} is a computed column and cannot be set` };
     }
@@ -305,6 +306,7 @@ export function storageToCellValue(
         : null;
     case "formula":
     case "lookup":
+    case "rollup":
       // Computed on read — no stored value.
       return null;
     default:
