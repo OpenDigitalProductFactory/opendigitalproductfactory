@@ -100,7 +100,11 @@ export default async function WorkbookDetailPage({ params, searchParams }: Props
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
           {canManage && activeTableId && (
-            <AddColumnButton workbookId={workbookId} tableId={activeTableId} />
+            <AddColumnButton
+              workbookId={workbookId}
+              tableId={activeTableId}
+              columns={grid.schema.columns}
+            />
           )}
           <div className="min-h-0 flex-1">
             <WorkbookGrid

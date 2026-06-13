@@ -300,3 +300,19 @@ export async function resolvePlatformReference(
   const res = await adapter.resolveReference(entityType, referenceId);
   return res ? { id: referenceId, label: res.label } : null;
 }
+
+export interface ReferenceFieldOption {
+  field: string;
+  name: string;
+}
+
+/** The allow-listed fields of a reference target, available for a lookup column. */
+export async function getReferenceTargetFields(
+  user: PlatformUser,
+  entityType: string,
+): Promise<ReferenceFieldOption[]> {
+  requireTable(user, entityType); // 403/404 — gated by the target's view capability
+  const adapter = gridRegistry.require(entityType);
+  const columns = await adapter.getColumns(entityType);
+  return columns.map((c) => ({ field: c.columnId, name: c.name }));
+}

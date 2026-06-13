@@ -30,9 +30,11 @@ import {
 import {
   type PlatformUser,
   type ReferenceTarget,
+  type ReferenceFieldOption,
   listReferenceTargets,
   searchPlatformReferences,
   resolvePlatformReference,
+  getReferenceTargetFields,
 } from "@/lib/workbooks/platform-tables";
 import type { CellValue, ColumnDefinition, FieldType, FieldConfig } from "@/lib/workbooks/types";
 
@@ -245,6 +247,17 @@ export async function resolveReferenceAction(
   try {
     const user = await requirePlatformUser();
     return { ok: true, data: await resolvePlatformReference(user, referenceType, referenceId) };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function getReferenceTargetFieldsAction(
+  referenceType: string,
+): Promise<ActionResult<ReferenceFieldOption[]>> {
+  try {
+    const user = await requirePlatformUser();
+    return { ok: true, data: await getReferenceTargetFields(user, referenceType) };
   } catch (e) {
     return fail(e);
   }

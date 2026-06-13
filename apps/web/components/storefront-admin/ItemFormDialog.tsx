@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
+import { MediaUploader } from "./MediaUploader";
 
 export type ItemFormData = {
   id?: string;
@@ -90,6 +91,8 @@ type Props = {
   categorySuggestions: string[];
   defaultCtaType: string;
   isEditing: boolean;
+  /** DB id of the item being edited; enables the photo-gallery uploader. */
+  editingItemId?: string;
 };
 
 export function ItemFormDialog({
@@ -101,6 +104,7 @@ export function ItemFormDialog({
   categorySuggestions,
   defaultCtaType,
   isEditing,
+  editingItemId,
 }: Props) {
   const [form, setForm] = useState<ItemFormData>(() => ({
     ...EMPTY_FORM,
@@ -391,13 +395,29 @@ export function ItemFormDialog({
             </div>
           )}
 
-          {/* Image URL (all types) */}
-          <details className="text-sm pt-3 border-t border-[var(--dpf-border)]">
+          {/* Images */}
+          <details className="text-sm pt-3 border-t border-[var(--dpf-border)]" open={Boolean(editingItemId)}>
             <summary className="text-[10px] text-[var(--dpf-muted)] cursor-pointer hover:text-[var(--dpf-text)]">
-              Image
+              Images
             </summary>
-            <div className="mt-2">
-              <Field label="Image URL">
+            <div className="mt-2 flex flex-col gap-3">
+              {editingItemId ? (
+                // Existing item: real upload + gallery via the media substrate.
+                <MediaUploader
+                  ownerType="StorefrontItem"
+                  ownerId={editingItemId}
+                  role="product"
+                  label="Photos"
+                  hint="First photo is the one shown on the storefront card"
+                />
+              ) : (
+                // New item: gallery uploads need a saved item to attach to — save
+                // first, then reopen to add photos. A URL still works immediately.
+                <p className="text-[11px] text-[var(--dpf-muted)]">
+                  Save the {vocabulary.singleItemLabel.toLowerCase()} first, then reopen it to add photos.
+                </p>
+              )}
+              <Field label="Or paste an image URL">
                 <input
                   type="url"
                   value={form.imageUrl}

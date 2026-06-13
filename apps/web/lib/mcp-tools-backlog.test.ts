@@ -60,6 +60,18 @@ vi.mock("@/lib/queue/inngest-client", () => ({
   inngest: mockInngest,
 }));
 
+// promote_to_build_studio fires a detached `void (async () => …)()` that
+// dynamically imports this module and dispatches Ideate. With the real module
+// in place that fire-and-forget rejects under the mocked prisma and calls
+// console.error *after* the test has returned — surfacing during worker
+// teardown as the intermittent
+// "Closing rpc while \"onUserConsoleLog\" was pending" EnvironmentTeardownError.
+// Stubbing the dispatch makes the detached promise resolve quietly so nothing
+// logs during teardown.
+vi.mock("@/lib/integrate/ideate-on-approval", () => ({
+  dispatchIdeateForApprovedBuild: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { executeTool } from "./mcp-tools";
 
 describe("backlog MCP tool execution", () => {

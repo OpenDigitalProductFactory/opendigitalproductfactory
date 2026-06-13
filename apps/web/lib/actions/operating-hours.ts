@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
-import { GENERIC_DEFAULTS } from "@/lib/operating-hours-types";
+import { GENERIC_DEFAULTS, resolveOperatingHoursTimezone } from "@/lib/operating-hours-types";
 import type { DaySchedule, WeeklySchedule } from "@/lib/operating-hours-types";
 
 const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
@@ -175,10 +175,12 @@ export async function getOperatingHours(opts?: {
     select: { businessHours: true, timezone: true, hoursConfirmedAt: true },
   });
 
-  // Resolve timezone: confirmed profile > suggested from URL import > UTC fallback
-  const resolvedTimezone = profile?.timezone && profile.timezone !== "UTC"
-    ? profile.timezone
-    : opts?.suggestedTimezone ?? profile?.timezone ?? "UTC";
+  // Resolve timezone: confirmed profile > suggested from URL import > UTC fallback.
+  // Shared with the public booking calendar so the two never diverge.
+  const resolvedTimezone = resolveOperatingHoursTimezone(
+    profile?.timezone,
+    opts?.suggestedTimezone,
+  );
 
   // Priority 1: Existing confirmed hours
   if (profile?.hoursConfirmedAt) {

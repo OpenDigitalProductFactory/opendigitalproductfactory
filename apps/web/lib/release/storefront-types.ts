@@ -39,6 +39,36 @@ export interface PublicSection {
   isVisible: boolean;
 }
 
+/** One image attached to a public-facing entity (item, animal, gallery section). */
+export interface PublicMediaImage {
+  url: string;
+  altText: string | null;
+  caption: string | null;
+  width: number | null;
+  height: number | null;
+}
+
+/**
+ * An adoptable animal rendered by the `animals-available` section
+ * (pet-rescue / animal-shelter). Backed by the AdoptableAnimal entity + a
+ * MediaAttachment gallery, replacing the old free-form section JSON.
+ */
+export interface PublicAdoptableAnimal {
+  id: string;
+  animalRef: string;
+  name: string;
+  species: string | null;
+  breed: string | null;
+  age: string | null;
+  sex: string | null;
+  size: string | null;
+  description: string | null;
+  status: string;
+  attributes: Record<string, unknown> | null;
+  primaryPhotoUrl: string | null;
+  photos: PublicMediaImage[];
+}
+
 /**
  * A confirmed regulatory display obligation rendered by the storefront
  * "disclosures" section (BI-5D9DCDE6 spec §9.3). Only obligations backed by an
@@ -73,6 +103,8 @@ export interface PublicStorefrontConfig {
   brandingTokens: Record<string, unknown> | null;
   sections: PublicSection[];
   items: PublicItem[];
+  /** Adoptable animals for the `animals-available` section (empty otherwise). */
+  animals: PublicAdoptableAnimal[];
   /** Confirmed regulatory display obligations for the disclosures section. */
   displayObligations: PublicDisplayObligation[];
 }

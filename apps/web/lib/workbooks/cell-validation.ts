@@ -200,6 +200,12 @@ export function validateCell(
       return { ok: true, storage };
     }
 
+    case "formula":
+    case "lookup": {
+      // Computed columns are derived on read and never user-written.
+      return { ok: false, error: `${column.name} is a computed column and cannot be set` };
+    }
+
     default: {
       // Exhaustiveness guard — a new FieldType must extend this switch.
       const _never: never = column.fieldType;
@@ -237,6 +243,10 @@ export function storageToCellValue(
             referenceType: cell.referenceType ?? "",
           }
         : null;
+    case "formula":
+    case "lookup":
+      // Computed on read — no stored value.
+      return null;
     default:
       return null;
   }

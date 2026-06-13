@@ -768,7 +768,7 @@ async function dispatchSpecialist(params: {
   // ─── CLI dispatch path: Codex or Claude Code running inside the sandbox ──
   const config = await getBuildStudioConfig();
 
-  if (config.provider === "codex" || config.provider === "claude" || config.provider === "grok") {
+  if (config.provider === "codex" || config.provider === "claude" || config.provider === "grok" || config.provider === "opencode") {
     const onProgress = (message: string) => {
       agentEventBus.emit(parentThreadId, {
         type: "orchestrator:task_progress",
@@ -792,8 +792,8 @@ async function dispatchSpecialist(params: {
         buildId,
         buildContext,
         priorResults,
-        providerId: config.provider === "claude" ? config.claudeProviderId : config.provider === "grok" ? config.grokProviderId : config.codexProviderId,
-        model: config.provider === "claude" ? config.claudeModel : config.provider === "grok" ? config.grokModel : config.codexModel,
+        providerId: config.provider === "claude" ? config.claudeProviderId : config.provider === "grok" ? config.grokProviderId : config.provider === "opencode" ? config.opencodeProviderId : config.codexProviderId,
+        model: config.provider === "claude" ? config.claudeModel : config.provider === "grok" ? config.grokModel : config.provider === "opencode" ? config.opencodeModel : config.codexModel,
         sessionId,
         onProgress,
       },

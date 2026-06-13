@@ -1497,7 +1497,7 @@ model ModelProvider {
   updatedAt                DateTime                  @updatedAt
   authHeader               String?
   computeWatts             Float?
-  cliEngine                String? // "claude" | "codex" — which CLI dispatch engine this provider works with (null = not CLI-dispatchable)
+  cliEngine                String? // "claude" | "codex" | "grok" | "opencode" — which CLI dispatch engine this provider works with (null = not CLI-dispatchable). "opencode" = local OpenAI-compatible endpoint (Docker Model Runner / Ollama).
   costModel                String                    @default("token")
   electricityRateKwh       Float?
   enabledFamilies          Json                      @default("[]")
@@ -2842,6 +2842,7 @@ model Organization {
   recordsRequests               RecordsRequest[]
   fundBudgetLines               FundBudgetLine[]
   memberEquityEntries           MemberEquityEntry[]
+  mediaAssets                   MediaAsset[]
 }
 
 // EP-PARTNER-CHANNEL Phase 1b. Generic per-organization opt-in overlay on top of
@@ -7020,6 +7021,7 @@ model StorefrontConfig {
   marketingStrategies MarketingStrategy[]
   rentableUnits       RentableUnit[]
   rentalAgreements    RentalAgreement[]
+  adoptableAnimals    AdoptableAnimal[]
 }
 
 model MarketingStrategy {
@@ -7613,6 +7615,91 @@ model RentalConditionRecord {
   returnForAgreement   RentalAgreement? @relation("ReturnCondition")
 
   @@index([agreementId, phase])
+}
+
+// Media asset management — see
+// docs/superpowers/specs/2026-06-12-media-asset-management-design.md.
+// One first-class, org-scoped, content-addressed asset (MediaAsset) plus a
+// polymorphic, ordered, role-tagged attachment (MediaAttachment) so any entity
+// can carry galleries without a column per model. Existing scalar imageUrl /
+// logoUrl / avatarUrl / heroImageUrl fields stay as a denormalized primary-image
+// cache, kept in sync from the primary attachment.
+model MediaAsset {
+  id             String   @id @default(cuid())
+  organizationId String
+  sha256         String // content hash; dedup key within an org
+  storageKey     String // path within the blob store
+  storageDriver  String   @default("filesystem") // filesystem|s3|gcs — pluggable
+  kind           String   @default("image") // image|video|document
+  mimeType       String
+  sizeBytes      Int
+  width          Int?
+  height         Int?
+  durationMs     Int? // video
+  altText        String? // SEO + accessibility
+  dominantColor  String? // hex, low-quality placeholder background
+  blurhash       String? // tiny placeholder string
+  focalX         Float?   @default(0.5) // 0..1 crop anchor
+  focalY         Float?   @default(0.5)
+  originalName   String?
+  status         String   @default("ready") // uploading|ready|failed|quarantined
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  attachments  MediaAttachment[]
+
+  @@unique([organizationId, sha256])
+  @@index([organizationId, kind, status])
+}
+
+model MediaAttachment {
+  id             String   @id @default(cuid())
+  organizationId String
+  mediaAssetId   String
+  ownerType      String // StorefrontItem|RentableUnit|AdoptableAnimal|ServiceProvider|StorefrontConfig|StorefrontSection|Organization|RentalConditionRecord
+  ownerId        String
+  role           String   @default("gallery") // primary|gallery|hero|logo|avatar|equipment|inspection-checkout|inspection-return|before|after
+  sortOrder      Int      @default(0)
+  caption        String?
+  createdAt      DateTime @default(now())
+
+  asset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+
+  @@index([ownerType, ownerId, role, sortOrder])
+  @@index([organizationId])
+  @@index([mediaAssetId])
+}
+
+// The adoptable animal — the entity behind the `animals-available` storefront
+// section (pet-rescue, animal-shelter), which previously had no model. Shaped
+// after Petfinder: a gallery (MediaAttachment, ownerType="AdoptableAnimal") plus
+// a designated primary photo.
+model AdoptableAnimal {
+  id                  String    @id @default(cuid())
+  animalRef           String    @unique
+  storefrontId        String
+  organizationId      String
+  name                String
+  species             String? // dog|cat|rabbit|other
+  breed               String?
+  age                 String? // baby|young|adult|senior | free text
+  sex                 String?
+  size                String? // small|medium|large|xl
+  description         String?   @db.Text
+  status              String    @default("available") // available|pending|adopted|hold
+  primaryPhotoAssetId String?
+  attributes          Json? // spayed/neutered, good-with-kids/dogs/cats, house-trained
+  publishedAt         DateTime?
+  adoptedAt           DateTime?
+  sortOrder           Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  storefront StorefrontConfig @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+
+  @@index([storefrontId, status, sortOrder])
 }
 
 model StorefrontInquiry {
