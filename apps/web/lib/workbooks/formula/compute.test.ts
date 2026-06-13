@@ -107,6 +107,41 @@ describe("computeDerivedCells — lookups", () => {
     expect(rows[1].cells.c_epicstatus).toBeNull();
   });
 
+  it("resolves LOOKUP() inside a formula via the referenced record", async () => {
+    const adapter = {
+      entityType: "fake_formula_acct",
+      getColumns: async () => [],
+      queryRows: async () => ({ data: [], nextCursor: null }),
+      getRow: async (_t: string, id: string) =>
+        id === "A-1" ? { rowId: "A-1", cells: { tier: "gold", mrr: 1200 } } : null,
+      getCapabilities: () => ({ canAddRow: false, canAddColumn: false, canEditCell: false, canDeleteRow: false }),
+    } as unknown as DataSourceAdapter;
+    gridRegistry.register(adapter);
+
+    const columns: DerivableColumn[] = [
+      { columnId: "c_acct", name: "Account", fieldType: "reference", config: { referenceType: "fake_formula_acct" } },
+      {
+        columnId: "c_arr",
+        name: "ARR",
+        fieldType: "formula",
+        config: { formula: '=LOOKUP([Account],"mrr") * 12', resultType: "number" },
+      },
+    ];
+    const rows: GridRow[] = [
+      {
+        rowId: "r1",
+        cells: {
+          c_acct: { referenceId: "A-1", referenceType: "fake_formula_acct", label: "Acme" },
+          c_arr: null,
+        },
+      },
+      { rowId: "r2", cells: { c_acct: null, c_arr: null } },
+    ];
+    await computeDerivedCells(columns, rows);
+    expect(rows[0].cells.c_arr).toBe(14400);
+    expect(rows[1].cells.c_arr).toBe(0); // empty reference → LOOKUP null → 0 * 12
+  });
+
   it("makes a lookup value available to a downstream formula", async () => {
     const adapter = {
       entityType: "fake_lookup_prod",

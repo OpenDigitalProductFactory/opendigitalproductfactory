@@ -145,6 +145,13 @@ export interface EvalContext {
   scope: Map<string, FormulaValue>;
   /** normalized column name -> all rows' values, in row order (only set on the dataset path) */
   columns?: Map<string, FormulaValue[]>;
+  /**
+   * Resolve REF([col]) / LOOKUP([col], field) for the current row against a
+   * `reference` column: `field` omitted → the reference's display label (REF);
+   * `field` given → that field of the referenced record (LOOKUP). Set only when
+   * referenced records have been fetched.
+   */
+  resolveRef?: (columnName: string, field?: string) => FormulaValue;
 }
 
 /** Resolve a cross-row function's range argument (must be a bare column reference) to its full column array. */
@@ -184,6 +191,22 @@ function evalCrossRow(fnName: string, args: Node[], ctx: EvalContext): FormulaVa
   }
   if (fnName === "SUMIF") return sum;
   return count === 0 ? 0 : sum / count; // AVERAGEIF — empty match averages to 0 (never #DIV/0!)
+}
+
+/** Evaluate REF([col]) / LOOKUP([col], "field") against the current row's reference columns. */
+function evalRefLookup(fnName: string, args: Node[], ctx: EvalContext): FormulaValue {
+  if (!ctx.resolveRef) {
+    throw new FormulaError(`${fnName} can only be used in a table context`);
+  }
+  const colNode = args[0];
+  if (!colNode || colNode.type !== "Identifier" || !colNode.name) {
+    throw new FormulaError(`${fnName} first argument must be a reference column`);
+  }
+  const colName = normalizeName(colNode.name);
+  if (fnName === "REF") return ctx.resolveRef(colName);
+  if (!args[1]) throw new FormulaError("LOOKUP requires a field name as the second argument");
+  const field = toStr(evalNode(args[1], ctx));
+  return ctx.resolveRef(colName, field);
 }
 
 function evalNode(node: Node, ctx: EvalContext): FormulaValue {
@@ -234,6 +257,9 @@ function evalNode(node: Node, ctx: EvalContext): FormulaValue {
       if (CROSS_ROW_FUNCTIONS.has(fnName)) {
         return evalCrossRow(fnName, node.arguments ?? [], ctx);
       }
+      if (fnName === "REF" || fnName === "LOOKUP") {
+        return evalRefLookup(fnName, node.arguments ?? [], ctx);
+      }
       const fn = FORMULA_FUNCTIONS[fnName];
       if (!fn) throw new FormulaError(`Unknown function: ${callee.name}`);
       const args = (node.arguments ?? []).map((a) => evalNode(a, ctx));
@@ -272,12 +298,13 @@ export function evaluateFormula(
   formula: string,
   scope: Map<string, FormulaValue>,
   columns?: Map<string, FormulaValue[]>,
+  resolveRef?: EvalContext["resolveRef"],
 ): FormulaResult {
   try {
     const normalized = normalizeFormulaSource(formula);
     if (!normalized) return { ok: true, value: null };
     const ast = jsep(normalized) as unknown as Node;
-    return { ok: true, value: evalNode(ast, { scope, columns }) };
+    return { ok: true, value: evalNode(ast, { scope, columns, resolveRef }) };
   } catch (e) {
     return { ok: false, value: null, error: e instanceof Error ? e.message : "Formula error" };
   }

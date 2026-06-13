@@ -103,6 +103,47 @@ describe("evaluateFormula — cross-row aggregation (COUNTIF/SUMIF/AVERAGEIF)", 
   });
 });
 
+describe("evaluateFormula — REF/LOOKUP inside a formula", () => {
+  const resolveRef = (col: string, field?: string): FormulaValue => {
+    if (col !== "account") return null;
+    if (field === undefined) return "Acme Corp"; // REF → label
+    const fields: Record<string, FormulaValue> = { tier: "gold", mrr: 1200 };
+    return field in fields ? fields[field] : null;
+  };
+
+  it("REF returns the reference display label", () => {
+    expect(evaluateFormula("=REF([Account])", scope({}), undefined, resolveRef)).toEqual({
+      ok: true,
+      value: "Acme Corp",
+    });
+  });
+  it("LOOKUP pulls a field from the referenced record and composes with operators", () => {
+    expect(evaluateFormula('=LOOKUP([Account],"tier") & " tier"', scope({}), undefined, resolveRef)).toEqual({
+      ok: true,
+      value: "gold tier",
+    });
+    expect(evaluateFormula('=LOOKUP([Account],"mrr") * 12', scope({}), undefined, resolveRef)).toEqual({
+      ok: true,
+      value: 14400,
+    });
+  });
+  it("LOOKUP requires a field-name second argument", () => {
+    const r = evaluateFormula("=LOOKUP([Account])", scope({}), undefined, resolveRef);
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/field name/i);
+  });
+  it("the first argument must be a reference column", () => {
+    const r = evaluateFormula('=LOOKUP("x","tier")', scope({}), undefined, resolveRef);
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/reference column/i);
+  });
+  it("errors when used without a resolver (per-row context only)", () => {
+    const r = evaluateFormula("=REF([Account])", scope({}));
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/table context/i);
+  });
+});
+
 describe("evaluateFormula — error handling (never throws)", () => {
   it("reports division by zero", () => {
     const r = evaluateFormula("=a/b", scope({ a: 1, b: 0 }));

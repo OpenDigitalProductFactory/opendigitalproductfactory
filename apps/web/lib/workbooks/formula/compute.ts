@@ -64,13 +64,29 @@ export async function computeDerivedCells(
   const formulaCols = columns.filter((c) => c.fieldType === "formula");
   if (lookupCols.length === 0 && formulaCols.length === 0) return;
 
-  // 1) Batch-fetch every referenced record needed by lookup columns.
+  // A formula may resolve a reference inline via REF()/LOOKUP(); if any does, we
+  // must fetch the records for every reference column too (not just lookup columns).
+  const referenceCols = columns.filter((c) => c.fieldType === "reference");
+  const formulaUsesRef =
+    referenceCols.length > 0 &&
+    formulaCols.some((fc) => /\b(ref|lookup)\s*\(/i.test(fc.config?.formula ?? ""));
+
+  // 1) Batch-fetch every referenced record needed by lookup columns (+ all
+  //    reference columns when a formula resolves references inline).
   const refsNeeded: { referenceType: string; referenceId: string }[] = [];
   for (const row of rows) {
     for (const lc of lookupCols) {
       const ref = asReference(row.cells[lc.config!.lookup!.referenceColumnId]);
       if (ref?.referenceId && ref.referenceType) {
         refsNeeded.push({ referenceType: ref.referenceType, referenceId: ref.referenceId });
+      }
+    }
+    if (formulaUsesRef) {
+      for (const rc of referenceCols) {
+        const ref = asReference(row.cells[rc.columnId]);
+        if (ref?.referenceId && ref.referenceType) {
+          refsNeeded.push({ referenceType: ref.referenceType, referenceId: ref.referenceId });
+        }
       }
     }
   }
@@ -106,16 +122,32 @@ export async function computeDerivedCells(
     );
   }
 
+  // Map a reference column's normalized name -> its columnId, for inline REF()/LOOKUP().
+  const refColIdByName = new Map(referenceCols.map((c) => [normalizeName(c.name), c.columnId]));
+
   // 4) Formulas: evaluate in position order, each seeing earlier columns (per-row
-  //    scope) and the whole dataset (column arrays).
+  //    scope), the whole dataset (column arrays), and a per-row reference resolver.
   for (const row of rows) {
     const scope = new Map<string, FormulaValue>();
     for (const c of columns) {
       if (c.fieldType === "formula") continue;
       scope.set(normalizeName(c.name), toFormulaValue(row.cells[c.columnId] ?? null));
     }
+
+    const resolveRef = formulaUsesRef
+      ? (columnName: string, field?: string): FormulaValue => {
+          const colId = refColIdByName.get(columnName);
+          if (!colId) return null;
+          const ref = asReference(row.cells[colId]);
+          if (!ref?.referenceId || !ref.referenceType) return null;
+          if (field === undefined) return ref.label ?? ref.referenceId; // REF → display
+          const rec = records.get(referenceKey(ref.referenceType, ref.referenceId));
+          return rec ? toFormulaValue(rec.cells[field] ?? null) : null; // LOOKUP → field
+        }
+      : undefined;
+
     for (const fc of formulaCols) {
-      const res = evaluateFormula(fc.config?.formula ?? "", scope, columnArrays);
+      const res = evaluateFormula(fc.config?.formula ?? "", scope, columnArrays, resolveRef);
       row.cells[fc.columnId] = res.ok
         ? coerceResult(res.value, fc.config?.resultType)
         : `#ERROR: ${res.error ?? "formula"}`;
