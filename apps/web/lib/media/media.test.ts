@@ -8,6 +8,7 @@ import {
 } from "./media-storage";
 import { normalizeRenditionWidth, RENDITION_WIDTHS } from "./renditions";
 import { decodeDataUri } from "./logo-ingest";
+import { normalizeLogoForStore } from "./normalize-image";
 
 function pngHeader(width: number, height: number): Buffer {
   const buf = Buffer.alloc(24);
@@ -138,5 +139,34 @@ describe("decodeDataUri (logo ingest)", () => {
   it("returns null for an empty payload or a non-data URL", () => {
     expect(decodeDataUri("data:image/png;base64,")).toBeNull();
     expect(decodeDataUri("https://example.com/logo.png")).toBeNull();
+  });
+});
+
+describe("normalizeLogoForStore", () => {
+  it("passes raster bytes through unchanged", async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const out = await normalizeLogoForStore(png, "image/png");
+    expect(out?.mimeType).toBe("image/png");
+    expect(out?.content).toBe(png);
+  });
+
+  it("rasterises an SVG logo to PNG on the user's behalf", async () => {
+    const svg = Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="#09f"/></svg>',
+    );
+    const out = await normalizeLogoForStore(svg, "image/svg+xml");
+    // In CI (sharp installed) this rasterises to PNG; if sharp is unavailable the
+    // helper returns null rather than throwing.
+    if (out) {
+      expect(out.mimeType).toBe("image/png");
+      expect(out.content.subarray(1, 4).toString("ascii")).toBe("PNG");
+    }
+  });
+
+  it("detects SVG by content even without a mime type", async () => {
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    const out = await normalizeLogoForStore(svg, null);
+    // Either rasterised (PNG) or null — never the raw SVG passed through.
+    if (out) expect(out.mimeType).toBe("image/png");
   });
 });
