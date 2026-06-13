@@ -130,7 +130,7 @@ describe("getPublicStorefront", () => {
     expect(result?.timezone).toBe("America/New_York");
   });
 
-  it("never falls back to Europe/London when no Operating Hours timezone is set", async () => {
+  it("falls back to UTC (matching the OH settings page) when no Operating Hours timezone is set, never Europe/London", async () => {
     vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue({
       ...mockStorefront,
       timezone: "Europe/London",
@@ -138,6 +138,6 @@ describe("getPublicStorefront", () => {
     vi.mocked(prisma.businessProfile.findFirst).mockResolvedValue(null as never);
 
     const result = await getPublicStorefront("acme-vet");
-    expect(result?.timezone).toBe("America/Chicago");
+    expect(result?.timezone).toBe("UTC");
   });
 });
