@@ -10,6 +10,7 @@ import {
 } from "@/lib/actions/promotions";
 import { LocalTime } from "@/components/ui/LocalTime";
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
+import { StatusBadge } from "@/components/ui/report-kit";
 
 type LatestRun = {
   runId: string;
@@ -112,6 +113,10 @@ function sourceLabel(source: ImageVersionSource | undefined): string {
   }
 }
 
+function statusLabel(value: string): string {
+  return value.replace(/[_-]/g, " ");
+}
+
 function formatDuration(start: Date | string, end: Date | string): string {
   const ms = new Date(end).getTime() - new Date(start).getTime();
   if (ms <= 0) return "";
@@ -175,13 +180,6 @@ function recoveryPointSummary(run: LatestRun | null): RecoveryPointSummary | nul
   };
 }
 
-const RUN_STATUS_STYLES: Record<string, string> = {
-  running: "bg-[var(--dpf-info)]/20 text-[var(--dpf-info)] border-[var(--dpf-info)]/30",
-  succeeded: "bg-[var(--dpf-success)]/20 text-[var(--dpf-success)] border-[var(--dpf-success)]/30",
-  failed: "bg-[var(--dpf-destructive)]/20 text-[var(--dpf-destructive)] border-[var(--dpf-destructive)]/30",
-  skipped: "bg-[var(--dpf-muted)]/20 text-[var(--dpf-muted)] border-[var(--dpf-muted)]/30",
-};
-
 const DEFAULT_STATUS_STYLE =
   "bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] border-[var(--dpf-border)]";
 
@@ -237,7 +235,8 @@ export default function SelfUpgradeClient({
 
   // True once the worker has actually picked the upgrade up — the run is running
   // or the portal is draining/swapping for the swap.
-  const upgradeInFlight = latestRun?.status === "running" || draining;
+  const queuedRun = latestRun?.status === "queued" || latestRun?.status === "pending";
+  const upgradeInFlight = queuedRun || latestRun?.status === "running" || draining;
 
   // The manual trigger only *queues* an upgrade: the server action returns
   // `{ queued: true }` in well under a second, but the Inngest worker still has
@@ -423,7 +422,9 @@ export default function SelfUpgradeClient({
                   aria-live="polite"
                   data-upgrade-inflight="true"
                 >
-                  Upgrade in progress…
+                  {queuedRun
+                    ? "Upgrade queued — waiting for the worker…"
+                    : "Upgrade in progress…"}
                 </span>
               )
             ) : (
@@ -462,7 +463,7 @@ export default function SelfUpgradeClient({
         )}
       </div>
 
-      {enabled && triggerBusy && latestRun?.status !== "running" && (
+      {enabled && triggerBusy && latestRun?.status !== "running" && !queuedRun && (
         <div
           className="text-xs text-[var(--dpf-muted)]"
           data-upgrade-starting="true"
@@ -731,16 +732,20 @@ export default function SelfUpgradeClient({
         >
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-[var(--dpf-text)]">Latest Run</span>
-            <span
-              className={`px-2 py-0.5 rounded-full text-xs border ${
-                RUN_STATUS_STYLES[latestRun.status] ??
-                "bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] border-[var(--dpf-border)]"
-              }`}
-            >
-              {latestRun.status}
-            </span>
+            <StatusBadge
+              domain="selfUpgradeRun"
+              status={latestRun.status}
+              label={statusLabel(latestRun.status)}
+              variant="soft"
+            />
             <span className="text-xs font-mono text-[var(--dpf-muted)]">{latestRun.runId}</span>
           </div>
+
+          {queuedRun && (
+            <div className="text-xs text-[var(--dpf-muted)]" data-upgrade-queued="true">
+              Upgrade queued — waiting for the worker to accept this run.
+            </div>
+          )}
 
           {latestRun.currentSha && latestRun.targetSha && (
             <div className="text-xs text-[var(--dpf-muted)]">
@@ -872,13 +877,12 @@ export default function SelfUpgradeClient({
                   data-run-id={run.runId}
                 >
                   <td className="px-3 py-2 w-24 shrink-0">
-                    <span
-                      className={`px-2 py-0.5 rounded-full border ${
-                        RUN_STATUS_STYLES[run.status] ?? DEFAULT_STATUS_STYLE
-                      }`}
-                    >
-                      {run.status}
-                    </span>
+                    <StatusBadge
+                      domain="selfUpgradeRun"
+                      status={run.status}
+                      label={statusLabel(run.status)}
+                      variant="soft"
+                    />
                   </td>
                   <td className="px-3 py-2 font-mono text-[var(--dpf-muted)]">{run.runId}</td>
                   <td className="px-3 py-2 text-[var(--dpf-muted)]">

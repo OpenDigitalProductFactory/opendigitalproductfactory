@@ -13,6 +13,7 @@ describe("self-upgrade bundle boundary", () => {
     expect(source).not.toMatch(
       /import\s+\{[^}]*\b(?:runPromoter|isPromoterAvailable)\b[^}]*\}\s+from\s+["']@\/lib\/self-upgrade\/promoter["']/,
     );
-    expect(source).toContain("turbopackIgnore");
+    expect(source).toContain('import("@/lib/self-upgrade/promoter")');
+    expect(source).not.toContain('import(/* turbopackIgnore: true */ "@/lib/self-upgrade/promoter")');
   });
 });

@@ -59,4 +59,12 @@ describe("statusColors", () => {
     expect(resolveIntent("marketing", "approved")).toBe("success");
     expect(resolveIntent("marketing", "rejected")).toBe("danger");
   });
+
+  it("maps self-upgrade run statuses to operational intents", () => {
+    expect(resolveIntent("selfUpgradeRun", "queued")).toBe("info");
+    expect(resolveIntent("selfUpgradeRun", "running")).toBe("accent");
+    expect(resolveIntent("selfUpgradeRun", "succeeded")).toBe("success");
+    expect(resolveIntent("selfUpgradeRun", "failed")).toBe("danger");
+    expect(resolveIntent("selfUpgradeRun", "skipped")).toBe("neutral");
+  });
 });
