@@ -130,10 +130,14 @@ and toolbar Undo/Redo buttons; the keyboard handler yields to a cell editor's ow
 transitions extracted to a pure, unit-tested `grid-history.ts` (record clears the redo branch;
 commitUndo/commitRedo move entries; LIFO). Cell-value edits in scope; row add/delete deferred.
 
-## Slice 5 — More read-only generic grids — separate PR (BI-29E1F452)
+## Slice 5 — More read-only generic grids — SHIPPED (BI-29E1F452)
 
-~15-line config rows on the #1722 generic adapter for customers, employees (safe-fields allow-list
-only — no PII/comp), suppliers. Each behind its domain view capability.
+Customers (`customer_account`, view_customer), people (`employee_profile`, view_employee — safe
+org-directory fields only), suppliers (`supplier`, view_finance) as read-only generic grids +
+boards. Allow-lists live in `people-supplier-configs.ts` (a light, type-only-import module) and are
+**unit-tested for safe omission**: the employee grid asserts no legal-name-parts/personal-contact/
+comp/PII/addresses/termination; supplier omits tax/bank/address; customer omits revenue/notes/source.
+They also become reference targets automatically (slice 1). Each behind its domain view capability.
 
 ## Ordering rationale
 
