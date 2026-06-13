@@ -1,16 +1,16 @@
-# Archetype Audit Plan — All 53 Archetypes
+# Archetype Audit Plan — All 56 Archetypes
 
 **Status:** Revised — 2026-06-10 (architecture / UX / operations review applied)  
 **Scope:** Full audit of every seeded archetype via browser-driven fresh installs. Produces gap backlog items for post-audit execution.  
 **Related:** [platform-qa-plan.md](platform-qa-plan.md), [fresh-install.ps1](../../scripts/fresh-install.ps1), [BIAN design spec](../superpowers/specs/2026-06-09-bian-banking-archetypes-design.md)
 
-> **Inventory ground truth (verified 2026-06-10 against `origin/main` `packages/storefront-templates/src/archetypes/`):** 53 seeded archetypes, not 55. The five archetypes previously flagged "not yet confirmed" (`landscaping`, `cleaning-service`, `personal-trainer`, `counselling`, `wholesale-distribution`) ARE seeded and are now placed in Runs 1, 2, 3, and 6. `pet-rescue` is seeded once (category `nonprofit-community`) and is tested only in Run 11.
+> **Inventory ground truth (verified 2026-06-12 against `origin/main` `packages/storefront-templates/src/archetypes/`):** 56 seeded archetypes across 15 categories. The five archetypes previously flagged "not yet confirmed" (`landscaping`, `cleaning-service`, `personal-trainer`, `counselling`, `wholesale-distribution`) ARE seeded and are placed in Runs 1, 2, 3, and 6. `pet-rescue` is seeded once (category `nonprofit-community`) and is tested only in Run 11. The rental / shared-asset value stream (EP-ARCH-8D4F2A, merged #1725/#1726) added three: `equipment-rental` + `self-storage` (new `asset-rental` category) and `agricultural-cooperative` (category `nonprofit-community`, derives both member-owned and rental capability sets) — all in Run 17.
 
 ---
 
 ## 1. Purpose
 
-DPF ships 53 archetypes across 14 categories. The platform must behave correctly for each organizational model — correct vocabulary, correct CTA, correct coworker framing, correct activation modules, correct compliance defaults. This audit drives each archetype through a browser-realistic experience and records gaps as backlog items.
+DPF ships 56 archetypes across 15 categories. The platform must behave correctly for each organizational model — correct vocabulary, correct CTA, correct coworker framing, correct activation modules, correct compliance defaults. This audit drives each archetype through a browser-realistic experience and records gaps as backlog items.
 
 **Out of scope for this plan:** executing the gap items. This thread produces the plan, the backlog snapshot, and the per-run scripts. Execution follows in a separate thread.
 
@@ -60,15 +60,15 @@ Not everything needs to be tested 18 times. The audit evaluates two distinct dim
 
 ### Common platform mechanics — test once, deeply, in Run 0
 
-These are shared UI surfaces that behave the same regardless of archetype. Run 0 is the only run that **evaluates** them (pass/fail, finds bugs). Runs 1–16 **use** them as setup tools without re-evaluating the mechanics.
+These are shared UI surfaces that behave the same regardless of archetype. Run 0 is the only run that **evaluates** them (pass/fail, finds bugs). Runs 1–17 **use** them as setup tools without re-evaluating the mechanics.
 
-Checklist items tagged `[C]` below fall in this category. In Runs 1–16, execute the step, but do not log a finding if the mechanics work correctly — you have already proved they do. Only log if the step **fails** in a run where it worked in Run 0 (that would indicate a regression, not an archetype gap).
+Checklist items tagged `[C]` below fall in this category. In Runs 1–17, execute the step, but do not log a finding if the mechanics work correctly — you have already proved they do. Only log if the step **fails** in a run where it worked in Run 0 (that would indicate a regression, not an archetype gap).
 
 | Surface | What Run 0 proves |
 |---------|------------------|
 | Brand URL scrape engine | Returns meaningful suggestions; handles `.co`, `.co.uk`, `.com` variants |
 | Setup wizard step mechanics | Each step saves, next/back navigation works, financial step pre-fills correctly |
-| Archetype grid | All 53 archetypes visible; grid navigable; card renders name + category + CTA type |
+| Archetype grid | All 56 archetypes visible; grid navigable; card renders name + category + CTA type |
 | `/storefront/team` CRUD | Add/edit/delete provider; availability day-of-week grid saves and syncs |
 | `/storefront/settings/operations` | Operating hours editor: all 7 days toggleable, open/close time pickers, timezone selector, save triggers ProviderAvailability sync |
 | `/storefront/items` CRUD | Add/edit/delete/reorder items; priceAmount field accepts decimal; ctaType selector works |
@@ -85,7 +85,7 @@ Checklist items tagged `[C]` below fall in this category. In Runs 1–16, execut
 
 ### Archetype-specific dimensions — evaluated on every archetype
 
-These are the reasons we run 53 evaluations. If they are wrong they indicate an archetype gap, not a platform mechanics bug.
+These are the reasons we run 56 evaluations. If they are wrong they indicate an archetype gap, not a platform mechanics bug.
 
 | Dimension | What changes per archetype |
 |-----------|---------------------------|
@@ -116,7 +116,7 @@ Any step where the auditor had to think "a real operator would struggle here" �
 
 ## 3. Audit Run Strategy
 
-53 archetypes across **Run 0 (pilot) + grouped install runs**. **Every archetype gets its own fresh install** and the full Phase A–F checklist. Archetypes are grouped into runs by category only for scheduling and findings organization — each archetype in a run still begins from a clean DB state (DB-only reset from golden dump, see Section 5).
+56 archetypes across **Run 0 (pilot) + grouped install runs**. **Every archetype gets its own fresh install** and the full Phase A–F checklist. Archetypes are grouped into runs by category only for scheduling and findings organization — each archetype in a run still begins from a clean DB state (DB-only reset from golden dump, see Section 5).
 
 > **Why full installs, not API swaps:** using `archetype-reset` to swap between archetypes leaves prior company identity (name, slug, hero copy, inbox history) in place. A real operator always installs fresh; an audit that swaps via API tests a different — and rarer — path. Run 1 swap testing (2026-06-12) confirmed this: all swap archetypes presented as the lead archetype's business identity to customers. Per-archetype fresh installs eliminate this class of false and misleading findings.
 
@@ -141,12 +141,13 @@ Any step where the auditor had to think "a real operator would struggle here" �
 | 14c | Banking | mortgage-lending (NMLS/RESPA/TILA pack) | inquiry (NMLS) |
 | 15 | Public Sector | small-town-municipality, municipal-utility | inquiry |
 | 16 | Law Enforcement | law-enforcement-agency (POST/CJIS-gate pack) | inquiry (public-body) |
+| 17 | Rental & Shared Assets | equipment-rental, self-storage, agricultural-cooperative | rental (Reserve) |
 
-Total fresh installs: 53 (one per archetype). Run 0/13 is the software-platform pilot; the golden dump (Section 5) is created after Run 0's provider setup so all subsequent installs restore from it in ~90 seconds without re-entering provider credentials.
+Total fresh installs: 56 (one per archetype). Run 0/13 is the software-platform pilot; the golden dump (Section 5) is created after Run 0's provider setup so all subsequent installs restore from it in ~90 seconds without re-entering provider credentials.
 
 ### 3b. Representative Quality Bar (12 archetypes — must all Pass before audit is considered representative)
 
-A related acceptance test plan (`docs/superpowers/plans/2026-06-06-archetype-acceptance-test-plan.md` in the nifty-chatterjee-211928 worktree) identifies a representative 12-archetype batch that covers every operating model type. These 12 are the **minimum viable quality bar** — if any of them `Fail` (Section 8 verdict system), the platform is not ready for broader rollout regardless of the remaining 41 archetypes.
+A related acceptance test plan (`docs/superpowers/plans/2026-06-06-archetype-acceptance-test-plan.md` in the nifty-chatterjee-211928 worktree) identifies a representative 12-archetype batch that covers every operating model type. These 12 are the **minimum viable quality bar** — if any of them `Fail` (Section 8 verdict system), the platform is not ready for broader rollout regardless of the remaining 44 archetypes.
 
 Treat these as priority-1 within their runs. If time or resets run short, these 12 are non-negotiable:
 
@@ -169,12 +170,12 @@ Treat these as priority-1 within their runs. If time or resets run short, these 
 
 ### 3a. Run 0 — Pilot / calibration + Platform Core Mechanics (MANDATORY before Run 1)
 
-Run 0 serves two goals: (a) validate the audit harness so the remaining 18 resets test the platform rather than the plan's assumptions; (b) prove all common platform mechanics (Section 2a) once so Runs 1–16 can treat them as reliable setup tools rather than evaluation subjects. Every item in the Section 2a common-mechanics table must be exercised and confirmed in Run 0.
+Run 0 serves two goals: (a) validate the audit harness so the remaining 19 resets test the platform rather than the plan's assumptions; (b) prove all common platform mechanics (Section 2a) once so Runs 1–17 can treat them as reliable setup tools rather than evaluation subjects. Every item in the Section 2a common-mechanics table must be exercised and confirmed in Run 0.
 
 **Harness validation steps:**
 
 1. **Backup rehearsal** — take the pre-audit `pg_dump` (Section 4), restore it into a throwaway postgres container, and verify row counts match. Do not proceed to any wipe until the restore is proven.
-2. **Inventory confirmation** — on the live install, confirm the archetype grid shows all 53 seeded archetypes; reconcile against the seed list in this doc's header. File a BI for any mismatch.
+2. **Inventory confirmation** — on the live install, confirm the archetype grid shows all 56 seeded archetypes; reconcile against the seed list in this doc's header. File a BI for any mismatch.
 3. **Provider bootstrap check** — verify Anthropic is auto-configured from the environment on a fresh install. If providers need manual re-entry, document the exact re-setup steps and time; add that time to every run's budget.
 4. **Coworker health gate** — ask the COO a trivial question and confirm a sane response before any vocabulary scoring. Routing failures get misattributed as archetype gaps in every run if this gate is skipped.
 5. **Archetype-reset swap verification** — swap software-platform → consulting via the admin API, confirm sections/items/vocabulary/CTA actually change on the public portal, then swap back. Empirically validates the Tier-B/E/F strategy for all multi-archetype runs.
@@ -412,7 +413,7 @@ while ((Get-Date) -lt $deadline) {
 
 1. Navigate to `http://localhost:3000`
 2. Confirm redirect to `/welcome` (no organization exists)
-3. Confirm archetype grid renders with all 53 archetypes visible
+3. Confirm archetype grid renders with all 56 archetypes visible
 4. Navigate to `/platform/ai/providers` → confirm providers show healthy status (restored from golden dump — no re-entry needed)
 
 **Step 5 — Coworker health gate**
@@ -442,7 +443,7 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 
 > **Validity:** every archetype gets a fresh install and all phases. There are no "swap-only" or "partial" archetypes. Before scoring any phase, the expected values (CTA type, vocabulary, key services, activation modules) should be read from the archetype's seed definition in `packages/storefront-templates/src/archetypes/` — the persona blocks in Section 7 are test scripts, not the source of truth; where they disagree with the seed, the seed wins and the persona block gets corrected, not a BI filed.
 >
-> **`[C]` = Common — mechanics proven in Run 0.** In Runs 1–16, execute these steps as setup tools. Only log a finding if the step **fails** (which would be a platform regression, not an archetype gap — see Section 8d). **`[A]` = Archetype-specific — evaluate on every archetype; these are why we run 53 iterations.**
+> **`[C]` = Common — mechanics proven in Run 0.** In Runs 1–17, execute these steps as setup tools. Only log a finding if the step **fails** (which would be a platform regression, not an archetype gap — see Section 8d). **`[A]` = Archetype-specific — evaluate on every archetype; these are why we run 56 iterations.**
 
 ### Phase A — Onboarding (SETUP)
 - [ ] **A1** Navigate to `/welcome` → Setup wizard loads (SETUP step 1)
@@ -457,7 +458,7 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 
 > Run after Phase A, before Phase B. These steps seed real staff, items, operating hours, and a test customer so Phase B5 exercises a live business scenario, not an empty shell. For swapped (non-lead) archetypes running only B/E/F, run the applicable P sub-section below before Phase B.
 >
-> **`[C]` mechanics vs. `[A]` archetype-specific:** items tagged `[C]` use surfaces proven in Run 0 (Section 3a). In Runs 1–16, execute them as setup steps; do not score them as findings unless they outright fail. Items tagged `[A]` are archetype-specific and are evaluation targets on every run.
+> **`[C]` mechanics vs. `[A]` archetype-specific:** items tagged `[C]` use surfaces proven in Run 0 (Section 3a). In Runs 1–17, execute them as setup steps; do not score them as findings unless they outright fail. Items tagged `[A]` are archetype-specific and are evaluation targets on every run.
 >
 > **Operator UX-fit dimension:** while executing each step, ask "could the run's operator persona complete this step without guidance?" (Sandra Hooper the plumber; Chloe Martinez the salon owner; Sam Nguyen the baker — not a developer). Flag non-obvious navigation or terminology as a `minor` UX finding. Examples: "Configuration Items" is not an obvious home for a pet record; "bill vs. invoice" distinction may confuse a non-accountant. These feed EP-9FC5D2FD (Dale/operator persona hardening).
 
@@ -796,7 +797,7 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 **CTA:** inquiry  
 **Key services to verify:** Planned Maintenance Contract, HVAC Servicing, Reactive Repair, Building Inspection, Emergency Call-Out  
 **Special — HVAC/AC test:** Ask coworker "A tenant is complaining about no cold air — what do we do?" → Response should reference HVAC Servicing, not technical platform terms.  
-**Gap check:** BI-FS-001 (HVAC/AC Contractor Storefront Archetype) is an open backlog item — confirm whether a dedicated `hvac-contractor` leaf is present. If not, note the gap (it is not in the 53-archetype verified inventory).
+**Gap check:** BI-FS-001 (HVAC/AC Contractor Storefront Archetype) is an open backlog item — confirm whether a dedicated `hvac-contractor` leaf is present. If not, note the gap (it is not in the 56-archetype verified inventory).
 
 **Before starting facilities-maintenance:** execute Tier 2 DB-only reset (Section 5, restore from golden dump). Verify `/welcome` redirect. Then run Phase A setup wizard with: company name "ProSite Facilities Group", select `facilities-maintenance` archetype, owner name "Jamie Chen", currency USD. Operating hours Mon–Fri 07:00–18:00.
 
@@ -2833,6 +2834,109 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 
 ---
 
+### Run 17 — Rental & Shared Assets
+
+**Fresh install per archetype.** The rental / shared-asset value stream (EP-ARCH-8D4F2A). These archetypes are the ONLY ones that exercise the `reservation-and-return` provisioning axis, the `rental` ctaType ("Reserve"), and the **Rental Desk** operator surface (`/rental`). The novel test target is the **reserve → verify → checkout → return & inspect → re-pool** lifecycle, which no other run touches — give Phase R below the same weight as Phase B5.
+
+> **Capability-gated surface:** the Rental Desk nav entry ("Rental Desk", `/rental`) renders only when the archetype derives `rental-fleet` or `rental-agreements`. Its absence on a rental archetype is a `critical` finding; its presence on a NON-rental archetype (spot-check one prior run) is also `critical`. Phase 2 public-portal rental CTAs currently route to `/inquire` (which carries the date fields) — a "Reserve" button that lands on the inquiry form is EXPECTED, not a bug, until the dedicated booking form ships.
+
+---
+
+#### Archetype: `equipment-rental`
+**Fictional company:** Maplewood Plant & Tool Hire  
+**Domain:** `maplewoodhire.co.uk`  
+**Persona — Operator:** Hire Desk Manager: Dave Pearce  
+**Business model:** Time-bounded loan of stocked, returnable equipment. Per-day/per-week rate cards; deposit + condition capture; serialized fleet (each unit has a plate/serial).  
+**CTA:** rental ("Reserve")  
+**Key services to verify:** Mini Excavator, Scaffold Tower, Generator (5kW), Pressure Washer, Party Tent (6x12m)  
+**Provisioning model:** reservation-and-return  
+**Vocabulary expected:** Renters, Rental Portal, Reservations, Rental Desk  
+**Special:** Verify the CTA label reads "Reserve" (not "Book"/"Buy"); ask coworker "A renter wants the mini excavator for next weekend — how do I check it's free and get it booked out?"
+
+**Run-17 Phase P setup (`equipment-rental` — fresh install):**
+- P-RENTAL P1: `/storefront/items` → Confirm seeded rate-card classes: Mini Excavator, Scaffold Tower, Generator (5kW), Pressure Washer, Party Tent (6x12m). Verify ctaType is `rental` and the rendered item label is "Reserve". Set per-day prices if £0 (e.g., Mini Excavator £180/day, Scaffold Tower £45/day). Add audit class: "Audit — Pressure Washer", £35/day, ctaType rental.
+- P-RENTAL P2: `/storefront/settings/operations` → Mon–Sat 07:00–17:00 (hire desk hours). Save.
+
+**Run-17 Phase R walkthrough (`equipment-rental` — Rental Desk lifecycle, REQUIRED):**
+1. `/rental` → confirm the **Rental Desk** board renders (capability-gated). Header summary shows "awaiting checkout / out now / occupancy".
+2. **Fleet setup:** add a RentableUnit to the "Audit — Pressure Washer" class — label "PW-001", unitRef "SN-77421". Confirm it appears available.
+3. **Reserve:** create a reservation for PW-001 — renter "Test Renter R17a", email renter-r17a@test.com, dates next Mon→Wed, deposit £50. Confirm agreement `reserved`, verification `pending` (deposit > 0), unit → `reserved`.
+4. **Double-booking guard:** attempt a second overlapping reservation on PW-001 for an overlapping window → must be refused ("already booked for the selected dates").
+5. **Verify → Checkout:** Verify renter (deposit gate clears), then Check out → confirm checkout condition record, unit → `out`, agreement → `active`, board "out now" increments.
+6. **Return & re-pool:** Return & re-pool → confirm return condition record, unit → `available`, agreement → `closed`, deposit "cleared for release" note. Re-run with "Return → maintenance" on a second cycle → unit → `maintenance`.
+7. Coworker check: ask "A renter wants the mini excavator for next weekend — how do I check it's free and get it booked out?" → describes availability + reservation, uses "renter"/"reservation" vocabulary, not "customer"/"appointment".
+
+**Run-17 Phase G (`equipment-rental` — rental):**
+- G1: Supplier "Plant & Tool Wholesale Ltd" at `/finance/suppliers`
+- G2: Bill: "Replacement hydraulic hoses and filters — quarterly", qty 1, £1,400.00. Save.
+- G3: Invoice: link to the renter account, "Pressure Washer hire — 3 days @ £35", £105.00 + deposit handling. Save.
+- G4: P&L → revenue £105.00, expenses £1,400.00 — verify both appear.
+
+---
+
+#### Archetype: `self-storage`
+**Fictional company:** Maplewood Self Storage  
+**Persona — Operator:** Storage Manager: Lucy Bennett  
+**Business model:** Recurring rental of fixed storage units (subscription, not per-day). Occupancy % is the headline KPI. Units are a fixed inventory, not a serialized fleet.  
+**CTA:** rental — item ctaLabel "Reserve unit"  
+**Key services to verify:** 5x5 Unit, 10x10 Unit, 10x20 Unit, Climate-Controlled 10x10  
+**Provisioning model:** reservation-and-return  
+**Vocabulary expected:** Tenants, Storage Portal, Move-ins, Storage Manager  
+**Special:** Verify "Tenants"/"Move-ins" vocabulary (NOT "Renters"/"Reservations" — self-storage skins differently from equipment hire); confirm the Rental Desk header reports **occupancy %** over the unit inventory. Ask coworker "A tenant wants to move into a 10x10 unit on the 1st — what's available?"
+
+**Run-17 Phase P setup (`self-storage` — fresh install):**
+- P-RENTAL P1: `/storefront/items` → Confirm seeded unit sizes: 5x5 Unit, 10x10 Unit, 10x20 Unit, Climate-Controlled 10x10. Verify ctaType `rental`, item label "Reserve unit". Set monthly prices if £0 (5x5 £40/mo, 10x10 £95/mo). Add audit class: "Audit — 5x5 Unit", £40/mo, ctaType rental.
+- P-RENTAL P2: Verify vocabulary override: "Tenants"/"Move-ins" present, not "Customers"/"Renters" — log as important if generic/equipment vocabulary appears.
+
+**Run-17 Phase R walkthrough (`self-storage` — occupancy-hybrid):**
+1. `/rental` → Storage board renders; header summary reports **% of N units occupied** (occupancy, not utilization).
+2. **Inventory setup:** add three RentableUnits to "Audit — 5x5 Unit" (labels A-12, A-13, A-14). Confirm 3 units available, occupancy 0%.
+3. **Move-in (reserve→active):** reserve A-12 for tenant "Test Tenant R17b", monthly term; checkout (move-in). Confirm A-12 → `out`, occupancy recomputes (1/3 ≈ 33%).
+4. **Move-out (return):** Return A-12 → unit → `available`, occupancy back to 0%. Confirm no per-day meter prompt is forced (subscription, not metered).
+5. Coworker check: "A tenant wants to move into a 10x10 unit on the 1st — what's available?" → reports availability using "tenant"/"unit"/"move-in" vocabulary.
+
+**Run-17 Phase G (`self-storage`):**
+- G1: Supplier "Facility Security & Maintenance Co" at `/finance/suppliers`
+- G2: Bill: "Gate access system maintenance — annual", qty 1, £900.00. Save.
+- G3: Invoice: tenant account, "5x5 Unit — monthly rent", £40.00. Save.
+- G4: P&L → revenue £40.00, expenses £900.00 — verify both appear.
+
+---
+
+#### Archetype: `agricultural-cooperative`
+**Fictional company:** Maplewood Valley Farmers' Co-op  
+**Persona — Operator:** Co-op Coordinator: Margaret Doyle  
+**Business model:** Member-OWNED shared machinery pool (combine, planter, sprayer). Members book shared equipment; contended capacity is allocated equitably (patronage-balanced), NOT first-come-first-served. Patronage, not profit.  
+**CTA:** rental — item ctaLabel "Request booking" — within a member portal  
+**Key services to verify:** Combine Harvester, Grain Drill / Planter, Sprayer (+ Membership Share / Membership Application onboarding items)  
+**Provisioning model:** reservation-and-return · **Governance:** member-owned  
+**Vocabulary expected:** Member-Owners, Member Portal, Booking Requests, Co-op Coordinator  
+**Special:** This archetype derives BOTH the member-owned governance set AND the rental set — verify the Rental Desk AND a member-governance surface both gate on. Confirm patronage framing (no member-equity buy-in override; ag co-ops do patronage). Ask coworker "Two members both want the combine the same week — how do we decide who gets it?"
+
+**Run-17 Phase P setup (`agricultural-cooperative` — fresh install):**
+- P-RENTAL P1: `/storefront/items` → Confirm seeded shared machinery: Combine Harvester, Grain Drill / Planter, Sprayer (each `ctaType: rental`, item label "Request booking"). The leaf also seeds a Membership Share (purchase) and Membership Application (inquiry) — these are member-onboarding, not rental, and are expected. Verify "Member-Owners"/"Booking Requests" vocabulary, not "Customers"/"Reservations". Add audit class: "Audit — Round Baler", usage-based rate, ctaType rental, ctaLabel "Request booking".
+- P-RENTAL P2: Confirm member-governance surface present (board/annual-meeting governance) AND Rental Desk present — both capability-gated, both should render for this archetype.
+
+**Run-17 Phase R walkthrough (`agricultural-cooperative` — equitable rationing, REQUIRED):**
+1. `/rental` → board renders. Member-owned framing: agreements show member-owner names, not "customers".
+2. **Contended window:** create three Booking Requests from three different members for the Combine Harvester over the SAME peak week (only 1 combine).
+3. **Equitable allocation:** confirm the allocation is patronage-balanced — the **least-served member** (lowest recent usage) is granted, the others are **waitlisted with a reason** (capacity-exhausted / member-cap-reached), NOT pure first-come-first-served. If the UI doesn't yet surface batch rationing, confirm the scheduler logic via a coworker explanation and log a `minor` if there's no operator-facing rationale view.
+4. **Lifecycle:** check out the granted booking → combine `out`; return & re-pool → next-priority waitlisted member becomes grantable.
+5. Coworker check: "Two members both want the combine the same week — how do we decide who gets it?" → explains equitable/patronage-balanced allocation (least-served first), NOT "whoever booked first"; uses "member-owner" vocabulary.
+
+**Run-17 Phase G (`agricultural-cooperative`):**
+- G1: Supplier "Agricultural Machinery Parts & Service" at `/finance/suppliers`
+- G2: Bill: "Combine harvester annual service and parts", qty 1, £3,200.00. Save.
+- G3: Skip a commercial invoice — co-op recovers cost via member usage charges / patronage, not retail invoicing. If an invoice flow is attempted, note whether patronage framing is preserved.
+- G4: P&L → expenses £3,200.00 — verify the shared-asset maintenance expense appears against the member-owned pool.
+
+**Special checks (member-owned + rental intersection):**
+1. `/member-equity` (if present) → patronage/usage ledger, NOT a per-member capital buy-in (ag co-ops do patronage allocation).
+2. Vocabulary: "Member-Owners" and "Booking Requests" throughout; "customers"/"reservations" must NOT leak into the member-facing UX.
+3. Both the Rental Desk and a governance/member surface render — the dual-capability derivation is the whole point of this leaf.
+
+---
+
 ## 8. Gap Capture
 
 ### 8a. The fundamental constraint: every DB reset wipes portal state
@@ -2936,7 +3040,7 @@ These issues are visible to the team immediately and survive all resets. After t
 
 ### 8d. Common mechanics failures are platform findings, not archetype gaps
 
-If a `[C]`-marked step (Section 2a / Phase P) fails in Runs 1–16 and it passed in Run 0, that is a **regression** — log with severity `critical` and the note "regression vs. Run 0" and open a GitHub issue immediately. Do not continue the current run until the regression is triaged (it will affect all remaining runs if it is a platform-wide failure).
+If a `[C]`-marked step (Section 2a / Phase P) fails in Runs 1–17 and it passed in Run 0, that is a **regression** — log with severity `critical` and the note "regression vs. Run 0" and open a GitHub issue immediately. Do not continue the current run until the regression is triaged (it will affect all remaining runs if it is a platform-wide failure).
 
 ### 8f. Closing GitHub Issues when a fix PR merges
 
@@ -2976,12 +3080,13 @@ These tests apply to EVERY archetype run. Track results in the summary table bel
 |------|-------------|----------------|
 | AI-0 | Coworker health gate (precondition) | Coworker answers a trivial question coherently on the fresh install BEFORE any AI/vocab scoring; failure blocks AI tests for the run and is filed as a platform finding, not an archetype gap |
 | VOCAB-1 | No platform-developer vocabulary in portal | Coworker never says "backlog", "epic", "worktree", "MCP", "FeatureBuild" |
-| VOCAB-2 | Archetype vocabulary overrides render | "Members" for credit-union and cooperative; "Ratepayers" for municipal-utility; "Borrowers" for mortgage-lending |
-| VOCAB-3 | CTA label correct | "Book Now" / "Shop Now" / "Get a Quote" / "Donate" / "Apply" matches archetype |
+| VOCAB-2 | Archetype vocabulary overrides render | "Members" for credit-union and cooperative; "Ratepayers" for municipal-utility; "Borrowers" for mortgage-lending; "Renters" for equipment-rental; "Tenants" for self-storage; "Member-Owners" for agricultural-cooperative |
+| VOCAB-3 | CTA label correct | "Book Now" / "Shop Now" / "Get a Quote" / "Donate" / "Apply" matches archetype; rental item labels: "Reserve" (equipment-rental), "Reserve unit" (self-storage), "Request booking" (agricultural-cooperative) |
 | SETUP-1 | Brand URL suggests correct archetype | Auto-suggestion matches expected archetype for recognizable domain pattern |
 | SETUP-2 | Currency pre-fills for locale | EUR for .de, GBP for .co.uk, USD default |
 | STORE-1 | Public portal renders without errors | No 500 errors, no blank sections, hero section first |
 | STORE-2 | CTA completes end-to-end | Booking/purchase/inquiry/donation flow completes with reference number |
+| RENT-1 | Rental lifecycle operates (Run 17 only) | `/rental` Rental Desk gated correctly; reserve → verify → checkout → return & re-pool transitions a unit through reserved/out/available; double-booking refused; self-storage reports occupancy %; agricultural-cooperative allocates contended capacity equitably (least-served first), not first-come |
 | AI-1 | Coworker agent routing | Correct agent shown per route (/storefront → Marketing Specialist, /workspace → COO) |
 | AI-2 | Coworker uses archetype context | Responses reference archetype services and vocabulary, not generic defaults |
 | AI-3 | Regulated archetypes disclaim appropriately | Banking, healthcare, legal, law enforcement — no clinical/legal/financial advice given |
@@ -3001,7 +3106,7 @@ After all runs are complete (or the abort criteria fire):
 2. **Compile gap list** — consolidate the git-committed per-run findings files (`docs/testing/archetype-audit-findings/run-NN-<category>.md`) into a single summary. Dedupe cross-run repeats of the same root cause: one BI per root cause with an affected-archetypes list, not one BI per archetype symptom.
 3. **Close GitHub Issues → file portal BIs** — for every GitHub issue opened during the audit (Section 8b Channel 2): create the portal BI via `create_backlog_item` MCP, record the new portal BI ID in the GitHub issue body, then close the issue. This closes the loop between real-time team visibility and the permanent backlog record.
 4. **Triage by severity** — `critical` gaps → priority 1 BIs; `important` → priority 2; swapped-archetype `observation`-tier A/C/D findings only graduate to BIs after fresh-install reproduction confirms them.
-5. **Separate platform regressions from archetype gaps** — any `[C]`-marked finding that failed in Runs 1–16 (mechanics already proven in Run 0) is a platform regression BI, not an archetype BI. Link regressions to the appropriate platform epic; link archetype gaps to EP-ARCH-8D4F2A or EP-9FC5D2FD.
+5. **Separate platform regressions from archetype gaps** — any `[C]`-marked finding that failed in Runs 1–17 (mechanics already proven in Run 0) is a platform regression BI, not an archetype BI. Link regressions to the appropriate platform epic; link archetype gaps to EP-ARCH-8D4F2A or EP-9FC5D2FD.
 6. **Operator UX-fit batch** — collect all `minor` UX-fit findings from Phase P and Phase B5 steps across all runs. These are operator persona accessibility gaps; link them to EP-9FC5D2FD (Dale persona hardening).
 7. **Link to epics** — archetype vocabulary/CTA/coworker gaps → EP-ARCH-8D4F2A. Operator UX-fit → EP-9FC5D2FD. Platform mechanics regressions → appropriate existing platform epic.
 8. **Create new epic if needed** — if total archetype-gap BI count exceeds 20 items, create EP-ARCHETYPE-AUDIT-2026 to contain them.
