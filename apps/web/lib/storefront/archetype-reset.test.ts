@@ -18,6 +18,13 @@ vi.mock("nanoid", () => ({
   nanoid: mockNanoid,
 }));
 
+// The OVSM projection is covered by its own tests; mock it here so the reset
+// test does not load the Prisma-client chain, and assert reset invokes it.
+const { mockProjectOvs } = vi.hoisted(() => ({ mockProjectOvs: vi.fn() }));
+vi.mock("./project-operational-value-stream", () => ({
+  projectOperationalValueStreamForArchetype: mockProjectOvs,
+}));
+
 import { resetStorefrontArchetype } from "./archetype-reset";
 
 function businessCapabilityProjectionStore() {
@@ -35,6 +42,8 @@ describe("resetStorefrontArchetype", () => {
   beforeEach(() => {
     mockNanoid.mockReset();
     mockPrisma.$transaction.mockReset();
+    mockProjectOvs.mockReset();
+    mockProjectOvs.mockResolvedValue({ viewId: "view-ovs" });
     mockNanoid.mockReturnValue("abcd1234");
   });
 
@@ -94,6 +103,12 @@ describe("resetStorefrontArchetype", () => {
     expect(tx.businessContext.updateMany).toHaveBeenCalledWith({
       where: { organizationId: "org_1" },
       data: { industry: "software-platform", ctaType: "inquiry" },
+    });
+    // Reset regenerates the operational value stream inside the transaction.
+    expect(mockProjectOvs).toHaveBeenCalledWith({
+      db: tx,
+      organizationId: "org_1",
+      archetypeId: "software-platform",
     });
   });
 

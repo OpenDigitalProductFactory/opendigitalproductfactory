@@ -10,6 +10,7 @@ import {
   readActivationProfile,
 } from "@/lib/storefront/archetype-activation";
 import { setCapabilityChoice } from "@/lib/storefront/capability-activation";
+import { projectOperationalValueStreamForArchetype } from "@/lib/storefront/project-operational-value-stream";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -163,6 +164,14 @@ export async function POST(req: NextRequest) {
   await applyBusinessCapabilityPerspective(prisma, {
     archetypeId,
     category: archetype.category,
+  });
+
+  // P0 "Capture": derive and persist the org's operational value-stream
+  // architecture so it renders on /ea and seeds the WWWD business-context
+  // perspective. Fatal: setup has not met the architecture contract without it.
+  await projectOperationalValueStreamForArchetype({
+    organizationId: org.id,
+    archetypeId,
   });
 
   // Seed default provider, availability, and booking config from template scheduling defaults

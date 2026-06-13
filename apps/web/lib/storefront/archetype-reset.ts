@@ -1,6 +1,7 @@
 import { prisma } from "@dpf/db";
 import { applyBusinessCapabilityPerspective } from "@dpf/db/business-capability-perspectives";
 import { nanoid } from "nanoid";
+import { projectOperationalValueStreamForArchetype } from "./project-operational-value-stream";
 
 type ResetMode = "replace-seeded-content";
 
@@ -67,6 +68,15 @@ export async function resetStorefrontArchetype(input: {
     await applyBusinessCapabilityPerspective(tx, {
       archetypeId: targetArchetype.archetypeId,
       category: targetArchetype.category,
+    });
+
+    // P0 "Capture": regenerate the org's operational value-stream architecture
+    // inside the reset transaction (idempotent; prunes stages the new archetype
+    // does not have, e.g. rental → non-rental drops Return & Inspect).
+    await projectOperationalValueStreamForArchetype({
+      db: tx,
+      organizationId,
+      archetypeId: targetArchetype.archetypeId,
     });
 
     let sectionsCreated = 0;
