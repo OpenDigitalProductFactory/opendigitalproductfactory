@@ -13,18 +13,33 @@ export function CtaButton({
   ctaLabel,
   orgSlug,
   itemId,
+  priceAmount,
 }: {
   ctaType: string;
   ctaLabel: string | null;
   orgSlug: string;
   itemId: string;
+  /** Decimal amount as a string (Prisma Decimal serializes to string), or null. */
+  priceAmount?: string | null;
 }) {
-  const label = ctaLabel ?? DEFAULT_LABELS[ctaType] ?? "Get in Touch";
+  // A "purchase" item with no price has nothing to charge — the order route
+  // (/s/[slug]/order/[itemId]) 404s when priceAmount is null. Rather than render
+  // a Buy button that dead-ends, fall back to the inquiry flow so the customer
+  // gets a working "Enquire" CTA (AUDIT-R3/R4). Operators can set a price later
+  // to restore the Buy flow.
+  const isPricelessPurchase =
+    ctaType === "purchase" && (priceAmount === null || priceAmount === undefined);
+  const effectiveCtaType = isPricelessPurchase ? "inquiry" : ctaType;
+
+  // Drop a stale purchase-oriented custom label when downgrading so we don't
+  // show "Buy" on a button that now routes to the inquiry form.
+  const label =
+    (isPricelessPurchase ? null : ctaLabel) ?? DEFAULT_LABELS[effectiveCtaType] ?? "Get in Touch";
 
   const href =
-    ctaType === "booking" ? `/s/${orgSlug}/book/${itemId}`
-    : ctaType === "purchase" ? `/s/${orgSlug}/order/${itemId}`
-    : ctaType === "donation" ? `/s/${orgSlug}/donate`
+    effectiveCtaType === "booking" ? `/s/${orgSlug}/book/${itemId}`
+    : effectiveCtaType === "purchase" ? `/s/${orgSlug}/order/${itemId}`
+    : effectiveCtaType === "donation" ? `/s/${orgSlug}/donate`
     : `/s/${orgSlug}/inquire/${itemId}`;
 
   return (

@@ -110,12 +110,12 @@ export const educationTrainingArchetypes: ArchetypeDefinition[] = [
     ctaType: "purchase",
     tags: ["driving", "lessons", "test", "licence"],
     itemTemplates: [
-      { name: "1-Hour Lesson", description: "Individual driving lesson with a qualified instructor", priceType: "fixed", bookingDurationMinutes: 60, ctaType: "booking" },
-      { name: "Block of 10 Lessons", description: "Save with a block booking of 10 lessons", priceType: "fixed", ctaType: "purchase" },
-      { name: "Intensive Week Course", description: "Pass in a week with a structured intensive course", priceType: "from", ctaType: "purchase" },
-      { name: "Theory Test Preparation", description: "Online theory test practice and coaching", priceType: "fixed", ctaType: "purchase" },
-      { name: "Pass Plus", description: "Post-test advanced driving course", priceType: "fixed", ctaType: "purchase" },
-      { name: "Motorway Lesson", description: "Motorway driving experience post-test", priceType: "fixed", bookingDurationMinutes: 120, ctaType: "booking" },
+      { name: "1-Hour Lesson", description: "Individual driving lesson with a qualified instructor", priceType: "fixed", priceAmount: 35, bookingDurationMinutes: 60, ctaType: "booking" },
+      { name: "Block of 10 Lessons", description: "Save with a block booking of 10 lessons", priceType: "fixed", priceAmount: 320, ctaType: "purchase" },
+      { name: "Intensive Week Course", description: "Pass in a week with a structured intensive course", priceType: "from", priceAmount: 600, ctaType: "purchase" },
+      { name: "Theory Test Preparation", description: "Online theory test practice and coaching", priceType: "fixed", priceAmount: 30, ctaType: "purchase" },
+      { name: "Pass Plus", description: "Post-test advanced driving course", priceType: "fixed", priceAmount: 180, ctaType: "purchase" },
+      { name: "Motorway Lesson", description: "Motorway driving experience post-test", priceType: "fixed", priceAmount: 70, bookingDurationMinutes: 120, ctaType: "booking" },
     ],
     sectionTemplates: [
       { type: "hero", title: "Hero", sortOrder: 0 },
