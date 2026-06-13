@@ -120,6 +120,19 @@ export const getPublicStorefront = cache(async function getPublicStorefront(
 
   const org = config.organization;
 
+  // Booking calendar display timezone must follow the operator's Operating Hours
+  // setting (BusinessProfile.timezone). StorefrontConfig.timezone carries a stale
+  // Europe/London default that is never re-synced when the operator sets hours,
+  // which is why US salons saw "Times shown in Europe/London" (AUDIT-R2-NS-B-005).
+  const businessProfile = await prisma.businessProfile.findFirst({
+    where: { isActive: true },
+    select: { timezone: true },
+  });
+  const resolvedTimezone =
+    businessProfile?.timezone?.trim() ||
+    (config.timezone && config.timezone !== "Europe/London" ? config.timezone : null) ||
+    "America/Chicago";
+
   // Confirmed regulatory display obligations for the "disclosures" section
   // (BI-5D9DCDE6 spec §9.3). D5 honesty rule: only obligations whose parent
   // credential record is ACTIVE are exposed — uncaptured posture must render
@@ -169,7 +182,7 @@ export const getPublicStorefront = cache(async function getPublicStorefront(
   return {
     tagline: config.tagline,
     description: config.description,
-    timezone: config.timezone ?? "America/Chicago",
+    timezone: resolvedTimezone,
     heroImageUrl: config.heroImageUrl,
     contactEmail: config.contactEmail,
     contactPhone: config.contactPhone,

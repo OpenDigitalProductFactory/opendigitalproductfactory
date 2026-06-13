@@ -42,6 +42,53 @@ export function StorefrontDashboard({ config, counts }: { config: DashboardConfi
 
   return (
     <div>
+      {/* Publish gate is deliberate (unpublished by default), but operators were
+          not prompted to publish after the wizard and assumed the 404 portal was
+          broken. Surface a prominent call-to-action whenever the portal is not
+          yet live. */}
+      {!published && (
+        <div
+          role="status"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+            marginBottom: 24,
+            padding: "14px 16px",
+            borderRadius: 8,
+            border: "1px solid var(--dpf-accent)",
+            background: "color-mix(in srgb, var(--dpf-accent) 12%, transparent)",
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--dpf-text)" }}>
+              Your storefront is ready — publish it now
+            </div>
+            <div style={{ marginTop: 2, fontSize: 13, color: "var(--dpf-muted)" }}>
+              It is not live yet, so the public link returns a 404. Publish it so customers can find you.
+            </div>
+          </div>
+          <button
+            onClick={togglePublish}
+            disabled={toggling}
+            style={{
+              padding: "8px 18px",
+              borderRadius: 6,
+              border: "none",
+              background: "var(--dpf-accent)",
+              color: "white",
+              cursor: toggling ? "wait" : "pointer",
+              fontSize: 14,
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {toggling ? "Publishing..." : "Publish now"}
+          </button>
+        </div>
+      )}
+
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 15, fontWeight: 600 }}>{config.orgName}</div>
