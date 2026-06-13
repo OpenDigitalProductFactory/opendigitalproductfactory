@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { probeImage } from "./image-probe";
 import { buildMediaBlobStorageKey, hashMediaBlobContent } from "./media-storage";
+import { normalizeRenditionWidth, RENDITION_WIDTHS } from "./renditions";
 
 function pngHeader(width: number, height: number): Buffer {
   const buf = Buffer.alloc(24);
@@ -70,5 +71,25 @@ describe("media storage keys", () => {
 
   it("identical bytes hash identically (dedupe guarantee)", () => {
     expect(hashMediaBlobContent(Buffer.from("abc"))).toBe(hashMediaBlobContent(Buffer.from("abc")));
+  });
+});
+
+describe("normalizeRenditionWidth", () => {
+  it("snaps a requested width up to the nearest rung", () => {
+    expect(normalizeRenditionWidth(100)).toBe(160);
+    expect(normalizeRenditionWidth(200)).toBe(320);
+    expect(normalizeRenditionWidth(640)).toBe(640);
+    expect(normalizeRenditionWidth(700)).toBe(960);
+  });
+
+  it("caps at the largest rung", () => {
+    expect(normalizeRenditionWidth(5000)).toBe(RENDITION_WIDTHS[RENDITION_WIDTHS.length - 1]);
+  });
+
+  it("rejects invalid widths (serve original)", () => {
+    expect(normalizeRenditionWidth(0)).toBeNull();
+    expect(normalizeRenditionWidth(-10)).toBeNull();
+    expect(normalizeRenditionWidth(null)).toBeNull();
+    expect(normalizeRenditionWidth(Number.NaN)).toBeNull();
   });
 });
