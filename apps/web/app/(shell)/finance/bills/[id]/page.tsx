@@ -150,6 +150,22 @@ export default async function BillDetailPage({ params }: Props) {
                   {sym}{formatMoney(bill.totalAmount)}
                 </td>
               </tr>
+              {Number(bill.amountPaid) > 0 && (
+                <>
+                  <tr>
+                    <td colSpan={4} className="px-4 py-2.5 text-right text-[var(--dpf-muted)] text-[10px] uppercase tracking-widest">
+                      Paid
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">{sym}{formatMoney(bill.amountPaid)}</td>
+                  </tr>
+                  <tr>
+                    <td colSpan={4} className="px-4 py-2.5 text-right text-[var(--dpf-muted)] text-[10px] uppercase tracking-widest">
+                      Due
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-[var(--dpf-text)]">{sym}{formatMoney(bill.amountDue)}</td>
+                  </tr>
+                </>
+              )}
             </tfoot>
           </table>
         </div>
