@@ -30,6 +30,22 @@ export type WikiPageFrontmatter = {
   abstract?: string;
   /** Source slugs (relative to raw-sources/) that this page cites. */
   sources?: string[];
+  // ─── WSID profession-corpus variant axes (variant addendum 2026-06-13) ───
+  // Apply only to profession-corpus pages (slug prefix `professions/`).
+  // Validated by the corpus seed against PROFESSION_JURISDICTIONS /
+  // PROFESSION_COMPETENCY_LEVELS in wiki-taxonomy.ts; not stored as DB columns
+  // in V1 (no migration). See
+  // docs/superpowers/specs/2026-06-13-wsid-location-competency-variants-design.md.
+  /**
+   * Jurisdictions this page's doctrine governs. Omitted = jurisdiction-neutral
+   * (equivalent to ["global"]). Values from PROFESSION_JURISDICTIONS.
+   */
+  professionJurisdiction?: string[];
+  /**
+   * Depth of professional judgment the page encodes. Omitted defaults to
+   * "practitioner". Values from PROFESSION_COMPETENCY_LEVELS.
+   */
+  professionCompetencyLevel?: string;
   // ─── Principle-only frontmatter (spec section 9) ───
   // Required-field gating lives in lint detectors per spec section 14, not
   // here. The seed walker accepts incomplete principle data so lint can
