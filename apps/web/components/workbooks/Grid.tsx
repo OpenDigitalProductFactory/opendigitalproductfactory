@@ -56,6 +56,7 @@ import {
   commitRedo,
 } from "./grid-history";
 import { quickFilterRows, applyColumnFilters, type ColumnFilters } from "./grid-filter";
+import { rowsToCsv } from "./grid-csv";
 
 export interface WorkbookGridProps {
   /** custom WorkbookTable id (TBL-*) or, for platform data, the entity type. */
@@ -344,6 +345,20 @@ export function WorkbookGrid({
     setBusy(false);
   }, [tableId, selectedRows]);
 
+  const onExportCsv = useCallback(() => {
+    if (typeof document === "undefined") return;
+    const csv = rowsToCsv(columns, sortedRows);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${tableId}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, [columns, sortedRows, tableId]);
+
   return (
     <div className="flex h-full flex-col gap-2" onKeyDown={onKeyDown}>
       <div className="flex items-center gap-2">
@@ -404,9 +419,18 @@ export function WorkbookGrid({
         )}
         <button
           type="button"
+          onClick={onExportCsv}
+          disabled={columns.length === 0}
+          className="ml-auto rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] disabled:opacity-40"
+          title="Export the current view to CSV"
+        >
+          Export CSV
+        </button>
+        <button
+          type="button"
           onClick={() => setShowFilters((v) => !v)}
           aria-pressed={showFilters}
-          className="ml-auto rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
           title="Filter by column"
         >
           {showFilters ? "Hide filters" : "Filters"}
