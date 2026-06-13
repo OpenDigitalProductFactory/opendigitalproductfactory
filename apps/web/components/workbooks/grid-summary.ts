@@ -78,3 +78,24 @@ export function summarize(
   out.sort((a, b) => b.count - a.count || a.group.localeCompare(b.group));
   return out;
 }
+
+export interface SummaryBar {
+  group: string;
+  value: number;
+  /** 0–100, relative to the largest bar (for a CSS bar width). */
+  pct: number;
+}
+
+/**
+ * Turn a summary into chart bars: the bar value is the chosen metric's `sum` when
+ * a value column is set, else the group `count`. `pct` is relative to the max bar.
+ */
+export function summaryChartBars(summary: GroupSummary[], hasValueColumn: boolean): SummaryBar[] {
+  const value = (s: GroupSummary) => (hasValueColumn ? s.sum : s.count);
+  const max = summary.reduce((m, s) => Math.max(m, value(s)), 0);
+  return summary.map((s) => ({
+    group: s.group,
+    value: value(s),
+    pct: max > 0 ? Math.round((value(s) / max) * 100) : 0,
+  }));
+}

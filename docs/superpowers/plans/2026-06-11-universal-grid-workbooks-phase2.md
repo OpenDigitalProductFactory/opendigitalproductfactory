@@ -165,9 +165,12 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   chosen column and shows count + numeric aggregates (sum/avg/min/max) of a chosen value column per
   group. Pure, unit-tested `grid-summary.ts` (`summarize`/`toSummaryNumber`). Over loaded rows; full
   pivots (multi-dimension, subtotals, %) + SQL push-down are later Phase-4 work.
+- **Slice 13 — summary chart — SHIPPED.** A Table/Chart toggle in the Summary panel renders a CSS
+  bar chart of the grouped metric (count, or the value column's sum), scaled to the largest bar.
+  Pure, unit-tested `summaryChartBars`. Richer chart types (pie/line via recharts) are a follow-up.
 - **Remaining (not built):** saved views (persist filters/sort/format to the existing `WorkbookView`);
-  calendar + gallery views; `.xlsx` import; full pivots + charts/dashboards; metrics/semantic layer;
-  operationalization lifecycle.
+  calendar + gallery views; `.xlsx` import (slice 12, in flight); full pivots + richer charts;
+  metrics/semantic layer; operationalization lifecycle.
 
 ## Remaining toward full Smartsheet + Supabase parity (tracked, not built)
 

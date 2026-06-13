@@ -67,7 +67,7 @@ import {
   blankRule,
   operatorNeedsValue,
 } from "./grid-conditional-format";
-import { summarize, numericColumns } from "./grid-summary";
+import { summarize, numericColumns, summaryChartBars } from "./grid-summary";
 
 export interface WorkbookGridProps {
   /** custom WorkbookTable id (TBL-*) or, for platform data, the entity type. */
@@ -209,6 +209,7 @@ export function WorkbookGrid({
   const [showSummary, setShowSummary] = useState(false);
   const [summaryGroupBy, setSummaryGroupBy] = useState("");
   const [summaryValue, setSummaryValue] = useState("");
+  const [summaryChart, setSummaryChart] = useState(false);
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
   const activeFilterCount = Object.values(columnFilters).filter((v) => v.trim()).length;
   // Multi-step undo/redo of cell edits (distinct from the audit history). Each
@@ -664,7 +665,48 @@ export function WorkbookGrid({
                   </option>
                 ))}
               </select>
+              <div className="ml-auto inline-flex overflow-hidden rounded-md border border-[var(--dpf-border)] text-sm">
+                <button
+                  type="button"
+                  onClick={() => setSummaryChart(false)}
+                  className={
+                    summaryChart
+                      ? "px-2 py-1 text-[var(--dpf-muted)]"
+                      : "bg-[var(--dpf-surface-1)] px-2 py-1 font-medium text-[var(--dpf-text)]"
+                  }
+                >
+                  Table
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSummaryChart(true)}
+                  className={
+                    summaryChart
+                      ? "bg-[var(--dpf-surface-1)] px-2 py-1 font-medium text-[var(--dpf-text)]"
+                      : "px-2 py-1 text-[var(--dpf-muted)]"
+                  }
+                >
+                  Chart
+                </button>
+              </div>
             </div>
+            {summaryChart ? (
+              <div className="flex flex-col gap-1">
+                {summaryChartBars(summary, Boolean(valueCol)).map((bar) => (
+                  <div key={bar.group} className="flex items-center gap-2 text-sm">
+                    <span className="w-32 shrink-0 truncate text-[var(--dpf-muted)]" title={bar.group}>
+                      {bar.group}
+                    </span>
+                    <span className="dpf-summary-bar-track">
+                      <span className="dpf-summary-bar-fill" style={{ width: `${bar.pct}%` }} />
+                    </span>
+                    <span className="w-16 shrink-0 text-right tabular-nums text-[var(--dpf-text)]">
+                      {bar.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
             <div className="overflow-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -699,6 +741,7 @@ export function WorkbookGrid({
                 </tbody>
               </table>
             </div>
+            )}
           </div>
         );
       })()}
