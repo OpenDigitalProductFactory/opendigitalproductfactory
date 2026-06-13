@@ -1,4 +1,18 @@
-import type { ArchetypeDefinition } from "../types";
+import type { ArchetypeDefinition, SchedulingDefaults } from "../types";
+
+// Artisan workshops are booked into daytime slots, typically Tue–Sat. The
+// archetype's top-level ctaType is "purchase" (selling goods), but the
+// "Workshop Booking" item is ctaType:"booking" and needs schedulingDefaults or
+// its calendar ships empty (same root cause as AUDIT-R3/R4).
+const WORKSHOP_SCHEDULING: SchedulingDefaults = {
+  schedulingPattern: "slot",
+  assignmentMode: "customer-choice",
+  defaultOperatingHours: [2, 3, 4, 5, 6].map((day) => ({ day, start: "10:00", end: "17:00" })),
+  defaultBeforeBuffer: 0,
+  defaultAfterBuffer: 15,
+  minimumNoticeHours: 48,
+  maxAdvanceDays: 90,
+};
 
 const CONTACT_FIELDS = [
   { name: "name", label: "Full name", type: "text" as const, required: true },
@@ -54,6 +68,7 @@ export const retailGoodsArchetypes: ArchetypeDefinition[] = [
       ...CONTACT_FIELDS,
       { name: "commissionDetails", label: "Commission details", type: "textarea" as const, required: false, placeholder: "Describe what you have in mind" },
     ],
+    schedulingDefaults: WORKSHOP_SCHEDULING,
   },
   {
     archetypeId: "florist",
