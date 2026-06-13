@@ -21,6 +21,10 @@ overrides:
   '@opentelemetry/otlp-transformer>protobufjs': '^8.3.0'
   'protobufjs@<=7.5.7': '^7.5.8'
   'ws@>=8.0.0 <8.20.1': '^8.20.1'
+  # esbuild < 0.28.1: GHSA binary-integrity RCE via NPM_CONFIG_REGISTRY (high) +
+  # arbitrary file read by the Windows dev server (low). Dev-only transitive dep
+  # of vite/vitest; pin the vulnerable range up to the patched release.
+  'esbuild@>=0.17.0 <0.28.1': '^0.28.1'
   fast-uri: '^3.1.2'
   hono: '^4.12.21'
   mermaid: '^11.15.0'
