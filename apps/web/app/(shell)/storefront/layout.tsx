@@ -29,13 +29,20 @@ export default async function StorefrontAdminLayout({ children }: { children: Re
   const showAnimals = Boolean(
     config?.sections.some((s) => s.type === "animals-available"),
   );
+  // Units tab appears whenever the storefront sells a rental class (a rental
+  // archetype's stockable fleet).
+  const showUnits = config
+    ? (await prisma.storefrontItem.count({
+        where: { storefrontId: config.id, ctaType: "rental" },
+      })) > 0
+    : false;
 
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700 }}>{vocabulary.portalLabel}</h1>
       </div>
-      <StorefrontAdminTabNav vocabulary={vocabulary} showAnimals={showAnimals} />
+      <StorefrontAdminTabNav vocabulary={vocabulary} showAnimals={showAnimals} showUnits={showUnits} />
       {children}
     </div>
   );
