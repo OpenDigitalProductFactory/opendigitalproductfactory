@@ -172,6 +172,19 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     failed: "danger",
     blocked: "warning",
   },
+  // Ops self-upgrade lifecycle. Keep these here so the Upgrade Center does not
+  // carry a private run-status color map.
+  selfUpgradeRun: {
+    queued: "info",
+    pending: "info",
+    running: "accent",
+    completing: "accent",
+    succeeded: "success",
+    failed: "danger",
+    skipped: "neutral",
+    cancelled: "neutral",
+    rolled_back: "warning",
+  },
   // Deliberation consensus outcome on the AI Operations Map deliberation lens.
   deliberationConsensus: {
     consensus: "success",

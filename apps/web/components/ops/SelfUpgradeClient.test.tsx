@@ -155,6 +155,19 @@ describe("SelfUpgradeClient – enabled", () => {
 // ─── Running ──────────────────────────────────────────────────────────────────
 
 describe("SelfUpgradeClient – running", () => {
+  it("shows queued state as accepted work instead of an idle trigger", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("queued", { startedAt: null, completedAt: null })}
+      />,
+    );
+    expect(html).toContain("Upgrade queued");
+    expect(html).toContain("waiting for the worker");
+    expect(html).toContain('data-run-status="queued"');
+    expect(html).not.toContain('aria-label="Upgrade now"');
+  });
+
   it("shows running badge in the latest run section", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeClient {...baseStatus} latestRun={makeRun("running")} />,
