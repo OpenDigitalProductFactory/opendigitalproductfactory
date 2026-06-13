@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 // apps/web/components/build/AgentActivityStrip.test.tsx
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, act } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, act } from "@testing-library/react";
+
+afterEach(() => {
+  cleanup();
+});
 import { AgentActivityStrip } from "./AgentActivityStrip";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 
