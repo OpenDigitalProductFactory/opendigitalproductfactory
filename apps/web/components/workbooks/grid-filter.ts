@@ -45,3 +45,27 @@ export function quickFilterRows(
   if (!lowered) return rows;
   return rows.filter((r) => rowMatchesQuery(r, columns, lowered));
 }
+
+/** Per-column filters: columnId → substring the column's value must contain. */
+export type ColumnFilters = Record<string, string>;
+
+/** Keep only the non-empty filters (lowercased), as [columnId, needle] pairs. */
+export function activeColumnFilters(filters: ColumnFilters): [string, string][] {
+  return Object.entries(filters)
+    .map(([k, v]) => [k, v.trim().toLowerCase()] as [string, string])
+    .filter(([, v]) => v.length > 0);
+}
+
+/** AND-combine per-column substring filters. No active filters → all rows. */
+export function applyColumnFilters(
+  rows: GridRowData[],
+  filters: ColumnFilters,
+): GridRowData[] {
+  const active = activeColumnFilters(filters);
+  if (active.length === 0) return rows;
+  return rows.filter((row) =>
+    active.every(([columnId, needle]) =>
+      cellSearchText(row[columnId] ?? null).toLowerCase().includes(needle),
+    ),
+  );
+}
