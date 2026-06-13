@@ -58,6 +58,35 @@
   font-size: 0.8125rem;
 }
 
+/* Provenance progressive disclosure — column header with a small source label. */
+.dpf-grid-header {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.dpf-grid-header-name {
+  font-weight: 600;
+}
+.dpf-prov {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.dpf-prov-system {
+  color: var(--dpf-accent);
+}
+.dpf-prov-source {
+  color: var(--dpf-warning, var(--dpf-accent));
+}
+.dpf-prov-derived {
+  color: var(--dpf-success, var(--dpf-accent));
+}
+.dpf-prov-manual {
+  color: var(--dpf-muted);
+}
+
 .dpf-grid-editor {
   inline-size: 100%;
   block-size: 100%;
