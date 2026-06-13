@@ -47,6 +47,65 @@ export interface ItemTemplate {
   ctaType?: CtaType;          // overrides archetype default if set
   ctaLabel?: string;
   bookingDurationMinutes?: number;
+  /**
+   * Image affordance this item template expects. When set, the storefront editor
+   * surfaces an image/gallery slot for items seeded from this template (e.g. a
+   * retail product or a rentable excavator). Usually left unset — the
+   * archetype-level {@link MediaProfile} (derived in media-profile.ts) covers
+   * the common case; this is the per-item override.
+   */
+  mediaRole?: MediaRole;
+}
+
+/**
+ * A kind of image a business surface carries. Roles are how a {@link MediaSlot}
+ * and a `MediaAttachment` (DB) describe *what* an image is, independent of which
+ * entity holds it — so the storefront renderer and upload UI can treat a product
+ * gallery, an adoptable-animal gallery, and an equipment gallery uniformly.
+ */
+export type MediaRole =
+  | "logo"          // organization mark
+  | "hero"          // storefront hero/banner
+  | "gallery"       // general portfolio/work showcase
+  | "product"       // a sellable item's photos (retail, food, artisan)
+  | "equipment"     // a rentable unit's photos (asset-rental)
+  | "avatar"        // staff/provider/instructor headshot
+  | "animal"        // adoptable-animal photos (pet-rescue, animal-shelter)
+  | "before-after"  // transformation pairs (beauty, grooming, fitness)
+  | "facility"      // premises/space photos (storage, spa, clinic)
+  | "certificate";  // credential/qualification images
+
+/** Which entity a {@link MediaSlot}'s images attach to. */
+export type MediaOwner =
+  | "organization"
+  | "storefront"
+  | "item"
+  | "provider"
+  | "section"
+  | "animal"
+  | "rentable-unit";
+
+/**
+ * One declared image need for an archetype: a {@link MediaRole} on a
+ * {@link MediaOwner}, with how strongly it applies and whether it is a gallery.
+ * Derived from the archetype's sections/ctaType/category/axes by
+ * `deriveMediaProfile` (media-profile.ts), not hand-authored per archetype —
+ * mirroring how `BillingPatternProfile` is derived from `commercialModel`.
+ */
+export interface MediaSlot {
+  role: MediaRole;
+  owner: MediaOwner;
+  applicability: "required" | "recommended" | "optional";
+  /** True for an ordered gallery; false for a single image. */
+  multiple: boolean;
+  label: string;
+  /** Why this image matters — ties the slot to the customer journey. */
+  reason: string;
+}
+
+/** The full set of image affordances an archetype surfaces. */
+export interface MediaProfile {
+  slots: MediaSlot[];
 }
 
 export interface SectionTemplate {
@@ -447,4 +506,11 @@ export interface ArchetypeDefinition {
    * typecheck instead of being silently ignored at merge time.
    */
   vocabulary?: ArchetypeVocabularyOverride;
+  /**
+   * Optional override of the derived {@link MediaProfile}. Almost always left
+   * unset — `deriveMediaProfile` (media-profile.ts) produces a sensible profile
+   * from this archetype's sections/ctaType/category/axes. Set only if a leaf has
+   * a genuine image-affordance exception the derivation can't express.
+   */
+  mediaProfile?: MediaProfile;
 }

@@ -32,9 +32,13 @@ Exit: tool registry row merged; exact CLI invocation + env contract documented i
 
 Exit: `pnpm --filter web exec vitest run` green on new tests; `pnpm --filter web typecheck` green. (Source-local gates in worktree; runtime gates Phase 3.)
 
+**Status: Phase 1 landed** (feat/opencode-build-agent). `opencode` BuildAgentId + `opencode-agent-runner` + `opencode-dispatch` (portal-side endpoint preflight, sandbox URL rewrite, `opencode.json` provider config, `opencode run --format json` exec, event/result parsing), dispatch-config `provider:"opencode"` with none-auth-aware auto-detect (claude→codex→grok→opencode→agentic) + env overrides, orchestrator wiring, `cliEngine:"opencode"` seed on the `local`+`ollama` providers, schema comment refresh. 28 new unit tests; full integrate/sandbox suite green (250 tests); typecheck clean. Runtime unverified (Phase 3).
+
+**Research finding folded into Phase 1:** `/v1/models` returns reachability + model presence but **not** context length for most OpenAI-compatible servers, so the hard preflight is endpoint-reachable + requested-model-present; the ≥`OPENCODE_MIN_CONTEXT_TOKENS` (22k) floor is enforced only when the endpoint reports a context field, otherwise it's a documented model requirement (see spec).
+
 ## Phase 2 — Sandbox image + admin UI
 
-1. `Dockerfile.sandbox`: `npm install -g opencode-ai@<pin>` (from Phase 0 registry row). No auth material added to the image. Apply the grok lesson already in this Dockerfile — the image is Alpine/musl and the npm package fetches a platform binary, so gate the image build loudly with `opencode --version` as root **and** as the `node` user.
+1. `Dockerfile.sandbox`: install the **pinned** OpenCode binary. **Research finding (opencode issue #9571):** `npm install -g opencode-ai` does NOT detect musl — on the `node:24-alpine` base it fails or links the wrong binary (the grok failure mode, worse). Do **not** change the base image (blast-radius for codex/claude/grok). Instead install the musl artifact directly — `npm install -g opencode-linux-x64-musl@<pin>` (or download the musl release binary onto PATH) — and, because OpenCode dynamically fetches the `@ai-sdk/openai-compatible` provider package on first run, **pre-install that package into the image** so air-gapped first runs don't fail. Gate the image build loudly with `opencode --version` as root **and** as the `node` user (the grok lesson).
 2. Admin Build Studio dispatch config UI: add "Local model (OpenCode)" option with resolved endpoint + model display, an inline endpoint health/context preflight result (config-time, not first at dispatch), preview-tier banner, and a "no credential required" note. Theme tokens per AGENTS.md §12.
 3. Docs: update the Build Studio operator docs' dispatch-provider section (document at ship).
 

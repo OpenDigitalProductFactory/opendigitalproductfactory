@@ -363,7 +363,7 @@ export type HappyPathIntakeState = {
 };
 
 export type HappyPathExecutionState = {
-  engine: "claude" | "codex" | "grok" | "agentic" | null;
+  engine: "claude" | "codex" | "grok" | "opencode" | "agentic" | null;
   source: "grafana" | "prometheus" | null;
   status: "pending" | "running" | "failed" | "done";
   failureStage: HappyPathFailureStage | null;

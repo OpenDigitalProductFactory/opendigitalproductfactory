@@ -348,7 +348,7 @@ export async function dispatchIdeateResearch(params: {
   scoutFindings?: { relatedModels: Array<{ name: string; file: string; line: number }>; gaps: Array<{ entity: string; reason: string }>; externalStructure?: Record<string, unknown>; suggestedQuestions: string[] };
   providerId?: string;
   model?: string;
-  dispatchEngine?: "claude" | "codex" | "grok" | "agentic";
+  dispatchEngine?: "claude" | "codex" | "grok" | "opencode" | "agentic";
   onProgress?: (message: string) => void;
 }): Promise<IdeateResult> {
   const dispatchEngine = params.dispatchEngine ?? "codex";

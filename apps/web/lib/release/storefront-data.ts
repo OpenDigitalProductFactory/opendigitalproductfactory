@@ -1,11 +1,71 @@
 import { cache } from "react";
 import { prisma } from "@dpf/db";
 import type { FormField } from "@dpf/storefront-templates";
+import { resolveOperatingHoursTimezone } from "@/lib/operating-hours-types";
+import { listOwnerMedia, mediaAssetUrl } from "@/lib/media";
 import type {
   PublicStorefrontConfig,
   PublicItem,
   PublicSection,
+  PublicAdoptableAnimal,
 } from "./storefront-types";
+
+/**
+ * Load the published adoptable animals for a storefront, each with its primary
+ * photo and gallery. Only loaded when the storefront has an `animals-available`
+ * section, so every other archetype skips the query.
+ */
+export async function getPublicAdoptableAnimals(
+  storefrontId: string,
+): Promise<PublicAdoptableAnimal[]> {
+  const animals = await prisma.adoptableAnimal.findMany({
+    where: { storefrontId, status: { in: ["available", "pending", "hold"] } },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+      animalRef: true,
+      name: true,
+      species: true,
+      breed: true,
+      age: true,
+      sex: true,
+      size: true,
+      description: true,
+      status: true,
+      attributes: true,
+      primaryPhotoAssetId: true,
+    },
+  });
+
+  return Promise.all(
+    animals.map(async (a) => {
+      const photos = (await listOwnerMedia("AdoptableAnimal", a.id)).map((m) => ({
+        url: m.url,
+        altText: m.altText,
+        caption: m.caption,
+        width: m.width,
+        height: m.height,
+      }));
+      return {
+        id: a.id,
+        animalRef: a.animalRef,
+        name: a.name,
+        species: a.species,
+        breed: a.breed,
+        age: a.age,
+        sex: a.sex,
+        size: a.size,
+        description: a.description,
+        status: a.status,
+        attributes: a.attributes as Record<string, unknown> | null,
+        primaryPhotoUrl: a.primaryPhotoAssetId
+          ? mediaAssetUrl(a.primaryPhotoAssetId)
+          : (photos[0]?.url ?? null),
+        photos,
+      };
+    }),
+  );
+}
 
 // Generic fallback used when an archetype defines no form schema (or for custom
 // archetypes that were created without one).
@@ -60,6 +120,7 @@ export const getPublicStorefront = cache(async function getPublicStorefront(
   const config = await prisma.storefrontConfig.findFirst({
     where: { organization: { slug } },
     select: {
+      id: true,
       isPublished: true,
       tagline: true,
       description: true,
@@ -124,14 +185,14 @@ export const getPublicStorefront = cache(async function getPublicStorefront(
   // setting (BusinessProfile.timezone). StorefrontConfig.timezone carries a stale
   // Europe/London default that is never re-synced when the operator sets hours,
   // which is why US salons saw "Times shown in Europe/London" (AUDIT-R2-NS-B-005).
+  // Resolve through the same helper the Operating Hours settings page uses so the
+  // calendar label always matches what the operator sees there (UTC on a fresh
+  // install), never the stale config default.
   const businessProfile = await prisma.businessProfile.findFirst({
     where: { isActive: true },
     select: { timezone: true },
   });
-  const resolvedTimezone =
-    businessProfile?.timezone?.trim() ||
-    (config.timezone && config.timezone !== "Europe/London" ? config.timezone : null) ||
-    "America/Chicago";
+  const resolvedTimezone = resolveOperatingHoursTimezone(businessProfile?.timezone);
 
   // Confirmed regulatory display obligations for the "disclosures" section
   // (BI-5D9DCDE6 spec §9.3). D5 honesty rule: only obligations whose parent
@@ -139,6 +200,15 @@ export const getPublicStorefront = cache(async function getPublicStorefront(
   // a neutral placeholder, never a fabricated "Member FDIC"/NCUA claim.
   // Loaded only when the storefront actually has a disclosures section, so
   // every other archetype skips the extra query.
+  // Adoptable animals back the `animals-available` section (pet-rescue /
+  // animal-shelter). Loaded only when that section is present.
+  const hasAnimalsSection = config.sections.some(
+    (section) => section.type === "animals-available",
+  );
+  const animals = hasAnimalsSection
+    ? await getPublicAdoptableAnimals(config.id)
+    : [];
+
   const hasDisclosuresSection = config.sections.some(
     (section) => section.type === "disclosures",
   );
@@ -200,6 +270,7 @@ export const getPublicStorefront = cache(async function getPublicStorefront(
       priceAmount: item.priceAmount?.toString() ?? null,
       bookingConfig: item.bookingConfig as Record<string, unknown> | null,
     })),
+    animals,
     displayObligations,
   };
 });

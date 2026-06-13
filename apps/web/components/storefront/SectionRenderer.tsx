@@ -40,7 +40,7 @@ export function SectionRenderer({
     case "donate":
       return <DonationSection content={content} orgSlug={orgSlug} />;
     case "animals-available":
-      return <AnimalsSection content={content} />;
+      return <AnimalsSection content={content} animals={storefront.animals} />;
     case "disclosures":
       return (
         <DisclosuresSection

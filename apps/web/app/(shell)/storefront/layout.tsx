@@ -16,12 +16,18 @@ export default async function StorefrontAdminLayout({ children }: { children: Re
 
   // Load archetype for vocabulary
   const config = await prisma.storefrontConfig.findFirst({
-    include: { archetype: { select: { category: true, customVocabulary: true } } },
+    include: {
+      archetype: { select: { category: true, customVocabulary: true } },
+      sections: { select: { type: true } },
+    },
   });
 
   const vocabulary = getVocabulary(
     config?.archetype?.category,
     config?.archetype?.customVocabulary as Record<string, string> | null,
+  );
+  const showAnimals = Boolean(
+    config?.sections.some((s) => s.type === "animals-available"),
   );
 
   return (
@@ -29,7 +35,7 @@ export default async function StorefrontAdminLayout({ children }: { children: Re
       <div style={{ marginBottom: 16 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700 }}>{vocabulary.portalLabel}</h1>
       </div>
-      <StorefrontAdminTabNav vocabulary={vocabulary} />
+      <StorefrontAdminTabNav vocabulary={vocabulary} showAnimals={showAnimals} />
       {children}
     </div>
   );
