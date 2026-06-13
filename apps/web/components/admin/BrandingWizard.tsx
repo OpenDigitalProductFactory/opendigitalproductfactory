@@ -44,6 +44,30 @@ export function BrandingWizard({
   const [urlInput, setUrlInput] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+
+  // Upload a logo of any common type (incl SVG). The server normalises it on the
+  // operator's behalf and returns a hosted /api/media URL — no format choices.
+  const handleLogoFile = async (file: File | undefined) => {
+    if (!file) return;
+    setUploadingLogo(true);
+    setLogoError(null);
+    try {
+      const fd = new FormData();
+      fd.set("file", file);
+      const res = await fetch("/api/brand/logo", { method: "POST", body: fd });
+      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (!res.ok || !data.url) {
+        setLogoError(data.error ?? "We couldn't use that image. Try another logo.");
+        return;
+      }
+      setLogoUrl(data.url);
+      setStep("preview");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   const handleAnalyzeUrl = async () => {
     if (!urlInput.trim()) return;
@@ -136,18 +160,21 @@ export function BrandingWizard({
           )}
         </div>
 
-        {/* Upload brand document */}
+        {/* Upload your logo */}
         <div className="rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] p-4 space-y-3">
-          <p className="text-xs font-semibold text-[var(--dpf-text)] uppercase tracking-widest">Upload brand document</p>
+          <p className="text-xs font-semibold text-[var(--dpf-text)] uppercase tracking-widest">Upload your logo</p>
+          <p className="text-[11px] text-[var(--dpf-muted)]">
+            Any common image works — we&apos;ll tidy it up and host it for you.
+          </p>
           <input
             type="file"
-            accept=".pdf,.png,.jpg,.jpeg,.svg"
-            disabled
-            className="w-full bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-xs text-[var(--dpf-text)] opacity-60 cursor-not-allowed file:mr-3 file:rounded file:border-0 file:bg-[var(--dpf-surface-1)] file:text-[var(--dpf-muted)] file:px-2 file:py-1 file:text-xs"
+            accept="image/*,.svg"
+            disabled={uploadingLogo}
+            onChange={(e) => handleLogoFile(e.currentTarget.files?.[0])}
+            className="w-full bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-xs text-[var(--dpf-text)] disabled:opacity-60 file:mr-3 file:rounded file:border-0 file:bg-[var(--dpf-accent)] file:text-white file:px-2 file:py-1 file:text-xs file:cursor-pointer"
           />
-          <p className="text-[11px] text-[var(--dpf-muted)]">
-            Accepts PDF, PNG, JPG, JPEG, SVG.
-          </p>
+          {uploadingLogo && <p className="text-[11px] text-[var(--dpf-muted)]">Uploading your logo…</p>}
+          {logoError && <p className="text-[11px] text-red-400">{logoError}</p>}
         </div>
 
         {/* Preset grid */}
@@ -361,13 +388,22 @@ export function BrandingWizard({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Logo URL</span>
+            <span className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Logo</span>
+            <input
+              type="file"
+              accept="image/*,.svg"
+              disabled={uploadingLogo}
+              onChange={(e) => handleLogoFile(e.currentTarget.files?.[0])}
+              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-xs text-[var(--dpf-text)] disabled:opacity-60 file:mr-3 file:rounded file:border-0 file:bg-[var(--dpf-accent)] file:text-white file:px-2 file:py-1 file:text-xs file:cursor-pointer"
+            />
+            {uploadingLogo && <span className="text-[11px] text-[var(--dpf-muted)]">Uploading…</span>}
+            {logoError && <span className="text-[11px] text-red-400">{logoError}</span>}
             <input
               type="text"
               value={logoUrl}
               onChange={(e) => setLogoUrl(e.currentTarget.value)}
-              placeholder="https://example.com/logo.png"
-              className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]"
+              placeholder="…or paste a link to your logo"
+              className="mt-1 bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)]"
             />
           </label>
 
