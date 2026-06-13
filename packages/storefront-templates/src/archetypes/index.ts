@@ -13,6 +13,7 @@ import { hoaPropertyManagementArchetypes } from "./hoa-property-management";
 import { bankingFinancialServicesArchetypes } from "./banking-financial-services";
 import { publicSectorArchetypes } from "./public-sector";
 import { assetRentalArchetypes } from "./asset-rental";
+import { realEstateConstructionArchetypes } from "./real-estate-construction";
 
 export const ALL_ARCHETYPES = [
   ...healthcareWellnessArchetypes,
@@ -30,4 +31,5 @@ export const ALL_ARCHETYPES = [
   ...bankingFinancialServicesArchetypes,
   ...publicSectorArchetypes,
   ...assetRentalArchetypes,
+  ...realEstateConstructionArchetypes,
 ];

@@ -110,6 +110,18 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
     supplyChain:
       "Our physical supply chain is intentionally light — most of what we consume is software, research databases, and professional subscriptions. The discipline is in vendor selection and renewal review: a stale tool can cost more than its licence.",
   },
+  "real-estate-construction": {
+    missionTheme:
+      "build homes and communities our buyers are proud to live in",
+    businessModel:
+      "Home sales driven by display-home visits and purchase agreements; revenue arrives at settlement with milestone draws during construction. Subcontractors deliver the trade work; the builder's value is design, project management, and quality assurance.",
+    whoWeServe:
+      "We serve home buyers — first-timers, families upsizing, downsizers, and investors — who trust us with the largest purchase of their lives. Every home we hand over is a reflection of that trust and our reputation.",
+    howWeDecide:
+      "We decide for build quality, delivery on time, and the buyer's confidence at handover. A defect caught before settlement is never optional to fix, and a warranty call is an opportunity to demonstrate we stand behind our work. We hold completion integrity above schedule shortcuts.",
+    supplyChain:
+      "Our build supply chain is almost entirely subcontracted — framers, concreters, plumbers, electricians, plasterers, tilers, and painters all work under our project management umbrella. The discipline is in subcontractor qualification, schedule coordination, and quality inspection at every stage. Material supply (structural timber, windows, bricks, roof tiles) typically runs through builders' merchants and volume trade accounts; lead times and material price volatility are operational risks that need to be hedged in contract pricing.",
+  },
   "asset-rental": {
     missionTheme:
       "keep a well-maintained pool of equipment available and turning so customers get what they need, when they need it",
@@ -228,6 +240,22 @@ const ARCHETYPE_PROFILES: Record<string, Partial<ArchetypeBusinessProfile>> = {
       "Online transactional sales with repeat custom; product quality, fast fulfilment, and easy support turn first orders into loyal customers.",
     supplyChain:
       "Inventory comes from wholesalers, brand suppliers, or via dropship; some SKUs we hold, some ship direct. We manage against turn rate, lead times, and fulfilment-partner reliability — what is on the website needs to be in stock or shippable, not aspirational.",
+  },
+  "new-home-builder": {
+    missionTheme:
+      "build quality homes and thriving communities that buyers are proud to call home",
+    businessModel:
+      "Volume production of homes across planned communities; display homes serve as the showroom, and most buyer contact begins with a guided tour. Subcontractors complete most trade work under the builder's project management; revenue arrives at settlement.",
+    supplyChain:
+      "Volume builders run centralised supply chains with preferred suppliers and trade partnerships across structural, building envelope, joinery, services (MEP), and finishes categories. Trade-pack pricing and volume commitments buffer against spot-price volatility; site supervisors manage the subcontractor schedule and stage inspections.",
+  },
+  "custom-home-builder": {
+    missionTheme:
+      "design and build the home each client has been imagining, on the lot they have chosen",
+    businessModel:
+      "Project-based: one contract per home, structured around a build programme with milestone payments. Each project is unique; the builder manages the design-to-handover journey including permits, subcontractor coordination, and quality sign-off.",
+    supplyChain:
+      "Custom builders procure on a project-by-project basis, working with trusted local subcontractors and trade suppliers who match the quality standard the brief demands. Supplier relationships are long-term but quantities are project-specific, with provisional sums built into contracts for items such as stone, joinery, and fixtures where selection drives price. Site lead times for premium materials require early ordering.",
   },
   nonprofit: {
     missionTheme:
