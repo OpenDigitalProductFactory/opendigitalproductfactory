@@ -789,6 +789,179 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
       "Licensed; cited by reference.",
     retrievedAt: "2026-06-13",
   },
+
+  // ── IT operations / SRE family (WSID wave 6/7) ──
+  // NIST SP 800-61 Rev.2 was withdrawn 2025-04-03 (superseded by Rev.3); the
+  // IR-lifecycle phases are durable doctrine cited via an open secondary
+  // explainer because the primary PDF did not text-extract. ITIL 4 is licensed
+  // (PeopleCert/Axelos): incident-vs-problem doctrine uses an open explainer,
+  // never ITIL spec text. Google SRE book is CC-BY-NC-ND (cited, not modified).
+  "nist/sp-800-61": {
+    sourceType: "standard",
+    title: "NIST SP 800-61 Computer Security Incident Handling Guide",
+    url: "https://csrc.nist.gov/pubs/sp/800/61/r2/final",
+    license: "US-Gov-Public-Domain",
+    abstract:
+      "NIST incident-response lifecycle (preparation; detection & analysis; " +
+      "containment/eradication/recovery; post-incident). Rev.2 withdrawn; see Rev.3.",
+    retrievedAt: "2026-06-13",
+  },
+  "rapid7/nist-ir-lifecycle": {
+    sourceType: "web-article",
+    title: "Introduction to the NIST SP 800-61 Incident Response Life Cycle",
+    url: "https://www.rapid7.com/blog/post/2017/01/11/introduction-to-incident-response-life-cycle-of-nist-sp-800-61/",
+    license: "web-article-public",
+    abstract:
+      "Open secondary explainer of the four NIST SP 800-61 incident-response " +
+      "lifecycle phases.",
+    retrievedAt: "2026-06-13",
+  },
+  "opentelemetry/observability-primer": {
+    sourceType: "spec",
+    title: "OpenTelemetry Observability Primer",
+    url: "https://opentelemetry.io/docs/concepts/observability-primer/",
+    license: "CC-BY-4.0",
+    abstract:
+      "Defines observability and the three signals (traces, metrics, logs), " +
+      "spans, and distributed tracing; vendor-neutral CNCF framework.",
+    retrievedAt: "2026-06-13",
+  },
+  "google/sre-book-slo": {
+    sourceType: "reference",
+    title: "Google SRE Book — Service Level Objectives",
+    url: "https://sre.google/sre-book/service-level-objectives/",
+    license: "CC-BY-NC-ND-4.0",
+    abstract:
+      "Defines SLI, SLO, and SLA; advocates a handful of representative " +
+      "indicators and percentiles over averages.",
+    retrievedAt: "2026-06-13",
+  },
+  "google/sre-book-risk": {
+    sourceType: "reference",
+    title: "Google SRE Book — Embracing Risk",
+    url: "https://sre.google/sre-book/embracing-risk/",
+    license: "CC-BY-NC-ND-4.0",
+    abstract:
+      "Error budgets as the gap between target and 100%; the reliability-vs-" +
+      "innovation trade-off.",
+    retrievedAt: "2026-06-13",
+  },
+  "google/sre-book-postmortem": {
+    sourceType: "reference",
+    title: "Google SRE Book — Postmortem Culture",
+    url: "https://sre.google/sre-book/postmortem-culture/",
+    license: "CC-BY-NC-ND-4.0",
+    abstract:
+      "Blameless postmortems: fix systems and processes, not people; defined " +
+      "triggers and mandatory review.",
+    retrievedAt: "2026-06-13",
+  },
+  "betterstack/severity-levels": {
+    sourceType: "web-article",
+    title: "Incident Severity Levels (SEV1-SEV3)",
+    url: "https://betterstack.com/community/guides/incident-management/severity-levels/",
+    license: "CC-BY-NC-SA-4.0",
+    abstract:
+      "Defines incident severity levels SEV1/SEV2/SEV3 and the severity-vs-" +
+      "priority distinction.",
+    retrievedAt: "2026-06-13",
+  },
+  "itsm-tools/incident-vs-problem": {
+    sourceType: "web-article",
+    title: "Incident vs Problem Management (open explainer)",
+    url: "https://itsm.tools/incident-vs-problem-management/",
+    license: "web-article-public",
+    abstract:
+      "Open explainer of the ITIL distinction: incident management restores " +
+      "service; problem management eliminates recurring causes.",
+    retrievedAt: "2026-06-13",
+  },
+
+  // ── HR / people-ops family (WSID wave 7) — jurisdiction split us vs eu ──
+  // SHRM BASK is licensed (cluster names used as facts, checklist-only). EEOC
+  // and EU Your-Europe are public-domain/open-reuse. US OPM/HHS interview
+  // pages blocked the fetcher; structured-interviewing is anchored on an open
+  // vendor explainer.
+  "eeoc/prohibited-practices": {
+    sourceType: "standard",
+    title: "EEOC — Prohibited Employment Policies/Practices",
+    url: "https://www.eeoc.gov/prohibited-employment-policiespractices",
+    license: "US-Gov-Public-Domain",
+    abstract:
+      "US protected bases and prohibited practices across the employment " +
+      "lifecycle (ads, hiring, pay, discipline, harassment).",
+    retrievedAt: "2026-06-13",
+  },
+  "eeoc/eeo-laws": {
+    sourceType: "standard",
+    title: "EEOC — Equal Employment Opportunity Laws",
+    url: "https://www.eeoc.gov/equal-employment-opportunity-laws",
+    license: "US-Gov-Public-Domain",
+    abstract:
+      "Overview of the EEOC's role and the federal anti-discrimination statutes " +
+      "it enforces.",
+    retrievedAt: "2026-06-13",
+  },
+  "eeoc/federal-laws-qa": {
+    sourceType: "standard",
+    title: "EEOC — Federal Laws Prohibiting Job Discrimination (Q&A)",
+    url: "https://www.eeoc.gov/fact-sheet/federal-laws-prohibiting-job-discrimination-questions-and-answers",
+    license: "US-Gov-Public-Domain",
+    abstract:
+      "Title VII, EPA, ADEA, ADA, Rehabilitation Act, GINA — protected bases " +
+      "and employer-size coverage thresholds.",
+    retrievedAt: "2026-06-13",
+  },
+  "eu/employment-termination": {
+    sourceType: "standard",
+    title: "Terminating employment contracts in the EU (Your Europe)",
+    url: "https://europa.eu/youreurope/business/human-resources/general-employment-terms-conditions/terminating-employment-contracts/index_en.htm",
+    license: "EC-reuse-attribution",
+    abstract:
+      "EU dismissal protection: non-discrimination, pregnancy/parental " +
+      "protection, employer burden of proof, collective-redundancy consultation.",
+    retrievedAt: "2026-06-13",
+  },
+  "gdpr/art-88": {
+    sourceType: "standard",
+    title: "GDPR Article 88 — Processing in the employment context",
+    url: "https://gdpr-info.eu/art-88-gdpr/",
+    license: "OJ-EU-open-reproduction",
+    abstract:
+      "Member states may set employee-data rules with safeguards for dignity, " +
+      "monitoring transparency, and intra-group transfers.",
+    retrievedAt: "2026-06-13",
+  },
+  "shrm/bask": {
+    sourceType: "framework",
+    title: "SHRM Body of Applied Skills and Knowledge (BASK)",
+    url: "https://www.shrm.org/credentials/certification/exam-preparation/bask",
+    license: "SHRM-copyright-checklist-only",
+    abstract:
+      "SHRM competency clusters (Leadership, Interpersonal, Business) + HR " +
+      "Expertise. Licensed; cluster names used as facts only.",
+    retrievedAt: "2026-06-13",
+  },
+  "atwill/cornell-lii": {
+    sourceType: "reference",
+    title: "Employment-at-will doctrine (Cornell LII Wex)",
+    url: "https://www.law.cornell.edu/wex/employment-at-will_doctrine",
+    license: "Cornell-LII-educational",
+    abstract:
+      "US at-will employment and its exceptions: public policy, implied " +
+      "contract, implied covenant of good faith.",
+    retrievedAt: "2026-06-13",
+  },
+  "interview/structured": {
+    sourceType: "web-article",
+    title: "Structured Interviews — guide",
+    url: "https://www.pin.com/blog/structured-interviews-guide/",
+    license: "web-article-public",
+    abstract:
+      "Same questions/order/rubric for all candidates; behavioral vs " +
+      "situational; higher validity and legal defensibility than unstructured.",
+    retrievedAt: "2026-06-13",
+  },
 };
 
 // ─── Source seeding ──────────────────────────────────────────────────────────
