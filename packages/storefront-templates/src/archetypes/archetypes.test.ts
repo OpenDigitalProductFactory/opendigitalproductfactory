@@ -200,4 +200,53 @@ describe("archetype catalog", () => {
     expect(salonProfile?.partnerProgram.portalMode).toBe("none");
     expect(getCapabilityApplicability(salonProfile, "partner-program")).toBe("not-applicable");
   });
+
+  it("ships home builder archetypes with booking items, scheduling defaults, and correct operating model (EP-GRID-BUILDER)", () => {
+    const builders = ALL_ARCHETYPES.filter((a) => a.category === "real-estate-construction");
+    expect(builders.map((a) => a.archetypeId).sort()).toEqual([
+      "custom-home-builder",
+      "new-home-builder",
+    ]);
+
+    for (const b of builders) {
+      // Both have a booking item — model home tour or design consultation.
+      const hasBookingItem =
+        b.ctaType === "booking" ||
+        b.itemTemplates.some((t) => (t.ctaType ?? b.ctaType) === "booking");
+      expect(hasBookingItem, `${b.archetypeId} should have a booking item`).toBe(true);
+      // Scheduling defaults are required when a booking item exists (AUDIT-R3/R4 rule).
+      expect(b.schedulingDefaults, `${b.archetypeId} needs schedulingDefaults`).toBeDefined();
+      // Builders sell physical goods to households.
+      expect(b.activationProfile?.axes?.form, `${b.archetypeId} form`).toBe("goods");
+      expect(b.activationProfile?.axes?.primaryConsumer, `${b.archetypeId} primaryConsumer`).toBe("household");
+      expect(b.activationProfile?.axes?.delivery, `${b.archetypeId} delivery`).toBe("physical");
+      // Milestone payments require billing-readiness prepared-not-prescribed.
+      expect(b.activationProfile?.modules, `${b.archetypeId} modules`).toContain("billing-readiness");
+      expect(b.activationProfile?.modules, `${b.archetypeId} modules`).toContain("projects");
+      expect(b.activationProfile?.billingReadinessMode, `${b.archetypeId} billing`).toBe("prepared-not-prescribed");
+    }
+
+    // Model homes are open 7 days — production builder must have Sunday hours.
+    const nhb = builders.find((b) => b.archetypeId === "new-home-builder");
+    const nhbSunday = nhb?.schedulingDefaults?.defaultOperatingHours.find((h) => h.day === 0);
+    expect(nhbSunday, "new-home-builder model homes open on Sundays").toBeDefined();
+
+    // Custom builder runs business-hours only — no weekend hours.
+    const chb = builders.find((b) => b.archetypeId === "custom-home-builder");
+    const chbSunday = chb?.schedulingDefaults?.defaultOperatingHours.find((h) => h.day === 0);
+    expect(chbSunday, "custom-home-builder should not have Sunday hours").toBeUndefined();
+    const chbSaturday = chb?.schedulingDefaults?.defaultOperatingHours.find((h) => h.day === 6);
+    expect(chbSaturday, "custom-home-builder should not have Saturday hours").toBeUndefined();
+
+    // Custom builder carries a leaf-level vocabulary override (Clients, Build Team).
+    expect(chb?.vocabulary?.stakeholderLabel).toBe("Clients");
+    expect(chb?.vocabulary?.teamLabel).toBe("Build Team");
+    expect(chb?.vocabulary?.agentName).toBe("Build Consultant");
+
+    // Production builder has no leaf vocabulary override — category default applies.
+    expect(nhb?.vocabulary).toBeUndefined();
+
+    // Custom builder includes service-operations for active subcontractor coordination.
+    expect(chb?.activationProfile?.modules).toContain("service-operations");
+  });
 });
