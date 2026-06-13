@@ -168,9 +168,13 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
 - **Slice 13 — summary chart — SHIPPED.** A Table/Chart toggle in the Summary panel renders a CSS
   bar chart of the grouped metric (count, or the value column's sum), scaled to the largest bar.
   Pure, unit-tested `summaryChartBars`. Richer chart types (pie/line via recharts) are a follow-up.
-- **Remaining (not built):** saved views (persist filters/sort/format to the existing `WorkbookView`);
-  calendar + gallery views; `.xlsx` import (slice 12, in flight); full pivots + richer charts;
-  metrics/semantic layer; operationalization lifecycle.
+- **Slice 14 — persistent grid views — SHIPPED.** The per-grid view (quick filter, column filters,
+  sort, conditional-format rules, provenance toggle) is saved per tableId and restored on reload.
+  Client-side localStorage (works for every grid, no migration); pure, unit-tested `grid-view-state.ts`
+  with defensive parsing (malformed/old payloads ignored field-by-field). Named/shareable server-side
+  views (WorkbookView) are a follow-up.
+- **Remaining (not built):** named/shareable views; calendar + gallery views; full pivots + richer
+  charts; metrics/semantic layer; operationalization lifecycle.
 
 ## Remaining toward full Smartsheet + Supabase parity (tracked, not built)
 
