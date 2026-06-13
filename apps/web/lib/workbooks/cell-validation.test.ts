@@ -86,6 +86,26 @@ describe("validateCell", () => {
     expect(validateCell(col("image", { required: true }), null).ok).toBe(false);
   });
 
+  it("serializes an attachment {url,name,size} and rejects missing url", () => {
+    const c = col("attachment");
+    const ok = validateCell(c, { url: "/api/media/file1", name: "report.pdf", size: 2048 });
+    expect(ok.ok).toBe(true);
+    if (ok.ok) {
+      expect(JSON.parse(ok.storage.textValue ?? "{}")).toEqual({
+        url: "/api/media/file1",
+        name: "report.pdf",
+        size: 2048,
+      });
+    }
+    // a bare URL string is accepted (external link / resilience)
+    expect(validateCell(c, "/api/media/bare").ok).toBe(true);
+    // an object without a url is rejected
+    expect(validateCell(c, { name: "x" } as never).ok).toBe(false);
+    // empty allowed when optional, rejected when required
+    expect(validateCell(c, null).ok).toBe(true);
+    expect(validateCell(col("attachment", { required: true }), null).ok).toBe(false);
+  });
+
   it("requires a referenceId for reference and enforces target type", () => {
     const c = col("reference", { config: { referenceType: "epic" } });
     const ok = validateCell(c, { referenceId: "E1", referenceType: "epic" });
@@ -116,5 +136,20 @@ describe("storageToCellValue", () => {
   it("round-trips an image URL through text storage", () => {
     const r = validateCell(col("image"), "/api/media/xyz");
     expect(r.ok && storageToCellValue("image", r.storage)).toBe("/api/media/xyz");
+  });
+
+  it("round-trips an attachment value through JSON text storage", () => {
+    const r = validateCell(col("attachment"), { url: "/api/media/doc", name: "spec.docx", size: 5120 });
+    expect(r.ok && storageToCellValue("attachment", r.storage)).toEqual({
+      url: "/api/media/doc",
+      name: "spec.docx",
+      size: 5120,
+    });
+  });
+
+  it("treats a legacy plain-url attachment text as {url}", () => {
+    expect(storageToCellValue("attachment", { textValue: "/api/media/legacy" })).toEqual({
+      url: "/api/media/legacy",
+    });
   });
 });
