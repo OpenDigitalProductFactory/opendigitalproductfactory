@@ -73,7 +73,7 @@ class InvoiceAdapter implements DataSourceAdapter {
   readonly entityType = INVOICE_ENTITY_TYPE;
 
   async getColumns(): Promise<ColumnDefinition[]> {
-    return INVOICE_COLUMNS;
+    return INVOICE_COLUMNS.map((c) => ({ ...c, provenanceKind: "system" as const }));
   }
 
   async queryRows(
