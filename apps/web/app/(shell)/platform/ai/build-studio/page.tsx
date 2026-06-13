@@ -78,6 +78,9 @@ export default async function BuildStudioPage() {
   const grokProviders = allProviders.filter(p =>
     (p.provider as Record<string, unknown>).cliEngine === "grok",
   );
+  const opencodeProviders = allProviders.filter(p =>
+    (p.provider as Record<string, unknown>).cliEngine === "opencode",
+  );
 
   return (
     <div>
@@ -115,6 +118,13 @@ export default async function BuildStudioPage() {
           costNotes: p.provider.costPerformanceNotes,
         }))}
         grokProviders={grokProviders.map(p => ({
+          providerId: p.provider.providerId,
+          name: p.provider.name,
+          status: p.credential?.status ?? "unconfigured",
+          billingLabel: p.provider.billingLabel,
+          costNotes: p.provider.costPerformanceNotes,
+        }))}
+        opencodeProviders={opencodeProviders.map(p => ({
           providerId: p.provider.providerId,
           name: p.provider.name,
           status: p.credential?.status ?? "unconfigured",

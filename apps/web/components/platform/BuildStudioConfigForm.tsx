@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { saveBuildStudioConfig } from "@/lib/actions/build-studio";
+import { saveBuildStudioConfig, checkLocalEndpoint } from "@/lib/actions/build-studio";
 import type { BuildStudioDispatchConfig } from "@/lib/integrate/build-studio-config";
+import type { LocalEndpointPreflight } from "@/lib/integrate/opencode-dispatch";
 import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 import { BUILD_STUDIO_CONFIG_ROUTE_COPY } from "./build-studio-route-copy";
 import { engineReadinessBadgeContent, ENGINE_READINESS_TONE_COLOR } from "./engine-readiness-badge";
@@ -29,6 +30,7 @@ type Props = {
   claudeProviders: ProviderOption[];
   codexProviders: ProviderOption[];
   grokProviders: ProviderOption[];
+  opencodeProviders: ProviderOption[];
   contributorMcpReadiness: ContributorMcpReadiness;
   /** Per-engine sandbox readiness (engineId → last probe), keyed "claude"|"codex"|"grok". */
   engineReadiness?: Record<string, EngineReadinessBadge>;
@@ -75,6 +77,7 @@ export function BuildStudioConfigForm({
   claudeProviders,
   codexProviders,
   grokProviders,
+  opencodeProviders,
   contributorMcpReadiness,
   engineReadiness,
   baseUrl,
@@ -87,10 +90,15 @@ export function BuildStudioConfigForm({
   const [claudeModel, setClaudeModel] = useState(config.claudeModel);
   const [codexModel, setCodexModel] = useState(config.codexModel);
   const [grokModel, setGrokModel] = useState(config.grokModel);
-  // opencode (local model) fields are carried through here; the dedicated
-  // "Local model (OpenCode)" UI surface lands in Phase 2 of the local-LLM plan.
-  const [opencodeProviderId] = useState(config.opencodeProviderId);
-  const [opencodeModel] = useState(config.opencodeModel);
+  // opencode = local model via the install's own OpenAI-compatible endpoint.
+  // No credential to pick; the operator chooses which local provider (usually
+  // one) and optionally a model, then preflights the endpoint here.
+  const [opencodeProviderId, setOpencodeProviderId] = useState(
+    config.opencodeProviderId || opencodeProviders[0]?.providerId || "",
+  );
+  const [opencodeModel, setOpencodeModel] = useState(config.opencodeModel);
+  const [endpointCheck, setEndpointCheck] = useState<LocalEndpointPreflight | null>(null);
+  const [checkingEndpoint, setCheckingEndpoint] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +106,21 @@ export function BuildStudioConfigForm({
   const hasClaudeCreds = claudeProviders.some(p => isConfigured(p.status));
   const hasCodexCreds = codexProviders.some(p => isConfigured(p.status));
   const hasGrokCreds = grokProviders.some(p => isConfigured(p.status));
+  const hasOpencodeProvider = opencodeProviders.length > 0;
+
+  function runEndpointCheck() {
+    setCheckingEndpoint(true);
+    setEndpointCheck(null);
+    startTransition(async () => {
+      try {
+        setEndpointCheck(await checkLocalEndpoint(opencodeModel));
+      } catch (err) {
+        setEndpointCheck({ ok: false, resolvedModel: null, models: [], contextOk: false, reason: (err as Error).message });
+      } finally {
+        setCheckingEndpoint(false);
+      }
+    });
+  }
 
   function handleSave() {
     setSaved(false);
@@ -210,6 +233,18 @@ export function BuildStudioConfigForm({
             desc="xAI models · headless grok -p"
             unconfiguredMsg={!hasGrokCreds ? "No xAI credentials found." : undefined}
             readiness={engineReadiness?.grok}
+            canProvision={canWrite}
+          />
+          <ProviderRadio
+            name="provider"
+            value="opencode"
+            checked={provider === "opencode"}
+            onChange={() => setProvider("opencode")}
+            disabled={!canWrite || !hasOpencodeProvider}
+            label="Local model (OpenCode) (Preview)"
+            desc="Your own local LLM · no credential, runs offline"
+            unconfiguredMsg={!hasOpencodeProvider ? "No local model provider found." : undefined}
+            readiness={engineReadiness?.opencode}
             canProvision={canWrite}
           />
           <ProviderRadio
@@ -382,6 +417,82 @@ export function BuildStudioConfigForm({
                   }}
                 />
               </label>
+            </div>
+          )}
+
+          {provider === "opencode" && (
+            <div>
+              <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 6 }}>
+                Runs the open-source OpenCode agent against your install&apos;s own local model
+                endpoint — no API key, nothing leaves your machine. Preview tier until eval
+                evidence on a real local model promotes it.
+              </p>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dpf-text)", marginBottom: 8 }}>
+                Model:
+                <input
+                  type="text"
+                  value={opencodeModel}
+                  onChange={e => setOpencodeModel(e.target.value)}
+                  disabled={!canWrite}
+                  placeholder="auto (first served model)"
+                  style={{
+                    width: 200,
+                    fontSize: 11,
+                    padding: "2px 6px",
+                    border: "1px solid var(--dpf-border)",
+                    borderRadius: 4,
+                    background: "var(--dpf-bg)",
+                    color: "var(--dpf-text)",
+                  }}
+                />
+              </label>
+              <p style={{ fontSize: 10, color: "var(--dpf-muted)", marginBottom: 8 }}>
+                Leave blank to use the first model your local endpoint serves. A coding model
+                with ≥22k context (e.g. a qwen3-coder build) is recommended.
+              </p>
+              {canWrite && (
+                <button
+                  type="button"
+                  onClick={runEndpointCheck}
+                  disabled={checkingEndpoint}
+                  style={{
+                    padding: "4px 12px",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    background: "var(--dpf-surface-2)",
+                    color: "var(--dpf-text)",
+                    border: "1px solid var(--dpf-border)",
+                    borderRadius: 6,
+                    cursor: checkingEndpoint ? "wait" : "pointer",
+                  }}
+                >
+                  {checkingEndpoint ? "Checking…" : "Test local endpoint"}
+                </button>
+              )}
+              {endpointCheck && (
+                <div
+                  role="status"
+                  style={{
+                    marginTop: 8,
+                    fontSize: 11,
+                    color: endpointCheck.ok ? "var(--dpf-success)" : "var(--dpf-error)",
+                  }}
+                >
+                  {endpointCheck.ok ? (
+                    <>
+                      ✓ Endpoint reachable — will dispatch to{" "}
+                      <strong>{endpointCheck.resolvedModel}</strong>.
+                      {endpointCheck.models.length > 0 && (
+                        <span style={{ color: "var(--dpf-muted)" }}>
+                          {" "}Models served: {endpointCheck.models.join(", ")}.
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>⚠ {endpointCheck.reason}</>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </section>
