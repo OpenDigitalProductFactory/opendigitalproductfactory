@@ -29,12 +29,12 @@ export const fitnessRecreationArchetypes: ArchetypeDefinition[] = [
     ctaType: "purchase",
     tags: ["gym", "fitness", "membership", "weights"],
     itemTemplates: [
-      { name: "Monthly Membership", description: "Unlimited access to all gym facilities", priceType: "fixed", ctaType: "purchase" },
-      { name: "Day Pass", description: "Single day access to the gym", priceType: "fixed", ctaType: "purchase" },
+      { name: "Monthly Membership", description: "Unlimited access to all gym facilities", priceType: "fixed", priceAmount: 40, ctaType: "purchase" },
+      { name: "Day Pass", description: "Single day access to the gym", priceType: "fixed", priceAmount: 12, ctaType: "purchase" },
       { name: "Personal Training", description: "One-to-one session with a qualified PT", priceType: "per-session", ctaType: "booking", bookingDurationMinutes: 60 },
-      { name: "Annual Membership", description: "12-month membership at a discounted rate", priceType: "fixed", ctaType: "purchase" },
-      { name: "Student Membership", description: "Discounted membership for full-time students", priceType: "fixed", ctaType: "purchase" },
-      { name: "Family Membership", description: "Access for up to 2 adults and 2 children", priceType: "from", ctaType: "purchase" },
+      { name: "Annual Membership", description: "12-month membership at a discounted rate", priceType: "fixed", priceAmount: 400, ctaType: "purchase" },
+      { name: "Student Membership", description: "Discounted membership for full-time students", priceType: "fixed", priceAmount: 30, ctaType: "purchase" },
+      { name: "Family Membership", description: "Access for up to 2 adults and 2 children", priceType: "from", priceAmount: 70, ctaType: "purchase" },
     ],
     sectionTemplates: [
       { type: "hero", title: "Hero", sortOrder: 0 },
@@ -57,12 +57,12 @@ export const fitnessRecreationArchetypes: ArchetypeDefinition[] = [
     ctaType: "purchase",
     tags: ["yoga", "wellness", "classes", "mindfulness"],
     itemTemplates: [
-      { name: "Class Pack (10 classes)", description: "10-class pack valid for 3 months", priceType: "fixed", ctaType: "purchase" },
-      { name: "Monthly Unlimited", description: "Unlimited classes for one month", priceType: "fixed", ctaType: "purchase" },
-      { name: "Drop-in Class", description: "Single class — book in advance", priceType: "fixed", ctaType: "booking", bookingDurationMinutes: 60 },
+      { name: "Class Pack (10 classes)", description: "10-class pack valid for 3 months", priceType: "fixed", priceAmount: 120, ctaType: "purchase" },
+      { name: "Monthly Unlimited", description: "Unlimited classes for one month", priceType: "fixed", priceAmount: 90, ctaType: "purchase" },
+      { name: "Drop-in Class", description: "Single class — book in advance", priceType: "fixed", priceAmount: 15, ctaType: "booking", bookingDurationMinutes: 60 },
       { name: "Private Session", description: "One-to-one yoga session with an instructor", priceType: "per-session", ctaType: "booking", bookingDurationMinutes: 60 },
-      { name: "Beginners Course", description: "6-week introductory course for new students", priceType: "fixed", ctaType: "purchase" },
-      { name: "Retreat Day", description: "Full-day yoga and wellbeing retreat", priceType: "fixed", ctaType: "purchase" },
+      { name: "Beginners Course", description: "6-week introductory course for new students", priceType: "fixed", priceAmount: 90, ctaType: "purchase" },
+      { name: "Retreat Day", description: "Full-day yoga and wellbeing retreat", priceType: "fixed", priceAmount: 75, ctaType: "purchase" },
     ],
     sectionTemplates: [
       { type: "hero", title: "Hero", sortOrder: 0 },
@@ -85,10 +85,10 @@ export const fitnessRecreationArchetypes: ArchetypeDefinition[] = [
     ctaType: "purchase",
     tags: ["dance", "classes", "studio", "performance"],
     itemTemplates: [
-      { name: "Term Booking", description: "Full term of weekly dance classes", priceType: "fixed", ctaType: "purchase" },
+      { name: "Term Booking", description: "Full term of weekly dance classes", priceType: "fixed", priceAmount: 180, ctaType: "purchase" },
       { name: "Trial Class", description: "Try a class before committing", priceType: "free", ctaType: "booking", bookingDurationMinutes: 60 },
       { name: "Private Lesson", description: "One-to-one tuition with an instructor", priceType: "per-session", ctaType: "booking", bookingDurationMinutes: 60 },
-      { name: "Drop-in Class", description: "Single class — various styles available", priceType: "fixed", ctaType: "booking", bookingDurationMinutes: 60 },
+      { name: "Drop-in Class", description: "Single class — various styles available", priceType: "fixed", priceAmount: 12, ctaType: "booking", bookingDurationMinutes: 60 },
       { name: "Exam Preparation", description: "ISTD or RAD grade exam coaching", priceType: "per-session", ctaType: "booking", bookingDurationMinutes: 60 },
     ],
     sectionTemplates: [

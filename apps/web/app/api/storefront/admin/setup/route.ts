@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
             priceType: string;
             ctaType?: string;
             ctaLabel?: string;
+            priceAmount?: number | null;
           }>
         ).map((t, i) => ({
           itemId: `itm-${nanoid(8)}`,
@@ -89,6 +90,9 @@ export async function POST(req: NextRequest) {
           priceType: t.priceType,
           ctaType: t.ctaType ?? archetype.ctaType,
           ctaLabel: t.ctaLabel ?? null,
+          // Seed the template's price so purchase items are chargeable out of the
+          // box; null leaves the item price-less (CtaButton renders "Enquire").
+          priceAmount: t.priceAmount ?? null,
           sortOrder: i,
           isActive: true,
           priceCurrency: "GBP",
