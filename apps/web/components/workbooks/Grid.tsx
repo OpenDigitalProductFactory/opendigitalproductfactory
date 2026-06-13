@@ -67,6 +67,7 @@ import {
   blankRule,
   operatorNeedsValue,
 } from "./grid-conditional-format";
+import { summarize, numericColumns } from "./grid-summary";
 
 export interface WorkbookGridProps {
   /** custom WorkbookTable id (TBL-*) or, for platform data, the entity type. */
@@ -205,6 +206,9 @@ export function WorkbookGrid({
   const [showFormat, setShowFormat] = useState(false);
   const [cfRules, setCfRules] = useState<ConditionalRule[]>([]);
   const cfIdRef = useRef(0);
+  const [showSummary, setShowSummary] = useState(false);
+  const [summaryGroupBy, setSummaryGroupBy] = useState("");
+  const [summaryValue, setSummaryValue] = useState("");
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
   const activeFilterCount = Object.values(columnFilters).filter((v) => v.trim()).length;
   // Multi-step undo/redo of cell edits (distinct from the audit history). Each
@@ -461,6 +465,15 @@ export function WorkbookGrid({
         </button>
         <button
           type="button"
+          onClick={() => setShowSummary((v) => !v)}
+          aria-pressed={showSummary}
+          className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          title="Group rows and summarize"
+        >
+          {showSummary ? "Hide summary" : "Summary"}
+        </button>
+        <button
+          type="button"
           onClick={() => setShowProvenance((v) => !v)}
           aria-pressed={showProvenance}
           className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
@@ -613,6 +626,82 @@ export function WorkbookGrid({
           </button>
         </div>
       )}
+
+      {showSummary && columns.length > 0 && (() => {
+        const groupBy = summaryGroupBy || columns[0]!.columnId;
+        const valueCol = summaryValue || undefined;
+        const numCols = numericColumns(columns);
+        const summary = summarize(sortedRows, groupBy, valueCol);
+        const ctrlClass =
+          "rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-sm text-[var(--dpf-text)]";
+        return (
+          <div className="flex flex-col gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-[var(--dpf-muted)]">Group by</span>
+              <select
+                value={groupBy}
+                onChange={(e) => setSummaryGroupBy(e.target.value)}
+                aria-label="Group by column"
+                className={ctrlClass}
+              >
+                {columns.map((c) => (
+                  <option key={c.columnId} value={c.columnId}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <span className="text-sm text-[var(--dpf-muted)]">summarize</span>
+              <select
+                value={summaryValue}
+                onChange={(e) => setSummaryValue(e.target.value)}
+                aria-label="Value column"
+                className={ctrlClass}
+              >
+                <option value="">count only</option>
+                {numCols.map((c) => (
+                  <option key={c.columnId} value={c.columnId}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="overflow-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[var(--dpf-muted)]">
+                    <th className="px-2 py-1">Group</th>
+                    <th className="px-2 py-1">Count</th>
+                    {valueCol && (
+                      <>
+                        <th className="px-2 py-1">Sum</th>
+                        <th className="px-2 py-1">Avg</th>
+                        <th className="px-2 py-1">Min</th>
+                        <th className="px-2 py-1">Max</th>
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {summary.map((s) => (
+                    <tr key={s.group} className="border-t border-[var(--dpf-border)]">
+                      <td className="px-2 py-1">{s.group}</td>
+                      <td className="px-2 py-1">{s.count}</td>
+                      {valueCol && (
+                        <>
+                          <td className="px-2 py-1">{s.sum}</td>
+                          <td className="px-2 py-1">{s.avg}</td>
+                          <td className="px-2 py-1">{s.min}</td>
+                          <td className="px-2 py-1">{s.max}</td>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
 
       {columns.length === 0 ? (
         <div className="rounded-md border border-dashed border-[var(--dpf-border)] p-8 text-center text-[var(--dpf-muted)]">
