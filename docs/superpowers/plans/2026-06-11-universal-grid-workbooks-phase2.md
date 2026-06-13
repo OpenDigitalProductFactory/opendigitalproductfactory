@@ -121,11 +121,14 @@ column's tier follows from what it is, not a stored flag that could drift).
 
 `source` (live external feeds) stays unused until Phase 6 integrations land.
 
-## Slice 4 — Multi-step undo/redo — separate PR (BI-BA57AB71)
+## Slice 4 — Multi-step undo/redo — SHIPPED (BI-BA57AB71)
 
-Undo/redo stack in the `<Grid>` contract; each undo replays the inverse edit through the same
-validated dispatch (never raw write); reject + show error + leave cell unchanged when the inverse
-is invalid (parity with #1634 optimistic revert). Cell-value edits in scope; row add/delete deferred.
+Undo/redo for cell edits in the `<Grid>`. Each inverse replays through the **same validated
+dispatch** as a normal edit (never a raw write); a rejected inverse shows the error and leaves the
+cell unchanged (persistCell's optimistic revert, parity with #1634). Ctrl-Z / Ctrl-Y (+ Ctrl-Shift-Z)
+and toolbar Undo/Redo buttons; the keyboard handler yields to a cell editor's own text-undo. Stack
+transitions extracted to a pure, unit-tested `grid-history.ts` (record clears the redo branch;
+commitUndo/commitRedo move entries; LIFO). Cell-value edits in scope; row add/delete deferred.
 
 ## Slice 5 — More read-only generic grids — separate PR (BI-29E1F452)
 
