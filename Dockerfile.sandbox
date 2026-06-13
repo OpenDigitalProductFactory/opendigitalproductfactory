@@ -37,6 +37,40 @@ RUN curl -fsSL https://x.ai/cli/install.sh | GROK_BIN_DIR=/usr/local/bin bash \
  && rm -rf /root/.grok \
  && grok --version \
  && su -s /bin/sh node -c "grok --version"
+# OpenCode CLI (sst/opencode): the open-source agent for the Build Studio "opencode"
+# dispatch engine (opencode-dispatch.ts). Runs against the install's OWN local
+# OpenAI-compatible endpoint (Docker Model Runner / Ollama) — no vendor credential.
+#
+# The npm package (`opencode-ai`) postinstall does NOT detect musl (upstream
+# #9571), so on this Alpine/musl base it links the wrong binary. We therefore
+# fetch the dedicated musl release tarball directly (the grok pattern). The
+# `baseline` variant drops the AVX2 requirement so the sandbox runs on arbitrary
+# operator hardware. The tarball is a single `opencode` binary; install it into
+# world-traversable /usr/local/bin and gate the build with `opencode --version`
+# as root AND as the node user (uid 1000, who actually runs dispatch — the same
+# perms trap that bit grok). curl/libstdc++/libgcc are already installed above.
+# Verified live on node:24-alpine: v1.17.4 baseline-musl runs as both users.
+ARG OPENCODE_VERSION=1.17.4
+RUN set -eux; \
+    curl -fsSL -o /tmp/opencode.tar.gz \
+      "https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/opencode-linux-x64-baseline-musl.tar.gz"; \
+    tar -xzf /tmp/opencode.tar.gz -C /usr/local/bin; \
+    rm /tmp/opencode.tar.gz; \
+    chmod 755 /usr/local/bin/opencode; \
+    cp /usr/local/bin/opencode /opt/dpf-engines/opencode 2>/dev/null || (mkdir -p /opt/dpf-engines && cp /usr/local/bin/opencode /opt/dpf-engines/opencode); \
+    opencode --version; \
+    su -s /bin/sh node -c "opencode --version"
+# Pre-seed the @ai-sdk/openai-compatible provider into OpenCode's per-package
+# cache for the node user. OpenCode resolves provider SDKs into
+# ~/.cache/opencode/packages/<pkg>/node_modules/<pkg> at first run and
+# short-circuits when that path exists — so seeding it keeps a headless build
+# fully air-gapped (no npm fetch on first dispatch).
+RUN set -eux; \
+    PKG_DIR=/home/node/.cache/opencode/packages/@ai-sdk/openai-compatible; \
+    mkdir -p "$PKG_DIR"; \
+    npm install --prefix "$PKG_DIR" @ai-sdk/openai-compatible; \
+    test -d "$PKG_DIR/node_modules/@ai-sdk/openai-compatible"; \
+    chown -R node:node /home/node/.cache
 RUN git config --global user.email "sandbox@dpf.local" \
  && git config --global user.name "DPF Sandbox"
 # Codex CLI defaults: bypass internal sandbox (Docker IS the sandbox),
