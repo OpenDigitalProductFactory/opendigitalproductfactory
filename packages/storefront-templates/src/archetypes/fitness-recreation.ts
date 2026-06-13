@@ -1,4 +1,18 @@
-import type { ArchetypeDefinition } from "../types";
+import type { ArchetypeDefinition, SchedulingDefaults } from "../types";
+
+// Fitness studios run long days, seven days a week, and let the customer pick
+// their slot (PT session, private class, drop-in). Without this the setup route
+// seeds no provider/availability for the booking items and the calendar ships
+// empty (AUDIT-R3/R4). Mirrors the BEAUTY_SCHEDULING shape.
+const FITNESS_SCHEDULING: SchedulingDefaults = {
+  schedulingPattern: "slot",
+  assignmentMode: "customer-choice",
+  defaultOperatingHours: [0, 1, 2, 3, 4, 5, 6].map((day) => ({ day, start: "07:00", end: "21:00" })),
+  defaultBeforeBuffer: 0,
+  defaultAfterBuffer: 10,
+  minimumNoticeHours: 4,
+  maxAdvanceDays: 60,
+};
 
 const CONTACT_FIELDS = [
   { name: "name", label: "Full name", type: "text" as const, required: true },
@@ -34,6 +48,7 @@ export const fitnessRecreationArchetypes: ArchetypeDefinition[] = [
       { name: "membershipType", label: "Membership interest", type: "select" as const, required: false, options: ["Monthly", "Annual", "Day pass", "Student", "Family", "Personal Training"] },
       { name: "fitnessGoal", label: "Primary goal", type: "select" as const, required: false, options: ["Weight loss", "Muscle gain", "General fitness", "Sports performance", "Wellbeing"] },
     ],
+    schedulingDefaults: FITNESS_SCHEDULING,
   },
   {
     archetypeId: "yoga-studio",
@@ -61,6 +76,7 @@ export const fitnessRecreationArchetypes: ArchetypeDefinition[] = [
       { name: "yogaStyle", label: "Style of yoga", type: "select" as const, required: false, options: ["Hatha", "Vinyasa", "Yin", "Restorative", "Ashtanga", "Not sure"] },
       { name: "experienceLevel", label: "Experience level", type: "select" as const, required: false, options: ["Complete beginner", "Some experience", "Regular practitioner", "Advanced"] },
     ],
+    schedulingDefaults: FITNESS_SCHEDULING,
   },
   {
     archetypeId: "dance-studio",
@@ -88,5 +104,6 @@ export const fitnessRecreationArchetypes: ArchetypeDefinition[] = [
       { name: "studentAge", label: "Student age / year group", type: "text" as const, required: false },
       { name: "experienceLevel", label: "Experience level", type: "select" as const, required: false, options: ["Beginner", "Intermediate", "Advanced"] },
     ],
+    schedulingDefaults: FITNESS_SCHEDULING,
   },
 ];
