@@ -17,7 +17,11 @@ const UNSET_LABEL = "(unset)";
 function cellKey(value: CellValue): string {
   if (value === null || value === undefined) return UNSET_KEY;
   if (Array.isArray(value)) return value[0] ?? UNSET_KEY;
-  if (typeof value === "object") return value.referenceId ?? UNSET_KEY;
+  if (typeof value === "object") {
+    if ("referenceId" in value) return value.referenceId ?? UNSET_KEY;
+    if ("url" in value) return value.url ?? UNSET_KEY;
+    return UNSET_KEY;
+  }
   return String(value);
 }
 

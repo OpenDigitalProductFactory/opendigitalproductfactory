@@ -61,6 +61,27 @@
   cursor: pointer;
 }
 
+.dpf-grid-attachment {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  max-inline-size: 100%;
+  color: var(--dpf-text);
+}
+
+.dpf-grid-attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: underline;
+}
+
+.dpf-grid-attachment-size {
+  flex: none;
+  color: var(--dpf-muted);
+  font-size: 0.7rem;
+}
+
 .dpf-grid-chip {
   display: inline-flex;
   align-items: center;
