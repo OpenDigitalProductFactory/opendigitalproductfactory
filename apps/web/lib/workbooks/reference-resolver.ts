@@ -11,6 +11,7 @@
 // workbook-service → custom-table-adapter).
 
 import { gridRegistry } from "./adapter";
+import type { GridRow } from "./types";
 
 let registrationPromise: Promise<unknown> | null = null;
 
@@ -70,4 +71,36 @@ export async function resolveReferenceLabels(
     }),
   );
   return labels;
+}
+
+/**
+ * Fetch the full target record for a batch of references (de-duped), used by
+ * `lookup` columns to pull an arbitrary allow-listed field. Returns a Map keyed
+ * by `referenceKey`; missing/dangling references are absent.
+ */
+export async function fetchReferenceRecords(
+  refs: { referenceType: string; referenceId: string }[],
+): Promise<Map<string, GridRow>> {
+  const records = new Map<string, GridRow>();
+  const unique = collectUniqueReferences(refs);
+  if (unique.size === 0) return records;
+
+  const types = new Set([...unique.values()].map((u) => u.type));
+  if (![...types].every((t) => gridRegistry.has(t))) {
+    await ensurePlatformAdaptersRegistered();
+  }
+
+  await Promise.all(
+    [...unique.entries()].map(async ([key, { type, id }]) => {
+      const adapter = gridRegistry.get(type);
+      if (!adapter) return;
+      try {
+        const row = await adapter.getRow(type, id);
+        if (row) records.set(key, row);
+      } catch {
+        // Dangling reference — lookup renders empty.
+      }
+    }),
+  );
+  return records;
 }

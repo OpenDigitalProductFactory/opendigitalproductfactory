@@ -24,6 +24,7 @@ import {
   type Pagination,
   type PagedRows,
   type GridCapabilities,
+  isComputedFieldType,
 } from "./types";
 import {
   validateCell,
@@ -32,6 +33,7 @@ import {
 } from "./cell-validation";
 import { applyFilters, applySort, paginate } from "./grid-query";
 import { resolveReferenceLabels, referenceKey } from "./reference-resolver";
+import { computeDerivedCells } from "./formula/compute";
 import { genSemanticId } from "./ids";
 
 function asReference(value: CellValue): ReferenceValue | null {
@@ -97,7 +99,7 @@ function toColumnDefinition(meta: ColumnMeta, position: number, width: number | 
     required: meta.required,
     width: width ?? undefined,
     config: meta.config,
-    editable: true,
+    editable: !isComputedFieldType(meta.fieldType),
     groupable: meta.fieldType === "select",
   };
 }
@@ -160,6 +162,7 @@ class CustomTableAdapter implements DataSourceAdapter {
       return { rowId: row.rowId, cells };
     });
     await hydrateReferenceLabels(gridRows);
+    await computeDerivedCells(metas, gridRows);
     return gridRows;
   }
 
@@ -186,8 +189,10 @@ class CustomTableAdapter implements DataSourceAdapter {
     const metas = await loadColumnMeta(internalTableId);
 
     // Validate every column (required checks included, even if absent from input).
+    // Computed columns (formula/lookup) are derived on read — never stored.
     const writes: { internalColumnId: string; storage: CellStorage }[] = [];
     for (const meta of metas) {
+      if (isComputedFieldType(meta.fieldType)) continue;
       const value = meta.columnId in input ? input[meta.columnId] : null;
       const result = validateCell(meta, value);
       if (!result.ok) throw new Error(result.error);
@@ -236,6 +241,9 @@ class CustomTableAdapter implements DataSourceAdapter {
       for (const [semanticColId, value] of Object.entries(changes)) {
         const meta = bySemantic.get(semanticColId);
         if (!meta) throw new Error(`Unknown column: ${semanticColId}`);
+        if (isComputedFieldType(meta.fieldType)) {
+          throw new Error(`${meta.name} is a computed column and cannot be edited`);
+        }
         const result = validateCell(meta, value);
         if (!result.ok) throw new Error(result.error);
         await tx.workbookCell.upsert({

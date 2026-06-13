@@ -259,6 +259,9 @@ importers:
       jose:
         specifier: ^6.2.3
         version: 6.2.3
+      jsep:
+        specifier: ^1.4.0
+        version: 1.4.0
       libphonenumber-js:
         specifier: ^1.13.6
         version: 1.13.6

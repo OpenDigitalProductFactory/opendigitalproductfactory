@@ -53,6 +53,11 @@
   text-decoration: underline;
 }
 
+.dpf-grid-formula-error {
+  color: var(--dpf-error);
+  font-size: 0.8125rem;
+}
+
 .dpf-grid-editor {
   inline-size: 100%;
   block-size: 100%;

@@ -80,15 +80,31 @@ on the generic adapter (against a seeded model), and the action's capability gat
 test that the add-column picker persists `referenceType` and the grid mounts the editor for
 `reference` columns.
 
-## Slice 2 — Rollups / lookups over references (v1 function set) — follow-up PR
+## Slice 2 — Lookups + formulas (computed columns) — SHIPPED
 
-Greenfield formula layer. **Library decision required** (research before implementing):
-evaluate HyperFormula (GPL/commercial — license-check against AGENTS.md), formulajs (MIT,
-Excel-function library, no parser), or a scoped custom evaluator. Recommendation to confirm in
-that PR: formulajs (MIT) for the function implementations + a small safe expression parser, OR a
-purpose-built rollup/lookup evaluator for v1 (REF/LOOKUP/XLOOKUP/SUMIFS family) without a full
-Excel grammar. Derived columns compute over reference-joined rows; **write a lineage edge for every
-derived column (fail-closed)** per the spec invariant. Out of scope for slice 1.
+**Library decision (resolved):** `jsep` (MIT, ~5KB, already in the lockfile) to parse + a
+purpose-built AST evaluator with a closed function allow-list (`formula/functions.ts`). Rejected
+HyperFormula (GPL/heavy) and formulajs (still needs a parser; less control). No `eval`/`new
+Function`, no member access — a user formula can never run arbitrary code.
+
+Delivered:
+- **`lookup` columns** — pull an allow-listed field from a referenced platform record
+  (`formula/compute.ts` via `reference-resolver.fetchReferenceRecords`). Builds directly on slice-1
+  references; can only read fields the target adapter already exposes (security preserved).
+- **`formula` columns** — Excel-style row-local expressions over other columns (`formula/evaluate.ts`),
+  v1 function set: IF/IFS/AND/OR/NOT/SWITCH, SUM/AVERAGE/MIN/MAX/COUNT/ROUND/FLOOR/CEILING/ABS,
+  CONCAT/TEXT/LEFT/RIGHT/MID/LEN/TRIM/SUBSTITUTE/LOWER/UPPER, TODAY/NOW/YEAR/MONTH/DAY/DATEDIF/EOMONTH.
+  Excel `=`/`<>`/`&` normalized; `[Column Name]` refs; formulas can reference earlier computed columns.
+- Computed columns are read-only (`isComputedFieldType`), never stored, derived on read for grid+MCP+API;
+  broken formulas render a `#ERROR:` sentinel, never crash a load. AddColumnButton gains Formula +
+  Lookup pickers (lookup target fields via `getReferenceTargetFieldsAction`).
+
+**Deferred (named so scope is clear):** cross-row aggregations (SUMIFS/COUNTIFS over a *column*),
+rollups over one-to-many collections, and REF/LOOKUP *inside* formulas — all need the full dataset /
+reverse-references / push-down, so they belong with the reporting phase. **Lineage edges for derived
+columns (fail-closed)** are NOT yet written — tracked for the governance/lifecycle phase (slice 5+);
+v1 computed columns are local-derivation only, no SoR mutation, so the fail-closed lineage invariant
+(which guards *promotion*) is not yet engaged.
 
 ## Slice 3 — `provenanceKind` + progressive disclosure — separate PR (BI-B8549363)
 
