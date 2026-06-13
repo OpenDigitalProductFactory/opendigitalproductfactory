@@ -9,11 +9,28 @@ vi.mock("next/link", () => ({
 
 import { CtaButton } from "./CtaButton";
 
-function hrefFor(ctaType: string) {
-  const html = renderToStaticMarkup(
-    <CtaButton ctaType={ctaType} ctaLabel={null} orgSlug="acme" itemId="item-1" />,
+function render(props: {
+  ctaType: string;
+  ctaLabel?: string | null;
+  priceAmount?: string | null;
+}) {
+  return renderToStaticMarkup(
+    <CtaButton
+      ctaType={props.ctaType}
+      ctaLabel={props.ctaLabel ?? null}
+      orgSlug="acme"
+      itemId="item-1"
+      priceAmount={props.priceAmount}
+    />,
   );
-  return html.match(/href="([^"]+)"/)?.[1] ?? null;
+}
+
+function hrefFor(ctaType: string, priceAmount: string | null = "10.00") {
+  return render({ ctaType, priceAmount }).match(/href="([^"]+)"/)?.[1] ?? null;
+}
+
+function labelFor(html: string) {
+  return html.replace(/<[^>]+>/g, "").trim();
 }
 
 describe("CtaButton routing", () => {
@@ -25,5 +42,33 @@ describe("CtaButton routing", () => {
     expect(hrefFor("booking")).toBe("/s/acme/book/item-1");
     expect(hrefFor("donation")).toBe("/s/acme/donate");
     expect(hrefFor("inquiry")).toBe("/s/acme/inquire/item-1");
+  });
+});
+
+describe("CtaButton price-less purchase guard (AUDIT-R3/R4)", () => {
+  it("routes a priceless purchase item to the inquiry flow instead of the 404ing order route", () => {
+    // The order route 404s when priceAmount is null; the Buy CTA must not lead there.
+    expect(hrefFor("purchase", null)).toBe("/s/acme/inquire/item-1");
+  });
+
+  it("labels a priceless purchase item 'Enquire', not 'Buy'", () => {
+    expect(labelFor(render({ ctaType: "purchase", priceAmount: null }))).toBe("Enquire");
+  });
+
+  it("drops a stale 'Buy'-style custom label when downgrading to inquiry", () => {
+    expect(labelFor(render({ ctaType: "purchase", ctaLabel: "Buy now", priceAmount: null }))).toBe(
+      "Enquire",
+    );
+  });
+
+  it("keeps the Buy flow once the item carries a price", () => {
+    expect(hrefFor("purchase", "25.00")).toBe("/s/acme/order/item-1");
+    expect(labelFor(render({ ctaType: "purchase", priceAmount: "25.00" }))).toBe("Buy");
+  });
+
+  it("does not downgrade booking/inquiry/donation items that legitimately have no price", () => {
+    expect(hrefFor("booking", null)).toBe("/s/acme/book/item-1");
+    expect(hrefFor("donation", null)).toBe("/s/acme/donate");
+    expect(hrefFor("inquiry", null)).toBe("/s/acme/inquire/item-1");
   });
 });

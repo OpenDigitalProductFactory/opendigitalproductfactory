@@ -46,7 +46,7 @@ export function ItemCard({ item, orgSlug }: { item: PublicItem; orgSlug: string 
         <div style={{ fontSize: 15, fontWeight: 700, color: "var(--dpf-text)" }}>{priceDisplay}</div>
       )}
       <div style={{ marginTop: "auto", paddingTop: 8 }}>
-        <CtaButton ctaType={item.ctaType} ctaLabel={item.ctaLabel} orgSlug={orgSlug} itemId={item.itemId} />
+        <CtaButton ctaType={item.ctaType} ctaLabel={item.ctaLabel} orgSlug={orgSlug} itemId={item.itemId} priceAmount={item.priceAmount} />
       </div>
     </div>
   );

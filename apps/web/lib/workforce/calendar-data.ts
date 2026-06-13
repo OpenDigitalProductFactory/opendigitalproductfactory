@@ -4,6 +4,7 @@
 import { cache } from "react";
 import { prisma } from "@dpf/db";
 import type { WeeklySchedule, DaySchedule } from "@/lib/operating-hours-types";
+import { buildWorkbookEvents, type WorkbookEventInput } from "./workbook-calendar-events";
 
 // ─── Unified Event Type ─────────────────────────────────────────────────────
 
@@ -974,6 +975,88 @@ async function projectScheduledJobEvents(rangeStart: Date, rangeEnd: Date): Prom
   return events;
 }
 
+// ─── Workbook projections (EP-GRID-WORKBOOKS integration) ───────────────────
+
+/**
+ * Project rows of user workbooks that carry a date/datetime column onto the
+ * calendar — e.g. a "Due date" column on a custom grid becomes an event. Uses
+ * the first date column per table as the event date and the first other column
+ * as the row label. Only custom (EAV) tables have rows/cells.
+ */
+async function projectWorkbookEvents(rangeStart: Date, rangeEnd: Date): Promise<CalendarEventView[]> {
+  const dateColumns = await prisma.workbookColumn.findMany({
+    where: { fieldType: { in: ["date", "datetime"] }, table: { dataSource: "custom" } },
+    select: { id: true, tableId: true, fieldType: true, position: true },
+    orderBy: { position: "asc" },
+  });
+  if (dateColumns.length === 0) return [];
+
+  // First date column per table (lowest position).
+  const dateColByTable = new Map<string, { id: string; withTime: boolean }>();
+  for (const c of dateColumns) {
+    if (!dateColByTable.has(c.tableId)) {
+      dateColByTable.set(c.tableId, { id: c.id, withTime: c.fieldType === "datetime" });
+    }
+  }
+  const tableIds = [...dateColByTable.keys()];
+  const dateColInternalIds = [...dateColByTable.values()].map((c) => c.id);
+
+  // First non-date column per table = the row label.
+  const allColumns = await prisma.workbookColumn.findMany({
+    where: { tableId: { in: tableIds } },
+    select: { id: true, tableId: true },
+    orderBy: { position: "asc" },
+  });
+  const titleColByTable = new Map<string, string>();
+  for (const c of allColumns) {
+    if (dateColByTable.get(c.tableId)?.id === c.id) continue; // skip the date column
+    if (!titleColByTable.has(c.tableId)) titleColByTable.set(c.tableId, c.id);
+  }
+
+  const tables = await prisma.workbookTable.findMany({
+    where: { id: { in: tableIds } },
+    select: { id: true, name: true },
+  });
+  const tableNameById = new Map(tables.map((t) => [t.id, t.name]));
+
+  // Date cells in range.
+  const dateCells = await prisma.workbookCell.findMany({
+    where: { columnId: { in: dateColInternalIds }, dateValue: { gte: rangeStart, lte: rangeEnd } },
+    select: { dateValue: true, row: { select: { id: true, rowId: true, tableId: true } } },
+  });
+  if (dateCells.length === 0) return [];
+
+  // Title cells for those rows.
+  const titleColInternalIds = [...titleColByTable.values()];
+  const rowInternalIds = dateCells.map((c) => c.row.id);
+  const titleByRow = new Map<string, string>();
+  if (titleColInternalIds.length > 0) {
+    const titleCells = await prisma.workbookCell.findMany({
+      where: { rowId: { in: rowInternalIds }, columnId: { in: titleColInternalIds } },
+      select: { rowId: true, textValue: true, selectValue: true },
+    });
+    for (const t of titleCells) {
+      const label = t.textValue ?? t.selectValue;
+      if (label) titleByRow.set(t.rowId, label);
+    }
+  }
+
+  const inputs: WorkbookEventInput[] = [];
+  for (const cell of dateCells) {
+    if (!cell.dateValue) continue;
+    const tableName = tableNameById.get(cell.row.tableId);
+    if (!tableName) continue;
+    inputs.push({
+      tableName,
+      rowId: cell.row.rowId,
+      dateISO: cell.dateValue.toISOString(),
+      title: titleByRow.get(cell.row.id) ?? null,
+      withTime: dateColByTable.get(cell.row.tableId)?.withTime ?? false,
+    });
+  }
+  return buildWorkbookEvents(inputs);
+}
+
 // ─── Main Query ─────────────────────────────────────────────────────────────
 
 export const getCalendarEvents = cache(async (
@@ -1013,7 +1096,7 @@ export const getCalendarEvents = cache(async (
     leaves, reviews, timesheets, onboarding, lifecycle, maintenance,
     compliance, finance, changeMgmt, deployWindows,
     bookings, crmActivities, pipeline, operatingHours, providerAvail,
-    agentTasks,
+    agentTasks, workbookEvents,
   ] = await Promise.all([
     projectLeaveEvents(rangeStart, rangeEnd),
     projectReviewEvents(rangeStart, rangeEnd),
@@ -1031,12 +1114,13 @@ export const getCalendarEvents = cache(async (
     projectOperatingHoursEvents(rangeStart, rangeEnd),
     projectProviderAvailabilityEvents(rangeStart, rangeEnd),
     projectScheduledAgentTasks(rangeStart, rangeEnd),
+    projectWorkbookEvents(rangeStart, rangeEnd),
   ]);
 
   return [
     ...native, ...leaves, ...reviews, ...timesheets, ...onboarding, ...lifecycle,
     ...maintenance, ...compliance, ...finance, ...changeMgmt, ...deployWindows,
     ...bookings, ...crmActivities, ...pipeline, ...operatingHours, ...providerAvail,
-    ...agentTasks,
+    ...agentTasks, ...workbookEvents,
   ].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
 });

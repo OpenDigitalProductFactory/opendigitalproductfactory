@@ -110,12 +110,12 @@ export const educationTrainingArchetypes: ArchetypeDefinition[] = [
     ctaType: "purchase",
     tags: ["driving", "lessons", "test", "licence"],
     itemTemplates: [
-      { name: "1-Hour Lesson", description: "Individual driving lesson with a qualified instructor", priceType: "fixed", bookingDurationMinutes: 60, ctaType: "booking" },
-      { name: "Block of 10 Lessons", description: "Save with a block booking of 10 lessons", priceType: "fixed", ctaType: "purchase" },
-      { name: "Intensive Week Course", description: "Pass in a week with a structured intensive course", priceType: "from", ctaType: "purchase" },
-      { name: "Theory Test Preparation", description: "Online theory test practice and coaching", priceType: "fixed", ctaType: "purchase" },
-      { name: "Pass Plus", description: "Post-test advanced driving course", priceType: "fixed", ctaType: "purchase" },
-      { name: "Motorway Lesson", description: "Motorway driving experience post-test", priceType: "fixed", bookingDurationMinutes: 120, ctaType: "booking" },
+      { name: "1-Hour Lesson", description: "Individual driving lesson with a qualified instructor", priceType: "fixed", priceAmount: 35, bookingDurationMinutes: 60, ctaType: "booking" },
+      { name: "Block of 10 Lessons", description: "Save with a block booking of 10 lessons", priceType: "fixed", priceAmount: 320, ctaType: "purchase" },
+      { name: "Intensive Week Course", description: "Pass in a week with a structured intensive course", priceType: "from", priceAmount: 600, ctaType: "purchase" },
+      { name: "Theory Test Preparation", description: "Online theory test practice and coaching", priceType: "fixed", priceAmount: 30, ctaType: "purchase" },
+      { name: "Pass Plus", description: "Post-test advanced driving course", priceType: "fixed", priceAmount: 180, ctaType: "purchase" },
+      { name: "Motorway Lesson", description: "Motorway driving experience post-test", priceType: "fixed", priceAmount: 70, bookingDurationMinutes: 120, ctaType: "booking" },
     ],
     sectionTemplates: [
       { type: "hero", title: "Hero", sortOrder: 0 },
@@ -129,5 +129,11 @@ export const educationTrainingArchetypes: ArchetypeDefinition[] = [
       { name: "experience", label: "Driving experience", type: "select" as const, required: true, options: ["Complete beginner", "Some lessons previously", "Returning after a break", "Refresher course"] },
       { name: "transmission", label: "Transmission preference", type: "select" as const, required: false, options: ["Manual", "Automatic", "Either"] },
     ],
+    // Driving lessons are 1:1 slot bookings like tutoring/music-school, so reuse
+    // EDUCATION_SCHEDULING. The archetype's top-level ctaType is "purchase"
+    // (course/package sales), but its lesson items are ctaType:"booking" — without
+    // schedulingDefaults the setup route seeds no provider and the booking
+    // calendar ships empty (AUDIT-R3-DRV-F-001).
+    schedulingDefaults: EDUCATION_SCHEDULING,
   },
 ];

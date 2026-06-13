@@ -176,6 +176,10 @@ function buildColumn(
         renderCell: renderReferenceCell,
         renderEditCell:
           editable && referenceType ? makeReferenceEditor(referenceType) : undefined,
+        // The typeahead's result list is a floating element; without this,
+        // react-data-grid treats a click on it as an outside-click and commits
+        // the (empty) draft before onSelect runs, so the picked reference is lost.
+        editorOptions: { commitOnOutsideClick: false },
       };
     }
     case "formula":

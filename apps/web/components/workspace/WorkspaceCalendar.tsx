@@ -36,6 +36,7 @@ const SOURCE_FILTER_CONFIG: Record<string, { label: string; matchFn: (e: { sourc
   "op-hours":      { label: "Hours",          matchFn: (e) => e.eventType === "operating-hours" },
   providers:       { label: "Providers",      matchFn: (e) => e.eventType === "provider-schedule" },
   "agent-tasks":   { label: "AI tasks",       matchFn: (e) => e.eventType === "agent-task" },
+  workbooks:       { label: "Workbooks",      matchFn: (e) => e.eventType === "workbook" },
 };
 
 /** Archetype categories where certain source filters are hidden by default. */

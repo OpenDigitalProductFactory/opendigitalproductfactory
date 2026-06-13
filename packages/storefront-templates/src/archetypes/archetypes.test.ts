@@ -49,10 +49,26 @@ describe("archetype catalog", () => {
     }
   });
 
-  it("all booking-type archetypes have schedulingDefaults", () => {
-    const bookingArchetypes = ALL_ARCHETYPES.filter((a) => a.ctaType === "booking");
+  it("every archetype with a booking item has schedulingDefaults", () => {
+    // The setup route (apps/web/app/api/storefront/admin/setup/route.ts) seeds
+    // the ServiceProvider, availability, and per-item bookingConfig only when the
+    // template carries schedulingDefaults, and it keys on *item-level* ctaType.
+    // An archetype whose top-level ctaType is not "booking" but which contains a
+    // booking item (gym, yoga-studio, dance-studio, driving-school,
+    // artisan-goods, the HOA/condo reservations, the municipal pavilion) still
+    // needs schedulingDefaults — without it the booking calendar ships empty
+    // (AUDIT-R3/R4). Guarding on item-level ctaType closes the gap where the old
+    // archetype-level check let these pass while broken.
+    const hasBookingItem = (a: (typeof ALL_ARCHETYPES)[number]) =>
+      a.ctaType === "booking" ||
+      a.itemTemplates.some((t) => (t.ctaType ?? a.ctaType) === "booking");
+    const bookingArchetypes = ALL_ARCHETYPES.filter(hasBookingItem);
+    expect(bookingArchetypes.length).toBeGreaterThan(0);
     for (const a of bookingArchetypes) {
-      expect(a.schedulingDefaults, `${a.archetypeId} missing schedulingDefaults`).toBeDefined();
+      expect(
+        a.schedulingDefaults,
+        `${a.archetypeId} has a booking item but no schedulingDefaults`,
+      ).toBeDefined();
     }
   });
 

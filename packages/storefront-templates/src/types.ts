@@ -46,6 +46,17 @@ export interface ItemTemplate {
   priceType: PriceType;
   ctaType?: CtaType;          // overrides archetype default if set
   ctaLabel?: string;
+  /**
+   * Optional seed price in the catalogue currency (the setup route seeds items
+   * in GBP). Set on `fixed`/`from` items — especially `purchase` items — so the
+   * storefront ships with a chargeable price out-of-the-box. A `purchase` item
+   * with no `priceAmount` would otherwise render a Buy CTA that 404s at checkout
+   * (the order route 404s on a null price); see {@link CtaButton}'s guard. Left
+   * unset for `quote`/`free`/`donation`/`per-hour`/`per-session` items, where the
+   * operator supplies the figure. Operator-overridable from the admin items
+   * manager.
+   */
+  priceAmount?: number;
   bookingDurationMinutes?: number;
   /**
    * Image affordance this item template expects. When set, the storefront editor
