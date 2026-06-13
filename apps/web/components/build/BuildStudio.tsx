@@ -53,6 +53,7 @@ import {
   getBuildStudioSidebarClassName,
   shouldOpenBuildStudioSidebarByDefault,
 } from "./build-studio-layout";
+import { AgentActivityStrip } from "./AgentActivityStrip";
 
 type Props = {
   builds: FeatureBuildRow[];
@@ -756,6 +757,7 @@ export function BuildStudio({
                     bomSummary={bomSummary}
                     findings={assuranceFindings}
                   />
+                  <AgentActivityStrip build={activeBuild} />
                   <div className="border-b border-[var(--dpf-border)] px-4 py-2 text-xs text-[var(--dpf-muted)]">
                     Select any stage or task to inspect — or open Details on the right for progress, brief, review, sandbox, and BS Queue evidence.
                   </div>
