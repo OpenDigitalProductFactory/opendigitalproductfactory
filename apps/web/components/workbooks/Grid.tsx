@@ -6,7 +6,7 @@
 // implementation detail contained here, so it can be swapped without touching
 // the data layer, server, or pages.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   DataGrid,
   SelectColumn,
@@ -46,6 +46,15 @@ import {
   deleteRowAction,
 } from "@/lib/actions/workbooks";
 import { updatePlatformCellsAction } from "@/lib/actions/platform-grid";
+import {
+  type GridHistory,
+  EMPTY_HISTORY,
+  recordEdit,
+  peekUndo,
+  peekRedo,
+  commitUndo,
+  commitRedo,
+} from "./grid-history";
 
 export interface WorkbookGridProps {
   /** custom WorkbookTable id (TBL-*) or, for platform data, the entity type. */
@@ -179,6 +188,9 @@ export function WorkbookGrid({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showProvenance, setShowProvenance] = useState(false);
+  // Multi-step undo/redo of cell edits (distinct from the audit history). Each
+  // entry's inverse replays through the same validated dispatch as a normal edit.
+  const [history, setHistory] = useState<GridHistory>(EMPTY_HISTORY);
 
   const gridColumns = useMemo<Column<GridRowData>[]>(() => {
     const cols = columns.map((c) => buildColumn(c, capabilities.canEditCell, showProvenance));
@@ -199,7 +211,12 @@ export function WorkbookGrid({
   }, [rowData, sortColumns]);
 
   const persistCell = useCallback(
-    async (rowId: string, columnId: string, value: CellValue, prevValue: CellValue) => {
+    async (
+      rowId: string,
+      columnId: string,
+      value: CellValue,
+      prevValue: CellValue,
+    ): Promise<boolean> => {
       setError(null);
       const res =
         source === "platform"
@@ -211,7 +228,9 @@ export function WorkbookGrid({
         setRowData((prev) =>
           prev.map((r) => (r.rowId === rowId ? { ...r, [columnId]: prevValue } : r)),
         );
+        return false;
       }
+      return true;
     },
     [tableId, source],
   );
@@ -226,11 +245,62 @@ export function WorkbookGrid({
         if (!changed) continue;
         const prevRow = rowData.find((r) => r.rowId === changed.rowId);
         const prevValue: CellValue = prevRow ? prevRow[columnId] ?? null : null;
-        void persistCell(changed.rowId, columnId, changed[columnId] ?? null, prevValue);
+        const nextValue: CellValue = changed[columnId] ?? null;
+        void persistCell(changed.rowId, columnId, nextValue, prevValue).then((ok) => {
+          // Only a committed edit is undoable; a rejected one is already reverted.
+          if (ok) {
+            setHistory((h) => recordEdit(h, { rowId: changed.rowId, columnId, prevValue, nextValue }));
+          }
+        });
       }
       setRowData((prev) => prev.map((r) => byId.get(r.rowId) ?? r));
     },
     [persistCell, rowData],
+  );
+
+  // Replay a cell to a target value through the validated dispatch; on success
+  // commit the stack transition. A failed persist leaves history unchanged
+  // (persistCell already reverted the optimistic cell).
+  const undo = useCallback(() => {
+    const entry = peekUndo(history);
+    if (!entry) return;
+    setRowData((prev) =>
+      prev.map((r) => (r.rowId === entry.rowId ? { ...r, [entry.columnId]: entry.prevValue } : r)),
+    );
+    void persistCell(entry.rowId, entry.columnId, entry.prevValue, entry.nextValue).then((ok) => {
+      if (ok) setHistory((h) => commitUndo(h));
+    });
+  }, [history, persistCell]);
+
+  const redo = useCallback(() => {
+    const entry = peekRedo(history);
+    if (!entry) return;
+    setRowData((prev) =>
+      prev.map((r) => (r.rowId === entry.rowId ? { ...r, [entry.columnId]: entry.nextValue } : r)),
+    );
+    void persistCell(entry.rowId, entry.columnId, entry.nextValue, entry.prevValue).then((ok) => {
+      if (ok) setHistory((h) => commitRedo(h));
+    });
+  }, [history, persistCell]);
+
+  const onKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (!capabilities.canEditCell) return;
+      // Don't hijack a cell editor's own text undo while editing.
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      if (key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if (key === "y" || (key === "z" && e.shiftKey)) {
+        e.preventDefault();
+        redo();
+      }
+    },
+    [capabilities.canEditCell, undo, redo],
   );
 
   const onAddRow = useCallback(async () => {
@@ -266,7 +336,7 @@ export function WorkbookGrid({
   }, [tableId, selectedRows]);
 
   return (
-    <div className="flex h-full flex-col gap-2">
+    <div className="flex h-full flex-col gap-2" onKeyDown={onKeyDown}>
       <div className="flex items-center gap-2">
         {capabilities.canAddRow && (
           <button
@@ -287,6 +357,28 @@ export function WorkbookGrid({
           >
             Delete {selectedRows.size} selected
           </button>
+        )}
+        {capabilities.canEditCell && (
+          <>
+            <button
+              type="button"
+              onClick={undo}
+              disabled={history.undo.length === 0}
+              className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-text)] disabled:opacity-40"
+              title="Undo (Ctrl+Z)"
+            >
+              Undo
+            </button>
+            <button
+              type="button"
+              onClick={redo}
+              disabled={history.redo.length === 0}
+              className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-text)] disabled:opacity-40"
+              title="Redo (Ctrl+Y)"
+            >
+              Redo
+            </button>
+          </>
         )}
         <button
           type="button"
