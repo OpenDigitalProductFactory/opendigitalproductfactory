@@ -29,7 +29,12 @@ export type ArchetypeCategory =
    *  re-pool (the S4b Return & Inspect stage); see
    *  docs/architecture/archetype-business-value-streams.md §10.1 and
    *  docs/superpowers/specs/2026-05-29-vehicle-equipment-rental-archetype-design.md. */
-  | "asset-rental";
+  | "asset-rental"
+  /** Residential construction: production builders (communities and display homes)
+   *  and custom builders (build-on-your-lot / BYOL). The defining value stream is
+   *  design → permit → build → inspect → handover; subcontractors deliver most
+   *  trade work under the builder's project management umbrella. */
+  | "real-estate-construction";
 
 export interface FormField {
   name: string;

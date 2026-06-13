@@ -58,6 +58,7 @@ describe("resolveBusinessProfile", () => {
       "nonprofit-community",
       "public-sector",
       "asset-rental",
+      "real-estate-construction",
     ];
 
     it("populates a non-empty supplyChain on every industry profile", () => {
