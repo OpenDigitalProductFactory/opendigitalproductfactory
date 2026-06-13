@@ -4,4 +4,5 @@ export * from "./applicability-rules";
 export * from "./activation-profile";
 export * from "./capability-activation";
 export * from "./archetypes/index";
+export * from "./media-profile";
 export * from "./sections/schemas";
