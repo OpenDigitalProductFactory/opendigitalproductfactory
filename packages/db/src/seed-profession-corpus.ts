@@ -354,6 +354,166 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
       "consent for collecting data from children under 13; FTC-enforced.",
     retrievedAt: "2026-06-13",
   },
+
+  // ── QA / software-quality family (WSID wave 4) ──
+  // ISTQB glossary blocked the fetcher (403); test terminology is anchored on
+  // fetched CC-BY-SA encyclopedia articles. ISO/IEC 25010 full text is licensed;
+  // the quality-model page uses an open summary and is checklist-only.
+  "owasp/wstg": {
+    sourceType: "web-article",
+    title: "OWASP Web Security Testing Guide",
+    url: "https://owasp.org/www-project-web-security-testing-guide/",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "Community framework of web-application security testing best practices, " +
+      "addressed by stable WSTG identifiers.",
+    retrievedAt: "2026-06-13",
+  },
+  "fowler/test-pyramid": {
+    sourceType: "web-article",
+    title: "The Practical Test Pyramid (Ham Vocke)",
+    url: "https://martinfowler.com/articles/practical-test-pyramid.html",
+    license: "article-free-to-read",
+    abstract:
+      "The test automation pyramid: many fast unit tests, fewer service tests, " +
+      "very few slow end-to-end tests.",
+    retrievedAt: "2026-06-13",
+  },
+  "iso25000/quality-model": {
+    sourceType: "reference",
+    title: "ISO/IEC 25010 product quality model (open summary)",
+    url: "https://iso25000.com/index.php/en/iso-25000-standards/iso-25010",
+    license: "open-summary-iso-licensed",
+    abstract:
+      "Open summary of the ISO/IEC 25010 product-quality characteristics. The " +
+      "ISO standard itself is licensed (checklist-only).",
+    retrievedAt: "2026-06-13",
+  },
+  "wikipedia/software-testing": {
+    sourceType: "reference",
+    title: "Software testing",
+    url: "https://en.wikipedia.org/wiki/Software_testing",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "Test levels (unit, integration, system, acceptance) and the " +
+      "verification/validation framing.",
+    retrievedAt: "2026-06-13",
+  },
+  "wikipedia/verification-validation": {
+    sourceType: "reference",
+    title: "Software verification and validation",
+    url: "https://en.wikipedia.org/wiki/Software_verification_and_validation",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      'The V&V distinction: "building the product right" (static verification) ' +
+      'vs "the right product" (dynamic validation).',
+    retrievedAt: "2026-06-13",
+  },
+  "wikipedia/software-bug": {
+    sourceType: "reference",
+    title: "Software bug",
+    url: "https://en.wikipedia.org/wiki/Software_bug",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "Severity vs priority managed separately; reliable reproduction is the " +
+      "first step to fixing a defect.",
+    retrievedAt: "2026-06-13",
+  },
+  "wikipedia/bug-tracking": {
+    sourceType: "reference",
+    title: "Bug tracking system",
+    url: "https://en.wikipedia.org/wiki/Bug_tracking_system",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "Defect records capture severity, erroneous behavior, and reproduction " +
+      "steps; severity is not fix complexity.",
+    retrievedAt: "2026-06-13",
+  },
+
+  // ── Product-management family (WSID wave 4) ──
+  // SVPG/Cagan pages blocked the fetcher (403); outcome-over-output is anchored
+  // on the open Agile Alliance Product Owner page. SAFe WSJF is copyrighted
+  // (paraphrased with attribution, not reproduced).
+  "agile/manifesto": {
+    sourceType: "reference",
+    title: "Manifesto for Agile Software Development",
+    url: "https://agilemanifesto.org/",
+    license: "open-copy-in-entirety",
+    abstract:
+      "The four Agile values (individuals/interactions, working software, " +
+      "customer collaboration, responding to change).",
+    retrievedAt: "2026-06-13",
+  },
+  "agile/principles": {
+    sourceType: "reference",
+    title: "Principles behind the Agile Manifesto",
+    url: "https://agilemanifesto.org/principles.html",
+    license: "open-copy-in-entirety",
+    abstract:
+      "The twelve principles underpinning the Agile values, including early " +
+      "continuous delivery and welcoming change.",
+    retrievedAt: "2026-06-13",
+  },
+  "scrum/guide-2020": {
+    sourceType: "framework",
+    title: "The 2020 Scrum Guide",
+    url: "https://scrumguides.org/scrum-guide.html",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "Defines the ordered, refined Product Backlog, Product Owner " +
+      "accountability, Product Goal, Increment, and Definition of Done.",
+    retrievedAt: "2026-06-13",
+  },
+  "safe/wsjf": {
+    sourceType: "framework",
+    title: "WSJF — Weighted Shortest Job First (SAFe)",
+    url: "https://framework.scaledagile.com/wsjf/",
+    license: "Scaled-Agile-copyright",
+    abstract:
+      "WSJF = relative cost of delay divided by relative job duration; sequence " +
+      "shortest high-cost-of-delay jobs first. Paraphrased, attributed.",
+    retrievedAt: "2026-06-13",
+  },
+  "agile-alliance/invest": {
+    sourceType: "reference",
+    title: "INVEST (Agile Alliance glossary)",
+    url: "https://www.agilealliance.org/glossary/invest/",
+    license: "open-attribution",
+    abstract:
+      "Checklist for user-story quality: Independent, Negotiable, Valuable, " +
+      "Estimable, Small, Testable.",
+    retrievedAt: "2026-06-13",
+  },
+  "agile-alliance/acceptance": {
+    sourceType: "reference",
+    title: "Acceptance / Acceptance Testing (Agile Alliance glossary)",
+    url: "https://www.agilealliance.org/glossary/acceptance/",
+    license: "open-attribution",
+    abstract:
+      "An acceptance test is a formal, example-based description of product " +
+      "behavior yielding a binary pass/fail.",
+    retrievedAt: "2026-06-13",
+  },
+  "agile-alliance/definition-of-done": {
+    sourceType: "reference",
+    title: "Definition of Done (Agile Alliance glossary)",
+    url: "https://www.agilealliance.org/glossary/definition-of-done/",
+    license: "open-attribution",
+    abstract:
+      "Criteria an increment must meet to be considered done; references a " +
+      "companion Definition of Ready.",
+    retrievedAt: "2026-06-13",
+  },
+  "agile-alliance/product-owner": {
+    sourceType: "reference",
+    title: "Product Owner (Agile Alliance glossary)",
+    url: "https://www.agilealliance.org/glossary/product-owner/",
+    license: "open-attribution",
+    abstract:
+      "The Product Owner prioritizes the backlog to deliver maximum outcome " +
+      "with minimum output.",
+    retrievedAt: "2026-06-13",
+  },
 };
 
 // ─── Source seeding ──────────────────────────────────────────────────────────
