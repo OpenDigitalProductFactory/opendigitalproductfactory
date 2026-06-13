@@ -310,6 +310,7 @@ export function ItemsManager({ storefrontId, items: initial, vocabulary, categor
         categorySuggestions={categorySuggestions}
         defaultCtaType={defaultCtaType}
         isEditing={!!editingItem}
+        editingItemId={editingItem?.id}
       />
     </div>
   );
