@@ -125,6 +125,10 @@ events (PR #1810)** = W-CAL.
 - **W-SUMMARY** — **Summary** panel: group by a column, summarize a numeric column. *Expect:* count + sum/avg/min/max per group; empty-value group labelled "(empty)"; **Chart** toggle renders a bar chart scaled to the largest bar.
 - **W-VIEWS** — Set filters, sort, and conditional format; reload. *Expect:* the view is restored per table (persisted view state). **Gallery** toggle renders rows as cards, honoring current filters/sort/conditional-format colour.
 
+**Media Columns** *(PRs #1832 image, #1836 attachment)*
+
+- **W-MEDIA** — On a custom table, add an **Image** column and an **Attachment** column. In the image cell, upload a picture → *expect:* an inline thumbnail renders; **reload** → the thumbnail persists. In the attachment cell, upload a non-image file (e.g. a PDF) → *expect:* a download chip shows the original **filename + human-readable size**; clicking it downloads the file; **reload** → the chip persists. Add the attachment column to the quick-**Filter** and **Export CSV** → *expect:* the filter matches on filename and the CSV cell contains the filename (not `[object Object]` or a raw id). *Critical:* bytes live in content-addressed media storage — the cell only carries the URL (+ name/size for attachments).
+
 **Calendar Integration**
 
 - **W-CAL** *(PR #1810 acceptance)* — Add a date column to a custom table; set dates on two or more rows. Open `/workspace/calendar`; enable the **Workbooks** source filter. *Expect:* those rows appear as events titled `<Table>: <row label>` on their dates (datetime columns → timed events; date columns → all-day events), alongside existing finance/HR/compliance events.
@@ -274,7 +278,7 @@ Run 0 serves two goals: (a) validate the audit harness so the remaining 19 reset
 - [ ] **RC26** Load the following routes in sequence and confirm each returns 200 (no 500 or blank page): `/workspace`, `/storefront`, `/storefront/team`, `/storefront/items`, `/storefront/settings/operations`, `/customer`, `/finance`, `/finance/suppliers`, `/finance/bills`, `/finance/invoices`, `/finance/reports/profit-loss`, `/ops`, `/compliance`, `/workbooks`, `/workspace/calendar`.
 
 *Universal Grid & Workbooks + Calendar (Phase 2–4):*
-- [ ] **RC27** Run the full **Phase W** deep checklist (§2a) end-to-end in order: **W-PREREQ** (confirm ≥1 row per reference entity type; create any missing), then — Custom-Table Workbook: W-CORE, W-REF-1..4 (incl. the PR #1817 acceptance at **W-REF-3**), W-LOOKUP, W-FORMULA (incl. chained formula + deliberate bad formula), W-PROV, W-UNDO — Platform-Backed Grids: W-PLATFORM, W-EDIT-BACKLOG, W-EDIT-SUPPLIER — Data Ops: W-FILTER, W-CSV, W-XLSX, W-CONDFMT, W-SUMMARY, W-VIEWS — Calendar: **W-CAL** (PR #1810). Log each as drove → observed → signed off / DEFECT.
+- [ ] **RC27** Run the full **Phase W** deep checklist (§2a) end-to-end in order: **W-PREREQ** (confirm ≥1 row per reference entity type; create any missing), then — Custom-Table Workbook: W-CORE, W-REF-1..4 (incl. the PR #1817 acceptance at **W-REF-3**), W-LOOKUP, W-FORMULA (incl. chained formula + deliberate bad formula), W-PROV, W-UNDO — Platform-Backed Grids: W-PLATFORM, W-EDIT-BACKLOG, W-EDIT-SUPPLIER — Data Ops: W-FILTER, W-CSV, W-XLSX, W-CONDFMT, W-SUMMARY, W-VIEWS — Media: **W-MEDIA** (PRs #1832 image, #1836 attachment) — Calendar: **W-CAL** (PR #1810). Log each as drove → observed → signed off / DEFECT.
 
 **Finding threshold for RC items:** any RC item that fails is a platform-wide gap (not an archetype gap) — file it as a `critical` BI immediately using the GitHub Issues channel (Section 8) and do not proceed to Run 1 until it is resolved or explicitly deferred as a known limitation that won't affect the archetype-specific evaluation.
 
