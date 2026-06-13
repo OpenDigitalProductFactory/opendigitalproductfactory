@@ -22,6 +22,8 @@ import {
   type GridRow,
   type CellValue,
   type GridCapabilities,
+  type ProvenanceKind,
+  PROVENANCE_LABELS,
 } from "@/lib/workbooks/types";
 import {
   type GridRowData,
@@ -66,15 +68,28 @@ function toRowData(rows: GridRow[]): GridRowData[] {
 function buildColumn(
   col: ColumnDefinition,
   canEdit: boolean,
+  showProvenance: boolean,
 ): Column<GridRowData> {
   const options = col.config?.options ?? [];
+  const label = col.required ? `${col.name} *` : col.name;
+  const kind: ProvenanceKind = col.provenanceKind ?? "manual";
   const base: Column<GridRowData> = {
     key: col.columnId,
-    name: col.required ? `${col.name} *` : col.name,
+    name: label,
     resizable: true,
     sortable: true,
     width: col.width,
     minWidth: 80,
+    // Progressive disclosure (Dale review): provenance is hidden until the user
+    // turns on "Show data sources" — the grid reads as an ordinary spreadsheet.
+    renderHeaderCell: showProvenance
+      ? () => (
+          <div className="dpf-grid-header">
+            <span className="dpf-grid-header-name">{label}</span>
+            <span className={`dpf-prov dpf-prov-${kind}`}>{PROVENANCE_LABELS[kind]}</span>
+          </div>
+        )
+      : undefined,
   };
   const editable = canEdit && col.editable;
 
@@ -163,11 +178,12 @@ export function WorkbookGrid({
   const [selectedRows, setSelectedRows] = useState<ReadonlySet<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showProvenance, setShowProvenance] = useState(false);
 
   const gridColumns = useMemo<Column<GridRowData>[]>(() => {
-    const cols = columns.map((c) => buildColumn(c, capabilities.canEditCell));
+    const cols = columns.map((c) => buildColumn(c, capabilities.canEditCell, showProvenance));
     return capabilities.canDeleteRow ? [SelectColumn, ...cols] : cols;
-  }, [columns, capabilities]);
+  }, [columns, capabilities, showProvenance]);
 
   const sortedRows = useMemo<GridRowData[]>(() => {
     if (sortColumns.length === 0) return rowData;
@@ -272,6 +288,15 @@ export function WorkbookGrid({
             Delete {selectedRows.size} selected
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => setShowProvenance((v) => !v)}
+          aria-pressed={showProvenance}
+          className="ml-auto rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          title="Show where each column's values come from"
+        >
+          {showProvenance ? "Hide data sources" : "Show data sources"}
+        </button>
         {error && <span className="text-sm text-[var(--dpf-error)]">{error}</span>}
       </div>
 
