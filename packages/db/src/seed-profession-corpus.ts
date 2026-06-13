@@ -962,6 +962,127 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
       "situational; higher validity and legal defensibility than unstructured.",
     retrievedAt: "2026-06-13",
   },
+
+  // ── Customer-success family (WSID wave 8) ──
+  // Only wikipedia/nps is open; NN/G, Intercom, Gainsight, Bain are licensed/
+  // vendor and cited by reference (short attributed quotes, facts only). CSA
+  // manifesto blocked the fetcher (403) and is not authored from.
+  "wikipedia/nps": {
+    sourceType: "reference",
+    title: "Net Promoter Score",
+    url: "https://en.wikipedia.org/wiki/Net_promoter_score",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "NPS: the recommend question, promoter/passive/detractor bands, and the " +
+      "%promoters - %detractors formula.",
+    retrievedAt: "2026-06-13",
+  },
+  "nng/journey-mapping": {
+    sourceType: "web-article",
+    title: "Customer Journey Mapping (Nielsen Norman Group)",
+    url: "https://www.nngroup.com/articles/customer-journey-mapping/",
+    license: "NNG-copyright-cite-by-reference",
+    abstract:
+      "Journey maps combine storytelling and visualization of user goals, " +
+      "phases, actions, emotions, touchpoints, and opportunities.",
+    retrievedAt: "2026-06-13",
+  },
+  "nng/service-blueprints": {
+    sourceType: "web-article",
+    title: "Service Blueprints: Definition (Nielsen Norman Group)",
+    url: "https://www.nngroup.com/articles/service-blueprints-definition/",
+    license: "NNG-copyright-cite-by-reference",
+    abstract:
+      "Service blueprints map frontstage/backstage/support layers and the " +
+      "interaction, visibility, and internal-interaction lines.",
+    retrievedAt: "2026-06-13",
+  },
+  "intercom/aha-moments": {
+    sourceType: "web-article",
+    title: "Understanding your aha moments (Intercom)",
+    url: "https://www.intercom.com/blog/understanding-your-aha-moments-and-putting-them-to-work/",
+    license: "vendor-copyright-cite-by-reference",
+    abstract:
+      "Distinguishes the user's value-discovery aha moment from company-defined " +
+      "activation in onboarding.",
+    retrievedAt: "2026-06-13",
+  },
+  "bain/net-promoter-system": {
+    sourceType: "web-article",
+    title: "Measuring Your Net Promoter Score (Bain)",
+    url: "https://www.netpromotersystem.com/about/measuring-your-net-promoter-score/",
+    license: "vendor-copyright-cite-by-reference",
+    abstract:
+      "Bain's Net Promoter System: the ultimate question, score bands, and the " +
+      "economics of promoters vs detractors.",
+    retrievedAt: "2026-06-13",
+  },
+  "gainsight/cs-guide": {
+    sourceType: "web-article",
+    title: "The Essential Guide to Customer Success (Gainsight)",
+    url: "https://www.gainsight.com/guides/the-essential-guide-to-customer-success/",
+    license: "vendor-copyright-cite-by-reference",
+    abstract:
+      "Defines customer success as proactive and outcome-focused, contrasted " +
+      "with reactive support; the CSM lifecycle role.",
+    retrievedAt: "2026-06-13",
+  },
+  "gainsight/health-scores": {
+    sourceType: "web-article",
+    title: "Customer Health Scores (Gainsight)",
+    url: "https://www.gainsight.com/blog/customer-health-scores/",
+    license: "vendor-copyright-cite-by-reference",
+    abstract:
+      "Health-score components and models (traffic-light / 0-100) with " +
+      "alert-and-playbook intervention on score decay.",
+    retrievedAt: "2026-06-13",
+  },
+
+  // ── Strategy & executive family (WSID wave 8) ──
+  // No CC/public-domain source exists for these frameworks; all are openly
+  // readable but copyrighted. Cited by reference with short attributed quotes;
+  // doctrine is distilled framework facts (OKR structure, BSC perspectives),
+  // never reproduced prose.
+  "whatmatters/okr": {
+    sourceType: "framework",
+    title: "OKR Meaning, Definition & Example (What Matters)",
+    url: "https://www.whatmatters.com/faqs/okr-meaning-definition-example",
+    license: "copyright-cite-by-reference",
+    abstract:
+      "OKRs pair one Objective with 3-5 measurable Key Results; the " +
+      '"I will (Objective) as measured by (Key Results)" template.',
+    retrievedAt: "2026-06-13",
+  },
+  "bsi/balanced-scorecard": {
+    sourceType: "framework",
+    title: "Balanced Scorecard Basics (Balanced Scorecard Institute)",
+    url: "https://balancedscorecard.org/bsc-basics/",
+    license: "copyright-cite-by-reference",
+    abstract:
+      "The Balanced Scorecard's four perspectives (financial, customer, " +
+      "internal process, learning & growth) translating strategy into measures.",
+    retrievedAt: "2026-06-13",
+  },
+  "bsi/strategy": {
+    sourceType: "framework",
+    title: "Cascading — Creating Alignment (Balanced Scorecard Institute)",
+    url: "https://balancedscorecard.org/cascading-creating-alignment/",
+    license: "copyright-cite-by-reference",
+    abstract:
+      "Cascading scorecards across tiers to create line-of-sight between daily " +
+      "work and high-level strategy.",
+    retrievedAt: "2026-06-13",
+  },
+  "mooncamp/okr-vs-kpi": {
+    sourceType: "web-article",
+    title: "OKR vs KPI: Differences & Synergies (Mooncamp)",
+    url: "https://mooncamp.com/blog/okr-vs-kpi",
+    license: "copyright-cite-by-reference",
+    abstract:
+      "Contrasts OKRs (leading indicators, drive change) with KPIs (lagging " +
+      "indicators, monitor health); the two are complementary.",
+    retrievedAt: "2026-06-13",
+  },
 };
 
 // ─── Source seeding ──────────────────────────────────────────────────────────
