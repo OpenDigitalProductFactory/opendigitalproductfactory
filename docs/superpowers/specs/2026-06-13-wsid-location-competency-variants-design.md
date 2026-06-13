@@ -199,3 +199,36 @@ shows real divergence. Competency tiering applies to **every** family.
 5. Omitting both fields yields a jurisdiction-neutral, practitioner-level page
    (backward-compatible with the shipped data-architect corpus, which sets
    neither and therefore tallies as `global` / `practitioner`).
+
+## 9. Coverage disposition for platform-internal families
+
+"Consider variants … for **all** of the AI Coworkers" requires a disposition for
+every registry family, not corpus content for every family. Most families get a
+researched external corpus (data-architect, software-engineer, finance, security,
+legal-compliance, qa-engineer, product-manager, frontend-engineer, ux-design,
+documentation-content, enterprise-architecture, operations, hr-people-ops,
+customer-success, strategy-executive, external-intelligence, plus the wave still
+gated on merges: devops-platform, scrum-master, portfolio-management, marketing,
+release-service-management).
+
+Three registry families are **platform-internal** and are deliberately *not* given
+a parallel external corpus:
+
+- **`build-studio`** and **`admin-operations`** — their professional doctrine is
+  DPF's own platform doctrine, already the single source of truth in the **founder
+  kernel** (`docs/founder-kernel/wiki/principles/`) and `AGENTS.md`. Authoring a
+  `professions/build-studio/*` corpus that re-cited `AGENTS.md` would duplicate the
+  kernel and violate `single-source-of-truth`. Their Phase-1 profession profiles
+  already fall back through the chain to the platform/WWMD kernel (parent spec
+  §4.5), which **is** their body of knowledge. This matches parent spec §4.11:
+  "Platform-internal pipeline agents … are governed by the engineering-flow/WWMD
+  platform doctrine they already have; they map to families only where a real
+  external profession exists."
+- **`external-intelligence`** *does* map to a real external profession (tool/registry
+  scouting, supply-chain vetting) with genuine external sources (MCP, npm, OWASP),
+  so it gets a corpus.
+
+Disposition rule: a family with a real external body of knowledge gets a researched
+corpus; a platform-internal family defers to the founder kernel via the fallback
+chain rather than duplicating it. Both are "covered" — one by corpus, one by
+governed deferral.

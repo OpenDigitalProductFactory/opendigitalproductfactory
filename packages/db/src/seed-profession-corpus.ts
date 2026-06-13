@@ -1083,6 +1083,91 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
       "indicators, monitor health); the two are complementary.",
     retrievedAt: "2026-06-13",
   },
+
+  // ── External-intelligence / scouting family (WSID wave 9) ──
+  // MCP and npm docs are open developer documentation; OWASP is CC-BY-SA;
+  // Smithery docs page is open (homepage 403'd, not authored from). Product
+  // School build-vs-buy is licensed (cited by reference).
+  "mcp/intro": {
+    sourceType: "spec",
+    title: "Model Context Protocol — Introduction",
+    url: "https://modelcontextprotocol.io/",
+    license: "open-docs",
+    abstract:
+      'MCP is an open standard connecting AI applications to external systems — ' +
+      '"like a USB-C port for AI applications."',
+    retrievedAt: "2026-06-13",
+  },
+  "mcp/architecture": {
+    sourceType: "spec",
+    title: "Model Context Protocol — Architecture",
+    url: "https://modelcontextprotocol.io/docs/concepts/architecture",
+    license: "open-docs",
+    abstract:
+      "MCP client-server architecture; servers expose tools, resources, and " +
+      "prompts discovered by clients via list methods.",
+    retrievedAt: "2026-06-13",
+  },
+  "smithery/registry-docs": {
+    sourceType: "web-article",
+    title: "Smithery Registry — Search Servers (docs)",
+    url: "https://smithery.ai/docs/concepts/registry_search_servers",
+    license: "open-docs",
+    abstract:
+      "Smithery is a searchable registry of MCP servers with full-text/semantic " +
+      "search and usage + verification signals.",
+    retrievedAt: "2026-06-13",
+  },
+  "npm/registry-docs": {
+    sourceType: "web-article",
+    title: "About the public npm registry",
+    url: "https://docs.npmjs.com/about-the-public-npm-registry",
+    license: "open-docs",
+    abstract:
+      "The public npm registry is a database of JavaScript packages, each with " +
+      "software and metadata.",
+    retrievedAt: "2026-06-13",
+  },
+  "npm/semver": {
+    sourceType: "web-article",
+    title: "About semantic versioning (npm)",
+    url: "https://docs.npmjs.com/about-semantic-versioning",
+    license: "open-docs",
+    abstract:
+      "npm semantic versioning: MAJOR.MINOR.PATCH conveys breaking / feature / " +
+      "bug-fix change scope.",
+    retrievedAt: "2026-06-13",
+  },
+  "owasp/component-analysis": {
+    sourceType: "web-article",
+    title: "OWASP Component Analysis",
+    url: "https://owasp.org/www-community/Component_Analysis",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "Process for identifying risk from third-party/open-source components: " +
+      "vulnerability age, component currency, ongoing maintenance cost.",
+    retrievedAt: "2026-06-13",
+  },
+  "owasp/dependency-chain-abuse": {
+    sourceType: "web-article",
+    title: "OWASP CICD-SEC-3: Dependency Chain Abuse",
+    url: "https://owasp.org/www-project-top-10-ci-cd-security-risks/CICD-SEC-03-Dependency-Chain-Abuse",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "Dependency confusion, hijacking, typosquatting, and brandjacking attack " +
+      "vectors against the software supply chain.",
+    retrievedAt: "2026-06-13",
+  },
+  "productschool/build-vs-buy": {
+    sourceType: "web-article",
+    title: "Build vs Buy: Making Smarter Software Decisions (Product School)",
+    url: "https://productschool.com/blog/leadership/build-vs-buy",
+    license: "copyright-cite-by-reference",
+    abstract:
+      "Build/buy framework across cost/TCO, time-to-market, capability, " +
+      "expertise, and strategic control. Licensed; cited by reference.",
+    retrievedAt: "2026-06-13",
+  },
 };
 
 // ─── Source seeding ──────────────────────────────────────────────────────────
