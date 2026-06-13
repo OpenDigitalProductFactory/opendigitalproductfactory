@@ -35,6 +35,7 @@ import {
   renderEmailCell,
   renderDateCell,
   renderReferenceCell,
+  renderComputedCell,
   makeReferenceEditor,
 } from "./cell-editors";
 import {
@@ -127,6 +128,10 @@ function buildColumn(
           editable && referenceType ? makeReferenceEditor(referenceType) : undefined,
       };
     }
+    case "formula":
+    case "lookup":
+      // Phase 2: computed read-only columns (derived server-side).
+      return { ...base, renderCell: renderComputedCell };
     default:
       return base;
   }

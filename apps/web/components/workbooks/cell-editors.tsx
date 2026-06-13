@@ -237,3 +237,18 @@ export function renderReferenceCell({ row, column }: RenderCellProps<GridRowData
   }
   return null;
 }
+
+/** Read-only renderer for computed (formula/lookup) cells. */
+export function renderComputedCell({ row, column }: RenderCellProps<GridRowData>): ReactNode {
+  const v = row[column.key];
+  if (v === null || v === undefined) return null;
+  if (Array.isArray(v)) return <span>{v.join(", ")}</span>;
+  if (typeof v === "object" && "referenceId" in v) {
+    const ref = v as ReferenceValue;
+    return <span className="dpf-grid-chip">{ref.label ?? ref.referenceId}</span>;
+  }
+  if (typeof v === "boolean") return <span>{v ? "TRUE" : "FALSE"}</span>;
+  const text = String(v);
+  const isError = text.startsWith("#ERROR");
+  return <span className={isError ? "dpf-grid-formula-error" : undefined}>{text}</span>;
+}

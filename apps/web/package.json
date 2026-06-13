@@ -37,6 +37,7 @@
     "gray-matter": "^4.0.3",
     "inngest": "^4.5.0",
     "jose": "^6.2.3",
+    "jsep": "^1.4.0",
     "libphonenumber-js": "^1.13.6",
     "lucide-react": "^1.17.0",
     "mammoth": "^1.12.0",

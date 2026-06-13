@@ -7,7 +7,11 @@
 // implementation detail hidden behind the Grid component — nothing here
 // references it, so it stays swappable.
 
-/** Phase-1 field types. Phase-2 (formula, rollup, lookup, attachment, currency) are out of scope. */
+/**
+ * Field types. `formula` and `lookup` (Phase 2) are *computed* — read-only,
+ * never user-written, derived on read. `rollup`, attachment, currency remain out
+ * of scope.
+ */
 export const FIELD_TYPES = [
   "text",
   "number",
@@ -19,9 +23,18 @@ export const FIELD_TYPES = [
   "reference",
   "url",
   "email",
+  "formula",
+  "lookup",
 ] as const;
 
 export type FieldType = (typeof FIELD_TYPES)[number];
+
+/** Field types whose value is computed on read, not stored or user-edited. */
+export const COMPUTED_FIELD_TYPES: readonly FieldType[] = ["formula", "lookup"];
+
+export function isComputedFieldType(fieldType: FieldType): boolean {
+  return COMPUTED_FIELD_TYPES.includes(fieldType);
+}
 
 /** Option for select / multi_select columns, stored in WorkbookColumn.fieldConfig.options. */
 export interface SelectOption {
@@ -29,6 +42,16 @@ export interface SelectOption {
   label: string;
   /** optional semantic intent so the grid can color the chip via report-kit statusColors */
   intent?: string;
+}
+
+/** Configuration for a `lookup` column: pull a field from a referenced record. */
+export interface LookupConfig {
+  /** columnId of a `reference` column on the same table */
+  referenceColumnId: string;
+  /** the field key on the referenced entity to surface */
+  targetField: string;
+  /** how to render the looked-up value (defaults to text) */
+  targetFieldType?: FieldType;
 }
 
 /** Column-level configuration, persisted as WorkbookColumn.fieldConfig (JSON). */
@@ -41,6 +64,12 @@ export interface FieldConfig {
   multiline?: boolean;
   /** number fields: decimal places hint for display */
   precision?: number;
+  /** formula columns: an Excel-style expression over other columns in the row */
+  formula?: string;
+  /** formula columns: how to render/coerce the computed result (defaults to text) */
+  resultType?: FieldType;
+  /** lookup columns: where to pull the value from */
+  lookup?: LookupConfig;
 }
 
 /** A column as the grid consumes it — derived from a WorkbookColumn or an adapter's getColumns(). */
