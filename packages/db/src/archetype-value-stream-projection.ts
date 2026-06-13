@@ -18,13 +18,45 @@ import type { OperationalValueStream } from "@dpf/storefront-templates";
  * No new Prisma table — this is a projection into EA elements/views.
  */
 
-// A single Prisma client type, not a union: `PrismaClient` is assignable to
-// `Prisma.TransactionClient` (it has a superset of the delegates), so both the
-// setup caller (package client) and the reset caller (transaction client) fit.
-// Using the union here forced the type checker to resolve every delegate across
-// two enormous client types at each call site, which blew the build/typecheck
-// heap (OOM) — see PR #1798 CI.
-type Db = Prisma.TransactionClient;
+// Minimal structural DB interface — deliberately type-safety-light.
+// Typing `db` as the full Prisma client (or `Prisma.TransactionClient`, an Omit
+// mapped type) and calling ~20 delegate methods with recursive JSON-path `where`
+// filters forced the type checker to instantiate Prisma's giant generic delegate
+// types at every call site, which exhausted the typecheck / Next-build heap
+// (OOM, PR #1798 CI). This narrow interface keeps the queries cheap to check; the
+// real PrismaClient and a `$transaction` client both satisfy it at runtime, so we
+// cast at the single boundary in projectArchetypeValueStream(). Query shapes are
+// covered by the unit tests rather than the Prisma types.
+type IdRow = { id: string };
+interface OvsmDb {
+  eaNotation: { findUnique(args: unknown): Promise<IdRow | null> };
+  viewpointDefinition: { findUnique(args: unknown): Promise<IdRow | null> };
+  eaElementType: { findUnique(args: unknown): Promise<IdRow | null> };
+  eaRelationshipType: { findUnique(args: unknown): Promise<IdRow | null> };
+  eaView: {
+    findFirst(args: unknown): Promise<IdRow | null>;
+    create(args: unknown): Promise<IdRow>;
+    update(args: unknown): Promise<IdRow>;
+  };
+  eaElement: {
+    findFirst(args: unknown): Promise<IdRow | null>;
+    findMany(args: unknown): Promise<IdRow[]>;
+    create(args: unknown): Promise<IdRow>;
+    update(args: unknown): Promise<IdRow>;
+    deleteMany(args: unknown): Promise<{ count: number }>;
+  };
+  eaViewElement: {
+    findUnique(args: unknown): Promise<IdRow | null>;
+    create(args: unknown): Promise<IdRow>;
+    update(args: unknown): Promise<IdRow>;
+    deleteMany(args: unknown): Promise<{ count: number }>;
+  };
+  eaRelationship: {
+    findFirst(args: unknown): Promise<IdRow | null>;
+    create(args: unknown): Promise<IdRow>;
+    deleteMany(args: unknown): Promise<{ count: number }>;
+  };
+}
 
 const ARCHETYPE_OVSM_SOURCE = "archetype-ovsm";
 /** Sentinel stageKey for the band element that holds the whole stream. */
@@ -33,7 +65,8 @@ const BAND_STAGE_KEY = "__stream__";
 const FLOW_EXCLUDED_KEYS = new Set(["trust-compliance", "operate-improve"]);
 
 export interface ProjectArchetypeValueStreamInput {
-  db?: Db;
+  /** A PrismaClient or a `$transaction` client; cast to the narrow OvsmDb inside. */
+  db?: Prisma.TransactionClient;
   orgId: string;
   ovsm: OperationalValueStream;
 }
@@ -52,7 +85,7 @@ function buildScopeRef(orgId: string): string {
   return `${orgId}:operational`;
 }
 
-function bandMetadata(orgId: string, ovsm: OperationalValueStream): Prisma.InputJsonValue {
+function bandMetadata(orgId: string, ovsm: OperationalValueStream): Record<string, unknown> {
   return {
     projection: {
       layoutRole: "stream_band",
@@ -74,14 +107,14 @@ function bandMetadata(orgId: string, ovsm: OperationalValueStream): Prisma.Input
       // stages, so the binding is stored here rather than mapped onto that field.
       it4itStageBinding: ovsm.it4itStageBinding,
     },
-  } satisfies Prisma.InputJsonValue;
+  };
 }
 
 function stageMetadata(
   orgId: string,
   ovsm: OperationalValueStream,
   stage: OperationalValueStream["stages"][number],
-): Prisma.InputJsonValue {
+): Record<string, unknown> {
   return {
     projection: {
       layoutRole: "stream_stage",
@@ -103,18 +136,18 @@ function stageMetadata(
       trustGates: ovsm.trustGates,
       it4itStageBinding: ovsm.it4itStageBinding,
     },
-  } satisfies Prisma.InputJsonValue;
+  };
 }
 
 async function resolveElement(
-  db: Db,
+  db: OvsmDb,
   input: {
     orgId: string;
     stageKey: string;
     elementTypeId: string;
     name: string;
     description: string;
-    properties: Prisma.InputJsonValue;
+    properties: Record<string, unknown>;
   },
 ): Promise<{ id: string; created: boolean }> {
   const existing = await db.eaElement.findFirst({
@@ -159,7 +192,7 @@ async function resolveElement(
 }
 
 async function resolveViewElement(
-  db: Db,
+  db: OvsmDb,
   input: { viewId: string; elementId: string; parentViewElementId: string | null; orderIndex: number | null },
 ): Promise<{ id: string; created: boolean }> {
   const existing = await db.eaViewElement.findUnique({
@@ -196,7 +229,9 @@ async function resolveViewElement(
 export async function projectArchetypeValueStream(
   input: ProjectArchetypeValueStreamInput,
 ): Promise<ProjectArchetypeValueStreamResult> {
-  const db: Db = input.db ?? prisma;
+  // Single boundary cast: the real PrismaClient / transaction client satisfies
+  // OvsmDb structurally at runtime (see the OvsmDb note above).
+  const db = (input.db ?? prisma) as unknown as OvsmDb;
   const { orgId, ovsm } = input;
 
   const notation = await db.eaNotation.findUnique({
@@ -349,7 +384,7 @@ export async function projectArchetypeValueStream(
             notationSlug: "archimate4",
             properties: {
               projection: { source: ARCHETYPE_OVSM_SOURCE, orgId },
-            } satisfies Prisma.InputJsonValue,
+            },
           },
           select: { id: true },
         });
