@@ -2583,9 +2583,15 @@ async function main(): Promise<void> {
     if (result.emptyCorpus) {
       console.log("  profession-corpus: empty (no docs/professions/*/wiki/ content yet)");
     } else {
+      const fmt = (cov: Record<string, number>) =>
+        Object.entries(cov)
+          .map(([k, v]) => `${k}=${v}`)
+          .join(",") || "none";
       console.log(
         `  profession-corpus: sources=${result.sourceCount} pages=${result.pageCount} ` +
-          `orphan-links=${result.orphanLinks.length}`,
+          `orphan-links=${result.orphanLinks.length} ` +
+          `jurisdiction[${fmt(result.jurisdictionCoverage)}] ` +
+          `competency[${fmt(result.competencyCoverage)}]`,
       );
     }
   });
