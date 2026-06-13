@@ -131,3 +131,19 @@
   border-radius: 0.25rem;
   border: 1px solid var(--dpf-border);
 }
+
+/* Group-by summary chart — simple CSS bars. */
+.dpf-summary-bar-track {
+  flex: 1 1 auto;
+  block-size: 0.75rem;
+  border-radius: 9999px;
+  background-color: var(--dpf-surface-1);
+  border: 1px solid var(--dpf-border);
+  overflow: hidden;
+}
+.dpf-summary-bar-fill {
+  display: block;
+  block-size: 100%;
+  min-inline-size: 2px;
+  background-color: var(--dpf-accent);
+}
