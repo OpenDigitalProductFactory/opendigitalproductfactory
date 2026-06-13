@@ -90,31 +90,44 @@ Checklist items tagged `[C]` below fall in this category. In Runs 1–17, execut
 #### Phase W — Universal Grid & Workbooks + Calendar (Run-0 deep checklist) `[C]`
 
 Archetype-neutral; **evaluate once, deeply, in Run 0.** Record evidence as dynamic analysis
-(**drove X → observed Y → signed off / DEFECT Z**), not screenshots. Reference/lookup steps need
-target data — before testing, note row counts for Digital products / Customers / Suppliers / People /
-Epics and pick a target that has rows (an empty dropdown for a 0-row target is correct, not a defect).
+(**drove X → observed Y → signed off / DEFECT Z**), not screenshots.
 Two fixes to confirm landed: **reference-cell persistence (PR #1817)** = W-REF-3; **calendar workbook
 events (PR #1810)** = W-CAL.
 
-- **W-CORE** — Create workbook → table → add columns of each type (text/number/date/datetime/checkbox/single-select/url/email); add a row; edit cells; sort by header. *Expect:* each type renders + edits inline; reload persists; sort reorders.
-- **W-REF-1** — Add a **Reference** column; target picker lists platform entities that have data. *Expect:* picker populated (Epics, Digital products, Customers, People, Suppliers — those with rows).
-- **W-REF-2** — Open the reference cell, type a query. *Expect:* typeahead returns **real** matching records (live search), not placeholders.
-- **W-REF-3** *(PR #1817 acceptance)* — Select a record, then **reload**. *Expect:* the cell still shows the selected record's label (referenceId persisted + label re-hydrated). **Critical check** — earlier builds saved an empty referenceId.
-- **W-REF-4** — A viewer lacking the target's view capability gets no results (no leak).
-- **W-LOOKUP** — Add a **Lookup** column over the reference column → pick a target field. *Expect:* shows that field's live value.
-- **W-FORMULA** — Add **Formula** columns, e.g. `=Price*Qty` and `=IF(Qty>3,"high","low")`. *Expect:* computed result renders; a bad formula shows `#ERROR:` (never crashes); a formula can reference an earlier computed column.
-- **W-PROV** — Toggle **Show data sources**. *Expect:* hidden by default; when on, headers show Official/Live source/Calculated/Your note correctly (platform = Official; formula/lookup = Calculated; user columns = Your note).
-- **W-UNDO** — Edit a cell, **Ctrl+Z** (+ Undo button). *Expect:* reverts AND persists the revert; redo re-applies; an invalid inverse shows the error and leaves the cell unchanged.
-- **W-PLATFORM** — Open `/workbooks/system/{backlog_item,invoice,risk_assessment,epic,digital_product,customer_account,employee_profile,supplier}`. *Expect:* real records render; Grid/Board toggle where a groupable column exists.
-- **W-EDIT-BACKLOG** — Edit a Backlog cell (e.g. priority) on an item with null workType. *Expect:* persists (partial-update path, #1634).
-- **W-EDIT-SUPPLIER** — Suppliers grid: edit a safe field (name/contact/email/status). *Expect:* persists (validated raw-write tier). Confirm tax/bank/address are **not shown or editable**; confirm People grid shows **no comp/PII**.
-- **W-FILTER** — Quick **Filter…** box narrows rows across all columns (incl. reference labels) with an "N of M" count; **Filters** panel adds per-column filters AND-combined, with active-count badge + Clear.
-- **W-CSV** — **Export CSV** downloads the current filtered+sorted view; values match what's shown (reference labels, not ids).
-- **W-XLSX** — **Import .xlsx** creates a new table with inferred column types + typed rows; row/column caps reported if hit.
-- **W-CONDFMT** — **Format** panel: add a rule (column + operator + value + colour). *Expect:* matching rows tint; first matching rule wins; remove/Clear works.
-- **W-SUMMARY** — **Summary** panel: group by a column, summarize a numeric column → count + sum/avg/min/max per group (empty group labelled "(empty)"); **Chart** toggle renders a bar chart scaled to the largest bar.
-- **W-VIEWS** — Set filters/sort/format, **reload** → the view is restored per table; **Gallery** toggle renders rows as cards honoring filters/sort/conditional-format colour.
-- **W-CAL** *(PR #1810 acceptance)* — Add a date column to a custom table, set dates on rows; open `/workspace/calendar`, enable the **Workbooks** source filter. *Expect:* those rows appear as events titled `<Table>: <row label>` on their dates (datetime = timed, date = all-day) alongside existing finance/HR/compliance events.
+**Prerequisite**
+
+- **W-PREREQ** — Before any reference/lookup steps, confirm platform reference data exists. Query or navigate to confirm: Epics ≥ 1 row, Digital products ≥ 1, Customers (CustomerAccount) ≥ 1, People (EmployeeProfile) ≥ 1, Suppliers ≥ 1. Record the actual row counts. If a target entity type has 0 rows, create one through the portal UI before continuing. An empty picker for a genuinely 0-row target is correct behaviour — not a defect; the defect would be omitting a target that HAS rows. *Expect:* all five entity types have ≥ 1 real row before W-REF-1 begins.
+
+**Custom-Table Workbook** — build one workbook to exercise the full authoring surface
+
+- **W-CORE** — Create workbook → table → add a column of **each** type: text, number, date, datetime, checkbox, single-select, url, email. Add a row; edit each cell inline; sort by a header; reload. *Expect:* every type renders + edits inline; reload persists; sort reorders rows.
+- **W-REF-1** — Add a **Reference** column; open the target picker. *Expect:* picker lists **only** platform entities that actually have rows (Epics, Digital products, Customers, People, Suppliers confirmed in W-PREREQ); empty-row targets are absent.
+- **W-REF-2** — Open the reference cell, type a query. *Expect:* typeahead returns **real** live matches (not placeholders).
+- **W-REF-3** *(CRITICAL — PR #1817 acceptance)* — Select a record, then **reload**. *Expect:* the cell still shows the selected record's label (referenceId persisted + label re-hydrated). Earlier builds saved an empty referenceId — this is the regression guard.
+- **W-REF-4** — As a viewer lacking the target's view capability, repeat the reference search. *Expect:* no results returned, no data leak.
+- **W-LOOKUP** — Add a **Lookup** column over the reference column → pick a target field. *Expect:* shows that field's live value from the referenced record.
+- **W-FORMULA** — Add three formula columns: `=Price*Qty`, `=IF(Qty>3,"high","low")`, and a third that references one of the two earlier computed columns (chained formula). Then enter a deliberately bad formula (e.g. `=NOTAFUNCTION(`). *Expect:* computed results render correctly; chained formula works; bad formula shows `#ERROR:` and never crashes the grid.
+- **W-PROV** — Toggle **Show data sources**. *Expect:* hidden by default; when on, column headers label: Official (platform columns) / Live source (lookup) / Calculated (formula+lookup) / Your note (user-authored columns).
+- **W-UNDO** — Edit a cell value, then **Ctrl+Z** (and the Undo button). *Expect:* value reverts AND the revert persists on reload; redo re-applies the change; an invalid inverse shows the error and leaves the cell unchanged.
+
+**Platform-Backed Grids** — prove "any platform table becomes a grid"
+
+- **W-PLATFORM** — Open `/workbooks/system/{backlog_item,invoice,risk_assessment,epic,digital_product,customer_account,employee_profile,supplier}` in sequence. *Expect:* real records render for each; Grid/Board toggle appears where a groupable column exists.
+- **W-EDIT-BACKLOG** — On the Backlog Items grid, edit a cell (e.g. priority) on an item with null workType. *Expect:* edit persists (partial-update path, #1634).
+- **W-EDIT-SUPPLIER** — On the Suppliers grid, edit a safe field (name / contact email / status). *Expect:* edit persists (validated raw-write tier). **Confirm** tax/bank/address fields are **not shown or editable**. **Confirm** the People (EmployeeProfile) grid shows **no comp/PII** columns.
+
+**Data Ops** — Smartsheet/Supabase parity surface
+
+- **W-FILTER** — Quick **Filter…** box narrows rows across all columns including reference labels, with an "N of M" count. **Filters** panel adds AND-combined per-column filters with an active-count badge + Clear. *Expect:* both filter surfaces work together; N of M count is accurate.
+- **W-CSV** — **Export CSV** downloads the current filtered+sorted view. *Expect:* values match what's shown in the grid (reference LABELS, not raw ids).
+- **W-XLSX** — **Import .xlsx**: upload a spreadsheet file. *Expect:* creates a new table with inferred column types and typed rows; row/column cap hit is reported (not silently truncated) if the sheet exceeds limits.
+- **W-CONDFMT** — **Format** panel: add a conditional-format rule (column + operator + value + colour). *Expect:* matching rows tint with the chosen colour; first matching rule wins; removing the rule or clicking Clear restores default appearance.
+- **W-SUMMARY** — **Summary** panel: group by a column, summarize a numeric column. *Expect:* count + sum/avg/min/max per group; empty-value group labelled "(empty)"; **Chart** toggle renders a bar chart scaled to the largest bar.
+- **W-VIEWS** — Set filters, sort, and conditional format; reload. *Expect:* the view is restored per table (persisted view state). **Gallery** toggle renders rows as cards, honoring current filters/sort/conditional-format colour.
+
+**Calendar Integration**
+
+- **W-CAL** *(PR #1810 acceptance)* — Add a date column to a custom table; set dates on two or more rows. Open `/workspace/calendar`; enable the **Workbooks** source filter. *Expect:* those rows appear as events titled `<Table>: <row label>` on their dates (datetime columns → timed events; date columns → all-day events), alongside existing finance/HR/compliance events.
 
 ### Archetype-specific dimensions — evaluated on every archetype
 
@@ -261,7 +274,7 @@ Run 0 serves two goals: (a) validate the audit harness so the remaining 19 reset
 - [ ] **RC26** Load the following routes in sequence and confirm each returns 200 (no 500 or blank page): `/workspace`, `/storefront`, `/storefront/team`, `/storefront/items`, `/storefront/settings/operations`, `/customer`, `/finance`, `/finance/suppliers`, `/finance/bills`, `/finance/invoices`, `/finance/reports/profit-loss`, `/ops`, `/compliance`, `/workbooks`, `/workspace/calendar`.
 
 *Universal Grid & Workbooks + Calendar (Phase 2–4):*
-- [ ] **RC27** Run the full **Phase W** deep checklist (§2a) end-to-end: W-CORE, W-REF-1..4 (incl. the PR #1817 reference-persist acceptance at **W-REF-3**), W-LOOKUP, W-FORMULA, W-PROV, W-UNDO, W-PLATFORM, W-EDIT-BACKLOG, W-EDIT-SUPPLIER, W-FILTER, W-CSV, W-XLSX, W-CONDFMT, W-SUMMARY, W-VIEWS, and the calendar integration **W-CAL** (PR #1810). Log each as drove → observed → signed off / DEFECT. (Requires platform reference data — see Phase W's data-prerequisite note.)
+- [ ] **RC27** Run the full **Phase W** deep checklist (§2a) end-to-end in order: **W-PREREQ** (confirm ≥1 row per reference entity type; create any missing), then — Custom-Table Workbook: W-CORE, W-REF-1..4 (incl. the PR #1817 acceptance at **W-REF-3**), W-LOOKUP, W-FORMULA (incl. chained formula + deliberate bad formula), W-PROV, W-UNDO — Platform-Backed Grids: W-PLATFORM, W-EDIT-BACKLOG, W-EDIT-SUPPLIER — Data Ops: W-FILTER, W-CSV, W-XLSX, W-CONDFMT, W-SUMMARY, W-VIEWS — Calendar: **W-CAL** (PR #1810). Log each as drove → observed → signed off / DEFECT.
 
 **Finding threshold for RC items:** any RC item that fails is a platform-wide gap (not an archetype gap) — file it as a `critical` BI immediately using the GitHub Issues channel (Section 8) and do not proceed to Run 1 until it is resolved or explicitly deferred as a known limitation that won't affect the archetype-specific evaluation.
 
