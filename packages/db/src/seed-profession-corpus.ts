@@ -190,6 +190,170 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
       "control over financial reporting) and AS 1105 (audit evidence).",
     retrievedAt: "2026-06-13",
   },
+
+  // ── Security family (WSID wave 3) ──
+  "nist/csf-2": {
+    sourceType: "framework",
+    title: "NIST Cybersecurity Framework (CSF) 2.0",
+    url: "https://www.nist.gov/cyberframework",
+    license: "US-Gov-Public-Domain",
+    abstract:
+      "NIST CSF 2.0 organizes cybersecurity risk into six Functions: Govern, " +
+      "Identify, Protect, Detect, Respond, Recover.",
+    retrievedAt: "2026-06-13",
+  },
+  "wikipedia/nist-csf": {
+    sourceType: "reference",
+    title: "NIST Cybersecurity Framework (encyclopedia summary)",
+    url: "https://en.wikipedia.org/wiki/NIST_Cybersecurity_Framework",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "Secondary open summary of the NIST CSF Function definitions, used where " +
+      "the primary CSF 2.0 PDF was not text-extractable.",
+    retrievedAt: "2026-06-13",
+  },
+  "cis/controls": {
+    sourceType: "framework",
+    title: "CIS Critical Security Controls v8.1",
+    url: "https://www.cisecurity.org/controls",
+    license: "CIS-free-registration",
+    abstract:
+      "18 prioritized security controls and 153 safeguards, grouped into three " +
+      "Implementation Groups (IG1/IG2/IG3). Structure used as facts only.",
+    retrievedAt: "2026-06-13",
+  },
+  "nist/nvd-cve": {
+    sourceType: "reference",
+    title: "NIST National Vulnerability Database (NVD)",
+    url: "https://nvd.nist.gov/",
+    license: "US-Gov-Public-Domain",
+    abstract:
+      "US-government vulnerability repository hosting CVE records and CVSS " +
+      "severity scoring (v2/v3.x/v4.0).",
+    retrievedAt: "2026-06-13",
+  },
+  "cyclonedx/spec": {
+    sourceType: "spec",
+    title: "CycloneDX Specification Overview (ECMA-424)",
+    url: "https://cyclonedx.org/specification/overview/",
+    license: "ECMA-424-open",
+    abstract:
+      "Modular bill-of-materials standard (SBOM/SaaSBOM/HBOM) for supply-chain " +
+      "transparency; standardized as ECMA-424.",
+    retrievedAt: "2026-06-13",
+  },
+  "owasp/threat-modeling": {
+    sourceType: "web-article",
+    title: "OWASP Threat Modeling Cheat Sheet",
+    url: "https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "Four-question threat-modeling framework and the STRIDE category set; " +
+      "phases of model, identify, respond, validate.",
+    retrievedAt: "2026-06-13",
+  },
+  "owasp/secrets-management": {
+    sourceType: "web-article",
+    title: "OWASP Secrets Management Cheat Sheet",
+    url: "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "Eliminate hardcoded secrets; centralize, least-privilege, rotate, " +
+      "encrypt, audit, and detect secrets.",
+    retrievedAt: "2026-06-13",
+  },
+
+  // ── Legal & compliance family (WSID wave 3) ──
+  "gdpr/art-4": {
+    sourceType: "standard",
+    title: "GDPR Article 4 — Definitions",
+    url: "https://gdpr-info.eu/art-4-gdpr/",
+    license: "OJ-EU-open-reproduction",
+    abstract:
+      'Defines "personal data" and "processing" under the EU General Data ' +
+      "Protection Regulation.",
+    retrievedAt: "2026-06-13",
+  },
+  "gdpr/art-6": {
+    sourceType: "standard",
+    title: "GDPR Article 6 — Lawfulness of processing",
+    url: "https://gdpr-info.eu/art-6-gdpr/",
+    license: "OJ-EU-open-reproduction",
+    abstract:
+      "The six lawful bases for processing personal data, including consent " +
+      "and legitimate interests.",
+    retrievedAt: "2026-06-13",
+  },
+  "gdpr/art-7": {
+    sourceType: "standard",
+    title: "GDPR Article 7 — Conditions for consent",
+    url: "https://gdpr-info.eu/art-7-gdpr/",
+    license: "OJ-EU-open-reproduction",
+    abstract:
+      "Consent must be demonstrable, in clear and plain language, and as easy " +
+      "to withdraw as to give.",
+    retrievedAt: "2026-06-13",
+  },
+  "gdpr/chap-3": {
+    sourceType: "standard",
+    title: "GDPR Chapter 3 — Rights of the data subject",
+    url: "https://gdpr-info.eu/chapter-3/",
+    license: "OJ-EU-open-reproduction",
+    abstract:
+      "Data-subject rights: access, rectification, erasure, restriction, " +
+      "portability, objection, and automated-decision safeguards.",
+    retrievedAt: "2026-06-13",
+  },
+  "eu/ai-act": {
+    sourceType: "standard",
+    title: "EU AI Act — High-level summary",
+    url: "https://artificialintelligenceact.eu/high-level-summary/",
+    license: "open-explainer",
+    abstract:
+      "Summary of the EU AI Act's four risk tiers (unacceptable/high/limited/" +
+      "minimal) and high-risk provider obligations. Secondary explainer.",
+    retrievedAt: "2026-06-13",
+  },
+  "spdx/license-list": {
+    sourceType: "spec",
+    title: "SPDX License List",
+    url: "https://spdx.org/licenses/",
+    license: "CC-BY-3.0",
+    abstract:
+      "Standardized short identifiers (e.g. MIT, Apache-2.0, GPL-3.0-only) for " +
+      "open-source licenses and exceptions.",
+    retrievedAt: "2026-06-13",
+  },
+  "spdx/spec": {
+    sourceType: "spec",
+    title: "SPDX Specification v3.0.1",
+    url: "https://spdx.github.io/spdx-spec/v3.0.1/",
+    license: "CC-BY-3.0",
+    abstract:
+      "Machine-readable SBOM and license/copyright metadata model, including " +
+      "license expressions and attribution text.",
+    retrievedAt: "2026-06-13",
+  },
+  "ccpa/oag": {
+    sourceType: "standard",
+    title: "California Consumer Privacy Act (CCPA), as amended by CPRA",
+    url: "https://oag.ca.gov/privacy/ccpa",
+    license: "US-Gov-Public-Domain",
+    abstract:
+      "California consumer privacy rights: know, delete, correct, opt-out of " +
+      "sale/sharing, limit sensitive data, non-discrimination.",
+    retrievedAt: "2026-06-13",
+  },
+  "coppa/govinfo": {
+    sourceType: "standard",
+    title: "COPPA statute — 15 U.S.C. ch. 91",
+    url: "https://www.govinfo.gov/content/pkg/USCODE-2010-title15/html/USCODE-2010-title15-chap91.htm",
+    license: "US-Gov-Public-Domain",
+    abstract:
+      "US Children's Online Privacy Protection Act: verifiable parental " +
+      "consent for collecting data from children under 13; FTC-enforced.",
+    retrievedAt: "2026-06-13",
+  },
 };
 
 // ─── Source seeding ──────────────────────────────────────────────────────────

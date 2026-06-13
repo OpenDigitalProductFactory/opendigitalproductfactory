@@ -26,7 +26,7 @@ export default async function ItemDetailPage({
         <p style={{ color: "#374151", lineHeight: 1.75, marginTop: 12 }}>{item.description}</p>
       )}
       <div style={{ marginTop: 24 }}>
-        <CtaButton ctaType={item.ctaType} ctaLabel={item.ctaLabel} orgSlug={slug} itemId={item.itemId} />
+        <CtaButton ctaType={item.ctaType} ctaLabel={item.ctaLabel} orgSlug={slug} itemId={item.itemId} priceAmount={item.priceAmount} />
       </div>
     </div>
   );

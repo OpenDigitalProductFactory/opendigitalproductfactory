@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
             priceType: string;
             ctaType?: string;
             ctaLabel?: string;
+            priceAmount?: number | null;
           }>
         ).map((t, i) => ({
           itemId: `itm-${nanoid(8)}`,
@@ -89,6 +90,9 @@ export async function POST(req: NextRequest) {
           priceType: t.priceType,
           ctaType: t.ctaType ?? archetype.ctaType,
           ctaLabel: t.ctaLabel ?? null,
+          // Seed the template's price so purchase items are chargeable out of the
+          // box; null leaves the item price-less (CtaButton renders "Enquire").
+          priceAmount: t.priceAmount ?? null,
           sortOrder: i,
           isActive: true,
           priceCurrency: "GBP",
@@ -174,11 +178,33 @@ export async function POST(req: NextRequest) {
     archetypeId,
   });
 
-  // Seed default provider, availability, and booking config from template scheduling defaults
+  // Seed default provider, availability, and booking config from template
+  // scheduling defaults. This block keys on *item-level* ctaType when linking
+  // providers and seeding bookingConfig, so an archetype that has booking items
+  // but no explicit schedulingDefaults (a template config gap) must still get a
+  // working calendar instead of silently shipping an empty one — fall back to a
+  // 09:00–17:00 Mon–Fri provider. Every shipped archetype with a booking item
+  // carries explicit schedulingDefaults (guarded by archetypes.test.ts); this
+  // fallback is defence-in-depth so a future archetype can't regress to the
+  // empty-calendar bug (AUDIT-R3/R4).
   const template = ALL_ARCHETYPES.find((a: { archetypeId: string }) => a.archetypeId === archetypeId);
-  if (template?.schedulingDefaults) {
-    const defaults = template.schedulingDefaults;
-
+  const templateCtaType = template?.ctaType;
+  const templateHasBookingItems =
+    template?.itemTemplates.some(
+      (t: { ctaType?: string }) => (t.ctaType ?? templateCtaType) === "booking",
+    ) ?? false;
+  const FALLBACK_SCHEDULING = {
+    schedulingPattern: "slot" as const,
+    assignmentMode: "next-available" as const,
+    defaultOperatingHours: [1, 2, 3, 4, 5].map((day) => ({ day, start: "09:00", end: "17:00" })),
+    defaultBeforeBuffer: 0,
+    defaultAfterBuffer: 0,
+    minimumNoticeHours: 2,
+    maxAdvanceDays: 60,
+  };
+  const defaults =
+    template?.schedulingDefaults ?? (templateHasBookingItems ? FALLBACK_SCHEDULING : null);
+  if (template && defaults) {
     // 1. Create default ServiceProvider named after the org
     const provider = await prisma.serviceProvider.create({
       data: {
