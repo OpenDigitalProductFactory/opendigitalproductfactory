@@ -8,10 +8,22 @@
 
 import { prisma } from "@dpf/db";
 import { lazyCrypto, lazyFsPromises, lazyPath } from "../shared/lazy-node";
+import { probeImage } from "./image-probe";
 
 export const MEDIA_BLOB_PREFIX = "media/sha256";
+export const DEFAULT_MEDIA_BLOB_MAX_BYTES = 15 * 1024 * 1024;
+export const DEFAULT_MEDIA_BLOB_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+]);
 
 export type MediaBlobContent = Buffer | Uint8Array;
+declare const validatedMediaBlobContentBrand: unique symbol;
+export type ValidatedMediaBlobContent = Buffer & {
+  readonly [validatedMediaBlobContentBrand]: true;
+};
 
 export type MediaBlobWriteResult = {
   sha256: string;
@@ -23,6 +35,28 @@ function toBuffer(content: MediaBlobContent): Buffer {
   return Buffer.isBuffer(content) ? content : Buffer.from(content);
 }
 
+export function prepareMediaBlobContentForStorage(
+  content: MediaBlobContent,
+  options: {
+    allowedMimeTypes?: ReadonlySet<string>;
+    maxBytes?: number;
+  } = {},
+): ValidatedMediaBlobContent {
+  const buffer = toBuffer(content);
+  const maxBytes = options.maxBytes ?? DEFAULT_MEDIA_BLOB_MAX_BYTES;
+  if (buffer.byteLength > maxBytes) {
+    throw new Error(`Media blob exceeds ${maxBytes} byte limit.`);
+  }
+
+  const allowedMimeTypes = options.allowedMimeTypes ?? DEFAULT_MEDIA_BLOB_MIME_TYPES;
+  const mimeType = probeImage(buffer).mimeType;
+  if (!mimeType || !allowedMimeTypes.has(mimeType)) {
+    throw new Error("Unsupported or unrecognised media blob type.");
+  }
+
+  return buffer as ValidatedMediaBlobContent;
+}
+
 export function hashMediaBlobContent(content: MediaBlobContent): string {
   return lazyCrypto().createHash("sha256").update(toBuffer(content)).digest("hex");
 }
@@ -32,6 +66,23 @@ export function buildMediaBlobStorageKey(sha256: string): string {
     throw new Error("Media blob storage keys require a lowercase SHA-256 hash.");
   }
   return `${MEDIA_BLOB_PREFIX}/${sha256.slice(0, 2)}/${sha256.slice(2, 4)}/${sha256}`;
+}
+
+export function resolveMediaStoragePath(root: string, storageKey: string): string {
+  if (!storageKey.startsWith(`${MEDIA_BLOB_PREFIX}/`)) {
+    throw new Error("Media storage key must use the media blob prefix.");
+  }
+
+  const path = lazyPath();
+  const resolvedRoot = path.resolve(root);
+  const resolved = path.resolve(resolvedRoot, storageKey);
+  const relative = path.relative(resolvedRoot, resolved);
+
+  if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error("Media storage key escapes the storage root.");
+  }
+
+  return resolved;
 }
 
 export async function getMediaStorageRoot(): Promise<string> {
@@ -53,21 +104,21 @@ export async function getMediaStorageRoot(): Promise<string> {
  */
 export interface MediaStorageDriver {
   readonly name: string;
-  put(content: MediaBlobContent): Promise<MediaBlobWriteResult>;
+  put(content: ValidatedMediaBlobContent): Promise<MediaBlobWriteResult>;
   get(storageKey: string): Promise<Buffer>;
 }
 
 class FilesystemMediaDriver implements MediaStorageDriver {
   readonly name = "filesystem";
 
-  async put(content: MediaBlobContent): Promise<MediaBlobWriteResult> {
-    const buffer = toBuffer(content);
+  async put(content: ValidatedMediaBlobContent): Promise<MediaBlobWriteResult> {
+    const buffer = content;
     const sha256 = hashMediaBlobContent(buffer);
     const storageKey = buildMediaBlobStorageKey(sha256);
     const root = await getMediaStorageRoot();
     const fs = lazyFsPromises();
     const path = lazyPath();
-    const absolutePath = path.join(root, storageKey);
+    const absolutePath = resolveMediaStoragePath(root, storageKey);
     const directory = path.dirname(absolutePath);
     const result = { sha256, storageKey, sizeBytes: buffer.byteLength };
 
@@ -87,6 +138,9 @@ class FilesystemMediaDriver implements MediaStorageDriver {
     );
 
     try {
+      // Bytes reach this sink only after prepareMediaBlobContentForStorage has
+      // probed type and size; the path is content-addressed and root-confined.
+      // codeql[js/http-to-file-access]
       await fs.writeFile(temporaryPath, buffer, { flag: "wx" });
       await fs.rename(temporaryPath, absolutePath);
     } catch (error) {
@@ -104,14 +158,7 @@ class FilesystemMediaDriver implements MediaStorageDriver {
 
   async get(storageKey: string): Promise<Buffer> {
     const root = await getMediaStorageRoot();
-    const path = lazyPath();
-    const absolutePath = path.join(root, storageKey);
-    // Guard against path traversal: the resolved path must stay under the root.
-    const resolved = path.resolve(absolutePath);
-    if (!resolved.startsWith(path.resolve(root))) {
-      throw new Error("Media storage key escapes the storage root.");
-    }
-    return lazyFsPromises().readFile(resolved);
+    return lazyFsPromises().readFile(resolveMediaStoragePath(root, storageKey));
   }
 }
 
@@ -124,6 +171,6 @@ export function getMediaStorageDriver(driver = "filesystem"): MediaStorageDriver
 }
 
 /** Write bytes to the default (filesystem) driver. */
-export function writeMediaBlob(content: MediaBlobContent): Promise<MediaBlobWriteResult> {
+export function writeMediaBlob(content: ValidatedMediaBlobContent): Promise<MediaBlobWriteResult> {
   return FILESYSTEM_DRIVER.put(content);
 }

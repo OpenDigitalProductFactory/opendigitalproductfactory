@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { probeImage } from "./image-probe";
-import { buildMediaBlobStorageKey, hashMediaBlobContent } from "./media-storage";
+import {
+  buildMediaBlobStorageKey,
+  hashMediaBlobContent,
+  prepareMediaBlobContentForStorage,
+  resolveMediaStoragePath,
+} from "./media-storage";
 import { normalizeRenditionWidth, RENDITION_WIDTHS } from "./renditions";
 import { decodeDataUri } from "./logo-ingest";
 
@@ -72,6 +77,32 @@ describe("media storage keys", () => {
 
   it("identical bytes hash identically (dedupe guarantee)", () => {
     expect(hashMediaBlobContent(Buffer.from("abc"))).toBe(hashMediaBlobContent(Buffer.from("abc")));
+  });
+
+  it("brands probed image bytes before filesystem storage", () => {
+    const content = pngHeader(32, 32);
+    const prepared = prepareMediaBlobContentForStorage(content);
+
+    expect(Buffer.isBuffer(prepared)).toBe(true);
+    expect(hashMediaBlobContent(prepared)).toBe(hashMediaBlobContent(content));
+  });
+
+  it("rejects arbitrary bytes before filesystem storage", () => {
+    expect(() => prepareMediaBlobContentForStorage(Buffer.from("not an image"))).toThrow(
+      /unsupported/i,
+    );
+  });
+
+  it("rejects oversized media bytes before filesystem storage", () => {
+    expect(() =>
+      prepareMediaBlobContentForStorage(pngHeader(32, 32), { maxBytes: 8 }),
+    ).toThrow(/exceeds/i);
+  });
+
+  it("rejects storage keys that escape into a sibling root prefix", () => {
+    expect(() =>
+      resolveMediaStoragePath("/tmp/uploads", "media/sha256/../../../../uploads2/blob"),
+    ).toThrow(/escapes/i);
   });
 });
 
