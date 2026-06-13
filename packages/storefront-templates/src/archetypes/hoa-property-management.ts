@@ -1,4 +1,19 @@
-import type { ArchetypeDefinition } from "../types";
+import type { ArchetypeDefinition, SchedulingDefaults } from "../types";
+
+// Amenity / common-area reservations (clubhouse, pool, party room) are bookable
+// across the week into long daytime-to-evening windows. The archetype's
+// top-level ctaType is "inquiry", but the reservation item is ctaType:"booking"
+// and needs schedulingDefaults or its calendar ships empty (same root cause as
+// AUDIT-R3/R4).
+const AMENITY_SCHEDULING: SchedulingDefaults = {
+  schedulingPattern: "slot",
+  assignmentMode: "customer-choice",
+  defaultOperatingHours: [0, 1, 2, 3, 4, 5, 6].map((day) => ({ day, start: "08:00", end: "22:00" })),
+  defaultBeforeBuffer: 0,
+  defaultAfterBuffer: 30,
+  minimumNoticeHours: 24,
+  maxAdvanceDays: 90,
+};
 
 const CONTACT_FIELDS = [
   { name: "name", label: "Full name", type: "text" as const, required: true },
@@ -33,6 +48,7 @@ export const hoaPropertyManagementArchetypes: ArchetypeDefinition[] = [
       ...CONTACT_FIELDS,
       { name: "requestType", label: "Request type", type: "select" as const, required: true, options: ["Maintenance", "Architectural Review", "Complaint", "General Inquiry", "Amenity Reservation"] },
     ],
+    schedulingDefaults: AMENITY_SCHEDULING,
   },
   {
     archetypeId: "condo-association",
@@ -58,6 +74,7 @@ export const hoaPropertyManagementArchetypes: ArchetypeDefinition[] = [
       ...CONTACT_FIELDS,
       { name: "requestType", label: "Request type", type: "select" as const, required: true, options: ["Maintenance", "Noise Complaint", "Parking", "Move-in / Move-out", "General Inquiry"] },
     ],
+    schedulingDefaults: AMENITY_SCHEDULING,
   },
   {
     archetypeId: "property-management-company",

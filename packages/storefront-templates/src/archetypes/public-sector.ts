@@ -1,4 +1,18 @@
-import type { ArchetypeDefinition } from "../types";
+import type { ArchetypeDefinition, SchedulingDefaults } from "../types";
+
+// Park pavilion / community-room reservations are booked into daytime slots,
+// every day, well in advance. The archetype's top-level ctaType is "inquiry",
+// but the reservation item is ctaType:"booking" and needs schedulingDefaults or
+// its calendar ships empty (same root cause as AUDIT-R3/R4).
+const CIVIC_FACILITY_SCHEDULING: SchedulingDefaults = {
+  schedulingPattern: "slot",
+  assignmentMode: "customer-choice",
+  defaultOperatingHours: [0, 1, 2, 3, 4, 5, 6].map((day) => ({ day, start: "08:00", end: "20:00" })),
+  defaultBeforeBuffer: 0,
+  defaultAfterBuffer: 30,
+  minimumNoticeHours: 48,
+  maxAdvanceDays: 180,
+};
 
 const RESIDENT_CONTACT_FIELDS = [
   { name: "name", label: "Full name", type: "text" as const, required: true },
@@ -34,6 +48,7 @@ export const publicSectorArchetypes: ArchetypeDefinition[] = [
       { name: "department", label: "Department", type: "select" as const, required: true, options: ["Clerk's Office", "Public Works", "Parks & Recreation", "Planning & Zoning", "Code Enforcement", "Finance / Utility Billing", "Other"] },
       { name: "notes", label: "How can we help?", type: "textarea" as const, required: true },
     ],
+    schedulingDefaults: CIVIC_FACILITY_SCHEDULING,
     activationProfile: {
       profileType: "standard",
       modules: ["service-operations", "projects"],
