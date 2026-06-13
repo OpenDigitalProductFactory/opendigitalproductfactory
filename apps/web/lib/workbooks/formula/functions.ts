@@ -132,3 +132,63 @@ export const FORMULA_FUNCTIONS: Record<string, FormulaFn> = {
 export function isFormulaFunction(name: string): boolean {
   return Object.prototype.hasOwnProperty.call(FORMULA_FUNCTIONS, name.toUpperCase());
 }
+
+// ── cross-row aggregation (reporting phase) ──────────────────────────────────
+//
+// COUNTIF/SUMIF/AVERAGEIF operate over a whole column (all rows), not the row's
+// own scalar, so they are handled specially by the evaluator (which has the
+// column arrays) rather than living in FORMULA_FUNCTIONS. The criterion-matching
+// and safe-numeric helpers are factored here so they are unit-testable on their own.
+
+/** Function names whose first (and optional third) argument is a column range, not a scalar. */
+export const CROSS_ROW_FUNCTIONS = new Set(["COUNTIF", "SUMIF", "AVERAGEIF"]);
+
+/** Coerce to a number, treating non-numeric / empty as 0 (Excel SUMIF ignores text). */
+export function numOrZero(v: FormulaValue): number {
+  if (v === null || v === "" || v === undefined) return 0;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isNaN(n) ? 0 : n;
+}
+
+/** Whether two values are equal, numerically when both parse as numbers, else case-insensitive text. */
+function criterionEquals(value: FormulaValue, target: string): boolean {
+  if (value === null || value === undefined || value === "") return target === "";
+  const a = typeof value === "boolean" ? toStr(value) : String(value);
+  const an = Number(a);
+  const bn = Number(target);
+  if (a !== "" && target !== "" && !Number.isNaN(an) && !Number.isNaN(bn)) return an === bn;
+  return a.toLowerCase() === target.toLowerCase();
+}
+
+/**
+ * Excel-style criterion match: a bare value compares by equality; a string
+ * prefixed with a comparison operator (`>`, `>=`, `<`, `<=`, `<>`, `=`) compares
+ * accordingly (numeric operators require both sides to be numeric).
+ */
+export function matchCriterion(value: FormulaValue, criterion: FormulaValue): boolean {
+  if (typeof criterion === "string") {
+    const m = criterion.match(/^(<=|>=|<>|=|<|>)\s*(.*)$/);
+    if (m) {
+      const op = m[1];
+      const rhs = m[2].trim();
+      if (op === "=") return criterionEquals(value, rhs);
+      if (op === "<>") return !criterionEquals(value, rhs);
+      const lhsNum = typeof value === "number" ? value : Number(value);
+      const rhsNum = Number(rhs);
+      const numeric =
+        value !== null && value !== "" && !Number.isNaN(lhsNum) && !Number.isNaN(rhsNum);
+      if (!numeric) return false;
+      switch (op) {
+        case ">":
+          return lhsNum > rhsNum;
+        case ">=":
+          return lhsNum >= rhsNum;
+        case "<":
+          return lhsNum < rhsNum;
+        case "<=":
+          return lhsNum <= rhsNum;
+      }
+    }
+  }
+  return criterionEquals(value, typeof criterion === "boolean" ? toStr(criterion) : String(criterion ?? ""));
+}

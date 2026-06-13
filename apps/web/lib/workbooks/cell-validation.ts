@@ -11,6 +11,7 @@ import {
   type FieldType,
   type FieldConfig,
   type ReferenceValue,
+  type AttachmentValue,
   TEXT_MAX_LENGTH,
 } from "./types";
 
@@ -67,6 +68,15 @@ function isReferenceValue(value: unknown): value is ReferenceValue {
     value !== null &&
     "referenceId" in value &&
     typeof (value as ReferenceValue).referenceId === "string"
+  );
+}
+
+function isAttachmentValue(value: unknown): value is AttachmentValue {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "url" in value &&
+    typeof (value as AttachmentValue).url === "string"
   );
 }
 
@@ -127,6 +137,31 @@ export function validateCell(
         return { ok: false, error: `${column.name} exceeds ${TEXT_MAX_LENGTH} characters` };
       }
       storage.textValue = value;
+      return { ok: true, storage };
+    }
+
+    case "attachment": {
+      // Stores an uploaded file's retrieval URL plus its display name/size,
+      // serialized as JSON in textValue. The bytes live in content-addressed
+      // media storage (/api/v1/upload), not in the cell. A bare URL string is
+      // accepted too (treated as {url}) for resilience / external links.
+      const att = isAttachmentValue(value)
+        ? value
+        : typeof value === "string"
+          ? { url: value }
+          : null;
+      if (!att || typeof att.url !== "string" || att.url.length === 0) {
+        return { ok: false, error: `Expected an uploaded file for ${column.name}` };
+      }
+      const serialized = JSON.stringify({
+        url: att.url,
+        ...(att.name ? { name: att.name } : {}),
+        ...(typeof att.size === "number" ? { size: att.size } : {}),
+      });
+      if (serialized.length > TEXT_MAX_LENGTH) {
+        return { ok: false, error: `${column.name} exceeds ${TEXT_MAX_LENGTH} characters` };
+      }
+      storage.textValue = serialized;
       return { ok: true, storage };
     }
 
@@ -215,7 +250,8 @@ export function validateCell(
     }
 
     case "formula":
-    case "lookup": {
+    case "lookup":
+    case "rollup": {
       // Computed columns are derived on read and never user-written.
       return { ok: false, error: `${column.name} is a computed column and cannot be set` };
     }
@@ -240,6 +276,16 @@ export function storageToCellValue(
     case "email":
     case "image":
       return cell.textValue ?? null;
+    case "attachment": {
+      if (!cell.textValue) return null;
+      try {
+        const parsed = JSON.parse(cell.textValue) as AttachmentValue;
+        return parsed && typeof parsed.url === "string" ? parsed : null;
+      } catch {
+        // legacy/plain url stored as text
+        return { url: cell.textValue };
+      }
+    }
     case "number":
       return cell.numberValue ?? null;
     case "date":
@@ -260,6 +306,7 @@ export function storageToCellValue(
         : null;
     case "formula":
     case "lookup":
+    case "rollup":
       // Computed on read — no stored value.
       return null;
     default:

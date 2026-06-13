@@ -55,6 +55,20 @@ const MARKETING_SKILL_RULES: Record<string, Record<string, unknown>> = {
       reframe: "Focus on impact storytelling, donor stewardship, volunteer appreciation, and fundraising event promotion. Tone is mission-focused and gratitude-first.",
     },
   },
+  "real-estate-construction": {
+    "seo-content-optimizer": {
+      label: "Community & Home Search Visibility",
+      reframe: "Focus on community name visibility, suburb-level search terms (new homes near [suburb], custom builders in [region]), and floor-plan content that ranks for home-search queries. Include structured data for property listings where applicable.",
+    },
+    "competitive-analysis": {
+      label: "Market & Community Positioning",
+      reframe: "Focus on community differentiators, build quality, included features versus the market, and delivery track record. Avoid unverifiable price-per-sqft claims; any public price comparisons must reflect current listed prices.",
+    },
+    "email-campaign-builder": {
+      label: "Buyer Journey Communication Builder",
+      reframe: "Focus on community launch announcements, construction milestone updates for under-contract buyers, design centre appointment reminders, and post-handover warranty follow-ups. Tone is professional, milestone-driven, and celebratory at key moments (slab down, frame up, handover).",
+    },
+  },
   "banking-financial-services": {
     "competitive-analysis": {
       label: "Local Institution Positioning",

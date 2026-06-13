@@ -331,6 +331,39 @@ const CATEGORY_PLAYBOOKS: Record<string, MarketingPlaybook> = {
     agentSkills: ["Holiday boarding campaign", "Puppy programme launch", "Rebooking reminders", "Seasonal grooming promotion"],
   },
 
+  "real-estate-construction": {
+    primaryGoal: "Generate qualified buyer enquiries and display-home appointments that convert to purchase agreements",
+    stakeholders: "Home buyers (first-time, upsizing, downsizing, investing), real estate agents, mortgage brokers, subcontractors",
+    campaignTypes: [
+      "Community and stage release announcements",
+      "Display home open-weekend promotions",
+      "Design centre event invitations (colour palette reveals, upgrade showcases)",
+      "First-home buyer education content (the build journey explained)",
+      "Construction milestone updates for under-contract buyers",
+      "Post-handover warranty follow-up sequences (30 / 60 / 90 days)",
+      "Before-and-after project showcases for custom builds",
+      "Referral programmes for settled buyers",
+      "Build timeline and progress updates for custom clients",
+    ],
+    contentTone: "Aspirational, milestone-driven, trustworthy — homes are the largest purchase buyers will make; tone must project permanence and quality",
+    keyMetrics: [
+      "Display home appointments booked",
+      "Enquiry-to-appointment conversion rate",
+      "Purchase agreements signed",
+      "Days from first enquiry to contract",
+      "Buyer referral rate",
+      "Warranty call rate at 90 days post-handover",
+    ],
+    ctaLanguage: [
+      "Schedule a tour", "Book a display home visit", "Enquire now",
+      "View floor plans", "Register your interest", "Download the community guide",
+    ],
+    agentSkills: [
+      "Community release announcement", "Display home open-day promotion",
+      "Buyer journey explainer", "Construction milestone update template",
+    ],
+  },
+
   "retail-goods": {
     primaryGoal: "Increase order frequency and average order value",
     stakeholders: "Customers, wholesale/trade buyers, event organisers",
