@@ -1,0 +1,130 @@
+import { describe, expect, it } from "vitest";
+import { ALL_ARCHETYPES } from "./archetypes/index";
+import {
+  deriveOperationalValueStream,
+  type OperationalValueStream,
+} from "./operational-value-stream";
+
+function ovsmFor(archetypeId: string): OperationalValueStream {
+  const archetype = ALL_ARCHETYPES.find((a) => a.archetypeId === archetypeId);
+  if (!archetype) throw new Error(`test archetype not found: ${archetypeId}`);
+  return deriveOperationalValueStream(archetype);
+}
+
+describe("deriveOperationalValueStream — invariants across all archetypes", () => {
+  it("produces a well-formed OVSM for every seeded archetype", () => {
+    expect(ALL_ARCHETYPES.length).toBeGreaterThanOrEqual(56);
+    for (const archetype of ALL_ARCHETYPES) {
+      const ovs = deriveOperationalValueStream(archetype);
+      // The six primary stages + two cross-cuts are always present.
+      const keys = ovs.stages.map((s) => s.key);
+      for (const required of [
+        "attract",
+        "capture",
+        "qualify",
+        "deliver",
+        "settle",
+        "retain",
+        "trust-compliance",
+        "operate-improve",
+      ]) {
+        expect(keys).toContain(required);
+      }
+      // Stages are ordered.
+      const orders = ovs.stages.map((s) => s.order);
+      expect([...orders]).toEqual([...orders].sort((a, b) => a - b));
+      // Core derived facts are always present.
+      expect(ovs.loadBearingStageKeys.length).toBeGreaterThan(0);
+      expect(ovs.capacityUnit).toBeTruthy();
+      expect(ovs.demandSignature).toBeTruthy();
+      expect(ovs.it4itStageBinding.length).toBeGreaterThan(0);
+      // Exactly the load-bearing stages are flagged.
+      const flagged = ovs.stages.filter((s) => s.loadBearing).map((s) => s.key).sort();
+      expect(flagged).toEqual([...ovs.loadBearingStageKeys].sort());
+      // Trust gates live on the trust-compliance stage.
+      const trustStage = ovs.stages.find((s) => s.key === "trust-compliance");
+      expect(trustStage?.trustGateKeys).toEqual(ovs.trustGates);
+    }
+  });
+
+  it("adds the return-inspect stage only for reservation-and-return archetypes", () => {
+    const rentalIds = ["equipment-rental", "self-storage", "agricultural-cooperative"];
+    for (const id of rentalIds) {
+      expect(ovsmFor(id).stages.map((s) => s.key)).toContain("return-inspect");
+    }
+    // Non-rental archetypes never grow the stage.
+    for (const archetype of ALL_ARCHETYPES) {
+      if (rentalIds.includes(archetype.archetypeId)) continue;
+      const ovs = deriveOperationalValueStream(archetype);
+      expect(ovs.stages.map((s) => s.key)).not.toContain("return-inspect");
+    }
+  });
+});
+
+describe("deriveOperationalValueStream — representative archetypes", () => {
+  it("hair-salon: appointment-checkout, load-bearing qualify, slot-hours", () => {
+    const ovs = ovsmFor("hair-salon");
+    expect(ovs.loadBearingStageKeys).toContain("qualify");
+    expect(ovs.capacityUnit).toBe("slot-hours");
+  });
+
+  it("veterinary-clinic: encounter-based, load-bearing deliver, clinical trust gate", () => {
+    const ovs = ovsmFor("veterinary-clinic");
+    expect(ovs.loadBearingStageKeys).toContain("deliver");
+    expect(ovs.trustGates).toContain("clinical-adjacent-no-advice");
+  });
+
+  it("bakery: point-of-sale, load-bearing capture, perishable/durable stock", () => {
+    const ovs = ovsmFor("bakery");
+    expect(ovs.loadBearingStageKeys).toContain("capture");
+    expect(["perishable-stock", "durable-stock"]).toContain(ovs.capacityUnit);
+  });
+
+  it("gym: subscription, load-bearing retain, physical hard cap", () => {
+    const ovs = ovsmFor("gym");
+    expect(ovs.loadBearingStageKeys).toContain("retain");
+    expect(ovs.capacityUnit).toBe("physical-hard-cap");
+  });
+
+  it("it-managed-services: recurring-agreement, load-bearing deliver, strict estate gate", () => {
+    const ovs = ovsmFor("it-managed-services");
+    expect(ovs.loadBearingStageKeys).toContain("deliver");
+    expect(ovs.trustGates).toContain("strict-estate-separation");
+  });
+
+  it("community-bank: account-based-fees, trust gate precedes qualify, KYC signal", () => {
+    const ovs = ovsmFor("community-bank");
+    expect(ovs.loadBearingStageKeys).toContain("trust-compliance");
+    expect(ovs.trustGates).toContain("kyc-and-disclosure");
+  });
+
+  it("small-town-municipality: statutory, universal-service obligation", () => {
+    const ovs = ovsmFor("small-town-municipality");
+    expect(ovs.trustGates).toContain("universal-service-obligation");
+  });
+
+  it("charity: donation, load-bearing capture, donation receipt (no invoice)", () => {
+    const ovs = ovsmFor("charity");
+    expect(ovs.loadBearingStageKeys).toContain("capture");
+    const settle = ovs.stages.find((s) => s.key === "settle");
+    expect(settle?.metricBindings).toContain("donation-receipt");
+    expect(settle?.metricBindings).not.toContain("invoice");
+  });
+
+  it("equipment-rental: reusable pooled asset, synchronized contention, return-inspect", () => {
+    const ovs = ovsmFor("equipment-rental");
+    expect(ovs.capacityUnit).toBe("reusable-pooled-asset");
+    expect(ovs.demandSignature).toBe("synchronized-contention");
+    expect(ovs.stages.map((s) => s.key)).toContain("return-inspect");
+  });
+
+  it("self-storage: reusable pooled asset", () => {
+    expect(ovsmFor("self-storage").capacityUnit).toBe("reusable-pooled-asset");
+  });
+
+  it("agricultural-cooperative: member-owned equitable allocation + return-inspect", () => {
+    const ovs = ovsmFor("agricultural-cooperative");
+    expect(ovs.trustGates).toContain("member-equitable-allocation");
+    expect(ovs.stages.map((s) => s.key)).toContain("return-inspect");
+  });
+});
