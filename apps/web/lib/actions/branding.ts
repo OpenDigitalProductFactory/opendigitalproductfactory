@@ -276,13 +276,35 @@ export async function importBrandFromUrl(url: string): Promise<BrandImportResult
 
 export async function saveSimpleBrand(formData: FormData): Promise<{ corrections: Correction[] }> {
   const companyName = readString(formData.get("companyName")) || "Open Digital Product Factory";
-  const logoUrl = readString(formData.get("logoUrl")) || null;
+  let logoUrl = readString(formData.get("logoUrl")) || null;
   const logoUrlLight = readString(formData.get("logoUrlLight")) || null;
   const accent = readString(formData.get("accent")) || "#7c8cf8";
   const fontFamily = readString(formData.get("fontFamily")) || "Inter, system-ui, sans-serif";
 
   const rawTokens = deriveThemeTokens(accent, { fontFamily });
   const { corrected, corrections } = validateAndCorrectDualTokens(rawTokens);
+
+  // Harmonised logo path: if the logo is an external link or a pasted data: URI
+  // (i.e. not already one of our served assets), pull it into the media store so
+  // Organization.logoUrl becomes a durable, self-hosted /api/media URL — instead
+  // of a link to someone else's server that can vanish. Best-effort: on any
+  // failure we keep the original string. SVG is rasterised on the user's behalf.
+  if (logoUrl && !logoUrl.startsWith("/api/media/")) {
+    try {
+      const org = await prisma.organization.findFirst({ select: { id: true } });
+      if (org) {
+        const { ingestOrganizationLogo, mediaAssetUrl } = await import("@/lib/media");
+        const assetId = await ingestOrganizationLogo({
+          organizationId: org.id,
+          ref: { url: logoUrl },
+          name: companyName,
+        });
+        if (assetId) logoUrl = mediaAssetUrl(assetId);
+      }
+    } catch {
+      // Keep the original logoUrl string.
+    }
+  }
 
   await Promise.all([
     prisma.brandingConfig.upsert({

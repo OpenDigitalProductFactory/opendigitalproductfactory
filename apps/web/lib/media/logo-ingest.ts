@@ -8,6 +8,7 @@
 // Organization.logoUrl to the served /api/media URL via syncPrimaryImage.
 
 import { attachMedia, createMediaAsset } from "./attachments";
+import { normalizeLogoForStore } from "./normalize-image";
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024; // logos are small; cap fetches
 
@@ -45,10 +46,8 @@ async function fetchUrl(url: string, declaredMime?: string | null): Promise<{ co
  * usable to ingest (so callers can stay non-fatal). Never throws for an
  * unreadable/oversized/non-image source.
  *
- * Note: createMediaAsset accepts only raster images (png/jpeg/gif/webp), so an
- * SVG logo returns null here and the design-system copy is left as-is — serving
- * unsanitised SVG same-origin is an XSS risk, so safe SVG-logo ingestion is a
- * deliberate follow-up rather than something this path silently enables.
+ * Format-agnostic: SVG/vector logos are rasterised to PNG on the operator's
+ * behalf (normalizeLogoForStore), so they never have to know or convert formats.
  */
 export async function ingestOrganizationLogo(input: {
   organizationId: string;
@@ -69,10 +68,47 @@ export async function ingestOrganizationLogo(input: {
       : null;
   if (!decoded) return null;
 
-  const created = await createMediaAsset({
+  return storeLogoBytes({
     organizationId: input.organizationId,
     content: decoded.content,
-    declaredMimeType: input.ref?.mimeType ?? decoded.mimeType,
+    mimeType: input.ref?.mimeType ?? decoded.mimeType,
+    name: input.name,
+    createdById: input.createdById,
+  });
+}
+
+/**
+ * Ingest a directly-uploaded logo file (wizard upload). Same normalize → store →
+ * attach path as extraction, so every logo source converges on one served asset.
+ */
+export async function ingestLogoUpload(input: {
+  organizationId: string;
+  content: Buffer;
+  mimeType?: string | null;
+  name?: string | null;
+  createdById?: string | null;
+}): Promise<string | null> {
+  if (input.content.byteLength === 0 || input.content.byteLength > MAX_LOGO_BYTES) {
+    return null;
+  }
+  return storeLogoBytes(input);
+}
+
+/** Shared tail: normalise (rasterise SVG) → MediaAsset → attach role="logo". */
+async function storeLogoBytes(input: {
+  organizationId: string;
+  content: Buffer;
+  mimeType?: string | null;
+  name?: string | null;
+  createdById?: string | null;
+}): Promise<string | null> {
+  const normalized = await normalizeLogoForStore(input.content, input.mimeType);
+  if (!normalized) return null;
+
+  const created = await createMediaAsset({
+    organizationId: input.organizationId,
+    content: normalized.content,
+    declaredMimeType: normalized.mimeType || input.mimeType,
     originalName: `${input.name?.trim() || "brand"}-logo`,
     altText: input.name ? `${input.name} logo` : "Organisation logo",
     createdById: input.createdById ?? null,
