@@ -44,8 +44,13 @@ function formatValue(col: ColumnDefinition | undefined, value: CellValue): strin
     case "datetime":
       return typeof value === "string" ? new Date(value).toLocaleString() : String(value);
     case "reference":
-      return typeof value === "object" && value && !Array.isArray(value)
+      return typeof value === "object" && value && !Array.isArray(value) && "referenceId" in value
         ? value.label ?? value.referenceId
+        : String(value);
+    case "image":
+    case "attachment":
+      return typeof value === "object" && value && !Array.isArray(value) && "url" in value
+        ? value.name ?? value.url
         : String(value);
     default:
       return String(value);

@@ -44,6 +44,8 @@ import {
   renderEmailCell,
   renderImageCell,
   ImageEditor,
+  renderAttachmentCell,
+  AttachmentEditor,
   renderDateCell,
   renderReferenceCell,
   renderComputedCell,
@@ -151,6 +153,12 @@ function buildColumn(
         renderCell: renderImageCell,
         renderEditCell: editable ? ImageEditor : undefined,
       };
+    case "attachment":
+      return {
+        ...base,
+        renderCell: renderAttachmentCell,
+        renderEditCell: editable ? AttachmentEditor : undefined,
+      };
     case "number":
       return { ...base, renderEditCell: editable ? NumberEditor : undefined };
     case "date":
@@ -203,7 +211,11 @@ function compareValues(a: CellValue, b: CellValue): number {
   const norm = (v: CellValue): string | number => {
     if (v === null || v === undefined) return "";
     if (Array.isArray(v)) return v.join(",");
-    if (typeof v === "object") return v.referenceId ?? "";
+    if (typeof v === "object") {
+      if ("referenceId" in v) return v.referenceId ?? "";
+      if ("url" in v) return v.name ?? v.url;
+      return "";
+    }
     if (typeof v === "boolean") return v ? 1 : 0;
     return v;
   };

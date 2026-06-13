@@ -6,7 +6,7 @@
 
 import type { ReactNode } from "react";
 import type { RenderEditCellProps, RenderCellProps } from "react-data-grid";
-import type { CellValue, SelectOption, ReferenceValue } from "@/lib/workbooks/types";
+import type { CellValue, SelectOption, ReferenceValue, AttachmentValue } from "@/lib/workbooks/types";
 import { ReferenceTypeahead } from "@/components/ui/ReferenceTypeahead";
 import { searchReferencesAction } from "@/lib/actions/workbooks";
 
@@ -15,6 +15,21 @@ export type GridRowData = { rowId: string } & Record<string, CellValue>;
 
 function asString(v: CellValue): string {
   return typeof v === "string" ? v : "";
+}
+
+function asAttachment(v: CellValue): AttachmentValue | null {
+  return v && typeof v === "object" && "url" in v && typeof v.url === "string"
+    ? (v as AttachmentValue)
+    : null;
+}
+
+/** Human-readable byte size, e.g. 2.4 MB / 812 KB / 96 B. */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
+  const mb = kb / 1024;
+  return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
 }
 
 // ---------------------------------------------------------------------------
@@ -202,6 +217,63 @@ export function ImageEditor({
   );
 }
 
+/**
+ * Attachment editor: uploads any file type to /api/v1/upload (content-addressed
+ * MediaAsset storage) and commits an {url, name, size} value. Unlike the image
+ * editor it accepts any file and preserves the original filename + size for a
+ * download chip (the upload endpoint echoes only the URL, so name/size are
+ * captured client-side from the chosen File).
+ */
+export function AttachmentEditor({
+  row,
+  column,
+  onRowChange,
+  onClose,
+}: RenderEditCellProps<GridRowData>): ReactNode {
+  const current = asAttachment(row[column.key]);
+  return (
+    <div className="dpf-grid-editor-image">
+      <input
+        type="file"
+        autoFocus
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) {
+            onClose(false);
+            return;
+          }
+          const body = new FormData();
+          body.append("file", file);
+          try {
+            const res = await fetch("/api/v1/upload", { method: "POST", body });
+            const json = (await res.json()) as { data?: { url?: string }; url?: string };
+            const url = json.data?.url ?? json.url ?? null;
+            if (url) {
+              onRowChange(
+                { ...row, [column.key]: { url, name: file.name, size: file.size } },
+                true,
+              );
+            } else {
+              onClose(false);
+            }
+          } catch {
+            onClose(false);
+          }
+        }}
+      />
+      {current ? (
+        <button
+          type="button"
+          className="dpf-grid-image-clear"
+          onClick={() => onRowChange({ ...row, [column.key]: null }, true)}
+        >
+          Clear
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Display renderers (renderCell)
 // ---------------------------------------------------------------------------
@@ -240,6 +312,20 @@ export function renderImageCell({ row, column }: RenderCellProps<GridRowData>): 
   if (!v) return null;
   // eslint-disable-next-line @next/next/no-img-element -- content-addressed media URL, arbitrary host; next/image optimizer not applicable
   return <img className="dpf-grid-thumb" src={v} alt="" />;
+}
+
+export function renderAttachmentCell({ row, column }: RenderCellProps<GridRowData>): ReactNode {
+  const att = asAttachment(row[column.key]);
+  if (!att) return null;
+  const label = att.name ?? att.url.split("/").pop() ?? "file";
+  return (
+    <a className="dpf-grid-attachment" href={att.url} target="_blank" rel="noreferrer" download={att.name}>
+      <span className="dpf-grid-attachment-name">{label}</span>
+      {typeof att.size === "number" ? (
+        <span className="dpf-grid-attachment-size">{formatBytes(att.size)}</span>
+      ) : null}
+    </a>
+  );
 }
 
 export function renderEmailCell({ row, column }: RenderCellProps<GridRowData>): ReactNode {

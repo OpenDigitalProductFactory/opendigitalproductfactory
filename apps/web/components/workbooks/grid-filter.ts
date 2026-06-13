@@ -5,7 +5,12 @@
 // already loaded in the grid (server-side / push-down filtering for large datasets
 // is a reporting-phase concern). Kept pure so it is unit-testable.
 
-import type { CellValue, ColumnDefinition, ReferenceValue } from "@/lib/workbooks/types";
+import type {
+  CellValue,
+  ColumnDefinition,
+  ReferenceValue,
+  AttachmentValue,
+} from "@/lib/workbooks/types";
 import type { GridRowData } from "./cell-editors";
 
 /** Render a cell value to the text a user would see, for substring matching. */
@@ -15,6 +20,10 @@ export function cellSearchText(value: CellValue): string {
   if (typeof value === "object" && "referenceId" in value) {
     const ref = value as ReferenceValue;
     return ref.label ?? ref.referenceId;
+  }
+  if (typeof value === "object" && "url" in value) {
+    const att = value as AttachmentValue;
+    return att.name ?? att.url;
   }
   if (typeof value === "boolean") return value ? "true" : "false";
   return String(value);
