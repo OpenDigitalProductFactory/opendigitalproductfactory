@@ -48,6 +48,27 @@ describe("computeDerivedCells — formulas", () => {
     await computeDerivedCells(columns, rows);
     expect(rows[0].cells.c_a).toBe(1);
   });
+
+  it("resolves a cross-row SUMIF over the whole table on every row", async () => {
+    const columns: DerivableColumn[] = [
+      { columnId: "c_status", name: "Status", fieldType: "select" },
+      { columnId: "c_hours", name: "Hours", fieldType: "number" },
+      {
+        columnId: "c_done",
+        name: "DoneHours",
+        fieldType: "formula",
+        config: { formula: '=SUMIF([Status],"done",[Hours])', resultType: "number" },
+      },
+    ];
+    const rows: GridRow[] = [
+      { rowId: "r1", cells: { c_status: "done", c_hours: 3, c_done: null } },
+      { rowId: "r2", cells: { c_status: "open", c_hours: 5, c_done: null } },
+      { rowId: "r3", cells: { c_status: "done", c_hours: 2, c_done: null } },
+    ];
+    await computeDerivedCells(columns, rows);
+    // Same dataset-wide total on every row (3 + 2 = 5).
+    expect(rows.map((r) => r.cells.c_done)).toEqual([5, 5, 5]);
+  });
 });
 
 describe("computeDerivedCells — lookups", () => {

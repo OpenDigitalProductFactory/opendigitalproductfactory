@@ -76,8 +76,9 @@ export async function computeDerivedCells(
   }
   const records = refsNeeded.length > 0 ? await fetchReferenceRecords(refsNeeded) : new Map();
 
+  // 2) Lookups: pull the target field from the referenced record (all rows first,
+  //    so the column arrays built next include resolved lookup values).
   for (const row of rows) {
-    // 2) Lookups: pull the target field from the referenced record.
     for (const lc of lookupCols) {
       const { referenceColumnId, targetField } = lc.config!.lookup!;
       const ref = asReference(row.cells[referenceColumnId]);
@@ -88,21 +89,37 @@ export async function computeDerivedCells(
       }
       row.cells[lc.columnId] = value;
     }
+  }
 
-    // 3) Formulas: evaluate in position order, each seeing earlier columns.
-    if (formulaCols.length > 0) {
-      const scope = new Map<string, FormulaValue>();
-      for (const c of columns) {
-        if (c.fieldType === "formula") continue;
-        scope.set(normalizeName(c.name), toFormulaValue(row.cells[c.columnId] ?? null));
-      }
-      for (const fc of formulaCols) {
-        const res = evaluateFormula(fc.config?.formula ?? "", scope);
-        row.cells[fc.columnId] = res.ok
-          ? coerceResult(res.value, fc.config?.resultType)
-          : `#ERROR: ${res.error ?? "formula"}`;
-        scope.set(normalizeName(fc.name), res.ok ? res.value : null);
-      }
+  if (formulaCols.length === 0) return;
+
+  // 3) Build the column dataset for cross-row functions (COUNTIF/SUMIF/AVERAGEIF):
+  //    every non-formula column's values across all rows, in row order. Formula
+  //    columns are intentionally excluded — aggregating over a derived column is a
+  //    later slice — so a cross-row range over one yields "unknown column".
+  const columnArrays = new Map<string, FormulaValue[]>();
+  for (const c of columns) {
+    if (c.fieldType === "formula") continue;
+    columnArrays.set(
+      normalizeName(c.name),
+      rows.map((r) => toFormulaValue(r.cells[c.columnId] ?? null)),
+    );
+  }
+
+  // 4) Formulas: evaluate in position order, each seeing earlier columns (per-row
+  //    scope) and the whole dataset (column arrays).
+  for (const row of rows) {
+    const scope = new Map<string, FormulaValue>();
+    for (const c of columns) {
+      if (c.fieldType === "formula") continue;
+      scope.set(normalizeName(c.name), toFormulaValue(row.cells[c.columnId] ?? null));
+    }
+    for (const fc of formulaCols) {
+      const res = evaluateFormula(fc.config?.formula ?? "", scope, columnArrays);
+      row.cells[fc.columnId] = res.ok
+        ? coerceResult(res.value, fc.config?.resultType)
+        : `#ERROR: ${res.error ?? "formula"}`;
+      scope.set(normalizeName(fc.name), res.ok ? res.value : null);
     }
   }
 }

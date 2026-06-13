@@ -54,6 +54,55 @@ describe("evaluateFormula — functions", () => {
   });
 });
 
+describe("evaluateFormula — cross-row aggregation (COUNTIF/SUMIF/AVERAGEIF)", () => {
+  function cols(obj: Record<string, FormulaValue[]>): Map<string, FormulaValue[]> {
+    const m = new Map<string, FormulaValue[]>();
+    for (const [k, v] of Object.entries(obj)) m.set(normalizeName(k), v);
+    return m;
+  }
+  // A small 4-row dataset: status + hours columns.
+  const dataset = cols({
+    Status: ["done", "open", "done", "blocked"],
+    Hours: [3, 5, 2, 8],
+  });
+
+  it("COUNTIF counts rows matching an exact criterion", () => {
+    expect(evaluateFormula('=COUNTIF([Status], "done")', scope({}), dataset)).toEqual({ ok: true, value: 2 });
+  });
+  it("COUNTIF supports operator-prefixed numeric criteria", () => {
+    expect(evaluateFormula('=COUNTIF([Hours], ">3")', scope({}), dataset)).toEqual({ ok: true, value: 2 });
+    expect(evaluateFormula('=COUNTIF([Hours], "<>5")', scope({}), dataset)).toEqual({ ok: true, value: 3 });
+  });
+  it("SUMIF sums a separate value column over matching rows", () => {
+    expect(evaluateFormula('=SUMIF([Status], "done", [Hours])', scope({}), dataset)).toEqual({
+      ok: true,
+      value: 5,
+    });
+  });
+  it("AVERAGEIF averages the value column over matching rows", () => {
+    expect(evaluateFormula('=AVERAGEIF([Status], "done", [Hours])', scope({}), dataset)).toEqual({
+      ok: true,
+      value: 2.5,
+    });
+  });
+  it("a cross-row aggregate can feed an ordinary per-row expression", () => {
+    // % of total hours contributed by 'done' rows, for the current row.
+    const r = evaluateFormula('=SUMIF([Status],"done",[Hours]) / SUM([Hours])', scope({ hours: 18 }), dataset);
+    // SUM here is the per-row SUM of the single scalar 18 → 18; 5/18.
+    expect(r.ok && Math.round((r.value as number) * 100) / 100).toBe(0.28);
+  });
+  it("errors when a cross-row range is not a column reference", () => {
+    const r = evaluateFormula('=COUNTIF(1+1, "x")', scope({}), dataset);
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/range must be a column/i);
+  });
+  it("errors when used without a dataset (per-row context only)", () => {
+    const r = evaluateFormula('=COUNTIF([Status], "done")', scope({}));
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/table context/i);
+  });
+});
+
 describe("evaluateFormula — error handling (never throws)", () => {
   it("reports division by zero", () => {
     const r = evaluateFormula("=a/b", scope({ a: 1, b: 0 }));
