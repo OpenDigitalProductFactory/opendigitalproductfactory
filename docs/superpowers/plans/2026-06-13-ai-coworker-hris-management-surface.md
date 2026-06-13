@@ -14,7 +14,15 @@
   `AgentModelRoutingCard`, `getAgentGrantSummaries`, `getAgentGaidMap`).
 - Worktree has no node_modules; typecheck via CI / root-clone toolchain before push.
 
-## Phase 0 — substrate enablement
+## Status (2026-06-13)
+
+Phases 0–3 implemented locally (commits on `claude/happy-wozniak-2a7049`). Phase 4's
+defer signals are integrated into the record (Decisions tab) and roster (defer-rate badge +
+coverage-gap demand banner). Local typecheck skipped in the deps-less worktree (junctioned
+`node_modules` resolves `@dpf/db` to the pre-EP-WSID root clone); CI gates the real typecheck
+on the consistent tree. Functional drive deferred to the holistic verification thread.
+
+## Phase 0 — substrate enablement ✅
 
 1. `packages/db/src/seed-profession-corpus.ts`: in the page upsert (Pass 1, ~L834), persist
    `{ professionJurisdiction, professionCompetencyLevel }` into `WikiPage.metadata` (merge into
