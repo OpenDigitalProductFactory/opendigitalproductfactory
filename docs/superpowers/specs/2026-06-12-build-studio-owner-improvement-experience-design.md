@@ -9,6 +9,7 @@ relatedSpecs:
   - docs/superpowers/specs/2026-05-30-build-studio-right-sizing-design.md
   - docs/superpowers/specs/2026-06-05-human-experience-closed-loop-design.md
   - docs/superpowers/specs/2026-04-05-continuous-improvement-flywheel-design.md
+  - docs/superpowers/specs/2026-06-12-archetype-aware-mobile-companion-remote-access-design.md
   - docs/architecture/2026-06-09-dap-experience-layer-design.md
   - docs/architecture/2026-06-09-long-running-agentic-process-architecture.md
 canonicalSubstrate:
@@ -16,6 +17,10 @@ canonicalSubstrate:
   - apps/web/lib/build/business-build-brief.ts#businessBuildBriefFromRecord  # existing brief projection
   - apps/web/components/build-studio/BuildStudioV2.tsx  # already the brief-driven owner surface (route ?v=2)
   - apps/web/lib/explore/build-process-matrix.ts  # (work type, size) -> LifecyclePolicy
+  - packages/db/prisma/schema.prisma#CommunicationChannelBinding  # principal-anchored notification channel policy
+  - packages/db/prisma/schema.prisma#CommunicationDeliveryAttempt  # delivery audit for phone/push channels
+  - packages/db/prisma/schema.prisma#PrincipalAlias  # mobile-device aliases converge here
+  - packages/db/prisma/schema.prisma#PushDeviceRegistration  # token storage only; not notification policy authority
 relatedPrinciples:
   - docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md
   - docs/founder-kernel/wiki/principles/governance-approves-evidence-not-provenance.md
@@ -33,6 +38,8 @@ Reviewed against AGENTS.md §11 data-model stewardship, `schema-audit-before-fea
 - **`[critical]` The "Improvement brief" already exists as `BusinessBuildBrief`.** §5.1/§5.2 describe drafting a brief with business outcome, affected people, affected workflow, source evidence, success signals, constraints, risk, business interpretation, hidden technical interpretation, open questions, and confidence. That is the `BusinessBuildBrief` model field-for-field (`businessOutcome`, `affectedPeople`, `affectedWorkflow`, `sourceEvidence`, `successSignals`, `constraints`, `riskProfile`, `businessInterpretation`, `technicalInterpretation`, `openQuestions`, `confidence`/`confidenceRationale`), with `BriefStatus`/`IntakeSource`/`BriefConfidence` enums and a `featureBuildId` link. Inventing a parallel brief would violate `single-source-of-truth`. **Resolution applied:** §2 and §5 now name `BusinessBuildBrief` and its projection helper `businessBuildBriefFromRecord()` as the canonical intake substrate.
 - **`[important]` `BuildStudioV2` is not "demo-data driven."** It is wired into the live `/build` route behind `?v=2`, and it already consumes a real `BusinessBuildBrief` (see `apps/web/app/(shell)/build/page.tsx:36-77`). It is, in fact, an early version of the very owner surface this spec describes. The convergence requirement (§10) is corrected from "demo shell to absorb or delete" to "harden the brief-driven owner surface and fold the developer `BuildStudio` view into its drill-down" — and which of the two becomes the default is escalated as an Open Question, not asserted here.
 - **`[important]` Needs You, the notification policy, and the cross-process inbox are owned by the DAP experience-layer design.** That doc makes the cross-process inbox the primary new IA, and makes `HitlNotificationEvent.riskClass` the deterministic IRC channel-selector (push-vs-ambient, modal-vs-inbox). §6's hand-authored push table and §4.2's inbox must be the *Build Studio instantiation* of that policy (a mapping of Build events to `riskClass`), not a second policy that will drift. §6, §4.2, §7.2, and Slice 5 now subordinate to the DAP contract.
+- **`[important]` The parallel mobile companion plan makes Needs You a multi-surface contract.** The native companion is planned as one adaptive Expo app with server-owned archetype job packs, and its first viewport is `Today / Needs You`: the mobile projection of the same DAP cross-process inbox. Build Studio should therefore emit phone-renderable decision items and evidence summaries, but mobile remains a downstream channel and archetype job-pack target, not a second Build Studio. The mobile planning source was read from the separate worktree `D:/DPF-worktrees/mobile-companion-remote-access/docs/superpowers/specs/2026-06-12-archetype-aware-mobile-companion-remote-access-design.md`; this branch does not yet contain that file.
+- **`[important]` Push delivery policy must converge on `CommunicationChannelBinding`, not `PushDeviceRegistration`.** The mobile plan verifies the richer principal-anchored substrate already exists: `CommunicationChannelBinding` with `allowedUrgencies`, `quietHours`, `preferences`, `verificationStatus`, and `CommunicationDeliveryAttempt` audit. `PushDeviceRegistration` is token storage/support metadata only. Build Studio must not route phone alerts directly to a device table or invent mobile-only notification preferences.
 - **`[important]` The follow-up loop (§5.8) is owned by the Human Experience Closed-Loop / Continuous Improvement Flywheel.** "Did the outcome improve?" should emit an `ImprovementSignal` into the flywheel, not stand up a new measurement mechanism. §5.8 now routes there.
 - **`[minor]` `ownerPhase` conflates phase and status.** `needs_attention` is a status overlay (a build in any phase can be blocked/failed), not a lifecycle phase; and the underscore casing diverges from the hyphenated string-enum convention (AGENTS.md §3). §7.1 now splits `ownerPhase` (a pure projection of `FeatureBuild.phase`) from a separate `ownerStatus`.
 
@@ -68,6 +75,9 @@ Current DPF substrate already includes:
 | Right-sizing | `(work type, size) -> LifecyclePolicy` in `apps/web/lib/explore/build-process-matrix.ts` | Owner experience should adapt by work size without making the owner choose ceremony. |
 | Durable execution | Inngest migration plan and the DAP experience layer | Long-running work must be ambient, resumable, and interrupt-by-exception. |
 | HITL / attention | DAP experience layer + `HitlNotificationEvent.riskClass` (IRC channel-selector) | The notification + inbox policy lives in the DAP doc. Build Studio maps its events onto it; it does not author a second policy. |
+| Phone / push channel | `CommunicationChannelBinding` + `CommunicationDeliveryAttempt`; `PushDeviceRegistration` only stores device tokens/support metadata | Build Studio emits DAP decision events. Channel resolution, quiet hours, urgency, and push audit live in the communications substrate, not in Build Studio. |
+| Mobile companion | One adaptive Expo app + server-owned archetype job packs from the mobile companion plan | Mobile-facing Improvements modify job-pack schemas/actions and evidence views. Do not create per-archetype native apps or a mobile-only Build Studio. |
+| Remote access | Deployment-selected Authority Core URL, QR/link provisioning, public HTTPS / private mesh / tunnel modes | Build Studio planning must not assume `localhost` or require a non-technical owner to solve reachability. Mobile readiness is a deployment capability surfaced plainly. |
 | Outcome follow-up | Human Experience Closed-Loop → `ImprovementSignal` → Continuous Improvement Flywheel | Follow-up emits signals into the flywheel; it is not a new measurement mechanism. |
 | Existing UI | Live developer `BuildStudio`; brief-driven `BuildStudioV2` behind `/build?v=2` (consumes real `BusinessBuildBrief`, **not** demo data) | `BuildStudioV2` is an early version of this spec's owner surface. Harden and converge — do not stand up a third shell. |
 
@@ -118,7 +128,7 @@ Active Improvements
 Recently Live
 ```
 
-The composer should provide archetype-aware examples. A rental business should see examples such as "make it easier to quote rentals," not generic software prompts.
+The composer should provide archetype-aware examples. A rental business should see examples such as "make it easier to quote rentals," not generic software prompts. If an outcome is field/mobile-shaped ("let techs capture truck stock in the field", "scan returns at receiving", "get signatures after delivery"), the composer should frame it as a **mobile companion job-pack change** inside the same Improvement, not as "build a separate app."
 
 ### 4.2 Needs You Inbox
 
@@ -186,6 +196,19 @@ Developer details are collapsible and permission-aware. They include:
 
 This is an admin/operator drill-down, not the default owner experience.
 
+### 4.5 Mobile Companion Projection
+
+Build Studio owns creation, planning, verification, and governed release. The native mobile companion owns short, phone-appropriate work away from the desk.
+
+For Build Studio, mobile matters in two ways:
+
+- **Attention channel:** blocking Build decisions can appear in the mobile `Today / Needs You` surface when they are phone-safe and the operator has an active push channel. The phone item is the same DAP decision item as the portal item, rendered smaller.
+- **Improvement target:** an Improvement may change a server-owned mobile job pack, dynamic form, dynamic view, or action list. The owner still starts with a business outcome; the plan explains "this adds a truck-stock action to the mobile companion" rather than "this creates mobile code."
+
+Phone-renderable Build decisions must be compact and safe: title, one-sentence ask, proposed action, risk class, evidence summary, blast-radius hint, and fixed verbs. Sensitive prompts, patient/customer/financial text, raw logs, and diffs stay behind authenticated detail. High-risk actions require explicit authenticated confirmation; unauthenticated notification actions can at most open the app.
+
+Mobile is optional. If no mobile channel is configured, the same Needs You item remains available in the portal. If the Authority Core is unreachable from the phone, the item must say so plainly and offer portal/admin continuation rather than failing silently.
+
 ## 5. End-to-End Workflow
 
 ### 5.1 Start: Business Outcome Intake
@@ -252,6 +275,13 @@ Every plan item maps to backstage evidence:
 - acceptance criterion
 - optional UX check
 
+If the Improvement affects mobile companion behavior, the plan also shows:
+
+- which archetype job pack or phone workflow changes
+- whether the phone app needs only server-owned schema/action updates or a native app release
+- whether remote access / QR provisioning is already configured for the Authority Core
+- what mobile evidence will be required before ship (simulator/device path, accessibility pass, offline/sync behavior if affected)
+
 Approving the plan records the HITL decision and advances the lifecycle.
 
 ### 5.4 Build: Ambient Safe Execution
@@ -307,6 +337,14 @@ Evidence packet sections:
 
 Technical detail sits behind expansion. Screenshots can support evidence, but dynamic verification and recorded acceptance are the proof.
 
+For mobile-affecting work, the evidence packet includes phone-specific evidence without making the owner inspect native implementation detail:
+
+- mobile workflow preview or screenshots when available
+- device/simulator verification result
+- push/deep-link delivery result when a decision flow is involved
+- offline queue/sync result when writes can happen away from the network
+- accessibility and field-ergonomics result for the changed job form or action
+
 ### 5.7 Go Live
 
 Release approval should show consequences:
@@ -350,6 +388,8 @@ HITL must be precise. The system should interrupt only when a decision is blocki
 
 The *policy* — what reaches the operator, when, at what altitude — is owned by the [DAP experience layer](../../architecture/2026-06-09-dap-experience-layer-design.md) (§3: classify every event on the IRC model; `HitlNotificationEvent.riskClass` is the deterministic channel-selector for push-vs-ambient and modal-vs-inbox). This section is the **Build Studio instantiation** of that policy — a mapping of Build events onto `riskClass` — not a second policy. If the two ever disagree, the DAP doc wins and this table is corrected. The "Push?" column below is shorthand for the `riskClass` the event should carry.
 
+When a Build event is delivered to mobile, Build Studio still does not own push delivery. It emits a DAP decision/notification event; the communications layer resolves the accountable `Principal`, active `CommunicationChannelBinding`, allowed urgency, quiet hours, and `CommunicationDeliveryAttempt` audit. `PushDeviceRegistration` is not a policy surface.
+
 | Event | Surface | Push? (riskClass) |
 | --- | --- | --- |
 | Plan ready for approval | Needs You | Yes |
@@ -365,6 +405,13 @@ The *policy* — what reaches the operator, when, at what altitude — is owned 
 The owner promise is: "We only interrupt when your decision matters."
 
 This preserves calibrated trust and avoids notification fatigue.
+
+Mobile-specific guardrails:
+
+- Push payloads contain privacy-safe summaries only.
+- High-risk approvals are online-only and require authenticated in-app confirmation.
+- Offline mobile may defer, draft a response, or queue explicitly allowed low-risk field mutations; it cannot silently approve Build release.
+- If the phone cannot reach the Authority Core, the item remains visible in the portal and the mobile app shows a reachability error, not a generic failure.
 
 ## 7. Evidence And Data Contract
 
@@ -389,10 +436,24 @@ type OwnerImprovementView = {
   ownerStatus: "on-track" | "needs-you" | "needs-attention" | "deferred" | "abandoned";  // ← status overlay
   brief: OwnerBriefView | null;   // projected from BusinessBuildBrief via businessBuildBriefFromRecord()
   needsYou: OwnerDecisionItem[];  // DAP cross-process decision-item contract (see §4.2)
+  mobileProjection: OwnerMobileProjection | null;
   summary: string;
   evidencePacket: OwnerEvidencePacket | null;
   preview: OwnerPreviewState | null;
   developerDetailsHref: string | null;
+};
+```
+
+`OwnerMobileProjection` is not a mobile table. It is a view over the same DAP decision item and Improvement evidence:
+
+```ts
+type OwnerMobileProjection = {
+  phoneSafe: boolean;
+  requiresAuth: boolean;
+  delivery: "portal-only" | "mobile-inbox" | "push-eligible";
+  authorityCoreReachable: boolean | "unknown";
+  summary: string;
+  actionLabels: Array<"approve" | "edit" | "answer" | "send-back" | "defer" | "escalate">;
 };
 ```
 
@@ -507,8 +568,9 @@ Goal: keep progress moving while the live portal and Build Studio runtime are un
 Deliverables:
 
 - source-verified inventory of `BuildStudioV2`, developer `BuildStudio`, and the `/build` route split
+- source-verified incorporation of the parallel mobile companion plan, without copying its file into this branch
 - parity checklist for the route decision in Open Question 6
-- owner projection contract boundaries (`BusinessBuildBrief`, `FeatureBuild`, DAP decision item, evidence packet)
+- owner projection contract boundaries (`BusinessBuildBrief`, `FeatureBuild`, DAP decision item, evidence packet, mobile projection)
 - list of runtime-bound checks that cannot be claimed until the portal rebuild/test cycle finishes
 
 No MCP calls, live DB edits, or UX evidence are required for this slice. It is a planning/refactor-readiness slice only. A later implementation plan should explicitly separate source-local gates from canonical-runtime gates per AGENTS.md §5.
@@ -521,7 +583,7 @@ Recommended direction: make the existing brief-driven `BuildStudioV2` the owner-
 - V2 can start/create an Improvement through `BusinessBuildBrief` and the existing governed promotion path.
 - V2 exposes every blocking action currently available in the developer surface, translated into owner language.
 - V2 has a developer/admin drill-down for graph, raw evidence, runtime lease, and recovery information.
-- Needs You items use the DAP decision-item contract and risk-class policy.
+- Needs You items use the DAP decision-item contract and risk-class policy, and can render in the mobile `Today / Needs You` surface when phone-safe.
 - Release review shows rollback/undo affordance state before owner approval.
 - Canonical-runtime UX verification passes after the portal rebuild path is healthy.
 
@@ -537,6 +599,7 @@ Deliverables:
 - owner phase mapping (`FeatureBuild.phase` to `ownerPhase`) and the separate `ownerStatus` overlay
 - Needs You projection from workflow action/gate state, shaped to the DAP cross-process decision-item contract (§4.2)
 - evidence packet summary projection
+- optional mobile projection for phone-safe decision items
 - tests for each lifecycle phase and key blocked states
 
 No schema migration. (The brief substrate, evidence fields, and `PhaseHandoff` all already exist; verified against `schema.prisma`.)
@@ -567,6 +630,7 @@ Deliverables:
 - evidence packet view
 - developer detail drawer
 - coworker context actions
+- mobile companion job-pack summary when the Improvement affects phone workflows
 
 ### Slice 4: Preview Annotation Loop
 
@@ -578,7 +642,7 @@ Deliverables:
 - select/comment/copy-edit actions
 - structured preview annotation projection
 - rerun/review integration
-- accessibility and mobile behavior
+- accessibility, mobile viewport behavior, and mobile companion evidence when the changed artifact is phone-facing
 
 Defer schema unless anchors must persist across preview rebuilds.
 
@@ -591,6 +655,8 @@ Deliverables:
 - durable owner decision item projection
 - fixed verbs
 - notification policy
+- `CommunicationChannelBinding` / delivery-attempt alignment for mobile push channels
+- mobile `Today / Needs You` rendering rules for phone-safe Build decisions
 - re-entry digest
 - metrics for notification precision, decision dwell, and **questions-to-first-build** (the speed-to-first-result guardrail from §11 positioning)
 
@@ -609,6 +675,8 @@ The design is implemented when:
 - No new evidence ledger exists in Phase 1, and no parallel "brief" model — the owner brief is `BusinessBuildBrief`.
 - A single converged owner surface exists; `BuildStudioV2` and the developer `BuildStudio` are not both live as competing default paths.
 - Needs You items and notifications use the DAP cross-process decision-item + `riskClass` contract, not a Build-Studio-private policy.
+- Phone/push delivery, if enabled, routes through `CommunicationChannelBinding` / `CommunicationDeliveryAttempt` and treats `PushDeviceRegistration` as token storage only.
+- Mobile companion work is delivered as server-owned archetype job-pack/schema/action changes inside the Improvement model, not as per-archetype app forks or a second Build Studio.
 - UI uses DPF theme tokens and report-kit where applicable.
 - Runtime-bound verification evidence still names its substrate per AGENTS.md.
 
@@ -620,6 +688,7 @@ The design is implemented when:
 4. Should owner release approval be modal, inbox-item based, or both depending on risk class?
 5. Should `uxVerificationStatus="failed"` remain advisory in owner copy, or should owner-facing release copy treat failed UX checks as "needs review" even when the gate technically allows ship? (Confirmed values: `null | "running" | "complete" | "failed" | "skipped"`.)
 6. Convergence direction (§10): should `BuildStudioV2` (brief-driven, `?v=2`) be promoted to the default `/build` surface with the developer `BuildStudio` demoted to the drill-down, or should the developer surface stay default with V2 reachable behind a flag until parity? This is a genuine 2-option trade-off. The recommendation is V2-as-owner-target after parity (§12), but the route flip should still go through `dpf-decision-via-kernel` before implementation.
+7. Which Build Studio decision classes are phone-safe by default? Recommendation: plan approval, clarification answers, defer, and send-back can be mobile-first; release approval is mobile-eligible only after authenticated review with evidence and rollback state; high-risk or reachability-uncertain decisions remain portal/admin-first.
 
 ## 15. Non-Goals
 
@@ -630,7 +699,8 @@ The design is implemented when:
 - Making direct production changes from preview annotations.
 - Exposing raw tool execution to owners.
 - Solving all DAP process kinds in the first slice.
+- Building the mobile companion app, remote-access provisioning, or mobile job-pack registry in this Build Studio slice.
 
 ## 16. Next Step
 
-Because the live portal and Build Studio runtime are currently undergoing rebuild testing, continue with Slice 0 first: complete the source-only convergence audit and parity checklist without MCP or live UX claims. After the portal is healthy, route Open Question 6 through the decision kernel, then create a focused implementation plan for Slice 1: the owner projection layer and tests. That slice is the architectural foundation for the later UI work and keeps the refactor bounded.
+Because the live portal and Build Studio runtime are currently undergoing rebuild testing, continue with Slice 0 first: complete the source-only convergence audit, V2 parity checklist, and mobile companion cross-surface contract without MCP or live UX claims. After the portal is healthy, route Open Question 6 through the decision kernel, then create a focused implementation plan for Slice 1: the owner projection layer and tests. That slice is the architectural foundation for the later UI work and keeps the refactor bounded.
