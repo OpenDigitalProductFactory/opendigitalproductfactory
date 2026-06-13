@@ -144,3 +144,24 @@ They also become reference targets automatically (slice 1). Each behind its doma
 References (1) are the relational substrate rollups/lookups (2) require. `provenanceKind` (3) is
 cheap and clarifies tiers but does not block 1–2. Undo/redo (4) is independent. Generic grids (5)
 are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
+
+## Phase 3 — Spreadsheet-on-data UX (toward Smartsheet parity)
+
+- **Slice 6 — grid quick filter — SHIPPED.** A client-side, case-insensitive substring filter
+  across all columns (pure, unit-tested `grid-filter.ts`; matches reference labels too), with a
+  toolbar search box + "N of M" count. Filters the rows already loaded; server-side/push-down
+  filtering for large datasets is a reporting-phase concern.
+- **Remaining (not built):** per-column filters + AND/OR builder; saved views (persist to the
+  existing `WorkbookView`); conditional formatting (color scales / data bars / icon sets /
+  formula rules); calendar + gallery views; CSV + `.xlsx` import; group-by summary.
+
+## Remaining toward full Smartsheet + Supabase parity (tracked, not built)
+
+- **Supabase tier:** an *editable* generic adapter (any allow-listed Prisma model writable) — needs
+  a design call (raw validated writes for models without a domain action, as an explicit lower tier,
+  vs. always requiring a bespoke validated action). The biggest remaining Supabase-defining feature.
+- **Reporting (Phase 4):** group-by/pivots, charts/dashboards via report-kit, drill-through,
+  scheduled refresh, RLS pre-aggregation, push-down/materialization, cross-row aggregation functions.
+- **Semantic layer (Phase 4):** `WorkbookMetric` (unique/owned/versioned, lineage-required).
+- **Operationalization lifecycle (Phase 5):** promote column → metric → schema field / page-visual,
+  with gates + blast-radius + governed retirement; derived-column lineage edges (fail-closed).
