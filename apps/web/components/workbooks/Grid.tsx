@@ -55,6 +55,7 @@ import {
   commitUndo,
   commitRedo,
 } from "./grid-history";
+import { quickFilterRows } from "./grid-filter";
 
 export interface WorkbookGridProps {
   /** custom WorkbookTable id (TBL-*) or, for platform data, the entity type. */
@@ -188,6 +189,7 @@ export function WorkbookGrid({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showProvenance, setShowProvenance] = useState(false);
+  const [filterQuery, setFilterQuery] = useState("");
   // Multi-step undo/redo of cell edits (distinct from the audit history). Each
   // entry's inverse replays through the same validated dispatch as a normal edit.
   const [history, setHistory] = useState<GridHistory>(EMPTY_HISTORY);
@@ -198,8 +200,9 @@ export function WorkbookGrid({
   }, [columns, capabilities, showProvenance]);
 
   const sortedRows = useMemo<GridRowData[]>(() => {
-    if (sortColumns.length === 0) return rowData;
-    const sorted = [...rowData];
+    const filtered = quickFilterRows(rowData, columns, filterQuery);
+    if (sortColumns.length === 0) return filtered;
+    const sorted = [...filtered];
     sorted.sort((ra, rb) => {
       for (const sc of sortColumns) {
         const cmp = compareValues(ra[sc.columnKey], rb[sc.columnKey]);
@@ -208,7 +211,7 @@ export function WorkbookGrid({
       return 0;
     });
     return sorted;
-  }, [rowData, sortColumns]);
+  }, [rowData, columns, filterQuery, sortColumns]);
 
   const persistCell = useCallback(
     async (
@@ -338,6 +341,19 @@ export function WorkbookGrid({
   return (
     <div className="flex h-full flex-col gap-2" onKeyDown={onKeyDown}>
       <div className="flex items-center gap-2">
+        <input
+          type="search"
+          value={filterQuery}
+          onChange={(e) => setFilterQuery(e.target.value)}
+          placeholder="Filter…"
+          aria-label="Filter rows"
+          className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
+        />
+        {filterQuery.trim() && (
+          <span className="text-xs text-[var(--dpf-muted)]">
+            {sortedRows.length} of {rowData.length}
+          </span>
+        )}
         {capabilities.canAddRow && (
           <button
             type="button"
