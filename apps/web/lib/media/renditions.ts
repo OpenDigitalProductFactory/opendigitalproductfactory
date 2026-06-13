@@ -27,6 +27,7 @@ function renditionStorageKey(sha256: string, width: number): string {
 }
 
 export type Rendition = { bytes: Buffer; mimeType: string };
+type SharpFactory = typeof import("sharp").default;
 
 /**
  * Return a cached/resized webp rendition at `width`, or null to signal the caller
@@ -61,9 +62,9 @@ export async function getRendition(input: {
   }
 
   // Resize with sharp, lazily. Any failure → null (serve original).
-  let sharp: typeof import("sharp");
+  let sharp: SharpFactory;
   try {
-    sharp = (await import("sharp")).default as unknown as typeof import("sharp");
+    sharp = (await import("sharp")).default;
   } catch {
     return null;
   }

@@ -41,10 +41,10 @@
     "@types/jest": "^30.0.0",
     "@types/react": "^19",
     "jest": "~30.4.2",
-    "jest-expo": "~56.0.4",
+    "jest-expo": "~56.0.5",
     "msw": "^2.14.6",
     "react-test-renderer": "19.2.7",
-    "tailwindcss": "^4.3.0",
+    "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3"
   },
   "expo": {

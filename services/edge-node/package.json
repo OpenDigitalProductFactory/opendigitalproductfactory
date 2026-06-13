@@ -14,12 +14,12 @@
   "dependencies": {
     "@dpf/validators": "workspace:*",
     "net-snmp": "^3.14.0",
-    "undici": "^8.3.0",
+    "undici": "^8.4.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/net-snmp": "^3.11.0",
-    "@types/node": "^25.9.2",
+    "@types/node": "^25.9.3",
     "tsx": "^4.22.4",
     "typescript": "^5.7.3",
     "vitest": "^4.1.8"
