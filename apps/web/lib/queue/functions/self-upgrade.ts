@@ -16,6 +16,8 @@ import {
   startRun,
   completeRun,
   failRun,
+  skipRun,
+  updateRunPlan,
   recordRunRecoveryPoint,
   getLatestRun,
   getLatestSucceededRun,
@@ -50,10 +52,11 @@ type PromoterRuntime = Pick<
 >;
 
 async function loadPromoterRuntime(): Promise<PromoterRuntime> {
-  return await import(/* turbopackIgnore: true */ "@/lib/self-upgrade/promoter");
+  return await import("@/lib/self-upgrade/promoter");
 }
 
 export type SelfUpgradeRunEventData = {
+  runId?: string;
   triggeredBy?: string;
   dryRun?: boolean;
   buildId?: string;
@@ -86,7 +89,21 @@ export async function runSelfUpgrade(
   const now = new Date();
   const cooldownMinutes = config.cooldownMinutes ?? DEFAULT_COOLDOWN_MINUTES;
 
-  if (!config.enabled && !params.dryRun) return { skipped: true, reason: "disabled" };
+  async function skipAttempt(
+    reason: string,
+    persistedReason = reason,
+    extra: Record<string, unknown> = {},
+  ): Promise<Record<string, unknown>> {
+    if (params.runId) await skipRun(params.runId, persistedReason);
+    return {
+      skipped: true,
+      reason,
+      ...(params.runId ? { runId: params.runId } : {}),
+      ...extra,
+    };
+  }
+
+  if (!config.enabled && !params.dryRun) return await skipAttempt("disabled");
 
   // Cooldown backoff. After a deferred or failed drain we set a cooldown so the
   // NEXT attempt — from ANY trigger (scheduled cron, manual `ops/self-upgrade.run`
@@ -97,11 +114,12 @@ export async function runSelfUpgrade(
   if (!params.dryRun && !params.force) {
     const cooldownUntil = await getCooldownUntil();
     if (isInCooldown(cooldownUntil, now)) {
-      return {
-        skipped: true,
-        reason: "cooldown",
-        cooldownUntil: cooldownUntil?.toISOString() ?? null,
-      };
+      const cooldownIso = cooldownUntil?.toISOString() ?? null;
+      return await skipAttempt(
+        "cooldown",
+        cooldownIso ? `cooldown: ${cooldownIso}` : "cooldown",
+        { cooldownUntil: cooldownIso },
+      );
     }
   }
   // The upgrade window ("whenever the storefront is closed", derived from
@@ -117,7 +135,7 @@ export async function runSelfUpgrade(
       schedule,
       timeZone: timezone,
     });
-    if (!allowed) return { skipped: true, reason: "outside-window" };
+    if (!allowed) return await skipAttempt("outside-window");
   }
 
   // checkIntervalHours throttle: only the scheduled cron is rate-limited, so the
@@ -127,12 +145,9 @@ export async function runSelfUpgrade(
   if (params.scheduled && !params.dryRun && !params.force) {
     const lastCheckedAt = await getLastCheckedAt();
     if (!isCheckIntervalElapsed(lastCheckedAt, config.checkIntervalHours, now)) {
-      return { skipped: true, reason: "interval-not-elapsed" };
+      return await skipAttempt("interval-not-elapsed");
     }
   }
-  // A real check is proceeding now — reset the interval clock (scheduled, manual,
-  // or forced; never on dryRun).
-  if (!params.dryRun) await recordCheckedAt(now);
 
   // Promoter-availability precheck — skip BEFORE any drain. A swap is impossible
   // without the promoter image, so if it isn't on the daemon we must NOT drain
@@ -145,11 +160,12 @@ export async function runSelfUpgrade(
     const { isPromoterAvailable } = await loadPromoterRuntime();
     const promoterReady = await isPromoterAvailable(config.promoterImage);
     if (!promoterReady) {
-      return {
-        skipped: true,
-        reason: "promoter-unavailable",
-        promoterImage: config.promoterImage ?? "dpf-promoter",
-      };
+      const promoterImage = config.promoterImage ?? "dpf-promoter";
+      return await skipAttempt(
+        "promoter-unavailable",
+        `promoter-unavailable: ${promoterImage}`,
+        { promoterImage },
+      );
     }
   }
 
@@ -185,13 +201,20 @@ export async function runSelfUpgrade(
       ? snapshot.surfaces
       : snapshot.surfaces.filter((s) => s.kind === "hard");
     if (blocking.length > 0) {
-      return {
-        skipped: true,
-        reason: "activity-in-flight",
-        surfaces: blocking.map((s) => s.surface),
-      };
+      const surfaces = blocking.map((s) => s.surface);
+      return await skipAttempt(
+        "activity-in-flight",
+        `activity-in-flight: ${surfaces.join(", ")}`,
+        { surfaces },
+      );
     }
   }
+
+  // A real target check is proceeding now — reset the interval clock
+  // (scheduled, manual, or forced; never on dryRun). Keep this after local
+  // pre-drain guards so a missing promoter/active work does not delay the next
+  // scheduled poll while producing no useful run history.
+  if (!params.dryRun) await recordCheckedAt(now);
 
   const gitRun = defaultGitRunner;
   const hostSourcePath =
@@ -242,17 +265,25 @@ export async function runSelfUpgrade(
     await gitRun(buildFetchCommand({ hostSourcePath, remote, branch }).slice(1));
     const head = await gitRun(buildRemoteHeadCommand({ hostSourcePath, remote, branch }).slice(1));
     upstreamSha = head.code === 0 ? head.stdout.trim() : null;
-    if (!upstreamSha) return { skipped: true, reason: "no-target" };
+    if (!upstreamSha) return await skipAttempt("no-target");
 
     const lastOk = await getLatestSucceededRun();
     if (!params.dryRun && !params.force && lastOk?.targetSha === upstreamSha) {
-      return { skipped: true, reason: "up-to-date", upstreamSha };
+      return await skipAttempt("up-to-date", `up-to-date: ${upstreamSha}`, { upstreamSha });
     }
   }
 
   const latestRun = await getLatestRun();
-  if (latestRun?.status === "running") {
-    return { skipped: true, reason: "active-run", runId: latestRun.runId };
+  if (
+    latestRun &&
+    (latestRun.status === "running" ||
+      latestRun.status === "queued" ||
+      latestRun.status === "pending") &&
+    latestRun.runId !== params.runId
+  ) {
+    return await skipAttempt("active-run", `active-run: ${latestRun.runId}`, {
+      activeRunId: latestRun.runId,
+    });
   }
 
   const deployedSha = await getDeployedSha();
@@ -283,11 +314,16 @@ export async function runSelfUpgrade(
       // Conflict / no-target / prep-error: record for audit, do NOT drain or
       // swap. A merge conflict defers (operator resolves in the Upgrade Center);
       // the current build keeps running.
-      const failedRun = await createRun({
-        triggeredBy: params.triggeredBy,
-        fromVersion: deployedSha ?? undefined,
-        toVersion: upstreamSha ?? undefined,
-      });
+      const failedRun = params.runId
+        ? await updateRunPlan(params.runId, {
+            fromVersion: deployedSha ?? undefined,
+            toVersion: upstreamSha ?? undefined,
+          })
+        : await createRun({
+            triggeredBy: params.triggeredBy,
+            fromVersion: deployedSha ?? undefined,
+            toVersion: upstreamSha ?? undefined,
+          });
       const reason =
         prep.reason === "merge-conflict"
           ? `merge-conflict: ${prep.conflictFiles.join(", ")}`
@@ -317,20 +353,26 @@ export async function runSelfUpgrade(
   // the running SHA. A clean no-op: no run row, no QuiescenceRun, no cooldown.
   // force/dryRun bypass (operator asked; dry-run never swaps).
   if (!params.dryRun && !params.force && deployedSha && builtStamp === deployedSha) {
-    return { skipped: true, reason: "up-to-date", builtStamp };
+    return await skipAttempt("up-to-date", `up-to-date: ${builtStamp}`, { builtStamp });
   }
 
-  const run = await createRun({
-    triggeredBy: params.triggeredBy,
-    fromVersion: deployedSha ?? undefined,
-    // targetSha column carries the upstream lineage marker (what the build
-    // contains), falling back to the built stamp in local mode.
-    toVersion: upstreamSha ?? builtStamp,
-    // deployedSha carries the expected runtime identity the rebuilt image will
-    // report after boot. In upstream mode this is the install-branch merge
-    // commit, not the upstream lineage marker above.
-    expectedDeployedSha: builtStamp,
-  });
+  const run = params.runId
+    ? await updateRunPlan(params.runId, {
+        fromVersion: deployedSha ?? undefined,
+        // targetSha column carries the upstream lineage marker (what the build
+        // contains), falling back to the built stamp in local mode.
+        toVersion: upstreamSha ?? builtStamp,
+        // deployedSha carries the expected runtime identity the rebuilt image will
+        // report after boot. In upstream mode this is the install-branch merge
+        // commit, not the upstream lineage marker above.
+        expectedDeployedSha: builtStamp,
+      })
+    : await createRun({
+        triggeredBy: params.triggeredBy,
+        fromVersion: deployedSha ?? undefined,
+        toVersion: upstreamSha ?? builtStamp,
+        expectedDeployedSha: builtStamp,
+      });
   await startRun(run.runId);
   await emitUpgradeEvent({ type: "upgrade.started", runId: run.runId });
 
@@ -536,6 +578,18 @@ export const selfUpgradeManual = inngest.createFunction(
   },
   async ({ event, step }) => {
     const data = event.data as SelfUpgradeRunEventData;
-    return await step.run("run-self-upgrade-manual", () => runSelfUpgrade(data));
+    try {
+      return await step.run("run-self-upgrade-manual", () => runSelfUpgrade(data));
+    } catch (err) {
+      if (data.runId) {
+        const msg = err instanceof Error ? err.message : String(err);
+        try {
+          await failRun(data.runId, `worker-error: ${msg}`);
+        } catch {
+          // Preserve the original Inngest failure; DB recovery failure is secondary.
+        }
+      }
+      throw err;
+    }
   },
 );

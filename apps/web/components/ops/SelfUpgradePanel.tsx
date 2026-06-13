@@ -1,6 +1,7 @@
 import type { SelfUpgradeDashboard } from "@/lib/actions/self-upgrade";
 import { requestPortalSelfUpgradeAction } from "@/lib/actions/self-upgrade";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { StatusBadge } from "@/components/ui/report-kit";
 
 function shortSha(value: string | null): string {
   return value ? value.slice(0, 12) : "unknown";
@@ -84,9 +85,12 @@ export function SelfUpgradePanel({ dashboard }: { dashboard: SelfUpgradeDashboar
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-mono text-sm font-semibold text-[var(--dpf-text)]">{run.runId}</span>
-                      <span className="rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-0.5 text-xs text-[var(--dpf-muted)]">
-                        {statusLabel(run.status)}
-                      </span>
+                      <StatusBadge
+                        domain="selfUpgradeRun"
+                        status={run.status}
+                        label={statusLabel(run.status)}
+                        variant="soft"
+                      />
                       <span className="text-xs text-[var(--dpf-muted)]">{run.trigger}</span>
                     </div>
                     <div className="mt-2 grid gap-2 text-xs text-[var(--dpf-muted)] sm:grid-cols-3">

@@ -153,6 +153,7 @@
 
 ---
 
+<<<<<<< HEAD
 ### ✅ W-MEDIA — Attachment column
 
 **Surface:** Workbook toolbar → "+ Add column" → field type picker → "Attachment"  
@@ -174,6 +175,14 @@
 - CSV export: header "Docs", value "test-document.pdf" ✅
 
 **Verdict:** ✅ Attachment column: type picker wired, chip renders filename+size, persists on reload, filename in CSV export
+=======
+### ⚠️ W-MEDIA — Attachment column (BLOCKED)
+
+**Surface:** Workbook toolbar → "+ Add column" → field type picker  
+**Observed:** Column type picker lists: Text, Number, Date, Date & time, Checkbox, Single select, Reference, Lookup, Formula, URL, Email, Image — "Attachment" is absent  
+**Root cause:** PR #1836 (`feat(workbooks): attachment column type`) merged at commit `b6db7d01a`, which is 3 commits AFTER `e68d3c17` (the SHA used for this run's image rebuild). Attachment column code was not present in the built image.  
+**Action required:** Rebuild portal image from `origin/main` HEAD (post-#1836) and re-run W-MEDIA Attachment test
+>>>>>>> origin/main
 
 ---
 
@@ -190,6 +199,14 @@
 
 ## Required Actions Before Phase W Close
 
+<<<<<<< HEAD
 1. **Re-run W-UNDO** — with native browser interaction (not JS dispatch), drive: dblclick cell → edit value → Ctrl+Z → verify value reverts → reload confirms no stale persist
 2. **File BI** for PLATFORM_TABLES missing adapters (`supplier`, `customer_account`, `employee_profile`)
 3. **Investigate W-REF-4** (viewer-restricted reference) — requires second user account with `viewer` role
+=======
+1. **Rebuild portal image** from current `origin/main` (includes PR #1836 attachment column + PR #1838 reporting-phase plan)
+2. **Re-run W-MEDIA Attachment** — upload any file (PDF/docx) → download chip shows filename+size → reload → filter by filename → CSV contains filename
+3. **Re-run W-UNDO** — with native browser interaction (not JS dispatch), drive: dblclick cell → edit value → Ctrl+Z → verify value reverts → reload confirms no stale persist
+4. **File BI** for PLATFORM_TABLES missing adapters (`supplier`, `customer_account`, `employee_profile`)
+5. **Investigate W-REF-4** (viewer-restricted reference) — requires second user account with `viewer` role
+>>>>>>> origin/main

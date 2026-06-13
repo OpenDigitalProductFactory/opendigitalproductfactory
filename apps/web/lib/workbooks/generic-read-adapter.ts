@@ -67,6 +67,37 @@ export interface GenericTableConfig {
    * read-only grid. Each write goes through `validateCell` before Prisma.
    */
   editableFields?: string[];
+  /**
+   * Read-only `rollup` columns: aggregate the records of another model that
+   * reference this row (reporting phase, reverse-FK). Resolved with one grouped
+   * query per rollup, then assigned per row — no N+1.
+   */
+  rollups?: RollupSpec[];
+}
+
+/**
+ * A rollup column: aggregate a related model's rows that point back at this row
+ * via a foreign key. e.g. on an Epic grid, count BacklogItems where epicId = this
+ * epic — note the FK targets the cuid PK (`anchorField: "id"`), NOT the semantic
+ * id used as the grid rowId, so the join uses `anchorField`, not `idField`.
+ */
+export interface RollupSpec {
+  /** grid columnId for this rollup column */
+  field: string;
+  name: string;
+  /** Prisma delegate of the model to aggregate (the "many" side), e.g. "backlogItem" */
+  targetModel: string;
+  /** the FK scalar on the target model pointing back to this model, e.g. "epicId" */
+  foreignKeyField: string;
+  /** field on THIS model the FK references; defaults to the grid idField. For FKs that target a cuid PK, set "id". */
+  anchorField?: string;
+  /** aggregation operation */
+  op: "count" | "sum" | "avg" | "min" | "max";
+  /** numeric field on the target model to aggregate (required for sum/avg/min/max; ignored for count) */
+  valueField?: string;
+  width?: number;
+  /** optional extra Prisma `where` to scope which target rows are counted (e.g. exclude archived) */
+  filter?: Record<string, unknown>;
 }
 
 const DEFAULT_CAP = 500;
@@ -120,9 +151,74 @@ export function genericRowToGridRow(
   return { rowId: String(row[config.idField]), cells };
 }
 
+/** Runs a Prisma `groupBy` for the named model — injected so the resolver is unit-testable without a DB. */
+export type GroupByRunner = (model: string, args: unknown) => Promise<Record<string, unknown>[]>;
+
+/**
+ * Resolve every rollup column to a Map<anchorValue, aggregate> using one grouped
+ * query per rollup (no N+1). Pure but for the injected runner, so it is testable
+ * with a stub. Anchor values are de-duplicated and only the rows actually present
+ * are queried, so the aggregate is correct for the loaded page.
+ */
+export async function resolveRollups(
+  config: GenericTableConfig,
+  records: Record<string, unknown>[],
+  runGroupBy: GroupByRunner,
+): Promise<Map<string, Map<string, number>>> {
+  const out = new Map<string, Map<string, number>>();
+  for (const spec of config.rollups ?? []) {
+    const anchorField = spec.anchorField ?? config.idField;
+    const anchors = [...new Set(records.map((r) => r[anchorField]).filter((v) => v != null))];
+    const valueMap = new Map<string, number>();
+    if (anchors.length > 0) {
+      if (spec.op !== "count" && !spec.valueField) {
+        throw new Error(`Rollup "${spec.field}" with op "${spec.op}" requires a valueField`);
+      }
+      const aggregate =
+        spec.op === "count"
+          ? { _count: { _all: true } }
+          : { [`_${spec.op}`]: { [spec.valueField as string]: true } };
+      const groups = await runGroupBy(spec.targetModel, {
+        by: [spec.foreignKeyField],
+        where: { [spec.foreignKeyField]: { in: anchors }, ...(spec.filter ?? {}) },
+        ...aggregate,
+      });
+      for (const g of groups) {
+        const key = String(g[spec.foreignKeyField]);
+        const value =
+          spec.op === "count"
+            ? Number((g._count as { _all?: number } | undefined)?._all ?? 0)
+            : Number(
+                (g[`_${spec.op}`] as Record<string, unknown> | undefined)?.[spec.valueField as string] ?? 0,
+              );
+        valueMap.set(key, value);
+      }
+    }
+    out.set(spec.field, valueMap);
+  }
+  return out;
+}
+
+/** Build grid rows from raw records, attaching resolved rollup values (count → 0, others → null when absent). */
+function buildGridRows(
+  config: GenericTableConfig,
+  records: Record<string, unknown>[],
+  rollupMaps: Map<string, Map<string, number>>,
+): GridRow[] {
+  return records.map((r) => {
+    const gr = genericRowToGridRow(config, r);
+    for (const spec of config.rollups ?? []) {
+      const anchorField = spec.anchorField ?? config.idField;
+      const v = rollupMaps.get(spec.field)?.get(String(r[anchorField]));
+      gr.cells[spec.field] = v ?? (spec.op === "count" ? 0 : null);
+    }
+    return gr;
+  });
+}
+
 export function genericColumnDefs(config: GenericTableConfig): ColumnDefinition[] {
   const editable = new Set(config.editableFields ?? []);
-  return config.columns.map((c, i) => ({
+  const base: ColumnDefinition[] = config.columns.map((c, i) => ({
     columnId: c.field,
     name: c.name,
     fieldType: c.fieldType,
@@ -135,6 +231,18 @@ export function genericColumnDefs(config: GenericTableConfig): ColumnDefinition[
     config: c.options ? { options: c.options } : undefined,
     provenanceKind: "system", // a live platform field
   }));
+  const rollups: ColumnDefinition[] = (config.rollups ?? []).map((spec, i) => ({
+    columnId: spec.field,
+    name: spec.name,
+    fieldType: "rollup",
+    position: config.columns.length + i,
+    required: false,
+    editable: false, // computed, read-only
+    width: spec.width,
+    groupable: false,
+    provenanceKind: "derived", // calculated from related records
+  }));
+  return [...base, ...rollups];
 }
 
 /** Pull the validated scalar for a Prisma write from a CellStorage by field type. */
@@ -196,6 +304,7 @@ type ReadDelegate = {
   findMany(args: unknown): Promise<Record<string, unknown>[]>;
   findUnique(args: unknown): Promise<Record<string, unknown> | null>;
   update(args: unknown): Promise<Record<string, unknown>>;
+  groupBy(args: unknown): Promise<Record<string, unknown>[]>;
 };
 
 function delegate(model: string): ReadDelegate {
@@ -205,6 +314,9 @@ function delegate(model: string): ReadDelegate {
   }
   return d;
 }
+
+/** A GroupByRunner backed by the live Prisma client (the production rollup query path). */
+const prismaGroupBy: GroupByRunner = (model, args) => delegate(model).groupBy(args);
 
 class GenericReadAdapter implements DataSourceAdapter {
   constructor(private readonly cfg: GenericTableConfig) {}
@@ -216,6 +328,8 @@ class GenericReadAdapter implements DataSourceAdapter {
   private select(): Record<string, true> {
     const sel: Record<string, true> = { [this.cfg.idField]: true };
     for (const c of this.cfg.columns) sel[c.field] = true;
+    // Rollups join on the anchor field (often the cuid PK), which may not be a column.
+    for (const r of this.cfg.rollups ?? []) sel[r.anchorField ?? this.cfg.idField] = true;
     return sel;
   }
 
@@ -239,7 +353,8 @@ class GenericReadAdapter implements DataSourceAdapter {
         `[workbooks] generic grid "${this.cfg.entityType}" hit the ${cap}-row cap; older rows omitted (push-down pagination is a Phase-4 follow-up).`,
       );
     }
-    const rows = records.map((r) => genericRowToGridRow(this.cfg, r));
+    const rollupMaps = await resolveRollups(this.cfg, records, prismaGroupBy);
+    const rows = buildGridRows(this.cfg, records, rollupMaps);
     const filtered = applyFilters(rows, opts.filters);
     const sorted = applySort(filtered, opts.sort);
     return paginate(sorted, opts.pagination.cursor, opts.pagination.limit);
@@ -250,7 +365,9 @@ class GenericReadAdapter implements DataSourceAdapter {
       where: { [this.cfg.idField]: rowId },
       select: this.select(),
     });
-    return r ? genericRowToGridRow(this.cfg, r) : null;
+    if (!r) return null;
+    const rollupMaps = await resolveRollups(this.cfg, [r], prismaGroupBy);
+    return buildGridRows(this.cfg, [r], rollupMaps)[0];
   }
 
   async searchReferences(

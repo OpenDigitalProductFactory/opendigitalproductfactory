@@ -109,6 +109,15 @@ const VOCABULARY: Record<string, ArchetypeVocabulary> = {
     portalLabel: "Rental Portal", stakeholderLabel: "Renters",
     teamLabel: "Team", inboxLabel: "Reservations", agentName: "Rental Desk",
   },
+  // Residential construction — production builders (communities + display homes) and
+  // custom builders (BYOL/BOYL). Per-leaf override for custom-home-builder ("Clients",
+  // "Build Team") ships with that archetype via customVocabulary.
+  "real-estate-construction": {
+    itemsLabel: "Homes & Communities", singleItemLabel: "Home", addButtonLabel: "Add home",
+    categoryLabel: "Community", priceLabel: "From",
+    portalLabel: "Buyer Portal", stakeholderLabel: "Home Buyers",
+    teamLabel: "Sales Team", inboxLabel: "Appointments", agentName: "New Homes Advisor",
+  },
 };
 
 const DEFAULT_VOCABULARY: ArchetypeVocabulary = {
@@ -226,6 +235,10 @@ const CATEGORY_SUGGESTIONS: Record<string, string[]> = {
   // Rental & shared assets
   "equipment-rental": ["Earthmoving", "Access & Lifting", "Power & Site", "Cleaning", "Events"],
   "self-storage": ["Small Units", "Medium Units", "Large Units", "Climate-Controlled"],
+
+  // Real estate & construction
+  "new-home-builder": ["Single Storey", "Double Storey", "Townhouses & Duplexes", "Acreage Designs", "Granny Flats"],
+  "custom-home-builder": ["New Home Build", "Knockdown & Rebuild", "Renovation & Extension", "Dual Occupancy", "Acreage Builds"],
 };
 
 export function getCategorySuggestions(archetypeId: string | null | undefined): string[] {

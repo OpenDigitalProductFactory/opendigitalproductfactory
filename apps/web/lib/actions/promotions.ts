@@ -10,7 +10,7 @@ import { generatePromotionId } from "@/lib/version-tracking";
 import { getSelfUpgradeConfig, nextMaintenanceWindowStart } from "@/lib/self-upgrade/config";
 import { resolveTargetSha, isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
-import { getLatestRun } from "@/lib/self-upgrade/run-store";
+import { createRun, failRun, getLatestRun } from "@/lib/self-upgrade/run-store";
 import {
   isStoreOpen,
   isUpgradeWindowOpen,
@@ -724,6 +724,7 @@ export async function getSelfUpgradeStatus() {
 
 export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: boolean }) {
   const userId = await requireOpsAccess();
+  const triggeredBy = `manual:${userId}`;
 
   if (!opts?.dryRun) {
     const config = await getSelfUpgradeConfig();
@@ -740,16 +741,31 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: bool
   if (latestRun?.status === "running") {
     return { queued: false, reason: "already-running", runId: latestRun.runId } as const;
   }
+  if (latestRun?.status === "queued" || latestRun?.status === "pending") {
+    return { queued: false, reason: "already-queued", runId: latestRun.runId } as const;
+  }
 
-  await inngest.send({
-    name: SELF_UPGRADE_EVENT,
-    data: {
-      triggeredBy: `manual:${userId}`,
-      ...(opts?.dryRun !== undefined ? { dryRun: opts.dryRun } : {}),
-      ...(opts?.force ? { force: true } : {}),
-    },
+  const run = await createRun({
+    triggeredBy,
   });
-  return { queued: true } as const;
+
+  try {
+    await inngest.send({
+      name: SELF_UPGRADE_EVENT,
+      data: {
+        runId: run.runId,
+        triggeredBy,
+        ...(opts?.dryRun !== undefined ? { dryRun: opts.dryRun } : {}),
+        ...(opts?.force ? { force: true } : {}),
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await failRun(run.runId, `queue-dispatch-failed: ${message}`);
+    return { queued: false, reason: "queue-dispatch-failed", runId: run.runId } as const;
+  }
+
+  return { queued: true, runId: run.runId } as const;
 }
 
 /**
