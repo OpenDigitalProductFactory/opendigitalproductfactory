@@ -1,0 +1,329 @@
+import type {
+  ArchetypeCategory,
+  ArchetypeDefinition,
+  ArchetypeModule,
+  CommercialModel,
+  It4ItStage,
+} from "./types";
+
+/**
+ * Operational Value Stream Model (OVSM) — a pure projection of an archetype's
+ * existing substrate (axes / activation profile / scheduling / billing) into the
+ * six-stage operational value stream described in
+ * `docs/architecture/archetype-business-value-streams.md` (§3 load-bearing,
+ * §5 capability binding, §7 demand–capacity). This is the P0 "Capture" contract:
+ * derive, never author — no new fields on ArchetypeDefinition, no prose parsing.
+ */
+
+export type OperationalValueStreamStageKey =
+  | "attract"
+  | "capture"
+  | "qualify"
+  | "deliver"
+  | "settle"
+  | "retain"
+  | "trust-compliance"
+  | "operate-improve"
+  /** Rental/shared-asset only: the asset returns to the pool and is inspected. */
+  | "return-inspect";
+
+export type CapacityUnitType =
+  | "slot-hours"
+  | "service-throughput"
+  | "durable-stock"
+  | "perishable-stock"
+  | "physical-hard-cap"
+  | "billable-hours"
+  | "volunteer-or-bed-capacity"
+  | "loan-processing-throughput"
+  | "statutory-throughput"
+  | "reusable-pooled-asset"
+  | "governance-cycle";
+
+export type DemandSignature =
+  | "steady"
+  | "seasonal"
+  | "weekly"
+  | "event-driven"
+  | "fiscal-calendar"
+  | "rate-sensitive"
+  | "emergency-reactive"
+  | "synchronized-contention";
+
+export interface OperationalValueStreamStage {
+  key: OperationalValueStreamStageKey;
+  label: string;
+  order: number;
+  loadBearing: boolean;
+  capabilityBindings: ArchetypeModule[];
+  metricBindings: string[];
+  trustGateKeys: string[];
+}
+
+export interface OperationalValueStream {
+  archetypeId: string;
+  archetypeName: string;
+  category: string;
+  stages: OperationalValueStreamStage[];
+  loadBearingStageKeys: OperationalValueStreamStageKey[];
+  capacityUnit: CapacityUnitType;
+  demandSignature: DemandSignature;
+  trustGates: string[];
+  it4itStageBinding: It4ItStage[];
+}
+
+// ── Stage backbone ───────────────────────────────────────────────────────────
+
+interface StageSpec {
+  key: OperationalValueStreamStageKey;
+  label: string;
+  order: number;
+}
+
+const PRIMARY_STAGE_SPECS: StageSpec[] = [
+  { key: "attract", label: "Attract & Discover", order: 10 },
+  { key: "capture", label: "Capture Demand", order: 20 },
+  { key: "qualify", label: "Qualify & Schedule", order: 30 },
+  { key: "deliver", label: "Deliver the Value", order: 40 },
+  { key: "settle", label: "Settle & Account", order: 50 },
+  { key: "retain", label: "Retain & Grow", order: 60 },
+];
+
+const RETURN_INSPECT_SPEC: StageSpec = {
+  key: "return-inspect",
+  label: "Return & Inspect",
+  order: 45, // between deliver (40) and settle (50)
+};
+
+const CROSS_CUT_SPECS: StageSpec[] = [
+  { key: "trust-compliance", label: "Trust & Compliance", order: 70 },
+  { key: "operate-improve", label: "Operate & Improve", order: 80 },
+];
+
+// Stage → enabling capability modules (artefact §5). Intersected with the
+// archetype's actual active modules when an activation profile is present so we
+// never claim a capability the archetype did not activate.
+const STAGE_CAPABILITY_MAP: Record<OperationalValueStreamStageKey, ArchetypeModule[]> = {
+  attract: [],
+  capture: [],
+  qualify: ["service-operations"],
+  deliver: ["customer-estate", "service-operations", "projects"],
+  settle: ["billing-readiness"],
+  retain: ["service-agreements", "lifecycle-signals"],
+  "trust-compliance": [],
+  "operate-improve": ["integrations"],
+  "return-inspect": ["rental-fleet", "rental-agreements"],
+};
+
+const STAGE_METRIC_MAP: Record<OperationalValueStreamStageKey, string[]> = {
+  attract: ["storefront-published"],
+  capture: ["inbox-submissions", "capture-conversion"],
+  qualify: ["utilization", "no-show-rate", "lead-time"],
+  deliver: ["estate-completeness", "fulfilment"],
+  settle: ["invoice", "profit-loss"],
+  retain: ["repeat-rate", "renewals"],
+  "trust-compliance": ["obligations-status"],
+  "operate-improve": ["backlog-throughput"],
+  "return-inspect": ["asset-utilization", "turnaround", "overdue-returns"],
+};
+
+// ── Category defaults (used only when axes do not set a commercial model) ─────
+
+const CATEGORY_DEFAULT_COMMERCIAL_MODEL: Partial<Record<ArchetypeCategory, CommercialModel>> = {
+  "healthcare-wellness": "encounter-based",
+  "beauty-personal-care": "appointment-checkout",
+  "pet-services": "appointment-checkout",
+  "trades-maintenance": "transactional",
+  "professional-services": "recurring-agreement",
+  "software-platform": "subscription",
+  "fitness-recreation": "subscription",
+  "retail-goods": "point-of-sale",
+  "hoa-property-management": "statutory-fees-and-levies",
+  "public-sector": "statutory-fees-and-levies",
+  "banking-financial-services": "account-based-fees",
+};
+
+function resolveCommercialModel(a: ArchetypeDefinition): CommercialModel {
+  const fromAxes = a.activationProfile?.axes?.commercialModel;
+  if (fromAxes) return fromAxes;
+  // food-hospitality and education-training are mixed — key on the CTA.
+  if (a.category === "food-hospitality" || a.category === "education-training") {
+    if (a.ctaType === "purchase") return "point-of-sale";
+    if (a.ctaType === "booking") return "appointment-checkout";
+    return "transactional";
+  }
+  return CATEGORY_DEFAULT_COMMERCIAL_MODEL[a.category] ?? "transactional";
+}
+
+const CATEGORY_DEFAULT_DEMAND: Partial<Record<ArchetypeCategory, DemandSignature>> = {
+  "beauty-personal-care": "weekly",
+  "food-hospitality": "weekly",
+  "healthcare-wellness": "seasonal",
+  "pet-services": "seasonal",
+  "retail-goods": "seasonal",
+  "fitness-recreation": "seasonal",
+  "public-sector": "seasonal",
+  "hoa-property-management": "seasonal",
+  "trades-maintenance": "emergency-reactive",
+  "education-training": "fiscal-calendar",
+  "professional-services": "fiscal-calendar",
+  "nonprofit-community": "fiscal-calendar",
+  "banking-financial-services": "rate-sensitive",
+  "software-platform": "steady",
+};
+
+const CATEGORY_DEFAULT_CAPACITY: Partial<Record<ArchetypeCategory, CapacityUnitType>> = {
+  "beauty-personal-care": "slot-hours",
+  "healthcare-wellness": "slot-hours",
+  "pet-services": "slot-hours",
+  "education-training": "slot-hours",
+  "trades-maintenance": "slot-hours",
+  "fitness-recreation": "physical-hard-cap",
+  "retail-goods": "durable-stock",
+  "professional-services": "billable-hours",
+  "public-sector": "statutory-throughput",
+  "nonprofit-community": "volunteer-or-bed-capacity",
+  "software-platform": "service-throughput",
+  "hoa-property-management": "service-throughput",
+};
+
+// ── Derivation ───────────────────────────────────────────────────────────────
+
+function resolveCapacityUnit(a: ArchetypeDefinition, isRental: boolean, cm: CommercialModel): CapacityUnitType {
+  if (isRental) return "reusable-pooled-asset";
+  if (a.category === "food-hospitality") return a.ctaType === "purchase" ? "perishable-stock" : "slot-hours";
+  if (a.category === "banking-financial-services") {
+    return a.archetypeId === "mortgage-lending" ? "loan-processing-throughput" : "service-throughput";
+  }
+  if (a.category === "professional-services" && a.activationProfile?.profileType === "managed-service-provider") {
+    return "service-throughput";
+  }
+  if (a.archetypeId === "cooperative") return "governance-cycle";
+  const byCategory = CATEGORY_DEFAULT_CAPACITY[a.category];
+  if (byCategory) return byCategory;
+  // Commercial-model fallback for categories without a default.
+  if (cm === "subscription") return "physical-hard-cap";
+  return "service-throughput";
+}
+
+function resolveLoadBearingStages(
+  cm: CommercialModel,
+  isRental: boolean,
+  isDonation: boolean,
+): OperationalValueStreamStageKey[] {
+  if (isRental) return ["qualify"]; // reserve the right asset against a finite pool
+  if (isDonation) return ["capture"]; // capture the gift; no purchase artefact downstream
+  switch (cm) {
+    case "appointment-checkout":
+      return ["qualify"];
+    case "encounter-based":
+      return ["deliver"];
+    case "recurring-agreement":
+      return ["deliver"];
+    case "subscription":
+      return ["retain"];
+    case "transactional":
+    case "point-of-sale":
+      return ["capture"];
+    case "account-based-fees":
+      return ["trust-compliance", "qualify"]; // the gate precedes scheduling
+    case "statutory-fees-and-levies":
+      return ["trust-compliance"];
+    case "usage-based":
+      return ["qualify"];
+    default:
+      return ["capture"];
+  }
+}
+
+function resolveTrustGates(a: ArchetypeDefinition, isRental: boolean): string[] {
+  const gates: string[] = [];
+  const governance = a.activationProfile?.axes?.governance ?? "investor-owned";
+
+  if (a.category === "healthcare-wellness") gates.push("clinical-adjacent-no-advice");
+  if (a.archetypeId === "counselling") gates.push("crisis-routing");
+  if (a.archetypeId === "optician") gates.push("clinical-adjacent-no-advice");
+  if (a.category === "banking-financial-services") gates.push("kyc-and-disclosure");
+  if (a.archetypeId === "legal-services" || a.archetypeId === "accounting") gates.push("regulated-no-advice");
+
+  if (governance === "public-body") gates.push("universal-service-obligation");
+  if (a.archetypeId === "law-enforcement-agency") gates.push("no-cji-access");
+
+  if (a.activationProfile?.estateSeparation === "strict") gates.push("strict-estate-separation");
+
+  if (governance === "member-owned") {
+    gates.push(isRental ? "member-equitable-allocation" : "member-governance");
+  }
+
+  return Array.from(new Set(gates));
+}
+
+function resolveIt4itBinding(a: ArchetypeDefinition): It4ItStage[] {
+  const portfolios = a.activationProfile?.portfolios;
+  if (portfolios) {
+    const stages = new Set<It4ItStage>();
+    for (const profile of Object.values(portfolios)) {
+      for (const stage of profile?.it4itStages ?? []) stages.add(stage);
+    }
+    if (stages.size > 0) return Array.from(stages);
+  }
+  return ["request-to-fulfill"];
+}
+
+/**
+ * Pure derivation: archetype definition → operational value stream model.
+ * Deterministic and side-effect-free; safe to call at setup, archetype-reset,
+ * or in tests across every archetype in `ALL_ARCHETYPES`.
+ */
+export function deriveOperationalValueStream(archetype: ArchetypeDefinition): OperationalValueStream {
+  const commercialModel = resolveCommercialModel(archetype);
+  const provisioning = archetype.activationProfile?.axes?.provisioning;
+  const isRental = provisioning === "reservation-and-return";
+  const isDonation = archetype.ctaType === "donation";
+
+  const loadBearingStageKeys = resolveLoadBearingStages(commercialModel, isRental, isDonation);
+  const trustGates = resolveTrustGates(archetype, isRental);
+  const capacityUnit = resolveCapacityUnit(archetype, isRental, commercialModel);
+  const demandSignature = isRental
+    ? "synchronized-contention"
+    : (CATEGORY_DEFAULT_DEMAND[archetype.category] ?? "steady");
+  const it4itStageBinding = resolveIt4itBinding(archetype);
+
+  const activeModules = archetype.activationProfile?.modules;
+
+  const specs: StageSpec[] = [
+    ...PRIMARY_STAGE_SPECS,
+    ...(isRental ? [RETURN_INSPECT_SPEC] : []),
+    ...CROSS_CUT_SPECS,
+  ].sort((x, y) => x.order - y.order);
+
+  const stages: OperationalValueStreamStage[] = specs.map((spec) => {
+    const mapped = STAGE_CAPABILITY_MAP[spec.key];
+    const capabilityBindings = activeModules
+      ? mapped.filter((m) => activeModules.includes(m))
+      : mapped;
+    const metricBindings =
+      spec.key === "settle" && isDonation ? ["donation-receipt"] : STAGE_METRIC_MAP[spec.key];
+    return {
+      key: spec.key,
+      label: spec.label,
+      order: spec.order,
+      loadBearing: loadBearingStageKeys.includes(spec.key),
+      capabilityBindings,
+      metricBindings,
+      trustGateKeys: spec.key === "trust-compliance" ? trustGates : [],
+    };
+  });
+
+  return {
+    archetypeId: archetype.archetypeId,
+    archetypeName: archetype.name,
+    category: archetype.category,
+    stages,
+    loadBearingStageKeys,
+    capacityUnit,
+    demandSignature,
+    trustGates,
+    it4itStageBinding,
+  };
+}
