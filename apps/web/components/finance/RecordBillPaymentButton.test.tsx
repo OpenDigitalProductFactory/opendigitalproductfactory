@@ -3,19 +3,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-const { recordPayment, refresh } = vi.hoisted(() => ({
-  recordPayment: vi.fn(async () => ({ id: "pay-1", paymentRef: "PAY-1" })),
+const { recordBillPayment, refresh } = vi.hoisted(() => ({
+  recordBillPayment: vi.fn(async () => undefined),
   refresh: vi.fn(),
 }));
 
-vi.mock("@/lib/actions/finance", () => ({ recordPayment }));
+vi.mock("@/lib/actions/ap", () => ({ recordBillPayment }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 
 import { RecordBillPaymentButton } from "./RecordBillPaymentButton";
 
 afterEach(() => {
   cleanup();
-  recordPayment.mockClear();
+  recordBillPayment.mockClear();
   refresh.mockClear();
 });
 
@@ -33,12 +33,10 @@ describe("RecordBillPaymentButton", () => {
     fireEvent.click(screen.getByText("Confirm payment"));
 
     await waitFor(() => {
-      expect(recordPayment).toHaveBeenCalledWith(
+      expect(recordBillPayment).toHaveBeenCalledWith(
         expect.objectContaining({
-          direction: "outbound",
           billId: "bill-1",
           amount: 85,
-          currency: "USD",
           method: "bank_transfer",
         }),
       );

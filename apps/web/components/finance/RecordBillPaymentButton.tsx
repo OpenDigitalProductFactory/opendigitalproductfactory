@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { recordPayment } from "@/lib/actions/finance";
+import { recordBillPayment } from "@/lib/actions/ap";
 
 const PAYMENT_METHODS = [
   "bank_transfer", "card", "cash", "cheque", "direct_debit", "stripe",
@@ -46,12 +46,12 @@ export function RecordBillPaymentButton({ billId, amountDue, currency }: Props) 
     setLoading(true);
     setError(null);
     try {
-      await recordPayment({
-        direction: "outbound",
+      // Routes through the server-side guard (status + outstanding-balance checks);
+      // currency is derived from the bill server-side, so it is not sent from here.
+      await recordBillPayment({
+        billId,
         method: method as (typeof PAYMENT_METHODS)[number],
         amount: value,
-        currency,
-        billId,
         receivedAt,
       });
       setOpen(false);
