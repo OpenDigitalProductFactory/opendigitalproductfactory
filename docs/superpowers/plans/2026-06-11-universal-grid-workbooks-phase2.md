@@ -149,11 +149,14 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
 
 - **Slice 6 — grid quick filter — SHIPPED.** A client-side, case-insensitive substring filter
   across all columns (pure, unit-tested `grid-filter.ts`; matches reference labels too), with a
-  toolbar search box + "N of M" count. Filters the rows already loaded; server-side/push-down
-  filtering for large datasets is a reporting-phase concern.
-- **Remaining (not built):** per-column filters + AND/OR builder; saved views (persist to the
-  existing `WorkbookView`); conditional formatting (color scales / data bars / icon sets /
-  formula rules); calendar + gallery views; CSV + `.xlsx` import; group-by summary.
+  toolbar search box + "N of M" count.
+- **Slice 7 — per-column filters — SHIPPED.** A toggleable filter panel with one control per column
+  (select → option dropdown, checkbox → checked/unchecked, else text), AND-combined with the quick
+  filter (`applyColumnFilters`, unit-tested), with an active-count badge + Clear. Client-side over
+  loaded rows; precise number/date operators + saved views are follow-ups.
+- **Remaining (not built):** saved views (persist filters/sort to the existing `WorkbookView`);
+  conditional formatting (color scales / data bars / icon sets / formula rules); calendar + gallery
+  views; CSV + `.xlsx` import; group-by summary.
 
 ## Remaining toward full Smartsheet + Supabase parity (tracked, not built)
 
