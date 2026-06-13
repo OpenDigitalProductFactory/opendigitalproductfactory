@@ -65,7 +65,7 @@ class RiskAssessmentAdapter implements DataSourceAdapter {
   readonly entityType = RISK_ENTITY_TYPE;
 
   async getColumns(): Promise<ColumnDefinition[]> {
-    return RISK_COLUMNS;
+    return RISK_COLUMNS.map((c) => ({ ...c, provenanceKind: "system" as const }));
   }
 
   async queryRows(

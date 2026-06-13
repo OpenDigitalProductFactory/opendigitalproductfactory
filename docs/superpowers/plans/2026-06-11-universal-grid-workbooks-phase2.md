@@ -106,12 +106,20 @@ columns (fail-closed)** are NOT yet written — tracked for the governance/lifec
 v1 computed columns are local-derivation only, no SoR mutation, so the fail-closed lineage invariant
 (which guards *promotion*) is not yet engaged.
 
-## Slice 3 — `provenanceKind` + progressive disclosure — separate PR (BI-B8549363)
+## Slice 3 — `provenanceKind` + progressive disclosure — SHIPPED (BI-B8549363)
 
-Additive migration: `WorkbookColumn.provenanceKind` (`system|source|derived|manual`). Platform-adapter
-columns report `system`; custom columns default `manual`; slice-2 derived columns are `derived`.
-Progressive disclosure: labels hidden until hover/advanced toggle (Dale review). One migration +
-seed-safe default + adapter `getColumns` populates it + a hover label in the grid header.
+**No migration** — provenance is *derived*, not stored: platform/generic adapters report `system`;
+custom columns are `derived` (formula/lookup) or `manual` (everything else) via
+`customColumnProvenance`. Avoids the deploy-gap entirely and is the correct source of truth (a
+column's tier follows from what it is, not a stored flag that could drift).
+
+- `ColumnDefinition.provenanceKind` + `PROVENANCE_KINDS`/`PROVENANCE_LABELS` (end-user wording:
+  Official / Live source / Calculated / Your note).
+- Every adapter's `getColumns` tags provenance (backlog/invoice/risk/generic = system; custom = derived/manual).
+- **Progressive disclosure (Dale review):** the grid reads as an ordinary spreadsheet; a "Show data
+  sources" toggle reveals a small per-column provenance label in the header. Hidden by default.
+
+`source` (live external feeds) stays unused until Phase 6 integrations land.
 
 ## Slice 4 — Multi-step undo/redo — separate PR (BI-BA57AB71)
 

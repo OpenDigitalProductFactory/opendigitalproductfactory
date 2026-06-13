@@ -119,6 +119,7 @@ export function genericColumnDefs(config: GenericTableConfig): ColumnDefinition[
     width: c.width,
     groupable: c.groupable ?? c.fieldType === "select",
     config: c.options ? { options: c.options } : undefined,
+    provenanceKind: "system", // a live platform field
   }));
 }
 

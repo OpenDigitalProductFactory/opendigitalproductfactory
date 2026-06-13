@@ -7,6 +7,7 @@ import {
   buildReferenceSearchArgs,
   type GenericTableConfig,
 } from "./generic-read-adapter";
+import { customColumnProvenance } from "./types";
 
 const config: GenericTableConfig = {
   entityType: "epic",
@@ -108,5 +109,20 @@ describe("genericColumnDefs", () => {
     const status = cols.find((c) => c.columnId === "status");
     expect(status?.groupable).toBe(true);
     expect(status?.config?.options?.[0].key).toBe("open");
+  });
+
+  it("marks every generic (platform) column as system provenance", () => {
+    const cols = genericColumnDefs(config);
+    expect(cols.every((c) => c.provenanceKind === "system")).toBe(true);
+  });
+});
+
+describe("customColumnProvenance", () => {
+  it("derives derived for computed types and manual otherwise", () => {
+    expect(customColumnProvenance("formula")).toBe("derived");
+    expect(customColumnProvenance("lookup")).toBe("derived");
+    expect(customColumnProvenance("text")).toBe("manual");
+    expect(customColumnProvenance("reference")).toBe("manual");
+    expect(customColumnProvenance("number")).toBe("manual");
   });
 });
