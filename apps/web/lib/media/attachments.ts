@@ -11,7 +11,7 @@
 
 import { prisma } from "@dpf/db";
 import { probeImage } from "./image-probe";
-import { writeMediaBlob } from "./media-storage";
+import { prepareMediaBlobContentForStorage, writeMediaBlob } from "./media-storage";
 
 export type MediaOwnerType =
   | "StorefrontItem"
@@ -62,7 +62,16 @@ export async function createMediaAsset(
     return { ok: false, error: `Image exceeds ${MAX_IMAGE_BYTES / (1024 * 1024)}MB limit` };
   }
 
-  const probed = probeImage(content);
+  let preparedContent: ReturnType<typeof prepareMediaBlobContentForStorage>;
+  try {
+    preparedContent = prepareMediaBlobContentForStorage(content, {
+      allowedMimeTypes: ALLOWED_IMAGE_MIME_TYPES,
+      maxBytes: MAX_IMAGE_BYTES,
+    });
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Invalid media upload." };
+  }
+  const probed = probeImage(preparedContent);
   const mimeType = probed.mimeType ?? input.declaredMimeType ?? null;
   if (!mimeType || !ALLOWED_IMAGE_MIME_TYPES.has(mimeType)) {
     return {
@@ -71,7 +80,7 @@ export async function createMediaAsset(
     };
   }
 
-  const blob = await writeMediaBlob(content);
+  const blob = await writeMediaBlob(preparedContent);
 
   // Content-addressed dedupe within the org.
   const existing = await prisma.mediaAsset.findUnique({

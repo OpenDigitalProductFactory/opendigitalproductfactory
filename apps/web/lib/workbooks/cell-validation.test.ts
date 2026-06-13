@@ -75,6 +75,17 @@ describe("validateCell", () => {
     expect(validateCell(col("email"), "nope").ok).toBe(false);
   });
 
+  it("stores an image URL as text and rejects non-strings", () => {
+    const c = col("image");
+    const ok = validateCell(c, "/api/media/abc123");
+    expect(ok.ok && ok.storage.textValue).toBe("/api/media/abc123");
+    expect(validateCell(c, 42 as never).ok).toBe(false);
+    // empty is allowed on a non-required image column
+    expect(validateCell(c, null).ok).toBe(true);
+    // required image column rejects empty
+    expect(validateCell(col("image", { required: true }), null).ok).toBe(false);
+  });
+
   it("requires a referenceId for reference and enforces target type", () => {
     const c = col("reference", { config: { referenceType: "epic" } });
     const ok = validateCell(c, { referenceId: "E1", referenceType: "epic" });
@@ -100,5 +111,10 @@ describe("storageToCellValue", () => {
 
   it("returns empty array for multi_select with no value", () => {
     expect(storageToCellValue("multi_select", null)).toBeNull();
+  });
+
+  it("round-trips an image URL through text storage", () => {
+    const r = validateCell(col("image"), "/api/media/xyz");
+    expect(r.ok && storageToCellValue("image", r.storage)).toBe("/api/media/xyz");
   });
 });

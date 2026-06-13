@@ -25,6 +25,7 @@ const OFFERED_TYPES: { value: FieldType; label: string }[] = [
   { value: "formula", label: "Formula" },
   { value: "url", label: "URL" },
   { value: "email", label: "Email" },
+  { value: "image", label: "Image" },
 ];
 
 const RESULT_TYPES: { value: FieldType; label: string }[] = [
