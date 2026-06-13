@@ -6,7 +6,14 @@
 // implementation detail contained here, so it can be swapped without touching
 // the data layer, server, or pages.
 
-import { useCallback, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import {
   DataGrid,
   SelectColumn,
@@ -68,6 +75,12 @@ import {
   operatorNeedsValue,
 } from "./grid-conditional-format";
 import { summarize, numericColumns, summaryChartBars } from "./grid-summary";
+import {
+  viewStorageKey,
+  serializeViewState,
+  parseViewState,
+  type SortState,
+} from "./grid-view-state";
 
 export interface WorkbookGridProps {
   /** custom WorkbookTable id (TBL-*) or, for platform data, the entity type. */
@@ -215,6 +228,42 @@ export function WorkbookGrid({
   // Multi-step undo/redo of cell edits (distinct from the audit history). Each
   // entry's inverse replays through the same validated dispatch as a normal edit.
   const [history, setHistory] = useState<GridHistory>(EMPTY_HISTORY);
+
+  // Persist the per-grid view (filters/sort/formatting/provenance) per tableId so
+  // it survives reloads. Client-only (localStorage); hydrate once, then save on change.
+  const viewHydratedRef = useRef(false);
+  useEffect(() => {
+    viewHydratedRef.current = false;
+    try {
+      const parsed = parseViewState(localStorage.getItem(viewStorageKey(tableId)));
+      if (parsed) {
+        if (parsed.filterQuery !== undefined) setFilterQuery(parsed.filterQuery);
+        if (parsed.columnFilters) setColumnFilters(parsed.columnFilters);
+        if (parsed.sort) setSortColumns(parsed.sort);
+        if (parsed.cfRules) setCfRules(parsed.cfRules);
+        if (parsed.showProvenance !== undefined) setShowProvenance(parsed.showProvenance);
+      }
+    } catch {
+      // ignore unreadable storage
+    }
+    viewHydratedRef.current = true;
+  }, [tableId]);
+
+  useEffect(() => {
+    if (!viewHydratedRef.current) return;
+    try {
+      const sort: SortState[] = sortColumns.map((s) => ({
+        columnKey: s.columnKey,
+        direction: s.direction,
+      }));
+      localStorage.setItem(
+        viewStorageKey(tableId),
+        serializeViewState({ filterQuery, columnFilters, sort, cfRules, showProvenance }),
+      );
+    } catch {
+      // ignore quota / unavailable storage
+    }
+  }, [tableId, filterQuery, columnFilters, sortColumns, cfRules, showProvenance]);
 
   const gridColumns = useMemo<Column<GridRowData>[]>(() => {
     const cols = columns.map((c) => buildColumn(c, capabilities.canEditCell, showProvenance));
