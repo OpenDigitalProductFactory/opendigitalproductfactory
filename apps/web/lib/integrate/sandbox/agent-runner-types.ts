@@ -6,7 +6,7 @@ import type {
 } from "./provider-types";
 import type { AssignedTask } from "../task-dependency-graph";
 
-export type BuildAgentId = "codex" | "claude" | "grok" | "dpf-native";
+export type BuildAgentId = "codex" | "claude" | "grok" | "dpf-native" | "opencode";
 
 export type BuildAgentRunnerCapabilities = {
   // "preview" is the onboarding tier for a newly-admitted agent runner: it is

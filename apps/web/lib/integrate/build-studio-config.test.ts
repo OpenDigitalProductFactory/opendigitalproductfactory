@@ -23,8 +23,9 @@ const mockCredentialFindUnique = vi.mocked(prisma.credentialEntry.findUnique);
 function providerRow(
   providerId: string,
   status: "active" | "inactive" | "unconfigured" = "active",
+  authMethod: string = "api_key",
 ): Awaited<ReturnType<typeof prisma.modelProvider.findMany>>[number] {
-  return { providerId, status } as Awaited<ReturnType<typeof prisma.modelProvider.findMany>>[number];
+  return { providerId, status, authMethod } as Awaited<ReturnType<typeof prisma.modelProvider.findMany>>[number];
 }
 
 function credentialRow(status: "ok" | "configured" | "pending"): NonNullable<Awaited<ReturnType<typeof prisma.credentialEntry.findUnique>>> {
@@ -42,6 +43,8 @@ describe("getBuildStudioConfig", () => {
     delete process.env.CLAUDE_CODE_MODEL;
     delete process.env.CODEX_MODEL;
     delete process.env.GROK_MODEL;
+    delete process.env.OPENCODE_PROVIDER_ID;
+    delete process.env.OPENCODE_MODEL;
     mockProviderFindMany.mockResolvedValue([]);
     mockCredentialFindUnique.mockResolvedValue(null);
   });
@@ -54,9 +57,11 @@ describe("getBuildStudioConfig", () => {
       claudeProviderId: "",
       codexProviderId: "",
       grokProviderId: "",
+      opencodeProviderId: "",
       claudeModel: "sonnet",
       codexModel: "",
       grokModel: "",
+      opencodeModel: "",
     });
   });
 
@@ -144,5 +149,52 @@ describe("getBuildStudioConfig", () => {
     process.env.CODEX_DISPATCH = "false";
     const config = await getBuildStudioConfig();
     expect(config.provider).toBe("agentic");
+  });
+
+  it("auto-detects opencode from an active no-auth local provider with no credential row", async () => {
+    mockFindUnique.mockResolvedValue(null);
+    // claude, codex, grok find nothing; opencode finds the local model provider.
+    mockProviderFindMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([providerRow("local", "active", "none")]);
+    // No credentialEntry exists for the no-auth provider — must still detect.
+    mockCredentialFindUnique.mockResolvedValue(null);
+
+    const config = await getBuildStudioConfig();
+
+    expect(config.provider).toBe("opencode");
+    expect(config.opencodeProviderId).toBe("local");
+  });
+
+  it("prefers a configured frontier CLI over the local opencode provider", async () => {
+    mockFindUnique.mockResolvedValue(null);
+    mockProviderFindMany
+      .mockResolvedValueOnce([providerRow("anthropic-sub")])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([providerRow("local", "active", "none")]);
+    mockCredentialFindUnique.mockResolvedValueOnce(credentialRow("ok"));
+
+    const config = await getBuildStudioConfig();
+
+    expect(config.provider).toBe("claude");
+    expect(config.opencodeProviderId).toBe("local");
+  });
+
+  it("honors CLI_DISPATCH_PROVIDER=opencode when a local provider is active", async () => {
+    mockFindUnique.mockResolvedValue(null);
+    process.env.CLI_DISPATCH_PROVIDER = "opencode";
+    mockProviderFindMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([providerRow("local", "active", "none")]);
+    mockCredentialFindUnique.mockResolvedValue(null);
+
+    const config = await getBuildStudioConfig();
+
+    expect(config.provider).toBe("opencode");
   });
 });

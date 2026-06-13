@@ -87,6 +87,10 @@ export function BuildStudioConfigForm({
   const [claudeModel, setClaudeModel] = useState(config.claudeModel);
   const [codexModel, setCodexModel] = useState(config.codexModel);
   const [grokModel, setGrokModel] = useState(config.grokModel);
+  // opencode (local model) fields are carried through here; the dedicated
+  // "Local model (OpenCode)" UI surface lands in Phase 2 of the local-LLM plan.
+  const [opencodeProviderId] = useState(config.opencodeProviderId);
+  const [opencodeModel] = useState(config.opencodeModel);
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,9 +109,11 @@ export function BuildStudioConfigForm({
           claudeProviderId,
           codexProviderId,
           grokProviderId,
+          opencodeProviderId,
           claudeModel,
           codexModel,
           grokModel,
+          opencodeModel,
         });
         setSaved(true);
         setTimeout(() => setSaved(false), 3000);
