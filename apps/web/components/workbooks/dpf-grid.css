@@ -147,3 +147,17 @@
   min-inline-size: 2px;
   background-color: var(--dpf-accent);
 }
+
+/* Gallery card conditional-format accent (scoped so it never restyles grid rows). */
+.dpf-gallery-card.dpf-cf-red {
+  border-inline-start: 3px solid var(--dpf-error);
+}
+.dpf-gallery-card.dpf-cf-amber {
+  border-inline-start: 3px solid var(--dpf-warning, #b8860b);
+}
+.dpf-gallery-card.dpf-cf-green {
+  border-inline-start: 3px solid var(--dpf-success, #2e7d32);
+}
+.dpf-gallery-card.dpf-cf-blue {
+  border-inline-start: 3px solid var(--dpf-accent);
+}

@@ -62,7 +62,7 @@ import {
   commitUndo,
   commitRedo,
 } from "./grid-history";
-import { quickFilterRows, applyColumnFilters, type ColumnFilters } from "./grid-filter";
+import { quickFilterRows, applyColumnFilters, cellSearchText, type ColumnFilters } from "./grid-filter";
 import { rowsToCsv } from "./grid-csv";
 import {
   type ConditionalRule,
@@ -214,6 +214,7 @@ export function WorkbookGrid({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showProvenance, setShowProvenance] = useState(false);
+  const [gallery, setGallery] = useState(false);
   const [filterQuery, setFilterQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [showFormat, setShowFormat] = useState(false);
@@ -531,6 +532,30 @@ export function WorkbookGrid({
         >
           {showProvenance ? "Hide data sources" : "Show data sources"}
         </button>
+        <div className="inline-flex overflow-hidden rounded-md border border-[var(--dpf-border)] text-sm">
+          <button
+            type="button"
+            onClick={() => setGallery(false)}
+            className={
+              gallery
+                ? "px-2 py-1 text-[var(--dpf-muted)]"
+                : "bg-[var(--dpf-surface-1)] px-2 py-1 font-medium text-[var(--dpf-text)]"
+            }
+          >
+            Grid
+          </button>
+          <button
+            type="button"
+            onClick={() => setGallery(true)}
+            className={
+              gallery
+                ? "bg-[var(--dpf-surface-1)] px-2 py-1 font-medium text-[var(--dpf-text)]"
+                : "px-2 py-1 text-[var(--dpf-muted)]"
+            }
+          >
+            Gallery
+          </button>
+        </div>
         {error && <span className="text-sm text-[var(--dpf-error)]">{error}</span>}
       </div>
 
@@ -798,6 +823,36 @@ export function WorkbookGrid({
       {columns.length === 0 ? (
         <div className="rounded-md border border-dashed border-[var(--dpf-border)] p-8 text-center text-[var(--dpf-muted)]">
           This table has no columns yet. Add a column to start entering data.
+        </div>
+      ) : gallery ? (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3 p-1">
+            {sortedRows.map((row) => {
+              const color = rowColor(row, cfRules);
+              return (
+                <div
+                  key={row.rowId}
+                  className={`dpf-gallery-card rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3 ${
+                    color ? rowColorClass(color) : ""
+                  }`}
+                >
+                  <dl className="flex flex-col gap-1">
+                    {columns.map((col) => (
+                      <div key={col.columnId} className="flex justify-between gap-2 text-sm">
+                        <dt className="shrink-0 text-[var(--dpf-muted)]">{col.name}</dt>
+                        <dd className="truncate text-right text-[var(--dpf-text)]" title={cellSearchText(row[col.columnId] ?? null)}>
+                          {cellSearchText(row[col.columnId] ?? null)}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              );
+            })}
+            {sortedRows.length === 0 && (
+              <div className="text-sm text-[var(--dpf-muted)]">No rows.</div>
+            )}
+          </div>
         </div>
       ) : (
         <div className="min-h-0 flex-1">

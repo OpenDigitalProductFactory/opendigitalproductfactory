@@ -173,8 +173,11 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   Client-side localStorage (works for every grid, no migration); pure, unit-tested `grid-view-state.ts`
   with defensive parsing (malformed/old payloads ignored field-by-field). Named/shareable server-side
   views (WorkbookView) are a follow-up.
-- **Remaining (not built):** named/shareable views; calendar + gallery views; full pivots + richer
-  charts; metrics/semantic layer; operationalization lifecycle.
+- **Slice 15 — gallery (card) view — SHIPPED.** A Grid/Gallery toggle on the WorkbookGrid renders
+  rows as cards (one card per row, each column as a label/value pair), honoring the active filters,
+  sort, and conditional-format colour (a left-border accent). No new dependency, like the kanban board.
+- **Remaining (not built):** named/shareable views; calendar view (fullcalendar — needs a date
+  column); full pivots + richer charts; metrics/semantic layer; operationalization lifecycle.
 
 ## Remaining toward full Smartsheet + Supabase parity (tracked, not built)
 
