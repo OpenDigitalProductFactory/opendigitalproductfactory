@@ -55,7 +55,7 @@ import {
   commitUndo,
   commitRedo,
 } from "./grid-history";
-import { quickFilterRows } from "./grid-filter";
+import { quickFilterRows, applyColumnFilters, type ColumnFilters } from "./grid-filter";
 
 export interface WorkbookGridProps {
   /** custom WorkbookTable id (TBL-*) or, for platform data, the entity type. */
@@ -190,6 +190,9 @@ export function WorkbookGrid({
   const [busy, setBusy] = useState(false);
   const [showProvenance, setShowProvenance] = useState(false);
   const [filterQuery, setFilterQuery] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
+  const activeFilterCount = Object.values(columnFilters).filter((v) => v.trim()).length;
   // Multi-step undo/redo of cell edits (distinct from the audit history). Each
   // entry's inverse replays through the same validated dispatch as a normal edit.
   const [history, setHistory] = useState<GridHistory>(EMPTY_HISTORY);
@@ -200,7 +203,10 @@ export function WorkbookGrid({
   }, [columns, capabilities, showProvenance]);
 
   const sortedRows = useMemo<GridRowData[]>(() => {
-    const filtered = quickFilterRows(rowData, columns, filterQuery);
+    const filtered = applyColumnFilters(
+      quickFilterRows(rowData, columns, filterQuery),
+      columnFilters,
+    );
     if (sortColumns.length === 0) return filtered;
     const sorted = [...filtered];
     sorted.sort((ra, rb) => {
@@ -211,7 +217,7 @@ export function WorkbookGrid({
       return 0;
     });
     return sorted;
-  }, [rowData, columns, filterQuery, sortColumns]);
+  }, [rowData, columns, filterQuery, columnFilters, sortColumns]);
 
   const persistCell = useCallback(
     async (
@@ -398,15 +404,89 @@ export function WorkbookGrid({
         )}
         <button
           type="button"
+          onClick={() => setShowFilters((v) => !v)}
+          aria-pressed={showFilters}
+          className="ml-auto rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          title="Filter by column"
+        >
+          {showFilters ? "Hide filters" : "Filters"}
+          {activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+        </button>
+        <button
+          type="button"
           onClick={() => setShowProvenance((v) => !v)}
           aria-pressed={showProvenance}
-          className="ml-auto rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
           title="Show where each column's values come from"
         >
           {showProvenance ? "Hide data sources" : "Show data sources"}
         </button>
         {error && <span className="text-sm text-[var(--dpf-error)]">{error}</span>}
       </div>
+
+      {showFilters && columns.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
+          {columns.map((col) => {
+            const value = columnFilters[col.columnId] ?? "";
+            const set = (v: string) =>
+              setColumnFilters((f) => ({ ...f, [col.columnId]: v }));
+            const ctrlClass =
+              "rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-sm text-[var(--dpf-text)]";
+            if (col.fieldType === "select") {
+              return (
+                <select
+                  key={col.columnId}
+                  value={value}
+                  onChange={(e) => set(e.target.value)}
+                  aria-label={`Filter ${col.name}`}
+                  className={ctrlClass}
+                >
+                  <option value="">{col.name}: any</option>
+                  {(col.config?.options ?? []).map((o) => (
+                    <option key={o.key} value={o.key}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              );
+            }
+            if (col.fieldType === "checkbox") {
+              return (
+                <select
+                  key={col.columnId}
+                  value={value}
+                  onChange={(e) => set(e.target.value)}
+                  aria-label={`Filter ${col.name}`}
+                  className={ctrlClass}
+                >
+                  <option value="">{col.name}: any</option>
+                  <option value="true">Checked</option>
+                  <option value="false">Unchecked</option>
+                </select>
+              );
+            }
+            return (
+              <input
+                key={col.columnId}
+                value={value}
+                onChange={(e) => set(e.target.value)}
+                placeholder={col.name}
+                aria-label={`Filter ${col.name}`}
+                className={ctrlClass}
+              />
+            );
+          })}
+          {activeFilterCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setColumnFilters({})}
+              className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
       {columns.length === 0 ? (
         <div className="rounded-md border border-dashed border-[var(--dpf-border)] p-8 text-center text-[var(--dpf-muted)]">
