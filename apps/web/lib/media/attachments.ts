@@ -254,4 +254,101 @@ export async function syncPrimaryImage(
   }
 
   await cache.apply(ownerId, chosen ? mediaAssetUrl(chosen.mediaAssetId) : null);
+
+  // AdoptableAnimal caches the primary asset *id* (not a URL) on the row.
+  if (ownerType === "AdoptableAnimal") {
+    const first = await prisma.mediaAttachment.findFirst({
+      where: { ownerType, ownerId },
+      orderBy: [{ sortOrder: "asc" }],
+      select: { mediaAssetId: true },
+    });
+    await prisma.adoptableAnimal.update({
+      where: { id: ownerId },
+      data: { primaryPhotoAssetId: first?.mediaAssetId ?? null },
+    });
+  }
+}
+
+/**
+ * Detach one attachment by id (does not delete the shared asset/blob). Returns
+ * the owner so the caller can resync its primary cache, or null if not found.
+ */
+export async function detachMedia(
+  attachmentId: string,
+): Promise<{ ownerType: MediaOwnerType; ownerId: string } | null> {
+  const existing = await prisma.mediaAttachment.findUnique({
+    where: { id: attachmentId },
+    select: { ownerType: true, ownerId: true },
+  });
+  if (!existing) return null;
+  await prisma.mediaAttachment.delete({ where: { id: attachmentId } });
+  const owner = { ownerType: existing.ownerType as MediaOwnerType, ownerId: existing.ownerId };
+  await syncPrimaryImage(owner.ownerType, owner.ownerId);
+  return owner;
+}
+
+/**
+ * Reorder an owner's gallery for a role. `orderedAttachmentIds` is the desired
+ * order; each is written its index as sortOrder. Ids not belonging to the owner
+ * are ignored. Refreshes the primary cache (position 0 becomes primary).
+ */
+export async function reorderOwnerMedia(
+  ownerType: MediaOwnerType,
+  ownerId: string,
+  orderedAttachmentIds: string[],
+  role?: string,
+): Promise<void> {
+  const owned = await prisma.mediaAttachment.findMany({
+    where: { ownerType, ownerId, ...(role ? { role } : {}) },
+    select: { id: true },
+  });
+  const ownedIds = new Set(owned.map((a) => a.id));
+  await prisma.$transaction(
+    orderedAttachmentIds
+      .filter((id) => ownedIds.has(id))
+      .map((id, index) =>
+        prisma.mediaAttachment.update({ where: { id }, data: { sortOrder: index } }),
+      ),
+  );
+  await syncPrimaryImage(ownerType, ownerId);
+}
+
+/** Make one attachment the primary (sortOrder 0); others shift down. */
+export async function setPrimaryAttachment(attachmentId: string): Promise<void> {
+  const target = await prisma.mediaAttachment.findUnique({
+    where: { id: attachmentId },
+    select: { ownerType: true, ownerId: true, role: true },
+  });
+  if (!target) return;
+  const siblings = await prisma.mediaAttachment.findMany({
+    where: { ownerType: target.ownerType, ownerId: target.ownerId, role: target.role },
+    orderBy: { sortOrder: "asc" },
+    select: { id: true },
+  });
+  const reordered = [attachmentId, ...siblings.map((s) => s.id).filter((id) => id !== attachmentId)];
+  await reorderOwnerMedia(
+    target.ownerType as MediaOwnerType,
+    target.ownerId,
+    reordered,
+    target.role,
+  );
+}
+
+/** Update an attachment's caption. */
+export async function updateAttachmentCaption(
+  attachmentId: string,
+  caption: string | null,
+): Promise<void> {
+  await prisma.mediaAttachment.update({
+    where: { id: attachmentId },
+    data: { caption },
+  });
+}
+
+/** Update the alt text on the underlying asset (SEO + accessibility). */
+export async function updateAssetAltText(
+  assetId: string,
+  altText: string | null,
+): Promise<void> {
+  await prisma.mediaAsset.update({ where: { id: assetId }, data: { altText } });
 }
