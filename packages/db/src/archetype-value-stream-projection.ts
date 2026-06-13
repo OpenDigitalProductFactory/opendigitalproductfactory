@@ -1,4 +1,3 @@
-import type { Prisma } from "../generated/client/client";
 import { prisma } from "./client";
 import type { OperationalValueStream } from "@dpf/storefront-templates";
 
@@ -65,8 +64,14 @@ const BAND_STAGE_KEY = "__stream__";
 const FLOW_EXCLUDED_KEYS = new Set(["trust-compliance", "operate-improve"]);
 
 export interface ProjectArchetypeValueStreamInput {
-  /** A PrismaClient or a `$transaction` client; cast to the narrow OvsmDb inside. */
-  db?: Prisma.TransactionClient;
+  /**
+   * A PrismaClient or a `$transaction` client. Typed `unknown` on purpose: naming
+   * the Prisma client type here forced every importer (incl. apps/web) to compute
+   * Prisma's `Omit<PrismaClient, …>` mapped type, which blew the typecheck heap
+   * (OOM, PR #1798 CI). It is cast to the narrow OvsmDb at the single boundary in
+   * projectArchetypeValueStream(); callers pass `prisma` or a transaction client.
+   */
+  db?: unknown;
   orgId: string;
   ovsm: OperationalValueStream;
 }

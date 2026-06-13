@@ -17,7 +17,25 @@ export function isOperationalValueStreamScope(scopeType: string | null | undefin
   return scopeType === "archetype_value_stream";
 }
 
-export async function listValueStreamViews() {
+/**
+ * Explicit return shape (not the inferred Prisma `findMany` type). The inferred
+ * type for a query with `select` + `_count` is large, and letting it propagate
+ * across the module boundary into the page server component pushed the apps/web
+ * `tsc` heap over its ceiling (OOM, PR #1798 CI). A plain interface keeps the
+ * boundary cheap; the Prisma result is structurally assignable to it.
+ */
+export interface ValueStreamViewListItem {
+  id: string;
+  name: string;
+  description: string | null;
+  scopeType: string;
+  scopeRef: string | null;
+  createdAt: Date;
+  notation: { name: string };
+  _count: { viewElements: number };
+}
+
+export async function listValueStreamViews(): Promise<ValueStreamViewListItem[]> {
   return prisma.eaView.findMany({
     where: { scopeType: { in: [...VALUE_STREAM_VIEW_SCOPES] } },
     orderBy: [{ createdAt: "desc" }],
