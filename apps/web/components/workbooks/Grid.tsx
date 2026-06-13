@@ -6,7 +6,7 @@
 // implementation detail contained here, so it can be swapped without touching
 // the data layer, server, or pages.
 
-import { useCallback, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   DataGrid,
   SelectColumn,
@@ -57,6 +57,16 @@ import {
 } from "./grid-history";
 import { quickFilterRows, applyColumnFilters, type ColumnFilters } from "./grid-filter";
 import { rowsToCsv } from "./grid-csv";
+import {
+  type ConditionalRule,
+  CF_OPERATORS,
+  CF_OPERATOR_LABELS,
+  CF_COLORS,
+  rowColor,
+  rowColorClass,
+  blankRule,
+  operatorNeedsValue,
+} from "./grid-conditional-format";
 
 export interface WorkbookGridProps {
   /** custom WorkbookTable id (TBL-*) or, for platform data, the entity type. */
@@ -192,6 +202,9 @@ export function WorkbookGrid({
   const [showProvenance, setShowProvenance] = useState(false);
   const [filterQuery, setFilterQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [showFormat, setShowFormat] = useState(false);
+  const [cfRules, setCfRules] = useState<ConditionalRule[]>([]);
+  const cfIdRef = useRef(0);
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
   const activeFilterCount = Object.values(columnFilters).filter((v) => v.trim()).length;
   // Multi-step undo/redo of cell edits (distinct from the audit history). Each
@@ -438,6 +451,16 @@ export function WorkbookGrid({
         </button>
         <button
           type="button"
+          onClick={() => setShowFormat((v) => !v)}
+          aria-pressed={showFormat}
+          className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          title="Highlight rows by a condition"
+        >
+          {showFormat ? "Hide formatting" : "Format"}
+          {cfRules.length > 0 ? ` (${cfRules.length})` : ""}
+        </button>
+        <button
+          type="button"
           onClick={() => setShowProvenance((v) => !v)}
           aria-pressed={showProvenance}
           className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
@@ -512,6 +535,85 @@ export function WorkbookGrid({
         </div>
       )}
 
+      {showFormat && columns.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
+          {cfRules.map((rule) => {
+            const update = (patch: Partial<ConditionalRule>) =>
+              setCfRules((rs) => rs.map((r) => (r.id === rule.id ? { ...r, ...patch } : r)));
+            const ctrlClass =
+              "rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-sm text-[var(--dpf-text)]";
+            return (
+              <div key={rule.id} className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-[var(--dpf-muted)]">Highlight when</span>
+                <select
+                  value={rule.columnId}
+                  onChange={(e) => update({ columnId: e.target.value })}
+                  aria-label="Column"
+                  className={ctrlClass}
+                >
+                  {columns.map((c) => (
+                    <option key={c.columnId} value={c.columnId}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={rule.operator}
+                  onChange={(e) => update({ operator: e.target.value as ConditionalRule["operator"] })}
+                  aria-label="Operator"
+                  className={ctrlClass}
+                >
+                  {CF_OPERATORS.map((op) => (
+                    <option key={op} value={op}>
+                      {CF_OPERATOR_LABELS[op]}
+                    </option>
+                  ))}
+                </select>
+                {operatorNeedsValue(rule.operator) && (
+                  <input
+                    value={rule.value}
+                    onChange={(e) => update({ value: e.target.value })}
+                    placeholder="value"
+                    aria-label="Value"
+                    className={ctrlClass}
+                  />
+                )}
+                <select
+                  value={rule.color}
+                  onChange={(e) => update({ color: e.target.value as ConditionalRule["color"] })}
+                  aria-label="Color"
+                  className={ctrlClass}
+                >
+                  {CF_COLORS.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <span className={`dpf-cf-swatch ${rowColorClass(rule.color)}`} aria-hidden="true" />
+                <button
+                  type="button"
+                  onClick={() => setCfRules((rs) => rs.filter((r) => r.id !== rule.id))}
+                  className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+                  aria-label="Remove rule"
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() =>
+              setCfRules((rs) => [...rs, blankRule(`cf-${(cfIdRef.current += 1)}`, columns)])
+            }
+            className="w-fit rounded-md border border-[var(--dpf-border)] px-3 py-1 text-sm text-[var(--dpf-text)]"
+          >
+            + Add formatting rule
+          </button>
+        </div>
+      )}
+
       {columns.length === 0 ? (
         <div className="rounded-md border border-dashed border-[var(--dpf-border)] p-8 text-center text-[var(--dpf-muted)]">
           This table has no columns yet. Add a column to start entering data.
@@ -528,6 +630,10 @@ export function WorkbookGrid({
             onSortColumnsChange={setSortColumns}
             selectedRows={selectedRows}
             onSelectedRowsChange={setSelectedRows}
+            rowClass={(row) => {
+              const color = rowColor(row, cfRules);
+              return color ? rowColorClass(color) : undefined;
+            }}
             defaultColumnOptions={{ resizable: true, sortable: true }}
           />
         </div>
