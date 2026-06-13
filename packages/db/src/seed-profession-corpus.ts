@@ -514,6 +514,123 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
       "with minimum output.",
     retrievedAt: "2026-06-13",
   },
+
+  // ── Frontend-engineer + UX/accessibility families (WSID wave 5) ──
+  // w3c/wcag22 is shared by both families (registered once). W3C docs are open
+  // (W3C Document License); MDN is CC-BY-SA; web.dev is CC-BY-4.0. NN/G and
+  // WebAIM are licensed (no open license) — cited by reference with attribution,
+  // quotes kept short; their structure (heuristic names, contrast ratios that
+  // are also normative in the open WCAG) is used as facts, not reproduced prose.
+  "w3c/wcag22": {
+    sourceType: "standard",
+    title: "Web Content Accessibility Guidelines (WCAG) 2.2",
+    url: "https://www.w3.org/TR/WCAG22/",
+    license: "W3C-Document-License",
+    abstract:
+      "W3C Recommendation defining accessibility under four POUR principles and " +
+      "conformance levels A/AA/AAA, with testable success criteria.",
+    retrievedAt: "2026-06-13",
+  },
+  "w3c/aria-apg": {
+    sourceType: "standard",
+    title: "ARIA Authoring Practices Guide (APG)",
+    url: "https://www.w3.org/WAI/ARIA/apg/practices/read-me-first/",
+    license: "W3C-Document-License",
+    abstract:
+      'WAI guidance on correct ARIA use: "No ARIA is better than Bad ARIA"; a ' +
+      "role is a promise to implement its interactions.",
+    retrievedAt: "2026-06-13",
+  },
+  "w3c/using-aria": {
+    sourceType: "standard",
+    title: "Using ARIA",
+    url: "https://www.w3.org/TR/using-aria/",
+    license: "W3C-Document-License",
+    abstract:
+      "Defines the First Rule of ARIA: prefer a native HTML element over " +
+      "re-purposing one with an ARIA role.",
+    retrievedAt: "2026-06-13",
+  },
+  "w3c/wai-intro": {
+    sourceType: "standard",
+    title: "Introduction to Web Accessibility (W3C WAI)",
+    url: "https://www.w3.org/WAI/fundamentals/accessibility-intro/",
+    license: "W3C-Document-License",
+    abstract:
+      "Defines web accessibility and who benefits; accessibility is most " +
+      "efficient when built in from project inception.",
+    retrievedAt: "2026-06-13",
+  },
+  "mdn/html": {
+    sourceType: "reference",
+    title: "HTML: HyperText Markup Language (MDN)",
+    url: "https://developer.mozilla.org/en-US/docs/Web/HTML",
+    license: "CC-BY-SA-2.5",
+    abstract:
+      "HTML defines the meaning and structure of web content; meaning belongs " +
+      "to HTML, appearance to CSS.",
+    retrievedAt: "2026-06-13",
+  },
+  "mdn/accessibility": {
+    sourceType: "reference",
+    title: "Accessibility (MDN)",
+    url: "https://developer.mozilla.org/en-US/docs/Web/Accessibility",
+    license: "CC-BY-SA-2.5",
+    abstract:
+      "Accessibility enables as many people as possible to use sites; covers " +
+      "text alternatives and keyboard access.",
+    retrievedAt: "2026-06-13",
+  },
+  "mdn/img": {
+    sourceType: "reference",
+    title: "<img>: the Image embed element (MDN)",
+    url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/img",
+    license: "CC-BY-SA-2.5",
+    abstract:
+      "The alt attribute is mandatory: a concise text replacement for image " +
+      "content; alt=\"\" only for decorative images.",
+    retrievedAt: "2026-06-13",
+  },
+  "webdev/core-web-vitals": {
+    sourceType: "web-article",
+    title: "Web Vitals (web.dev)",
+    url: "https://web.dev/articles/vitals",
+    license: "CC-BY-4.0",
+    abstract:
+      "Core Web Vitals targets: LCP <= 2.5s, INP <= 200ms, CLS <= 0.1, assessed " +
+      "at the 75th percentile across mobile and desktop.",
+    retrievedAt: "2026-06-13",
+  },
+  "nng/ten-heuristics": {
+    sourceType: "web-article",
+    title: "10 Usability Heuristics for User Interface Design (Nielsen Norman Group)",
+    url: "https://www.nngroup.com/articles/ten-usability-heuristics/",
+    license: "NNG-copyright-cite-by-reference",
+    abstract:
+      "Nielsen's ten general usability heuristics. Licensed; cited by reference " +
+      "with attribution, not reproduced.",
+    retrievedAt: "2026-06-13",
+  },
+  "nng/heuristic-evaluation": {
+    sourceType: "web-article",
+    title: "How to Conduct a Heuristic Evaluation (Nielsen Norman Group)",
+    url: "https://www.nngroup.com/articles/how-to-conduct-a-heuristic-evaluation/",
+    license: "NNG-copyright-cite-by-reference",
+    abstract:
+      "Three-phase heuristic-evaluation method using 3-5 independent evaluators. " +
+      "Licensed; cited by reference.",
+    retrievedAt: "2026-06-13",
+  },
+  "webaim/contrast": {
+    sourceType: "web-article",
+    title: "Contrast and Color Accessibility (WebAIM)",
+    url: "https://webaim.org/articles/contrast/",
+    license: "WebAIM-copyright-cite-by-reference",
+    abstract:
+      "Explains WCAG 2 contrast ratios (4.5:1 normal, 3:1 large, 7:1 AAA) and " +
+      "the definition of large text. Licensed; cited by reference.",
+    retrievedAt: "2026-06-13",
+  },
 };
 
 // ─── Source seeding ──────────────────────────────────────────────────────────
