@@ -631,6 +631,164 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
       "the definition of large text. Licensed; cited by reference.",
     retrievedAt: "2026-06-13",
   },
+
+  // ── Documentation & content family (WSID wave 6, open-license) ──
+  "diataxis/framework": {
+    sourceType: "framework",
+    title: "Diataxis — A systematic approach to technical documentation",
+    url: "https://diataxis.fr/",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "Documentation framework defining four modes (tutorials, how-to guides, " +
+      "reference, explanation) across content, style, and architecture.",
+    retrievedAt: "2026-06-13",
+  },
+  "diataxis/tutorials": {
+    sourceType: "framework",
+    title: "Tutorials — Diataxis",
+    url: "https://diataxis.fr/tutorials/",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "Learning-oriented documentation: the teacher takes responsibility for the " +
+      "learner's success through guided doing.",
+    retrievedAt: "2026-06-13",
+  },
+  "diataxis/how-to-guides": {
+    sourceType: "framework",
+    title: "How-to guides — Diataxis",
+    url: "https://diataxis.fr/how-to-guides/",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "Task-oriented directions guiding a competent user toward a real-world goal; " +
+      "action, not teaching.",
+    retrievedAt: "2026-06-13",
+  },
+  "diataxis/reference": {
+    sourceType: "framework",
+    title: "Reference — Diataxis",
+    url: "https://diataxis.fr/reference/",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "Information-oriented, austere technical description whose structure mirrors " +
+      "the product; describe and only describe.",
+    retrievedAt: "2026-06-13",
+  },
+  "diataxis/explanation": {
+    sourceType: "framework",
+    title: "Explanation — Diataxis",
+    url: "https://diataxis.fr/explanation/",
+    license: "CC-BY-SA-4.0",
+    abstract:
+      "Understanding-oriented, discursive documentation giving context, reasons, " +
+      "and connections, distinct from active practice.",
+    retrievedAt: "2026-06-13",
+  },
+  "mermaid/intro": {
+    sourceType: "web-article",
+    title: "Mermaid — Overview / Introduction",
+    url: "https://mermaid.js.org/intro/",
+    license: "MIT",
+    abstract:
+      "JavaScript diagramming tool rendering Markdown-inspired text into diagrams " +
+      "(diagram-as-code); many diagram types.",
+    retrievedAt: "2026-06-13",
+  },
+  "google/dev-style": {
+    sourceType: "web-article",
+    title: "Google developer documentation style guide",
+    url: "https://developers.google.com/style",
+    license: "CC-BY-4.0",
+    abstract:
+      "Technical-writing voice/clarity guide: conversational, global audience, " +
+      "second person, active voice, conditions before instructions.",
+    retrievedAt: "2026-06-13",
+  },
+
+  // ── Enterprise-architecture family (WSID wave 6) ──
+  // The Open Group full specs (ArchiMate 3.2, TOGAF Standard, IT4IT 3.0 snapshot)
+  // are OAuth-gated / purchase-licensed: structure (layer names, ADM phases,
+  // value-stream names) is used as facts from the public overviews; element-level
+  // detail requires the licensed copy. ADR (Nygard) is CC0/public-domain.
+  "opengroup/archimate-3-2": {
+    sourceType: "standard",
+    title: "ArchiMate 3.2 Specification (public overview)",
+    url: "https://pubs.opengroup.org/architecture/archimate3-doc/",
+    license: "OpenGroup-licensed",
+    abstract:
+      "Open EA modeling language relating Business, Application, and Technology " +
+      "layers via service-orientation. Full spec OAuth-gated.",
+    retrievedAt: "2026-06-13",
+  },
+  "opengroup/togaf": {
+    sourceType: "framework",
+    title: "TOGAF Standard — Overview",
+    url: "https://www.opengroup.org/togaf",
+    license: "OpenGroup-licensed",
+    abstract:
+      "EA methodology whose core is the Architecture Development Method (ADM). " +
+      "Full standard is purchase-licensed.",
+    retrievedAt: "2026-06-13",
+  },
+  "opengroup/it4it": {
+    sourceType: "framework",
+    title: "IT4IT Reference Architecture — Overview",
+    url: "https://www.opengroup.org/it4it",
+    license: "OpenGroup-licensed",
+    abstract:
+      "Value-stream-based reference architecture for digital/IT management; four " +
+      "value streams S2P, R2D, R2F, D2C.",
+    retrievedAt: "2026-06-13",
+  },
+  "conexiam/togaf-adm": {
+    sourceType: "web-article",
+    title: "TOGAF ADM Phases Explained (Conexiam)",
+    url: "https://conexiam.com/togaf-adm-phases-explained/",
+    license: "web-article-public",
+    abstract:
+      "Per-phase purpose of the TOGAF ADM: Preliminary plus phases A through H, " +
+      "with central Requirements Management.",
+    retrievedAt: "2026-06-13",
+  },
+  "adr/github": {
+    sourceType: "web-article",
+    title: "Architectural Decision Records (ADR)",
+    url: "https://adr.github.io/",
+    license: "open-community",
+    abstract:
+      "Community home for ADRs: an architectural decision is a justified, " +
+      "architecturally-significant design choice; ADRs form a decision log.",
+    retrievedAt: "2026-06-13",
+  },
+  "nygard/adr": {
+    sourceType: "web-article",
+    title: "Documenting Architecture Decisions (Michael Nygard)",
+    url: "https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions",
+    license: "CC0-public-domain",
+    abstract:
+      "The original ADR format: Title, Status, Context, Decision, Consequences; " +
+      "record the rationale, not just the outcome.",
+    retrievedAt: "2026-06-13",
+  },
+  "conway/law": {
+    sourceType: "reference",
+    title: "Conway's Law (author's page)",
+    url: "https://www.melconway.com/Home/Conways_Law.html",
+    license: "author-site-open",
+    abstract:
+      "Canonical statement of Conway's Law from \"How Do Committees Invent?\" " +
+      "(Datamation, April 1968).",
+    retrievedAt: "2026-06-13",
+  },
+  "techtarget/it4it": {
+    sourceType: "web-article",
+    title: "What is IT4IT? (TechTarget)",
+    url: "https://www.techtarget.com/whatis/definition/IT4IT",
+    license: "TechTarget-copyright-cite-by-reference",
+    abstract:
+      "Secondary explainer of the four IT4IT value streams (S2P, R2D, R2F, D2C). " +
+      "Licensed; cited by reference.",
+    retrievedAt: "2026-06-13",
+  },
 };
 
 // ─── Source seeding ──────────────────────────────────────────────────────────
