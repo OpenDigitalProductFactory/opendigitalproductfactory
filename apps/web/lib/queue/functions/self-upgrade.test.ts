@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   startRun: vi.fn(),
   completeRun: vi.fn(),
   failRun: vi.fn(),
+  skipRun: vi.fn(),
+  updateRunPlan: vi.fn(),
   recordRunRecoveryPoint: vi.fn(),
   getLatestRun: vi.fn(),
   getLatestSucceededRun: vi.fn(),
@@ -91,6 +93,8 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   startRun: mocks.startRun,
   completeRun: mocks.completeRun,
   failRun: mocks.failRun,
+  skipRun: mocks.skipRun,
+  updateRunPlan: mocks.updateRunPlan,
   recordRunRecoveryPoint: mocks.recordRunRecoveryPoint,
   getLatestRun: mocks.getLatestRun,
   getLatestSucceededRun: mocks.getLatestSucceededRun,
@@ -315,6 +319,21 @@ describe("success path", () => {
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
     expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-AAAABBBB" });
     expect(mocks.completeRun).toHaveBeenCalledWith("SUR-AAAABBBB");
+  });
+
+  it("claims a pre-created queued run instead of creating a second run", async () => {
+    mocks.updateRunPlan.mockResolvedValue({ runId: "SUR-QUEUED1" });
+
+    const result = await runSelfUpgrade({ triggeredBy: "ops", runId: "SUR-QUEUED1" });
+
+    expect(mocks.createRun).not.toHaveBeenCalled();
+    expect(mocks.updateRunPlan).toHaveBeenCalledWith("SUR-QUEUED1", {
+      fromVersion: "oldsha1",
+      toVersion: "abc1234deadbeef",
+      expectedDeployedSha: "abc1234deadbeef",
+    });
+    expect(mocks.startRun).toHaveBeenCalledWith("SUR-QUEUED1");
+    expect(result).toMatchObject({ ok: true, status: "succeeded", runId: "SUR-QUEUED1" });
   });
 
   it("creates and records a recovery point after quiescence and before swap starts", async () => {
@@ -931,6 +950,27 @@ describe("skip-before-drain guards", () => {
     expect(mocks.createRun).not.toHaveBeenCalled();
     // A clean no-op sets no cooldown — the next tick re-checks immediately.
     expect(mocks.recordCooldown).not.toHaveBeenCalled();
+  });
+
+  it("marks a pre-created queued run skipped when a pre-drain guard stops the attempt", async () => {
+    mocks.isPromoterAvailable.mockResolvedValue(false);
+
+    const result = await runSelfUpgrade({
+      triggeredBy: "manual:ops",
+      runId: "SUR-QUEUED1",
+    });
+
+    expect(result).toMatchObject({
+      skipped: true,
+      reason: "promoter-unavailable",
+      runId: "SUR-QUEUED1",
+    });
+    expect(mocks.skipRun).toHaveBeenCalledWith(
+      "SUR-QUEUED1",
+      "promoter-unavailable: dpf-promoter",
+    );
+    expect(mocks.recordCheckedAt).not.toHaveBeenCalled();
+    expect(mocks.createRun).not.toHaveBeenCalled();
   });
 
   it("checks promoter availability against the configured image", async () => {
