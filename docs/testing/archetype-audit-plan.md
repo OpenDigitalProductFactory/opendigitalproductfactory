@@ -2,7 +2,7 @@
 
 **Status:** Revised — 2026-06-10 (architecture / UX / operations review applied)  
 **Scope:** Full audit of every seeded archetype via browser-driven fresh installs. Produces gap backlog items for post-audit execution.  
-**Related:** [platform-qa-plan.md](platform-qa-plan.md), [fresh-install.ps1](../../scripts/fresh-install.ps1), [BIAN design spec](../superpowers/specs/2026-06-09-bian-banking-archetypes-design.md)
+**Related:** [archetype-business-value-streams.md](../architecture/archetype-business-value-streams.md) (value-stream rationale — read first), [platform-qa-plan.md](platform-qa-plan.md), [fresh-install.ps1](../../scripts/fresh-install.ps1), [BIAN design spec](../superpowers/specs/2026-06-09-bian-banking-archetypes-design.md)
 
 > **Inventory ground truth (verified 2026-06-12 against `origin/main` `packages/storefront-templates/src/archetypes/`):** 56 seeded archetypes across 15 categories. The five archetypes previously flagged "not yet confirmed" (`landscaping`, `cleaning-service`, `personal-trainer`, `counselling`, `wholesale-distribution`) ARE seeded and are placed in Runs 1, 2, 3, and 6. `pet-rescue` is seeded once (category `nonprofit-community`) and is tested only in Run 11. The rental / shared-asset value stream (EP-ARCH-8D4F2A, merged #1725/#1726) added three: `equipment-rental` + `self-storage` (new `asset-rental` category) and `agricultural-cooperative` (category `nonprofit-community`, derives both member-owned and rental capability sets) — all in Run 17.
 
@@ -13,6 +13,8 @@
 DPF ships 56 archetypes across 15 categories. The platform must behave correctly for each organizational model — correct vocabulary, correct CTA, correct coworker framing, correct activation modules, correct compliance defaults. This audit drives each archetype through a browser-realistic experience and records gaps as backlog items.
 
 **Out of scope for this plan:** executing the gap items. This thread produces the plan, the backlog snapshot, and the per-run scripts. Execution follows in a separate thread.
+
+> **Test against the value stream, not the checklist.** Every phase defends a named stage of the business's real-world operational value stream. Before driving a run, read the archetype's profile in [archetype-business-value-streams.md](../architecture/archetype-business-value-streams.md) to know its **load-bearing stage(s)**, **demand–capacity inflection**, and **trust gate** — these set where to scrutinise hardest and how to grade severity (that doc's Section 4 gives the stage→phase mapping and the severity-derivation rule). When logging a finding, name the value-stream stage it breaks and let load-bearing status drive severity rather than asserting it.
 
 ---
 
