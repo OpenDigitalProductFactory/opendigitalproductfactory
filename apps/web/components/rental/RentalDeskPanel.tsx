@@ -8,6 +8,9 @@ import {
   returnAgreement,
   cancelAgreement,
 } from "@/lib/actions/rental";
+import { MediaUploader } from "@/components/storefront-admin/MediaUploader";
+
+type ActiveInspection = { recordId: string; phase: "checkout" | "return"; ref: string };
 
 const STATUS_CHIPS: Record<string, string> = {
   reserved: "bg-[var(--dpf-info)]/15 text-[var(--dpf-info)]",
@@ -39,6 +42,7 @@ export function RentalDeskPanel({ agreements }: { agreements: RentalAgreementRow
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [inspection, setInspection] = useState<ActiveInspection | null>(null);
 
   async function run(id: string, fn: () => Promise<{ ok: boolean; message: string }>) {
     setBusy(id);
@@ -49,9 +53,53 @@ export function RentalDeskPanel({ agreements }: { agreements: RentalAgreementRow
     else router.refresh();
   }
 
+  // Checkout / return return the condition-record id; open an inspection-photo
+  // uploader for it so the operator can attach condition evidence on the spot.
+  async function runInspection(
+    id: string,
+    ref: string,
+    phase: "checkout" | "return",
+    fn: () => Promise<{ ok: boolean; message: string; id?: string }>,
+  ) {
+    setBusy(id);
+    setError(null);
+    const result = await fn();
+    setBusy(null);
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+    if (result.id) setInspection({ recordId: result.id, phase, ref });
+    router.refresh();
+  }
+
   return (
     <div className="space-y-3">
       {error && <p className="text-xs text-[var(--dpf-error)]">{error}</p>}
+
+      {inspection && (
+        <div className="rounded-lg border border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="text-sm font-medium text-[var(--dpf-text)]">
+              {inspection.phase === "checkout" ? "Checkout" : "Return"} inspection photos
+            </span>
+            <span className="font-mono text-[11px] text-[var(--dpf-muted)]">{inspection.ref}</span>
+            <button
+              onClick={() => setInspection(null)}
+              className="ml-auto px-2 py-1 text-[11px] rounded border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:border-[var(--dpf-accent)]"
+            >
+              Done
+            </button>
+          </div>
+          <MediaUploader
+            ownerType="RentalConditionRecord"
+            ownerId={inspection.recordId}
+            role={`inspection-${inspection.phase}`}
+            label="Condition photos"
+            hint="Photographic evidence of the asset's condition for this agreement"
+          />
+        </div>
+      )}
 
       <ul className="space-y-2">
         {agreements.map((a) => {
@@ -97,7 +145,7 @@ export function RentalDeskPanel({ agreements }: { agreements: RentalAgreementRow
                 )}
                 {(a.status === "reserved" || a.status === "verified") && a.verificationStatus !== "pending" && (
                   <button
-                    onClick={() => run(a.id, () => checkoutAgreement(a.id, {}))}
+                    onClick={() => runInspection(a.id, a.ref, "checkout", () => checkoutAgreement(a.id, {}))}
                     disabled={isBusy}
                     className="px-2 py-1 text-[11px] rounded border border-[var(--dpf-border)] text-[var(--dpf-warning)] hover:border-[var(--dpf-warning)] disabled:opacity-50"
                   >
@@ -107,14 +155,14 @@ export function RentalDeskPanel({ agreements }: { agreements: RentalAgreementRow
                 {a.status === "active" && (
                   <>
                     <button
-                      onClick={() => run(a.id, () => returnAgreement(a.id, {}))}
+                      onClick={() => runInspection(a.id, a.ref, "return", () => returnAgreement(a.id, {}))}
                       disabled={isBusy}
                       className="px-2 py-1 text-[11px] rounded border border-[var(--dpf-border)] text-[var(--dpf-success)] hover:border-[var(--dpf-success)] disabled:opacity-50"
                     >
                       Return &amp; re-pool
                     </button>
                     <button
-                      onClick={() => run(a.id, () => returnAgreement(a.id, { needsMaintenance: true }))}
+                      onClick={() => runInspection(a.id, a.ref, "return", () => returnAgreement(a.id, { needsMaintenance: true }))}
                       disabled={isBusy}
                       className="px-2 py-1 text-[11px] rounded border border-[var(--dpf-border)] text-[var(--dpf-text)] hover:border-[var(--dpf-accent)] disabled:opacity-50"
                     >
