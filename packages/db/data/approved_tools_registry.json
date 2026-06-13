@@ -1,5 +1,74 @@
 {
   "version": "1.0.0",
   "generated_at": "2026-03-25",
-  "tools": []
+  "tools": [
+    {
+      "id": "tool-eval-opencode-20260613",
+      "toolName": "opencode (opencode-ai)",
+      "toolType": "npm_package",
+      "version": "1.17.4",
+      "sourceUrl": "https://github.com/anomalyco/opencode",
+      "proposedBy": "BI-01D6A51B (local-LLM Build Studio dispatch)",
+      "proposedAt": "2026-06-13",
+      "status": "conditional",
+      "verdict": {
+        "decision": "conditional",
+        "rationale": "MIT-licensed open-source headless coding agent adopted as the Build Studio 'opencode' dispatch engine. It runs inside the existing sandbox against the install's OWN local OpenAI-compatible endpoint, so it introduces no vendor credential and no network egress beyond the operator's own model server. Install mechanism, runtime, and dispatch flags were verified live on node:24-alpine (musl). Conditional pending the formal EP-GOVERN-002 multi-agent evaluation to upgrade to 'approved'.",
+        "riskLevel": "low",
+        "threatCategories": [],
+        "confidenceScore": 0.6
+      },
+      "conditions": [
+        "version-pinned to 1.17.4 (opencode-linux-x64-baseline-musl release asset)",
+        "sandbox-only — runs inside the Build Studio sandbox container, never on the host or portal",
+        "local-endpoint-only — pointed at the install's local OpenAI-compatible endpoint; no external provider config",
+        "no credential injected — local servers need none; the opencode.json apiKey is a dummy",
+        "capability tier stays 'preview' until Phase 3 eval evidence on a real local model"
+      ],
+      "findings": [
+        {
+          "reviewerAgentId": "claude-code (implementing agent)",
+          "category": "compliance",
+          "severity": "info",
+          "title": "License: MIT",
+          "description": "OpenCode is MIT-licensed (OSI-approved), compatible with the platform. Rejected alternative Crush is FSL-1.1 (not OSI) for this reason.",
+          "evidence": "https://github.com/anomalyco/opencode (LICENSE)",
+          "recommendation": "Compatible — no license condition needed.",
+          "mitigatable": true,
+          "mitigation": null
+        },
+        {
+          "reviewerAgentId": "claude-code (implementing agent)",
+          "category": "supply_chain",
+          "severity": "medium",
+          "title": "npm postinstall does not detect musl (upstream #9571)",
+          "description": "The opencode-ai npm postinstall constructs the glibc binary name and never tries the -musl variant, so `npm install -g opencode-ai` fails/links the wrong binary on the Alpine sandbox base.",
+          "evidence": "https://github.com/anomalyco/opencode/issues/9571",
+          "recommendation": "Bypass npm: fetch the pinned opencode-linux-x64-baseline-musl release tarball directly into the image (the grok pattern). Implemented in Dockerfile.sandbox.",
+          "mitigatable": true,
+          "mitigation": "Direct tarball install + `opencode --version` build gate as root and the node user."
+        },
+        {
+          "reviewerAgentId": "claude-code (implementing agent)",
+          "category": "integration",
+          "severity": "info",
+          "title": "Install + dispatch contract verified live on node:24-alpine",
+          "description": "Probe build confirmed: baseline-musl tarball runs as root and the node user (uid 1000) printing version 1.17.4 exit 0 with only libstdc++/libgcc (no gcompat); the dispatch flags --dir, -m provider/model, --format json, --dangerously-skip-permissions all exist on this pinned version; the @ai-sdk/openai-compatible provider pre-seeds into ~/.cache/opencode/packages/... for air-gapped first run.",
+          "evidence": "docker build .opencode-probe.Dockerfile + opencode run --help (2026-06-13)",
+          "recommendation": "Proceed. Full happy-path (opencode run against a real local model) is the Phase 3 functional gate.",
+          "mitigatable": true,
+          "mitigation": null
+        }
+      ],
+      "reviewers": [
+        { "reviewerId": "claude-code", "role": "implementing-agent", "reviewedAt": "2026-06-13" }
+      ],
+      "approvedBy": null,
+      "approvedAt": null,
+      "reEvaluateAfter": "2026-12-13",
+      "supersedes": null,
+      "createdAt": "2026-06-13",
+      "updatedAt": "2026-06-13"
+    }
+  ]
 }
