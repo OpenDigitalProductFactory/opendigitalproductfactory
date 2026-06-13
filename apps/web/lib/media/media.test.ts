@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { probeImage } from "./image-probe";
 import { buildMediaBlobStorageKey, hashMediaBlobContent } from "./media-storage";
 import { normalizeRenditionWidth, RENDITION_WIDTHS } from "./renditions";
+import { decodeDataUri } from "./logo-ingest";
 
 function pngHeader(width: number, height: number): Buffer {
   const buf = Buffer.alloc(24);
@@ -91,5 +92,20 @@ describe("normalizeRenditionWidth", () => {
     expect(normalizeRenditionWidth(-10)).toBeNull();
     expect(normalizeRenditionWidth(null)).toBeNull();
     expect(normalizeRenditionWidth(Number.NaN)).toBeNull();
+  });
+});
+
+describe("decodeDataUri (logo ingest)", () => {
+  it("decodes a base64 data URI to bytes + mime", () => {
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const uri = `data:image/png;base64,${bytes.toString("base64")}`;
+    const decoded = decodeDataUri(uri);
+    expect(decoded?.mimeType).toBe("image/png");
+    expect(decoded?.content.equals(bytes)).toBe(true);
+  });
+
+  it("returns null for an empty payload or a non-data URL", () => {
+    expect(decodeDataUri("data:image/png;base64,")).toBeNull();
+    expect(decodeDataUri("https://example.com/logo.png")).toBeNull();
   });
 });
