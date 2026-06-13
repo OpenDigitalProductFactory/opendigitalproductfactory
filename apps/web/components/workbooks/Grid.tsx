@@ -200,7 +200,8 @@ function buildColumn(
     }
     case "formula":
     case "lookup":
-      // Phase 2: computed read-only columns (derived server-side).
+    case "rollup":
+      // Computed read-only columns (derived server-side). rollup = reverse-FK aggregate.
       return { ...base, renderCell: renderComputedCell };
     default:
       return base;

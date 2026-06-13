@@ -84,6 +84,19 @@ const EPIC_TABLE: GenericTableConfig = {
     { field: "description", name: "Description", fieldType: "text", width: 400 },
     { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
   ],
+  rollups: [
+    {
+      field: "itemCount",
+      name: "Backlog items",
+      targetModel: "backlogItem",
+      // BacklogItem.epic @relation(fields: [epicId], references: [id]) → the FK
+      // targets Epic.id (cuid), NOT the semantic epicId used as the grid rowId.
+      foreignKeyField: "epicId",
+      anchorField: "id",
+      op: "count",
+      width: 120,
+    },
+  ],
 };
 
 const DIGITAL_PRODUCT_TABLE: GenericTableConfig = {
