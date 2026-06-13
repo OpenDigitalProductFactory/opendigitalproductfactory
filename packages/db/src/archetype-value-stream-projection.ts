@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from "../generated/client/client";
+import type { Prisma } from "../generated/client/client";
 import { prisma } from "./client";
 import type { OperationalValueStream } from "@dpf/storefront-templates";
 
@@ -18,7 +18,13 @@ import type { OperationalValueStream } from "@dpf/storefront-templates";
  * No new Prisma table — this is a projection into EA elements/views.
  */
 
-type Db = Prisma.TransactionClient | PrismaClient;
+// A single Prisma client type, not a union: `PrismaClient` is assignable to
+// `Prisma.TransactionClient` (it has a superset of the delegates), so both the
+// setup caller (package client) and the reset caller (transaction client) fit.
+// Using the union here forced the type checker to resolve every delegate across
+// two enormous client types at each call site, which blew the build/typecheck
+// heap (OOM) — see PR #1798 CI.
+type Db = Prisma.TransactionClient;
 
 const ARCHETYPE_OVSM_SOURCE = "archetype-ovsm";
 /** Sentinel stageKey for the band element that holds the whole stream. */
