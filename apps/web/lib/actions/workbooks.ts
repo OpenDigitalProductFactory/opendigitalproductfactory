@@ -36,6 +36,7 @@ import {
   resolvePlatformReference,
   getReferenceTargetFields,
 } from "@/lib/workbooks/platform-tables";
+import { inferTableFromSheet, type SheetCell } from "@/lib/workbooks/sheet-import";
 import type { CellValue, ColumnDefinition, FieldType, FieldConfig } from "@/lib/workbooks/types";
 
 export type ActionResult<T = void> =
@@ -258,6 +259,54 @@ export async function getReferenceTargetFieldsAction(
   try {
     const user = await requirePlatformUser();
     return { ok: true, data: await getReferenceTargetFields(user, referenceType) };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// ── Spreadsheet import (Phase 3) ────────────────────────────────────────────
+// Parse an uploaded .xlsx/.csv server-side and create a workbook table with
+// inferred columns + typed rows, composing the same validated service the manual
+// flow uses (createTable → addColumn → createRow).
+
+export async function importSheetAction(
+  workbookId: string,
+  formData: FormData,
+): Promise<ActionResult<{ tableId: string; columnCount: number; rowCount: number; truncated: boolean }>> {
+  try {
+    const user = await requireUser("manage_workbooks");
+    const file = formData.get("file");
+    if (!(file instanceof File)) throw new WorkbookError("No file uploaded", 400);
+    const buffer = await file.arrayBuffer();
+    const { readSheet } = await import(/* turbopackIgnore: true */ "read-excel-file/browser");
+    const matrix = (await readSheet(buffer)) as SheetCell[][];
+
+    const { columns, rows, truncated } = inferTableFromSheet(matrix);
+    if (columns.length === 0) throw new WorkbookError("The sheet has no columns to import", 400);
+
+    const tableName = file.name.replace(/\.[^.]+$/, "").trim() || "Imported sheet";
+    const table = await svcCreateTable(user, workbookId, { name: tableName });
+
+    const columnIdByName = new Map<string, string>();
+    for (const col of columns) {
+      const created = await svcAddColumn(user, table.tableId, { name: col.name, fieldType: col.fieldType });
+      columnIdByName.set(col.name, created.columnId);
+    }
+
+    for (const row of rows) {
+      const input: Record<string, CellValue> = {};
+      for (const [name, value] of Object.entries(row)) {
+        const columnId = columnIdByName.get(name);
+        if (columnId) input[columnId] = value;
+      }
+      await svcCreateRow(user, table.tableId, input);
+    }
+
+    revalidatePath(`/workbooks/${workbookId}`);
+    return {
+      ok: true,
+      data: { tableId: table.tableId, columnCount: columns.length, rowCount: rows.length, truncated },
+    };
   } catch (e) {
     return fail(e);
   }

@@ -72,6 +72,24 @@ export interface FieldConfig {
   lookup?: LookupConfig;
 }
 
+/**
+ * Where a column's values come from — the spec's three-tier provenance, shown as
+ * a progressively-disclosed per-column label (official / live source / calculated
+ * / your note). `system` = a governed platform field; `source` = a live external
+ * feed (Phase 6); `derived` = computed (formula/lookup); `manual` = a free-form
+ * user column.
+ */
+export const PROVENANCE_KINDS = ["system", "source", "derived", "manual"] as const;
+export type ProvenanceKind = (typeof PROVENANCE_KINDS)[number];
+
+/** Human label for a provenance kind (end-user wording — no engineering jargon). */
+export const PROVENANCE_LABELS: Record<ProvenanceKind, string> = {
+  system: "Official",
+  source: "Live source",
+  derived: "Calculated",
+  manual: "Your note",
+};
+
 /** A column as the grid consumes it — derived from a WorkbookColumn or an adapter's getColumns(). */
 export interface ColumnDefinition {
   columnId: string;
@@ -85,6 +103,13 @@ export interface ColumnDefinition {
   editable: boolean;
   /** kanban group-by eligibility (select-like columns) */
   groupable?: boolean;
+  /** value provenance, surfaced via progressive disclosure (defaults to "manual" if absent) */
+  provenanceKind?: ProvenanceKind;
+}
+
+/** Derive provenance from field type for a custom (user-table) column. */
+export function customColumnProvenance(fieldType: FieldType): ProvenanceKind {
+  return isComputedFieldType(fieldType) ? "derived" : "manual";
 }
 
 /** A reference cell value carries both the id and a resolved display label. */
