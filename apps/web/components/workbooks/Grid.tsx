@@ -42,6 +42,8 @@ import {
   makeMultiSelectRenderer,
   renderUrlCell,
   renderEmailCell,
+  renderImageCell,
+  ImageEditor,
   renderDateCell,
   renderReferenceCell,
   renderComputedCell,
@@ -142,6 +144,12 @@ function buildColumn(
         ...base,
         renderCell: renderEmailCell,
         renderEditCell: editable ? renderTextEditor : undefined,
+      };
+    case "image":
+      return {
+        ...base,
+        renderCell: renderImageCell,
+        renderEditCell: editable ? ImageEditor : undefined,
       };
     case "number":
       return { ...base, renderEditCell: editable ? NumberEditor : undefined };

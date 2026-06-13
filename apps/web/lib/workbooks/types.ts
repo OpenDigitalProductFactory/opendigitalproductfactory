@@ -9,8 +9,8 @@
 
 /**
  * Field types. `formula` and `lookup` (Phase 2) are *computed* — read-only,
- * never user-written, derived on read. `rollup`, attachment, currency remain out
- * of scope.
+ * never user-written, derived on read. `image` stores an uploaded MediaAsset URL
+ * (content-addressed via /api/v1/upload). `rollup`, currency remain out of scope.
  */
 export const FIELD_TYPES = [
   "text",
@@ -23,6 +23,7 @@ export const FIELD_TYPES = [
   "reference",
   "url",
   "email",
+  "image",
   "formula",
   "lookup",
 ] as const;

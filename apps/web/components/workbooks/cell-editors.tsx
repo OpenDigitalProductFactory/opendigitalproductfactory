@@ -148,6 +148,60 @@ export function makeReferenceEditor(referenceType: string) {
   };
 }
 
+/**
+ * Image editor: uploads a chosen file to /api/v1/upload (content-addressed
+ * MediaAsset storage) and commits the returned retrieval URL as the cell value.
+ * The bytes never live in the cell — only the URL string does, so an image
+ * column behaves like a url column with an upload affordance + thumbnail render.
+ */
+export function ImageEditor({
+  row,
+  column,
+  onRowChange,
+  onClose,
+}: RenderEditCellProps<GridRowData>): ReactNode {
+  const current = asString(row[column.key]);
+  return (
+    <div className="dpf-grid-editor-image">
+      <input
+        type="file"
+        accept="image/*"
+        autoFocus
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) {
+            onClose(false);
+            return;
+          }
+          const body = new FormData();
+          body.append("file", file);
+          try {
+            const res = await fetch("/api/v1/upload", { method: "POST", body });
+            const json = (await res.json()) as { data?: { url?: string }; url?: string };
+            const url = json.data?.url ?? json.url ?? null;
+            if (url) {
+              onRowChange({ ...row, [column.key]: url }, true);
+            } else {
+              onClose(false);
+            }
+          } catch {
+            onClose(false);
+          }
+        }}
+      />
+      {current ? (
+        <button
+          type="button"
+          className="dpf-grid-image-clear"
+          onClick={() => onRowChange({ ...row, [column.key]: null }, true)}
+        >
+          Clear
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Display renderers (renderCell)
 // ---------------------------------------------------------------------------
@@ -179,6 +233,13 @@ export function renderUrlCell({ row, column }: RenderCellProps<GridRowData>): Re
       {v}
     </a>
   );
+}
+
+export function renderImageCell({ row, column }: RenderCellProps<GridRowData>): ReactNode {
+  const v = asString(row[column.key]);
+  if (!v) return null;
+  // eslint-disable-next-line @next/next/no-img-element -- content-addressed media URL, arbitrary host; next/image optimizer not applicable
+  return <img className="dpf-grid-thumb" src={v} alt="" />;
 }
 
 export function renderEmailCell({ row, column }: RenderCellProps<GridRowData>): ReactNode {

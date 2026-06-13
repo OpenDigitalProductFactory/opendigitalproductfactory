@@ -35,6 +35,32 @@
 }
 
 /* Cell renderer helpers */
+.dpf-grid-thumb {
+  block-size: 1.75rem;
+  inline-size: auto;
+  max-inline-size: 4rem;
+  object-fit: cover;
+  border-radius: 0.25rem;
+  border: 1px solid var(--dpf-border);
+  vertical-align: middle;
+}
+
+.dpf-grid-editor-image {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  inline-size: 100%;
+  block-size: 100%;
+  padding-inline: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.dpf-grid-image-clear {
+  color: var(--dpf-muted);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .dpf-grid-chip {
   display: inline-flex;
   align-items: center;
