@@ -13,6 +13,7 @@ import "./backlog-adapter"; // self-register the backlog adapter
 import "./invoice-adapter"; // self-register the invoice adapter
 import "./risk-adapter"; // self-register the risk-assessment adapter
 import { registerGenericReadTable, type GenericTableConfig } from "./generic-read-adapter";
+import { PEOPLE_SUPPLIER_TABLES } from "./people-supplier-configs";
 import {
   type ColumnDefinition,
   type GridRow,
@@ -115,6 +116,9 @@ const DIGITAL_PRODUCT_TABLE: GenericTableConfig = {
 
 registerGenericReadTable(EPIC_TABLE);
 registerGenericReadTable(DIGITAL_PRODUCT_TABLE);
+// Customers, people (safe org-directory fields only), suppliers — explicit
+// allow-lists live in people-supplier-configs.ts (unit-tested for safe omission).
+for (const cfg of PEOPLE_SUPPLIER_TABLES) registerGenericReadTable(cfg);
 
 /** The registry of platform datasets available as grids. Add a row per adapter. */
 export const PLATFORM_TABLES: PlatformTableDef[] = [
@@ -157,6 +161,30 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     viewCapability: "view_portfolio",
     manageCapability: "view_portfolio", // read-only grid; adapter performs no writes
     homeSurface: { path: "/portfolio", label: "Portfolio", board: true },
+  },
+  {
+    entityType: "customer_account",
+    label: "Customers",
+    description: "Customer accounts as a read-only grid — sort, filter, and board by status.",
+    viewCapability: "view_customer",
+    manageCapability: "view_customer", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/customer", label: "Customers", board: true },
+  },
+  {
+    entityType: "employee_profile",
+    label: "People",
+    description: "The team directory as a read-only grid (safe fields only) — board by status.",
+    viewCapability: "view_employee",
+    manageCapability: "view_employee", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/employee", label: "People", board: true },
+  },
+  {
+    entityType: "supplier",
+    label: "Suppliers",
+    description: "Suppliers as a read-only grid — sort, filter, and board by status.",
+    viewCapability: "view_finance",
+    manageCapability: "view_finance", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/finance", label: "Finance", board: true },
   },
 ];
 
