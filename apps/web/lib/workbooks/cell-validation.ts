@@ -116,6 +116,20 @@ export function validateCell(
       return { ok: true, storage };
     }
 
+    case "image": {
+      // Stores the retrieval URL of an uploaded MediaAsset (e.g. /api/media/<id>)
+      // or an external image URL. The upload editor obtains it from /api/v1/upload;
+      // the bytes live in content-addressed media storage, not in the cell.
+      if (typeof value !== "string") {
+        return { ok: false, error: `Expected an image URL for ${column.name}` };
+      }
+      if (value.length > TEXT_MAX_LENGTH) {
+        return { ok: false, error: `${column.name} exceeds ${TEXT_MAX_LENGTH} characters` };
+      }
+      storage.textValue = value;
+      return { ok: true, storage };
+    }
+
     case "number": {
       const num = typeof value === "number" ? value : Number(value);
       if (typeof value === "boolean" || Number.isNaN(num)) {
@@ -224,6 +238,7 @@ export function storageToCellValue(
     case "text":
     case "url":
     case "email":
+    case "image":
       return cell.textValue ?? null;
     case "number":
       return cell.numberValue ?? null;
