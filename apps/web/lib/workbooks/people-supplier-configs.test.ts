@@ -61,4 +61,18 @@ describe("people/supplier safe read-only grids", () => {
       expect(present).not.toContain(f);
     }
   });
+
+  it("SUPPLIER editable fields are a safe subset of columns (never id or sensitive)", () => {
+    const cols = new Set(fields(SUPPLIER_TABLE));
+    const editable = SUPPLIER_TABLE.editableFields ?? [];
+    expect(editable.length).toBeGreaterThan(0);
+    for (const f of editable) expect(cols.has(f)).toBe(true);
+    expect(editable).not.toContain(SUPPLIER_TABLE.idField);
+    for (const f of ["taxId", "bankDetails", "address"]) expect(editable).not.toContain(f);
+  });
+
+  it("CUSTOMER and EMPLOYEE grids stay read-only (no manage capability exists)", () => {
+    expect(CUSTOMER_ACCOUNT_TABLE.editableFields).toBeUndefined();
+    expect(EMPLOYEE_PROFILE_TABLE.editableFields).toBeUndefined();
+  });
 });
