@@ -34,7 +34,7 @@ export function buildMediaBlobStorageKey(sha256: string): string {
   return `${MEDIA_BLOB_PREFIX}/${sha256.slice(0, 2)}/${sha256.slice(2, 4)}/${sha256}`;
 }
 
-async function getMediaStorageRoot(): Promise<string> {
+export async function getMediaStorageRoot(): Promise<string> {
   const config = await prisma.platformConfig.findUnique({
     where: { key: "upload_storage_path" },
     select: { value: true },
