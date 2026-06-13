@@ -154,9 +154,12 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   (select → option dropdown, checkbox → checked/unchecked, else text), AND-combined with the quick
   filter (`applyColumnFilters`, unit-tested), with an active-count badge + Clear. Client-side over
   loaded rows; precise number/date operators + saved views are follow-ups.
+- **Slice 9 — CSV export — SHIPPED.** An "Export CSV" toolbar button downloads the current view
+  (filtered + sorted) as RFC-4180-ish CSV (pure, unit-tested `grid-csv.ts`; reuses `cellSearchText`
+  so exported values match what's shown, including reference labels). Works for every grid.
 - **Remaining (not built):** saved views (persist filters/sort to the existing `WorkbookView`);
   conditional formatting (color scales / data bars / icon sets / formula rules); calendar + gallery
-  views; CSV + `.xlsx` import; group-by summary.
+  views; `.xlsx` import; group-by summary.
 
 ## Remaining toward full Smartsheet + Supabase parity (tracked, not built)
 
