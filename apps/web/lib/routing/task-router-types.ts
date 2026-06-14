@@ -42,6 +42,19 @@ export interface TaskRequirement {
   // "frontier" = complex tool-calling, code-gen; "adequate" = simple conversation.
   minimumTier?: QualityTier;
 
+  // SysML routing-policy matrix (2026-06-14 AI-cockpit model): routing-posture
+  // defaults carried BY the task requirement so the use-case → routing-policy
+  // mapping is load-bearing. Honoured by inferContract() when the caller's
+  // routeContext does not override them.
+  //   budgetClassDefault    biases cost vs quality (email triage → minimize_cost)
+  //   reasoningDepthDefault sets the effort floor
+  //   residencyPolicy       "local_only" keeps a use case on local/on-prem endpoints
+  //                         (privacy-sensitive work); default leaves it unset so
+  //                         installs without local AI are not starved.
+  budgetClassDefault?: "minimize_cost" | "balanced" | "quality_first";
+  reasoningDepthDefault?: "minimal" | "low" | "medium" | "high";
+  residencyPolicy?: "local_only" | "approved_cloud" | "any_enabled";
+
   // Operational preferences
   maxLatencyMs?: number;
   preferCheap?: boolean;
