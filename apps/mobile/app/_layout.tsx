@@ -4,6 +4,7 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import { useAuthStore } from "@/src/features/auth/auth.store";
 import { useDeepLink } from "@/src/hooks/useDeepLink";
 import { AgentFAB } from "@/src/components/AgentFAB";
+import { loadServerUrl } from "@/src/lib/serverConfig";
 
 function useProtectedRoute() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -30,7 +31,11 @@ export default function RootLayout() {
   const isLoading = useAuthStore((s) => s.isLoading);
 
   useEffect(() => {
-    initialize();
+    // Hydrate the configured install URL before any network call, then auth.
+    void (async () => {
+      await loadServerUrl();
+      await initialize();
+    })();
   }, [initialize]);
 
   useProtectedRoute();

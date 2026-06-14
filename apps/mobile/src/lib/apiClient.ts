@@ -1,12 +1,13 @@
 import { createApiClient } from "@dpf/api-client";
 import { SecureStorage } from "@/src/repositories/SecureStorage";
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000";
+import { getServerUrl } from "@/src/lib/serverConfig";
 
 let refreshPromise: Promise<string | null> | null = null;
 
 export const api = createApiClient({
-  baseUrl: API_BASE_URL,
+  // Resolver, not a static string: the active install can change at runtime
+  // once the user connects to their org. See src/lib/serverConfig.ts.
+  baseUrl: () => getServerUrl(),
   getToken: () => SecureStorage.getAccessToken(),
   onTokenExpired: () => {
     // Deduplicate concurrent refresh attempts
@@ -15,7 +16,7 @@ export const api = createApiClient({
         try {
           const refreshToken = await SecureStorage.getRefreshToken();
           if (!refreshToken) return null;
-          const res = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+          const res = await fetch(`${getServerUrl()}/api/v1/auth/refresh`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ refreshToken }),
