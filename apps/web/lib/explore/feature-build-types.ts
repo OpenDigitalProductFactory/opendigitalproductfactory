@@ -197,6 +197,32 @@ export type ReviewResult = {
    *  deliberation trail as the `architect` branch and are surfaced to the
    *  build coworker so it can fold actionable concerns back into the spec. */
   architectureAdvisory?: ArchitectureAdvisory;
+  /** Per-reviewer verdicts captured BEFORE mergeReviews() collapses the two
+   *  gating reviewers (+ the advisory architect) into a single decision. Lets
+   *  the Review-phase UI show WHICH named reviewer cleared vs flagged instead
+   *  of only the merged outcome. Nested on the JSON column (like
+   *  architectureAdvisory) — no migration. Absent on rows reviewed before this
+   *  shipped; the UI falls back to the merged checklist lens. */
+  reviewers?: ReviewerVerdict[];
+};
+
+/** A single reviewer's verdict, preserved on ReviewResult.reviewers so the
+ *  Review-phase UI can render named reviewer chips. The three sources match the
+ *  deliberation branch ids the dual-review run already emits (reviewer-1,
+ *  reviewer-2, architect). There is NO larger named-discipline roster — the
+ *  build review system runs exactly these three reviewers. */
+export type ReviewerVerdict = {
+  /** Stable reviewer id — matches the deliberation branchNodeId. */
+  source: "reviewer-1" | "reviewer-2" | "architect";
+  /** Operator-facing name: "Primary review" / "Independent review" / "Architecture". */
+  label: string;
+  /** "reviewer" verdicts gate via mergeReviews; "architect" is advisory only. */
+  role: "reviewer" | "architect";
+  decision: "pass" | "fail";
+  /** Issue counts by severity — enough to render a chip without the full list. */
+  issueCounts: { critical: number; important: number; minor: number };
+  /** True when this reviewer's output failed to parse (absent, not dissenting). */
+  parseError?: boolean;
 };
 
 /** Compact, advisory-only record of an architectural-alignment review.
