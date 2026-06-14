@@ -199,11 +199,29 @@ export async function inferContract(
   const sensitivity = (routeContext?.sensitivity ?? "internal") as
     RequestContract["sensitivity"];
 
-  const budgetClass = (routeContext?.budgetClass ?? "balanced") as
+  // Load the task requirement once (DB-backed, in-memory cached, with a built-in
+  // fallback). It is the "demand side" of the use-case → routing-policy matrix:
+  // it supplies the tier floor (below) plus routing-posture defaults (budget class,
+  // reasoning depth, residency) so the matrix is load-bearing, not advisory.
+  // Dynamic import mirrors the tier-floor lookup and avoids a static import cycle.
+  let taskReq: import("./task-router-types").TaskRequirement | undefined;
+  try {
+    const { getTaskRequirement } = await import("./task-requirements");
+    taskReq = await getTaskRequirement(taskType);
+  } catch {
+    taskReq = undefined;
+  }
+
+  // budgetClass: explicit caller override wins, then the task requirement's
+  // default, then "balanced". Existing task types set no default, so their
+  // behaviour is unchanged; email-* requirements default to minimize_cost.
+  const budgetClass = (routeContext?.budgetClass ?? taskReq?.budgetClassDefault ?? "balanced") as
     RequestContract["budgetClass"];
 
   // ── Reasoning depth ───────────────────────────────────────────────────
-  const reasoningDepth = DEFAULT_REASONING_DEPTH[taskType] ?? "medium";
+  // Requirement default wins, then the per-task-type heuristic, then "medium".
+  const reasoningDepth = (taskReq?.reasoningDepthDefault ?? DEFAULT_REASONING_DEPTH[taskType] ?? "medium") as
+    RequestContract["reasoningDepth"];
 
   // ── Contract family ───────────────────────────────────────────────────
   const contractFamily = `${interactionMode}.${taskType}`;
@@ -246,9 +264,12 @@ export async function inferContract(
   if (routeContext?.allowedProviders !== undefined) {
     contract.allowedProviders = routeContext.allowedProviders;
   }
-  if (routeContext?.residencyPolicy !== undefined) {
-    contract.residencyPolicy = routeContext.residencyPolicy as
-      RequestContract["residencyPolicy"];
+  // residencyPolicy: caller override wins, else the task requirement's policy
+  // (e.g. email triage hardened to "local_only" by an operator). Unset when
+  // neither is present, preserving the prior no-constraint default.
+  const residencyPolicy = routeContext?.residencyPolicy ?? taskReq?.residencyPolicy;
+  if (residencyPolicy !== undefined) {
+    contract.residencyPolicy = residencyPolicy as RequestContract["residencyPolicy"];
   }
 
   // ── Tier floor from task requirements ───────────────────────────────────
@@ -260,12 +281,8 @@ export async function inferContract(
   // doesn't meet the floor, and cost-per-success ranking can't route a
   // frontier task to a strong-tier model just because it's cheaper.
   try {
-    const [{ getTaskRequirement }, { TIER_MINIMUM_DIMENSIONS, isValidTier }] = await Promise.all([
-      import("./task-requirements"),
-      import("./quality-tiers"),
-    ]);
-    const req = await getTaskRequirement(taskType);
-    const tier = req?.minimumTier;
+    const { TIER_MINIMUM_DIMENSIONS, isValidTier } = await import("./quality-tiers");
+    const tier = taskReq?.minimumTier;
     if (tier && isValidTier(tier)) {
       const tierFloor = TIER_MINIMUM_DIMENSIONS[tier];
       if (Object.keys(tierFloor).length > 0) {
