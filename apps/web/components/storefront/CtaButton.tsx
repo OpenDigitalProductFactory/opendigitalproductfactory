@@ -1,12 +1,5 @@
 import Link from "next/link";
-
-const DEFAULT_LABELS: Record<string, string> = {
-  booking: "Book Now",
-  purchase: "Buy",
-  inquiry: "Enquire",
-  donation: "Donate",
-  rental: "Reserve",
-};
+import { DEFAULT_CTA_LABELS } from "@/lib/storefront/cta-labels";
 
 export function CtaButton({
   ctaType,
@@ -34,7 +27,7 @@ export function CtaButton({
   // Drop a stale purchase-oriented custom label when downgrading so we don't
   // show "Buy" on a button that now routes to the inquiry form.
   const label =
-    (isPricelessPurchase ? null : ctaLabel) ?? DEFAULT_LABELS[effectiveCtaType] ?? "Get in Touch";
+    (isPricelessPurchase ? null : ctaLabel) ?? DEFAULT_CTA_LABELS[effectiveCtaType] ?? "Get in Touch";
 
   const href =
     effectiveCtaType === "booking" ? `/s/${orgSlug}/book/${itemId}`
