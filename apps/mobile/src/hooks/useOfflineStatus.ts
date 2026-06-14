@@ -1,8 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-
-const HEALTH_URL = process.env.EXPO_PUBLIC_API_URL
-  ? `${process.env.EXPO_PUBLIC_API_URL}/api/health`
-  : "http://localhost:3000/api/health";
+import { getServerUrl } from "@/src/lib/serverConfig";
 
 const POLL_INTERVAL_MS = 15_000;
 
@@ -17,7 +14,9 @@ export function useOfflineStatus() {
   useEffect(() => {
     async function check() {
       try {
-        const res = await fetch(HEALTH_URL, { method: "HEAD" });
+        const res = await fetch(`${getServerUrl()}/api/health`, {
+          method: "HEAD",
+        });
         setIsOnline(res.ok);
       } catch {
         setIsOnline(false);

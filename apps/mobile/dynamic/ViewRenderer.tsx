@@ -1,7 +1,7 @@
 import React from "react";
 import { ScrollView, Text, ActivityIndicator, StyleSheet } from "react-native";
 import type { DynamicViewSchema } from "@dpf/types";
-import { colors, spacing } from "@/src/lib/theme";
+import { useTheme } from "@/src/lib/theme";
 import { widgetRegistry, type WidgetProps } from "./widgets";
 
 interface ViewRendererProps {
@@ -15,6 +15,34 @@ export function ViewRenderer({
   data,
   isLoading,
 }: ViewRendererProps) {
+  // Live, install-themed colors — re-renders when the manifest re-themes the app.
+  const { colors, spacing } = useTheme();
+  const styles = React.useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          flex: 1,
+          backgroundColor: colors.surface1,
+        },
+        content: {
+          padding: spacing.md,
+          paddingBottom: spacing.xl,
+        },
+        title: {
+          color: colors.text,
+          fontSize: 22,
+          fontWeight: "700",
+          marginBottom: spacing.md,
+        },
+        loader: {
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+        },
+      }),
+    [colors, spacing],
+  );
+
   if (isLoading) {
     return (
       <ActivityIndicator
@@ -43,25 +71,3 @@ export function ViewRenderer({
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.surface1,
-  },
-  content: {
-    padding: spacing.md,
-    paddingBottom: spacing.xl,
-  },
-  title: {
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: "700",
-    marginBottom: spacing.md,
-  },
-  loader: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-});
