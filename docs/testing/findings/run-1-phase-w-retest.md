@@ -22,7 +22,7 @@
 | W-VIEWS Gallery | Gallery view | ❌ IMAGE STALE | ✅ | dpf-gallery-card rendered (2 cards for 2 rows) |
 | W-PROV | Provenance labels | ❌ IMAGE STALE | ✅ | "Your note" / "Calculated" labels confirmed |
 | W-FILTER | Column filter | ❌ IMAGE STALE | ✅ | "1 of 2" counter when filtering "Assessment" |
-| W-UNDO | Undo / Redo | ❌ IMAGE STALE | ⚠️ PARTIAL | Buttons visible; interactive test blocked by SSE/editor issue |
+| W-UNDO | Undo / Redo | ❌ IMAGE STALE | ✅ | Buttons visible; full round-trip confirmed: edit→commit→Undo reverts DB value; reload confirms "initial note" persists, not "changed value" |
 | W-CSV | Export CSV | ❌ IMAGE STALE | ✅ | blob: download URL generated on button click |
 | W-XLSX | Import .xlsx | ❌ IMAGE STALE | ✅ | "Import .xlsx" button + file input accept=".xlsx" present |
 | W-CONDFMT | Conditional formatting | ❌ IMAGE STALE | ✅ | Rule panel opens with column/operator selects + value input |
@@ -36,7 +36,7 @@
 | W-MEDIA (Image) | Image column — upload + thumbnail | NEW | ✅ | dpf-grid-thumb renders; /api/media/ URL persists across reload |
 | W-MEDIA (Attachment) | Attachment column — upload + download chip | NEW | ✅ | dpf-grid-attachment chip renders filename+size; persists on reload; CSV exports filename |
 
-**Result: 20 ✅ confirmed · 1 ⚠️ partial · 1 NOT TESTED · 0 open defects**
+**Result: 21 ✅ confirmed · 0 ⚠️ partial · 1 NOT TESTED · 0 open defects**
 
 ---
 
@@ -69,12 +69,19 @@
 
 ---
 
-### ⚠️ W-UNDO (partial)
+### ✅ W-UNDO
 
 **Surface:** Workbook toolbar — Undo / Redo buttons  
-**Drove:** Confirmed "Undo" and "Redo" buttons present in DOM. Attempted dblclick via `MouseEvent('dblclick', ...)` to enter edit mode — editor opened but was empty (React grid requires native browser dblclick with coordinates). Attempted Enter key dispatch — no edit mode entered.  
-**Observed:** Buttons present and clickable; interactive edit→undo round-trip not completed due to SSE/persistent-connection blocking `executeScript`-dependent automation  
-**Verdict:** ⚠️ Partial — undo/redo wired to toolbar but interactive test not driven
+**Drove:**
+1. Typed "initial note" into Notes cell (dblclick via Chrome MCP `computer` native double_click) → committed with Enter → cell shows "initial note"
+2. Clicked Undo → cell reverted to empty; Undo disabled, Redo enabled ✅
+3. Clicked Redo → "initial note" restored; reload confirmed "initial note" persists (Redo was the last committed state) ✅
+4. Typed "changed value" into Notes cell → committed with Enter → cell shows "changed value"
+5. Clicked Undo (via `undoBtn.click()`) → cell reverted to "initial note"; Undo disabled, Redo enabled ✅
+6. Reloaded page — Notes cell shows "initial note", not "changed value" ✅
+
+**Observed:** Undo is a full server round-trip: clicking Undo after a committed cell edit writes the previous value back to the DB, not just a display revert. Redo re-applies forward. Both persist correctly across page reload.  
+**Verdict:** ✅ Undo/Redo fully operational — commits revert to DB, Redo re-applies, both survive reload
 
 ---
 
@@ -189,5 +196,4 @@
 
 ## Required Actions Before Phase W Close
 
-1. **Re-run W-UNDO** — with native browser interaction (not JS dispatch), drive: dblclick cell → edit value → Ctrl+Z → verify value reverts → reload confirms no stale persist
-2. **Investigate W-REF-4** (viewer-restricted reference) — requires second user account with `viewer` role
+1. **Investigate W-REF-4** (viewer-restricted reference) — requires second user account with `viewer` role
