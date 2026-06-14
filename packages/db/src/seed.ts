@@ -13,6 +13,7 @@ import { seedEaReferenceModels } from "./seed-ea-reference-models.js";
 import { seedEaStructureRules } from "./seed-ea-structure-rules.js";
 import { seedEaSysml2 } from "./seed-ea-sysml2.js";
 import { seedEaSysmlAiCockpit } from "./seed-ea-sysml-ai-cockpit.js";
+import { seedEaSysmlAgentAuthority } from "./seed-ea-sysml-agent-authority.js";
 import {
   seedViewpointsForNotation,
   ARCHIMATE_VIEWPOINTS,
@@ -2415,6 +2416,7 @@ async function main(): Promise<void> {
   await step("eaViewpoints", () => seedEaViewpoints());
   await step("eaViews", () => seedEaViews());
   await step("eaSysmlAiCockpit", () => seedEaSysmlAiCockpit());
+  await step("eaSysmlAgentAuthority", () => seedEaSysmlAgentAuthority());
   await step("dpfSelfRegistration", () => seedDpfSelfRegistration());
   await step("defaultAdminUser", () => seedDefaultAdminUser());
   await step("discoveryTriageScheduledTask", () => ensureDiscoveryTriageScheduledTask(prisma));
