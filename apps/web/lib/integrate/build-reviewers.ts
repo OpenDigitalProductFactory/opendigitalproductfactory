@@ -68,6 +68,7 @@ REVIEW CHECKLIST — evaluate EVERY item before responding:
 7. Are acceptance criteria testable and specific?
 ${hasUI ? `8. Does the design's "Accessibility" field explicitly address a11y? (semantic HTML, keyboard operability, ARIA labels, visible focus, color-not-sole-conveyor.) If the Accessibility field is present and covers these points, accept it — do NOT re-demand the same criteria as a failure reason. If the Accessibility field is missing or says "Not applicable" despite obvious UI surface, THAT's a critical issue.` : `8. (Accessibility review skipped — this feature has no user-facing UI components.)`}
 9. If reusabilityAnalysis exists and scope is "parameterizable", does the proposed approach actually parameterize the identified domain entities? Flag any entity listed in domainEntities that appears hardcoded in the proposedApproach rather than stored as configuration.
+10. WHOLE-OUTCOME ALIGNMENT (per the "Optimize for the Whole" commandment): does the design name the end-to-end outcome — the user objective or value stream — it serves, and is the proposed approach the right thing for that whole, not a local optimization that advances one step at the whole's expense? A small or local change can state its served outcome briefly. Reserve "critical" only for a design that demonstrably degrades the broader objective in order to win locally; use "important" when the served outcome is simply unstated or only weakly connected to the approach.
 
 SEVERITY CALIBRATION: Use "critical" ONLY for issues that would cause data loss, security vulnerabilities, or broken functionality. Use "important" for design gaps that should be addressed but don't block implementation. Use "minor" for style, naming, or nice-to-have improvements. A health endpoint or simple utility does NOT need the same rigor as a payment system — calibrate accordingly.
 
@@ -196,7 +197,7 @@ export const ARCHITECTURE_REVIEW_REFERENCES: ReadonlyArray<{
     label: "Kernel principles",
     path: "docs/founder-kernel/wiki/principles/",
     covers:
-      "architecture-over-shortcuts, single-source-of-truth, schema-audit-before-features, organization-canonical-identity, principal-convergence",
+      "optimize-for-the-whole, architecture-over-shortcuts, single-source-of-truth, schema-audit-before-features, organization-canonical-identity, principal-convergence",
   },
   {
     label: "Platform usability standards",
@@ -262,7 +263,8 @@ export function buildArchitectureReviewPrompt(
   const artifactLabel = input.kind === "design" ? "design document" : "implementation plan";
   const focus =
     input.kind === "design"
-      ? `- Does the data model EXTEND canonical models (Organization for identity, Principal/PrincipalAlias for identity-bearing entities) rather than create parallel tables?
+      ? `- Does this serve the end-to-end outcome / value stream it belongs to, rather than locally optimizing one step at the whole's expense? The design should name the broader objective it advances (Optimize for the Whole).
+- Does the data model EXTEND canonical models (Organization for identity, Principal/PrincipalAlias for identity-bearing entities) rather than create parallel tables?
 - Does the proposed approach respect single-source-of-truth (no rule/fact/decision duplicated)?
 - Does it choose the architecturally sound shape over a shortcut that creates debt?
 - Are string-enum columns aligned with the canonical enum registry (hyphens, not underscores)?
