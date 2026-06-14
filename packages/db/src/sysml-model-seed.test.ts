@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { applySysmlModel, type SysmlDesiredModel } from "./sysml-model-seed";
+import { applySysmlModel, type SysmlDesiredModel } from "./sysml-model-seed.js";
 
 const MODEL: SysmlDesiredModel = {
   elements: [
@@ -27,6 +27,7 @@ function makeDb(existing: ExistingEl[] = [], opts: { notation?: boolean; relExis
       update: vi.fn(async (a: { where: { id: string } }) => ({ id: a.where.id })),
     },
     eaRelationship: { findFirst: vi.fn().mockResolvedValue(opts.relExists ? { id: "r" } : null), create: vi.fn().mockResolvedValue({}) },
+    eaConformanceIssue: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({}) },
     viewpointDefinition: { findUnique: vi.fn().mockResolvedValue({ id: "vp" }) },
     eaView: { findFirst: vi.fn().mockResolvedValue(opts.viewExists ? { id: "v" } : null), create: vi.fn().mockResolvedValue({ id: "v" }) },
     eaViewElement: { upsert: vi.fn().mockResolvedValue({}) },
@@ -73,5 +74,55 @@ describe("applySysmlModel", () => {
     const r = await applySysmlModel(MODEL, { db: db as never });
     expect(r.status).toBe("skipped");
     expect(db.eaElement.create).not.toHaveBeenCalled();
+  });
+
+  it("preserves per-element provenance (architect stays architect; otherwise deterministic)", async () => {
+    const db = makeDb([]);
+    const model: SysmlDesiredModel = {
+      ...MODEL,
+      softRemovePrefix: undefined,
+      elements: [
+        { sysmlKey: "x:pkg", typeSlug: "package", name: "P", description: "d", properties: { provenance: "architect", note: "judgment" } },
+        { sysmlKey: "x:a", typeSlug: "part_definition", name: "A", description: "d", properties: { sourceKey: "file.ts" } },
+      ],
+    };
+    await applySysmlModel(model, { db: db as never });
+    const created = db.eaElement.create.mock.calls.map(([a]) => (a as { data: { infraCiKey: string; properties: Record<string, unknown> } }).data);
+    expect(created.find((d) => d.infraCiKey === "x:pkg")!.properties.provenance).toBe("architect");
+    expect(created.find((d) => d.infraCiKey === "x:a")!.properties.provenance).toBe("deterministic");
+  });
+
+  it("stamps a configurable lifecycle stage (default production)", async () => {
+    const db = makeDb([]);
+    await applySysmlModel({ ...MODEL, softRemovePrefix: undefined, lifecycleStage: "design" }, { db: db as never });
+    const stages = db.eaElement.create.mock.calls.map(([a]) => (a as { data: { infraCiKey: string; lifecycleStage: string } }).data.lifecycleStage);
+    expect(stages).toEqual(["design", "design"]);
+  });
+
+  it("files conformance issues idempotently when provided", async () => {
+    const db = makeDb([]);
+    const model: SysmlDesiredModel = {
+      ...MODEL,
+      softRemovePrefix: undefined,
+      conformanceIssues: [{ onKey: "x:a", issueType: "drift-x", severity: "warn", message: "m" }],
+    };
+    await applySysmlModel(model, { db: db as never });
+    expect(db.eaConformanceIssue.create).toHaveBeenCalledTimes(1);
+    expect(db.eaConformanceIssue.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ issueType: "drift-x", elementId: "el-x:a", status: "open" }) })
+    );
+
+    // Re-run with the issue already present → no duplicate create.
+    db.eaConformanceIssue.findFirst.mockResolvedValue({ id: "existing" });
+    db.eaConformanceIssue.create.mockClear();
+    await applySysmlModel(model, { db: db as never });
+    expect(db.eaConformanceIssue.create).not.toHaveBeenCalled();
+  });
+
+  it("does not touch the conformance table when the model carries no issues", async () => {
+    const db = makeDb([]);
+    await applySysmlModel({ ...MODEL, softRemovePrefix: undefined }, { db: db as never });
+    expect(db.eaConformanceIssue.findFirst).not.toHaveBeenCalled();
+    expect(db.eaConformanceIssue.create).not.toHaveBeenCalled();
   });
 });
