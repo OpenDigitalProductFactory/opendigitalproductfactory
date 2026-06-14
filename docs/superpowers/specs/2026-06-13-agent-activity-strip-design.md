@@ -147,15 +147,24 @@ Augment each fleet row's `PhaseMiniRail` with a compact completion-density bar t
 
 Data: `FeatureBuildRow.taskResults` (done/failed, deduped by title — last result wins, matching `AgentActivityStrip`'s `resultByTitle` reduction) vs `buildPlan.tasks.length` (denominator, widened to `max(total, done+failed)` so segments never exceed 100%).
 
-#### §6.2 ReviewerStatusGrid
+#### §6.2 ReviewReadinessStrip — **Implemented** (`apps/web/components/build/ReviewReadinessStrip.tsx`)
 
-During `review` phase, replace the reviewer list in `WorkflowStageInspector` with named state-coded cards (same `--dpf-*` visual language, larger granularity since reviewer count is 5–8 and identity matters):
+> **Correction (substrate verification):** the first draft below assumed a roster of named reviewers, each with its own persisted `source` + completion state (`build.reviewIterations[latest].reviews[].source`). **That field does not exist, and that data is not persisted.** The build review system runs two reviewers + an advisory architecture lens and **`mergeReviews()` collapses them into a single `ReviewResult`** ([build-reviewers.ts](../../../apps/web/lib/integrate/build-reviewers.ts)); individual reviewer identity is gone by the time the row is stored. There is also no "reviewer list" in `WorkflowStageInspector` to replace. Rendering named cards would mean **fabricating reviewer names/states in the UI** — a violation of the evidence-is-the-report rule. The original sketch is retained here only as the rejected design:
+>
+> ~~`[EA Architect ✓] [Security ✓] [API Governance ●] [Code Reviewer ✓] [Test Coverage ●] [Accessibility ○]`~~
 
-```
-[EA Architect ✓] [Security ✓] [API Governance ●] [Code Reviewer ✓] [Test Coverage ●] [Accessibility ○]
-```
+**What shipped instead:** a strip of state-coded **review-lens** chips, each backed by a field that is actually stored on the row. Added to `WorkflowStageInspector` between "What Happened" and "Next Approval", gated to `phase === "review"`. Lens derivation is a pure, unit-tested function ([review-lenses.ts](../../../apps/web/lib/build/review-lenses.ts)):
 
-Data: `build.reviewIterations[latest].reviews[].source` (agent display name) + review completion state.
+| Lens | Source field | States |
+|------|-------------|--------|
+| Checklist review | `planReview ?? designReview` → `decision`, `issues[].severity`, `iteration.round`/`oscillating`, `parseError` | pass · fail · pending |
+| Architecture (advisory) | `ReviewResult.architectureAdvisory` (omitted if absent) | advisory |
+| Code review | `taskResults[].codeReview.decision` rolled up (omitted if no tasks) | pass · fail |
+| UX checks | `uxTestResults[]` (omitted if none) | pass · fail |
+| Verification | `verificationOut` (typecheck + tests) | pass · fail · pending |
+| Acceptance | `acceptanceMet[]` (omitted if none) | pass · partial |
+
+Checklist + Verification are the always-on spine (render even when pending); the other four are omitted entirely when their backing artifact is absent, so **no chip ever shows without evidence**. State is conveyed by colour **and** glyph **and** text (WCAG 1.4.1); each chip carries an `aria-label` of `"<lens>: <state> — <detail>"`. The section header shows an `N/M cleared · K blocking` roll-up. DPF token-only, zero new server plumbing.
 
 ### §7. Animation
 
@@ -183,4 +192,6 @@ Applied to running cells via `style={{ animation: "dpf-cell-pulse 1.4s ease-in-o
 
 Follow-on (separate PRs):
 - ~~`FleetDensityBar` in `BuildListItem.tsx`~~ — **done** (§6.1): `FleetDensityBar.tsx` + `FleetDensityBar.test.tsx`, wired into the fleet row.
-- `ReviewerStatusGrid` in `WorkflowStageInspector.tsx`
+- ~~`ReviewerStatusGrid` in `WorkflowStageInspector.tsx`~~ — **done** (§6.2), reshaped to `ReviewReadinessStrip` after substrate verification showed the per-reviewer roster is not persisted: `ReviewReadinessStrip.tsx` + `lib/build/review-lenses.ts`, driven by stored review evidence.
+
+All three follow-on surfaces from §6 are now implemented. The spec is fully realized.
