@@ -62,6 +62,21 @@ export async function computeDerivedCells(
 ): Promise<void> {
   const lookupCols = columns.filter((c) => c.fieldType === "lookup" && c.config?.lookup);
   const formulaCols = columns.filter((c) => c.fieldType === "formula");
+  const rollupCols = columns.filter((c) => c.fieldType === "rollup" && c.config?.rollup);
+  if (lookupCols.length === 0 && formulaCols.length === 0 && rollupCols.length === 0) return;
+
+  // 0) Rollup columns (custom tables): aggregate over a `link` column's targets.
+  //    v1 = count of linked records (the links are already loaded into the cell as
+  //    a ReferenceValue[] by the adapter). Computed before formulas so a formula
+  //    can reference a rollup's value. No DB round-trip.
+  if (rollupCols.length > 0) {
+    for (const row of rows) {
+      for (const rc of rollupCols) {
+        const links = row.cells[rc.config!.rollup!.linkColumnId];
+        row.cells[rc.columnId] = Array.isArray(links) ? links.length : 0;
+      }
+    }
+  }
   if (lookupCols.length === 0 && formulaCols.length === 0) return;
 
   // A formula may resolve a reference inline via REF()/LOOKUP(); if any does, we

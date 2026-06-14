@@ -42,6 +42,43 @@ describe("computeDerivedCells — formulas", () => {
     expect(String(rows[0].cells.c_x)).toMatch(/^#ERROR/);
   });
 
+  it("counts a link column's targets into a rollup column", async () => {
+    const columns: DerivableColumn[] = [
+      { columnId: "c_links", name: "Tasks", fieldType: "link", config: { link: { cardinality: "many", referenceType: "epic" } } },
+      { columnId: "c_count", name: "Task count", fieldType: "rollup", config: { rollup: { linkColumnId: "c_links", op: "count" } } },
+    ];
+    const rows: GridRow[] = [
+      {
+        rowId: "r1",
+        cells: {
+          c_links: [
+            { referenceId: "E1", referenceType: "epic" },
+            { referenceId: "E2", referenceType: "epic" },
+          ],
+          c_count: null,
+        },
+      },
+      { rowId: "r2", cells: { c_links: [], c_count: null } },
+    ];
+    await computeDerivedCells(columns, rows);
+    expect(rows[0].cells.c_count).toBe(2);
+    expect(rows[1].cells.c_count).toBe(0);
+  });
+
+  it("lets a formula reference a link-rollup count", async () => {
+    const columns: DerivableColumn[] = [
+      { columnId: "c_links", name: "Tasks", fieldType: "link", config: { link: { cardinality: "many", referenceType: "epic" } } },
+      { columnId: "c_count", name: "Task count", fieldType: "rollup", config: { rollup: { linkColumnId: "c_links", op: "count" } } },
+      { columnId: "c_busy", name: "Busy", fieldType: "formula", config: { formula: '=IF([Task count]>1,"yes","no")' } },
+    ];
+    const rows: GridRow[] = [
+      { rowId: "r1", cells: { c_links: [{ referenceId: "E1", referenceType: "epic" }, { referenceId: "E2", referenceType: "epic" }], c_count: null, c_busy: null } },
+    ];
+    await computeDerivedCells(columns, rows);
+    expect(rows[0].cells.c_count).toBe(2);
+    expect(rows[0].cells.c_busy).toBe("yes");
+  });
+
   it("is a no-op when there are no computed columns", async () => {
     const columns: DerivableColumn[] = [{ columnId: "c_a", name: "A", fieldType: "number" }];
     const rows: GridRow[] = [{ rowId: "r1", cells: { c_a: 1 } }];
