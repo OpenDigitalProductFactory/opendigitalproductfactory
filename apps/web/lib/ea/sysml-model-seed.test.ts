@@ -1,0 +1,77 @@
+import { describe, expect, it, vi } from "vitest";
+import { applySysmlModel, type SysmlDesiredModel } from "./sysml-model-seed";
+
+const MODEL: SysmlDesiredModel = {
+  elements: [
+    { sysmlKey: "x:pkg", typeSlug: "package", name: "P", description: "d" },
+    { sysmlKey: "x:a", typeSlug: "part_definition", name: "A", description: "d" },
+  ],
+  relationships: [{ fromKey: "x:pkg", toKey: "x:a", relSlug: "contains" }],
+  elementTypeSlugs: ["package", "part_definition"],
+  relTypeSlugs: ["contains"],
+  view: { name: "X View", description: "d", viewpointName: "System Decomposition & Interfaces", scopeRef: "x" },
+  softRemovePrefix: "x:",
+};
+
+type ExistingEl = { id: string; infraCiKey: string; properties: Record<string, unknown> };
+
+function makeDb(existing: ExistingEl[] = [], opts: { notation?: boolean; relExists?: boolean; viewExists?: boolean } = {}) {
+  return {
+    eaNotation: { findUnique: vi.fn().mockResolvedValue(opts.notation === false ? null : { id: "n" }) },
+    eaElementType: { findUniqueOrThrow: vi.fn(async (a: { where: { notationId_slug: { slug: string } } }) => ({ id: `et-${a.where.notationId_slug.slug}` })) },
+    eaRelationshipType: { findUniqueOrThrow: vi.fn(async (a: { where: { notationId_slug: { slug: string } } }) => ({ id: `rt-${a.where.notationId_slug.slug}` })) },
+    eaElement: {
+      findMany: vi.fn().mockResolvedValue(existing),
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn(async (a: { data: { infraCiKey: string } }) => ({ id: `el-${a.data.infraCiKey}` })),
+      update: vi.fn(async (a: { where: { id: string } }) => ({ id: a.where.id })),
+    },
+    eaRelationship: { findFirst: vi.fn().mockResolvedValue(opts.relExists ? { id: "r" } : null), create: vi.fn().mockResolvedValue({}) },
+    viewpointDefinition: { findUnique: vi.fn().mockResolvedValue({ id: "vp" }) },
+    eaView: { findFirst: vi.fn().mockResolvedValue(opts.viewExists ? { id: "v" } : null), create: vi.fn().mockResolvedValue({ id: "v" }) },
+    eaViewElement: { upsert: vi.fn().mockResolvedValue({}) },
+  };
+}
+
+describe("applySysmlModel", () => {
+  it("creates elements, relationships, and a view on first run", async () => {
+    const db = makeDb([]);
+    const r = await applySysmlModel(MODEL, { db: db as never });
+    expect(r.status).toBe("applied");
+    expect(r.created).toBe(2);
+    expect(r.updated).toBe(0);
+    expect(db.eaRelationship.create).toHaveBeenCalledTimes(1);
+    expect(db.eaView.create).toHaveBeenCalledTimes(1);
+    expect(db.eaViewElement.upsert).toHaveBeenCalledTimes(2);
+  });
+
+  it("is idempotent: re-run updates existing and creates no duplicates", async () => {
+    const existing: ExistingEl[] = [
+      { id: "el-x:pkg", infraCiKey: "x:pkg", properties: {} },
+      { id: "el-x:a", infraCiKey: "x:a", properties: {} },
+    ];
+    const db = makeDb(existing, { relExists: true, viewExists: true });
+    const r = await applySysmlModel(MODEL, { db: db as never });
+    expect(r.created).toBe(0);
+    expect(r.updated).toBe(2);
+    expect(db.eaElement.create).not.toHaveBeenCalled();
+    expect(db.eaRelationship.create).not.toHaveBeenCalled();
+    expect(db.eaView.create).not.toHaveBeenCalled();
+  });
+
+  it("soft-removes elements under the prefix that are no longer desired", async () => {
+    const existing: ExistingEl[] = [{ id: "el-stale", infraCiKey: "x:stale", properties: {} }];
+    const db = makeDb(existing);
+    const r = await applySysmlModel(MODEL, { db: db as never });
+    expect(r.removed).toBe(1);
+    const call = db.eaElement.update.mock.calls.find(([a]) => (a as { where: { id: string } }).where.id === "el-stale");
+    expect((call![0] as unknown as { data: { properties: { mirrorRemoved: boolean } } }).data.properties.mirrorRemoved).toBe(true);
+  });
+
+  it("skips when the notation is not seeded", async () => {
+    const db = makeDb([], { notation: false });
+    const r = await applySysmlModel(MODEL, { db: db as never });
+    expect(r.status).toBe("skipped");
+    expect(db.eaElement.create).not.toHaveBeenCalled();
+  });
+});
