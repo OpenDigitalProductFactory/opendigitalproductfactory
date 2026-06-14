@@ -37,7 +37,7 @@ export type EmailSetupToolResult = {
   ok: boolean;
   message: string;
   error?: string;
-  data?: unknown;
+  data?: Record<string, unknown>;
 };
 
 export async function runEmailSetupTool(args: EmailSetupToolArgs): Promise<EmailSetupToolResult> {
