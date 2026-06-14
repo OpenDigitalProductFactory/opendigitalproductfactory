@@ -37,11 +37,12 @@ describe('syncEngineRegistry', () => {
 
     await syncEngineRegistry(mockPrisma, dataPath);
 
-    expect(upsert).toHaveBeenCalledTimes(3);
+    expect(upsert).toHaveBeenCalledTimes(4);
     expect(upsert.mock.calls.map(([args]) => args.create.engineId)).toEqual([
       'claude',
       'codex',
       'grok',
+      'opencode',
     ]);
   });
 
@@ -52,7 +53,7 @@ describe('syncEngineRegistry', () => {
     await syncEngineRegistry(mockPrisma, dataPath);
     await syncEngineRegistry(mockPrisma, dataPath);
 
-    expect(upsert).toHaveBeenCalledTimes(6);
+    expect(upsert).toHaveBeenCalledTimes(8);
   });
 
   it('throws with file path on malformed JSON', async () => {
