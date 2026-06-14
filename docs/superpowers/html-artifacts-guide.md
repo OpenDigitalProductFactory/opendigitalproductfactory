@@ -20,6 +20,26 @@ This is **opt-in and additive**. Do not bulk-convert the existing
 `docs/superpowers/specs/*.md` or `plans/*.md` corpus. Reach for HTML when the
 extra expressiveness earns its keep; stay in Markdown when it doesn't.
 
+## The three-tier format model: JSON / HTML / Markdown
+
+Before choosing a format, decide which of three jobs the artifact does. They are
+not interchangeable:
+
+| Tier | Job | Reader | Use for | Don't use for |
+|------|-----|--------|---------|---------------|
+| **JSON** | Machine-to-machine **interface / data contract** | Parsers, orchestrators | Build-phase evidence (`buildPlan`, `designDoc`), structured tool outputs, config | Anything a human is meant to read as a document |
+| **HTML** | **Human-AND-AI-readable** artifact | People *and* agents | Specs, plans, PR write-ups, status reports, design explainers, option fan-outs | Canonical rule text; pure data contracts |
+| **Markdown** | Canonical **rule text / doctrine** | People (line-by-line in diffs) | AGENTS.md, kernel principles, skill bodies, READMEs, this guide | Diagram/table/interaction-heavy deliverables |
+
+The common mistake is conflating the **JSON tier** with the **HTML tier**.
+**Structured JSON evidence is an interface spec, not documentation** — it stays
+JSON no matter how diagram-rich the underlying feature is. If a process emits
+both a JSON contract *and* a human-readable companion (e.g. a Build Studio
+build-phase prompt that saves `buildPlan` JSON *and* shows the operator a plan
+write-up), only the companion is in HTML scope; the JSON stays JSON. This is the
+doctrine behind the Build Studio carve-out — see
+[Relationship to existing conventions](#relationship-to-existing-conventions).
+
 ## Why this is worth adopting here
 
 The thesis lands harder in DPF than in a generic repo, because the artifacts we
@@ -40,6 +60,28 @@ not check, leaving the agent to make every call) and **started reading the HTML
 ones**. The operator staying in the loop is the whole point. In a codebase where
 the standing rule is "the agent runs the system, the human makes decisions,"
 keeping the human reading the decision artifact is load-bearing.
+
+### Why HTML beats Markdown for human-AND-AI artifacts
+
+The core reason is that HTML is **human and AI readable**, and it wins on *both*
+halves — not just the human one:
+
+- **Humans read it more.** (The anecdote above: the author stopped reading his
+  Markdown plans and started reading the HTML ones.) Layout, jump-links, and real
+  diagrams turn a doc you skim into a doc you open and click around.
+- **Agents parse it more precisely.** HTML has **better layout and formatting
+  specificity** than Markdown's loose conventions: semantic tags, classes and
+  attributes, explicit table cells with row/column context, and SVG geometry are
+  unambiguous structure the model can read back exactly. Markdown's "a table if
+  you squint, a bullet that might be a heading" is lossy by comparison. That
+  specificity pays off on **every subsequent round-trip** — when the agent
+  re-reads its own artifact to extend a plan, verify a spec, or answer a
+  question, it reconstructs the structure instead of re-inferring it.
+
+So the format choice is **not** a human-convenience tax paid against agent
+efficiency. The explicit structure serves the agent too; both readers come away
+more accurate. That dual benefit is why HTML — not JSON, not Markdown — is the
+right tier for any artifact a person *and* an agent both consume.
 
 ## When to use HTML vs Markdown
 
@@ -159,6 +201,16 @@ family.
   needs to be discoverable via that tool, leave a short Markdown stub (title,
   BI, one-line abstract, link to the `.html`) so the index still finds it. The
   pilot keeps its full `.md`, so this isn't a concern there.
+- **Build Studio carve-out — JSON evidence stays JSON.** Build Studio's
+  build-phase prompts (`ideate`, `plan`, `ship`) save **structured JSON
+  evidence** (`designDoc`, `buildPlan`) that the build orchestrator parses to
+  dispatch agents. Per the [three-tier model](#the-three-tier-format-model-json--html--markdown)
+  that evidence is the **JSON tier** — an interface contract, not documentation —
+  so it stays JSON regardless of how diagram-heavy the feature is. Only the
+  **human-readable companion** those prompts also produce (the design doc an
+  operator opens, a plan write-up, ship notes / a PR explainer) is in HTML scope.
+  This is why the build-phase prompts point only their *human-readable* paths at
+  this convention while leaving the evidence JSON untouched.
 - **This guide is itself Markdown on purpose** — it's reference doctrine that
   should diff and grep cleanly. The artifacts it describes are where the HTML
   goes. (Yes, that's the guide following its own "stay in Markdown" rule.)
