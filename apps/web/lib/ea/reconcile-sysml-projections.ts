@@ -10,11 +10,13 @@
 import { prisma } from "@dpf/db";
 import { reconcileMcpAuthorityModel, type McpAuthorityReconcileResult } from "./reconcile-mcp-authority";
 import { reconcileCoworkerAuthority } from "./reconcile-coworker-authority";
+import { reconcileValueStreams } from "./reconcile-value-streams";
 import type { SysmlSeedResult } from "./sysml-model-seed";
 
 export interface SysmlProjectionsResult {
   mcpAuthority: McpAuthorityReconcileResult;
   coworkerAuthority: SysmlSeedResult;
+  valueStreams: SysmlSeedResult;
 }
 
 export async function reconcileSysmlProjections(
@@ -22,5 +24,6 @@ export async function reconcileSysmlProjections(
 ): Promise<SysmlProjectionsResult> {
   const mcpAuthority = await reconcileMcpAuthorityModel({ db: opts.db });
   const coworkerAuthority = await reconcileCoworkerAuthority({ db: opts.db });
-  return { mcpAuthority, coworkerAuthority };
+  const valueStreams = await reconcileValueStreams({ db: opts.db });
+  return { mcpAuthority, coworkerAuthority, valueStreams };
 }
