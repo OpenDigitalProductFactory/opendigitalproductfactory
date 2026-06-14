@@ -6,6 +6,9 @@ import { useDeepLink } from "@/src/hooks/useDeepLink";
 import { AgentFAB } from "@/src/components/AgentFAB";
 import { loadServerUrl } from "@/src/lib/serverConfig";
 import { loadAndApplyAppConfig } from "@/src/lib/appConfig";
+import { useOfflineQueueStore } from "@/src/stores/offlineQueue";
+import { sqliteQueueStorage } from "@/src/stores/queueStorage";
+import { useOfflineSync } from "@/src/hooks/useOfflineSync";
 
 function useProtectedRoute() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -40,8 +43,17 @@ export default function RootLayout() {
     })();
   }, [initialize]);
 
+  useEffect(() => {
+    // Wire durable storage for the offline mutation queue and restore any
+    // pending mutations from a previous (offline) session.
+    const store = useOfflineQueueStore.getState();
+    store.configureStorage(sqliteQueueStorage);
+    store.hydrate();
+  }, []);
+
   useProtectedRoute();
   useDeepLink();
+  useOfflineSync();
 
   if (isLoading) {
     return (

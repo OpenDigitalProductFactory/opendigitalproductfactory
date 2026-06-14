@@ -19,6 +19,7 @@ export interface TabSpec {
 export const TAB_REGISTRY: TabSpec[] = [
   { key: "index", personas: ["operator", "employee", "customer", "admin"] },
   { key: "ops", personas: ["operator", "employee", "admin"] },
+  { key: "jobs", personas: ["operator", "employee", "admin"], capability: "work-items" },
   { key: "portfolio", personas: ["operator", "admin"] },
   { key: "customers", personas: ["operator", "employee", "customer", "admin"] },
   { key: "more", personas: ["operator", "employee", "customer", "admin"] },
@@ -36,9 +37,11 @@ export interface ResolveTabsInput {
 
 /**
  * Resolve which tabs are visible (and in what order) from the install manifest.
- * Precedence: explicit manifest tab order → persona defaults. A capability gate
- * applies only when capabilities are known (a connected install); with none
- * loaded the app shows its persona defaults ungated, preserving the operator app.
+ * Precedence: explicit manifest tab order → persona defaults. An ungated tab
+ * follows persona defaults; a capability-gated tab shows only when the connected
+ * install's capabilities include its key — so the default/operator app (which
+ * loads no capabilities) shows only the ungated tabs, while a field install that
+ * grants "work-items" surfaces the Jobs tab.
  */
 export function resolveVisibleTabs(input: ResolveTabsInput): string[] {
   const registry = input.registry ?? TAB_REGISTRY;
@@ -48,9 +51,8 @@ export function resolveVisibleTabs(input: ResolveTabsInput): string[] {
   const byKey = new Map(registry.map((t) => [t.key, t]));
 
   const capAllowed = (spec: TabSpec): boolean => {
-    if (!spec.capability) return true;
-    if (!capsKnown) return true;
-    return caps!.includes(spec.capability);
+    if (!spec.capability) return true; // ungated → persona default
+    return capsKnown && caps!.includes(spec.capability); // gated → require the key
   };
 
   if (input.manifestTabs && input.manifestTabs.length > 0) {
