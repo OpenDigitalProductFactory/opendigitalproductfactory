@@ -1040,6 +1040,60 @@ export async function autoDiscoverAndProfile(providerId: string): Promise<{
 }
 
 /**
+ * Queue deterministic dimension evals for any ACTIVE models on a provider whose
+ * profiles are still un-calibrated seed priors (profileSource="seed",
+ * evalCount=0). This is the catch-up path for the bundled local provider: its
+ * models are seeded at install but, unlike user-configured providers, never went
+ * through autoDiscoverAndProfile — so they were stuck on flat seed priors and
+ * routing could not tell a strong tool-caller from a weak one.
+ *
+ * Safe to call repeatedly (e.g. on page-load health checks): once a model's
+ * first eval completes (evalCount>=1, even if inconclusive) it no longer matches
+ * the filter, so it stops re-queueing. No-op for providers ineligible for
+ * background evals (OAuth-delegated, non-LLM endpoints). Returns the number of
+ * models queued.
+ */
+export async function queueUncalibratedModelEvals(providerId: string): Promise<number> {
+  const provider = await prisma.modelProvider.findUnique({
+    where: { providerId },
+    select: {
+      providerId: true,
+      endpointType: true,
+      category: true,
+      serviceKind: true,
+      authMethod: true,
+      cliEngine: true,
+    },
+  });
+  if (!canQueueBackgroundModelEvals(provider ?? {})) {
+    console.log(
+      `[auto-eval] Skipping calibration evals for ${JSON.stringify(providerId)}: ${JSON.stringify(backgroundModelEvalSkipReason(provider))}`,
+    );
+    return 0;
+  }
+
+  const models = await prisma.modelProfile.findMany({
+    where: { providerId, modelStatus: "active", profileSource: "seed", evalCount: 0 },
+    select: { modelId: true, id: true },
+  });
+  if (models.length === 0) return 0;
+
+  try {
+    const { inngest } = await import("@/lib/queue/inngest-client");
+    for (const event of buildAutoDiscoveryEvalEvents(providerId, models)) {
+      await inngest.send(event);
+    }
+    console.log(`[auto-eval] Queued calibration evals for ${models.length} un-calibrated model(s) on ${JSON.stringify(providerId)}`);
+  } catch (err) {
+    // Non-fatal — seed priors remain usable until the eval runs.
+    console.warn("[auto-eval] Failed to queue calibration evals for %s: %s",
+      JSON.stringify(providerId),
+      err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
+  }
+  return models.length;
+}
+
+/**
  * Seed DiscoveredModel + ModelProfile from the known-model catalog.
  * Used for providers that can't call /v1/models (subscription OAuth, agent providers).
  */
