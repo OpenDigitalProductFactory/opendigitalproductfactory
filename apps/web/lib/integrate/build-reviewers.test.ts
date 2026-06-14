@@ -9,6 +9,7 @@ import {
   parseReviewResponse,
   extractClaimsFromReview,
   buildReviewBranchArtifacts,
+  collectReviewerVerdicts,
   deriveReviewRiskLevel,
   artifactTypeForPhase,
   mapCompactSummaryToBuildEntry,
@@ -571,5 +572,67 @@ describe("architectureAdvisoryFromReview", () => {
         parseError: true,
       }),
     ).toBeNull();
+  });
+});
+
+describe("collectReviewerVerdicts", () => {
+  function rev(overrides: Partial<ReviewResult> = {}): ReviewResult {
+    return { decision: "pass", issues: [], summary: "", ...overrides };
+  }
+
+  it("maps r1/r2/archReview to named verdicts in deliberation-branch order", () => {
+    const verdicts = collectReviewerVerdicts(
+      rev({ decision: "pass" }),
+      rev({ decision: "fail", issues: [{ severity: "critical", description: "x" }] }),
+      rev({ decision: "pass", issues: [{ severity: "minor", description: "n" }] }),
+    );
+    expect(verdicts.map((v) => v.source)).toEqual(["reviewer-1", "reviewer-2", "architect"]);
+    expect(verdicts.map((v) => v.label)).toEqual([
+      "Primary review",
+      "Independent review",
+      "Architecture",
+    ]);
+    expect(verdicts[1]).toMatchObject({
+      role: "reviewer",
+      decision: "fail",
+      issueCounts: { critical: 1, important: 0, minor: 0 },
+    });
+    expect(verdicts[2]).toMatchObject({ role: "architect", decision: "pass" });
+  });
+
+  it("omits reviewers that did not respond (null) rather than inventing a pass", () => {
+    const verdicts = collectReviewerVerdicts(rev(), null, null);
+    expect(verdicts).toHaveLength(1);
+    expect(verdicts[0]?.source).toBe("reviewer-1");
+  });
+
+  it("returns an empty array when no reviewer responded", () => {
+    expect(collectReviewerVerdicts(null, null, null)).toEqual([]);
+  });
+
+  it("preserves the parseError flag so the UI can show 'unavailable' not a false pass", () => {
+    const verdicts = collectReviewerVerdicts(
+      rev({ parseError: true, decision: "fail" }),
+      rev({ decision: "pass" }),
+      null,
+    );
+    expect(verdicts[0]).toMatchObject({ source: "reviewer-1", parseError: true });
+    expect(verdicts[1]).not.toHaveProperty("parseError");
+  });
+
+  it("counts issues by severity", () => {
+    const verdicts = collectReviewerVerdicts(
+      rev({
+        issues: [
+          { severity: "critical", description: "a" },
+          { severity: "important", description: "b" },
+          { severity: "important", description: "c" },
+          { severity: "minor", description: "d" },
+        ],
+      }),
+      null,
+      null,
+    );
+    expect(verdicts[0]?.issueCounts).toEqual({ critical: 1, important: 2, minor: 1 });
   });
 });
