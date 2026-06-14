@@ -14,6 +14,17 @@ import type { ArchetypeDefinition, SchedulingDefaults } from "../types";
 // execution, KYC/AML execution, and payment rails stay with the institution's
 // core systems — see spec §5 Non-Goals.
 
+// Default seed content for the loan calculator section.
+// Operators can override these in admin once the section exists.
+// Rate is illustrative only — see disclaimer.
+const CALCULATOR_DEFAULT_CONTENT = {
+  defaultRatePercent: 6.5,
+  defaultTermYears: 30,
+  showDownPayment: true,
+  disclaimer:
+    "For illustrative purposes only. Not a loan offer or commitment to lend. Actual rates and payments depend on credit profile, loan program, and property. All loans subject to credit approval.",
+};
+
 const INQUIRY_BASE_FIELDS = [
   { name: "name", label: "Full name", type: "text" as const, required: true },
   { name: "email", label: "Email", type: "email" as const, required: true },
@@ -95,7 +106,8 @@ export const bankingFinancialServicesArchetypes: ArchetypeDefinition[] = [
       { type: "about", title: "About the Bank", sortOrder: 2 },
       { type: "team", title: "Our Bankers", sortOrder: 3 },
       { type: "contact", title: "Visit a Branch", sortOrder: 4 },
-      { type: "disclosures", title: "Disclosures", sortOrder: 5 },
+      { type: "calculator", title: "Loan Calculator", sortOrder: 5, content: CALCULATOR_DEFAULT_CONTENT },
+      { type: "disclosures", title: "Disclosures", sortOrder: 6 },
     ],
     formSchema: [
       ...INQUIRY_BASE_FIELDS,
@@ -149,7 +161,8 @@ export const bankingFinancialServicesArchetypes: ArchetypeDefinition[] = [
       { type: "about", title: "Membership", sortOrder: 2 },
       { type: "team", title: "Member Advisors", sortOrder: 3 },
       { type: "contact", title: "Visit a Branch", sortOrder: 4 },
-      { type: "disclosures", title: "Disclosures", sortOrder: 5 },
+      { type: "calculator", title: "Loan Calculator", sortOrder: 5, content: CALCULATOR_DEFAULT_CONTENT },
+      { type: "disclosures", title: "Disclosures", sortOrder: 6 },
     ],
     formSchema: [
       ...INQUIRY_BASE_FIELDS,
@@ -228,7 +241,8 @@ export const bankingFinancialServicesArchetypes: ArchetypeDefinition[] = [
       { type: "team", title: "Loan Officers", sortOrder: 3 },
       { type: "testimonials", title: "Client Stories", sortOrder: 4 },
       { type: "contact", title: "Talk to Us", sortOrder: 5 },
-      { type: "disclosures", title: "Disclosures", sortOrder: 6 },
+      { type: "calculator", title: "Loan Calculator", sortOrder: 6, content: CALCULATOR_DEFAULT_CONTENT },
+      { type: "disclosures", title: "Disclosures", sortOrder: 7 },
     ],
     formSchema: [
       ...INQUIRY_BASE_FIELDS,

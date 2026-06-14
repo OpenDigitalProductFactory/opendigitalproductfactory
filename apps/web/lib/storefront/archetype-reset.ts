@@ -109,6 +109,7 @@ export async function resetStorefrontArchetype(input: {
         type: string;
         title?: string | null;
         sortOrder: number;
+        content?: Record<string, unknown>;
       }>;
       const itemTemplates = targetArchetype.itemTemplates as Array<{
         name: string;
@@ -124,7 +125,7 @@ export async function resetStorefrontArchetype(input: {
           storefrontId: storefront.id,
           type: section.type,
           title: section.title ?? null,
-          content: {},
+          content: section.content ?? {},
           sortOrder: section.sortOrder,
           isVisible: true,
         })),

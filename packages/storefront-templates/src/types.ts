@@ -7,7 +7,10 @@ export type PriceType =
 export type SectionType =
   | "hero" | "about" | "items" | "team" | "gallery"
   | "contact" | "testimonials" | "donate"
-  | "animals-available" | "disclosures" | "custom";
+  | "animals-available" | "disclosures" | "custom"
+  // Banking-only interactive section: loan/mortgage payment calculator.
+  // Gated to banking-financial-services at seed time; not addable by other archetypes.
+  | "calculator";
 
 export type ArchetypeCategory =
   | "healthcare-wellness"
@@ -144,6 +147,8 @@ export interface SectionTemplate {
   type: SectionType;
   title: string;
   sortOrder: number;
+  /** Seed content for sections that need defaults beyond an empty object (e.g. calculator). */
+  content?: Record<string, unknown>;
 }
 
 export interface SchedulingDefaults {
