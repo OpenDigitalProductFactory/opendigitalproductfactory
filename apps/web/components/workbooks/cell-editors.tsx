@@ -352,7 +352,7 @@ export function makeMultiSelectRenderer(options: SelectOption[]) {
   const byKey = new Map(options.map((o) => [o.key, o]));
   return function MultiSelectCell({ row, column }: RenderCellProps<GridRowData>): ReactNode {
     const v = row[column.key];
-    const keys = Array.isArray(v) ? v : [];
+    const keys: string[] = Array.isArray(v) ? v.filter((it): it is string => typeof it === "string") : [];
     if (keys.length === 0) return null;
     return (
       <>
@@ -383,6 +383,23 @@ export function renderReferenceCell({ row, column }: RenderCellProps<GridRowData
     return <span className="dpf-grid-chip">{ref.label ?? ref.referenceId}</span>;
   }
   return null;
+}
+
+/** Read-only renderer for `link` cells — a chip per linked record. */
+export function renderLinkCell({ row, column }: RenderCellProps<GridRowData>): ReactNode {
+  const v = row[column.key];
+  if (!Array.isArray(v) || v.length === 0) return null;
+  const refs = v.filter((it): it is ReferenceValue => !!it && typeof it === "object" && "referenceId" in it);
+  if (refs.length === 0) return null;
+  return (
+    <span className="dpf-grid-chips">
+      {refs.map((ref) => (
+        <span key={ref.referenceId} className="dpf-grid-chip">
+          {ref.label ?? ref.referenceId}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 /** Read-only renderer for computed (formula/lookup) cells. */

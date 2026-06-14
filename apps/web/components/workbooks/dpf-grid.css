@@ -95,6 +95,14 @@
   border: 1px solid var(--dpf-border);
 }
 
+/* link cell: a flex row of chips that wraps within the cell */
+.dpf-grid-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  align-items: center;
+}
+
 .dpf-grid-link {
   color: var(--dpf-accent);
   text-decoration: underline;
