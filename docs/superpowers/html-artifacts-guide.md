@@ -191,8 +191,45 @@ the body — same no-hardcoded-colors discipline the portal UI follows. The
 templates ship with a palette already wired; reuse it so artifacts look like one
 family.
 
+## Side benefit: artifacts can double as public-site content
+
+The public site at [opendigitalproductfactory.com](https://opendigitalproductfactory.com)
+is a Jekyll site served from `docs/`. It already ships **one bespoke,
+self-contained HTML page** — the landing page `docs/index.html`, which is opted
+*out* of the Jekyll layout (`layout: null`) and carries its own embedded styles.
+
+The artifacts this guide produces are built the same way: **self-contained**
+(inline CSS, inline SVG, no external assets or CDN). That means a *curated*
+HTML artifact can be published to the public domain **as-is** — no Jekyll chrome,
+no template wiring, exactly the pattern `index.html` already uses. Over time,
+surfacing select design explainers, architecture overviews, or worked specs on
+the public site deepens its content and **veracity** as a long-term side effect
+of writing artifacts in this format — the same file serves the internal reader,
+the agent, and (when cleared) the public.
+
+Two honest caveats so this stays a *deliberate* act, never an automatic leak:
+
+- **`superpowers/` is currently Jekyll-excluded** (see `docs/_config.yml`
+  `exclude:`) — it holds internal specs/plans and Liquid markers that must not
+  hit the public build. Nothing under it publishes today, and that default is
+  correct.
+- **Publishing is curated and outward-facing.** Internal specs stay internal;
+  only an artifact explicitly cleared for public consumption gets surfaced
+  (e.g. copied to a public-cleared path outside the `exclude` list).
+  Self-containment makes publishing *cheap when you choose to*; it does not make
+  it the default. Treat any move that puts an artifact on the public domain as a
+  publish decision requiring review.
+
 ## Relationship to existing conventions
 
+- **Grounded in the HTML standard.** This convention conforms to the WHATWG HTML
+  Living Standard. The reference entry — canonical URLs, version, license, the
+  document-semantics sections artifacts rely on — is
+  [`docs/Reference/html-living-standard.md`](../Reference/html-living-standard.md),
+  with a local offline snapshot of the authoring subset under
+  [`docs/Reference/html-spec/`](../Reference/html-spec/) so a function-specialized
+  or local LLM can read the spec directly instead of relying on training memory
+  (per "research and use standards"). Don't guess at HTML semantics — consult it.
 - **Locations are unchanged.** HTML specs live in `docs/superpowers/specs/`
   next to the `.md` files; HTML plans live in `docs/superpowers/plans/`. Keep
   the same `YYYY-MM-DD-<topic>-design.html` / `YYYY-MM-DD-<feature>.html`

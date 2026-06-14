@@ -133,6 +133,7 @@ export {
   CANONICAL_PRISMA_SCHEMA_PATH,
 } from "./schema-source";
 export { DATA_MODEL_MIRROR_TASK_ID } from "./data-model-mirror-config";
+export { SYSML_PROJECTION_TASK_ID } from "./sysml-projection-config";
 export {
   buildDiscoveredKey,
   buildInventoryEntityKey,

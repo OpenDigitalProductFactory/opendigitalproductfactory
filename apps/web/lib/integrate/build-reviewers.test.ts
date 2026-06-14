@@ -31,6 +31,20 @@ describe("buildDesignReviewPrompt", () => {
     expect(prompt).toContain("JSON FORMAT");
   });
 
+  it("gates on whole-outcome alignment per the Optimize for the Whole commandment", () => {
+    const prompt = buildDesignReviewPrompt({
+      problemStatement: "Users need filtering",
+      existingCodeAudit: "No existing filter",
+      reusePlan: "Reuse OpsClient pattern",
+      proposedApproach: "Add checkbox filter",
+      acceptanceCriteria: ["Filter hides done items"],
+    }, "Test project");
+    // The design review must ask which end-to-end outcome the change serves —
+    // local correctness alone is not "done".
+    expect(prompt).toContain("WHOLE-OUTCOME ALIGNMENT");
+    expect(prompt).toContain("Optimize for the Whole");
+  });
+
   // BI-CE49D82E — Delta-aware design review prompt, mirror of the plan path
   // added in BI-4396EFEC (D38). Live repro that drove this fix: FB-5E20E793
   // (Voice Slice 1.6) looped on the same "missing accessibility section"
@@ -501,6 +515,8 @@ describe("buildArchitectureReviewPrompt", () => {
     expect(prompt).toContain("ArchitectureReview table");
     // The chief-architect lens must invite reference-doc feedback.
     expect(prompt).toContain("[reference-doc]");
+    // Whole-over-local is a first-class architectural-alignment concern.
+    expect(prompt).toContain("Optimize for the Whole");
     expect(prompt).toContain("JSON FORMAT");
   });
 
@@ -523,6 +539,12 @@ describe("buildArchitectureReviewPrompt", () => {
   it("exposes the reference standards as a non-empty, repo-relative list", () => {
     expect(ARCHITECTURE_REVIEW_REFERENCES.length).toBeGreaterThan(0);
     expect(ARCHITECTURE_REVIEW_REFERENCES.map((r) => r.path)).toContain("AGENTS.md");
+    // The Optimize-for-the-Whole commandment is among the kernel principles the
+    // architect lens measures a spec against.
+    const kernel = ARCHITECTURE_REVIEW_REFERENCES.find(
+      (r) => r.path === "docs/founder-kernel/wiki/principles/",
+    );
+    expect(kernel?.covers).toContain("optimize-for-the-whole");
   });
 });
 

@@ -14,6 +14,7 @@ import { seedEaStructureRules } from "./seed-ea-structure-rules.js";
 import { seedEaSysml2 } from "./seed-ea-sysml2.js";
 import { seedEaSysmlAiCockpit } from "./seed-ea-sysml-ai-cockpit.js";
 import { seedEaSysmlAgentAuthority } from "./seed-ea-sysml-agent-authority.js";
+import { seedEaSysmlDataAuthority } from "./seed-ea-sysml-data-authority.js";
 import {
   seedViewpointsForNotation,
   ARCHIMATE_VIEWPOINTS,
@@ -47,6 +48,7 @@ import { seedDeliberationPatterns } from "./seed-deliberation.js";
 import { seedStallThresholds } from "./seed-stall-thresholds.js";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage.js";
 import { ensureDataModelMirrorScheduledTask } from "./seed-data-model-mirror.js";
+import { ensureSysmlProjectionScheduledTask } from "./seed-sysml-projection.js";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout.js";
 import { ensureAllBackupScheduledJobs } from "./seed-platform-backup.js";
 import { ensureContributorInventoryScheduledJob } from "./seed-contributor-inventory.js";
@@ -2417,10 +2419,12 @@ async function main(): Promise<void> {
   await step("eaViews", () => seedEaViews());
   await step("eaSysmlAiCockpit", () => seedEaSysmlAiCockpit());
   await step("eaSysmlAgentAuthority", () => seedEaSysmlAgentAuthority());
+  await step("eaSysmlDataAuthority", () => seedEaSysmlDataAuthority());
   await step("dpfSelfRegistration", () => seedDpfSelfRegistration());
   await step("defaultAdminUser", () => seedDefaultAdminUser());
   await step("discoveryTriageScheduledTask", () => ensureDiscoveryTriageScheduledTask(prisma));
   await step("dataModelMirrorScheduledTask", () => ensureDataModelMirrorScheduledTask(prisma));
+  await step("sysmlProjectionScheduledTask", () => ensureSysmlProjectionScheduledTask(prisma));
   await step("hiveScoutScheduledTask", () => ensureHiveScoutScheduledTask(prisma));
   await step("allBackupScheduledJobs", () => ensureAllBackupScheduledJobs(prisma));
   await step("contributorInventoryScheduledJob", () => ensureContributorInventoryScheduledJob(prisma));

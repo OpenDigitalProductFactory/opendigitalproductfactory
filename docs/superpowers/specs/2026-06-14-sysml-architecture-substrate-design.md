@@ -352,16 +352,17 @@ validation deferred per §10/§13):
   reusable notation-aware helper `seed-ea-viewpoints.ts` (§11). Cross-notation
   SysML→ArchiMate bridges (`sysml_allocates`/`sysml_traces`/`sysml_verifies`) added
   to `seed-ea-cross-notation.ts`. Unit-tested (idempotent seed + viewpoint resolution).
-- **Phase 2 — DPF current-state catch-up views:** in progress. Two SysML models
+- **Phase 2 — DPF current-state catch-up views:** in progress. Three SysML models
   seeded as EA graph content: **AI Cockpit & Model Routing**
-  (`seed-ea-sysml-ai-cockpit.ts`, target/design model) and **AI Agent Authority —
-  Current State** (`seed-ea-sysml-agent-authority.ts`, catch-up view #3 from §8) —
-  the latter grounded in the real authority substrate (default-deny grants, dual
-  capability+grant gate, HITL envelopes, dual-principal audit), marking deterministic
-  vs architect-authored facts with source keys and filing a conformance issue for the
-  one verification gap found (AuthorizationDecisionLog write-site unconfirmed).
-  Remaining §8 views (System Decomposition, Data Authority, Build Studio Lifecycle,
-  Deployment/Runtime Contracts, Value-Stream→System, Skill/Toolchain) are next.
+  (`seed-ea-sysml-ai-cockpit.ts`, target/design model), **AI Agent Authority —
+  Current State** (`seed-ea-sysml-agent-authority.ts`, §8 view #3), and **Data
+  Authority & Projection — Current State** (`seed-ea-sysml-data-authority.ts`, §8
+  view #2, grounded in EP-DATA-ARCH) — each grounded in the real substrate, marking
+  deterministic vs architect-authored facts with source keys and filing conformance
+  issues for the drift found (AuthorizationDecisionLog write-site unconfirmed;
+  vestigial EaElement/EaRelationship.syncedAt Postgres columns). Remaining §8 views
+  (System Decomposition, Build Studio Lifecycle, Deployment/Runtime Contracts,
+  Value-Stream→System, Skill/Toolchain) are next.
 - **Phases 3–5** (Build Studio planning hooks, external-agent convergence, tool
   evaluation / import-export): not started.
 
