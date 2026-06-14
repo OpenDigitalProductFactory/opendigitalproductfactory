@@ -78,7 +78,7 @@ Checklist items tagged `[C]` below fall in this category. In Runs 1–17, execut
 | `/customer` CRUD | Create account → add contact → add ConfigurationItem (ciType, name, description); all three forms save and link |
 | `/finance/suppliers` | Add supplier: name, contact saves correctly |
 | `/finance/bills/new` | Add supplier, add line items (description, qty, unit price), totals calculate, save to draft |
-| `/finance/invoices/new` | Link customer account, add line items, totals calculate, save to draft |
+| `/finance/invoices/new` | Link customer account, add line items, totals calculate, save to draft; TAX % pre-fills from the org's VAT setting (not a hardcoded 20) — see Phase G-REG-1 |
 | `/finance/reports/profit-loss` | Report loads; bill expenses appear; invoice revenue appears; net is calculated |
 | `/storefront/inbox` mechanics | Submitted CTAs appear; can open, assign to staff member, send to backlog |
 | Form validation (all surfaces) | Required fields reject empty submission; invalid email rejected; no 500 on malformed input |
@@ -262,6 +262,7 @@ Run 0 serves two goals: (a) validate the audit harness so the remaining 19 reset
 - [ ] **RC16** `/finance/bills/new` → Select "Run 0 Test Supplier". Add two line items: "Item A" qty 2 £10.00 each, "Item B" qty 1 £25.00. Confirm subtotal shows £45.00. Save to draft.
 - [ ] **RC17** `/finance/invoices/new` → Link to the account created in RC12. Add one line item: "Test Service" qty 1 £60.00. Save to draft.
 - [ ] **RC18** `/finance/reports/profit-loss` → Report loads. Confirm the RC16 bill (£45 expense) and RC17 invoice (£60 revenue) appear. Net = +£15.00.
+- [ ] **RC18-REG** Run the **Phase G-REG** invoice gap regressions (§Phase G — Phase G-REG) against the Run-0 org: **G-REG-1** (TAX % default reflects the org's VAT setting, not a hardcoded 20), **G-REG-2** (Send Invoice with no SMTP surfaces an actionable 422 and does NOT mark the invoice sent), **G-REG-3** (enable "Require signature" on the RC17 invoice → pay link shows the signature pad gating Pay Now → sign → admin shows "Signed by…"). Log each as drove → observed → signed off / DEFECT.
 - [ ] **RC19** Navigate to `/finance` → Dashboard shows at least one metric reflecting the RC16/RC17 entries.
 
 *Inbox mechanics:*
@@ -680,6 +681,23 @@ Apply this checklist to every archetype within a run. Log findings in Section 8 
 - [ ] **G4** `[C]` Navigate to `/finance/reports/profit-loss` → P&L report loads. `[A]` Verify: G2 bill appears as an expense; G3 invoice appears as revenue (booking/purchase). Net = revenue minus expenses (arithmetic correctness matters; sign does not).
 - [ ] **G5** `[A]` If P&L loads empty despite G2/G3 entries: log as an important finding.
 - [ ] **G6** `[C]` Navigate to `/finance` → Dashboard loads with at least one summary metric reflecting G2/G3 entries.
+
+#### Phase G-REG — Invoice gap regressions (Runs 6 & 7 closures, [PR #1865](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1865))
+
+> Regression guard for the three invoice gaps that Runs 6 & 7 surfaced. Run after Phase G. **G-REG-2** is a common platform mechanic `[C]` (evaluate once, in Run 0); **G-REG-1** and **G-REG-3** are archetype-conditional `[A]` — the expected value depends on the run's VAT status and archetype. Record evidence as **drove X → observed Y → signed off / DEFECT Z**, not screenshots.
+
+- [ ] **G-REG-1** `[A]` *(tax default — Gap 1)* On a fresh `/finance/invoices/new`, read the default **TAX %** on the first (empty) line item **before typing anything**, then add a second line and confirm it inherits the same default.
+  - *No-VAT org* (operator chose "No VAT" in setup → `OrganizationTaxProfile.taxModel = none`; most US installs and non-VAT archetypes): expect **0**.
+  - *VAT-registered org* (`taxModel = vat` — e.g. legal-services, accounting, trades): expect the standard rate from the applied finance profile (e.g. **20** for UK professional services; **0** for VAT-exempt industries such as healthcare).
+  - **DEFECT** if a No-VAT org shows a hardcoded **20** (the original Runs 6 & 7 finding).
+
+- [ ] **G-REG-2** `[C]` *(Send Invoice with no SMTP — Gap 2)* On a saved invoice detail page with **no SMTP configured** (fresh-install default), click **Send Invoice**. *Expect:* an operator-visible inline error — "Email delivery is not configured…" (HTTP 422) — **and the invoice status stays draft/approved (NOT flipped to "sent")**. **DEFECT** if the click silently succeeds ("Sent!") with no email, or returns an opaque 500. *(If SMTP has been configured on the install, record N/A.)*
+
+- [ ] **G-REG-3** `[A]` *(e-signature Phase 1 — Gap 3)* Signature capture on the payment portal.
+  - *legal-services / accounting:* create a new invoice → confirm **"Require signature before payment" is ON by default**. Open the pay link `/s/pay/{token}` → *expect* a **signature pad gating the Pay Now block** (cannot pay until signed). Enter name + email, draw a signature, submit → *expect* a "Signed by … on …" confirmation on the pay page, and the admin invoice detail page shows **"Signed by [name] at [timestamp]"** with the captured signature image.
+  - *counselling / it-managed-services and other archetypes:* confirm "Require signature" **defaults OFF**; the operator can enable it per invoice (creation checkbox, or the toggle on the invoice detail page), after which the same pad → sign → status flow applies.
+  - *non-professional-services archetypes:* with signature off, the existing pay flow is unchanged (no pad; Pay Now shown directly).
+  - **DEFECT** if the default is wrong for the archetype, the pad does not gate Pay Now, signing does not persist, or admin shows no signature status.
 
 ---
 
