@@ -5,6 +5,7 @@ import { listExpenseClaims } from "@/lib/actions/expenses";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
+import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 import { LocalTime } from "@/components/ui/LocalTime";
 import Link from "next/link";
 
@@ -18,10 +19,12 @@ const STATUS_COLOURS: Record<string, string> = {
 
 const ALL_STATUSES = ["draft", "submitted", "approved", "rejected", "paid"];
 
-type Props = { searchParams: Promise<{ status?: string }> };
+type Props = { searchParams: Promise<{ status?: string; view?: string }> };
 
 export default async function ExpenseClaimsPage({ searchParams }: Props) {
-  const { status } = await searchParams;
+  const sp = await searchParams;
+  const { status } = sp;
+  const view = parseSurfaceView(sp.view);
 
   const [claims, orgSettings] = await Promise.all([
     listExpenseClaims({ ...(status ? { status } : {}) }),
@@ -54,6 +57,9 @@ export default async function ExpenseClaimsPage({ searchParams }: Props) {
 
       <FinanceTabNav />
 
+      <PlatformGridSection entityType="expense_claim" view={view} />
+
+      {!view && (<>
       {/* Pending approval alert */}
       {pendingCount > 0 && (
         <div
@@ -197,6 +203,7 @@ export default async function ExpenseClaimsPage({ searchParams }: Props) {
           </table>
         </div>
       )}
+      </>)}
     </div>
   );
 }

@@ -219,11 +219,327 @@ const COMPLIANCE_INCIDENT_TABLE: GenericTableConfig = {
   ],
 };
 
+// CRM opportunities — read-only; stage keys per the schema enum comment, so board
+// grouping aligns. Money fields exposed; assignee/account are relation ids, omitted.
+const OPPORTUNITY_TABLE: GenericTableConfig = {
+  entityType: "opportunity",
+  prismaModel: "opportunity",
+  idField: "opportunityId",
+  labelField: "title",
+  orderBy: { field: "updatedAt", dir: "desc" },
+  columns: [
+    { field: "opportunityId", name: "ID", fieldType: "text", width: 140 },
+    { field: "title", name: "Title", fieldType: "text", width: 300 },
+    {
+      field: "stage",
+      name: "Stage",
+      fieldType: "select",
+      width: 140,
+      groupable: true,
+      options: [
+        { key: "qualification", label: "Qualification" },
+        { key: "discovery", label: "Discovery" },
+        { key: "proposal", label: "Proposal" },
+        { key: "negotiation", label: "Negotiation" },
+        { key: "closed_won", label: "Closed Won" },
+        { key: "closed_lost", label: "Closed Lost" },
+      ],
+    },
+    { field: "probability", name: "Probability", fieldType: "number", width: 110 },
+    { field: "expectedValue", name: "Expected value", fieldType: "number", width: 140 },
+    { field: "currency", name: "Currency", fieldType: "text", width: 90 },
+    { field: "expectedClose", name: "Expected close", fieldType: "date", width: 140 },
+    { field: "isDormant", name: "Dormant", fieldType: "checkbox", width: 90 },
+    { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
+  ],
+};
+
+// CRM quotes — read-only; status keys per the schema enum comment. Money exposed;
+// account/opportunity relation ids omitted.
+const QUOTE_TABLE: GenericTableConfig = {
+  entityType: "quote",
+  prismaModel: "quote",
+  idField: "quoteId",
+  labelField: "quoteNumber",
+  orderBy: { field: "updatedAt", dir: "desc" },
+  columns: [
+    { field: "quoteNumber", name: "Number", fieldType: "text", width: 160 },
+    {
+      field: "status",
+      name: "Status",
+      fieldType: "select",
+      width: 130,
+      groupable: true,
+      options: [
+        { key: "draft", label: "Draft" },
+        { key: "sent", label: "Sent" },
+        { key: "accepted", label: "Accepted" },
+        { key: "rejected", label: "Rejected" },
+        { key: "expired", label: "Expired" },
+        { key: "superseded", label: "Superseded" },
+      ],
+    },
+    { field: "totalAmount", name: "Total", fieldType: "number", width: 130 },
+    { field: "currency", name: "Currency", fieldType: "text", width: 90 },
+    { field: "validUntil", name: "Valid until", fieldType: "date", width: 130 },
+    { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
+  ],
+};
+
+// CRM sales orders — read-only; status keys per the schema enum comment.
+const SALES_ORDER_TABLE: GenericTableConfig = {
+  entityType: "sales_order",
+  prismaModel: "salesOrder",
+  idField: "orderRef",
+  labelField: "orderRef",
+  orderBy: { field: "updatedAt", dir: "desc" },
+  columns: [
+    { field: "orderRef", name: "Order", fieldType: "text", width: 160 },
+    {
+      field: "status",
+      name: "Status",
+      fieldType: "select",
+      width: 140,
+      groupable: true,
+      options: [
+        { key: "confirmed", label: "Confirmed" },
+        { key: "in_progress", label: "In Progress" },
+        { key: "fulfilled", label: "Fulfilled" },
+        { key: "cancelled", label: "Cancelled" },
+      ],
+    },
+    { field: "totalAmount", name: "Total", fieldType: "number", width: 130 },
+    { field: "currency", name: "Currency", fieldType: "text", width: 90 },
+    { field: "fulfilledAt", name: "Fulfilled", fieldType: "datetime", width: 160 },
+    { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
+  ],
+};
+
+// CRM engagements — read-only; status keys per the schema enum comment. contact is
+// a relation id (omitted); no PII columns.
+const ENGAGEMENT_TABLE: GenericTableConfig = {
+  entityType: "engagement",
+  prismaModel: "engagement",
+  idField: "engagementId",
+  labelField: "title",
+  orderBy: { field: "updatedAt", dir: "desc" },
+  columns: [
+    { field: "engagementId", name: "ID", fieldType: "text", width: 140 },
+    { field: "title", name: "Title", fieldType: "text", width: 300 },
+    {
+      field: "status",
+      name: "Status",
+      fieldType: "select",
+      width: 130,
+      groupable: true,
+      options: [
+        { key: "new", label: "New" },
+        { key: "contacted", label: "Contacted" },
+        { key: "qualified", label: "Qualified" },
+        { key: "unqualified", label: "Unqualified" },
+        { key: "converted", label: "Converted" },
+      ],
+    },
+    { field: "source", name: "Source", fieldType: "text", width: 130 },
+    { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
+  ],
+};
+
+// Finance bills — read-only; status free-form (text, no board). Money exposed.
+const BILL_TABLE: GenericTableConfig = {
+  entityType: "bill",
+  prismaModel: "bill",
+  idField: "billRef",
+  labelField: "billRef",
+  orderBy: { field: "issueDate", dir: "desc" },
+  columns: [
+    { field: "billRef", name: "Bill", fieldType: "text", width: 150 },
+    { field: "status", name: "Status", fieldType: "text", width: 120 },
+    { field: "issueDate", name: "Issued", fieldType: "date", width: 120 },
+    { field: "dueDate", name: "Due", fieldType: "date", width: 120 },
+    { field: "currency", name: "Currency", fieldType: "text", width: 90 },
+    { field: "totalAmount", name: "Total", fieldType: "number", width: 120 },
+    { field: "amountDue", name: "Due amount", fieldType: "number", width: 120 },
+  ],
+};
+
+// Finance bank accounts — read-only; PII OMITTED (accountNumber, sortCode, iban,
+// swift are deliberately excluded from the allow-list). Balances are view_finance-gated.
+const BANK_ACCOUNT_TABLE: GenericTableConfig = {
+  entityType: "bank_account",
+  prismaModel: "bankAccount",
+  idField: "bankAccountId",
+  labelField: "name",
+  orderBy: { field: "updatedAt", dir: "desc" },
+  columns: [
+    { field: "name", name: "Name", fieldType: "text", width: 220 },
+    { field: "bankName", name: "Bank", fieldType: "text", width: 180 },
+    { field: "accountType", name: "Type", fieldType: "text", width: 120 },
+    { field: "currency", name: "Currency", fieldType: "text", width: 90 },
+    { field: "currentBalance", name: "Balance", fieldType: "number", width: 130 },
+    { field: "status", name: "Status", fieldType: "text", width: 110 },
+    { field: "lastReconciledAt", name: "Reconciled", fieldType: "datetime", width: 160 },
+  ],
+};
+
+// Finance expense claims — read-only; status free-form (text). employee relation id omitted.
+const EXPENSE_CLAIM_TABLE: GenericTableConfig = {
+  entityType: "expense_claim",
+  prismaModel: "expenseClaim",
+  idField: "claimId",
+  labelField: "title",
+  orderBy: { field: "updatedAt", dir: "desc" },
+  columns: [
+    { field: "claimId", name: "ID", fieldType: "text", width: 140 },
+    { field: "title", name: "Title", fieldType: "text", width: 300 },
+    { field: "status", name: "Status", fieldType: "text", width: 120 },
+    { field: "totalAmount", name: "Total", fieldType: "number", width: 120 },
+    { field: "currency", name: "Currency", fieldType: "text", width: 90 },
+    { field: "submittedAt", name: "Submitted", fieldType: "datetime", width: 160 },
+    { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
+  ],
+};
+
+// Finance fixed assets — read-only; status free-form (text). assignee relation id omitted.
+const FIXED_ASSET_TABLE: GenericTableConfig = {
+  entityType: "fixed_asset",
+  prismaModel: "fixedAsset",
+  idField: "assetId",
+  labelField: "name",
+  orderBy: { field: "purchaseDate", dir: "desc" },
+  columns: [
+    { field: "assetId", name: "ID", fieldType: "text", width: 140 },
+    { field: "name", name: "Name", fieldType: "text", width: 260 },
+    { field: "category", name: "Category", fieldType: "text", width: 150 },
+    { field: "status", name: "Status", fieldType: "text", width: 110 },
+    { field: "purchaseDate", name: "Purchased", fieldType: "date", width: 120 },
+    { field: "purchaseCost", name: "Cost", fieldType: "number", width: 120 },
+    { field: "currentBookValue", name: "Book value", fieldType: "number", width: 130 },
+    { field: "currency", name: "Currency", fieldType: "text", width: 90 },
+    { field: "location", name: "Location", fieldType: "text", width: 150 },
+  ],
+};
+
+// Storefront items — read-only; clean catalogue fields.
+const STOREFRONT_ITEM_TABLE: GenericTableConfig = {
+  entityType: "storefront_item",
+  prismaModel: "storefrontItem",
+  idField: "itemId",
+  labelField: "name",
+  orderBy: { field: "sortOrder", dir: "asc" },
+  columns: [
+    { field: "itemId", name: "ID", fieldType: "text", width: 140 },
+    { field: "name", name: "Name", fieldType: "text", width: 260 },
+    { field: "category", name: "Category", fieldType: "text", width: 150 },
+    { field: "priceAmount", name: "Price", fieldType: "number", width: 110 },
+    { field: "priceCurrency", name: "Currency", fieldType: "text", width: 90 },
+    { field: "ctaType", name: "CTA", fieldType: "text", width: 120 },
+    { field: "isActive", name: "Active", fieldType: "checkbox", width: 80 },
+    { field: "sortOrder", name: "Order", fieldType: "number", width: 80 },
+  ],
+};
+
+// Inventory entities — read-only; discovery catalogue. No PII.
+const INVENTORY_ENTITY_TABLE: GenericTableConfig = {
+  entityType: "inventory_entity",
+  prismaModel: "inventoryEntity",
+  idField: "entityKey",
+  labelField: "name",
+  orderBy: { field: "lastSeenAt", dir: "desc" },
+  columns: [
+    { field: "entityKey", name: "Key", fieldType: "text", width: 160 },
+    { field: "name", name: "Name", fieldType: "text", width: 240 },
+    { field: "entityType", name: "Type", fieldType: "text", width: 140 },
+    { field: "manufacturer", name: "Manufacturer", fieldType: "text", width: 150 },
+    { field: "productModel", name: "Model", fieldType: "text", width: 150 },
+    { field: "supportStatus", name: "Support", fieldType: "text", width: 120 },
+    { field: "status", name: "Status", fieldType: "text", width: 110 },
+    { field: "lastSeenAt", name: "Last seen", fieldType: "datetime", width: 160 },
+  ],
+};
+
+// Rental agreements — read-only; PII OMITTED (customerEmail, customerPhone,
+// customerContactId excluded). customerName retained for operator context; gated by
+// view_customer. status keys per the schema enum comment → board grouping aligns.
+const RENTAL_AGREEMENT_TABLE: GenericTableConfig = {
+  entityType: "rental_agreement",
+  prismaModel: "rentalAgreement",
+  idField: "agreementRef",
+  labelField: "agreementRef",
+  orderBy: { field: "periodStart", dir: "desc" },
+  columns: [
+    { field: "agreementRef", name: "Ref", fieldType: "text", width: 150 },
+    { field: "customerName", name: "Customer", fieldType: "text", width: 200 },
+    {
+      field: "status",
+      name: "Status",
+      fieldType: "select",
+      width: 130,
+      groupable: true,
+      options: [
+        { key: "reserved", label: "Reserved" },
+        { key: "verified", label: "Verified" },
+        { key: "active", label: "Active" },
+        { key: "returned", label: "Returned" },
+        { key: "closed", label: "Closed" },
+        { key: "cancelled", label: "Cancelled" },
+      ],
+    },
+    { field: "pricingModel", name: "Pricing", fieldType: "text", width: 120 },
+    { field: "periodStart", name: "From", fieldType: "date", width: 120 },
+    { field: "periodEnd", name: "To", fieldType: "date", width: 120 },
+    { field: "rateAmount", name: "Rate", fieldType: "number", width: 110 },
+    { field: "currency", name: "Currency", fieldType: "text", width: 90 },
+  ],
+};
+
+// Fund budget lines — read-only; civic fund-accounting. fund keys per schema enum
+// comment. Uses the cuid PK as the row id (no semantic unique id on this model).
+const FUND_BUDGET_LINE_TABLE: GenericTableConfig = {
+  entityType: "fund_budget_line",
+  prismaModel: "fundBudgetLine",
+  idField: "id",
+  labelField: "accountCode",
+  orderBy: { field: "fiscalYear", dir: "desc" },
+  columns: [
+    { field: "fiscalYear", name: "FY", fieldType: "number", width: 90 },
+    {
+      field: "fund",
+      name: "Fund",
+      fieldType: "select",
+      width: 160,
+      groupable: true,
+      options: [
+        { key: "general", label: "General" },
+        { key: "special-revenue", label: "Special Revenue" },
+        { key: "enterprise", label: "Enterprise" },
+        { key: "capital-projects", label: "Capital Projects" },
+        { key: "debt-service", label: "Debt Service" },
+      ],
+    },
+    { field: "accountCode", name: "Account", fieldType: "text", width: 140 },
+    { field: "budgetedAmount", name: "Budgeted", fieldType: "number", width: 140 },
+    { field: "notes", name: "Notes", fieldType: "text", width: 280 },
+  ],
+};
+
 registerGenericReadTable(EPIC_TABLE);
 registerGenericReadTable(DIGITAL_PRODUCT_TABLE);
+registerGenericReadTable(STOREFRONT_ITEM_TABLE);
+registerGenericReadTable(INVENTORY_ENTITY_TABLE);
+registerGenericReadTable(RENTAL_AGREEMENT_TABLE);
+registerGenericReadTable(FUND_BUDGET_LINE_TABLE);
 registerGenericReadTable(COMPLIANCE_CONTROL_TABLE);
 registerGenericReadTable(COMPLIANCE_OBLIGATION_TABLE);
 registerGenericReadTable(COMPLIANCE_INCIDENT_TABLE);
+registerGenericReadTable(OPPORTUNITY_TABLE);
+registerGenericReadTable(QUOTE_TABLE);
+registerGenericReadTable(SALES_ORDER_TABLE);
+registerGenericReadTable(ENGAGEMENT_TABLE);
+registerGenericReadTable(BILL_TABLE);
+registerGenericReadTable(BANK_ACCOUNT_TABLE);
+registerGenericReadTable(EXPENSE_CLAIM_TABLE);
+registerGenericReadTable(FIXED_ASSET_TABLE);
 // Customers, people (safe org-directory fields only), suppliers — explicit
 // allow-lists live in people-supplier-configs.ts (unit-tested for safe omission).
 for (const cfg of PEOPLE_SUPPLIER_TABLES) registerGenericReadTable(cfg);
@@ -277,6 +593,102 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     viewCapability: "view_compliance",
     manageCapability: "view_compliance", // read-only grid; adapter performs no writes
     homeSurface: { path: "/compliance/incidents", label: "Incidents", board: false },
+  },
+  {
+    entityType: "opportunity",
+    label: "Opportunities",
+    description: "Sales opportunities as a read-only grid — sort, filter, and board by stage.",
+    viewCapability: "view_customer",
+    manageCapability: "view_customer", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/customer/opportunities", label: "Opportunities", board: true },
+  },
+  {
+    entityType: "quote",
+    label: "Quotes",
+    description: "Sales quotes as a read-only grid — sort, filter, and board by status.",
+    viewCapability: "view_customer",
+    manageCapability: "view_customer", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/customer/quotes", label: "Quotes", board: true },
+  },
+  {
+    entityType: "sales_order",
+    label: "Sales orders",
+    description: "Sales orders as a read-only grid — sort, filter, and board by status.",
+    viewCapability: "view_customer",
+    manageCapability: "view_customer", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/customer/sales-orders", label: "Sales orders", board: true },
+  },
+  {
+    entityType: "engagement",
+    label: "Engagements",
+    description: "CRM engagements as a read-only grid — sort, filter, and board by status.",
+    viewCapability: "view_customer",
+    manageCapability: "view_customer", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/customer/engagements", label: "Engagements", board: true },
+  },
+  {
+    entityType: "bill",
+    label: "Bills",
+    description: "Supplier bills as a read-only grid — sort and filter.",
+    viewCapability: "view_finance",
+    manageCapability: "view_finance", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/finance/bills", label: "Bills", board: false },
+  },
+  {
+    entityType: "bank_account",
+    label: "Bank accounts",
+    description: "Bank accounts as a read-only grid (no account numbers) — sort and filter.",
+    viewCapability: "view_finance",
+    manageCapability: "view_finance", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/finance/banking", label: "Banking", board: false },
+  },
+  {
+    entityType: "expense_claim",
+    label: "Expense claims",
+    description: "Expense claims as a read-only grid — sort and filter.",
+    viewCapability: "view_finance",
+    manageCapability: "view_finance", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/finance/expense-claims", label: "Expense claims", board: false },
+  },
+  {
+    entityType: "fixed_asset",
+    label: "Assets",
+    description: "Fixed assets as a read-only grid — sort and filter.",
+    viewCapability: "view_finance",
+    manageCapability: "view_finance", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/finance/assets", label: "Assets", board: false },
+  },
+  {
+    entityType: "storefront_item",
+    label: "Storefront items",
+    description: "Storefront catalogue items as a read-only grid — sort and filter.",
+    viewCapability: "view_storefront",
+    manageCapability: "view_storefront", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/storefront", label: "Storefront", board: false },
+  },
+  {
+    entityType: "inventory_entity",
+    label: "Inventory",
+    description: "Discovered inventory entities as a read-only grid — sort and filter.",
+    viewCapability: "view_inventory",
+    manageCapability: "view_inventory", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/inventory", label: "Inventory", board: false },
+  },
+  {
+    entityType: "rental_agreement",
+    label: "Rental agreements",
+    description: "Rental agreements as a read-only grid (no contact PII) — sort, filter, board by status.",
+    viewCapability: "view_customer",
+    manageCapability: "view_customer", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/rental", label: "Rental", board: true },
+  },
+  {
+    entityType: "fund_budget_line",
+    label: "Fund budgets",
+    description: "Fund budget lines as a read-only grid — sort, filter, and board by fund.",
+    viewCapability: "view_finance",
+    manageCapability: "view_finance", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/finance/funds", label: "Funds", board: true },
   },
   {
     entityType: "epic",

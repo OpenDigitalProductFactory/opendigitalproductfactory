@@ -4,8 +4,10 @@ import Link from "next/link";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 
-export default async function BankingPage() {
+export default async function BankingPage({ searchParams }: { searchParams?: Promise<{ view?: string }> }) {
+  const view = parseSurfaceView((await searchParams)?.view);
   const accounts = await listBankAccounts();
 
   const formatMoney = (amount: unknown) =>
@@ -44,8 +46,10 @@ export default async function BankingPage() {
 
       <FinanceTabNav />
 
+      <PlatformGridSection entityType="bank_account" view={view} />
+
       {/* Accounts */}
-      {accounts.length === 0 ? (
+      {!view && (accounts.length === 0 ? (
         <div className="p-8 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-center">
           <p className="text-sm text-[var(--dpf-muted)] mb-3">
             No bank accounts yet. Add your first account to start reconciling transactions.
@@ -139,7 +143,7 @@ export default async function BankingPage() {
             );
           })}
         </div>
-      )}
+      ))}
     </div>
   );
 }
