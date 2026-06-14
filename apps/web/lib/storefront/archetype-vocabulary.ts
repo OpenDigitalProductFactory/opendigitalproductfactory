@@ -244,3 +244,15 @@ const CATEGORY_SUGGESTIONS: Record<string, string[]> = {
 export function getCategorySuggestions(archetypeId: string | null | undefined): string[] {
   return CATEGORY_SUGGESTIONS[archetypeId ?? ""] ?? [];
 }
+
+/**
+ * Vocabulary for a storefront is always driven by the primary archetype.
+ * Thin wrapper over getVocabulary so call sites can use this named function
+ * without knowing that secondaries don't contribute vocabulary.
+ */
+export function getVocabularyForStorefront(
+  primaryCategory: string | null | undefined,
+  primaryCustomVocabulary?: Record<string, string> | null,
+): ArchetypeVocabulary {
+  return getVocabulary(primaryCategory, primaryCustomVocabulary);
+}

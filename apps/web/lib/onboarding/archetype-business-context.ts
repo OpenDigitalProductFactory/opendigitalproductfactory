@@ -267,13 +267,52 @@ const ARCHETYPE_PROFILES: Record<string, Partial<ArchetypeBusinessProfile>> = {
  * Resolve the best business profile for an org: a flagship archetype override
  * (merged over its industry profile) when available, else the industry profile,
  * else the generic profile. Pure and deterministic.
+ *
+ * When secondaryArchetypeIds / secondaryIndustries are provided (multi-archetype
+ * composition), each secondary's whoWeServe and supplyChain paragraphs are
+ * appended to the primary's when they differ — blended, not replaced.
+ * All prior call sites without secondaries are unchanged.
  */
 export function resolveBusinessProfile(input: {
   archetypeId?: string | null;
   industry?: string | null;
+  secondaryArchetypeIds?: string[] | null;
+  secondaryIndustries?: string[] | null;
 }): ArchetypeBusinessProfile {
   const base: ArchetypeBusinessProfile =
     (input.industry ? INDUSTRY_PROFILES[input.industry] : undefined) ?? GENERIC_BUSINESS_PROFILE;
   const override = input.archetypeId ? ARCHETYPE_PROFILES[input.archetypeId] : undefined;
-  return override ? { ...base, ...override } : base;
+  const primary = override ? { ...base, ...override } : base;
+
+  const secondaryIds = input.secondaryArchetypeIds ?? [];
+  const secondaryIndustries = input.secondaryIndustries ?? [];
+  const count = Math.max(secondaryIds.length, secondaryIndustries.length);
+  if (count === 0) return primary;
+
+  const extraWhoWeServe: string[] = [];
+  const extraSupplyChain: string[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const secId = i < secondaryIds.length ? secondaryIds[i] : undefined;
+    const secInd = i < secondaryIndustries.length ? secondaryIndustries[i] : undefined;
+    const secBase =
+      (secInd ? INDUSTRY_PROFILES[secInd] : undefined) ?? GENERIC_BUSINESS_PROFILE;
+    const secOverride = secId ? ARCHETYPE_PROFILES[secId] : undefined;
+    const sec = secOverride ? { ...secBase, ...secOverride } : secBase;
+
+    if (sec.whoWeServe !== primary.whoWeServe) extraWhoWeServe.push(sec.whoWeServe);
+    if (sec.supplyChain !== primary.supplyChain) extraSupplyChain.push(sec.supplyChain);
+  }
+
+  return {
+    ...primary,
+    whoWeServe:
+      extraWhoWeServe.length > 0
+        ? `${primary.whoWeServe}\n\n${extraWhoWeServe.join("\n\n")}`
+        : primary.whoWeServe,
+    supplyChain:
+      extraSupplyChain.length > 0
+        ? `${primary.supplyChain}\n\n${extraSupplyChain.join("\n\n")}`
+        : primary.supplyChain,
+  };
 }
