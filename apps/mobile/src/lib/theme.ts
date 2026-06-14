@@ -7,10 +7,7 @@
  * See docs/superpowers/specs/2026-06-14-native-mobile-archetype-apps-design.html (§3).
  */
 import { create } from "zustand";
-import type {
-  BrandingThemeTokens,
-  DualBrandingThemeTokens,
-} from "@/src/lib/manifest.types";
+import type { BrandingThemeTokens, DualBrandingThemeTokens } from "@dpf/types";
 
 export interface ThemeColors {
   primary: string;

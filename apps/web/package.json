@@ -17,6 +17,7 @@
     "@dpf/finance-templates": "workspace:*",
     "@dpf/integration-shared": "workspace:*",
     "@dpf/storefront-templates": "workspace:*",
+    "@dpf/types": "workspace:*",
     "@dpf/validators": "workspace:*",
     "@floating-ui/react": "^0.27.19",
     "@fullcalendar/core": "^6.1.20",

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -8,10 +8,74 @@ import {
   Switch,
   StyleSheet,
 } from "react-native";
-import { colors, spacing, borderRadius } from "@/src/lib/theme";
+import { useTheme } from "@/src/lib/theme";
 import type { FieldProps } from "./index";
 
+function makeStyles({
+  colors,
+  spacing,
+  borderRadius,
+}: ReturnType<typeof useTheme>) {
+  return StyleSheet.create({
+    container: { marginBottom: spacing.md },
+    label: {
+      color: colors.text,
+      fontSize: 14,
+      fontWeight: "500",
+      marginBottom: spacing.xs,
+    },
+    toggleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    picker: {
+      backgroundColor: colors.surface1,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: borderRadius.sm,
+      paddingVertical: spacing.sm + 4,
+      paddingHorizontal: spacing.md,
+    },
+    pickerError: { borderColor: colors.error },
+    pickerText: { color: colors.text, fontSize: 16 },
+    placeholder: { color: colors.textMuted },
+    overlay: {
+      flex: 1,
+      justifyContent: "flex-end",
+      backgroundColor: "rgba(0,0,0,0.5)",
+    },
+    sheet: {
+      backgroundColor: colors.surface2,
+      borderTopLeftRadius: borderRadius.lg,
+      borderTopRightRadius: borderRadius.lg,
+      padding: spacing.md,
+      maxHeight: "60%",
+    },
+    sheetTitle: {
+      color: colors.text,
+      fontSize: 18,
+      fontWeight: "600",
+      marginBottom: spacing.md,
+      textAlign: "center",
+    },
+    option: {
+      paddingVertical: spacing.sm + 4,
+      paddingHorizontal: spacing.md,
+      borderRadius: borderRadius.sm,
+    },
+    optionSelected: { backgroundColor: colors.primary + "22" },
+    optionText: { color: colors.text, fontSize: 16 },
+    optionTextSelected: { color: colors.primary, fontWeight: "600" },
+    error: { color: colors.error, fontSize: 12, marginTop: spacing.xs },
+  });
+}
+
 export function SelectField({ definition, value, onChange, error }: FieldProps) {
+  const theme = useTheme();
+  const { colors } = theme;
+  const styles = useMemo(() => makeStyles(theme), [theme.colors]);
+
   const isToggle =
     definition.type === "checkbox" || definition.type === "toggle";
 
@@ -34,10 +98,19 @@ export function SelectField({ definition, value, onChange, error }: FieldProps) 
     );
   }
 
-  return <SelectPicker definition={definition} value={value} onChange={onChange} error={error} />;
+  return (
+    <SelectPicker
+      definition={definition}
+      value={value}
+      onChange={onChange}
+      error={error}
+    />
+  );
 }
 
 function SelectPicker({ definition, value, onChange, error }: FieldProps) {
+  const theme = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme.colors]);
   const [open, setOpen] = useState(false);
   const options = definition.options ?? [];
   const displayValue = value != null ? String(value) : "";
@@ -52,12 +125,7 @@ function SelectPicker({ definition, value, onChange, error }: FieldProps) {
         accessibilityLabel={`Select ${definition.label}`}
         testID={`field-${definition.key}`}
       >
-        <Text
-          style={[
-            styles.pickerText,
-            !displayValue && styles.placeholder,
-          ]}
-        >
+        <Text style={[styles.pickerText, !displayValue && styles.placeholder]}>
           {displayValue || `Select ${definition.label.toLowerCase()}`}
         </Text>
       </Pressable>
@@ -99,78 +167,3 @@ function SelectPicker({ definition, value, onChange, error }: FieldProps) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: spacing.md,
-  },
-  label: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: spacing.xs,
-  },
-  toggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  picker: {
-    backgroundColor: colors.surface1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.sm,
-    paddingVertical: spacing.sm + 4,
-    paddingHorizontal: spacing.md,
-  },
-  pickerError: {
-    borderColor: colors.error,
-  },
-  pickerText: {
-    color: colors.text,
-    fontSize: 16,
-  },
-  placeholder: {
-    color: colors.textMuted,
-  },
-  overlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  sheet: {
-    backgroundColor: colors.surface2,
-    borderTopLeftRadius: borderRadius.lg,
-    borderTopRightRadius: borderRadius.lg,
-    padding: spacing.md,
-    maxHeight: "60%",
-  },
-  sheetTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: spacing.md,
-    textAlign: "center",
-  },
-  option: {
-    paddingVertical: spacing.sm + 4,
-    paddingHorizontal: spacing.md,
-    borderRadius: borderRadius.sm,
-  },
-  optionSelected: {
-    backgroundColor: colors.primary + "22",
-  },
-  optionText: {
-    color: colors.text,
-    fontSize: 16,
-  },
-  optionTextSelected: {
-    color: colors.primary,
-    fontWeight: "600",
-  },
-  error: {
-    color: colors.error,
-    fontSize: 12,
-    marginTop: spacing.xs,
-  },
-});

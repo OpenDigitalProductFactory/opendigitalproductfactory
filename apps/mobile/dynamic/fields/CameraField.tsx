@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import { colors, spacing, borderRadius } from "@/src/lib/theme";
+import { useTheme } from "@/src/lib/theme";
 import type { FieldProps } from "./index";
 
 /**
@@ -8,6 +8,49 @@ import type { FieldProps } from "./index";
  * Full implementation will integrate expo-image-picker or expo-camera.
  */
 export function CameraField({ definition, value, onChange, error }: FieldProps) {
+  const { colors, spacing, borderRadius } = useTheme();
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: { marginBottom: spacing.md },
+        label: {
+          color: colors.text,
+          fontSize: 14,
+          fontWeight: "500",
+          marginBottom: spacing.xs,
+        },
+        photoRow: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: spacing.sm,
+          marginBottom: spacing.sm,
+        },
+        thumbnail: {
+          width: 60,
+          height: 60,
+          backgroundColor: colors.surface2,
+          borderWidth: 1,
+          borderColor: colors.border,
+          borderRadius: borderRadius.sm,
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        thumbnailText: { color: colors.textMuted, fontSize: 14 },
+        button: {
+          backgroundColor: colors.surface2,
+          borderWidth: 1,
+          borderColor: colors.primary,
+          borderRadius: borderRadius.sm,
+          paddingVertical: spacing.sm + 4,
+          alignItems: "center",
+        },
+        buttonText: { color: colors.primary, fontSize: 14, fontWeight: "600" },
+        limitText: { color: colors.textMuted, fontSize: 13 },
+        error: { color: colors.error, fontSize: 12, marginTop: spacing.xs },
+      }),
+    [colors, spacing, borderRadius],
+  );
+
   const photos = Array.isArray(value) ? (value as string[]) : [];
   const maxCount = definition.maxCount ?? 5;
   const canAdd = photos.length < maxCount;
@@ -38,65 +81,9 @@ export function CameraField({ definition, value, onChange, error }: FieldProps) 
           <Text style={styles.buttonText}>Take Photo</Text>
         </Pressable>
       ) : (
-        <Text style={styles.limitText}>
-          Maximum {maxCount} photos reached
-        </Text>
+        <Text style={styles.limitText}>Maximum {maxCount} photos reached</Text>
       )}
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: spacing.md,
-  },
-  label: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: spacing.xs,
-  },
-  photoRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  thumbnail: {
-    width: 60,
-    height: 60,
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  thumbnailText: {
-    color: colors.textMuted,
-    fontSize: 14,
-  },
-  button: {
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: borderRadius.sm,
-    paddingVertical: spacing.sm + 4,
-    alignItems: "center",
-  },
-  buttonText: {
-    color: colors.primary,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  limitText: {
-    color: colors.textMuted,
-    fontSize: 13,
-  },
-  error: {
-    color: colors.error,
-    fontSize: 12,
-    marginTop: spacing.xs,
-  },
-});

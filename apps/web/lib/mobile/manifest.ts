@@ -6,59 +6,18 @@
  * the generic mobile app consumes (GET /api/v1/app/config) and the discovery
  * descriptor (GET /.well-known/dpf-instance.json).
  *
- * These types mirror the mobile-side contract in
- * apps/mobile/src/lib/manifest.types.ts; both describe the same wire JSON. They
- * converge into @dpf/types in a follow-up once shared-package changes are
- * verifiable from linked worktrees.
+ * The wire types are the single source of truth in `@dpf/types`
+ * (mobile-manifest.ts); this module owns only the projection logic.
  * Spec: docs/superpowers/specs/2026-06-14-native-mobile-archetype-apps-design.html (§3).
  */
-
-export interface BrandingPalette {
-  bg?: string;
-  surface1?: string;
-  surface2?: string;
-  text?: string;
-  accent?: string;
-  muted?: string;
-  border?: string;
-}
-export interface BrandingTypography {
-  fontFamily?: string;
-  headingFontFamily?: string;
-}
-export interface BrandingThemeTokens {
-  palette?: BrandingPalette;
-  typography?: BrandingTypography;
-}
-export interface DualBrandingThemeTokens {
-  light?: BrandingThemeTokens;
-  dark?: BrandingThemeTokens;
-}
-
-export type AppPersonaKind = "customer" | "employee" | "operator" | "admin";
-export interface AppPersona {
-  kind: AppPersonaKind;
-  mode?: string;
-}
-
-export interface MobileInstanceDescriptor {
-  instanceId: string;
-  orgName: string;
-  archetype?: string;
-  apiVersion: string;
-  authModes: string[];
-  capabilities?: string[];
-  branding?: { accent?: string; logoUrl?: string };
-}
-
-export interface MobileAppConfigManifest {
-  schemaVersion: string;
-  org: { name: string; archetype?: string };
-  persona: AppPersona;
-  designTokens?: BrandingThemeTokens | DualBrandingThemeTokens;
-  capabilities: string[];
-  vocabulary?: Record<string, string>;
-}
+import type {
+  AppConfigManifest,
+  AppPersona,
+  BrandingPalette,
+  BrandingThemeTokens,
+  DualBrandingThemeTokens,
+  InstanceDescriptor,
+} from "@dpf/types";
 
 const PALETTE_KEYS: (keyof BrandingPalette)[] = [
   "bg",
@@ -86,7 +45,7 @@ function extractSingle(raw: unknown): BrandingThemeTokens | undefined {
     const v = str(paletteRaw[k]);
     if (v) palette[k] = v;
   }
-  const typography: BrandingTypography = {};
+  const typography: { fontFamily?: string; headingFontFamily?: string } = {};
   const ff = str(typoRaw.fontFamily);
   if (ff) typography.fontFamily = ff;
   const hf = str(typoRaw.headingFontFamily);
@@ -162,8 +121,8 @@ export function buildInstanceDescriptor(input: {
   capabilities?: string[];
   accent?: string | null;
   logoUrl?: string | null;
-}): MobileInstanceDescriptor {
-  const descriptor: MobileInstanceDescriptor = {
+}): InstanceDescriptor {
+  const descriptor: InstanceDescriptor = {
     instanceId: input.instanceId,
     orgName: input.orgName || "DPF",
     apiVersion: "v1",
@@ -194,8 +153,8 @@ export function buildAppConfigManifest(input: {
   brandingTokensRaw?: unknown;
   capabilities: string[];
   vocabulary?: Record<string, string>;
-}): MobileAppConfigManifest {
-  const manifest: MobileAppConfigManifest = {
+}): AppConfigManifest {
+  const manifest: AppConfigManifest = {
     schemaVersion: "1",
     org: {
       name: input.orgName || "DPF",

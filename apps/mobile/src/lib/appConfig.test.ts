@@ -5,7 +5,7 @@ import {
   useAppConfigStore,
 } from "./appConfig";
 import { useThemeStore, defaultColors } from "./theme";
-import type { AppConfigManifest } from "./manifest.types";
+import type { AppConfigManifest } from "@dpf/types";
 
 /* ------------------------------------------------------------------ */
 /*  Mocks                                                              */

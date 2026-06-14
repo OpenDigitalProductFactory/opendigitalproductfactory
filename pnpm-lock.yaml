@@ -200,6 +200,9 @@ importers:
       '@dpf/storefront-templates':
         specifier: workspace:*
         version: link:../../packages/storefront-templates
+      '@dpf/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       '@dpf/validators':
         specifier: workspace:*
         version: link:../../packages/validators
