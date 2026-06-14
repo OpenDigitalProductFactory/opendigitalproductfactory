@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { resolveSmtpConfig, isSmtpConfigured } from "./smtp-config";
 
 type EmailOptions = {
   to: string;
@@ -362,7 +363,8 @@ export function composeExpenseApprovalEmail(params: ExpenseApprovalEmailParams) 
 }
 
 /**
- * Whether outbound email delivery is configured (SMTP host present).
+ * Whether outbound email delivery is configured — a usable SMTP host resolves
+ * from either the in-portal settings (Admin → Settings → Email) or env vars.
  *
  * Send flows that are operator-triggered (e.g. "Send Invoice") should pre-flight
  * this and surface an actionable error, rather than relying on sendEmail's
@@ -370,16 +372,17 @@ export function composeExpenseApprovalEmail(params: ExpenseApprovalEmailParams) 
  * cold-start fresh install with no SMTP, that fake dev success is exactly the
  * silent no-op the Runs 6 & 7 audit flagged.
  */
-export function isEmailConfigured(): boolean {
-  return Boolean(process.env.SMTP_HOST);
+export async function isEmailConfigured(): Promise<boolean> {
+  return isSmtpConfigured();
 }
 
 export async function sendEmail(options: EmailOptions): Promise<{ messageId: string }> {
-  const host = process.env.SMTP_HOST;
-  const port = parseInt(process.env.SMTP_PORT || "587", 10);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const from = options.from || process.env.SMTP_FROM || "noreply@example.com";
+  const cfg = await resolveSmtpConfig();
+  const host = cfg.host;
+  const port = cfg.port;
+  const user = cfg.user;
+  const pass = cfg.pass;
+  const from = options.from || cfg.from || "noreply@example.com";
 
   // Without SMTP config: in production this is a hard failure — returning a
   // fake success would let callers record an email as "sent" that never went
@@ -402,8 +405,8 @@ export async function sendEmail(options: EmailOptions): Promise<{ messageId: str
   const transport = nodemailer.createTransport({
     host,
     port,
-    secure: port === 465,
-    auth: user ? { user, pass } : undefined,
+    secure: cfg.secure,
+    auth: user ? { user, pass: pass ?? undefined } : undefined,
   });
 
   const result = await transport.sendMail({
