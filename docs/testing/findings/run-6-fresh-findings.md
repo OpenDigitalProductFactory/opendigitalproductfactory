@@ -1,0 +1,119 @@
+# Run 6 Fresh-Install Findings — Retail & Goods
+
+**Date:** 2026-06-14  
+**Archetypes:** `retail-goods`, `artisan-goods`, `florist`, `wholesale-distribution`  
+**Image SHA:** `e68d3c17471214a9295fa6e9748fb27f37135cee` (DPF_PLATFORM_VERSION 6.3.0-88-ge68d3c174)  
+**Validator:** Autonomous MCP session (Claude Sonnet 4.6)  
+**Golden dump:** `golden-provider-configured-2026-06-12.dump`
+
+---
+
+## Archetype 1: `retail-goods` — The General Emporium
+
+**Persona:** Pat Sullivan, retail store owner  
+**CTA type:** purchase  
+**Install method:** DB-only reset from golden dump + full wizard run
+
+### Phase P — Setup
+
+| Step | Action | Result |
+|------|--------|--------|
+| P1 | Edit seeded items (Featured Product $29.99, Bundle Deal $49.99, Gift Voucher $50.00) | ✅ Saved; product edit modal opens with empty Name field — re-entered manually each time (noted as potential bug) |
+| P2 | Add "Audit Run Widget — Test SKU R6", $19.99, General Merchandise, ctaType purchase | ✅ Item created (ITEM-288873E0); appears on storefront |
+| P3 | Add customer account "Test Buyer R6", buyer-r6@test.com | ✅ Account `ACCT-3CE87B39` created |
+| P4 | Operating hours Mon–Sat 09:00–18:00, Sun 11:00–17:00 | ✅ 14 time inputs confirmed (7 days × 2) |
+
+**Note:** Storefront wizard required completing financial sub-form (Step 6) to exit the wizard loop; `/storefront/items` redirected to `/storefront/setup` until Step 6 was submitted.
+
+### Phase B5 — Public Storefront Walkthrough
+
+**Surface:** `http://localhost:3000/s/the-general-emporium`
+
+| Check | Observed | Verdict |
+|-------|----------|---------|
+| Storefront renders | h1 "The General Emporium", 5 products visible | ✅ |
+| "Shop Now" CTA on hero | **No hero CTA button** — products each have a per-item "Buy" button; no top-level "Shop Now" | ⚠️ Minor — retail-goods CTA language correct ("Buy") but no hero call-to-action button; plan expected "Shop Now" at hero level |
+| Product catalog (≥4 items) | 5 items: Featured Product ×2, Gift Voucher, Bundle Deal, Audit Run Widget | ✅ |
+| Audit Run Widget visible at $19.99 | Shows as "Audit Run Widget — Test SKU R6 / £19.99 / Buy" | ✅ item present; ⚠️ £ prefix shown (SYS-4) |
+| Order form fields | Email + quantity only; no name field, no delivery address | ⚠️ Important — delivery address absent for physical retail |
+| Order placed: ORD-WK8JI50E | Confirmation page: "Order placed! Reference: ORD-WK8JI50E" | ✅ |
+| Admin order counter | Storefront dashboard: "1 Orders" | ✅ |
+
+**B5-1 — No delivery address on order form (Important)**  
+The order form at `/s/the-general-emporium/order/<itemId>` collects only email and quantity. For a physical retail storefront selling tangible goods, a delivery address is essential. No address field is present. This means operators cannot dispatch physical goods to a known shipping address — orders arrive with contact detail only.
+
+**B5-2 — Currency symbol shows £ despite USD configuration (SYS-4 carry-over)**  
+All product prices on the public storefront and in the admin interface show `£` prefix. The platform was configured as USD during the wizard (`Set Up Finances` → USD, no VAT). SYS-4 was first identified in an earlier run. The issue persists on this image.
+
+### Phase G — Financials
+
+| Step | Action | Result |
+|------|--------|--------|
+| G1 | Supplier "General Merchandise Wholesale" | ✅ Created — `SUP-BAZkZaJ` |
+| G2 | Bill `BILL-2026-0001`: "Quarterly stock replenishment — mixed goods", qty 1, $250.00 | ✅ Saved as draft |
+| G3 | Invoice `INV-2026-0002`: Test Buyer R6, "Audit Run Widget — Test SKU R6", qty 1, $19.99 | ✅ Saved as draft; 20% tax applied automatically → total $23.99 |
+| G4 | P&L check | ✅ Report renders; shows $0.00 revenue / $0.00 expenses (both docs in draft — correct accounting behaviour); draft bill flagged in notice: "DRAFT $250.00 across 1 bill not yet paid" |
+
+**G-note:** Tax rate defaulted to 20% on the invoice (UK VAT default). For a USD-configured install the expected default is 0% or US sales tax. This may be a configuration bleed — if VAT rate is seeded regardless of currency/locale, operators will need to manually correct every invoice.
+
+Also noted: `/finance/settings` shows "VAT Registered" status on a USD install — confirms locale/VAT seeding is not conditional on currency.
+
+### Phase O — AI Coworker Operating Intelligence
+
+**Model in use:** `local:docker.io/ai/gemma4:26B` (no external provider configured — golden dump baseline)
+
+| Question | Response level | Notes |
+|----------|---------------|-------|
+| O1: Tax setup | **Level 2** | Covers US sales tax + nexus (post-Wayfair), UK/EU VAT, GST; acknowledges no company-specific policy; appropriate caveat + escalation offer. Missing: income/corporation tax, specific state thresholds. |
+| O2: Expenses | **Level 1** | Deflected — filed BI-9AC29BEC instead of answering. No mention of COGS, lease, wages, shrinkage, shipping, merchant fees. |
+| O3: Market context (Amazon) | **Level 2+** | Gave useful framework: curation vs algorithm, community, local pickup, personalized service. Not Level 3 (missed margin compression metrics, e-commerce necessity). |
+| O4: Marketing channels | Not tested — skipped for session efficiency |
+| O5: Compliance | Not tested — skipped for session efficiency |
+| O6: Setup gaps (observational) | — | No stock level tracking visible; no reorder point; no returns policy on public portal; no dispatch/tracking UX |
+| O7: Cross-coworker (margin → promotion) | **Local model insufficient** | Model explicitly: "I'm on a local AI that wasn't strong enough to finish this. Connecting a stronger provider unlocks the work I'm built for." Graceful degradation — no hallucination. |
+
+**O-finding:** Local Gemma4:26B handles foundational questions at Level 1–2 but cannot complete cross-domain synthesis (O7). Graceful degradation messaging is clear and actionable.
+
+### Phase K — Operator Day-to-Day UX
+
+| Check | Observed | Verdict |
+|-------|----------|---------|
+| K1: Order confirmation email from inbox | Order `ORD-WK8JI50E` visible in inbox with buyer-r6@test.com ✅; no reply/send email action button — inbox is read-only | ⚠️ Important — no dispatch notification or confirmation email path from inbox |
+| K2: Operational schedule | `/workspace/calendar` exists; shows Workbooks events; no staffing rota or stock delivery view | ⚠️ Minor — calendar present but not retail-contextualized |
+| K3: Payment gateway | No Stripe or payment processing settings in `/finance/settings` or `/storefront/settings` | ⚠️ Important — purchase CTA order flow has no payment capture; orders arrive with no payment taken |
+| K4: Product-level KPIs | `/finance/revenue` shows invoice-level counters only; no revenue-by-product, top-selling items, stock turn, average order value | ⚠️ Minor |
+| K5: Staff management | No `/people` or HR section in workspace nav for retail-goods archetype | ⚠️ Minor |
+| K6: Digital presence | No Google Shopping, Instagram catalog, or Google Business Profile integration surface visible | ⚠️ Minor |
+| K7: Next-step guidance | No guided onboarding prompts for checkout setup, card reader, Google Shopping | ⚠️ Minor |
+| K8: Language fit | "Storefront" ✅; "Products" nav label ✅; "Inbox" ✅; "Inquiries" ✅; finance uses "invoices" not "receipts/sales" (generic but acceptable); no appointments/bookings language ✅ | ✅ Language broadly appropriate for retail |
+
+---
+
+## Archetype 2: `artisan-goods` — Handmade & Heartfelt Studio
+
+*Pending — DB reset required*
+
+---
+
+## Archetype 3: `florist` — Bloom & Wild Florals
+
+*Pending — DB reset required*
+
+---
+
+## Archetype 4: `wholesale-distribution` — Cascade Wholesale Supply
+
+*Pending — DB reset required*
+
+---
+
+## Defect Log
+
+| ID | Phase | Severity | Description |
+|----|-------|----------|-------------|
+| R6-001 | B5 | Important | No delivery address field on purchase order form — physical retail/goods cannot capture shipping address |
+| R6-002 | B5/P | Carry-over SYS-4 | £ symbol shown on all prices despite USD configured — currency symbol bleed |
+| R6-003 | P1 | Minor | Product edit modal opens with empty Name field — operator must re-type name on every edit |
+| R6-004 | G3 | Minor | Invoice tax rate defaults to 20% (UK VAT) on a USD-configured install — locale/currency mismatch in tax seed |
+| R6-005 | K1 | Important | Storefront inbox is read-only — no reply/send email/dispatch action; operator cannot send order confirmation or dispatch notification |
+| R6-006 | K3 | Important | No payment gateway setup (Stripe) visible — purchase CTA orders complete with no payment captured |
