@@ -1,21 +1,46 @@
 // apps/web/app/(shell)/finance/invoices/new/page.tsx
 import { prisma } from "@dpf/db";
+import { getFinancialProfile } from "@dpf/finance-templates";
 import Link from "next/link";
 import { CreateInvoiceForm } from "@/components/finance/CreateInvoiceForm";
+import { resolveInvoiceDefaultTaxRate } from "@/lib/finance/invoice-default-tax";
+import { defaultSignatureRequiredForArchetype } from "@/lib/finance/invoice-signature-default";
 
 export default async function NewInvoicePage() {
-  const customers = await prisma.customerAccount.findMany({
-    where: {
-      status: { in: ["active", "prospect", "qualified", "onboarding"] },
-    },
-    orderBy: { name: "asc" },
-    select: {
-      id: true,
-      accountId: true,
-      name: true,
-      currency: true,
-    },
+  const [customers, taxProfile, orgSettings, storefront] = await Promise.all([
+    prisma.customerAccount.findMany({
+      where: {
+        status: { in: ["active", "prospect", "qualified", "onboarding"] },
+      },
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        accountId: true,
+        name: true,
+        currency: true,
+      },
+    }),
+    prisma.organizationTaxProfile.findFirst({ select: { taxModel: true } }),
+    prisma.orgSettings.findFirst({ select: { appliedProfileSlug: true } }),
+    prisma.storefrontConfig.findFirst({
+      select: { archetype: { select: { archetypeId: true } } },
+    }),
+  ]);
+
+  // Default the TAX % field from the org's wizard VAT selection, not a 20% hardcode.
+  const financeProfile = orgSettings?.appliedProfileSlug
+    ? getFinancialProfile(orgSettings.appliedProfileSlug)
+    : null;
+  const defaultTaxRate = resolveInvoiceDefaultTaxRate({
+    taxModel: taxProfile?.taxModel ?? null,
+    profileVatRegistered: financeProfile?.vatRegistered ?? null,
+    profileDefaultTaxRate: financeProfile?.defaultTaxRate ?? null,
   });
+
+  // Default "require signature" on for regulated archetypes (legal/accounting).
+  const defaultSignatureRequired = defaultSignatureRequiredForArchetype(
+    storefront?.archetype?.archetypeId ?? null,
+  );
 
   return (
     <div>
@@ -46,7 +71,11 @@ export default async function NewInvoicePage() {
         </p>
       </div>
 
-      <CreateInvoiceForm customers={customers} />
+      <CreateInvoiceForm
+        customers={customers}
+        defaultTaxRate={defaultTaxRate}
+        defaultSignatureRequired={defaultSignatureRequired}
+      />
     </div>
   );
 }
