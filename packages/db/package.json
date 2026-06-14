@@ -6,6 +6,7 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./sysml-model-seed": "./src/sysml-model-seed.ts",
     "./ea-validation": "./src/ea-validation.ts",
     "./neo4j-sync": "./src/neo4j-sync.ts",
     "./reference-model-projection": "./src/reference-model-projection.ts",

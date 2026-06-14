@@ -14,13 +14,11 @@
 // Idempotent: elements upsert by stable `infraCiKey`; relationships/view elements
 // de-dupe on natural keys. Runtime EA validation deferred per the substrate spec.
 //
-// (Mirrors the seeding pattern in seed-ea-sysml-ai-cockpit.ts; a shared seeding
-// helper is a tracked convergence follow-up.)
+// (Builds a desired model and applies it via the shared applySysmlModel seeder.)
 
-import { prisma } from "./client.js";
 import type { Prisma } from "../generated/client/client";
+import { applySysmlModel, type SysmlDesiredElement, type SysmlDesiredModel, type SysmlDesiredRel } from "./sysml-model-seed.js";
 
-const NOTATION_SLUG = "sysml2";
 const KEY = (suffix: string) => `sysml:aauth:${suffix}`;
 
 type ElementSeed = {
@@ -86,112 +84,51 @@ const PACKAGE: ElementSeed = {
 
 const VIEW_NAME = "AI Agent Authority — Current State";
 
+function buildAgentAuthorityModel(): SysmlDesiredModel {
+  const all: ElementSeed[] = [PACKAGE, ...REQUIREMENTS, ...CONSTRAINTS, ...PARTS, ...VERIFICATIONS];
+  const elements: SysmlDesiredElement[] = all.map((seed) => ({
+    sysmlKey: KEY(seed.key),
+    typeSlug: seed.typeSlug,
+    name: seed.name,
+    description: seed.description,
+    properties: (seed.properties ?? {}) as Record<string, unknown>,
+  }));
+
+  const relationships: SysmlDesiredRel[] = [];
+  for (const seed of all) {
+    if (seed.key !== PACKAGE.key) relationships.push({ fromKey: KEY(PACKAGE.key), toKey: KEY(seed.key), relSlug: "contains" });
+  }
+  for (const p of PARTS) for (const reqKey of p.satisfies) relationships.push({ fromKey: KEY(p.key), toKey: KEY(reqKey), relSlug: "satisfies" });
+  for (const v of VERIFICATIONS) for (const reqKey of v.verifies) relationships.push({ fromKey: KEY(v.key), toKey: KEY(reqKey), relSlug: "verifies" });
+  for (const ref of CONSTRAINT_REFINES) relationships.push({ fromKey: KEY(ref.from), toKey: KEY(ref.to), relSlug: "refines" });
+
+  // Conformance issue(s) for verification gaps found during research.
+  const conformanceIssues = VERIFICATIONS.filter((v) => v.gap).map((v) => ({
+    onKey: KEY(v.key),
+    issueType: "missing-verification-evidence",
+    severity: "warn",
+    message: v.gap!,
+  }));
+
+  return {
+    elements,
+    relationships,
+    elementTypeSlugs: ["package", "requirement", "constraint", "part_definition", "verification_case"],
+    relTypeSlugs: ["contains", "satisfies", "verifies", "refines"],
+    view: {
+      name: VIEW_NAME,
+      description: "Current-state authority model: parts (identity→token), the invariants they satisfy, and the audit records that verify them.",
+      viewpointName: "Systems Requirements & Verification",
+      scopeRef: "agent-authority",
+    },
+    conformanceIssues,
+  };
+}
+
 export async function seedEaSysmlAgentAuthority(): Promise<void> {
-  const notation = await prisma.eaNotation.findUnique({ where: { slug: NOTATION_SLUG }, select: { id: true } });
-  if (!notation) {
-    console.warn(`Skipping AI Agent Authority view: notation "${NOTATION_SLUG}" not seeded`);
-    return;
+  const model = buildAgentAuthorityModel();
+  const r = await applySysmlModel(model);
+  if (r.status !== "skipped") {
+    console.log(`Seeded AI Agent Authority SysML view: ${model.elements.length} elements + view "${VIEW_NAME}"`);
   }
-  const notationId = notation.id;
-
-  const typeSlugs = ["package", "requirement", "constraint", "part_definition", "verification_case"];
-  const etId = new Map<string, string>();
-  for (const slug of typeSlugs) {
-    const et = await prisma.eaElementType.findUniqueOrThrow({ where: { notationId_slug: { notationId, slug } }, select: { id: true } });
-    etId.set(slug, et.id);
-  }
-  const relSlugs = ["contains", "satisfies", "verifies", "refines"];
-  const rtId = new Map<string, string>();
-  for (const slug of relSlugs) {
-    const rt = await prisma.eaRelationshipType.findUniqueOrThrow({ where: { notationId_slug: { notationId, slug } }, select: { id: true } });
-    rtId.set(slug, rt.id);
-  }
-
-  const elementId = new Map<string, string>();
-  async function upsertElement(seed: ElementSeed): Promise<string> {
-    const infraCiKey = KEY(seed.key);
-    const elementTypeId = etId.get(seed.typeSlug);
-    if (!elementTypeId) throw new Error(`agent-authority seed: unknown sysml2 element type "${seed.typeSlug}"`);
-    const data = {
-      elementTypeId,
-      name: seed.name,
-      description: seed.description,
-      properties: seed.properties ?? {},
-      lifecycleStage: "production",
-      lifecycleStatus: "active",
-      infraCiKey,
-    };
-    const existing = await prisma.eaElement.findFirst({ where: { infraCiKey }, select: { id: true } });
-    const row = existing
-      ? await prisma.eaElement.update({ where: { id: existing.id }, data, select: { id: true } })
-      : await prisma.eaElement.create({ data, select: { id: true } });
-    elementId.set(seed.key, row.id);
-    return row.id;
-  }
-
-  async function upsertRel(fromKey: string, toKey: string, relSlug: string): Promise<void> {
-    const fromElementId = elementId.get(fromKey);
-    const toElementId = elementId.get(toKey);
-    const relationshipTypeId = rtId.get(relSlug);
-    if (!fromElementId || !toElementId || !relationshipTypeId) {
-      console.warn(`agent-authority seed: skipping rel ${fromKey} -[${relSlug}]-> ${toKey} (unresolved)`);
-      return;
-    }
-    const existing = await prisma.eaRelationship.findFirst({ where: { fromElementId, toElementId, relationshipTypeId }, select: { id: true } });
-    if (!existing) {
-      await prisma.eaRelationship.create({ data: { fromElementId, toElementId, relationshipTypeId, notationSlug: NOTATION_SLUG, properties: {} } });
-    }
-  }
-
-  // 1. Elements.
-  await upsertElement(PACKAGE);
-  for (const r of REQUIREMENTS) await upsertElement(r);
-  for (const c of CONSTRAINTS) await upsertElement(c);
-  for (const p of PARTS) await upsertElement(p);
-  for (const v of VERIFICATIONS) await upsertElement(v);
-
-  // 2. Relationships.
-  for (const key of elementId.keys()) {
-    if (key !== PACKAGE.key) await upsertRel(PACKAGE.key, key, "contains");
-  }
-  for (const p of PARTS) for (const reqKey of p.satisfies) await upsertRel(p.key, reqKey, "satisfies");
-  for (const v of VERIFICATIONS) for (const reqKey of v.verifies) await upsertRel(v.key, reqKey, "verifies");
-  for (const ref of CONSTRAINT_REFINES) await upsertRel(ref.from, ref.to, "refines");
-
-  // 3. Conformance issue for the verification gap found during research.
-  for (const v of VERIFICATIONS) {
-    if (!v.gap) continue;
-    const elId = elementId.get(v.key);
-    if (!elId) continue;
-    const existing = await prisma.eaConformanceIssue.findFirst({ where: { elementId: elId, issueType: "missing-verification-evidence" }, select: { id: true } });
-    if (!existing) {
-      await prisma.eaConformanceIssue.create({
-        data: { elementId: elId, issueType: "missing-verification-evidence", severity: "warn", message: v.gap, status: "open" },
-      });
-    }
-  }
-
-  // 4. View under the "Systems Requirements & Verification" viewpoint.
-  const viewpoint = await prisma.viewpointDefinition.findUnique({ where: { name: "Systems Requirements & Verification" }, select: { id: true } });
-  let view = await prisma.eaView.findFirst({ where: { notationId, name: VIEW_NAME }, select: { id: true } });
-  if (!view) {
-    view = await prisma.eaView.create({
-      data: {
-        notationId, name: VIEW_NAME,
-        description: "Current-state authority model: parts (identity→token), the invariants they satisfy, and the audit records that verify them.",
-        layoutType: "graph", scopeType: "custom", scopeRef: "agent-authority",
-        viewpointId: viewpoint?.id ?? null, status: "draft",
-      },
-      select: { id: true },
-    });
-  }
-  for (const id of elementId.values()) {
-    await prisma.eaViewElement.upsert({
-      where: { viewId_elementId: { viewId: view.id, elementId: id } },
-      update: {},
-      create: { viewId: view.id, elementId: id, mode: "existing" },
-    });
-  }
-
-  console.log(`Seeded AI Agent Authority SysML view: ${elementId.size} elements + view "${VIEW_NAME}"`);
 }
