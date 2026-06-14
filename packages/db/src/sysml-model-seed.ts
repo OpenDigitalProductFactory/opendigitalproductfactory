@@ -22,7 +22,10 @@
 //
 // Design: docs/superpowers/specs/2026-06-14-design-implementation-parity-engine-design.md
 
-import { prisma } from "./client.js";
+// Extensionless "./client" (not "./client.js") to match the barrel convention in
+// index.ts: this module is pulled into the apps/web Next/Turbopack build via the
+// @dpf/db barrel + subpath, and Turbopack cannot resolve the ".js" specifier there.
+import { prisma } from "./client";
 
 export interface SysmlDesiredElement {
   /** Stable source key → EaElement.infraCiKey. */
