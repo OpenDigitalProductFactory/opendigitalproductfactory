@@ -151,6 +151,14 @@ export type UpsertWikiPageInput = {
   kernelPageId?: string | null;
   derivedFromKernelVersion?: string | null;
   abstract?: string | null;
+  /**
+   * Free-form frontmatter carried into the `WikiPage.metadata` Json column
+   * (IT4IT, Scott Page, sensitivity, and — for profession-corpus pages — the
+   * WSID variant axes `professionJurisdiction` / `professionCompetencyLevel`,
+   * per the location/competency-variants spec). Merged as-is; the store does
+   * not validate shape (seed/lint own that). Omitted = column left untouched.
+   */
+  metadata?: Record<string, unknown> | null;
 } & WikiPagePrincipleInput;
 
 /**
@@ -266,6 +274,7 @@ export async function upsertWikiPage(
     kernelPageId: input.kernelPageId ?? null,
     derivedFromKernelVersion: input.derivedFromKernelVersion ?? null,
     abstract: input.abstract ?? null,
+    ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
     ...principleData,
   };
 
@@ -287,6 +296,7 @@ export async function upsertWikiPage(
         kernelPageId: data.kernelPageId,
         derivedFromKernelVersion: data.derivedFromKernelVersion,
         abstract: data.abstract,
+        ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
         ...principleData,
       },
     });

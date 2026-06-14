@@ -8,7 +8,7 @@ import {
 import type { WikiPerspective } from "@/lib/wiki/perspective-intent";
 
 type PageProps = {
-  searchParams?: Promise<{ mode?: string }>;
+  searchParams?: Promise<{ mode?: string; profile?: string }>;
 };
 
 // Mode filter only narrows to WWMD or WWWD — no `"custom"` literal. Use the
@@ -24,11 +24,16 @@ function titleForMode(mode: WikiPerspective | null) {
 }
 
 export default async function FounderReviewPage({ searchParams }: PageProps) {
-  const resolvedSearchParams = await (searchParams ?? Promise.resolve({} as { mode?: string }));
+  const resolvedSearchParams = await (searchParams ?? Promise.resolve({} as { mode?: string; profile?: string }));
   const mode = normalizeMode(resolvedSearchParams.mode);
+  // Profession/coworker scoping (HRIS surface): the coworker record's Decisions
+  // tab deep-links `?profile=<professionProfileId>` to filter this inbox to one
+  // coworker's profession profile.
+  const profileFilter = resolvedSearchParams.profile?.trim() || null;
   const rows = await prisma.decisionInteraction.findMany({
     where: {
       outcomeType: { in: ["defer", "escalate"] },
+      ...(profileFilter ? { profileId: profileFilter } : {}),
     },
     orderBy: { createdAt: "desc" },
     take: 50,
@@ -65,6 +70,14 @@ export default async function FounderReviewPage({ searchParams }: PageProps) {
         <p className="mt-1 text-sm text-[var(--dpf-muted)]">
           Unresolved decisions that need a principle, evidence, owner, or judgment call.
         </p>
+        {profileFilter ? (
+          <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+            Filtered to profile <code>{profileFilter}</code> ·{" "}
+            <Link href="/platform/ai/founder-review" className="text-[var(--dpf-accent)]">
+              clear filter
+            </Link>
+          </p>
+        ) : null}
       </div>
 
       {groups.length === 0 ? (
