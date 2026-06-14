@@ -5,6 +5,7 @@ import {
   BUILD_STUDIO_TEST_IDS,
   FLEET_ROW_HEIGHT_CLASS,
 } from "./build-studio-layout";
+import { FleetDensityBar } from "./FleetDensityBar";
 import { PhaseMiniRail, type PhaseRailPhase } from "./PhaseMiniRail";
 import { QueueStateBadge, type BuildQueueState } from "./QueueStateBadge";
 
@@ -212,6 +213,9 @@ function FleetDensityRow({
           {build.buildId}
         </span>
         <PhaseMiniRail currentPhase={railPhase} />
+        {build.phase === "build" && (
+          <FleetDensityBar taskResults={build.taskResults} buildPlan={build.buildPlan} />
+        )}
         {build.claimStatus === "claimed" && build.claimedByAgentId && (
           <span
             className="inline-flex h-3.5 items-center justify-center rounded-full bg-[var(--dpf-accent-soft)] px-1.5 text-[9px] font-semibold uppercase text-[var(--dpf-accent)]"
