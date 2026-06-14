@@ -571,7 +571,7 @@ export function WorkbookGrid({
           type="button"
           onClick={() => setShowProvenance((v) => !v)}
           aria-pressed={showProvenance}
-          className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          className="ml-auto rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
           title="Show where each column's values come from"
         >
           {showProvenance ? "Hide data sources" : "Show data sources"}
