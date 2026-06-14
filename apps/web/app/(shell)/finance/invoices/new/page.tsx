@@ -1,13 +1,14 @@
 // apps/web/app/(shell)/finance/invoices/new/page.tsx
 import { prisma } from "@dpf/db";
-import { getFinancialProfile } from "@dpf/finance-templates";
 import Link from "next/link";
 import { CreateInvoiceForm } from "@/components/finance/CreateInvoiceForm";
-import { resolveInvoiceDefaultTaxRate } from "@/lib/finance/invoice-default-tax";
+import { getInvoiceDefaultTaxRate } from "@/lib/actions/financial-setup";
 import { defaultSignatureRequiredForArchetype } from "@/lib/finance/invoice-signature-default";
 
 export default async function NewInvoicePage() {
-  const [customers, taxProfile, orgSettings, storefront] = await Promise.all([
+  // Default the TAX % field from the org's wizard VAT selection, not a 20% hardcode
+  // (shared with the recurring-schedule form via getInvoiceDefaultTaxRate).
+  const [customers, storefront, defaultTaxRate] = await Promise.all([
     prisma.customerAccount.findMany({
       where: {
         status: { in: ["active", "prospect", "qualified", "onboarding"] },
@@ -20,22 +21,11 @@ export default async function NewInvoicePage() {
         currency: true,
       },
     }),
-    prisma.organizationTaxProfile.findFirst({ select: { taxModel: true } }),
-    prisma.orgSettings.findFirst({ select: { appliedProfileSlug: true } }),
     prisma.storefrontConfig.findFirst({
       select: { archetype: { select: { archetypeId: true } } },
     }),
+    getInvoiceDefaultTaxRate(),
   ]);
-
-  // Default the TAX % field from the org's wizard VAT selection, not a 20% hardcode.
-  const financeProfile = orgSettings?.appliedProfileSlug
-    ? getFinancialProfile(orgSettings.appliedProfileSlug)
-    : null;
-  const defaultTaxRate = resolveInvoiceDefaultTaxRate({
-    taxModel: taxProfile?.taxModel ?? null,
-    profileVatRegistered: financeProfile?.vatRegistered ?? null,
-    profileDefaultTaxRate: financeProfile?.defaultTaxRate ?? null,
-  });
 
   // Default "require signature" on for regulated archetypes (legal/accounting).
   const defaultSignatureRequired = defaultSignatureRequiredForArchetype(

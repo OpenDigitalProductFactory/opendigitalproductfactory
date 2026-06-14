@@ -32,6 +32,8 @@ interface Customer {
 
 interface Props {
   customers: Customer[];
+  /** Org default line-item tax rate (%). 0 unless the org is VAT/GST registered. */
+  defaultTaxRate?: number;
 }
 
 function round2(n: number): number {
@@ -42,7 +44,7 @@ function getTodayDate(): string {
   return new Date().toISOString().split("T")[0]!;
 }
 
-export function CreateRecurringForm({ customers }: Props) {
+export function CreateRecurringForm({ customers, defaultTaxRate = 0 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export function CreateRecurringForm({ customers }: Props) {
   const [templateNotes, setTemplateNotes] = useState("");
   const [currency, setCurrency] = useState("GBP");
   const [lineItems, setLineItems] = useState<LineItem[]>([
-    { description: "", quantity: 1, unitPrice: 0, taxRate: 20 },
+    { description: "", quantity: 1, unitPrice: 0, taxRate: defaultTaxRate },
   ]);
 
   const handleCustomerChange = useCallback(
@@ -73,7 +75,7 @@ export function CreateRecurringForm({ customers }: Props) {
   const addLineItem = () => {
     setLineItems((prev) => [
       ...prev,
-      { description: "", quantity: 1, unitPrice: 0, taxRate: 20 },
+      { description: "", quantity: 1, unitPrice: 0, taxRate: defaultTaxRate },
     ]);
   };
 

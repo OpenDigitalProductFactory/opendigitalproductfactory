@@ -26,13 +26,15 @@ interface Props {
   suppliers: Supplier[];
   defaultSupplierId?: string;
   defaultCurrency?: string;
+  /** Org default line-item tax rate (%). 0 for AP (mirrors bills); operator sets per line. */
+  defaultTaxRate?: number;
 }
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-export function CreatePOForm({ suppliers, defaultSupplierId, defaultCurrency }: Props) {
+export function CreatePOForm({ suppliers, defaultSupplierId, defaultCurrency, defaultTaxRate = 0 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +45,7 @@ export function CreatePOForm({ suppliers, defaultSupplierId, defaultCurrency }: 
   const [terms, setTerms] = useState("");
   const [notes, setNotes] = useState("");
   const [lineItems, setLineItems] = useState<LineItem[]>([
-    { description: "", quantity: 1, unitPrice: 0, taxRate: 20 },
+    { description: "", quantity: 1, unitPrice: 0, taxRate: defaultTaxRate },
   ]);
 
   const handleSupplierChange = useCallback(
@@ -60,7 +62,7 @@ export function CreatePOForm({ suppliers, defaultSupplierId, defaultCurrency }: 
   const addLineItem = () => {
     setLineItems((prev) => [
       ...prev,
-      { description: "", quantity: 1, unitPrice: 0, taxRate: 20 },
+      { description: "", quantity: 1, unitPrice: 0, taxRate: defaultTaxRate },
     ]);
   };
 
