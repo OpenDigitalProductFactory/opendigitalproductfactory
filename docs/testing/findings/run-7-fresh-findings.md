@@ -97,33 +97,36 @@ Enquiry form includes a categorisation dropdown with 6 legal matter types. Enabl
 
 ## Archetype 3: `accountancy`
 
-**Install name:** *(set during wizard)*  
-**Currency:** GBP  
-**VAT:** No VAT
+**Install name:** Clearwater Accountancy Ltd  
+**Slug:** `/s/clearwater-accountancy-ltd`  
+**Currency:** GBP · **VAT:** No VAT
 
 ### Phase P — Operator Setup
 
 | Step | Action | Result |
 |------|--------|--------|
-| P1 | Setup wizard | |
-| P2 | Service setup | |
-| P3 | Supplier setup | |
+| P1 | Setup wizard — archetype=Accounting & Bookkeeping, GBP, No VAT | ✅ Completed |
+| P2 | Services seeded | ✅ 6 services: Bookkeeping, Annual Accounts, Self Assessment Tax Return, VAT Returns, Payroll, Business Advisory — all Enquire type |
+| P3 | Nav vocabulary | ✅ "Client Portal", "Services", "Enquiries" — same cluster as legal-services |
 
 ### Phase B5 — Public Storefront
 
 | Step | Action | Result |
 |------|--------|--------|
-| B5-1 | Storefront loads | |
-| B5-2 | Service listing | |
-| B5-3 | Inquiry flow | |
+| B5-1 | Storefront loads | ✅ 6 services, "Enquire" CTAs, domain-specific descriptions |
+| B5-2 | Enquiry form | ✅ Name, Email, Phone, "Business size" dropdown (Sole trader/Partnership/Ltd micro/small/medium+), free-text field |
+| B5-3 | Enquiry submitted | ✅ INQ-CBZTZVZC confirmed |
+
+**B5-ac-1 — "Business size" dropdown on enquiry form (positive)**  
+Enquiry form includes a business size categorisation (Sole trader → Ltd medium+) enabling the accountant to triage complexity and fee tier immediately.
 
 ### Phase G — Financials
 
 | Step | Action | Result |
 |------|--------|--------|
-| G1 | Customer account | |
-| G2 | Expense entry | |
-| G3 | Invoice creation | |
+| G1 | Customer account | ✅ Test Client R7c created |
+| G2 | Invoice creation | ✅ INV-2026-0001: £350.00, Self Assessment Tax Return, 0% tax, GBP — draft saved |
+| G3 | R6-004 carry-over | ⚠️ Invoice TAX % defaulted to 20% on GBP No-VAT install — manually corrected to 0% |
 
 ---
 
@@ -174,3 +177,4 @@ Enquiry form includes a categorisation dropdown with 6 legal matter types. Enabl
 - **P-cw-1**: Archetype-tailored navigation: "Patient Portal", "Services", "Practitioners", "Appointments"
 - **P-ls-1**: Legal-specific vocabulary — "Client Portal", "Enquiries", "Our Solicitors" section, British English spelling throughout
 - **B5-ls-1**: "Type of legal matter" dropdown on enquiry form with 6 legal matter categories — enables structured triage
+- **B5-ac-1**: "Business size" dropdown on accountancy enquiry form (Sole trader → Ltd medium+) — enables fee-tier triage
