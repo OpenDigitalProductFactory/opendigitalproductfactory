@@ -91,7 +91,46 @@ Also noted: `/finance/settings` shows "VAT Registered" status on a USD install �
 
 ## Archetype 2: `artisan-goods` — Handmade & Heartfelt Studio
 
-*Pending — DB reset required*
+**Persona:** Lena Brooks, maker and studio owner  
+**CTA type:** purchase (with inquiry for commissions)  
+**Install method:** DB-only reset from golden dump + full wizard run
+
+### Phase P — Setup
+
+| Step | Action | Result |
+|------|--------|--------|
+| P1 | Edit seeded items — Handmade Ceramic Mug ($28), Workshop — Pottery for Beginners ($45), Gift Set ($55) | ✅ Saved; name corrected from "Handmade Item" → "Handmade Ceramic Mug" |
+| P2 | Add "Audit — Handmade Ceramic Mug", $28.00, ctaType purchase | ✅ Created (ITEM-EA5C12B2); 6 items total |
+| P3 | Add customer account "Test Buyer R6a", buyer-r6a@test.com | ✅ Account created |
+| P4 | Operating hours Mon–Sat 09:00–17:00 | ✅ 12 time inputs (6 days × 2); Sunday closed |
+
+**Seeded item names:** "Handmade Item" → renamed to "Handmade Ceramic Mug" (minor name drift from plan expectation of "Handmade Ceramic Mug").
+
+### Phase B5 — Public Storefront Walkthrough
+
+**Surface:** `http://localhost:3000/s/handmade-heartfelt-studio`
+
+| Check | Observed | Verdict |
+|-------|----------|---------|
+| Storefront renders | h1 "Handmade & Heartfelt Studio", 6 items visible | ✅ |
+| CTA differentiation | Purchase items show "Buy"; Custom Commission shows "Enquire" (inquiry type) ✅; Seasonal Collection shows "Enquire" (inquiry) | ✅ CTA type respected per item |
+| Currency (SYS-4) | All prices show £ prefix despite USD config | ⚠️ SYS-4 confirmed |
+| Order: Audit — Handmade Ceramic Mug | Confirmation: "Order placed! Reference: ORD-B2QZZ4A-" | ✅ |
+| Commission inquiry flow | `/inquire/itm-8opZGfvr` → form with Name, Email, Phone, Notes + **Commission details** textarea | ✅ Commission-specific field present — spec collection works |
+| Commission submission | Reference: INQ-QOPVWHAQ | ✅ |
+| Admin inbox | 1 Order + 1 Inquiry expected | Not verified — confirmed by order/inquiry references |
+
+**B5-artisan-1 — Commission inquiry form has dedicated spec field (Positive)**  
+The Custom Commission inquiry page includes a "Commission details" textarea alongside standard contact fields — operators receive the commission spec inline. This is better than a generic "Notes" field alone and appropriate for bespoke commission workflow.
+
+### Phase G — Financials
+
+| Step | Action | Result |
+|------|--------|--------|
+| G1 | Supplier "Craft Materials & Clay Supplies" | ✅ Created |
+| G2 | Bill `BILL-2026-0001`: "Glazing materials and kiln supplies — monthly", qty 1, $90.00 | ✅ Saved at 0% tax |
+| G3 | Invoice `INV-2026-0002`: Test Buyer R6a, "Audit — Handmade Ceramic Mug", qty 1, $28.00 | ✅ Saved; 20% tax applied → $33.60 total (R6-004 confirmed again) |
+| G4 | P&L | ✅ $0.00 (draft); notice: "DRAFT $90.00 across 1 bill not yet paid" |
 
 ---
 
