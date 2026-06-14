@@ -141,6 +141,9 @@ const CATEGORY_DEFAULT_COMMERCIAL_MODEL: Partial<Record<ArchetypeCategory, Comme
   "hoa-property-management": "statutory-fees-and-levies",
   "public-sector": "statutory-fees-and-levies",
   "banking-financial-services": "account-based-fees",
+  "automotive-services": "appointment-checkout",
+  "moving-and-logistics": "transactional",
+  "security-services": "recurring-agreement",
 };
 
 function resolveCommercialModel(a: ArchetypeDefinition): CommercialModel {
@@ -170,6 +173,12 @@ const CATEGORY_DEFAULT_DEMAND: Partial<Record<ArchetypeCategory, DemandSignature
   "nonprofit-community": "fiscal-calendar",
   "banking-financial-services": "rate-sensitive",
   "software-platform": "steady",
+  // Automotive: chips, breakdowns, and lockouts arrive unscheduled.
+  "automotive-services": "emergency-reactive",
+  // Moving peaks at month-end and over summer.
+  "moving-and-logistics": "seasonal",
+  // Guard contracts and monitoring are steady recurring coverage.
+  "security-services": "steady",
 };
 
 const CATEGORY_DEFAULT_CAPACITY: Partial<Record<ArchetypeCategory, CapacityUnitType>> = {
@@ -185,6 +194,10 @@ const CATEGORY_DEFAULT_CAPACITY: Partial<Record<ArchetypeCategory, CapacityUnitT
   "nonprofit-community": "volunteer-or-bed-capacity",
   "software-platform": "service-throughput",
   "hoa-property-management": "service-throughput",
+  // Field-dispatch services are bounded by technician / crew / officer hours.
+  "automotive-services": "slot-hours",
+  "moving-and-logistics": "slot-hours",
+  "security-services": "slot-hours",
 };
 
 // ── Derivation ───────────────────────────────────────────────────────────────
