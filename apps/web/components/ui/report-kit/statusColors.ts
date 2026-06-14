@@ -219,6 +219,32 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     blocked: "danger",
     unknown: "neutral",
   },
+  // Field-dispatch job lifecycle (dispatch board). Mirrors FIELD_DISPATCH_JOB_STATUSES
+  // in @dpf/validators (packages/validators/src/field-dispatch.ts). `needs-review` is the exception
+  // bucket (a job with no valid dispatch state) so it is warning, not neutral; truly
+  // unknown values fall through resolveIntent() to neutral.
+  fieldDispatchJob: {
+    quoted: "neutral",
+    scheduled: "info",
+    confirmed: "info",
+    "en-route": "accent",
+    "on-site": "accent",
+    complete: "success",
+    invoiced: "info",
+    paid: "success",
+    cancelled: "neutral",
+    "needs-review": "warning",
+  },
+  // Operational health ramp shared by the dispatch board and the storefront
+  // composition view (CompositionCompatibilityStatus). good/concern/acute/
+  // in-motion/unknown — unknown is neutral (never green) for missing data.
+  operationalStatus: {
+    good: "success",
+    concern: "warning",
+    acute: "danger",
+    "in-motion": "accent",
+    unknown: "neutral",
+  },
   // Generic severity ramp, reusable by any surface that has none of its own.
   severity: {
     info: "info",
