@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AppConfigManifest, AppPersona } from "@/src/lib/manifest.types";
+import type { AppConfigManifest, AppPersona } from "@dpf/types";
 import { getServerUrl } from "@/src/lib/serverConfig";
 import { SecureStorage } from "@/src/repositories/SecureStorage";
 import { useThemeStore, type ColorScheme } from "@/src/lib/theme";

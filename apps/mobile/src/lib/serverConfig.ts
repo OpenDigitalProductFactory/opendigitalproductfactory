@@ -1,4 +1,5 @@
 import * as SecureStore from "expo-secure-store";
+import type { InstanceDescriptor } from "@dpf/types";
 
 /**
  * Runtime server (install) configuration.
@@ -113,21 +114,9 @@ export async function clearServerUrl(): Promise<void> {
   }
 }
 
-/**
- * Descriptor served by every DPF install at `/.well-known/dpf-instance.json`.
- * Lets the app prove a URL is a real install and learn its identity, archetype,
- * auth modes, and branding before the user signs in. (Portal endpoint lands in
- * the next P1 increment; this is the client contract.)
- */
-export interface InstanceDescriptor {
-  instanceId: string;
-  orgName: string;
-  archetype?: string;
-  apiVersion: string;
-  authModes: string[];
-  capabilities?: string[];
-  branding?: { accent?: string; logoUrl?: string };
-}
+// InstanceDescriptor (the /.well-known/dpf-instance.json wire shape) is the
+// shared contract from @dpf/types; re-exported here for callers of this module.
+export type { InstanceDescriptor };
 
 /**
  * Fetch and validate the instance descriptor for a candidate URL. Used by the

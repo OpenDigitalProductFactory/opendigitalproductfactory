@@ -1,21 +1,46 @@
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "@/src/lib/theme";
+import { useAppConfigStore } from "@/src/lib/appConfig";
+import { resolveVisibleTabs } from "@/src/lib/navigation";
 
 export default function TabsLayout() {
+  const { colors } = useTheme();
+  const persona = useAppConfigStore((s) => s.persona);
+  const capabilities = useAppConfigStore((s) => s.capabilities);
+  const navigation = useAppConfigStore((s) => s.navigation);
+
+  // Which tabs the connected install exposes for this persona. With no manifest
+  // loaded this returns the full operator set, so the default app is unchanged.
+  const visible = new Set(
+    resolveVisibleTabs({
+      persona,
+      capabilities,
+      manifestTabs: navigation?.tabs,
+    }),
+  );
+  // `href: null` hides a tab from the bar; `undefined` leaves it visible.
+  const hiddenHref = (name: string): null | undefined =>
+    visible.has(name) ? undefined : null;
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: "#818cf8",
-        tabBarInactiveTintColor: "#9ca3af",
-        tabBarStyle: { backgroundColor: "#1e1e2e", borderTopColor: "#3f3f5a" },
-        headerStyle: { backgroundColor: "#1e1e2e" },
-        headerTintColor: "#e2e8f0",
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle: {
+          backgroundColor: colors.surface1,
+          borderTopColor: colors.border,
+        },
+        headerStyle: { backgroundColor: colors.surface1 },
+        headerTintColor: colors.text,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: "Home",
+          href: hiddenHref("index"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home" size={size} color={color} />
           ),
@@ -26,6 +51,7 @@ export default function TabsLayout() {
         options={{
           title: "Ops",
           headerShown: false,
+          href: hiddenHref("ops"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="list" size={size} color={color} />
           ),
@@ -36,6 +62,7 @@ export default function TabsLayout() {
         options={{
           title: "Portfolio",
           headerShown: false,
+          href: hiddenHref("portfolio"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="pie-chart" size={size} color={color} />
           ),
@@ -46,6 +73,7 @@ export default function TabsLayout() {
         options={{
           title: "Customers",
           headerShown: false,
+          href: hiddenHref("customers"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="people" size={size} color={color} />
           ),
@@ -56,6 +84,7 @@ export default function TabsLayout() {
         options={{
           title: "More",
           headerShown: false,
+          href: hiddenHref("more"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="ellipsis-horizontal" size={size} color={color} />
           ),
