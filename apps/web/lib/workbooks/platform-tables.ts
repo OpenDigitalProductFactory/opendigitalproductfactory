@@ -127,8 +127,62 @@ const DIGITAL_PRODUCT_TABLE: GenericTableConfig = {
   ],
 };
 
+// Compliance controls — read-only grid; no PII fields (owner is a relation id,
+// omitted). Select options mirror the controls page facets so board/grouping align.
+const COMPLIANCE_CONTROL_TABLE: GenericTableConfig = {
+  entityType: "compliance_control",
+  prismaModel: "control",
+  idField: "controlId",
+  labelField: "title",
+  orderBy: { field: "updatedAt", dir: "desc" },
+  columns: [
+    { field: "controlId", name: "ID", fieldType: "text", width: 140 },
+    { field: "title", name: "Title", fieldType: "text", width: 320 },
+    {
+      field: "controlType",
+      name: "Type",
+      fieldType: "select",
+      width: 130,
+      groupable: true,
+      options: [
+        { key: "preventive", label: "Preventive" },
+        { key: "detective", label: "Detective" },
+        { key: "corrective", label: "Corrective" },
+      ],
+    },
+    {
+      field: "implementationStatus",
+      name: "Status",
+      fieldType: "select",
+      width: 150,
+      groupable: true,
+      options: [
+        { key: "planned", label: "Planned" },
+        { key: "in-progress", label: "In Progress" },
+        { key: "implemented", label: "Implemented" },
+        { key: "not-applicable", label: "Not Applicable" },
+      ],
+    },
+    {
+      field: "effectiveness",
+      name: "Effectiveness",
+      fieldType: "select",
+      width: 160,
+      options: [
+        { key: "effective", label: "Effective" },
+        { key: "partially-effective", label: "Partially Effective" },
+        { key: "ineffective", label: "Ineffective" },
+        { key: "not-assessed", label: "Not Assessed" },
+      ],
+    },
+    { field: "nextReviewDate", name: "Next review", fieldType: "date", width: 130 },
+    { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
+  ],
+};
+
 registerGenericReadTable(EPIC_TABLE);
 registerGenericReadTable(DIGITAL_PRODUCT_TABLE);
+registerGenericReadTable(COMPLIANCE_CONTROL_TABLE);
 // Customers, people (safe org-directory fields only), suppliers — explicit
 // allow-lists live in people-supplier-configs.ts (unit-tested for safe omission).
 for (const cfg of PEOPLE_SUPPLIER_TABLES) registerGenericReadTable(cfg);
@@ -158,6 +212,14 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     viewCapability: "view_compliance",
     manageCapability: "manage_compliance",
     homeSurface: { path: "/compliance/risks", label: "Risk assessments", board: true },
+  },
+  {
+    entityType: "compliance_control",
+    label: "Controls",
+    description: "Compliance controls as a read-only grid — sort, filter, and board by status.",
+    viewCapability: "view_compliance",
+    manageCapability: "view_compliance", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/compliance/controls", label: "Controls", board: true },
   },
   {
     entityType: "epic",
