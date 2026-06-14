@@ -222,6 +222,14 @@ Two honest caveats so this stays a *deliberate* act, never an automatic leak:
 
 ## Relationship to existing conventions
 
+- **Grounded in the HTML standard.** This convention conforms to the WHATWG HTML
+  Living Standard. The reference entry — canonical URLs, version, license, the
+  document-semantics sections artifacts rely on — is
+  [`docs/Reference/html-living-standard.md`](../Reference/html-living-standard.md),
+  with a local offline snapshot of the authoring subset under
+  [`docs/Reference/html-spec/`](../Reference/html-spec/) so a function-specialized
+  or local LLM can read the spec directly instead of relying on training memory
+  (per "research and use standards"). Don't guess at HTML semantics — consult it.
 - **Locations are unchanged.** HTML specs live in `docs/superpowers/specs/`
   next to the `.md` files; HTML plans live in `docs/superpowers/plans/`. Keep
   the same `YYYY-MM-DD-<topic>-design.html` / `YYYY-MM-DD-<feature>.html`

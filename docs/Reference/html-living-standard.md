@@ -76,16 +76,35 @@ scripting/networking APIs:
   (the guide's requirement) means valid per §13 and correct default rendering
   per §15 — not just "opens without error in one browser."
 
-## Why this is a pointer, not a copy
+## Local offline corpus (for local / function-specialized LLMs)
 
-The HTML Living Standard is a single ~13 MB document that is **revised daily**.
-Vendoring its full text would bloat the repository and be stale within a day,
-violating single-source-of-truth. The canonical source is always correct and
-freely linkable, so this reference pins the authoritative URLs, the snapshot
-date, the license, and the DPF-relevant sections — and defers to the live
-document for normative wording. This is the same pattern as
-[`sysml-v2.md`](sysml-v2.md): a curated reference to an external standard, not a
-mirror of it.
+A local, offline-readable snapshot of the **authoring subset** lives in
+[`html-spec/`](html-spec/). This exists so a model can read the actual spec
+rather than rely on training memory.
+
+The rationale is how the platform scales: **expertise per function**, not one
+model overloaded with everything. A function-specialized or **local LLM whose
+training may not have included HTML cannot follow an `https://` link** — for it
+to author HTML correctly, the spec text must be present locally. It reads the
+snapshot, internalizes the rules for the task at hand, and implements from the
+standard instead of guessing. See [`html-spec/README.md`](html-spec/README.md)
+for the file manifest, what's included/excluded, and the reproducible refresh
+(`node scripts/refresh-html-spec-snapshot.mjs`).
+
+## Pointer vs. local copy — when each applies
+
+The full HTML Living Standard is a single ~13 MB document **revised daily**, so
+mirroring the *whole* thing would bloat the repo and be stale within a day. The
+balance DPF strikes:
+
+- **This file is the curated pointer** — authoritative URLs, version/date,
+  license, and the DPF-relevant sections — same pattern as
+  [`sysml-v2.md`](sysml-v2.md). It defers to the live document for normative
+  wording.
+- **`html-spec/` is a deliberate, bounded local copy** — only the authoring
+  subset, only for the offline-retrieval use case above. It is a point-in-time
+  snapshot, not a mirror of the living standard; the source URL stays
+  authoritative for anything beyond it.
 
 ## Attribution
 
