@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { submitInquiry } from "@/lib/storefront-actions";
 import { useRouter } from "next/navigation";
 
@@ -25,6 +25,14 @@ export function InquiryForm({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [calcSnapshot, setCalcSnapshot] = useState<Record<string, unknown> | null>(null);
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem("dpf_calc_snapshot");
+    if (raw) {
+      try { setCalcSnapshot(JSON.parse(raw)); } catch { /* ignore malformed */ }
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -47,6 +55,8 @@ export function InquiryForm({
         if (val !== null) formData[field.name] = val;
       }
     }
+
+    if (calcSnapshot) formData.calculatorSnapshot = calcSnapshot;
 
     const result = await submitInquiry(orgSlug, {
       customerEmail: email,

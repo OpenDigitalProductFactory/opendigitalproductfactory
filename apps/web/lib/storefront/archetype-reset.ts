@@ -1,4 +1,4 @@
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { applyBusinessCapabilityPerspective } from "@dpf/db/business-capability-perspectives";
 import { nanoid } from "nanoid";
 import { projectOperationalValueStreamForArchetype } from "./project-operational-value-stream";
@@ -110,6 +110,7 @@ export async function resetStorefrontArchetype(input: {
         type: string;
         title?: string | null;
         sortOrder: number;
+        content?: Record<string, unknown>;
       }>;
       const itemTemplates = targetArchetype.itemTemplates as Array<{
         name: string;
@@ -125,7 +126,7 @@ export async function resetStorefrontArchetype(input: {
           storefrontId: storefront.id,
           type: section.type,
           title: section.title ?? null,
-          content: {},
+          content: (section.content ?? {}) as unknown as Prisma.InputJsonValue,
           sortOrder: section.sortOrder,
           isVisible: true,
         })),
