@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { View, Text, TextInput, StyleSheet } from "react-native";
-import { colors, spacing, borderRadius } from "@/src/lib/theme";
+import { useTheme } from "@/src/lib/theme";
 import type { FieldProps } from "./index";
 
 /**
@@ -8,6 +8,33 @@ import type { FieldProps } from "./index";
  * A native date picker integration can replace this later.
  */
 export function DateField({ definition, value, onChange, error }: FieldProps) {
+  const { colors, spacing, borderRadius } = useTheme();
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: { marginBottom: spacing.md },
+        label: {
+          color: colors.text,
+          fontSize: 14,
+          fontWeight: "500",
+          marginBottom: spacing.xs,
+        },
+        input: {
+          backgroundColor: colors.surface1,
+          borderWidth: 1,
+          borderColor: colors.border,
+          borderRadius: borderRadius.sm,
+          paddingVertical: spacing.sm + 4,
+          paddingHorizontal: spacing.md,
+          color: colors.text,
+          fontSize: 16,
+        },
+        inputError: { borderColor: colors.error },
+        error: { color: colors.error, fontSize: 12, marginTop: spacing.xs },
+      }),
+    [colors, spacing, borderRadius],
+  );
+
   const [localError, setLocalError] = useState<string | null>(null);
   const textValue = value != null ? String(value) : "";
 
@@ -34,39 +61,7 @@ export function DateField({ definition, value, onChange, error }: FieldProps) {
         accessibilityLabel={definition.label}
         testID={`field-${definition.key}`}
       />
-      {displayError ? (
-        <Text style={styles.error}>{displayError}</Text>
-      ) : null}
+      {displayError ? <Text style={styles.error}>{displayError}</Text> : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: spacing.md,
-  },
-  label: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: spacing.xs,
-  },
-  input: {
-    backgroundColor: colors.surface1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.sm,
-    paddingVertical: spacing.sm + 4,
-    paddingHorizontal: spacing.md,
-    color: colors.text,
-    fontSize: 16,
-  },
-  inputError: {
-    borderColor: colors.error,
-  },
-  error: {
-    color: colors.error,
-    fontSize: 12,
-    marginTop: spacing.xs,
-  },
-});
