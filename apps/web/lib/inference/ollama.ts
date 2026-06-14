@@ -4,7 +4,7 @@
 // OpenAI-compatible local inference endpoint.
 
 import { prisma, syncInfraCI } from "@dpf/db";
-import { discoverModelsInternal, profileModelsInternal } from "./ai-provider-internals";
+import { autoDiscoverAndProfile, queueUncalibratedModelEvals } from "./ai-provider-internals";
 import { getOllamaBaseUrl } from "./ollama-url";
 export { getOllamaBaseUrl } from "./ollama-url";
 
@@ -92,18 +92,22 @@ export async function checkBundledProviders(): Promise<void> {
       data: { status: "active" },
     });
 
-    const result = await discoverModelsInternal("local");
-    if (result.discovered < 20) {
-      await profileModelsInternal("local");
-    }
+    // Discover + profile + queue the deterministic capability evals that promote
+    // each model's seed prior to measured ("evaluated") scores. Without the eval
+    // queue (the prior behaviour here), local models stayed on flat seed priors
+    // forever and routing could not tell a strong tool-caller from a weak one.
+    await autoDiscoverAndProfile("local");
     await enrichLocalInfraCI(baseUrl, "operational");
   } else if (reachable && provider.status === "active") {
     const profileCount = await prisma.modelProfile.count({ where: { providerId: "local" } });
     if (profileCount === 0) {
-      const result = await discoverModelsInternal("local");
-      if (result.discovered < 20) {
-        await profileModelsInternal("local");
-      }
+      await autoDiscoverAndProfile("local");
+    } else {
+      // Profiles exist but may still be un-calibrated seed priors (e.g. seeded at
+      // install, never evaluated). Queue the deterministic eval so capability
+      // scores reflect the real model. Self-limiting: stops once each model has
+      // an eval on record.
+      await queueUncalibratedModelEvals("local");
     }
     await enrichLocalInfraCI(baseUrl, "operational");
   } else if (!reachable && provider.status === "active") {

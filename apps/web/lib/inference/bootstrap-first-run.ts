@@ -1,6 +1,6 @@
 import { prisma } from "@dpf/db";
 import { checkBundledProviders, getOllamaHardwareInfo } from "./ollama";
-import { getOllamaBaseUrl } from "./ollama-url";
+import { getOllamaBaseUrl, getOllamaApiRoot } from "./ollama-url";
 import { isFirstRun, createSetupProgress } from "../actions/setup-progress";
 import { activateProvider } from "@/lib/govern/activate-provider";
 import { syncAgentPrincipal } from "@/lib/identity/principal-linking";
@@ -151,9 +151,14 @@ export async function executeFirstRunBootstrap(
     // 1. Try to activate Ollama — but don't block setup if it's unavailable
     try {
       const baseUrl = getOllamaBaseUrl();
+      // The Ollama-native /api/* endpoints live at the management root, not under
+      // the OpenAI-compatible /v1 inference prefix. On Docker Model Runner,
+      // `${baseUrl}/api/tags` resolves to /v1/api/tags (404), which silently
+      // skipped first-run auto-pull. getOllamaApiRoot() strips the /v1 suffix.
+      const apiRoot = getOllamaApiRoot();
 
-      // Check if Ollama is reachable
-      const pingRes = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
+      // Check if the local runtime is reachable
+      const pingRes = await fetch(`${apiRoot}/api/tags`, { signal: AbortSignal.timeout(3000) });
       if (pingRes.ok) {
         const tagsData = await pingRes.json() as { models?: Array<{ name: string }> };
         const pulledModels = (tagsData.models ?? []).filter(
@@ -166,7 +171,7 @@ export async function executeFirstRunBootstrap(
           console.log(`[bootstrap] No chat models found — pulling ${modelToPull}`);
           onStatus?.({ phase: "pulling_model", progress: 0, total: 1, status: `Pulling ${modelToPull}...` });
 
-          const pullRes = await fetch(`${baseUrl}/api/pull`, {
+          const pullRes = await fetch(`${apiRoot}/api/pull`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: modelToPull, stream: false }),
