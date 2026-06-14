@@ -164,6 +164,67 @@ export function makeReferenceEditor(referenceType: string) {
 }
 
 /**
+ * Link editor: multi-select typeahead over a live target entity for a `link`
+ * column. Each pick/remove commits the updated link set (a ReferenceValue[]) and
+ * closes — re-open the cell to add another. `cardinality: "one"` replaces rather
+ * than appends. The dropdown lives in the editor's subtree and the column sets
+ * commitOnOutsideClick:false, so a result click never cancels the edit.
+ */
+export function makeLinkEditor(config: { cardinality: "one" | "many"; referenceType: string }) {
+  return function LinkEditor({
+    row,
+    column,
+    onRowChange,
+  }: RenderEditCellProps<GridRowData>): ReactNode {
+    const raw = row[column.key];
+    const current: ReferenceValue[] = Array.isArray(raw)
+      ? raw.filter((it): it is ReferenceValue => !!it && typeof it === "object" && "referenceId" in it)
+      : [];
+    const commit = (next: ReferenceValue[]) => onRowChange({ ...row, [column.key]: next }, true);
+    const add = (item: { id: string; label: string }) => {
+      const ref: ReferenceValue = { referenceId: item.id, referenceType: config.referenceType, label: item.label };
+      if (config.cardinality === "one") return commit([ref]);
+      if (current.some((r) => r.referenceId === item.id)) return commit(current);
+      return commit([...current, ref]);
+    };
+    return (
+      <div className="dpf-grid-editor-reference">
+        {current.length > 0 ? (
+          <div className="dpf-grid-chips">
+            {current.map((r) => (
+              <span key={r.referenceId} className="dpf-grid-chip">
+                {r.label ?? r.referenceId}
+                <button
+                  type="button"
+                  className="dpf-grid-chip-x"
+                  aria-label={`Remove ${r.label ?? r.referenceId}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    commit(current.filter((x) => x.referenceId !== r.referenceId));
+                  }}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <ReferenceTypeahead
+          autoFocus
+          placeholder="Search…"
+          value={null}
+          onSearch={async (q) => {
+            const res = await searchReferencesAction(config.referenceType, q);
+            return res.ok ? res.data : [];
+          }}
+          onSelect={add}
+        />
+      </div>
+    );
+  };
+}
+
+/**
  * Image editor: uploads a chosen file to /api/v1/upload (content-addressed
  * MediaAsset storage) and commits the returned retrieval URL as the cell value.
  * The bytes never live in the cell — only the URL string does, so an image

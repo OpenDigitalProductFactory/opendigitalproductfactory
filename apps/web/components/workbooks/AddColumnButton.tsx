@@ -27,6 +27,7 @@ const OFFERED_TYPES: { value: FieldType; label: string }[] = [
   { value: "email", label: "Email" },
   { value: "image", label: "Image" },
   { value: "attachment", label: "Attachment" },
+  { value: "link", label: "Link to records" },
 ];
 
 const RESULT_TYPES: { value: FieldType; label: string }[] = [
@@ -69,6 +70,7 @@ export function AddColumnButton({
   const [optionsRaw, setOptionsRaw] = useState("");
   const [referenceType, setReferenceType] = useState("");
   const [referenceTargets, setReferenceTargets] = useState<ReferenceTarget[]>([]);
+  const [linkCardinality, setLinkCardinality] = useState<"one" | "many">("many");
   const [formula, setFormula] = useState("");
   const [resultType, setResultType] = useState<FieldType>("text");
   const [lookupRefColumnId, setLookupRefColumnId] = useState("");
@@ -116,6 +118,7 @@ export function AddColumnButton({
     setFieldType("text");
     setOptionsRaw("");
     setReferenceType("");
+    setLinkCardinality("many");
     setFormula("");
     setResultType("text");
     setLookupRefColumnId("");
@@ -128,6 +131,7 @@ export function AddColumnButton({
   function buildConfig(): FieldConfig | undefined {
     if (fieldType === "select") return { options: parseOptions(optionsRaw) };
     if (fieldType === "reference") return { referenceType };
+    if (fieldType === "link") return { link: { cardinality: linkCardinality, referenceType } };
     if (fieldType === "formula") return { formula, resultType };
     if (fieldType === "lookup") {
       return { lookup: { referenceColumnId: lookupRefColumnId, targetField: lookupTargetField } };
@@ -135,10 +139,10 @@ export function AddColumnButton({
     return undefined;
   }
 
-  const missingReferenceTarget = fieldType === "reference" && !referenceType;
+  const missingTarget = (fieldType === "reference" || fieldType === "link") && !referenceType;
   const missingFormula = fieldType === "formula" && !formula.trim();
   const missingLookup = fieldType === "lookup" && (!lookupRefColumnId || !lookupTargetField);
-  const invalidConfig = missingReferenceTarget || missingFormula || missingLookup;
+  const invalidConfig = missingTarget || missingFormula || missingLookup;
 
   function submit() {
     setError(null);
@@ -198,20 +202,40 @@ export function AddColumnButton({
           className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-1.5 text-sm text-[var(--dpf-text)]"
         />
       )}
-      {fieldType === "reference" && (
+      {(fieldType === "reference" || fieldType === "link") && (
         <select
           value={referenceType}
           onChange={(e) => setReferenceType(e.target.value)}
           className={selectClass}
+          aria-label="Link target"
         >
           <option value="" className={optionClass}>
-            {referenceTargets.length === 0 ? "No reference targets available" : "Select what to reference…"}
+            {referenceTargets.length === 0
+              ? "No targets available"
+              : fieldType === "link"
+                ? "Select what to link to…"
+                : "Select what to reference…"}
           </option>
           {referenceTargets.map((t) => (
             <option key={t.entityType} value={t.entityType} className={optionClass}>
               {t.label}
             </option>
           ))}
+        </select>
+      )}
+      {fieldType === "link" && (
+        <select
+          value={linkCardinality}
+          onChange={(e) => setLinkCardinality(e.target.value as "one" | "many")}
+          className={selectClass}
+          aria-label="How many"
+        >
+          <option value="many" className={optionClass}>
+            Link to many (M-M)
+          </option>
+          <option value="one" className={optionClass}>
+            Link to one (1-1 / 1-M)
+          </option>
         </select>
       )}
       {fieldType === "formula" && (

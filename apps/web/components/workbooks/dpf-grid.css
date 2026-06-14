@@ -103,6 +103,20 @@
   align-items: center;
 }
 
+/* remove (×) button inside a link chip in the editor */
+.dpf-grid-chip-x {
+  margin-inline-start: 0.25rem;
+  border: none;
+  background: transparent;
+  color: var(--dpf-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+.dpf-grid-chip-x:hover {
+  color: var(--dpf-text);
+}
+
 .dpf-grid-link {
   color: var(--dpf-accent);
   text-decoration: underline;

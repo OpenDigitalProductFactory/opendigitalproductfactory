@@ -52,6 +52,7 @@ import {
   renderComputedCell,
   renderLinkCell,
   makeReferenceEditor,
+  makeLinkEditor,
 } from "./cell-editors";
 import {
   createRowAction,
@@ -205,9 +206,16 @@ function buildColumn(
     case "rollup":
       // Computed read-only columns (derived server-side). rollup = reverse-FK aggregate.
       return { ...base, renderCell: renderComputedCell };
-    case "link":
-      // Link-to-many: chips per linked record. Multi-select editor lands in slice 3.
-      return { ...base, renderCell: renderLinkCell };
+    case "link": {
+      // Link-to-many: chips per linked record + multi-select typeahead editor.
+      const linkConfig = col.config?.link;
+      return {
+        ...base,
+        renderCell: renderLinkCell,
+        renderEditCell: editable && linkConfig ? makeLinkEditor(linkConfig) : undefined,
+        editorOptions: { commitOnOutsideClick: false },
+      };
+    }
     default:
       return base;
   }
