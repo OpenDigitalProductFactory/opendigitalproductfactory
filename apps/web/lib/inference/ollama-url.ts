@@ -21,3 +21,19 @@ export function getOllamaBaseUrl(provider?: ProviderUrlFields | null): string {
   }
   return provider?.endpoint ?? provider?.baseUrl ?? "http://model-runner.docker.internal/v1";
 }
+
+/**
+ * Returns the root URL for the local provider's Ollama-native management API
+ * (`/api/tags`, `/api/pull`, `/api/version`).
+ *
+ * Docker Model Runner serves those endpoints at the host root
+ * (e.g. http://model-runner.docker.internal), NOT under the OpenAI-compatible
+ * `/v1` (or `/engines/v1`) inference prefix that getOllamaBaseUrl() returns.
+ * Appending `/api/tags` directly to the `/v1` base yields `/v1/api/tags`, which
+ * 404s on Docker Model Runner — silently disabling first-run model auto-pull.
+ * Strip the inference suffix so `/api/*` calls hit the management root. A real
+ * Ollama base URL (no `/v1` suffix) is returned unchanged.
+ */
+export function getOllamaApiRoot(provider?: ProviderUrlFields | null): string {
+  return getOllamaBaseUrl(provider).replace(/\/(engines\/)?v1\/?$/, "");
+}
