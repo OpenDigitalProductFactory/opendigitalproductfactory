@@ -1186,6 +1186,12 @@ async function seedCoworkerAgents(): Promise<void> {
     // / ZDR agreement and clearing the destination channel.
     { agentId: "compliance-officer", slugId: "compliance-officer", name: "Compliance Officer", tier: 2, type: "coworker", description: "Regulatory compliance, policy governance, audit readiness, and risk management", valueStream: "cross-cutting", sensitivity: "confidential" },
     { agentId: "finance-controller", slugId: "finance-controller", name: "Finance Controller", tier: 2, type: "coworker", description: "Financial controls, budget governance, cost management, and financial reporting", valueStream: "cross-cutting", sensitivity: "confidential" },
+    // Field-dispatch coordinator (F2b of the Field Dispatch capability —
+    // docs/superpowers/specs/2026-06-13-field-dispatch-capability-design.html).
+    // Activated for field-service archetypes; coordinates the field-service-job
+    // lifecycle: scheduling, technician/crew assignment, and customer
+    // notifications (confirm / on-my-way / running-late) proposed for approval.
+    { agentId: "dispatcher", slugId: "dispatcher", name: "Dispatcher", tier: 2, type: "coworker", description: "Field-service dispatch: job scheduling, technician/crew assignment, customer ETA notifications (confirm / on-my-way / running-late), and running-late coordination", valueStream: "operate", sensitivity: "confidential" },
   ];
 
   // Tool grants per hardcoded coworker. Every coworker needs explicit grants —
@@ -1211,6 +1217,10 @@ async function seedCoworkerAgents(): Promise<void> {
     "doc-specialist":       ["file_read", "registry_read", "portfolio_read", "document_read", "document_write", "document_publish"],
     "compliance-officer":   ["policy_write", "data_governance_validate", "file_read", "backlog_read", "backlog_write", "tool_evaluation_create"],
     "finance-controller":   ["registry_read", "backlog_read", "portfolio_read"],
+    // Reads field-service jobs (WorkItems) + customer contact data; updates job
+    // status; proposes customer notifications for approval. Same grant family as
+    // customer-advisor, plus consumer_write for notification proposals.
+    "dispatcher":           ["backlog_read", "backlog_write", "consumer_read", "consumer_write", "registry_read"],
   };
 
   // Grants for onboarding-coo — the agent itself is created by
