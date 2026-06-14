@@ -6,4 +6,5 @@ export * from "./dynamic";
 export * from "./edge";
 export * from "./field-dispatch";
 export * from "./field-dispatch-notifications";
+export * from "./field-dispatch-warranty";
 export * from "./storefront";
