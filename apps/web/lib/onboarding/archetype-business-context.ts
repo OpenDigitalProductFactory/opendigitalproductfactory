@@ -206,6 +206,42 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
     supplyChain:
       "Our supply chain blends purchased program supplies, in-kind donations from supporters, and contributions from partner organisations. Stewardship matters — we choose suppliers and partners who match our mission and respect that donors' trust comes attached.",
   },
+  "automotive-services": {
+    missionTheme:
+      "get our customers safely back on the road with honest, convenient vehicle service",
+    businessModel:
+      "Mobile service that comes to the customer — most jobs are dispatched to a driveway, workplace, or roadside. Trust, honest diagnosis, and fast turnaround drive repeat work and referrals.",
+    whoWeServe:
+      "We serve drivers and fleet owners who need work done on their vehicle without the hassle of a shop visit. Many are stranded or inconvenienced, so speed and reliability earn the next call.",
+    howWeDecide:
+      "We decide for safety, honest diagnosis, and getting the customer moving again. We never upsell work a vehicle does not need, we stand behind our parts and our calibration, and we are transparent about price before we start.",
+    supplyChain:
+      "We stock parts on the van or truck and resolve the right part from the vehicle's VIN — glass SKUs, filters, tires, keys. Keeping the mobile inventory matched to the day's jobs is the discipline; a wrong or missing part means a second trip and a lost slot.",
+  },
+  "moving-and-logistics": {
+    missionTheme:
+      "move our customers' belongings and freight safely, on time, and with care",
+    businessModel:
+      "Crew-and-truck jobs quoted per move or run on recurring routes; careful handling and on-time delivery turn a stressful day into a referral.",
+    whoWeServe:
+      "We serve households relocating and businesses that need goods moved or delivered. We are handling people's possessions or a company's promises to its own customers, so trust is the product.",
+    howWeDecide:
+      "We decide for careful handling, honest estimates, and hitting the promised window. We protect what we carry, communicate delays early, and never cut corners on securing a load or on a driver's legal hours.",
+    supplyChain:
+      "Our 'inventory' is trucks, fuel, packing materials, and the crew's time; the discipline is routing, load planning, and keeping vehicles and equipment road-ready. Driver hours and vehicle availability are the real constraints on what we can promise.",
+  },
+  "security-services": {
+    missionTheme:
+      "keep the people, property, and events entrusted to us safe",
+    businessModel:
+      "Recurring guard and monitoring contracts plus field installation; dependability and a credible response are what clients renew for.",
+    whoWeServe:
+      "We serve businesses, property managers, and residents who need a visible, reliable security presence. The relationship rests on trust that we will be there and respond when it matters.",
+    howWeDecide:
+      "We decide for the safety of people first, then property — with trained, licensed officers, clear post orders, and documented incident response. We never compromise coverage or cut corners on vetting and licensing.",
+    supplyChain:
+      "We provision uniforms, vehicles, radios, and — for the install side — alarm, camera, and access-control hardware from security distributors. Licensing and training are as load-bearing as equipment; an unlicensed officer or an unmonitored panel is an operational and legal failure.",
+  },
 };
 
 // ─── Flagship specific-archetype overrides (merged over the industry profile) ─

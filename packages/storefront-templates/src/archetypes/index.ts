@@ -14,6 +14,9 @@ import { bankingFinancialServicesArchetypes } from "./banking-financial-services
 import { publicSectorArchetypes } from "./public-sector";
 import { assetRentalArchetypes } from "./asset-rental";
 import { realEstateConstructionArchetypes } from "./real-estate-construction";
+import { automotiveServicesArchetypes } from "./automotive-services";
+import { movingAndLogisticsArchetypes } from "./moving-and-logistics";
+import { securityServicesArchetypes } from "./security-services";
 
 export const ALL_ARCHETYPES = [
   ...healthcareWellnessArchetypes,
@@ -32,4 +35,7 @@ export const ALL_ARCHETYPES = [
   ...publicSectorArchetypes,
   ...assetRentalArchetypes,
   ...realEstateConstructionArchetypes,
+  ...automotiveServicesArchetypes,
+  ...movingAndLogisticsArchetypes,
+  ...securityServicesArchetypes,
 ];

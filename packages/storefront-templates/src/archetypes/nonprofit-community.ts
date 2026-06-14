@@ -277,4 +277,53 @@ export const nonprofitCommunityArchetypes: ArchetypeDefinition[] = [
       ],
     },
   },
+  {
+    // Meals-on-Wheels-style program: a nonprofit funded by donation whose
+    // *operating model* is a physical, route-based meal-delivery service to
+    // homebound recipients. The donation CTA funds it; the volunteer-driver
+    // dispatch is the operational layer that derives the Field Dispatch
+    // capability (form=services + delivery=physical + onsite-plus-portal).
+    // Food-handling is a capability-layer compliance overlay (design ADR-5).
+    archetypeId: "meal-delivery-program",
+    name: "Meal Delivery Program",
+    category: "nonprofit-community",
+    ctaType: "donation",
+    tags: ["meals on wheels", "meal delivery", "food", "seniors", "homebound", "charity", "volunteer", "route"],
+    itemTemplates: [
+      { name: "Donate", description: "Fund meals for homebound neighbours in need", priceType: "donation", ctaType: "donation" },
+      { name: "Sponsor a Route", description: "Underwrite a full delivery route for a month", priceType: "donation", ctaType: "donation" },
+      { name: "Request Meal Service", description: "Sign up yourself or a loved one to receive meals", priceType: "free", ctaType: "inquiry" },
+      { name: "Volunteer as a Driver", description: "Deliver meals and a friendly check-in on a local route", priceType: "free", ctaType: "inquiry" },
+    ],
+    sectionTemplates: [
+      { type: "hero", title: "Hero", sortOrder: 0 },
+      { type: "about", title: "About Our Program", sortOrder: 1 },
+      { type: "items", title: "Get Involved", sortOrder: 2 },
+      { type: "donate", title: "Donate", sortOrder: 3 },
+      { type: "contact", title: "Contact Us", sortOrder: 4 },
+    ],
+    formSchema: DONATION_FORM_FIELDS,
+    activationProfile: {
+      profileType: "standard",
+      modules: ["service-operations", "lifecycle-signals"],
+      billingReadinessMode: "none",
+      customerGraph: "none",
+      estateSeparation: "shared",
+      axes: {
+        form: "services",
+        delivery: "physical",
+        primaryConsumer: "individual",
+        consumptionChannel: "onsite-plus-portal",
+        commercialModel: "transactional",
+        provisioning: "none",
+        platform: "no",
+      },
+      portfolios: {
+        foundational: { scope: "minimal" },
+        manufactureAndDeliver: { scope: "primary", it4itStages: ["request-to-fulfill"] },
+        forEmployees: { scope: "standard" },
+        productsAndServicesSold: { scope: "primary" },
+      },
+    },
+  },
 ];

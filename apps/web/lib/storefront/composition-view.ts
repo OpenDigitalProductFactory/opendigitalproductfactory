@@ -77,7 +77,11 @@ function resolveVisualPattern(
   }
   if (
     modules.includes("service-operations") &&
-    (category === "trades-maintenance" || category === "facilities-maintenance")
+    (category === "trades-maintenance" ||
+      category === "facilities-maintenance" ||
+      category === "automotive-services" ||
+      category === "moving-and-logistics" ||
+      category === "security-services")
   ) {
     return "map-dispatch";
   }
