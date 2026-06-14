@@ -1,7 +1,11 @@
 // apps/web/app/(shell)/finance/suppliers/page.tsx
 import { listSuppliers } from "@/lib/actions/ap";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
+import { SurfaceViewSwitcher } from "@/components/workbooks/SurfaceViewSwitcher";
+import { SurfacePlatformGrid } from "@/components/workbooks/SurfacePlatformGrid";
 import Link from "next/link";
+
+export const dynamic = "force-dynamic";
 
 const SUPPLIER_STATUS_COLOURS: Record<string, string> = {
   active: "#4ade80",
@@ -9,7 +13,13 @@ const SUPPLIER_STATUS_COLOURS: Record<string, string> = {
   blocked: "#ef4444",
 };
 
-export default async function SuppliersPage() {
+export default async function SuppliersPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ view?: string }>;
+}) {
+  const sp = await searchParams;
+  const view = sp?.view === "grid" || sp?.view === "board" ? sp.view : null;
   const suppliers = await listSuppliers();
 
   return (
@@ -36,7 +46,11 @@ export default async function SuppliersPage() {
 
       <FinanceTabNav />
 
-      {suppliers.length === 0 ? (
+      <SurfaceViewSwitcher entityType="supplier" current={view ?? "list"} />
+
+      {view ? (
+        <SurfacePlatformGrid entityType="supplier" view={view} />
+      ) : suppliers.length === 0 ? (
         <p className="text-sm text-[var(--dpf-muted)]">No suppliers yet.</p>
       ) : (
         <div className="rounded-lg border border-[var(--dpf-border)] overflow-hidden">
