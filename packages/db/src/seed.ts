@@ -54,6 +54,7 @@ import { syncCapabilities } from "./sync-capabilities.js";
 import { defaultGovernanceFor } from "./taxonomy-governance-defaults.js";
 import { AGENT_MODEL_CONFIG_DEFAULTS } from "./agent-model-defaults.js";
 import { toModelProfileSeedCreateData } from "./model-profile-seed.js";
+import { deriveLocalModelCapabilityPrior } from "./local-model-capabilities.js";
 import { seedIntegrationCoverage } from "../scripts/seed-integration-coverage.js";
 import * as crypto from "crypto";
 import bcrypt from "bcryptjs";
@@ -1638,24 +1639,35 @@ async function seedLocalModels(): Promise<void> {
       where: { providerId_modelId: { providerId: "local", modelId: m.id } },
     });
     if (!existing) {
+      // Capability-aware bootstrap prior, keyed on model family. These are only
+      // priors (profileSource="seed", confidence "low") — the activation-time
+      // deterministic dimension eval promotes them to "evaluated" with measured
+      // scores. Replaces the prior flat toolFidelity=20 that made routing unable
+      // to distinguish a strong tool-caller from a reasoning model from an
+      // embedding model. See packages/db/src/local-model-capabilities.ts.
+      const prior = deriveLocalModelCapabilityPrior(m.id);
       await prisma.modelProfile.create({
         data: {
           providerId: "local",
           modelId: m.id,
-          friendlyName: m.id.replace("docker.io/ai/", ""),
-          summary: "Local model via Docker Model Runner",
-          capabilityCategory: "basic",
+          friendlyName: m.id.replace(/^docker\.io\/ai\//, "").replace(/^ai\//, ""),
+          summary: prior.isEmbedding
+            ? "Local embedding model via Docker Model Runner"
+            : "Local model via Docker Model Runner",
+          capabilityCategory: prior.capabilityCategory,
           costTier: "free",
-          bestFor: ["conversation", "general"],
-          avoidFor: [],
+          bestFor: prior.bestFor,
+          avoidFor: prior.avoidFor,
           modelStatus: "active",
           generatedBy: "system:seed",
           profileSource: "seed",
           profileConfidence: "low",
-          reasoning: 40, codegen: 30, toolFidelity: 20,
-          instructionFollowingScore: 50, structuredOutputScore: 30,
-          conversational: 60, contextRetention: 40,
-          capabilities: { streaming: true } as any,
+          supportsToolUse: prior.supportsToolUse,
+          reasoning: prior.reasoning, codegen: prior.codegen, toolFidelity: prior.toolFidelity,
+          instructionFollowingScore: prior.instructionFollowingScore,
+          structuredOutputScore: prior.structuredOutputScore,
+          conversational: prior.conversational, contextRetention: prior.contextRetention,
+          capabilities: { streaming: true, embedding: prior.isEmbedding } as any,
         },
       });
       discovered++;

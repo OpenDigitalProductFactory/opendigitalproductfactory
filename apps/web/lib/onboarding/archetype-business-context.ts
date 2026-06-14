@@ -206,6 +206,78 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
     supplyChain:
       "Our supply chain blends purchased program supplies, in-kind donations from supporters, and contributions from partner organisations. Stewardship matters — we choose suppliers and partners who match our mission and respect that donors' trust comes attached.",
   },
+  "automotive-services": {
+    missionTheme:
+      "get our customers safely back on the road with honest, convenient vehicle service",
+    businessModel:
+      "Mobile service that comes to the customer — most jobs are dispatched to a driveway, workplace, or roadside. Trust, honest diagnosis, and fast turnaround drive repeat work and referrals.",
+    whoWeServe:
+      "We serve drivers and fleet owners who need work done on their vehicle without the hassle of a shop visit. Many are stranded or inconvenienced, so speed and reliability earn the next call.",
+    howWeDecide:
+      "We decide for safety, honest diagnosis, and getting the customer moving again. We never upsell work a vehicle does not need, we stand behind our parts and our calibration, and we are transparent about price before we start.",
+    supplyChain:
+      "We stock parts on the van or truck and resolve the right part from the vehicle's VIN — glass SKUs, filters, tires, keys. Keeping the mobile inventory matched to the day's jobs is the discipline; a wrong or missing part means a second trip and a lost slot.",
+  },
+  "moving-and-logistics": {
+    missionTheme:
+      "move our customers' belongings and freight safely, on time, and with care",
+    businessModel:
+      "Crew-and-truck jobs quoted per move or run on recurring routes; careful handling and on-time delivery turn a stressful day into a referral.",
+    whoWeServe:
+      "We serve households relocating and businesses that need goods moved or delivered. We are handling people's possessions or a company's promises to its own customers, so trust is the product.",
+    howWeDecide:
+      "We decide for careful handling, honest estimates, and hitting the promised window. We protect what we carry, communicate delays early, and never cut corners on securing a load or on a driver's legal hours.",
+    supplyChain:
+      "Our 'inventory' is trucks, fuel, packing materials, and the crew's time; the discipline is routing, load planning, and keeping vehicles and equipment road-ready. Driver hours and vehicle availability are the real constraints on what we can promise.",
+  },
+  "security-services": {
+    missionTheme:
+      "keep the people, property, and events entrusted to us safe",
+    businessModel:
+      "Recurring guard and monitoring contracts plus field installation; dependability and a credible response are what clients renew for.",
+    whoWeServe:
+      "We serve businesses, property managers, and residents who need a visible, reliable security presence. The relationship rests on trust that we will be there and respond when it matters.",
+    howWeDecide:
+      "We decide for the safety of people first, then property — with trained, licensed officers, clear post orders, and documented incident response. We never compromise coverage or cut corners on vetting and licensing.",
+    supplyChain:
+      "We provision uniforms, vehicles, radios, and — for the install side — alarm, camera, and access-control hardware from security distributors. Licensing and training are as load-bearing as equipment; an unlicensed officer or an unmonitored panel is an operational and legal failure.",
+  },
+  "trades-maintenance": {
+    missionTheme:
+      "do reliable, quality work that keeps our customers' homes and properties running",
+    businessModel:
+      "Job- and call-out-based work — quotes, repairs, installs, and maintenance plans. Reputation, reliability, and showing up when we said we would drive repeat work and referrals.",
+    whoWeServe:
+      "We serve homeowners, landlords, and businesses who need work done right and on time, often urgently. Trust is earned one job at a time, and a good tradesperson becomes the one they call again.",
+    howWeDecide:
+      "We decide for quality workmanship, safety, and honest pricing. We never cut corners on a fix that affects safety, we are upfront about what is needed versus what can wait, and we stand behind our work.",
+    supplyChain:
+      "We rely on trade suppliers and merchants for parts and materials — much of it carried as van stock so common jobs are first-visit fixes. Matching the right parts to the day's jobs is the discipline; a missing part means a second trip and a lost slot.",
+  },
+  "pet-services": {
+    missionTheme:
+      "care for every pet as if it were our own",
+    businessModel:
+      "Appointment- and visit-based services — grooming, walking, boarding, and care. Trust with people's animals drives loyalty and word-of-mouth referrals.",
+    whoWeServe:
+      "We serve pet owners who trust us with a member of their family. Many become regulars, so each visit is part of an ongoing relationship built on the animal's wellbeing and the owner's peace of mind.",
+    howWeDecide:
+      "We decide for the animal's safety, comfort, and wellbeing first, then the owner's trust. We are honest about what a pet needs, careful with handling and health, and we never take on more than we can care for well.",
+    supplyChain:
+      "We provision grooming and care consumables, food, and supplies from pet-trade distributors, plus equipment that must be cleaned and maintained to a hygiene standard. Running out of a consumable or a broken piece of equipment is a welfare and reputation issue, not just a cost one.",
+  },
+  "software-platform": {
+    missionTheme:
+      "build software that genuinely helps the people and businesses who depend on it",
+    businessModel:
+      "Subscription and usage-based recurring revenue. The business compounds on retention, expansion, and word-of-mouth — keeping customers successful matters far more than any single sale.",
+    whoWeServe:
+      "We serve the users and organizations who run part of their work on our product. The relationship is ongoing and renewal-driven, so their success and trust are the whole business, not a one-time transaction.",
+    howWeDecide:
+      "We decide for long-term customer success, reliability, and data trust over short-term growth hacks. We protect uptime and security, are honest about limitations and roadmap, and keep humans in control of consequential automated decisions.",
+    supplyChain:
+      "Our supply chain is almost entirely digital — cloud infrastructure, third-party APIs, and software subscriptions. The discipline is vendor selection, dependency and security review, and avoiding lock-in; an unreviewed dependency or a single-vendor outage can take the whole product down.",
+  },
 };
 
 // ─── Flagship specific-archetype overrides (merged over the industry profile) ─

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateLinkValue, isReferenceValue } from "./cell-links";
+import { validateLinkValue, isReferenceValue, conflictingLinks } from "./cell-links";
 import type { LinkConfig } from "./types";
 
 const many: LinkConfig = { cardinality: "many", referenceType: "epic" };
@@ -75,5 +75,21 @@ describe("validateLinkValue", () => {
     expect(() => validateLinkValue([{ referenceId: "E1", referenceType: "epic" }], undefined)).toThrow(
       /configuration/i,
     );
+  });
+});
+
+describe("conflictingLinks", () => {
+  it("returns candidates already linked by other rows", () => {
+    const otherRows = new Set(["E2", "E3"]);
+    expect(conflictingLinks(["E1", "E2"], otherRows)).toEqual(["E2"]);
+  });
+
+  it("returns empty when no candidate collides (free to link)", () => {
+    expect(conflictingLinks(["E1"], new Set(["E2"]))).toEqual([]);
+    expect(conflictingLinks(["E1"], new Set())).toEqual([]);
+  });
+
+  it("flags every colliding candidate", () => {
+    expect(conflictingLinks(["E1", "E2"], new Set(["E1", "E2"]))).toEqual(["E1", "E2"]);
   });
 });
