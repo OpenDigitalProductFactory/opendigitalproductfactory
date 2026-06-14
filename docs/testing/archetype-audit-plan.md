@@ -3016,6 +3016,8 @@ The DPF showcase archetype — used for DPF's own installation. Run on the Run 0
 
 > **Never file portal backlog items during audit runs.** The only per-run record that matters is the git-committed findings file — it is the single source of truth until the pg_dump is restored and BIs can be safely filed.
 
+> **Deferred BIs and fix-PR follow-ups** that are not tied to a single run are tracked in the durable [pending-backlog-items.md](pending-backlog-items.md) registry — same reset-proof principle (git, not the DB), with stable `PBI-*` refs + GitHub Issue numbers, filed into the portal post-audit (§10).
+
 ### 8b. Two-channel findings workflow
 
 #### Channel 1 — Git findings file (authoritative, required)
