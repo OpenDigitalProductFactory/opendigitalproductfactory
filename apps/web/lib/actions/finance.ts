@@ -492,7 +492,7 @@ export async function signInvoice(input: SignInvoiceInput): Promise<{ ok: true }
 }
 
 async function sendSignedConfirmation(invoiceId: string, token: string): Promise<void> {
-  if (!isEmailConfigured()) return;
+  if (!(await isEmailConfigured())) return;
 
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
