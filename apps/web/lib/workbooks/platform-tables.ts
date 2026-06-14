@@ -219,11 +219,47 @@ const COMPLIANCE_INCIDENT_TABLE: GenericTableConfig = {
   ],
 };
 
+// CRM opportunities — read-only; stage keys per the schema enum comment, so board
+// grouping aligns. Money fields exposed; assignee/account are relation ids, omitted.
+const OPPORTUNITY_TABLE: GenericTableConfig = {
+  entityType: "opportunity",
+  prismaModel: "opportunity",
+  idField: "opportunityId",
+  labelField: "title",
+  orderBy: { field: "updatedAt", dir: "desc" },
+  columns: [
+    { field: "opportunityId", name: "ID", fieldType: "text", width: 140 },
+    { field: "title", name: "Title", fieldType: "text", width: 300 },
+    {
+      field: "stage",
+      name: "Stage",
+      fieldType: "select",
+      width: 140,
+      groupable: true,
+      options: [
+        { key: "qualification", label: "Qualification" },
+        { key: "discovery", label: "Discovery" },
+        { key: "proposal", label: "Proposal" },
+        { key: "negotiation", label: "Negotiation" },
+        { key: "closed_won", label: "Closed Won" },
+        { key: "closed_lost", label: "Closed Lost" },
+      ],
+    },
+    { field: "probability", name: "Probability", fieldType: "number", width: 110 },
+    { field: "expectedValue", name: "Expected value", fieldType: "number", width: 140 },
+    { field: "currency", name: "Currency", fieldType: "text", width: 90 },
+    { field: "expectedClose", name: "Expected close", fieldType: "date", width: 140 },
+    { field: "isDormant", name: "Dormant", fieldType: "checkbox", width: 90 },
+    { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
+  ],
+};
+
 registerGenericReadTable(EPIC_TABLE);
 registerGenericReadTable(DIGITAL_PRODUCT_TABLE);
 registerGenericReadTable(COMPLIANCE_CONTROL_TABLE);
 registerGenericReadTable(COMPLIANCE_OBLIGATION_TABLE);
 registerGenericReadTable(COMPLIANCE_INCIDENT_TABLE);
+registerGenericReadTable(OPPORTUNITY_TABLE);
 // Customers, people (safe org-directory fields only), suppliers — explicit
 // allow-lists live in people-supplier-configs.ts (unit-tested for safe omission).
 for (const cfg of PEOPLE_SUPPLIER_TABLES) registerGenericReadTable(cfg);
@@ -277,6 +313,14 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     viewCapability: "view_compliance",
     manageCapability: "view_compliance", // read-only grid; adapter performs no writes
     homeSurface: { path: "/compliance/incidents", label: "Incidents", board: false },
+  },
+  {
+    entityType: "opportunity",
+    label: "Opportunities",
+    description: "Sales opportunities as a read-only grid — sort, filter, and board by stage.",
+    viewCapability: "view_customer",
+    manageCapability: "view_customer", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/customer/opportunities", label: "Opportunities", board: true },
   },
   {
     entityType: "epic",
