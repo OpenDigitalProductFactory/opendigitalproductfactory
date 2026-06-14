@@ -242,6 +242,42 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
     supplyChain:
       "We provision uniforms, vehicles, radios, and — for the install side — alarm, camera, and access-control hardware from security distributors. Licensing and training are as load-bearing as equipment; an unlicensed officer or an unmonitored panel is an operational and legal failure.",
   },
+  "trades-maintenance": {
+    missionTheme:
+      "do reliable, quality work that keeps our customers' homes and properties running",
+    businessModel:
+      "Job- and call-out-based work — quotes, repairs, installs, and maintenance plans. Reputation, reliability, and showing up when we said we would drive repeat work and referrals.",
+    whoWeServe:
+      "We serve homeowners, landlords, and businesses who need work done right and on time, often urgently. Trust is earned one job at a time, and a good tradesperson becomes the one they call again.",
+    howWeDecide:
+      "We decide for quality workmanship, safety, and honest pricing. We never cut corners on a fix that affects safety, we are upfront about what is needed versus what can wait, and we stand behind our work.",
+    supplyChain:
+      "We rely on trade suppliers and merchants for parts and materials — much of it carried as van stock so common jobs are first-visit fixes. Matching the right parts to the day's jobs is the discipline; a missing part means a second trip and a lost slot.",
+  },
+  "pet-services": {
+    missionTheme:
+      "care for every pet as if it were our own",
+    businessModel:
+      "Appointment- and visit-based services — grooming, walking, boarding, and care. Trust with people's animals drives loyalty and word-of-mouth referrals.",
+    whoWeServe:
+      "We serve pet owners who trust us with a member of their family. Many become regulars, so each visit is part of an ongoing relationship built on the animal's wellbeing and the owner's peace of mind.",
+    howWeDecide:
+      "We decide for the animal's safety, comfort, and wellbeing first, then the owner's trust. We are honest about what a pet needs, careful with handling and health, and we never take on more than we can care for well.",
+    supplyChain:
+      "We provision grooming and care consumables, food, and supplies from pet-trade distributors, plus equipment that must be cleaned and maintained to a hygiene standard. Running out of a consumable or a broken piece of equipment is a welfare and reputation issue, not just a cost one.",
+  },
+  "software-platform": {
+    missionTheme:
+      "build software that genuinely helps the people and businesses who depend on it",
+    businessModel:
+      "Subscription and usage-based recurring revenue. The business compounds on retention, expansion, and word-of-mouth — keeping customers successful matters far more than any single sale.",
+    whoWeServe:
+      "We serve the users and organizations who run part of their work on our product. The relationship is ongoing and renewal-driven, so their success and trust are the whole business, not a one-time transaction.",
+    howWeDecide:
+      "We decide for long-term customer success, reliability, and data trust over short-term growth hacks. We protect uptime and security, are honest about limitations and roadmap, and keep humans in control of consequential automated decisions.",
+    supplyChain:
+      "Our supply chain is almost entirely digital — cloud infrastructure, third-party APIs, and software subscriptions. The discipline is vendor selection, dependency and security review, and avoiding lock-in; an unreviewed dependency or a single-vendor outage can take the whole product down.",
+  },
 };
 
 // ─── Flagship specific-archetype overrides (merged over the industry profile) ─
