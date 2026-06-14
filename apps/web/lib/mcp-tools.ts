@@ -8258,7 +8258,7 @@ export async function executeTool(
       }
 
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
-      const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
+      const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
       const designDocTyped = build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0];
       // BI-CE49D82E — Compute the iteration context up front so we can
       // (a) feed prior issues into the reviewer prompt and (b) populate
@@ -8346,7 +8346,11 @@ export async function executeTool(
       // have already seen the signal in passing.
       const { sizeDesignDoc } = await import("@/lib/build/size-design-doc");
       const sizeAssessment = sizeDesignDoc(build.designDoc as Parameters<typeof sizeDesignDoc>[0]);
-      const reviewWithSize = { ...review, sizeAssessment };
+      // Preserve the individual reviewer verdicts (pre-merge) so the Review-phase
+      // UI can show which named reviewer cleared vs flagged. Nested on the JSON
+      // column — no migration. Same r1/r2/archReview the deliberation trail uses.
+      const reviewers = collectReviewerVerdicts(r1, r2, archReview);
+      const reviewWithSize = { ...review, sizeAssessment, ...(reviewers.length > 0 ? { reviewers } : {}) };
       await prisma.featureBuild.update({ where: { buildId }, data: { designReview: reviewWithSize as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "designReview" });
@@ -8703,7 +8707,7 @@ export async function executeTool(
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }
-      const { buildPlanReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews } = await import("@/lib/build-reviewers");
+      const { buildPlanReviewPrompt, buildArchitectureReviewPrompt, architectureAdvisoryFromReview, parseReviewResponse, mergeReviews, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
       // BI-4396EFEC (D38) — Compute the iteration context up front so we can
       // (a) feed prior issues into the reviewer prompt and (b) populate
       // ReviewResult.iteration on the output. Round is 1-based: first
@@ -8778,7 +8782,10 @@ export async function executeTool(
       const review = architectureAdvisory
         ? { ...reviewWithIteration, architectureAdvisory }
         : reviewWithIteration;
-      await prisma.featureBuild.update({ where: { buildId }, data: { planReview: review as unknown as import("@dpf/db").Prisma.InputJsonValue } });
+      // Preserve individual reviewer verdicts (pre-merge) for the Review-phase UI.
+      const reviewers = collectReviewerVerdicts(r1, r2, archReview);
+      const planReviewToPersist = reviewers.length > 0 ? { ...review, reviewers } : review;
+      await prisma.featureBuild.update({ where: { buildId }, data: { planReview: planReviewToPersist as unknown as import("@dpf/db").Prisma.InputJsonValue } });
       const { agentEventBus } = await import("@/lib/agent-event-bus");
       if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "planReview" });
       logBuildActivity(buildId, "reviewBuildPlan", `Plan review: ${review.decision}. ${review.summary}`);

@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { prisma } from "@dpf/db";
 import { StorefrontDashboard } from "@/components/storefront-admin/StorefrontDashboard";
+import { ServiceLinesPanel } from "@/components/storefront-admin/ServiceLinesPanel";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { resolveVocabularyKey } from "@/lib/storefront/resolve-vocabulary";
+import { loadCompositionViewData } from "@/lib/storefront/service-line-actions";
+import { deriveStorefrontCompositionView } from "@/lib/storefront/composition-view";
 
 function getSetupSteps(portalLabel: string, stakeholderLabel: string) {
   return [
@@ -47,28 +50,56 @@ export default async function StorefrontPage() {
   });
 
   if (config) {
-    const [inquiryCount, bookingCount, orderCount, donationCount] = await Promise.all([
-      prisma.storefrontInquiry.count({ where: { storefrontId: config.id } }),
-      prisma.storefrontBooking.count({ where: { storefrontId: config.id } }),
-      prisma.storefrontOrder.count({ where: { storefrontId: config.id } }),
-      prisma.storefrontDonation.count({ where: { storefrontId: config.id } }),
+    const [inquiryCount, bookingCount, orderCount, donationCount, compositionData, allArchetypes] =
+      await Promise.all([
+        prisma.storefrontInquiry.count({ where: { storefrontId: config.id } }),
+        prisma.storefrontBooking.count({ where: { storefrontId: config.id } }),
+        prisma.storefrontOrder.count({ where: { storefrontId: config.id } }),
+        prisma.storefrontDonation.count({ where: { storefrontId: config.id } }),
+        loadCompositionViewData(config.id),
+        prisma.storefrontArchetype.findMany({
+          select: { archetypeId: true, name: true, category: true },
+          orderBy: { name: "asc" },
+        }),
+      ]);
+
+    const compositionView = compositionData
+      ? deriveStorefrontCompositionView(compositionData)
+      : null;
+
+    // Archetypes not already active in the composition
+    const activeSlugSet = new Set([
+      compositionData?.primary.archetypeSlug,
+      ...(compositionData?.secondaries.map((s) => s.archetypeSlug) ?? []),
     ]);
+    const availableArchetypes = allArchetypes
+      .filter((a) => !activeSlugSet.has(a.archetypeId))
+      .map((a) => ({ archetypeSlug: a.archetypeId, name: a.name, category: a.category }));
 
     return (
-      <StorefrontDashboard
-        config={{
-          id: config.id,
-          isPublished: config.isPublished,
-          tagline: config.tagline,
-          orgSlug: config.organization.slug,
-          orgName: config.organization.name,
-          archetypeId: config.archetype?.archetypeId ?? "",
-          ctaType: config.archetype?.ctaType ?? "inquiry",
-          sectionCount: config._count.sections,
-          itemCount: config._count.items,
-        }}
-        counts={{ inquiries: inquiryCount, bookings: bookingCount, orders: orderCount, donations: donationCount }}
-      />
+      <>
+        <StorefrontDashboard
+          config={{
+            id: config.id,
+            isPublished: config.isPublished,
+            tagline: config.tagline,
+            orgSlug: config.organization.slug,
+            orgName: config.organization.name,
+            archetypeId: config.archetype?.archetypeId ?? "",
+            ctaType: config.archetype?.ctaType ?? "inquiry",
+            sectionCount: config._count.sections,
+            itemCount: config._count.items,
+          }}
+          counts={{ inquiries: inquiryCount, bookings: bookingCount, orders: orderCount, donations: donationCount }}
+        />
+        {compositionView && (
+          <ServiceLinesPanel
+            storefrontId={config.id}
+            view={compositionView}
+            availableArchetypes={availableArchetypes}
+          />
+        )}
+      </>
     );
   }
 

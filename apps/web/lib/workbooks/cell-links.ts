@@ -52,3 +52,16 @@ export function validateLinkValue(
   }
   return links;
 }
+
+/**
+ * Cross-row uniqueness check for a `cardinality: "one"` link column (true 1-M/1-1):
+ * given the targets a row wants to link and the set of targets already linked by
+ * *other* rows in the same column, return any that would collide. Pure, so the
+ * adapter can query the "other rows" set and this stays unit-testable.
+ */
+export function conflictingLinks(
+  candidateRefIds: string[],
+  linkedByOtherRows: ReadonlySet<string>,
+): string[] {
+  return candidateRefIds.filter((id) => linkedByOtherRows.has(id));
+}

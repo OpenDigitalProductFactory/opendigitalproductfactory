@@ -59,6 +59,9 @@ describe("resolveBusinessProfile", () => {
       "public-sector",
       "asset-rental",
       "real-estate-construction",
+      "trades-maintenance",
+      "pet-services",
+      "software-platform",
     ];
 
     it("populates a non-empty supplyChain on every industry profile", () => {

@@ -24,6 +24,10 @@ interface Customer {
 
 interface Props {
   customers: Customer[];
+  /** Org default line-item tax rate (%). 0 unless the org is VAT/GST registered. */
+  defaultTaxRate?: number;
+  /** Default for "require signature before payment". On for legal/accounting archetypes. */
+  defaultSignatureRequired?: boolean;
 }
 
 function round2(n: number): number {
@@ -36,7 +40,11 @@ function getDefaultDueDate(): string {
   return d.toISOString().split("T")[0]!;
 }
 
-export function CreateInvoiceForm({ customers }: Props) {
+export function CreateInvoiceForm({
+  customers,
+  defaultTaxRate = 0,
+  defaultSignatureRequired = false,
+}: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,8 +54,9 @@ export function CreateInvoiceForm({ customers }: Props) {
   const [currency, setCurrency] = useState("GBP");
   const [paymentTerms, setPaymentTerms] = useState("");
   const [notes, setNotes] = useState("");
+  const [signatureRequired, setSignatureRequired] = useState(defaultSignatureRequired);
   const [lineItems, setLineItems] = useState<LineItem[]>([
-    { description: "", quantity: 1, unitPrice: 0, taxRate: 20 },
+    { description: "", quantity: 1, unitPrice: 0, taxRate: defaultTaxRate },
   ]);
 
   const handleCustomerChange = useCallback(
@@ -64,7 +73,7 @@ export function CreateInvoiceForm({ customers }: Props) {
   const addLineItem = () => {
     setLineItems((prev) => [
       ...prev,
-      { description: "", quantity: 1, unitPrice: 0, taxRate: 20 },
+      { description: "", quantity: 1, unitPrice: 0, taxRate: defaultTaxRate },
     ]);
   };
 
@@ -126,6 +135,7 @@ export function CreateInvoiceForm({ customers }: Props) {
         currency,
         paymentTerms: paymentTerms || undefined,
         notes: notes || undefined,
+        signatureRequired,
         lineItems: lineItems.map((item) => ({
           description: item.description,
           quantity: item.quantity,
@@ -210,6 +220,23 @@ export function CreateInvoiceForm({ customers }: Props) {
               placeholder="Optional notes for the customer"
               className={`${inputClasses} w-full resize-none`}
             />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={signatureRequired}
+                onChange={(e) => setSignatureRequired(e.target.checked)}
+                className="mt-0.5 accent-[var(--dpf-accent)]"
+              />
+              <span className="text-xs text-[var(--dpf-text)]">
+                Require signature before payment
+                <span className="block text-[var(--dpf-muted)]">
+                  The customer signs on the payment page before they can pay. Recommended for
+                  engagement letters and service agreements.
+                </span>
+              </span>
+            </label>
           </div>
         </div>
       </div>

@@ -57,6 +57,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
   const [saveMessage, setSaveMessage]               = useState<string | null>(null);
   const [discoveryResult, setDiscoveryResult]       = useState<{ discovered: number; newCount: number; error?: string; warning?: string } | null>(null);
   const [profilingResult, setProfilingResult]       = useState<{ profiled: number; failed: number; error?: string } | null>(null);
+  const [disconnectConfirm, setDisconnectConfirm]   = useState(false);
   const [pipelineStatus, setPipelineStatus]         = useState<string | null>(null);
 
   const [clientId, setClientId]                     = useState(credential?.clientId ?? "");
@@ -468,21 +469,45 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                   Connected · token expires {new Date(credential.tokenExpiresAt).toLocaleString()}
                 </span>
               </div>
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => startTransition(async () => {
-                  const result = await disconnectProviderOAuth(provider.providerId);
-                  if (result.error) {
-                    setTestResult({ ok: false, message: result.error });
-                    return;
-                  }
-                  router.refresh();
-                })}
-                style={{ background: "transparent", border: "1px solid var(--dpf-error)", color: "var(--dpf-error)", padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}
-              >
-                Disconnect
-              </button>
+              {disconnectConfirm ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, color: "var(--dpf-muted)" }}>
+                    Disconnect this account? Linked services will be deactivated.
+                  </span>
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => startTransition(async () => {
+                      const result = await disconnectProviderOAuth(provider.providerId);
+                      if (result.error) {
+                        setTestResult({ ok: false, message: result.error });
+                        setDisconnectConfirm(false);
+                        return;
+                      }
+                      router.refresh();
+                    })}
+                    style={{ background: "color-mix(in srgb, var(--dpf-error) 15%, transparent)", border: "1px solid var(--dpf-error)", color: "var(--dpf-error)", padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}
+                  >
+                    Confirm disconnect
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDisconnectConfirm(false)}
+                    style={{ background: "transparent", border: "1px solid var(--dpf-border)", color: "var(--dpf-muted)", padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}
+                  >
+                    Cancel
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => setDisconnectConfirm(true)}
+                  style={{ background: "transparent", border: "1px solid var(--dpf-error)", color: "var(--dpf-error)", padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}
+                >
+                  Disconnect
+                </button>
+              )}
             </div>
           ) : credential?.status === "expired" ? (
             <div>
@@ -569,9 +594,10 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           <button
             onClick={handleTest}
             disabled={isPending}
+            title="Verifies the connection, then discovers and profiles the provider's models."
             style={{ padding: "8px 16px", background: "transparent", border: "1px solid var(--dpf-border)", color: "var(--dpf-text)", borderRadius: 4, fontSize: 13, cursor: "pointer" }}
           >
-            Test connection
+            Test &amp; Discover
           </button>
           {saveMessage && <span style={{ fontSize: 12, color: saveMessage.startsWith("Error") ? "var(--dpf-error)" : "var(--dpf-success)" }}>{saveMessage}</span>}
           {testResult && (
@@ -594,7 +620,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             disabled={isPending}
             style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", color: "var(--dpf-text)", fontSize: 13, padding: "8px 14px", borderRadius: 4, cursor: isPending ? "not-allowed" : "pointer", opacity: isPending ? 0.6 : 1 }}
           >
-            {isPending ? "Syncing..." : "Sync Models & Profiles"}
+            {isPending ? "Syncing..." : "Discover & Profile Models"}
           </button>
           {isPending && (
             <span style={{ marginLeft: 8, fontSize: 12, color: "var(--dpf-muted)" }} className="animate-pulse">

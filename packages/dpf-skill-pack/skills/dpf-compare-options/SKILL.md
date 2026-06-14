@@ -46,6 +46,8 @@ Compare 2-4 architecturally distinct options with WWMD after the context has bee
 5. Preserve the raw tool response as audit detail for Build Studio or review surfaces.
 6. If confidence is low or a commandment conflict appears, route the decision to founder review instead of forcing a choice.
 
+> **Optional HTML fan-out (opt-in presentation).** When the operator benefits from *seeing* the options side by side — each as a card headed by the trade-off it makes, with the scores in a table — a self-contained HTML artifact reads better than a prose list. This is the flagship "fan out N approaches, you pick" use case from the [html-artifacts-guide](../../../../docs/superpowers/html-artifacts-guide.md) (starter: [`_templates/spec.template.html`](../../../../docs/superpowers/_templates/spec.template.html)). Additive only — the default operator summary stays as-is; reach for HTML only when the visual comparison earns its keep.
+
 ## Guardrails
 
 - Do not fabricate feature scores. If a score is uncertain, say why and use the semantic fallback only with strong descriptions.

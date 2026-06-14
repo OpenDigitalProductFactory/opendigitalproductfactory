@@ -68,3 +68,53 @@ describe("getOllamaBaseUrl", () => {
     delete process.env.LLM_BASE_URL;
   });
 });
+
+describe("getOllamaApiRoot", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    vi.resetModules();
+    process.env = { ...originalEnv };
+    delete process.env.OLLAMA_INTERNAL_URL;
+    delete process.env.LLM_BASE_URL;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it("strips the /v1 inference prefix so /api/* hits the management root", async () => {
+    // Regression: `${base}/api/tags` on the /v1 base => /v1/api/tags (404 on
+    // Docker Model Runner), which silently disabled first-run auto-pull.
+    const { getOllamaApiRoot } = await import("./ollama-url");
+    expect(getOllamaApiRoot()).toBe("http://model-runner.docker.internal");
+  });
+
+  it("strips an /engines/v1 prefix", async () => {
+    const { getOllamaApiRoot } = await import("./ollama-url");
+    expect(
+      getOllamaApiRoot({ providerId: "local", baseUrl: "http://model-runner.docker.internal/engines/v1", endpoint: null }),
+    ).toBe("http://model-runner.docker.internal");
+  });
+
+  it("strips a /v1 with a trailing slash", async () => {
+    const { getOllamaApiRoot } = await import("./ollama-url");
+    expect(
+      getOllamaApiRoot({ providerId: "local", baseUrl: "http://localhost:11434/v1/", endpoint: null }),
+    ).toBe("http://localhost:11434");
+  });
+
+  it("leaves a native Ollama base URL (no /v1) unchanged", async () => {
+    const { getOllamaApiRoot } = await import("./ollama-url");
+    expect(
+      getOllamaApiRoot({ providerId: "local", baseUrl: "http://localhost:11434", endpoint: null }),
+    ).toBe("http://localhost:11434");
+  });
+
+  it("respects LLM_BASE_URL and strips its /v1 suffix", async () => {
+    process.env.LLM_BASE_URL = "http://custom:8080/v1";
+    const { getOllamaApiRoot } = await import("./ollama-url");
+    expect(getOllamaApiRoot()).toBe("http://custom:8080");
+    delete process.env.LLM_BASE_URL;
+  });
+});

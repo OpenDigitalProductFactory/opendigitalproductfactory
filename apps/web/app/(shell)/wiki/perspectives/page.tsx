@@ -8,6 +8,7 @@ import Link from "next/link"
 import { prisma } from "@dpf/db"
 import { notFound } from "next/navigation"
 import { auth } from "@/lib/auth"
+import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-profession-profile"
 
 export const dynamic = "force-dynamic"
 
@@ -18,10 +19,19 @@ export const metadata = {
 const KIND_LABELS: Record<string, string> = {
   organization: "Organization",
   platform: "Platform",
+  profession: "Profession",
   "persona-real": "Real persona",
   "persona-fictional": "Fictional persona",
   "persona-synthetic": "Synthetic persona",
 }
+
+// Map a profession profileId (convention `wsid-<professionKey>`) to its
+// registry family, so profession profiles show a friendly label + a back-link
+// to the coworker(s) they govern (HRIS surface — closes the "no friendly
+// profession label" gap on this index).
+const PROFESSION_BY_PROFILE_ID = new Map(
+  PROFESSION_REGISTRY.families.map((f) => [`wsid-${f.professionKey}`, f]),
+)
 
 const VOICE_STATUS_LABELS: Record<string, { label: string; className: string }> = {
   ready:      { label: "Voice ready",    className: "bg-green-500/10 text-green-600 border border-green-500/20" },
@@ -73,6 +83,8 @@ export default async function PerspectivesIndexPage() {
           {profiles.map((profile) => {
             const voiceStatus = profile.voiceProfile?.status ?? null
             const badge = voiceStatus ? VOICE_STATUS_LABELS[voiceStatus] : null
+            const family = PROFESSION_BY_PROFILE_ID.get(profile.profileId)
+            const primaryRole = family?.roles[0] ?? null
 
             return (
               <div key={profile.profileId} className="flex items-center justify-between px-4 py-3 hover:bg-muted/40 transition-colors">
@@ -80,7 +92,12 @@ export default async function PerspectivesIndexPage() {
                   <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground bg-muted px-2 py-0.5 rounded shrink-0">
                     {KIND_LABELS[profile.kind] ?? profile.kind}
                   </span>
-                  <span className="font-medium text-sm truncate">{profile.name}</span>
+                  <span className="font-medium text-sm truncate">{family?.label ?? profile.name}</span>
+                  {family && family.roles.length > 0 && (
+                    <span className="text-xs text-[var(--dpf-muted)] shrink-0">
+                      {family.roles.length} coworker{family.roles.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
                   {profile.voiceEnabled && voiceStatus === "ready" && (
                     <span className="text-xs text-green-600 shrink-0">● active</span>
                   )}
@@ -91,6 +108,14 @@ export default async function PerspectivesIndexPage() {
                     <span className={`text-xs px-2 py-0.5 rounded ${badge.className}`}>
                       {badge.label}
                     </span>
+                  )}
+                  {primaryRole && (
+                    <Link
+                      href={`/platform/ai/agent/${encodeURIComponent(primaryRole)}`}
+                      className="text-sm text-[var(--dpf-accent)] hover:underline"
+                    >
+                      Coworker record →
+                    </Link>
                   )}
                   <Link
                     href={`/wiki/perspectives/${profile.profileId}/voice`}

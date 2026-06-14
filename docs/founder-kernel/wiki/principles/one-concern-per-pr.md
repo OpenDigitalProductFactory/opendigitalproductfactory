@@ -5,7 +5,7 @@ status: published
 abstract: Topic branches named by intent. Bundling unrelated changes makes review harder and rollback worse.
 principleTier: core
 principleDirection: Scope each branch and PR to one concern; bundle nothing extra.
-principleDimensionVector: {"long_term_maintainability": 0.6, "governance_compliance": 0.5, "blast_radius": 0.5}
+principleDimensionVector: {"long_term_maintainability": 0.6, "governance_compliance": 0.5, "blast_radius": -0.5}
 principleAppliesTo:
   - in_platform_coworker
   - external_coding_agent
@@ -41,7 +41,7 @@ Before starting a branch, decide what the one concern is and name it explicitly 
 
 - `long_term_maintainability: 0.6` — single-concern PRs are easier to revert, audit, and reason about months later.
 - `governance_compliance: 0.5` — PR review is more effective on focused scopes; the governance value of the gate compounds.
-- `blast_radius: 0.5` — smaller PRs have smaller blast radius when they regress.
+- `blast_radius: -0.5` — smaller PRs have smaller blast radius when they regress.
 
 ## Examples
 

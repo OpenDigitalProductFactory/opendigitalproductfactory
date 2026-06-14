@@ -7033,20 +7033,28 @@ model StorefrontConfig {
 // (role=primary) written at setup completion; secondaries are added post-setup
 // via the "Add service line" admin action.
 model StorefrontArchetypeComposition {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   storefrontId String
   archetypeId  String
   /// "primary" | "secondary"
   role         String
-  sortOrder    Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  sortOrder    Int       @default(0)
+  /// Soft-delete: set when operator removes a service line. Seeded items/sections
+  /// are deactivated/hidden first; this marks the composition row as inactive while
+  /// preserving the audit trail. sourceCompositionId FKs use onDelete:SetNull so
+  /// historical item rows survive a hard delete if ever needed.
+  removedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  storefront StorefrontConfig    @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
-  archetype  StorefrontArchetype @relation(fields: [archetypeId], references: [id])
+  storefront     StorefrontConfig    @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  archetype      StorefrontArchetype @relation(fields: [archetypeId], references: [id])
+  seededItems    StorefrontItem[]
+  seededSections StorefrontSection[]
 
   @@unique([storefrontId, archetypeId])
   @@index([storefrontId, role])
+  @@index([removedAt])
 }
 
 model MarketingStrategy {
@@ -7386,45 +7394,54 @@ model OutboundAutopilotPolicy {
 }
 
 model StorefrontSection {
-  id           String           @id @default(cuid())
-  storefrontId String
-  type         String
-  title        String?
-  content      Json
-  sortOrder    Int              @default(0)
-  isVisible    Boolean          @default(true)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  storefront   StorefrontConfig @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  id                  String                          @id @default(cuid())
+  storefrontId        String
+  type                String
+  title               String?
+  content             Json
+  sortOrder           Int                             @default(0)
+  isVisible           Boolean                         @default(true)
+  /// Provenance: set when this section was seeded by a secondary add-line action.
+  sourceCompositionId String?
+  createdAt           DateTime                        @default(now())
+  updatedAt           DateTime                        @updatedAt
+  storefront          StorefrontConfig                @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  sourceComposition   StorefrontArchetypeComposition? @relation(fields: [sourceCompositionId], references: [id], onDelete: SetNull)
 
   @@index([storefrontId, sortOrder])
+  @@index([sourceCompositionId])
 }
 
 model StorefrontItem {
-  id               String            @id @default(cuid())
-  itemId           String            @unique
-  storefrontId     String
-  name             String
-  description      String?
-  category         String?
-  priceAmount      Decimal?
-  priceCurrency    String            @default("GBP")
-  priceType        String?
-  imageUrl         String?
-  ctaType          String
-  ctaLabel         String?
-  bookingConfig    Json?
-  isActive         Boolean           @default(true)
-  sortOrder        Int               @default(0)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  storefront       StorefrontConfig  @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
-  providerServices ProviderService[]
-  bookingHolds     BookingHold[]
-  rentableUnits    RentableUnit[]
-  rentalAgreements RentalAgreement[]
+  id                  String                          @id @default(cuid())
+  itemId              String                          @unique
+  storefrontId        String
+  name                String
+  description         String?
+  category            String?
+  priceAmount         Decimal?
+  priceCurrency       String                          @default("GBP")
+  priceType           String?
+  imageUrl            String?
+  ctaType             String
+  ctaLabel            String?
+  bookingConfig       Json?
+  isActive            Boolean                         @default(true)
+  sortOrder           Int                             @default(0)
+  /// Provenance: set when this item was seeded by a secondary add-line action.
+  /// Used by removeStorefrontServiceLine to scope cleanup to the right items.
+  sourceCompositionId String?
+  createdAt           DateTime                        @default(now())
+  updatedAt           DateTime                        @updatedAt
+  storefront          StorefrontConfig                @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  sourceComposition   StorefrontArchetypeComposition? @relation(fields: [sourceCompositionId], references: [id], onDelete: SetNull)
+  providerServices    ProviderService[]
+  bookingHolds        BookingHold[]
+  rentableUnits       RentableUnit[]
+  rentalAgreements    RentalAgreement[]
 
   @@index([storefrontId, isActive, sortOrder])
+  @@index([sourceCompositionId])
 }
 
 model StorefrontBooking {
@@ -7884,6 +7901,14 @@ model Invoice {
   erpSyncStatus  String?   @default("pending")
   erpRefId       String?
   payToken       String?   @unique
+  // E-signature (Phase 1): in-platform signature capture on the payment portal.
+  // signatureRequired gates the Pay Now flow; the signed* fields record the
+  // captured signature. Third-party e-sign (DocuSign/HelloSign) is a later phase.
+  signatureRequired Boolean   @default(false)
+  signedAt          DateTime?
+  signedByName      String?
+  signedByEmail     String?
+  signatureDataUrl  String?
   createdById    String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -9026,6 +9051,11 @@ model WikiPage {
   overrides                WikiPage[]         @relation("WikiPageOverride")
   derivedFromKernelVersion String?
   abstract                 String?            @db.Text
+  // Free-form frontmatter bag (mirrors PromptTemplate.metadata = "all other
+  // frontmatter"). Profession-corpus pages carry the WSID variant axes here
+  // (professionJurisdiction / professionCompetencyLevel) so coverage is
+  // queryable at runtime without typed/indexed columns (variants spec §3).
+  metadata                 Json?
   lastReviewedAt           DateTime?
   createdAt                DateTime           @default(now())
   updatedAt                DateTime           @updatedAt

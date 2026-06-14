@@ -16,6 +16,7 @@ import {
   UnifiedEvidenceTimeline,
   type UnifiedEvidenceTimelineEvent,
 } from "./UnifiedEvidenceTimeline";
+import { ReviewReadinessStrip } from "./ReviewReadinessStrip";
 
 type Props = {
   build: FeatureBuildRow;
@@ -349,6 +350,8 @@ export function WorkflowStageInspector({
             <div style={sectionLabelStyle}>What Happened</div>
             <div style={bodyTextStyle}>{getStageSummary(phase, build)}</div>
           </div>
+
+          <ReviewReadinessStrip build={build} phase={phase} />
 
           <div style={{ marginBottom: 16 }}>
             <div style={sectionLabelStyle}>Next Approval</div>

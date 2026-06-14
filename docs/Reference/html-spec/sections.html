@@ -1,0 +1,1443 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>HTML Standard (§4.3 Sections) — DPF local snapshot</title></head>
+<body>
+<!--
+  DPF local reference snapshot of the WHATWG HTML Standard (Developer Edition).
+  Section: §4.3 Sections
+  Source : https://html.spec.whatwg.org/dev/sections.html
+  Spec "Last Updated": 12 June 2026  |  Retrieved: 2026-06-14
+  License: text CC BY 4.0; code/IDL snippets BSD 3-Clause. (c) WHATWG.
+  Cleaned: stripped <head>, page <script>s, the site <header id=head> banner,
+           and the <ol class=toc> sidebar. Spec prose, element definitions,
+           and ALL examples (including <nav>/<header>/<section> demos) are
+           preserved unchanged. Point-in-time snapshot for offline/local-LLM
+           use; the source URL is always authoritative.
+  Regenerate: node scripts/refresh-html-spec-snapshot.mjs
+-->
+<nav><a href=semantics.html>← 4 The elements of HTML</a> — <a href=./>Table of Contents</a> — <a href=grouping-content.html>4.4 Grouping content →</a></nav><h3 id=sections><span class=secno>4.3</span> Sections<a href=#sections class=self-link></a></h3>
+
+  <h4 id=the-body-element><span class=secno>4.3.1</span> The <dfn data-dfn-type=element><code>body</code></dfn> element<a href=#the-body-element class=self-link></a></h4>
+
+  <dl class=element><dt><a href=dom.html#concept-element-categories id=the-body-element:concept-element-categories>Categories</a>:<dd>None.<dt><a href=dom.html#concept-element-contexts id=the-body-element:concept-element-contexts>Contexts in which this element can be used</a>:<dd>As the second element in an <code id=the-body-element:the-html-element><a href=semantics.html#the-html-element>html</a></code> element.<dt><a href=dom.html#concept-element-content-model id=the-body-element:concept-element-content-model>Content model</a>:<dd><a id=the-body-element:flow-content-2 href=dom.html#flow-content-2>Flow content</a>.<dt><a href=dom.html#concept-element-tag-omission id=the-body-element:concept-element-tag-omission>Tag omission in text/html</a>:<dd>A <code id=the-body-element:the-body-element><a href=#the-body-element>body</a></code> element's <a href=syntax.html#syntax-start-tag id=the-body-element:syntax-start-tag>start tag</a> can be omitted
+  if the element is empty, or if the first thing inside the <code id=the-body-element:the-body-element-2><a href=#the-body-element>body</a></code> element is not
+  <a id=the-body-element:space-characters href=https://infra.spec.whatwg.org/#ascii-whitespace data-x-internal=space-characters>ASCII whitespace</a> or a <a href=syntax.html#syntax-comments id=the-body-element:syntax-comments>comment</a>, except if the
+  first thing inside the <code id=the-body-element:the-body-element-3><a href=#the-body-element>body</a></code> element is a <code id=the-body-element:the-meta-element><a href=semantics.html#the-meta-element>meta</a></code>, <code id=the-body-element:the-noscript-element><a href=scripting.html#the-noscript-element>noscript</a></code>,
+  <code id=the-body-element:the-link-element><a href=semantics.html#the-link-element>link</a></code>, <code id=the-body-element:the-script-element><a href=scripting.html#the-script-element>script</a></code>, <code id=the-body-element:the-style-element><a href=semantics.html#the-style-element>style</a></code>, or <code id=the-body-element:the-template-element><a href=scripting.html#the-template-element>template</a></code> element.
+  <dd>A <code id=the-body-element:the-body-element-4><a href=#the-body-element>body</a></code> element's <a href=syntax.html#syntax-end-tag id=the-body-element:syntax-end-tag>end tag</a> can be omitted if the
+  <code id=the-body-element:the-body-element-5><a href=#the-body-element>body</a></code> element is not immediately followed by a <a href=syntax.html#syntax-comments id=the-body-element:syntax-comments-2>comment</a>.<dt><a href=dom.html#concept-element-attributes id=the-body-element:concept-element-attributes>Content attributes</a>:<dd><a id=the-body-element:global-attributes href=dom.html#global-attributes>Global attributes</a><dd><code id=the-body-element:handler-window-onafterprint><a href=webappapis.html#handler-window-onafterprint>onafterprint</a></code><dd><code id=the-body-element:handler-window-onbeforeprint><a href=webappapis.html#handler-window-onbeforeprint>onbeforeprint</a></code><dd><code id=the-body-element:handler-window-onbeforeunload><a href=webappapis.html#handler-window-onbeforeunload>onbeforeunload</a></code><dd><code id=the-body-element:handler-window-onhashchange><a href=webappapis.html#handler-window-onhashchange>onhashchange</a></code><dd><code id=the-body-element:handler-window-onlanguagechange><a href=webappapis.html#handler-window-onlanguagechange>onlanguagechange</a></code><dd><code id=the-body-element:handler-window-onmessage><a href=webappapis.html#handler-window-onmessage>onmessage</a></code><dd><code id=the-body-element:handler-window-onmessageerror><a href=webappapis.html#handler-window-onmessageerror>onmessageerror</a></code><dd><code id=the-body-element:handler-window-onoffline><a href=webappapis.html#handler-window-onoffline>onoffline</a></code><dd><code id=the-body-element:handler-window-ononline><a href=webappapis.html#handler-window-ononline>ononline</a></code><dd><code id=the-body-element:handler-window-onpageswap><a href=webappapis.html#handler-window-onpageswap>onpageswap</a></code><dd><code id=the-body-element:handler-window-onpagehide><a href=webappapis.html#handler-window-onpagehide>onpagehide</a></code><dd><code id=the-body-element:handler-window-onpagereveal><a href=webappapis.html#handler-window-onpagereveal>onpagereveal</a></code><dd><code id=the-body-element:handler-window-onpageshow><a href=webappapis.html#handler-window-onpageshow>onpageshow</a></code><dd><code id=the-body-element:handler-window-onpopstate><a href=webappapis.html#handler-window-onpopstate>onpopstate</a></code><dd><code id=the-body-element:handler-window-onrejectionhandled><a href=webappapis.html#handler-window-onrejectionhandled>onrejectionhandled</a></code><dd><code id=the-body-element:handler-window-onstorage><a href=webappapis.html#handler-window-onstorage>onstorage</a></code><dd><code id=the-body-element:handler-window-onunhandledrejection><a href=webappapis.html#handler-window-onunhandledrejection>onunhandledrejection</a></code><dd><code id=the-body-element:handler-window-onunload><a href=webappapis.html#handler-window-onunload>onunload</a></code><dt><a href=dom.html#concept-element-accessibility-considerations id=the-body-element:concept-element-accessibility-considerations>Accessibility considerations</a>:<dd><a href=https://w3c.github.io/html-aria/#el-body>For authors</a>.<dd><a href=https://w3c.github.io/html-aam/#el-body>For implementers</a>.<dt><a href=dom.html#concept-element-sanitization id=the-body-element:concept-element-sanitization>Sanitization</a>:<dd><span>Default</span>.<dt><a href=dom.html#concept-element-dom id=the-body-element:concept-element-dom>DOM interface</a>:<dd>Uses <code>HTMLBodyElement</code>.</dl>
+
+  <p>The <code id=the-body-element:the-body-element-6><a href=#the-body-element>body</a></code> element <a id=the-body-element:represents href=dom.html#represents>represents</a> the contents of the document.</p>
+
+  <p>In conforming documents, there is only one <code id=the-body-element:the-body-element-7><a href=#the-body-element>body</a></code> element. The <code id=the-body-element:dom-document-body><a href=dom.html#dom-document-body>document.body</a></code> IDL attribute provides scripts with easy access to
+  a document's <code id=the-body-element:the-body-element-8><a href=#the-body-element>body</a></code> element.</p>
+
+  
+
+  <p>The <code id=the-body-element:the-body-element-9><a href=#the-body-element>body</a></code> element exposes as <a id=the-body-element:event-handler-content-attributes href=webappapis.html#event-handler-content-attributes>event handler content attributes</a> a number
+  of the <a id=the-body-element:event-handlers href=webappapis.html#event-handlers>event handlers</a> of the <code>Window</code> object. It also mirrors their
+  <a id=the-body-element:event-handler-idl-attributes href=webappapis.html#event-handler-idl-attributes>event handler IDL attributes</a>.</p>
+
+  <p>The <a id=the-body-element:event-handlers-2 href=webappapis.html#event-handlers>event handlers</a> of the <code>Window</code> object named by the
+  <a id=the-body-element:window-reflecting-body-element-event-handler-set href=webappapis.html#window-reflecting-body-element-event-handler-set><code>Window</code>-reflecting body element event handler set</a>, exposed on the
+  <code id=the-body-element:the-body-element-10><a href=#the-body-element>body</a></code> element, replace the generic <a id=the-body-element:event-handlers-3 href=webappapis.html#event-handlers>event handlers</a> with the same names
+  normally supported by <a id=the-body-element:html-elements href=infrastructure.html#html-elements>HTML elements</a>.</p>
+
+  <p class=example>Thus, for example, a bubbling <code id=the-body-element:event-error><a href=indices.html#event-error>error</a></code> event
+  dispatched on a child of <a id=the-body-element:the-body-element-2-2 href=dom.html#the-body-element-2>the body element</a> of a <code>Document</code> would first
+  trigger the <code id=the-body-element:handler-onerror><a href=webappapis.html#handler-onerror>onerror</a></code> <a id=the-body-element:event-handler-content-attributes-2 href=webappapis.html#event-handler-content-attributes>event handler content
+  attributes</a> of that element, then that of the root <code id=the-body-element:the-html-element-2><a href=semantics.html#the-html-element>html</a></code> element, and only
+  <em>then</em> would it trigger the <code id=the-body-element:handler-onerror-2><a href=webappapis.html#handler-onerror>onerror</a></code> <a href=webappapis.html#event-handler-content-attributes id=the-body-element:event-handler-content-attributes-3>event handler content attribute</a> on the
+  <code id=the-body-element:the-body-element-11><a href=#the-body-element>body</a></code> element. This is because the event would bubble from the target, to the
+  <code id=the-body-element:the-body-element-12><a href=#the-body-element>body</a></code>, to the <code id=the-body-element:the-html-element-3><a href=semantics.html#the-html-element>html</a></code>, to the <code>Document</code>, to the
+  <code>Window</code>, and the <a href=webappapis.html#event-handlers id=the-body-element:event-handlers-4>event handler</a> on the
+  <code id=the-body-element:the-body-element-13><a href=#the-body-element>body</a></code> is watching the <code>Window</code> not the <code id=the-body-element:the-body-element-14><a href=#the-body-element>body</a></code>. A regular event
+  listener attached to the <code id=the-body-element:the-body-element-15><a href=#the-body-element>body</a></code> using <code>addEventListener()</code>,
+  however, would be run when the event bubbled through the <code id=the-body-element:the-body-element-16><a href=#the-body-element>body</a></code> and not when it reaches
+  the <code>Window</code> object.</p>
+
+  <div class=example>
+
+   <p>This page updates an indicator to show whether or not the user is online:</p>
+
+   <pre><code class='html'><c- cp>&lt;!DOCTYPE HTML&gt;</c->
+<c- p>&lt;</c-><c- f>html</c-> <c- e>lang</c-><c- o>=</c-><c- s>&quot;en&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>head</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>title</c-><c- p>&gt;</c->Online or offline?<c- p>&lt;/</c-><c- f>title</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>script</c-><c- p>&gt;</c->
+   <c- a>function</c-> update<c- p>(</c->online<c- p>)</c-> <c- p>{</c->
+     document<c- p>.</c->getElementById<c- p>(</c-><c- t>&apos;status&apos;</c-><c- p>).</c->textContent <c- o>=</c->
+       online <c- o>?</c-> <c- t>&apos;Online&apos;</c-> <c- o>:</c-> <c- t>&apos;Offline&apos;</c-><c- p>;</c->
+   <c- p>}</c->
+  <c- p>&lt;/</c-><c- f>script</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>head</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>body</c-> <c- e>ononline</c-><c- o>=</c-><c- s>&quot;update(true)&quot;</c->
+       <c- e>onoffline</c-><c- o>=</c-><c- s>&quot;update(false)&quot;</c->
+       <c- e>onload</c-><c- o>=</c-><c- s>&quot;update(navigator.onLine)&quot;</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->You are: <c- p>&lt;</c-><c- f>span</c-> <c- e>id</c-><c- o>=</c-><c- s>&quot;status&quot;</c-><c- p>&gt;</c->(Unknown)<c- p>&lt;/</c-><c- f>span</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>body</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>html</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+
+
+  <h4 id=the-article-element><span class=secno>4.3.2</span> The <dfn data-dfn-type=element><code>article</code></dfn> element<a href=#the-article-element class=self-link></a></h4>
+
+  <dl class=element><dt><a href=dom.html#concept-element-categories id=the-article-element:concept-element-categories>Categories</a>:<dd><a id=the-article-element:flow-content-2 href=dom.html#flow-content-2>Flow content</a>.<dd><a id=the-article-element:sectioning-content-2 href=dom.html#sectioning-content-2>Sectioning content</a>.<dd><a id=the-article-element:palpable-content-2 href=dom.html#palpable-content-2>Palpable content</a>.<dt><a href=dom.html#concept-element-contexts id=the-article-element:concept-element-contexts>Contexts in which this element can be used</a>:<dd>Where <a id=the-article-element:sectioning-content-2-2 href=dom.html#sectioning-content-2>sectioning content</a> is expected.<dt><a href=dom.html#concept-element-content-model id=the-article-element:concept-element-content-model>Content model</a>:<dd><a id=the-article-element:flow-content-2-2 href=dom.html#flow-content-2>Flow content</a>.<dt><a href=dom.html#concept-element-tag-omission id=the-article-element:concept-element-tag-omission>Tag omission in text/html</a>:<dd>Neither tag is omissible.<dt><a href=dom.html#concept-element-attributes id=the-article-element:concept-element-attributes>Content attributes</a>:<dd><a id=the-article-element:global-attributes href=dom.html#global-attributes>Global attributes</a><dt><a href=dom.html#concept-element-accessibility-considerations id=the-article-element:concept-element-accessibility-considerations>Accessibility considerations</a>:<dd><a href=https://w3c.github.io/html-aria/#el-article>For authors</a>.<dd><a href=https://w3c.github.io/html-aam/#el-article>For implementers</a>.<dt><a href=dom.html#concept-element-sanitization id=the-article-element:concept-element-sanitization>Sanitization</a>:<dd><span>Default</span>.<dt><a href=dom.html#concept-element-dom id=the-article-element:concept-element-dom>DOM interface</a>:<dd>Uses <code>HTMLElement</code>.</dl>
+
+  <p>The <code id=the-article-element:the-article-element><a href=#the-article-element>article</a></code> element <a id=the-article-element:represents href=dom.html#represents>represents</a> a complete, or self-contained,
+  composition in a document, page, application, or site and that is, in principle, independently
+  distributable or reusable, e.g. in syndication. This could be a forum post, a magazine or
+  newspaper article, a blog entry, a user-submitted comment, an interactive widget or gadget, or any
+  other independent item of content.</p>
+
+  
+
+  <p>When <code id=the-article-element:the-article-element-2><a href=#the-article-element>article</a></code> elements are nested, the inner <code id=the-article-element:the-article-element-3><a href=#the-article-element>article</a></code> elements
+  represent articles that are in principle related to the contents of the outer article. For
+  instance, a blog entry on a site that accepts user-submitted comments could represent the comments
+  as <code id=the-article-element:the-article-element-4><a href=#the-article-element>article</a></code> elements nested within the <code id=the-article-element:the-article-element-5><a href=#the-article-element>article</a></code> element for the blog
+  entry.</p>
+
+  <p>Author information associated with an <code id=the-article-element:the-article-element-6><a href=#the-article-element>article</a></code> element (q.v. the
+  <code id=the-article-element:the-address-element><a href=#the-address-element>address</a></code> element) does not apply to nested <code id=the-article-element:the-article-element-7><a href=#the-article-element>article</a></code> elements.</p>
+
+  <p class=note>When used specifically with content to be redistributed in syndication, the
+  <code id=the-article-element:the-article-element-8><a href=#the-article-element>article</a></code> element is similar in purpose to the <code>entry</code> element in
+  Atom. <a href=references.html#refsATOM>[ATOM]</a>
+
+  <p class=note>The schema.org microdata vocabulary can be used to provide the publication date
+  for an <code id=the-article-element:the-article-element-9><a href=#the-article-element>article</a></code> element, using one of the CreativeWork subtypes.</p>
+
+  <p>When the main content of the page (i.e. excluding footers, headers, navigation blocks, and
+  sidebars) is all one single self-contained composition, that content may be marked with an
+  <code id=the-article-element:the-article-element-10><a href=#the-article-element>article</a></code>, but it is technically redundant in that case (since it's self-evident that
+  the page is a single composition, as it is a single document).</p>
+
+  <div id=article-example class=example><a href=#article-example class=self-link></a>
+
+   <p>This example shows a blog post using the <code id=the-article-element:the-article-element-11><a href=#the-article-element>article</a></code> element, with some schema.org
+   annotations:</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>article</c-> <c- e>itemscope</c-> <c- e>itemtype</c-><c- o>=</c-><c- s>&quot;http://schema.org/BlogPosting&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>header</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h2</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;headline&quot;</c-><c- p>&gt;</c->The Very First Rule of Life<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>time</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;datePublished&quot;</c-> <c- e>datetime</c-><c- o>=</c-><c- s>&quot;2009-10-09&quot;</c-><c- p>&gt;</c->3 days ago<c- p>&lt;/</c-><c- f>time</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>link</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;url&quot;</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;?comments=0&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>header</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->If there&apos;s a microphone anywhere near you, assume it&apos;s hot and
+ sending whatever you&apos;re saying to the world. Seriously.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c-><em>...</em><c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>footer</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>a</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;discussionUrl&quot;</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;?comments=1&quot;</c-><c- p>&gt;</c->Show comments...<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>footer</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>article</c-><c- p>&gt;</c-></code></pre>
+
+   <p>Here is that same blog post, but showing some of the comments:</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>article</c-> <c- e>itemscope</c-> <c- e>itemtype</c-><c- o>=</c-><c- s>&quot;http://schema.org/BlogPosting&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>header</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h2</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;headline&quot;</c-><c- p>&gt;</c->The Very First Rule of Life<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>time</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;datePublished&quot;</c-> <c- e>datetime</c-><c- o>=</c-><c- s>&quot;2009-10-09&quot;</c-><c- p>&gt;</c->3 days ago<c- p>&lt;/</c-><c- f>time</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>link</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;url&quot;</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;?comments=0&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>header</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->If there&apos;s a microphone anywhere near you, assume it&apos;s hot and
+ sending whatever you&apos;re saying to the world. Seriously.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c-><em>...</em><c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Comments<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>article</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;comment&quot;</c-> <c- e>itemscope</c-> <c- e>itemtype</c-><c- o>=</c-><c- s>&quot;http://schema.org/Comment&quot;</c-> <c- e>id</c-><c- o>=</c-><c- s>&quot;c1&quot;</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>link</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;url&quot;</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;#c1&quot;</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>footer</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Posted by: <c- p>&lt;</c-><c- f>span</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;creator&quot;</c-> <c- e>itemscope</c-> <c- e>itemtype</c-><c- o>=</c-><c- s>&quot;http://schema.org/Person&quot;</c-><c- p>&gt;</c->
+     <c- p>&lt;</c-><c- f>span</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;name&quot;</c-><c- p>&gt;</c->George Washington<c- p>&lt;/</c-><c- f>span</c-><c- p>&gt;</c->
+    <c- p>&lt;/</c-><c- f>span</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>time</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;dateCreated&quot;</c-> <c- e>datetime</c-><c- o>=</c-><c- s>&quot;2009-10-10&quot;</c-><c- p>&gt;</c->15 minutes ago<c- p>&lt;/</c-><c- f>time</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+   <c- p>&lt;/</c-><c- f>footer</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Yeah! Especially when talking about your lobbyist friends!<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>article</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>article</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;comment&quot;</c-> <c- e>itemscope</c-> <c- e>itemtype</c-><c- o>=</c-><c- s>&quot;http://schema.org/Comment&quot;</c-> <c- e>id</c-><c- o>=</c-><c- s>&quot;c2&quot;</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>link</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;url&quot;</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;#c2&quot;</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>footer</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Posted by: <c- p>&lt;</c-><c- f>span</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;creator&quot;</c-> <c- e>itemscope</c-> <c- e>itemtype</c-><c- o>=</c-><c- s>&quot;http://schema.org/Person&quot;</c-><c- p>&gt;</c->
+     <c- p>&lt;</c-><c- f>span</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;name&quot;</c-><c- p>&gt;</c->George Hammond<c- p>&lt;/</c-><c- f>span</c-><c- p>&gt;</c->
+    <c- p>&lt;/</c-><c- f>span</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>time</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;dateCreated&quot;</c-> <c- e>datetime</c-><c- o>=</c-><c- s>&quot;2009-10-10&quot;</c-><c- p>&gt;</c->5 minutes ago<c- p>&lt;/</c-><c- f>time</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+   <c- p>&lt;/</c-><c- f>footer</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Hey, you have the same first name as me.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>article</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>article</c-><c- p>&gt;</c-></code></pre>
+
+   <p>Notice the use of <code id=the-article-element:the-footer-element><a href=#the-footer-element>footer</a></code> to give the information for each comment (such as who
+   wrote it and when): the <code id=the-article-element:the-footer-element-2><a href=#the-footer-element>footer</a></code> element <em>can</em> appear at the start of its
+   section when appropriate, such as in this case. (Using <code id=the-article-element:the-header-element><a href=#the-header-element>header</a></code> in this case wouldn't
+   be wrong either; it's mostly a matter of authoring preference.)</p>
+
+  </div>
+
+  <div class=example>
+
+   <p>In this example, <code id=the-article-element:the-article-element-12><a href=#the-article-element>article</a></code> elements are used to host widgets on a portal page. The
+   widgets are implemented as <a href=custom-elements.html#customized-built-in-element id=the-article-element:customized-built-in-element>customized built-in
+   elements</a> in order to get specific styling and scripted behavior.</p>
+
+   <pre><code class='html'><c- cp>&lt;!DOCTYPE HTML&gt;</c->
+<c- p>&lt;</c-><c- f>html</c-> <c- e>lang</c-><c- o>=</c-><c- s>en</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>title</c-><c- p>&gt;</c->eHome Portal<c- p>&lt;/</c-><c- f>title</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>script</c-> <c- e>src</c-><c- o>=</c-><c- s>&quot;/scripts/widgets.js&quot;</c-><c- p>&gt;&lt;/</c-><c- f>script</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>link</c-> <c- e>rel</c-><c- o>=</c-><c- s>stylesheet</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/styles/main.css&quot;</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>article</c-> <c- e>is</c-><c- o>=</c-><c- s>&quot;stock-widget&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Stocks<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>table</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>thead</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>tr</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>th</c-><c- p>&gt;</c-> Stock <c- p>&lt;</c-><c- f>th</c-><c- p>&gt;</c-> Value <c- p>&lt;</c-><c- f>th</c-><c- p>&gt;</c-> Delta
+  <c- p>&lt;</c-><c- f>tbody</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>template</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>tr</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>td</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>td</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>td</c-><c- p>&gt;</c-> <c- p>&lt;/</c-><c- f>template</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>table</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>input</c-> <c- e>type</c-><c- o>=</c-><c- s>button</c-> <c- e>value</c-><c- o>=</c-><c- s>&quot;Refresh&quot;</c-> <c- e>onclick</c-><c- o>=</c-><c- s>&quot;this.parentElement.refresh()&quot;</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>article</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>article</c-> <c- e>is</c-><c- o>=</c-><c- s>&quot;news-widget&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->News<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>ul</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>template</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>img</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>strong</c-><c- p>&gt;&lt;/</c-><c- f>strong</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>template</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>ul</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>input</c-> <c- e>type</c-><c- o>=</c-><c- s>button</c-> <c- e>value</c-><c- o>=</c-><c- s>&quot;Refresh&quot;</c-> <c- e>onclick</c-><c- o>=</c-><c- s>&quot;this.parentElement.refresh()&quot;</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>article</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+
+
+  <h4 id=the-section-element><span class=secno>4.3.3</span> The <dfn data-dfn-type=element><code>section</code></dfn> element<a href=#the-section-element class=self-link></a></h4>
+
+  <dl class=element><dt><a href=dom.html#concept-element-categories id=the-section-element:concept-element-categories>Categories</a>:<dd><a id=the-section-element:flow-content-2 href=dom.html#flow-content-2>Flow content</a>.<dd><a id=the-section-element:sectioning-content-2 href=dom.html#sectioning-content-2>Sectioning content</a>.<dd><a id=the-section-element:palpable-content-2 href=dom.html#palpable-content-2>Palpable content</a>.<dt><a href=dom.html#concept-element-contexts id=the-section-element:concept-element-contexts>Contexts in which this element can be used</a>:<dd>Where <a id=the-section-element:sectioning-content-2-2 href=dom.html#sectioning-content-2>sectioning content</a> is expected.<dt><a href=dom.html#concept-element-content-model id=the-section-element:concept-element-content-model>Content model</a>:<dd><a id=the-section-element:flow-content-2-2 href=dom.html#flow-content-2>Flow content</a>.<dt><a href=dom.html#concept-element-tag-omission id=the-section-element:concept-element-tag-omission>Tag omission in text/html</a>:<dd>Neither tag is omissible.<dt><a href=dom.html#concept-element-attributes id=the-section-element:concept-element-attributes>Content attributes</a>:<dd><a id=the-section-element:global-attributes href=dom.html#global-attributes>Global attributes</a><dt><a href=dom.html#concept-element-accessibility-considerations id=the-section-element:concept-element-accessibility-considerations>Accessibility considerations</a>:<dd><a href=https://w3c.github.io/html-aria/#el-section>For authors</a>.<dd><a href=https://w3c.github.io/html-aam/#el-section>For implementers</a>.<dt><a href=dom.html#concept-element-sanitization id=the-section-element:concept-element-sanitization>Sanitization</a>:<dd><span>Default</span>.<dt><a href=dom.html#concept-element-dom id=the-section-element:concept-element-dom>DOM interface</a>:<dd>Uses <code>HTMLElement</code>.</dl>
+
+  <p>The <code id=the-section-element:the-section-element><a href=#the-section-element>section</a></code> element <a id=the-section-element:represents href=dom.html#represents>represents</a> a generic section of a document or
+  application. A section, in this context, is a thematic grouping of content, typically with a
+  heading.</p>
+
+  <p class=example>Examples of sections would be chapters, the various tabbed pages in a tabbed
+  dialog box, or the numbered sections of a thesis. A web site's home page could be split into
+  sections for an introduction, news items, and contact information.</p>
+
+  <p class=note>Authors are encouraged to use the <code id=the-section-element:the-article-element><a href=#the-article-element>article</a></code> element instead of the
+  <code id=the-section-element:the-section-element-2><a href=#the-section-element>section</a></code> element when it would make sense to syndicate the contents of the
+  element.</p>
+
+  <p id=use-div-for-wrappers class=note><a href=#use-div-for-wrappers class=self-link></a>The <code id=the-section-element:the-section-element-3><a href=#the-section-element>section</a></code> element is not a generic
+  container element. When an element is needed only for styling purposes or as a convenience for
+  scripting, authors are encouraged to use the <code id=the-section-element:the-div-element><a href=grouping-content.html#the-div-element>div</a></code> element instead. A general rule is
+  that the <code id=the-section-element:the-section-element-4><a href=#the-section-element>section</a></code> element is appropriate only if the element's contents would be
+  listed explicitly in the document's <a href=#outline id=the-section-element:outline>outline</a>.</p>
+
+  <div class=example>
+
+   <p>In the following example, we see an article (part of a larger web page) about apples,
+   containing two short sections.</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>article</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>hgroup</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Apples<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Tasty, delicious fruit!<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>hgroup</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->The apple is the pomaceous fruit of the apple tree.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h3</c-><c- p>&gt;</c->Red Delicious<c- p>&lt;/</c-><c- f>h3</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->These bright red apples are the most common found in many
+  supermarkets.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h3</c-><c- p>&gt;</c->Granny Smith<c- p>&lt;/</c-><c- f>h3</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->These juicy, green apples make a great filling for
+  apple pies.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>article</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+  <div class=example>
+
+   <p>Here is a graduation programme with two sections, one for the list of people graduating, and
+   one for the description of the ceremony. (The markup in this example features an uncommon style
+   sometimes used to minimize the amount of <a id=the-section-element:inter-element-whitespace href=dom.html#inter-element-whitespace>inter-element whitespace</a>.)</p>
+
+   <pre><code class='html'><c- cp>&lt;!DOCTYPE Html&gt;</c->
+<c- p>&lt;</c-><c- f>Html</c-> <c- e>Lang</c-><c- o>=</c-><c- s>En</c->
+ <c- p>&gt;&lt;</c-><c- f>Head</c->
+   <c- p>&gt;&lt;</c-><c- f>Title</c->
+     <c- p>&gt;</c->Graduation Ceremony Summer 2022<c- p>&lt;/</c-><c- f>Title</c->
+   <c- p>&gt;&lt;/</c-><c- f>Head</c->
+ <c- p>&gt;&lt;</c-><c- f>Body</c->
+   <c- p>&gt;&lt;</c-><c- f>H1</c->
+     <c- p>&gt;</c->Graduation<c- p>&lt;/</c-><c- f>H1</c->
+   <c- p>&gt;&lt;</c-><c- f>Section</c->
+     <c- p>&gt;&lt;</c-><c- f>H2</c->
+       <c- p>&gt;</c->Ceremony<c- p>&lt;/</c-><c- f>H2</c->
+     <c- p>&gt;&lt;</c-><c- f>P</c->
+       <c- p>&gt;</c->Opening Procession<c- p>&lt;/</c-><c- f>P</c->
+     <c- p>&gt;&lt;</c-><c- f>P</c->
+       <c- p>&gt;</c->Speech by Valedictorian<c- p>&lt;/</c-><c- f>P</c->
+     <c- p>&gt;&lt;</c-><c- f>P</c->
+       <c- p>&gt;</c->Speech by Class President<c- p>&lt;/</c-><c- f>P</c->
+     <c- p>&gt;&lt;</c-><c- f>P</c->
+       <c- p>&gt;</c->Presentation of Diplomas<c- p>&lt;/</c-><c- f>P</c->
+     <c- p>&gt;&lt;</c-><c- f>P</c->
+       <c- p>&gt;</c->Closing Speech by Headmaster<c- p>&lt;/</c-><c- f>P</c->
+   <c- p>&gt;&lt;/</c-><c- f>Section</c->
+   <c- p>&gt;&lt;</c-><c- f>Section</c->
+     <c- p>&gt;&lt;</c-><c- f>H2</c->
+       <c- p>&gt;</c->Graduates<c- p>&lt;/</c-><c- f>H2</c->
+     <c- p>&gt;&lt;</c-><c- f>Ul</c->
+       <c- p>&gt;&lt;</c-><c- f>Li</c->
+         <c- p>&gt;</c->Molly Carpenter<c- p>&lt;/</c-><c- f>Li</c->
+       <c- p>&gt;&lt;</c-><c- f>Li</c->
+         <c- p>&gt;</c->Anastasia Luccio<c- p>&lt;/</c-><c- f>Li</c->
+       <c- p>&gt;&lt;</c-><c- f>Li</c->
+         <c- p>&gt;</c->Ebenezar McCoy<c- p>&lt;/</c-><c- f>Li</c->
+       <c- p>&gt;&lt;</c-><c- f>Li</c->
+         <c- p>&gt;</c->Karrin Murphy<c- p>&lt;/</c-><c- f>Li</c->
+       <c- p>&gt;&lt;</c-><c- f>Li</c->
+         <c- p>&gt;</c->Thomas Raith<c- p>&lt;/</c-><c- f>Li</c->
+       <c- p>&gt;&lt;</c-><c- f>Li</c->
+         <c- p>&gt;</c->Susan Rodriguez<c- p>&lt;/</c-><c- f>Li</c->
+     <c- p>&gt;&lt;/</c-><c- f>Ul</c->
+   <c- p>&gt;&lt;/</c-><c- f>Section</c->
+ <c- p>&gt;&lt;/</c-><c- f>Body</c->
+<c- p>&gt;&lt;/</c-><c- f>Html</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+  <div class=example>
+
+   <p>In this example, a book author has marked up some sections as chapters and some as appendices,
+   and uses CSS to style the headers in these two classes of section differently.</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>style</c-><c- p>&gt;</c->
+ <c- f>section</c-> <c- p>{</c-> <c- k>border</c-><c- p>:</c-> <c- kc>double</c-> <c- kc>medium</c-><c- p>;</c-> <c- k>margin</c-><c- p>:</c-> <c- mi>2</c-><c- b>em</c-><c- p>;</c-> <c- p>}</c->
+ <c- f>section</c-><c- p>.</c-><c- nc>chapter</c-> <c- f>h2</c-> <c- p>{</c-> <c- k>font</c-><c- p>:</c-> <c- mi>2</c-><c- b>em</c-> <c- n>Roboto</c-><c- p>,</c-> <c- n>Helvetica</c-> <c- n>Neue</c-><c- p>,</c-> <c- kc>sans-serif</c-><c- p>;</c-> <c- p>}</c->
+ <c- f>section</c-><c- p>.</c-><c- nc>appendix</c-> <c- f>h2</c-> <c- p>{</c-> <c- k>font</c-><c- p>:</c-> <c- kc>small-caps</c-> <c- mi>2</c-><c- b>em</c-> <c- n>Roboto</c-><c- p>,</c-> <c- n>Helvetica</c-> <c- n>Neue</c-><c- p>,</c-> <c- kc>sans-serif</c-><c- p>;</c-> <c- p>}</c->
+<c- p>&lt;/</c-><c- f>style</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>header</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>hgroup</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->My Book<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->A sample with not much content<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>hgroup</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>small</c-><c- p>&gt;</c->Published by Dummy Publicorp Ltd.<c- p>&lt;/</c-><c- f>small</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>header</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>section</c-> <c- e>class</c-><c- o>=</c-><c- s>&quot;chapter&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->My First Chapter<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->This is the first of my chapters. It doesn&apos;t say much.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->But it has two paragraphs!<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>section</c-> <c- e>class</c-><c- o>=</c-><c- s>&quot;chapter&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->It Continues: The Second Chapter<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Bla dee bla, dee bla dee bla. Boom.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>section</c-> <c- e>class</c-><c- o>=</c-><c- s>&quot;chapter&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Chapter Three: A Further Example<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->It&apos;s not like a battle between brightness and earthtones would go
+ unnoticed.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->But it might ruin my story.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>section</c-> <c- e>class</c-><c- o>=</c-><c- s>&quot;appendix&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Appendix A: Overview of Examples<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->These are demonstrations.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>section</c-> <c- e>class</c-><c- o>=</c-><c- s>&quot;appendix&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Appendix B: Some Closing Remarks<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Hopefully this long example shows that you <c- p>&lt;</c-><c- f>em</c-><c- p>&gt;</c->can<c- p>&lt;/</c-><c- f>em</c-><c- p>&gt;</c-> style
+ sections, so long as they are used to indicate actual sections.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+
+
+  <h4 id=the-nav-element><span class=secno>4.3.4</span> The <dfn data-dfn-type=element><code>nav</code></dfn> element<a href=#the-nav-element class=self-link></a></h4>
+
+  <dl class=element><dt><a href=dom.html#concept-element-categories id=the-nav-element:concept-element-categories>Categories</a>:<dd><a id=the-nav-element:flow-content-2 href=dom.html#flow-content-2>Flow content</a>.<dd><a id=the-nav-element:sectioning-content-2 href=dom.html#sectioning-content-2>Sectioning content</a>.<dd><a id=the-nav-element:palpable-content-2 href=dom.html#palpable-content-2>Palpable content</a>.<dt><a href=dom.html#concept-element-contexts id=the-nav-element:concept-element-contexts>Contexts in which this element can be used</a>:<dd>Where <a id=the-nav-element:sectioning-content-2-2 href=dom.html#sectioning-content-2>sectioning content</a> is expected.<dt><a href=dom.html#concept-element-content-model id=the-nav-element:concept-element-content-model>Content model</a>:<dd><a id=the-nav-element:flow-content-2-2 href=dom.html#flow-content-2>Flow content</a>.<dt><a href=dom.html#concept-element-tag-omission id=the-nav-element:concept-element-tag-omission>Tag omission in text/html</a>:<dd>Neither tag is omissible.<dt><a href=dom.html#concept-element-attributes id=the-nav-element:concept-element-attributes>Content attributes</a>:<dd><a id=the-nav-element:global-attributes href=dom.html#global-attributes>Global attributes</a><dt><a href=dom.html#concept-element-accessibility-considerations id=the-nav-element:concept-element-accessibility-considerations>Accessibility considerations</a>:<dd><a href=https://w3c.github.io/html-aria/#el-nav>For authors</a>.<dd><a href=https://w3c.github.io/html-aam/#el-nav>For implementers</a>.<dt><a href=dom.html#concept-element-sanitization id=the-nav-element:concept-element-sanitization>Sanitization</a>:<dd><span>Default</span>.<dt><a href=dom.html#concept-element-dom id=the-nav-element:concept-element-dom>DOM interface</a>:<dd>Uses <code>HTMLElement</code>.</dl>
+
+  <p>The <code id=the-nav-element:the-nav-element><a href=#the-nav-element>nav</a></code> element <a id=the-nav-element:represents href=dom.html#represents>represents</a> a section of a page that links to other
+  pages or to parts within the page: a section with navigation links.</p>
+
+  <p class=note>Not all groups of links on a page need to be in a <code id=the-nav-element:the-nav-element-2><a href=#the-nav-element>nav</a></code> element —
+  the element is primarily intended for sections that consist of major navigation blocks. In
+  particular, it is common for footers to have a short list of links to various pages of a site,
+  such as the terms of service, the home page, and a copyright page. The <code id=the-nav-element:the-footer-element><a href=#the-footer-element>footer</a></code> element
+  alone is sufficient for such cases; while a <code id=the-nav-element:the-nav-element-3><a href=#the-nav-element>nav</a></code> element can be used in such cases, it
+  is usually unnecessary.</p>
+
+  <p class=note>User agents (such as screen readers) that are targeted at users who can benefit
+  from navigation information being omitted in the initial rendering, or who can benefit from
+  navigation information being immediately available, can use this element as a way to determine
+  what content on the page to initially skip or provide on request (or both).</p>
+
+  <div class=example>
+
+   <p>In the following example, there are two <code id=the-nav-element:the-nav-element-4><a href=#the-nav-element>nav</a></code> elements, one for primary navigation
+   around the site, and one for secondary navigation around the page itself.</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>body</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->The Wiki Center Of Exampland<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>nav</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>ul</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/&quot;</c-><c- p>&gt;</c->Home<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>li</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/events&quot;</c-><c- p>&gt;</c->Current Events<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>li</c-><c- p>&gt;</c->
+   <em>...more...</em>
+  <c- p>&lt;/</c-><c- f>ul</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>nav</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>article</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>header</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Demos in Exampland<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Written by A. N. Other.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>header</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>nav</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>ul</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;#public&quot;</c-><c- p>&gt;</c->Public demonstrations<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>li</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;#destroy&quot;</c-><c- p>&gt;</c->Demolitions<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>li</c-><c- p>&gt;</c->
+    <em>...more...</em>
+   <c- p>&lt;/</c-><c- f>ul</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>nav</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>div</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>section</c-> <c- e>id</c-><c- o>=</c-><c- s>&quot;public&quot;</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Public demonstrations<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c-><em>...more...</em><c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+   <c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>section</c-> <c- e>id</c-><c- o>=</c-><c- s>&quot;destroy&quot;</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Demolitions<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c-><em>...more...</em><c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+   <c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+   <em>...more...</em>
+  <c- p>&lt;/</c-><c- f>div</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>footer</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;?edit&quot;</c-><c- p>&gt;</c->Edit<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c-> | <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;?delete&quot;</c-><c- p>&gt;</c->Delete<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c-> | <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;?Rename&quot;</c-><c- p>&gt;</c->Rename<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>footer</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>article</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>footer</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>small</c-><c- p>&gt;</c->© copyright 1998 Exampland Emperor<c- p>&lt;/</c-><c- f>small</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>footer</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>body</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+  <div class=example>
+
+   <p>In the following example, the page has several places where links are present, but only one of
+   those places is considered a navigation section.</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>body</c-> <c- e>itemscope</c-> <c- e>itemtype</c-><c- o>=</c-><c- s>&quot;http://schema.org/Blog&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>header</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Wake up sheeple!<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;news.html&quot;</c-><c- p>&gt;</c->News<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c-> -
+     <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;blog.html&quot;</c-><c- p>&gt;</c->Blog<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c-> -
+     <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;forums.html&quot;</c-><c- p>&gt;</c->Forums<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Last Modified: <c- p>&lt;</c-><c- f>span</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;dateModified&quot;</c-><c- p>&gt;</c->2009-04-01<c- p>&lt;/</c-><c- f>span</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>nav</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Navigation<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>ul</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;articles.html&quot;</c-><c- p>&gt;</c->Index of all articles<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>li</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;today.html&quot;</c-><c- p>&gt;</c->Things sheeple need to wake up for today<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>li</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;successes.html&quot;</c-><c- p>&gt;</c->Sheeple we have managed to wake<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>li</c-><c- p>&gt;</c->
+   <c- p>&lt;/</c-><c- f>ul</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>nav</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>header</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>main</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>article</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;blogPosts&quot;</c-> <c- e>itemscope</c-> <c- e>itemtype</c-><c- o>=</c-><c- s>&quot;http://schema.org/BlogPosting&quot;</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>header</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>h2</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;headline&quot;</c-><c- p>&gt;</c->My Day at the Beach<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+   <c- p>&lt;/</c-><c- f>header</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>div</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;articleBody&quot;</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Today I went to the beach and had a lot of fun.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+    <em>...more content...</em>
+   <c- p>&lt;/</c-><c- f>div</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>footer</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Posted <c- p>&lt;</c-><c- f>time</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;datePublished&quot;</c-> <c- e>datetime</c-><c- o>=</c-><c- s>&quot;2009-10-10&quot;</c-><c- p>&gt;</c->Thursday<c- p>&lt;/</c-><c- f>time</c-><c- p>&gt;</c->.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+   <c- p>&lt;/</c-><c- f>footer</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>article</c-><c- p>&gt;</c->
+  <em>...more blog posts...</em>
+ <c- p>&lt;/</c-><c- f>main</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>footer</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Copyright ©
+   <c- p>&lt;</c-><c- f>span</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;copyrightYear&quot;</c-><c- p>&gt;</c->2010<c- p>&lt;/</c-><c- f>span</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>span</c-> <c- e>itemprop</c-><c- o>=</c-><c- s>&quot;copyrightHolder&quot;</c-><c- p>&gt;</c->The Example Company<c- p>&lt;/</c-><c- f>span</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;about.html&quot;</c-><c- p>&gt;</c->About<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c-> -
+     <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;policy.html&quot;</c-><c- p>&gt;</c->Privacy Policy<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c-> -
+     <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;contact.html&quot;</c-><c- p>&gt;</c->Contact Us<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>footer</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>body</c-><c- p>&gt;</c-></code></pre>
+
+   <p>You can also see microdata annotations in the above example that use the schema.org vocabulary
+   to provide the publication date and other metadata about the blog post.</p>
+
+  </div>
+
+  <div class=example>
+
+   <p>A <code id=the-nav-element:the-nav-element-5><a href=#the-nav-element>nav</a></code> element doesn't have to contain a list, it can contain other kinds of
+   content as well. In this navigation block, links are provided in prose:</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>nav</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Navigation<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->You are on my home page. To the north lies <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/blog&quot;</c-><c- p>&gt;</c->my
+ blog<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->, from whence the sounds of battle can be heard. To the east
+ you can see a large mountain, upon which many <c- p>&lt;</c-><c- f>a</c->
+ <c- e>href</c-><c- o>=</c-><c- s>&quot;/school&quot;</c-><c- p>&gt;</c->school papers<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c-> are littered. Far up thus mountain
+ you can spy a little figure who appears to be me, desperately
+ scribbling a <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/school/thesis&quot;</c-><c- p>&gt;</c->thesis<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->To the west are several exits. One fun-looking exit is labeled <c- p>&lt;</c-><c- f>a</c->
+ <c- e>href</c-><c- o>=</c-><c- s>&quot;https://games.example.com/&quot;</c-><c- p>&gt;</c->&quot;games&quot;<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->. Another more
+ boring-looking exit is labeled <c- p>&lt;</c-><c- f>a</c->
+ <c- e>href</c-><c- o>=</c-><c- s>&quot;https://isp.example.net/&quot;</c-><c- p>&gt;</c->ISP™<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->To the south lies a dark and dank <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/about&quot;</c-><c- p>&gt;</c->contacts
+ page<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->. Cobwebs cover its disused entrance, and at one point you
+ see a rat run quickly out of the page.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>nav</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+  <div class=example>
+
+   <p>In this example, <code id=the-nav-element:the-nav-element-6><a href=#the-nav-element>nav</a></code> is used in an email application, to let the user switch
+   folders:</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>input</c-> <c- e>type</c-><c- o>=</c-><c- s>button</c-> <c- e>value</c-><c- o>=</c-><c- s>&quot;Compose&quot;</c-> <c- e>onclick</c-><c- o>=</c-><c- s>&quot;compose()&quot;</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>nav</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Folders<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>ul</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/inbox&quot;</c-> <c- e>onclick</c-><c- o>=</c-><c- s>&quot;return openFolder(this.href)&quot;</c-><c- p>&gt;</c->Inbox<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>span</c-> <c- e>class</c-><c- o>=</c-><c- s>count</c-><c- p>&gt;&lt;/</c-><c- f>span</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/sent&quot;</c-> <c- e>onclick</c-><c- o>=</c-><c- s>&quot;return openFolder(this.href)&quot;</c-><c- p>&gt;</c->Sent<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/drafts&quot;</c-> <c- e>onclick</c-><c- o>=</c-><c- s>&quot;return openFolder(this.href)&quot;</c-><c- p>&gt;</c->Drafts<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/trash&quot;</c-> <c- e>onclick</c-><c- o>=</c-><c- s>&quot;return openFolder(this.href)&quot;</c-><c- p>&gt;</c->Trash<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/customers&quot;</c-> <c- e>onclick</c-><c- o>=</c-><c- s>&quot;return openFolder(this.href)&quot;</c-><c- p>&gt;</c->Customers<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>ul</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>nav</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+
+
+  <h4 id=the-aside-element><span class=secno>4.3.5</span> The <dfn data-dfn-type=element><code>aside</code></dfn> element<a href=#the-aside-element class=self-link></a></h4>
+
+  <dl class=element><dt><a href=dom.html#concept-element-categories id=the-aside-element:concept-element-categories>Categories</a>:<dd><a id=the-aside-element:flow-content-2 href=dom.html#flow-content-2>Flow content</a>.<dd><a id=the-aside-element:sectioning-content-2 href=dom.html#sectioning-content-2>Sectioning content</a>.<dd><a id=the-aside-element:palpable-content-2 href=dom.html#palpable-content-2>Palpable content</a>.<dt><a href=dom.html#concept-element-contexts id=the-aside-element:concept-element-contexts>Contexts in which this element can be used</a>:<dd>Where <a id=the-aside-element:sectioning-content-2-2 href=dom.html#sectioning-content-2>sectioning content</a> is expected.<dt><a href=dom.html#concept-element-content-model id=the-aside-element:concept-element-content-model>Content model</a>:<dd><a id=the-aside-element:flow-content-2-2 href=dom.html#flow-content-2>Flow content</a>.<dt><a href=dom.html#concept-element-tag-omission id=the-aside-element:concept-element-tag-omission>Tag omission in text/html</a>:<dd>Neither tag is omissible.<dt><a href=dom.html#concept-element-attributes id=the-aside-element:concept-element-attributes>Content attributes</a>:<dd><a id=the-aside-element:global-attributes href=dom.html#global-attributes>Global attributes</a><dt><a href=dom.html#concept-element-accessibility-considerations id=the-aside-element:concept-element-accessibility-considerations>Accessibility considerations</a>:<dd><a href=https://w3c.github.io/html-aria/#el-aside>For authors</a>.<dd><a href=https://w3c.github.io/html-aam/#el-aside>For implementers</a>.<dt><a href=dom.html#concept-element-sanitization id=the-aside-element:concept-element-sanitization>Sanitization</a>:<dd><span>Default</span>.<dt><a href=dom.html#concept-element-dom id=the-aside-element:concept-element-dom>DOM interface</a>:<dd>Uses <code>HTMLElement</code>.</dl>
+
+  <p>The <code id=the-aside-element:the-aside-element><a href=#the-aside-element>aside</a></code> element <a id=the-aside-element:represents href=dom.html#represents>represents</a> a section of a page that consists of
+  content that is tangentially related to the content around the <code id=the-aside-element:the-aside-element-2><a href=#the-aside-element>aside</a></code> element, and
+  which could be considered separate from that content. Such sections are often represented as
+  sidebars in printed typography.</p>
+
+  <p>The element can be used for typographical effects like pull quotes or sidebars, for
+  advertising, for groups of <code id=the-aside-element:the-nav-element><a href=#the-nav-element>nav</a></code> elements, and for other content that is considered
+  separate from the main content of the page.</p>
+
+  <p class=note>It's not appropriate to use the <code id=the-aside-element:the-aside-element-3><a href=#the-aside-element>aside</a></code> element just for
+  parentheticals, since those are part of the main flow of the document.</p>
+
+  <div class=example>
+
+   <p>The following example shows how an aside is used to mark up background material on Switzerland
+   in a much longer news story on Europe.</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>aside</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Switzerland<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Switzerland, a land-locked country in the middle of geographic
+ Europe, has not joined the geopolitical European Union, though it is
+ a signatory to a number of European treaties.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>aside</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+  <div class=example>
+
+   <p>The following example shows how an aside is used to mark up a pull quote in a longer
+   article.</p>
+
+   <pre><code class='html'>...
+
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->He later joined a large company, continuing on the same work.
+<c- p>&lt;</c-><c- f>q</c-><c- p>&gt;</c->I love my job. People ask me what I do for fun when I&apos;m not at
+work. But I&apos;m paid to do my hobby, so I never know what to
+answer. Some people wonder what they would do if they didn&apos;t have to
+work... but I know what I would do, because I was unemployed for a
+year, and I filled that time doing exactly what I do now.<c- p>&lt;/</c-><c- f>q</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+
+<c- p>&lt;</c-><c- f>aside</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>q</c-><c- p>&gt;</c->People ask me what I do for fun when I&apos;m not at work. But I&apos;m
+ paid to do my hobby, so I never know what to answer.<c- p>&lt;/</c-><c- f>q</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>aside</c-><c- p>&gt;</c->
+
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Of course his work — or should that be hobby? —
+isn&apos;t his only passion. He also enjoys other pleasures.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+
+...</code></pre>
+
+  </div>
+
+  <div class=example>
+
+   <p>The following extract shows how <code id=the-aside-element:the-aside-element-4><a href=#the-aside-element>aside</a></code> can be used for blogrolls and other side
+   content on a blog:</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>body</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>header</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->My wonderful blog<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->My tagline<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>header</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>aside</c-><c- p>&gt;</c->
+  <c- c>&lt;!-- </c-><em><c- c>this aside contains two sections that are tangentially related</c->
+<c- c>  to the page, namely, links to other blogs, and links to blog posts</c->
+<c- c>  from this blog</c-></em><c- c> --&gt;</c->
+  <c- p>&lt;</c-><c- f>nav</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->My blogroll<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>ul</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;https://blog.example.com/&quot;</c-><c- p>&gt;</c->Example Blog<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+   <c- p>&lt;/</c-><c- f>ul</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>nav</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>nav</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Archives<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>ol</c-> <c- e>reversed</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/last-post&quot;</c-><c- p>&gt;</c->My last post<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/first-post&quot;</c-><c- p>&gt;</c->My first post<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+   <c- p>&lt;/</c-><c- f>ol</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>nav</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>aside</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>aside</c-><c- p>&gt;</c->
+  <c- c>&lt;!-- </c-><em><c- c>this aside is tangentially related to the page also, it</c->
+<c- c>  contains twitter messages from the blog author</c-></em><c- c> --&gt;</c->
+  <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Twitter Feed<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>blockquote</c-> <c- e>cite</c-><c- o>=</c-><c- s>&quot;https://twitter.example.net/t31351234&quot;</c-><c- p>&gt;</c->
+   I&apos;m on vacation, writing my blog.
+  <c- p>&lt;/</c-><c- f>blockquote</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>blockquote</c-> <c- e>cite</c-><c- o>=</c-><c- s>&quot;https://twitter.example.net/t31219752&quot;</c-><c- p>&gt;</c->
+   I&apos;m going to go on vacation soon.
+  <c- p>&lt;/</c-><c- f>blockquote</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>aside</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>article</c-><c- p>&gt;</c->
+  <c- c>&lt;!-- </c-><em><c- c>this is a blog post</c-></em><c- c> --&gt;</c->
+  <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->My last post<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->This is my last post.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>footer</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/last-post&quot;</c-> <c- e>rel</c-><c- o>=</c-><c- s>bookmark</c-><c- p>&gt;</c->Permalink<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>footer</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>article</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>article</c-><c- p>&gt;</c->
+  <c- c>&lt;!-- </c-><em><c- c>this is also a blog post</c-></em><c- c> --&gt;</c->
+  <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->My first post<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->This is my first post.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>aside</c-><c- p>&gt;</c->
+   <c- c>&lt;!-- </c-><em><c- c>this aside is about the blog post, since it&apos;s inside the</c->
+<c- c>   &lt;article&gt; element; it would be wrong, for instance, to put the</c->
+<c- c>   blogroll here, since the blogroll isn&apos;t really related to this post</c->
+<c- c>   specifically, only to the page as a whole</c-></em><c- c> --&gt;</c->
+   <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Posting<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->While I&apos;m thinking about it, I wanted to say something about
+   posting. Posting is fun!<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>aside</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>footer</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/first-post&quot;</c-> <c- e>rel</c-><c- o>=</c-><c- s>bookmark</c-><c- p>&gt;</c->Permalink<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>footer</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>article</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>footer</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/archives&quot;</c-><c- p>&gt;</c->Archives<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c-> -
+   <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/about&quot;</c-><c- p>&gt;</c->About me<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c-> -
+   <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/copyright&quot;</c-><c- p>&gt;</c->Copyright<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>footer</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>body</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+
+
+  <h4 id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements><span class=secno>4.3.6</span> The <dfn id=the-h1-element data-dfn-type=element><code>h1</code></dfn>, <dfn id=the-h2-element data-dfn-type=element><code>h2</code></dfn>, <dfn id=the-h3-element data-dfn-type=element><code>h3</code></dfn>, <dfn id=the-h4-element data-dfn-type=element><code>h4</code></dfn>, <dfn id=the-h5-element data-dfn-type=element><code>h5</code></dfn>, and <dfn id=the-h6-element data-dfn-type=element><code>h6</code></dfn>
+  elements<a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements class=self-link></a></h4>
+
+  <dl class=element><dt><a href=dom.html#concept-element-categories id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:concept-element-categories>Categories</a>:<dd><a id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:flow-content-2 href=dom.html#flow-content-2>Flow content</a>.<dd><a id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:heading-content-2 href=dom.html#heading-content-2>Heading content</a>.<dd><a id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:palpable-content-2 href=dom.html#palpable-content-2>Palpable content</a>.<dt><a href=dom.html#concept-element-contexts id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:concept-element-contexts>Contexts in which this element can be used</a>:<dd>As a child of an <code id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:the-hgroup-element><a href=#the-hgroup-element>hgroup</a></code> element.<dd>Where <a id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:heading-content-2-2 href=dom.html#heading-content-2>heading content</a> is expected.<dt><a href=dom.html#concept-element-content-model id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:concept-element-content-model>Content model</a>:<dd><a id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:phrasing-content-2 href=dom.html#phrasing-content-2>Phrasing content</a>.<dt><a href=dom.html#concept-element-tag-omission id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:concept-element-tag-omission>Tag omission in text/html</a>:<dd>Neither tag is omissible.<dt><a href=dom.html#concept-element-attributes id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:concept-element-attributes>Content attributes</a>:<dd><a id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:global-attributes href=dom.html#global-attributes>Global attributes</a><dt><a href=dom.html#concept-element-accessibility-considerations id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:concept-element-accessibility-considerations>Accessibility considerations</a>:<dd><a href=https://w3c.github.io/html-aria/#el-h1-h6>For authors</a>.<dd><a href=https://w3c.github.io/html-aam/#el-h1-h6>For implementers</a>.<dt><a href=dom.html#concept-element-sanitization id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:concept-element-sanitization>Sanitization</a>:<dd><span>Default</span>.<dt><a href=dom.html#concept-element-dom id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:concept-element-dom>DOM interface</a>:<dd>Uses <code>HTMLHeadingElement</code>.</dl>
+
+  <p>These elements <a href=dom.html#represents id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:represents>represent</a> headings for their sections.</p>
+
+  <p>The semantics and meaning of these elements are defined in the section on <a href=#headings-and-outlines>headings and outlines</a>.</p>
+
+  <p>These elements have a <a href=#heading-level id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:heading-level>heading level</a> given by the number in their name. The
+  <a href=#heading-level id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:heading-level-2>heading level</a> corresponds to the levels of nested sections. The <code id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h1</a></code>
+  element is for a top-level section, <code id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-2><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h2</a></code> for a subsection, <code id=the-h1,-h2,-h3,-h4,-h5,-and-h6-elements:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-3><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h3</a></code> for a
+  sub-subsection, and so on.</p>
+
+  <div class=example>
+
+   <p>As far as their respective document outlines (their heading and section structures) are
+   concerned, these two snippets are semantically equivalent:</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>body</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Let&apos;s call it a draw(ing surface)<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Diving in<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Simple shapes<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Canvas coordinates<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h3</c-><c- p>&gt;</c->Canvas coordinates diagram<c- p>&lt;/</c-><c- f>h3</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Paths<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>body</c-><c- p>&gt;</c-></code></pre>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>body</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Let&apos;s call it a draw(ing surface)<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Diving in<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Simple shapes<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Canvas coordinates<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>h3</c-><c- p>&gt;</c->Canvas coordinates diagram<c- p>&lt;/</c-><c- f>h3</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Paths<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>body</c-><c- p>&gt;</c-></code></pre>
+
+   <p>Authors might prefer the former style for its terseness, or the latter style for its
+   additional styling hooks. Which is best is purely an issue of preferred authoring style.</p>
+  </div>
+
+
+  <h4 id=the-hgroup-element><span class=secno>4.3.7</span> The <dfn data-dfn-type=element><code>hgroup</code></dfn> element<a href=#the-hgroup-element class=self-link></a></h4>
+
+  <dl class=element><dt><a href=dom.html#concept-element-categories id=the-hgroup-element:concept-element-categories>Categories</a>:<dd><a id=the-hgroup-element:flow-content-2 href=dom.html#flow-content-2>Flow content</a>.<dd><a id=the-hgroup-element:heading-content-2 href=dom.html#heading-content-2>Heading content</a>.<dd><a id=the-hgroup-element:palpable-content-2 href=dom.html#palpable-content-2>Palpable content</a>.<dt><a href=dom.html#concept-element-contexts id=the-hgroup-element:concept-element-contexts>Contexts in which this element can be used</a>:<dd>Where <a id=the-hgroup-element:heading-content-2-2 href=dom.html#heading-content-2>heading content</a> is expected.<dt><a href=dom.html#concept-element-content-model id=the-hgroup-element:concept-element-content-model>Content model</a>:<dd>Zero or more <code id=the-hgroup-element:the-p-element><a href=grouping-content.html#the-p-element>p</a></code> elements, followed by one <code id=the-hgroup-element:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h1</a></code>, <code id=the-hgroup-element:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-2><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h2</a></code>,
+   <code id=the-hgroup-element:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-3><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h3</a></code>, <code id=the-hgroup-element:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-4><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h4</a></code>, <code id=the-hgroup-element:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-5><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h5</a></code>, or <code id=the-hgroup-element:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-6><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h6</a></code> element, followed by zero
+   or more <code id=the-hgroup-element:the-p-element-2><a href=grouping-content.html#the-p-element>p</a></code> elements, optionally intermixed with <a id=the-hgroup-element:script-supporting-elements-2 href=dom.html#script-supporting-elements-2>script-supporting
+   elements</a>.<dt><a href=dom.html#concept-element-tag-omission id=the-hgroup-element:concept-element-tag-omission>Tag omission in text/html</a>:<dd>Neither tag is omissible.<dt><a href=dom.html#concept-element-attributes id=the-hgroup-element:concept-element-attributes>Content attributes</a>:<dd><a id=the-hgroup-element:global-attributes href=dom.html#global-attributes>Global attributes</a><dt><a href=dom.html#concept-element-accessibility-considerations id=the-hgroup-element:concept-element-accessibility-considerations>Accessibility considerations</a>:<dd><a href=https://w3c.github.io/html-aria/#el-hgroup>For authors</a>.<dd><a href=https://w3c.github.io/html-aam/#el-hgroup>For implementers</a>.<dt><a href=dom.html#concept-element-sanitization id=the-hgroup-element:concept-element-sanitization>Sanitization</a>:<dd><span>Default</span>.<dt><a href=dom.html#concept-element-dom id=the-hgroup-element:concept-element-dom>DOM interface</a>:<dd>Uses <code>HTMLElement</code>.</dl>
+
+  <p>The <code id=the-hgroup-element:the-hgroup-element><a href=#the-hgroup-element>hgroup</a></code> element <a id=the-hgroup-element:represents href=dom.html#represents>represents</a> a heading and related content. The
+  element may be used to group an <code id=the-hgroup-element:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-7><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h1</a></code>–<code id=the-hgroup-element:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-8><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h6</a></code> element with one or more
+  <code id=the-hgroup-element:the-p-element-3><a href=grouping-content.html#the-p-element>p</a></code> elements containing content representing a subheading, alternative title, or
+  tagline.</p>
+
+  <div class=example>
+   <p>Here are some examples of valid headings contained within an <code id=the-hgroup-element:the-hgroup-element-2><a href=#the-hgroup-element>hgroup</a></code> element.</p>
+
+    <pre><code class='html'><c- p>&lt;</c-><c- f>hgroup</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->The reality dysfunction<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Space is not the only void<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>hgroup</c-><c- p>&gt;</c-></code></pre>
+
+    <pre><code class='html'><c- p>&lt;</c-><c- f>hgroup</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Dr. Strangelove<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Or: How I Learned to Stop Worrying and Love the Bomb<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>hgroup</c-><c- p>&gt;</c-></code></pre>
+  </div>
+
+  <h4 id=the-header-element><span class=secno>4.3.8</span> The <dfn data-dfn-type=element><code>header</code></dfn> element<a href=#the-header-element class=self-link></a></h4>
+
+  <dl class=element><dt><a href=dom.html#concept-element-categories id=the-header-element:concept-element-categories>Categories</a>:<dd><a id=the-header-element:flow-content-2 href=dom.html#flow-content-2>Flow content</a>.<dd><a id=the-header-element:palpable-content-2 href=dom.html#palpable-content-2>Palpable content</a>.<dt><a href=dom.html#concept-element-contexts id=the-header-element:concept-element-contexts>Contexts in which this element can be used</a>:<dd>Where <a id=the-header-element:flow-content-2-2 href=dom.html#flow-content-2>flow content</a> is expected.<dt><a href=dom.html#concept-element-content-model id=the-header-element:concept-element-content-model>Content model</a>:<dd><a id=the-header-element:flow-content-2-3 href=dom.html#flow-content-2>Flow content</a>, but with no <code id=the-header-element:the-header-element><a href=#the-header-element>header</a></code> or <code id=the-header-element:the-footer-element><a href=#the-footer-element>footer</a></code> element
+   descendants.<dt><a href=dom.html#concept-element-tag-omission id=the-header-element:concept-element-tag-omission>Tag omission in text/html</a>:<dd>Neither tag is omissible.<dt><a href=dom.html#concept-element-attributes id=the-header-element:concept-element-attributes>Content attributes</a>:<dd><a id=the-header-element:global-attributes href=dom.html#global-attributes>Global attributes</a><dt><a href=dom.html#concept-element-accessibility-considerations id=the-header-element:concept-element-accessibility-considerations>Accessibility considerations</a>:<dd>If there is an ancestor <a id=the-header-element:sectioning-content-2 href=dom.html#sectioning-content-2>sectioning content</a> element: <a href=https://w3c.github.io/html-aria/#el-header>for authors</a>; <a href=https://w3c.github.io/html-aam/#el-header>for implementers</a>.<dd>Otherwise: <a href=https://w3c.github.io/html-aria/#el-header>for authors</a>; <a href=https://w3c.github.io/html-aam/#el-header-ancestorbody>for implementers</a>.<dt><a href=dom.html#concept-element-sanitization id=the-header-element:concept-element-sanitization>Sanitization</a>:<dd><span>Default</span>.<dt><a href=dom.html#concept-element-dom id=the-header-element:concept-element-dom>DOM interface</a>:<dd>Uses <code>HTMLElement</code>.</dl>
+
+  <p>The <code id=the-header-element:the-header-element-2><a href=#the-header-element>header</a></code> element <a id=the-header-element:represents href=dom.html#represents>represents</a> a group of introductory or navigational
+  aids.</p>
+
+  <p class=note>A <code id=the-header-element:the-header-element-3><a href=#the-header-element>header</a></code> element is intended to usually contain a heading
+  (an <code id=the-header-element:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h1</a></code>–<code id=the-header-element:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-2><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h6</a></code> element or an <code id=the-header-element:the-hgroup-element><a href=#the-hgroup-element>hgroup</a></code> element), but this is
+  not required. The <code id=the-header-element:the-header-element-4><a href=#the-header-element>header</a></code> element can also be used to wrap a section's table of
+  contents, a search form, or any relevant logos.</p>
+
+  <div class=example>
+
+  <p>Here are some sample headers. This first one is for a game:</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>header</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Welcome to...<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Voidwars!<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>header</c-><c- p>&gt;</c-></code></pre>
+
+   <p>The following snippet shows how the element can be used to mark
+   up a specification's header:</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>header</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>hgroup</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Fullscreen API<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Living Standard — Last Updated 19 October 2015<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>hgroup</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>dl</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>dt</c-><c- p>&gt;</c->Participate:<c- p>&lt;/</c-><c- f>dt</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>dd</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;https://github.com/whatwg/fullscreen&quot;</c-><c- p>&gt;</c->GitHub whatwg/fullscreen<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>dd</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>dt</c-><c- p>&gt;</c->Commits:<c- p>&lt;/</c-><c- f>dt</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>dd</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;https://github.com/whatwg/fullscreen/commits&quot;</c-><c- p>&gt;</c->GitHub whatwg/fullscreen/commits<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>dd</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>dl</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>header</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+  <p class=note>The <code id=the-header-element:the-header-element-5><a href=#the-header-element>header</a></code> element is not <a id=the-header-element:sectioning-content-2-2 href=dom.html#sectioning-content-2>sectioning content</a>; it doesn't
+  introduce a new section.</p>
+
+  <div class=example>
+
+  <p>In this example, the page has a page heading given by the <code id=the-header-element:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-3><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h1</a></code> element, and two
+  subsections whose headings are given by <code id=the-header-element:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-4><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h2</a></code> elements. The content after the
+  <code id=the-header-element:the-header-element-6><a href=#the-header-element>header</a></code> element is still part of the last subsection started in the
+  <code id=the-header-element:the-header-element-7><a href=#the-header-element>header</a></code> element, because the <code id=the-header-element:the-header-element-8><a href=#the-header-element>header</a></code> element doesn't take part in the
+  <a href=#outline id=the-header-element:outline>outline</a> algorithm.</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>body</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>header</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Little Green Guys With Guns<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>nav</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>ul</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/games&quot;</c-><c- p>&gt;</c->Games<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/forum&quot;</c-><c- p>&gt;</c->Forum<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/download&quot;</c-><c- p>&gt;</c->Download<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+   <c- p>&lt;/</c-><c- f>ul</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>nav</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Important News<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c-> <c- c>&lt;!-- this starts a second subsection --&gt;</c->
+  <c- c>&lt;!-- this is part of the subsection entitled &quot;Important News&quot; --&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->To play today&apos;s games you will need to update your client.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Games<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c-> <c- c>&lt;!-- this starts a third subsection --&gt;</c->
+ <c- p>&lt;/</c-><c- f>header</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->You have three active games:<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- c>&lt;!-- this is still part of the subsection entitled &quot;Games&quot; --&gt;</c->
+ ...</code></pre>
+
+  </div>
+
+
+
+
+  <h4 id=the-footer-element><span class=secno>4.3.9</span> The <dfn data-dfn-type=element><code>footer</code></dfn> element<a href=#the-footer-element class=self-link></a></h4>
+
+  <dl class=element><dt><a href=dom.html#concept-element-categories id=the-footer-element:concept-element-categories>Categories</a>:<dd><a id=the-footer-element:flow-content-2 href=dom.html#flow-content-2>Flow content</a>.<dd><a id=the-footer-element:palpable-content-2 href=dom.html#palpable-content-2>Palpable content</a>.<dt><a href=dom.html#concept-element-contexts id=the-footer-element:concept-element-contexts>Contexts in which this element can be used</a>:<dd>Where <a id=the-footer-element:flow-content-2-2 href=dom.html#flow-content-2>flow content</a> is expected.<dt><a href=dom.html#concept-element-content-model id=the-footer-element:concept-element-content-model>Content model</a>:<dd><a id=the-footer-element:flow-content-2-3 href=dom.html#flow-content-2>Flow content</a>, but with no <code id=the-footer-element:the-header-element><a href=#the-header-element>header</a></code> or <code id=the-footer-element:the-footer-element><a href=#the-footer-element>footer</a></code> element
+   descendants.<dt><a href=dom.html#concept-element-tag-omission id=the-footer-element:concept-element-tag-omission>Tag omission in text/html</a>:<dd>Neither tag is omissible.<dt><a href=dom.html#concept-element-attributes id=the-footer-element:concept-element-attributes>Content attributes</a>:<dd><a id=the-footer-element:global-attributes href=dom.html#global-attributes>Global attributes</a><dt><a href=dom.html#concept-element-accessibility-considerations id=the-footer-element:concept-element-accessibility-considerations>Accessibility considerations</a>:<dd>If there is an ancestor <a id=the-footer-element:sectioning-content-2 href=dom.html#sectioning-content-2>sectioning content</a> element: <a href=https://w3c.github.io/html-aria/#el-footer>for authors</a>; <a href=https://w3c.github.io/html-aam/#el-footer>for implementers</a>.<dd>Otherwise: <a href=https://w3c.github.io/html-aria/#el-footer>for authors</a>; <a href=https://w3c.github.io/html-aam/#el-footer-ancestorbody>for implementers</a>.<dt><a href=dom.html#concept-element-sanitization id=the-footer-element:concept-element-sanitization>Sanitization</a>:<dd><span>Default</span>.<dt><a href=dom.html#concept-element-dom id=the-footer-element:concept-element-dom>DOM interface</a>:<dd>Uses <code>HTMLElement</code>.</dl>
+
+  <p>The <code id=the-footer-element:the-footer-element-2><a href=#the-footer-element>footer</a></code> element <a id=the-footer-element:represents href=dom.html#represents>represents</a> a footer for its nearest ancestor
+  <a id=the-footer-element:sectioning-content-2-2 href=dom.html#sectioning-content-2>sectioning content</a> element, or for <a id=the-footer-element:the-body-element-2 href=dom.html#the-body-element-2>the body element</a> if there is no such
+  ancestor. A footer typically contains information about its section such as who wrote it, links
+  to related documents, copyright data, and the like.</p>
+
+  <p>When the <code id=the-footer-element:the-footer-element-3><a href=#the-footer-element>footer</a></code> element contains entire sections, they <a href=dom.html#represents id=the-footer-element:represents-2>represent</a> appendices, indices, long colophons, verbose license
+  agreements, and other such content.</p>
+
+  <p class=note>Contact information for the author or editor of a section belongs in an
+  <code id=the-footer-element:the-address-element><a href=#the-address-element>address</a></code> element, possibly itself inside a <code id=the-footer-element:the-footer-element-4><a href=#the-footer-element>footer</a></code>. Bylines and other
+  information that could be suitable for both a <code id=the-footer-element:the-header-element-2><a href=#the-header-element>header</a></code> or a <code id=the-footer-element:the-footer-element-5><a href=#the-footer-element>footer</a></code> can be
+  placed in either (or neither). The primary purpose of these elements is merely to help the author
+  write self-explanatory markup that is easy to maintain and style; they are not intended to impose
+  specific structures on authors.</p>
+
+  <p>Footers don't necessarily have to appear at the <em>end</em> of a section, though they usually
+  do.</p>
+
+  <p>When there is no ancestor <a id=the-footer-element:sectioning-content-2-3 href=dom.html#sectioning-content-2>sectioning content</a> element, then it applies to the whole
+  page.</p>
+
+  <p class=note>The <code id=the-footer-element:the-footer-element-6><a href=#the-footer-element>footer</a></code> element is not itself <a id=the-footer-element:sectioning-content-2-4 href=dom.html#sectioning-content-2>sectioning content</a>; it
+  doesn't introduce a new section.</p>
+
+  <div class=example>
+
+   <p>Here is a page with two footers, one at the top and one at the bottom, with the same
+   content:</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>body</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>footer</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;../&quot;</c-><c- p>&gt;</c->Back to index...<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>footer</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>hgroup</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Lorem ipsum<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->The ipsum of all lorems<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>hgroup</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->A dolor sit amet, consectetur adipisicing elit, sed do eiusmod
+ tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
+ veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex
+ ea commodo consequat. Duis aute irure dolor in reprehenderit in
+ voluptate velit esse cillum dolore eu fugiat nulla
+ pariatur. Excepteur sint occaecat cupidatat non proident, sunt in
+ culpa qui officia deserunt mollit anim id est laborum.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>footer</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;../&quot;</c-><c- p>&gt;</c->Back to index...<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>footer</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>body</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+  <div class=example>
+
+   <p>Here is an example which shows the <code id=the-footer-element:the-footer-element-7><a href=#the-footer-element>footer</a></code> element being used both for a site-wide
+   footer and for a section footer.</p>
+
+   <pre><code class='html'><c- cp>&lt;!DOCTYPE HTML&gt;</c->
+<c- p>&lt;</c-><c- f>HTML</c-> <c- e>LANG</c-><c- o>=</c-><c- s>&quot;en&quot;</c-><c- p>&gt;&lt;</c-><c- f>HEAD</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>TITLE</c-><c- p>&gt;</c->The Ramblings of a Scientist<c- p>&lt;/</c-><c- f>TITLE</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>BODY</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>H1</c-><c- p>&gt;</c->The Ramblings of a Scientist<c- p>&lt;/</c-><c- f>H1</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>ARTICLE</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>H1</c-><c- p>&gt;</c->Episode 15<c- p>&lt;/</c-><c- f>H1</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>VIDEO</c-> <c- e>SRC</c-><c- o>=</c-><c- s>&quot;/fm/015.ogv&quot;</c-> <c- e>CONTROLS</c-> <c- e>PRELOAD</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>P</c-><c- p>&gt;&lt;</c-><c- f>A</c-> <c- e>HREF</c-><c- o>=</c-><c- s>&quot;/fm/015.ogv&quot;</c-><c- p>&gt;</c->Download video<c- p>&lt;/</c-><c- f>A</c-><c- p>&gt;</c->.<c- p>&lt;/</c-><c- f>P</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>VIDEO</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>FOOTER</c-><c- p>&gt;</c-> <c- c>&lt;!-- footer for article --&gt;</c->
+  <c- p>&lt;</c-><c- f>P</c-><c- p>&gt;</c->Published <c- p>&lt;</c-><c- f>TIME</c-> <c- e>DATETIME</c-><c- o>=</c-><c- s>&quot;2009-10-21T18:26-07:00&quot;</c-><c- p>&gt;</c->on 2009/10/21 at 6:26pm<c- p>&lt;/</c-><c- f>TIME</c-><c- p>&gt;&lt;/</c-><c- f>P</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>FOOTER</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>ARTICLE</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>ARTICLE</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>H1</c-><c- p>&gt;</c->My Favorite Trains<c- p>&lt;/</c-><c- f>H1</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>P</c-><c- p>&gt;</c->I love my trains. My favorite train of all time is a Köf.<c- p>&lt;/</c-><c- f>P</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>P</c-><c- p>&gt;</c->It is fun to see them pull some coal cars because they look so
+ dwarfed in comparison.<c- p>&lt;/</c-><c- f>P</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>FOOTER</c-><c- p>&gt;</c-> <c- c>&lt;!-- footer for article --&gt;</c->
+  <c- p>&lt;</c-><c- f>P</c-><c- p>&gt;</c->Published <c- p>&lt;</c-><c- f>TIME</c-> <c- e>DATETIME</c-><c- o>=</c-><c- s>&quot;2009-09-15T14:54-07:00&quot;</c-><c- p>&gt;</c->on 2009/09/15 at 2:54pm<c- p>&lt;/</c-><c- f>TIME</c-><c- p>&gt;&lt;/</c-><c- f>P</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>FOOTER</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>ARTICLE</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>FOOTER</c-><c- p>&gt;</c-> <c- c>&lt;!-- site wide footer --&gt;</c->
+ <c- p>&lt;</c-><c- f>NAV</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>P</c-><c- p>&gt;&lt;</c-><c- f>A</c-> <c- e>HREF</c-><c- o>=</c-><c- s>&quot;/credits.html&quot;</c-><c- p>&gt;</c->Credits<c- p>&lt;/</c-><c- f>A</c-><c- p>&gt;</c-> —
+     <c- p>&lt;</c-><c- f>A</c-> <c- e>HREF</c-><c- o>=</c-><c- s>&quot;/tos.html&quot;</c-><c- p>&gt;</c->Terms of Service<c- p>&lt;/</c-><c- f>A</c-><c- p>&gt;</c-> —
+     <c- p>&lt;</c-><c- f>A</c-> <c- e>HREF</c-><c- o>=</c-><c- s>&quot;/index.html&quot;</c-><c- p>&gt;</c->Blog Index<c- p>&lt;/</c-><c- f>A</c-><c- p>&gt;&lt;/</c-><c- f>P</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>NAV</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>P</c-><c- p>&gt;</c->Copyright © 2009 Gordon Freeman<c- p>&lt;/</c-><c- f>P</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>FOOTER</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>BODY</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>HTML</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+  <div class=example>
+
+   <p>Some site designs have what is sometimes referred to as "fat footers" — footers that
+   contain a lot of material, including images, links to other articles, links to pages for sending
+   feedback, special offers... in some ways, a whole "front page" in the footer.</p>
+
+   <p>This fragment shows the bottom of a page on a site with a "fat footer":</p>
+
+   <pre><code class='html'>...
+ <c- p>&lt;</c-><c- f>footer</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>nav</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Articles<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>img</c-> <c- e>src</c-><c- o>=</c-><c- s>&quot;images/somersaults.jpeg&quot;</c-> <c- e>alt</c-><c- o>=</c-><c- s>&quot;&quot;</c-><c- p>&gt;</c-> Go to the gym with
+    our somersaults class! Our teacher Jim takes you through the paces
+    in this two-part article. <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;articles/somersaults/1&quot;</c-><c- p>&gt;</c->Part
+    1<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c-> · <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;articles/somersaults/2&quot;</c-><c- p>&gt;</c->Part 2<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>img</c-> <c- e>src</c-><c- o>=</c-><c- s>&quot;images/kindplus.jpeg&quot;</c-><c- p>&gt;</c-> Tired of walking on the edge of
+    a clif<c- c>&lt;!-- sic --&gt;</c->? Our guest writer Lara shows you how to bumble
+    your way through the bars. <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;articles/kindplus/1&quot;</c-><c- p>&gt;</c->Read
+    more...<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>img</c-> <c- e>src</c-><c- o>=</c-><c- s>&quot;images/crisps.jpeg&quot;</c-><c- p>&gt;</c-> The chips are down, now all
+    that&apos;s left is a potato. What can you do with it? <c- p>&lt;</c-><c- f>a</c->
+    <c- e>href</c-><c- o>=</c-><c- s>&quot;articles/crisps/1&quot;</c-><c- p>&gt;</c->Read more...<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+   <c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>ul</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/about&quot;</c-><c- p>&gt;</c->About us...<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/feedback&quot;</c-><c- p>&gt;</c->Send feedback!<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>li</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/sitemap&quot;</c-><c- p>&gt;</c->Sitemap<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+   <c- p>&lt;/</c-><c- f>ul</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>nav</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>small</c-><c- p>&gt;</c->Copyright © 2015 The Snacker —
+  <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/tos&quot;</c-><c- p>&gt;</c->Terms of Service<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;&lt;/</c-><c- f>small</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>footer</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>body</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+
+  <h4 id=the-address-element><span class=secno>4.3.10</span> The <dfn data-dfn-type=element><code>address</code></dfn> element<a href=#the-address-element class=self-link></a></h4>
+
+  <dl class=element><dt><a href=dom.html#concept-element-categories id=the-address-element:concept-element-categories>Categories</a>:<dd><a id=the-address-element:flow-content-2 href=dom.html#flow-content-2>Flow content</a>.<dd><a id=the-address-element:palpable-content-2 href=dom.html#palpable-content-2>Palpable content</a>.<dt><a href=dom.html#concept-element-contexts id=the-address-element:concept-element-contexts>Contexts in which this element can be used</a>:<dd>Where <a id=the-address-element:flow-content-2-2 href=dom.html#flow-content-2>flow content</a> is expected.<dt><a href=dom.html#concept-element-content-model id=the-address-element:concept-element-content-model>Content model</a>:<dd><a id=the-address-element:flow-content-2-3 href=dom.html#flow-content-2>Flow content</a>, but with no <a id=the-address-element:heading-content-2 href=dom.html#heading-content-2>heading
+   content</a> descendants, no <a id=the-address-element:sectioning-content-2 href=dom.html#sectioning-content-2>sectioning content</a>
+   descendants, and no <code id=the-address-element:the-header-element><a href=#the-header-element>header</a></code>, <code id=the-address-element:the-footer-element><a href=#the-footer-element>footer</a></code>, or
+   <code id=the-address-element:the-address-element><a href=#the-address-element>address</a></code> element descendants.<dt><a href=dom.html#concept-element-tag-omission id=the-address-element:concept-element-tag-omission>Tag omission in text/html</a>:<dd>Neither tag is omissible.<dt><a href=dom.html#concept-element-attributes id=the-address-element:concept-element-attributes>Content attributes</a>:<dd><a id=the-address-element:global-attributes href=dom.html#global-attributes>Global attributes</a><dt><a href=dom.html#concept-element-accessibility-considerations id=the-address-element:concept-element-accessibility-considerations>Accessibility considerations</a>:<dd><a href=https://w3c.github.io/html-aria/#el-address>For authors</a>.<dd><a href=https://w3c.github.io/html-aam/#el-address>For implementers</a>.<dt><a href=dom.html#concept-element-sanitization id=the-address-element:concept-element-sanitization>Sanitization</a>:<dd><span>Default</span>.<dt><a href=dom.html#concept-element-dom id=the-address-element:concept-element-dom>DOM interface</a>:<dd>Uses <code>HTMLElement</code>.</dl>
+
+  <p>The <code id=the-address-element:the-address-element-2><a href=#the-address-element>address</a></code> element <a id=the-address-element:represents href=dom.html#represents>represents</a> the contact information for its
+  nearest <code id=the-address-element:the-article-element><a href=#the-article-element>article</a></code> or <code id=the-address-element:the-body-element><a href=#the-body-element>body</a></code> element ancestor. If that is <a id=the-address-element:the-body-element-2 href=dom.html#the-body-element-2>the body
+  element</a>, then the contact information applies to the document as a whole.</p>
+
+  <div class=example>
+   <p>For example, a page at the W3C web site related to HTML might
+   include the following contact information:</p>
+   <pre><code class='html'><c- p>&lt;</c-><c- f>ADDRESS</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>A</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;../People/Raggett/&quot;</c-><c- p>&gt;</c->Dave Raggett<c- p>&lt;/</c-><c- f>A</c-><c- p>&gt;</c->,
+ <c- p>&lt;</c-><c- f>A</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;../People/Arnaud/&quot;</c-><c- p>&gt;</c->Arnaud Le Hors<c- p>&lt;/</c-><c- f>A</c-><c- p>&gt;</c->,
+ contact persons for the <c- p>&lt;</c-><c- f>A</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;Activity&quot;</c-><c- p>&gt;</c->W3C HTML Activity<c- p>&lt;/</c-><c- f>A</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>ADDRESS</c-><c- p>&gt;</c-></code></pre>
+  </div>
+
+  <p>The <code id=the-address-element:the-address-element-3><a href=#the-address-element>address</a></code> element must not be used to represent arbitrary addresses (e.g. postal
+  addresses), unless those addresses are in fact the relevant contact information. (The
+  <code id=the-address-element:the-p-element><a href=grouping-content.html#the-p-element>p</a></code> element is the appropriate element for marking up postal addresses in general.)</p>
+
+  <p>The <code id=the-address-element:the-address-element-4><a href=#the-address-element>address</a></code> element must not contain information other than contact
+  information.</p>
+
+  <div class=example>
+   <p>For example, the following is non-conforming use of the
+   <code id=the-address-element:the-address-element-5><a href=#the-address-element>address</a></code> element:</p>
+   <pre class=bad><code class='html'><c- p>&lt;</c-><c- f>ADDRESS</c-><c- p>&gt;</c->Last Modified: 1999/12/24 23:37:50<c- p>&lt;/</c-><c- f>ADDRESS</c-><c- p>&gt;</c-></code></pre>
+  </div>
+
+  <p>Typically, the <code id=the-address-element:the-address-element-6><a href=#the-address-element>address</a></code> element would be included along with other information in a
+  <code id=the-address-element:the-footer-element-2><a href=#the-footer-element>footer</a></code> element.</p>
+
+  
+
+  <div class=example>
+
+   <p>In this example the footer contains contact information and a copyright notice.</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>footer</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>address</c-><c- p>&gt;</c->
+  For more details, contact
+  <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;mailto:js@example.com&quot;</c-><c- p>&gt;</c->John Smith<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->.
+ <c- p>&lt;/</c-><c- f>address</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>small</c-><c- p>&gt;</c->© copyright 2038 Example Corp.<c- p>&lt;/</c-><c- f>small</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>footer</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+
+
+  <h4 id=headings-and-outlines-2><span class=secno>4.3.11</span> <span id=headings-and-outlines></span><span id=outlines></span>Headings and outlines<a href=#headings-and-outlines-2 class=self-link></a></h4>
+
+  <p><code id=headings-and-outlines-2:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h1</a></code>–<code id=headings-and-outlines-2:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-2><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h6</a></code> elements have a <dfn id=heading-level>heading level</dfn>, which is
+  given by <a href="#get-an-element's-computed-heading-level" id="headings-and-outlines-2:get-an-element's-computed-heading-level">getting the element's computed
+  heading level</a>.</p>
+
+  <p>These elements <a href=dom.html#represents id=headings-and-outlines-2:represents>represent</a> <dfn id=concept-heading>headings</dfn>. The lower a <a href=#concept-heading id=headings-and-outlines-2:concept-heading>heading</a>'s <a href=#heading-level id=headings-and-outlines-2:heading-level>heading level</a> is, the fewer ancestor
+  sections the <a href=#concept-heading id=headings-and-outlines-2:concept-heading-2>heading</a> has.</p>
+
+  <div data-algorithm="">
+  <p>The <dfn id=outline>outline</dfn> is all <a href=#concept-heading id=headings-and-outlines-2:concept-heading-3>headings</a> in a
+  document, in <a id=headings-and-outlines-2:tree-order href=https://dom.spec.whatwg.org/#concept-tree-order data-x-internal=tree-order>tree order</a>.</p>
+  </div>
+
+  <p>The <a href=#outline id=headings-and-outlines-2:outline>outline</a> should be used for generating document outlines, for example when
+  generating tables of contents. When creating an interactive table of contents, entries should
+  jump the user to the relevant <a href=#concept-heading id=headings-and-outlines-2:concept-heading-4>heading</a>.</p>
+
+  <p>If a document has one or more <a href=#concept-heading id=headings-and-outlines-2:concept-heading-5>headings</a>, at least a
+  single <a href=#concept-heading id=headings-and-outlines-2:concept-heading-6>heading</a> within the <a href=#outline id=headings-and-outlines-2:outline-2>outline</a> should have
+  a <a href=#heading-level id=headings-and-outlines-2:heading-level-2>heading level</a> of 1.</p>
+
+  <div data-algorithm="">
+  <p>Each <a href=#concept-heading id=headings-and-outlines-2:concept-heading-7>heading</a> following another <a href=#concept-heading id=headings-and-outlines-2:concept-heading-8>heading</a> <var>lead</var> in the <a href=#outline id=headings-and-outlines-2:outline-3>outline</a> must
+  have a <a href=#heading-level id=headings-and-outlines-2:heading-level-3>heading level</a> that is less than, equal to, or 1 greater than <var>lead</var>'s
+  <a href=#heading-level id=headings-and-outlines-2:heading-level-4>heading level</a>.</p>
+  </div>
+
+  <div class=example>
+   <p>The following example is non-conforming:</p>
+
+   <pre class=bad><code class='html'><c- p>&lt;</c-><c- f>body</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Apples<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Apples are fruit.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h3</c-><c- p>&gt;</c->Taste<c- p>&lt;/</c-><c- f>h3</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->They taste lovely.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>body</c-><c- p>&gt;</c-></code></pre>
+
+   <p>It could be written as follows and then it would be conforming:</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>body</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Apples<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Apples are fruit.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Taste<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->They taste lovely.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>body</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+  <h5 id="heading-levels-&amp;-offsets"><span class=secno>4.3.11.1</span> Heading levels &amp; offsets<a href="#heading-levels-&amp;-offsets" class=self-link></a></h5>
+
+  <p>The <dfn data-dfn-for=global id=attr-headingoffset data-dfn-type=element-attr><code>headingoffset</code></dfn>
+  content attribute allows authors to offset heading levels for descendants.</p>
+
+  <p>If the <code id="heading-levels-&amp;-offsets:attr-headingoffset"><a href=#attr-headingoffset>headingoffset</a></code> attribute is specified, it must
+  have a value that is a <a id="heading-levels-&amp;-offsets:valid-non-negative-integer" href=common-microsyntaxes.html#valid-non-negative-integer>valid non-negative integer</a> between 0 and 8, inclusive.</p>
+
+  <p>The <dfn data-dfn-for=global id=attr-headingreset data-dfn-type=element-attr><code>headingreset</code></dfn>
+  content attribute is a <a id="heading-levels-&amp;-offsets:boolean-attribute" href=common-microsyntaxes.html#boolean-attribute>boolean attribute</a>. It allows authors to prevent a heading
+  offset computation from traversing beyond the element with the attribute.</p>
+
+  <div data-algorithm="">
+  <p>To <dfn id="get-an-element's-computed-heading-level">get an element's computed heading level</dfn>, given an element
+  <var>element</var>:</p>
+
+  <ol><li><p>Let <var>level</var> be 0.<li><p>If <var>element</var>'s local name is <code id="heading-levels-&amp;-offsets:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements"><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h1</a></code>, then set
+   <var>level</var> to 1.<li><p>If <var>element</var>'s local name is <code id="heading-levels-&amp;-offsets:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-2"><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h2</a></code>, then set
+   <var>level</var> to 2.<li><p>If <var>element</var>'s local name is <code id="heading-levels-&amp;-offsets:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-3"><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h3</a></code>, then set
+   <var>level</var> to 3.<li><p>If <var>element</var>'s local name is <code id="heading-levels-&amp;-offsets:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-4"><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h4</a></code>, then set
+   <var>level</var> to 4.<li><p>If <var>element</var>'s local name is <code id="heading-levels-&amp;-offsets:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-5"><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h5</a></code>, then set
+   <var>level</var> to 5.<li><p>If <var>element</var>'s local name is <code id="heading-levels-&amp;-offsets:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-6"><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h6</a></code>, then set
+   <var>level</var> to 6.<li><p><a id="heading-levels-&amp;-offsets:assert" href=https://infra.spec.whatwg.org/#assert data-x-internal=assert>Assert</a>: <var>level</var> is not 0.<li><p>Increment <var>level</var> by the result of <a href="#get-an-element's-computed-heading-offset" id="heading-levels-&amp;-offsets:get-an-element's-computed-heading-offset">getting an element's computed heading
+   offset</a> given <var>element</var>.<li><p>If <var>level</var> is greater than 9, then return 9.<li><p>Return <var>level</var>.</ol>
+  </div>
+
+  <div data-algorithm="">
+  <p>To <dfn id="get-an-element's-computed-heading-offset">get an element's computed heading offset</dfn>, given an element <var>element</var>,
+  perform the following steps. They return a non-negative integer.</p>
+
+  <ol><li><p>Let <var>offset</var> be 0.<li><p>Let <var>inclusiveAncestor</var> be <var>element</var>.<li>
+    <p>While <var>inclusiveAncestor</var> is not null:</p>
+
+    <ol><li><p>Let <var>nextOffset</var> be 0.<li>
+      <p>If <var>inclusiveAncestor</var> is an <a href=infrastructure.html#html-elements id="heading-levels-&amp;-offsets:html-elements">HTML element</a> and
+      has a <code id="heading-levels-&amp;-offsets:attr-headingoffset-2"><a href=#attr-headingoffset>headingoffset</a></code> attribute, then parse its value
+      using the <span>rules for parsing non-negative integers</span>.</p>
+
+      <p>If the result of parsing the value is not an error, then set <var>nextOffset</var> to that
+      value.</p>
+     <li><p>Increment <var>offset</var> by <var>nextOffset</var>.<li><p>If <var>inclusiveAncestor</var> is an <a href=infrastructure.html#html-elements id="heading-levels-&amp;-offsets:html-elements-2">HTML element</a>
+     and has a <code id="heading-levels-&amp;-offsets:attr-headingreset"><a href=#attr-headingreset>headingreset</a></code> attribute, then return
+     <var>offset</var>.<li><p>Set <var>inclusiveAncestor</var> to the parent node of <var>inclusiveAncestor</var>
+     within the <a id="heading-levels-&amp;-offsets:flat-tree" href=https://drafts.csswg.org/css-scoping/#flat-tree data-x-internal=flat-tree>flat tree</a>.</ol>
+   <li><p>Return <var>offset</var>.</ol>
+  </div>
+
+  <div class=example>
+   <p>This example shows a combination of <code id="heading-levels-&amp;-offsets:attr-headingoffset-3"><a href=#attr-headingoffset>headingoffset</a></code>,
+   <code id="heading-levels-&amp;-offsets:attr-headingreset-2"><a href=#attr-headingreset>headingreset</a></code>, and <code id="heading-levels-&amp;-offsets:attr-aria-level"><a data-x-internal=attr-aria-level href=https://w3c.github.io/aria/#aria-level>aria-level</a></code> attributes with comments demonstrating the respective
+   heading levels. This example illustrates the various combinations and is not a best practice
+   example.</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>body</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>main</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->This is a heading level 1<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>article</c-> <c- e>headingoffset</c-><c- o>=</c-><c- s>&quot;1&quot;</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->This is a heading level 2<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>section</c-> <c- e>headingoffset</c-><c- o>=</c-><c- s>&quot;1&quot;</c-><c- p>&gt;</c->
+     <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->This is a heading level 3<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+     <c- p>&lt;</c-><c- f>dialog</c-> <c- e>headingreset</c-><c- p>&gt;</c->
+      <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->This is a heading level 1<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+     <c- p>&lt;/</c-><c- f>dialog</c-><c- p>&gt;</c->
+    <c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+   <c- p>&lt;/</c-><c- f>article</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>h1</c-> <c- e>aria-level</c-><c- o>=</c-><c- s>&quot;2&quot;</c-><c- p>&gt;</c->This is a heading level 2<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>main</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>body</c-><c- p>&gt;</c-></code></pre>
+  </div>
+
+  <h5 id=sample-outlines><span class=secno>4.3.11.2</span> Sample outlines<a href=#sample-outlines class=self-link></a></h5>
+
+  <div class=example>
+   <p>The following markup fragment:</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>body</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>hgroup</c-> <c- e>id</c-><c- o>=</c-><c- s>&quot;document-title&quot;</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->HTML: Living Standard<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Last Updated 12 August 2016<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>hgroup</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Some intro to the document.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Table of contents<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>ol</c-> <c- e>id</c-><c- o>=</c-><c- s>toc</c-><c- p>&gt;</c->...<c- p>&lt;/</c-><c- f>ol</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->First section<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Some intro to the first section.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>body</c-><c- p>&gt;</c-></code></pre>
+
+   <p>...results in 3 document headings:</p>
+
+   <ol class=brief><li><p><code>&lt;h1>HTML: Living Standard&lt;/h1></code><li><p><code>&lt;h2>Table of contents&lt;/h2></code>.<li><p><code>&lt;h2>First section&lt;/h2></code>.</ol>
+
+   <p>A rendered view of the <a href=#outline id=sample-outlines:outline>outline</a> might look like:</p>
+
+   <p><img class=darkmode-aware width=465 alt="Top-level section with the heading &quot;HTML: Living Standard&quot; and two subsections; &quot;Table of contents&quot; and &quot;First section&quot;." src=/images/outline.svg height=120></p>
+  </div>
+
+  <div class=example>
+   <p>First, here is a document, which is a book with very short chapters and subsections:</p>
+
+   <pre><code class='html'><c- cp>&lt;!DOCTYPE HTML&gt;</c->
+<c- p>&lt;</c-><c- f>html</c-> <c- e>lang</c-><c- o>=</c-><c- s>en</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>title</c-><c- p>&gt;</c->The Tax Book (all in one page)<c- p>&lt;/</c-><c- f>title</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->The Tax Book<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Earning money<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Earning money is good.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h3</c-><c- p>&gt;</c->Getting a job<c- p>&lt;/</c-><c- f>h3</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->To earn money you typically need a job.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Spending money<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Spending is what money is mainly used for.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h3</c-><c- p>&gt;</c->Cheap things<c- p>&lt;/</c-><c- f>h3</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Buying cheap things often not cost-effective.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h3</c-><c- p>&gt;</c->Expensive things<c- p>&lt;/</c-><c- f>h3</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->The most expensive thing is often not the most cost-effective either.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Investing money<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->You can lend your money to other people.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Losing money<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->If you spend money or invest money, sooner or later you will lose money.
+<c- p>&lt;</c-><c- f>h3</c-><c- p>&gt;</c->Poor judgement<c- p>&lt;/</c-><c- f>h3</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Usually if you lose money it&apos;s because you made a mistake.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c-></code></pre>
+
+   <p>Its <a href=#outline id=sample-outlines:outline-2>outline</a> could be presented as follows:</p>
+
+   <ol class=brief><li>
+     The Tax Book
+     <ol class=brief><li>
+       Earning money
+       <ol class=brief><li>Getting a job</ol>
+      <li>
+       Spending money
+       <ol class=brief><li>Cheap things<li>Expensive things</ol>
+      <li>Investing money<li>
+       Losing money
+       <ol class=brief><li>Poor judgement</ol>
+      </ol>
+   </ol>
+
+   <p>Notice that the <code id=sample-outlines:the-title-element><a href=semantics.html#the-title-element>title</a></code> element is not a <a href=#concept-heading id=sample-outlines:concept-heading>heading</a>.</p>
+  </div>
+
+  <div class=example>
+   <p>A document can contain multiple top-level headings:</p>
+
+   <pre><code class='html'><c- cp>&lt;!DOCTYPE HTML&gt;</c->
+<c- p>&lt;</c-><c- f>html</c-> <c- e>lang</c-><c- o>=</c-><c- s>en</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>title</c-><c- p>&gt;</c->Alphabetic Fruit<c- p>&lt;/</c-><c- f>title</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Apples<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Pomaceous.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Bananas<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Edible.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Carambola<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Star.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c-></code></pre>
+
+   <p>The document's <a href=#outline id=sample-outlines:outline-3>outline</a> could be presented as follows:</p>
+
+   <ol class=brief><li>Apples<li>Bananas<li>Carambola</ol>
+  </div>
+
+  <div class=example>
+   <p><code id=sample-outlines:the-header-element><a href=#the-header-element>header</a></code> elements do not influence the <a href=#outline id=sample-outlines:outline-4>outline</a> of a
+   document:</p>
+
+   <pre><code class='html'><c- cp>&lt;!DOCTYPE HTML&gt;</c->
+<c- p>&lt;</c-><c- f>html</c-> <c- e>lang</c-><c- o>=</c-><c- s>&quot;en&quot;</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>title</c-><c- p>&gt;</c->We&apos;re adopting a child! — Ray&apos;s blog<c- p>&lt;/</c-><c- f>title</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Ray&apos;s blog<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>article</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>header</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>nav</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;?t=-1d&quot;</c-><c- p>&gt;</c->Yesterday<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->;
+   <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;?t=-7d&quot;</c-><c- p>&gt;</c->Last week<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->;
+   <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;?t=-1m&quot;</c-><c- p>&gt;</c->Last month<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>nav</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->We&apos;re adopting a child!<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>header</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->As of today, Janine and I have signed the papers to become
+ the proud parents of baby Diane! We&apos;ve been looking forward to
+ this day for weeks.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>article</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>html</c-><c- p>&gt;</c-></code></pre>
+
+   <p>The document's <a href=#outline id=sample-outlines:outline-5>outline</a> could be presented as follows:</p>
+
+   <ol class=brief><li> Ray's blog
+     <ol class=brief><li> We're adopting a child!
+     </ol>
+   </ol>
+  </div>
+
+  <hr>
+
+  <div class=example>
+   <p>The following example is conforming, but not encouraged as it has no <a href=#concept-heading id=sample-outlines:concept-heading-2>heading</a> whose <a href=#heading-level id=sample-outlines:heading-level>heading level</a> is 1:</p>
+
+   <pre><code class='html'><c- cp>&lt;!DOCTYPE HTML&gt;</c->
+<c- p>&lt;</c-><c- f>html</c-> <c- e>lang</c-><c- o>=</c-><c- s>en</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>title</c-><c- p>&gt;</c->Alphabetic Fruit<c- p>&lt;/</c-><c- f>title</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Apples<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Pomaceous.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Bananas<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Edible.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Carambola<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Star.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c-></code></pre>
+
+   <p>The document's <a href=#outline id=sample-outlines:outline-6>outline</a> could be presented as follows:</p>
+
+   <ol class=brief><li>
+     <ol class=brief><li>Apples<li>Bananas<li>Carambola</ol>
+    </ol>
+  </div>
+
+  <div class=example>
+   <p>The following example is conforming, but not encouraged as the first <a href=#concept-heading id=sample-outlines:concept-heading-3>heading</a>'s <a href=#heading-level id=sample-outlines:heading-level-2>heading level</a> is not 1:</p>
+
+   <pre><code class='html'><c- cp>&lt;!DOCTYPE HTML&gt;</c->
+<c- p>&lt;</c-><c- f>html</c-> <c- e>lang</c-><c- o>=</c-><c- s>en</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>title</c-><c- p>&gt;</c->Feathers on The Site of Encyclopedic Knowledge<c- p>&lt;/</c-><c- f>title</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->A plea from our caretakers<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Please, we beg of you, send help! We&apos;re stuck in the server room!<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Feathers<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Epidermal growths.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c-></code></pre>
+
+  <p>The document's <a href=#outline id=sample-outlines:outline-7>outline</a> could be presented as follows:</p>
+
+  <ol class=brief><li>
+     <ol class=brief><li>A plea from our caretakers</ol>
+    <li>Feathers</ol>
+  </div>
+
+
+  <h5 id=exposing-outlines-to-users><span class=secno>4.3.11.3</span> Exposing outlines to users<a href=#exposing-outlines-to-users class=self-link></a></h5>
+
+  <p>User agents are encouraged to expose page <a href=#outline id=exposing-outlines-to-users:outline>outlines</a> to users to
+  aid in navigation. This is especially true for non-visual media, e.g. screen readers.</p>
+
+  <div class=example>
+   <p>For instance, a user agent could map the arrow keys as follows:</p>
+
+   <dl><dt><kbd><kbd>Shift</kbd> + <kbd>← Left</kbd></kbd><dd>Go to previous heading<dt><kbd><kbd>Shift</kbd> + <kbd>→ Right</kbd></kbd><dd>Go to next heading<dt><kbd><kbd>Shift</kbd> + <kbd>↑ Up</kbd></kbd><dd>Go to next heading whose <a href=#heading-level id=exposing-outlines-to-users:heading-level>level</a> is one less than the
+    current heading's level<dt><kbd><kbd>Shift</kbd> + <kbd>↓ Down</kbd></kbd><dd>Go to next heading whose <a href=#heading-level id=exposing-outlines-to-users:heading-level-2>level</a> is the same as the
+    current heading's level</dl>
+  </div>
+
+
+  <h4 id=usage-summary-2><span class=secno>4.3.12</span> Usage summary<a href=#usage-summary-2 class=self-link></a></h4>
+
+  
+
+  <table class=vertical-summary-table><thead><tr><th rowspan=2>Element
+     <th>Purpose
+    <tr><th>Example
+   <tbody><tr><td rowspan=2><code id=usage-summary-2:the-body-element><a href=#the-body-element>body</a></code>
+     <td>The contents of the document.
+    <tr><td><pre class=example><code class='html'><c- cp>&lt;!DOCTYPE HTML&gt;</c->
+<c- p>&lt;</c-><c- f>html</c-> <c- e>lang</c-><c- o>=</c-><c- s>&quot;en&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>head</c-><c- p>&gt;</c-> <c- p>&lt;</c-><c- f>title</c-><c- p>&gt;</c->Steve Hill&apos;s Home Page<c- p>&lt;/</c-><c- f>title</c-><c- p>&gt;</c-> <c- p>&lt;/</c-><c- f>head</c-><c- p>&gt;</c->
+ <strong><c- p>&lt;</c-><c- f>body</c-><c- p>&gt;</c-></strong> <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Hard Trance is My Life.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c-> <strong><c- p>&lt;/</c-><c- f>body</c-><c- p>&gt;</c-></strong>
+<c- p>&lt;/</c-><c- f>html</c-><c- p>&gt;</c-></code></pre>
+
+    <tr><td rowspan=2><code id=usage-summary-2:the-article-element><a href=#the-article-element>article</a></code>
+     <td>A complete, or self-contained,
+  composition in a document, page, application, or site and that is, in principle, independently
+  distributable or reusable, e.g. in syndication. This could be a forum post, a magazine or
+  newspaper article, a blog entry, a user-submitted comment, an interactive widget or gadget, or any
+  other independent item of content.
+    <tr><td><pre class=example><code class='html'><strong><c- p>&lt;</c-><c- f>article</c-><c- p>&gt;</c-></strong>
+ <c- p>&lt;</c-><c- f>img</c-> <c- e>src</c-><c- o>=</c-><c- s>&quot;/tumblr_masqy2s5yn1rzfqbpo1_500.jpg&quot;</c-> <c- e>alt</c-><c- o>=</c-><c- s>&quot;Yellow smiley face with the caption &apos;masif&apos;&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->My fave Masif tee so far!<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>footer</c-><c- p>&gt;</c->Posted 2 days ago<c- p>&lt;/</c-><c- f>footer</c-><c- p>&gt;</c->
+<strong><c- p>&lt;/</c-><c- f>article</c-><c- p>&gt;</c-></strong>
+<strong><c- p>&lt;</c-><c- f>article</c-><c- p>&gt;</c-></strong>
+ <c- p>&lt;</c-><c- f>img</c-> <c- e>src</c-><c- o>=</c-><c- s>&quot;/tumblr_m9tf6wSr6W1rzfqbpo1_500.jpg&quot;</c-> <c- e>alt</c-><c- o>=</c-><c- s>&quot;&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Happy 2nd birthday Masif Saturdays!!!<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>footer</c-><c- p>&gt;</c->Posted 3 weeks ago<c- p>&lt;/</c-><c- f>footer</c-><c- p>&gt;</c->
+<strong><c- p>&lt;/</c-><c- f>article</c-><c- p>&gt;</c-></strong></code></pre>
+
+    <tr><td rowspan=2><code id=usage-summary-2:the-section-element><a href=#the-section-element>section</a></code>
+     <td>A generic section of a document or
+  application. A section, in this context, is a thematic grouping of content, typically with a
+  heading.
+    <tr><td><pre class=example><code class='html'><c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Biography<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+<strong><c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c-></strong>
+ <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->The facts<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->1500+ shows, 14+ countries<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<strong><c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c-></strong>
+<strong><c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c-></strong>
+ <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->2010/2011 figures per year<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->100+ shows, 8+ countries<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<strong><c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c-></strong></code></pre>
+
+    <tr><td rowspan=2><code id=usage-summary-2:the-nav-element><a href=#the-nav-element>nav</a></code>
+     <td>A section of a page that links to other
+  pages or to parts within the page: a section with navigation links.
+    <tr><td><pre class=example><code class='html'><strong><c- p>&lt;</c-><c- f>nav</c-><c- p>&gt;</c-></strong>
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/&quot;</c-><c- p>&gt;</c->Home<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/biog.html&quot;</c-><c- p>&gt;</c->Bio<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/discog.html&quot;</c-><c- p>&gt;</c->Discog<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+<strong><c- p>&lt;/</c-><c- f>nav</c-><c- p>&gt;</c-></strong></code></pre>
+
+    <tr><td rowspan=2><code id=usage-summary-2:the-aside-element><a href=#the-aside-element>aside</a></code>
+     <td>A section of a page that consists of
+  content that is tangentially related to the content around the <code id=usage-summary-2:the-aside-element-2><a href=#the-aside-element>aside</a></code> element, and
+  which could be considered separate from that content. Such sections are often represented as
+  sidebars in printed typography.
+    <tr><td><pre class=example><code class='html'><c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Music<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->As any burner can tell you, the event has a lot of trance.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<strong><c- p>&lt;</c-><c- f>aside</c-><c- p>&gt;</c-></strong>You can buy the music we played at our <c- p>&lt;</c-><c- f>a</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;buy.html&quot;</c-><c- p>&gt;</c->playlist page<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->.<strong><c- p>&lt;/</c-><c- f>aside</c-><c- p>&gt;</c-></strong>
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->This year we played a kind of trance that originated in Belgium, Germany, and the Netherlands in the mid-90s.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c-></code></pre>
+
+    <tr><td rowspan=2><code id=usage-summary-2:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h1</a></code>–<code id=usage-summary-2:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-2><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h6</a></code>
+     <td>A heading
+    <tr><td><pre class=example><code class='html'><strong><c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c-></strong>The Guide To Music On The Playa<strong><c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c-></strong>
+<strong><c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c-></strong>The Main Stage<strong><c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c-></strong>
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->If you want to play on a stage, you should bring one.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<strong><c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c-></strong>Amplified Music<strong><c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c-></strong>
+<c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Amplifiers up to 300W or 90dB are welcome.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c-></code></pre>
+
+    <tr><td rowspan=2><code id=usage-summary-2:the-hgroup-element><a href=#the-hgroup-element>hgroup</a></code>
+     <td>A heading and related content. The
+  element may be used to group an <code id=usage-summary-2:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-3><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h1</a></code>–<code id=usage-summary-2:the-h1,-h2,-h3,-h4,-h5,-and-h6-elements-4><a href=#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements>h6</a></code> element with one or more
+  <code id=usage-summary-2:the-p-element><a href=grouping-content.html#the-p-element>p</a></code> elements containing content representing a subheading, alternative title, or
+  tagline.
+    <tr><td><pre class=example><code class='html'><strong><c- p>&lt;</c-><c- f>hgroup</c-><c- p>&gt;</c-></strong>
+ <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Burning Music<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->The Guide To Music On The Playa<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<strong><c- p>&lt;/</c-><c- f>hgroup</c-><c- p>&gt;</c-></strong>
+<c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c->
+ <strong><c- p>&lt;</c-><c- f>hgroup</c-><c- p>&gt;</c-></strong>
+  <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Main Stage<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->The Fiction Of A Music Festival<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <strong><c- p>&lt;/</c-><c- f>hgroup</c-><c- p>&gt;</c-></strong>
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->If you want to play on a stage, you should bring one.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>section</c-><c- p>&gt;</c->
+ <strong><c- p>&lt;</c-><c- f>hgroup</c-><c- p>&gt;</c-></strong>
+  <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Loudness!<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Questions About Amplified Music<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <strong><c- p>&lt;/</c-><c- f>hgroup</c-><c- p>&gt;</c-></strong>
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Amplifiers up to 300W or 90dB are welcome.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c-></code></pre>
+
+    <tr><td rowspan=2><code id=usage-summary-2:the-header-element><a href=#the-header-element>header</a></code>
+     <td>A group of introductory or navigational
+  aids.
+    <tr><td><pre class=example><code class='html'><c- p>&lt;</c-><c- f>article</c-><c- p>&gt;</c->
+ <strong><c- p>&lt;</c-><c- f>header</c-><c- p>&gt;</c-></strong>
+  <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Hard Trance is My Life<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->By DJ Steve Hill and Technikal<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <strong><c- p>&lt;/</c-><c- f>header</c-><c- p>&gt;</c-></strong>
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->The album with the amusing punctuation has red artwork.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>article</c-><c- p>&gt;</c-></code></pre>
+
+    <tr><td rowspan=2><code id=usage-summary-2:the-footer-element><a href=#the-footer-element>footer</a></code>
+     <td>A footer for its nearest ancestor
+  <a id=usage-summary-2:sectioning-content-2 href=dom.html#sectioning-content-2>sectioning content</a> element, or for <a id=usage-summary-2:the-body-element-2 href=dom.html#the-body-element-2>the body element</a> if there is no such
+  ancestor. A footer typically contains information about its section such as who wrote it, links
+  to related documents, copyright data, and the like.
+    <tr><td><pre class=example><code class='html'><c- p>&lt;</c-><c- f>article</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->Hard Trance is My Life<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->The album with the amusing punctuation has red artwork.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <strong><c- p>&lt;</c-><c- f>footer</c-><c- p>&gt;</c-></strong>
+  <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->Artists: DJ Steve Hill and Technikal<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+ <strong><c- p>&lt;/</c-><c- f>footer</c-><c- p>&gt;</c-></strong>
+<c- p>&lt;/</c-><c- f>article</c-><c- p>&gt;</c-></code></pre>
+
+  </table>
+
+
+  <h5 id=article-or-section><span class=secno>4.3.12.1</span> Article or section?<a href=#article-or-section class=self-link></a></h5>
+
+  
+
+  <p>A <code id=article-or-section:the-section-element><a href=#the-section-element>section</a></code> forms part of something else. An <code id=article-or-section:the-article-element><a href=#the-article-element>article</a></code> is its own thing.
+  But how does one know which is which? Mostly the real answer is "it depends on author intent".</p>
+
+  <p>For example, one could imagine a book with a "Granny Smith" chapter that just said "These
+  juicy, green apples make a great filling for apple pies."; that would be a <code id=article-or-section:the-section-element-2><a href=#the-section-element>section</a></code>
+  because there'd be lots of other chapters on (maybe) other kinds of apples.</p>
+
+  <p>On the other hand, one could imagine a tweet or reddit comment or tumblr post or newspaper
+  classified ad that just said "Granny Smith. These juicy, green apples make a great filling for
+  apple pies."; it would then be <code id=article-or-section:the-article-element-2><a href=#the-article-element>article</a></code>s because that was the whole thing.</p>
+
+  <p>A comment on an article is not part of the <code id=article-or-section:the-article-element-3><a href=#the-article-element>article</a></code> on which it is commenting,
+  therefore it is its own <code id=article-or-section:the-article-element-4><a href=#the-article-element>article</a></code>.</p>
+
+
+
+  <nav><a href=semantics.html>← 4 The elements of HTML</a> — <a href=./>Table of Contents</a> — <a href=grouping-content.html>4.4 Grouping content →</a></nav>
+</body>
+</html>

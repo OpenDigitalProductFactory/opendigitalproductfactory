@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import { colors, spacing, borderRadius } from "@/src/lib/theme";
+import { useTheme } from "@/src/lib/theme";
 import type { FieldProps } from "./index";
 
 /**
@@ -13,6 +13,34 @@ export function SignatureField({
   onChange,
   error,
 }: FieldProps) {
+  const { colors, spacing, borderRadius } = useTheme();
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: { marginBottom: spacing.md },
+        label: {
+          color: colors.text,
+          fontSize: 14,
+          fontWeight: "500",
+          marginBottom: spacing.xs,
+        },
+        canvas: {
+          height: 120,
+          backgroundColor: colors.surface1,
+          borderWidth: 2,
+          borderColor: colors.border,
+          borderRadius: borderRadius.md,
+          borderStyle: "dashed",
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        canvasError: { borderColor: colors.error },
+        canvasText: { color: colors.textMuted, fontSize: 16 },
+        error: { color: colors.error, fontSize: 12, marginTop: spacing.xs },
+      }),
+    [colors, spacing, borderRadius],
+  );
+
   const hasSigned = Boolean(value);
 
   function handleTap() {
@@ -38,37 +66,3 @@ export function SignatureField({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: spacing.md,
-  },
-  label: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: spacing.xs,
-  },
-  canvas: {
-    height: 120,
-    backgroundColor: colors.surface1,
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderRadius: borderRadius.md,
-    borderStyle: "dashed",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  canvasError: {
-    borderColor: colors.error,
-  },
-  canvasText: {
-    color: colors.textMuted,
-    fontSize: 16,
-  },
-  error: {
-    color: colors.error,
-    fontSize: 12,
-    marginTop: spacing.xs,
-  },
-});

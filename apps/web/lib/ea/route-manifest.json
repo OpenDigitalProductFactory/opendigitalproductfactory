@@ -1,0 +1,5782 @@
+{
+  "generator": "apps/web/scripts/build-route-manifest.ts",
+  "routeCount": 494,
+  "routes": [
+    {
+      "routePath": "/",
+      "kind": "page",
+      "segments": [],
+      "dynamicParams": [],
+      "file": "apps/web/app/page.tsx"
+    },
+    {
+      "routePath": "/.well-known/dpf-instance.json",
+      "kind": "route",
+      "segments": [
+        ".well-known",
+        "dpf-instance.json"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/.well-known/dpf-instance.json/route.ts"
+    },
+    {
+      "routePath": "/admin",
+      "kind": "page",
+      "segments": [
+        "admin"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/page.tsx"
+    },
+    {
+      "routePath": "/admin/backlog",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "backlog"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/backlog/page.tsx"
+    },
+    {
+      "routePath": "/admin/backups",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "backups"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/backups/page.tsx"
+    },
+    {
+      "routePath": "/admin/branding",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "branding"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/branding/page.tsx"
+    },
+    {
+      "routePath": "/admin/build-studio/stall-thresholds",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "build-studio",
+        "stall-thresholds"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/build-studio/stall-thresholds/page.tsx"
+    },
+    {
+      "routePath": "/admin/business-context",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "business-context"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/business-context/page.tsx"
+    },
+    {
+      "routePath": "/admin/business-models",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "business-models"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/business-models/page.tsx"
+    },
+    {
+      "routePath": "/admin/cockpit",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "cockpit"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/cockpit/page.tsx"
+    },
+    {
+      "routePath": "/admin/diagnostics",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "diagnostics"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/diagnostics/page.tsx"
+    },
+    {
+      "routePath": "/admin/hive",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "hive"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/hive/page.tsx"
+    },
+    {
+      "routePath": "/admin/issue-reports",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "issue-reports"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/issue-reports/page.tsx"
+    },
+    {
+      "routePath": "/admin/operating-hours",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "operating-hours"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/operating-hours/page.tsx"
+    },
+    {
+      "routePath": "/admin/platform-development",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "platform-development"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/platform-development/page.tsx"
+    },
+    {
+      "routePath": "/admin/prompts",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "prompts"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/prompts/page.tsx"
+    },
+    {
+      "routePath": "/admin/reference-data",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "reference-data"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/reference-data/page.tsx"
+    },
+    {
+      "routePath": "/admin/research",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "research"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/research/page.tsx"
+    },
+    {
+      "routePath": "/admin/scheduled-jobs",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "scheduled-jobs"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/scheduled-jobs/page.tsx"
+    },
+    {
+      "routePath": "/admin/settings",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "settings"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/settings/page.tsx"
+    },
+    {
+      "routePath": "/admin/skills",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "skills"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/skills/page.tsx"
+    },
+    {
+      "routePath": "/admin/storefront",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "storefront"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/storefront/page.tsx"
+    },
+    {
+      "routePath": "/admin/storefront/inbox",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "storefront",
+        "inbox"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/storefront/inbox/page.tsx"
+    },
+    {
+      "routePath": "/admin/storefront/items",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "storefront",
+        "items"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/storefront/items/page.tsx"
+    },
+    {
+      "routePath": "/admin/storefront/sections",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "storefront",
+        "sections"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/storefront/sections/page.tsx"
+    },
+    {
+      "routePath": "/admin/storefront/settings",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "storefront",
+        "settings"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/storefront/settings/page.tsx"
+    },
+    {
+      "routePath": "/admin/storefront/setup",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "storefront",
+        "setup"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/storefront/setup/page.tsx"
+    },
+    {
+      "routePath": "/admin/storefront/team",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "storefront",
+        "team"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/storefront/team/page.tsx"
+    },
+    {
+      "routePath": "/admin/wiki/lint",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "wiki",
+        "lint"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/wiki/lint/page.tsx"
+    },
+    {
+      "routePath": "/api/admin/bs-dispatch-test",
+      "kind": "route",
+      "segments": [
+        "api",
+        "admin",
+        "bs-dispatch-test"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/admin/bs-dispatch-test/route.ts"
+    },
+    {
+      "routePath": "/api/admin/model-capability-changes",
+      "kind": "route",
+      "segments": [
+        "api",
+        "admin",
+        "model-capability-changes"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/admin/model-capability-changes/route.ts"
+    },
+    {
+      "routePath": "/api/admin/ops/execute-proposal",
+      "kind": "route",
+      "segments": [
+        "api",
+        "admin",
+        "ops",
+        "execute-proposal"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/admin/ops/execute-proposal/route.ts"
+    },
+    {
+      "routePath": "/api/agent/build/advance-phase",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent",
+        "build",
+        "advance-phase"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/agent/build/advance-phase/route.ts"
+    },
+    {
+      "routePath": "/api/agent/cancel",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent",
+        "cancel"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/agent/cancel/route.ts"
+    },
+    {
+      "routePath": "/api/agent/envelope/[envelopeId]/approve",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent",
+        "envelope",
+        "[envelopeId]",
+        "approve"
+      ],
+      "dynamicParams": [
+        "envelopeId"
+      ],
+      "file": "apps/web/app/api/agent/envelope/[envelopeId]/approve/route.ts"
+    },
+    {
+      "routePath": "/api/agent/envelope/[envelopeId]/deny",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent",
+        "envelope",
+        "[envelopeId]",
+        "deny"
+      ],
+      "dynamicParams": [
+        "envelopeId"
+      ],
+      "file": "apps/web/app/api/agent/envelope/[envelopeId]/deny/route.ts"
+    },
+    {
+      "routePath": "/api/agent/health",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent",
+        "health"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/agent/health/route.ts"
+    },
+    {
+      "routePath": "/api/agent/send",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent",
+        "send"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/agent/send/route.ts"
+    },
+    {
+      "routePath": "/api/agent/status",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent",
+        "status"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/agent/status/route.ts"
+    },
+    {
+      "routePath": "/api/agent/stream",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent",
+        "stream"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/agent/stream/route.ts"
+    },
+    {
+      "routePath": "/api/agent/system-stream",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent",
+        "system-stream"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/agent/system-stream/route.ts"
+    },
+    {
+      "routePath": "/api/auth/[...nextauth]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "auth",
+        "[...nextauth]"
+      ],
+      "dynamicParams": [
+        "nextauth"
+      ],
+      "file": "apps/web/app/api/auth/[...nextauth]/route.ts"
+    },
+    {
+      "routePath": "/api/brand/logo",
+      "kind": "route",
+      "segments": [
+        "api",
+        "brand",
+        "logo"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/brand/logo/route.ts"
+    },
+    {
+      "routePath": "/api/build/[buildId]/evidence/[fileName]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "build",
+        "[buildId]",
+        "evidence",
+        "[fileName]"
+      ],
+      "dynamicParams": [
+        "buildId",
+        "fileName"
+      ],
+      "file": "apps/web/app/api/build/[buildId]/evidence/[fileName]/route.ts"
+    },
+    {
+      "routePath": "/api/business-context/setup",
+      "kind": "route",
+      "segments": [
+        "api",
+        "business-context",
+        "setup"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/business-context/setup/route.ts"
+    },
+    {
+      "routePath": "/api/calendar/events",
+      "kind": "route",
+      "segments": [
+        "api",
+        "calendar",
+        "events"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/calendar/events/route.ts"
+    },
+    {
+      "routePath": "/api/calendar/feed/[userId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "calendar",
+        "feed",
+        "[userId]"
+      ],
+      "dynamicParams": [
+        "userId"
+      ],
+      "file": "apps/web/app/api/calendar/feed/[userId]/route.ts"
+    },
+    {
+      "routePath": "/api/calendar/sync",
+      "kind": "route",
+      "segments": [
+        "api",
+        "calendar",
+        "sync"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/calendar/sync/route.ts"
+    },
+    {
+      "routePath": "/api/diagnostics/preflight",
+      "kind": "route",
+      "segments": [
+        "api",
+        "diagnostics",
+        "preflight"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/diagnostics/preflight/route.ts"
+    },
+    {
+      "routePath": "/api/diagnostics/probe",
+      "kind": "route",
+      "segments": [
+        "api",
+        "diagnostics",
+        "probe"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/diagnostics/probe/route.ts"
+    },
+    {
+      "routePath": "/api/docs",
+      "kind": "route",
+      "segments": [
+        "api",
+        "docs"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/docs/route.ts"
+    },
+    {
+      "routePath": "/api/health",
+      "kind": "route",
+      "segments": [
+        "api",
+        "health"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/health/route.ts"
+    },
+    {
+      "routePath": "/api/health/sha",
+      "kind": "route",
+      "segments": [
+        "api",
+        "health",
+        "sha"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/health/sha/route.ts"
+    },
+    {
+      "routePath": "/api/inngest",
+      "kind": "route",
+      "segments": [
+        "api",
+        "inngest"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/inngest/route.ts"
+    },
+    {
+      "routePath": "/api/integrations/adp/connect",
+      "kind": "route",
+      "segments": [
+        "api",
+        "integrations",
+        "adp",
+        "connect"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/integrations/adp/connect/route.ts"
+    },
+    {
+      "routePath": "/api/integrations/email-postmark/inbound",
+      "kind": "route",
+      "segments": [
+        "api",
+        "integrations",
+        "email-postmark",
+        "inbound"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/integrations/email-postmark/inbound/route.ts"
+    },
+    {
+      "routePath": "/api/integrations/facebook-lead-ads/connect",
+      "kind": "route",
+      "segments": [
+        "api",
+        "integrations",
+        "facebook-lead-ads",
+        "connect"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/integrations/facebook-lead-ads/connect/route.ts"
+    },
+    {
+      "routePath": "/api/integrations/facebook-pages/connect",
+      "kind": "route",
+      "segments": [
+        "api",
+        "integrations",
+        "facebook-pages",
+        "connect"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/integrations/facebook-pages/connect/route.ts"
+    },
+    {
+      "routePath": "/api/integrations/google-business-profile/connect",
+      "kind": "route",
+      "segments": [
+        "api",
+        "integrations",
+        "google-business-profile",
+        "connect"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/integrations/google-business-profile/connect/route.ts"
+    },
+    {
+      "routePath": "/api/integrations/google-marketing-intelligence/connect",
+      "kind": "route",
+      "segments": [
+        "api",
+        "integrations",
+        "google-marketing-intelligence",
+        "connect"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/integrations/google-marketing-intelligence/connect/route.ts"
+    },
+    {
+      "routePath": "/api/integrations/hubspot/connect",
+      "kind": "route",
+      "segments": [
+        "api",
+        "integrations",
+        "hubspot",
+        "connect"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/integrations/hubspot/connect/route.ts"
+    },
+    {
+      "routePath": "/api/integrations/instagram-business/connect",
+      "kind": "route",
+      "segments": [
+        "api",
+        "integrations",
+        "instagram-business",
+        "connect"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/integrations/instagram-business/connect/route.ts"
+    },
+    {
+      "routePath": "/api/integrations/linkedin-personal-social/callback",
+      "kind": "route",
+      "segments": [
+        "api",
+        "integrations",
+        "linkedin-personal-social",
+        "callback"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/integrations/linkedin-personal-social/callback/route.ts"
+    },
+    {
+      "routePath": "/api/integrations/mailchimp/connect",
+      "kind": "route",
+      "segments": [
+        "api",
+        "integrations",
+        "mailchimp",
+        "connect"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/integrations/mailchimp/connect/route.ts"
+    },
+    {
+      "routePath": "/api/integrations/microsoft365-communications/connect",
+      "kind": "route",
+      "segments": [
+        "api",
+        "integrations",
+        "microsoft365-communications",
+        "connect"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/integrations/microsoft365-communications/connect/route.ts"
+    },
+    {
+      "routePath": "/api/integrations/quickbooks/connect",
+      "kind": "route",
+      "segments": [
+        "api",
+        "integrations",
+        "quickbooks",
+        "connect"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/integrations/quickbooks/connect/route.ts"
+    },
+    {
+      "routePath": "/api/integrations/stripe/connect",
+      "kind": "route",
+      "segments": [
+        "api",
+        "integrations",
+        "stripe",
+        "connect"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/integrations/stripe/connect/route.ts"
+    },
+    {
+      "routePath": "/api/integrations/whatsapp-business/connect",
+      "kind": "route",
+      "segments": [
+        "api",
+        "integrations",
+        "whatsapp-business",
+        "connect"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/integrations/whatsapp-business/connect/route.ts"
+    },
+    {
+      "routePath": "/api/internal/quiescence-state",
+      "kind": "route",
+      "segments": [
+        "api",
+        "internal",
+        "quiescence-state"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/internal/quiescence-state/route.ts"
+    },
+    {
+      "routePath": "/api/internal/tasks/[taskId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "internal",
+        "tasks",
+        "[taskId]"
+      ],
+      "dynamicParams": [
+        "taskId"
+      ],
+      "file": "apps/web/app/api/internal/tasks/[taskId]/route.ts"
+    },
+    {
+      "routePath": "/api/internal/tasks/[taskId]/subscribe",
+      "kind": "route",
+      "segments": [
+        "api",
+        "internal",
+        "tasks",
+        "[taskId]",
+        "subscribe"
+      ],
+      "dynamicParams": [
+        "taskId"
+      ],
+      "file": "apps/web/app/api/internal/tasks/[taskId]/subscribe/route.ts"
+    },
+    {
+      "routePath": "/api/kernel/gate",
+      "kind": "route",
+      "segments": [
+        "api",
+        "kernel",
+        "gate"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/kernel/gate/route.ts"
+    },
+    {
+      "routePath": "/api/mcp/call",
+      "kind": "route",
+      "segments": [
+        "api",
+        "mcp",
+        "call"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/mcp/call/route.ts"
+    },
+    {
+      "routePath": "/api/mcp/token/refresh",
+      "kind": "route",
+      "segments": [
+        "api",
+        "mcp",
+        "token",
+        "refresh"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/mcp/token/refresh/route.ts"
+    },
+    {
+      "routePath": "/api/mcp/tools",
+      "kind": "route",
+      "segments": [
+        "api",
+        "mcp",
+        "tools"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/mcp/tools/route.ts"
+    },
+    {
+      "routePath": "/api/mcp/v1",
+      "kind": "route",
+      "segments": [
+        "api",
+        "mcp",
+        "v1"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/mcp/v1/route.ts"
+    },
+    {
+      "routePath": "/api/media",
+      "kind": "route",
+      "segments": [
+        "api",
+        "media"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/media/route.ts"
+    },
+    {
+      "routePath": "/api/media/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "media",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/media/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/metrics",
+      "kind": "route",
+      "segments": [
+        "api",
+        "metrics"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/metrics/route.ts"
+    },
+    {
+      "routePath": "/api/onboarding/business-document",
+      "kind": "route",
+      "segments": [
+        "api",
+        "onboarding",
+        "business-document"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/onboarding/business-document/route.ts"
+    },
+    {
+      "routePath": "/api/onboarding/market-context",
+      "kind": "route",
+      "segments": [
+        "api",
+        "onboarding",
+        "market-context"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/onboarding/market-context/route.ts"
+    },
+    {
+      "routePath": "/api/ops/self-upgrade/impact-summary",
+      "kind": "route",
+      "segments": [
+        "api",
+        "ops",
+        "self-upgrade",
+        "impact-summary"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/ops/self-upgrade/impact-summary/route.ts"
+    },
+    {
+      "routePath": "/api/platform/alerts",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "alerts"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/alerts/route.ts"
+    },
+    {
+      "routePath": "/api/platform/authority-bindings",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "authority-bindings"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/authority-bindings/route.ts"
+    },
+    {
+      "routePath": "/api/platform/authority-bindings/[bindingId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "authority-bindings",
+        "[bindingId]"
+      ],
+      "dynamicParams": [
+        "bindingId"
+      ],
+      "file": "apps/web/app/api/platform/authority-bindings/[bindingId]/route.ts"
+    },
+    {
+      "routePath": "/api/platform/authority-bindings/bootstrap",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "authority-bindings",
+        "bootstrap"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/authority-bindings/bootstrap/route.ts"
+    },
+    {
+      "routePath": "/api/platform/git/updates",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "git",
+        "updates"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/git/updates/route.ts"
+    },
+    {
+      "routePath": "/api/platform/image-version",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "image-version"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/image-version/route.ts"
+    },
+    {
+      "routePath": "/api/platform/integrations/sync-progress/[syncId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "integrations",
+        "sync-progress",
+        "[syncId]"
+      ],
+      "dynamicParams": [
+        "syncId"
+      ],
+      "file": "apps/web/app/api/platform/integrations/sync-progress/[syncId]/route.ts"
+    },
+    {
+      "routePath": "/api/platform/metrics",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "metrics"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/metrics/route.ts"
+    },
+    {
+      "routePath": "/api/platform/metrics/alerts",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "metrics",
+        "alerts"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/metrics/alerts/route.ts"
+    },
+    {
+      "routePath": "/api/platform/metrics/targets",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "metrics",
+        "targets"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/metrics/targets/route.ts"
+    },
+    {
+      "routePath": "/api/platform/status",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "status"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/status/route.ts"
+    },
+    {
+      "routePath": "/api/platform/version",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "version"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/version/route.ts"
+    },
+    {
+      "routePath": "/api/portfolio/product/[id]/supply-chain/bom",
+      "kind": "route",
+      "segments": [
+        "api",
+        "portfolio",
+        "product",
+        "[id]",
+        "supply-chain",
+        "bom"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/portfolio/product/[id]/supply-chain/bom/route.ts"
+    },
+    {
+      "routePath": "/api/quality/report",
+      "kind": "route",
+      "segments": [
+        "api",
+        "quality",
+        "report"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/quality/report/route.ts"
+    },
+    {
+      "routePath": "/api/sandbox/preview",
+      "kind": "route",
+      "segments": [
+        "api",
+        "sandbox",
+        "preview"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/sandbox/preview/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/[slug]/dates",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "[slug]",
+        "dates"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/api/storefront/[slug]/dates/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/[slug]/hold",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "[slug]",
+        "hold"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/api/storefront/[slug]/hold/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/[slug]/slots",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "[slug]",
+        "slots"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/api/storefront/[slug]/slots/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/animals",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "animals"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/animals/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/animals/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "animals",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/storefront/admin/animals/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/archetype-reset",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "archetype-reset"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/archetype-reset/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/archetypes",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "archetypes"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/archetypes/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/archetypes/refinement",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "archetypes",
+        "refinement"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/archetypes/refinement/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/inquiries/[id]/product-backlog",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "inquiries",
+        "[id]",
+        "product-backlog"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/storefront/admin/inquiries/[id]/product-backlog/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/items",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "items"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/items/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/items/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "items",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/storefront/admin/items/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/items/reorder",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "items",
+        "reorder"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/items/reorder/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/media",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "media"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/media/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/media/[attachmentId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "media",
+        "[attachmentId]"
+      ],
+      "dynamicParams": [
+        "attachmentId"
+      ],
+      "file": "apps/web/app/api/storefront/admin/media/[attachmentId]/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/providers",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "providers"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/providers/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/providers/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "providers",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/storefront/admin/providers/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/publish",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "publish"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/publish/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/sections/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "sections",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/storefront/admin/sections/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/sections/reorder",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "sections",
+        "reorder"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/sections/reorder/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/setup",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "setup"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/setup/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/units",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "units"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/units/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/units/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "units",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/storefront/admin/units/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/sign-up",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "sign-up"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/sign-up/route.ts"
+    },
+    {
+      "routePath": "/api/test/codex-responses",
+      "kind": "route",
+      "segments": [
+        "api",
+        "test",
+        "codex-responses"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/test/codex-responses/route.ts"
+    },
+    {
+      "routePath": "/api/transcribe",
+      "kind": "route",
+      "segments": [
+        "api",
+        "transcribe"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/transcribe/route.ts"
+    },
+    {
+      "routePath": "/api/upload",
+      "kind": "route",
+      "segments": [
+        "api",
+        "upload"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/upload/route.ts"
+    },
+    {
+      "routePath": "/api/v1/admin/operating-hours",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "admin",
+        "operating-hours"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/admin/operating-hours/route.ts"
+    },
+    {
+      "routePath": "/api/v1/agent/message",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "agent",
+        "message"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/agent/message/route.ts"
+    },
+    {
+      "routePath": "/api/v1/agent/proposals",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "agent",
+        "proposals"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/agent/proposals/route.ts"
+    },
+    {
+      "routePath": "/api/v1/agent/stream",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "agent",
+        "stream"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/agent/stream/route.ts"
+    },
+    {
+      "routePath": "/api/v1/agent/thread",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "agent",
+        "thread"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/agent/thread/route.ts"
+    },
+    {
+      "routePath": "/api/v1/app/config",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "app",
+        "config"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/app/config/route.ts"
+    },
+    {
+      "routePath": "/api/v1/auth/login",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "auth",
+        "login"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/auth/login/route.ts"
+    },
+    {
+      "routePath": "/api/v1/auth/logout",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "auth",
+        "logout"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/auth/logout/route.ts"
+    },
+    {
+      "routePath": "/api/v1/auth/me",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "auth",
+        "me"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/auth/me/route.ts"
+    },
+    {
+      "routePath": "/api/v1/auth/provider-oauth/callback",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "auth",
+        "provider-oauth",
+        "callback"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/auth/provider-oauth/callback/route.ts"
+    },
+    {
+      "routePath": "/api/v1/auth/refresh",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "auth",
+        "refresh"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/auth/refresh/route.ts"
+    },
+    {
+      "routePath": "/api/v1/business-models",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "business-models"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/business-models/route.ts"
+    },
+    {
+      "routePath": "/api/v1/business-models/[modelId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "business-models",
+        "[modelId]"
+      ],
+      "dynamicParams": [
+        "modelId"
+      ],
+      "file": "apps/web/app/api/v1/business-models/[modelId]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/compliance/alerts",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "compliance",
+        "alerts"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/compliance/alerts/route.ts"
+    },
+    {
+      "routePath": "/api/v1/compliance/audits/[id]/findings",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "compliance",
+        "audits",
+        "[id]",
+        "findings"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/compliance/audits/[id]/findings/route.ts"
+    },
+    {
+      "routePath": "/api/v1/compliance/controls",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "compliance",
+        "controls"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/compliance/controls/route.ts"
+    },
+    {
+      "routePath": "/api/v1/compliance/corrective-actions",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "compliance",
+        "corrective-actions"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/compliance/corrective-actions/route.ts"
+    },
+    {
+      "routePath": "/api/v1/compliance/incidents",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "compliance",
+        "incidents"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/compliance/incidents/route.ts"
+    },
+    {
+      "routePath": "/api/v1/compliance/regulations",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "compliance",
+        "regulations"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/compliance/regulations/route.ts"
+    },
+    {
+      "routePath": "/api/v1/customer/accounts",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "customer",
+        "accounts"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/customer/accounts/route.ts"
+    },
+    {
+      "routePath": "/api/v1/customer/accounts/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "customer",
+        "accounts",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/customer/accounts/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/customer/activities",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "customer",
+        "activities"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/customer/activities/route.ts"
+    },
+    {
+      "routePath": "/api/v1/customer/contacts",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "customer",
+        "contacts"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/customer/contacts/route.ts"
+    },
+    {
+      "routePath": "/api/v1/customer/contacts/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "customer",
+        "contacts",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/customer/contacts/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/customer/engagements",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "customer",
+        "engagements"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/customer/engagements/route.ts"
+    },
+    {
+      "routePath": "/api/v1/customer/engagements/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "customer",
+        "engagements",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/customer/engagements/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/customer/opportunities",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "customer",
+        "opportunities"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/customer/opportunities/route.ts"
+    },
+    {
+      "routePath": "/api/v1/customer/opportunities/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "customer",
+        "opportunities",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/customer/opportunities/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/customer/quotes",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "customer",
+        "quotes"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/customer/quotes/route.ts"
+    },
+    {
+      "routePath": "/api/v1/customer/quotes/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "customer",
+        "quotes",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/customer/quotes/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/customer/sales-orders",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "customer",
+        "sales-orders"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/customer/sales-orders/route.ts"
+    },
+    {
+      "routePath": "/api/v1/customer/sales-orders/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "customer",
+        "sales-orders",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/customer/sales-orders/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/device-catalog",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "device-catalog"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/device-catalog/route.ts"
+    },
+    {
+      "routePath": "/api/v1/discovery/connections/[id]/run",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "discovery",
+        "connections",
+        "[id]",
+        "run"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/discovery/connections/[id]/run/route.ts"
+    },
+    {
+      "routePath": "/api/v1/discovery/sweep",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "discovery",
+        "sweep"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/discovery/sweep/route.ts"
+    },
+    {
+      "routePath": "/api/v1/dynamic/forms",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "dynamic",
+        "forms"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/dynamic/forms/route.ts"
+    },
+    {
+      "routePath": "/api/v1/dynamic/forms/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "dynamic",
+        "forms",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/dynamic/forms/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/dynamic/forms/[id]/submit",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "dynamic",
+        "forms",
+        "[id]",
+        "submit"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/dynamic/forms/[id]/submit/route.ts"
+    },
+    {
+      "routePath": "/api/v1/dynamic/views",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "dynamic",
+        "views"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/dynamic/views/route.ts"
+    },
+    {
+      "routePath": "/api/v1/dynamic/views/[id]/data",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "dynamic",
+        "views",
+        "[id]",
+        "data"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/dynamic/views/[id]/data/route.ts"
+    },
+    {
+      "routePath": "/api/v1/edge/adapters",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "edge",
+        "adapters"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/edge/adapters/route.ts"
+    },
+    {
+      "routePath": "/api/v1/edge/discovery-runs",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "edge",
+        "discovery-runs"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/edge/discovery-runs/route.ts"
+    },
+    {
+      "routePath": "/api/v1/edge/enroll",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "edge",
+        "enroll"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/edge/enroll/route.ts"
+    },
+    {
+      "routePath": "/api/v1/edge/events",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "edge",
+        "events"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/edge/events/route.ts"
+    },
+    {
+      "routePath": "/api/v1/edge/heartbeat",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "edge",
+        "heartbeat"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/edge/heartbeat/route.ts"
+    },
+    {
+      "routePath": "/api/v1/edge/metrics",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "edge",
+        "metrics"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/edge/metrics/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/assets",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "assets"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/finance/assets/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/assets/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "assets",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/finance/assets/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/bank-accounts",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "bank-accounts"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/finance/bank-accounts/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/bank-accounts/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "bank-accounts",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/finance/bank-accounts/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/bank-accounts/[id]/reconcile",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "bank-accounts",
+        "[id]",
+        "reconcile"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/finance/bank-accounts/[id]/reconcile/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/bank-accounts/[id]/transactions",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "bank-accounts",
+        "[id]",
+        "transactions"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/finance/bank-accounts/[id]/transactions/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/bills",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "bills"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/finance/bills/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/bills/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "bills",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/finance/bills/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/dunning/run",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "dunning",
+        "run"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/finance/dunning/run/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/exchange-rates",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "exchange-rates"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/finance/exchange-rates/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/expense-claims",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "expense-claims"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/finance/expense-claims/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/expense-claims/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "expense-claims",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/finance/expense-claims/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/invoices",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "invoices"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/finance/invoices/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/invoices/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "invoices",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/finance/invoices/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/invoices/[id]/pdf",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "invoices",
+        "[id]",
+        "pdf"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/finance/invoices/[id]/pdf/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/invoices/[id]/send",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "invoices",
+        "[id]",
+        "send"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/finance/invoices/[id]/send/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/payment-runs",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "payment-runs"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/finance/payment-runs/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/payments",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "payments"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/finance/payments/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/purchase-orders",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "purchase-orders"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/finance/purchase-orders/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/recurring",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "recurring"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/finance/recurring/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/recurring/generate",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "recurring",
+        "generate"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/finance/recurring/generate/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/reports/[report]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "reports",
+        "[report]"
+      ],
+      "dynamicParams": [
+        "report"
+      ],
+      "file": "apps/web/app/api/v1/finance/reports/[report]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/suppliers",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "suppliers"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/finance/suppliers/route.ts"
+    },
+    {
+      "routePath": "/api/v1/governance/approvals",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "governance",
+        "approvals"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/governance/approvals/route.ts"
+    },
+    {
+      "routePath": "/api/v1/governance/approvals/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "governance",
+        "approvals",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/governance/approvals/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/governance/decisions",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "governance",
+        "decisions"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/governance/decisions/route.ts"
+    },
+    {
+      "routePath": "/api/v1/grid/[tableId]/rows",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "grid",
+        "[tableId]",
+        "rows"
+      ],
+      "dynamicParams": [
+        "tableId"
+      ],
+      "file": "apps/web/app/api/v1/grid/[tableId]/rows/route.ts"
+    },
+    {
+      "routePath": "/api/v1/grid/[tableId]/rows/[rowId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "grid",
+        "[tableId]",
+        "rows",
+        "[rowId]"
+      ],
+      "dynamicParams": [
+        "tableId",
+        "rowId"
+      ],
+      "file": "apps/web/app/api/v1/grid/[tableId]/rows/[rowId]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/grid/[tableId]/schema",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "grid",
+        "[tableId]",
+        "schema"
+      ],
+      "dynamicParams": [
+        "tableId"
+      ],
+      "file": "apps/web/app/api/v1/grid/[tableId]/schema/route.ts"
+    },
+    {
+      "routePath": "/api/v1/integrations/coverage",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "integrations",
+        "coverage"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/integrations/coverage/route.ts"
+    },
+    {
+      "routePath": "/api/v1/notifications",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "notifications"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/notifications/route.ts"
+    },
+    {
+      "routePath": "/api/v1/notifications/[id]/read",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "notifications",
+        "[id]",
+        "read"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/notifications/[id]/read/route.ts"
+    },
+    {
+      "routePath": "/api/v1/notifications/register-device",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "notifications",
+        "register-device"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/notifications/register-device/route.ts"
+    },
+    {
+      "routePath": "/api/v1/ops/backlog",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "ops",
+        "backlog"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/ops/backlog/route.ts"
+    },
+    {
+      "routePath": "/api/v1/ops/backlog/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "ops",
+        "backlog",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/ops/backlog/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/ops/business-profile",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "ops",
+        "business-profile"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/ops/business-profile/route.ts"
+    },
+    {
+      "routePath": "/api/v1/ops/catalog",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "ops",
+        "catalog"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/ops/catalog/route.ts"
+    },
+    {
+      "routePath": "/api/v1/ops/catalog/[key]/create-rfc",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "ops",
+        "catalog",
+        "[key]",
+        "create-rfc"
+      ],
+      "dynamicParams": [
+        "key"
+      ],
+      "file": "apps/web/app/api/v1/ops/catalog/[key]/create-rfc/route.ts"
+    },
+    {
+      "routePath": "/api/v1/ops/changes",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "ops",
+        "changes"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/ops/changes/route.ts"
+    },
+    {
+      "routePath": "/api/v1/ops/changes/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "ops",
+        "changes",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/ops/changes/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/ops/changes/[id]/execute",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "ops",
+        "changes",
+        "[id]",
+        "execute"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/ops/changes/[id]/execute/route.ts"
+    },
+    {
+      "routePath": "/api/v1/ops/changes/[id]/rollback",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "ops",
+        "changes",
+        "[id]",
+        "rollback"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/ops/changes/[id]/rollback/route.ts"
+    },
+    {
+      "routePath": "/api/v1/ops/epics",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "ops",
+        "epics"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/ops/epics/route.ts"
+    },
+    {
+      "routePath": "/api/v1/ops/epics/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "ops",
+        "epics",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/ops/epics/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/ops/windows",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "ops",
+        "windows"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/ops/windows/route.ts"
+    },
+    {
+      "routePath": "/api/v1/portfolio/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "portfolio",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/portfolio/[id]/route.ts"
+    },
+    {
+      "routePath": "/api/v1/portfolio/[id]/products",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "portfolio",
+        "[id]",
+        "products"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/portfolio/[id]/products/route.ts"
+    },
+    {
+      "routePath": "/api/v1/portfolio/tree",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "portfolio",
+        "tree"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/portfolio/tree/route.ts"
+    },
+    {
+      "routePath": "/api/v1/upload",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "upload"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/upload/route.ts"
+    },
+    {
+      "routePath": "/api/v1/work-queue/[itemId]/claim",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "work-queue",
+        "[itemId]",
+        "claim"
+      ],
+      "dynamicParams": [
+        "itemId"
+      ],
+      "file": "apps/web/app/api/v1/work-queue/[itemId]/claim/route.ts"
+    },
+    {
+      "routePath": "/api/v1/work-queue/[itemId]/complete",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "work-queue",
+        "[itemId]",
+        "complete"
+      ],
+      "dynamicParams": [
+        "itemId"
+      ],
+      "file": "apps/web/app/api/v1/work-queue/[itemId]/complete/route.ts"
+    },
+    {
+      "routePath": "/api/v1/work-queue/my-items",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "work-queue",
+        "my-items"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/work-queue/my-items/route.ts"
+    },
+    {
+      "routePath": "/api/v1/workbooks",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "workbooks"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/workbooks/route.ts"
+    },
+    {
+      "routePath": "/api/v1/workspace/activity",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "workspace",
+        "activity"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/workspace/activity/route.ts"
+    },
+    {
+      "routePath": "/api/v1/workspace/dashboard",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "workspace",
+        "dashboard"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/workspace/dashboard/route.ts"
+    },
+    {
+      "routePath": "/api/voice/audio/[...path]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "voice",
+        "audio",
+        "[...path]"
+      ],
+      "dynamicParams": [
+        "path"
+      ],
+      "file": "apps/web/app/api/voice/audio/[...path]/route.ts"
+    },
+    {
+      "routePath": "/api/voice/audio/status",
+      "kind": "route",
+      "segments": [
+        "api",
+        "voice",
+        "audio",
+        "status"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/voice/audio/status/route.ts"
+    },
+    {
+      "routePath": "/api/voice/reference",
+      "kind": "route",
+      "segments": [
+        "api",
+        "voice",
+        "reference"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/voice/reference/route.ts"
+    },
+    {
+      "routePath": "/api/voice/synthesize",
+      "kind": "route",
+      "segments": [
+        "api",
+        "voice",
+        "synthesize"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/voice/synthesize/route.ts"
+    },
+    {
+      "routePath": "/api/voice/synthesize/stream",
+      "kind": "route",
+      "segments": [
+        "api",
+        "voice",
+        "synthesize",
+        "stream"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/voice/synthesize/stream/route.ts"
+    },
+    {
+      "routePath": "/api/voice/train",
+      "kind": "route",
+      "segments": [
+        "api",
+        "voice",
+        "train"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/voice/train/route.ts"
+    },
+    {
+      "routePath": "/auth/callback",
+      "kind": "route",
+      "segments": [
+        "auth",
+        "callback"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/auth/callback/route.ts"
+    },
+    {
+      "routePath": "/build",
+      "kind": "page",
+      "segments": [
+        "build"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/build/page.tsx"
+    },
+    {
+      "routePath": "/build/work",
+      "kind": "page",
+      "segments": [
+        "build",
+        "work"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/build/work/page.tsx"
+    },
+    {
+      "routePath": "/build/work/[capsuleId]",
+      "kind": "page",
+      "segments": [
+        "build",
+        "work",
+        "[capsuleId]"
+      ],
+      "dynamicParams": [
+        "capsuleId"
+      ],
+      "file": "apps/web/app/(shell)/build/work/[capsuleId]/page.tsx"
+    },
+    {
+      "routePath": "/callback",
+      "kind": "route",
+      "segments": [
+        "callback"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/callback/route.ts"
+    },
+    {
+      "routePath": "/complaints",
+      "kind": "page",
+      "segments": [
+        "complaints"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/complaints/page.tsx"
+    },
+    {
+      "routePath": "/compliance",
+      "kind": "page",
+      "segments": [
+        "compliance"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/compliance/page.tsx"
+    },
+    {
+      "routePath": "/compliance/actions",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "actions"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/compliance/actions/page.tsx"
+    },
+    {
+      "routePath": "/compliance/actions/[id]",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "actions",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/compliance/actions/[id]/page.tsx"
+    },
+    {
+      "routePath": "/compliance/audits",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "audits"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/compliance/audits/page.tsx"
+    },
+    {
+      "routePath": "/compliance/audits/[id]",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "audits",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/compliance/audits/[id]/page.tsx"
+    },
+    {
+      "routePath": "/compliance/controls",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "controls"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/compliance/controls/page.tsx"
+    },
+    {
+      "routePath": "/compliance/controls/[id]",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "controls",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/compliance/controls/[id]/page.tsx"
+    },
+    {
+      "routePath": "/compliance/evidence",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "evidence"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/compliance/evidence/page.tsx"
+    },
+    {
+      "routePath": "/compliance/evidence/[id]",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "evidence",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/compliance/evidence/[id]/page.tsx"
+    },
+    {
+      "routePath": "/compliance/gaps",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "gaps"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/compliance/gaps/page.tsx"
+    },
+    {
+      "routePath": "/compliance/incidents",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "incidents"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/compliance/incidents/page.tsx"
+    },
+    {
+      "routePath": "/compliance/incidents/[id]",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "incidents",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/compliance/incidents/[id]/page.tsx"
+    },
+    {
+      "routePath": "/compliance/licensing",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "licensing"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/compliance/licensing/page.tsx"
+    },
+    {
+      "routePath": "/compliance/obligations",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "obligations"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/compliance/obligations/page.tsx"
+    },
+    {
+      "routePath": "/compliance/obligations/[id]",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "obligations",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/compliance/obligations/[id]/page.tsx"
+    },
+    {
+      "routePath": "/compliance/onboard",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "onboard"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/compliance/onboard/page.tsx"
+    },
+    {
+      "routePath": "/compliance/policies",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "policies"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/compliance/policies/page.tsx"
+    },
+    {
+      "routePath": "/compliance/policies/[id]",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "policies",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/compliance/policies/[id]/page.tsx"
+    },
+    {
+      "routePath": "/compliance/posture",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "posture"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/compliance/posture/page.tsx"
+    },
+    {
+      "routePath": "/compliance/regulations",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "regulations"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/compliance/regulations/page.tsx"
+    },
+    {
+      "routePath": "/compliance/regulations/[id]",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "regulations",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/compliance/regulations/[id]/page.tsx"
+    },
+    {
+      "routePath": "/compliance/risks",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "risks"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/compliance/risks/page.tsx"
+    },
+    {
+      "routePath": "/compliance/risks/[id]",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "risks",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/compliance/risks/[id]/page.tsx"
+    },
+    {
+      "routePath": "/compliance/submissions",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "submissions"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/compliance/submissions/page.tsx"
+    },
+    {
+      "routePath": "/compliance/submissions/[id]",
+      "kind": "page",
+      "segments": [
+        "compliance",
+        "submissions",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/compliance/submissions/[id]/page.tsx"
+    },
+    {
+      "routePath": "/customer",
+      "kind": "page",
+      "segments": [
+        "customer"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/customer/(crm)/page.tsx"
+    },
+    {
+      "routePath": "/customer-complete-profile",
+      "kind": "page",
+      "segments": [
+        "customer-complete-profile"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(customer-auth)/customer-complete-profile/page.tsx"
+    },
+    {
+      "routePath": "/customer-link-account",
+      "kind": "page",
+      "segments": [
+        "customer-link-account"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(customer-auth)/customer-link-account/page.tsx"
+    },
+    {
+      "routePath": "/customer-login",
+      "kind": "page",
+      "segments": [
+        "customer-login"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(customer-auth)/customer-login/page.tsx"
+    },
+    {
+      "routePath": "/customer-signup",
+      "kind": "page",
+      "segments": [
+        "customer-signup"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(customer-auth)/customer-signup/page.tsx"
+    },
+    {
+      "routePath": "/customer/[id]",
+      "kind": "page",
+      "segments": [
+        "customer",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/customer/(crm)/[id]/page.tsx"
+    },
+    {
+      "routePath": "/customer/engagements",
+      "kind": "page",
+      "segments": [
+        "customer",
+        "engagements"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/customer/(crm)/engagements/page.tsx"
+    },
+    {
+      "routePath": "/customer/funnel",
+      "kind": "page",
+      "segments": [
+        "customer",
+        "funnel"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/customer/(crm)/funnel/page.tsx"
+    },
+    {
+      "routePath": "/customer/marketing",
+      "kind": "page",
+      "segments": [
+        "customer",
+        "marketing"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/customer/marketing/page.tsx"
+    },
+    {
+      "routePath": "/customer/marketing/automation",
+      "kind": "page",
+      "segments": [
+        "customer",
+        "marketing",
+        "automation"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/customer/marketing/automation/page.tsx"
+    },
+    {
+      "routePath": "/customer/marketing/campaigns",
+      "kind": "page",
+      "segments": [
+        "customer",
+        "marketing",
+        "campaigns"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/customer/marketing/campaigns/page.tsx"
+    },
+    {
+      "routePath": "/customer/marketing/funnel",
+      "kind": "page",
+      "segments": [
+        "customer",
+        "marketing",
+        "funnel"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/customer/marketing/funnel/page.tsx"
+    },
+    {
+      "routePath": "/customer/marketing/strategy",
+      "kind": "page",
+      "segments": [
+        "customer",
+        "marketing",
+        "strategy"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/customer/marketing/strategy/page.tsx"
+    },
+    {
+      "routePath": "/customer/opportunities",
+      "kind": "page",
+      "segments": [
+        "customer",
+        "opportunities"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/customer/(crm)/opportunities/page.tsx"
+    },
+    {
+      "routePath": "/customer/opportunities/[id]",
+      "kind": "page",
+      "segments": [
+        "customer",
+        "opportunities",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/customer/(crm)/opportunities/[id]/page.tsx"
+    },
+    {
+      "routePath": "/customer/quotes",
+      "kind": "page",
+      "segments": [
+        "customer",
+        "quotes"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/customer/(crm)/quotes/page.tsx"
+    },
+    {
+      "routePath": "/customer/quotes/[id]",
+      "kind": "page",
+      "segments": [
+        "customer",
+        "quotes",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/customer/(crm)/quotes/[id]/page.tsx"
+    },
+    {
+      "routePath": "/customer/sales-orders",
+      "kind": "page",
+      "segments": [
+        "customer",
+        "sales-orders"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/customer/(crm)/sales-orders/page.tsx"
+    },
+    {
+      "routePath": "/docs/[[...slug]]",
+      "kind": "page",
+      "segments": [
+        "docs",
+        "[[...slug]]"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(shell)/docs/[[...slug]]/page.tsx"
+    },
+    {
+      "routePath": "/ea",
+      "kind": "page",
+      "segments": [
+        "ea"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ea/page.tsx"
+    },
+    {
+      "routePath": "/ea/agents",
+      "kind": "page",
+      "segments": [
+        "ea",
+        "agents"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ea/agents/page.tsx"
+    },
+    {
+      "routePath": "/ea/capabilities",
+      "kind": "page",
+      "segments": [
+        "ea",
+        "capabilities"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ea/capabilities/page.tsx"
+    },
+    {
+      "routePath": "/ea/data-model",
+      "kind": "page",
+      "segments": [
+        "ea",
+        "data-model"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ea/data-model/page.tsx"
+    },
+    {
+      "routePath": "/ea/models",
+      "kind": "page",
+      "segments": [
+        "ea",
+        "models"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ea/models/page.tsx"
+    },
+    {
+      "routePath": "/ea/models/[slug]",
+      "kind": "page",
+      "segments": [
+        "ea",
+        "models",
+        "[slug]"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(shell)/ea/models/[slug]/page.tsx"
+    },
+    {
+      "routePath": "/ea/value-streams",
+      "kind": "page",
+      "segments": [
+        "ea",
+        "value-streams"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ea/value-streams/page.tsx"
+    },
+    {
+      "routePath": "/ea/views",
+      "kind": "page",
+      "segments": [
+        "ea",
+        "views"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ea/views/page.tsx"
+    },
+    {
+      "routePath": "/ea/views/[id]",
+      "kind": "page",
+      "segments": [
+        "ea",
+        "views",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/ea/views/[id]/page.tsx"
+    },
+    {
+      "routePath": "/employee",
+      "kind": "page",
+      "segments": [
+        "employee"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/employee/page.tsx"
+    },
+    {
+      "routePath": "/finance",
+      "kind": "page",
+      "segments": [
+        "finance"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/page.tsx"
+    },
+    {
+      "routePath": "/finance/assets",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "assets"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/assets/page.tsx"
+    },
+    {
+      "routePath": "/finance/assets/[id]",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "assets",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/finance/assets/[id]/page.tsx"
+    },
+    {
+      "routePath": "/finance/assets/new",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "assets",
+        "new"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/assets/new/page.tsx"
+    },
+    {
+      "routePath": "/finance/banking",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "banking"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/banking/page.tsx"
+    },
+    {
+      "routePath": "/finance/banking/[id]",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "banking",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/finance/banking/[id]/page.tsx"
+    },
+    {
+      "routePath": "/finance/banking/[id]/import",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "banking",
+        "[id]",
+        "import"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/finance/banking/[id]/import/page.tsx"
+    },
+    {
+      "routePath": "/finance/banking/[id]/reconcile",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "banking",
+        "[id]",
+        "reconcile"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/finance/banking/[id]/reconcile/page.tsx"
+    },
+    {
+      "routePath": "/finance/banking/new",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "banking",
+        "new"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/banking/new/page.tsx"
+    },
+    {
+      "routePath": "/finance/banking/rules",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "banking",
+        "rules"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/banking/rules/page.tsx"
+    },
+    {
+      "routePath": "/finance/bills",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "bills"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/bills/page.tsx"
+    },
+    {
+      "routePath": "/finance/bills/[id]",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "bills",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/finance/bills/[id]/page.tsx"
+    },
+    {
+      "routePath": "/finance/bills/new",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "bills",
+        "new"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/bills/new/page.tsx"
+    },
+    {
+      "routePath": "/finance/close",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "close"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/close/page.tsx"
+    },
+    {
+      "routePath": "/finance/configuration",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "configuration"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/configuration/page.tsx"
+    },
+    {
+      "routePath": "/finance/expense-claims",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "expense-claims"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/expense-claims/page.tsx"
+    },
+    {
+      "routePath": "/finance/expense-claims/[id]",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "expense-claims",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/finance/expense-claims/[id]/page.tsx"
+    },
+    {
+      "routePath": "/finance/funds",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "funds"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/funds/page.tsx"
+    },
+    {
+      "routePath": "/finance/invoices",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "invoices"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/invoices/page.tsx"
+    },
+    {
+      "routePath": "/finance/invoices/[id]",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "invoices",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/finance/invoices/[id]/page.tsx"
+    },
+    {
+      "routePath": "/finance/invoices/new",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "invoices",
+        "new"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/invoices/new/page.tsx"
+    },
+    {
+      "routePath": "/finance/my-expenses",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "my-expenses"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/my-expenses/page.tsx"
+    },
+    {
+      "routePath": "/finance/my-expenses/new",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "my-expenses",
+        "new"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/my-expenses/new/page.tsx"
+    },
+    {
+      "routePath": "/finance/payment-runs",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "payment-runs"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/payment-runs/page.tsx"
+    },
+    {
+      "routePath": "/finance/payments",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "payments"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/payments/page.tsx"
+    },
+    {
+      "routePath": "/finance/purchase-orders",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "purchase-orders"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/purchase-orders/page.tsx"
+    },
+    {
+      "routePath": "/finance/purchase-orders/[id]",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "purchase-orders",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/finance/purchase-orders/[id]/page.tsx"
+    },
+    {
+      "routePath": "/finance/purchase-orders/new",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "purchase-orders",
+        "new"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/purchase-orders/new/page.tsx"
+    },
+    {
+      "routePath": "/finance/recurring",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "recurring"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/recurring/page.tsx"
+    },
+    {
+      "routePath": "/finance/recurring/[id]",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "recurring",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/finance/recurring/[id]/page.tsx"
+    },
+    {
+      "routePath": "/finance/recurring/new",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "recurring",
+        "new"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/recurring/new/page.tsx"
+    },
+    {
+      "routePath": "/finance/reports",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "reports"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/reports/page.tsx"
+    },
+    {
+      "routePath": "/finance/reports/aged-creditors",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "reports",
+        "aged-creditors"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/reports/aged-creditors/page.tsx"
+    },
+    {
+      "routePath": "/finance/reports/aged-debtors",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "reports",
+        "aged-debtors"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/reports/aged-debtors/page.tsx"
+    },
+    {
+      "routePath": "/finance/reports/cash-flow",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "reports",
+        "cash-flow"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/reports/cash-flow/page.tsx"
+    },
+    {
+      "routePath": "/finance/reports/outstanding",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "reports",
+        "outstanding"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/reports/outstanding/page.tsx"
+    },
+    {
+      "routePath": "/finance/reports/profit-loss",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "reports",
+        "profit-loss"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/reports/profit-loss/page.tsx"
+    },
+    {
+      "routePath": "/finance/reports/revenue-by-customer",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "reports",
+        "revenue-by-customer"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/reports/revenue-by-customer/page.tsx"
+    },
+    {
+      "routePath": "/finance/reports/vat-summary",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "reports",
+        "vat-summary"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/reports/vat-summary/page.tsx"
+    },
+    {
+      "routePath": "/finance/revenue",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "revenue"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/revenue/page.tsx"
+    },
+    {
+      "routePath": "/finance/settings",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "settings"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/settings/page.tsx"
+    },
+    {
+      "routePath": "/finance/settings/currency",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "settings",
+        "currency"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/settings/currency/page.tsx"
+    },
+    {
+      "routePath": "/finance/settings/dunning",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "settings",
+        "dunning"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/settings/dunning/page.tsx"
+    },
+    {
+      "routePath": "/finance/settings/setup",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "settings",
+        "setup"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/settings/setup/page.tsx"
+    },
+    {
+      "routePath": "/finance/settings/tax",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "settings",
+        "tax"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/settings/tax/page.tsx"
+    },
+    {
+      "routePath": "/finance/spend",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "spend"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/spend/page.tsx"
+    },
+    {
+      "routePath": "/finance/spend/ai",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "spend",
+        "ai"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/spend/ai/page.tsx"
+    },
+    {
+      "routePath": "/finance/suppliers",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "suppliers"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/suppliers/page.tsx"
+    },
+    {
+      "routePath": "/finance/suppliers/[id]",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "suppliers",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/finance/suppliers/[id]/page.tsx"
+    },
+    {
+      "routePath": "/finance/suppliers/new",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "suppliers",
+        "new"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/suppliers/new/page.tsx"
+    },
+    {
+      "routePath": "/forgot-password",
+      "kind": "page",
+      "segments": [
+        "forgot-password"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(auth)/forgot-password/page.tsx"
+    },
+    {
+      "routePath": "/governance",
+      "kind": "page",
+      "segments": [
+        "governance"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/governance/page.tsx"
+    },
+    {
+      "routePath": "/governance/records-requests",
+      "kind": "page",
+      "segments": [
+        "governance",
+        "records-requests"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/governance/records-requests/page.tsx"
+    },
+    {
+      "routePath": "/inventory",
+      "kind": "page",
+      "segments": [
+        "inventory"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/inventory/page.tsx"
+    },
+    {
+      "routePath": "/inventory/entity/[entityId]",
+      "kind": "page",
+      "segments": [
+        "inventory",
+        "entity",
+        "[entityId]"
+      ],
+      "dynamicParams": [
+        "entityId"
+      ],
+      "file": "apps/web/app/(shell)/inventory/entity/[entityId]/page.tsx"
+    },
+    {
+      "routePath": "/knowledge",
+      "kind": "page",
+      "segments": [
+        "knowledge"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/knowledge/page.tsx"
+    },
+    {
+      "routePath": "/knowledge/[articleId]",
+      "kind": "page",
+      "segments": [
+        "knowledge",
+        "[articleId]"
+      ],
+      "dynamicParams": [
+        "articleId"
+      ],
+      "file": "apps/web/app/(shell)/knowledge/[articleId]/page.tsx"
+    },
+    {
+      "routePath": "/knowledge/new",
+      "kind": "page",
+      "segments": [
+        "knowledge",
+        "new"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/knowledge/new/page.tsx"
+    },
+    {
+      "routePath": "/login",
+      "kind": "page",
+      "segments": [
+        "login"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(auth)/login/page.tsx"
+    },
+    {
+      "routePath": "/member-equity",
+      "kind": "page",
+      "segments": [
+        "member-equity"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/member-equity/page.tsx"
+    },
+    {
+      "routePath": "/ops",
+      "kind": "page",
+      "segments": [
+        "ops"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/page.tsx"
+    },
+    {
+      "routePath": "/ops/changes",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "changes"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/changes/page.tsx"
+    },
+    {
+      "routePath": "/ops/dev-loop",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "dev-loop"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/dev-loop/page.tsx"
+    },
+    {
+      "routePath": "/ops/health",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "health"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/health/page.tsx"
+    },
+    {
+      "routePath": "/ops/improvements",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "improvements"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/improvements/page.tsx"
+    },
+    {
+      "routePath": "/ops/promotions",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "promotions"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/promotions/page.tsx"
+    },
+    {
+      "routePath": "/ops/self-upgrade",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "self-upgrade"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/self-upgrade/page.tsx"
+    },
+    {
+      "routePath": "/platform",
+      "kind": "page",
+      "segments": [
+        "platform"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/agent/[agentId]",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "agent",
+        "[agentId]"
+      ],
+      "dynamicParams": [
+        "agentId"
+      ],
+      "file": "apps/web/app/(shell)/platform/ai/agent/[agentId]/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/assignments",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "assignments"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/assignments/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/assignments/bindings/[bindingId]",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "assignments",
+        "bindings",
+        "[bindingId]"
+      ],
+      "dynamicParams": [
+        "bindingId"
+      ],
+      "file": "apps/web/app/(shell)/platform/ai/assignments/bindings/[bindingId]/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/authority",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "authority"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/authority/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/browser-sessions",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "browser-sessions"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/browser-sessions/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/browser-sessions/setup",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "browser-sessions",
+        "setup"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/browser-sessions/setup/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/build-studio",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "build-studio"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/build-studio/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/capability-needs",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "capability-needs"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/capability-needs/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/capacity-continuity",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "capacity-continuity"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/capacity-continuity/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/decisions/[interactionId]",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "decisions",
+        "[interactionId]"
+      ],
+      "dynamicParams": [
+        "interactionId"
+      ],
+      "file": "apps/web/app/(shell)/platform/ai/decisions/[interactionId]/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/founder-review",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "founder-review"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/founder-review/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/history",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "history"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/history/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/model-assignment",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "model-assignment"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/model-assignment/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/operations",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "operations"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/operations/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/operations-map",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "operations-map"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/operations-map/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/prompts",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "prompts"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/prompts/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/providers",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "providers"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/providers/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/providers/[providerId]",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "providers",
+        "[providerId]"
+      ],
+      "dynamicParams": [
+        "providerId"
+      ],
+      "file": "apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/routing",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "routing"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/routing/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/skills",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "skills"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/skills/page.tsx"
+    },
+    {
+      "routePath": "/platform/audit",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "audit"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/audit/page.tsx"
+    },
+    {
+      "routePath": "/platform/audit/authority",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "audit",
+        "authority"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/audit/authority/page.tsx"
+    },
+    {
+      "routePath": "/platform/audit/journal",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "audit",
+        "journal"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/audit/journal/page.tsx"
+    },
+    {
+      "routePath": "/platform/audit/ledger",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "audit",
+        "ledger"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/audit/ledger/page.tsx"
+    },
+    {
+      "routePath": "/platform/audit/metrics",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "audit",
+        "metrics"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/audit/metrics/page.tsx"
+    },
+    {
+      "routePath": "/platform/audit/operations",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "audit",
+        "operations"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/audit/operations/page.tsx"
+    },
+    {
+      "routePath": "/platform/audit/routes",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "audit",
+        "routes"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/audit/routes/page.tsx"
+    },
+    {
+      "routePath": "/platform/development/change-lanes",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "development",
+        "change-lanes"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/development/change-lanes/page.tsx"
+    },
+    {
+      "routePath": "/platform/device-catalog",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "device-catalog"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/device-catalog/page.tsx"
+    },
+    {
+      "routePath": "/platform/edge-nodes",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "edge-nodes"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/edge-nodes/page.tsx"
+    },
+    {
+      "routePath": "/platform/identity",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "identity"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/identity/page.tsx"
+    },
+    {
+      "routePath": "/platform/identity/agents",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "identity",
+        "agents"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/identity/agents/page.tsx"
+    },
+    {
+      "routePath": "/platform/identity/applications",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "identity",
+        "applications"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/identity/applications/page.tsx"
+    },
+    {
+      "routePath": "/platform/identity/authorization",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "identity",
+        "authorization"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/identity/authorization/page.tsx"
+    },
+    {
+      "routePath": "/platform/identity/authorization/bindings/[bindingId]",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "identity",
+        "authorization",
+        "bindings",
+        "[bindingId]"
+      ],
+      "dynamicParams": [
+        "bindingId"
+      ],
+      "file": "apps/web/app/(shell)/platform/identity/authorization/bindings/[bindingId]/page.tsx"
+    },
+    {
+      "routePath": "/platform/identity/directory",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "identity",
+        "directory"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/identity/directory/page.tsx"
+    },
+    {
+      "routePath": "/platform/identity/federation",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "identity",
+        "federation"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/identity/federation/page.tsx"
+    },
+    {
+      "routePath": "/platform/identity/groups",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "identity",
+        "groups"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/identity/groups/page.tsx"
+    },
+    {
+      "routePath": "/platform/identity/principals",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "identity",
+        "principals"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/identity/principals/page.tsx"
+    },
+    {
+      "routePath": "/platform/integrations",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "integrations"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/integrations/page.tsx"
+    },
+    {
+      "routePath": "/platform/integrations/sync",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "integrations",
+        "sync"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/integrations/sync/page.tsx"
+    },
+    {
+      "routePath": "/platform/schedule",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "schedule"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/schedule/page.tsx"
+    },
+    {
+      "routePath": "/platform/services",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "services"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/services/page.tsx"
+    },
+    {
+      "routePath": "/platform/services/[serverId]",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "services",
+        "[serverId]"
+      ],
+      "dynamicParams": [
+        "serverId"
+      ],
+      "file": "apps/web/app/(shell)/platform/services/[serverId]/page.tsx"
+    },
+    {
+      "routePath": "/platform/services/activate",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "services",
+        "activate"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/services/activate/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/built-ins",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "built-ins"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/built-ins/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/catalog",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "catalog"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/catalog/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/catalog/sync",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "catalog",
+        "sync"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/catalog/sync/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/discovery",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "discovery"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/discovery/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/discovery/promotion-audit",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "discovery",
+        "promotion-audit"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/discovery/promotion-audit/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/integrations",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "integrations"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/integrations/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/integrations/adp",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "integrations",
+        "adp"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/integrations/adp/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/integrations/communications",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "integrations",
+        "communications"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/integrations/communications/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/integrations/email-postmark",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "integrations",
+        "email-postmark"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/integrations/email-postmark/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/integrations/facebook-lead-ads",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "integrations",
+        "facebook-lead-ads"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/integrations/facebook-lead-ads/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/integrations/facebook-pages",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "integrations",
+        "facebook-pages"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/integrations/facebook-pages/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/integrations/google-business-profile",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "integrations",
+        "google-business-profile"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/integrations/google-business-profile/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/integrations/google-marketing-intelligence",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "integrations",
+        "google-marketing-intelligence"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/integrations/google-marketing-intelligence/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/integrations/hubspot",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "integrations",
+        "hubspot"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/integrations/hubspot/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/integrations/instagram-business",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "integrations",
+        "instagram-business"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/integrations/instagram-business/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/integrations/linkedin-personal-social",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "integrations",
+        "linkedin-personal-social"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/integrations/linkedin-personal-social/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/integrations/mailchimp",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "integrations",
+        "mailchimp"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/integrations/mailchimp/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/integrations/microsoft365-communications",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "integrations",
+        "microsoft365-communications"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/integrations/microsoft365-communications/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/integrations/quickbooks",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "integrations",
+        "quickbooks"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/integrations/quickbooks/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/integrations/stripe",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "integrations",
+        "stripe"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/integrations/stripe/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/integrations/whatsapp-business",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "integrations",
+        "whatsapp-business"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/integrations/whatsapp-business/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/inventory",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "inventory"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/inventory/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/services",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "services"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/services/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/services/[serverId]",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "services",
+        "[serverId]"
+      ],
+      "dynamicParams": [
+        "serverId"
+      ],
+      "file": "apps/web/app/(shell)/platform/tools/services/[serverId]/page.tsx"
+    },
+    {
+      "routePath": "/platform/tools/services/activate",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "tools",
+        "services",
+        "activate"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/tools/services/activate/page.tsx"
+    },
+    {
+      "routePath": "/portal",
+      "kind": "page",
+      "segments": [
+        "portal"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(portal)/portal/page.tsx"
+    },
+    {
+      "routePath": "/portal/account",
+      "kind": "page",
+      "segments": [
+        "portal",
+        "account"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(portal)/portal/account/page.tsx"
+    },
+    {
+      "routePath": "/portal/orders",
+      "kind": "page",
+      "segments": [
+        "portal",
+        "orders"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(portal)/portal/orders/page.tsx"
+    },
+    {
+      "routePath": "/portal/services",
+      "kind": "page",
+      "segments": [
+        "portal",
+        "services"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(portal)/portal/services/page.tsx"
+    },
+    {
+      "routePath": "/portal/sign-in",
+      "kind": "page",
+      "segments": [
+        "portal",
+        "sign-in"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(portal-auth)/portal/sign-in/page.tsx"
+    },
+    {
+      "routePath": "/portal/support",
+      "kind": "page",
+      "segments": [
+        "portal",
+        "support"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(portal)/portal/support/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/[[...slug]]",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "[[...slug]]"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/[[...slug]]/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/architecture",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "architecture"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/portfolio/architecture/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/architecture",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "architecture"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/architecture/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/backlog",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "backlog"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/backlog/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/changes",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "changes"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/changes/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/health",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "health"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/health/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/inventory",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "inventory"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/inventory/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/knowledge",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "knowledge"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/knowledge/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/offerings",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "offerings"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/offerings/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/supply-chain",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "supply-chain"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/supply-chain/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/team",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "team"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/team/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/versions",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "versions"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/versions/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/products/[productId]",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "products",
+        "[productId]"
+      ],
+      "dynamicParams": [
+        "productId"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/products/[productId]/page.tsx"
+    },
+    {
+      "routePath": "/rental",
+      "kind": "page",
+      "segments": [
+        "rental"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/rental/page.tsx"
+    },
+    {
+      "routePath": "/reset-password",
+      "kind": "page",
+      "segments": [
+        "reset-password"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(auth)/reset-password/page.tsx"
+    },
+    {
+      "routePath": "/s/[slug]",
+      "kind": "page",
+      "segments": [
+        "s",
+        "[slug]"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(storefront)/s/[slug]/page.tsx"
+    },
+    {
+      "routePath": "/s/[slug]/book/[itemId]",
+      "kind": "page",
+      "segments": [
+        "s",
+        "[slug]",
+        "book",
+        "[itemId]"
+      ],
+      "dynamicParams": [
+        "slug",
+        "itemId"
+      ],
+      "file": "apps/web/app/(storefront)/s/[slug]/book/[itemId]/page.tsx"
+    },
+    {
+      "routePath": "/s/[slug]/checkout",
+      "kind": "page",
+      "segments": [
+        "s",
+        "[slug]",
+        "checkout"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(storefront)/s/[slug]/checkout/page.tsx"
+    },
+    {
+      "routePath": "/s/[slug]/donate",
+      "kind": "page",
+      "segments": [
+        "s",
+        "[slug]",
+        "donate"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(storefront)/s/[slug]/donate/page.tsx"
+    },
+    {
+      "routePath": "/s/[slug]/inquire",
+      "kind": "page",
+      "segments": [
+        "s",
+        "[slug]",
+        "inquire"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(storefront)/s/[slug]/inquire/page.tsx"
+    },
+    {
+      "routePath": "/s/[slug]/inquire/[itemId]",
+      "kind": "page",
+      "segments": [
+        "s",
+        "[slug]",
+        "inquire",
+        "[itemId]"
+      ],
+      "dynamicParams": [
+        "slug",
+        "itemId"
+      ],
+      "file": "apps/web/app/(storefront)/s/[slug]/inquire/[itemId]/page.tsx"
+    },
+    {
+      "routePath": "/s/[slug]/item/[itemId]",
+      "kind": "page",
+      "segments": [
+        "s",
+        "[slug]",
+        "item",
+        "[itemId]"
+      ],
+      "dynamicParams": [
+        "slug",
+        "itemId"
+      ],
+      "file": "apps/web/app/(storefront)/s/[slug]/item/[itemId]/page.tsx"
+    },
+    {
+      "routePath": "/s/[slug]/order/[itemId]",
+      "kind": "page",
+      "segments": [
+        "s",
+        "[slug]",
+        "order",
+        "[itemId]"
+      ],
+      "dynamicParams": [
+        "slug",
+        "itemId"
+      ],
+      "file": "apps/web/app/(storefront)/s/[slug]/order/[itemId]/page.tsx"
+    },
+    {
+      "routePath": "/s/[slug]/sign-in",
+      "kind": "page",
+      "segments": [
+        "s",
+        "[slug]",
+        "sign-in"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(storefront)/s/[slug]/sign-in/page.tsx"
+    },
+    {
+      "routePath": "/s/[slug]/sign-up",
+      "kind": "page",
+      "segments": [
+        "s",
+        "[slug]",
+        "sign-up"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(storefront)/s/[slug]/sign-up/page.tsx"
+    },
+    {
+      "routePath": "/s/approve/[token]",
+      "kind": "page",
+      "segments": [
+        "s",
+        "approve",
+        "[token]"
+      ],
+      "dynamicParams": [
+        "token"
+      ],
+      "file": "apps/web/app/(storefront)/s/approve/[token]/page.tsx"
+    },
+    {
+      "routePath": "/s/expense-approve/[token]",
+      "kind": "page",
+      "segments": [
+        "s",
+        "expense-approve",
+        "[token]"
+      ],
+      "dynamicParams": [
+        "token"
+      ],
+      "file": "apps/web/app/(storefront)/s/expense-approve/[token]/page.tsx"
+    },
+    {
+      "routePath": "/s/pay/[token]",
+      "kind": "page",
+      "segments": [
+        "s",
+        "pay",
+        "[token]"
+      ],
+      "dynamicParams": [
+        "token"
+      ],
+      "file": "apps/web/app/(storefront)/s/pay/[token]/page.tsx"
+    },
+    {
+      "routePath": "/sandbox-restricted",
+      "kind": "page",
+      "segments": [
+        "sandbox-restricted"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/sandbox-restricted/page.tsx"
+    },
+    {
+      "routePath": "/service-requests",
+      "kind": "page",
+      "segments": [
+        "service-requests"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/service-requests/page.tsx"
+    },
+    {
+      "routePath": "/setup",
+      "kind": "page",
+      "segments": [
+        "setup"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(setup)/setup/page.tsx"
+    },
+    {
+      "routePath": "/storefront",
+      "kind": "page",
+      "segments": [
+        "storefront"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/storefront/page.tsx"
+    },
+    {
+      "routePath": "/storefront/animals",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "animals"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/storefront/animals/page.tsx"
+    },
+    {
+      "routePath": "/storefront/inbox",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "inbox"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/storefront/inbox/page.tsx"
+    },
+    {
+      "routePath": "/storefront/items",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "items"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/storefront/items/page.tsx"
+    },
+    {
+      "routePath": "/storefront/sections",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "sections"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/storefront/sections/page.tsx"
+    },
+    {
+      "routePath": "/storefront/settings",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "settings"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/storefront/settings/page.tsx"
+    },
+    {
+      "routePath": "/storefront/settings/business",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "settings",
+        "business"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/storefront/settings/business/page.tsx"
+    },
+    {
+      "routePath": "/storefront/settings/capabilities",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "settings",
+        "capabilities"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/storefront/settings/capabilities/page.tsx"
+    },
+    {
+      "routePath": "/storefront/settings/operations",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "settings",
+        "operations"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/storefront/settings/operations/page.tsx"
+    },
+    {
+      "routePath": "/storefront/setup",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "setup"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/storefront/setup/page.tsx"
+    },
+    {
+      "routePath": "/storefront/team",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "team"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/storefront/team/page.tsx"
+    },
+    {
+      "routePath": "/storefront/units",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "units"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/storefront/units/page.tsx"
+    },
+    {
+      "routePath": "/welcome",
+      "kind": "page",
+      "segments": [
+        "welcome"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/welcome/page.tsx"
+    },
+    {
+      "routePath": "/wiki",
+      "kind": "page",
+      "segments": [
+        "wiki"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/wiki/page.tsx"
+    },
+    {
+      "routePath": "/wiki/[...slug]",
+      "kind": "page",
+      "segments": [
+        "wiki",
+        "[...slug]"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(shell)/wiki/[...slug]/page.tsx"
+    },
+    {
+      "routePath": "/wiki/edit/[...slug]",
+      "kind": "page",
+      "segments": [
+        "wiki",
+        "edit",
+        "[...slug]"
+      ],
+      "dynamicParams": [
+        "slug"
+      ],
+      "file": "apps/web/app/(shell)/wiki/edit/[...slug]/page.tsx"
+    },
+    {
+      "routePath": "/wiki/perspectives",
+      "kind": "page",
+      "segments": [
+        "wiki",
+        "perspectives"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/wiki/perspectives/page.tsx"
+    },
+    {
+      "routePath": "/wiki/perspectives/[profileId]/voice",
+      "kind": "page",
+      "segments": [
+        "wiki",
+        "perspectives",
+        "[profileId]",
+        "voice"
+      ],
+      "dynamicParams": [
+        "profileId"
+      ],
+      "file": "apps/web/app/(shell)/wiki/perspectives/[profileId]/voice/page.tsx"
+    },
+    {
+      "routePath": "/workbooks",
+      "kind": "page",
+      "segments": [
+        "workbooks"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workbooks/page.tsx"
+    },
+    {
+      "routePath": "/workbooks/[workbookId]",
+      "kind": "page",
+      "segments": [
+        "workbooks",
+        "[workbookId]"
+      ],
+      "dynamicParams": [
+        "workbookId"
+      ],
+      "file": "apps/web/app/(shell)/workbooks/[workbookId]/page.tsx"
+    },
+    {
+      "routePath": "/workbooks/system/[entityType]",
+      "kind": "page",
+      "segments": [
+        "workbooks",
+        "system",
+        "[entityType]"
+      ],
+      "dynamicParams": [
+        "entityType"
+      ],
+      "file": "apps/web/app/(shell)/workbooks/system/[entityType]/page.tsx"
+    },
+    {
+      "routePath": "/workspace",
+      "kind": "page",
+      "segments": [
+        "workspace"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/page.tsx"
+    },
+    {
+      "routePath": "/workspace/calendar",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "calendar"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/calendar/page.tsx"
+    },
+    {
+      "routePath": "/workspace/documents",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "documents"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/documents/page.tsx"
+    },
+    {
+      "routePath": "/workspace/documents/[documentId]",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "documents",
+        "[documentId]"
+      ],
+      "dynamicParams": [
+        "documentId"
+      ],
+      "file": "apps/web/app/(shell)/workspace/documents/[documentId]/page.tsx"
+    },
+    {
+      "routePath": "/workspace/my-queue",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "my-queue"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/my-queue/page.tsx"
+    }
+  ]
+}

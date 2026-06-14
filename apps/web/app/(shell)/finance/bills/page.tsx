@@ -4,6 +4,7 @@ import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import Link from "next/link";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
+import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 import { LocalTime } from "@/components/ui/LocalTime";
 
 const STATUS_COLOURS: Record<string, string> = {
@@ -17,10 +18,12 @@ const STATUS_COLOURS: Record<string, string> = {
 
 const ALL_STATUSES = ["draft", "awaiting_approval", "approved", "partially_paid", "paid"];
 
-type Props = { searchParams: Promise<{ status?: string; supplierId?: string }> };
+type Props = { searchParams: Promise<{ status?: string; supplierId?: string; view?: string }> };
 
 export default async function BillsPage({ searchParams }: Props) {
-  const { status, supplierId } = await searchParams;
+  const sp = await searchParams;
+  const { status, supplierId } = sp;
+  const view = parseSurfaceView(sp.view);
 
   const [bills, orgSettings] = await Promise.all([
     listBills({
@@ -58,6 +61,9 @@ export default async function BillsPage({ searchParams }: Props) {
 
       <FinanceTabNav />
 
+      <PlatformGridSection entityType="bill" view={view} />
+
+      {!view && (<>
       {/* Status filter pills */}
       <div className="flex flex-wrap gap-2 mb-6">
         <Link
@@ -161,6 +167,7 @@ export default async function BillsPage({ searchParams }: Props) {
           </table>
         </div>
       )}
+      </>)}
     </div>
   );
 }

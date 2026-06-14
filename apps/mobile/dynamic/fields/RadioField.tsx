@@ -1,9 +1,49 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import { colors, spacing, borderRadius } from "@/src/lib/theme";
+import { useTheme } from "@/src/lib/theme";
 import type { FieldProps } from "./index";
 
 export function RadioField({ definition, value, onChange, error }: FieldProps) {
+  const { colors, spacing } = useTheme();
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: { marginBottom: spacing.md },
+        label: {
+          color: colors.text,
+          fontSize: 14,
+          fontWeight: "500",
+          marginBottom: spacing.sm,
+        },
+        optionRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          paddingVertical: spacing.sm,
+        },
+        radioOuter: {
+          width: 22,
+          height: 22,
+          borderRadius: 11,
+          borderWidth: 2,
+          borderColor: colors.border,
+          alignItems: "center",
+          justifyContent: "center",
+          marginRight: spacing.sm,
+        },
+        radioOuterSelected: { borderColor: colors.primary },
+        radioInner: {
+          width: 12,
+          height: 12,
+          borderRadius: 6,
+          backgroundColor: colors.primary,
+        },
+        optionText: { color: colors.text, fontSize: 16 },
+        optionTextSelected: { color: colors.primary, fontWeight: "500" },
+        error: { color: colors.error, fontSize: 12, marginTop: spacing.xs },
+      }),
+    [colors, spacing],
+  );
+
   const options = definition.options ?? [];
 
   return (
@@ -43,52 +83,3 @@ export function RadioField({ definition, value, onChange, error }: FieldProps) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: spacing.md,
-  },
-  label: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: spacing.sm,
-  },
-  optionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: spacing.sm,
-  },
-  radioOuter: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: spacing.sm,
-  },
-  radioOuterSelected: {
-    borderColor: colors.primary,
-  },
-  radioInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.primary,
-  },
-  optionText: {
-    color: colors.text,
-    fontSize: 16,
-  },
-  optionTextSelected: {
-    color: colors.primary,
-    fontWeight: "500",
-  },
-  error: {
-    color: colors.error,
-    fontSize: 12,
-    marginTop: spacing.xs,
-  },
-});

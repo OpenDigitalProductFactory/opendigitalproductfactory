@@ -8,11 +8,13 @@ updatedBy: Claude (COO)
 
 ## Overview
 
-The EA Modeler is a canvas-based tool for building and maintaining your organization's enterprise architecture. Models are created using ArchiMate 4 notation and are intended to be implementable — not just decorative diagrams. They connect directly to the products, technology, and operations managed elsewhere in the platform.
+The EA Modeler is a canvas-based tool for building and maintaining your organization's enterprise architecture. Models are created in ArchiMate 4 (the default notation for enterprise structure), with BPMN 2.0 for process/workflow behaviour and SysML v2 for systems requirements, constraints, interfaces, and verification. They are intended to be implementable — not just decorative diagrams. They connect directly to the products, technology, and operations managed elsewhere in the platform.
 
 ## Key Concepts
 
-- **ArchiMate 4** — The open standard notation used for all models. It supports three layers: Business (processes, actors, roles), Application (software, interfaces, services), and Technology (infrastructure, platforms, networks).
+- **ArchiMate 4** — The default open-standard notation for enterprise structure, across three layers: Business (capabilities, actors, roles), Application (services, components, interfaces), and Technology (infrastructure, platforms, networks). Best for cross-layer dependencies and strategy alignment.
+- **BPMN 2.0** — For process and workflow behaviour: sequences, gateways, events, and swimlanes (who does what — human or AI coworker).
+- **SysML v2** — For systems architecture: requirements, constraints, interfaces, allocations, verification cases, and traceability. An architect-facing viewpoint (see Views & Viewpoints), not a default end-user surface.
 - **Views and Viewpoints** — A viewpoint defines which elements and relationships are relevant for a particular audience. A view is a specific diagram built from that viewpoint.
 - **Reference Models** — Prebuilt architecture patterns (e.g., cloud-native application, integration hub) that can be adapted and incorporated into your own models.
 - **Value Streams** — End-to-end sequences of activities that deliver value to a customer or stakeholder. Modelled in the business layer and traceable to the products and capabilities that enable them.
@@ -20,7 +22,7 @@ The EA Modeler is a canvas-based tool for building and maintaining your organiza
 ## What You Can Do
 
 - Create and edit architecture views across business, application, and technology layers
-- Apply standard ArchiMate viewpoints or define custom ones for your audience
+- Apply standard ArchiMate, BPMN, or SysML viewpoints, or define custom ones for your audience
 - Start from reference models and tailor them to your organization
 - Map value streams to the products and capabilities that support them
 - Use the AI coworker to generate a draft architecture view from a description

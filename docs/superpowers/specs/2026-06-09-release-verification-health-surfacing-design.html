@@ -1,0 +1,273 @@
+<!doctype html>
+<!--
+  HTML companion to 2026-06-09-release-verification-health-surfacing-design.md
+  (the Markdown original is kept alongside, unchanged). Pilot conversion for the
+  HTML-artifacts convention — see docs/superpowers/html-artifacts-guide.md.
+  Self-contained: inline CSS + SVG, no external assets.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Release Verification Health Surfacing — Design</title>
+<style>
+  :root {
+    --bg:#fff; --fg:#1a1d24; --muted:#5b6472; --soft:#f4f6fa; --border:#dce1e8;
+    --accent:#2f6df6; --accent-soft:#e8f0ff; --code-bg:#f6f8fa;
+    --kw:#b5258a; --str:#167f3a; --com:#8a94a6;
+    --ok:#167f3a; --ok-bg:#e7f6ec; --warn:#9a6700; --warn-bg:#fbf3e0;
+    --crit:#c0362c; --crit-bg:#fbe9e7; --neutral:#5b6472; --neutral-bg:#eef1f5;
+    --radius:10px; --maxw:1000px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0f1117; --fg:#e6e9ef; --muted:#9aa4b2; --soft:#161a22; --border:#2a313d;
+      --accent:#6ea0ff; --accent-soft:#18233b; --code-bg:#12161e;
+      --kw:#e07ad0; --str:#6fd58a; --com:#6b7585;
+      --ok:#6fd58a; --ok-bg:#11281a; --warn:#e3b35a; --warn-bg:#2a2210;
+      --crit:#f08a80; --crit-bg:#2c1513; --neutral:#9aa4b2; --neutral-bg:#1b2129;
+    }
+  }
+  * { box-sizing:border-box; } html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  .layout { display:grid; grid-template-columns:240px minmax(0,1fr); gap:40px; max-width:var(--maxw); margin:0 auto; padding:32px 24px 96px; }
+  nav.toc { position:sticky; top:24px; align-self:start; font-size:14px; }
+  nav.toc strong { display:block; text-transform:uppercase; letter-spacing:.06em; font-size:11px; color:var(--muted); margin-bottom:10px; }
+  nav.toc a { display:block; color:var(--muted); text-decoration:none; padding:4px 10px; border-left:2px solid var(--border); }
+  nav.toc a:hover { color:var(--accent); border-left-color:var(--accent); }
+  main { min-width:0; }
+  h1 { font-size:30px; line-height:1.2; margin:0 0 4px; }
+  h2 { font-size:21px; margin:40px 0 12px; }
+  h3 { font-size:16px; margin:24px 0 8px; }
+  a { color:var(--accent); }
+  code { font-family:"SF Mono","JetBrains Mono",Consolas,monospace; font-size:.88em; background:var(--code-bg); padding:1px 5px; border-radius:5px; }
+  pre { background:var(--code-bg); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; overflow:auto; }
+  pre code { background:none; padding:0; font-size:13px; line-height:1.6; }
+  .kw{color:var(--kw);} .str{color:var(--str);} .com{color:var(--com);font-style:italic;}
+  .meta-card { display:flex; flex-wrap:wrap; gap:8px 26px; margin:14px 0 8px; padding:14px 18px; background:var(--soft); border:1px solid var(--border); border-radius:var(--radius); }
+  .meta-card div { font-size:14px; } .meta-card span.k { color:var(--muted); text-transform:uppercase; letter-spacing:.05em; font-size:11px; display:block; }
+  .pill { display:inline-block; font-size:12px; font-weight:600; padding:2px 9px; border-radius:999px; }
+  .pill.ok{color:var(--ok);background:var(--ok-bg);} .pill.warn{color:var(--warn);background:var(--warn-bg);}
+  .pill.crit{color:var(--crit);background:var(--crit-bg);} .pill.neutral{color:var(--neutral);background:var(--neutral-bg);}
+  table { border-collapse:collapse; width:100%; margin:14px 0; font-size:14px; }
+  th,td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+  thead th { background:var(--soft); font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  figure { margin:18px 0; padding:18px; background:var(--soft); border:1px solid var(--border); border-radius:var(--radius); }
+  figure svg { display:block; width:100%; height:auto; }
+  figcaption { margin-top:12px; font-size:13px; color:var(--muted); text-align:center; }
+  .n-start { fill:var(--neutral-bg); stroke:var(--muted); }
+  .n-ok { fill:var(--ok-bg); stroke:var(--ok); }
+  .n-warn { fill:var(--warn-bg); stroke:var(--warn); }
+  .n-crit { fill:var(--crit-bg); stroke:var(--crit); }
+  .n-neutral { fill:var(--accent-soft); stroke:var(--accent); }
+  .lab { fill:var(--fg); font:600 13px sans-serif; }
+  .lab-sm { fill:var(--muted); font:11px sans-serif; }
+  .edge { stroke:var(--muted); fill:none; stroke-width:1.5; }
+  .edge-up { stroke:var(--ok); fill:none; stroke-width:1.5; stroke-dasharray:5 4; }
+  .edge-lab { fill:var(--muted); font:11px sans-serif; }
+  .callout { border-left:3px solid var(--accent); background:var(--accent-soft); padding:10px 16px; border-radius:0 var(--radius) var(--radius) 0; margin:16px 0; }
+  .src { font-size:13px; color:var(--muted); margin-top:8px; }
+  @media (max-width:760px) { .layout { grid-template-columns:1fr; } nav.toc { position:static; } }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="On this page">
+    <strong>On this page</strong>
+    <a href="#problem">Problem</a>
+    <a href="#design">Design</a>
+    <a href="#classify">Classification</a>
+    <a href="#state">State &amp; notifications</a>
+    <a href="#surfaces">Surfaces</a>
+    <a href="#oos">Out of scope</a>
+    <a href="#verification">Verification</a>
+  </nav>
+
+  <main>
+    <h1>Release Verification Health Surfacing — Design</h1>
+    <div class="meta-card">
+      <div><span class="k">BI</span>BI-3630773C</div>
+      <div><span class="k">Epic</span>EP-FULL-OBS (Full Observability)</div>
+      <div><span class="k">Status</span><span class="pill ok">shipped with this spec's PR</span></div>
+      <div><span class="k">Date</span>2026-06-09</div>
+    </div>
+    <p class="src">HTML companion to
+      <a href="2026-06-09-release-verification-health-surfacing-design.md">the Markdown original</a>
+      (kept unchanged). Pilot for the
+      <a href="../html-artifacts-guide.md">HTML-artifacts convention</a>.</p>
+
+    <h2 id="problem">Problem</h2>
+    <p>A release stamp (<code>vX.Y.Z</code> tag push) runs the Publish Docker Images
+      workflow, which publishes images <strong>first</strong> and runs the E2E install
+      verification gate <strong>after</strong>. A red verify gate therefore means a
+      <em>published but unverified</em> release — and that signal previously lived only
+      in the GitHub Actions dashboard.</p>
+    <div class="callout"><strong>Founding incident.</strong> The v6.0.0 stamp's verify
+      gate failed on 2026-06-08 and sat unnoticed for two days, masking an
+      installer-breaking bug (impossible distroless Loki healthcheck, fixed in
+      <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1677">PR #1677</a>),
+      until the v6.1.0 stamp hit the same wall. Watching CI dashboards is not the
+      operator's job.</div>
+
+    <h2 id="design">Design</h2>
+    <p>Three small pieces on existing rails — <strong>no new Prisma models, no
+      migration</strong>:</p>
+    <ol>
+      <li><strong>Reader</strong> — <code>apps/web/lib/release-health/release-runs-reader.ts</code></li>
+      <li><strong>State + notifications</strong> — <code>state.ts</code>, <code>runner.ts</code></li>
+      <li><strong>Surfaces</strong> — an Inngest cron + a portal Health-tab card</li>
+    </ol>
+
+    <h3>Reader</h3>
+    <ul>
+      <li>Reads the publish workflow's runs via the GitHub Actions REST API, filtered to
+        <code>event=push</code> + <code>head_branch</code> matching <code>vX.Y.Z</code>
+        (GitHub puts the tag name in <code>head_branch</code> for tag pushes).</li>
+      <li>Auth is optional: the upstream repo is public, and two requests per 15-minute
+        tick fit the anonymous 60/hr budget. When the <code>github-pr-sync</code>
+        credential (Contributor MCP card) is bound, its token is reused (resolvers
+        exported from <code>lib/contributor-change-lanes/github-rest-reader.ts</code>).</li>
+    </ul>
+
+    <h2 id="classify">Classification — the state machine</h2>
+    <p>This is the heart of the reader, and the part that reads as a tangle of prose
+      bullets in Markdown. As a diagram it's a four-outcome classifier with one
+      asynchronous "upgrade" edge:</p>
+
+    <figure>
+      <svg viewBox="0 0 760 420" role="img"
+           aria-label="Classification state machine: a stamp run resolves to verified, in-progress, verify-failed, or publish-failed; a newer green release-mode dispatch run upgrades verify-failed to verified.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)" /></marker>
+          <marker id="arg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--ok)" /></marker>
+        </defs>
+
+        <!-- start -->
+        <rect class="n-start" x="290" y="20" width="180" height="48" rx="10" />
+        <text class="lab" x="380" y="42" text-anchor="middle">Stamp run</text>
+        <text class="lab-sm" x="380" y="58" text-anchor="middle">push, head_branch = vX.Y.Z</text>
+
+        <!-- branch labels -->
+        <line class="edge" x1="340" y1="68" x2="150" y2="150" marker-end="url(#ar)" />
+        <text class="edge-lab" x="205" y="108">green</text>
+        <line class="edge" x1="380" y1="68" x2="380" y2="150" marker-end="url(#ar)" />
+        <text class="edge-lab" x="388" y="112">running</text>
+        <line class="edge" x1="420" y1="68" x2="610" y2="150" marker-end="url(#ar)" />
+        <text class="edge-lab" x="520" y="108">red → fetch jobs</text>
+
+        <!-- verified -->
+        <rect class="n-ok" x="60" y="150" width="180" height="48" rx="10" />
+        <text class="lab" x="150" y="172" text-anchor="middle">verified</text>
+        <text class="lab-sm" x="150" y="188" text-anchor="middle">success tone</text>
+
+        <!-- in-progress -->
+        <rect class="n-neutral" x="290" y="150" width="180" height="48" rx="10" />
+        <text class="lab" x="380" y="172" text-anchor="middle">in-progress</text>
+        <text class="lab-sm" x="380" y="188" text-anchor="middle">neutral tone</text>
+
+        <!-- red: split into two -->
+        <rect class="n-start" x="520" y="150" width="180" height="48" rx="10" />
+        <text class="lab" x="610" y="172" text-anchor="middle">red run</text>
+        <text class="lab-sm" x="610" y="188" text-anchor="middle">which job failed?</text>
+
+        <line class="edge" x1="565" y1="198" x2="470" y2="270" marker-end="url(#ar)" />
+        <text class="edge-lab" x="468" y="240">only verify gate</text>
+        <line class="edge" x1="655" y1="198" x2="655" y2="270" marker-end="url(#ar)" />
+        <text class="edge-lab" x="663" y="240">publish broke</text>
+
+        <!-- verify-failed -->
+        <rect class="n-crit" x="350" y="270" width="200" height="56" rx="10" />
+        <text class="lab" x="450" y="292" text-anchor="middle">verify-failed</text>
+        <text class="lab-sm" x="450" y="310" text-anchor="middle">images live, NOT verified · critical</text>
+
+        <!-- publish-failed -->
+        <rect class="n-warn" x="580" y="270" width="150" height="56" rx="10" />
+        <text class="lab" x="655" y="292" text-anchor="middle">publish-failed</text>
+        <text class="lab-sm" x="655" y="310" text-anchor="middle">nothing shipped · warning</text>
+
+        <!-- supersede upgrade edge -->
+        <path class="edge-up" d="M350,305 C160,320 150,250 150,200" marker-end="url(#arg)" />
+        <text class="edge-lab" x="120" y="300" fill="var(--ok)">newer green</text>
+        <text class="edge-lab" x="120" y="316" fill="var(--ok)">release-mode</text>
+        <text class="edge-lab" x="120" y="332" fill="var(--ok)">dispatch run</text>
+      </svg>
+      <figcaption>Figure 1 — Classification of a stamp run, and the asynchronous
+        <span style="color:var(--ok)">upgrade edge</span> by which a newer green
+        release-mode dispatch supersedes a <code>verify-failed</code> result.</figcaption>
+    </figure>
+
+    <div class="callout"><strong>Superseding dispatch verification.</strong> A red stamp
+      run stays red on GitHub forever — re-runs execute the tag's stale workflow
+      definition, so operators re-verify via the manual <code>install-verification.yml</code>
+      dispatch in release mode instead (the v6.1.0 recovery path). A green release-mode
+      dispatch run <em>newer than the stamp</em> upgrades <code>verify-failed</code> →
+      <code>verified</code>. Release mode is detected from the job name
+      (<code>… (ubuntu-latest, release)</code>) because dispatch inputs are not exposed on
+      the runs API. Best-effort: any failure in this check leaves the stamp
+      <code>verify-failed</code> — alerting too much beats silently clearing a real
+      failure.</div>
+
+    <h2 id="state">State &amp; notifications</h2>
+    <ul>
+      <li>Last-known state persists as one JSON blob in <code>PlatformConfig</code>
+        (<code>release_health.latest</code>), the same pattern as
+        <code>self_upgrade.lastCheckedAt</code>. Survives portal restarts.</li>
+      <li>Red stamp → one <code>PlatformNotification</code> (category
+        <code>release-verification</code>, subjectId = tag) per run id;
+        <code>notifiedRunId</code> in state dedupes across polls.</li>
+      <li>A later stamp verifying green resolves all open release-verification
+        notifications. An in-progress re-stamp does <strong>not</strong> resolve — the
+        failed release stays alerted until a green verify actually lands.</li>
+      <li>Poll errors (offline, rate-limited) leave prior state untouched.</li>
+    </ul>
+
+    <h3>Status → severity → portal tone</h3>
+    <table>
+      <thead><tr><th>State</th><th>Meaning</th><th>Notification</th><th>Card tone</th></tr></thead>
+      <tbody>
+        <tr><td><code>verified</code></td><td>Verify gate passed; release is good</td><td>—</td><td><span class="pill ok">success</span></td></tr>
+        <tr><td><code>in-progress</code></td><td>Stamp run still executing</td><td>—</td><td><span class="pill neutral">neutral</span></td></tr>
+        <tr><td><code>verify-failed</code></td><td>Images live, verification failed</td><td><span class="pill crit">critical</span></td><td><span class="pill crit">critical</span></td></tr>
+        <tr><td><code>publish-failed</code></td><td>Publish itself broke; nothing shipped</td><td><span class="pill warn">warning</span></td><td><span class="pill warn">warning</span></td></tr>
+        <tr><td>never-stamped</td><td>No release tag observed yet</td><td>—</td><td><span class="pill neutral">neutral "—"</span></td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="surfaces">Surfaces</h2>
+    <ul>
+      <li>Inngest cron <code>ops/release-health-check</code> every 15 minutes
+        (<code>lib/queue/functions/release-health-check.ts</code>), gated by
+        <code>gateAtEntry</code> like every scheduled function.</li>
+      <li>A fourth "Latest Release" card on the portal Health tab summary grid
+        (<code>PortalHealthSummary</code>), fed server-side from <code>PlatformConfig</code>
+        by the health page. The card links to the GitHub Actions run (external link,
+        new tab).</li>
+    </ul>
+
+    <h2 id="oos">Out of scope</h2>
+    <ul>
+      <li>Re-running or gating the stamp itself (stays operator-initiated).</li>
+      <li>Auto-filing PIR/backlog items from the failure log (the Tier 2 log scanner
+        owns log-derived intake).</li>
+      <li>Non-release workflow monitoring (PR CI health).</li>
+    </ul>
+
+    <h2 id="verification">Verification evidence (at ship)</h2>
+    <div class="callout">
+      <ul style="margin:0">
+        <li>24 unit tests across reader classification, superseding logic, and the
+          runner's notification lifecycle.</li>
+        <li>Live-contract check against the real GitHub API (2026-06-10): the v6.1.0
+          incident classifies as <code>verify-failed</code> from its real jobs payload, and
+          the real green dispatch run <code>27248800875</code> (created 02:21Z, job
+          "Linux E2E Install (ubuntu-latest, release)") supersedes it to
+          <code>verified</code> — so the first cron tick after merge shows v6.1.0 verified
+          rather than raising a stale false alarm.</li>
+      </ul>
+    </div>
+  </main>
+</div>
+</body>
+</html>

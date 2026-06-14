@@ -253,6 +253,17 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     high: "warning",
     critical: "danger",
   },
+  // Multi-archetype composition compatibility (EP-ARCH-8D4F2A §4.3).
+  // good = same-category or low-conflict; concern = cross-category differences;
+  // acute = trust/compliance/identity block; in-motion = seeding in progress;
+  // unknown = metadata missing (never green).
+  compositionCompatibility: {
+    good: "success",
+    concern: "warning",
+    acute: "danger",
+    "in-motion": "accent",
+    unknown: "neutral",
+  },
 };
 
 /**

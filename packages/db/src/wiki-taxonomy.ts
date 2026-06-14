@@ -161,6 +161,34 @@ export const PRINCIPLE_DIMENSIONS = [
 export type PrincipleDimension = (typeof PRINCIPLE_DIMENSIONS)[number];
 
 /**
+ * The subset of `PRINCIPLE_DIMENSIONS` that are *costs* — axes where a higher
+ * option-feature score (0..1, "how much does this option exhibit this axis")
+ * means the option exhibits MORE of a bad thing: more blast radius, more
+ * operator/agent cognitive load, more vendor lock-in.
+ *
+ * Sign convention (AUTHORING.md §8A.3): a negative weight means a principle
+ * "pulls against" the axis. Because option features are non-negative, the only
+ * way for `principle_decide` to express "this principle opposes the cost" is a
+ * NEGATIVE weight. A POSITIVE weight on a cost axis makes the scorer reward the
+ * very cost the principle exists to prevent — e.g. `never-wipe-db-for-code-fixes`
+ * with `blast_radius: 1.0` once scored "wipe the db" as its top-aligned option
+ * (see docs/superpowers/audits/2026-06-14-principle-dimension-sign-audit.md).
+ *
+ * Enforced by the dimension-vector sign-convention guard in
+ * `seed-wiki-kernel.test.ts`, so the inversion cannot silently return —
+ * `remove-avoidable-failure-opportunities` applied to the kernel's own
+ * calibration. All other dimensions are benefits (positive is the normal
+ * direction) or neutral trade-offs (e.g. `speed_to_value`, legitimately
+ * negative when a principle trades speed away).
+ */
+export const PRINCIPLE_COST_DIMENSIONS = [
+  "blast_radius",
+  "human_cognitive_load",
+  "vendor_lock_in",
+] as const satisfies readonly PrincipleDimension[];
+export type PrincipleCostDimension = (typeof PRINCIPLE_COST_DIMENSIONS)[number];
+
+/**
  * Default weight magnitude for each tier. A principle can override via
  * `principleWeight` + `principleWeightRationale`; lint warns on divergence.
  * Ratios chosen so one commandment outweighs ten contextual at peak alignment
