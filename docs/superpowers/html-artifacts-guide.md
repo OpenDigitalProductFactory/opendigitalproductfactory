@@ -191,6 +191,35 @@ the body — same no-hardcoded-colors discipline the portal UI follows. The
 templates ship with a palette already wired; reuse it so artifacts look like one
 family.
 
+## Side benefit: artifacts can double as public-site content
+
+The public site at [opendigitalproductfactory.com](https://opendigitalproductfactory.com)
+is a Jekyll site served from `docs/`. It already ships **one bespoke,
+self-contained HTML page** — the landing page `docs/index.html`, which is opted
+*out* of the Jekyll layout (`layout: null`) and carries its own embedded styles.
+
+The artifacts this guide produces are built the same way: **self-contained**
+(inline CSS, inline SVG, no external assets or CDN). That means a *curated*
+HTML artifact can be published to the public domain **as-is** — no Jekyll chrome,
+no template wiring, exactly the pattern `index.html` already uses. Over time,
+surfacing select design explainers, architecture overviews, or worked specs on
+the public site deepens its content and **veracity** as a long-term side effect
+of writing artifacts in this format — the same file serves the internal reader,
+the agent, and (when cleared) the public.
+
+Two honest caveats so this stays a *deliberate* act, never an automatic leak:
+
+- **`superpowers/` is currently Jekyll-excluded** (see `docs/_config.yml`
+  `exclude:`) — it holds internal specs/plans and Liquid markers that must not
+  hit the public build. Nothing under it publishes today, and that default is
+  correct.
+- **Publishing is curated and outward-facing.** Internal specs stay internal;
+  only an artifact explicitly cleared for public consumption gets surfaced
+  (e.g. copied to a public-cleared path outside the `exclude` list).
+  Self-containment makes publishing *cheap when you choose to*; it does not make
+  it the default. Treat any move that puts an artifact on the public domain as a
+  publish decision requiring review.
+
 ## Relationship to existing conventions
 
 - **Locations are unchanged.** HTML specs live in `docs/superpowers/specs/`
