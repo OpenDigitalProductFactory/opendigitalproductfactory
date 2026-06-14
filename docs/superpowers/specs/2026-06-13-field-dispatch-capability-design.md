@@ -322,6 +322,10 @@ Dependency-ordered; each is independently shippable. **★ = in the smallest bui
 | **F11** | Field-parts inventory — per-vehicle stock (Workbooks substrate), parts-used→stock deduction, low-stock→draft-PO reorder | F0b, F1 | **moat (spine §6.5)** |
 | **F12** | QuickBooks job→invoice→sync — job-complete→DPF `Invoice` (`sourceType=field-service-job`), QB write client, approval-gated sync proposal | F1 | **moat (spine §6.5)** |
 | **F13** | AI job/finance monitoring — Dispatcher coworker standing watches: schedule adherence, unconfirmed, failed-notify, parts-blocked, cert expiry, **un-invoiced completion / sync-failed** | F1, F2 | **moat (spine §6.5)** |
+| **F14** | Warranty-aware service — per-component parts/labor coverage (e.g. compressor 10yr parts / 0 labor) on the equipment record; field-invoice line classification (covered → $0 customer line) | F12, equipment record | **moat** |
+| **F15** | Mobile field-app contract — geo / comms / routing / customer-location detail / field-invoice / payment surfaces the dispatcher consumes; the dispatch↔mobile convergence contract | F1, F2 | enabler |
+
+> **F14/F15 detail + warranty model + the mobile convergence contract are specified in [Field Dispatch — Mobile Field-App Contract & Warranty Service](2026-06-14-field-dispatch-mobile-contract-and-warranty-design.html) (HTML+SysML).** The native mobile archetype apps (separate thread, PR #1886) implement the contract's ports; warranty logic is built + verified in `@dpf/validators/field-dispatch-warranty.ts`.
 
 ### Smallest buildable slice (no external dependencies)
 **F0a + F0b + F1 + F2(propose confirm + propose on-my-way) + F3(minimal board) + F7(trades vocab).**
