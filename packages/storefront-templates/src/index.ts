@@ -3,6 +3,7 @@ export * from "./capability-registry";
 export * from "./applicability-rules";
 export * from "./activation-profile";
 export * from "./capability-activation";
+export * from "./composition";
 export * from "./archetypes/index";
 export * from "./media-profile";
 export * from "./operational-value-stream";

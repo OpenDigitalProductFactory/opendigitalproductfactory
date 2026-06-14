@@ -102,6 +102,16 @@ export async function POST(req: NextRequest) {
     select: { id: true },
   });
 
+  // Seed the primary composition slot so getCompositeActivationProfile can resolve this storefront.
+  await prisma.storefrontArchetypeComposition.create({
+    data: {
+      storefrontId: config.id,
+      archetypeId: archetype.id,
+      role: "primary",
+      sortOrder: 0,
+    },
+  });
+
   // Generate design system recommendation from archetype metadata (pure TypeScript, no LLM call)
   try {
     const tags = Array.isArray(archetype.tags) ? (archetype.tags as string[]).join(" ") : "";
