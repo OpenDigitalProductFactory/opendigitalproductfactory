@@ -58,6 +58,17 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="jobs"
+        options={{
+          title: "Jobs",
+          headerShown: false,
+          href: hiddenHref("jobs"),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="briefcase" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="portfolio"
         options={{
           title: "Portfolio",
