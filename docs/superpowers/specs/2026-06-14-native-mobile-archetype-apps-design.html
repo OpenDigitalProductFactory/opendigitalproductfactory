@@ -103,6 +103,7 @@
     <a href="#decisions">13 · Decisions for you</a>
     <a href="#out-of-scope">14 · Out of scope</a>
     <a href="#verification">15 · Verification</a>
+    <a href="#sysml">16 · SysML substrate</a>
   </nav>
 
   <main>
@@ -183,14 +184,16 @@
     </table>
 
     <!-- ============================================================ -->
-    <h2 id="architecture">3 · Keystone architecture — one binary, persona-routed</h2>
+    <h2 id="architecture">3 · Keystone architecture — the install drives the app</h2>
 
-    <p>The whole design hinges on one move: <strong>the app is generic; the install tells it who the user
-    is and what to show.</strong> After the user connects to their org's install and signs in, the app
-    fetches a <strong>persona manifest</strong> — a small JSON document that declares the principal's kind,
-    the org's archetype(s), the enabled modules/capabilities, the tab set, vocabulary overrides, and
-    branding tokens. The shell renders entirely from that manifest plus the existing dynamic
-    form/view renderer. <strong>No per-archetype app code ships in the binary.</strong></p>
+    <p>The whole design hinges on one move: <strong>the app is a generic renderer; the install drives both
+    its design and its functionality.</strong> After the user connects to their org's install and signs in,
+    the app fetches one <strong>install manifest</strong> carrying three layers — <strong>(1) design tokens</strong>
+    (the install's branding/theme as data), <strong>(2) capability gating</strong> (which functionality this
+    org + archetype + persona may use), and <strong>(3) server-driven screens</strong> (the forms, views, tabs,
+    and navigation, as data). The app re-themes and re-functions from that manifest plus a fixed catalog of
+    native components. <strong>No per-company or per-archetype code ships in the binary</strong> — uniqueness is
+    data the platform emits, exactly the way an archetype already bootstraps a portal.</p>
 
     <figure>
       <svg viewBox="0 0 980 360" role="img" aria-label="One binary fetches a persona manifest and routes to one of three modes">
@@ -210,9 +213,9 @@
         <!-- manifest -->
         <line class="svg-edge" x1="388" y1="180" x2="443" y2="180" marker-end="url(#arrow)" />
         <rect class="svg-node" x="446" y="148" width="180" height="64" rx="8" />
-        <text class="svg-label" x="536" y="170" text-anchor="middle">Persona manifest</text>
+        <text class="svg-label" x="536" y="170" text-anchor="middle">Install manifest</text>
         <text class="svg-sub" x="536" y="188" text-anchor="middle">/api/v1/app/config</text>
-        <text class="svg-sub" x="536" y="202" text-anchor="middle">kind · archetype · tabs · modules</text>
+        <text class="svg-sub" x="536" y="202" text-anchor="middle">tokens · capabilities · screens</text>
         <!-- three modes -->
         <line class="svg-edge" x1="626" y1="165" x2="690" y2="80"  marker-end="url(#arrow)" />
         <line class="svg-edge" x1="626" y1="180" x2="690" y2="180" marker-end="url(#arrow)" />
@@ -227,31 +230,84 @@
         <text class="svg-label" x="710" y="274">Operator mode  (exists)</text>
         <text class="svg-sub" x="710" y="292">paused-work approvals · ops · portfolio</text>
       </svg>
-      <figcaption>Figure 1 — The same binary connects to any install, fetches a persona manifest, and
-        renders one of three shared-shell modes. All three read the existing <code>/api/v1/*</code> + dynamic renderer.</figcaption>
+      <figcaption>Figure 1 — One generic binary connects to any install, fetches the install manifest
+        (design tokens + capabilities + server-driven screens), and re-themes + re-functions into the right
+        persona surface. All modes render from a fixed native component catalog + the existing dynamic renderer.</figcaption>
     </figure>
 
-    <p><strong>Identity is already converged for this.</strong> AGENTS §11 (principal convergence) makes
-    <code>User</code>, <code>CustomerContact</code>, <code>Agent</code>, and <code>MobileDevice</code> all
-    resolve onto a single <code>Principal</code>; the alias kind tells the platform which surface
-    authenticated. The manifest resolves on the <code>Principal</code> — so customer, employee, and
-    operator are one identity model, three views.</p>
-
-    <h3>The manifest (new contract — illustrative shape)</h3>
-    <pre><code><span class="com">// GET /api/v1/app/config  → returned after login, drives the whole shell</span>
+    <h3>The install manifest (new contract — three layers)</h3>
+    <pre><code><span class="com">// GET /api/v1/app/config — returned after connect + login; drives the whole app</span>
 {
-  <span class="str">"principalKind"</span>: <span class="str">"customer"</span> | <span class="str">"employee"</span> | <span class="str">"operator"</span>,
-  <span class="str">"org"</span>: { <span class="str">"name"</span>: <span class="str">"Acme HVAC"</span>, <span class="str">"archetype"</span>: <span class="str">"trades-maintenance/hvac-contractor"</span> },
-  <span class="str">"mode"</span>: <span class="str">"field"</span>,                 <span class="com">// which shared-shell mode to mount</span>
-  <span class="str">"tabs"</span>: [<span class="str">"jobs"</span>, <span class="str">"schedule"</span>, <span class="str">"customers"</span>, <span class="str">"more"</span>],
-  <span class="str">"capabilities"</span>: [<span class="str">"work-items"</span>, <span class="str">"offline-sync"</span>, <span class="str">"photo-capture"</span>, <span class="str">"signature"</span>],
-  <span class="str">"vocabulary"</span>: { <span class="str">"customer"</span>: <span class="str">"customer"</span> },   <span class="com">// archetype overrides (e.g. "patient", "member")</span>
-  <span class="str">"branding"</span>: { <span class="str">"accent"</span>: <span class="str">"#1e6f50"</span>, <span class="str">"logoUrl"</span>: <span class="str">"…"</span> }
+  <span class="str">"schemaVersion"</span>: <span class="str">"1"</span>,
+  <span class="str">"org"</span>:     { <span class="str">"name"</span>: <span class="str">"Acme HVAC"</span>, <span class="str">"archetype"</span>: <span class="str">"trades-maintenance/hvac-contractor"</span> },
+  <span class="str">"persona"</span>: { <span class="str">"kind"</span>: <span class="str">"employee"</span>, <span class="str">"mode"</span>: <span class="str">"field"</span> },
+
+  <span class="com">// (1) DESIGN — W3C DTCG design tokens, sourced from the install's BrandingConfig.tokens</span>
+  <span class="str">"designTokens"</span>: { <span class="str">"color"</span>: { <span class="str">"accent"</span>: { <span class="str">"$type"</span>: <span class="str">"color"</span>, <span class="str">"$value"</span>: <span class="str">"#1e6f50"</span> } },
+                    <span class="str">"font"</span>:  { <span class="str">"body"</span>:   { <span class="str">"$type"</span>: <span class="str">"fontFamily"</span>, <span class="str">"$value"</span>: <span class="str">"Inter"</span> } } },
+
+  <span class="com">// (2) CAPABILITIES — derived from the archetype activationProfile + org activation</span>
+  <span class="str">"capabilities"</span>: [<span class="str">"work-items"</span>, <span class="str">"scheduling"</span>, <span class="str">"offline-sync"</span>, <span class="str">"photo-capture"</span>, <span class="str">"signature"</span>],
+  <span class="str">"vocabulary"</span>:   { <span class="str">"customer"</span>: <span class="str">"customer"</span> },   <span class="com">// archetype overrides (e.g. "patient", "member")</span>
+
+  <span class="com">// (3) SCREENS — server-driven nav + screens, rendered by the fixed native catalog</span>
+  <span class="str">"navigation"</span>: { <span class="str">"tabs"</span>: [<span class="str">"jobs"</span>, <span class="str">"schedule"</span>, <span class="str">"customers"</span>, <span class="str">"more"</span>], <span class="str">"defaultTab"</span>: <span class="str">"jobs"</span> },
+  <span class="str">"screens"</span>:    [ { <span class="str">"screenId"</span>: <span class="str">"jobs"</span>, <span class="str">"type"</span>: <span class="str">"view"</span>, <span class="str">"schema"</span>: { <span class="com">/* DynamicViewSchema */</span> } } ]
 }</code></pre>
-    <p>This composes existing platform logic rather than inventing it: <code>BusinessModelRole</code> /
-    <code>platformRole</code> (persona), <code>StorefrontArchetype.activationProfile</code> (modules + axes),
-    <code>getShellNavSections</code> + <code>portal-navigation-model.ts</code> (nav resolution),
-    <code>resolveVocabularyKey</code> (vocabulary), <code>Organization</code> branding.</p>
+    <p>Each layer composes substrate that already exists, rather than inventing it:</p>
+    <ul>
+      <li><strong>Design tokens</strong> → <code>BrandingConfig.tokens</code> (per-org JSON, light/dark) +
+        the portal's <code>--dpf-*</code> variables in <code>globals.css</code> + the runtime injector
+        <code>buildBrandingStyleTag</code> in <code>apps/web/lib/release/branding.ts</code>. The web portal already
+        re-themes from these; mobile's <code>theme.ts</code> is hard-coded today and consumes them at startup instead.</li>
+      <li><strong>Capabilities</strong> → <code>StorefrontArchetype.activationProfile</code> (modules + axes) +
+        <code>OrganizationCapabilityActivation</code> (the org's on/off choices) + the nav
+        <code>capabilityKey</code> / <code>orgCapabilityKey</code> gates in <code>portal-navigation-model.ts</code>.</li>
+      <li><strong>Screens</strong> → <code>DynamicFormSchema</code> / <code>DynamicViewSchema</code> +
+        <code>fieldRegistry</code> / <code>widgetRegistry</code> + <code>FormRenderer</code> / <code>ViewRenderer</code>
+        in <code>apps/mobile/dynamic/</code> (a working SDUI seed), plus the portal's <code>ScreenManifest</code> pattern
+        as precedent for declarative screen contracts.</li>
+    </ul>
+    <p><strong>Identity is already converged for this.</strong> AGENTS §11 (principal convergence) resolves
+    <code>User</code>, <code>CustomerContact</code>, <code>Agent</code>, and <code>MobileDevice</code> onto one
+    <code>Principal</code>; the alias kind tells the platform which surface authenticated — so customer, employee,
+    and operator are one identity model, three views, all selected by the manifest.</p>
+
+    <h3 id="standard-or-invent">Standard, or do we invent?</h3>
+    <p>Researched against the field (citations in §10). The verdict: <strong>this is a partially-standardized
+    pattern — adopt the primitives, build only the glue.</strong> It is not genuinely novel; nobody ships exactly
+    "generic RN app + token theming + native SDUI + capability flags + self-hosted multi-archetype" off the shelf,
+    so the <em>integration</em> is ours — but every layer underneath is established.</p>
+    <table>
+      <thead><tr><th>Layer</th><th>Status in industry</th><th>What we adopt / build</th></tr></thead>
+      <tbody>
+        <tr><td>Design system as data</td><td><span class="pill ok">standardized</span> — W3C DTCG Design Tokens, first stable 2025.10</td><td><strong>Adopt</strong> the DTCG token format; store in <code>BrandingConfig.tokens</code></td></tr>
+        <tr><td>Functionality / screens as data (SDUI)</td><td><span class="pill warn">mature pattern, no single standard</span> — DivKit (Apache-2.0), Adaptive Cards, Airbnb GP</td><td><strong>Adopt the approach</strong> (declarative component registry); we already have the renderer seed</td></tr>
+        <tr><td>"Point-at-instance, absorb config/brand/features"</td><td><span class="pill warn">strong precedents, not standardized</span> — Home Assistant, Nextcloud, Mastodon</td><td><strong>Adopt the flow</strong> (connect → descriptor → manifest)</td></tr>
+        <tr><td>Per-archetype contract binding all three to installs</td><td><span class="pill neutral">novel — our IP</span></td><td><strong>Build</strong> the glue — = "archetype is bootstrap" extended to mobile</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Apple's declarative-only line (App Store 2.5.2)</h3>
+    <div class="callout warn">
+      Apple guideline <strong>2.5.2</strong> forbids apps that "download, install, or execute code which
+      introduces or changes features." A <strong>JSON manifest of tokens + layouts rendered by pre-shipped native
+      components is <em>data</em>, not code — and is permitted.</strong> Shipping server-delivered JS/native code that
+      changes functionality is not. Guideline 2.3.1 also bars using config to change the app's <em>core purpose</em>
+      post-review (per-archetype variation is fine; turning a wellness app into a casino is not). <strong>The contract
+      stays strictly declarative</strong> — a fixed component vocabulary + tokens + capability flags + data — and we
+      never ship executable code over the wire. (Android/Play has no equivalent restriction.)
+    </div>
+
+    <h3>How much already exists (~60%)</h3>
+    <table>
+      <thead><tr><th>Layer</th><th>Exists today</th><th>Gap to close</th></tr></thead>
+      <tbody>
+        <tr><td>Design tokens</td><td><code>BrandingConfig.tokens</code> + <code>globals.css</code> <code>--dpf-*</code> + <code>branding.ts</code> injector (portal)</td><td>mobile <code>theme.ts</code> consumes tokens at startup; manifest carries full DTCG set (today's <code>InstanceDescriptor</code> seeds only accent + logo)</td></tr>
+        <tr><td>Capabilities</td><td><code>activationProfile</code> + <code>OrganizationCapabilityActivation</code> + nav gates</td><td>mobile queries them; module → mobile-screen mapping</td></tr>
+        <tr><td>SDUI screens</td><td><code>DynamicForm</code>/<code>DynamicView</code> schema + registries + renderers + DB models</td><td>nav/screen-level schema, conditional visibility, in-schema theming, screen-to-screen flow; seed per archetype</td></tr>
+      </tbody>
+    </table>
 
     <!-- ============================================================ -->
     <h2 id="repo">4 · Repo &amp; CI strategy — keep the monorepo, decouple the lane</h2>
@@ -417,7 +473,7 @@
     <table>
       <thead><tr><th>Action</th><th>Why an agent can't</th><th>Cost / note</th></tr></thead>
       <tbody>
-        <tr><td>Enroll <strong>Apple Developer Program</strong> (organization)</td><td>legal entity, D-U-N-S, 2FA Apple ID, signed agreements</td><td class="num">$99/yr</td></tr>
+        <tr><td>Enroll <strong>Apple Developer Program</strong> as <strong>Arcamanus LLC</strong> (organization)</td><td>legal entity, D-U-N-S, 2FA Apple ID, signed agreements</td><td class="num">$99/yr</td></tr>
         <tr><td>Create <strong>Google Play Console</strong> account (org)</td><td>identity verification, signed agreements</td><td class="num">$25 once</td></tr>
         <tr><td>Create <strong>Expo / EAS</strong> account + org</td><td>account auth for cloud builds</td><td>free to start</td></tr>
         <tr><td>Create <strong>Firebase</strong> project (FCM) + generate <strong>APNs Auth Key</strong></td><td>Google/Apple account-bound credential generation</td><td>free (push)</td></tr>
@@ -431,10 +487,24 @@
     <!-- ============================================================ -->
     <h2 id="research">10 · Research &amp; benchmarking</h2>
     <ul>
-      <li><strong>Self-hosted multi-instance clients</strong> (Mastodon, Nextcloud, Home Assistant, WordPress,
-        GitLab): one app-store binary + user-entered instance URL + discovery endpoint. <em>Adopted:</em>
-        instance-URL entry + <code>.well-known</code> descriptor. <em>Rejected as default:</em> per-org
-        white-label builds (store overhead, cost) — offered only later as a premium.</li>
+      <li><strong>Self-hosted multi-instance clients</strong> — one app-store binary + user-entered instance URL +
+        discovery endpoint. <a href="https://companion.home-assistant.io/docs/integrations/android-webview/">Home Assistant</a>
+        is the closest product analog (point at your instance; its config + <a href="https://companion.home-assistant.io/docs/integrations/theming/">theme</a>
+        drive the UI — though via WebView); <a href="https://nextcloud.com/blog/branded-nextcloud-clients/">Nextcloud</a>
+        auto-syncs the server's theme to its apps and sells pre-configured "branded clients" as a premium;
+        <a href="https://docs.joinmastodon.org/methods/instance/">Mastodon</a> exposes per-instance config via
+        <code>/api/v1/instance</code>. <em>Adopted:</em> instance-URL entry + <code>.well-known</code> descriptor + manifest.
+        <em>Rejected as default:</em> per-org white-label builds — offered only later as a premium.</li>
+      <li><strong>Server-driven UI (SDUI)</strong> — <a href="https://medium.com/airbnb-engineering/a-deep-dive-into-airbnbs-server-driven-ui-system-842244c5f5">Airbnb's Ghost Platform</a>
+        (reference design, not OSS), <a href="https://github.com/divkit/divkit">DivKit</a> (VK, Apache-2.0, iOS/Android/web —
+        no first-party RN renderer), and <a href="https://learn.microsoft.com/en-us/adaptive-cards/">Adaptive Cards</a>
+        (declarative JSON UI with a real React-Native renderer, but card-scoped). <em>Adopted:</em> a declarative
+        component-registry approach over our existing dynamic renderer. <em>Rejected:</em> downloading executable UI
+        code (Apple 2.5.2) and over-scoped SDUI frameworks (Spotify deprecated its HubFramework).</li>
+      <li><strong>Design tokens as data</strong> — the <a href="https://www.designtokens.org/tr/2025.10/format/">W3C DTCG Design Tokens Format Module</a>
+        reached its <a href="https://www.w3.org/community/design-tokens/2025/10/28/design-tokens-specification-reaches-first-stable-version/">first stable version (2025.10)</a>.
+        <em>Adopted</em> as the manifest's design layer; maps onto our existing <code>BrandingConfig.tokens</code>
+        (Style Dictionary for build-time fan-out if needed).</li>
       <li><strong>Field-service apps</strong> (ServiceTitan, Jobber, Housecall Pro, FieldEdge): convergent
         field-tech feature set — job list, schedule, "on my way", check-in/out, line items, photos, signature,
         offline. <em>Validates</em> our <code>WorkItem/WorkSchedule</code> + dynamic camera/signature surface;
@@ -453,13 +523,14 @@
     <table>
       <thead><tr><th>Phase</th><th>Outcome</th><th>Key work</th><th>Gate</th><th>Depends on</th></tr></thead>
       <tbody>
-        <tr><td><strong>P0</strong> Accounts &amp; naming <em>(you, in parallel)</em></td><td>able to publish later</td><td>Apple/Google/Expo/Firebase accounts, APNs key, bundle ids, privacy policy, demo domain</td><td>Mark</td><td>—</td></tr>
-        <tr><td><strong>P1</strong> Connectivity foundation <em>(now)</em></td><td>app reaches any install at runtime</td><td>runtime server-URL config + <code>.well-known/dpf-instance</code> + connect screen</td><td>—</td><td>—</td></tr>
-        <tr><td><strong>P2</strong> Persona manifest <em>(keystone)</em></td><td>one binary, persona-routed; operator mode folded in</td><td><code>/api/v1/app/config</code> + manifest-driven shell/nav</td><td>—</td><td>P1</td></tr>
-        <tr><td><strong>P3</strong> Customer mode</td><td>recurring-biz customers self-serve</td><td>booking, my-visits, invoices/pay, messages, service requests</td><td>—</td><td>P2</td></tr>
-        <tr><td><strong>P4</strong> Field mode</td><td>techs run jobs offline</td><td>job/dispatch board, schedule, check-in/out, checklist, photo/sig, offline sync</td><td>—</td><td>P2</td></tr>
-        <tr><td><strong>P5</strong> Push + offline hardening</td><td>reliable notifications + offline writes</td><td>Expo push sender adapter (APNs/FCM), channel policy, offline mutation queue</td><td>P0 creds</td><td>P2</td></tr>
-        <tr><td><strong>P6</strong> Store release</td><td>in users' hands</td><td>EAS build/submit, TestFlight + Play internal → production, metadata</td><td>Mark</td><td>P0, P3/P4</td></tr>
+        <tr><td><strong>P0</strong> Accounts &amp; naming <em>(you, in parallel)</em></td><td>able to publish later</td><td>Apple Developer as <strong>Arcamanus LLC</strong>, Google Play, Expo/EAS, Firebase + APNs key, bundle ids, privacy policy, demo domain</td><td>Mark</td><td>—</td></tr>
+        <tr><td><strong>P1</strong> Connectivity foundation <span class="pill ok">done</span></td><td>app reaches any install at runtime</td><td>runtime server-URL config + connect screen + <code>.well-known/dpf-instance</code> descriptor</td><td>—</td><td>—</td></tr>
+        <tr><td><strong>P2</strong> Install manifest + runtime theming <em>(keystone)</em></td><td>install drives design + nav; one binary re-themes per org</td><td><code>/api/v1/app/config</code> with DTCG tokens + capability gating + resolved nav/persona; mobile <code>theme.ts</code> consumes tokens at startup</td><td>—</td><td>P1</td></tr>
+        <tr><td><strong>P3</strong> Server-driven screen layer (SDUI)</td><td>archetypes drive functionality as data</td><td>extend the dynamic renderer with screen/nav schema + conditional visibility + in-schema theming; seed <code>DynamicForm</code>/<code>DynamicView</code> per archetype</td><td>—</td><td>P2</td></tr>
+        <tr><td><strong>P4</strong> Field use-cases <em>(first set)</em></td><td>techs run jobs offline</td><td>job/dispatch board, schedule, check-in/out, checklist, photo/sig, offline mutation sync</td><td>—</td><td>P3</td></tr>
+        <tr><td><strong>P5</strong> Customer use-cases</td><td>recurring-biz customers self-serve</td><td>booking, my-visits, invoices/pay, messages, service requests</td><td>—</td><td>P3</td></tr>
+        <tr><td><strong>P6</strong> Push + offline hardening</td><td>reliable notifications + offline writes</td><td>Expo push sender adapter (APNs/FCM), channel policy, offline mutation queue</td><td>P0 creds</td><td>P2</td></tr>
+        <tr><td><strong>P7</strong> Store release</td><td>in users' hands</td><td>EAS build/submit under Arcamanus LLC, TestFlight + Play internal → production, metadata</td><td>Mark</td><td>P0, P4/P5</td></tr>
       </tbody>
     </table>
 
@@ -484,17 +555,19 @@
     <h2 id="decisions">13 · Decisions for you (I'll proceed on the recommended default unless you redirect)</h2>
     <div class="cards">
       <div class="card">
-        <h4>A · Distribution model</h4>
-        <p class="rec">Recommended: one generic app + instance URL</p>
-        <p>One DPF app + connect-to-your-org (Mastodon model, lowest cost) <em>now</em>; design so per-org
-        white-label is a <em>later</em> premium. Alternative: white-label per org (expensive store overhead).</p>
+        <h4>A · Distribution model <span class="pill ok">resolved</span></h4>
+        <p class="rec">One generic app, published by Arcamanus LLC</p>
+        <p>Confirmed 2026-06-14: a single generic DPF app under <strong>Arcamanus LLC</strong> (the OSS supporting
+        company / Apple license holder); connect-to-your-org + install manifest. Per-org white-label remains a
+        possible later premium (Nextcloud's model).</p>
       </div>
       <div class="card">
-        <h4>B · First persona mode after the manifest</h4>
-        <p class="rec">Recommended: Field mode first</p>
-        <p>Field service is more defensible/sticky, reuses the <code>WorkItem</code> substrate, and avoids the
-        payment/compliance entanglements of customer pay. Then Customer mode (broadest market). Your
-        go-to-market may flip this — your call.</p>
+        <h4>B · First use-case set after the manifest</h4>
+        <p class="rec">Recommended: Field use-cases first</p>
+        <p>With SDUI, "modes" are data, not code — so this is which use-cases we model first. Field service is
+        defensible/sticky, reuses the <code>WorkItem</code> substrate, and avoids the payment/compliance
+        entanglements of customer pay; then customer self-service (broadest market). Your go-to-market may flip
+        this — open question.</p>
       </div>
       <div class="card">
         <h4>C · Repo</h4>
@@ -521,8 +594,91 @@
       + <code>pnpm --filter mobile test</code> (jest) — named substrate per AGENTS §6/§15. Functional gate once
       P1/P2 land: drive <em>connect → manifest → mode</em> on the running install via the
       <code>dpf-verify-on-live-install</code> skill. Native build evidence comes from EAS internal builds on
-      real devices (P6). Each phase carries its own UX evidence per AGENTS §5.
+      real devices (P7). Each phase carries its own UX evidence per AGENTS §5.
     </div>
+
+    <h2 id="sysml">16 · SysML v2 architecture substrate</h2>
+    <p>Per the EA convention, a design spec carries a SysML v2 viewpoint over the platform substrate — a notation
+    for requirements, interfaces, allocations, and verification, not a separate model. The install manifest is the
+    load-bearing new interface contract; below it is in SysML v2, traced to the existing substrate that realizes it.</p>
+    <pre><code><span class="kw">package</span> NativeMobileArchetypeApps {
+
+  <span class="com">// ---- Systems ----</span>
+  <span class="kw">part def</span> MobileApp;               <span class="com">// one generic Expo/RN binary, published by Arcamanus LLC</span>
+  <span class="kw">part def</span> DpfInstall;              <span class="com">// a self-hosted single-org install</span>
+  <span class="kw">part def</span> NativeComponentCatalog;  <span class="com">// fixed, app-shipped renderer catalog (fields + widgets)</span>
+
+  <span class="com">// ---- Interfaces (the new contracts) ----</span>
+  <span class="kw">interface def</span> InstanceDescriptor {     <span class="com">// GET /.well-known/dpf-instance.json</span>
+    <span class="kw">attribute</span> instanceId : String;
+    <span class="kw">attribute</span> orgName    : String;
+    <span class="kw">attribute</span> archetype  : String;
+    <span class="kw">attribute</span> authModes  : String[1..*];
+  }
+  <span class="kw">interface def</span> InstallManifest {        <span class="com">// GET /api/v1/app/config</span>
+    <span class="kw">attribute</span> schemaVersion : String;
+    <span class="kw">attribute</span> designTokens  : DtcgTokenSet;        <span class="com">// (1) design  — W3C DTCG</span>
+    <span class="kw">attribute</span> capabilities  : Capability[0..*];    <span class="com">// (2) gating  — archetype-derived</span>
+    <span class="kw">attribute</span> vocabulary    : VocabularyOverride[0..*];
+    <span class="kw">attribute</span> navigation    : NavigationSpec;      <span class="com">// (3) screens — declarative SDUI</span>
+    <span class="kw">attribute</span> screens       : ScreenSpec[0..*];
+  }
+
+  <span class="com">// ---- Ports + topology ----</span>
+  <span class="kw">port def</span> DescriptorPort { <span class="kw">out</span> descriptor : InstanceDescriptor; }
+  <span class="kw">port def</span> ManifestPort   { <span class="kw">out</span> manifest   : InstallManifest; }
+
+  <span class="kw">part</span> install : DpfInstall { <span class="kw">port</span> descriptorOut : DescriptorPort; <span class="kw">port</span> manifestOut : ManifestPort; }
+  <span class="kw">part</span> app : MobileApp {
+    <span class="kw">part</span> catalog : NativeComponentCatalog;
+    <span class="kw">port</span> descriptorIn : ~DescriptorPort;
+    <span class="kw">port</span> manifestIn   : ~ManifestPort;
+  }
+  <span class="kw">connection</span> connect : app.descriptorIn <span class="kw">to</span> install.descriptorOut;   <span class="com">// simple connect step</span>
+  <span class="kw">connection</span> absorb  : app.manifestIn   <span class="kw">to</span> install.manifestOut;     <span class="com">// absorb design + functionality</span>
+
+  <span class="com">// ---- Requirements ----</span>
+  <span class="kw">requirement def</span> R1_InstallDrivenDesign          { doc <span class="str">/* the install's design system drives the app's design */</span> }
+  <span class="kw">requirement def</span> R2_ArchetypeDrivenFunctionality { doc <span class="str">/* installed archetypes drive exposed functionality */</span> }
+  <span class="kw">requirement def</span> R3_SingleGenericBinary          { doc <span class="str">/* one binary; no per-company/per-archetype code shipped */</span> }
+  <span class="kw">requirement def</span> R4_DeclarativeOnly              { doc <span class="str">/* manifest is declarative data only — Apple 2.5.2 */</span> }
+  <span class="kw">requirement def</span> R5_InstanceDiscovery            { doc <span class="str">/* a simple connect step locates + validates the install */</span> }
+  <span class="kw">requirement def</span> R6_OfflineCapable               { doc <span class="str">/* field use-cases work offline; writes queue + reconcile */</span> }
+
+  <span class="com">// ---- Allocations: obligation -> existing substrate ----</span>
+  <span class="kw">allocate</span> R1_InstallDrivenDesign          <span class="kw">to</span> BrandingConfig_tokens, globals_css_dpf_vars, branding_buildBrandingStyleTag;
+  <span class="kw">allocate</span> R2_ArchetypeDrivenFunctionality <span class="kw">to</span> StorefrontArchetype_activationProfile, OrganizationCapabilityActivation, portal_nav_capabilityKey;
+  <span class="kw">allocate</span> R3_SingleGenericBinary          <span class="kw">to</span> MobileApp, NativeComponentCatalog, InstallManifest;
+  <span class="kw">allocate</span> R4_DeclarativeOnly              <span class="kw">to</span> InstallManifest;          <span class="com">// schema carries data, never code</span>
+  <span class="kw">allocate</span> R5_InstanceDiscovery            <span class="kw">to</span> serverConfig_ts, InstanceDescriptor;
+  <span class="kw">allocate</span> R6_OfflineCapable               <span class="kw">to</span> offlineQueue_ts, expo_sqlite_cache, DynamicFormSchema_offlineCapable;
+
+  <span class="com">// ---- Verification ----</span>
+  <span class="kw">verification def</span> V_Connectivity { doc <span class="str">/* serverConfig 15/15 + full mobile suite 164/164 (shipped) */</span> }
+  <span class="kw">verification def</span> V_Manifest     { doc <span class="str">/* drive connect -&gt; manifest -&gt; themed shell on the live install (P2) */</span> }
+  <span class="kw">verification def</span> V_Declarative  { doc <span class="str">/* review: no remote-code path; EAS builds a fixed JS bundle */</span> }
+
+  <span class="kw">verify</span> R5_InstanceDiscovery <span class="kw">by</span> V_Connectivity;
+  <span class="kw">verify</span> R1_InstallDrivenDesign <span class="kw">by</span> V_Manifest;
+  <span class="kw">verify</span> R4_DeclarativeOnly <span class="kw">by</span> V_Declarative;
+}</code></pre>
+    <p>Allocation targets map to real substrate: <code>BrandingConfig.tokens</code> + <code>globals.css</code> +
+    <code>branding.ts</code> (R1); <code>StorefrontArchetype.activationProfile</code> +
+    <code>OrganizationCapabilityActivation</code> + nav gates (R2); <code>apps/mobile</code> + the dynamic renderer
+    + the manifest schema (R3/R4); <code>serverConfig.ts</code> + <code>.well-known/dpf-instance</code> (R5);
+    <code>offlineQueue.ts</code> + expo-sqlite + <code>offlineCapable</code> (R6).</p>
+
+    <h3>SysML architecture note</h3>
+    <ul>
+      <li><strong>Scope:</strong> new mobile-client subsystem + the install-manifest interface; no change to portal data authority.</li>
+      <li><strong>Requirements/constraints:</strong> R1–R6 (install-driven design, archetype-driven functionality, single generic binary, declarative-only, instance discovery, offline).</li>
+      <li><strong>Interfaces/ports:</strong> NEW <code>GET /api/v1/app/config</code> (InstallManifest) + <code>GET /.well-known/dpf-instance.json</code> (InstanceDescriptor); existing <code>/api/v1/*</code> + JWT unchanged.</li>
+      <li><strong>Allocations:</strong> as traced above — all to existing substrate except the two new endpoints + the mobile token/SDUI consumers.</li>
+      <li><strong>Verification:</strong> V_Connectivity (shipped: 15/15 + 164/164), V_Manifest (drive on live install at P2), V_Declarative (review + EAS fixed-bundle).</li>
+      <li><strong>Data authority:</strong> source of truth unchanged — the manifest is a <em>derived projection</em> of <code>BrandingConfig</code> + <code>activationProfile</code> + <code>DynamicForm/View</code>; no new authority, no new tables.</li>
+      <li><strong>EA catch-up:</strong> add the mobile client + manifest interface to the platform-decomposition + authority views (none today).</li>
+      <li><strong>Open architecture risks:</strong> SDUI screen-schema versioning/back-compat; JSON-parse latency on low-end Android; offline conflict resolution.</li>
+    </ul>
   </main>
 </div>
 </body>
