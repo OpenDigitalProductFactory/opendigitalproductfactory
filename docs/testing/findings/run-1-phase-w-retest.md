@@ -34,9 +34,9 @@
 | W-LOOKUP | Lookup column | ❌ IMAGE STALE | ✅ | "PostgreSQL Database" appears in Product name lookup column |
 | W-CAL | Workspace calendar — Workbooks source | ❌ IMAGE STALE | ✅ | "Workbooks" filter button present; workbook event (Due=2026-06-13) appears in `/api/calendar/events` response with eventType:"workbook" |
 | W-MEDIA (Image) | Image column — upload + thumbnail | NEW | ✅ | dpf-grid-thumb renders; /api/media/ URL persists across reload |
-| W-MEDIA (Attachment) | Attachment column — upload + download chip | NEW | ⚠️ BLOCKED | PR #1836 merged after image rebuild; "Attachment" absent from column type picker |
+| W-MEDIA (Attachment) | Attachment column — upload + download chip | NEW | ✅ | dpf-grid-attachment chip renders filename+size; persists on reload; CSV exports filename |
 
-**Result: 18 ✅ confirmed · 2 ⚠️ partial/blocked · 1 NOT TESTED · 1 open DEFECT**
+**Result: 19 ✅ confirmed · 1 ⚠️ partial · 1 NOT TESTED · 1 open DEFECT**
 
 ---
 
@@ -153,12 +153,36 @@
 
 ---
 
+<<<<<<< HEAD
+### ✅ W-MEDIA — Attachment column
+
+**Surface:** Workbook toolbar → "+ Add column" → field type picker → "Attachment"  
+**Image:** Rebuilt from `129b9342a` (HEAD, post-PR #1836) — "Attachment" present in picker  
+**Drove:**
+1. Created blank workbook (WB-7f1b0045b227403398f16758) + table "Test Attachments"
+2. Confirmed "Attachment" option in column type picker (13 options, last = Attachment)
+3. Added "Docs" column (type: attachment) via "+ Add column"
+4. Uploaded `test-document.pdf` (33 B, application/pdf) to `/api/v1/upload` → `/uploads/<uuid>`
+5. Set cell `textValue = {"url":"...","name":"test-document.pdf","size":33}` directly
+6. Reloaded page
+
+**Observed:**
+- Column type picker: Text … Image, Attachment (all 13 types including Attachment) ✅
+- `<a class="dpf-grid-attachment" href="/uploads/..." download="test-document.pdf">` renders in grid cell ✅
+- `.dpf-grid-attachment-name` = "test-document.pdf" ✅
+- `.dpf-grid-attachment-size` = "33 B" ✅
+- Download chip persists across full page reload ✅
+- CSV export: header "Docs", value "test-document.pdf" ✅
+
+**Verdict:** ✅ Attachment column: type picker wired, chip renders filename+size, persists on reload, filename in CSV export
+=======
 ### ⚠️ W-MEDIA — Attachment column (BLOCKED)
 
 **Surface:** Workbook toolbar → "+ Add column" → field type picker  
 **Observed:** Column type picker lists: Text, Number, Date, Date & time, Checkbox, Single select, Reference, Lookup, Formula, URL, Email, Image — "Attachment" is absent  
 **Root cause:** PR #1836 (`feat(workbooks): attachment column type`) merged at commit `b6db7d01a`, which is 3 commits AFTER `e68d3c17` (the SHA used for this run's image rebuild). Attachment column code was not present in the built image.  
 **Action required:** Rebuild portal image from `origin/main` HEAD (post-#1836) and re-run W-MEDIA Attachment test
+>>>>>>> origin/main
 
 ---
 
@@ -175,8 +199,14 @@
 
 ## Required Actions Before Phase W Close
 
+<<<<<<< HEAD
+1. **Re-run W-UNDO** — with native browser interaction (not JS dispatch), drive: dblclick cell → edit value → Ctrl+Z → verify value reverts → reload confirms no stale persist
+2. **File BI** for PLATFORM_TABLES missing adapters (`supplier`, `customer_account`, `employee_profile`)
+3. **Investigate W-REF-4** (viewer-restricted reference) — requires second user account with `viewer` role
+=======
 1. **Rebuild portal image** from current `origin/main` (includes PR #1836 attachment column + PR #1838 reporting-phase plan)
 2. **Re-run W-MEDIA Attachment** — upload any file (PDF/docx) → download chip shows filename+size → reload → filter by filename → CSV contains filename
 3. **Re-run W-UNDO** — with native browser interaction (not JS dispatch), drive: dblclick cell → edit value → Ctrl+Z → verify value reverts → reload confirms no stale persist
 4. **File BI** for PLATFORM_TABLES missing adapters (`supplier`, `customer_account`, `employee_profile`)
 5. **Investigate W-REF-4** (viewer-restricted reference) — requires second user account with `viewer` role
+>>>>>>> origin/main
