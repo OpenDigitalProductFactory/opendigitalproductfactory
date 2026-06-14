@@ -3,6 +3,7 @@
 import { prisma } from "@dpf/db";
 import { getFinancialProfile } from "@dpf/finance-templates";
 import { seedDefaultDunningSequence } from "@/lib/actions/dunning";
+import { resolveInvoiceDefaultTaxRate } from "@/lib/finance/invoice-default-tax";
 
 // ─── applyFinancialProfile ────────────────────────────────────────────────────
 
@@ -80,4 +81,27 @@ export async function getFinancialSetupStatus(): Promise<{
     baseCurrency: settings.baseCurrency,
     dunningActive: dunningSequence !== null,
   };
+}
+
+// ─── getInvoiceDefaultTaxRate ─────────────────────────────────────────────────
+
+/**
+ * Default line-item tax rate (%) for a new customer invoice or recurring
+ * schedule, derived from the org's VAT selection rather than a hardcoded 20.
+ * Shared by the invoice and recurring-schedule new-forms so the two cannot
+ * drift. See lib/finance/invoice-default-tax.ts for the pure resolution rules.
+ */
+export async function getInvoiceDefaultTaxRate(): Promise<number> {
+  const [taxProfile, settings] = await Promise.all([
+    prisma.organizationTaxProfile.findFirst({ select: { taxModel: true } }),
+    prisma.orgSettings.findFirst({ select: { appliedProfileSlug: true } }),
+  ]);
+  const profile = settings?.appliedProfileSlug
+    ? getFinancialProfile(settings.appliedProfileSlug)
+    : null;
+  return resolveInvoiceDefaultTaxRate({
+    taxModel: taxProfile?.taxModel ?? null,
+    profileVatRegistered: profile?.vatRegistered ?? null,
+    profileDefaultTaxRate: profile?.defaultTaxRate ?? null,
+  });
 }

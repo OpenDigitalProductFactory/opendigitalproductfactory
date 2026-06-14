@@ -6,6 +6,10 @@ import Link from "next/link";
 
 type Props = { searchParams: Promise<{ supplierId?: string }> };
 
+// Purchase orders are accounts-payable, like bills: line items default to 0% tax.
+// An operator who needs tax sets it per line. Fixed default, mirrors bills/new.
+const DEFAULT_PO_TAX_RATE = 0;
+
 export default async function NewPOPage({ searchParams }: Props) {
   const { supplierId } = await searchParams;
 
@@ -44,6 +48,7 @@ export default async function NewPOPage({ searchParams }: Props) {
           }))}
           {...(supplierId ? { defaultSupplierId: supplierId } : {})}
           defaultCurrency={orgSettings.baseCurrency}
+          defaultTaxRate={DEFAULT_PO_TAX_RATE}
         />
       </div>
     </div>
