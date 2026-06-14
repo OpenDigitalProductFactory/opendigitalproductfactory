@@ -2,6 +2,8 @@ import { prisma } from "@dpf/db";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { PlatformKeysPanel } from "@/components/admin/PlatformKeysPanel";
 import { SocialAuthPanel } from "@/components/admin/SocialAuthPanel";
+import { EmailSettingsPanel } from "@/components/admin/EmailSettingsPanel";
+import { getSmtpConfigStatus } from "@/lib/shared/smtp-config";
 
 const PLATFORM_KEYS = ["upload_storage_path"];
 const ADMIN_PLATFORM_KEY_CONFIGS = [
@@ -51,6 +53,7 @@ export default async function AdminSettingsPage() {
         configs={ADMIN_PLATFORM_KEY_CONFIGS}
       />
       <SocialAuthPanel keyData={await getKeyData(SOCIAL_AUTH_KEYS)} />
+      <EmailSettingsPanel status={await getSmtpConfigStatus()} />
     </div>
   );
 }

@@ -16,14 +16,15 @@
 
 | PBI ref | Title | Severity | Source | GitHub Issue | Portal BI (post-audit) | Status |
 |---|---|---|---|---|---|---|
-| PBI-INV-01 | SMTP configuration UI / onboarding prompt | important | [PR #1865](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1865) — Gap 2 follow-up | [#1875](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/1875) | — | open |
+| PBI-INV-01 | SMTP configuration UI / onboarding prompt | important | [PR #1865](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1865) — Gap 2 follow-up | [#1875](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/1875) | — | **in [PR #1887](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1887)** |
 | PBI-INV-02 | Phase 2 — third-party e-signature (DocuSign/HelloSign) for standalone documents | important | [PR #1865](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1865) — Gap 3 Phase 2 | [#1876](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/1876) | — | open |
 | PBI-INV-03 | Remove dead `InvoiceActions.tsx` (superseded by `InvoiceSendButton`) | minor | [PR #1865](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1865) cleanup | [#1871](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1871) | n/a — shipped | **done** |
+| PBI-INV-04 | Bundled zero-config email relay (SMTP panel becomes the BYO override) | important | [PR #1887](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1887) follow-up; DPF zero-click principle | [#1888](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/1888) | — | open |
 
 ## Details
 
 ### PBI-INV-01 — SMTP configuration UI / onboarding prompt
-- **Severity:** important · **Issue:** #1875
+- **Severity:** important · **Issue:** #1875 · **Status:** in [PR #1887](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1887)
 - **Context:** PR #1865 added a send-time pre-flight (`isEmailConfigured()` → HTTP 422 with an actionable message) so "Send Invoice" no longer silently fails when SMTP is unconfigured. But SMTP is **env-var only** (`SMTP_HOST` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM`) — there is no in-portal way to configure it, so a fresh-install operator cannot enable email delivery without shell/env access.
 - **Scope:** a Settings → Email surface (and/or setup-wizard step) to enter SMTP config, stored via the credential-encryption layer (`CREDENTIAL_ENCRYPTION_KEY`); `isEmailConfigured()` / `sendEmail()` resolve from this store (env-var fallback retained).
 - **Acceptance:** operator configures SMTP from the portal on a fresh install → "Send Invoice" delivers with no env var set; with nothing configured the 422 still surfaces.
@@ -39,3 +40,9 @@
 ### PBI-INV-03 — Remove dead `InvoiceActions.tsx`
 - **Severity:** minor · **Status: done** — shipped via [PR #1871](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/1871) (merged to main).
 - **Context:** `apps/web/app/(shell)/finance/invoices/[id]/InvoiceActions.tsx` was unreferenced dead code; the live send button is `apps/web/components/finance/InvoiceSendButton.tsx`. Removed.
+
+### PBI-INV-04 — Bundled zero-config email relay
+- **Severity:** important · **Issue:** #1888
+- **Context:** the SMTP panel (PBI-INV-01) is the **BYO** path. DPF's zero-click / bundled-services-active-by-default principle wants outbound email to work on a fresh install with **no** setup. This tracks shipping a bundled default sender, with the SMTP panel as the override.
+- **Scope:** default platform email sender/relay; resolution order operator-SMTP (DB) → env → bundled relay; deliverability (SPF/DKIM), per-install limits/abuse controls, from-address rewriting. Larger build / own epic.
+- **Acceptance:** a brand-new install with nothing configured can "Send Invoice" and the customer receives it; operators can still override with their own SMTP.
