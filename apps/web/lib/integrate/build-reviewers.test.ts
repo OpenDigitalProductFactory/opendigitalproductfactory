@@ -518,6 +518,8 @@ describe("buildArchitectureReviewPrompt", () => {
     expect(prompt).toContain("[reference-doc]");
     // Whole-over-local is a first-class architectural-alignment concern.
     expect(prompt).toContain("Optimize for the Whole");
+    // Archetype/storefront designs are measured against their load-bearing stages.
+    expect(prompt).toContain("LOAD-BEARING value-stream");
     expect(prompt).toContain("JSON FORMAT");
   });
 
@@ -546,6 +548,10 @@ describe("buildArchitectureReviewPrompt", () => {
       (r) => r.path === "docs/founder-kernel/wiki/principles/",
     );
     expect(kernel?.covers).toContain("optimize-for-the-whole");
+    // Archetype designs are measured against their load-bearing value-stream
+    // stages — the whole-outcome measure that survives portal rebuilds.
+    expect(ARCHITECTURE_REVIEW_REFERENCES.map((r) => r.path))
+      .toContain("docs/architecture/archetype-business-value-streams.md");
   });
 });
 

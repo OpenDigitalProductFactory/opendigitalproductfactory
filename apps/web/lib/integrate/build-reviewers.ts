@@ -210,6 +210,12 @@ export const ARCHITECTURE_REVIEW_REFERENCES: ReadonlyArray<{
     path: "docs/superpowers/specs/2026-05-09-deployment-contracts.md",
     covers: "the canonical deployment contracts every substrate must wrap",
   },
+  {
+    label: "Archetype value streams",
+    path: "docs/architecture/archetype-business-value-streams.md",
+    covers:
+      "per-archetype operational value streams + load-bearing stages — the whole outcome each archetype design must serve; stage names stay stable across portal rebuilds, so this is the rebuild-surviving measure of whole-vs-local for storefront/archetype work",
+  },
 ];
 
 function formatArchitectureReferences(): string {
@@ -265,6 +271,7 @@ export function buildArchitectureReviewPrompt(
   const focus =
     input.kind === "design"
       ? `- Does this serve the end-to-end outcome / value stream it belongs to, rather than locally optimizing one step at the whole's expense? The design should name the broader objective it advances (Optimize for the Whole).
+- If the change touches an archetype/storefront surface, does it serve that archetype's LOAD-BEARING value-stream stage(s) (per docs/architecture/archetype-business-value-streams.md), not just a generic step? Strengthening a non-load-bearing stage while weakening the load-bearing one fails the whole — and those stage names stay stable across portal rebuilds, so they are the durable measure.
 - Does the data model EXTEND canonical models (Organization for identity, Principal/PrincipalAlias for identity-bearing entities) rather than create parallel tables?
 - Does the proposed approach respect single-source-of-truth (no rule/fact/decision duplicated)?
 - Does it choose the architecturally sound shape over a shortcut that creates debt?
