@@ -52,10 +52,10 @@ describe("resolveVisibleTabs", () => {
       { key: "index", personas: ["operator"] },
       { key: "jobs", personas: ["operator"], capability: "work-items" },
     ];
-    // capabilities unknown → ungated (jobs shown)
+    // capabilities unknown → a capability-gated tab stays hidden until granted
     expect(
       resolveVisibleTabs({ persona: { kind: "operator" }, registry }),
-    ).toEqual(["index", "jobs"]);
+    ).toEqual(["index"]);
     // capabilities known, without work-items → jobs hidden
     expect(
       resolveVisibleTabs({
@@ -72,5 +72,14 @@ describe("resolveVisibleTabs", () => {
         registry,
       }),
     ).toEqual(["index", "jobs"]);
+  });
+
+  it("surfaces the jobs tab for a field install that grants work-items", () => {
+    expect(
+      resolveVisibleTabs({
+        persona: { kind: "employee" },
+        capabilities: ["work-items"],
+      }),
+    ).toEqual(["index", "ops", "jobs", "customers", "more"]);
   });
 });
