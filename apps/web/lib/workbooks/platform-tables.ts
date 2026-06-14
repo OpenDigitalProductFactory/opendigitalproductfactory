@@ -345,6 +345,61 @@ const ENGAGEMENT_TABLE: GenericTableConfig = {
   ],
 };
 
+// Finance bills — read-only; status free-form (text, no board). Money exposed.
+const BILL_TABLE: GenericTableConfig = {
+  entityType: "bill",
+  prismaModel: "bill",
+  idField: "billRef",
+  labelField: "billRef",
+  orderBy: { field: "issueDate", dir: "desc" },
+  columns: [
+    { field: "billRef", name: "Bill", fieldType: "text", width: 150 },
+    { field: "status", name: "Status", fieldType: "text", width: 120 },
+    { field: "issueDate", name: "Issued", fieldType: "date", width: 120 },
+    { field: "dueDate", name: "Due", fieldType: "date", width: 120 },
+    { field: "currency", name: "Currency", fieldType: "text", width: 90 },
+    { field: "totalAmount", name: "Total", fieldType: "number", width: 120 },
+    { field: "amountDue", name: "Due amount", fieldType: "number", width: 120 },
+  ],
+};
+
+// Finance bank accounts — read-only; PII OMITTED (accountNumber, sortCode, iban,
+// swift are deliberately excluded from the allow-list). Balances are view_finance-gated.
+const BANK_ACCOUNT_TABLE: GenericTableConfig = {
+  entityType: "bank_account",
+  prismaModel: "bankAccount",
+  idField: "bankAccountId",
+  labelField: "name",
+  orderBy: { field: "updatedAt", dir: "desc" },
+  columns: [
+    { field: "name", name: "Name", fieldType: "text", width: 220 },
+    { field: "bankName", name: "Bank", fieldType: "text", width: 180 },
+    { field: "accountType", name: "Type", fieldType: "text", width: 120 },
+    { field: "currency", name: "Currency", fieldType: "text", width: 90 },
+    { field: "currentBalance", name: "Balance", fieldType: "number", width: 130 },
+    { field: "status", name: "Status", fieldType: "text", width: 110 },
+    { field: "lastReconciledAt", name: "Reconciled", fieldType: "datetime", width: 160 },
+  ],
+};
+
+// Finance expense claims — read-only; status free-form (text). employee relation id omitted.
+const EXPENSE_CLAIM_TABLE: GenericTableConfig = {
+  entityType: "expense_claim",
+  prismaModel: "expenseClaim",
+  idField: "claimId",
+  labelField: "title",
+  orderBy: { field: "updatedAt", dir: "desc" },
+  columns: [
+    { field: "claimId", name: "ID", fieldType: "text", width: 140 },
+    { field: "title", name: "Title", fieldType: "text", width: 300 },
+    { field: "status", name: "Status", fieldType: "text", width: 120 },
+    { field: "totalAmount", name: "Total", fieldType: "number", width: 120 },
+    { field: "currency", name: "Currency", fieldType: "text", width: 90 },
+    { field: "submittedAt", name: "Submitted", fieldType: "datetime", width: 160 },
+    { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
+  ],
+};
+
 registerGenericReadTable(EPIC_TABLE);
 registerGenericReadTable(DIGITAL_PRODUCT_TABLE);
 registerGenericReadTable(COMPLIANCE_CONTROL_TABLE);
@@ -354,6 +409,9 @@ registerGenericReadTable(OPPORTUNITY_TABLE);
 registerGenericReadTable(QUOTE_TABLE);
 registerGenericReadTable(SALES_ORDER_TABLE);
 registerGenericReadTable(ENGAGEMENT_TABLE);
+registerGenericReadTable(BILL_TABLE);
+registerGenericReadTable(BANK_ACCOUNT_TABLE);
+registerGenericReadTable(EXPENSE_CLAIM_TABLE);
 // Customers, people (safe org-directory fields only), suppliers — explicit
 // allow-lists live in people-supplier-configs.ts (unit-tested for safe omission).
 for (const cfg of PEOPLE_SUPPLIER_TABLES) registerGenericReadTable(cfg);
@@ -439,6 +497,30 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     viewCapability: "view_customer",
     manageCapability: "view_customer", // read-only grid; adapter performs no writes
     homeSurface: { path: "/customer/engagements", label: "Engagements", board: true },
+  },
+  {
+    entityType: "bill",
+    label: "Bills",
+    description: "Supplier bills as a read-only grid — sort and filter.",
+    viewCapability: "view_finance",
+    manageCapability: "view_finance", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/finance/bills", label: "Bills", board: false },
+  },
+  {
+    entityType: "bank_account",
+    label: "Bank accounts",
+    description: "Bank accounts as a read-only grid (no account numbers) — sort and filter.",
+    viewCapability: "view_finance",
+    manageCapability: "view_finance", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/finance/banking", label: "Banking", board: false },
+  },
+  {
+    entityType: "expense_claim",
+    label: "Expense claims",
+    description: "Expense claims as a read-only grid — sort and filter.",
+    viewCapability: "view_finance",
+    manageCapability: "view_finance", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/finance/expense-claims", label: "Expense claims", board: false },
   },
   {
     entityType: "epic",
