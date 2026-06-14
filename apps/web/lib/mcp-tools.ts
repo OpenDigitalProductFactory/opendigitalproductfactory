@@ -2339,11 +2339,11 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "provision_build_engine",
-    description: "Install a build-dispatch engine (claude, codex, grok) into the running sandbox from its registry recipe, then verify by re-probing. Idempotent — a no-op if the engine is already present. Side-effecting: runs the install command (e.g. `npm install -g`, or the grok curl-installer) inside the sandbox, so it requires sandbox_execute. Pass offline:true to use only no-egress (prestaged-binary) recipes for air-gapped installs. Returns { kind, version, recipe }.",
+    description: "Install a build-dispatch engine (claude, codex, grok, opencode) into the running sandbox from its registry recipe, then verify by re-probing. Idempotent — a no-op if the engine is already present. Side-effecting: runs the install command (e.g. `npm install -g`, the grok curl-installer, or the opencode prestaged-binary/tarball) inside the sandbox, so it requires sandbox_execute. Pass offline:true to use only no-egress (prestaged-binary) recipes for air-gapped installs. Returns { kind, version, recipe }.",
     inputSchema: {
       type: "object",
       properties: {
-        engineId: { type: "string", description: "Engine to provision: 'claude' | 'codex' | 'grok'." },
+        engineId: { type: "string", description: "Engine to provision: 'claude' | 'codex' | 'grok' | 'opencode'." },
         offline: {
           type: "boolean",
           description: "When true, only run no-egress (prestaged-binary) recipes (air-gapped install). Default false.",
@@ -2358,7 +2358,7 @@ export const PLATFORM_TOOLS: ToolDefinition[] = [
   },
   {
     name: "get_build_engine_readiness",
-    description: "Report whether each build-dispatch engine (claude, codex, grok) is present and healthy in the build sandbox. Returns per-engine { present, version, lastProbedAt, bakeInDefault } from the last probe (BuildEngineState). Pass refresh:true to live re-probe each engine (docker exec <verifyCommand>) and persist the fresh result. Use this to see engine readiness before selecting a build dispatch engine — e.g. an engine that is selectable but shows present:false would fail at runtime with 'not found'.",
+    description: "Report whether each build-dispatch engine (claude, codex, grok, opencode) is present and healthy in the build sandbox. Returns per-engine { present, version, lastProbedAt, bakeInDefault } from the last probe (BuildEngineState). Pass refresh:true to live re-probe each engine (docker exec <verifyCommand>) and persist the fresh result. Use this to see engine readiness before selecting a build dispatch engine — e.g. an engine that is selectable but shows present:false would fail at runtime with 'not found'.",
     inputSchema: {
       type: "object",
       properties: {
