@@ -8,6 +8,30 @@
 
 ---
 
+## Executive Summary
+
+**4 archetypes audited · 8 defects logged · 6 positive findings**
+
+| Archetype | P | B5 | G | Net verdict |
+|-----------|---|----|---|-------------|
+| `retail-goods` — The General Emporium | ✅ | ⚠️ (R6-001, SYS-4) | ✅ (R6-004) | Functional; 2 important gaps |
+| `artisan-goods` — Handmade & Heartfelt Studio | ✅ | ⚠️ (R6-001, SYS-4) | ✅ (R6-004) | Functional; commission inquiry form positive |
+| `florist` — Bloom & Wild Florals | ✅ | ✅ | ⚠️ (R6-004, R6-007) | Functional; richest inquiry form; invoice currency cosmetic |
+| `wholesale-distribution` — Cascade Wholesale Supply | ✅ | ✅ | ✅ | Functional; B2B vocabulary correct; SYS-4 on volume dropdown |
+
+**Recurring defects (all 4 archetypes):**
+- **SYS-4**: Currency symbol bleed (£ on USD installs, £ in USD-configured dropdowns) — blocked by prior run, carry-over
+- **R6-003**: Product edit modal opens with empty Name field — operator must re-type on every edit
+- **R6-004**: Invoice tax rate defaults to 20% regardless of "No VAT" wizard selection
+
+**Positive findings:**
+- artisan-goods: Commission inquiry form has dedicated "Commission details" spec field
+- florist: Wedding inquiry form includes Occasion type, Delivery date, Budget range dropdowns — best-in-class lead qualification
+- florist: "POA" label correctly applied to quote/inquiry items
+- wholesale-distribution: Full B2B CTA vocabulary; no "Buy" anywhere; trade-specific inquiry qualification fields
+
+---
+
 ## Archetype 1: `retail-goods` — The General Emporium
 
 **Persona:** Pat Sullivan, retail store owner  
@@ -187,7 +211,49 @@ Invoice tax rate defaulted to 20% on a GBP "No VAT" install — same pattern as 
 
 ## Archetype 4: `wholesale-distribution` — Cascade Wholesale Supply
 
-*Pending — DB reset required*
+**Persona:** B2B wholesale distributor  
+**CTA type:** inquiry only — no purchase/buy flow  
+**Install method:** DB-only reset from golden dump + full wizard run
+
+### Phase P — Setup
+
+| Step | Action | Result |
+|------|--------|--------|
+| P1 | Confirm seeded items are all inquiry type | ✅ All 5 items: Trade Catalogue, Open a Trade Account, Become a Stockist, Distributor Program, Bulk / Pallet Order — all ctaType=inquiry |
+| P2 | No purchase items to price | ✅ Correct — B2B inquiry archetype has no fixed pricing |
+| P3 | No per-customer account needed (inquiry archetype) | — skipped per plan |
+| P4 | Operating hours Mon–Fri default (not reconfigured for this audit) | — skipped; archetype focus is B2B CTA verification |
+
+**Seeded items verified via DB:** `itm-o0vKq2Yo` Trade Catalogue (quote, inquiry), `itm-dY9zHRSr` Open a Trade Account (free, inquiry), `itm-bsY1JCyN` Become a Stockist (quote, inquiry), `itm-sSXZrY3s` Distributor Program (quote, inquiry), `itm-6XQUFMLx` Bulk / Pallet Order (from, inquiry).
+
+### Phase B5 — Public Storefront Walkthrough
+
+**Surface:** `http://localhost:3000/s/cascade-wholesale-supply`
+
+| Check | Observed | Verdict |
+|-------|----------|---------|
+| Storefront renders | h1 "Cascade Wholesale Supply", 5 items | ✅ |
+| No "Shop Now" hero CTA | No hero button; items show trade-specific CTA labels | ✅ Correct B2B framing |
+| CTA language | "Request trade pricing", "Apply for an account", "Become a stockist", "Discuss distribution", "Request a quote" | ✅ Fully B2B — no "Buy" anywhere |
+| Price display | POA for quote items; "Free" for account application; no fixed prices | ✅ Correct for wholesale |
+| Bulk / Pallet Order inquiry form | Fields: Full name, Email, Phone, Notes, **Trading / company name** (required), **How will you sell our products?** (dropdown), **Estimated monthly volume** (dropdown) | ✅ B2B-specific qualification fields |
+| Volume dropdown currency | Shows £ thresholds (Under £1k, £1k–£5k, etc.) despite USD config | ⚠️ SYS-4 confirmed on inquiry-form dropdown values |
+| Inquiry submission | Reference: INQ-ETDRFKOV | ✅ |
+
+**B5-wholesale-1 — Full B2B CTA vocabulary (Positive)**  
+All 5 items use trade-appropriate CTAs. No purchase flow is surfaced. The "Bulk / Pallet Order" inquiry form includes trading company name and channel-type qualification — operators receive pre-qualified leads, not generic contact requests.
+
+**B5-wholesale-2 — No "Get a Quote" hero / top-level CTA**  
+The hero section has no top-level action button (e.g. "Apply for Trade Account" or "Get a Quote"). A first-time trade visitor who scrolls past the header has no entry-point CTA anchored above the fold. Minor — items are immediately below.
+
+### Phase G — Financials
+
+| Step | Action | Result |
+|------|--------|--------|
+| G1 | Supplier "Freight & Logistics Partner Ltd" | ✅ Created |
+| G2 | Bill `BILL-2026-0001`: "Warehouse pallet storage — monthly fee", qty 1, $1,200.00 | ✅ Saved at 0% tax, USD |
+| G3 | Invoice — skipped (inquiry archetype; no trade customer to invoice in this audit run) | — per plan |
+| G4 | P&L | ✅ $0.00 profit (draft bill); notice: "DRAFT $1,200.00 across 1 bill not yet paid" |
 
 ---
 
@@ -202,3 +268,4 @@ Invoice tax rate defaulted to 20% on a GBP "No VAT" install — same pattern as 
 | R6-005 | K1 | Important | Storefront inbox is read-only — no reply/send email/dispatch action; operator cannot send order confirmation or dispatch notification |
 | R6-006 | K3 | Important | No payment gateway setup (Stripe) visible — purchase CTA orders complete with no payment captured |
 | R6-007 | G3 | Minor | Invoice form currency field displays "USD" despite GBP org config — cosmetic; saved record is correct GBP |
+| R6-008 | B5 | Minor | Wholesale inquiry form volume dropdown shows £ thresholds despite USD config — SYS-4 extends to inquiry-form select values, not just prices |
