@@ -1,0 +1,529 @@
+<!doctype html>
+<!--
+  DPF spec (HTML artifact) — Native Mobile: Archetype Persona Apps.
+  Self-contained: inline CSS, inline SVG, no external assets.
+  Markdown stub alongside (.md) for search_specs_and_plans indexing.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Native Mobile — Archetype Persona Apps — Design</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1a1d24; --muted: #5b6472; --soft: #f4f6fa;
+    --border: #dce1e8; --accent: #2f6df6; --accent-soft: #e8f0ff;
+    --code-bg: #f6f8fa; --kw: #b5258a; --str: #167f3a; --com: #8a94a6;
+    --ok: #167f3a; --ok-bg: #e7f6ec; --warn: #9a6700; --warn-bg: #fbf3e0;
+    --crit: #c0362c; --crit-bg: #fbe9e7; --neutral: #5b6472; --neutral-bg: #eef1f5;
+    --radius: 10px; --maxw: 1040px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1117; --fg: #e6e9ef; --muted: #9aa4b2; --soft: #161a22;
+      --border: #2a313d; --accent: #6ea0ff; --accent-soft: #18233b;
+      --code-bg: #12161e; --kw: #e07ad0; --str: #6fd58a; --com: #6b7585;
+      --ok: #6fd58a; --ok-bg: #11281a; --warn: #e3b35a; --warn-bg: #2a2210;
+      --crit: #f08a80; --crit-bg: #2c1513; --neutral: #9aa4b2; --neutral-bg: #1b2129;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 40px;
+    max-width: var(--maxw); margin: 0 auto; padding: 32px 24px 96px; }
+  nav.toc { position: sticky; top: 24px; align-self: start; font-size: 13.5px; max-height: 92vh; overflow:auto; }
+  nav.toc strong { display: block; text-transform: uppercase; letter-spacing: .06em;
+    font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+  nav.toc a { display: block; color: var(--muted); text-decoration: none;
+    padding: 4px 10px; border-left: 2px solid var(--border); }
+  nav.toc a:hover { color: var(--accent); border-left-color: var(--accent); }
+  main { min-width: 0; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 4px; }
+  h2 { font-size: 21px; margin: 44px 0 12px; padding-top: 8px; border-top: 1px solid var(--border); }
+  h3 { font-size: 16px; margin: 24px 0 8px; }
+  p, li { color: var(--fg); }
+  a { color: var(--accent); }
+  code { font-family: "SF Mono", "JetBrains Mono", Consolas, monospace; font-size: .9em;
+    background: var(--code-bg); padding: 1px 5px; border-radius: 5px; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 16px; overflow: auto; }
+  pre code { background: none; padding: 0; font-size: 13px; line-height: 1.6; }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .meta-card { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 14px 0 8px;
+    padding: 14px 18px; background: var(--soft); border: 1px solid var(--border); border-radius: var(--radius); }
+  .meta-card div { font-size: 14px; }
+  .meta-card span.k { color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-size: 11px; display: block; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space:nowrap; }
+  .pill.ok { color: var(--ok); background: var(--ok-bg); }
+  .pill.warn { color: var(--warn); background: var(--warn-bg); }
+  .pill.crit { color: var(--crit); background: var(--crit-bg); }
+  .pill.neutral { color: var(--neutral); background: var(--neutral-bg); }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  thead th { background: var(--soft); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  figure { margin: 18px 0; padding: 16px; background: var(--soft); border: 1px solid var(--border); border-radius: var(--radius); }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption { margin-top: 10px; font-size: 13px; color: var(--muted); text-align: center; }
+  .svg-node { fill: var(--accent-soft); stroke: var(--accent); }
+  .svg-node-2 { fill: var(--soft); stroke: var(--muted); }
+  .svg-label { fill: var(--fg); font: 600 13px sans-serif; }
+  .svg-sub { fill: var(--muted); font: 11px sans-serif; }
+  .svg-edge { stroke: var(--muted); fill: none; }
+  .svg-edge-label { fill: var(--muted); font: 11px sans-serif; }
+  .callout { border-left: 3px solid var(--accent); background: var(--accent-soft);
+    padding: 10px 16px; border-radius: 0 var(--radius) var(--radius) 0; margin: 16px 0; }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px,1fr)); gap: 14px; margin: 16px 0; }
+  .card { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; background: var(--soft); }
+  .card h4 { margin: 0 0 6px; font-size: 14.5px; }
+  .card .rec { font-size: 12px; font-weight: 700; color: var(--ok); }
+  @media (max-width: 820px) { .layout { grid-template-columns: 1fr; } nav.toc { position: static; max-height:none; } }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <nav class="toc" aria-label="On this page">
+    <strong>On this page</strong>
+    <a href="#summary">1 · Executive summary</a>
+    <a href="#current-state">2 · What already exists</a>
+    <a href="#architecture">3 · Keystone architecture</a>
+    <a href="#repo">4 · Repo &amp; CI strategy</a>
+    <a href="#build-pipeline">5 · Build &amp; simulation</a>
+    <a href="#connectivity">6 · Org-install connectivity</a>
+    <a href="#personas">7 · Persona × use-case map</a>
+    <a href="#testing">8 · Testing strategy</a>
+    <a href="#owner-actions">9 · What only you can do</a>
+    <a href="#research">10 · Research &amp; benchmarking</a>
+    <a href="#roadmap">11 · Phased roadmap</a>
+    <a href="#reuse">12 · Reuse map</a>
+    <a href="#decisions">13 · Decisions for you</a>
+    <a href="#out-of-scope">14 · Out of scope</a>
+    <a href="#verification">15 · Verification</a>
+  </nav>
+
+  <main>
+    <h1>Native Mobile — Archetype Persona Apps</h1>
+    <div class="meta-card">
+      <div><span class="k">BI</span>to file (verify overlap first)</div>
+      <div><span class="k">Epic</span>extend existing mobile epic — confirm in live backlog</div>
+      <div><span class="k">Status</span><span class="pill neutral">draft — for operator review</span></div>
+      <div><span class="k">Date</span>2026-06-14</div>
+      <div><span class="k">Supersedes/extends</span>2026-03-19 companion design · 2026-05-13 HITL addendum</div>
+    </div>
+
+    <p>This design answers a single question: <em>what do native iOS/Android apps for DPF look like</em> —
+    serving both the platform itself and the real-world use cases of each archetype (a salon's
+    customers booking visits; an HVAC company's field techs running jobs) — and how do we build, route,
+    test, and ship them given that DPF installs one-org-per-install on the customer's own hardware.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="summary">1 · Executive summary — the reframe</h2>
+
+    <p><strong>"We never moved past basic backend" undersells what's on disk.</strong> There is a
+    substantially-built Expo / React Native app at <code>apps/mobile/</code> (Expo SDK 55, RN 0.83,
+    React 19.2, Expo Router, Zustand, NativeWind), a complete REST surface at
+    <code>apps/web/app/api/v1/*</code>, shared <code>@dpf/api-client</code> / <code>@dpf/types</code> /
+    <code>@dpf/validators</code> packages, JWT + refresh-token auth, <code>Notification</code> /
+    <code>PushDeviceRegistration</code> models, an offline cache, a dynamic form/view renderer
+    (camera, signature, location, charts), and Maestro E2E flows. It is typechecked and unit-tested in CI.</p>
+
+    <p><strong>But what's built is one product for one persona.</strong> The existing app targets the
+    <em>platform operator/builder</em> — epics, backlog, portfolio, approvals — and the May 2026 audit
+    deliberately narrowed its first release further to <em>Paused-Work HITL approvals</em>. That is a
+    real and useful product. It is <em>not</em> what this goal asks for.</p>
+
+    <p><strong>You are asking for a second product line:</strong> archetype <em>end-user</em> apps — the
+    org's <em>customers</em> and its <em>field employees</em> — and you've already named the key insight:
+    <em>"all can use the same app, predicated on their persona and use case."</em> That is exactly right,
+    and the substrate to do it (archetypes, roles, work items, customer estate, dynamic rendering) is
+    already in the schema.</p>
+
+    <div class="callout">
+      <strong>The three real gaps</strong> — none of them "the basics":
+      <ol style="margin:6px 0 0">
+        <li><strong>Connectivity / discovery.</strong> One app-store binary must reach <em>N</em> self-hosted
+          single-org installs. Today the server URL is hard-coded at build time
+          (<code>EXPO_PUBLIC_API_URL</code>), so the app reaches exactly one install. This is the routing
+          problem you flagged.</li>
+        <li><strong>Persona-driven runtime UX.</strong> The app's tabs are static and operator-only. We need a
+          <em>manifest</em> the install returns at login that drives which mode (customer / field / operator)
+          and which screens the user sees — so one binary serves every archetype and persona.</li>
+        <li><strong>Native build &amp; release.</strong> iOS binaries cannot be built in our Linux Build Studio
+          (or any Linux box) — they need macOS + Xcode. We stand up <strong>EAS</strong> (Expo's cloud) to
+          compile and ship, and you complete the store/account steps no agent can.</li>
+      </ol>
+    </div>
+
+    <p><strong>Bottom line:</strong> we are one product (operator companion) in; we add two persona modes
+    (customer, field) on the same shell, solve discovery once, and stand up the cloud build pipeline. The
+    heavy lifting is integration and one keystone abstraction — not greenfield.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="current-state">2 · What already exists (ground truth)</h2>
+    <table>
+      <thead><tr><th>Area</th><th>Status</th><th>Where / note</th></tr></thead>
+      <tbody>
+        <tr><td>Mobile app shell (Expo SDK 55 / RN 0.83 / Router / Zustand / NativeWind)</td><td><span class="pill ok">built</span></td><td><code>apps/mobile/</code>; bundle id <code>com.dpf.mobile</code></td></tr>
+        <tr><td>REST API <code>/api/v1/*</code> (auth, workspace, ops, portfolio, customer, governance, compliance, notifications, dynamic, upload)</td><td><span class="pill ok">built</span></td><td><code>apps/web/app/api/v1/</code></td></tr>
+        <tr><td>Shared client / types / validators</td><td><span class="pill ok">built</span></td><td><code>packages/api-client</code>, <code>packages/types</code>, <code>packages/validators</code></td></tr>
+        <tr><td>Auth: JWT access (15&nbsp;min) + refresh (30&nbsp;day, <code>ApiToken</code>)</td><td><span class="pill ok">built</span></td><td><code>apps/web/lib/api/jwt.ts</code>, <code>auth-middleware.ts</code></td></tr>
+        <tr><td>Models: <code>Notification</code>, <code>PushDeviceRegistration</code>, <code>DynamicForm</code>, <code>DynamicView</code></td><td><span class="pill ok">built</span></td><td><code>packages/db/prisma/schema.prisma</code></td></tr>
+        <tr><td>Dynamic form/view renderer (camera, date, location, signature, lookup, multiselect; bar-chart/list/map/stat widgets)</td><td><span class="pill ok">built</span></td><td><code>apps/mobile/dynamic/</code></td></tr>
+        <tr><td>Maestro E2E flows + jest/RNTL unit tests + MSW mocks</td><td><span class="pill ok">built</span></td><td><code>apps/mobile/e2e/</code>, <code>__tests__</code></td></tr>
+        <tr><td>Offline cache (SQLite) + secure storage + offline write-queue</td><td><span class="pill warn">partial</span></td><td>reads cache; write-queue retry incomplete — <code>src/repositories/</code>, <code>src/stores/offlineQueue.ts</code></td></tr>
+        <tr><td>Push delivery (APNs / FCM via Expo)</td><td><span class="pill crit">missing</span></td><td>device-register endpoint exists; <em>sender adapter</em> not built</td></tr>
+        <tr><td>Persona / archetype-driven navigation</td><td><span class="pill crit">missing</span></td><td>tabs static + operator-only (<code>apps/mobile/app/(tabs)/_layout.tsx</code>)</td></tr>
+        <tr><td>Connectivity / runtime server URL</td><td><span class="pill crit">missing</span></td><td>hard-coded: <code>apiClient.ts:4</code>, <code>offlineQueue.ts:15</code>, <code>useOfflineStatus.ts:3</code></td></tr>
+        <tr><td>Native build in CI / EAS production profiles + credentials</td><td><span class="pill crit">missing</span></td><td><code>eas.json</code> is a skeleton; no native build in <code>.github/workflows/</code></td></tr>
+      </tbody>
+    </table>
+
+    <!-- ============================================================ -->
+    <h2 id="architecture">3 · Keystone architecture — one binary, persona-routed</h2>
+
+    <p>The whole design hinges on one move: <strong>the app is generic; the install tells it who the user
+    is and what to show.</strong> After the user connects to their org's install and signs in, the app
+    fetches a <strong>persona manifest</strong> — a small JSON document that declares the principal's kind,
+    the org's archetype(s), the enabled modules/capabilities, the tab set, vocabulary overrides, and
+    branding tokens. The shell renders entirely from that manifest plus the existing dynamic
+    form/view renderer. <strong>No per-archetype app code ships in the binary.</strong></p>
+
+    <figure>
+      <svg viewBox="0 0 980 360" role="img" aria-label="One binary fetches a persona manifest and routes to one of three modes">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)" /></marker>
+        </defs>
+        <!-- binary -->
+        <rect class="svg-node" x="20" y="150" width="150" height="60" rx="8" />
+        <text class="svg-label" x="95" y="176" text-anchor="middle">One app binary</text>
+        <text class="svg-sub" x="95" y="194" text-anchor="middle">App Store / Play</text>
+        <!-- connect -->
+        <line class="svg-edge" x1="170" y1="180" x2="225" y2="180" marker-end="url(#arrow)" />
+        <rect class="svg-node-2" x="228" y="150" width="160" height="60" rx="8" />
+        <text class="svg-label" x="308" y="172" text-anchor="middle">Connect + sign in</text>
+        <text class="svg-sub" x="308" y="190" text-anchor="middle">URL / QR · password|OIDC</text>
+        <!-- manifest -->
+        <line class="svg-edge" x1="388" y1="180" x2="443" y2="180" marker-end="url(#arrow)" />
+        <rect class="svg-node" x="446" y="148" width="180" height="64" rx="8" />
+        <text class="svg-label" x="536" y="170" text-anchor="middle">Persona manifest</text>
+        <text class="svg-sub" x="536" y="188" text-anchor="middle">/api/v1/app/config</text>
+        <text class="svg-sub" x="536" y="202" text-anchor="middle">kind · archetype · tabs · modules</text>
+        <!-- three modes -->
+        <line class="svg-edge" x1="626" y1="165" x2="690" y2="80"  marker-end="url(#arrow)" />
+        <line class="svg-edge" x1="626" y1="180" x2="690" y2="180" marker-end="url(#arrow)" />
+        <line class="svg-edge" x1="626" y1="195" x2="690" y2="280" marker-end="url(#arrow)" />
+        <rect class="svg-node-2" x="693" y="50"  width="265" height="62" rx="8" />
+        <text class="svg-label" x="710" y="74">Customer mode</text>
+        <text class="svg-sub" x="710" y="92">book · my visits · pay · message · requests</text>
+        <rect class="svg-node-2" x="693" y="150" width="265" height="62" rx="8" />
+        <text class="svg-label" x="710" y="174">Field / employee mode</text>
+        <text class="svg-sub" x="710" y="192">jobs · schedule · check-in · photo/sig · offline</text>
+        <rect class="svg-node-2" x="693" y="250" width="265" height="62" rx="8" />
+        <text class="svg-label" x="710" y="274">Operator mode  (exists)</text>
+        <text class="svg-sub" x="710" y="292">paused-work approvals · ops · portfolio</text>
+      </svg>
+      <figcaption>Figure 1 — The same binary connects to any install, fetches a persona manifest, and
+        renders one of three shared-shell modes. All three read the existing <code>/api/v1/*</code> + dynamic renderer.</figcaption>
+    </figure>
+
+    <p><strong>Identity is already converged for this.</strong> AGENTS §11 (principal convergence) makes
+    <code>User</code>, <code>CustomerContact</code>, <code>Agent</code>, and <code>MobileDevice</code> all
+    resolve onto a single <code>Principal</code>; the alias kind tells the platform which surface
+    authenticated. The manifest resolves on the <code>Principal</code> — so customer, employee, and
+    operator are one identity model, three views.</p>
+
+    <h3>The manifest (new contract — illustrative shape)</h3>
+    <pre><code><span class="com">// GET /api/v1/app/config  → returned after login, drives the whole shell</span>
+{
+  <span class="str">"principalKind"</span>: <span class="str">"customer"</span> | <span class="str">"employee"</span> | <span class="str">"operator"</span>,
+  <span class="str">"org"</span>: { <span class="str">"name"</span>: <span class="str">"Acme HVAC"</span>, <span class="str">"archetype"</span>: <span class="str">"trades-maintenance/hvac-contractor"</span> },
+  <span class="str">"mode"</span>: <span class="str">"field"</span>,                 <span class="com">// which shared-shell mode to mount</span>
+  <span class="str">"tabs"</span>: [<span class="str">"jobs"</span>, <span class="str">"schedule"</span>, <span class="str">"customers"</span>, <span class="str">"more"</span>],
+  <span class="str">"capabilities"</span>: [<span class="str">"work-items"</span>, <span class="str">"offline-sync"</span>, <span class="str">"photo-capture"</span>, <span class="str">"signature"</span>],
+  <span class="str">"vocabulary"</span>: { <span class="str">"customer"</span>: <span class="str">"customer"</span> },   <span class="com">// archetype overrides (e.g. "patient", "member")</span>
+  <span class="str">"branding"</span>: { <span class="str">"accent"</span>: <span class="str">"#1e6f50"</span>, <span class="str">"logoUrl"</span>: <span class="str">"…"</span> }
+}</code></pre>
+    <p>This composes existing platform logic rather than inventing it: <code>BusinessModelRole</code> /
+    <code>platformRole</code> (persona), <code>StorefrontArchetype.activationProfile</code> (modules + axes),
+    <code>getShellNavSections</code> + <code>portal-navigation-model.ts</code> (nav resolution),
+    <code>resolveVocabularyKey</code> (vocabulary), <code>Organization</code> branding.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="repo">4 · Repo &amp; CI strategy — keep the monorepo, decouple the lane</h2>
+
+    <p><strong>Recommendation: keep mobile in the monorepo; do not split it out now.</strong> Mobile already
+    consumes <code>@dpf/api-client</code>, <code>@dpf/types</code>, and <code>@dpf/validators</code> as
+    <code>workspace:*</code>. A separate repo forces publishing and version-pinning those packages, which
+    introduces contract drift between the API and its client and <em>slows</em> iteration — the opposite of
+    the goal. The shared, always-in-sync API contract is the single biggest asset of co-location.</p>
+
+    <p><strong>The "PRs take forever" pain is not caused by mobile being present.</strong> It's the
+    <code>apps/web</code> four-shard vitest matrix plus the Next.js production build (15–20&nbsp;min). Mobile
+    changes neither need nor should wait on those. The fix is lane decoupling, not repo splitting:</p>
+    <ul>
+      <li><strong>Path-filtered mobile CI lane.</strong> A workflow that triggers only on
+        <code>apps/mobile/**</code> + the three shared packages, running <em>mobile typecheck + jest only</em>.
+        Web shards skip when a PR touches only mobile, and vice-versa.</li>
+      <li><strong>Native builds off the PR gate entirely.</strong> EAS cloud builds run on merge-to-main / tag /
+        manual dispatch — never blocking a PR. (iOS builds take many minutes on cloud macOS; they have no
+        business in the inner loop.)</li>
+    </ul>
+    <p><strong>When to revisit a split:</strong> only if a dedicated mobile team with an independent release
+    train emerges. Even then, prefer a <em>published-contract package</em> over a fork, so the API and client
+    stay versioned together.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="build-pipeline">5 · Build &amp; simulation — dev tools, cross-compile, and the iOS constraint</h2>
+
+    <div class="callout warn">
+      <strong>Hard constraint:</strong> iOS binaries can only be built on <strong>macOS + Xcode</strong>. No
+      Linux cross-compiler exists. Our Build Studio sandbox is <code>node:24-alpine</code> (Linux), so it can
+      <em>never</em> build iOS — and it doesn't build Android today either (no Android SDK / Gradle / Java).
+    </div>
+
+    <p><strong>The answer is to split "write &amp; test code" from "compile native binary."</strong></p>
+    <ul>
+      <li><strong>Code generation + unit tests</strong> (jest, typecheck): Build Studio, Claude, or Codex — all
+        Linux, all fine. Build Studio stays viable for authoring and testing RN code; it simply does not
+        compile the binary.</li>
+      <li><strong>Native compilation</strong> (<code>.ipa</code> / <code>.aab</code>): <strong>EAS Build</strong>
+        (Expo's cloud) runs macOS builders for iOS and Linux builders for Android. <em>You do not need to own a
+        Mac fleet for CI.</em> A local Mac + Xcode is optional, only for deep local iOS debugging.</li>
+      <li><strong>Store submission:</strong> <strong>EAS Submit</strong> → TestFlight and Play.</li>
+    </ul>
+
+    <h3>Dev tools &amp; simulators (your direct questions)</h3>
+    <table>
+      <thead><tr><th>Platform</th><th>Local simulator</th><th>Build host</th><th>Buildable in our Build Studio?</th><th>Recommended path</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Android</strong></td><td>Android Emulator (Android Studio) — Win/Mac/Linux</td><td>Linux or macOS</td><td><span class="pill warn">possible if SDK added</span> (not today)</td><td>EAS Build (cloud)</td></tr>
+        <tr><td><strong>iOS</strong></td><td>iOS Simulator (Xcode) — <strong>macOS only</strong></td><td>macOS + Xcode only</td><td><span class="pill crit">impossible (Linux)</span></td><td>EAS Build (cloud macOS)</td></tr>
+      </tbody>
+    </table>
+    <p>Toolbelt: <strong>Expo CLI</strong> (dev server; Expo Go for instant UI on a phone),
+    <strong>EAS CLI</strong> (cloud build/submit), <strong>Android Studio</strong> (emulator + SDK),
+    <strong>Xcode</strong> (iOS simulator, macOS only), <strong>Maestro</strong> (E2E),
+    and <strong>dev-client builds</strong> for features Expo Go can't host (push, biometrics, deep links).</p>
+
+    <!-- ============================================================ -->
+    <h2 id="connectivity">6 · Org-install connectivity — the hard problem, solved in phases</h2>
+
+    <p>DPF is single-org-per-install on the customer's hardware, each with its own <code>PUBLIC_URL</code> and
+    no central tenancy. A single app-store binary therefore can't "just know" where to connect. <strong>This
+    is a solved pattern</strong> in self-hosted software — Mastodon, Nextcloud, Home Assistant, WordPress, and
+    GitLab all ship one app and ask the user to point it at their instance, validated by a discovery
+    endpoint. We adopt the same model.</p>
+
+    <figure>
+      <svg viewBox="0 0 980 170" role="img" aria-label="Connectivity flow: enter URL or scan QR, validate against well-known descriptor, sign in, fetch manifest">
+        <defs>
+          <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)" /></marker>
+        </defs>
+        <rect class="svg-node-2" x="10"  y="60" width="160" height="56" rx="8" />
+        <text class="svg-label" x="90" y="82" text-anchor="middle">Enter URL / scan QR</text>
+        <text class="svg-sub" x="90" y="100" text-anchor="middle">or email-domain lookup</text>
+        <line class="svg-edge" x1="170" y1="88" x2="215" y2="88" marker-end="url(#arrow2)" />
+        <rect class="svg-node" x="218" y="58" width="190" height="60" rx="8" />
+        <text class="svg-label" x="313" y="80" text-anchor="middle">Validate install</text>
+        <text class="svg-sub" x="313" y="98" text-anchor="middle">GET /.well-known/dpf-instance</text>
+        <line class="svg-edge" x1="408" y1="88" x2="453" y2="88" marker-end="url(#arrow2)" />
+        <rect class="svg-node-2" x="456" y="58" width="180" height="60" rx="8" />
+        <text class="svg-label" x="546" y="80" text-anchor="middle">Sign in</text>
+        <text class="svg-sub" x="546" y="98" text-anchor="middle">password · OIDC PKCE (later)</text>
+        <line class="svg-edge" x1="636" y1="88" x2="681" y2="88" marker-end="url(#arrow2)" />
+        <rect class="svg-node" x="684" y="58" width="285" height="60" rx="8" />
+        <text class="svg-label" x="826" y="80" text-anchor="middle">Persona manifest → shell</text>
+        <text class="svg-sub" x="826" y="98" text-anchor="middle">GET /api/v1/app/config</text>
+      </svg>
+      <figcaption>Figure 2 — Generic-client connectivity. The descriptor endpoint proves the URL is a real DPF
+        install and hands the app the org name, archetype, auth modes, and branding before login.</figcaption>
+    </figure>
+
+    <table>
+      <thead><tr><th>Phase</th><th>Mechanism</th><th>Solves</th></tr></thead>
+      <tbody>
+        <tr><td><strong>P1 — now</strong></td><td>Runtime server-URL config + <code>GET /.well-known/dpf-instance.json</code> descriptor (instanceId, org name, archetype, apiVersion, authModes, capabilities, branding, push key id). "Connect to your organization" screen; URL persisted to secure storage; all clients read it.</td><td>Removes the build-time hard-code. <em>Direction-independent — unblocks everything.</em></td></tr>
+        <tr><td>P2</td><td>Zero-typing onboarding: org admin shows a <strong>QR</strong> + invite deep link (<code>dpf-mobile://connect?u=…&amp;invite=…</code> and universal/app links via the <code>.well-known/apple-app-site-association</code> + <code>assetlinks.json</code> the audit already calls out).</td><td>The "lots of manual setup" pain — scan → connected → invited.</td></tr>
+        <tr><td>P3 (optional)</td><td>Hosted <strong>discovery directory</strong>: opt-in central index mapping org slug / email-domain → install URL. A phonebook, <em>not</em> tenancy — single-org-per-install law stays intact.</td><td>"Type your work email, we route you."</td></tr>
+        <tr><td>throughout</td><td>TLS required (non-localhost); signed instance descriptor + optional certificate pinning / trust-on-first-use against phishing; OIDC PKCE for SSO/federation (already flagged future in deployment contracts).</td><td>Trust &amp; anti-impersonation.</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ============================================================ -->
+    <h2 id="personas">7 · Persona × use-case map — one app, every archetype</h2>
+    <p>The same shell mounts a different mode per principal. The recurring-business customer surface and the
+    field-service employee surface are the two you named; both already have substrate.</p>
+    <table>
+      <thead><tr><th>Persona (alias kind)</th><th>Archetype examples</th><th>Primary mobile use cases</th><th>Substrate that exists</th><th>New for mobile</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Customer</strong><br><code>CustomerContact</code></td>
+          <td>salon, dental, gym, HOA resident, trades customer</td>
+          <td>book / reschedule, my visits, invoices &amp; pay, messages, service requests, documents</td>
+          <td><code>CustomerAccount/Contact/Site</code>, <code>StorefrontItem</code> + booking <code>formSchema</code>, <code>Invoice/Payment</code>, dynamic forms</td>
+          <td>customer-mode screens, pay sheet, booking UX</td>
+        </tr>
+        <tr>
+          <td><strong>Field employee</strong><br><code>User</code> + <code>EmployeeProfile</code></td>
+          <td>HVAC tech, plumber, mobile groomer, home-health visitor</td>
+          <td>my jobs, schedule, navigate to site, check-in/out, checklist, photo + signature, parts/notes, <strong>offline</strong></td>
+          <td><code>WorkItem/WorkItemMessage/WorkSchedule</code>, field-dispatch axes (<code>needsFieldDispatch</code>), dynamic camera/signature/location fields</td>
+          <td>dispatch/job board surface, offline mutation sync, geofenced check-in</td>
+        </tr>
+        <tr>
+          <td><strong>Operator / builder</strong><br><code>User</code> + <code>platformRole</code></td>
+          <td>any (the org running DPF)</td>
+          <td>paused-work approvals, ops/backlog, portfolio, notifications</td>
+          <td>the <em>existing</em> <code>apps/mobile</code> app + <code>/api/v1/*</code> + agent stream</td>
+          <td>already built → fold into the manifest as <code>operator</code> mode</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="">Field-dispatch detection is already encoded: the axis triple
+    <code>consumptionChannel: "onsite-plus-portal"</code> + <code>form: "services"</code> +
+    <code>delivery: "physical"</code> is read by <code>needsFieldDispatch(axes)</code> to decide whether an
+    archetype gets the field surface.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="testing">8 · Testing strategy — without a phone lab</h2>
+    <p>Your worry — "how do we test with lots of manual setup if real phones are used" — is handled by a
+    layered approach where physical devices cover only what simulators provably can't.</p>
+    <table>
+      <thead><tr><th>Layer</th><th>Tool</th><th>Device needed</th><th>In CI?</th></tr></thead>
+      <tbody>
+        <tr><td>Unit / component</td><td>jest + React Native Testing Library (exists)</td><td>none</td><td><span class="pill ok">yes</span></td></tr>
+        <tr><td>E2E happy paths</td><td>Maestro flows (exist) on Android Emulator</td><td>none (emulator)</td><td><span class="pill ok">yes</span></td></tr>
+        <tr><td>Real-device smoke</td><td>EAS internal build → TestFlight (iOS) + Play internal (Android)</td><td>1 iPhone + 1 Android</td><td>on demand</td></tr>
+        <tr><td>Device-matrix coverage</td><td>Firebase Test Lab / BrowserStack / AWS Device Farm; Maestro Cloud</td><td>none (rented)</td><td>scheduled</td></tr>
+      </tbody>
+    </table>
+    <p><strong>Kill the manual-setup tax with a seeded demo org.</strong> Ship a demo install + demo login +
+    QR connect so a tester goes <em>install → scan → signed-in</em> in seconds, against throwaway demo data
+    generated from the archetype seed per persona. Physical devices are then reserved for the four things
+    simulators can't fake: push delivery, biometrics, real universal/app links, and store review.</p>
+
+    <!-- ============================================================ -->
+    <h2 id="owner-actions">9 · What only you can do (no agent can)</h2>
+    <p>I (the agent) can write all the code, the EAS config, the <code>.well-known</code> endpoints, the
+    manifest, the tests, and a <em>draft</em> privacy policy. The items below require a human with the
+    company's legal identity, accounts, and hardware. I'll prep everything to the edge of each and hand you a
+    one-click checklist.</p>
+    <table>
+      <thead><tr><th>Action</th><th>Why an agent can't</th><th>Cost / note</th></tr></thead>
+      <tbody>
+        <tr><td>Enroll <strong>Apple Developer Program</strong> (organization)</td><td>legal entity, D-U-N-S, 2FA Apple ID, signed agreements</td><td class="num">$99/yr</td></tr>
+        <tr><td>Create <strong>Google Play Console</strong> account (org)</td><td>identity verification, signed agreements</td><td class="num">$25 once</td></tr>
+        <tr><td>Create <strong>Expo / EAS</strong> account + org</td><td>account auth for cloud builds</td><td>free to start</td></tr>
+        <tr><td>Create <strong>Firebase</strong> project (FCM) + generate <strong>APNs Auth Key</strong></td><td>Google/Apple account-bound credential generation</td><td>free (push)</td></tr>
+        <tr><td>Provide a <strong>physical iPhone + Android</strong> device</td><td>hardware for push / biometric / deep-link / store QA</td><td>1 each</td></tr>
+        <tr><td>TestFlight + Play internal <strong>tester enrollment</strong></td><td>accept builds on real devices via your accounts</td><td>—</td></tr>
+        <tr><td>Approve <strong>store metadata</strong>, privacy-policy URL, data-safety / nutrition labels, content rating</td><td>legal/marketing decisions + a hosted policy page</td><td>—</td></tr>
+        <tr><td>Confirm the <strong>publishing entity + app name + bundle IDs</strong></td><td>business/branding decision (bundle ids provisionally <code>com.dpf.mobile</code>)</td><td>reserve early</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ============================================================ -->
+    <h2 id="research">10 · Research &amp; benchmarking</h2>
+    <ul>
+      <li><strong>Self-hosted multi-instance clients</strong> (Mastodon, Nextcloud, Home Assistant, WordPress,
+        GitLab): one app-store binary + user-entered instance URL + discovery endpoint. <em>Adopted:</em>
+        instance-URL entry + <code>.well-known</code> descriptor. <em>Rejected as default:</em> per-org
+        white-label builds (store overhead, cost) — offered only later as a premium.</li>
+      <li><strong>Field-service apps</strong> (ServiceTitan, Jobber, Housecall Pro, FieldEdge): convergent
+        field-tech feature set — job list, schedule, "on my way", check-in/out, line items, photos, signature,
+        offline. <em>Validates</em> our <code>WorkItem/WorkSchedule</code> + dynamic camera/signature surface;
+        offline-first is table stakes.</li>
+      <li><strong>Customer booking apps</strong> (Mindbody, Fresha, Square Appointments, Calendly): book,
+        reminders, rebook, pay, membership. <em>Validates</em> <code>StorefrontItem</code> booking schema +
+        <code>Invoice/Payment</code> reuse.</li>
+      <li><strong>Mobile toolchain</strong>: Expo + EAS is the current industry-standard managed RN pipeline
+        (cloud iOS builds without a Mac fleet). Already chosen in <code>apps/mobile</code> — keep.</li>
+      <li><strong>Anti-pattern rejected</strong>: "the whole portal on a phone" (the May 2026 audit's own
+        warning). We render persona-scoped surfaces, never a shrunk desktop.</li>
+    </ul>
+
+    <!-- ============================================================ -->
+    <h2 id="roadmap">11 · Phased roadmap</h2>
+    <table>
+      <thead><tr><th>Phase</th><th>Outcome</th><th>Key work</th><th>Gate</th><th>Depends on</th></tr></thead>
+      <tbody>
+        <tr><td><strong>P0</strong> Accounts &amp; naming <em>(you, in parallel)</em></td><td>able to publish later</td><td>Apple/Google/Expo/Firebase accounts, APNs key, bundle ids, privacy policy, demo domain</td><td>Mark</td><td>—</td></tr>
+        <tr><td><strong>P1</strong> Connectivity foundation <em>(now)</em></td><td>app reaches any install at runtime</td><td>runtime server-URL config + <code>.well-known/dpf-instance</code> + connect screen</td><td>—</td><td>—</td></tr>
+        <tr><td><strong>P2</strong> Persona manifest <em>(keystone)</em></td><td>one binary, persona-routed; operator mode folded in</td><td><code>/api/v1/app/config</code> + manifest-driven shell/nav</td><td>—</td><td>P1</td></tr>
+        <tr><td><strong>P3</strong> Customer mode</td><td>recurring-biz customers self-serve</td><td>booking, my-visits, invoices/pay, messages, service requests</td><td>—</td><td>P2</td></tr>
+        <tr><td><strong>P4</strong> Field mode</td><td>techs run jobs offline</td><td>job/dispatch board, schedule, check-in/out, checklist, photo/sig, offline sync</td><td>—</td><td>P2</td></tr>
+        <tr><td><strong>P5</strong> Push + offline hardening</td><td>reliable notifications + offline writes</td><td>Expo push sender adapter (APNs/FCM), channel policy, offline mutation queue</td><td>P0 creds</td><td>P2</td></tr>
+        <tr><td><strong>P6</strong> Store release</td><td>in users' hands</td><td>EAS build/submit, TestFlight + Play internal → production, metadata</td><td>Mark</td><td>P0, P3/P4</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ============================================================ -->
+    <h2 id="reuse">12 · Reuse map</h2>
+    <div class="cards">
+      <div class="card"><h4>Reused as-is</h4>
+        <p><code>apps/mobile</code> shell · <code>/api/v1/*</code> · <code>api-client/types/validators</code> ·
+        JWT auth · dynamic form/view renderer · <code>Notification</code>/<code>PushDeviceRegistration</code> ·
+        offline cache · Maestro harness · archetype seed (<code>activationProfile</code>/axes) ·
+        <code>WorkItem/WorkSchedule</code> · <code>CustomerAccount/Contact</code>.</p>
+      </div>
+      <div class="card"><h4>Net-new</h4>
+        <p>instance discovery endpoint + descriptor · runtime URL config + connect screen · persona manifest
+        endpoint + manifest-driven shell · customer-mode screens · field-mode screens (dispatch, offline sync,
+        geofenced check-in) · Expo push sender adapter · path-filtered mobile CI lane · EAS production profiles
+        + credentials · store metadata / privacy.</p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="decisions">13 · Decisions for you (I'll proceed on the recommended default unless you redirect)</h2>
+    <div class="cards">
+      <div class="card">
+        <h4>A · Distribution model</h4>
+        <p class="rec">Recommended: one generic app + instance URL</p>
+        <p>One DPF app + connect-to-your-org (Mastodon model, lowest cost) <em>now</em>; design so per-org
+        white-label is a <em>later</em> premium. Alternative: white-label per org (expensive store overhead).</p>
+      </div>
+      <div class="card">
+        <h4>B · First persona mode after the manifest</h4>
+        <p class="rec">Recommended: Field mode first</p>
+        <p>Field service is more defensible/sticky, reuses the <code>WorkItem</code> substrate, and avoids the
+        payment/compliance entanglements of customer pay. Then Customer mode (broadest market). Your
+        go-to-market may flip this — your call.</p>
+      </div>
+      <div class="card">
+        <h4>C · Repo</h4>
+        <p class="rec">Recommended: keep monorepo + path-filtered CI</p>
+        <p>Split only if a dedicated mobile team with an independent release train appears; even then prefer a
+        published-contract package over a fork.</p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="out-of-scope">14 · Out of scope</h2>
+    <ul>
+      <li>AI-coworker phone UI — coworkers are not phone users.</li>
+      <li>Multi-tenant SaaS — single-org-per-install stands; the discovery directory is a phonebook, not tenancy.</li>
+      <li>Tablet-optimized layouts — v1 is phone-first.</li>
+      <li>White-label per-org builds — deferred to a premium tier (design leaves room).</li>
+      <li>"The whole portal on a phone" — persona-scoped surfaces only.</li>
+    </ul>
+
+    <!-- ============================================================ -->
+    <h2 id="verification">15 · Verification</h2>
+    <div class="callout">
+      <strong>Per phase, not per release.</strong> P1 source-local gates: <code>pnpm --filter mobile typecheck</code>
+      + <code>pnpm --filter mobile test</code> (jest) — named substrate per AGENTS §6/§15. Functional gate once
+      P1/P2 land: drive <em>connect → manifest → mode</em> on the running install via the
+      <code>dpf-verify-on-live-install</code> skill. Native build evidence comes from EAS internal builds on
+      real devices (P6). Each phase carries its own UX evidence per AGENTS §5.
+    </div>
+  </main>
+</div>
+</body>
+</html>
