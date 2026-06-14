@@ -1,3 +1,5 @@
+import type { FieldDispatchProfileOverride } from "./field-dispatch";
+
 export type CtaType = "booking" | "purchase" | "inquiry" | "donation" | "rental";
 
 export type PriceType =
@@ -165,7 +167,16 @@ export type ArchetypeModule =
   | "lifecycle-signals"
   | "integrations"
   | "rental-fleet"
-  | "rental-agreements";
+  | "rental-agreements"
+  /**
+   * Mobile-resource-to-customer-site coordination (dispatcher coworker +
+   * dispatch board). A *derived* module — `needsFieldDispatch(axes)` adds it
+   * during activation-profile normalization; it is never hand-authored into an
+   * archetype literal. Composes with `service-operations` (which stays the
+   * office-side service-work module). See field-dispatch.ts and
+   * docs/superpowers/specs/2026-06-13-field-dispatch-capability-design.md.
+   */
+  | "field-dispatch";
 
 export type ArchetypeProfileType = "standard" | "managed-service-provider";
 
@@ -545,4 +556,14 @@ export interface ArchetypeDefinition {
    * a genuine image-affordance exception the derivation can't express.
    */
   mediaProfile?: MediaProfile;
+  /**
+   * Optional override of the derived field-dispatch profile. Left unset for the
+   * common case — `deriveFieldDispatchProfile` (field-dispatch.ts) derives
+   * applicability and a sensible profile from this archetype's axes. Set
+   * `fieldDispatch.enabled` to force dispatch on/off against the axis
+   * derivation, or supply partial fields to specialize the vertical (resource
+   * noun, compliance overlay, inventory model, vocabulary). See
+   * docs/superpowers/specs/2026-06-13-field-dispatch-capability-design.md ADR-4.
+   */
+  fieldDispatch?: FieldDispatchProfileOverride;
 }

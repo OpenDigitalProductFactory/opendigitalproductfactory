@@ -3,6 +3,7 @@ import {
   deriveCapabilityApplicability,
   derivePartnerProgramProfile,
 } from "./applicability-rules";
+import { needsFieldDispatch } from "./field-dispatch";
 import {
   isCapabilityKey,
   type CapabilityKey,
@@ -43,6 +44,7 @@ const MODULES = new Set<ArchetypeModule>([
   "integrations",
   "rental-fleet",
   "rental-agreements",
+  "field-dispatch",
 ]);
 
 const PROFILE_TYPES = new Set(["standard", "managed-service-provider"] as const);
@@ -364,8 +366,17 @@ export function readActivationProfile(raw: unknown): NormalizedActivationProfile
   const billingProfile = deriveBillingPatternProfile(axes);
   const partnerProgram = derivePartnerProgramProfile(axes, portfolios);
 
+  // `field-dispatch` is a derived module (ADR-2): added from the axes here, not
+  // hand-authored into archetype literals — the same way billingProfile and
+  // partnerProgram are derived above. Idempotent if a literal ever declares it.
+  const derivedModules: ArchetypeModule[] =
+    needsFieldDispatch(axes) && !legacyShape.modules.includes("field-dispatch")
+      ? [...legacyShape.modules, "field-dispatch"]
+      : legacyShape.modules;
+
   return {
     ...legacyShape,
+    modules: derivedModules,
     axes,
     portfolios,
     capabilityOverrides,

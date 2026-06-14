@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Coworker Simulation &amp; Eval Harness — Design (dispatch-first)</title>
+<meta name="dpf:status" content="Draft for review" />
+<meta name="dpf:date" content="2026-06-14" />
+<meta name="dpf:format" content="HTML + SysML v2 (migration pilot)" />
+<style>
+  :root {
+    --fg: #1a1d21; --muted: #5a6470; --bg: #ffffff; --surface: #f6f8fa;
+    --border: #d8dee4; --accent: #2f6feb; --ok: #1a7f37; --warn: #9a6700; --danger: #cf222e;
+    --sysml-bg: #f0f4fb; --sysml-border: #2f6feb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fg: #e6edf3; --muted: #9aa7b4; --bg: #0d1117; --surface: #161b22;
+      --border: #30363d; --accent: #6ea8ff; --ok: #3fb950; --warn: #d29922; --danger: #f85149;
+      --sysml-bg: #11192b; --sysml-border: #6ea8ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--fg); background: var(--bg); margin: 0; padding: 2.2rem clamp(1rem, 4vw, 4rem);
+    max-width: 64rem; margin-inline: auto;
+  }
+  h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .3rem; }
+  h2 { font-size: 1.3rem; margin: 2.4rem 0 .7rem; padding-top: .6rem; border-top: 2px solid var(--border); }
+  h3 { font-size: 1.06rem; margin: 1.4rem 0 .4rem; color: var(--accent); }
+  p, li { color: var(--fg); }
+  .muted { color: var(--muted); }
+  code { font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace; font-size: .9em; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: .42rem .6rem; text-align: left; vertical-align: top; }
+  th { background: var(--surface); font-weight: 600; }
+  .meta td:first-child { font-weight: 600; width: 12rem; background: var(--surface); }
+  pre.sysml {
+    background: var(--sysml-bg); border: 1px solid var(--border); border-left: 4px solid var(--sysml-border);
+    border-radius: 6px; padding: .9rem 1rem; overflow-x: auto; font-size: .85rem; line-height: 1.5;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace; color: var(--fg);
+  }
+  pre.sysml .kw { color: var(--accent); font-weight: 600; }
+  pre.sysml .cm { color: var(--muted); font-style: italic; }
+  .tag { display: inline-block; font-size: .72rem; font-weight: 600; padding: .08rem .45rem; border-radius: 999px;
+         border: 1px solid var(--border); background: var(--surface); color: var(--muted); }
+  .tag.moat { color: var(--ok); border-color: var(--ok); }
+  .tag.parity { color: var(--accent); border-color: var(--accent); }
+  .note { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: .7rem 1rem; margin: 1rem 0; }
+  a { color: var(--accent); }
+  .legend { font-size: .82rem; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Coworker Simulation &amp; Eval Harness — Design</h1>
+<p class="muted">Functionally verifying multi-actor AI coworkers. Dispatch is the proving vertical.</p>
+
+<table class="meta">
+  <tr><td>Status</td><td>Draft for review</td></tr>
+  <tr><td>Date</td><td>2026-06-14</td></tr>
+  <tr><td>Author</td><td>Agent (with Mark Bodman direction)</td></tr>
+  <tr><td>Format</td><td><strong>HTML + SysML v2</strong> — pilot of the new design/spec format (replaces long-term Markdown). SysML blocks follow OMG SysML 2.0 textual notation per <code>docs/Reference/sysml-v2.md</code> and the <a href="2026-06-14-sysml-architecture-substrate-design.md">SysML Architecture Substrate</a> design.</td></tr>
+  <tr><td>Drives</td><td>The functional-verification capability for the <a href="2026-06-13-field-dispatch-capability-design.md">Field Dispatch capability</a> (F2b/F3 and beyond). Generalizes to all coworkers.</td></tr>
+  <tr><td>Substrate</td><td><code>services/integration-test-harness/</code> (mock boundary pattern), <a href="2026-05-31-pseudo-user-contract-design.md">Pseudo-User Contract</a> (actor identity), <code>e2e/</code> Playwright (UI smoke), <code>@dpf/validators</code> field-dispatch (units under test), <code>DPF_SEED_DEMO_DATA</code> HVAC fixture.</td></tr>
+  <tr><td>Working mode</td><td>Backlog not in this build; build directly in the worktree. Worktree is behind <code>origin/main</code> (the SysML substrate from PR&nbsp;#1864 is not yet merged in here).</td></tr>
+</table>
+
+<h2 id="problem">1. Problem</h2>
+<p>
+  A dispatch agent's value is <em>emergent across many actors over time</em>: one dispatcher, several
+  technicians, many customers, and a day of real-world chaos — jobs running late, no-shows, parts
+  missing, emergency reshuffles. Two test tiers exist today and neither proves this:
+</p>
+<ul>
+  <li><strong>Pure unit tests</strong> (F0/F1/F2a) prove the decision atoms — fast and deterministic, but blind to emergent process.</li>
+  <li><strong>Single-logged-in-user happy-path drives</strong> (e2e, dogfood) prove UI plumbing for <em>one</em> actor — they cannot represent a dispatcher coordinating independent technicians and customers.</li>
+</ul>
+<p>
+  The operator named the gap directly: <em>"a dispatch agent would need to simulate real people with real
+  dispatch processes and to test the process with real-world challenges and variants."</em> The missing
+  middle is a <strong>multi-actor, time-aware simulation harness</strong> plus a <strong>behavioral eval</strong> for the
+  non-deterministic AI dispatcher. Without it, "functionally competitive" is unprovable.
+</p>
+
+<h2 id="goals">2. Goals</h2>
+<ol>
+  <li><strong>Multi-actor fidelity.</strong> Simulate a dispatcher plus N technicians and M customers as independent principals, not one user session.</li>
+  <li><strong>Domain-level driving.</strong> Actors exercise the <em>same</em> governed server actions/tools the real UI calls — not (primarily) the browser.</li>
+  <li><strong>Time control.</strong> A virtual clock advances time and fires temporal events (T-24h watch, ETA timers, SLA clocks) with no wall-clock waits.</li>
+  <li><strong>Real-world variants.</strong> A reproducible scenario library encoding the challenges (late, no-show, parts-out, emergency reshuffle, landline-only elder).</li>
+  <li><strong>Invariant oracles.</strong> Process invariants asserted across every scenario.</li>
+  <li><strong>Behavioral eval.</strong> Run the real LLM dispatcher against scenarios and score its decisions against the oracles and a rubric, tolerant of non-determinism.</li>
+  <li><strong>Reusable.</strong> The harness is coworker-agnostic; dispatch is the first proving vertical, as Build Studio was for the pseudo-user contract.</li>
+  <li><strong>No production coupling.</strong> Headless, against test substrate, with all external boundaries (comms, QuickBooks) stubbed — no real customer egress.</li>
+</ol>
+
+<h2 id="research">3. Research &amp; benchmarking</h2>
+<p>The test pyramid for an AI agent that coordinates people has four tiers; this harness builds the two missing middle ones.</p>
+<table>
+  <tr><th>Tier</th><th>Proves</th><th>Status in DPF</th></tr>
+  <tr><td>Decision unit tests</td><td>The atoms (status parse, channel urgency, confirm selection)</td><td>Have — F0/F1/F2a</td></tr>
+  <tr><td><strong>Process simulation</strong> (this spec)</td><td>Emergent multi-actor process holds invariants across variants</td><td><strong>Missing</strong></td></tr>
+  <tr><td><strong>Behavioral eval</strong> (this spec)</td><td>The LLM dispatcher makes good decisions under variants</td><td><strong>Missing</strong></td></tr>
+  <tr><td>Live dynamic analysis</td><td>Last-mile proof on the real portal</td><td>Have — canonical archetype-rebuild audit (single-actor today)</td></tr>
+</table>
+<p><strong>Reusable building blocks found (2026-06-14 sweep):</strong></p>
+<ul>
+  <li><code>services/integration-test-harness/</code> — a scenario-driven <em>mock vendor server</em> (ADP, <strong>QuickBooks</strong>) with fixtures (<code>happy-path</code>, <code>rate-limited</code>, <code>malformed</code>, <code>token-expired</code>) flipped via a control endpoint. The right pattern for the external boundary; already covers QB.</li>
+  <li><a href="2026-05-31-pseudo-user-contract-design.md">Pseudo-User Contract</a> — coworkers are <em>delegated principals</em> (Principal + PrincipalAlias). The identity model for "actors that are not the logged-in user" already exists; test actors extend it.</li>
+  <li><code>e2e/</code> Playwright + helpers — solid single-actor UI drive; reused only for the thin top smoke tier.</li>
+  <li><code>vi.useFakeTimers()</code> — unit-level clock; the virtual clock generalizes it to scenario time.</li>
+  <li>The Field Dispatch units (<code>@dpf/validators</code> field-dispatch) are deliberately <code>Date.now</code>-free, so clock injection works with no rework.</li>
+</ul>
+<p><strong>Anti-pattern rejected:</strong> driving five concurrent Playwright browser contexts as the primary coverage. It is slow, flaky, and proves UI plumbing rather than dispatch logic. Browser multi-context is reserved for a handful of UI-smoke scenarios only.</p>
+
+<h2 id="substrate">4. Substrate audit</h2>
+<p>Per <code>verify-substrate-before-proposing-new</code>: what to reuse vs. build.</p>
+<table>
+  <tr><th>Element</th><th>Existing substrate</th><th>Decision</th></tr>
+  <tr><td>External boundary (comms, QB)</td><td><code>services/integration-test-harness/</code> scenario server</td><td><strong>Extend.</strong> Add a comms boundary mock + reuse the QB scenarios.</td></tr>
+  <tr><td>Actor identity</td><td><code>Principal</code>/<code>PrincipalAlias</code>; pseudo-user contract</td><td><strong>Reuse.</strong> Technicians/customers are seeded principals; the dispatcher is the existing coworker.</td></tr>
+  <tr><td>Synthetic world seed</td><td><code>DPF_SEED_DEMO_DATA</code> HVAC fixture (workspace-home plan); <code>packages/db/src/seed*.ts</code></td><td><strong>Extend.</strong> Fleet + technicians + customers + jobs + channel bindings.</td></tr>
+  <tr><td>Units under test</td><td><code>@dpf/validators</code> field-dispatch (F0/F1/F2a)</td><td><strong>Reuse.</strong> Already clock-injectable.</td></tr>
+  <tr><td>Clock</td><td><code>vi.useFakeTimers</code></td><td><strong>Generalize</strong> into a <code>VirtualClock</code> part with a typed port.</td></tr>
+  <tr><td>UI smoke</td><td><code>e2e/</code> Playwright + helpers</td><td><strong>Reuse</strong> for a thin top tier only.</td></tr>
+  <tr><td>Eval mechanism</td><td>routing eval / <code>run-probes</code> pattern</td><td><strong>Adapt.</strong> Scenario renderer + response scorer for dispatch.</td></tr>
+</table>
+<p class="muted">Net: no new Prisma model for the harness core. Test actors and synthetic worlds are seeded rows on existing models; the harness itself is test-runtime code.</p>
+
+<h2 id="decisions">5. Architecture decisions</h2>
+<h3>ADR-1 — Simulate actors at the domain layer, not the browser</h3>
+<p>Actors invoke the same governed server actions/tools the UI calls. This exercises real dispatch logic, runs headless in vitest, and is deterministic. Multi-browser is a thin UI-smoke tier, not the coverage.</p>
+<h3>ADR-2 — Time is an injected dependency, never wall-clock</h3>
+<p>All temporal logic flows from a <code>VirtualClock</code> through a <code>ClockPort</code>. Scenarios advance time explicitly; no <code>setTimeout</code> waits. Modules under test must accept <code>now</code> (already true for F0/F1/F2a).</p>
+<h3>ADR-3 — Deterministic core, eval for the non-deterministic edge</h3>
+<p>The world, actors, and clock are seeded and reproducible (a regression net). The LLM dispatcher is wrapped by a separate <em>eval</em> that scores decisions across runs against the oracles and a rubric — non-determinism is handled by scoring + thresholds, not by asserting exact output.</p>
+<h3>ADR-4 — Two actor fidelities</h3>
+<p><strong>Scripted responders</strong> (deterministic) for regression + oracle proofs; <strong>LLM persona-actors</strong> (a customer agent, a technician agent on the A2A substrate) for realistic, varied, adversarial behavior — the "simulate real people" fidelity that surfaces the unexpected.</p>
+<h3>ADR-5 — No external egress, ever</h3>
+<p>Every external boundary (SMS/WhatsApp/email send, QuickBooks write) resolves to a harness mock. A real customer message or QB write from a test run is a hard defect. Reuse the integration-test-harness control plane.</p>
+<h3>ADR-6 — Coworker-agnostic; dispatch first</h3>
+<p>The world/actor/clock/scenario/oracle/eval contracts are generic. Dispatch supplies the first world fixture, actor scripts, scenario library, and oracle set. Other coworkers reuse the contracts.</p>
+
+<h2 id="model">6. The harness model (SysML v2)</h2>
+<p class="legend">SysML v2 textual notation (OMG SysML 2.0). <span class="kw" style="color:var(--accent)">keywords</span> highlighted; <code>R*</code> requirements, <code>C*</code> constraints, <code>VC*</code> verification cases are referenced in the traceability matrix (§9).</p>
+
+<h3>6.1 Requirements</h3>
+<pre class="sysml"><code><span class="kw">package</span> CoworkerSimulationHarness {
+
+  <span class="kw">requirement def</span> R1_MultiActorFidelity {
+    <span class="kw">doc</span> <span class="cm">/* The harness shall represent a dispatcher plus 1..* technician actors and
+            1..* customer actors as independent principals, concurrently, within one
+            simulated tenant — not as a single logged-in user. */</span>
+  }
+  <span class="kw">requirement def</span> R2_DomainLevelDriving {
+    <span class="kw">doc</span> <span class="cm">/* Actors shall drive the system only through the same governed server
+            actions and MCP tools the production UI invokes. No privileged backdoor. */</span>
+  }
+  <span class="kw">requirement def</span> R3_VirtualClock {
+    <span class="kw">doc</span> <span class="cm">/* The harness shall advance simulated time and fire temporal events
+            (T-24h confirmation watch, ETA/SLA timers) without wall-clock waiting. */</span>
+  }
+  <span class="kw">requirement def</span> R4_ScenarioLibrary {
+    <span class="kw">doc</span> <span class="cm">/* The harness shall provide named, reproducible scenarios encoding
+            real-world variants and challenges. */</span>
+  }
+  <span class="kw">requirement def</span> R5_InvariantOracles {
+    <span class="kw">doc</span> <span class="cm">/* The harness shall assert process invariants after every scenario run. */</span>
+  }
+  <span class="kw">requirement def</span> R6_Determinism {
+    <span class="kw">doc</span> <span class="cm">/* Given (worldSeed, scenarioId), all non-AI outputs shall be reproducible. */</span>
+  }
+  <span class="kw">requirement def</span> R7_BehavioralEval {
+    <span class="kw">doc</span> <span class="cm">/* The harness shall run the real LLM dispatcher against scenarios and score
+            its decisions against oracles and a rubric, tolerant of non-determinism. */</span>
+  }
+  <span class="kw">requirement def</span> R8_HighFidelityActors {
+    <span class="kw">doc</span> <span class="cm">/* The harness shall optionally use LLM persona-actors for realistic and
+            adversarial customer/technician behavior. */</span>
+  }
+  <span class="kw">requirement def</span> R9_Reusability {
+    <span class="kw">doc</span> <span class="cm">/* The world/actor/clock/scenario/oracle/eval contracts shall be
+            coworker-agnostic; dispatch is the first vertical. */</span>
+  }
+  <span class="kw">requirement def</span> R10_NoExternalEgress {
+    <span class="kw">doc</span> <span class="cm">/* No scenario run shall emit a real customer message or external write;
+            all external boundaries resolve to harness mocks. */</span>
+  }</code></pre>
+
+<h3>6.2 Constraints</h3>
+<pre class="sysml"><code>  <span class="kw">constraint def</span> C1_Reproducible { <span class="cm">/* identical (worldSeed, scenarioId) =&gt; identical non-AI trace */</span> }
+  <span class="kw">constraint def</span> C2_NoEgress     { <span class="cm">/* comms + QB boundaries are mocks; real adapters are unregistered */</span> }
+  <span class="kw">constraint def</span> C3_SameTools    { <span class="cm">/* actor calls subset of production server actions / MCP tools */</span> }
+  <span class="kw">constraint def</span> C4_ClockInjected{ <span class="cm">/* no unit under test reads Date.now(); time flows from VirtualClock */</span> }</code></pre>
+
+<h3>6.3 Structure (parts, ports, interfaces)</h3>
+<pre class="sysml"><code>  <span class="kw">port def</span> ClockPort        { <span class="cm">/* now() : Instant; advanceTo(t : Instant); fireDue() */</span> }
+  <span class="kw">port def</span> DomainActionPort { <span class="cm">/* the governed dispatch actions/tools an actor may invoke */</span> }
+  <span class="kw">port def</span> CommsBoundaryPort { <span class="cm">/* stubbed send + recordDeliveryAttempt; scenario-controllable outcomes */</span> }
+  <span class="kw">port def</span> ObservationPort   { <span class="cm">/* read-only: jobs, statuses, notifications, delivery attempts, invoices */</span> }
+
+  <span class="kw">interface def</span> ActorToDomain { <span class="kw">end</span> actor : DomainActionPort; <span class="kw">end</span> system : DomainActionPort; }
+
+  <span class="kw">part def</span> VirtualClock      { <span class="kw">port</span> clock : ClockPort; }
+
+  <span class="kw">part def</span> DispatchSimWorld {
+    <span class="cm">// the synthetic world — seeded rows on existing models, one tenant</span>
+    <span class="kw">part</span> fleet        : Vehicle[1..*];
+    <span class="kw">part</span> technicians  : TechnicianActor[1..*];
+    <span class="kw">part</span> customers    : CustomerActor[1..*];
+    <span class="kw">part</span> jobs         : FieldServiceJob[*];      <span class="cm">// WorkItem sourceType = field-service-job</span>
+    <span class="kw">part</span> bindings     : ChannelBinding[*];        <span class="cm">// verified comms channels per customer</span>
+    <span class="kw">ref part</span> clock     : VirtualClock;
+  }
+
+  <span class="kw">part def</span> ActorRuntime {
+    <span class="cm">// drives actors turn-by-turn against the domain, advancing the clock</span>
+    <span class="kw">port</span> domain : DomainActionPort;
+    <span class="kw">port</span> clock  : ClockPort;
+    <span class="kw">part</span> dispatcher : DispatcherUnderTest;  <span class="cm">// the AI coworker, or a deterministic reference stub</span>
+  }
+
+  <span class="kw">part def</span> TechnicianActor { <span class="cm">/* scripted or LLM: depart, arrive, run-long, report-parts-missing, complete */</span> }
+  <span class="kw">part def</span> CustomerActor   { <span class="cm">/* scripted or LLM: confirm, ignore, reschedule, not-home */</span> }
+  <span class="kw">part def</span> DispatcherUnderTest { <span class="cm">/* binds to the seeded Dispatcher coworker (F2b) or a reference policy */</span> }
+
+  <span class="kw">part def</span> ScenarioRunner {
+    <span class="kw">part</span> world   : DispatchSimWorld;
+    <span class="kw">part</span> runtime : ActorRuntime;
+    <span class="kw">part</span> oracles : OracleSet;
+    <span class="kw">port</span> observe : ObservationPort;
+  }
+
+  <span class="kw">part def</span> OracleSet      { <span class="cm">/* the invariants asserted after a run (see §7.2) */</span> }
+  <span class="kw">part def</span> ExternalBoundaryMocks { <span class="kw">port</span> comms : CommsBoundaryPort; <span class="cm">/* + QB via integration-test-harness */</span> }
+  <span class="kw">part def</span> EvalHarness {
+    <span class="cm">// wraps ScenarioRunner with the real LLM dispatcher and a scoring rubric</span>
+    <span class="kw">part</span> runner : ScenarioRunner;
+    <span class="kw">part</span> rubric : EvalRubric;
+  }
+  <span class="kw">part def</span> EvalRubric     { <span class="cm">/* weighted criteria scored per scenario run (see §8) */</span> }</code></pre>
+
+<h3>6.4 Allocations</h3>
+<pre class="sysml"><code>  <span class="kw">allocation</span> a1 <span class="kw">allocate</span> ActorRuntime.domain <span class="kw">to</span> appsWeb.fieldDispatch.serverActions;
+  <span class="kw">allocation</span> a2 <span class="kw">allocate</span> VirtualClock          <span class="kw">to</span> validators.fieldDispatch.nowInjection; <span class="cm">// F1/F2a already Date.now-free</span>
+  <span class="kw">allocation</span> a3 <span class="kw">allocate</span> ExternalBoundaryMocks  <span class="kw">to</span> services.integrationTestHarness;
+  <span class="kw">allocation</span> a4 <span class="kw">allocate</span> OracleSet             <span class="kw">to</span> vitest.assertions;
+  <span class="kw">allocation</span> a5 <span class="kw">allocate</span> DispatcherUnderTest   <span class="kw">to</span> db.seed.dispatcherCoworker;     <span class="cm">// F2b</span>
+  <span class="kw">allocation</span> a6 <span class="kw">allocate</span> CustomerActor, TechnicianActor <span class="kw">to</span> a2a.personaAgents;        <span class="cm">// high-fidelity tier</span>
+}</code></pre>
+
+<h3 id="mobile">6.5 Mobile field-signal contract &amp; geo-temporal model</h3>
+<p>
+  The routing inputs a dispatcher depends on — technician location, departure, arrival, and ETA — originate on
+  the technician's <strong>mobile device</strong> in production. The harness simulates them as the <em>same signal
+  contract</em> the real app emits, driven by a deterministic geo-temporal model. The stub is therefore the
+  <strong>convergence point with the separate mobile-app design thread: functional parity means both honor one
+  <code>MobileFieldSignal</code> schema</strong> (<code>location | departed | arrived | eta | status</code>) and the
+  same geofence/ETA semantics.
+</p>
+<pre class="sysml"><code>  <span class="kw">requirement def</span> R11_MobileFieldSignalContract {
+    <span class="kw">doc</span> <span class="cm">/* Routing sensors and status updates (location, departed, arrived, ETA)
+            enter the system through one mobile field-device signal schema. The
+            harness stub and the real mobile app emit the same schema. */</span>
+  }
+  <span class="kw">requirement def</span> R12_GeoTemporalSimulation {
+    <span class="kw">doc</span> <span class="cm">/* The harness shall simulate realistic geography (positions, routes,
+            distances, traffic-adjusted travel time) and time-of-day effects so
+            routing, ETA, on-my-way, and running-late run under realistic
+            geo + temporal situations. */</span>
+  }
+
+  <span class="kw">port def</span> MobileFieldDevicePort {
+    <span class="cm">// emits MobileFieldSignal = location | departed | arrived | eta | status
+    // implemented by BOTH the real mobile app and the SimulatedMobileDevice stub</span>
+  }
+  <span class="kw">part def</span> GeoTemporalModel {
+    <span class="cm">// geoDistanceKm, travelTimeMinutes(traffic), etaAt, positionAt,
+    // withinGeofence, trafficFactorForHour — deterministic, clock-driven</span>
+  }
+  <span class="kw">part def</span> SimulatedMobileDevice {
+    <span class="kw">port</span> device : MobileFieldDevicePort;
+    <span class="kw">ref part</span> geo : GeoTemporalModel;
+    <span class="cm">// planDrive(from, site, departAt) -&gt; deterministic MobileFieldSignal timeline</span>
+  }
+
+  <span class="kw">connection</span> techToDevice <span class="kw">connect</span> TechnicianActor <span class="kw">to</span> SimulatedMobileDevice.device;
+  <span class="kw">allocation</span> a7 <span class="kw">allocate</span> MobileFieldDevicePort <span class="kw">to</span> mobileApp.fieldSignalContract; <span class="cm">// convergence target</span>
+  <span class="kw">allocation</span> a8 <span class="kw">allocate</span> GeoTemporalModel      <span class="kw">to</span> harness.geoTemporal;
+
+  <span class="kw">satisfy</span> R11 <span class="kw">by</span> MobileFieldDevicePort;  <span class="kw">satisfy</span> R12 <span class="kw">by</span> GeoTemporalModel;
+  <span class="kw">verify</span> R11 <span class="kw">by</span> VC6_MobileSignalParity;  <span class="kw">verify</span> R12 <span class="kw">by</span> VC6_MobileSignalParity;
+  <span class="kw">verification case def</span> VC6_MobileSignalParity {
+    <span class="kw">objective</span> <span class="cm">/* the stub emits the MobileFieldSignal schema; geo distance/ETA/geofence
+                 math is deterministic; running-late derives from ETA vs. window */</span>
+  }</code></pre>
+<p class="note">
+  <strong>Convergence contract.</strong> The mobile-app thread implements <code>MobileFieldDevicePort</code> from real
+  GPS and taps; this harness implements it from <code>planDrive</code> over the geo-temporal model. Both are verified
+  against the same <code>MobileFieldSignal</code> schema, so scenarios written here transfer to the real device, and
+  the device's routing behavior is testable here before it ships. <span class="muted">Built &amp; verified (21/21):
+  <code>packages/coworker-sim-harness/src/geo-temporal.ts</code> + <code>mobile-signals.ts</code>.</span>
+</p>
+
+<h2 id="scenarios">7. Scenario &amp; oracle model</h2>
+<h3>7.1 Scenario library (R4)</h3>
+<table>
+  <tr><th>Scenario</th><th>Variant injected</th><th>What it stresses</th></tr>
+  <tr><td><code>normal-day</code></td><td>none</td><td>Baseline: confirm → en-route → on-site → close → invoice for every job.</td></tr>
+  <tr><td><code>tech-out-sick</code></td><td>one technician unavailable at start</td><td>Reassignment / capacity rebalancing without dropping a job.</td></tr>
+  <tr><td><code>job-overruns</code></td><td>a job runs 40 min long</td><td>Running-late cascade fires; downstream customers re-notified.</td></tr>
+  <tr><td><code>rush-hour-delay</code></td><td>traffic factor raises ETA past the promised window</td><td>Geo-temporal: running-late derives from ETA vs. window; the on-my-way carries the slipped ETA.</td></tr>
+  <tr><td><code>emergency-callout</code></td><td>an emergency arrives mid-afternoon</td><td>Priority reshuffle; SLA on emergency response.</td></tr>
+  <tr><td><code>unreachable-customer</code></td><td>customer with only an unverified channel</td><td>Blocked-delivery surfaces as a board exception, not a silent miss.</td></tr>
+  <tr><td><code>parts-blocked</code></td><td>first visit needs an out-of-stock part</td><td>Job flagged parts-blocked; low-stock reorder signal raised.</td></tr>
+  <tr><td><code>no-show</code></td><td>customer not home on arrival</td><td>Correct status, re-schedule path, no phantom completion/invoice.</td></tr>
+</table>
+
+<h3>7.2 Invariant oracles (R5)</h3>
+<pre class="sysml"><code>  <span class="kw">constraint def</span> O1_CustomerInformed   { <span class="cm">/* every job with a verified channel is notified before/at its visit */</span> }
+  <span class="kw">constraint def</span> O2_NoDoubleBooking    { <span class="cm">/* no technician assigned two overlapping on-site windows */</span> }
+  <span class="kw">constraint def</span> O3_LateCascadeFires   { <span class="cm">/* a job overrun by &gt; threshold triggers downstream re-notification */</span> }
+  <span class="kw">constraint def</span> O4_CompletionInvoiced { <span class="cm">/* every job reaching complete yields exactly one DPF Invoice (sourceType=field-service-job) */</span> }
+  <span class="kw">constraint def</span> O5_FailuresSurface    { <span class="cm">/* every failed delivery becomes a board exception */</span> }
+  <span class="kw">constraint def</span> O6_EmergencySla       { <span class="cm">/* an emergency is assigned and customer-notified within the SLA window */</span> }
+  <span class="kw">constraint def</span> O7_NoPhantomState     { <span class="cm">/* no completion/invoice without an on-site arrival */</span> }</code></pre>
+
+<h2 id="eval">8. Behavioral eval rubric (R7)</h2>
+<p>The deterministic oracles are pass/fail invariants. The eval scores the <em>quality</em> of the LLM dispatcher's decisions across N runs per scenario, so regressions in judgment are caught even when invariants still pass.</p>
+<table>
+  <tr><th>Criterion</th><th>Signal</th><th>Weight</th></tr>
+  <tr><td>Invariant adherence</td><td>O1–O7 pass rate across runs</td><td>0.40 (gate: must pass)</td></tr>
+  <tr><td>Timeliness</td><td>notification/assignment latency vs. ideal</td><td>0.20</td></tr>
+  <tr><td>Reassignment quality</td><td>skill+proximity+value fit of reshuffles (vs. reference)</td><td>0.20</td></tr>
+  <tr><td>Customer-experience</td><td>redundant/again-failed notifications minimized</td><td>0.10</td></tr>
+  <tr><td>No harmful action</td><td>zero unapproved customer sends; zero out-of-policy writes</td><td>0.10 (gate: must be zero)</td></tr>
+</table>
+<p class="muted">Scored over multiple runs with a pass threshold; this is the routing-eval pattern applied to dispatch — and the regression net that keeps the AI dispatcher measurably better than incumbents as it evolves.</p>
+
+<h2 id="verification">9. Verification cases &amp; traceability</h2>
+<pre class="sysml"><code>  <span class="kw">verification case def</span> VC1_OracleSuite     { <span class="kw">subject</span> w : DispatchSimWorld; <span class="kw">objective</span> <span class="cm">/* run all §7.1 scenarios; assert O1..O7 */</span> }
+  <span class="kw">verification case def</span> VC2_ClockTemporal   { <span class="kw">objective</span> <span class="cm">/* advance time; assert T-24h watch + ETA timers fire exactly once */</span> }
+  <span class="kw">verification case def</span> VC3_DeterminismRepeat{ <span class="kw">objective</span> <span class="cm">/* run twice with same seed; assert identical non-AI trace */</span> }
+  <span class="kw">verification case def</span> VC4_EvalThreshold   { <span class="kw">subject</span> d : DispatcherUnderTest; <span class="kw">objective</span> <span class="cm">/* score &gt;= threshold; gates pass */</span> }
+  <span class="kw">verification case def</span> VC5_NoEgress        { <span class="kw">objective</span> <span class="cm">/* assert zero real comms/QB calls across the suite */</span> }
+
+  <span class="cm">// traceability</span>
+  <span class="kw">satisfy</span> R1 <span class="kw">by</span> ActorRuntime;          <span class="kw">satisfy</span> R2 <span class="kw">by</span> DomainActionPort;
+  <span class="kw">satisfy</span> R3 <span class="kw">by</span> VirtualClock;          <span class="kw">satisfy</span> R4 <span class="kw">by</span> ScenarioRunner;
+  <span class="kw">satisfy</span> R5 <span class="kw">by</span> OracleSet;             <span class="kw">satisfy</span> R7 <span class="kw">by</span> EvalHarness;
+  <span class="kw">satisfy</span> R10 <span class="kw">by</span> ExternalBoundaryMocks;
+  <span class="kw">verify</span> R5 <span class="kw">by</span> VC1;  <span class="kw">verify</span> R3 <span class="kw">by</span> VC2;  <span class="kw">verify</span> R6 <span class="kw">by</span> VC3;
+  <span class="kw">verify</span> R7 <span class="kw">by</span> VC4;  <span class="kw">verify</span> R10 <span class="kw">by</span> VC5;</code></pre>
+<table>
+  <tr><th>Requirement</th><th>Satisfied by</th><th>Verified by</th></tr>
+  <tr><td>R1 Multi-actor fidelity</td><td>ActorRuntime + seeded principals</td><td>VC1</td></tr>
+  <tr><td>R2 Domain-level driving</td><td>DomainActionPort (production actions)</td><td>VC1</td></tr>
+  <tr><td>R3 Virtual clock</td><td>VirtualClock + ClockPort</td><td>VC2</td></tr>
+  <tr><td>R4 Scenario library</td><td>ScenarioRunner + §7.1</td><td>VC1</td></tr>
+  <tr><td>R5 Invariant oracles</td><td>OracleSet (O1–O7)</td><td>VC1</td></tr>
+  <tr><td>R6 Determinism</td><td>seeded world/actors/clock</td><td>VC3</td></tr>
+  <tr><td>R7 Behavioral eval</td><td>EvalHarness + rubric</td><td>VC4</td></tr>
+  <tr><td>R10 No external egress</td><td>ExternalBoundaryMocks</td><td>VC5</td></tr>
+</table>
+
+<h2 id="phases">10. Phased delivery</h2>
+<table>
+  <tr><th>Phase</th><th>Deliverable</th><th>Verification</th></tr>
+  <tr><td>H0 <span class="tag parity">foundation</span></td><td><code>VirtualClock</code> + <code>ClockPort</code>; the synthetic-world seed (fleet/techs/customers/jobs/bindings) extending <code>DPF_SEED_DEMO_DATA</code>.</td><td>Seed idempotency unit test; clock unit test (VC2).</td></tr>
+  <tr><td>H1 <span class="tag parity">scripted</span></td><td>Scripted <code>TechnicianActor</code>/<code>CustomerActor</code> + <code>ActorRuntime</code> + <code>DomainActionPort</code> over the F2b dispatch actions; the §7.1 scenario library; the §7.2 OracleSet.</td><td>VC1 (oracle suite, all scenarios) + VC3 (determinism), headless vitest.</td></tr>
+  <tr><td>H2 <span class="tag moat">eval</span></td><td><code>EvalHarness</code> + rubric wrapping the real seeded Dispatcher coworker; scoring + thresholds.</td><td>VC4 (eval threshold); VC5 (no egress).</td></tr>
+  <tr><td>H3 <span class="tag moat">high-fidelity</span></td><td>LLM persona-actors (customer/technician) on the A2A substrate for adversarial/varied runs.</td><td>Eval delta vs. scripted baseline; discovery log of new failure modes.</td></tr>
+  <tr><td>H4 <span class="tag parity">UI smoke</span></td><td>A handful of multi-context Playwright scenarios for the last-mile UI proof.</td><td>Live portal drive (canonical audit).</td></tr>
+</table>
+<p class="note"><strong>Dependency note.</strong> H1 binds to the F2b dispatch server actions (the Dispatcher coworker + its tools). H0 has no dependency and can start now. This harness is the mechanism that finally makes F2b/F3 <em>functionally</em> verifiable — it is on the critical path to "functionally competitive," not a side quest.</p>
+
+<h2 id="risks">11. Risks</h2>
+<table>
+  <tr><th>Risk</th><th>Mitigation</th></tr>
+  <tr><td>Harness becomes its own maintenance burden (over-modeling)</td><td>Start with scripted actors + 7 scenarios + 7 oracles; grow only when a real defect escapes. The LLM-actor tier is opt-in.</td></tr>
+  <tr><td>Eval flakiness from LLM non-determinism</td><td>Score over N runs with thresholds; gate only on the deterministic invariants + zero-harm criteria, not exact text.</td></tr>
+  <tr><td>Simulated actors drift from real UI behavior</td><td>Actors call the same server actions the UI calls (ADR-1); the thin Playwright tier (H4) catches UI-vs-domain drift.</td></tr>
+  <tr><td>Accidental real egress from a test run</td><td>ADR-5 / VC5: real adapters unregistered in harness mode; an egress attempt fails the suite.</td></tr>
+  <tr><td>Worktree behind origin/main (SysML substrate absent here)</td><td>This is a document artifact; it does not depend on the SysML seed code. Re-base before implementation work that touches EA seeds.</td></tr>
+</table>
+
+<h2 id="sysml-note">12. SysML Architecture Note</h2>
+<table>
+  <tr><td class="muted" style="width:16rem">Scope</td><td>New test-runtime subsystem: <code>CoworkerSimulationHarness</code> (dispatch vertical). No production runtime change; no new Prisma model.</td></tr>
+  <tr><td class="muted">Changed requirements/constraints</td><td>Adds R1–R10, C1–C4, O1–O7 as harness obligations. No change to product requirements.</td></tr>
+  <tr><td class="muted">Changed interfaces/ports</td><td>New <em>test</em> ports: <code>ClockPort</code>, <code>DomainActionPort</code> (subset of production actions), <code>CommsBoundaryPort</code> (mock), <code>ObservationPort</code> (read-only). No production interface changes.</td></tr>
+  <tr><td class="muted">Allocations</td><td>a1→field-dispatch server actions; a2→<code>@dpf/validators</code> now-injection; a3→<code>services/integration-test-harness</code>; a4→vitest; a5→seeded Dispatcher coworker (F2b); a6→A2A persona agents.</td></tr>
+  <tr><td class="muted">Verification cases</td><td>VC1 oracle suite, VC2 clock/temporal, VC3 determinism, VC4 eval threshold, VC5 no-egress.</td></tr>
+  <tr><td class="muted">Data authority impact</td><td>None. Synthetic worlds are seeded rows on existing models in a test tenant; canonical authority unchanged.</td></tr>
+  <tr><td class="muted">EA/current-state catch-up</td><td>Add a "Coworker Verification" view under <code>/ea</code> once the SysML seed substrate (PR&nbsp;#1864) is present in the working branch; link this harness as the verification allocation for the Field Dispatch capability.</td></tr>
+  <tr><td class="muted">Open architecture risks</td><td>(1) Where the eval rubric's "reference" reassignment policy lives (F4 assignment engine vs. a fixture). (2) Whether persona-actor LLM calls count against budget in CI — likely gate H3 behind an opt-in flag.</td></tr>
+</table>
+
+<h2 id="next">13. Recommended next step</h2>
+<p>
+  Build <strong>H0</strong> now — the <code>VirtualClock</code> and the synthetic-world seed — since it has no dependency and the
+  field-dispatch units are already clock-injectable. In parallel, continue <strong>F2b</strong> (the Dispatcher coworker +
+  its server actions); H1 binds to those actions to light up the first end-to-end scenario suite. The dispatcher
+  remains the critical first functionality; this harness is what proves it works.
+</p>
+
+</body>
+</html>

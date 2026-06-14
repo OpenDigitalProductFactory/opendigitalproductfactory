@@ -1,4 +1,5 @@
 export * from "./types";
+export * from "./field-dispatch";
 export * from "./capability-registry";
 export * from "./applicability-rules";
 export * from "./activation-profile";
