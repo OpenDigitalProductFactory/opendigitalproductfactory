@@ -28,6 +28,7 @@ const OFFERED_TYPES: { value: FieldType; label: string }[] = [
   { value: "image", label: "Image" },
   { value: "attachment", label: "Attachment" },
   { value: "link", label: "Link to records" },
+  { value: "rollup", label: "Rollup (count links)" },
 ];
 
 const RESULT_TYPES: { value: FieldType; label: string }[] = [
@@ -71,6 +72,7 @@ export function AddColumnButton({
   const [referenceType, setReferenceType] = useState("");
   const [referenceTargets, setReferenceTargets] = useState<ReferenceTarget[]>([]);
   const [linkCardinality, setLinkCardinality] = useState<"one" | "many">("many");
+  const [rollupLinkColumnId, setRollupLinkColumnId] = useState("");
   const [formula, setFormula] = useState("");
   const [resultType, setResultType] = useState<FieldType>("text");
   const [lookupRefColumnId, setLookupRefColumnId] = useState("");
@@ -82,6 +84,8 @@ export function AddColumnButton({
 
   // Reference columns on this table are the only valid lookup sources.
   const referenceColumns = columns.filter((c) => c.fieldType === "reference");
+  // Link columns on this table are the rollup-over-links sources.
+  const linkColumns = columns.filter((c) => c.fieldType === "link");
   const selectedRefColumn = referenceColumns.find((c) => c.columnId === lookupRefColumnId);
 
   // Load the available reference targets once the picker is opened.
@@ -119,6 +123,7 @@ export function AddColumnButton({
     setOptionsRaw("");
     setReferenceType("");
     setLinkCardinality("many");
+    setRollupLinkColumnId("");
     setFormula("");
     setResultType("text");
     setLookupRefColumnId("");
@@ -132,6 +137,7 @@ export function AddColumnButton({
     if (fieldType === "select") return { options: parseOptions(optionsRaw) };
     if (fieldType === "reference") return { referenceType };
     if (fieldType === "link") return { link: { cardinality: linkCardinality, referenceType } };
+    if (fieldType === "rollup") return { rollup: { linkColumnId: rollupLinkColumnId, op: "count" } };
     if (fieldType === "formula") return { formula, resultType };
     if (fieldType === "lookup") {
       return { lookup: { referenceColumnId: lookupRefColumnId, targetField: lookupTargetField } };
@@ -142,7 +148,8 @@ export function AddColumnButton({
   const missingTarget = (fieldType === "reference" || fieldType === "link") && !referenceType;
   const missingFormula = fieldType === "formula" && !formula.trim();
   const missingLookup = fieldType === "lookup" && (!lookupRefColumnId || !lookupTargetField);
-  const invalidConfig = missingTarget || missingFormula || missingLookup;
+  const missingRollup = fieldType === "rollup" && !rollupLinkColumnId;
+  const invalidConfig = missingTarget || missingFormula || missingLookup || missingRollup;
 
   function submit() {
     setError(null);
@@ -236,6 +243,23 @@ export function AddColumnButton({
           <option value="one" className={optionClass}>
             Link to one (1-1 / 1-M)
           </option>
+        </select>
+      )}
+      {fieldType === "rollup" && (
+        <select
+          value={rollupLinkColumnId}
+          onChange={(e) => setRollupLinkColumnId(e.target.value)}
+          className={selectClass}
+          aria-label="Link column to count"
+        >
+          <option value="" className={optionClass}>
+            {linkColumns.length === 0 ? "Add a link column first" : "Count links in…"}
+          </option>
+          {linkColumns.map((c) => (
+            <option key={c.columnId} value={c.columnId} className={optionClass}>
+              {c.name}
+            </option>
+          ))}
         </select>
       )}
       {fieldType === "formula" && (
