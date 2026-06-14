@@ -3,8 +3,8 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { applyBusinessCapabilityPerspective } from "@dpf/db/business-capability-perspectives";
 import { nanoid } from "nanoid";
-import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
 import { generateDesignSystem } from "@/lib/design-intelligence";
+import { seedBookingScheduleDefaults } from "@/lib/storefront/seed-booking-defaults";
 import {
   deriveRevenueModelFromActivationProfile,
   readActivationProfile,
@@ -188,116 +188,19 @@ export async function POST(req: NextRequest) {
     archetypeId,
   });
 
-  // Seed default provider, availability, and booking config from template
-  // scheduling defaults. This block keys on *item-level* ctaType when linking
-  // providers and seeding bookingConfig, so an archetype that has booking items
-  // but no explicit schedulingDefaults (a template config gap) must still get a
-  // working calendar instead of silently shipping an empty one — fall back to a
-  // 09:00–17:00 Mon–Fri provider. Every shipped archetype with a booking item
-  // carries explicit schedulingDefaults (guarded by archetypes.test.ts); this
-  // fallback is defence-in-depth so a future archetype can't regress to the
-  // empty-calendar bug (AUDIT-R3/R4).
-  const template = ALL_ARCHETYPES.find((a: { archetypeId: string }) => a.archetypeId === archetypeId);
-  const templateCtaType = template?.ctaType;
-  const templateHasBookingItems =
-    template?.itemTemplates.some(
-      (t: { ctaType?: string }) => (t.ctaType ?? templateCtaType) === "booking",
-    ) ?? false;
-  const FALLBACK_SCHEDULING = {
-    schedulingPattern: "slot" as const,
-    assignmentMode: "next-available" as const,
-    defaultOperatingHours: [1, 2, 3, 4, 5].map((day) => ({ day, start: "09:00", end: "17:00" })),
-    defaultBeforeBuffer: 0,
-    defaultAfterBuffer: 0,
-    minimumNoticeHours: 2,
-    maxAdvanceDays: 60,
-  };
-  const defaults =
-    template?.schedulingDefaults ?? (templateHasBookingItems ? FALLBACK_SCHEDULING : null);
-  if (template && defaults) {
-    // 1. Create default ServiceProvider named after the org
-    const provider = await prisma.serviceProvider.create({
-      data: {
-        providerId: `SP-${nanoid(6).toUpperCase()}`,
-        storefrontId: config.id,
-        name: orgName ?? org.name,
-        isActive: true,
-      },
-    });
+  // Seed a default provider, availability, provider→item links, and per-item
+  // bookingConfig for booking archetypes so the storefront ships with a working
+  // calendar instead of an empty one (AUDIT-R3/R4, R9-RES-001). Shared with the
+  // archetype-reset path so the two seed paths can never drift.
+  const seededBooking = await seedBookingScheduleDefaults(prisma, {
+    storefrontId: config.id,
+    archetypeId,
+    providerName: orgName ?? org.name,
+  });
 
-    // 2. Create availability rows — use confirmed BusinessProfile hours if available
-    const profile = await prisma.businessProfile.findFirst({
-      where: { isActive: true, hoursConfirmedAt: { not: null } },
-      select: { businessHours: true },
-    });
-
-    let operatingHours: { day: number; start: string; end: string }[];
-    if (profile?.businessHours) {
-      const bh = profile.businessHours as Record<string, { open: string; close: string } | null>;
-      const dayMap: Record<string, number> = {
-        sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
-        thursday: 4, friday: 5, saturday: 6,
-      };
-      operatingHours = Object.entries(bh)
-        .filter(([, hours]) => hours !== null)
-        .map(([day, hours]) => ({
-          day: dayMap[day] ?? 0,
-          start: hours!.open,
-          end: hours!.close,
-        }));
-    } else {
-      operatingHours = defaults.defaultOperatingHours;
-    }
-
-    const grouped = new Map<string, number[]>();
-    for (const h of operatingHours) {
-      const key = `${h.start}-${h.end}`;
-      if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key)!.push(h.day);
-    }
-    for (const [key, days] of grouped) {
-      const keyParts = key.split("-");
-      const startTime = keyParts[0] ?? "09:00";
-      const endTime = keyParts[1] ?? "17:00";
-      await prisma.providerAvailability.create({
-        data: { providerId: provider.id, days, startTime, endTime },
-      });
-    }
-
-    // 3. Link provider to all booking items
-    const bookingItems = await prisma.storefrontItem.findMany({
-      where: { storefrontId: config.id, ctaType: "booking" },
-      select: { id: true, name: true },
-    });
-
-    for (const item of bookingItems) {
-      await prisma.providerService.create({
-        data: { providerId: provider.id, itemId: item.id },
-      });
-    }
-
-    // 4. Set bookingConfig on each booking item from template + defaults
-    const itemTemplates = template.itemTemplates;
-    for (const tmpl of itemTemplates) {
-      if ((tmpl.ctaType ?? template.ctaType) === "booking") {
-        await prisma.storefrontItem.updateMany({
-          where: { storefrontId: config.id, name: tmpl.name },
-          data: {
-            bookingConfig: {
-              durationMinutes: tmpl.bookingDurationMinutes ?? 60,
-              schedulingPattern: defaults.schedulingPattern,
-              assignmentMode: defaults.assignmentMode,
-              beforeBufferMinutes: defaults.defaultBeforeBuffer,
-              afterBufferMinutes: defaults.defaultAfterBuffer,
-              minimumNoticeHours: defaults.minimumNoticeHours,
-              maxAdvanceDays: defaults.maxAdvanceDays,
-            },
-          },
-        });
-      }
-    }
-
-    // Update BusinessProfile to reflect storefront existence
+  if (seededBooking) {
+    // Mark the business as having a storefront (booking archetypes only,
+    // preserving prior behaviour).
     await prisma.businessProfile.updateMany({
       where: { isActive: true },
       data: { hasStorefront: true },
