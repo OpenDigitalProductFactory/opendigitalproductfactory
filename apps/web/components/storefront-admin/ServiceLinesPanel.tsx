@@ -1,0 +1,339 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import {
+  addStorefrontServiceLine,
+  removeStorefrontServiceLine,
+} from "@/lib/storefront/service-line-actions";
+import type { StorefrontCompositionView, StorefrontServiceLineView } from "@/lib/storefront/composition-view";
+import { intentStyle } from "@/components/ui/report-kit/statusColors";
+
+interface AvailableArchetype {
+  archetypeSlug: string;
+  name: string;
+  category: string;
+}
+
+interface Props {
+  storefrontId: string;
+  view: StorefrontCompositionView;
+  availableArchetypes: AvailableArchetype[];
+}
+
+export function ServiceLinesPanel({ storefrontId, view, availableArchetypes }: Props) {
+  const [selectedSlug, setSelectedSlug] = useState(availableArchetypes[0]?.archetypeSlug ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function handleAdd() {
+    if (!selectedSlug) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await addStorefrontServiceLine(storefrontId, selectedSlug);
+      if ("error" in result) setError(result.error);
+    });
+  }
+
+  function handleRemove(compositionId: string) {
+    setError(null);
+    startTransition(async () => {
+      const result = await removeStorefrontServiceLine(storefrontId, compositionId);
+      if ("error" in result) setError(result.error);
+    });
+  }
+
+  const hasSummaryWarning =
+    view.compatibilitySummary.status !== "good" &&
+    view.compatibilitySummary.status !== "unknown";
+
+  return (
+    <div
+      style={{
+        border: "1px solid var(--dpf-border)",
+        borderRadius: 10,
+        overflow: "hidden",
+        marginTop: 24,
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "14px 20px",
+          borderBottom: "1px solid var(--dpf-border)",
+          background: "var(--dpf-surface-1)",
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--dpf-text)" }}>
+            Active service lines
+          </div>
+          <div style={{ fontSize: 12, color: "var(--dpf-muted)", marginTop: 2 }}>
+            Add secondary lines to serve customers across multiple business models.
+          </div>
+        </div>
+        {hasSummaryWarning && (
+          <CompatibilityChip
+            status={view.compatibilitySummary.status}
+            label={view.compatibilitySummary.label}
+          />
+        )}
+      </div>
+
+      {/* Lines list */}
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        <ServiceLineRow line={view.primary} onRemove={undefined} isPending={isPending} />
+        {view.secondaries.map((line) => (
+          <ServiceLineRow
+            key={line.compositionId}
+            line={line}
+            onRemove={() => handleRemove(line.compositionId)}
+            isPending={isPending}
+          />
+        ))}
+      </div>
+
+      {/* Compatibility reasons */}
+      {view.compatibilitySummary.reasons.length > 0 && (
+        <div
+          style={{
+            padding: "10px 20px",
+            borderTop: "1px solid var(--dpf-border)",
+            background: "color-mix(in srgb, var(--dpf-warning) 8%, transparent)",
+          }}
+        >
+          {view.compatibilitySummary.reasons.map((reason, i) => (
+            <div key={i} style={{ fontSize: 12, color: "var(--dpf-text)", marginBottom: i < view.compatibilitySummary.reasons.length - 1 ? 4 : 0 }}>
+              {reason}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add service line row */}
+      {availableArchetypes.length > 0 && (
+        <div
+          style={{
+            padding: "12px 20px",
+            borderTop: "1px solid var(--dpf-border)",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+            background: "var(--dpf-surface-1)",
+          }}
+        >
+          <select
+            value={selectedSlug}
+            onChange={(e) => setSelectedSlug(e.target.value)}
+            disabled={isPending}
+            style={{
+              flex: 1,
+              minWidth: 180,
+              padding: "7px 10px",
+              border: "1px solid var(--dpf-border)",
+              borderRadius: 6,
+              fontSize: 13,
+              background: "var(--dpf-surface-1)",
+              color: "var(--dpf-text)",
+            }}
+          >
+            {availableArchetypes.map((a) => (
+              <option key={a.archetypeSlug} value={a.archetypeSlug}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={handleAdd}
+            disabled={isPending || !selectedSlug}
+            style={{
+              padding: "7px 16px",
+              borderRadius: 6,
+              border: "none",
+              background: "var(--dpf-accent)",
+              color: "white",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: isPending || !selectedSlug ? "not-allowed" : "pointer",
+              opacity: isPending || !selectedSlug ? 0.6 : 1,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {isPending ? "Adding…" : "Add service line"}
+          </button>
+          {error && (
+            <div style={{ width: "100%", fontSize: 12, color: "var(--dpf-error)", marginTop: 4 }}>
+              {error}
+            </div>
+          )}
+        </div>
+      )}
+
+      {availableArchetypes.length === 0 && view.secondaries.length >= 2 && (
+        <div
+          style={{
+            padding: "10px 20px",
+            borderTop: "1px solid var(--dpf-border)",
+            fontSize: 12,
+            color: "var(--dpf-muted)",
+            background: "var(--dpf-surface-1)",
+          }}
+        >
+          Maximum of 2 secondary service lines reached.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ServiceLineRow({
+  line,
+  onRemove,
+  isPending,
+}: {
+  line: StorefrontServiceLineView;
+  onRemove?: () => void;
+  isPending: boolean;
+}) {
+  const chip = intentStyle(line.statusIntent);
+  const isSecondary = line.role === "secondary";
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "12px 20px",
+        borderBottom: "1px solid var(--dpf-border)",
+      }}
+    >
+      {/* Role pill */}
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: "0.05em",
+          textTransform: "uppercase",
+          padding: "2px 6px",
+          borderRadius: 4,
+          background: isSecondary
+            ? "color-mix(in srgb, var(--dpf-accent) 15%, transparent)"
+            : "color-mix(in srgb, var(--dpf-success) 15%, transparent)",
+          color: isSecondary ? "var(--dpf-accent)" : "var(--dpf-success)",
+          whiteSpace: "nowrap",
+          flexShrink: 0,
+        }}
+      >
+        {isSecondary ? "Secondary" : "Primary"}
+      </div>
+
+      {/* Name + category */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 600,
+            color: "var(--dpf-text)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {line.operatorLabel}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: "var(--dpf-muted)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {line.category}
+        </div>
+      </div>
+
+      {/* Modules count */}
+      {line.contributedModules.length > 0 && (
+        <div style={{ fontSize: 12, color: "var(--dpf-muted)", whiteSpace: "nowrap", flexShrink: 0 }}>
+          {line.contributedModules.length} module{line.contributedModules.length !== 1 ? "s" : ""}
+        </div>
+      )}
+
+      {/* Compatibility badge (secondaries only) */}
+      {isSecondary && (
+        <CompatibilityChip status={line.status} label={line.statusLabel} />
+      )}
+
+      {/* Remove button (secondaries only) */}
+      {isSecondary && onRemove && (
+        <button
+          onClick={onRemove}
+          disabled={isPending}
+          aria-label={`Remove ${line.operatorLabel}`}
+          style={{
+            padding: "4px 10px",
+            borderRadius: 5,
+            border: "1px solid var(--dpf-error)",
+            background: "transparent",
+            color: "var(--dpf-error)",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: isPending ? "not-allowed" : "pointer",
+            opacity: isPending ? 0.5 : 1,
+            whiteSpace: "nowrap",
+            flexShrink: 0,
+          }}
+        >
+          Remove
+        </button>
+      )}
+    </div>
+  );
+}
+
+function CompatibilityChip({
+  status,
+  label,
+}: {
+  status: StorefrontServiceLineView["status"];
+  label: string;
+}) {
+  const style = intentStyle(
+    status === "good"
+      ? "success"
+      : status === "concern"
+        ? "warning"
+        : status === "acute"
+          ? "danger"
+          : status === "in-motion"
+            ? "accent"
+            : "neutral",
+  );
+
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "3px 8px",
+        borderRadius: 20,
+        fontSize: 11,
+        fontWeight: 600,
+        background: style.softBg,
+        color: style.fg,
+        border: `1px solid ${style.border}`,
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+      }}
+    >
+      {label}
+    </div>
+  );
+}

@@ -1,7 +1,7 @@
 # Multi-Archetype Composition Design
 
 **Date:** 2026-06-13
-**Status:** Draft - pending operator review
+**Status:** Phase 1 merged (#1847) · Phase 2 in PR (#1851) · Phase 3 advisory (schedule on operator feedback)
 **Author:** Claude with user direction (Mark Bodman)
 **Related docs:**
 - `packages/storefront-templates/src/types.ts` — `ArchetypeDefinition`, `ActivationProfile`, `ArchetypeModule`, `OperatingModelAxes`
