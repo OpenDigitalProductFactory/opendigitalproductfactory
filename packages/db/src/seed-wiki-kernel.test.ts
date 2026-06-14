@@ -10,6 +10,7 @@ import {
   type SeedablePage,
   type WikiPageFrontmatter,
 } from "./seed-wiki-kernel";
+import { isPrincipleDimension } from "./wiki-taxonomy";
 
 describe("seed-wiki-kernel: parseFrontmatter", () => {
   it("parses scalar fields", () => {
@@ -474,6 +475,59 @@ describe("founder-kernel principle frontmatter", () => {
     }
 
     expect(missing).toEqual([]);
+  });
+});
+
+describe("founder-kernel principle: remove-avoidable-failure-opportunities", () => {
+  // Spec: docs/superpowers/specs/2026-06-14-design-implementation-parity-engine-design.md §8.
+  // Guards that the WWMD "avoid opportunities to fail" principle seeds with a
+  // structurally valid, registry-backed dimensionVector so principle_decide
+  // scores it via STRUCTURED alignment (not semantic fallback). The proposed
+  // tier/vector are flagged for operator calibration in the PR, so this test
+  // pins structural intent (valid keys + the two researched signs), NOT exact
+  // magnitudes — recalibrating a weight must not break the build.
+  const principlePath = resolve(
+    process.cwd(),
+    "../../docs/founder-kernel/wiki/principles/remove-avoidable-failure-opportunities.md",
+  );
+
+  it("seeds as a core principle with a valid, registry-backed dimensionVector", () => {
+    const raw = readFileSync(principlePath, "utf8");
+    const { frontmatter } = parseFrontmatter<WikiPageFrontmatter>(raw);
+
+    expect(frontmatter.pageKind).toBe("principle");
+    expect(frontmatter.principleTier).toBe("core");
+
+    // extractPrinciplePayload throws on any unknown dimension key, so a clean
+    // extraction is itself the "valid vector" guarantee — assert it explicitly.
+    expect(() => extractPrinciplePayload(frontmatter)).not.toThrow();
+    const payload = extractPrinciplePayload(frontmatter);
+
+    const vector = payload.principleDimensionVector ?? {};
+    const keys = Object.keys(vector);
+    expect(keys.length).toBeGreaterThan(0);
+    // Every axis must exist in the closed PRINCIPLE_DIMENSIONS registry, else
+    // structured scoring could never key on it (and seeding would have thrown).
+    for (const key of keys) {
+      expect(isPrincipleDimension(key)).toBe(true);
+    }
+
+    // Semantic load-bearing signs (researched against option-scoring.ts):
+    // option feature scores are non-negative, so a NEGATIVE weight means
+    // "an option that adds this axis aligns AGAINST the principle".
+    //   - long_term_maintainability: the defining (positive, dominant) axis.
+    //   - human_cognitive_load: negative — the principle removes upkeep burden.
+    expect(vector["long_term_maintainability"]).toBeGreaterThan(0);
+    expect(vector["human_cognitive_load"]).toBeLessThan(0);
+
+    // principleDimensions is derived from the vector keys 1:1 when omitted.
+    expect((payload.principleDimensions ?? []).slice().sort()).toEqual(
+      keys.slice().sort(),
+    );
+
+    // Coherent consumer scoping: an agent-class archetype that must NOT pair
+    // with `human` in principleAppliesTo (enforced by the seed coherence matrix).
+    expect(frontmatter.principleConsumerArchetype).toBe("ai-coworker-universal");
   });
 });
 
