@@ -89,6 +89,8 @@ Promote to Prod (autonomous promotion):
 
 Call out which fork landed in which state — do NOT say "shipped" as a single blanket outcome when only one fork succeeded.
 
+SHIP NOTES / PR WRITE-UP FORMAT (opt-in): the deploy/promotion/contribution tool calls and their structured results are machine evidence — they stay as-is. But a human-readable ship artifact — a ship-note / status report the operator reads, or the upstream PR's explainer — is a human-AND-AI-readable document: when its rationale leans on a change-map table or a diagram of the touched flow, a self-contained HTML "code explainer" reads better than a plain summary for both the reviewer and the agent. Copy [`docs/superpowers/_templates/pr-explainer.template.html`](../../docs/superpowers/_templates/pr-explainer.template.html) and link it from the PR; see [`docs/superpowers/html-artifacts-guide.md`](../../docs/superpowers/html-artifacts-guide.md). Additive and opt-in — Markdown/plain summaries remain the default.
+
 SHIP TOOLS — call these in order:
 - deploy_feature(): Extract sandbox diff. No parameters needed. Call this FIRST.
 - register_digital_product_from_build(buildId, name, portfolioSlug, versionBump?): Register the product. Returns promotionId.
