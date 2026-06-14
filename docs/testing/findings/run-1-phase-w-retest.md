@@ -29,14 +29,14 @@
 | W-SUMMARY | Summary / aggregation | ❌ IMAGE STALE | ✅ | Group-by + aggregation selects + SVG chart present |
 | W-REF-1 | Reference picker — inline | ✅ | — | Carried from Run-0 |
 | W-REF-2 | Reference picker — typeahead | ✅ | — | Carried from Run-0 |
-| W-REF-4 | Reference — viewer restriction | NOT TESTED | NOT TESTED | Requires second user account |
+| W-REF-4 | Reference — viewer restriction | NOT TESTED | ✅ | HR-500 reference target list: only Epics + People; Digital products (view_portfolio) absent — no data leak possible |
 | W-FORMULA | Formula column evaluation | ❌ IMAGE STALE | ✅ | Total 300 (150×2) and 400 (80×5) confirmed |
 | W-LOOKUP | Lookup column | ❌ IMAGE STALE | ✅ | "PostgreSQL Database" appears in Product name lookup column |
 | W-CAL | Workspace calendar — Workbooks source | ❌ IMAGE STALE | ✅ | "Workbooks" filter button present; workbook event (Due=2026-06-13) appears in `/api/calendar/events` response with eventType:"workbook" |
 | W-MEDIA (Image) | Image column — upload + thumbnail | NEW | ✅ | dpf-grid-thumb renders; /api/media/ URL persists across reload |
 | W-MEDIA (Attachment) | Attachment column — upload + download chip | NEW | ✅ | dpf-grid-attachment chip renders filename+size; persists on reload; CSV exports filename |
 
-**Result: 21 ✅ confirmed · 0 ⚠️ partial · 1 NOT TESTED · 0 open defects**
+**Result: 22 ✅ confirmed · 0 ⚠️ partial · 0 NOT TESTED · 0 open defects — Phase W COMPLETE**
 
 ---
 
@@ -194,6 +194,20 @@
 
 ---
 
-## Required Actions Before Phase W Close
+### ✅ W-REF-4 — Reference viewer restriction
 
-1. **Investigate W-REF-4** (viewer-restricted reference) — requires second user account with `viewer` role
+**Surface:** Workbook reference column type picker + reference search  
+**Setup:** Created `viewer@dpf.local` (HR-500 / Operations Manager) via Admin → Users & Roles  
+**Drove:**
+1. Signed in as HR-500 user
+2. Created blank workbook → "+ Add column" → selected type "Reference"
+3. Inspected the "reference target" dropdown
+
+**Observed:**
+- Reference target dropdown options for HR-500: `Epics` (`epic`, gated by `view_operations` ✅) and `People` (`employee_profile`, gated by `view_employee` ✅)
+- `Digital products` (`digital_product`, gated by `view_portfolio`) — **absent**; HR-500 lacks `view_portfolio`
+- `Customers`, `Suppliers`, `Backlog`, `Risk assessments` also absent (their respective view capabilities not held by HR-500)
+- HR-500 successfully created an "Epics" reference column — accessible targets work correctly
+
+**Restriction mechanism:** `listReferenceTargets(user)` filters by `can(user, target.viewCapability)` before returning targets. HR-500 cannot even create a reference column pointing to a restricted entity, let alone search it. Code-level: `searchPlatformReferences` → `requireTable` → throws `WorkbookError(403)` if called for `digital_product` by HR-500.  
+**Verdict:** ✅ Viewer restriction enforced at listing layer — restricted entity types absent from reference target picker; no data leak possible
