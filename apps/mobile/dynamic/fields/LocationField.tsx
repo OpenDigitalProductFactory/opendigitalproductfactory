@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import { colors, spacing, borderRadius } from "@/src/lib/theme";
+import { useTheme } from "@/src/lib/theme";
 import type { FieldProps } from "./index";
 
 interface LocationValue {
@@ -18,6 +18,38 @@ export function LocationField({
   onChange,
   error,
 }: FieldProps) {
+  const { colors, spacing, borderRadius } = useTheme();
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: { marginBottom: spacing.md },
+        label: {
+          color: colors.text,
+          fontSize: 14,
+          fontWeight: "500",
+          marginBottom: spacing.xs,
+        },
+        coordBox: {
+          backgroundColor: colors.surface2,
+          borderRadius: borderRadius.sm,
+          padding: spacing.sm,
+          marginBottom: spacing.sm,
+        },
+        coordText: { color: colors.text, fontSize: 14, fontFamily: "monospace" },
+        button: {
+          backgroundColor: colors.surface2,
+          borderWidth: 1,
+          borderColor: colors.primary,
+          borderRadius: borderRadius.sm,
+          paddingVertical: spacing.sm + 4,
+          alignItems: "center",
+        },
+        buttonText: { color: colors.primary, fontSize: 14, fontWeight: "600" },
+        error: { color: colors.error, fontSize: 12, marginTop: spacing.xs },
+      }),
+    [colors, spacing, borderRadius],
+  );
+
   const location = value as LocationValue | undefined;
 
   function handleCapture() {
@@ -53,44 +85,3 @@ export function LocationField({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: spacing.md,
-  },
-  label: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: spacing.xs,
-  },
-  coordBox: {
-    backgroundColor: colors.surface2,
-    borderRadius: borderRadius.sm,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  coordText: {
-    color: colors.text,
-    fontSize: 14,
-    fontFamily: "monospace",
-  },
-  button: {
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: borderRadius.sm,
-    paddingVertical: spacing.sm + 4,
-    alignItems: "center",
-  },
-  buttonText: {
-    color: colors.primary,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  error: {
-    color: colors.error,
-    fontSize: 12,
-    marginTop: spacing.xs,
-  },
-});

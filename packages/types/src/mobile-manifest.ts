@@ -1,16 +1,14 @@
-import type { DynamicFormSchema, DynamicViewSchema } from "@dpf/types";
+import type { DynamicFormSchema, DynamicViewSchema } from "./dynamic";
 
 /**
- * Install-manifest contract (mobile-facing).
+ * Install-manifest wire contract — the single source of truth shared by the
+ * portal producer (apps/web/lib/mobile/manifest.ts) and the mobile consumer
+ * (apps/mobile/src/lib/appConfig.ts, theme.ts, serverConfig.ts).
  *
  * The install drives the app: after connect + login the app fetches this
  * manifest (GET /api/v1/app/config) and re-themes + re-functions from it.
  * Three layers — design tokens, capabilities, server-driven screens.
- * See docs/superpowers/specs/2026-06-14-native-mobile-archetype-apps-design.html (§3).
- *
- * NOTE: these types live in the mobile app for now; they lift to `@dpf/types`
- * when the portal `/api/v1/app/config` endpoint lands so both surfaces share one
- * contract (the "build the glue" item in the spec).
+ * Spec: docs/superpowers/specs/2026-06-14-native-mobile-archetype-apps-design.html (§3).
  */
 
 /** Branding palette — mirrors the portal's BrandingConfig.tokens palette keys. */
@@ -75,4 +73,19 @@ export interface AppConfigManifest {
   /** (3) screen layer — server-driven navigation + screens. */
   navigation?: AppNavigation;
   screens?: AppScreen[];
+}
+
+/**
+ * Public discovery descriptor served at /.well-known/dpf-instance.json. Lets the
+ * app prove a URL is a real install and learn its identity, archetype, auth
+ * modes, and branding seed before sign-in.
+ */
+export interface InstanceDescriptor {
+  instanceId: string;
+  orgName: string;
+  archetype?: string;
+  apiVersion: string;
+  authModes: string[];
+  capabilities?: string[];
+  branding?: { accent?: string; logoUrl?: string };
 }
