@@ -180,9 +180,50 @@ const COMPLIANCE_CONTROL_TABLE: GenericTableConfig = {
   ],
 };
 
+// Compliance obligations — read-only; no PII (owner is a relation id, omitted).
+// category/frequency are free-form strings → text columns (no board grouping).
+const COMPLIANCE_OBLIGATION_TABLE: GenericTableConfig = {
+  entityType: "compliance_obligation",
+  prismaModel: "obligation",
+  idField: "obligationId",
+  labelField: "title",
+  orderBy: { field: "updatedAt", dir: "desc" },
+  columns: [
+    { field: "obligationId", name: "ID", fieldType: "text", width: 140 },
+    { field: "title", name: "Title", fieldType: "text", width: 320 },
+    { field: "category", name: "Category", fieldType: "text", width: 150 },
+    { field: "frequency", name: "Frequency", fieldType: "text", width: 120 },
+    { field: "applicability", name: "Applicability", fieldType: "text", width: 160 },
+    { field: "reviewDate", name: "Review date", fieldType: "date", width: 120 },
+    { field: "status", name: "Status", fieldType: "text", width: 110 },
+    { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
+  ],
+};
+
+// Compliance incidents — read-only; no PII (reporter is a relation id, omitted).
+const COMPLIANCE_INCIDENT_TABLE: GenericTableConfig = {
+  entityType: "compliance_incident",
+  prismaModel: "complianceIncident",
+  idField: "incidentId",
+  labelField: "title",
+  orderBy: { field: "occurredAt", dir: "desc" },
+  columns: [
+    { field: "incidentId", name: "ID", fieldType: "text", width: 140 },
+    { field: "title", name: "Title", fieldType: "text", width: 300 },
+    { field: "severity", name: "Severity", fieldType: "text", width: 110 },
+    { field: "category", name: "Category", fieldType: "text", width: 140 },
+    { field: "status", name: "Status", fieldType: "text", width: 110 },
+    { field: "regulatoryNotifiable", name: "Notifiable", fieldType: "checkbox", width: 100 },
+    { field: "occurredAt", name: "Occurred", fieldType: "datetime", width: 160 },
+    { field: "notificationDeadline", name: "Notify by", fieldType: "datetime", width: 160 },
+  ],
+};
+
 registerGenericReadTable(EPIC_TABLE);
 registerGenericReadTable(DIGITAL_PRODUCT_TABLE);
 registerGenericReadTable(COMPLIANCE_CONTROL_TABLE);
+registerGenericReadTable(COMPLIANCE_OBLIGATION_TABLE);
+registerGenericReadTable(COMPLIANCE_INCIDENT_TABLE);
 // Customers, people (safe org-directory fields only), suppliers — explicit
 // allow-lists live in people-supplier-configs.ts (unit-tested for safe omission).
 for (const cfg of PEOPLE_SUPPLIER_TABLES) registerGenericReadTable(cfg);
@@ -220,6 +261,22 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     viewCapability: "view_compliance",
     manageCapability: "view_compliance", // read-only grid; adapter performs no writes
     homeSurface: { path: "/compliance/controls", label: "Controls", board: true },
+  },
+  {
+    entityType: "compliance_obligation",
+    label: "Obligations",
+    description: "Regulatory obligations as a read-only grid — sort and filter.",
+    viewCapability: "view_compliance",
+    manageCapability: "view_compliance", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/compliance/obligations", label: "Obligations", board: false },
+  },
+  {
+    entityType: "compliance_incident",
+    label: "Incidents",
+    description: "Compliance incidents as a read-only grid — sort and filter.",
+    viewCapability: "view_compliance",
+    manageCapability: "view_compliance", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/compliance/incidents", label: "Incidents", board: false },
   },
   {
     entityType: "epic",
