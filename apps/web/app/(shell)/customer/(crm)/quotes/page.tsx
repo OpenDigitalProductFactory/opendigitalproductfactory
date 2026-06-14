@@ -4,8 +4,10 @@ import { prisma } from "@dpf/db";
 import { CustomerStatusBadge } from "@/components/customer/CustomerStatusBadge";
 import { CRM_TONE_CLASSES, getQuoteStatusMeta } from "@/lib/crm/presentation";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 
-export default async function QuotesPage() {
+export default async function QuotesPage({ searchParams }: { searchParams?: Promise<{ view?: string }> }) {
+  const view = parseSurfaceView((await searchParams)?.view);
   const quotes = await prisma.quote.findMany({
     orderBy: { createdAt: "desc" },
     include: {
@@ -25,6 +27,9 @@ export default async function QuotesPage() {
         </p>
       </div>
 
+      <PlatformGridSection entityType="quote" view={view} />
+
+      {!view && (<>
       <div className="space-y-2">
         {quotes.map((q) => {
           const statusMeta = getQuoteStatusMeta(q.status);
@@ -76,6 +81,7 @@ export default async function QuotesPage() {
       {quotes.length === 0 && (
         <p className="text-sm text-[var(--dpf-muted)]">No quotes created yet.</p>
       )}
+      </>)}
     </div>
   );
 }

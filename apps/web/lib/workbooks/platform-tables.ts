@@ -254,12 +254,106 @@ const OPPORTUNITY_TABLE: GenericTableConfig = {
   ],
 };
 
+// CRM quotes — read-only; status keys per the schema enum comment. Money exposed;
+// account/opportunity relation ids omitted.
+const QUOTE_TABLE: GenericTableConfig = {
+  entityType: "quote",
+  prismaModel: "quote",
+  idField: "quoteId",
+  labelField: "quoteNumber",
+  orderBy: { field: "updatedAt", dir: "desc" },
+  columns: [
+    { field: "quoteNumber", name: "Number", fieldType: "text", width: 160 },
+    {
+      field: "status",
+      name: "Status",
+      fieldType: "select",
+      width: 130,
+      groupable: true,
+      options: [
+        { key: "draft", label: "Draft" },
+        { key: "sent", label: "Sent" },
+        { key: "accepted", label: "Accepted" },
+        { key: "rejected", label: "Rejected" },
+        { key: "expired", label: "Expired" },
+        { key: "superseded", label: "Superseded" },
+      ],
+    },
+    { field: "totalAmount", name: "Total", fieldType: "number", width: 130 },
+    { field: "currency", name: "Currency", fieldType: "text", width: 90 },
+    { field: "validUntil", name: "Valid until", fieldType: "date", width: 130 },
+    { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
+  ],
+};
+
+// CRM sales orders — read-only; status keys per the schema enum comment.
+const SALES_ORDER_TABLE: GenericTableConfig = {
+  entityType: "sales_order",
+  prismaModel: "salesOrder",
+  idField: "orderRef",
+  labelField: "orderRef",
+  orderBy: { field: "updatedAt", dir: "desc" },
+  columns: [
+    { field: "orderRef", name: "Order", fieldType: "text", width: 160 },
+    {
+      field: "status",
+      name: "Status",
+      fieldType: "select",
+      width: 140,
+      groupable: true,
+      options: [
+        { key: "confirmed", label: "Confirmed" },
+        { key: "in_progress", label: "In Progress" },
+        { key: "fulfilled", label: "Fulfilled" },
+        { key: "cancelled", label: "Cancelled" },
+      ],
+    },
+    { field: "totalAmount", name: "Total", fieldType: "number", width: 130 },
+    { field: "currency", name: "Currency", fieldType: "text", width: 90 },
+    { field: "fulfilledAt", name: "Fulfilled", fieldType: "datetime", width: 160 },
+    { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
+  ],
+};
+
+// CRM engagements — read-only; status keys per the schema enum comment. contact is
+// a relation id (omitted); no PII columns.
+const ENGAGEMENT_TABLE: GenericTableConfig = {
+  entityType: "engagement",
+  prismaModel: "engagement",
+  idField: "engagementId",
+  labelField: "title",
+  orderBy: { field: "updatedAt", dir: "desc" },
+  columns: [
+    { field: "engagementId", name: "ID", fieldType: "text", width: 140 },
+    { field: "title", name: "Title", fieldType: "text", width: 300 },
+    {
+      field: "status",
+      name: "Status",
+      fieldType: "select",
+      width: 130,
+      groupable: true,
+      options: [
+        { key: "new", label: "New" },
+        { key: "contacted", label: "Contacted" },
+        { key: "qualified", label: "Qualified" },
+        { key: "unqualified", label: "Unqualified" },
+        { key: "converted", label: "Converted" },
+      ],
+    },
+    { field: "source", name: "Source", fieldType: "text", width: 130 },
+    { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
+  ],
+};
+
 registerGenericReadTable(EPIC_TABLE);
 registerGenericReadTable(DIGITAL_PRODUCT_TABLE);
 registerGenericReadTable(COMPLIANCE_CONTROL_TABLE);
 registerGenericReadTable(COMPLIANCE_OBLIGATION_TABLE);
 registerGenericReadTable(COMPLIANCE_INCIDENT_TABLE);
 registerGenericReadTable(OPPORTUNITY_TABLE);
+registerGenericReadTable(QUOTE_TABLE);
+registerGenericReadTable(SALES_ORDER_TABLE);
+registerGenericReadTable(ENGAGEMENT_TABLE);
 // Customers, people (safe org-directory fields only), suppliers — explicit
 // allow-lists live in people-supplier-configs.ts (unit-tested for safe omission).
 for (const cfg of PEOPLE_SUPPLIER_TABLES) registerGenericReadTable(cfg);
@@ -321,6 +415,30 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
     viewCapability: "view_customer",
     manageCapability: "view_customer", // read-only grid; adapter performs no writes
     homeSurface: { path: "/customer/opportunities", label: "Opportunities", board: true },
+  },
+  {
+    entityType: "quote",
+    label: "Quotes",
+    description: "Sales quotes as a read-only grid — sort, filter, and board by status.",
+    viewCapability: "view_customer",
+    manageCapability: "view_customer", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/customer/quotes", label: "Quotes", board: true },
+  },
+  {
+    entityType: "sales_order",
+    label: "Sales orders",
+    description: "Sales orders as a read-only grid — sort, filter, and board by status.",
+    viewCapability: "view_customer",
+    manageCapability: "view_customer", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/customer/sales-orders", label: "Sales orders", board: true },
+  },
+  {
+    entityType: "engagement",
+    label: "Engagements",
+    description: "CRM engagements as a read-only grid — sort, filter, and board by status.",
+    viewCapability: "view_customer",
+    manageCapability: "view_customer", // read-only grid; adapter performs no writes
+    homeSurface: { path: "/customer/engagements", label: "Engagements", board: true },
   },
   {
     entityType: "epic",
